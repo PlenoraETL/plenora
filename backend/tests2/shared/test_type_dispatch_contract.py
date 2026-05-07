@@ -44,9 +44,7 @@ def _mapper():
     return ColumnMapper(db_type="postgres")
 
 
-# =============================================================================
 # Site 2: _infer_type_from_canvas (canvas-type string -> canonical)
-# =============================================================================
 
 
 @pytest.mark.parametrize("canvas_type,expected", [
@@ -82,9 +80,7 @@ def test_infer_type_from_canvas_matrix(canvas_type, expected):
     assert m._infer_type_from_canvas(canvas_type) == expected
 
 
-# =============================================================================
 # Site 3: _infer_type_from_pandas (pandas Series -> canonical)
-# =============================================================================
 # Copertura N11 gia' completa in test_n11_type_inference_loss_contract.
 # Qui aggiungo solo boundary casi che il refactor potrebbe rompere.
 
@@ -139,9 +135,7 @@ def test_infer_type_from_pandas_nullable_Int64_is_int():
     assert _mapper()._infer_type_from_pandas(pd.Series([1, pd.NA, 3], dtype="Int64")) == "int"
 
 
-# =============================================================================
 # Site 1: carica/router.py auto_mapping — alias map canvas-type -> pandas dtype
-# =============================================================================
 # La dispatch e' inline nel body dell'endpoint (if/elif chain, righe ~242-251).
 # Uso AST sentinel per congelare le condizioni: se qualcuno cambia gli alias
 # accettati o gli output dtype, questo test cattura la modifica.
@@ -211,9 +205,7 @@ def test_auto_mapping_delegates_to_canonical_dispatch():
         )
 
 
-# =============================================================================
 # Geometry vocabulary (alias set condiviso fra ColumnMapper)
-# =============================================================================
 
 
 def test_geometry_urby_types_contains_expected_subtypes():
@@ -228,9 +220,7 @@ def test_geometry_urby_types_contains_expected_subtypes():
     assert not missing, f"Sub-type geometry mancanti: {missing}"
 
 
-# =============================================================================
 # Coerenza fra dispatch: un input canonico va dove ci si aspetta
-# =============================================================================
 
 
 def test_dispatch_coherence_canonical_types_accepted_by_canvas_inference():

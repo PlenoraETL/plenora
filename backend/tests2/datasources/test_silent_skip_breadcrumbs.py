@@ -62,8 +62,6 @@ def _detach_collector(logger: logging.Logger, handler: _RecordCollector, prev_le
     logger.setLevel(prev_level)
 
 
-# ─── Fixtures ──────────────────────────────────────────────────────────────
-
 @pytest.fixture(autouse=True)
 def _ensure_database_url_for_module_import(monkeypatch):
     monkeypatch.setenv(
@@ -72,8 +70,6 @@ def _ensure_database_url_for_module_import(monkeypatch):
     )
     yield
 
-
-# ─── 1) ftp._maybe_hash ────────────────────────────────────────────────────
 
 def test_ftp_maybe_hash_logs_debug_on_silent_return_none(monkeypatch):
     """``_maybe_hash`` ritorna None quando hash fallisce. Ora con breadcrumb."""
@@ -108,7 +104,6 @@ def test_ftp_maybe_hash_logs_debug_on_silent_return_none(monkeypatch):
     finally:
         _detach_collector(logger, handler, prev)
 
-# ─── 2) sftp.disconnect ────────────────────────────────────────────────────
 
 def test_sftp_disconnect_logs_debug_on_close_failure():
     """``disconnect`` chiama close() su ssh/sftp: se close fallisce → breadcrumb."""
@@ -138,7 +133,6 @@ def test_sftp_disconnect_logs_debug_on_close_failure():
         )
     finally:
         _detach_collector(logger, handler, prev)
-# ─── 3) local list_files: stat fail → continue con breadcrumb ─────────────
 
 def test_local_list_files_logs_debug_on_stat_failure(tmp_path, monkeypatch):
     """``list_files`` con entry che solleva OSError in stat: skip + breadcrumb."""
@@ -199,7 +193,6 @@ def test_local_list_files_logs_debug_on_stat_failure(tmp_path, monkeypatch):
         )
     finally:
         _detach_collector(logger, handler, prev)
-# ─── 4) service.mark_as_processed: snapshot fail → breadcrumb ─────────────
 
 def test_service_mark_as_processed_logs_debug_on_snapshot_failure(
     tmp_path, monkeypatch,

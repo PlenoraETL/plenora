@@ -91,9 +91,7 @@ from tests2.integration.harness.reconciliation import (
 )
 
 
-# ---------------------------------------------------------------------------
 # Skip policy: env opt-in + probe-connect, no `psycopg2.connect` se mancano.
-# ---------------------------------------------------------------------------
 
 _RUN_DB_LIVE = os.getenv("URBY_RUN_DB_LIVE_TESTS") == "1"
 
@@ -109,9 +107,7 @@ _SKIP_NO_DB_LIVE_OPT_IN = pytest.mark.skipif(
 )
 
 
-# ---------------------------------------------------------------------------
 # Preflight TCP + subprocess psycopg2.connect
-# ---------------------------------------------------------------------------
 #
 # Pattern imparato in Batch B review #1-#5: su Windows `psycopg2` puo'
 # produrre Windows fatal access violation lato libpq prima di sollevare
@@ -208,9 +204,7 @@ def pg_ext_reachable():
         )
 
 
-# ---------------------------------------------------------------------------
 # Engine + WriteConfig builders
-# ---------------------------------------------------------------------------
 
 def _pg_ext_engine():
     """SQLAlchemy engine verso lo stesso PG ext del harness."""
@@ -250,9 +244,7 @@ def _make_write_config(dest_table: str) -> WriteConfig:
     )
 
 
-# ---------------------------------------------------------------------------
 # Test: smoke reconciliation 10k righe
-# ---------------------------------------------------------------------------
 
 @pytest.mark.integration
 @pytest.mark.contract

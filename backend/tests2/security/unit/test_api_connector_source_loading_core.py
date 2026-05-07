@@ -66,9 +66,7 @@ def _ctx_grp(group_id: str | None = "grp-1",
     )
 
 
-# ---------------------------------------------------------------------------
 # Bug 1 chiuso: _load_source_project propaga expected_group_id al resolver
-# ---------------------------------------------------------------------------
 
 
 def test_load_source_project_propagates_group_id_via_source_loader():
@@ -205,9 +203,7 @@ def test_load_source_project_distinguishes_project_not_found_from_cross_tenant()
     assert "gruppo diverso" not in msg
 
 
-# ---------------------------------------------------------------------------
 # Fix #2: _resolve_file_source_path branch project_source con expected_group_id
-# ---------------------------------------------------------------------------
 
 
 def test_resolve_file_source_path_project_branch_passes_through_source_loader():
@@ -300,9 +296,7 @@ def test_resolve_file_source_path_fail_closed_without_ctx_group_id():
         )
 
 
-# ---------------------------------------------------------------------------
 # Bug 2 chiuso: _load_file_source preserva il GeoDataFrame
-# ---------------------------------------------------------------------------
 
 
 def test_load_file_source_preserves_geodataframe():
@@ -413,9 +407,7 @@ def test_load_file_source_fail_closed_without_ctx_group_id():
         )
 
 
-# ---------------------------------------------------------------------------
 # Static values: nessuna regressione
-# ---------------------------------------------------------------------------
 
 
 def test_load_static_values_works_without_db_or_user():
@@ -440,9 +432,7 @@ def test_load_static_values_empty_fields_returns_single_empty_row():
     assert len(df) == 1
 
 
-# ---------------------------------------------------------------------------
 # BE-GO-READY-TRANSFORMATION-ENGINE-028: classification lock
-# ---------------------------------------------------------------------------
 
 
 def test_te030b_critical_fail_closed_locks_use_ctx_strict_missing_group():

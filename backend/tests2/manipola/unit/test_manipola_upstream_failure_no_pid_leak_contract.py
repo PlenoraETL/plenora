@@ -71,9 +71,7 @@ def _failing_upstream_artifact(source_pid: str) -> PipelineArtifact:
     })
 
 
-# ============================================================
 # 1. upstream failure NON propaga project_id source
-# ============================================================
 
 
 def test_upstream_failure_does_not_leak_source_project_id():
@@ -112,9 +110,7 @@ def test_upstream_failure_does_not_leak_source_project_id():
     )
 
 
-# ============================================================
 # 2. wrappable da from_executor_result senza ValueError
-# ============================================================
 
 
 def test_upstream_failure_result_is_wrappable_without_pid_mismatch():
@@ -153,9 +149,7 @@ def test_upstream_failure_result_is_wrappable_without_pid_mismatch():
     assert artifact.success is False
 
 
-# ============================================================
 # 3. messaggio include source_project_id per diagnostica
-# ============================================================
 
 
 def test_upstream_failure_message_includes_source_project_id():
@@ -197,9 +191,7 @@ def test_upstream_failure_message_includes_source_project_id():
     )
 
 
-# ============================================================
 # 4. upstream success path invariato
-# ============================================================
 
 
 def test_upstream_success_path_unchanged():

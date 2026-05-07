@@ -57,12 +57,6 @@ from fastapi import APIRouter, Depends, HTTPException
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from app.core.auth import disclosure as _disclosure
-# BE-GO-READY-AUTH-ENGINE-011-SHARED-CURRENT-USER-CONTRACT:
-# `CurrentUser` consumed from the shared contract module
-# (mirror of `groups_router.py` / Phase-7 routers). The three
-# request/response DTOs (`ResetPasswordRequest`, `UserCreate`,
-# `UserResponse`) stay on the models leaf for now; W-011 owns
-# only the `CurrentUser` migration.
 from app.core.auth.models import (
     ResetPasswordRequest,
     UserCreate,
@@ -103,9 +97,6 @@ def require_admin(
     return _require_admin(current_user)
 
 
-# --- Gestione utenti (admin only) ---
-
-
 @users_router.get("", response_model=list[UserResponse])
 def list_users(current_user: CurrentUser = Depends(require_admin)):
     """
@@ -114,13 +105,6 @@ def list_users(current_user: CurrentUser = Depends(require_admin)):
     admin      → solo utenti del proprio gruppo
     """
     if current_user.role == "superadmin":
-        # Superadmin: tutti gli utenti con una singola query (no N+1 per gruppo).
-        # BE-GO-READY-DB-ENGINE-006-FACADE-PROD-PURGE-NEXT: leaf import
-        # (`app.db.config.users.list_all_users`) replaces the prior
-        # `_cfg_db.fetchall(...)` raw-SQL shim through the facade. The
-        # leaf helper preserves the `SELECT * FROM users ORDER BY username`
-        # shape used by `UserResponse.model_fields` filtering below, so
-        # the response payload is byte-identical.
         from app.db.config.users import list_all_users
         users = list_all_users()
     else:

@@ -63,9 +63,7 @@ def tac_env(api_service):
         yield mocks
 
 
-# =============================================================================
 # Section 1: validation + config retrieval
-# =============================================================================
 
 
 class TestTestApiConnectionValidation:
@@ -89,9 +87,7 @@ class TestTestApiConnectionValidation:
         assert "URL non configurato" in result["error"]
 
 
-# =============================================================================
 # Section 2: params merge + template processing
-# =============================================================================
 
 
 class TestTestApiConnectionParams:
@@ -142,9 +138,7 @@ class TestTestApiConnectionParams:
         assert "{{" not in params.get("timestamp", "")
 
 
-# =============================================================================
 # Section 3: path param substitution
-# =============================================================================
 
 
 class TestTestApiConnectionPathParams:
@@ -170,9 +164,7 @@ class TestTestApiConnectionPathParams:
         assert "lon" not in params
 
 
-# =============================================================================
 # Section 4: auth injection (api_key, arcgis_token)
-# =============================================================================
 
 
 class TestTestApiConnectionAuth:
@@ -210,9 +202,7 @@ class TestTestApiConnectionAuth:
         assert "ArcGIS token" in result["error"]
 
 
-# =============================================================================
 # Section 5: SSRF + HTTP call
-# =============================================================================
 
 
 class TestTestApiConnectionHttp:
@@ -253,9 +243,7 @@ class TestTestApiConnectionHttp:
         assert "HTTP 500" in result["error"]
 
 
-# =============================================================================
 # Section 6: response JSON parsing + fallback
-# =============================================================================
 
 
 class TestTestApiConnectionResponseParsing:
@@ -308,9 +296,7 @@ class TestTestApiConnectionResponseParsing:
         assert "non è JSON" in result["error"] or "non parseabile" in result["error"]
 
 
-# =============================================================================
 # Section 7: exception handlers
-# =============================================================================
 
 
 class TestTestApiConnectionExceptions:

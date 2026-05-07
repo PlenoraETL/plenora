@@ -66,9 +66,7 @@ def _sql_escape(value: str) -> str:
     return str(value).replace("'", "''")
 
 
-# =============================================================================
 # N2 — VALIDATORI INPUT CONTRO SQL INJECTION
-# =============================================================================
 # I traduttori in questo modulo costruiscono SQL via f-string. Per i valori
 # che non finiscono tra apici (numeri, nomi colonna, espressioni) _sql_escape
 # non basta: serve un cast/whitelist esplicito che rifiuti input malformati
@@ -179,9 +177,7 @@ def _safe_compare_operator(value) -> str:
     return value
 
 
-# =============================================================================
 # ENUMERAZIONI
-# =============================================================================
 
 class DbType(Enum):
     """Tipi di database supportati dal traduttore SQL."""
@@ -202,9 +198,7 @@ class FunctionCategory(Enum):
     CAST = "cast"
 
 
-# =============================================================================
 # DEFINIZIONI FUNZIONI
-# =============================================================================
 
 @dataclass
 class FunctionParam:
@@ -238,13 +232,10 @@ class FunctionDef:
     params: List[FunctionParam]     # Parametri della funzione
 
 
-# =============================================================================
 # CATALOGO FUNZIONI DISPONIBILI
-# =============================================================================
 
 FUNCTION_CATALOG: Dict[str, FunctionDef] = {
 
-    # --- FUNZIONI GEOMETRICHE ---
 
     "CENTROID": FunctionDef(
         name="CENTROID", label="Centroide",
@@ -319,7 +310,6 @@ FUNCTION_CATALOG: Dict[str, FunctionDef] = {
         params=[FunctionParam("column", "column", True, None, "Colonna geometrica")]
     ),
 
-    # --- FUNZIONI NUMERICHE ---
 
     "ROUND": FunctionDef(
         name="ROUND", label="Arrotonda",
@@ -353,7 +343,6 @@ FUNCTION_CATALOG: Dict[str, FunctionDef] = {
         params=[FunctionParam("column", "column", True, None, "Colonna numerica")]
     ),
 
-    # --- FUNZIONI STRINGA ---
 
     "UPPER": FunctionDef(
         name="UPPER", label="Maiuscolo",
@@ -398,7 +387,6 @@ FUNCTION_CATALOG: Dict[str, FunctionDef] = {
         ]
     ),
 
-    # --- FUNZIONI DATA ---
 
     "YEAR": FunctionDef(
         name="YEAR", label="Estrai anno",
@@ -422,7 +410,6 @@ FUNCTION_CATALOG: Dict[str, FunctionDef] = {
         params=[FunctionParam("column", "column", True, None, "Colonna data")]
     ),
 
-    # --- OPERAZIONE MATEMATICA ---
 
     "MATH": FunctionDef(
         name="MATH", label="Operazione matematica",
@@ -485,7 +472,6 @@ FUNCTION_CATALOG: Dict[str, FunctionDef] = {
         params=[FunctionParam("values", "column_list", True, None, "Colonne da confrontare")]
     ),
 
-    # --- FUNZIONI STRINGA (nuove) ---
 
     "REPLACE": FunctionDef(
         name="REPLACE", label="Sostituisci",
@@ -543,7 +529,6 @@ FUNCTION_CATALOG: Dict[str, FunctionDef] = {
         params=[FunctionParam("column", "column", True, None, "Colonna testo")]
     ),
 
-    # --- FUNZIONI DATA (nuove) ---
 
     "NOW": FunctionDef(
         name="NOW", label="Data/ora corrente",
@@ -611,7 +596,6 @@ FUNCTION_CATALOG: Dict[str, FunctionDef] = {
         ]
     ),
 
-    # --- FUNZIONI CONDIZIONALI ---
 
     "COALESCE": FunctionDef(
         name="COALESCE", label="Primo valore non nullo",
@@ -657,7 +641,6 @@ FUNCTION_CATALOG: Dict[str, FunctionDef] = {
         ]
     ),
 
-    # --- FUNZIONI CONVERSIONE (CAST) ---
 
     "TO_INTEGER": FunctionDef(
         name="TO_INTEGER", label="Converti in intero",
@@ -693,9 +676,7 @@ FUNCTION_CATALOG: Dict[str, FunctionDef] = {
 }
 
 
-# =============================================================================
 # TRADUTTORE SQL MULTI-DATABASE
-# =============================================================================
 
 class SqlFunctionTranslator:
     """
@@ -799,9 +780,7 @@ class SqlFunctionTranslator:
             return f"{table_alias}.{column}"
         return column
 
-    # =========================================================================
     # FUNZIONI GEOMETRICHE
-    # =========================================================================
 
     def _translate_centroid(self, params: Dict, table_alias: str = None) -> str:
         """Centroide — centro geometrico della geometria."""
@@ -926,9 +905,7 @@ class SqlFunctionTranslator:
         }
         return self._ottieni_traduzione(traduzioni, "ENVELOPE")
 
-    # =========================================================================
     # FUNZIONI NUMERICHE
-    # =========================================================================
 
     def _translate_round(self, params: Dict, table_alias: str = None) -> str:
         """Arrotondamento — al numero di decimali specificato."""
@@ -966,9 +943,7 @@ class SqlFunctionTranslator:
         col = self._qualify_column(params["column"], table_alias)
         return f"FLOOR({col})"
 
-    # =========================================================================
     # FUNZIONI STRINGA
-    # =========================================================================
 
     def _translate_upper(self, params: Dict, table_alias: str = None) -> str:
         """Conversione in maiuscolo — identica su tutti i database."""
@@ -1054,9 +1029,7 @@ class SqlFunctionTranslator:
 
         return f"SUBSTRING({col}, {inizio}, {lunghezza or 'NULL'})"
 
-    # =========================================================================
     # FUNZIONI DATA
-    # =========================================================================
 
     def _translate_year(self, params: Dict, table_alias: str = None) -> str:
         """Estrazione anno — PostgreSQL/Oracle: EXTRACT, MSSQL/MySQL: YEAR(), SQLite: STRFTIME."""
@@ -1094,9 +1067,7 @@ class SqlFunctionTranslator:
         }
         return self._ottieni_traduzione(traduzioni, "DAY")
 
-    # =========================================================================
     # OPERAZIONE MATEMATICA
-    # =========================================================================
 
     def _translate_math(self, params: Dict, table_alias: str = None) -> str:
         """
@@ -1141,9 +1112,7 @@ class SqlFunctionTranslator:
 
         return f"({col1} {operatore} {secondo_operando})"
 
-    # =========================================================================
     # FUNZIONI NUMERICHE (nuove)
-    # =========================================================================
 
     def _translate_mod(self, params: Dict, table_alias: str = None) -> str:
         """Resto divisione — MSSQL/SQLite usano %, altri MOD(). Protezione div per zero."""
@@ -1214,9 +1183,7 @@ class SqlFunctionTranslator:
             return f"MIN({', '.join(valori_q)})"
         return f"LEAST({', '.join(valori_q)})"
 
-    # =========================================================================
     # FUNZIONI STRINGA (nuove)
-    # =========================================================================
 
     def _translate_replace(self, params: Dict, table_alias: str = None) -> str:
         """Sostituzione testo — REPLACE() identico su tutti i database."""
@@ -1276,9 +1243,7 @@ class SqlFunctionTranslator:
         col = self._qualify_column(params["column"], table_alias)
         return f"RTRIM({col})"
 
-    # =========================================================================
     # FUNZIONI DATA (nuove)
-    # =========================================================================
 
     def _translate_now(self, params: Dict, table_alias: str = None) -> str:
         """Data/ora corrente — sintassi specifica per ogni database."""
@@ -1413,9 +1378,7 @@ class SqlFunctionTranslator:
         }
         return self._ottieni_traduzione(traduzioni, "EXTRACT")
 
-    # =========================================================================
     # FUNZIONI CONDIZIONALI (nuove)
-    # =========================================================================
 
     def _translate_coalesce(self, params: Dict, table_alias: str = None) -> str:
         """Primo valore non NULL — COALESCE() identico su tutti i database."""
@@ -1459,9 +1422,7 @@ class SqlFunctionTranslator:
         }
         return self._ottieni_traduzione(traduzioni, "IIF")
 
-    # =========================================================================
     # FUNZIONI CONVERSIONE / CAST (nuove)
-    # =========================================================================
 
     def _translate_to_integer(self, params: Dict, table_alias: str = None) -> str:
         """Conversione a intero — sintassi CAST diversa per database."""
@@ -1521,9 +1482,7 @@ class SqlFunctionTranslator:
             }
         return self._ottieni_traduzione(traduzioni, "TO_DATE")
 
-    # =========================================================================
     # HELPER INTERNO
-    # =========================================================================
 
     def _ottieni_traduzione(self, traduzioni: Dict[DbType, str], nome_funzione: str) -> str:
         """
@@ -1544,9 +1503,7 @@ class SqlFunctionTranslator:
         raise ValueError(f"{nome_funzione} non supportato per {self.db_type.value}")
 
 
-# =============================================================================
 # FUNZIONI HELPER PUBBLICHE
-# =============================================================================
 
 def get_function_catalog() -> Dict[str, dict]:
     """

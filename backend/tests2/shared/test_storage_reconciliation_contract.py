@@ -43,9 +43,7 @@ from app.shared.storage_reconciliation import (
 pytestmark = [pytest.mark.unit, pytest.mark.shared, pytest.mark.contract]
 
 
-# ---------------------------------------------------------------------------
 # record_pending
-# ---------------------------------------------------------------------------
 
 
 def _make_cursor(*, return_id: str = "11111111-1111-1111-1111-111111111111"):
@@ -162,9 +160,7 @@ def test_record_pending_accepts_upload_intent_operation():
     assert ref.operation == "upload_intent"
 
 
-# ---------------------------------------------------------------------------
 # mark_done / mark_failed_attempt / mark_orphan_deleted
-# ---------------------------------------------------------------------------
 
 
 def _capture_pg_execute(monkeypatch) -> List[Tuple[str, tuple]]:
@@ -264,9 +260,7 @@ def test_mark_orphan_deleted_swallows_exception(monkeypatch):
     assert mark_orphan_deleted("rec-z") is None
 
 
-# ---------------------------------------------------------------------------
 # Module hygiene: leaf module, no FastAPI / boto3 / settings imports
-# ---------------------------------------------------------------------------
 
 
 def test_module_is_leaf_no_fastapi_boto3_settings():

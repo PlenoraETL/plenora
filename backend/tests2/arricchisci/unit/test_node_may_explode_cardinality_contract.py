@@ -41,9 +41,7 @@ from app.core.arricchisci.parallel import (
 pytestmark = [pytest.mark.unit, pytest.mark.contract, pytest.mark.regression]
 
 
-# =============================================================================
 # 1-7. Detector unit
-# =============================================================================
 
 
 def test_detector_path_with_brackets_returns_true():
@@ -135,9 +133,7 @@ def test_detector_non_api_enrich_returns_false():
         )
 
 
-# =============================================================================
 # 8-11. compute_parallel_groups integration
-# =============================================================================
 
 
 def _make_api_enrich_node(node_id: str, output_mapping: list, api_id: str = None) -> dict:
@@ -254,9 +250,7 @@ def test_compute_groups_real_bug_15_topology():
     assert sorted(groups[2][1]) == sorted([f"geosafe_{i}" for i in range(10)])
 
 
-# =============================================================================
 # 12. Anti-regression: fail-hard RB.#14 resta attivo per falsi negativi
-# =============================================================================
 
 
 def test_fail_hard_safety_net_still_documented_for_path_b_explosion():

@@ -107,18 +107,13 @@ from typing import Any, Dict, List, Union
 
 from app.utils.logger import get_logger
 
-# Stesso logger name di `base.py`: i record sono indistinguibili dai
-# consumer che attaccano handler / filtrano per
-# "app.core.manipola.transforms.base" (pattern §6.1 facade).
 logger = get_logger("app.core.manipola.transforms.base")
 
 DataFrame = Union[pd.DataFrame, gpd.GeoDataFrame]
 
 
-# =============================================================================
 # HASH MD5 (Rilevamento modifiche)
 # Calcola hash MD5 di colonne selezionate per change detection e anonimizzazione.
-# =============================================================================
 
 def op_md5_hash(
     df: DataFrame,
@@ -197,10 +192,8 @@ def op_md5_hash(
         raise
 
 
-# =============================================================================
 # MASCHERAMENTO DATI SENSIBILI
 # Nasconde dati sensibili con pattern (es: Mario Rossi → M**** R*****).
-# =============================================================================
 
 def _mask_cf(value: str) -> str:
     """Maschera codice fiscale: RSSMRA80A01H501Z → RSS***********01Z"""
@@ -326,12 +319,6 @@ def op_mask_data(
 
             logger.info(f"Mask Data: {column} -> {out_col} (tipo: {mask_type})")
 
-        # intent: fail-closed all-or-nothing masking — privacy-safe.
-        # Se una colonna fallisce, l'intero transform fallisce prima di
-        # ritornare un `result` con colonne parzialmente mascherate (leak
-        # PII). Il caller executor manipola (batch 5 E1 chiuso) cattura
-        # RuntimeError e traduce in error dict del nodo. str(e) tecnico
-        # preservato nel logger.error [CRASH] server-side per postmortem.
         except Exception as e:
             logger.error(
                 f"[CRASH] Errore mascheramento colonna '{column}': {e}",

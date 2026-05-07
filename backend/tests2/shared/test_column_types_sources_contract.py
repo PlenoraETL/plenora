@@ -36,9 +36,7 @@ import pytest
 pytestmark = [pytest.mark.unit, pytest.mark.shared, pytest.mark.contract]
 
 
-# =============================================================================
 # 1. Format contract — ogni vista ha struttura attesa
-# =============================================================================
 
 
 def test_columns_metadata_is_list_of_name_type_dicts(monkeypatch):
@@ -95,9 +93,7 @@ def test_columns_metadata_handles_canvas_as_json_string(monkeypatch):
     assert result == [{"name": "x", "type": "real"}]
 
 
-# =============================================================================
 # 2. Update contract — write/read idempotente
-# =============================================================================
 
 
 def test_update_columns_metadata_writes_to_canvas(monkeypatch):
@@ -161,9 +157,7 @@ def test_update_columns_metadata_preserves_other_canvas_fields(monkeypatch):
     assert captured_calls[0]["value"] == new_meta
 
 
-# =============================================================================
 # 3. Consumer inventory — sentinel sui punti che leggono i tipi
-# =============================================================================
 # Se un refactor sposta la sorgente di verita', dobbiamo aggiornare
 # questi consumer. I test fungono da sentinel: grep AST-based che
 # assicura che i pattern noti continuino a esistere nel codebase.
@@ -247,9 +241,7 @@ def test_enricher_bridge_reads_from_columns_metadata():
     )
 
 
-# =============================================================================
 # 4. Format stability — tipi canvas ammessi
-# =============================================================================
 # I tipi canvas sono una enum informale esposta da
 # `app.shared.column_types.normalize_canvas_type` (delega del mapper).
 # Qualsiasi refactor che tocca il vocabolario deve preservare i tipi base.

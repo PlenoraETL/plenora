@@ -34,9 +34,7 @@ from app.core.estrai.executor import (
 pytestmark = [pytest.mark.unit, pytest.mark.contract, pytest.mark.regression]
 
 
-# =============================================================================
 # _dedup_column_names: helper puro, deterministico
-# =============================================================================
 
 
 def test_dedup_column_names_no_duplicates_is_noop():
@@ -81,9 +79,7 @@ def test_dedup_column_names_multiple_duplicate_groups_independent():
     assert renames == [("a", "a_2"), ("b", "b_2")]
 
 
-# =============================================================================
 # _dedup_dataframe_columns_for_serialization: integrazione con DataFrame
-# =============================================================================
 
 
 def test_dedup_dataframe_no_duplicates_returns_same_frame_no_warnings():

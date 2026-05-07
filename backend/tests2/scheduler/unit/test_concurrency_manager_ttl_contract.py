@@ -73,9 +73,6 @@ from app.core.scheduler.concurrency_manager import ConcurrencyManager
 pytestmark = [pytest.mark.unit, pytest.mark.scheduler, pytest.mark.contract]
 
 
-# ─── Fake DB ──────────────────────────────────────────────────────────────
-
-
 class _FakeCursor:
     """Simula psycopg2 cursor con .rowcount per gli UPDATE."""
 
@@ -192,9 +189,6 @@ def _count_updates(fake: _FakeDb) -> int:
     return count
 
 
-# ─── 1) _get auto-cleanup su lock scaduto ────────────────────────────────
-
-
 def test_get_deletes_and_returns_none_when_lock_expired(mgr_with_real_helpers):
     """Blinda §1.6 lock-expire: se ``expires_at`` è nel passato,
     ``_get`` DEVE:
@@ -221,9 +215,6 @@ def test_get_deletes_and_returns_none_when_lock_expired(mgr_with_real_helpers):
     assert "scheduler:lock:expired-sched" not in fake.rows, (
         "row scaduta DEVE essere fisicamente rimossa dallo store"
     )
-
-
-# ─── 2) _get preserva lock con expires_at malformato ─────────────────────
 
 
 def test_get_preserves_lock_when_expires_at_is_malformed(mgr_with_real_helpers):
@@ -262,9 +253,6 @@ def test_get_preserves_lock_when_expires_at_is_malformed(mgr_with_real_helpers):
     assert _count_deletes_on_key(fake, "scheduler:lock:corrupt") == 0
 
 
-# ─── 3) _get senza TTL (expires_at NULL) ─────────────────────────────────
-
-
 def test_get_returns_value_when_expires_at_is_null(mgr_with_real_helpers):
     """Blinda il contract: un lock con ``expires_at=NULL`` è persistente
     (nessun TTL). ``_get`` DEVE saltare il check di scadenza e ritornare
@@ -283,9 +271,6 @@ def test_get_returns_value_when_expires_at_is_null(mgr_with_real_helpers):
     assert result == "5"
     # Nessun DELETE emesso per un lock NULL-expires
     assert _count_deletes_on_key(fake, "scheduler:queue:sched-1") == 0
-
-
-# ─── 4) try_acquire post-scadenza ricrea il lock ─────────────────────────
 
 
 def test_try_acquire_on_expired_lock_returns_acquired_and_reinstalls_lock(
@@ -333,9 +318,6 @@ def test_try_acquire_on_expired_lock_returns_acquired_and_reinstalls_lock(
     )
 
 
-# ─── 5) is_running su lock scaduto ───────────────────────────────────────
-
-
 def test_is_running_returns_false_when_lock_is_expired(mgr_with_real_helpers):
     """Blinda il contract pubblico: ``is_running`` DEVE ritornare False
     su lock scaduto, non solo sul lock mai acquisito.
@@ -361,9 +343,6 @@ def test_is_running_returns_false_when_lock_is_expired(mgr_with_real_helpers):
     assert "scheduler:lock:dead" not in fake.rows, (
         "is_running su lock scaduto DEVE innescare il cleanup (via _get)"
     )
-
-
-# ─── 6) refresh_lock su lock scaduto: False + NO UPDATE ──────────────────
 
 
 def test_refresh_lock_on_expired_lock_returns_false_without_issuing_update(

@@ -51,9 +51,7 @@ logger = get_logger(__name__)
 TEMPLATE_REGEX = r"\{\{([A-Z]+)([+-]\d+[hdmsMHDMS])?\}\}"
 
 
-# =============================================================================
 # FORMATTAZIONE DATA/ORA
-# =============================================================================
 
 def format_datetime(dt: datetime) -> str:
     """Formatta come YYYY-MM-DD HH:MM (formato standard per le API)."""
@@ -70,9 +68,7 @@ def format_time(dt: datetime) -> str:
     return dt.strftime("%H:%M")
 
 
-# =============================================================================
 # CALCOLO DATA BASE E OFFSET
-# =============================================================================
 
 def get_base_date(var_name: str, reference_date: datetime = None) -> datetime:
     """
@@ -170,9 +166,7 @@ def format_value(dt: datetime, var_name: str) -> str:
         return format_datetime(dt)
 
 
-# =============================================================================
 # PROCESSAMENTO VARIABILI
-# =============================================================================
 
 def process_template_variables(text: str, reference_date: datetime = None) -> str:
     """
@@ -259,9 +253,7 @@ def process_static_fields(
     return risultato
 
 
-# =============================================================================
 # CATALOGO VARIABILI (per documentazione e autocomplete frontend)
-# =============================================================================
 
 AVAILABLE_VARIABLES = [
     {"name": "{{NOW}}",       "description": "Data/ora corrente",    "example": "2026-02-02 11:30"},

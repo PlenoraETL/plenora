@@ -76,8 +76,6 @@ def _sanitize_mssql_error(e: Exception) -> str:
     return "Errore connessione MS SQL"
 
 
-# ─── Service ─────────────────────────────────────────────────────────────────
-
 class ConnectionService:
 
     DEFAULT_GROUP = settings.DEFAULT_GROUP

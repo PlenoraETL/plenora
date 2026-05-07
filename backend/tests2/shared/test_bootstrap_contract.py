@@ -55,9 +55,7 @@ def _read(p: Path) -> str:
     return p.read_text(encoding="utf-8")
 
 
-# ---------------------------------------------------------------------------
 # 1. Call order — `bootstrap()` invokes the 4 steps in canonical sequence
-# ---------------------------------------------------------------------------
 
 
 def _real_bootstrap():
@@ -142,9 +140,7 @@ def test_bootstrap_signature_returns_none(monkeypatch):
     assert result is None
 
 
-# ---------------------------------------------------------------------------
 # 2. SSL env cleanup runs AFTER init_all_dbs
-# ---------------------------------------------------------------------------
 
 
 def test_ssl_env_cleanup_runs_after_init_all_dbs(monkeypatch):
@@ -244,9 +240,7 @@ def test_repair_psycopg2_ssl_env_does_not_touch_other_vars(monkeypatch):
     assert "REQUESTS_CA_BUNDLE" not in os.environ
 
 
-# ---------------------------------------------------------------------------
 # 3. Idempotency
-# ---------------------------------------------------------------------------
 
 
 def test_bootstrap_is_idempotent(monkeypatch):
@@ -290,9 +284,7 @@ def test_bootstrap_is_idempotent(monkeypatch):
     }
 
 
-# ---------------------------------------------------------------------------
 # 4. Exception propagation — each step's exception type preserved
-# ---------------------------------------------------------------------------
 
 
 def test_bootstrap_propagates_validate_startup_systemexit(monkeypatch):
@@ -390,9 +382,7 @@ def test_bootstrap_propagates_init_all_dbs_error(monkeypatch):
     )
 
 
-# ---------------------------------------------------------------------------
 # 5. main.py delegates to bootstrap (source-bound)
-# ---------------------------------------------------------------------------
 
 
 def test_main_py_imports_bootstrap_and_calls_it_at_module_load():

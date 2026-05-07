@@ -52,9 +52,7 @@ pytestmark = [
 ]
 
 
-# ---------------------------------------------------------------------------
 # Helpers
-# ---------------------------------------------------------------------------
 
 def _make_writer(config: WriteConfig) -> DatabaseWriter:
     """Costruisce un DatabaseWriter con engine fake.
@@ -75,9 +73,7 @@ def _df() -> pd.DataFrame:
     return pd.DataFrame([{"id": 1, "amount": 99.5}])
 
 
-# ---------------------------------------------------------------------------
 # 1. Combo unsafe senza opt-in -> ValueError con messaggio diagnostico
-# ---------------------------------------------------------------------------
 
 def test_unsafe_append_combo_without_flag_raises():
     """APPEND + PER_BATCH + match_columns=[] + allow_unsafe_append=False
@@ -114,9 +110,7 @@ def test_unsafe_append_error_default_when_flag_unset():
     )
 
 
-# ---------------------------------------------------------------------------
 # 2. Combo unsafe con opt-in -> proceed + warning
-# ---------------------------------------------------------------------------
 
 def test_unsafe_append_combo_with_flag_proceeds(monkeypatch):
     """`allow_unsafe_append=True` consente la combo + emette warning.
@@ -219,9 +213,7 @@ def test_unsafe_append_combo_with_flag_proceeds(monkeypatch):
     assert "allow_unsafe_append=True" in warning_msg
 
 
-# ---------------------------------------------------------------------------
 # 3. Combo sicure non gated
-# ---------------------------------------------------------------------------
 
 def test_safe_combo_all_or_nothing_not_gated(monkeypatch):
     """APPEND + ALL_OR_NOTHING + match_columns=[] e' sicura: rollback
@@ -288,9 +280,7 @@ def test_non_append_modes_not_gated(monkeypatch):
             writer.write(_df())
 
 
-# ---------------------------------------------------------------------------
 # 4. WriteConfig.from_node_data: default-safe + opt-in dal canvas
-# ---------------------------------------------------------------------------
 
 def test_from_node_data_default_allow_unsafe_append_false():
     """Canvas senza chiave esplicita -> default sicuro (False).
@@ -338,9 +328,7 @@ def test_to_dict_roundtrip_preserves_allow_unsafe_append():
     assert rebuilt.allow_unsafe_append is True
 
 
-# ---------------------------------------------------------------------------
 # 5. Strict boolean su from_node_data (review Step 3 review #2)
-# ---------------------------------------------------------------------------
 #
 # Il flag abilita una modalita' unsafe: SOLO il boolean True puo' abilitare
 # l'opt-in. Stringhe "false"/"0"/"true"/"1" e altri truthy-Python (es. lista

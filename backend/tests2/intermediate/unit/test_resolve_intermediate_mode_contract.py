@@ -42,9 +42,7 @@ from app.core.intermediate.policy import (
 pytestmark = [pytest.mark.unit, pytest.mark.intermediate, pytest.mark.contract]
 
 
-# ============================================================
 # 1. Override None -> ritorna default (bit-compat)
-# ============================================================
 
 @pytest.mark.parametrize(
     "default_mode",
@@ -62,9 +60,7 @@ def test_override_none_returns_default(default_mode):
     assert resolve_intermediate_mode(default_mode, override_mode=None) == default_mode
 
 
-# ============================================================
 # 2-3. Override valido sovrascrive il default
-# ============================================================
 
 @pytest.mark.parametrize(
     "default_mode,override_mode,expected",
@@ -85,9 +81,7 @@ def test_override_valid_sovrascrive_default(default_mode, override_mode, expecte
     assert resolve_intermediate_mode(default_mode, override_mode) == expected
 
 
-# ============================================================
 # 4. Override invalido -> raise IntermediateSettingsError (fail-loud)
-# ============================================================
 
 def test_override_stringa_vuota_solleva():
     with pytest.raises(IntermediateSettingsError) as exc_info:
@@ -137,9 +131,7 @@ def test_override_tipo_non_str_solleva(bad_override):
     assert "type=" in msg or "str" in msg.lower()
 
 
-# ============================================================
 # 5. Override in PLANNED_PERSISTENCE_MODES -> raise
-# ============================================================
 
 def test_override_planned_mode_solleva(monkeypatch):
     """Mode pianificate ma non implementate devono fail-loud."""
@@ -157,10 +149,8 @@ def test_override_planned_mode_solleva(monkeypatch):
     assert "non e' ancora" in msg or "implement" in msg.lower()
 
 
-# ============================================================
 # 6. Capability runtime NON verificata (full_artifact senza object storage
 #    NON solleva qui — quella check resta startup-side)
-# ============================================================
 
 def test_full_artifact_override_non_verifica_capability(monkeypatch):
     """`full_artifact` come override deve passare l'enum-check anche se
@@ -192,9 +182,7 @@ def test_full_artifact_override_non_verifica_capability(monkeypatch):
     )
 
 
-# ============================================================
 # 7. default_mode invalido non e' validato dalla fn (caller responsability)
-# ============================================================
 
 def test_default_mode_invalido_passa_se_override_none():
     """resolve_intermediate_mode NON valida default_mode quando override
@@ -209,9 +197,7 @@ def test_default_mode_invalido_passa_se_override_none():
     assert resolve_intermediate_mode("not_a_real_mode", None) == "not_a_real_mode"
 
 
-# ============================================================
 # 8. Coverage smoke: ogni mode supportato e' raggiungibile come override
-# ============================================================
 
 def test_ogni_mode_supportato_e_overridable_da_metadata_only():
     """Sanity: il default produzione (metadata_only) puo' essere

@@ -84,9 +84,7 @@ def harness_section(doc_text: str) -> str:
     return doc_text[start:end]
 
 
-# =====================================================================
 # Section 5 of the dry-run pack
-# =====================================================================
 
 
 def test_harness_section_exists(harness_section: str):

@@ -50,9 +50,7 @@ _RESULT_BLOB_PY = (
 )
 
 
-# ---------------------------------------------------------------------------
 # 1. Mode acceptance
-# ---------------------------------------------------------------------------
 
 
 def test_path_mode_is_now_supported():
@@ -94,9 +92,7 @@ def test_stream_mode_remains_unsupported():
         ResultBlobLoader().load(ref, mode="stream")  # type: ignore[arg-type]
 
 
-# ---------------------------------------------------------------------------
 # 2. Single-dispatch invariant (bytes + path share lookup/filter/SQL)
-# ---------------------------------------------------------------------------
 
 
 def test_path_mode_uses_same_dispatch_function_as_bytes_mode():
@@ -174,9 +170,7 @@ def test_path_mode_passes_group_id_filter_when_not_superadmin(monkeypatch):
         cleanup_resource_path(out)
 
 
-# ---------------------------------------------------------------------------
 # 3. Failure paths
-# ---------------------------------------------------------------------------
 
 
 def test_path_mode_raises_file_not_found_on_missing_row():
@@ -252,9 +246,7 @@ def test_path_mode_cleans_up_partial_tempfile_on_write_failure(monkeypatch, tmp_
         )
 
 
-# ---------------------------------------------------------------------------
 # 4. Anti-god-engine: stdlib-only tempfile (no app.config import)
-# ---------------------------------------------------------------------------
 
 
 def test_loader_module_does_not_import_app_config():
@@ -319,9 +311,7 @@ def test_loader_path_mode_does_not_pull_settings_at_import_time():
     )
 
 
-# ---------------------------------------------------------------------------
 # 5. Resource envelope shape (path-mode specifics)
-# ---------------------------------------------------------------------------
 
 
 def test_path_mode_resource_envelope_has_path_only_no_data_no_stream():

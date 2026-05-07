@@ -172,9 +172,7 @@ def auth_headers(auth_token):
     return {"Authorization": f"Bearer {auth_token}"}
 
 
-# =============================================================================
 # Auto-marker: requires_backend_http_service
-# =============================================================================
 #
 # Marca i test che dipendono direttamente o transitivamente da una fixture
 # che spawna un backend HTTP live (uvicorn). Permette il deselect dalla CI

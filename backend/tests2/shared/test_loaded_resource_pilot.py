@@ -20,9 +20,7 @@ import pytest
 pytestmark = [pytest.mark.unit, pytest.mark.shared]
 
 
-# ---------------------------------------------------------------------------
 # Helpers
-# ---------------------------------------------------------------------------
 
 def _make_file_ref(fid="fs-1"):
     from app.core.artifacts import SourceRef
@@ -48,9 +46,7 @@ _COLUMNS = [
 ]
 
 
-# ---------------------------------------------------------------------------
 # 1. LoadedResource is importable from shared (boundary guard companion)
-# ---------------------------------------------------------------------------
 
 
 def test_loaded_resource_importable_from_shared():
@@ -68,9 +64,7 @@ def test_loaded_resource_is_frozen_dataclass():
         lr.data = "something"  # type: ignore[misc]
 
 
-# ---------------------------------------------------------------------------
 # 2. load_with_metadata returns LoadedResource with correct data
-# ---------------------------------------------------------------------------
 
 
 def test_load_with_metadata_returns_loaded_resource():
@@ -97,9 +91,7 @@ def test_load_with_metadata_returns_loaded_resource():
     assert result.data is df
 
 
-# ---------------------------------------------------------------------------
 # 3. metadata carries geometry_column and crs_epsg from columns_metadata
-# ---------------------------------------------------------------------------
 
 
 def test_load_with_metadata_populates_resource_metadata():
@@ -123,9 +115,7 @@ def test_load_with_metadata_populates_resource_metadata():
     assert result.metadata.source_kind == "file"
 
 
-# ---------------------------------------------------------------------------
 # 4. columns_metadata=None produces LoadedResource with metadata=None
-# ---------------------------------------------------------------------------
 
 
 def test_load_with_metadata_none_columns_gives_none_metadata():
@@ -148,9 +138,7 @@ def test_load_with_metadata_none_columns_gives_none_metadata():
     assert result.metadata is None
 
 
-# ---------------------------------------------------------------------------
 # 5. source_kind resolved per ref.kind()
-# ---------------------------------------------------------------------------
 
 
 def test_load_with_metadata_project_ref_sets_project_source_kind():
@@ -172,9 +160,7 @@ def test_load_with_metadata_project_ref_sets_project_source_kind():
     assert result.metadata.source_kind == "project"
 
 
-# ---------------------------------------------------------------------------
 # 6. legacy load() return value is unchanged (backward compat)
-# ---------------------------------------------------------------------------
 
 
 def test_legacy_load_still_returns_raw_data():
@@ -191,9 +177,7 @@ def test_legacy_load_still_returns_raw_data():
     assert raw is df
 
 
-# ---------------------------------------------------------------------------
 # 7. _source_kind_for_ref — unit tests for the extracted mapping function
-# ---------------------------------------------------------------------------
 
 
 def test_source_kind_for_file_ref():
@@ -211,9 +195,7 @@ def test_source_kind_for_static_ref():
     assert _source_kind_for_ref(_make_static_ref()) == "static"
 
 
-# ---------------------------------------------------------------------------
 # 8. Static source kind coverage (059-W1 expansion)
-# ---------------------------------------------------------------------------
 
 
 def test_static_source_no_columns_metadata_gives_none():

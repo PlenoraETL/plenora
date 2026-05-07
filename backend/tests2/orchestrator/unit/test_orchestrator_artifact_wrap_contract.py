@@ -31,9 +31,7 @@ from app.core.artifacts.types import (
 pytestmark = [pytest.mark.unit, pytest.mark.contract]
 
 
-# =============================================================================
 # 1. artifact_kind derivation
-# =============================================================================
 
 
 def test_kind_blob_when_result_id_present():
@@ -92,9 +90,7 @@ def test_kind_priority_inline_over_blob_over_file():
     assert b.artifact_kind == "blob"
 
 
-# =============================================================================
 # 2. project_id binding autorevole
-# =============================================================================
 
 
 def test_project_id_overrides_when_missing_in_payload():
@@ -122,9 +118,7 @@ def test_project_id_empty_keyword_raises():
         )
 
 
-# =============================================================================
 # 3. Input non-dict → artifact 'none' safe
-# =============================================================================
 
 
 def test_non_dict_input_produces_none_artifact_not_raise():
@@ -137,9 +131,7 @@ def test_non_dict_input_produces_none_artifact_not_raise():
     assert b.artifact_kind == "none"
 
 
-# =============================================================================
 # 4. Dict-like access per retrocompat legacy consumer
-# =============================================================================
 
 
 def test_artifact_is_dict_subclass_for_legacy_consumers():
@@ -156,9 +148,7 @@ def test_artifact_is_dict_subclass_for_legacy_consumers():
     assert a["carica"] == {"task_id": "ct-1"}
 
 
-# =============================================================================
 # 5. to_run_artifact_ref solleva su kind='none', altrimenti Ref valido
-# =============================================================================
 
 
 def test_to_run_artifact_ref_for_blob():
@@ -191,9 +181,7 @@ def test_to_run_artifact_ref_none_raises():
         a.to_run_artifact_ref()
 
 
-# =============================================================================
 # 6. Integrazione: orchestrator.execute_pipeline → PipelineArtifact
-# =============================================================================
 
 
 def test_orchestrator_wraps_estrai_executor_result_as_blob_artifact():

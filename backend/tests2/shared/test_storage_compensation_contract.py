@@ -39,9 +39,7 @@ from app.shared.storage_compensation import compensating_delete
 pytestmark = [pytest.mark.unit, pytest.mark.shared, pytest.mark.contract]
 
 
-# ---------------------------------------------------------------------------
 # Stubs
-# ---------------------------------------------------------------------------
 
 
 class _StubStorage:
@@ -73,9 +71,7 @@ def caplog_helper(caplog):
     helper_logger.setLevel(prev_level)
 
 
-# ---------------------------------------------------------------------------
 # 1. Capability disabled -> skipped silenzioso
-# ---------------------------------------------------------------------------
 
 
 def test_capability_disabled_returns_skipped_no_factory_call(
@@ -130,9 +126,7 @@ def test_capability_disabled_with_supplied_storage_still_skipped(
     assert storage.deletes == []
 
 
-# ---------------------------------------------------------------------------
 # 2. Capability ON + delete OK -> ok
-# ---------------------------------------------------------------------------
 
 
 def test_capability_on_delete_ok_returns_ok_emits_info_event(
@@ -195,9 +189,7 @@ def test_supplied_storage_used_instead_of_factory(monkeypatch):
     assert storage.deletes == ["results/p1/abc.bin"]
 
 
-# ---------------------------------------------------------------------------
 # 3. Capability ON + delete fail -> failed (mai solleva)
-# ---------------------------------------------------------------------------
 
 
 def test_delete_failure_returns_failed_never_raises(
@@ -262,9 +254,7 @@ def test_delete_failure_warning_log_level(monkeypatch, caplog_helper):
     assert failed[0].levelno == logging.WARNING
 
 
-# ---------------------------------------------------------------------------
 # 4. Race capability-off-during-resolution
-# ---------------------------------------------------------------------------
 
 
 def test_race_capability_disabled_during_factory_resolution(
@@ -334,9 +324,7 @@ def test_factory_unexpected_error_returns_failed(monkeypatch, caplog_helper):
     ), msgs
 
 
-# ---------------------------------------------------------------------------
 # 5. Extras handling: protected keys non sovrascrivono i campi canonici
-# ---------------------------------------------------------------------------
 
 
 def test_extras_protected_keys_filtered(monkeypatch, caplog_helper):
@@ -404,9 +392,7 @@ def test_extras_none_value_omitted(monkeypatch, caplog_helper):
     assert "batch_id" not in ok
 
 
-# ---------------------------------------------------------------------------
 # 6. Caller-supplied logger
-# ---------------------------------------------------------------------------
 
 
 def test_caller_logger_receives_records(monkeypatch):

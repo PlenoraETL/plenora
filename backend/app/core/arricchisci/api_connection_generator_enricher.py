@@ -275,12 +275,10 @@ class ApiConnectionGeneratorEnricherMixin:
     delegate condiviso fra i due flussi).
     """
 
-    # =========================================================================
     # API GENERATOR
     # Pipeline: build_base_params → paginate → call_endpoint(path subst →
     # SSRF guard → GET/POST → parse_response). Pagination 4 strategies:
     # '' (no-pag), 'offset', 'cursor', 'link'.
-    # =========================================================================
 
     def _paginate_generator_results(
         self, *, call_fn, pagination: Dict, base_params: Dict
@@ -605,12 +603,10 @@ class ApiConnectionGeneratorEnricherMixin:
         )
         return pd.DataFrame(all_rows) if all_rows else pd.DataFrame()
 
-    # =========================================================================
     # API ENRICHER
     # Pipeline: per riga del df → build params → path subst → SSRF guard →
     # GET/POST → parse → estrai → scrivi colonne. Skip-on-row-error
     # resilience pattern.
-    # =========================================================================
 
     def _extract_rows_from_response(self, data: Any, output_mapping: List[Dict]) -> List[Dict]:
         """
@@ -850,9 +846,7 @@ class ApiConnectionGeneratorEnricherMixin:
         logger.info(f"Completato: {success_count}/{len(df)} righe, {error_count} errori")
         return result_df
 
-    # =========================================================================
     # JSON PATH UTIL — delegate condiviso fra Generator e Enricher
-    # =========================================================================
 
     def _extract_json_value(self, data: Any, path: str) -> Any:
         """Estrae valore da JSON usando dot notation. Delegato a shared/api_utils."""

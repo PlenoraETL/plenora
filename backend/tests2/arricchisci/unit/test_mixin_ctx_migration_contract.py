@@ -44,9 +44,7 @@ pytestmark = [pytest.mark.unit, pytest.mark.arricchisci, pytest.mark.contract]
 _BACKEND_ROOT = Path(__file__).resolve().parent.parent.parent.parent
 
 
-# ---------------------------------------------------------------------------
 # 1. Signature Phase 2 — `ctx` as kwarg on all 6 reader sites
-# ---------------------------------------------------------------------------
 
 
 def test_load_source_project_accepts_ctx_kwarg():
@@ -115,9 +113,7 @@ def test_resolve_file_source_path_accepts_ctx_kwarg():
     assert sig.parameters["ctx"].kind == inspect.Parameter.KEYWORD_ONLY
 
 
-# ---------------------------------------------------------------------------
 # 2 + 4. Phase 2 wins over singleton state
-# ---------------------------------------------------------------------------
 
 
 def test_load_static_values_uses_ctx_group_id_over_singleton(api_service):
@@ -163,9 +159,7 @@ def test_load_static_values_uses_ctx_group_id_over_singleton(api_service):
     )
 
 
-# ---------------------------------------------------------------------------
 # 3. KEEP_COMPAT fallback to singleton when ctx is None
-# ---------------------------------------------------------------------------
 
 
 def test_load_static_values_ignores_stale_singleton_with_explicit_ctx(api_service):
@@ -383,9 +377,7 @@ def test_load_file_source_uses_ctx_preview_limit_over_singleton(api_service):
     )
 
 
-# ---------------------------------------------------------------------------
 # 5. Fail-closed when ctx.group_id is None
-# ---------------------------------------------------------------------------
 
 
 def test_load_source_project_fails_closed_when_ctx_group_id_none(api_service):
@@ -428,9 +420,7 @@ def test_assert_file_source_group_access_fails_closed_with_ctx_none_group(
         api_service._assert_file_source_group_access("fs-1", ctx=ctx)
 
 
-# ---------------------------------------------------------------------------
 # 6. canvas_orchestrator threads ctx through to mixin callsites
-# ---------------------------------------------------------------------------
 
 
 def _has_ctx_kwarg_in_call(node: ast.Call) -> bool:
@@ -497,9 +487,7 @@ def test_canvas_orchestrator_init_returns_ctx_used_in_dispatch():
     )
 
 
-# ---------------------------------------------------------------------------
 # rest_file legacy helper removal (BE-GO-READY-TRANSFORMATION-ENGINE-027)
-# ---------------------------------------------------------------------------
 
 
 def test_rest_file_legacy_resolve_helper_is_removed():
@@ -582,9 +570,7 @@ def test_rest_file_strict_helpers_still_present():
     )
 
 
-# ---------------------------------------------------------------------------
 # BE-GO-READY-TRANSFORMATION-ENGINE-029 — source-loading migratable locks
-# ---------------------------------------------------------------------------
 
 
 def test_te029_source_loading_migratable_tests_use_ctx_and_stale_singleton():
@@ -739,9 +725,7 @@ def test_te030b_source_loading_callsites_use_strict_helper():
     )
 
 
-# ---------------------------------------------------------------------------
 # BE-GO-READY-TRANSFORMATION-ENGINE-032 — ctx required signatures
-# ---------------------------------------------------------------------------
 
 
 def _get_signature_from_mixin(method_name: str):

@@ -64,9 +64,7 @@ def _stub_save(monkeypatch):
     return fake_save
 
 
-# ============================================================
 # A. df NON None -> record_final_snapshot via policy
-# ============================================================
 
 
 def test_estrai_final_snapshot_uses_record_final_snapshot(monkeypatch):
@@ -119,9 +117,7 @@ def test_estrai_final_snapshot_uses_record_final_snapshot(monkeypatch):
     write_node_spy.assert_not_called()
 
 
-# ============================================================
 # B. policy metadata_only -> 0 node_rows ma hash + meta presenti
-# ============================================================
 
 
 def test_estrai_metadata_only_writes_meta_and_hash_no_rows(monkeypatch):
@@ -167,9 +163,7 @@ def test_estrai_metadata_only_writes_meta_and_hash_no_rows(monkeypatch):
     assert captured["hash_algo"] == "pandas_sample_hash_v1"
 
 
-# ============================================================
 # C. policy preview_only sopra cap legacy non usa logica custom
-# ============================================================
 
 
 def test_estrai_preview_only_above_legacy_cap_caps_to_preview_rows(monkeypatch):
@@ -217,9 +211,7 @@ def test_estrai_preview_only_above_legacy_cap_caps_to_preview_rows(monkeypatch):
     assert captured["preview_truncated"] is True
 
 
-# ============================================================
 # D. Streaming branch (df=None) preserva legacy ok_streamed
-# ============================================================
 
 
 def test_estrai_streaming_branch_uses_legacy_write_node_ok_streamed(monkeypatch):

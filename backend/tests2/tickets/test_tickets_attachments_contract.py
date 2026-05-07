@@ -29,9 +29,7 @@ from app.core.tickets.router import _require_not_esecutore, router as tickets_ro
 pytestmark = [pytest.mark.unit, pytest.mark.contract]
 
 
-# =============================================================================
 # Fixtures
-# =============================================================================
 
 
 def _user(role: str = "user", user_id: str = "u1", group_id: str = "g1") -> CurrentUser:
@@ -139,9 +137,7 @@ def mock_file_service():
         yield fake_fs
 
 
-# =============================================================================
 # UPLOAD
-# =============================================================================
 
 
 def test_upload_happy_path_returns_attachment_metadata(mock_tdb, mock_file_service):
@@ -295,9 +291,7 @@ def test_upload_rejects_binary_renamed_to_log(mock_tdb, mock_file_service):
     mock_file_service.create_raw_from_upload.assert_not_called()
 
 
-# =============================================================================
 # DELETE
-# =============================================================================
 
 
 def test_delete_uploader_can_remove_own_attachment(mock_tdb, mock_file_service):
@@ -355,9 +349,7 @@ def test_delete_attachment_mismatched_ticket_returns_404(mock_tdb, mock_file_ser
     mock_tdb.delete_attachment.assert_not_called()
 
 
-# =============================================================================
 # DOWNLOAD
-# =============================================================================
 
 
 @pytest.fixture
@@ -467,9 +459,7 @@ def test_download_blob_unavailable_returns_404(mock_tdb, mock_file_service):
     assert response.status_code == 404
 
 
-# =============================================================================
 # DELETE (continua)
-# =============================================================================
 
 
 def test_delete_cleanup_failure_does_not_break_response(mock_tdb, mock_file_service):

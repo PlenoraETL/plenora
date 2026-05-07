@@ -31,9 +31,7 @@ import pytest
 pytestmark = [pytest.mark.unit, pytest.mark.security, pytest.mark.contract]
 
 
-# =============================================================================
 # 1. Helpers rifiutano payload
-# =============================================================================
 
 
 @pytest.mark.parametrize("payload", [
@@ -113,9 +111,7 @@ def test_safe_qualified_identifier_rejects_multilevel():
         _safe_qualified_identifier("a.b.c")
 
 
-# =============================================================================
 # 2. Metodi numerici rifiutano injection
-# =============================================================================
 
 
 def _translator(db="postgres"):
@@ -162,9 +158,7 @@ def test_numeric_params_accept_valid_inputs():
     assert "4326" in sql
 
 
-# =============================================================================
 # 3. _qualify_column rifiuta identifier invalidi
-# =============================================================================
 
 
 def test_qualify_column_rejects_injection_in_simple_identifier():
@@ -195,9 +189,7 @@ def test_qualify_column_passthrough_expressions():
     assert tr._qualify_column(expr, "t") == expr
 
 
-# =============================================================================
 # 4. Regression: metodi gia' validati restano tali
-# =============================================================================
 
 
 def test_date_add_still_rejects_non_numeric_interval():
@@ -230,9 +222,7 @@ def test_date_format_still_rejects_bad_format():
         )
 
 
-# =============================================================================
 # 5. N2 residui — follow-up fix (MATH.value, EXTRACT.part)
-# =============================================================================
 
 
 @pytest.mark.parametrize("payload", [
@@ -313,9 +303,7 @@ def test_extract_rejects_unknown_part():
         tr.translate("EXTRACT", {"column": "d", "part": "century"}, table_alias="t")
 
 
-# =============================================================================
 # 6. N2 residui — defense-in-depth su _qualify_column (expression path)
-# =============================================================================
 
 
 @pytest.mark.parametrize("payload", [
@@ -353,9 +341,7 @@ def test_qualify_column_expression_path_accepts_legitimate_outputs(expr):
     assert tr._qualify_column(expr, "t") == expr
 
 
-# =============================================================================
 # 7. N2 residui — operator non validato in CASE_WHEN / IIF
-# =============================================================================
 
 
 @pytest.mark.parametrize("method,extra", [

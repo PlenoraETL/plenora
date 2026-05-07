@@ -57,9 +57,7 @@ def _tick(fc: FakeClock, interval: float) -> None:
     fc.advance(interval + 0.001)
 
 
-# =============================================================================
 # refresh OK -> nessun problema
-# =============================================================================
 
 
 def test_heartbeat_does_not_try_reacquire_when_refresh_returns_true():
@@ -80,9 +78,7 @@ def test_heartbeat_does_not_try_reacquire_when_refresh_returns_true():
     assert state.get("lock_lost") is not True
 
 
-# =============================================================================
 # refresh False -> tenta re-acquire
-# =============================================================================
 
 
 def test_heartbeat_attempts_reacquire_when_refresh_returns_false(caplog):

@@ -53,18 +53,13 @@ from typing import List, Optional, Union
 
 from app.utils.logger import get_logger
 
-# Stesso logger name di `base.py`: i record sono indistinguibili dai
-# consumer che attaccano handler / filtrano per
-# "app.core.manipola.transforms.base" (pattern §6.1 facade).
 logger = get_logger("app.core.manipola.transforms.base")
 
 DataFrame = Union[pd.DataFrame, gpd.GeoDataFrame]
 
 
-# =============================================================================
 # NUMERAZIONE RIGHE
 # Aggiunge colonna con numero progressivo, opzionalmente partizionato e ordinato.
-# =============================================================================
 
 def op_add_row_number(
     df: DataFrame,
@@ -111,10 +106,8 @@ def op_add_row_number(
         raise
 
 
-# =============================================================================
 # ESTRAZIONE PARTI DATA
 # Estrae componenti (anno, mese, giorno, ecc.) da una colonna datetime.
-# =============================================================================
 
 def op_date_extract(
     df: DataFrame,
@@ -181,10 +174,8 @@ def op_date_extract(
         raise
 
 
-# =============================================================================
 # UUID GENERATOR — Genera un UUID univoco per ogni riga
 # Utile per creare chiavi primarie sintetiche.
-# =============================================================================
 
 def op_uuid_generator(
     df: DataFrame,

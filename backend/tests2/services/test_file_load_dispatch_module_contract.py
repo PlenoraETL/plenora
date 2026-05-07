@@ -29,9 +29,6 @@ import pytest
 pytestmark = [pytest.mark.unit, pytest.mark.contract]
 
 
-# --- Fixtures ------------------------------------------------------------
-
-
 @pytest.fixture
 def fake_logger():
     log = MagicMock()
@@ -51,9 +48,6 @@ def fake_loader():
     loader.load_json = MagicMock()
     loader.load_geospatial = MagicMock()
     return loader
-
-
-# --- Tabular formats -----------------------------------------------------
 
 
 def test_csv_dispatches_to_loader_load_csv(fake_loader, fake_logger):
@@ -110,9 +104,6 @@ def test_json_dispatches_to_loader_load_json(fake_loader, fake_logger):
     assert df is expected_df
     assert gdf is None
     fake_loader.load_json.assert_called_once_with(Path("/tmp/x.json"))
-
-
-# --- Geospatial formats --------------------------------------------------
 
 
 def _fake_geometry(wkt_value):
@@ -172,9 +163,6 @@ def test_geospatial_without_geometry_column_skips_wkt_conversion(
     assert list(df["id"]) == [1, 2]
 
 
-# --- Error path ----------------------------------------------------------
-
-
 def test_unsupported_format_raises_value_error(fake_loader, fake_logger):
     from app.services.file_load_dispatch import load_by_format
 
@@ -192,9 +180,6 @@ def test_unsupported_format_raises_value_error(fake_loader, fake_logger):
     fake_loader.load_geospatial.assert_not_called()
     # Niente logger.info perche' raise prima.
     fake_logger.info.assert_not_called()
-
-
-# --- Service wrapper delega ----------------------------------------------
 
 
 def test_file_source_service_wrapper_delegates_to_load_by_format():

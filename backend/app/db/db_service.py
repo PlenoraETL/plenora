@@ -17,7 +17,6 @@ Strangler / deathmap:
     `tests2/shared/test_config_db_service_facade_strangler_contract.py`.
 """
 
-# Re-export of the config-cluster DALs (canonical home: `app/db/config/*.py`).
 from app.db.config_db_service import (
     get_connection, init_db, transaction, fetchone, fetchall, execute, executemany,
     get_group, list_groups, create_group, delete_group,
@@ -37,7 +36,6 @@ from app.db.config_db_service import (
     get_schedule, list_schedules, save_schedule, update_schedule, delete_schedule,
 )
 
-# Re-export of the results / log-execution DAL (canonical home: `app/db/results_db_service.py`).
 from app.db.results_db_service import (
     save_result, get_result, get_result_data, get_latest_result,
     list_results, delete_result,

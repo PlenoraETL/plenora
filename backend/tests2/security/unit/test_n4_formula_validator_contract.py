@@ -31,9 +31,7 @@ import pytest
 pytestmark = [pytest.mark.unit, pytest.mark.security, pytest.mark.contract]
 
 
-# =============================================================================
 # 1. AST validator — payload di attacco bloccati
-# =============================================================================
 
 
 @pytest.mark.parametrize("payload", [
@@ -107,9 +105,7 @@ def test_ast_validator_blocks_exotic_nodes_whitelist(payload):
         _validate_formula_ast(payload)
 
 
-# =============================================================================
 # 2. AST validator — formule lecite passano
-# =============================================================================
 
 
 @pytest.mark.parametrize("formula", [
@@ -149,9 +145,7 @@ def test_ast_validator_allows_legitimate_formulas(formula):
     _validate_formula_ast(formula)
 
 
-# =============================================================================
 # 3. op_formula — nomi colonna _-prefix/dunder scartati dal namespace eval
-# =============================================================================
 
 
 class _ListHandler(logging.Handler):

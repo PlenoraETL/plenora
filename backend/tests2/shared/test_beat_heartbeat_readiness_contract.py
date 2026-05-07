@@ -35,9 +35,7 @@ import pytest
 pytestmark = [pytest.mark.unit, pytest.mark.shared, pytest.mark.contract]
 
 
-# =====================================================================
 # 1. Settings default + opt-in semantics
-# =====================================================================
 
 
 def test_settings_default_is_zero_disabled():
@@ -91,9 +89,7 @@ def test_check_skipped_when_threshold_negative():
     assert "disabled" in detail
 
 
-# =====================================================================
 # 2. Threshold > 0: row presence and age semantics
-# =====================================================================
 
 
 def _settings_stub(*, max_age):
@@ -208,9 +204,7 @@ def test_naive_datetime_is_treated_as_utc():
     assert ok in (True, False)
 
 
-# =====================================================================
 # 3. Fail-OPEN on degraded signal
-# =====================================================================
 
 
 def test_db_error_is_fail_open():
@@ -266,9 +260,7 @@ def test_malformed_timestamp_is_fail_open():
     assert "check skipped" in detail
 
 
-# =====================================================================
 # 4. SQL contract
-# =====================================================================
 
 
 def test_sql_targets_canonical_row():
@@ -292,9 +284,7 @@ def test_sql_targets_canonical_row():
     assert "ts" in captured["sql"]
 
 
-# =====================================================================
 # 5. gather_readiness wiring
-# =====================================================================
 
 
 def test_check_beat_heartbeat_in_module_all():

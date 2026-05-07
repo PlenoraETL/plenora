@@ -57,9 +57,7 @@ except ImportError:
     # variabili d'ambiente esportate dal sistema.
     pass
 
-# =============================================================================
 # CLASSE SETTINGS
-# =============================================================================
 
 class Settings:
     """
@@ -72,14 +70,8 @@ class Settings:
     """
 
     DEFAULTS = {
-        # ==================== DIRECTORY ====================
         "DATA_DIR": "./data",
 
-        # ==================== LOG DB ====================
-        # Legacy post-PG (O-ARC 2026-04-21): keys stale. LOG_DB_FILE/MAX_ROWS
-        # lette da utils/logger.py:250-251 ma non consumate (SQLiteLogHandler
-        # dead; sink canonico = PostgresLogHandler su plenora.logs). CONNECT/
-        # BUSY_TIMEOUT orfani. Mantenute per .env retro-compat + Settings init.
         "LOG_DB_FILE":              "log.db",
         "LOG_DB_MAX_ROWS":          100_000,
         "LOG_DB_CONNECT_TIMEOUT":   5,
@@ -87,15 +79,12 @@ class Settings:
         "RUNS_PAGE_SIZE":           50,
         "RUNS_LOG_LIMIT":           200,
 
-        # ==================== CORS ====================
         "CORS_ORIGINS": "http://localhost:3000,http://localhost:5173,http://127.0.0.1:3000,http://127.0.0.1:5173",
 
-        # ==================== DATABASE ====================
         "DB_CONNECT_TIMEOUT": 10,
         "DB_QUERY_TIMEOUT": 30,
         "SUPPORTED_DB_TYPES": ["postgres", "mssql", "mysql", "oracle", "sqlite"],
 
-        # ==================== CELERY (Redis) ====================
         "CELERY_BROKER_URL":            "redis://localhost:6379/0",
         "CELERY_RESULT_BACKEND":        "redis://localhost:6379/0",
         "CELERY_TASK_TIMEOUT":          3600,
@@ -120,7 +109,6 @@ class Settings:
         "TASK_PROGRESS_POLL_INTERVAL":  1,
         "CELERY_RESULT_EXPIRES":        86400,
 
-        # ==================== AUTH ====================
         # Durata del token JWT in ore. Migrato a Settings da `BE-CONFIG-001B`
         # (era direct `os.getenv` in `app.shared.jwt_token`). Override env
         # `JWT_EXPIRE_HOURS` continua a funzionare via type coercion `int`.
@@ -146,7 +134,6 @@ class Settings:
         # Default 1800s (30 min). Migrato a Settings da `BE-CONFIG-001C`.
         "JWT_BLACKLIST_STALE_THRESHOLD_SEC": 1800,
 
-        # ==================== FEATURE FLAG + TUNING (001D) ====================
         # Migrati da direct `os.getenv` in `BE-CONFIG-001D`. Default
         # tipati identici al pre-001D. Override env funziona via
         # `Settings._converti_tipo_env`.
@@ -176,38 +163,27 @@ class Settings:
         "DB_SCHEMA_WARN_GB": 1.0,
         "DB_SCHEMA_ERROR_GB": 5.0,
 
-        # ==================== API ESTERNE ====================
         "API_TIMEOUT": 30,
         "API_DEFAULT_RATE_LIMIT": 5,
 
-        # ==================== FORMATI OUTPUT ====================
         "SUPPORTED_OUTPUT_FORMATS": [
             "csv", "json", "xlsx", "parquet",
             "geojson", "gpkg", "shp", "gdb"
         ],
         "DEFAULT_OUTPUT_FORMAT": "csv",
 
-        # ==================== FILE ESTERNI ====================
         "SUPPORTED_FILE_FORMATS": [
             "csv", "xlsx", "json",
             "geojson", "gpkg", "shp", "gdb"
         ],
         "MAX_FILE_SIZE": 100 * 1024 * 1024,  # 100 MB
 
-        # ==================== TEMP CLEANUP ====================
         # TTL in ore per i file temp orfani sotto `DATA_DIR/temp/`.
         # Beat scheduler (`workers/beat_scheduler:_cleanup_temp_orphans`)
         # rimuove le directory piu' vecchie di N ore. Default 24h.
         # Migrato a Settings da `BE-CONFIG-001B`.
         "TEMP_ORPHAN_CLEANUP_HOURS": 24,
 
-        # ==================== STORAGE POLICY (A1) ====================
-        # Policy unica top-level per persistenza di result pipeline e
-        # file_source utente. Vedi orchestrate/phase_1_stabilization/a1_storage_policy.md.
-        #   - "db"             -> sempre BYTEA in DB, nessun bucket richiesto
-        #   - "object_storage" -> sempre bucket, DB tiene solo metadata
-        #   - "hybrid"         -> dispatch per soglia (default retro-compat)
-        # Validazione coerenza all'avvio in app/shared/cloud_backends.validate_storage_config.
         "STORAGE_POLICY": "hybrid",
         # Hard cap per payload persistiti come BYTEA (mode "db" + ramo DB di "hybrid").
         # Default 500 MB: limite pratico di un BYTEA PG senza toast tuning.
@@ -228,12 +204,6 @@ class Settings:
         "MINIO_ACCESS_KEY": None,
         "MINIO_SECRET_KEY": None,
 
-        # ==================== LOG ARCHIVE (O-ARC Batch 2, ADR-0014) ====================
-        # Master switch archive+purge per plenora.logs e plenora.audit_actions.
-        # Con enabled=false (default) validate_storage_config salta tutti i check
-        # LOG_ARCHIVE_*; il retention esistente (_cleanup_old_logs) continua a
-        # girare come oggi. L'hook archive nel beat arriva in Batch 3
-        # (ADR-0014 §A4: silent pass anche con altre LOG_ARCHIVE_* settate).
         "LOG_ARCHIVE_ENABLED": False,
         # Prefisso deterministico delle object key archive. Default senza
         # auto-derivazione <env>: ops override esplicito in .env per separare
@@ -243,24 +213,17 @@ class Settings:
         # pratico RAM per batch. Nome canonico (ADR-0014 §A1): supersede
         # LOG_ARCHIVE_BATCH_SIZE citato nell'ADR originale Consequences/Neutral.
         "LOG_ARCHIVE_BATCH_ROWS": 10_000,
-        # Giorni di retention per plenora.audit_actions. 0 = retention
-        # disabilitata (simmetrico a SCHEDULE_LOGS_RETENTION_DAYS). Default
-        # 365gg: baseline ISO 27001 A.12.4.1 per event log. Consumato dal
-        # beat in Batch 3 come cutoff archive+purge.
         "AUDIT_RETENTION_DAYS": 365,
         # NB: LOG_ARCHIVE_BUCKET e' intenzionalmente fuori da DEFAULTS —
         # e' required-if-enabled con validazione fail-fast a boot
         # (ADR-0014 §A3: distinto da BACKUP_BUCKET/BACKUP_S3_BUCKET).
 
-        # ==================== PROGETTI ====================
         "SUPPORTED_PROJECT_TYPES": ["estrai", "manipola", "arricchisci", "salva"],
         "DEFAULT_GROUP": "default",
 
-        # ==================== LIMITI ====================
         "MAX_PROJECT_NAME_LENGTH": 100,
         "MAX_CONNECTION_NAME_LENGTH": 100,
         "MAX_PREVIEW_ROWS": 1000,
-        # ==================== MEMORY / OOM PREVENTION ====================
         # BE-GO-READY-MEMORY-OOM-001-LOAD-FILE-PREFLIGHT-GUARD: cap massimo
         # in byte per il file caricato sincrono via
         # `load_dataframe_from_file`. Sopra il cap il guard solleva
@@ -505,12 +468,10 @@ class Settings:
         # Cap <= 0 cade al fallback hardcoded di 3s.
         "READINESS_OBJECT_STORAGE_TIMEOUT_SECONDS": 3,
 
-        # ==================== TASK ARRICCHIMENTO ====================
         "ENRICHMENT_BATCH_SIZE": 100,
         "ENRICHMENT_MAX_WORKERS": 5,
         "ENRICHMENT_CACHE_TTL": 3600,
 
-        # ==================== CARICA ====================
         # Soglia righe oltre la quale TRUNCATE_INSERT + ALL_OR_NOTHING usa
         # stage+swap invece di DELETE+INSERT atomico. Sotto soglia: atomic
         # (zero overhead, no privilegi DDL). Sopra soglia: stage+swap
@@ -518,7 +479,6 @@ class Settings:
         # manca il writer fa fallback automatico ad atomic con WARNING).
         "CARICA_STAGE_SWAP_THRESHOLD": 500_000,
 
-        # ==================== ESTRAI ====================
         # C11: hard cap righe ritornate da una query ESTRAI. Se un
         # chunk_fetchmany porta il totale oltre questo limite, la
         # query fallisce loud con suggerimento (aggiungi WHERE, usa
@@ -536,7 +496,6 @@ class Settings:
         # serve per debug UI, non per re-esecuzione integrale.
         "INTERMEDIATE_SNAPSHOT_MAX_ROWS": 100_000,
 
-        # ==================== INTERMEDIATE PERSISTENCE POLICY ====================
         # Phase 6 product-grade Batch 1 (2026-04-28). Nuova policy
         # globale che separa "persistenza righe" (UI/debug) da "change
         # detection" (hash). Tre mode implementati in Batch 1:
@@ -587,27 +546,10 @@ class Settings:
         # Rendere troppo alto vanifica il vantaggio del sample.
         "INTERMEDIATE_FINGERPRINT_SAMPLE_ROWS": 1000,
 
-        # ==================== CHECKPOINT POLICY PER MODULO ====================
-        # Granularita' selezione nodi che producono snapshot in MANIPOLA.
-        # Policy applicata al layer `intermediate.policy`, non agli
-        # executor (Batch 2). Valori:
-        #   - "none": solo final, nessun nodo intermedio
-        #   - "critical": nodi critici (join/aggregate/filter/...) + final
-        #   - "marked": solo nodi con flag canvas save_intermediate=true
-        #     + final
-        #   - "critical_or_marked": critici O marcati + final
-        #   - "all": tutti i nodi (debug/legacy)
-        # Vedi `manipola_checkpoint_policy.md` per la classifica
-        # transform-by-transform.
         "MANIPOLA_INTERMEDIATE_CHECKPOINTS": "critical",
-        # ESTRAI: solo final output del modulo (no checkpoint per
-        # query intermedie). Solo "final_only" ammesso in Batch 1.
         "ESTRAI_INTERMEDIATE_CHECKPOINTS": "final_only",
-        # ARRICCHISCI: solo final output del modulo (no snapshot per
-        # nodo api_enrich). Solo "final_only" ammesso in Batch 1.
         "ARRICCHISCI_INTERMEDIATE_CHECKPOINTS": "final_only",
 
-        # ==================== ADMIN BACKUPS POLICY (BE-GO-READY-CONFIG-BOUNDARY-001) ====================
         # Backup amministrativi: cron schedule + descrizione UI-readable.
         # Classificate APP_POLICY/OPERATIONAL_TUNING in ADR-0021 §"Config
         # boundary": stringhe consumate da `get_schedule_info()` per
@@ -622,7 +564,6 @@ class Settings:
         "BACKUP_SCHEDULE_CRON": "0 2 * * *",
         "BACKUP_SCHEDULE_DESCRIPTION": "Daily 02:00 UTC (+ jitter fino a 5 min)",
 
-        # ==================== ARTIFACT STORE ====================
         # Bucket dedicato runtime artifact intermedi (full_artifact).
         # Separato da BACKUP_BUCKET (IAM boundary distinto) e dal
         # terraform-state. Required quando MODE=full_artifact +
@@ -636,7 +577,6 @@ class Settings:
         # Default "intermediate". Trim slash a destra.
         "INTERMEDIATE_ARTIFACT_PREFIX": "intermediate",
 
-        # ==================== OBJECT STORAGE CAPABILITY (Batch 1.5) ====================
         # Capability globale: se False, NESSUN modulo runtime (result/
         # file_source/eseguibili/IMDF/intermediate) deve tentare upload o
         # download via object storage. La factory `get_runtime_object_storage`
@@ -670,7 +610,6 @@ class Settings:
     def __init__(self):
         pass  # Niente da caricare — tutto da DEFAULTS + env
 
-    # ==================== ACCESSO VALORI ====================
 
     def get(self, key: str, default: Any = None) -> Any:
         """
@@ -711,7 +650,6 @@ class Settings:
             return super().__getattribute__(name)
         return self.get(name)
 
-    # ==================== DIRECTORY ====================
 
     def _directory(self, sottopercorso: str, base: Path = None, create: bool = True) -> Path:
         if base is None:
@@ -765,7 +703,6 @@ class Settings:
         except (TypeError, ValueError):
             return 48
 
-    # ==================== LOGGING ====================
     # Livello minimo dei log che finiscono nella console (stdout/journald).
     @property
     def LOG_LEVEL_CONSOLE(self) -> str:
@@ -799,11 +736,6 @@ class Settings:
         except (TypeError, ValueError):
             return 90
 
-    # ==================== LOG ARCHIVE (O-ARC Batch 2, ADR-0014) ====================
-    # Master switch pipeline archive+purge (beat hook in Batch 3). False =
-    # validate_storage_config salta i check LOG_ARCHIVE_*; il retention
-    # esistente gira come oggi. Silent pass anche con altre LOG_ARCHIVE_*
-    # settate nel .env (pattern preparazione pre-flip, ADR-0014 §A4).
     @property
     def LOG_ARCHIVE_ENABLED(self) -> bool:
         return bool(self.get("LOG_ARCHIVE_ENABLED", False))
@@ -835,10 +767,6 @@ class Settings:
         except (TypeError, ValueError):
             return 10_000
 
-    # Giorni di retention per plenora.audit_actions. 0 = retention
-    # disabilitata (simmetrico a SCHEDULE_LOGS_RETENTION_DAYS). Default
-    # 365gg: baseline ISO 27001 A.12.4.1 per event log. Consumato dal
-    # beat in Batch 3 come cutoff archive+purge.
     @property
     def AUDIT_RETENTION_DAYS(self) -> int:
         try:
@@ -883,7 +811,6 @@ class Settings:
     def ARCGIS_CONNECTIONS_DIR(self) -> Path:
         return self._directory("arcgis_connections", create=False)
 
-    # ==================== HELPER PERCORSI ====================
 
     def get_project_output_dir(self, project_id: str) -> Path:
         return self._directory(project_id, base=self.RESULTS_DIR)
@@ -897,7 +824,6 @@ class Settings:
     def get_task_dir(self, task_id: str) -> Path:
         return self._directory(task_id, base=self.TASKS_DIR)
 
-    # ==================== REDIS AUTO-START ====================
 
     def _ensure_redis(self, errors: list, warnings: list) -> None:
         """Verifica che Redis sia raggiungibile sul broker URL configurato.
@@ -984,7 +910,6 @@ class Settings:
         except Exception as e:
             errors.append(f"Impossibile avviare Redis via WSL: {e}")
 
-    # ==================== VALIDAZIONE AVVIO ====================
 
     def validate_startup(self) -> None:
         errors = []
@@ -1043,7 +968,6 @@ class Settings:
                 print(f"  {i}. {e}")
             raise SystemExit(1)
 
-    # ==================== DEBUG ====================
 
     def print_config(self):
         print("=" * 60)

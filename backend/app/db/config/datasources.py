@@ -56,11 +56,6 @@ def update_datasource(ds_id: str, **kwargs) -> None:
     created_by, ecc.).
     """
     from datetime import datetime, timezone
-    # Lazy import: `_safe_set_clause` è helper private cross-cluster nel facade
-    # `config_db_service` (usato da 5 cluster: users/projects/connections/
-    # datasources/schedules). Import locale rompe ciclo facade ↔ config/datasources
-    # senza spostare il helper (violerebbe zero call site touched sugli altri 4
-    # cluster). Vedi invariants §6 commit `86ea1c5`.
     from app.db.config_db_service import _safe_set_clause
     if not kwargs:
         return

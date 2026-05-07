@@ -99,9 +99,7 @@ def _write_bundle(dir_path: Path, site_id: str = "SITE01"):
     )
 
 
-# =============================================================================
 # save_bundle
-# =============================================================================
 
 
 def test_save_bundle_uploads_zip_and_meta(fake_storage, fake_settings, tmp_path):
@@ -137,9 +135,7 @@ def test_save_bundle_rejects_missing_dir(fake_storage, fake_settings, tmp_path):
         st.save_bundle("task-1", missing)
 
 
-# =============================================================================
 # ensure_local_bundle
-# =============================================================================
 
 
 def test_ensure_local_bundle_cache_hit(fake_storage, fake_settings, tmp_path):
@@ -183,9 +179,7 @@ def test_ensure_local_bundle_not_found_raises(fake_storage, fake_settings):
         st.ensure_local_bundle("task-does-not-exist")
 
 
-# =============================================================================
 # get_meta_only
-# =============================================================================
 
 
 def test_get_meta_only_reads_without_downloading_zip(fake_storage, fake_settings, tmp_path):
@@ -207,9 +201,7 @@ def test_get_meta_only_missing_returns_none(fake_storage, fake_settings):
     assert st.get_meta_only("task-missing") is None
 
 
-# =============================================================================
 # list_task_ids
-# =============================================================================
 
 
 def test_list_task_ids_returns_only_meta(fake_storage, fake_settings, tmp_path):
@@ -233,9 +225,7 @@ def test_list_task_ids_empty_when_no_bundles(fake_storage, fake_settings):
     assert st.list_task_ids() == []
 
 
-# =============================================================================
 # delete_bundle
-# =============================================================================
 
 
 def test_delete_bundle_removes_s3_and_local(fake_storage, fake_settings, tmp_path):

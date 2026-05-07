@@ -40,8 +40,6 @@ from app.core.datasources.sharepoint import SharePointDataSource
 pytestmark = [pytest.mark.unit, pytest.mark.contract, pytest.mark.shared]
 
 
-# ─── 1) Dispatch canonico per ogni tipo supportato ────────────────────────────
-
 @pytest.mark.parametrize("ds_type,expected_cls", [
     ("local",      LocalDataSource),
     ("ftp",        FTPDataSource),
@@ -71,8 +69,6 @@ def test_create_backend_dispatches_to_correct_class(ds_type, expected_cls):
         "ogni backend DEVE implementare DataSourceInterface"
     )
 
-
-# ─── 2) Fail-fast su tipo sconosciuto ─────────────────────────────────────────
 
 def test_create_backend_raises_value_error_on_unknown_type():
     """Blinda §4.1 fail-fast: ds_type sconosciuto → ValueError esplicito,
@@ -119,8 +115,6 @@ def test_create_backend_raises_on_empty_string_type():
     with pytest.raises(ValueError, match="non supportato"):
         factory.create_backend(config)
 
-
-# ─── 3) Contract su BackendConfig: structured vs extra ────────────────────────
 
 def test_create_backend_routes_custom_fields_into_extra():
     """Blinda il contratto di trasporto config: campi NON-structured
@@ -194,8 +188,6 @@ def test_create_backend_filters_none_values_from_extra():
         "Empty string NON deve essere filtrato, solo None"
     )
 
-
-# ─── 4) supported_types() contract ────────────────────────────────────────────
 
 def test_supported_types_returns_canonical_four():
     """Blinda la superficie pubblica: ``supported_types()`` ritorna

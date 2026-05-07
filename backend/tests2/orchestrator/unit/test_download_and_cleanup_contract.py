@@ -21,9 +21,7 @@ import pytest
 pytestmark = [pytest.mark.unit, pytest.mark.contract]
 
 
-# =============================================================================
 # 1. Fast-path eseguibile: orchestrator /api/tasks/{id}/download
-# =============================================================================
 
 
 def test_tasks_download_eseguibile_streams_from_storage_and_cleans_up():
@@ -105,9 +103,7 @@ def test_tasks_download_falls_back_to_db_blob_if_no_s3_key():
             assert "storage" not in str(e).lower() or "no s3" not in str(e).lower()
 
 
-# =============================================================================
 # 2. Eseguibili download: stream + cleanup owner meta
-# =============================================================================
 
 
 def test_eseguibili_download_streams_from_storage_cleans_owner_meta():
@@ -199,9 +195,7 @@ def test_eseguibili_download_cleanup_runs_even_if_delete_by_task_raises():
         mock_del_owner.assert_called_once_with("t1")
 
 
-# =============================================================================
 # 3. Task result payload shape (post save_pipeline_result)
-# =============================================================================
 
 
 def test_save_pipeline_result_dict_shape(monkeypatch):

@@ -42,9 +42,7 @@ import pytest
 pytestmark = [pytest.mark.unit, pytest.mark.security, pytest.mark.contract]
 
 
-# ---------------------------------------------------------------------------
 # Fixture: store fresco per ogni test (no shared state cross-test)
-# ---------------------------------------------------------------------------
 
 
 @pytest.fixture
@@ -59,9 +57,7 @@ def fresh_store():
         rl._STORE.failed_attempts.clear()
 
 
-# ---------------------------------------------------------------------------
 # 1. Threshold + raise shape
-# ---------------------------------------------------------------------------
 
 
 def test_check_under_threshold_does_not_raise(fresh_store):
@@ -107,9 +103,7 @@ def test_triggered_carries_retry_after_attribute():
     assert e2.retry_after == -7
 
 
-# ---------------------------------------------------------------------------
 # 2. Sliding window pruning
-# ---------------------------------------------------------------------------
 
 
 def test_check_prunes_timestamps_older_than_window(fresh_store, monkeypatch):
@@ -134,9 +128,7 @@ def test_check_prunes_timestamps_older_than_window(fresh_store, monkeypatch):
     assert fresh_store.failed_attempts["1.2.3.4"] == []
 
 
-# ---------------------------------------------------------------------------
 # 3. Per-IP isolation
-# ---------------------------------------------------------------------------
 
 
 def test_record_isolates_ip_buckets(fresh_store):
@@ -166,9 +158,7 @@ def test_clear_unknown_ip_is_idempotent(fresh_store):
     rl.clear_failed_logins_in_memory("never-seen-before")
 
 
-# ---------------------------------------------------------------------------
 # 4. Lock identity (concorrenza minimal smoke)
-# ---------------------------------------------------------------------------
 
 
 def test_store_lock_is_a_threading_lock(fresh_store):
@@ -183,9 +173,7 @@ def test_store_lock_is_a_threading_lock(fresh_store):
     rl._STORE.lock.release()
 
 
-# ---------------------------------------------------------------------------
 # 5. KEEP_COMPAT alias in auth.py
-# ---------------------------------------------------------------------------
 
 
 def test_auth_module_aliases_point_to_extracted_store(fresh_store):
@@ -260,9 +248,7 @@ def test_auth_check_wrapper_reads_monkeypatched_constants(fresh_store):
     assert ei.value.status_code == 429
 
 
-# ---------------------------------------------------------------------------
 # 6. Smoke concorrenza: record da 5 thread non perde timestamp
-# ---------------------------------------------------------------------------
 
 
 def test_concurrent_record_does_not_lose_timestamps(fresh_store):

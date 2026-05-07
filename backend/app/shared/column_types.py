@@ -30,9 +30,7 @@ from typing import Any, Dict, Iterable, List, Mapping, Optional
 import pandas as pd
 
 
-# ---------------------------------------------------------------------------
 # Vocabolario canonico + alias
-# ---------------------------------------------------------------------------
 
 
 CANONICAL_BASE_TYPES = frozenset({"int", "real", "str", "bool", "date", "geometry"})
@@ -58,9 +56,7 @@ GEOMETRY_SUBTYPES = frozenset({
 """Sub-type di geometry supportati (dopo `geometry:` nel canvas-type string)."""
 
 
-# ---------------------------------------------------------------------------
 # Introspezione
-# ---------------------------------------------------------------------------
 
 
 def is_canonical_type(t: str) -> bool:
@@ -164,9 +160,7 @@ def pandas_series_to_canvas_type(series: "pd.Series") -> str:
     return "str"
 
 
-# ---------------------------------------------------------------------------
 # Adapter di shape (list <-> dict)
-# ---------------------------------------------------------------------------
 
 
 def metadata_to_dict(rows: Iterable[Mapping[str, Any]] | None) -> Dict[str, str]:

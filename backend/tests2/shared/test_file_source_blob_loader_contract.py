@@ -62,9 +62,7 @@ def _fake_fetchone(row):
     return captured, _impl
 
 
-# ---------------------------------------------------------------------------
 # 1. Mode validation
-# ---------------------------------------------------------------------------
 
 
 def test_loader_kind_property_is_file_source_blob():
@@ -116,9 +114,7 @@ def test_loader_rejects_stream_mode():
         FileSourceBlobLoader().load(ref, mode="stream")
 
 
-# ---------------------------------------------------------------------------
 # 2. Tenant binding
-# ---------------------------------------------------------------------------
 
 
 def test_default_call_applies_group_id_sql_filter():
@@ -201,9 +197,7 @@ def test_missing_row_raises_file_not_found():
             FileSourceBlobLoader().load(_make_ref(), mode="bytes")
 
 
-# ---------------------------------------------------------------------------
 # 3. SQL preflight shape
-# ---------------------------------------------------------------------------
 
 
 def test_sql_preflight_uses_length_and_case_pattern():
@@ -261,9 +255,7 @@ def test_oversized_bytea_raises_memory_limit_exceeded(monkeypatch):
     assert err.stage == "file_source_blob_oversize"
 
 
-# ---------------------------------------------------------------------------
 # 4. Object-storage branch
-# ---------------------------------------------------------------------------
 
 
 class _FakeStorage:
@@ -332,9 +324,7 @@ def test_storage_key_oversize_raises_memory_limit_exceeded(monkeypatch):
     assert err.stage == "file_source_blob_oversize"
 
 
-# ---------------------------------------------------------------------------
 # 5. Cap resolution
-# ---------------------------------------------------------------------------
 
 
 def test_default_cap_is_200_mib(monkeypatch):
@@ -370,9 +360,7 @@ def test_invalid_env_falls_back_to_default(monkeypatch):
     assert resolve_resource_max_bytes() == 200 * 1024 * 1024
 
 
-# ---------------------------------------------------------------------------
 # 6. Registry integration — second loader is registered
-# ---------------------------------------------------------------------------
 
 
 def test_default_registry_resolves_file_source_blob_kind():

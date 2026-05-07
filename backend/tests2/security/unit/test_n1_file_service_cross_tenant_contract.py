@@ -50,9 +50,7 @@ def _file_source(group_id="A"):
     )
 
 
-# =============================================================================
 # _assert_visible core
-# =============================================================================
 
 
 def test_assert_visible_passes_when_group_matches(svc):
@@ -126,9 +124,7 @@ def test_assert_visible_fails_closed_on_sharing_exception(svc):
                 svc._assert_visible("f1", "B")
 
 
-# =============================================================================
 # load_dataframe wiring
-# =============================================================================
 
 
 def test_load_dataframe_requires_expected_group_id(svc):
@@ -156,9 +152,7 @@ def test_load_dataframe_passes_when_group_matches_owner(svc):
                 svc.load_dataframe("f1", expected_group_id="A")
 
 
-# =============================================================================
 # File ID entropy
-# =============================================================================
 
 
 def test_file_id_generator_produces_32_hex_uuid():

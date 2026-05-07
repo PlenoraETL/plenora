@@ -77,9 +77,7 @@ def test_execute_carica_fails_when_no_run_specific_artifact_is_available(schedul
     assert "Artefatto della run non disponibile" in result["error"]
 
 
-# =============================================================================
 # Group isolation fail-closed (Refactor #2 invariante C)
-# =============================================================================
 
 
 def _project_meta(group_id):

@@ -36,9 +36,7 @@ pytestmark = [pytest.mark.unit, pytest.mark.shared, pytest.mark.contract]
 _BACKEND_APP = Path(__file__).resolve().parent.parent.parent / "app"
 
 
-# ---------------------------------------------------------------------------
 # Set shape — exact pre-IMDF-001 casings
-# ---------------------------------------------------------------------------
 
 def test_oid_fields_literal_exact_pre_001_casings():
     """Gli stessi 5 valori che `arcgis_client.py:1864` aggiungeva a
@@ -70,9 +68,7 @@ def test_sets_are_immutable_frozenset():
     assert isinstance(ESRI_SYSTEM_FIELDS_LITERAL, frozenset)
 
 
-# ---------------------------------------------------------------------------
 # normalize_field_name — pattern legacy bit-per-bit
-# ---------------------------------------------------------------------------
 
 @pytest.mark.parametrize(
     "name, expected",
@@ -98,9 +94,7 @@ def test_normalize_field_name_none_safe():
     assert normalize_field_name(None) == ""  # type: ignore[arg-type]
 
 
-# ---------------------------------------------------------------------------
 # is_esri_system_field — riconoscimento case-insensitive
-# ---------------------------------------------------------------------------
 
 @pytest.mark.parametrize(
     "name",
@@ -143,9 +137,7 @@ def test_is_esri_system_field_none_safe():
     assert is_esri_system_field(None) is False  # type: ignore[arg-type]
 
 
-# ---------------------------------------------------------------------------
 # Pure module — niente import pesanti / I/O / env
-# ---------------------------------------------------------------------------
 
 def test_module_has_no_heavy_imports():
     """Il modulo shared deve restare pure: niente pandas/geopandas/
@@ -174,9 +166,7 @@ def test_module_has_no_heavy_imports():
         )
 
 
-# ---------------------------------------------------------------------------
 # Source-bound: i 3 call site usano lo shared
-# ---------------------------------------------------------------------------
 
 def _read(path: Path) -> str:
     return path.read_text(encoding="utf-8")

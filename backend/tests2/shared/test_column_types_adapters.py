@@ -32,9 +32,7 @@ from app.shared.column_types import (
 pytestmark = [pytest.mark.unit, pytest.mark.shared]
 
 
-# ---------------------------------------------------------------------------
 # metadata_to_dict
-# ---------------------------------------------------------------------------
 
 
 def test_metadata_to_dict_basic():
@@ -82,9 +80,7 @@ def test_metadata_to_dict_last_wins_on_duplicate_name():
     assert metadata_to_dict(rows) == {"id": "str"}
 
 
-# ---------------------------------------------------------------------------
 # dict_to_metadata
-# ---------------------------------------------------------------------------
 
 
 def test_dict_to_metadata_basic():
@@ -111,9 +107,7 @@ def test_dict_to_metadata_preserves_insertion_order():
     assert [r["name"] for r in result] == ["z", "a"]
 
 
-# ---------------------------------------------------------------------------
 # Roundtrip
-# ---------------------------------------------------------------------------
 
 
 def test_roundtrip_list_dict_list_is_identity():
@@ -130,9 +124,7 @@ def test_roundtrip_dict_list_dict_is_identity():
     assert metadata_to_dict(dict_to_metadata(original)) == original
 
 
-# ---------------------------------------------------------------------------
 # is_canonical_type
-# ---------------------------------------------------------------------------
 
 
 def test_is_canonical_type_base_types():
@@ -153,9 +145,7 @@ def test_is_canonical_type_rejects_unknown():
     assert not is_canonical_type(123)   # type: ignore[arg-type]
 
 
-# ---------------------------------------------------------------------------
 # normalize_canvas_type (fase C)
-# ---------------------------------------------------------------------------
 
 
 @pytest.mark.parametrize("input_,expected", [
@@ -200,9 +190,7 @@ def test_type_aliases_map_coherent_with_canonical():
         )
 
 
-# ---------------------------------------------------------------------------
 # canvas_type_to_pandas_dtype (fase C)
-# ---------------------------------------------------------------------------
 
 
 @pytest.mark.parametrize("canvas_type,expected_dtype", [
@@ -237,9 +225,7 @@ def test_canvas_type_to_pandas_dtype_is_instantiable():
         pd.Series([], dtype=dtype)
 
 
-# ---------------------------------------------------------------------------
 # pandas_series_to_canvas_type (fase C — include N11 heuristic)
-# ---------------------------------------------------------------------------
 
 
 def test_pandas_series_int_is_int():

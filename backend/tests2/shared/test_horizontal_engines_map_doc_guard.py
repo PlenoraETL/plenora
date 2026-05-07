@@ -63,9 +63,7 @@ def doc_text() -> str:
     return _DOC.read_text(encoding="utf-8")
 
 
-# =====================================================================
 # Page existence + canonical title + stream tag
-# =====================================================================
 
 
 def test_horizontal_engines_doc_exists():
@@ -90,9 +88,7 @@ def test_doc_has_canonical_title_and_stream_tag(doc_text: str):
     )
 
 
-# =====================================================================
 # Six canonical horizontal sections + engine alignment tags
-# =====================================================================
 
 
 def test_doc_has_six_canonical_sections_in_order(doc_text: str):
@@ -141,9 +137,7 @@ def test_doc_lists_engine_alignment_tags(doc_text: str):
         )
 
 
-# =====================================================================
 # Canonical entry points referenced
-# =====================================================================
 
 
 def test_doc_references_canonical_entry_points(doc_text: str):
@@ -167,9 +161,7 @@ def test_doc_references_canonical_entry_points(doc_text: str):
         )
 
 
-# =====================================================================
 # "Do not import" section
-# =====================================================================
 
 
 def test_doc_has_do_not_import_section(doc_text: str):
@@ -207,9 +199,7 @@ def test_do_not_import_lists_four_canonical_guards(doc_text: str):
         assert needle in do_not_section, message
 
 
-# =====================================================================
 # Cross-links must remain
-# =====================================================================
 
 
 def test_readme_links_to_horizontal_engines_map():
@@ -233,9 +223,7 @@ def test_code_map_links_to_horizontal_engines_map():
     )
 
 
-# =====================================================================
 # ASCII-only
-# =====================================================================
 
 
 def test_doc_is_ascii_only(doc_text: str):

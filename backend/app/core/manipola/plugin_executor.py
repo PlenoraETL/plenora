@@ -104,9 +104,7 @@ class PluginExecutor:
         self._carica_registry()
         self._carica_funzioni()
 
-    # =========================================================================
     # CARICAMENTO
-    # =========================================================================
 
     def _carica_registry(self):
         """Carica il registry JSON con definizioni trasformazioni e categorie."""
@@ -165,9 +163,7 @@ class PluginExecutor:
         self._carica_registry()
         self._carica_funzioni()
 
-    # =========================================================================
     # INTERROGAZIONE REGISTRY
-    # =========================================================================
 
     def get_registry(self) -> Dict[str, Dict]:
         """Restituisce il registry completo (usato dall'API frontend)."""
@@ -202,9 +198,7 @@ class PluginExecutor:
             for tid, config in self.registry.items()
         ]
 
-    # =========================================================================
     # ESECUZIONE
-    # =========================================================================
 
     def execute(
         self,
@@ -286,9 +280,7 @@ class PluginExecutor:
         else:
             return func(inputs[0], **kwargs)
 
-    # =========================================================================
     # PREPARAZIONE PARAMETRI
-    # =========================================================================
 
     def _prepara_kwargs(self, transform_config: Dict, node_config: Dict) -> Dict[str, Any]:
         """
@@ -309,7 +301,6 @@ class PluginExecutor:
         for param in parameters:
             param_id = param['id']
 
-            # --- Dipendenze condizionali ---
             # Es: il parametro "custom_value" dipende da "mode" == "custom"
             if 'depends_on' in param:
                 dep = param['depends_on']
@@ -332,7 +323,6 @@ class PluginExecutor:
                     if dep_value != dep_expected:
                         continue  # Dipendenza non soddisfatta
 
-            # --- Risoluzione valore: nodo → default → warning/skip ---
             if param_id in node_config:
                 value = node_config[param_id]
             elif 'default' in param:
@@ -408,9 +398,7 @@ class PluginExecutor:
 
         return value
 
-    # =========================================================================
     # VALIDAZIONE
-    # =========================================================================
 
     def validate_config(self, transform_id: str, node_config: Dict) -> List[str]:
         """
@@ -498,9 +486,7 @@ class PluginExecutor:
         return defaults
 
 
-# =============================================================================
 # SINGLETON
-# =============================================================================
 
 _executor_instance: Optional[PluginExecutor] = None
 
@@ -533,9 +519,7 @@ def reload_executor():
         _executor_instance = PluginExecutor()
 
 
-# =============================================================================
 # LAYER DI COMPATIBILITÀ
-# =============================================================================
 
 class PluginExecutorCompatibility:
     """

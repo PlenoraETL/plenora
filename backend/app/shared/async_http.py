@@ -30,9 +30,7 @@ from app.utils.logger import get_logger
 logger = get_logger(__name__)
 
 
-# ──────────────────────────────────────────────────────────────────────
 # Configurazione
-# ──────────────────────────────────────────────────────────────────────
 
 def _get_pool_size() -> int:
     """Legge pool size da Settings, con fallback e clamping di sicurezza.
@@ -54,9 +52,7 @@ def _get_default_timeout() -> httpx.Timeout:
     return httpx.Timeout(connect=10.0, read=30.0, write=10.0, pool=5.0)
 
 
-# ──────────────────────────────────────────────────────────────────────
 # Singleton AsyncClient
-# ──────────────────────────────────────────────────────────────────────
 
 _async_client: Optional[httpx.AsyncClient] = None
 _client_lock = asyncio.Lock()
@@ -101,9 +97,7 @@ async def close_async_client() -> None:
     _async_client = None
 
 
-# ──────────────────────────────────────────────────────────────────────
 # Retry helper con backoff esponenziale
-# ──────────────────────────────────────────────────────────────────────
 
 async def async_request_with_retry(
     method: str,

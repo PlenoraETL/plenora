@@ -39,9 +39,7 @@ import pytest
 pytestmark = [pytest.mark.unit, pytest.mark.contract]
 
 
-# =============================================================================
 # Helpers
-# =============================================================================
 
 
 def _svc():
@@ -66,9 +64,7 @@ def _node(node_id: str, ntype: str, **data):
     return n
 
 
-# =============================================================================
 # Test 1 — api_enrich con output_mapping standard (chiave `column`)
-# =============================================================================
 
 
 def test_infer_api_enrich_schema_reads_output_mapping_canonical_column_key():
@@ -102,9 +98,7 @@ def test_infer_api_enrich_schema_reads_output_mapping_canonical_column_key():
     assert by_name["id"].is_calculated is False
 
 
-# =============================================================================
 # Test 2 — api_enrich shape variante: target_column / name / type assente
-# =============================================================================
 
 
 def test_infer_api_enrich_schema_tolerates_target_column_and_name_fallbacks():
@@ -143,9 +137,7 @@ def test_infer_api_enrich_schema_tolerates_target_column_and_name_fallbacks():
     assert by_name["id"].is_calculated is False
 
 
-# =============================================================================
 # Test 3 — compute_result_columns end-to-end: project_source → api_enrich → result
-# =============================================================================
 
 
 def test_compute_result_columns_includes_api_enrich_added_columns():
@@ -204,9 +196,7 @@ def test_compute_result_columns_includes_api_enrich_added_columns():
     assert by_name["lat"]["type"] == "float"
 
 
-# =============================================================================
 # Test 4 — project_source preferisce result_node.columns quando presente
-# =============================================================================
 
 
 def test_infer_project_source_schema_prefers_result_node_columns_over_metadata():
@@ -256,9 +246,7 @@ def test_infer_project_source_schema_prefers_result_node_columns_over_metadata()
     assert names == ["id", "lat", "risk", "score"], names
 
 
-# =============================================================================
 # Test 5 — project_source fallback su columns_metadata se result.columns vuoto
-# =============================================================================
 
 
 def test_infer_project_source_schema_fallback_to_columns_metadata_when_result_empty():
@@ -294,9 +282,7 @@ def test_infer_project_source_schema_fallback_to_columns_metadata_when_result_em
     assert names == ["id", "value"], names
 
 
-# =============================================================================
 # Test 6 — rollback semantica fuori scope: alias non usato come nome
-# =============================================================================
 # Pre-fix `columns_metadata` non aveva campo `alias`, quindi il consumer
 # riceveva sempre `name`. Il primo tentativo di Fix 2 introduceva
 # `col_name = alias or name`: scope-creep che avrebbe rotto i consumer
@@ -338,9 +324,7 @@ def test_infer_project_source_schema_does_not_rename_columns_via_alias():
     assert "X_renamed" not in names
 
 
-# =============================================================================
 # Test 7 — rollback semantica fuori scope: niente filtro intrinseco visible=False
-# =============================================================================
 # Pre-fix `columns_metadata` non aveva campo `visible`, quindi tutte le
 # colonne dei metadata venivano sempre emesse. Il primo tentativo di
 # Fix 2 introduceva `if not col.get("visible", True): continue` che

@@ -60,8 +60,6 @@ def _make_source(root_path) -> LocalDataSource:
     )
 
 
-# ─── 1) Drive letter rejection ────────────────────────────────────────────
-
 def test_abs_rejects_windows_drive_letter_even_on_linux_runner(tmp_path):
     """Blinda §1.6 fail-closed: input con drive letter Windows (``C:``,
     ``D:``) DEVE essere rifiutato con ``DataSourcePermissionError``.
@@ -84,8 +82,6 @@ def test_abs_rejects_windows_drive_letter_even_on_linux_runner(tmp_path):
             ds._abs(evil)
 
 
-# ─── 2) Empty string → root ───────────────────────────────────────────────
-
 def test_abs_with_empty_string_returns_root_absolute_path(tmp_path):
     """Blinda contract operazionale: ``_abs("")`` ritorna root_abs.
 
@@ -105,8 +101,6 @@ def test_abs_with_empty_string_returns_root_absolute_path(tmp_path):
         f"_abs('') deve ritornare root_abs, ottenuto {result!r}"
     )
 
-
-# ─── 3) Deep nested join ──────────────────────────────────────────────────
 
 def test_abs_joins_deep_nested_relative_path_under_root(tmp_path):
     """Blinda normalizzazione su nesting profondo (3+ livelli).
@@ -135,8 +129,6 @@ def test_abs_joins_deep_nested_relative_path_under_root(tmp_path):
         f"nesting non preservato, parts: {parts_under_root!r}"
     )
 
-
-# ─── 4) Symlink escape rejection ──────────────────────────────────────────
 
 def test_abs_rejects_symlink_that_resolves_outside_root(tmp_path):
     """Blinda §1.6 fail-closed contro symlink escape.
@@ -175,8 +167,6 @@ def test_abs_rejects_symlink_that_resolves_outside_root(tmp_path):
         ds._abs("evil_link/secret.txt")
 
 
-# ─── 5) _rel normalizes separators ────────────────────────────────────────
-
 def test_rel_normalizes_separators_to_forward_slash(tmp_path):
     """Blinda portability Windows↔Linux: ``_rel`` ritorna sempre path
     con forward slash, indipendentemente dall'OS.
@@ -205,8 +195,6 @@ def test_rel_normalizes_separators_to_forward_slash(tmp_path):
     assert rel == "a/b/file.csv", f"atteso 'a/b/file.csv', ottenuto {rel!r}"
 
 
-# ─── 6) file_exists distingue file da directory ───────────────────────────
-
 def test_file_exists_returns_false_for_directories(tmp_path):
     """Blinda il contract semantico: ``file_exists`` ritorna True SOLO
     per file regolari, False per directory (usa ``os.path.isfile``).
@@ -230,8 +218,6 @@ def test_file_exists_returns_false_for_directories(tmp_path):
     )
     assert ds.file_exists("nonexistent.txt") is False
 
-
-# ─── 7) write_file crea parent dir mancanti ───────────────────────────────
 
 def test_write_file_creates_missing_parent_directories(tmp_path):
     """Blinda il contract ``write_file``: crea automaticamente parent

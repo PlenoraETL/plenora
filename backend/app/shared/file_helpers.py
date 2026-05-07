@@ -54,9 +54,6 @@ if not _USE_APP_MODELS:
         type: str
 
 
-# ==================== RILEVATORE FORMATO ====================
-
-
 class FormatDetector:
     """Rileva formato file - PURE FUNCTIONS"""
 
@@ -87,9 +84,6 @@ class FormatDetector:
     def is_tabular(cls, format_type: str) -> bool:
         """Verifica se formato e' tabellare"""
         return format_type in ['csv', 'xlsx', 'json']
-
-
-# ==================== INFERENZA TIPI ====================
 
 
 class TypeInferrer:
@@ -210,9 +204,6 @@ class TypeInferrer:
         return cls.GEOMETRY_TYPE_MAP.get(geom_type, 'geometry')
 
 
-# ==================== ID GENERATOR ====================
-
-
 class FileIdGenerator:
     """Genera ID per file source - PURE (con time provider iniettato).
 
@@ -247,7 +238,6 @@ class FileIdGenerator:
         return safe.replace(' ', '_')[:max_length]
 
 
-# ==================== COSTRUTTORE INFO COLONNE ====================
 # Analizza un DataFrame e costruisce la lista di ColumnInfo con tipo inferito.
 
 

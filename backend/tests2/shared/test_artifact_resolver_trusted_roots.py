@@ -66,9 +66,7 @@ def resolver():
     return ArtifactResolver()
 
 
-# =============================================================================
 # HAPPY PATH — tutti i setting validi / skip legittimi
-# =============================================================================
 
 
 def test_trusted_roots_built_with_all_three_settings(resolver, monkeypatch, tmp_path):
@@ -134,9 +132,7 @@ def test_trusted_roots_temp_and_data_none_skip_legit(resolver, monkeypatch, tmp_
     )
 
 
-# =============================================================================
 # BREADCRUMB su fallimento parziale (lista non vuota, warning emesso)
-# =============================================================================
 
 
 def test_trusted_roots_results_dir_resolve_fails_logs_warning(
@@ -226,9 +222,7 @@ def test_trusted_roots_temp_dir_resolve_fails_logs_warning_and_continues(
     assert temp_warnings[0].exc_info is not None
 
 
-# =============================================================================
 # FAIL-CLOSED — trusted_roots vuoti → raise ArtifactResolutionError
-# =============================================================================
 
 
 def test_trusted_roots_empty_raises_artifact_resolution_error(

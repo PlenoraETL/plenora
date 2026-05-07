@@ -55,8 +55,6 @@ pytestmark = [
 ]
 
 
-# ─── Fake paramiko minimal per mocking deterministico ─────────────────────
-
 class _FakeSFTPSession:
     """Stand-in di paramiko.SFTPClient."""
     def chdir(self, path):
@@ -173,8 +171,6 @@ def _make_ds(host_key_policy: str | None = None,
     return SFTPDataSource(config)
 
 
-# ─── 1) reject policy → RejectPolicy + load_system_host_keys ──────────────
-
 def test_host_key_policy_reject_uses_reject_policy_and_loads_system_keys():
     """Blinda il contract di sicurezza critico: ``host_key_policy="reject"``
     DEVE risultare in:
@@ -206,8 +202,6 @@ def test_host_key_policy_reject_uses_reject_policy_and_loads_system_keys():
     )
 
 
-# ─── 2) auto_add (default esplicito) → AutoAddPolicy + NO system keys ─────
-
 def test_host_key_policy_auto_add_uses_auto_add_policy_no_system_keys():
     """Blinda il complementare di #1: policy=auto_add → AutoAddPolicy
     SENZA caricare known_hosts di sistema.
@@ -230,8 +224,6 @@ def test_host_key_policy_auto_add_uses_auto_add_policy_no_system_keys():
         "policy=auto_add NON DEVE chiamare load_system_host_keys"
     )
 
-
-# ─── 3) Policy non-canonica → fallback auto_add (documenta fail-open) ─────
 
 def test_host_key_policy_unknown_value_falls_back_to_auto_add_policy():
     """Blinda che il check ``policy == "reject"`` sia ESATTO. Qualunque
@@ -257,8 +249,6 @@ def test_host_key_policy_unknown_value_falls_back_to_auto_add_policy():
         )
         assert client.system_keys_loaded is False
 
-
-# ─── 4) Credenziali mancanti → fail-fast ConnectionError ──────────────────
 
 def test_connect_without_password_or_private_key_fails_fast():
     """Blinda fail-fast: config senza ``password`` E senza ``private_key``
@@ -286,8 +276,6 @@ def test_connect_without_password_or_private_key_fails_fast():
         "ssh.connect NON deve essere chiamato se le credenziali mancano"
     )
 
-
-# ─── 5) Password + private_key → vince private_key ────────────────────────
 
 def test_connect_prefers_private_key_over_password_when_both_provided(
     monkeypatch,
@@ -361,8 +349,6 @@ def test_connect_maps_auth_exception_to_connection_error_with_auth_message():
         FakeSSHClient.__init__ = original_init
 
 
-# ─── 7) SSHException → ConnectionError "Errore SSH" ───────────────────────
-
 def test_connect_maps_ssh_exception_to_connection_error_with_ssh_message():
     """Blinda error mapping distintivo per ``paramiko.SSHException`` →
     "Errore SSH". Complementa il test #6 (auth) per coprire l'altro
@@ -395,8 +381,6 @@ def test_connect_maps_ssh_exception_to_connection_error_with_ssh_message():
         FakeSSHClient.__init__ = original_init
 
 
-# ─── 8) Operation senza connect → _check gate ─────────────────────────────
-
 def test_operation_without_connect_raises_not_connected_error():
     """Blinda il contract ``_check``: operation file su ds mai-connesso
     solleva ``DataSourceConnectionError("Non connesso...")``.
@@ -419,9 +403,7 @@ def test_operation_without_connect_raises_not_connected_error():
             op()
 
 
-# =============================================================================
 # F5-B2 Anti-leak (2026-04-24) — sanitize str(e) paramiko in messaggi utente
-# =============================================================================
 
 
 def test_test_connection_sanitizes_auth_exception_no_paramiko_leak():

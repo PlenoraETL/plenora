@@ -51,9 +51,7 @@ _ENRICHMENT_TASK_PY = (
 )
 
 
-# ---------------------------------------------------------------------------
 # 1. Source-bound: no more direct mutation
-# ---------------------------------------------------------------------------
 
 
 def _scan_assign_targets(src: str) -> list:
@@ -98,9 +96,7 @@ def test_enrichment_task_no_direct_singleton_mutation():
     )
 
 
-# ---------------------------------------------------------------------------
 # 2. Context construction (typed boundary primary surface)
-# ---------------------------------------------------------------------------
 
 
 def test_enrichment_task_imports_and_uses_typed_context():
@@ -118,9 +114,7 @@ def test_enrichment_task_imports_and_uses_typed_context():
     )
 
 
-# ---------------------------------------------------------------------------
 # 3. Threading completo: 4 mixin callsite ricevono ctx
-# ---------------------------------------------------------------------------
 
 
 def _scan_mixin_callsites(src: str) -> dict:
@@ -165,9 +159,7 @@ def test_enrichment_task_threads_ctx_to_mixin_callsites():
             )
 
 
-# ---------------------------------------------------------------------------
 # 4. Negative source-bound lock (BE-GO-READY-ORCHESTRATION-ENGINE-012)
-# ---------------------------------------------------------------------------
 
 
 # Files that the lock MUST tolerate as "self-references" — this

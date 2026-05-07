@@ -111,9 +111,7 @@ class SourceLoader:
         # difensivo: SourceRef.__post_init__ esclude il caso
         raise ValueError(f"SourceLoader.load: kind sconosciuto {kind!r}")
 
-    # ------------------------------------------------------------------
     # branch: static
-    # ------------------------------------------------------------------
 
     def _load_static(self, fields: Optional[tuple]) -> Any:
         import pandas as pd
@@ -125,9 +123,7 @@ class SourceLoader:
         processed = process_static_fields(list(fields))
         return pd.DataFrame([processed])
 
-    # ------------------------------------------------------------------
     # branch: file
-    # ------------------------------------------------------------------
 
     def _load_file(
         self,
@@ -198,9 +194,7 @@ class SourceLoader:
         # perderebbe `geometry.crs` al primo cast).
         return gdf if gdf is not None else df
 
-    # ------------------------------------------------------------------
     # branch: project
-    # ------------------------------------------------------------------
 
     def resolve_project_path(
         self,
@@ -281,9 +275,6 @@ class SourceLoader:
                 return m.df
             return load_dataframe_from_file(m.path)
 
-    # ------------------------------------------------------------------
-    # load_with_metadata: typed envelope path (BE-GO-READY-ARCH-058-W1)
-    # ------------------------------------------------------------------
 
     def load_with_metadata(
         self,

@@ -43,9 +43,7 @@ import pytest
 pytestmark = [pytest.mark.integration, pytest.mark.scheduler, pytest.mark.contract]
 
 
-# ---------------------------------------------------------------------------
 # Fake in-memory ObjectStorage (Protocol-compatible)
-# ---------------------------------------------------------------------------
 
 
 class _InMemoryObjectStorage:
@@ -99,9 +97,7 @@ class _InMemoryObjectStorage:
         return [json.loads(ln) for ln in raw.splitlines() if ln]
 
 
-# ---------------------------------------------------------------------------
 # Skip graceful su PG non raggiungibile
-# ---------------------------------------------------------------------------
 
 
 def _pg_available() -> bool:
@@ -128,9 +124,7 @@ _SKIP_NO_PG = pytest.mark.skipif(
 )
 
 
-# ---------------------------------------------------------------------------
 # Helpers di test
-# ---------------------------------------------------------------------------
 
 
 def _make_scheduler():
@@ -300,9 +294,7 @@ def _fetch_observability_rows(
     )
 
 
-# ===========================================================================
 # B4-E1 — archive+purge logs end-to-end
-# ===========================================================================
 
 
 @_SKIP_NO_PG
@@ -375,9 +367,7 @@ def test_end_to_end_archive_and_purge_logs_real_pg(test_marker):
     assert scheduler._last_logs_archive > 0
 
 
-# ===========================================================================
 # B4-E2 — archive+purge audit_actions end-to-end
-# ===========================================================================
 
 
 @_SKIP_NO_PG
@@ -430,9 +420,7 @@ def test_end_to_end_archive_and_purge_audit_actions_real_pg(test_marker):
     assert scheduler._last_audit_archive > 0
 
 
-# ===========================================================================
 # B4-E3 — trigger append-only guard (redundant, closes cluster invariant)
-# ===========================================================================
 
 
 @_SKIP_NO_PG
@@ -474,9 +462,7 @@ def test_delete_on_logs_without_bypass_raises_from_trigger(test_marker):
     )
 
 
-# ===========================================================================
 # B4-E4 — re-run idempotent su tabella gia' vuota
-# ===========================================================================
 
 
 @_SKIP_NO_PG
@@ -548,9 +534,7 @@ def test_re_run_same_day_idempotent_empty_batch(test_marker):
     assert details_run2["object_keys"] == []
 
 
-# ===========================================================================
 # B4-E5 — upload failure: righe restano in DB, no observability
-# ===========================================================================
 
 
 @_SKIP_NO_PG

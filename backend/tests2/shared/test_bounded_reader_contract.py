@@ -41,9 +41,7 @@ _HELPER_PY = (
 )
 
 
-# ---------------------------------------------------------------------------
 # 1. Under-limit body returns joined bytes
-# ---------------------------------------------------------------------------
 
 
 def test_under_limit_returns_joined_bytes():
@@ -69,9 +67,7 @@ def test_single_chunk_works():
     assert out == b"x" * 100
 
 
-# ---------------------------------------------------------------------------
 # 2. Exact-limit body succeeds
-# ---------------------------------------------------------------------------
 
 
 def test_exact_limit_body_succeeds():
@@ -101,9 +97,7 @@ def test_max_bytes_zero_accepts_empty_body_only():
         read_stream_bounded(iter([b"x"]), max_bytes=0, label="zero")
 
 
-# ---------------------------------------------------------------------------
 # 3. Over-limit fails BEFORE the iterator is fully consumed
-# ---------------------------------------------------------------------------
 
 
 def test_over_limit_raises_memory_limit_exceeded():
@@ -176,9 +170,7 @@ def test_first_chunk_alone_exceeds_limit_raises_immediately():
     assert exc.value.limit_bytes == 100
 
 
-# ---------------------------------------------------------------------------
 # 4. Invalid chunk types fail clearly
-# ---------------------------------------------------------------------------
 
 
 @pytest.mark.parametrize(
@@ -229,9 +221,7 @@ def test_non_bytes_like_chunk_does_not_consume_remaining_iterator():
     )
 
 
-# ---------------------------------------------------------------------------
 # 5. max_bytes < 0 fails at call time
-# ---------------------------------------------------------------------------
 
 
 @pytest.mark.parametrize("bad_max", [-1, -100])
@@ -242,9 +232,7 @@ def test_negative_max_bytes_raises_value_error(bad_max: int):
         read_stream_bounded(iter([b"x"]), max_bytes=bad_max, label="neg")
 
 
-# ---------------------------------------------------------------------------
 # 6. Bytes-like alternatives (bytearray, memoryview) are accepted
-# ---------------------------------------------------------------------------
 
 
 def test_bytearray_chunks_accepted():
@@ -265,9 +253,7 @@ def test_memoryview_chunks_accepted():
     assert out == base
 
 
-# ---------------------------------------------------------------------------
 # 7. Anti-god-engine: helper module is stdlib-only (+ typed exception)
-# ---------------------------------------------------------------------------
 
 
 _FORBIDDEN_TOPLEVEL_IMPORTS = {

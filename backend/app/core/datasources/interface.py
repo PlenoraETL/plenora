@@ -14,8 +14,6 @@ import fnmatch
 import hashlib
 
 
-# ==================== ECCEZIONI ====================
-
 class DataSourceError(Exception):
     """Eccezione base per errori Data Source."""
     pass
@@ -32,8 +30,6 @@ class DataSourcePermissionError(DataSourceError):
     """Permessi insufficienti."""
     pass
 
-
-# ==================== DATA CLASSES ====================
 
 @dataclass
 class FileInfo:
@@ -68,8 +64,6 @@ class BackendConfig:
     extra: dict = field(default_factory=dict)   # tutti gli altri campi specifici
 
 
-# ==================== INTERFACCIA ASTRATTA ====================
-
 class DataSourceInterface(ABC):
     """
     Interfaccia astratta per tutti i backend Data Source.
@@ -86,7 +80,6 @@ class DataSourceInterface(ABC):
     def __init__(self, config: BackendConfig):
         self.config = config
 
-    # --- Context manager ---------------------------------------------------
 
     def __enter__(self):
         self.connect()
@@ -96,7 +89,6 @@ class DataSourceInterface(ABC):
         self.disconnect()
         return False
 
-    # --- Lifecycle ---------------------------------------------------------
 
     @abstractmethod
     def connect(self) -> None:
@@ -119,7 +111,6 @@ class DataSourceInterface(ABC):
             {"ok": False, "message": "...", "details": {...}}
         """
 
-    # --- Le 6 operazioni ---------------------------------------------------
 
     @abstractmethod
     def list_files(
@@ -188,7 +179,6 @@ class DataSourceInterface(ABC):
         Verifica se un file esiste. Non solleva eccezioni (ritorna False se non trovato).
         """
 
-    # --- Helpers condivisi -------------------------------------------------
 
     def _extension(self, filename: str) -> str:
         """Estensione senza punto, lowercase. '' se assente."""

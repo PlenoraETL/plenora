@@ -50,9 +50,7 @@ from app.core.auth.auth import get_current_user, require_admin, require_not_esec
 pytestmark = [pytest.mark.unit, pytest.mark.contract, pytest.mark.security]
 
 
-# =============================================================================
 # Helpers
-# =============================================================================
 
 
 def _user(role: str, group_id: str = "g1", user_id: str = "u1") -> CurrentUser:
@@ -91,9 +89,7 @@ def _build_dummy_app() -> FastAPI:
     return app
 
 
-# =============================================================================
 # Sez. D — Dependency-direct tests
-# =============================================================================
 
 
 def test_valid_roles_includes_esecutore():
@@ -119,9 +115,7 @@ def test_require_not_esecutore_passes_for_non_kiosk_roles(role: str):
     assert out.role == role
 
 
-# =============================================================================
 # Sez. B — Negative parametric (dummy endpoints + smoke router reale)
-# =============================================================================
 
 
 @pytest.fixture
@@ -177,9 +171,7 @@ def test_esecutore_smoke_blocked_on_real_connections_router():
     assert resp.status_code == 403
 
 
-# =============================================================================
 # Sez. A — Positive eseguibili (mock minimi)
-# =============================================================================
 
 
 @pytest.fixture
@@ -296,9 +288,7 @@ def test_esecutore_cannot_get_eseguibile_cross_tenant(
     assert resp.status_code in (403, 404), resp.text
 
 
-# =============================================================================
 # Sez. C — Eseguibili admin-mutativo bloccato per esecutore
-# =============================================================================
 
 
 def test_esecutore_blocked_on_create_eseguibile(
@@ -331,9 +321,7 @@ def test_esecutore_blocked_on_delete_eseguibile(
     assert resp.status_code == 403
 
 
-# =============================================================================
 # Sez. E — auth/me consentito
-# =============================================================================
 
 
 def test_esecutore_can_access_auth_me():

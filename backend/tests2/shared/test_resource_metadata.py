@@ -13,9 +13,7 @@ from app.shared.resources.metadata import ColumnMeta, ResourceMetadata
 pytestmark = [pytest.mark.unit]
 
 
-# ---------------------------------------------------------------------------
 # ColumnMeta
-# ---------------------------------------------------------------------------
 
 
 class TestColumnMetaIsGeometry:
@@ -66,9 +64,7 @@ class TestColumnMetaGeometrySubtype:
         assert ColumnMeta(name="x", type="str").geometry_subtype() is None
 
 
-# ---------------------------------------------------------------------------
 # ResourceMetadata — from_columns_list
-# ---------------------------------------------------------------------------
 
 
 _MIXED_COLUMNS = [
@@ -126,9 +122,7 @@ class TestResourceMetadataFromColumnsList:
         assert rm.crs_epsg == 4326
 
 
-# ---------------------------------------------------------------------------
 # ResourceMetadata — to_columns_list round-trip
-# ---------------------------------------------------------------------------
 
 
 class TestResourceMetadataToColumnsList:
@@ -141,9 +135,7 @@ class TestResourceMetadataToColumnsList:
         assert rm.to_columns_list() == []
 
 
-# ---------------------------------------------------------------------------
 # ResourceMetadata — accessors
-# ---------------------------------------------------------------------------
 
 
 class TestResourceMetadataAccessors:
@@ -166,9 +158,7 @@ class TestResourceMetadataAccessors:
         assert not rm.has_geometry()
 
 
-# ---------------------------------------------------------------------------
 # Immutability
-# ---------------------------------------------------------------------------
 
 
 class TestImmutability:

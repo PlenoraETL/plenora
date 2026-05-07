@@ -28,9 +28,7 @@ def _col(source, dest, dest_type="str"):
     return ColumnMapping(source_column=source, dest_column=dest, dest_type=dest_type)
 
 
-# =============================================================================
 # Oracle: promozione attiva
-# =============================================================================
 
 
 def test_oracle_long_string_column_promoted_to_clob():
@@ -95,9 +93,7 @@ def test_oracle_promotion_only_affects_long_columns():
     assert "VARCHAR2(4000)" in sql.upper()
 
 
-# =============================================================================
 # Oracle: missing max_lengths (legacy behavior)
-# =============================================================================
 
 
 def test_oracle_without_max_lengths_kwarg_keeps_legacy_varchar2():
@@ -111,9 +107,7 @@ def test_oracle_without_max_lengths_kwarg_keeps_legacy_varchar2():
     assert "VARCHAR2(4000)" in sql.upper()
 
 
-# =============================================================================
 # Altri dialetti: nessuna promozione (il tipo base non ha limite)
-# =============================================================================
 
 
 def test_postgres_long_string_is_already_unlimited():

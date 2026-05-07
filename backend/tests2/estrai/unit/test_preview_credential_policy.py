@@ -31,9 +31,6 @@ from app.shared.crypto import CredentialUnavailableError
 pytestmark = [pytest.mark.unit, pytest.mark.contract, pytest.mark.regression]
 
 
-# ─── Fixtures ────────────────────────────────────────────────────────────────
-
-
 @pytest.fixture
 def mock_metadata():
     m = MagicMock()
@@ -76,9 +73,6 @@ def executor_with_failing_connection(mock_metadata, mock_canvas):
     )
 
 
-# ─── preview() ───────────────────────────────────────────────────────────────
-
-
 def test_preview_returns_user_error_when_credential_unavailable(
     executor_with_failing_connection, mock_canvas
 ):
@@ -96,9 +90,6 @@ def test_preview_returns_user_error_when_credential_unavailable(
     assert "decriptabile" in result["message"].lower()
 
 
-# ─── execute() ───────────────────────────────────────────────────────────────
-
-
 def test_execute_returns_user_error_when_credential_unavailable(
     executor_with_failing_connection, mock_canvas
 ):
@@ -112,9 +103,6 @@ def test_execute_returns_user_error_when_credential_unavailable(
     assert result.get("user_error") is True
     assert "credenziale" in result["message"].lower()
     assert "decriptabile" in result["message"].lower()
-
-
-# ─── Non-regression: altre eccezioni bubblano normalmente ───────────────────
 
 
 def test_preview_propagates_non_credential_runtime_errors(mock_metadata, mock_canvas):

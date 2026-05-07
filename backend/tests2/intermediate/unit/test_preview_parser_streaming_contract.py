@@ -44,9 +44,7 @@ _PREVIEW_PARSER_PY = (
 )
 
 
-# ---------------------------------------------------------------------------
 # Helpers — synthesize parquet bytes via pyarrow (already a hard dep)
-# ---------------------------------------------------------------------------
 
 
 def _make_parquet(rows: list[dict] | None, columns: list[str] | None = None) -> bytes:
@@ -64,9 +62,7 @@ def _make_parquet(rows: list[dict] | None, columns: list[str] | None = None) -> 
     return buf.getvalue()
 
 
-# ---------------------------------------------------------------------------
 # 1. Streaming behavior — limit << total rows
-# ---------------------------------------------------------------------------
 
 
 def test_streaming_returns_only_limit_rows_for_large_file():
@@ -120,9 +116,7 @@ def test_zero_row_parquet_returns_empty_rows_with_full_schema():
     assert set(result.col_schema.keys()) == {"alpha", "beta", "gamma"}
 
 
-# ---------------------------------------------------------------------------
 # 2. Schema fidelity vs the legacy pd.read_parquet path
-# ---------------------------------------------------------------------------
 
 
 def test_col_schema_dtype_strings_match_legacy_format():
@@ -148,9 +142,7 @@ def test_col_schema_dtype_strings_match_legacy_format():
     assert result.col_schema == legacy_schema
 
 
-# ---------------------------------------------------------------------------
 # 3. Error envelope — read_parquet stage
-# ---------------------------------------------------------------------------
 
 
 def test_invalid_bytes_raises_read_parquet_stage():
@@ -186,9 +178,7 @@ def test_empty_bytes_raises_read_parquet_stage():
     assert exc_info.value.stage == "read_parquet"
 
 
-# ---------------------------------------------------------------------------
 # 4. Source-bound: no full-file pd.read_parquet
-# ---------------------------------------------------------------------------
 
 
 def test_parser_does_not_call_pd_read_parquet_on_full_buffer():

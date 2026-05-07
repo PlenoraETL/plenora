@@ -21,9 +21,7 @@ from .scanner import extract_expected_columns
 logger = get_logger(__name__)
 
 
-# ──────────────────────────────────────────────────────────────
 # CREATE — clona canvas da progetto arricchisci esistente
-# ──────────────────────────────────────────────────────────────
 
 def create_from_project(
     source_project_id: str,
@@ -109,9 +107,7 @@ def create_from_project(
     return record
 
 
-# ──────────────────────────────────────────────────────────────
 # ANALYZE UPLOAD — upload file utente + estrazione colonne
-# ──────────────────────────────────────────────────────────────
 
 def analyze_file_upload(
     eseguibile: Dict[str, Any],
@@ -196,8 +192,6 @@ def analyze_file_upload(
                 clean[k] = v
         preview_rows.append(clean)
 
-    # Genera un file_id per questo upload — in Phase 1 usiamo il path temp come riferimento
-    # (il file resta su disco finché il task di esecuzione non lo consuma)
     file_id = f"esec_upload_{uuid.uuid4().hex[:12]}"
 
     return {
@@ -211,9 +205,7 @@ def analyze_file_upload(
     }
 
 
-# ──────────────────────────────────────────────────────────────
 # EXECUTE — sostituisce sorgente nel canvas e lancia task
-# ──────────────────────────────────────────────────────────────
 
 def execute(
     eseguibile: Dict[str, Any],

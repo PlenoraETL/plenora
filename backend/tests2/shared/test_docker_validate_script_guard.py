@@ -50,9 +50,7 @@ _SCRIPT = _REPO_ROOT / "scripts" / "docker-validate.sh"
 _INSTALL_DOCKER = _REPO_ROOT / "docs" / "ops" / "install-docker.md"
 
 
-# =====================================================================
 # scripts/docker-validate.sh: existence + canonical contract
-# =====================================================================
 
 
 def test_validate_script_exists():
@@ -206,9 +204,7 @@ def test_validate_script_does_not_clobber_env_docker():
     )
 
 
-# =====================================================================
 # BE-GO-READY-INSTALL-013-DOCKER-VALIDATE-LINUX-SAFETY
-# =====================================================================
 # Adds two structural guards that make the script safe to run on a
 # real Linux PC without surprises:
 #   - LF-only line endings (a CRLF copy fails with `bad interpreter:
@@ -389,9 +385,7 @@ def test_validate_script_preflights_run_in_correct_order():
         )
 
 
-# =====================================================================
 # install-docker.md: validation pack section
-# =====================================================================
 
 
 def test_install_docker_doc_has_validation_pack_section():
@@ -490,9 +484,7 @@ def test_install_docker_doc_documents_script_non_destructive_contract():
     )
 
 
-# =====================================================================
 # BE-GO-READY-INSTALL-019: FE gap warnings in script output
-# =====================================================================
 
 
 def test_validate_script_defines_fe_gap_report_function():

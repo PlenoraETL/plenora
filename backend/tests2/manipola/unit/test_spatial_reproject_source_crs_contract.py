@@ -35,9 +35,7 @@ pytestmark = [
 ]
 
 
-# =============================================================================
 # Fixtures: una geometria semplice, riusata in piu' configurazioni di CRS.
-# =============================================================================
 
 
 @pytest.fixture
@@ -80,9 +78,7 @@ def gdf_without_crs():
     )
 
 
-# =============================================================================
 # 1. source_crs mancante + nessun CRS recuperabile -> ValueError fail-loud
-# =============================================================================
 
 
 def test_reproject_raises_when_source_crs_missing_and_gdf_has_no_crs(
@@ -124,9 +120,7 @@ def test_reproject_raises_when_source_crs_missing_on_plain_wkt_dataframe(
     assert "source_crs" in str(exc.value).lower()
 
 
-# =============================================================================
 # 2. source_crs esplicito -> riproiezione ok
-# =============================================================================
 
 
 def test_reproject_works_with_explicit_source_crs_on_gdf_without_crs(
@@ -172,9 +166,7 @@ def test_reproject_works_with_explicit_source_crs_on_plain_dataframe(
     assert "3857" in str(result.crs)
 
 
-# =============================================================================
 # 3. CRS gia' presente sul GeoDataFrame -> riproiezione ok (no source_crs)
-# =============================================================================
 
 
 def test_reproject_works_when_gdf_has_crs_and_source_crs_omitted(

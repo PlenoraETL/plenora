@@ -122,9 +122,7 @@ def _all_messages(handler: _RecordCollector) -> List[str]:
     return [r.getMessage() for r in handler.records]
 
 
-# =============================================================================
 # _geometry_to_wkt — log behavior osservabile
-# =============================================================================
 
 
 def test_geometry_to_wkt_logs_on_wkb_fallback_exhaustion(captured_writer_logs):
@@ -203,9 +201,7 @@ def test_geometry_to_wkt_return_contract_invariant_on_valid_wkt():
     assert result == valid_wkt
 
 
-# =============================================================================
 # _prepare_dataframe — log behavior su ImportError geopandas
-# =============================================================================
 
 
 def test_prepare_dataframe_logs_when_geopandas_missing(monkeypatch, captured_writer_logs):
@@ -250,9 +246,7 @@ def test_prepare_dataframe_logs_when_geopandas_missing(monkeypatch, captured_wri
     )
 
 
-# =============================================================================
 # Cleanup guards log level — verifica che i metodi usano WARNING non DEBUG
-# =============================================================================
 
 
 def test_cleanup_guards_use_warning_not_debug_on_orphan_leftover():

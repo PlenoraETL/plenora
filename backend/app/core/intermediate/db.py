@@ -44,9 +44,7 @@ def init_db():
 
 # fetchone, fetchall, execute sono importati da pg_connection (top del file)
 
-# ============================================================
 # RUNS
-# ============================================================
 
 def create_run(run_id: str, canvas_id: str, group_id: str,
                total_nodes: int = 0,
@@ -136,9 +134,7 @@ def pin_run(run_id: str, group_id: Optional[str], pinned: bool = True) -> bool:
     return cur.rowcount > 0
 
 
-# ============================================================
 # NODE META
-# ============================================================
 
 def upsert_node_meta(run_id: str, node_id: str, node_type: str = None,
                      row_count: int = None, col_schema: dict = None,
@@ -158,9 +154,6 @@ def upsert_node_meta(run_id: str, node_id: str, node_type: str = None,
     )
 
 
-# Phase 6 Batch 1 (2026-04-28): UPSERT esteso con colonne policy.
-# Tenuto separato da `upsert_node_meta` legacy per evitare regressioni
-# sui caller esistenti (`writer.write_node` resta full_pg).
 _SQL_UPSERT_NODE_META_EXT = """
 INSERT INTO node_meta (
     run_id, node_id, node_type, row_count, col_schema, exec_time, status, error_msg,
@@ -303,9 +296,7 @@ def list_node_meta(run_id: str) -> List[Dict]:
     return rows
 
 
-# ============================================================
 # NODE ROWS — tabella unificata JSONB (ex tabelle dinamiche)
-# ============================================================
 #
 # Design precedente (rimosso): una tabella Postgres fisica per ogni nodo di
 # ogni run, naming convention run_{uuid}_{node_id}. Causava:
@@ -317,36 +308,7 @@ def list_node_meta(run_id: str) -> List[Dict]:
 # Design corrente: una singola tabella plenora.node_rows con row_data jsonb.
 # La FK run_id → plenora.runs(run_id) ON DELETE CASCADE garantisce retention
 # atomica gratuita: basta DELETE FROM runs WHERE run_id = ? per pulire tutto.
-# ============================================================
 
-
-# ============================================================
-# F-DATA-01 / P1-04: SENTINEL per NaN/Inf in JSONB
-# ============================================================
-#
-# JSON strict non ammette NaN / +Inf / -Inf. Pre-fix `_to_jsonable` li
-# mappava a None: divergenza fantasma con `compute_row_hash` (che li
-# preserva come "nan" / "+inf" / "-inf" via `_format_float_stable`).
-# Reload da `node_rows.row_data` perdeva la distinzione e ricalcolare
-# l'hash dei dati ricostruiti dava un hash diverso da quello stored.
-#
-# Fix simmetrico via sentinel object JSONB namespaced. Sentinel string
-# semplici (es. "__nan__") sarebbero rischiosi: un valore utente reale
-# uguale alla stringa sentinel verrebbe convertito a NaN al reverse,
-# corrompendo dati legittimi. Usiamo invece un dict di forma esatta:
-#
-#     {"__plenora_special_float__": "nan"}
-#     {"__plenora_special_float__": "+inf"}
-#     {"__plenora_special_float__": "-inf"}
-#
-# Il reverse mapping converte SOLO dict con esattamente quella chiave
-# (singola, valore in {"nan","+inf","-inf"}). Stringhe omonime e dict
-# utente con altre chiavi restano invariati. Hash storico invariato
-# (writer.py NON e' toccato).
-#
-# Compat: dati pre-fix scritti come `null` continuano a venire letti
-# come `None` (il reverse tocca solo dict di forma esatta). Nessuna
-# migration richiesta.
 
 _SPECIAL_FLOAT_KEY = "__plenora_special_float__"
 _SPECIAL_FLOAT_TAG_NAN = "nan"
@@ -453,11 +415,6 @@ def _from_jsonable_value(v):
     return v
 
 
-# A3 (Phase 4): SQL costanti riusate da insert_node_rows + write_node_atomic.
-# Il placeholder e' %s diretto (non ?): scriviamo via cursor PG nativo, fuori
-# dal wrapper _adapt_params di pg_connection. Tenere allineati questi due nomi
-# e' importante perche' i contract test sotto verificano testualmente che il
-# DELETE preceda l'INSERT.
 _SQL_DELETE_NODE_ROWS = (
     "DELETE FROM node_rows WHERE run_id = %s AND node_id = %s"
 )
@@ -682,9 +639,7 @@ def get_node_table_rows(run_id: str, node_id: str,
     return result
 
 
-# ============================================================
 # RETENTION POLICY
-# ============================================================
 
 DEFAULT_RUNS_RETENTION = 5
 
@@ -700,9 +655,6 @@ def apply_runs_retention(canvas_id: str, group_id: str) -> None:
     try:
         # Legge retention_n dal progetto in config.db
         try:
-            # BE-GO-READY-DB-ENGINE-004: leaf canonico
-            # (`app.db.config.projects.get_project_retention_n`) invece
-            # del facade `config_db_service`. Allowlist trimmed.
             from app.db.config.projects import get_project_retention_n
             retention_n = get_project_retention_n(canvas_id)
             if retention_n is None:

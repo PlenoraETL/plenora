@@ -133,9 +133,7 @@ class BatchDispatchMixin:
     (gestisce batch execution loop + transaction strategies).
     """
 
-    # ========================================================================
     # BATCH INSERT
-    # ========================================================================
 
     def _batch_insert(
         self,
@@ -152,9 +150,7 @@ class BatchDispatchMixin:
 
         return self._execute_in_batches(df, columns, sql_template, result, "insert")
 
-    # ========================================================================
     # BATCH UPDATE
-    # ========================================================================
 
     def _batch_update(
         self,
@@ -182,9 +178,7 @@ class BatchDispatchMixin:
 
         return self._execute_in_batches(df, columns, sql_template, result, "update")
 
-    # ========================================================================
     # BATCH UPSERT
-    # ========================================================================
 
     def _batch_upsert(
         self,

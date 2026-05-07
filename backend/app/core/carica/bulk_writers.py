@@ -53,9 +53,7 @@ class BulkInsertNotSupportedError(Exception):
     (`_execute_batch`) catcha e fa fallback a executemany."""
 
 
-# ─────────────────────────────────────────────────────────────────────
 # Dispatch factory (post-rimozione: raise sempre dialect_not_supported)
-# ─────────────────────────────────────────────────────────────────────
 
 
 def bulk_insert(
@@ -103,9 +101,7 @@ def bulk_insert(
     )
 
 
-# ─────────────────────────────────────────────────────────────────────
 # Feature flag (opt-out via env) — scaffolding preservato
-# ─────────────────────────────────────────────────────────────────────
 
 
 def is_bulk_enabled() -> bool:

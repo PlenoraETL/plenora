@@ -39,9 +39,7 @@ import pytest
 pytestmark = [pytest.mark.unit, pytest.mark.contract]
 
 
-# =============================================================================
 # Helpers
-# =============================================================================
 
 
 @pytest.fixture
@@ -70,9 +68,7 @@ def service_with_fake_db(monkeypatch):
     return ProjectService(), state
 
 
-# =============================================================================
 # Canvas valido — nessuna eccezione
-# =============================================================================
 
 
 def test_canvas_valid_dict_parses_ok(service_with_fake_db):
@@ -93,9 +89,7 @@ def test_canvas_valid_json_string_parses_ok(service_with_fake_db):
     assert canvas.nodes == []
 
 
-# =============================================================================
 # Canvas vuoto legittimo — NO raise, NO log error
-# =============================================================================
 
 
 @pytest.mark.parametrize("empty_canvas", [None, {}, ""])
@@ -128,9 +122,7 @@ def test_canvas_json_string_empty_dict_is_not_corruption(service_with_fake_db):
     assert canvas.nodes == []
 
 
-# =============================================================================
 # Progetto inesistente — None, non raise
-# =============================================================================
 
 
 def test_missing_project_returns_none(service_with_fake_db):
@@ -140,9 +132,7 @@ def test_missing_project_returns_none(service_with_fake_db):
     assert result is None
 
 
-# =============================================================================
 # Canvas corrotto — raise CanvasCorruptedError con reason esplicito
-# =============================================================================
 
 
 def test_corrupted_json_string_raises(service_with_fake_db):
@@ -238,9 +228,7 @@ def test_canvas_invalid_node_structure_raises(service_with_fake_db):
     assert "schema non valido" in exc_info.value.reason
 
 
-# =============================================================================
 # Reason non deve leakare contenuto sensibile
-# =============================================================================
 
 
 def test_corrupted_error_str_includes_project_id(service_with_fake_db):
@@ -259,9 +247,7 @@ def test_corrupted_error_str_includes_project_id(service_with_fake_db):
     assert "JSON malformato" in msg
 
 
-# =============================================================================
 # Regressione: il fallback silenzioso a CanvasState() NON deve tornare
-# =============================================================================
 
 
 def test_corrupted_canvas_never_returns_empty_silently(service_with_fake_db):

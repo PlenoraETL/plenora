@@ -122,9 +122,7 @@ class ResourceMetadata:
     group_id: Optional[str] = None
     project_id: Optional[str] = None
 
-    # ------------------------------------------------------------------
     # Factory - interoperates with the existing wire format
-    # ------------------------------------------------------------------
 
     @classmethod
     def from_columns_list(
@@ -170,9 +168,7 @@ class ResourceMetadata:
             project_id=project_id,
         )
 
-    # ------------------------------------------------------------------
     # Serialisation - round-trips cleanly with the existing wire format
-    # ------------------------------------------------------------------
 
     def to_columns_list(self) -> list[dict]:
         """Serialise back to ``[{"name": str, "type": str}]``.
@@ -182,9 +178,7 @@ class ResourceMetadata:
         """
         return [{"name": col.name, "type": col.type} for col in self.columns]
 
-    # ------------------------------------------------------------------
     # Accessors
-    # ------------------------------------------------------------------
 
     def column_type_map(self) -> dict[str, str]:
         """``{name: type}`` dict for O(1) type lookup.

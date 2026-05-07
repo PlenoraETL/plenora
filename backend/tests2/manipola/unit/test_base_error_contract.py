@@ -40,9 +40,7 @@ from app.core.manipola.transforms.base import (
 pytestmark = [pytest.mark.unit, pytest.mark.manipola, pytest.mark.contract]
 
 
-# =============================================================================
 # 1. Contratto fail-closed su 3 transform rappresentative
-# =============================================================================
 
 @pytest.mark.parametrize(
     "transform, patch_target, kwargs",
@@ -75,9 +73,7 @@ def test_top_level_transform_reraises_on_internal_failure(transform, patch_targe
             transform(df, **kwargs)
 
 
-# =============================================================================
 # 2. Smoke regression sull'happy path di op_aggregate
-# =============================================================================
 
 def test_aggregate_happy_path_unchanged():
     """Il fix E1 tocca solo il ramo except: l'happy path deve restare
@@ -95,9 +91,7 @@ def test_aggregate_happy_path_unchanged():
     assert grouped["B"] == 3
 
 
-# =============================================================================
 # 3. op_type_cast con errors='coerce' (copertura R1 audit §7.4)
-# =============================================================================
 
 def test_type_cast_coerce_happy_path_unchanged():
     """Happy path di errors='coerce' invariato: stringhe non numeriche

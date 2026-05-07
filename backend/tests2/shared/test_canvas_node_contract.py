@@ -10,9 +10,7 @@ from app.shared.execution.canvas_node import CanvasNode
 from app.shared.execution.canvas_graph import CanvasGraph
 
 
-# ------------------------------------------------------------
 # Properties
-# ------------------------------------------------------------
 
 def test_id_from_root():
     assert CanvasNode({"id": "n1", "type": "api_enrich"}).id == "n1"
@@ -36,9 +34,7 @@ def test_data_property_non_dict_returns_empty_dict():
     assert CanvasNode({"data": "bad"}).data == {}
 
 
-# ------------------------------------------------------------
 # get_field two-level lookup
-# ------------------------------------------------------------
 
 def test_get_field_top_level_wins():
     node = {"api_id": "top", "data": {"api_id": "nested"}}
@@ -65,18 +61,14 @@ def test_get_field_zero_is_truthy_value_returned():
     assert CanvasNode(node).get_field("count") == 0
 
 
-# ------------------------------------------------------------
 # TypeError guard
-# ------------------------------------------------------------
 
 def test_non_dict_raises_type_error():
     with pytest.raises(TypeError, match="CanvasNode expects a dict"):
         CanvasNode("not-a-dict")
 
 
-# ------------------------------------------------------------
 # Integration: parallel.py helpers via CanvasNode
-# ------------------------------------------------------------
 
 def test_parallel_extract_consumed_uses_canvas_node():
     """_extract_consumed_columns reads param_mapping via CanvasNode."""
@@ -100,9 +92,7 @@ def test_parallel_may_explode_cardinality_path_marker():
     assert _node_may_explode_cardinality(node) is True
 
 
-# ------------------------------------------------------------
 # CanvasGraph contract (BE-GO-READY-ARCH-058-W3)
-# ------------------------------------------------------------
 
 _NODES = [
     {"id": "n1", "type": "file_source", "data": {"file_source_id": "fs-1"}},

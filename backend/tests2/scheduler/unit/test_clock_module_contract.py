@@ -27,9 +27,7 @@ from app.shared.clock import WALL_CLOCK, Clock, FakeClock, WallClock
 pytestmark = [pytest.mark.unit, pytest.mark.scheduler, pytest.mark.contract]
 
 
-# =============================================================================
 # WallClock production
-# =============================================================================
 
 
 def test_wall_clock_is_singleton_and_protocol_compliant():
@@ -62,9 +60,7 @@ def test_wall_clock_wait_returns_false_on_timeout():
     assert elapsed >= 0.04, "deve aspettare quasi tutto il timeout"
 
 
-# =============================================================================
 # FakeClock test-only
-# =============================================================================
 
 
 def test_fake_clock_now_starts_at_zero_and_advances():

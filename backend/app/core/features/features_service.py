@@ -58,9 +58,7 @@ from app.core.features.arcgis_client import (
 
 logger = get_logger(__name__)
 
-# =============================================================================
 # CRUD STORAGE — tabella arcgis_connections su PostgreSQL
-# =============================================================================
 # Merged da features_service_db.py (S4 consolidation). Le 5 funzioni
 # pubbliche *_db e i 3 helper privati sono mantenuti come module-level
 # per preservare la superficie importata dai test.
@@ -226,9 +224,7 @@ def delete_connection_db(connection_id: str) -> bool:
     return True
 
 
-# =============================================================================
 # PROTOCOLLI PER DEPENDENCY INJECTION
-# =============================================================================
 
 class SaveFunctionProtocol(Protocol):
     """Protocollo per la funzione di salvataggio DataFrame — iniettabile per test."""
@@ -242,9 +238,7 @@ class SaveFunctionProtocol(Protocol):
     ) -> Path: ...
 
 
-# =============================================================================
 # SERVIZIO PRINCIPALE
-# =============================================================================
 
 class FeaturesService:
     """
@@ -275,9 +269,7 @@ class FeaturesService:
         
         # Crea directory se non esiste
     
-    # =========================================================================
     # CRUD CONNESSIONI
-    # =========================================================================
     
     def _generate_connection_id(self, name: str) -> str:
         """Genera ID univoco per connessione (stesso pattern di ConnectionService)."""
@@ -334,9 +326,7 @@ class FeaturesService:
             details=result.get("details"),
         )
     
-    # =========================================================================
     # BROWSE: SERVIZI E LAYER
-    # =========================================================================
     
     def browse_services(self, connection_id: str) -> List[dict]:
         """
@@ -441,9 +431,7 @@ class FeaturesService:
         conn_info = self._to_connection_info(connection)
         return self._client.get_layer_schema(conn_info, layer_url)
     
-    # =========================================================================
     # QUERY (lettura dati)
-    # =========================================================================
     
     def query_layer(
         self,
@@ -591,9 +579,7 @@ class FeaturesService:
                 "timings": {},
             }
     
-    # =========================================================================
     # HELPER INTERNI
-    # =========================================================================
     
     def _to_connection_info(self, conn: ArcGISConnection) -> ArcGISConnectionInfo:
         """Converte ArcGISConnection (Pydantic) → ArcGISConnectionInfo (dataclass leggero)."""
@@ -690,9 +676,7 @@ class FeaturesService:
             df.to_csv(final_path, index=False, encoding="utf-8")
         return final_path
     
-    # =========================================================================
     # SCRITTURA: ADD / UPDATE / DELETE / CREATE SERVICE
-    # =========================================================================
     
     def write_features(
         self,
@@ -1247,9 +1231,7 @@ class FeaturesService:
                 ) from exc
 
 
-# =============================================================================
 # FACTORY FUNCTION
-# =============================================================================
 
 def create_features_service(
     client: ArcGISClient = None,

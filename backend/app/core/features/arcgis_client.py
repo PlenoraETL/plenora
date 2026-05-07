@@ -69,20 +69,15 @@ from app.utils.logger import get_logger
 logger = get_logger(__name__)
 
 
-
 def _mask_secret(value: str, visible: int = 4) -> str:
     """Mostra solo i primi N caratteri di un segreto nei log."""
     if not value:
         return "(vuoto)"
     return value[:visible] + "***" if len(value) > visible else "***"
 
-# =============================================================================
 # TIPI E PROTOCOLLI
-# =============================================================================
 
 
-# ArcGISConnectionInfo moved to app.shared.connections.arcgis_connection per
-# ADR-0023 (BE-GO-READY-ARCH-058-W5). Re-exported here for backward compat.
 from app.shared.connections.arcgis_connection import ArcGISConnectionInfo  # noqa: F401
 
 
@@ -127,9 +122,7 @@ class HttpClientProtocol(Protocol):
     def post(self, url: str, data: dict = None, timeout: int = 30, headers: dict = None) -> Any: ...
 
 
-# =============================================================================
 # HTTP CLIENT (default — usa requests)
-# =============================================================================
 
 class DefaultHttpClient:
     """
@@ -147,18 +140,11 @@ class DefaultHttpClient:
         return get_shared_session().post(url, data=data, timeout=timeout, headers=headers)
 
 
-# =============================================================================
 # MAPPING TIPI ESRI → PLENORA
-# =============================================================================
 
-# EsriTypeMapper moved to app.shared.connections.esri_types per ADR-0023.
-# Re-exported here so existing callers continue to work without changes.
-# KEEP_COMPAT — canonical location is now app.shared.connections.esri_types.
 from app.shared.connections.esri_types import EsriTypeMapper  # noqa: F401
 
-# =============================================================================
 # CONVERSIONI ESRI JSON ↔ GEODATAFRAME
-# =============================================================================
 
 class EsriJsonConverter:
     """
@@ -373,9 +359,7 @@ class EsriJsonConverter:
             return None
 
 
-# =============================================================================
 # CLIENT PRINCIPALE
-# =============================================================================
 
 class ArcGISClient:
     """
@@ -402,9 +386,7 @@ class ArcGISClient:
         self._http = http_client or DefaultHttpClient()
         self._token_cache: Dict[str, dict] = {}  # url → {token, expires}
 
-    # =========================================================================
     # C12: HELPER CENTRALIZZATO TOKEN-AWARE
-    # =========================================================================
 
     def _request_with_token(
         self,
@@ -468,8 +450,6 @@ class ArcGISClient:
 
         while True:
             token = self.authenticate(conn)
-            # Merge header: extra_headers del caller (es. Referer per
-            # compat ArcGIS) + Authorization Bearer
             headers = dict(extra_headers) if extra_headers else {}
             if token:
                 headers["Authorization"] = f"Bearer {token}"
@@ -556,9 +536,7 @@ class ArcGISClient:
             # Response finale — successo o errore non gestito dal retry
             return response
 
-    # =========================================================================
     # AUTENTICAZIONE
-    # =========================================================================
     
     def authenticate(self, conn: ArcGISConnectionInfo) -> Optional[str]:
         """
@@ -792,9 +770,7 @@ class ArcGISClient:
         
         return None
     
-    # =========================================================================
     # BROWSE: LISTA SERVIZI
-    # =========================================================================
     
     def list_services(
         self,
@@ -831,9 +807,7 @@ class ArcGISClient:
             or conn.server_type == "arcgis_online"
         )
     
-    # -------------------------------------------------------------------------
     # ArcGIS Online: Content API
-    # -------------------------------------------------------------------------
     
     def _list_services_online(
         self,
@@ -1089,9 +1063,7 @@ class ArcGISClient:
         except requests.RequestException as e:
             raise ConnectionError(f"Errore ricerca ArcGIS Online: {e}")
     
-    # -------------------------------------------------------------------------
     # ArcGIS Server/Enterprise: catalogo REST
-    # -------------------------------------------------------------------------
     
     def _list_services_server(
         self,
@@ -1174,9 +1146,7 @@ class ArcGISClient:
         else:
             return f"{base}/rest/services"
     
-    # =========================================================================
     # BROWSE: LISTA LAYER
-    # =========================================================================
     
     def list_layers(
         self,
@@ -1278,9 +1248,7 @@ class ArcGISClient:
         
         return urls
     
-    # =========================================================================
     # BROWSE: SCHEMA LAYER (campi e metadata)
-    # =========================================================================
     
     def get_layer_schema(
         self,
@@ -1506,9 +1474,7 @@ class ArcGISClient:
             raise RuntimeError(f"Errore ArcGIS: {payload['error']}")
         return int(payload.get("count", 0))
     
-    # =========================================================================
     # QUERY FEATURES
-    # =========================================================================
     
     def query_features(
         self,
@@ -1649,9 +1615,7 @@ class ArcGISClient:
                 return f["name"]
         return None
     
-    # =========================================================================
     # SCRITTURA: ADD / UPDATE / DELETE
-    # =========================================================================
     
     def add_features(
         self,
@@ -1856,9 +1820,7 @@ class ArcGISClient:
             "errors": all_errors,
         }
     
-    # =========================================================================
     # CONVERSIONE: DataFrame → Esri JSON
-    # =========================================================================
     
     @staticmethod
     def dataframe_to_esri_features(
@@ -2099,9 +2061,7 @@ class ArcGISClient:
             }
         }
 
-    # =========================================================================
     # CREAZIONE FEATURE SERVICE (ArcGIS Online)
-    # =========================================================================
 
     def create_service(
         self,
@@ -2145,7 +2105,6 @@ class ArcGISClient:
         parsed = urlparse(conn.server_url)
         base_url = f"{parsed.scheme}://{parsed.netloc}/sharing/rest"
         
-        # ---- Step 1: Crea il servizio vuoto ----
         
         # Unita basate su SRID
         units = "esriDecimalDegrees" if srid == 4326 else "esriMeters"
@@ -2210,7 +2169,6 @@ class ArcGISClient:
         except requests.RequestException as e:
             raise ConnectionError(f"Errore creazione servizio: {e}")
         
-        # ---- Step 2: Aggiungi la definizione del layer ----
         
         # Determina tipo geometria dal DataFrame.
         # Usiamo il tipo MAGGIORITARIO (value_counts) invece della prima
@@ -2345,7 +2303,6 @@ class ArcGISClient:
         except requests.RequestException as e:
             logger.error(f"[GESTITO] Errore addToDefinition: {e}")
         
-        # ---- Step 3: Carica i dati ----
         
         layer_url = f"{service_url}/0"
         features = self.dataframe_to_esri_features(df, geometry_column, srid, operation="create_service")
@@ -2366,7 +2323,6 @@ class ArcGISClient:
         if write_result.get("errors"):
             logger.error(f"[GESTITO] addFeatures errori (primi 3): {write_result['errors'][:3]}")
         
-        # ---- Step 4: Aggiorna extent del layer con i dati reali ----
         try:
             update_def = {
                 "layers": [{
@@ -2401,9 +2357,7 @@ class ArcGISClient:
             "errors": write_result.get("errors", []),
         }
 
-    # =========================================================================
     # ADD LAYER TO EXISTING SERVICE (BE-IMDF-006B)
-    # =========================================================================
 
     def add_layer_to_service(
         self,
@@ -2547,9 +2501,7 @@ class ArcGISClient:
             errors=tuple(write_result.get("errors", [])),
         )
 
-    # =========================================================================
     # TEST CONNESSIONE
-    # =========================================================================
     
     def test_connection(self, conn: ArcGISConnectionInfo) -> dict:
         """
@@ -2599,9 +2551,7 @@ class ArcGISClient:
             }
 
 
-    # =========================================================================
     # STILI / RENDERER
-    # =========================================================================
 
     def update_renderer(
         self,
@@ -2666,11 +2616,8 @@ class ArcGISClient:
         except requests.RequestException as e:
             return {"success": False, "message": str(e)}
 
-    # =========================================================================
 
-# =============================================================================
 # FACTORY FUNCTION
-# =============================================================================
 
 def create_client(http_client: HttpClientProtocol = None) -> ArcGISClient:
     """Factory function per creare un ArcGISClient con Dependency Injection."""

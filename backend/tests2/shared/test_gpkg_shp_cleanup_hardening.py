@@ -31,9 +31,7 @@ import pytest
 pytestmark = [pytest.mark.unit, pytest.mark.shared, pytest.mark.contract]
 
 
-# =============================================================================
 # save_pipeline_result gpkg/shp branch
-# =============================================================================
 
 
 def test_save_pipeline_result_gpkg_no_file_in_data_dir_temp(monkeypatch, tmp_path):

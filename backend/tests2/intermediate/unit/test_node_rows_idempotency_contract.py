@@ -42,10 +42,8 @@ pytestmark = [
 ]
 
 
-# ---------------------------------------------------------------------------
 # Helper: cattura tutte le chiamate cur.execute / cur.executemany dentro
 # una `with transaction() as conn: with conn.cursor() as cur:` finta.
-# ---------------------------------------------------------------------------
 
 
 def _make_fake_transaction():
@@ -144,9 +142,7 @@ def _upsert_meta_calls(cur) -> list:
     ]
 
 
-# =============================================================================
 # 1. insert_node_rows e' idempotente: DELETE precede INSERT
-# =============================================================================
 
 
 def test_insert_node_rows_emits_delete_before_insert():
@@ -222,9 +218,7 @@ def test_insert_node_rows_empty_rows_still_emits_delete():
     ev_spy.assert_not_called()
 
 
-# =============================================================================
 # 2. write_node_atomic: idempotency + atomicity end-to-end
-# =============================================================================
 
 
 def test_write_node_atomic_emits_delete_insert_upsert_in_order():
@@ -336,9 +330,7 @@ def test_write_node_atomic_empty_rows_still_evicts_and_upserts_meta():
     assert upserts[0].args[1][3] == 0  # row_count=0
 
 
-# =============================================================================
 # 3. Atomicity: rollback su fallimento meta evita orfani in node_rows
-# =============================================================================
 
 
 def test_write_node_atomic_meta_fail_rollback_propagates():
@@ -384,9 +376,7 @@ def test_write_node_atomic_meta_fail_rollback_propagates():
     assert len(_insert_row_calls(cur, ev_spy=ev_spy)) == 1
 
 
-# =============================================================================
 # 4. writer.write_node usa write_node_atomic sul ramo success
-# =============================================================================
 
 
 def test_writer_write_node_success_branch_routes_through_atomic_helper():

@@ -71,9 +71,7 @@ def test_shared_returns_false_on_empty_run_id():
     assert is_already_completed(None) is False
 
 
-# =============================================================================
 # Backward compat: app.core.carica.idempotency continua a funzionare
-# =============================================================================
 
 
 def test_carica_idempotency_reexports_from_shared():

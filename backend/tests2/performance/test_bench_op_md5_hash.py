@@ -30,9 +30,7 @@ from app.core.manipola.transforms.base import op_md5_hash
 from .conftest import make_pandas_df
 
 
-# ─────────────────────────────────────────────────────────────────────
 # Oracle: legacy impl (verbatim da base.py:1102 @ aea1f63)
-# ─────────────────────────────────────────────────────────────────────
 
 
 def _legacy_op_md5_hash(
@@ -73,9 +71,7 @@ def _legacy_op_md5_hash(
         return df
 
 
-# ─────────────────────────────────────────────────────────────────────
 # Naive: apply(axis=1) di un unico row-builder+hash
-# ─────────────────────────────────────────────────────────────────────
 
 
 def _naive_md5_apply(
@@ -110,9 +106,7 @@ def _naive_md5_apply(
     return result
 
 
-# ─────────────────────────────────────────────────────────────────────
 # Bench harness
-# ─────────────────────────────────────────────────────────────────────
 
 
 def _median_runtime(
@@ -129,9 +123,7 @@ def _median_runtime(
     return statistics.median(times)
 
 
-# ─────────────────────────────────────────────────────────────────────
 # Bench assertions
-# ─────────────────────────────────────────────────────────────────────
 
 _MIN_SPEEDUP_VS_LEGACY = 3.0
 _MIN_THROUGHPUT_ROWS_PER_SEC = 100_000  # floor conservativo per md5 puro

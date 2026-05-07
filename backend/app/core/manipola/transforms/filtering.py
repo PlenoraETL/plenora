@@ -67,18 +67,13 @@ from typing import Any, Dict, List, Union
 
 from app.utils.logger import get_logger
 
-# Stesso logger name di `base.py`: i record sono indistinguibili dai
-# consumer che attaccano handler / filtrano per
-# "app.core.manipola.transforms.base" (pattern §6.1 facade).
 logger = get_logger("app.core.manipola.transforms.base")
 
 DataFrame = Union[pd.DataFrame, gpd.GeoDataFrame]
 
 
-# =============================================================================
 # FILTRO RIGHE
 # Applica condizioni su colonne con operatori: =, !=, >, <, >=, <=, LIKE, IN, IS NULL.
-# =============================================================================
 
 def op_filter(
     df: DataFrame,
@@ -110,7 +105,6 @@ def op_filter(
     result = df.copy()
     col = result[column]
 
-    # === AUTO-CONVERSIONE TIPO ===
     # Se la colonna è numerica e il valore è stringa, converti
     if value is not None and pd.api.types.is_numeric_dtype(col):
         try:
@@ -170,10 +164,8 @@ def op_filter(
         ) from e
 
 
-# =============================================================================
 # CONDIZIONALE (CASE WHEN)
 # Crea colonna con valore dipendente da condizioni (simile a SQL CASE WHEN).
-# =============================================================================
 
 def op_conditional(
     df: DataFrame,

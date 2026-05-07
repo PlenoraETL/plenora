@@ -35,9 +35,7 @@ import pytest
 pytestmark = [pytest.mark.unit, pytest.mark.security, pytest.mark.contract]
 
 
-# ---------------------------------------------------------------------------
 # MIGRATION PATH
-# ---------------------------------------------------------------------------
 
 MIGRATION_FILENAME = "2026-04-21_log_immutable_triggers.sql"
 
@@ -55,9 +53,7 @@ def migration_sql() -> str:
     return path.read_text(encoding="utf-8")
 
 
-# ===========================================================================
 # A) STATIC CONTRACT (no PG)
-# ===========================================================================
 
 
 def test_migration_defines_block_function(migration_sql: str) -> None:
@@ -138,9 +134,7 @@ def test_migration_covers_only_declared_tables(migration_sql: str) -> None:
     )
 
 
-# ===========================================================================
 # B) INTEGRATION CONTRACT (richiede PG live, opt-in esplicito)
-# ===========================================================================
 #
 # Questi test fanno `psycopg2.connect` reale e applicano la migration
 # `2026-04-21_log_immutable_triggers.sql` su un DB di test condiviso.

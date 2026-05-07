@@ -91,9 +91,7 @@ class _FakeClient:
         return "tok"
 
 
-# =============================================================================
 # HAPPY PATH — primary delete success → (1, 1) NIENTE UnboundLocalError
-# =============================================================================
 
 
 def test_delete_existing_service_happy_path_returns_one_one():
@@ -118,9 +116,7 @@ def test_delete_existing_service_happy_path_returns_one_one():
     )
 
 
-# =============================================================================
 # PARTIAL FAIL — primary fail + fallback fail → (1, 0)
-# =============================================================================
 
 
 def test_delete_existing_service_partial_fail_returns_one_zero():

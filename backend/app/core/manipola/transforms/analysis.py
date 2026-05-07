@@ -75,19 +75,14 @@ from typing import Any, Dict, List, Optional, Union
 
 from app.utils.logger import get_logger
 
-# Stesso logger name di `base.py`: i record sono indistinguibili dai
-# consumer che attaccano handler / filtrano per
-# "app.core.manipola.transforms.base" (pattern §6.1 facade).
 logger = get_logger("app.core.manipola.transforms.base")
 
 DataFrame = Union[pd.DataFrame, gpd.GeoDataFrame]
 
 
-# =============================================================================
 # CAMPIONAMENTO RIGHE
 # Estrae un campione casuale di righe (per numero o per frazione).
 # Supporta campionamento stratificato proporzionale.
-# =============================================================================
 
 def op_sample(
     df: DataFrame,
@@ -145,10 +140,8 @@ def op_sample(
         raise
 
 
-# =============================================================================
 # LOOKUP — Mappatura valori tramite dizionario
 # Sostituisce valori di una colonna secondo una mappa chiave→valore.
-# =============================================================================
 
 def op_lookup(
     df: DataFrame,
@@ -200,10 +193,8 @@ def op_lookup(
         raise
 
 
-# =============================================================================
 # DISCRETIZZAZIONE (BINNING)
 # Suddivide una colonna numerica in intervalli (bin) discreti.
-# =============================================================================
 
 def op_bin(
     df: DataFrame,
@@ -252,10 +243,8 @@ def op_bin(
         raise
 
 
-# =============================================================================
 # FLATTEN JSON
 # Espande una colonna contenente JSON/dict in colonne separate.
-# =============================================================================
 
 def op_flatten_json(
     df: DataFrame,
@@ -321,10 +310,8 @@ def op_flatten_json(
         raise
 
 
-# =============================================================================
 # STATISTICS — StatisticsCalculator
 # Calcola statistiche descrittive per colonna, con raggruppamento opzionale.
-# =============================================================================
 
 def op_statistics(
     df: DataFrame,

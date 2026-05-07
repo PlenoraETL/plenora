@@ -80,9 +80,7 @@ def _clean_policy_env(monkeypatch):
     yield
 
 
-# =============================================================================
 # policy = db
-# =============================================================================
 
 
 def test_db_policy_writes_bytea_and_never_calls_storage(mock_db, stub_storage, monkeypatch):
@@ -118,9 +116,7 @@ def test_db_policy_enforces_hard_cap(mock_db, stub_storage, monkeypatch):
     assert stub_storage.uploads == []
 
 
-# =============================================================================
 # policy = object_storage
-# =============================================================================
 
 
 def test_object_storage_policy_always_uploads(mock_db, stub_storage, monkeypatch):
@@ -159,9 +155,7 @@ def test_object_storage_policy_ignores_threshold(mock_db, stub_storage, monkeypa
     assert mock_db[0]["data"] is None
 
 
-# =============================================================================
 # policy = hybrid (comportamento attuale + guard hard cap)
-# =============================================================================
 
 
 def test_hybrid_below_threshold_goes_to_db(mock_db, stub_storage, monkeypatch):

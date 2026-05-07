@@ -111,9 +111,6 @@ from app.utils.logger import get_logger
 
 from .sql_helpers import _quote_sql_value, _chunked, _query_oid_by_key
 
-# Stesso logger name di `arcgis_uploader.py`: i record sono
-# indistinguibili dai consumer che attaccano handler / filtrano per
-# "app.core.imdf.arcgis_uploader" (pattern §6.1 facade).
 logger = get_logger("app.core.imdf.arcgis_uploader")
 
 
@@ -146,9 +143,7 @@ def _add_layer_to_service(
     ).to_compat_dict()
 
 
-# =============================================================================
 # APPEND / UPSERT / UPDATE su FS esistente
-# =============================================================================
 
 
 def _publish_mode_existing(

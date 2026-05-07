@@ -51,9 +51,7 @@ _GITIGNORE = _REPO_ROOT / ".gitignore"
 _INSTALL_DOCKER = _REPO_ROOT / "docs" / "ops" / "install-docker.md"
 
 
-# =====================================================================
 # backend/Dockerfile contract
-# =====================================================================
 
 
 def test_dockerfile_exists():
@@ -157,9 +155,7 @@ def test_dockerfile_exposes_5004_and_uvicorn_default_cmd():
     )
 
 
-# =====================================================================
 # docker-compose.yml contract
-# =====================================================================
 
 
 def test_compose_exists():
@@ -270,9 +266,7 @@ def test_compose_loads_env_file():
     )
 
 
-# =====================================================================
 # .dockerignore contract
-# =====================================================================
 
 
 def test_dockerignore_exists():
@@ -304,9 +298,7 @@ def test_dockerignore_excludes_secrets_and_state():
         )
 
 
-# =====================================================================
 # .env.docker.example contract
-# =====================================================================
 
 
 def test_env_docker_example_exists():
@@ -370,9 +362,7 @@ def test_env_docker_real_file_is_gitignored():
     )
 
 
-# =====================================================================
 # install-docker.md scaffold runbook contract
-# =====================================================================
 
 
 def test_install_docker_doc_advertises_first_scaffold_status():
@@ -432,9 +422,7 @@ def test_install_docker_doc_documents_validation_gaps():
     )
 
 
-# =====================================================================
 # BE-GO-READY-ARCH-060-W6: same-image contract + dockerignore venv
-# =====================================================================
 
 
 def test_compose_worker_and_beat_share_backend_image():

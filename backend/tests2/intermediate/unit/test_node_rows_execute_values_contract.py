@@ -53,9 +53,7 @@ def _patched(idb):
         yield cur, ev_spy
 
 
-# ============================================================
 # A. write_node_snapshot_atomic (path Batch 1, preview_only)
-# ============================================================
 
 
 def test_snapshot_atomic_uses_execute_values_with_jsonb_template():
@@ -127,9 +125,7 @@ def test_snapshot_atomic_no_execute_values_when_no_rows():
     )
 
 
-# ============================================================
 # B. write_node_atomic (legacy)
-# ============================================================
 
 
 def test_write_node_atomic_legacy_uses_execute_values():
@@ -152,9 +148,7 @@ def test_write_node_atomic_legacy_uses_execute_values():
     assert len(ev_spy.call_args.args[2]) == 2
 
 
-# ============================================================
 # C. insert_node_rows (legacy idempotent helper)
-# ============================================================
 
 
 def test_insert_node_rows_uses_execute_values():
@@ -171,9 +165,7 @@ def test_insert_node_rows_uses_execute_values():
     assert len(ev_spy.call_args.args[2]) == 3
 
 
-# ============================================================
 # D. Records preservano shape pre-fix (jsonb-encodable)
-# ============================================================
 
 
 def test_records_have_5_tuple_with_jsonb_string_payload():
@@ -209,9 +201,7 @@ def test_records_have_5_tuple_with_jsonb_string_payload():
         assert "name" in parsed
 
 
-# ============================================================
 # E. Page size cap (sicurezza su payload molto grandi, full_pg)
-# ============================================================
 
 
 def test_execute_values_uses_explicit_page_size():

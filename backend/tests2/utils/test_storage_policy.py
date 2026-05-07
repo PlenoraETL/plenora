@@ -60,9 +60,7 @@ def _clean_storage_env(monkeypatch):
     yield
 
 
-# =============================================================================
 # 1. STORAGE_POLICY enum
-# =============================================================================
 
 
 def test_default_hybrid_requires_bucket(monkeypatch):
@@ -83,9 +81,7 @@ def test_policy_is_case_insensitive(monkeypatch):
     validate_storage_config()  # no raise
 
 
-# =============================================================================
 # 2. Policy = db
-# =============================================================================
 
 
 def test_db_policy_no_bucket_passes(monkeypatch):
@@ -128,9 +124,7 @@ def test_db_policy_rejects_non_int_hard_cap(monkeypatch):
         validate_storage_config()
 
 
-# =============================================================================
 # 3. Policy = object_storage
-# =============================================================================
 
 
 def test_object_storage_requires_bucket(monkeypatch):
@@ -190,9 +184,7 @@ def test_object_storage_rejects_provider_none(monkeypatch):
         validate_storage_config()
 
 
-# =============================================================================
 # 4. Policy = hybrid
-# =============================================================================
 
 
 def test_hybrid_passes_with_bucket(monkeypatch):
@@ -230,9 +222,7 @@ def test_hybrid_hard_cap_guard_applies(monkeypatch):
         validate_storage_config()
 
 
-# =============================================================================
 # 5. CLOUD_PROVIDER enum
-# =============================================================================
 
 
 def test_unknown_provider_fails(monkeypatch):
@@ -254,9 +244,7 @@ def test_known_but_unimplemented_provider_fails(monkeypatch, provider):
         validate_storage_config()
 
 
-# =============================================================================
 # 5.bis CLOUD_PROVIDER=minio (A1-B2, ADR-0015)
-# =============================================================================
 
 
 def _set_minio_boot_env(monkeypatch, *, policy="hybrid"):
@@ -304,9 +292,7 @@ def test_minio_boot_still_requires_bucket(monkeypatch):
         validate_storage_config()
 
 
-# =============================================================================
 # 6. LOG_ARCHIVE_* fail-fast (O-ARC Batch 2, ADR-0014 §A1-§A5)
-# =============================================================================
 
 
 def test_log_archive_disabled_skips_all_checks(monkeypatch):

@@ -109,9 +109,7 @@ def _slice_function(source: str, marker: str) -> str:
     return "\n".join(lines[start:end])
 
 
-# =====================================================================
 # 1-2. delete_result: record_pending precedes DELETE inside transaction
-# =====================================================================
 
 
 def test_delete_result_calls_record_pending_inside_transaction():
@@ -166,9 +164,7 @@ def test_delete_result_record_pending_precedes_delete_statement():
     )
 
 
-# =====================================================================
 # 3-4. delete_results_for_project: bulk path same invariants
-# =====================================================================
 
 
 def test_delete_results_for_project_calls_record_pending_inside_transaction():
@@ -221,9 +217,7 @@ def test_delete_results_for_project_record_pending_precedes_bulk_delete():
     )
 
 
-# =====================================================================
 # 5. compensating_delete + mark_done/failed wired post-commit
-# =====================================================================
 
 
 def test_delete_result_paths_wire_compensating_delete_and_mark_outcomes():
@@ -258,9 +252,7 @@ def test_delete_result_paths_wire_compensating_delete_and_mark_outcomes():
         )
 
 
-# =====================================================================
 # 6. Boundary surface preserved
-# =====================================================================
 
 
 def test_storage_reconciliation_exposes_record_pending_surface():

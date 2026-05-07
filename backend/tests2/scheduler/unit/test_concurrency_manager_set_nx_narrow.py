@@ -40,9 +40,7 @@ def _make_manager() -> ConcurrencyManager:
     return mgr
 
 
-# =============================================================================
 # HAPPY PATH
-# =============================================================================
 
 
 def test_set_nx_happy_path_returns_true_on_success():
@@ -57,9 +55,7 @@ def test_set_nx_happy_path_returns_true_on_success():
     mock_exec.assert_called_once()
 
 
-# =============================================================================
 # SEMANTICA UNIQUE CONSTRAINT — return False
-# =============================================================================
 
 
 def test_set_nx_unique_violation_returns_false():
@@ -91,9 +87,7 @@ def test_set_nx_integrity_error_returns_false():
     assert result is False
 
 
-# =============================================================================
 # FAIL-CLOSED — errori non-UNIQUE propagano
-# =============================================================================
 
 
 def test_set_nx_operational_error_propagates():

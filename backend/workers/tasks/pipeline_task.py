@@ -131,7 +131,6 @@ def execute_pipeline_task(
         run_id = str(_uuid.uuid4())
     _run_start = _time.time()
 
-    # --- N9 (2026-04-17): re-check permessi user al pickup del worker ---
     # Helper centralizzato in app.shared.async_user_recheck — single source
     # of truth condivisa fra tutti i worker Celery (pipeline, preview,
     # carica, enrichment). user_id=None -> skip legittimo (cron/scheduled).
@@ -153,12 +152,10 @@ def execute_pipeline_task(
     )
     _update_progress(self, 0, "Inizializzazione pipeline...")
 
-    # --- Leggi metadata progetto ---
     project_info = _get_project_info(project_id)
     group_id = project_info.get("group_id", "")
     module   = project_info.get("project_type", "")
 
-    # --- Apri run su log.db (N9: user_id persistito per audit) ---
     open_run(
         run_id=run_id,
         project_id=project_id,
@@ -168,7 +165,6 @@ def execute_pipeline_task(
         user_id=user_id,
     )
 
-    # --- Imposta contesto thread-local (run_id + steps collector) ---
     set_run_context(run_id=run_id, project_id=project_id)
 
     # --- Apri run su intermediate storage (PostgreSQL via
@@ -279,7 +275,6 @@ def execute_pipeline_task(
             _update_progress(self, 0, message)
             return {"success": False, "message": message}
 
-        # --- Successo ---
         rows_out = result.rows_count or 0
         _update_progress(self, 100, "Pipeline completata")
         logger.info(
@@ -442,4 +437,3 @@ def preview_pipeline_task(
     except Exception as e:
         logger.error(f"[CRASH] Task PREVIEW {task_id} fallito: {e}", exc_info=True)
         raise
-

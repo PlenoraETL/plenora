@@ -32,9 +32,7 @@ from app.core.features.arcgis_client import ArcGISClient
 pytestmark = [pytest.mark.unit, pytest.mark.contract]
 
 
-# ---------------------------------------------------------------------------
 # Fixtures
-# ---------------------------------------------------------------------------
 
 
 def _make_response(
@@ -81,9 +79,7 @@ def conn():
     )
 
 
-# ---------------------------------------------------------------------------
 # Happy path
-# ---------------------------------------------------------------------------
 
 
 def test_count_features_where_happy_path(client_with_fake_http, conn):
@@ -116,9 +112,7 @@ def test_count_features_where_zero_when_count_missing(client_with_fake_http, con
     ) == 0
 
 
-# ---------------------------------------------------------------------------
 # Request shape: URL, body, headers, timeout
-# ---------------------------------------------------------------------------
 
 
 def test_count_features_where_post_url_is_layer_query(client_with_fake_http, conn):
@@ -202,9 +196,7 @@ def test_count_features_where_custom_timeout(client_with_fake_http, conn):
     assert timeout == 15
 
 
-# ---------------------------------------------------------------------------
 # Fail-loud paths: 4 RuntimeError
-# ---------------------------------------------------------------------------
 
 
 def test_count_features_where_raises_on_http_non_200(client_with_fake_http, conn):
@@ -262,9 +254,7 @@ def test_count_features_where_raises_on_arcgis_error_payload(
         )
 
 
-# ---------------------------------------------------------------------------
 # Validator wrapper backward-compat
-# ---------------------------------------------------------------------------
 
 
 def test_validator_wrapper_delegates_to_client_method(client_with_fake_http, conn):
@@ -307,9 +297,7 @@ def test_validator_wrapper_propagates_runtime_error():
         )
 
 
-# ---------------------------------------------------------------------------
 # _get_feature_count rimane separato (semantica display-only fail-soft)
-# ---------------------------------------------------------------------------
 
 
 def test_get_feature_count_remains_distinct_method():

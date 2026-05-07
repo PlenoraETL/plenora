@@ -54,9 +54,7 @@ from app.shared.models import Node, Position
 pytestmark = [pytest.mark.unit, pytest.mark.manipola, pytest.mark.contract]
 
 
-# =============================================================================
 # 1. Contratto fail-closed sulle 3 transform rappresentative
-# =============================================================================
 
 @pytest.mark.parametrize(
     "transform, kwargs",
@@ -83,9 +81,7 @@ def test_single_input_transform_reraises_on_internal_failure(transform, kwargs):
             transform(df, **kwargs)
 
 
-# =============================================================================
 # 2. Integrazione con PluginExecutor (L4)
-# =============================================================================
 
 def test_plugin_executor_propagates_transform_error():
     """PluginExecutor.execute deve propagare un errore sollevato dal
@@ -112,9 +108,7 @@ def test_plugin_executor_propagates_transform_error():
             executor.execute("geo_buffer", [df], node)
 
 
-# =============================================================================
 # 3. Smoke regression sull'happy path
-# =============================================================================
 
 def test_buffer_happy_path_unchanged():
     """Il fix D1 tocca solo il ramo except: l'happy path deve restare
@@ -129,9 +123,7 @@ def test_buffer_happy_path_unchanged():
     assert result["buf"].iloc[0] is not None
 
 
-# =============================================================================
 # 4. Contratto fail-closed sulle 3 multi-input rappresentative (D2)
-# =============================================================================
 
 @pytest.mark.parametrize(
     "transform, args, kwargs",
@@ -160,9 +152,7 @@ def test_multi_input_transform_reraises_on_internal_failure(transform, args, kwa
             transform([df1, df2], *args, **kwargs)
 
 
-# =============================================================================
 # 5. Smoke regression sull'happy path multi-input (D2)
-# =============================================================================
 
 def test_sjoin_happy_path_unchanged():
     """Il fix D2 tocca solo il ramo except: l'happy path multi-input
@@ -187,9 +177,7 @@ def test_sjoin_happy_path_unchanged():
     assert result["zone"].iloc[0] == "A"
 
 
-# =============================================================================
 # 6. Contratto fail-closed sui 4 builder/extractor (D3) + chiusura S6
-# =============================================================================
 
 @pytest.mark.parametrize(
     "transform, args, kwargs",
@@ -228,9 +216,7 @@ def test_builder_extractor_reraises_and_closes_s6(transform, args, kwargs):
     )
 
 
-# =============================================================================
 # 7. Smoke regression sull'happy path builder (D3)
-# =============================================================================
 
 def test_bounds_extractor_happy_path_unchanged():
     """Il fix D3 tocca solo il ramo except: l'happy path deve restare

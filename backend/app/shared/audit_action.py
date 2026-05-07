@@ -82,9 +82,7 @@ from app.utils.logger import get_logger
 logger = get_logger(__name__)
 
 
-# ============================================================
 # METRICHE (contatori in-process, pattern token_blacklist)
-# ============================================================
 #
 # Counters sincroni protetti da lock. Azzerati a ogni restart del backend.
 # Esposti via get_metrics() per integrazione futura con admin_system_status.
@@ -130,9 +128,7 @@ def _reset_metrics_for_tests() -> None:
         _last_ok_epoch = None
 
 
-# ============================================================
 # EXTRACTORS DAL KWARGS DELLA FUNZIONE WRAPPATA
-# ============================================================
 
 
 def _extract_user_id(kwargs: Dict[str, Any]) -> Optional[str]:
@@ -205,9 +201,7 @@ def _short_error(msg: Any, limit: int = 500) -> Optional[str]:
     return s
 
 
-# ============================================================
 # WRITE FAIL-OPEN
-# ============================================================
 
 _INSERT_SQL = (
     "INSERT INTO plenora.audit_actions "
@@ -266,9 +260,7 @@ def _write_audit_row(
         _record_metric("write_fail")
 
 
-# ============================================================
 # DECORATOR
-# ============================================================
 
 
 def audit_action(

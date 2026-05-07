@@ -64,9 +64,7 @@ _RESULT_BLOB_PY = (
 )
 
 
-# ---------------------------------------------------------------------------
 # 1. ResourceRef field shape — optional, defaults to None
-# ---------------------------------------------------------------------------
 
 
 def test_resource_ref_accepts_optional_expected_project_id():
@@ -100,9 +98,7 @@ def test_resource_ref_expected_project_id_does_not_affect_id_mutual_exclusion():
         )
 
 
-# ---------------------------------------------------------------------------
 # 2. SQL plumbing — project_id_filter applied only when set
-# ---------------------------------------------------------------------------
 
 
 def test_fetch_row_no_project_filter_when_none():
@@ -208,9 +204,7 @@ def test_fetch_row_select_includes_project_id_column():
     )
 
 
-# ---------------------------------------------------------------------------
 # 3. Loader end-to-end: optional project filter
-# ---------------------------------------------------------------------------
 
 
 def test_loader_load_no_project_filter_when_ref_omits_it():
@@ -306,9 +300,7 @@ def test_loader_load_no_project_in_error_message_when_unset():
     assert "project_id" not in msg
 
 
-# ---------------------------------------------------------------------------
 # 4. is_superadmin does NOT bypass project filter
-# ---------------------------------------------------------------------------
 
 
 def test_is_superadmin_bypasses_group_filter_only_not_project_filter():
@@ -340,9 +332,7 @@ def test_is_superadmin_bypasses_group_filter_only_not_project_filter():
     assert captured["project_id_filter"] == "p-42"
 
 
-# ---------------------------------------------------------------------------
 # 5. Anti-god-engine — no new domain imports introduced
-# ---------------------------------------------------------------------------
 
 
 _FORBIDDEN_IMPORTS = {
@@ -414,9 +404,7 @@ def test_types_py_has_no_runtime_imports_beyond_stdlib():
         )
 
 
-# ---------------------------------------------------------------------------
 # 6. Decision audit trail — source-bound rationale lock
-# ---------------------------------------------------------------------------
 
 
 def test_resource_ref_docstring_documents_project_binding_contract():

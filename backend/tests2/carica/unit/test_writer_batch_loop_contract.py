@@ -57,9 +57,7 @@ def _make_result(total_rows: int) -> WriteResult:
     )
 
 
-# ---------------------------------------------------------------------------
 # 1. Slicing + iteration count
-# ---------------------------------------------------------------------------
 
 
 def test_run_batched_inserts_slices_df_per_batch_size():
@@ -121,9 +119,7 @@ def test_run_batched_inserts_invokes_process_batch_total_batches_times():
     assert invocations == [0, 1, 2]
 
 
-# ---------------------------------------------------------------------------
 # 2. Result mutation owned by callback (helper is read-only on result)
-# ---------------------------------------------------------------------------
 
 
 def test_helper_does_not_mutate_result_directly():
@@ -167,9 +163,7 @@ def test_callback_can_mutate_result_per_batch():
     assert result.batches_completed == 4
 
 
-# ---------------------------------------------------------------------------
 # 3. Progress reporting
-# ---------------------------------------------------------------------------
 
 
 def test_progress_emitted_once_per_batch_after_process_batch():
@@ -251,9 +245,7 @@ def test_elapsed_seconds_relative_to_start_time():
     assert captured[0].elapsed_seconds < 30.0
 
 
-# ---------------------------------------------------------------------------
 # 4. Exception propagation
-# ---------------------------------------------------------------------------
 
 
 def test_callback_exception_propagates_verbatim():
@@ -316,9 +308,7 @@ def test_callback_internal_exception_swallow_does_not_break_loop():
     assert len(progress_calls) == 3
 
 
-# ---------------------------------------------------------------------------
 # 5. Source-bound boundary: helper purity
-# ---------------------------------------------------------------------------
 
 
 _BACKEND_ROOT = Path(__file__).resolve().parent.parent.parent.parent
@@ -407,9 +397,7 @@ def test_callsites_use_run_batched_inserts():
     assert replace.count("run_batched_inserts(") >= 4
 
 
-# ---------------------------------------------------------------------------
 # 6. target_table forwarding (verified through callback closure)
-# ---------------------------------------------------------------------------
 
 
 def test_callback_can_forward_target_table_via_closure():

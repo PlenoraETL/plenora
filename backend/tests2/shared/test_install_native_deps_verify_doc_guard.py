@@ -81,9 +81,7 @@ def native_deps_section(dry_run_text: str) -> str:
     return dry_run_text[start:end]
 
 
-# =====================================================================
 # Section 3 of the dry-run pack
-# =====================================================================
 
 
 def test_native_deps_section_exists(native_deps_section: str):
@@ -245,9 +243,7 @@ def test_section_3_is_ascii_only(native_deps_section: str):
     )
 
 
-# =====================================================================
 # install-non-docker.md mirror (section 1.2)
-# =====================================================================
 
 
 def test_install_non_docker_mirrors_binary_probes(

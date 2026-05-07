@@ -176,9 +176,7 @@ class InMemoryRateLimitFallback:
 _STORE = InMemoryRateLimitFallback()
 
 
-# ---------------------------------------------------------------------------
 # Module-level functional wrappers
-# ---------------------------------------------------------------------------
 # Useful when callers want a plain callable (e.g.
 # `login_rate_limiter.check_rate_limit(..., fallback=<callable>)`).
 # `record_failed_login_in_memory` and `clear_failed_logins_in_memory`

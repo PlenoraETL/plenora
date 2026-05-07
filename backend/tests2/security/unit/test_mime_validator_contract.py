@@ -28,9 +28,7 @@ from app.utils.mime_validator import (
 pytestmark = [pytest.mark.unit, pytest.mark.security, pytest.mark.contract]
 
 
-# ─────────────────────────────────────────────────────────────────────
 # Helpers
-# ─────────────────────────────────────────────────────────────────────
 
 
 def _png_bytes() -> bytes:
@@ -93,9 +91,7 @@ def _pdf_bytes() -> bytes:
     return b"%PDF-1.4\n%test\n" + b"\x00" * 100
 
 
-# ─────────────────────────────────────────────────────────────────────
 # Happy path per estensione
-# ─────────────────────────────────────────────────────────────────────
 
 
 @pytest.mark.parametrize("ext,builder", [
@@ -165,9 +161,7 @@ def test_happy_path_text_latin1_acceptable():
     )
 
 
-# ─────────────────────────────────────────────────────────────────────
 # Adversarial: eseguibile rinominato
-# ─────────────────────────────────────────────────────────────────────
 
 
 @pytest.mark.parametrize("ext", ["csv", "png", "xlsx", "log", "json"])
@@ -199,9 +193,7 @@ def test_shebang_script_blocked():
         )
 
 
-# ─────────────────────────────────────────────────────────────────────
 # Polyglot: MIME mismatch
-# ─────────────────────────────────────────────────────────────────────
 
 
 def test_pdf_renamed_to_png_blocked():
@@ -242,9 +234,7 @@ def test_jpeg_renamed_to_xlsx_blocked():
         )
 
 
-# ─────────────────────────────────────────────────────────────────────
 # Estensione binaria con header invalido
-# ─────────────────────────────────────────────────────────────────────
 
 
 def test_xlsx_extension_with_text_content_blocked():
@@ -267,9 +257,7 @@ def test_gpkg_extension_with_random_bytes_blocked():
         )
 
 
-# ─────────────────────────────────────────────────────────────────────
 # Estensione mancante / non in allowlist
-# ─────────────────────────────────────────────────────────────────────
 
 
 def test_no_extension_blocked():
@@ -299,9 +287,7 @@ def test_empty_file_blocked():
         )
 
 
-# ─────────────────────────────────────────────────────────────────────
 # Text format edge cases
-# ─────────────────────────────────────────────────────────────────────
 
 
 def test_text_with_null_bytes_blocked():
@@ -325,9 +311,7 @@ def test_text_with_high_ratio_non_printable_blocked():
         )
 
 
-# ─────────────────────────────────────────────────────────────────────
 # Case insensitive ext
-# ─────────────────────────────────────────────────────────────────────
 
 
 def test_case_insensitive_extension():
@@ -338,9 +322,7 @@ def test_case_insensitive_extension():
     )
 
 
-# ─────────────────────────────────────────────────────────────────────
 # detect_mime helper diretto
-# ─────────────────────────────────────────────────────────────────────
 
 
 def test_detect_mime_recognizes_png():
@@ -355,9 +337,7 @@ def test_detect_mime_recognizes_zip():
     assert detect_mime(_zip_bytes()) == "application/zip"
 
 
-# ─────────────────────────────────────────────────────────────────────
 # validate_no_executable (block-only mode)
-# ─────────────────────────────────────────────────────────────────────
 
 
 @pytest.mark.parametrize("payload,filename", [
@@ -394,9 +374,7 @@ def test_no_executable_blocks_empty_file():
         validate_no_executable(content=b"", filename="empty.csv")
 
 
-# ─────────────────────────────────────────────────────────────────────
 # filetype mancante → fail-loud (no fail-open silenzioso)
-# ─────────────────────────────────────────────────────────────────────
 
 
 def test_detect_mime_raises_explicit_if_filetype_missing(monkeypatch):

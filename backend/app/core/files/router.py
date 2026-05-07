@@ -115,13 +115,6 @@ from app.core.auth.dependencies import (
     require_user_or_above,
 )
 from app.core.auth.owner_dependencies import require_file_owner
-# BE-GO-READY-AUTH-ENGINE-013 Phase-7 contract fan-out: pure
-# contract symbols (`CurrentUser`, `group_filter`) consumed from
-# the shared contract module. DB-bound ownership helpers stay on
-# `app.core.auth.ownership` (their canonical home - they require
-# `app.db.db_service` for `compute_can_edit` / `assert_can_modify`).
-# FastAPI Depends + `require_*` stay on the auth facade. Facade
-# KEEP_COMPAT re-exports preserved.
 from app.shared.contracts.auth import CurrentUser, group_filter
 from app.core.auth.ownership import (
     assert_group_access,

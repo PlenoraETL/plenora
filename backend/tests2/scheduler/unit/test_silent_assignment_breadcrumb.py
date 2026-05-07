@@ -50,9 +50,7 @@ def _read(relpath: str) -> str:
     return (_BACKEND_ROOT / relpath).read_text(encoding="utf-8")
 
 
-# =============================================================================
 # TEST 1 — Zero bare silent-assignment nei 4 file target
-# =============================================================================
 
 
 def test_no_bare_silent_assignment_in_target_files():
@@ -88,9 +86,7 @@ def test_no_bare_silent_assignment_in_target_files():
     )
 
 
-# =============================================================================
 # TEST 2 — Ogni sito ha logger.debug con type(e).__name__
-# =============================================================================
 
 
 _BREADCRUMB_CONTEXTS = [
@@ -125,9 +121,7 @@ def test_silent_assignment_sites_have_debug_breadcrumb():
     )
 
 
-# =============================================================================
 # TEST 3 — Fallback values preservati (breadcrumb additivo, non cambia fallback)
-# =============================================================================
 
 
 def test_silent_assignment_fallback_values_preserved():

@@ -34,9 +34,7 @@ import pytest
 pytestmark = [pytest.mark.unit, pytest.mark.contract]
 
 
-# =============================================================================
 # Helpers
-# =============================================================================
 
 
 def _mock_project_row():
@@ -130,9 +128,7 @@ def _patch_cascade(
     return ctx()
 
 
-# =============================================================================
 # HAPPY PATH
-# =============================================================================
 
 
 def test_delete_project_happy_path_returns_true_and_deletes_config():
@@ -148,9 +144,7 @@ def test_delete_project_happy_path_returns_true_and_deletes_config():
     mock_db_delete.assert_called_once_with("p-target", group_id=None)
 
 
-# =============================================================================
 # FAIL-CLOSED — step critical
-# =============================================================================
 
 
 def test_delete_project_fail_closed_when_intermediate_runs_delete_fails():
@@ -213,9 +207,7 @@ def test_delete_project_fail_closed_with_multiple_critical():
     assert exc_info.value.derived_failed == []
 
 
-# =============================================================================
 # BEST-EFFORT — step derived (non bloccano step 5)
-# =============================================================================
 
 
 def test_delete_project_best_effort_when_schedule_orphan_fails():
@@ -265,9 +257,7 @@ def test_delete_project_best_effort_when_comparison_keys_fails():
     assert ck_warnings[0].kwargs.get("exc_info") is True
 
 
-# =============================================================================
 # FAIL-CLOSED wins over derived (critical + derived mix)
-# =============================================================================
 
 
 def test_delete_project_mixed_failure_critical_wins():
@@ -292,9 +282,7 @@ def test_delete_project_mixed_failure_critical_wins():
     assert exc_info.value.derived_failed == ["schedules_orphan"]
 
 
-# =============================================================================
 # INVARIANT — config row preservata su qualsiasi critical failure
-# =============================================================================
 
 
 def test_delete_project_invariant_config_preserved_on_critical_fail():

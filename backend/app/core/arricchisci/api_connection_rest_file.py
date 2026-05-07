@@ -330,8 +330,6 @@ def _extract_file_source_group_id(
     passare `ctx=` riceve un fail-closed pulito invece di un
     silent fallback su stato di un'altra run.
     """
-    # `self_obj` intenzionalmente non letto post-010: KEEP_COMPAT
-    # con `_extract_project_source_group_id` signature (gemella).
     if ctx is None:
         return None
     return ctx.group_id
@@ -398,12 +396,10 @@ class ApiConnectionRestFileMixin:
     path resolution).
     """
 
-    # =========================================================================
     # REST_FILE PIPELINE
     # Pipeline: parse_config → prepare_headers → resolve_input → build_multipart
     # → requests.post(stream=True) → download_binary (dual-timeout) → cleanup.
     # Error taxonomy via `_rest_file_error` (F5 primo batch, 2026-04-24).
-    # =========================================================================
 
     @staticmethod
     def _parse_http_error_body(response) -> str:
@@ -951,12 +947,10 @@ class ApiConnectionRestFileMixin:
                     f"fallito: {_unlink_err}"
                 )
 
-    # =========================================================================
     # FILE_SOURCE RESOLUTION
     # Materializzazione file_source dal DB blob (cache filesystem atomica),
     # cross-tenant fail-closed, edge-based input path resolution per
     # file-processor nodes.
-    # =========================================================================
 
     def _assert_file_source_group_access(
         self,

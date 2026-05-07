@@ -55,8 +55,6 @@ def _parse_trusted_proxies_cached(raw: str) -> tuple:
                 exact.add(str(ipaddress.ip_address(entry)))
             except ValueError:
                 continue
-    # Ritorna tuple per compat lru_cache (frozen-ish); il caller la
-    # riassembla come (set, list).
     return (frozenset(exact), tuple(networks))
 
 

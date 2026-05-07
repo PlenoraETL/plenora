@@ -27,9 +27,6 @@ from app.core.manipola.transforms.base import op_join
 pytestmark = [pytest.mark.unit, pytest.mark.contract, pytest.mark.regression]
 
 
-# ─── Bug fix: errore deve esporre nomi colonne RAW, non suffissati ─────────
-
-
 def test_op_join_raises_with_raw_column_names_when_left_key_missing():
     """left_on non presente in left_df → KeyError con colonne raw.
 
@@ -83,9 +80,6 @@ def test_op_join_raises_with_raw_column_names_when_right_key_missing():
     assert "_R" not in msg, (
         f"Regressione: messaggio espone colonne post-rename con _R. Msg: {msg}"
     )
-
-
-# ─── Regressione: happy path continua a funzionare ──────────────────────────
 
 
 def test_op_join_happy_path_preserves_join_key():

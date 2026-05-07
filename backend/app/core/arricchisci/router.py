@@ -16,15 +16,10 @@ Sub-router:
 import json
 from pathlib import Path
 from fastapi import APIRouter, HTTPException, Depends, Query
-# BE-GO-READY-AUTH-ENGINE-019 dep-import off facade.
 from app.core.auth.dependencies import (
     require_not_esecutore,
     require_admin,
 )
-# BE-GO-READY-AUTH-ENGINE-014 Phase-8 contract fan-out: pure
-# contract `CurrentUser` consumed from the shared contract module.
-# DB-bound ownership helpers stay on `app.core.auth.ownership`.
-# FastAPI Depends + `require_*` stay on the auth facade.
 from app.shared.contracts.auth import CurrentUser
 from app.core.auth.ownership import (
     assert_group_access,
@@ -148,9 +143,7 @@ def _check_project_ownership(project_id: str, current_user: CurrentUser):
     return metadata
 
 
-# =============================================================================
 # PROXY — Fetch OpenAPI schema da URL esterni (evita blocco CORS nel browser)
-# =============================================================================
 
 class FetchSchemaRequest(BaseModel):
     url: str
@@ -199,9 +192,7 @@ async def fetch_openapi_schema(body: FetchSchemaRequest, user: CurrentUser = Dep
         )
 
 
-# =============================================================================
 # MODELLI REQUEST/RESPONSE — ENRICHMENT
-# =============================================================================
 
 class ValidateRequest(BaseModel):
     project_id: str
@@ -237,9 +228,7 @@ class EstimateResponse(BaseModel):
     deduplication_savings_percent: float
 
 
-# =============================================================================
 # ENDPOINT: ENRICHMENT PREVIEW/VALIDATE/ESTIMATE
-# =============================================================================
 
 @enrichment_router.post("/validate", response_model=ValidateResponse)
 async def validate_enrichment(
@@ -443,9 +432,7 @@ async def estimate_enrichment(
         raise_typed_http(error_codes.INTERNAL_ERROR, status_code=500, message="Errore interno del server")
 
 
-# =============================================================================
 # ENDPOINT: API CONNECTIONS CRUD
-# =============================================================================
 
 @api_connections_router.get("/api-connections")
 def list_api_connections(category: str = None, connection_type: str = None, current_user: CurrentUser = Depends(require_not_esecutore)):
@@ -763,9 +750,7 @@ def test_api_connection(
         raise_typed_http(error_codes.INTERNAL_ERROR, status_code=500, message="Errore interno del server")
 
 
-# =============================================================================
 # ENDPOINT: TEMPLATES API PRECONFIGURATI
-# =============================================================================
 
 TEMPLATES_FILE = Path(__file__).parent.parent.parent / "data" / "api_templates.json"
 
@@ -799,9 +784,7 @@ def get_templates(current_user: CurrentUser = Depends(require_not_esecutore)):
         raise_typed_http(error_codes.INTERNAL_ERROR, status_code=500, message="Errore interno del server")
 
 
-# =============================================================================
 # ENDPOINT: ESECUZIONE ARRICCHIMENTO (sincrono/asincrono)
-# =============================================================================
 
 enrich_router = APIRouter(prefix="/projects", tags=["arricchisci"])
 
@@ -921,9 +904,7 @@ def execute_enrichment_async(
         raise_typed_http(error_codes.INTERNAL_ERROR, status_code=500, message="Errore interno del server")
 
 
-# =============================================================================
 # HELPER
-# =============================================================================
 
 
 def _format_time(seconds: float) -> str:

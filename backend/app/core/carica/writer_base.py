@@ -63,9 +63,7 @@ class DestinationWriter(ABC):
         if self.progress_callback:
             self.progress_callback(progress)
 
-    # ========================================================================
     # METODI ASTRATTI — da implementare in ogni destinazione
-    # ========================================================================
 
     @abstractmethod
     def validate(self) -> Tuple[bool, str]:

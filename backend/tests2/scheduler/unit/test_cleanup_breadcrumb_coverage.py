@@ -52,9 +52,7 @@ def _read(relpath: str) -> str:
     return (_BACKEND_ROOT / relpath).read_text(encoding="utf-8")
 
 
-# =============================================================================
 # TEST 1 — Zero bare `except Exception: pass` nei 5 file target
-# =============================================================================
 
 
 def test_no_bare_except_pass_in_target_files():
@@ -83,9 +81,7 @@ def test_no_bare_except_pass_in_target_files():
     )
 
 
-# =============================================================================
 # TEST 2 — Ogni sito ha logger.debug con type(e).__name__
-# =============================================================================
 
 
 # Mapping (file, stringa-contesto-breadcrumb) dei siti attesi.
@@ -150,9 +146,7 @@ def test_each_cleanup_site_has_logger_debug_breadcrumb():
     )
 
 
-# =============================================================================
 # TEST 3 — Count aggregato: 15 siti trattati
-# =============================================================================
 
 
 def test_cleanup_sites_count_matches_scope():

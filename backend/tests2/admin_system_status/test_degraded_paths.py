@@ -23,9 +23,7 @@ import pytest
 pytestmark = [pytest.mark.unit, pytest.mark.contract]
 
 
-# =============================================================================
 # get_backup_status — dipende da admin_backups.list_backups (boto3 + S3)
-# =============================================================================
 
 
 def _fake_backup(age_hours: float, key: str = "urby_20260418_020000Z.dump",
@@ -123,9 +121,7 @@ def test_backup_status_age_unparseable_returns_unknown():
     assert "timestamp non parsabile" in out["message"]
 
 
-# =============================================================================
 # get_verify_restore_status — legge da plenora.verify_runs (DB)
-# =============================================================================
 
 
 def test_verify_restore_when_db_raises_returns_unknown():
@@ -246,9 +242,7 @@ def test_verify_restore_running_result():
     assert out["message"] == "Verifica in corso"
 
 
-# =============================================================================
 # get_schedules_status — DB query schedules
-# =============================================================================
 
 
 def test_schedules_status_when_db_raises_returns_unknown(monkeypatch):
@@ -308,9 +302,7 @@ def test_schedules_status_ignores_disabled():
     assert out["status"] == "ok"
 
 
-# =============================================================================
 # get_workers_status — Celery app non importabile + broker timeout
-# =============================================================================
 
 
 def test_workers_status_when_celery_app_import_fails(monkeypatch):

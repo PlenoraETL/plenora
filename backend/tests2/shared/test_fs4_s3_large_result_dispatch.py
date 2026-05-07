@@ -86,9 +86,7 @@ def mock_db(monkeypatch):
     return saved
 
 
-# =============================================================================
 # 1. Dispatch sul threshold
-# =============================================================================
 
 
 def test_small_file_goes_to_db_blob(mock_db, stub_storage, monkeypatch):
@@ -176,9 +174,7 @@ def test_no_hard_cap_any_size_goes_to_s3(mock_db, stub_storage, monkeypatch):
     assert mock_db[0]["storage_key"] == "results/p1/res-fs4.bin"
 
 
-# =============================================================================
 # 2. Fault handling
-# =============================================================================
 
 
 def test_s3_upload_failure_no_db_row_orphan(mock_db, stub_storage, monkeypatch):
@@ -203,9 +199,7 @@ def test_s3_upload_failure_no_db_row_orphan(mock_db, stub_storage, monkeypatch):
     assert mock_db == []
 
 
-# =============================================================================
 # 3. Reader: trasparente su storage_key
-# =============================================================================
 
 
 def test_get_result_data_from_db_blob(monkeypatch):
@@ -253,9 +247,7 @@ def test_get_result_data_s3_download_failure_returns_none(monkeypatch):
     assert rds.get_result_data("res-missing") is None
 
 
-# =============================================================================
 # 4. Delete: cleanup S3 coerente
-# =============================================================================
 
 
 def _fake_transaction_factory(*, select_row, delete_rowcount=1):
@@ -363,9 +355,7 @@ def test_delete_result_db_backed_does_not_touch_s3(monkeypatch):
     assert s3_calls == []
 
 
-# =============================================================================
 # 5. save_result_blob (path-based) — stesso dispatch post FS-4b
-# =============================================================================
 
 
 def test_save_result_blob_path_small_goes_to_db_blob(mock_db, stub_storage, monkeypatch, tmp_path):
@@ -457,9 +447,7 @@ def test_save_result_blob_path_s3_upload_failure_no_db_row(mock_db, stub_storage
     assert f.exists()
 
 
-# =============================================================================
 # 6. Delete operations (posizionati alla fine — terminate la suite)
-# =============================================================================
 
 
 def test_delete_results_for_project_cleans_all_s3_keys(monkeypatch):

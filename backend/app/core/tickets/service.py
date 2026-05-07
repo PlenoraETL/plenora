@@ -44,7 +44,6 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from fastapi import HTTPException
 
-# BE-GO-READY-AUTH-ENGINE-015 Phase-9 contract fan-out.
 from app.shared.contracts.auth import CurrentUser
 from app.db import tickets_db_service as tdb
 from app.shared import error_codes
@@ -53,9 +52,7 @@ from app.utils.logger import get_logger
 logger = get_logger(__name__)
 
 
-# ============================================================
 # ENUM APPLICATIVI (espandibili senza migration)
-# ============================================================
 
 TICKET_CATEGORIES: Tuple[str, ...] = (
     "auth",
@@ -81,9 +78,7 @@ _ROLES_TECH_DEBT_CREATE = {"admin", "superadmin"}
 _ROLES_ADMIN = {"admin", "superadmin"}
 
 
-# ============================================================
 # NOTIFIER HOOK (email-ready)
-# ============================================================
 
 
 class TicketNotifier:
@@ -148,9 +143,7 @@ def _fire_notification(method_name: str, *args, **kwargs) -> None:
         )
 
 
-# ============================================================
 # VALIDAZIONE INPUT
-# ============================================================
 
 
 def _validate_create_input(
@@ -179,9 +172,7 @@ def _validate_create_input(
         raise HTTPException(400, f"category non valida: {category}. Validi: {TICKET_CATEGORIES}")
 
 
-# ============================================================
 # RBAC HELPERS
-# ============================================================
 
 
 def _is_admin(actor: CurrentUser) -> bool:
@@ -231,9 +222,7 @@ def check_access(ticket: Optional[Dict[str, Any]], actor: CurrentUser) -> Dict[s
     return ticket
 
 
-# ============================================================
 # OPERAZIONI PUBBLICHE
-# ============================================================
 
 
 def create_ticket(

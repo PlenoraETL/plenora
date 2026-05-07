@@ -78,9 +78,7 @@ def _project_meta(group_id):
     return SimpleNamespace(id="proj-1", group_id=group_id, project_type="estrai")
 
 
-# ---------------------------------------------------------------------------
 # Cross-group blocked
-# ---------------------------------------------------------------------------
 
 
 def test_core_blocks_cross_group_execution(schedule_config):
@@ -99,9 +97,7 @@ def test_core_blocks_cross_group_execution(schedule_config):
     manager.concurrency.try_acquire.assert_not_called()
 
 
-# ---------------------------------------------------------------------------
 # Fail-closed sui group_id mancanti (era fail-OPEN pre-Refactor #2)
-# ---------------------------------------------------------------------------
 
 
 def test_core_blocks_schedule_with_missing_group_id(schedule_config):
@@ -166,9 +162,7 @@ def test_core_blocks_project_with_empty_string_group_id(schedule_config):
     assert "senza group_id" in result["message"]
 
 
-# ---------------------------------------------------------------------------
 # Same-group passes
-# ---------------------------------------------------------------------------
 
 
 def test_core_allows_same_group_execution(schedule_config):

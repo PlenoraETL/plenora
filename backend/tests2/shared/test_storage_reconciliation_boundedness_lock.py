@@ -63,9 +63,7 @@ def _read(rel: str) -> str:
     return (_BACKEND_ROOT / rel).read_text(encoding="utf-8")
 
 
-# ---------------------------------------------------------------------------
 # 1. Public boundary surface
-# ---------------------------------------------------------------------------
 
 
 def test_storage_reconciliation_exposes_boundedness_symbols():
@@ -97,9 +95,7 @@ def test_storage_reconciliation_state_alphabet_locked():
     assert "lost" in args
 
 
-# ---------------------------------------------------------------------------
 # 2. Backoff cap (no unbounded growth)
-# ---------------------------------------------------------------------------
 
 
 def test_compute_next_retry_at_caps_the_exponent():
@@ -131,9 +127,7 @@ def test_compute_next_retry_at_caps_the_exponent():
     )
 
 
-# ---------------------------------------------------------------------------
 # 3. State filters (active vs terminal)
-# ---------------------------------------------------------------------------
 
 
 def test_count_active_by_state_domain_sql_excludes_terminals():
@@ -176,9 +170,7 @@ def test_prune_terminal_older_than_sql_only_touches_terminals():
         )
 
 
-# ---------------------------------------------------------------------------
 # 4. Beat hook wiring (boundedness must be invoked every tick)
-# ---------------------------------------------------------------------------
 
 
 def test_beat_scheduler_reconcile_invokes_mark_lost():
@@ -246,9 +238,7 @@ def test_beat_scheduler_reconcile_reads_boundedness_settings():
         )
 
 
-# ---------------------------------------------------------------------------
 # 5. Settings.DEFAULTS — boundedness tunables surface
-# ---------------------------------------------------------------------------
 
 
 def test_settings_defaults_expose_boundedness_tunables():
@@ -310,9 +300,7 @@ def test_storage_reconcile_terminal_retention_days_is_finite():
     )
 
 
-# ---------------------------------------------------------------------------
 # 6. Observability event names locked (ops alerting depends on them)
-# ---------------------------------------------------------------------------
 
 
 def test_log_event_names_locked_in_source():

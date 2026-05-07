@@ -44,9 +44,7 @@ class PolicyEngine:
     restituisce la decisione senza effetti collaterali.
     """
     
-    # =========================================================================
     # RETRY
-    # =========================================================================
     
     @staticmethod
     def should_retry(
@@ -80,9 +78,7 @@ class PolicyEngine:
         logger.info(f"Retry programmato: tentativo {current_attempt + 1}/{error_policy.max_retries}, attesa {wait}s")
         return True, wait
     
-    # =========================================================================
     # CONFLICT RESOLUTION
-    # =========================================================================
     
     @staticmethod
     def resolve_conflict(
@@ -106,9 +102,7 @@ class PolicyEngine:
         """Determina se loggare le righe skipped."""
         return conflict_policy.log_skipped_rows
     
-    # =========================================================================
     # VALUTAZIONE RISULTATO
-    # =========================================================================
     
     @staticmethod
     def evaluate_result(
@@ -140,9 +134,7 @@ class PolicyEngine:
         
         return "completed"
     
-    # =========================================================================
     # DECISIONE COMPLETA
-    # =========================================================================
     
     @staticmethod
     def decide_after_failure(

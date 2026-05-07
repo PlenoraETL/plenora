@@ -56,9 +56,7 @@ pytestmark = [
 ]
 
 
-# =============================================================================
 # 1. Static guard: nessun singleton modulo-level
-# =============================================================================
 
 
 def test_execute_enrichment_task_does_not_import_singleton():
@@ -80,9 +78,7 @@ def test_execute_enrichment_task_does_not_import_singleton():
     )
 
 
-# =============================================================================
 # 2. Behavior: ApiConnectionService istanziata localmente nel task
-# =============================================================================
 
 
 def test_execute_enrichment_task_instantiates_local_api_service(
@@ -109,9 +105,7 @@ def test_execute_enrichment_task_instantiates_local_api_service(
     )
 
 
-# =============================================================================
 # 3. Behavior: _current_group_id settato PRIMA del primo loader
-# =============================================================================
 
 
 def test_execute_enrichment_task_passes_ctx_with_group_id_to_loaders(
@@ -181,9 +175,7 @@ def test_execute_enrichment_task_passes_ctx_with_group_id_to_loaders(
     )
 
 
-# =============================================================================
 # 4. Behavior: result_id propagato nel ramo DataFrame
-# =============================================================================
 
 
 def test_execute_enrichment_task_propagates_result_id_in_dataframe_branch(
@@ -274,9 +266,7 @@ def test_execute_enrichment_task_propagates_result_id_in_file_branch(
     )
 
 
-# =============================================================================
 # 5. Behavior: update_task_progress signature + task_id propagation
-# =============================================================================
 
 
 def test_update_task_progress_accepts_explicit_task_id():
@@ -358,9 +348,7 @@ def test_execute_enrichment_task_propagates_task_id_in_progress_calls(
     )
 
 
-# =============================================================================
 # 6. Behavior: ramo is_eseguibile lookup PRIMA del setattr group_id
-# =============================================================================
 
 
 def test_execute_enrichment_task_eseguibile_branch_fetches_group_id(
@@ -438,9 +426,7 @@ def test_execute_enrichment_task_eseguibile_branch_fetches_group_id(
     )
 
 
-# =============================================================================
 # 7. Static guard bytecode: niente undefined locals nel ramo IMDF
-# =============================================================================
 
 
 def test_execute_enrichment_task_imdf_branch_has_no_undefined_locals():
@@ -484,9 +470,7 @@ def _walk_code_objects(code):
             yield from _walk_code_objects(c)
 
 
-# =============================================================================
 # 8. Static guard: nessun helper modulo-level singleton-bound
-# =============================================================================
 
 
 def test_execute_enrichment_task_module_has_no_orphan_singleton_helpers():

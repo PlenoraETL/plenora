@@ -79,9 +79,6 @@ def minimal_api_config():
     }
 
 
-# ─── error_kind: file_source_not_found ─────────────────────────────────────
-
-
 def test_file_source_not_found_returns_structured_error_kind(service, minimal_api_config, ctx_default):
     """Bug reale 2026-04-23: file_source_id referenziato nel canvas non esiste
     nel DB. `_resolve_file_source_id_path` ritorna None (via row_meta None).
@@ -114,9 +111,6 @@ def test_file_source_not_found_returns_structured_error_kind(service, minimal_ap
     assert "file_source" in result["error"].lower()
     # Anti-regression: NON deve più essere il messaggio opaco unico
     assert result["error"] != "Errore interno nel processore file remoto"
-
-
-# ─── error_kind: file_source_forbidden ─────────────────────────────────────
 
 
 def test_file_source_forbidden_returns_structured_error_kind(service, minimal_api_config, ctx_default):
@@ -157,9 +151,6 @@ def test_file_source_forbidden_returns_structured_error_kind(service, minimal_ap
     assert result["user_error"] is True
     assert "Accesso negato" in result["error"]
     assert result["error"] != "Errore interno nel processore file remoto"
-
-
-# ─── error_kind: remote_processor_error ────────────────────────────────────
 
 
 def test_remote_processor_http_error_returns_structured_error_kind(
@@ -242,9 +233,6 @@ def test_remote_processor_timeout_returns_structured_error_kind(
     assert "Timeout" in result["error"]
 
 
-# ─── error_kind: internal ─────────────────────────────────────────────────
-
-
 def test_internal_exception_returns_structured_error_kind(service, minimal_api_config, ctx_default):
     """Un'eccezione inattesa diversa da ValueError/requests cade nel safety-net
     finale: error_kind='internal', user_error=False."""
@@ -278,9 +266,6 @@ def test_internal_exception_returns_structured_error_kind(service, minimal_api_c
     assert "qualche bug interno" not in result["error"]
     # Il messaggio safe e' quello canonico
     assert result["error"] == "Errore interno nel processore file remoto"
-
-
-# ─── Anti-regression strutturale ──────────────────────────────────────────
 
 
 def test_all_error_returns_carry_error_kind_and_user_error_fields(service, minimal_api_config, ctx_default):

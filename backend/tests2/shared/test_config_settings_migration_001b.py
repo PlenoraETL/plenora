@@ -28,9 +28,7 @@ _BACKEND_APP = Path(__file__).resolve().parent.parent.parent / "app"
 _BACKEND_WORKERS = Path(__file__).resolve().parent.parent.parent / "workers"
 
 
-# ---------------------------------------------------------------------------
 # Defaults present + tipati
-# ---------------------------------------------------------------------------
 
 @pytest.mark.parametrize(
     "key, expected_type, expected_default",
@@ -52,9 +50,7 @@ def test_default_present_and_typed(key, expected_type, expected_default):
     )
 
 
-# ---------------------------------------------------------------------------
 # Override env via Settings._converti_tipo_env
-# ---------------------------------------------------------------------------
 
 @pytest.mark.parametrize(
     "key, env_value, expected",
@@ -72,9 +68,7 @@ def test_env_override_typed(monkeypatch, key, env_value, expected):
     assert isinstance(val, int)
 
 
-# ---------------------------------------------------------------------------
 # Consumer reads via settings.get (no direct os.getenv on these keys)
-# ---------------------------------------------------------------------------
 
 def _read(path: Path) -> str:
     return path.read_text(encoding="utf-8")
@@ -110,9 +104,7 @@ def test_jwt_token_reads_expire_hours_via_settings():
     assert "os.getenv(\"JWT_EXPIRE_HOURS" not in src
 
 
-# ---------------------------------------------------------------------------
 # Module-level constant + behavior contract
-# ---------------------------------------------------------------------------
 
 def test_jwt_token_constant_is_int_and_matches_default():
     """`ACCESS_TOKEN_EXPIRE_HOURS` resta int module-level (consumato da

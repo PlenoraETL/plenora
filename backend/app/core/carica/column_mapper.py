@@ -215,9 +215,7 @@ class ColumnMapper:
 
         return candidates[:3]  # max 3 suggerimenti
 
-    # ========================================================================
     # RILEVAMENTO GEOMETRIA
-    # ========================================================================
 
     def _is_geometry_column(
         self,
@@ -286,9 +284,7 @@ class ColumnMapper:
                 pass
         return default
 
-    # ========================================================================
     # INFERENZA TIPI
-    # ========================================================================
 
     def _infer_type_from_canvas(self, canvas_type: str) -> str:
         """Converte tipo canvas PLENORA in tipo interno per il mapping.
@@ -309,9 +305,7 @@ class ColumnMapper:
         from app.shared.column_types import pandas_series_to_canvas_type
         return pandas_series_to_canvas_type(series)
 
-    # ========================================================================
     # MATCHING E SANITIZZAZIONE
-    # ========================================================================
 
     def _find_matching_column(
         self,

@@ -33,9 +33,7 @@ from typing import Any, List, Optional
 from app.shared.exceptions import ColumnsMetadataSaveError
 
 
-# ─────────────────────────────────────────────────────────────────────
 # Costanti retry/backoff
-# ─────────────────────────────────────────────────────────────────────
 
 # 4 tentativi totali, 3 sleep tra i retry. Sequenza copre transient
 # DB fino a ~1.7s di recovery — oltre, non e' transient.
@@ -67,9 +65,7 @@ def _get_transient_exceptions() -> tuple:
     return _TRANSIENT_EXCEPTIONS
 
 
-# ─────────────────────────────────────────────────────────────────────
 # API pubblica
-# ─────────────────────────────────────────────────────────────────────
 
 
 def save_columns_metadata_with_retry(

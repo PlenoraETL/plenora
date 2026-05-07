@@ -96,9 +96,7 @@ def test_list_pending_migrations_ignores_orphan_rows(tmp_path, monkeypatch):
         assert mr.list_pending_migrations() == []
 
 
-# ---------------------------------------------------------------------------
 # BE-GO-READY-INSTALLATION-002-SCHEMA-AUTOCREATE
-# ---------------------------------------------------------------------------
 
 def _make_fake_conn():
     """Fake psycopg2 connection: cur.execute calls vengono spy-ati."""

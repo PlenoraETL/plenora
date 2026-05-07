@@ -74,9 +74,7 @@ def _local_dir(task_id: str) -> Path:
     return _settings.IMDF_BUNDLES_DIR / task_id
 
 
-# =============================================================================
 # Upload (worker side, post-extract)
-# =============================================================================
 
 
 def save_bundle(task_id: str, local_dir: Path, meta: Optional[Dict[str, Any]] = None) -> Dict[str, str]:
@@ -156,9 +154,7 @@ def save_bundle(task_id: str, local_dir: Path, meta: Optional[Dict[str, Any]] = 
     return {"zip_key": _zip_key(task_id), "meta_key": mk}
 
 
-# =============================================================================
 # Read (endpoint side)
-# =============================================================================
 
 
 def ensure_local_bundle(task_id: str) -> Path:

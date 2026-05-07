@@ -36,9 +36,7 @@ def test_restore_mod():
     return mod
 
 
-# =============================================================================
 # 1. derive_test_db_name
-# =============================================================================
 
 
 def test_derive_test_db_name_matches_pattern(test_restore_mod):
@@ -66,9 +64,7 @@ def test_derive_test_db_name_two_calls_distinct_after_second(test_restore_mod):
     assert n1 != n2
 
 
-# =============================================================================
 # 2. split_db_url + make_target_url
-# =============================================================================
 
 
 def test_split_db_url_default_case(test_restore_mod):
@@ -99,9 +95,7 @@ def test_make_target_url_points_at_test_db(test_restore_mod):
     assert target == "postgresql://u:p@host:5432/plenora_restore_test_20260417_030000"
 
 
-# =============================================================================
 # 3. TEST_DB_PATTERN rejects unsafe names
-# =============================================================================
 
 
 @pytest.mark.parametrize("bad_name", [
@@ -128,9 +122,7 @@ def test_test_db_pattern_accepts_valid_names(test_restore_mod, good_name):
     assert test_restore_mod.TEST_DB_PATTERN.match(good_name)
 
 
-# =============================================================================
 # 4. Safety gate: dropdb rifiuta nomi fuori pattern
-# =============================================================================
 
 
 def test_dropdb_refuses_names_outside_pattern(test_restore_mod, capsys):

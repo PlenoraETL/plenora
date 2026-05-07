@@ -114,9 +114,7 @@ def test_load_project_sources_blocks_cross_tenant_source_project():
     assert dataframes == {}
 
 
-# =============================================================================
 # F1: preview() deve passare group_id esplicito ai source loader (TE-009)
-# =============================================================================
 
 
 def test_preview_passes_group_id_explicitly_to_source_loaders():

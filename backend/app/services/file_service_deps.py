@@ -35,7 +35,6 @@ import pandas as pd
 _logger = logging.getLogger(__name__)
 
 
-# ==================== PROTOCOLLI PER DEPENDENCY INJECTION ====================
 # Interfacce astratte per disaccoppiare il servizio dall'implementazione concreta.
 # In produzione: filesystem reale + GeoPandas. In test: mock in-memory.
 
@@ -85,7 +84,6 @@ class TimeProviderProtocol(Protocol):
     def generate_uuid(self) -> str: ...
 
 
-# ==================== IMPLEMENTAZIONI DEFAULT / NULL ====================
 # Implementazioni concrete dei protocolli per uso in produzione e testing.
 
 

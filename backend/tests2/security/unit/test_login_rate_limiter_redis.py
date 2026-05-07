@@ -27,9 +27,7 @@ from fastapi import HTTPException
 pytestmark = [pytest.mark.unit, pytest.mark.security, pytest.mark.contract]
 
 
-# -----------------------------------------------------------------------------
 # Fixtures
-# -----------------------------------------------------------------------------
 
 
 @pytest.fixture
@@ -67,9 +65,7 @@ def _no_op_fallback(_ip: str) -> None:
     pass
 
 
-# =============================================================================
 # 1. Limit applicato per IP via Redis
-# =============================================================================
 
 
 def test_redis_limit_triggers_after_max_attempts(rl_with_redis):
@@ -161,9 +157,7 @@ def test_redis_clear_resets_bucket(rl_with_redis):
     )
 
 
-# =============================================================================
 # 2. Sliding window — i record vecchi escono dal conteggio
-# =============================================================================
 
 
 def test_redis_sliding_window_drops_old_attempts(rl_with_redis):
@@ -195,9 +189,7 @@ def test_redis_sliding_window_drops_old_attempts(rl_with_redis):
     )
 
 
-# =============================================================================
 # 3. Cluster-safety simulata — due "istanze" condividono lo store
-# =============================================================================
 
 
 def test_cluster_safety_two_callers_share_bucket(fake_client):
@@ -231,9 +223,7 @@ def test_cluster_safety_two_callers_share_bucket(fake_client):
         rl._reset_state_for_tests()
 
 
-# =============================================================================
 # 4. Redis unavailable → fallback callable invocato (single-node parity)
-# =============================================================================
 
 
 def test_fallback_called_when_redis_client_is_none(rl_no_redis):
@@ -284,9 +274,7 @@ def test_fallback_called_when_redis_pipeline_raises():
         rl._reset_state_for_tests()
 
 
-# =============================================================================
 # 5. Parita' del fallback in-memory col vecchio limiter (smoke)
-# =============================================================================
 
 
 def test_fallback_inmemory_matches_legacy_behaviour(rl_no_redis):

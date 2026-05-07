@@ -52,9 +52,7 @@ def _make_input_df(n: int) -> pd.DataFrame:
     return pd.DataFrame({"id": list(range(n)), "x": [f"v{i}" for i in range(n)]})
 
 
-# =============================================================================
 # 1. Cardinality mismatch -> RuntimeError fail-hard
-# =============================================================================
 
 
 def test_merge_raises_runtime_error_on_cardinality_mismatch_explosion():
@@ -131,9 +129,7 @@ def test_merge_runtime_error_does_not_mutate_node_results_on_failure():
     assert node_results["B"] is b_before
 
 
-# =============================================================================
 # 2. Same cardinality -> merge OK, colonne propagate a TUTTI i node_results
-# =============================================================================
 
 
 def test_merge_combines_columns_when_all_nodes_same_cardinality():
@@ -200,9 +196,7 @@ def test_merge_skips_non_dataframe_node_results():
     assert node_results["C"] is merged
 
 
-# =============================================================================
 # 3. Anti-regression: nessun fallback silenzioso
-# =============================================================================
 
 
 def test_merge_does_not_emit_silent_warning_on_failure():

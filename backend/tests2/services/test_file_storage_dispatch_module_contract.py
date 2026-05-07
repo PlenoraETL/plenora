@@ -68,9 +68,7 @@ def _patched_settings(policy_value):
     return patch("app.config.settings", fake_settings)
 
 
-# =============================================================================
 # 1. STORAGE_POLICY=db -> sempre DB BYTEA
-# =============================================================================
 
 
 def test_dispatch_db_policy_always_returns_bytea(fake_logger, fake_storage):
@@ -97,9 +95,7 @@ def test_dispatch_db_policy_does_not_log(fake_logger):
     fake_logger.error.assert_not_called()
 
 
-# =============================================================================
 # 2. STORAGE_POLICY=object_storage -> sempre object storage
-# =============================================================================
 
 
 def test_dispatch_object_storage_policy_uploads_and_returns_storage_key(
@@ -135,9 +131,7 @@ def test_dispatch_object_storage_policy_reraises_upload_exception(
     fake_logger.error.assert_called_once()
 
 
-# =============================================================================
 # 3. STORAGE_POLICY=hybrid -> threshold-based
-# =============================================================================
 
 
 def test_dispatch_hybrid_policy_below_threshold_uses_bytea(
@@ -235,9 +229,7 @@ def test_dispatch_explicit_hybrid_policy_under_threshold_uses_bytea(
     assert out["storage_key"] is None
 
 
-# =============================================================================
 # 4. Logger e' iniettato (non viene da FileSourceService)
-# =============================================================================
 
 
 def test_dispatch_uses_injected_logger_not_global(fake_storage):
@@ -262,10 +254,8 @@ def test_dispatch_uses_injected_logger_not_global(fake_storage):
     assert "file_b" in log_b.info.call_args[0][0]
 
 
-# =============================================================================
 # 5. Backward-compat: il wrapper FileSourceService._dispatch_blob_storage
 #    delega correttamente alla funzione modulo.
-# =============================================================================
 
 
 def test_file_service_wrapper_delegates_to_module_function(fake_logger, fake_storage):
@@ -287,9 +277,7 @@ def test_file_service_wrapper_delegates_to_module_function(fake_logger, fake_sto
     assert out["size_bytes"] == len(raw)
 
 
-# =============================================================================
 # 6. BE-HARDEN-001C E1: storage_key_id opzionale per shared blob multi-layer
-# =============================================================================
 
 
 def test_dispatch_uses_storage_key_id_when_provided(fake_logger, fake_storage):

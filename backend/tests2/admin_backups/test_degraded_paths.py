@@ -22,9 +22,7 @@ import pytest
 pytestmark = [pytest.mark.unit, pytest.mark.contract]
 
 
-# =============================================================================
 # list_backups — path degraded (boto3/S3)
-# =============================================================================
 
 
 def test_list_backups_when_boto3_missing_returns_empty():
@@ -227,9 +225,7 @@ def test_list_backups_sorts_newest_first():
     assert out[1]["key"] == "plenora_20260301_020000Z.dump"
 
 
-# =============================================================================
 # get_last_run_status — legge da plenora.backup_runs (DB-based)
-# =============================================================================
 
 
 def test_last_run_status_when_db_raises_returns_unknown():
@@ -404,9 +400,7 @@ def test_last_run_status_duration_unparsable_iso_string_logs_warning():
     assert out["duration_sec"] is None
 
 
-# =============================================================================
 # get_schedule_info — metadati statici (container-friendly, no systemctl)
-# =============================================================================
 
 
 def test_schedule_info_returns_default_cron(monkeypatch):

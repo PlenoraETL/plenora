@@ -210,9 +210,7 @@ def integration_db_probe():
     }
 
 
-# =============================================================================
 # Auto-marker: requires_backend_http_service
-# =============================================================================
 #
 # Marca i test che dipendono direttamente o transitivamente da una fixture
 # che spawna un backend HTTP live (uvicorn) per i test integration. Vedi

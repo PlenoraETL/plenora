@@ -44,9 +44,7 @@ pytestmark = [pytest.mark.unit, pytest.mark.arricchisci, pytest.mark.contract]
 _BACKEND_ROOT = Path(__file__).resolve().parent.parent.parent.parent
 
 
-# ---------------------------------------------------------------------------
 # 1. Source location
-# ---------------------------------------------------------------------------
 
 
 def test_canvas_orchestrator_module_exists():
@@ -116,9 +114,7 @@ def test_orchestrator_module_exposes_pure_function_api():
     }
 
 
-# ---------------------------------------------------------------------------
 # 2 + 3. KEEP_COMPAT wrappers
-# ---------------------------------------------------------------------------
 
 
 def test_api_connection_service_execute_enrichment_is_thin_wrapper():
@@ -150,9 +146,7 @@ def test_api_connection_service_execute_enrichment_is_thin_wrapper():
 # (vedi sezione "Pure-function behavior locks" sotto).
 
 
-# ---------------------------------------------------------------------------
 # 5. No re-export maze
-# ---------------------------------------------------------------------------
 
 
 def test_api_connector_does_not_wildcard_import_orchestrator():
@@ -201,9 +195,7 @@ def test_api_connector_does_not_wildcard_import_orchestrator():
     )
 
 
-# ---------------------------------------------------------------------------
 # 6. Pure-function behavior locks
-# ---------------------------------------------------------------------------
 
 
 def test_get_execution_order_kahn_simple_chain():
@@ -259,9 +251,7 @@ def test_is_file_source_for_file_processor_pure_predicate():
     )
 
 
-# ---------------------------------------------------------------------------
 # 7. KEEP_COMPAT execute_canvas_enrichment dispatch (smoke)
-# ---------------------------------------------------------------------------
 
 
 def test_node_wrappers_built_once_at_entry_boundary():

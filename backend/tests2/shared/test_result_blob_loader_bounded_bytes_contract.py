@@ -51,9 +51,7 @@ _RESULT_BLOB_PY = (
 )
 
 
-# ---------------------------------------------------------------------------
 # 1. Cap resolution
-# ---------------------------------------------------------------------------
 
 
 def test_default_cap_is_200_mib():
@@ -107,9 +105,7 @@ def test_invalid_or_nonpositive_env_falls_back_to_default(
     assert resolve_resource_max_bytes() == RESOURCE_MAX_BYTES_DEFAULT
 
 
-# ---------------------------------------------------------------------------
 # 2. Bounded reader unit-level
-# ---------------------------------------------------------------------------
 
 
 def test_read_bounded_stream_assembles_bytes_within_cap():
@@ -186,9 +182,7 @@ def test_read_bounded_stream_skips_empty_chunks():
     assert out == b"abcdef"
 
 
-# ---------------------------------------------------------------------------
 # 3. Object-storage end-to-end: oversize aborts iteration
-# ---------------------------------------------------------------------------
 
 
 class _TrackingBody:
@@ -327,9 +321,7 @@ def test_object_storage_connectivity_error_still_returns_none(monkeypatch):
     assert out is None
 
 
-# ---------------------------------------------------------------------------
 # 4. BYTEA path: SQL preflight cap check (BE-GO-READY-RESOURCE-ENGINE-013)
-# ---------------------------------------------------------------------------
 
 
 def test_bytea_oversize_raises_at_dispatch(monkeypatch):
@@ -472,9 +464,7 @@ def test_bytea_under_cap_returns_normally(monkeypatch):
     assert out.data == b"small"
 
 
-# ---------------------------------------------------------------------------
 # 5. Path mode: oversize aborts BEFORE writing a tempfile
-# ---------------------------------------------------------------------------
 
 
 def test_path_mode_oversize_does_not_create_tempfile(monkeypatch, tmp_path):
@@ -517,9 +507,7 @@ def test_path_mode_oversize_does_not_create_tempfile(monkeypatch, tmp_path):
     )
 
 
-# ---------------------------------------------------------------------------
 # 6. Stream mode honesty: still unsupported, no body read
-# ---------------------------------------------------------------------------
 
 
 def test_stream_mode_raises_before_any_storage_access(monkeypatch):
@@ -561,9 +549,7 @@ def test_stream_mode_raises_before_any_storage_access(monkeypatch):
     )
 
 
-# ---------------------------------------------------------------------------
 # 7. Source-bound: the unbounded `b"".join(list(...))` pattern is gone
-# ---------------------------------------------------------------------------
 
 
 def test_source_no_longer_contains_unbounded_join_pattern():

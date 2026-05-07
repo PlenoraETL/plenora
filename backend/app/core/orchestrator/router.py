@@ -27,9 +27,7 @@ from app.shared.models import ExecuteRequest
 from app.services.task_service import TaskType
 from app.utils.router_utils import require_service
 from app.shared.audit_action import audit_action
-# BE-GO-READY-AUTH-ENGINE-019 dep-import off facade.
 from app.core.auth.dependencies import get_current_user, require_not_esecutore
-# BE-GO-READY-AUTH-ENGINE-015 Phase-9 contract fan-out.
 from app.shared.contracts.auth import CurrentUser
 from app.core.auth.ownership import assert_group_access
 
@@ -159,8 +157,6 @@ def init_orchestrator(orchestrator):
     global _orchestrator
     _orchestrator = orchestrator
 
-
-# ==================== PIPELINE EXECUTION ====================
 
 @pipeline_router.post("/{project_id}/execute")
 def execute_project_pipeline(
@@ -330,9 +326,6 @@ def download_project_result(project_id: str, file: Optional[str] = None, current
         logger.error(f"[CRASH] Errore download progetto {project_id}: {e}", exc_info=True)
         raise_typed_http(error_codes.INTERNAL_ERROR, status_code=500, message="Errore interno del server")
 
-
-
-# ==================== TASK ASINCRONI (CELERY) ====================
 
 class CreateTaskRequest(BaseModel):
     task_type: TaskType
@@ -609,7 +602,6 @@ def cleanup_task_completely(task_id: str, current_user: CurrentUser = Depends(ge
     else:
         assert_group_access(_meta, current_user, f"Task '{task_id}'")
 
-    # ──────────────────────────────────────────────────────────────
     # Cleanup scoped AL SINGOLO task_id (NON all'intero progetto!)
     # Rimuoviamo:
     #   - il record `result` collegato a questo task_id
@@ -618,7 +610,6 @@ def cleanup_task_completely(task_id: str, current_user: CurrentUser = Depends(ge
     # NON tocchiamo `RESULTS_DIR/{project_id}` ne' altri risultati del
     # progetto: un cleanup wide sarebbe data-loss grave (un click su
     # "cleanup task" distruggerebbe lo storico dell'intero progetto).
-    # ──────────────────────────────────────────────────────────────
 
     # Accumulatore step cleanup falliti. Ogni step e' best-effort (un fallimento
     # non blocca i successivi) ma l'esito aggregato finisce nel body 207 cosi'
@@ -665,11 +656,6 @@ def cleanup_task_completely(task_id: str, current_user: CurrentUser = Depends(ge
         logger.warning(f"cleanup: errore rimozione output_file: {e}", exc_info=True)
         failed_steps.append("unlink_output_file")
 
-    # 5. log_runs: cleanup esplicito per non lasciare orfani.
-    # BE-GO-READY-CONNECTION-ENGINE-006: query inline migrata a
-    # `app.db.log_runs_db_service.delete_log_run_by_run_id`. Lo step
-    # resta best-effort (try/except → failed_steps); la DAL propaga
-    # l'eccezione cosi' che la decisione log+continue stia qui.
     try:
         from app.db.log_runs_db_service import delete_log_run_by_run_id
         delete_log_run_by_run_id(task_id)
@@ -877,5 +863,3 @@ def download_task_result(
     except Exception as e:
         logger.error(f"[CRASH] Errore download risultato task {task_id}: {e}", exc_info=True)
         raise_typed_http(error_codes.INTERNAL_ERROR, status_code=500, message="Errore interno del server")
-
-

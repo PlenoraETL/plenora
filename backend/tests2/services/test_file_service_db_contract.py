@@ -27,9 +27,7 @@ import pytest
 pytestmark = [pytest.mark.unit, pytest.mark.contract]
 
 
-# =============================================================================
 # Helpers
-# =============================================================================
 
 
 def _install_fake_db(monkeypatch):
@@ -90,9 +88,7 @@ def _install_fake_db(monkeypatch):
     return store
 
 
-# =============================================================================
 # 1. Round-trip: upload -> DB -> read identical bytes
-# =============================================================================
 
 
 def test_upload_persists_bytes_in_db(monkeypatch):
@@ -259,9 +255,7 @@ def test_update_file_source_fallback_uses_settings_default_group(monkeypatch):
     assert saved_calls[0]["data"] == b"hello"
 
 
-# =============================================================================
 # 2. Zero FS leak: tempfile.mkdtemp calls are cleaned up
-# =============================================================================
 
 
 def test_no_temp_dir_leak_on_upload(monkeypatch):
@@ -313,9 +307,7 @@ def test_no_temp_dir_leak_on_upload(monkeypatch):
     assert not leaked, f"Temp dir leak dopo upload: {leaked}"
 
 
-# =============================================================================
 # 3. DI Protocol: service gira con mocks (filesystem/loader)
-# =============================================================================
 
 
 def test_service_can_be_instantiated_with_mocks():
@@ -376,9 +368,7 @@ def test_factory_no_longer_accepts_files_dir():
         create_file_service(files_dir=Path("/tmp/dead"))
 
 
-# =============================================================================
 # 4. FS-B1-large dispatch: blob sopra threshold va su S3 (non in DB BYTEA)
-# =============================================================================
 
 
 def test_dispatch_below_threshold_keeps_data_in_db(monkeypatch):
@@ -482,9 +472,7 @@ def test_upload_failure_does_not_create_db_row(monkeypatch):
     assert store == {}
 
 
-# =============================================================================
 # 5. Reader S3: download + cleanup temp anche su eccezione
-# =============================================================================
 
 
 def test_read_blob_from_s3_downloads_and_cleans_temp(monkeypatch, tmp_path):

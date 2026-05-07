@@ -22,9 +22,7 @@ from app.shared.path_policy import validate_imdf_task_id
 pytestmark = [pytest.mark.unit, pytest.mark.shared, pytest.mark.contract]
 
 
-# =============================================================================
 # 1. Valid task_id → Path resolved dentro root
-# =============================================================================
 
 
 def test_valid_uuid_task_id_returns_resolved_path(tmp_path: Path):
@@ -54,9 +52,7 @@ def test_valid_task_id_max_length_accepted(tmp_path: Path):
     assert result.name == task_id
 
 
-# =============================================================================
 # 2. Id vuoto / None → ValueError
-# =============================================================================
 
 
 def test_empty_task_id_raises(tmp_path: Path):
@@ -74,9 +70,7 @@ def test_none_task_id_raises(tmp_path: Path):
         validate_imdf_task_id(None, root.resolve())  # type: ignore[arg-type]
 
 
-# =============================================================================
 # 3. Formato invalido (dot, slash, spazi, null bytes) → ValueError
-# =============================================================================
 
 
 @pytest.mark.parametrize("bad_id", [
@@ -99,9 +93,7 @@ def test_task_id_with_forbidden_chars_rejected(tmp_path: Path, bad_id: str):
         validate_imdf_task_id(bad_id, root.resolve())
 
 
-# =============================================================================
 # 4. Primo char non alfanumerico → ValueError
-# =============================================================================
 
 
 @pytest.mark.parametrize("bad_id", ["-abc", "_abc", "-", "_"])
@@ -113,9 +105,7 @@ def test_task_id_starts_with_dash_or_underscore_rejected(tmp_path: Path, bad_id:
         validate_imdf_task_id(bad_id, root.resolve())
 
 
-# =============================================================================
 # 5. Length boundary: 129 char rifiutato
-# =============================================================================
 
 
 def test_task_id_exceeds_length_rejected(tmp_path: Path):
@@ -127,9 +117,7 @@ def test_task_id_exceeds_length_rejected(tmp_path: Path):
         validate_imdf_task_id(task_id, root.resolve())
 
 
-# =============================================================================
 # 6. Dash/underscore validi in posizioni non-iniziali
-# =============================================================================
 
 
 @pytest.mark.parametrize("good_id", [

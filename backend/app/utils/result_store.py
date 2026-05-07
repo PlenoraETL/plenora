@@ -34,9 +34,6 @@ def _apply_results_retention(project_id: str) -> None:
     N viene letto da projects.retention_n nelle config tables, default DEFAULT_RESULTS_RETENTION.
     """
     try:
-        # BE-GO-READY-DB-ENGINE-004: import diretto del leaf canonico
-        # (`app.db.config.projects.get_project_retention_n`) invece del
-        # facade `config_db_service`. Allowlist strangler trimmed.
         from app.db.config.projects import get_project_retention_n
         import app.db.results_db_service as res_db
 
@@ -86,9 +83,7 @@ class ResultSaveError(Exception):
     """
 
 
-# ---------------------------------------------------------------------------
 # Storage policy dispatch helpers (A1)
-# ---------------------------------------------------------------------------
 
 
 def _storage_policy() -> str:

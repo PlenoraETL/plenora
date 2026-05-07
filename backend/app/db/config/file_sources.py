@@ -354,9 +354,6 @@ def delete_file_source(file_id: str) -> bool:
             if outcome in ("ok", "skipped"):
                 mark_done(reconciliation_ref.id)
             else:
-                # outcome == "failed": ADR-0011 posture preserved
-                # (orphan accepted), but now persisted for the future
-                # reconciler beat hook (batch 006).
                 mark_failed_attempt(
                     reconciliation_ref.id,
                     error=f"compensating_delete_outcome={outcome}",

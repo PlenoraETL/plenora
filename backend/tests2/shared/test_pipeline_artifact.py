@@ -9,9 +9,7 @@ from app.core.artifacts.types import (
 pytestmark = [pytest.mark.unit, pytest.mark.contract]
 
 
-# ---------------------------------------------------------------------------
 # from_executor_result: classifier
-# ---------------------------------------------------------------------------
 
 
 def test_from_executor_result_inline_df_kind():
@@ -83,9 +81,7 @@ def test_from_executor_result_non_dict_input():
     assert a.artifact_kind == "none"
 
 
-# ---------------------------------------------------------------------------
 # Invariants
-# ---------------------------------------------------------------------------
 
 
 def test_pipeline_artifact_requires_project_id():
@@ -100,9 +96,7 @@ def test_pipeline_artifact_failure_helper_sets_message():
     assert a.artifact_kind == "none"
 
 
-# ---------------------------------------------------------------------------
 # Dict-like back-compat (consumer legacy)
-# ---------------------------------------------------------------------------
 
 
 def test_pipeline_artifact_is_dict_subclass():
@@ -175,9 +169,7 @@ def test_pipeline_artifact_from_executor_result_is_idempotent():
     assert b.success is True
 
 
-# ---------------------------------------------------------------------------
 # Tenant binding: project_id passato dal caller e' la fonte autorevole
-# ---------------------------------------------------------------------------
 
 
 def test_from_executor_result_requires_project_id():
@@ -228,9 +220,7 @@ def test_from_executor_result_pipeline_artifact_with_matching_pid_is_ok():
     assert b.result_id == "res-1"
 
 
-# ---------------------------------------------------------------------------
 # to_run_artifact_ref
-# ---------------------------------------------------------------------------
 
 
 def test_to_run_artifact_ref_preserves_blob_fields():

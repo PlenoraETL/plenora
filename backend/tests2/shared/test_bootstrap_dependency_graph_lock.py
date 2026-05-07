@@ -70,9 +70,7 @@ def _real_teardown():
     )
 
 
-# ---------------------------------------------------------------------------
 # 1. Source-bound: bootstrap.py canonical internal order
-# ---------------------------------------------------------------------------
 
 
 def test_bootstrap_py_canonical_order_in_source():
@@ -148,9 +146,7 @@ def test_bootstrap_completion_flag_is_set_last_in_source():
     )
 
 
-# ---------------------------------------------------------------------------
 # 2. Source-bound: main.py calls _bootstrap() BEFORE router imports
-# ---------------------------------------------------------------------------
 
 
 def test_main_py_bootstrap_runs_before_router_imports():
@@ -221,9 +217,7 @@ def test_main_py_imports_bootstrap_before_calling_it():
     assert import_match.start() < call_match.start()
 
 
-# ---------------------------------------------------------------------------
 # 3. Behavioural: is_bootstrapped() False → True transition
-# ---------------------------------------------------------------------------
 
 
 @pytest.fixture
@@ -354,9 +348,7 @@ def test_teardown_resets_completion_flag(monkeypatch, _reset_boot_flag):
     assert bootstrap_module.is_bootstrapped() is False
 
 
-# ---------------------------------------------------------------------------
 # 4. Module surface: is_bootstrapped is the only public reader
-# ---------------------------------------------------------------------------
 
 
 def test_is_bootstrapped_is_callable_and_returns_bool():

@@ -48,9 +48,7 @@ def _ms(t0: float) -> float:
     return round((time.monotonic() - t0) * 1000, 1)
 
 
-# ============================================================
 # Result types
-# ============================================================
 
 @dataclass
 class SnapshotHandle:
@@ -94,9 +92,7 @@ class FlushResult:
     errors: List[str] = field(default_factory=list)
 
 
-# ============================================================
 # Hash dataframe — pandas_hash_v1
-# ============================================================
 
 def _hash_pandas_block(digest, df, *, label: str) -> None:
     """Aggiorna `digest` con `pd.util.hash_pandas_object(df).tobytes()`.
@@ -257,9 +253,7 @@ def compute_dataframe_fingerprint(df: Any) -> tuple[str, str]:
     )
 
 
-# ============================================================
 # Preview & row-hash helpers (interni)
-# ============================================================
 
 def _build_preview_rows(df: Any, n_rows: int) -> List[Dict]:
     """Ritorna `df.head(n_rows).to_dict(orient='records')` con
@@ -318,9 +312,7 @@ def _col_schema_from_df(df: Any) -> Dict[str, str]:
     return {str(c): str(df[c].dtype) for c in df.columns}
 
 
-# ============================================================
 # Public API
-# ============================================================
 
 def _record_snapshot(
     *,
@@ -365,10 +357,6 @@ def _record_snapshot(
         mode_override=mode_override,
     )
     if not policy.recorded:
-        # [PERF] skip: deve restare estremamente economico.
-        # `total_ms` quantifica il costo del policy-resolve da solo
-        # (no fingerprint, no DB) per validare la correttezza dello
-        # skip-path su dataset grandi (Batch 2/3).
         logger.info(
             "[PERF] op=skip_checkpoint module=%s node_id=%s node_type=%s "
             "snapshot_kind=%s reason=%s total_ms=%s",

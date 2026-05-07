@@ -44,9 +44,7 @@ import pytest
 pytestmark = [pytest.mark.unit, pytest.mark.security, pytest.mark.contract]
 
 
-# ---------------------------------------------------------------------------
 # PATHS (backend/tests2/security/unit/ → backend)
-# ---------------------------------------------------------------------------
 
 _BACKEND = Path(__file__).resolve().parents[3]
 _MIGRATION = _BACKEND / "migrations" / "2026-04-21_add_user_mfa.sql"
@@ -76,9 +74,7 @@ def mfa_module_ast() -> ast.Module:
     return ast.parse(_MFA_PY.read_text(encoding="utf-8"))
 
 
-# ===========================================================================
 # A) STATIC / AST
-# ===========================================================================
 
 
 def test_migration_creates_user_mfa_table(migration_sql: str) -> None:
@@ -189,9 +185,7 @@ def test_mfa_module_declares_constants(mfa_module_ast: ast.Module) -> None:
     )
 
 
-# ===========================================================================
 # B) pyotp SMOKE (verifica che libreria si comporti come assumiamo)
-# ===========================================================================
 
 
 def test_pyotp_verify_honors_window() -> None:
@@ -223,9 +217,7 @@ def test_pyotp_provisioning_uri_format() -> None:
     assert f"secret={secret}" in uri
 
 
-# ===========================================================================
 # C) INTEGRATION DB-LIVE (opt-in esplicito)
-# ===========================================================================
 #
 # Questi test fanno INSERT/DELETE reali su `plenora.users`, `plenora.groups`,
 # `plenora.user_mfa` via `app.db.pg_connection.execute` (pool globale). Sono

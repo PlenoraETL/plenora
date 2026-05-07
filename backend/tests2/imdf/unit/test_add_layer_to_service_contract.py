@@ -63,9 +63,7 @@ from app.core.features.arcgis_client import ArcGISClient
 pytestmark = [pytest.mark.unit, pytest.mark.contract]
 
 
-# ---------------------------------------------------------------------------
 # Fixtures
-# ---------------------------------------------------------------------------
 
 
 def _make_response(payload: dict) -> MagicMock:
@@ -149,9 +147,7 @@ def _layer_def_from_post(client) -> dict:
     return json.loads(raw)
 
 
-# ---------------------------------------------------------------------------
 # 1. Happy path + result shape
-# ---------------------------------------------------------------------------
 
 
 def test_happy_path_returns_keep_compat_dict(fake_client, fake_conn):
@@ -188,9 +184,7 @@ def test_happy_path_calls_collaborators_in_order(fake_client, fake_conn):
     fake_client.add_features.assert_called_once()
 
 
-# ---------------------------------------------------------------------------
 # 2. Request shape: URL, body, header, timeout, token
-# ---------------------------------------------------------------------------
 
 
 def test_request_url_uses_admin_addtodefinition(fake_client, fake_conn):
@@ -277,9 +271,7 @@ def test_request_timeout_60s(fake_client, fake_conn):
     assert _post_call_kwargs(fake_client)["timeout"] == 60
 
 
-# ---------------------------------------------------------------------------
 # 3. Schema / layer_def shape
-# ---------------------------------------------------------------------------
 
 
 def test_layer_def_top_level_shape(fake_client, fake_conn):
@@ -471,9 +463,7 @@ def test_drawing_info_via_client_helper(fake_client, fake_conn):
     }
 
 
-# ---------------------------------------------------------------------------
 # 4. Failure paths
-# ---------------------------------------------------------------------------
 
 
 def test_addtodefinition_failure_returns_failed_result(fake_client, fake_conn):
@@ -535,9 +525,7 @@ def test_add_features_partial_success_returns_success(fake_client, fake_conn):
     assert result["errors"] == ["row 3 rejected"]
 
 
-# ---------------------------------------------------------------------------
 # 5. Features payload boundary
-# ---------------------------------------------------------------------------
 
 
 def test_dataframe_to_esri_features_called_with_expected_args(
@@ -575,9 +563,7 @@ def test_add_features_called_on_layer_url(fake_client, fake_conn):
     assert call.args[1] == "https://arc.test/server/rest/services/X/FeatureServer/7"
 
 
-# ---------------------------------------------------------------------------
 # 6. KEEP_COMPAT result shape sentinel
-# ---------------------------------------------------------------------------
 
 
 def test_result_keys_keep_compat_sentinel(fake_client, fake_conn):

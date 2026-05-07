@@ -36,9 +36,7 @@ def _canvas_with_project_source(source_project_id="proj-99"):
     )
 
 
-# ---------------------------------------------------------------------------
 # Fail-closed quando group_id esplicito e' assente o vuoto
-# ---------------------------------------------------------------------------
 
 
 def test_load_project_sources_fail_closed_without_explicit_group_id():
@@ -72,10 +70,8 @@ def test_load_project_sources_fail_closed_when_kwarg_is_empty_string():
     assert "Contesto di sicurezza" in result["message"]
 
 
-# ---------------------------------------------------------------------------
 # Cross-tenant blocked esplicito (era gia' coperto, qui ribadiamo come
 # baseline post-Refactor #2)
-# ---------------------------------------------------------------------------
 
 
 def test_load_project_sources_blocks_cross_tenant_via_resolver():
@@ -99,9 +95,7 @@ def test_load_project_sources_blocks_cross_tenant_via_resolver():
     assert dataframes == {}
 
 
-# ---------------------------------------------------------------------------
 # Fail-closed quando il progetto sorgente non esiste affatto
-# ---------------------------------------------------------------------------
 
 
 def test_load_project_sources_fail_closed_when_source_project_missing():
@@ -126,14 +120,10 @@ def test_load_project_sources_fail_closed_when_source_project_missing():
     assert "Accesso negato" in result["message"]
 
 
-# ---------------------------------------------------------------------------
 # Fail-closed quando il check esplode con eccezione DB
-# ---------------------------------------------------------------------------
 
 
-# ---------------------------------------------------------------------------
 # Refactor #3 fix CRS: _carica_sorgenti_file riapplica _applica_crs_da_colonne
-# ---------------------------------------------------------------------------
 
 
 def test_load_file_sources_reapplies_crs_from_node_columns_metadata():
@@ -193,9 +183,7 @@ def test_load_file_sources_reapplies_crs_from_node_columns_metadata():
     )
 
 
-# ---------------------------------------------------------------------------
 # TE-007/008/009 — ctx-strict: explicit group_id is the only channel
-# ---------------------------------------------------------------------------
 #
 # The `_current_group_id` attribute and `_resolve_executing_group_id` helper
 # are gone. All three `_carica_sorgenti_*` methods are ctx-strict: they use
@@ -320,7 +308,6 @@ def test_empty_explicit_kwarg_fails_closed_not_fallback():
     )
     assert resolver_called["count"] == 0
     assert dataframes == {}
-
 
 
 def test_load_project_sources_fail_closed_when_check_raises_unexpectedly():

@@ -185,9 +185,7 @@ class ApiConnectionManagementMixin:
     interactive delle API connections persistite.
     """
 
-    # =========================================================================
     # CRUD CONNESSIONI API — storage PostgreSQL tramite db_service
-    # =========================================================================
 
     def _mask_credentials(self, config: Dict) -> Dict:
         """Oscura token/password/client_secret nella risposta API."""
@@ -210,9 +208,6 @@ class ApiConnectionManagementMixin:
         group_id=None → no filter (used by superadmin and by allowed_groups path).
         """
         if group_id is None:
-            # BE-GO-READY-DB-ENGINE-005: `fetchall` is the canonical
-            # raw-SQL helper on `app.db.pg_connection`; the legacy
-            # `_cfg_db.fetchall` was a re-export of the same function.
             from app.db.pg_connection import fetchall as _fetchall
             rows = _fetchall(
                 "SELECT * FROM api_connections ORDER BY created_at DESC"
@@ -250,9 +245,6 @@ class ApiConnectionManagementMixin:
         Fix N+1: era un loop di get_api_connection(id, include_token=True).
         Ora fa UNA sola query e decifra inline. Ritorna dict id -> config.
         """
-        # BE-GO-READY-DB-ENGINE-005: migrated off `_cfg_db.fetchall`
-        # to the canonical `app.db.pg_connection.fetchall` (the
-        # re-export the facade was forwarding to).
         from app.db.pg_connection import fetchall as _fetchall
         if group_id is None:
             rows = _fetchall("SELECT * FROM api_connections")
@@ -425,12 +417,10 @@ class ApiConnectionManagementMixin:
         logger.info(f"Eliminata API connection: {api_id}")
         return True
 
-    # =========================================================================
     # TEST CONNESSIONE API
     # Test singola chiamata con parsing risposta JSON per validazione.
     # Estrae automaticamente i campi disponibili dalla risposta per
     # permettere la configurazione dell'output mapping nel frontend.
-    # =========================================================================
 
     @staticmethod
     def _build_test_call_params(config: Dict, test_params: Optional[Dict]) -> Dict:

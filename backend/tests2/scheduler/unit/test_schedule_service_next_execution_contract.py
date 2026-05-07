@@ -34,9 +34,7 @@ def _call(cron_expression: str, tz: str = "UTC"):
     )
 
 
-# =============================================================================
 # Happy path: ritorna datetime futuro
-# =============================================================================
 
 
 def test_returns_future_datetime_for_standard_cron():
@@ -60,9 +58,7 @@ def test_returns_future_datetime_for_hourly_cron():
     assert delta <= 3600
 
 
-# =============================================================================
 # Timezone awareness
-# =============================================================================
 
 
 def test_respects_timezone_in_calculation():
@@ -79,9 +75,7 @@ def test_respects_timezone_in_calculation():
     assert tokyo_next.tzinfo is not None
 
 
-# =============================================================================
 # Error handling: graceful None invece di eccezione
-# =============================================================================
 
 
 def test_returns_none_on_invalid_cron_expression():
@@ -99,9 +93,7 @@ def test_returns_none_on_invalid_timezone():
     assert result is None
 
 
-# =============================================================================
 # Vincolo esplicito: NO catchup behavior
-# =============================================================================
 
 
 def test_does_not_perform_catchup_for_missed_windows():

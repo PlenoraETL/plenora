@@ -48,9 +48,7 @@ def _make_scheduler(leader_id, redis_client):
     return scheduler
 
 
-# =============================================================================
 # Transition: acquired
-# =============================================================================
 
 
 def test_acquired_transition_increments_counter():
@@ -74,9 +72,7 @@ def test_acquired_sets_current_leader_id():
     assert current == b"pid-1@host"
 
 
-# =============================================================================
 # Transition: lost (qualcun altro ha preso il lock)
-# =============================================================================
 
 
 def test_lost_transition_increments_counter():
@@ -94,9 +90,7 @@ def test_lost_transition_increments_counter():
     assert lost_count == b"1"
 
 
-# =============================================================================
 # Transition: released (close esplicito)
-# =============================================================================
 
 
 def test_released_transition_increments_counter():
@@ -112,9 +106,7 @@ def test_released_transition_increments_counter():
     assert released_count == b"1"
 
 
-# =============================================================================
 # Transition: standby (Redis down fail-closed)
-# =============================================================================
 
 
 def test_standby_transition_recorded_when_redis_down(monkeypatch):
@@ -137,9 +129,7 @@ def test_standby_transition_recorded_when_redis_down(monkeypatch):
     assert beat._is_leader is False
 
 
-# =============================================================================
 # Transition: degraded_open (Redis down + fail-open)
-# =============================================================================
 
 
 def test_degraded_open_transition_recorded_when_fail_open_triggers(monkeypatch):
@@ -167,9 +157,7 @@ def test_degraded_open_transition_recorded_when_fail_open_triggers(monkeypatch):
     assert current == b"pid-1@host"
 
 
-# =============================================================================
 # Robustezza
-# =============================================================================
 
 
 def test_metric_write_failure_does_not_break_leader_election():

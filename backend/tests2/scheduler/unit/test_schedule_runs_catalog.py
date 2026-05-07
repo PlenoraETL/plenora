@@ -34,9 +34,7 @@ pytestmark = [
 ]
 
 
-# ---------------------------------------------------------------------------
 # Fixtures
-# ---------------------------------------------------------------------------
 
 
 @pytest.fixture
@@ -57,9 +55,7 @@ def runs_layout(tmp_path):
     return results, runs_dir, timestamps
 
 
-# ---------------------------------------------------------------------------
 # _schedule_short: convenzione condivisa
-# ---------------------------------------------------------------------------
 
 
 def test_schedule_short_strips_prefix_and_truncates():
@@ -89,9 +85,7 @@ def test_schedule_short_matches_artifact_store_convention():
     assert archive_dir.parent.name == catalog_short
 
 
-# ---------------------------------------------------------------------------
 # runs_root_for
-# ---------------------------------------------------------------------------
 
 
 def test_runs_root_for_layout(tmp_path):
@@ -110,9 +104,7 @@ def test_runs_root_for_returns_resolved_even_if_not_existing(tmp_path):
     assert root.is_absolute()
 
 
-# ---------------------------------------------------------------------------
 # list_runs
-# ---------------------------------------------------------------------------
 
 
 def test_list_runs_empty_when_no_runs_dir(tmp_path):
@@ -177,9 +169,7 @@ def test_list_runs_excludes_subdirectories_inside_run(runs_layout):
     assert file_names == {"out.csv", "out.parquet"}
 
 
-# ---------------------------------------------------------------------------
 # get_run_dir: sanitize + validation
-# ---------------------------------------------------------------------------
 
 
 @pytest.mark.parametrize(
@@ -239,9 +229,7 @@ def test_get_run_dir_rejects_path_policy_escape_even_with_regex_safe_token(runs_
         )
 
 
-# ---------------------------------------------------------------------------
 # latest_run_dir
-# ---------------------------------------------------------------------------
 
 
 def test_latest_run_dir_picks_newest_timestamp(runs_layout):
@@ -266,9 +254,7 @@ def test_latest_run_dir_returns_none_when_runs_dir_empty(tmp_path):
     assert catalog.latest_run_dir("proj-1", "schedule_abc") is None
 
 
-# ---------------------------------------------------------------------------
 # first_file_in
-# ---------------------------------------------------------------------------
 
 
 def test_first_file_in_returns_file(tmp_path):

@@ -15,9 +15,7 @@ from typing import Any, Union, Dict, List, Optional, Literal
 from datetime import datetime
 
 
-# =============================================================================
 # TIPI COLONNA
-# =============================================================================
 
 ColumnType = Literal[
     "int", "real", "str", "bool", "date",
@@ -26,9 +24,7 @@ ColumnType = Literal[
 ]
 
 
-# =============================================================================
 # INFO COLONNA
-# =============================================================================
 
 class ColumnInfo(BaseModel):
     """Informazioni di base su una colonna (nome e tipo)."""
@@ -36,9 +32,7 @@ class ColumnInfo(BaseModel):
     type: str = "str"
 
 
-# =============================================================================
 # CANVAS — NODI E ARCHI
-# =============================================================================
 
 class Position(BaseModel):
     """Posizione (x, y) di un nodo nel canvas visuale."""
@@ -124,7 +118,6 @@ class Node(BaseModel):
         _MAP = {'caricaArcgis': 'carica_arcgis', 'resultNode': 'result'}
         return _MAP.get(v, v)
 
-    # --- Nodo tabella (type="source") — Progetti ESTRAI ---
     table_name: Optional[str] = None
     alias: Optional[str] = None
     columns: List[Column] = []
@@ -132,7 +125,6 @@ class Node(BaseModel):
     calculated_columns: Optional[List[dict]] = []
     connection_id: Optional[str] = None
 
-    # --- Nodo Feature Service (type="feature_source") — Progetti ESTRAI ---
     layer_name: Optional[str] = None
     layer_url: Optional[str] = None
     service_name: Optional[str] = None
@@ -141,17 +133,13 @@ class Node(BaseModel):
     feature_count: Optional[int] = None
     where: Optional[str] = None
 
-    # --- Nodo progetto sorgente (type="project_source") — MANIPOLA/ARRICCHISCI ---
     source_project_id: Optional[str] = None
 
-    # --- Nodo file sorgente (type="file_source") — MANIPOLA ---
     file_source_id: Optional[str] = None
 
-    # --- Nodo valori statici (type="staticValues") — Tutti i progetti ---
     label: Optional[str] = None
     fields: Optional[List[dict]] = []
 
-    # --- Nodo trasformazione (type="transform") — MANIPOLA ---
     collapsed: Optional[bool] = False
     transform_op: Optional[Literal[
         # Base
@@ -171,7 +159,6 @@ class Node(BaseModel):
     ]] = None
     transform_category: Optional[Literal["base", "geometric", "query", "custom"]] = None
 
-    # --- Nodo API (type="api_enrich") — ARRICCHISCI ---
     api_id: Optional[str] = None
     api_name: Optional[str] = None
     param_mapping: Optional[Any] = None
@@ -208,17 +195,14 @@ class Node(BaseModel):
     skip_null_params: Optional[bool] = None
     max_errors: Optional[int] = None
 
-    # --- Dizionario generico per configurazioni specifiche del nodo ---
     data: Optional[dict] = {}
     config: Optional[dict] = {}
 
-    # --- Nodo risultato (type="result") — COMUNE A TUTTI I MODULI ---
     fileName: Optional[str] = None
     format: Optional[Literal["json", "csv", "xlsx", "geojson", "gpkg", "shp", "gdb", ""]] = None
     distinct: Optional[bool] = False
     limit: Optional[int] = None
     geomColumn: Optional[str] = None
-    # --- Nodo IMDF Publisher (type="imdf_publisher") — Pubblicazione su ArcGIS ---
     # Prende in ingresso un api_enrich con output_kind='imdf', legge il bundle
     # IMDF prodotto dal Processor File e chiama l'uploader (estrazione GDB +
     # creazione FeatureService ArcGIS + apply renderers). I campi sono sul Node
@@ -232,20 +216,16 @@ class Node(BaseModel):
     # Modalita' pubblicazione: 'replace' (default) | 'append' | 'upsert'
     imdf_publish_mode: Optional[Literal["replace", "append", "upsert"]] = "replace"
 
-    # --- GROUP BY (per ESTRAI) ---
     group_by_enabled: Optional[bool] = False
     group_by_columns: Optional[List[str]] = []
     aggregations: Optional[List[AggregationConfig]] = []
 
-    # --- ORDER BY (per ESTRAI) ---
     order_by_enabled: Optional[bool] = False
     order_by_columns: Optional[List[OrderByConfig]] = []
 
-    # --- HAVING (per ESTRAI, con GROUP BY) ---
     having_enabled: Optional[bool] = False
     having_conditions: Optional[List[HavingCondition]] = []
 
-    # --- Nodo CARICA (type="carica") ---
     dest_type: Optional[Literal["db", "arcgis"]] = None
     schema_name: Optional[str] = None
     write_mode: Optional[Literal["create", "replace", "append", "upsert", "update", "truncate_insert"]] = "create"
@@ -258,7 +238,6 @@ class Node(BaseModel):
     create_unique_index: Optional[bool] = False
     unique_key_column: Optional[str] = None
 
-    # --- Nodo CARICA ArcGIS (type="carica_arcgis") ---
     arcgis_connection_id: Optional[str] = None
     arcgis_service_url: Optional[str] = None
     arcgis_layer_url: Optional[str] = None
@@ -268,11 +247,9 @@ class Node(BaseModel):
     arcgis_new_service_name: Optional[str] = None
     arcgis_new_layer_name: Optional[str] = None
 
-    # --- Nodo MULTI-JOIN (type="multi_join") ---
     join_keys: Optional[List[str]] = []
     multi_join_type: Optional[Literal["inner", "left", "outer"]] = "inner"
 
-    # --- Nodo DATA SOURCE (type="datasource_node") — ESTRAI/MANIPOLA ---
     mode: Optional[Literal["source", "carica"]] = None
     datasource_id: Optional[str] = None
     datasource_name: Optional[str] = None
@@ -287,7 +264,6 @@ class Node(BaseModel):
     dest_filename: Optional[str] = None
     dest_format: Optional[Literal["csv", "xlsx", "geojson", "gpkg"]] = None
 
-    # --- Nodo annotazione (type="comment") ---
     text: Optional[str] = None
     title: Optional[str] = None
     color: Optional[str] = None
@@ -361,9 +337,7 @@ class CanvasState(BaseModel):
     edges: List[Edge] = []
 
 
-# =============================================================================
 # VALIDAZIONE E RICHIESTE
-# =============================================================================
 
 class ValidationError(BaseModel):
     """Singolo errore o warning rilevato durante la validazione del canvas."""

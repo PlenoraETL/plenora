@@ -91,7 +91,6 @@ from app.core.resources.loaders._shared import (
 )
 
 
-# ---------------------------------------------------------------------------
 # BE-GO-READY-RESOURCE-ENGINE-010-RESULT-BLOB-BOUNDED-BYTES:
 # bound the previously unbounded `b"".join(list(stream["body"]))` read.
 #
@@ -114,7 +113,6 @@ from app.core.resources.loaders._shared import (
 # Anti-god-engine note: NO ``app.config`` import (the helper is
 # stdlib-only too). The loader continues to read env via the helper
 # rather than importing ``app.config`` from a leaf module.
-# ---------------------------------------------------------------------------
 
 
 # BE-GO-READY-MEMORY-ENGINE-007: the loader-local
@@ -125,9 +123,7 @@ from app.core.resources.loaders._shared import (
 # the helper directly.
 
 
-# ---------------------------------------------------------------------------
 # Internal helpers — log key abbreviation + SQL row fetch
-# ---------------------------------------------------------------------------
 
 
 def _fetch_row(
@@ -321,7 +317,6 @@ def _dispatch_by_id(
     return data, "db_legacy"
 
 
-# ---------------------------------------------------------------------------
 # Path-mode helper: write bytes to a stdlib tempfile (anti-god-engine: no
 # settings imports, no domain-specific tempdir resolution; the engine
 # returns a raw stdlib tempfile path and the caller owns its lifecycle
@@ -334,7 +329,6 @@ def _dispatch_by_id(
 # narrowly scoped: every materialized file carries the
 # ``plenora-result-blob-`` prefix so cleanup helpers can identify and
 # safely target only files this engine produced.
-# ---------------------------------------------------------------------------
 
 
 # Explicit prefix for every tempfile this engine writes. The prefix
@@ -462,9 +456,7 @@ def cleanup_temp_path(path: Path) -> bool:
         return False
 
 
-# ---------------------------------------------------------------------------
 # ResultBlobLoader — Protocol-compliant fail-closed entry point
-# ---------------------------------------------------------------------------
 
 
 class ResultBlobLoader:

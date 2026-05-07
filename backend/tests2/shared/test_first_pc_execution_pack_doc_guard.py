@@ -81,9 +81,7 @@ def report_text() -> str:
     return _REPORT_TPL.read_text(encoding="utf-8")
 
 
-# =====================================================================
 # Dry-run pack section 0
-# =====================================================================
 
 
 def test_entry_section_exists(entry_section: str):
@@ -165,9 +163,7 @@ def test_entry_section_is_ascii_only(entry_section: str):
     )
 
 
-# =====================================================================
 # Report template
-# =====================================================================
 
 
 def test_report_template_exists():

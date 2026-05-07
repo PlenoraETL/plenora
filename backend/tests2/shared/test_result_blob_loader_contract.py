@@ -38,9 +38,7 @@ from tests2.shared._resource_loader_helpers import (
 pytestmark = [pytest.mark.unit, pytest.mark.shared, pytest.mark.contract]
 
 
-# ---------------------------------------------------------------------------
 # Fail-closed input validation
-# ---------------------------------------------------------------------------
 
 
 def test_load_rejects_wrong_kind():
@@ -91,9 +89,7 @@ def test_load_rejects_unsupported_mode():
             loader.load(ref, mode=mode)  # type: ignore[arg-type]
 
 
-# ---------------------------------------------------------------------------
 # SQL filter / tenant binding
-# ---------------------------------------------------------------------------
 
 
 def test_load_filters_by_group_id_when_not_superadmin():
@@ -148,9 +144,7 @@ def test_load_skips_group_filter_when_superadmin():
     assert out.data == b"payload"
 
 
-# ---------------------------------------------------------------------------
 # Storage-key dispatch (BYTEA vs object storage)
-# ---------------------------------------------------------------------------
 
 
 def test_load_dispatches_to_object_storage_when_storage_key_present():
@@ -264,9 +258,7 @@ def test_load_returns_size_bytes_zero_when_object_storage_disabled():
     assert out.size_bytes == 0
 
 
-# ---------------------------------------------------------------------------
 # Back-compat shim: get_result_data delegates correctly
-# ---------------------------------------------------------------------------
 
 
 def test_back_compat_shim_with_group_id_filters_sql():

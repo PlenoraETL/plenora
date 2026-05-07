@@ -35,10 +35,6 @@ from app.core.auth.dependencies import (
     require_not_esecutore,
     require_admin,
 )
-# BE-GO-READY-AUTH-ENGINE-013 Phase-7 contract fan-out: pure
-# contract symbols (`CurrentUser`, `group_filter`) come from the
-# shared contract module. DB-bound ownership helpers stay on
-# `app.core.auth.ownership`. Facade KEEP_COMPAT preserved.
 from app.shared.contracts.auth import CurrentUser, group_filter
 from app.core.auth.ownership import (
     assert_group_access,
@@ -85,9 +81,7 @@ def get_service() -> FeaturesService:
     return _service
 
 
-# =============================================================================
 # HELPER
-# =============================================================================
 
 def _mask_secrets(conn: ArcGISConnection) -> dict:
     """Oscura `password` e `client_secret` nelle response API delle
@@ -103,9 +97,7 @@ def _mask_secrets(conn: ArcGISConnection) -> dict:
     return data
 
 
-# =============================================================================
 # CRUD CONNESSIONI
-# =============================================================================
 
 def _check_arcgis_owner(connection_id: str, current_user: CurrentUser) -> ArcGISConnection:
     """
@@ -215,9 +207,7 @@ async def test_connection(connection_id: str, current_user: CurrentUser = Depend
         raise_typed_http(error_codes.INTERNAL_ERROR, status_code=500, message="Errore interno del server")
 
 
-# =============================================================================
 # BROWSE: SERVIZI E LAYER
-# =============================================================================
 
 @router.get("/connections/{connection_id}/services", response_model=BrowseServicesResponse)
 async def browse_services(connection_id: str, current_user: CurrentUser = Depends(require_not_esecutore)):
@@ -311,9 +301,7 @@ async def get_layer_schema(
         raise_typed_http(error_codes.INTERNAL_ERROR, status_code=500, message="Errore interno del server")
 
 
-# =============================================================================
 # QUERY (lettura dati)
-# =============================================================================
 
 @router.post("/query/preview")
 async def query_preview(
@@ -348,9 +336,7 @@ async def query_preview(
         raise_typed_http(error_codes.INTERNAL_ERROR, status_code=500, message="Errore interno del server")
 
 
-# =============================================================================
 # SCRITTURA
-# =============================================================================
 
 class WriteRequest(BaseModel):
     """Request per scrittura su layer esistente."""

@@ -71,9 +71,7 @@ _APP = _BACKEND_ROOT / "app"
 _WORKERS = _BACKEND_ROOT / "workers"
 
 
-# ---------------------------------------------------------------------------
 # A) Bytes-first preference for the Resource Engine
-# ---------------------------------------------------------------------------
 #
 # When ``app/+workers/`` callsites finally migrate to the engine
 # (post-resolver-unblock), bytes mode is the default. Path mode
@@ -219,9 +217,7 @@ def test_resource_engine_canonical_usage_docs_bytes_mode():
     )
 
 
-# ---------------------------------------------------------------------------
 # Deprecation pressure (BE-GO-READY-RESOURCE-ENGINE-014)
-# ---------------------------------------------------------------------------
 #
 # At batch 042 the production count of `mode="path"` callers
 # in `app/+workers/` is exactly ZERO. The empty allowlist
@@ -338,9 +334,7 @@ def test_temp_inventory_classification_buckets_match_brief():
     )
 
 
-# ---------------------------------------------------------------------------
 # B) Temp materialization inventory ratchet
-# ---------------------------------------------------------------------------
 #
 # Inventory of every ``NamedTemporaryFile`` + ``tempfile.mkdtemp``
 # + ``tempfile.TemporaryDirectory`` callsite in app/+workers/.
@@ -375,7 +369,6 @@ def test_temp_inventory_classification_buckets_match_brief():
 # an inventory entry fails the ratchet.
 
 _TEMP_INVENTORY: dict[tuple[str, int], tuple[str, str]] = {
-    # ---- NamedTemporaryFile ----
     # NOTE (BE-GO-READY-RESOURCE-ENGINE-006, R-005.1 closure): the
     # former entry at file_blob_materialization.py:77 (S3 download-
     # to-tempfile-then-read-bytes) has been migrated to bytes-first
@@ -449,7 +442,6 @@ _TEMP_INVENTORY: dict[tuple[str, int], tuple[str, str]] = {
         "callers should prefer mode='bytes'.",
     ),
 
-    # ---- TemporaryDirectory ----
     ("app/utils/dataframe.py", 291): (
         "DIR_MULTIFILE",
         "Shapefile zip extraction: SHP is multi-file (shp+shx+"
@@ -488,7 +480,6 @@ _TEMP_INVENTORY: dict[tuple[str, int], tuple[str, str]] = {
         "result_store.save_pipeline_result.",
     ),
 
-    # ---- mkdtemp ----
     ("app/services/file_service.py", 599): (
         "DIR_MULTIFILE",
         "SHP/GDB blob extraction destination: zip from BYTEA "

@@ -57,9 +57,7 @@ def _read(p: Path) -> str:
     return p.read_text(encoding="utf-8")
 
 
-# ---------------------------------------------------------------------------
 # 1. Per-policy decision lock
-# ---------------------------------------------------------------------------
 
 
 # (factory_callable, expected_code, expected_status, expected_message,
@@ -293,9 +291,7 @@ def test_rate_limit_exceeded_clamps_retry_after_to_min_one():
         assert decision.message == "Troppi tentativi. Riprova tra 1 secondi."
 
 
-# ---------------------------------------------------------------------------
 # 2. Anti-enumeration invariant encoding
-# ---------------------------------------------------------------------------
 
 
 def test_admin_target_not_visible_uniform_for_admin():
@@ -356,9 +352,7 @@ def test_user_not_found_or_disabled_is_single_function():
     assert len(defs) == 1
 
 
-# ---------------------------------------------------------------------------
 # 3. Header preservation
-# ---------------------------------------------------------------------------
 
 
 def test_token_factories_carry_www_authenticate_bearer():
@@ -381,9 +375,7 @@ def test_user_not_found_or_disabled_has_no_www_authenticate():
     assert decision.headers is None
 
 
-# ---------------------------------------------------------------------------
 # 4. raise_disclosure boundary
-# ---------------------------------------------------------------------------
 
 
 def test_raise_disclosure_raises_http_exception_with_typed_detail():
@@ -422,9 +414,7 @@ def test_raise_disclosure_preserves_retry_after_header():
     assert exc.detail["error"] == "auth_rate_limit_exceeded"
 
 
-# ---------------------------------------------------------------------------
 # 5. Source-bound delegation lock
-# ---------------------------------------------------------------------------
 
 
 _AUTH_DOMAIN_CODE_NAMES = [

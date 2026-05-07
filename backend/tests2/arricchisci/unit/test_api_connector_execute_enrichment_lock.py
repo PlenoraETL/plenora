@@ -42,9 +42,7 @@ pytestmark = [
 ]
 
 
-# =============================================================================
 # Builders per nodi / edges canvas
-# =============================================================================
 
 
 def _project_source(nid="src-1", project_id="p-up"):
@@ -84,9 +82,7 @@ def _canvas(nodes=None, edges=None):
     return {"nodes": nodes or [], "edges": edges or []}
 
 
-# =============================================================================
 # Fixture: patch tutti i collaborator di execute_enrichment
-# =============================================================================
 
 
 @pytest.fixture
@@ -166,9 +162,7 @@ def env(api_service):
         yield mocks
 
 
-# =============================================================================
 # Section 1: casi limite (empty canvas, exception top-level)
-# =============================================================================
 
 
 class TestExecuteEnrichmentBasics:
@@ -224,9 +218,7 @@ class TestExecuteEnrichmentBasics:
         assert env.svc._current_group_id == "grp-xyz"
 
 
-# =============================================================================
 # Section 2: loading dei nodi sorgente
-# =============================================================================
 
 
 class TestExecuteEnrichmentSourceNodes:
@@ -278,9 +270,7 @@ class TestExecuteEnrichmentSourceNodes:
         env.load_static.assert_called_once()
 
 
-# =============================================================================
 # Section 3: dispatch api_enrich → enricher/generator/rest_file
-# =============================================================================
 
 
 class TestExecuteEnrichmentApiEnrichDispatch:
@@ -453,9 +443,7 @@ class TestExecuteEnrichmentApiEnrichDispatch:
         assert "HTTP 422" in (result.get("error") or "")
 
 
-# =============================================================================
 # Section 5: risultato finale (dataframe / file / fallback / persistence)
-# =============================================================================
 
 
 class TestExecuteEnrichmentFinalResult:
@@ -543,9 +531,7 @@ class TestExecuteEnrichmentFinalResult:
         assert "Nessun risultato" in result["error"]
 
 
-# =============================================================================
 # Section 6: snapshot intermediate.db quando run_id e' presente
-# =============================================================================
 
 
 class TestExecuteEnrichmentIntermediateSnapshot:
@@ -604,9 +590,7 @@ class TestExecuteEnrichmentIntermediateSnapshot:
         mock_write_node.assert_not_called()
 
 
-# =============================================================================
 # Section 7: errore "API non trovata"
-# =============================================================================
 
 
 class TestExecuteEnrichmentResponseIncludesResultId:

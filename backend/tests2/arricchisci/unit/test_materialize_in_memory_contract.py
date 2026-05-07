@@ -32,9 +32,7 @@ def _make_connector():
     return c
 
 
-# =============================================================================
 # 1. Resolver input: DataFrame → bytes tuple, no tempfile
-# =============================================================================
 
 
 def test_resolve_dataframe_upstream_returns_bytes_tuple():
@@ -104,9 +102,7 @@ def test_resolve_unsupported_format_falls_back_to_xlsx():
     assert filename == "input.xlsx"  # fallback
 
 
-# =============================================================================
 # 2. Sentinel: NO tempfile creato per branch DataFrame
-# =============================================================================
 
 
 def test_no_tempfile_created_for_dataframe_branch(monkeypatch):
@@ -142,9 +138,7 @@ def test_no_tempfile_created_for_dataframe_branch(monkeypatch):
     assert len(calls) == 0
 
 
-# =============================================================================
 # 3. Multipart builder: tuple (bytes, filename) → BytesIO nel POST body
-# =============================================================================
 
 
 def test_multipart_builder_accepts_bytes_tuple():

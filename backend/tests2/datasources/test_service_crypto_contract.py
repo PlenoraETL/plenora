@@ -47,8 +47,6 @@ from app.shared import crypto
 pytestmark = [pytest.mark.unit, pytest.mark.security, pytest.mark.contract]
 
 
-# ─── Fixtures ────────────────────────────────────────────────────────────────
-
 @pytest.fixture(autouse=True)
 def _ensure_database_url_for_module_import(monkeypatch):
     """Placeholder DATABASE_URL per permettere l'import di
@@ -104,8 +102,6 @@ def fake_db(monkeypatch):
     return captured
 
 
-# ─── Helpers ─────────────────────────────────────────────────────────────────
-
 def _make_existing_row(ds_id: str, *, password_plain: str = "pwd-old",
                        private_key_plain: str = "PEM-OLD",
                        client_secret_plain: str = "secret-old",
@@ -143,8 +139,6 @@ def _make_existing_row(ds_id: str, *, password_plain: str = "pwd-old",
     }
 
 
-# ─── 1) Update re-encrypts new value ──────────────────────────────────────────
-
 def test_update_reencrypts_sensitive_fields_with_new_value(service, fake_db):
     """Blinda il contratto di re-encryption al save.
 
@@ -170,8 +164,6 @@ def test_update_reencrypts_sensitive_fields_with_new_value(service, fake_db):
     # La response API redatta (il caller non riceve plaintext)
     assert result is not None and result.password == "***"
 
-
-# ─── 2) Update skips masked placeholder ───────────────────────────────────────
 
 def test_update_skips_masked_triple_asterisk_preserving_stored_value(service, fake_db):
     """Blinda la disciplina di update "***": il client invia il
@@ -219,8 +211,6 @@ def test_update_skips_masked_triple_asterisk_preserving_stored_value(service, fa
     assert saved_config["description"] == "updated description"
 
 
-# ─── 3) Update doesn't leak group_id/created_by into config blob ──────────────
-
 def test_update_strips_group_id_and_created_by_from_saved_config_blob(service, fake_db):
     """Blinda la separazione schema DB vs JSON blob:
     ``group_id`` e ``created_by`` sono COLONNE DB separate, NON devono
@@ -246,8 +236,6 @@ def test_update_strips_group_id_and_created_by_from_saved_config_blob(service, f
         "created_by NON DEVE atterrare dentro il blob config (colonna DB separata)"
     )
 
-
-# ─── 4) _to_model redaction contract ──────────────────────────────────────────
 
 def test_to_model_with_redact_true_masks_all_four_sensitive_fields(service):
     """Blinda la superficie API-out: tutti e 4 i sensitive field sono
@@ -310,8 +298,6 @@ def test_to_model_with_redact_false_preserves_plaintext_for_internal_use(service
     assert model.client_secret == "PLAIN-SECRET"
 
 
-# ─── 5) Update non-existent returns None without raise ────────────────────────
-
 def test_update_nonexistent_datasource_returns_none_no_db_write(service, fake_db):
     """Blinda la policy di update su id inesistente: ritorna ``None``,
     NON solleva 404 al livello service (il router si occupa della 404).
@@ -333,9 +319,7 @@ def test_update_nonexistent_datasource_returns_none_no_db_write(service, fake_db
     )
 
 
-# =============================================================================
 # Bug #2 (2026-04-23): test_connection decrypt-fail policy
-# =============================================================================
 
 
 def test_get_full_config_strict_raises_on_undecryptable_field(service, monkeypatch):

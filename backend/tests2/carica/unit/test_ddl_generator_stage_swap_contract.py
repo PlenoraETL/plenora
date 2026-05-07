@@ -24,9 +24,7 @@ from app.core.carica.ddl_generator import DDLGenerator
 pytestmark = [pytest.mark.unit, pytest.mark.carica, pytest.mark.contract]
 
 
-# =============================================================================
 # generate_create_like — tabella shadow con stessa struttura
-# =============================================================================
 
 
 def test_postgres_create_like_uses_including_all():
@@ -94,9 +92,7 @@ def test_mssql_create_like_uses_select_into_empty():
     assert "LOGS__STG" in up
 
 
-# =============================================================================
 # generate_swap_rename — 3-way rename atomico per dialetto
-# =============================================================================
 
 
 def test_postgres_swap_uses_two_alter_renames():
@@ -173,9 +169,7 @@ def test_mssql_swap_uses_sp_rename():
     assert "LOGS__STG" in joined or "LOGS" in joined
 
 
-# =============================================================================
 # generate_drop_if_exists — cleanup shadow orfana
-# =============================================================================
 
 
 def test_drop_if_exists_oracle_uses_plsql_block():

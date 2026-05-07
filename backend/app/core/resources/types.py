@@ -28,9 +28,7 @@ from pathlib import Path
 from typing import Iterator, Literal, Optional, Protocol, runtime_checkable
 
 
-# ---------------------------------------------------------------------------
 # ResourceKind
-# ---------------------------------------------------------------------------
 #
 # v1 ships two kinds (`result_blob`, `file_source_blob`). Other
 # kinds remain in the audit (sec. 2.1) and join only after their
@@ -48,9 +46,7 @@ ResourceKind = Literal[
 OutputMode = Literal["bytes", "path", "stream"]
 
 
-# ---------------------------------------------------------------------------
 # ResourceRef — frozen typed reference, fail-closed by construction
-# ---------------------------------------------------------------------------
 
 
 @dataclass(frozen=True)
@@ -123,9 +119,7 @@ class ResourceRef:
             )
 
 
-# ---------------------------------------------------------------------------
 # Resource — frozen result envelope, byte-level only
-# ---------------------------------------------------------------------------
 
 
 @dataclass(frozen=True)
@@ -158,9 +152,7 @@ class Resource:
     is_temporary: bool = False
 
 
-# ---------------------------------------------------------------------------
 # ResourceLoader Protocol
-# ---------------------------------------------------------------------------
 
 
 @runtime_checkable
@@ -209,9 +201,7 @@ class ResourceLoader(Protocol):
         ...
 
 
-# ---------------------------------------------------------------------------
 # ResourceRegistry Protocol
-# ---------------------------------------------------------------------------
 
 
 class ResourceRegistry(Protocol):

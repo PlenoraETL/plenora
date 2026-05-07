@@ -158,12 +158,6 @@ def load_file_sources(
             {'file_source_id': fid},
         )
 
-        # Normalise columns from the canvas node before the load call so
-        # alias-resolved names can be forwarded to load_with_metadata as
-        # columns_metadata.  ResourceMetadata construction is delegated to
-        # SourceLoader.load_with_metadata (BE-GO-READY-ARCH-058-W1 API);
-        # the metadata travels out in LoadedResource.metadata rather than
-        # being reconstructed post-load from node_columns.
         node_columns = _nf(node, 'columns', [])
         node_columns_normalized = []
         for c in (node_columns or []):

@@ -45,9 +45,7 @@ def _invoke_emit(instance, schedule_id="sched-1"):
     return instance._emit_single_catchup(schedule_id, expected_last, now)
 
 
-# =============================================================================
 # HAPPY PATH — nessun error log
-# =============================================================================
 
 
 def test_emit_single_catchup_happy_path_no_error_log():
@@ -72,9 +70,7 @@ def test_emit_single_catchup_happy_path_no_error_log():
     assert crash_errors == []
 
 
-# =============================================================================
 # FAIL-OPEN — INSERT fail logga [CRASH] con exc_info
-# =============================================================================
 
 
 def test_emit_single_catchup_audit_insert_fail_logs_crash_with_exc_info():
@@ -108,9 +104,7 @@ def test_emit_single_catchup_audit_insert_fail_logs_crash_with_exc_info():
     assert crash_errors[0].kwargs.get("exc_info") is True
 
 
-# =============================================================================
 # BEAT-SAFE — nessuna propagazione su transient DB
-# =============================================================================
 
 
 def test_emit_single_catchup_beat_safe_no_propagation():
@@ -135,9 +129,7 @@ def test_emit_single_catchup_beat_safe_no_propagation():
     instance.app.send_task.assert_called_once()
 
 
-# =============================================================================
 # MESSAGGIO — menziona rischio duplicate emit
-# =============================================================================
 
 
 def test_emit_single_catchup_error_message_mentions_duplicate_risk():

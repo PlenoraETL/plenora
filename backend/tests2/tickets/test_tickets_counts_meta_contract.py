@@ -52,9 +52,7 @@ def mock_tdb(monkeypatch):
     return m
 
 
-# =============================================================================
 # META
-# =============================================================================
 
 
 def test_meta_returns_all_enums(mock_tdb):
@@ -96,9 +94,7 @@ def test_meta_categories_contains_expected_values(mock_tdb):
     assert expected.issubset(cats)
 
 
-# =============================================================================
 # COUNTS
-# =============================================================================
 
 
 def test_counts_superadmin_is_cross_group(mock_tdb):
@@ -194,9 +190,7 @@ def test_counts_filters_only_active_statuses(mock_tdb):
     assert "in_progress" in status_in
 
 
-# =============================================================================
 # RBAC esecutore
-# =============================================================================
 
 
 def test_meta_blocks_esecutore():

@@ -34,9 +34,7 @@ import pytest
 pytestmark = [pytest.mark.unit, pytest.mark.contract]
 
 
-# =============================================================================
 # Fixtures e helper
-# =============================================================================
 
 
 @pytest.fixture(autouse=True)
@@ -135,9 +133,7 @@ def _executed_sqls(cursor):
     return [c.args[0] for c in cursor.execute.call_args_list]
 
 
-# =============================================================================
 # 1. Row unica con storage_key (refcount=0) -> storage.delete chiamata
-# =============================================================================
 
 
 def test_delete_with_no_refs_proceeds_with_storage_cleanup(fake_storage):
@@ -174,9 +170,7 @@ def test_delete_with_no_refs_proceeds_with_storage_cleanup(fake_storage):
     assert cursor.execute.call_args_list[2].args[1] == ("file_abc",)
 
 
-# =============================================================================
 # 2. Row con altri ref -> storage.delete SKIPPATA + log
-# =============================================================================
 
 
 def test_delete_with_other_refs_skips_storage_cleanup_and_logs(fake_storage):
@@ -213,9 +207,7 @@ def test_delete_with_other_refs_skips_storage_cleanup_and_logs(fake_storage):
     assert any("DELETE FROM file_sources" in s for s in sqls)
 
 
-# =============================================================================
 # 3. Delete dell'ultimo ref -> storage.delete chiamata
-# =============================================================================
 
 
 def test_delete_last_remaining_ref_proceeds_with_storage_cleanup(fake_storage):
@@ -239,9 +231,7 @@ def test_delete_last_remaining_ref_proceeds_with_storage_cleanup(fake_storage):
     fake_storage.delete.assert_called_once_with("file-sources/batch_xyz/multi.gpkg")
 
 
-# =============================================================================
 # 4. BYTEA mode (storage_key=None) -> no siblings query, no storage interaction
-# =============================================================================
 
 
 def test_delete_bytea_mode_skips_siblings_and_storage(fake_storage):
@@ -272,9 +262,7 @@ def test_delete_bytea_mode_skips_siblings_and_storage(fake_storage):
     assert "DELETE FROM file_sources" in sqls[1]
 
 
-# =============================================================================
 # 5. Row inesistente -> ritorna False, no side effect
-# =============================================================================
 
 
 def test_delete_nonexistent_row_returns_false_no_side_effects(fake_storage):
@@ -302,9 +290,7 @@ def test_delete_nonexistent_row_returns_false_no_side_effects(fake_storage):
     assert len(sqls) == 2
 
 
-# =============================================================================
 # 6. E4: usa transaction() (single conn, atomic)
-# =============================================================================
 
 
 def test_delete_uses_transaction_context_manager(fake_storage):
@@ -332,9 +318,7 @@ def test_delete_uses_transaction_context_manager(fake_storage):
     assert cursor.execute.call_count == 3
 
 
-# =============================================================================
 # 7+8. SELECT FOR UPDATE su row corrente E sui siblings
-# =============================================================================
 
 
 def test_delete_uses_for_update_on_current_row_and_siblings(fake_storage):
@@ -365,9 +349,7 @@ def test_delete_uses_for_update_on_current_row_and_siblings(fake_storage):
     )
 
 
-# =============================================================================
 # 9+10. Storage delete OUTSIDE transaction (after commit)
-# =============================================================================
 
 
 def test_storage_delete_happens_after_db_commit_not_inside_transaction(
@@ -424,9 +406,7 @@ def test_storage_delete_happens_after_db_commit_not_inside_transaction(
     )
 
 
-# =============================================================================
 # 11. Race C: storage failure post-commit -> warn, row gia' deleted (True)
-# =============================================================================
 
 
 def test_storage_delete_failure_after_commit_does_not_undo_db_delete(
@@ -468,9 +448,7 @@ def test_storage_delete_failure_after_commit_does_not_undo_db_delete(
     assert "S3 5xx" in rendered
 
 
-# =============================================================================
 # 12. Race E: object_storage_enabled() False post-commit -> debug skip
-# =============================================================================
 
 
 def test_storage_delete_skipped_when_capability_disabled_post_commit(

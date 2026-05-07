@@ -71,9 +71,7 @@ def _read(p: Path) -> str:
     return p.read_text(encoding="utf-8")
 
 
-# ---------------------------------------------------------------------------
 # 1. Per-site code + message lock — disclosure.py
-# ---------------------------------------------------------------------------
 
 
 # (constant_name, italian_message_substring) per ogni decisione esposta
@@ -145,9 +143,7 @@ def test_disclosure_promotion_constant_and_message(
     )
 
 
-# ---------------------------------------------------------------------------
 # 2. Per-site code + message lock — ownership.py
-# ---------------------------------------------------------------------------
 
 
 _OWNERSHIP_PY_DISCLOSURE_LOCKS: List[Tuple[str, str]] = [
@@ -184,9 +180,7 @@ def test_ownership_py_delegates_to_disclosure_factory(
     )
 
 
-# ---------------------------------------------------------------------------
 # 3. Header preservation — WWW-Authenticate + Retry-After
-# ---------------------------------------------------------------------------
 
 
 def test_www_authenticate_bearer_preserved_in_disclosure_module() -> None:
@@ -231,9 +225,7 @@ def test_token_missing_factory_uses_typed_helper_with_header() -> None:
     )
 
 
-# ---------------------------------------------------------------------------
 # 4. Anti-enumeration invariants
-# ---------------------------------------------------------------------------
 
 
 def test_invariant_login_bad_creds_uniform_401() -> None:
@@ -327,9 +319,7 @@ def test_invariant_account_disabled_distinct_from_invalid_creds() -> None:
     )
 
 
-# ---------------------------------------------------------------------------
 # 5. Catalog completeness lock — 27 codici auth family
-# ---------------------------------------------------------------------------
 
 
 _AUTH_FAMILY_CODES = {

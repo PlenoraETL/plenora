@@ -33,9 +33,7 @@ from app.shared.exceptions import IntermediateWriteError
 pytestmark = [pytest.mark.unit, pytest.mark.contract, pytest.mark.regression]
 
 
-# =============================================================================
 # HAPPY PATH — nessun cambio al ramo success, return hash reale
-# =============================================================================
 
 
 def test_write_node_happy_path_returns_real_hash():
@@ -73,9 +71,7 @@ def test_write_node_happy_path_returns_real_hash():
     mock_meta.assert_not_called()
 
 
-# =============================================================================
 # PRIMARY FAIL → raise IntermediateWriteError (NO fake hash)
-# =============================================================================
 
 
 def test_write_node_primary_fail_raises_intermediate_write_error():
@@ -106,9 +102,7 @@ def test_write_node_primary_fail_raises_intermediate_write_error():
     assert exc_info.value.original_error is original_exc
 
 
-# =============================================================================
 # FALLBACK upsert_node_meta chiamato PRIMA del raise (resource guard)
-# =============================================================================
 
 
 def test_write_node_fallback_upsert_node_meta_called_before_raise():
@@ -144,9 +138,7 @@ def test_write_node_fallback_upsert_node_meta_called_before_raise():
     assert "primary atomic write fail" in kwargs["error_msg"]
 
 
-# =============================================================================
 # PRIMARY + FALLBACK entrambi falliscono → raise con original = primary
-# =============================================================================
 
 
 def test_write_node_primary_and_fallback_fail_still_raises_with_original():
@@ -180,9 +172,7 @@ def test_write_node_primary_and_fallback_fail_still_raises_with_original():
     assert len(debug_calls) == 1
 
 
-# =============================================================================
 # CHAIN TRACEBACK — `raise ... from e` preserva __cause__
-# =============================================================================
 
 
 def test_write_node_exception_chain_preserved():
@@ -208,9 +198,7 @@ def test_write_node_exception_chain_preserved():
     assert exc_info.value.original_error is original_exc
 
 
-# =============================================================================
 # BREADCRUMB — [CRASH] + exc_info=True
-# =============================================================================
 
 
 def test_write_node_logs_crash_with_exc_info():

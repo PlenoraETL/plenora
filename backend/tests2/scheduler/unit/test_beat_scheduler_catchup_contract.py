@@ -75,9 +75,7 @@ def _schedule_row(
 _NOW_FIXED = datetime(2026, 4, 16, 10, 0, tzinfo=timezone.utc)
 
 
-# =============================================================================
 # Skip quando flag catchup disabled
-# =============================================================================
 
 
 def test_skips_schedule_when_catchup_flag_disabled(scheduler):
@@ -113,9 +111,7 @@ def test_skips_schedule_when_disabled_globally(scheduler):
     assert "is_enabled" in query.lower()
 
 
-# =============================================================================
 # Emit task con kwargs corretti
-# =============================================================================
 
 
 def test_emits_task_with_triggered_by_catchup_and_scheduled_for(scheduler):
@@ -144,9 +140,7 @@ def test_emits_task_with_triggered_by_catchup_and_scheduled_for(scheduler):
     assert kwargs["scheduled_for"] == "2026-04-16T06:00:00+00:00"
 
 
-# =============================================================================
 # Update last_run per prevenire re-trigger
-# =============================================================================
 
 
 # Nota: il test `test_updates_last_run_to_expected_time_to_prevent_retrigger`
@@ -156,9 +150,7 @@ def test_emits_task_with_triggered_by_catchup_and_scheduled_for(scheduler):
 # test_beat_scheduler_catchup_no_premature_update_contract.py.
 
 
-# =============================================================================
 # Audit history
-# =============================================================================
 
 
 def test_writes_audit_entry_in_schedule_catchup_history(scheduler):
@@ -187,9 +179,7 @@ def test_writes_audit_entry_in_schedule_catchup_history(scheduler):
     assert "beat-test@host" in params_str              # leader_id
 
 
-# =============================================================================
 # Cap catchup consecutivi
-# =============================================================================
 
 
 def test_cap_exceeded_skips_emit_and_logs_warning(scheduler, caplog):
@@ -238,9 +228,7 @@ def test_cap_not_exceeded_still_emits(scheduler):
     scheduler.app.send_task.assert_called_once()
 
 
-# =============================================================================
 # Robustezza a DB error
-# =============================================================================
 
 
 def test_db_error_on_main_query_is_swallowed(scheduler, caplog):

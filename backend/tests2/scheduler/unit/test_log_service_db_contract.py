@@ -68,9 +68,7 @@ def _make_entry(svc, schedule_id: str = "schedule_abc123"):
     )
 
 
-# =============================================================================
 # 1. write_log → INSERT
-# =============================================================================
 
 
 def test_write_log_issues_insert(monkeypatch):
@@ -120,9 +118,7 @@ def test_write_log_serializes_steps_as_jsonb(monkeypatch):
     assert steps[1]["duration_ms"] == 2000
 
 
-# =============================================================================
 # 2. get_log → SELECT WHERE log_id
-# =============================================================================
 
 
 def test_get_log_by_id_returns_entry(monkeypatch):
@@ -163,9 +159,7 @@ def test_get_log_nonexistent_returns_none(monkeypatch):
     assert svc.get_log("sched_missing") is None
 
 
-# =============================================================================
 # 3. get_logs → paginato, ordinato timestamp DESC
-# =============================================================================
 
 
 def test_get_logs_paginated(monkeypatch):
@@ -243,9 +237,7 @@ def test_get_logs_status_filter_matches_pipeline_event(monkeypatch):
     assert captured_args["count"][1] == ("schedule_x", "PIPELINE_SUCCESS")
 
 
-# =============================================================================
 # 4. get_latest_log → ORDER BY DESC LIMIT 1
-# =============================================================================
 
 
 def test_get_latest_log_returns_first(monkeypatch):
@@ -278,9 +270,7 @@ def test_get_latest_log_returns_first(monkeypatch):
     assert "ORDER BY timestamp DESC LIMIT 1" in executed[1]
 
 
-# =============================================================================
 # 5. delete_* → DELETE
-# =============================================================================
 
 
 def test_delete_schedule_logs_issues_delete(monkeypatch):
@@ -318,9 +308,7 @@ def test_delete_logs_before_uses_timestamp_filter(monkeypatch):
     assert args[0].tzinfo is timezone.utc
 
 
-# =============================================================================
 # 6. FS-B3 invariant: nessuna dipendenza filesystem
-# =============================================================================
 
 
 def test_service_does_not_use_scheduler_logs_dir(monkeypatch):

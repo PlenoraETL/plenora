@@ -34,9 +34,7 @@ import pytest
 pytestmark = [pytest.mark.unit, pytest.mark.contract]
 
 
-# =============================================================================
 # Fixture — executor con project_service mockato
-# =============================================================================
 
 
 @pytest.fixture
@@ -83,9 +81,7 @@ def _make_res():
     }
 
 
-# =============================================================================
 # 1. Happy path — 1 sola chiamata, no retry
-# =============================================================================
 
 
 def test_save_happy_path_one_attempt(executor_with_mocks):
@@ -102,9 +98,7 @@ def test_save_happy_path_one_attempt(executor_with_mocks):
     ]
 
 
-# =============================================================================
 # 2-3. Retry su transient → succeed
-# =============================================================================
 
 
 def test_save_retries_on_transient_and_succeeds_on_2nd(executor_with_mocks):
@@ -143,9 +137,7 @@ def test_save_retries_on_deadlock_succeeds_on_3rd(executor_with_mocks):
     assert project_service.update_project_columns_metadata.call_count == 3
 
 
-# =============================================================================
 # 4. Fail dopo 3 retry transient → raise ColumnsMetadataSaveError
-# =============================================================================
 
 
 def test_save_raises_after_all_retries_exhausted(executor_with_mocks):
@@ -172,9 +164,7 @@ def test_save_raises_after_all_retries_exhausted(executor_with_mocks):
     assert exc_info.value.__cause__ is err
 
 
-# =============================================================================
 # 5-6. Eccezioni non-transient → raise immediato, 0 retry
-# =============================================================================
 
 
 def test_value_error_raises_immediately_no_retry(executor_with_mocks):
@@ -231,9 +221,7 @@ def test_attribute_error_raises_immediately_no_retry(executor_with_mocks):
     assert project_service.update_project_columns_metadata.call_count == 1
 
 
-# =============================================================================
 # 7. Messaggio errore esplicito per l'utente
-# =============================================================================
 
 
 def test_error_message_is_explicit_about_recovery(executor_with_mocks):
@@ -257,9 +245,7 @@ def test_error_message_is_explicit_about_recovery(executor_with_mocks):
     assert "downstream" in msg.lower() or "lineage" in msg.lower() or "tipi" in msg.lower()  # cosa non e' allineato
 
 
-# =============================================================================
 # 8. Se la 1° chiamata NON solleva, zero sleep (no backoff inutile)
-# =============================================================================
 
 
 def test_happy_path_does_not_sleep(executor_with_mocks, monkeypatch):
@@ -277,9 +263,7 @@ def test_happy_path_does_not_sleep(executor_with_mocks, monkeypatch):
     assert sleep_calls == [], f"Happy path non deve chiamare sleep: {sleep_calls}"
 
 
-# =============================================================================
 # 9. Backoff rispettato tra retry
-# =============================================================================
 
 
 def test_backoff_applied_between_retries(executor_with_mocks, monkeypatch):
@@ -311,9 +295,7 @@ def test_backoff_applied_between_retries(executor_with_mocks, monkeypatch):
     assert sleep_calls == [0.2, 0.5, 1.0]
 
 
-# =============================================================================
 # FULL-STACK CONTRACT — service reale, patch sul DB layer
-# =============================================================================
 #
 # I test precedenti mockavano direttamente `update_project_columns_metadata`:
 # scavalcavano completamente il service layer. Se il service avesse

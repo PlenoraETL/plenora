@@ -158,19 +158,15 @@ class SchemaInferenceService:
         
         schema: List[ColumnSchema] = []
         
-        # === NODO SOURCE (tabella DB) ===
         if node.type == "source":
             schema = self._infer_source_schema(node)
         
-        # === NODO PROJECT_SOURCE (riferimento a progetto ESTRAI) ===
         elif node.type == "project_source":
             schema = self._infer_project_source_schema(node)
         
-        # === NODO FILE_SOURCE (file esterno) ===
         elif node.type == "file_source":
             schema = self._infer_file_source_schema(node)
         
-        # === NODO TRANSFORM ===
         elif node.type == "transform":
             # Recupera schemi degli input
             input_schemas = self._get_input_schemas(
@@ -178,14 +174,12 @@ class SchemaInferenceService:
             )
             schema = self._infer_transform_schema(node, input_schemas, edges_by_target)
         
-        # === NODO API_ENRICH ===
         elif node.type == "api_enrich":
             input_schemas = self._get_input_schemas(
                 node.id, nodes_by_id, edges_by_target, project_id
             )
             schema = self._infer_api_enrich_schema(node, input_schemas)
         
-        # === NODO RESULT ===
         elif node.type == "result":
             # Passthrough: stesso schema dell'input
             input_schemas = self._get_input_schemas(
@@ -447,31 +441,26 @@ class SchemaInferenceService:
             "geo_envelope": pt,
             # spatial
             "geo_from_coords": lambda i, c, n: self._schema_geo_from_coords(i, c, n),
-            # batch 1 (utility/strings/spatial)
             "add_row_number": lambda i, c, n: self._schema_add_row_number(i, c, n),
             "uuid_generator": lambda i, c, n: self._schema_uuid_generator(i, c, n),
             "string_length": lambda i, c, n: self._schema_string_length(i, c, n),
             "date_extract": lambda i, c, n: self._schema_date_extract(i, c, n),
             "geo_distance": lambda i, c, n: self._schema_geo_distance(i, c, n),
             "geo_to_wkt": lambda i, c, n: self._schema_geo_to_wkt(i, c, n),
-            # batch 2 (geo metrics + base strings/binning)
             "geo_length": lambda i, c, n: self._schema_geo_length(i, c, n),
             "geo_perimeter": lambda i, c, n: self._schema_geo_perimeter(i, c, n),
             "geo_vertex_count": lambda i, c, n: self._schema_geo_vertex_count(i, c, n),
             "string_extract": lambda i, c, n: self._schema_string_extract(i, c, n),
             "bin": lambda i, c, n: self._schema_bin(i, c, n),
             "string_pad": lambda i, c, n: self._schema_string_pad(i, c, n),
-            # batch 3 (generative geo)
             "geo_bounds_extractor": lambda i, c, n: self._schema_geo_bounds_extractor(i, c, n),
             "geo_count_points_in_polygons": lambda i, c, n: self._schema_geo_count_points_in_polygons(i, c, n),
             "geo_line_builder": lambda i, c, n: self._schema_geo_line_builder(i, c, n),
             "geo_polygon_builder": lambda i, c, n: self._schema_geo_polygon_builder(i, c, n),
             "geo_point_on_surface": lambda i, c, n: self._schema_geo_point_on_surface(i, c, n),
             "geo_boundary": lambda i, c, n: self._schema_geo_boundary(i, c, n),
-            # batch 4 (reorder + voronoi)
             "reorder_columns": lambda i, c, n: self._schema_reorder_columns(i, c, n),
             "geo_voronoi": lambda i, c, n: self._schema_geo_voronoi(i, c, n),
-            # batch 5 (multi-input + lookup)
             "cross_join": lambda i, c, n: self._schema_cross_join(i, n),
             "geo_within": lambda i, c, n: self._schema_geo_within(i, n),
             "geo_overlay": lambda i, c, n: self._schema_geo_overlay(
@@ -482,7 +471,6 @@ class SchemaInferenceService:
             ),
             "geo_nearest": lambda i, c, n: self._schema_geo_nearest(i, c, n),
             "lookup": lambda i, c, n: self._schema_lookup(i, c, n),
-            # batch 6 (reshape + analytics deterministici)
             "table_diff": lambda i, c, n: self._schema_table_diff(i, c, n),
             "melt": lambda i, c, n: self._schema_melt(i, c, n),
             "statistics": lambda i, c, n: self._schema_statistics(i, c, n),
@@ -539,9 +527,7 @@ class SchemaInferenceService:
 
         return result
     
-    # =========================================================================
     # SCHEMA PER OPERAZIONI SPECIFICHE (base)
-    # =========================================================================
     # Ogni metodo _schema_xxx() simula l'effetto della trasformazione sullo
     # schema, senza eseguire l'operazione. Questo permette al frontend di
     # conoscere le colonne output PRIMA dell'esecuzione della pipeline.
@@ -923,9 +909,7 @@ class SchemaInferenceService:
         
         return result
     
-    # =========================================================================
     # SCHEMA PER OPERAZIONI GEOMETRICHE
-    # =========================================================================
     # Le operazioni geometriche possono cambiare il tipo della colonna geometry
     # (es: buffer punto → poligono, centroid poligono → punto) e aggiungere
     # colonne metriche (area_m2, length_m, distance_m).
@@ -1197,9 +1181,7 @@ class SchemaInferenceService:
         
         return result
     
-    # =========================================================================
     # TRASFORMAZIONI PRIVACY
-    # =========================================================================
     # Operazioni di anonimizzazione: hash MD5 e mascheramento dati.
     # Non cambiano il tipo colonna, ma possono aggiungere nuove colonne hash.
     
@@ -1265,9 +1247,7 @@ class SchemaInferenceService:
         
         return result
     
-    # =========================================================================
     # TRASFORMAZIONI BASE AGGIUNTIVE
-    # =========================================================================
     # Operazioni aggiunte successivamente: cast tipi, condizionali,
     # normalizzazione testo, creazione geometria da coordinate.
     
@@ -1409,16 +1389,6 @@ class SchemaInferenceService:
         
         return result
     
-    # =========================================================================
-    # BATCH 1 — BE-PHASE2-SCHEMA-INFER-002
-    # =========================================================================
-    # Handler dedicati per i 6 transform_op del primo batch di parity gap
-    # closure. Ogni handler corrisponde 1:1 alla shape di output del runtime
-    # in `app/core/manipola/transforms/{utility,strings,spatial}.py`.
-    #
-    # Convenzione: input + nuove colonne (mai mutazione del nome di colonne
-    # esistenti, salvo collisione esplicita gestita come "skip add"). Tutti
-    # gli handler sono pure: input → output, niente I/O, niente env.
 
     def _schema_add_row_number(
         self,
@@ -1661,12 +1631,6 @@ class SchemaInferenceService:
 
         return result
 
-    # =========================================================================
-    # BATCH 2 — BE-PHASE2-SCHEMA-INFER-003
-    # =========================================================================
-    # Handler dedicati per transform geo metrici (length/perimeter/vertex_count)
-    # e base strings/binning (string_extract, bin, string_pad).
-    # Stessa convenzione del batch 1: pure handler input -> output, niente I/O.
 
     def _schema_geo_length(
         self,
@@ -1907,15 +1871,6 @@ class SchemaInferenceService:
             ))
         return result
 
-    # =========================================================================
-    # BATCH 3 — BE-PHASE2-SCHEMA-INFER-004
-    # =========================================================================
-    # Handler dedicati per geometrie generative deterministiche
-    # (bounds_extractor, count_points_in_polygons, line_builder,
-    # polygon_builder, point_on_surface, boundary).
-    # Stessa convenzione dei batch 1+2: pure handler input -> output,
-    # niente I/O, niente env reads, type-hinted, riuso di
-    # `_copy_schema` per l'identita' di base.
 
     def _schema_geo_bounds_extractor(
         self,
@@ -2171,9 +2126,7 @@ class SchemaInferenceService:
                     break
         return result
 
-    # =========================================================================
     # BATCH 4 — BE-PHASE2-SCHEMA-INFER-005
-    # =========================================================================
     # Handler dedicati per il riordino colonne (`reorder_columns`) e per
     # `geo_voronoi`. Le altre 4 candidati (dedup_advanced,
     # geo_clean_topology, geo_make_valid, geo_explode) sono rows-only:
@@ -2259,13 +2212,6 @@ class SchemaInferenceService:
                 break
         return result
 
-    # =========================================================================
-    # BATCH 5 — BE-PHASE2-SCHEMA-INFER-006
-    # =========================================================================
-    # Handler dedicati per multi-input/spatial join + lookup.
-    # `geo_overlay` e `geo_symmetric_difference` riusano direttamente
-    # `_schema_geo_overlay` legacy (stessa shape: LEFT + RIGHT non-geom
-    # con suffisso `_2` su collisione + geometria combinata).
 
     def _schema_cross_join(
         self,
@@ -2429,14 +2375,6 @@ class SchemaInferenceService:
         ))
         return result
 
-    # =========================================================================
-    # BATCH 6 — BE-PHASE2-SCHEMA-INFER-007
-    # =========================================================================
-    # Handler dedicati per i 4 transform reshape/analytics deterministici
-    # residui: `table_diff`, `melt`, `statistics`, `window_function`.
-    # `flatten_json` e `transpose` restano in PASSTHROUGH_WRONG_GAP come
-    # `MIGRATE_NEXT_NEEDS_RUNTIME_CONTRACT` (output dipende dai dati a
-    # runtime, non inferibile staticamente).
 
     def _schema_table_diff(
         self,
@@ -2758,9 +2696,7 @@ class SchemaInferenceService:
         ))
         return result
 
-    # =========================================================================
     # BATCH 7 — BE-PHASE2-SCHEMA-INFER-009-ZERO-RESIDUALS
-    # =========================================================================
     # Handler dedicati per i 2 transform precedentemente classificati
     # `MIGRATE_NEXT_NEEDS_RUNTIME_CONTRACT` (output dipendente dai dati).
     # La direzione e' config-explicit: l'utente dichiara lo schema atteso
@@ -2957,9 +2893,7 @@ class SchemaInferenceService:
             is_calculated=col.is_calculated,
         ) for col in schema]
 
-    # =========================================================================
     # METODI DI SUPPORTO
-    # =========================================================================
 
     def _schema_passthrough(
         self, 
@@ -3019,9 +2953,7 @@ class SchemaInferenceService:
         return result
 
 
-# =============================================================================
 # VALIDAZIONE CONNESSIONI TRA NODI
-# =============================================================================
 # Verifica che i nodi collegati abbiano schemi compatibili
 # (es: la colonna di join esiste in entrambi i lati).
 

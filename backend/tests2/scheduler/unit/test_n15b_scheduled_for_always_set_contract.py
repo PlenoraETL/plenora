@@ -40,9 +40,7 @@ def _task_source() -> str:
     return inspect.getsource(schedule_task.schedule_pipeline_task)
 
 
-# =============================================================================
 # 1. Sentinel source: il task contiene il fallback now_iso quando None
-# =============================================================================
 
 
 def test_task_source_has_scheduled_for_fallback_logic():
@@ -58,9 +56,7 @@ def test_task_source_has_scheduled_for_fallback_logic():
     assert has_now, "Fallback non computa un timestamp 'now'."
 
 
-# =============================================================================
 # 2. Behavior: scheduled_for esplicito -> preservato
-# =============================================================================
 
 
 def test_task_preserves_explicit_scheduled_for():
@@ -88,9 +84,7 @@ def test_task_preserves_explicit_scheduled_for():
     assert captured.get("scheduled_for") == "2026-04-17T10:00:00+00:00"
 
 
-# =============================================================================
 # 3. Behavior: scheduled_for None + cron -> compute now
-# =============================================================================
 
 
 def test_task_computes_scheduled_for_when_none_for_cron():
@@ -149,9 +143,7 @@ def test_task_computes_scheduled_for_when_none_for_manual():
     assert captured.get("scheduled_for") is not None
 
 
-# =============================================================================
 # 4. Distinguibilita' di invocazioni diverse
-# =============================================================================
 
 
 def test_two_cron_invocations_without_scheduled_for_get_different_values():

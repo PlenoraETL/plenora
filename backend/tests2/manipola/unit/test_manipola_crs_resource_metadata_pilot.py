@@ -19,18 +19,14 @@ from shapely.geometry import Point
 pytestmark = [pytest.mark.unit, pytest.mark.manipola]
 
 
-# ---------------------------------------------------------------------------
 # Helper - import the function under test
-# ---------------------------------------------------------------------------
 
 def _func():
     from app.core.manipola.executor import _applica_crs_da_colonne
     return _applica_crs_da_colonne
 
 
-# ---------------------------------------------------------------------------
 # Fixtures
-# ---------------------------------------------------------------------------
 
 @pytest.fixture
 def plain_df():
@@ -51,9 +47,7 @@ def geo_df():
     )
 
 
-# ---------------------------------------------------------------------------
 # 1. Normal case: geometry + EPSG in type string -> GeoDataFrame with CRS
-# ---------------------------------------------------------------------------
 
 def test_applies_crs_when_geometry_column_and_epsg_present(plain_df):
     """The primary migration target: ResourceMetadata reads geometry_column
@@ -70,9 +64,7 @@ def test_applies_crs_when_geometry_column_and_epsg_present(plain_df):
     assert result.crs.to_epsg() == 4326
 
 
-# ---------------------------------------------------------------------------
 # 2. GeoDataFrame passthrough - not re-processed
-# ---------------------------------------------------------------------------
 
 def test_geodataframe_returned_unchanged(geo_df):
     """If the input is already a GeoDataFrame the function must return it
@@ -83,9 +75,7 @@ def test_geodataframe_returned_unchanged(geo_df):
     assert result is geo_df
 
 
-# ---------------------------------------------------------------------------
 # 3. No geometry column in node_columns -> plain DataFrame returned
-# ---------------------------------------------------------------------------
 
 def test_plain_df_returned_when_no_geometry_in_columns(plain_df):
     """node_columns contains only non-geometry types; the DataFrame must
@@ -96,9 +86,7 @@ def test_plain_df_returned_when_no_geometry_in_columns(plain_df):
     assert type(result) is pd.DataFrame
 
 
-# ---------------------------------------------------------------------------
 # 4. Geometry column not in df.columns -> plain DataFrame returned
-# ---------------------------------------------------------------------------
 
 def test_plain_df_returned_when_geometry_column_absent_from_dataframe(plain_df):
     """node_columns declares a geometry column but that column does not exist
@@ -110,9 +98,7 @@ def test_plain_df_returned_when_geometry_column_absent_from_dataframe(plain_df):
     assert type(result) is pd.DataFrame
 
 
-# ---------------------------------------------------------------------------
 # 5. Alias column name - alias takes priority over name
-# ---------------------------------------------------------------------------
 
 def test_alias_used_as_effective_column_name(plain_df):
     """When a canvas column carries an alias the alias is the actual column
@@ -129,9 +115,7 @@ def test_alias_used_as_effective_column_name(plain_df):
     assert result.crs.to_epsg() == 4326
 
 
-# ---------------------------------------------------------------------------
 # 6. Geometry type without EPSG -> plain DataFrame returned
-# ---------------------------------------------------------------------------
 
 def test_plain_df_returned_when_geometry_has_no_epsg(plain_df):
     """A geometry column with type 'geometry:polygon' (no EPSG component)
@@ -142,9 +126,7 @@ def test_plain_df_returned_when_geometry_has_no_epsg(plain_df):
     assert type(result) is pd.DataFrame
 
 
-# ---------------------------------------------------------------------------
 # 7. Empty node_columns -> plain DataFrame returned
-# ---------------------------------------------------------------------------
 
 def test_empty_node_columns_returns_plain_df(plain_df):
     fn = _func()
@@ -152,11 +134,9 @@ def test_empty_node_columns_returns_plain_df(plain_df):
     assert type(fn(plain_df, None)) is pd.DataFrame
 
 
-# ---------------------------------------------------------------------------
 # _estrai_srid_da_canvas — BE-GO-READY-ARCH-057-W5
 # Verifies the migration from extract_srid_from_column_type loop to
 # ResourceMetadata.from_columns_list.
-# ---------------------------------------------------------------------------
 
 
 def _executor():

@@ -67,9 +67,7 @@ def _boom() -> OperationalError:
     return OperationalError("stmt", {}, Exception("permission denied"))
 
 
-# =============================================================================
 # Le 4 introspection non devono mascherare errori reali
-# =============================================================================
 
 
 def test_table_exists_propagates_engine_error():
@@ -112,9 +110,7 @@ def test_get_tables_propagates_engine_error():
         writer.get_tables("public")
 
 
-# =============================================================================
 # validate() preserva il contratto Tuple[bool, str] traducendo il raise
-# =============================================================================
 
 
 def test_validate_reports_table_exists_failure_as_false_with_reason():

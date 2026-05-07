@@ -32,9 +32,7 @@ import pytest
 pytestmark = [pytest.mark.unit, pytest.mark.shared, pytest.mark.contract]
 
 
-# ---------------------------------------------------------------------------
 # 1. Happy paths
-# ---------------------------------------------------------------------------
 
 
 def test_simple_chain_a_b_c():
@@ -101,9 +99,7 @@ def test_single_node_returns_single_element():
     assert kahn_topological_order(["only"], []) == ["only"]
 
 
-# ---------------------------------------------------------------------------
 # 2. Edge filtering
-# ---------------------------------------------------------------------------
 
 
 def test_dangling_edge_source_unknown_is_dropped():
@@ -160,9 +156,7 @@ def test_duplicate_edges_increase_in_degree():
     assert order == ["A", "B"]
 
 
-# ---------------------------------------------------------------------------
 # 3. Cycle handling
-# ---------------------------------------------------------------------------
 
 
 def test_two_node_cycle_truncate_omits_both():
@@ -232,9 +226,7 @@ def test_graph_cycle_error_is_value_error_subclass():
     assert isinstance(err, ValueError)
 
 
-# ---------------------------------------------------------------------------
 # 4. Determinism
-# ---------------------------------------------------------------------------
 
 
 def test_input_order_determines_tie_break():
@@ -262,9 +254,7 @@ def test_repeated_calls_return_identical_lists():
     assert result1 == result2 == result3
 
 
-# ---------------------------------------------------------------------------
 # 5. Module boundary
-# ---------------------------------------------------------------------------
 
 
 def test_module_imports_no_domain_dependencies():
@@ -325,9 +315,7 @@ def test_public_surface_is_exactly_two_symbols():
         )
 
 
-# ---------------------------------------------------------------------------
 # 6. Adapter-shape regression: Arricchisci dict shape
-# ---------------------------------------------------------------------------
 #
 # Arricchisci pulls (id / source / target) from canvas dicts
 # before calling the shared utility. Lock the legacy chain

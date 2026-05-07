@@ -235,7 +235,6 @@ def execute_enrichment_task(
             logger.warning(f"[Task {task_id}] Intermediate: apertura run fallita (non bloccante): {_rie}")
             _run_id = None
 
-    # --- Apri run su log.db ---
     # Per eseguibili: niente log_runs/logs su DB.
     if not is_eseguibile:
         open_run(
@@ -300,21 +299,12 @@ def execute_enrichment_task(
         
         update_task_progress(self, 10, "API caricate, inizio elaborazione...", task_id=task_id)
 
-        # Ordine esecuzione topologico.
-        # BE-GO-READY-CONNECTION-ENGINE-009: callsite migrato dal
-        # wrapper KEEP_COMPAT `api_connection_service._get_execution_order`
-        # alla pure function modulo-level
-        # `canvas_orchestrator.get_execution_order(...)` (Kahn topo-sort
-        # deterministico). Mirror del callsite gia' migrato in
-        # `app/core/arricchisci/executor.py:172` dal batch
-        # TRANSFORMATION-ENGINE-014.
         from app.core.arricchisci.canvas_orchestrator import (
             get_execution_order,
         )
         execution_order = get_execution_order(nodes, edges)
         node_results = {}
         
-        # ─── Raggruppamento nodi per esecuzione parallela ───
         # compute_parallel_groups raggruppa api_enrich consecutivi che non
         # dipendono l'uno dall'output dell'altro (leggono solo colonne gia'
         # presenti nel DataFrame al momento del gruppo) → possono girare
@@ -378,8 +368,6 @@ def execute_enrichment_task(
 
             if node_type == "project_source":
                 update_task_progress(self, node_progress, f"Caricamento sorgente dati...", task_id=task_id)
-                # BE-GO-READY-TRANSFORMATION-ENGINE-020: passa il typed
-                # ctx esplicito invece di affidarsi al singleton state.
                 result = api_connection_service._load_source_project(
                     node_data, force_recalculate, ctx=ctx,
                 )
@@ -411,7 +399,6 @@ def execute_enrichment_task(
                     }
                 else:
                     update_task_progress(self, node_progress, f"Caricamento file...", task_id=task_id)
-                    # BE-GO-READY-TRANSFORMATION-ENGINE-020: typed ctx.
                     result = api_connection_service._load_file_source(
                         node_data, ctx=ctx,
                     )
@@ -420,7 +407,6 @@ def execute_enrichment_task(
 
             if node_type == "staticValues":
                 update_task_progress(self, node_progress, f"Processamento valori statici...", task_id=task_id)
-                # BE-GO-READY-TRANSFORMATION-ENGINE-020: typed ctx.
                 result = api_connection_service._load_static_values(
                     node_data, ctx=ctx,
                 )
@@ -451,7 +437,6 @@ def execute_enrichment_task(
             if node_type != "api_enrich":
                 return  # tipo sconosciuto → skip silente (era il comportamento del vecchio loop)
 
-            # ───── api_enrich ─────
             api_id = node_data.get("api_id")
             api_config = api_connections.get(api_id)
 
@@ -656,16 +641,6 @@ def execute_enrichment_task(
                         )
             node_results[node_id] = result
 
-            # Snapshot intermediate per nodo api_enrich.
-            # Phase 6 Batch 3B (2026-04-28): la policy globale
-            # `ARRICCHISCI_INTERMEDIATE_CHECKPOINTS=final_only` esclude i
-            # nodi api_enrich dagli snapshot intermedi. La nuova API
-            # `record_checkpoint_snapshot` ritorna immediatamente
-            # `recorded=False` PRIMA di toccare il DataFrame: niente
-            # `df.to_dict(full)`, niente thread daemon, niente DB.
-            # Pre-fix: ogni nodo materializzava le righe nel thread
-            # principale prima del thread daemon, doppia memoria + costo
-            # to_dict sincrono sul critical path.
             if _run_id:
                 try:
                     import pandas as _pd
@@ -687,7 +662,6 @@ def execute_enrichment_task(
                 except Exception as _sne:
                     logger.warning(f"[Task {task_id}] Intermediate write nodo {node_id} fallita: {_sne}")
 
-        # ─── Esecuzione per gruppi: single (qualunque tipo) o parallel (N api_enrich) ───
         for step_type, node_ids in parallel_groups:
             # Progress base del gruppo = progress del primo nodo nel execution_order
             idx_first = execution_order.index(node_ids[0])
@@ -1172,7 +1146,6 @@ def execute_enrichment_task(
                     logger.debug(f"cleanup async close_run fallito: {type(e).__name__}: {e}")
             threading.Thread(target=_async_close, daemon=True).start()
 
-        # --- Step tracking + close run su log.db ---
         if not is_eseguibile:
             _elapsed_ms = int((time.time() - _run_start) * 1000)
             _rows_ok = result.get("rows_processed", 0) or 0
@@ -1250,7 +1223,6 @@ def execute_enrichment_task(
         logger.error(f"[CRASH] [Task {task_id}] Errore: {error_message}", project_id=_log_pid)
 
         if not is_eseguibile:
-            # --- debug_payload ---
             try:
                 from app.utils.debug_payload_builder import DebugPayloadBuilder
                 import traceback as _tb
@@ -1305,9 +1277,7 @@ def execute_enrichment_task(
         }
 
 
-# =============================================================================
 # FUNZIONI HELPER PER IL TASK
-# =============================================================================
 
 
 def _cleanup_temp_file_sources(file_source_ids: Optional[List[str]], task_id: str) -> None:

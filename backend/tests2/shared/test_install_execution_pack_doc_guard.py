@@ -94,9 +94,7 @@ def docker_status_section(docker_text: str) -> str:
     return docker_text[start:end]
 
 
-# =====================================================================
 # Dry-run pack section 4.8
-# =====================================================================
 
 
 def test_rollback_section_exists(rollback_section: str):
@@ -195,9 +193,7 @@ def test_rollback_documents_what_it_skips(rollback_section: str):
     )
 
 
-# =====================================================================
 # install-docker.md "Status today" section
-# =====================================================================
 
 
 def test_docker_status_section_exists(docker_status_section: str):
@@ -290,9 +286,7 @@ def test_docker_status_section_points_back_to_dry_run_pack(
     )
 
 
-# =====================================================================
 # ASCII-only
-# =====================================================================
 
 
 def test_rollback_section_is_ascii_only(rollback_section: str):

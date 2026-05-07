@@ -43,12 +43,6 @@ from app.shared.error_envelope import raise_typed_http
 from app.utils.logger import get_logger
 
 
-# ============================================================
-# RUOLI
-# ============================================================
-# BE-GO-READY-AUTH-ENGINE-003: role constants live in a small shared
-# module so extracted auth routers can import them without importing
-# this whole `auth.py` module and creating a circular import.
 from app.core.auth.roles import (  # noqa: F401  (public compat re-export)
     VALID_ROLES,
     ROLES_ABOVE_VIEWER,
@@ -58,9 +52,7 @@ from app.core.auth.roles import (  # noqa: F401  (public compat re-export)
 
 logger = get_logger(__name__)
 
-# ============================================================
 # RATE LIMITING
-# ============================================================
 #
 # R-01: backend Redis-backed cluster-safe con fallback in-memory.
 # La logica Redis vive in `app.shared.login_rate_limiter`; qui restano
@@ -93,12 +85,6 @@ from app.core.auth.rate_limit_fallback import (
     clear_failed_logins_in_memory as _clear_failed_logins_in_memory,
 )
 
-# KEEP_COMPAT: alias dei membri dello store estratto. Identita' Python
-# preservata (`auth_mod._rate_lock is rate_limit_fallback._STORE.lock`)
-# cosi' un `with auth_mod._rate_lock:` nel test e un `self.lock` nel
-# nuovo modulo serializzano sulla stessa primitiva di sincronia. Idem
-# per `_failed_attempts`: l'oggetto `defaultdict(list)` e' lo stesso,
-# quindi `auth_mod._failed_attempts.clear()` svuota lo store reale.
 _rate_lock = _rate_limit_fallback_store.lock
 _failed_attempts = _rate_limit_fallback_store.failed_attempts
 
@@ -166,9 +152,7 @@ def _clear_failed_logins(ip: str):
     )
 
 
-# ============================================================
 # CONFIGURAZIONE JWT + UTILS
-# ============================================================
 #
 # STRUCT-005 Seam D: la logica vive in `app.shared.jwt_token`.
 # Qui restano i re-export per backward-compat con i test
@@ -187,27 +171,11 @@ from app.shared.jwt_token import (  # noqa: F401  (re-export pubblico)
     decode_token,
 )
 
-# ============================================================
-# MODELLI
-# ============================================================
-#
-# STRUCT-005 Seam C: i Pydantic DTO vivono in `app.core.auth.models`.
-# Qui restano i re-export per backward-compat con i test e i ~20 router
-# che fanno `from app.core.auth.auth import CurrentUser, ...`.
 
 from app.core.auth.models import (  # noqa: F401  (re-export pubblico)
     LoginRequest,
     TokenResponse,
     CurrentUser,
-    # BE-GO-READY-AUTH-ENGINE-021-USERS-GROUPS-REEXPORT-REMOVAL:
-    # `UserCreate`, `ResetPasswordRequest`, `GroupCreate` rimossi
-    # dal facade. Erano 1-occurrence-only in auth.py (zero uso
-    # interno); zero callsite via `from app.core.auth.auth import`
-    # in tutto l'albero (verificato whole-tree). Consumer canonici:
-    # `app.core.auth.users_router` (interno),
-    # `app.core.auth.groups_router` (interno),
-    # `app.shared.contracts.auth` (Phase-10 fan-out per tests +
-    # workers + futuri esterni).
     ChangePasswordRequest,
     UserResponse,
     GroupResponse,
@@ -217,16 +185,6 @@ from app.core.auth.models import (  # noqa: F401  (re-export pubblico)
     MFAStatusResponse,
 )
 
-# ============================================================
-# PASSWORD UTILS
-# ============================================================
-#
-# STRUCT-005 Seam A: la logica vive in `app.shared.password_hashing`.
-# Qui restano i re-export per backward-compat dei test e dei moduli
-# esterni che fanno `from app.core.auth.auth import hash_password, ...`.
-#
-# Nessun cambio comportamentale: i simboli importati sono gli stessi
-# oggetti del modulo nuovo (identita' preservata per monkeypatch).
 
 from app.shared.password_hashing import (  # noqa: F401  (re-export pubblico)
     _ph,
@@ -236,9 +194,7 @@ from app.shared.password_hashing import (  # noqa: F401  (re-export pubblico)
     _DUMMY_PASSWORD_HASH,
 )
 
-# ============================================================
 # DEPENDENCIES FASTAPI
-# ============================================================
 #
 # BE-GO-READY-AUTH-ENGINE-013-ROUTER-IMPORTS-OFF-AUTH-FACADE:
 # the five FastAPI dependency functions
@@ -285,48 +241,16 @@ from app.core.auth.dependencies import (  # noqa: F401  (re-export pubblico)
 # ::test_auth_no_longer_reexports_group_filter`).
 
 
-# ============================================================
-# OWNERSHIP CHECKS
-# ============================================================
-#
-# STRUCT-005 Seam B': i 6 helper puri vivono in `app.core.auth.ownership`.
-#
-# BE-GO-READY-AUTH-ENGINE-019: 4 re-export rimossi
-# (`_extract_group_and_id`, `assert_group_access`,
-# `compute_can_edit`, `assert_can_modify`). Tutti i 6 router
-# production (files / arricchisci / features / connections /
-# datasources / eseguibili) importano dal leaf.
-#
-# BE-GO-READY-AUTH-ENGINE-020: chiusura R-019.1 — IMDF migrato
-# al leaf (`app/core/imdf/router.py` ora ha import top-level
-# `from app.core.auth.ownership import assert_resource_visible`)
-# e i 2 test IMDF (`test_imdf_security_contract.py`,
-# `test_imdf_bundles_management_contract.py`) monkeypatchano via
-# `app.core.imdf.router.assert_resource_visible`. Il re-export
-# `assert_resource_visible` dal facade e' rimosso.
-#
-# BE-GO-READY-AUTH-ENGINE-018: le 3 dependency FastAPI
-# `require_*_owner` estratte nel leaf canonico
-# `app.core.auth.owner_dependencies`. Il cycle concern
-# `auth.py ↔ ownership.py` e' risolto da AUTH-ENGINE-005
-# (ownership.py non importa piu' da auth.py). Il re-export qui
-# preserva l'identita' per i caller legacy e per FastAPI Depends.
-# `_check_ownership` non e' piu' usato internamente in questo
-# modulo; il suo import e' rimosso.
-
 from app.core.auth.owner_dependencies import (  # noqa: F401  (re-export KEEP_COMPAT)
     require_file_owner,
     require_project_owner,
     require_schedule_owner,
 )
 
-# ============================================================
 # ROUTER AUTH
-# ============================================================
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
-# --- Login ---
 
 @router.post("/login", response_model=TokenResponse)
 @audit_action(action="auth.login")
@@ -387,7 +311,6 @@ def login(data: LoginRequest, request: Request):
         expires_in=ACCESS_TOKEN_EXPIRE_HOURS * 3600,
     )
 
-# --- Logout (revoca token via blacklist Redis) ---
 
 @router.post("/logout")
 @audit_action(action="auth.logout")
@@ -431,8 +354,6 @@ def logout(
     return {"ok": True, "blacklisted": True, "ttl": ttl}
 
 
-# --- Profilo personale ---
-
 @router.get("/me", response_model=UserResponse)
 def get_me(current_user: CurrentUser = Depends(get_current_user)):
     """Profilo dell'utente corrente. Qualsiasi autenticato."""
@@ -466,8 +387,6 @@ def change_password(
     logger.info(f"Password cambiata: {current_user.username}", op="change_password")
     return {"ok": True}
 
-
-# --- MFA TOTP (opt-in) ---
 
 @router.get("/mfa/status", response_model=MFAStatusResponse)
 def get_mfa_status(current_user: CurrentUser = Depends(get_current_user)):
@@ -524,38 +443,7 @@ def mfa_disable(
     return {"ok": True, "enabled": False}
 
 
-# --- Gestione utenti (admin only) ---
-# BE-GO-READY-AUTH-ENGINE-003-USERS-ROUTER-EXTRACTION:
-# i 5 endpoint admin CRUD `/auth/users*` vivono in
-# `app.core.auth.users_router`. `users_router` resta re-esportato
-# qui (KEEP_COMPAT) per non rompere `from app.core.auth.auth import
-# users_router` nei caller / test esistenti. `main.py` lo monta
-# direttamente dal modulo nuovo.
-#
-# BE-GO-READY-AUTH-ENGINE-021-USERS-GROUPS-REEXPORT-REMOVAL:
-# le 5 funzioni handler (`list_users`, `create_user`, `update_user`,
-# `reset_password`, `delete_user`) NON sono piu' re-esportate dal
-# facade. Zero callsite produzione (verificato whole-tree); i 3 test
-# che le chiamavano via `auth_mod.<name>` sono stati migrati a
-# `app.core.auth.users_router` (canonical handler home).
-
 from app.core.auth.users_router import users_router  # noqa: F401
 
-# ============================================================
-# ROUTER GRUPPI
-# ============================================================
-# BE-GO-READY-AUTH-ENGINE-004-GROUPS-ROUTER-EXTRACTION:
-# i 4 endpoint admin CRUD `/auth/groups*` vivono in
-# `app.core.auth.groups_router`. `groups_router` resta re-esportato
-# qui (KEEP_COMPAT) per non rompere `from app.core.auth.auth import
-# groups_router` nei caller esistenti (incluso `main.py` storico).
-#
-# BE-GO-READY-AUTH-ENGINE-021-USERS-GROUPS-REEXPORT-REMOVAL:
-# le 4 funzioni handler (`list_groups`, `create_group`,
-# `get_group_summary`, `delete_group`) NON sono piu' re-esportate
-# dal facade. Zero callsite produzione (verificato whole-tree); i 2
-# test che le toccavano (delete_group log + list_groups null safety)
-# sono stati migrati a `app.core.auth.groups_router`.
 
 from app.core.auth.groups_router import groups_router  # noqa: F401
-

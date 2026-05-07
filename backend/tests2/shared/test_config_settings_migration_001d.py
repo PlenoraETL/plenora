@@ -29,9 +29,7 @@ pytestmark = [pytest.mark.unit, pytest.mark.shared, pytest.mark.contract]
 _BACKEND_APP = Path(__file__).resolve().parent.parent.parent / "app"
 
 
-# ---------------------------------------------------------------------------
 # Defaults present + tipati + valori storici
-# ---------------------------------------------------------------------------
 
 @pytest.mark.parametrize(
     "key, expected_type, expected_default",
@@ -56,9 +54,7 @@ def test_default_present_and_typed(key, expected_type, expected_default):
     )
 
 
-# ---------------------------------------------------------------------------
 # Override env via Settings._converti_tipo_env
-# ---------------------------------------------------------------------------
 
 @pytest.mark.parametrize(
     "key, env_value, expected_type, expected",
@@ -84,9 +80,7 @@ def test_env_override_typed(monkeypatch, key, env_value, expected_type, expected
     )
 
 
-# ---------------------------------------------------------------------------
 # Source-bound: ogni consumer legge via settings.get
-# ---------------------------------------------------------------------------
 
 def _read(path: Path) -> str:
     return path.read_text(encoding="utf-8")
@@ -137,9 +131,7 @@ def test_admin_system_status_reads_db_schema_thresholds_via_settings():
     assert "os.getenv(\"DB_SCHEMA_ERROR_GB" not in src
 
 
-# ---------------------------------------------------------------------------
 # Behavior helpers (clamp / fallback)
-# ---------------------------------------------------------------------------
 
 def test_async_http_pool_size_default_returns_50():
     from app.shared.async_http import _get_pool_size

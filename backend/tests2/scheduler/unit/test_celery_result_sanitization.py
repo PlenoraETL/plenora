@@ -51,9 +51,7 @@ def _read(relpath: str) -> str:
     return (_BACKEND_ROOT / relpath).read_text(encoding="utf-8")
 
 
-# =============================================================================
 # SITO 1 — schedule_task.py (schedule_pipeline_task top-level)
-# =============================================================================
 
 
 def test_schedule_task_has_canonical_token_and_message():
@@ -71,9 +69,7 @@ def test_schedule_task_return_dict_no_longer_interpolates_str_e():
     assert "f'Errore fatale: {str(e)}'" not in src
 
 
-# =============================================================================
 # SITO 2 — carica_task.py:229-273 (outer task CARICA)
-# =============================================================================
 
 
 def test_carica_task_outer_has_canonical_token():
@@ -101,9 +97,7 @@ def test_carica_task_outer_preserves_admin_internal_message():
     assert 'error_message=error_msg_internal' in src
 
 
-# =============================================================================
 # SITO 3 — carica_task.py:357-365 (DataSource write)
-# =============================================================================
 
 
 def test_carica_task_datasource_has_canonical_token():
@@ -127,9 +121,7 @@ def test_carica_task_datasource_no_str_e_in_return():
     )
 
 
-# =============================================================================
 # SITO 4 — carica_task.py:511-521 (ArcGIS write)
-# =============================================================================
 
 
 def test_carica_task_arcgis_has_canonical_token():
@@ -146,9 +138,7 @@ def test_carica_task_arcgis_old_interpolation_removed():
     assert 'f"Errore scrittura ArcGIS: {str(e)}"' not in src
 
 
-# =============================================================================
 # SITO 5 — imdf_publish_task.py:260-268
-# =============================================================================
 
 
 def test_imdf_publish_task_has_canonical_token():
@@ -164,9 +154,7 @@ def test_imdf_publish_task_no_str_e_in_error_field():
     assert not pattern.search(src)
 
 
-# =============================================================================
 # SITO 6 — execution_manager.py:883-885 (_execute_carica)
-# =============================================================================
 
 
 def test_execution_manager_execute_carica_has_canonical_token():
@@ -191,9 +179,7 @@ def test_execution_manager_execute_carica_no_bare_str_e_return():
     )
 
 
-# =============================================================================
 # ANTI-REGRESSIONE AGGREGATA — nessun "error": str(e) nei return dict top-level
-# =============================================================================
 
 
 def test_no_str_e_in_return_dict_error_field_across_all_sites():

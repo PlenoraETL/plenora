@@ -42,9 +42,7 @@ from shapely.ops import unary_union
 from app.core.manipola.transforms.spatial import op_geo_clean_topology
 
 
-# ─────────────────────────────────────────────────────────────────────
 # Oracle: legacy impl (verbatim da spatial.py:1519 @ 7f024be)
-# ─────────────────────────────────────────────────────────────────────
 
 
 def _legacy_op_geo_clean_topology(
@@ -105,9 +103,7 @@ def _legacy_op_geo_clean_topology(
         return df
 
 
-# ─────────────────────────────────────────────────────────────────────
 # Comparison helpers
-# ─────────────────────────────────────────────────────────────────────
 
 
 def _geom_equivalent(gn, gl, area_tol_rel: float = 1e-6) -> tuple[bool, str]:
@@ -169,9 +165,7 @@ def _assert_gdf_equivalent(new_gdf, legacy_gdf, ctx):
         print(f"\n[{ctx}] match types: {match_types}")
 
 
-# ─────────────────────────────────────────────────────────────────────
 # Fixtures: dataset di poligoni con vari pattern topologici
-# ─────────────────────────────────────────────────────────────────────
 
 
 def _square(cx, cy, side):
@@ -292,9 +286,7 @@ _CASES = [
 ]
 
 
-# ─────────────────────────────────────────────────────────────────────
 # Tests
-# ─────────────────────────────────────────────────────────────────────
 
 
 @pytest.mark.perf_correctness

@@ -22,9 +22,7 @@ import hashlib
 pytestmark = [pytest.mark.unit, pytest.mark.manipola, pytest.mark.contract]
 
 
-# =============================================================================
 # 1. op_filter: silent failure -> raise
-# =============================================================================
 
 
 def test_filter_raises_on_missing_column():
@@ -49,9 +47,7 @@ def test_filter_works_on_existing_column():
     assert list(result["a"]) == [2, 3]
 
 
-# =============================================================================
 # 2. op_concat_columns skip_null vectorized
-# =============================================================================
 
 
 def test_concat_columns_skip_null_basic():
@@ -93,9 +89,7 @@ def test_concat_columns_no_skip_null_treats_as_empty():
     assert list(result["concatenated"]) == ["x-y", "-z"]
 
 
-# =============================================================================
 # 3. op_md5_hash vectorized
-# =============================================================================
 
 
 def _expected_md5(values, separator="\x1f", normalize=True):
@@ -154,9 +148,7 @@ def test_md5_hash_columns_sorted_alphabetically():
     assert r1["md5_hash"].iloc[0] == r2["md5_hash"].iloc[0]
 
 
-# =============================================================================
 # 4. op_table_diff correctness (no iterrows)
-# =============================================================================
 
 
 def test_table_diff_identifies_added_deleted_modified():

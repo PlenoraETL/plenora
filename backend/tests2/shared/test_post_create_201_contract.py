@@ -45,9 +45,6 @@ def admin_user() -> CurrentUser:
     )
 
 
-# ─── 1) POST /api/connections → 201 ─────────────────────────────────────────
-
-
 def test_post_connections_returns_201_on_create(admin_user, monkeypatch):
     """F3-B1: POST /api/connections → 201 Created (non 200 OK)."""
     from app.core.connections import router as connections_router_module
@@ -105,9 +102,6 @@ def test_post_connections_returns_201_on_create(admin_user, monkeypatch):
     assert body["name"] == "demo"
 
 
-# ─── 2) POST /api/api-connections → 201 ─────────────────────────────────────
-
-
 def test_post_api_connections_returns_201_on_create(admin_user, monkeypatch):
     """F3-B1: POST /api/api-connections → 201 Created."""
     from app.core.arricchisci import router as arr_router_module
@@ -143,9 +137,6 @@ def test_post_api_connections_returns_201_on_create(admin_user, monkeypatch):
     )
     body = response.json()
     assert body["id"] == "api-new-1"
-
-
-# ─── 3) POST /api/schedules → 201 ───────────────────────────────────────────
 
 
 def test_post_schedules_declares_201_on_route():

@@ -89,9 +89,7 @@ def _estimate_merge_output_rows(
     return matched_rows + left_unmatched_rows + right_unmatched_rows
 
 
-# =============================================================================
 # C3 round 3 fix 3: cycle detection runtime cross-project
-# =============================================================================
 #
 # Thread-local chain di project_id attualmente in esecuzione. Usata come
 # defense-in-depth contro cicli nei project_source: se _carica_sorgenti_progetto
@@ -205,9 +203,7 @@ class ManipolaExecutor:
         """Imposta callback per esecuzione ricorsiva progetti upstream."""
         self.orchestrator_callback = callback
 
-    # =========================================================================
     # ESECUZIONE COMPLETA
-    # =========================================================================
 
     def _init_security_context(self, project_id: str, *, strict: bool) -> Optional[str]:
         """Risolve il `group_id` del progetto corrente e lo ritorna.
@@ -227,7 +223,6 @@ class ManipolaExecutor:
         """
         resolved: Optional[str]
         try:
-            # BE-GO-READY-DB-ENGINE-009: leaf canonico invece del facade.
             from app.db.config.projects import get_project as _get_project
             _proj_row = _get_project(project_id)
             resolved = _proj_row.get("group_id") if _proj_row else None
@@ -376,7 +371,6 @@ class ManipolaExecutor:
                 logger=logger,
             )
 
-        # --- Step tracking ---
         append_step({
             "module":      "manipola",
             "status":      "success" if res.get("success") else "failure",
@@ -386,9 +380,7 @@ class ManipolaExecutor:
         })
         return res
 
-    # =========================================================================
     # ANTEPRIMA
-    # =========================================================================
 
     def preview(self, project_id: str, canvas: CanvasState, limit: int) -> Dict[str, Any]:
         """Preview: stessa pipeline dell'execute ma senza salvataggio."""
@@ -443,9 +435,7 @@ class ManipolaExecutor:
             logger.warning(f"[GESTITO] Errore preview MANIPOLA: {e}", op="preview")
             return {"success": False, "message": str(e)}
 
-    # =========================================================================
     # CARICAMENTO SORGENTI
-    # =========================================================================
 
     def _carica_sorgenti_progetto(
         self, canvas, dataframes, force_recalculate, run_id: str = None,
@@ -522,10 +512,6 @@ class ManipolaExecutor:
                     }
 
                 if materialized is None:
-                    # Compat residuo: progetti pre-R#1 con output solo
-                    # su disco, mai migrato al result store (DB/S3).
-                    # Emette warning quando scatta per misurare in prod
-                    # se e' ancora vivo.
                     output_dir = self.results_base_dir / source_project_id
                     fs_file = find_latest_output_file(output_dir)
                     if fs_file:
@@ -570,7 +556,6 @@ class ManipolaExecutor:
             try:
                 from app.utils.logger import open_run
                 from app.core.intermediate import db as idb
-                # BE-GO-READY-DB-ENGINE-004: leaf canonico invece del facade.
                 from app.db.config.projects import get_project as _get_project
                 upstream_meta = _get_project(source_project_id) or {}
                 open_run(
@@ -779,9 +764,7 @@ class ManipolaExecutor:
                 return {"success": False, "message": f"Errore StaticValues: {e}"}
         return None
 
-    # =========================================================================
     # TRASFORMAZIONI
-    # =========================================================================
 
     def _applica_trasformazioni(
         self, canvas, dataframes, run_id: str = None,
@@ -802,11 +785,6 @@ class ManipolaExecutor:
         sorted_nodes = self._ordina_topologicamente(process_nodes, canvas.edges)
         
         current_df = None
-        # BE-GO-READY-ARCH-059-W2: parse canvas nodes once through CanvasGraph
-        # at the entry boundary. Replaces the local node_map_all dict and
-        # removes the dual isinstance(pos, dict)/getattr(pos, 'y') branch:
-        # model_dump() inside from_nodes_edges always produces plain dicts,
-        # so position is always a dict in graph.raw(...).
         graph = CanvasGraph.from_nodes_edges(canvas.nodes, [])
 
         # Helper per estrarre targetHandle dall'edge (da attributo o da ID)
@@ -860,18 +838,6 @@ class ManipolaExecutor:
             # Salva risultato per nodi successivi
             dataframes[node.id] = current_df
 
-            # Snapshot checkpoint intermediate (non bloccante).
-            # Phase 6 Batch 2: la policy globale
-            # `MANIPOLA_INTERMEDIATE_CHECKPOINTS` (default `critical`)
-            # decide se questo specifico nodo va salvato, PRIMA di
-            # toccare il DataFrame. Per nodi `transform` non-critical
-            # `record_checkpoint_snapshot` ritorna subito con
-            # `recorded=False`: zero `df.to_dict`, zero hash, zero DB.
-            # Per `multi_join` e per i transform critical (join, filter,
-            # aggregate, geo_explode, ...) registra meta + hash + preview
-            # secondo `INTERMEDIATE_PERSISTENCE_MODE` globale.
-            # Pre-fix: write_node + df.to_dict(full) DOPO ogni transform,
-            # bloccante sul critical path su DataFrame grandi.
             if run_id and current_df is not None:
                 try:
                     from app.core.intermediate.snapshot import record_checkpoint_snapshot
@@ -965,7 +931,6 @@ class ManipolaExecutor:
         # Inizia con il primo DataFrame
         result = inputs[0].copy()
 
-        # === BE-GO-READY-TRANSFORMATION-ENGINE-002 — Multi-join OOM guard ===
         # Multi-join sequenziale: ogni step `pd.merge` puo' inflate
         # l'output rispetto agli input se le chiavi non sono unique.
         # Senza un guard, un'esplosione al merge step k si propaga ai
@@ -1088,9 +1053,7 @@ class ManipolaExecutor:
             return inputs[0] if inputs else pd.DataFrame()
         return get_executor().execute(transform_op, inputs, node)
 
-    # =========================================================================
     # GROUP BY
-    # =========================================================================
 
     def _applica_group_by(self, df, result_node):
         """Applica GROUP BY dal nodo risultato (count, sum, mean, min, max, std)."""
@@ -1145,9 +1108,7 @@ class ManipolaExecutor:
             logger.error(f"[CRASH] Errore GROUP BY: {e}", exc_info=True)
             return df
 
-    # =========================================================================
     # SALVATAGGIO
-    # =========================================================================
 
     def _salva_risultato(self, project_id, result_node, df, canvas=None):
         """Salva il risultato finale nel formato richiesto."""
@@ -1225,9 +1186,7 @@ class ManipolaExecutor:
                 return meta.crs_epsg
         return None
 
-    # =========================================================================
     # MAPPA TIPI CANVAS
-    # =========================================================================
 
     def _costruisci_mappa_tipi_canvas(self, canvas):
         """Costruisce mappa colonna->tipo dal canvas. Include suffissi _L/_R per JOIN."""

@@ -160,9 +160,7 @@ def test_cleanup_old_logs_skips_when_retention_disabled():
     mock_transaction.assert_not_called()
 
 
-# =============================================================================
 # Schedule logs retention (#33)
-# =============================================================================
 
 
 def test_cleanup_old_schedule_logs_calls_log_service_with_cutoff():

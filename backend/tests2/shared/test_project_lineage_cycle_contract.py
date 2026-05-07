@@ -30,9 +30,7 @@ def _sources_fn_from(graph: Dict[str, List[str]]):
     return fn
 
 
-# =============================================================================
 # No cycle
-# =============================================================================
 
 
 def test_linear_chain_has_no_cycle():
@@ -67,9 +65,7 @@ def test_unrelated_subtree_is_ignored():
     assert result is None
 
 
-# =============================================================================
 # Cycle detection
-# =============================================================================
 
 
 def test_detects_self_reference():
@@ -113,9 +109,7 @@ def test_cycle_reached_through_intermediate_branch():
     assert "C" in result
 
 
-# =============================================================================
 # Error class
-# =============================================================================
 
 
 def test_cycle_error_has_readable_chain_attribute():
@@ -127,9 +121,7 @@ def test_cycle_error_has_readable_chain_attribute():
     assert "A" in msg and "B" in msg
 
 
-# =============================================================================
 # Robustness
-# =============================================================================
 
 
 def test_get_sources_fn_returning_none_treated_as_no_sources():

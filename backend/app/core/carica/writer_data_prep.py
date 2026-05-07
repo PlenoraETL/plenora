@@ -103,9 +103,7 @@ class DataPrepMixin:
     pre-scrittura DB. Pure data transformation, zero transaction semantics.
     """
 
-    # ========================================================================
     # PREPARAZIONE DATAFRAME
-    # ========================================================================
 
     def _prepare_dataframe(self, df: pd.DataFrame) -> pd.DataFrame:
         """Prepara il DataFrame per la scrittura.
@@ -231,9 +229,7 @@ class DataPrepMixin:
         # Fallback
         return str(value)
 
-    # ========================================================================
     # COSTRUZIONE PARAMETRI SQL
-    # ========================================================================
 
     def _build_params(
         self,

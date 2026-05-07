@@ -25,7 +25,6 @@ import pytest
 pytestmark = [pytest.mark.unit, pytest.mark.observability, pytest.mark.contract]
 
 
-# ---------------------------------------------------------------------------
 # Autouse fixture for BE-GO-READY-BOOTSTRAP-ENGINE-015 — default-True
 # `is_bootstrapped()`. Without this fixture, the conftest stubs
 # `app.bootstrap.bootstrap` to a no-op which leaves `_BOOT_COMPLETE`
@@ -33,7 +32,6 @@ pytestmark = [pytest.mark.unit, pytest.mark.observability, pytest.mark.contract]
 # return False and breaking every existing pre-015 readiness test.
 # Tests that exercise the False branch override via
 # `patch.object(h, "check_bootstrap_complete", ...)`.
-# ---------------------------------------------------------------------------
 
 
 @pytest.fixture(autouse=True)
@@ -43,9 +41,7 @@ def _stub_is_bootstrapped_default_true(monkeypatch):
     )
 
 
-# ---------------------------------------------------------------------------
 # 1. Module purity: leaf module, no FastAPI / Starlette
-# ---------------------------------------------------------------------------
 
 
 def test_module_does_not_import_fastapi_or_starlette():
@@ -89,9 +85,7 @@ def test_module_exposes_public_api():
     assert HealthPayload is not None
 
 
-# ---------------------------------------------------------------------------
 # 2. HealthPayload dataclass — frozen
-# ---------------------------------------------------------------------------
 
 
 def test_health_payload_is_frozen():
@@ -110,9 +104,7 @@ def test_health_payload_fields():
     assert p.body == {"status": "unhealthy", "checks": {}}
 
 
-# ---------------------------------------------------------------------------
 # 3. check_postgres — fail-CLOSED on exception
-# ---------------------------------------------------------------------------
 
 
 def _make_pg_stub_conn(rows=None, default_row=None):
@@ -193,9 +185,7 @@ def test_check_postgres_fail_closed_on_exception():
     assert detail == "RuntimeError: DB down"
 
 
-# ---------------------------------------------------------------------------
 # 4. check_redis — fail-CLOSED on exception
-# ---------------------------------------------------------------------------
 
 
 def test_check_redis_ok_on_ping_true():
@@ -236,9 +226,7 @@ def test_check_redis_fail_closed_on_exception():
     assert detail == "ConnectionError: boom"
 
 
-# ---------------------------------------------------------------------------
 # 5. check_pool_headroom — fail-OPEN on exception (preserved fallback)
-# ---------------------------------------------------------------------------
 
 
 def test_check_pool_headroom_fail_open_on_introspection_error():
@@ -315,9 +303,7 @@ def test_check_pool_headroom_does_not_import_private_pool_symbols():
     assert "get_pool_headroom" in src
 
 
-# ---------------------------------------------------------------------------
 # 6. check_migrations_aligned — fail-OPEN on exception
-# ---------------------------------------------------------------------------
 
 
 def test_check_migrations_aligned_ok_when_no_pending():
@@ -360,9 +346,7 @@ def test_check_migrations_aligned_fail_open_on_exception():
     assert "check skipped" in detail
 
 
-# ---------------------------------------------------------------------------
 # 7. gather_liveness — 200/503 + 2 checks
-# ---------------------------------------------------------------------------
 
 
 def test_gather_liveness_returns_200_when_pg_and_redis_ok():
@@ -421,9 +405,7 @@ def test_gather_liveness_only_2_checks_in_body():
     assert set(payload.body["checks"].keys()) == {"postgres", "redis"}
 
 
-# ---------------------------------------------------------------------------
 # 8. gather_readiness — 200/503 + 5 checks (BE-GO-READY-BOOTSTRAP-ENGINE-011)
-# ---------------------------------------------------------------------------
 
 
 def test_gather_readiness_returns_200_when_all_8_ok():
@@ -566,9 +548,7 @@ def test_gather_readiness_returns_503_on_reconciliation_backlog_over_threshold()
     assert "lost=42" in payload.body["checks"]["reconciliation_backlog"]["detail"]
 
 
-# ---------------------------------------------------------------------------
 # 8.6 check_bootstrap_complete — BE-GO-READY-BOOTSTRAP-ENGINE-015
-# ---------------------------------------------------------------------------
 
 
 def test_check_bootstrap_complete_returns_ok_when_bootstrapped(monkeypatch):
@@ -695,10 +675,8 @@ def test_gather_liveness_does_not_include_bootstrap_complete():
     assert set(payload.body["checks"].keys()) == {"postgres", "redis"}
 
 
-# ---------------------------------------------------------------------------
 # 8.5 check_object_storage — capability-aware + boto3 not imported here
 # (BE-GO-READY-BOOTSTRAP-ENGINE-011)
-# ---------------------------------------------------------------------------
 
 
 def test_check_object_storage_returns_skipped_when_capability_off():
@@ -826,9 +804,7 @@ def test_check_object_storage_does_not_import_boto3_directly():
     assert "get_runtime_object_storage" in src
 
 
-# ---------------------------------------------------------------------------
 # 9. Source-bound: main.py delegates to gather_*, no inline _check_*
-# ---------------------------------------------------------------------------
 
 
 def test_main_py_delegates_health_routes_to_health_module():
@@ -849,10 +825,8 @@ def test_main_py_delegates_health_routes_to_health_module():
     assert "def _check_migrations_aligned" not in src
 
 
-# ---------------------------------------------------------------------------
 # 10. check_reconciliation_backlog — threshold-based readiness
 # (BE-GO-READY-STORAGE-ENGINE-015)
-# ---------------------------------------------------------------------------
 
 
 def _mk_count_row(state: str, domain: str, count: int):

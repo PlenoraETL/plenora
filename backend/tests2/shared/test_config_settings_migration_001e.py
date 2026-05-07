@@ -29,9 +29,7 @@ pytestmark = [pytest.mark.unit, pytest.mark.shared, pytest.mark.contract]
 _BACKEND_APP = Path(__file__).resolve().parent.parent.parent / "app"
 
 
-# ---------------------------------------------------------------------------
 # Default present + tipato per la chiave migrata (INTERMEDIATE_ARTIFACT_PREFIX)
-# ---------------------------------------------------------------------------
 
 def test_intermediate_artifact_prefix_default_present_and_typed():
     assert "INTERMEDIATE_ARTIFACT_PREFIX" in Settings.DEFAULTS
@@ -45,9 +43,7 @@ def test_intermediate_artifact_prefix_env_override(monkeypatch):
     assert settings.get("INTERMEDIATE_ARTIFACT_PREFIX") == "custom-x/y"
 
 
-# ---------------------------------------------------------------------------
 # Source-bound: artifact_writer ora legge via settings.get
-# ---------------------------------------------------------------------------
 
 def _read(path: Path) -> str:
     return path.read_text(encoding="utf-8")
@@ -71,11 +67,9 @@ def test_artifact_writer_does_not_import_os_anymore():
             )
 
 
-# ---------------------------------------------------------------------------
 # Validator boot-time: i 3 cloud_backends keys restano direct os.getenv
 # (intentional, ADR-0021 allowlist). Verifica che NON siano stati
 # silenziosamente migrati a settings.get.
-# ---------------------------------------------------------------------------
 
 def test_validate_storage_config_keeps_os_getenv_for_log_archive_key_prefix():
     src = _read(_BACKEND_APP / "shared" / "cloud_backends.py")
@@ -103,10 +97,8 @@ def test_validator_documents_intentional_direct_read():
     assert "BE-CONFIG-001E + ADR-0021" in src
 
 
-# ---------------------------------------------------------------------------
 # Runtime path: le 3 chiavi log archive sono lette via property in
 # beat_scheduler. Verifica la parita' tra Settings.DEFAULTS e property.
-# ---------------------------------------------------------------------------
 
 def test_log_archive_runtime_path_via_settings_properties():
     """Beat scheduler usa `settings.LOG_ARCHIVE_*` / `settings.AUDIT_RETENTION_DAYS`

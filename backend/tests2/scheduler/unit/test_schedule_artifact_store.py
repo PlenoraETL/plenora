@@ -32,9 +32,7 @@ def project_layout(tmp_path):
     return results_dir, project_dir
 
 
-# ---------------------------------------------------------------------------
 # DI: results_dir esplicito vs default da settings
-# ---------------------------------------------------------------------------
 
 
 def test_init_uses_explicit_results_dir(tmp_path):
@@ -63,9 +61,7 @@ def test_init_falls_back_to_settings_when_results_dir_none(monkeypatch, tmp_path
     assert store.archive("ghost", "schedule_x") is None
 
 
-# ---------------------------------------------------------------------------
 # Path success: archivia file in cartella timestamped
-# ---------------------------------------------------------------------------
 
 
 def test_archive_all_files_when_output_file_blank(project_layout):
@@ -137,9 +133,7 @@ def test_archive_excludes_existing_runs_subdir(tmp_path):
     assert "runs" not in archived_names
 
 
-# ---------------------------------------------------------------------------
 # Path errore: ritorna None senza propagare
-# ---------------------------------------------------------------------------
 
 
 def test_archive_returns_none_when_project_dir_missing(tmp_path):

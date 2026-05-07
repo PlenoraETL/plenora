@@ -58,8 +58,6 @@ from app.core.scheduler.policy_engine import PolicyEngine
 pytestmark = [pytest.mark.unit, pytest.mark.contract, pytest.mark.scheduler]
 
 
-# ─── 1) should_retry progression happy path ──────────────────────────────
-
 @pytest.mark.parametrize(
     "attempt,expected_wait",
     [(0, 60), (1, 300), (2, 900)],
@@ -89,8 +87,6 @@ def test_should_retry_returns_true_and_progressive_backoff_within_max(
     )
 
 
-# ─── 2) should_retry exhaustion ──────────────────────────────────────────
-
 def test_should_retry_returns_false_and_zero_wait_when_max_retries_reached():
     """Blinda il contract di terminazione retry: quando
     ``current_attempt >= max_retries``, ``should_retry`` DEVE ritornare
@@ -112,8 +108,6 @@ def test_should_retry_returns_false_and_zero_wait_when_max_retries_reached():
     assert should_over is False
     assert wait_over == 0
 
-
-# ─── 3) Backoff list shorter than max_retries → repeat last value ───────
 
 def test_should_retry_uses_last_backoff_value_when_list_shorter_than_max():
     """Blinda il contract documentato nel source: *"Se ci sono più retry
@@ -139,8 +133,6 @@ def test_should_retry_uses_last_backoff_value_when_list_shorter_than_max():
     assert PolicyEngine.should_retry(policy, 4) == (True, 60)
 
 
-# ─── 4) Empty backoff list → fallback 60s ────────────────────────────────
-
 def test_should_retry_falls_back_to_60s_when_backoff_list_is_empty():
     """Blinda il fallback di sicurezza quando la config ha
     ``retry_backoff_seconds=[]``: ``should_retry`` DEVE ritornare
@@ -163,8 +155,6 @@ def test_should_retry_falls_back_to_60s_when_backoff_list_is_empty():
         f"Backoff list vuota DEVE fallback a 60s, ottenuto {wait}s"
     )
 
-
-# ─── 5) evaluate_result three-way ────────────────────────────────────────
 
 @pytest.mark.parametrize(
     "success,rows_written,rows_skipped,expected_status",
@@ -198,8 +188,6 @@ def test_evaluate_result_classifies_status_by_success_and_skipped(
 
     assert status == expected_status
 
-
-# ─── 6) decide_after_failure: retry scheduled ────────────────────────────
 
 def test_decide_after_failure_schedules_retry_with_warning_and_increments_attempt(
     schedule_config,
@@ -236,8 +224,6 @@ def test_decide_after_failure_schedules_retry_with_warning_and_increments_attemp
     }
 
 
-# ─── 7) decide_after_failure: retry exhausted ────────────────────────────
-
 def test_decide_after_failure_emits_give_up_with_error_and_preserves_attempt(
     schedule_config,
 ):
@@ -273,8 +259,6 @@ def test_decide_after_failure_emits_give_up_with_error_and_preserves_attempt(
         "log_level": "ERROR",
     }
 
-
-# ─── 8) decide_after_success: partial vs completed ───────────────────────
 
 @pytest.mark.parametrize(
     "rows_written,rows_skipped,expected_status,expected_event,expected_log_level",
@@ -313,8 +297,6 @@ def test_decide_after_success_differentiates_partial_from_completed(
         "log_level": expected_log_level,
     }
 
-
-# ─── 9) Idempotency / pure function contract ─────────────────────────────
 
 def test_policy_engine_is_stateless_and_does_not_mutate_policy(schedule_config):
     """Blinda il contract stateless documentato in source: *"Stateless:
@@ -360,8 +342,6 @@ def test_policy_engine_is_stateless_and_does_not_mutate_policy(schedule_config):
         "Stateless = config immutata dopo la call."
     )
 
-
-# ─── 10) resolve_conflict + should_log_skipped passthrough ───────────────
 
 @pytest.mark.parametrize("mode", ["skip", "force", "abort"])
 def test_resolve_conflict_returns_configured_mode_exactly(mode):

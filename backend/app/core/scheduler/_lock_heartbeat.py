@@ -58,10 +58,6 @@ class LockHeartbeat:
         # R-05 seam: in produzione usa WALL_CLOCK (stop_event.wait); i test
         # iniettano FakeClock per avanzare il tempo deterministicamente.
         self._clock: Clock = clock if clock is not None else WALL_CLOCK
-        # State mutabile condiviso tra thread loop e get_state_dict().
-        # `lock_lost` viene mutato dal loop quando il lock e' perso e
-        # non re-acquisibile. `execute()` legge questa stessa reference
-        # via wrapper compat.
         self._state: Dict[str, Any] = {
             "stop_event": self._stop_event,
             "lock_lost": False,
@@ -121,10 +117,8 @@ class LockHeartbeat:
         re-acquire fallito. Read-only, mutato dal solo thread loop."""
         return bool(self._state.get("lock_lost", False))
 
-    # ------------------------------------------------------------------
     # Internal loop — copiato 1:1 da execution_manager._start_lock_heartbeat
     # (line 152-200 pre-refactor). Niente behavior change.
-    # ------------------------------------------------------------------
 
     def _heartbeat_loop(self) -> None:
         # Usa clock.wait(stop_event, timeout): in produzione e' equivalente

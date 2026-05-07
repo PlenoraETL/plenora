@@ -39,9 +39,7 @@ pytestmark = [
 ]
 
 
-# ============================================================
 # Helpers
-# ============================================================
 
 
 def _node_meta(
@@ -82,9 +80,7 @@ def _make_parquet_bytes(df: pd.DataFrame) -> bytes:
     return buf.getvalue()
 
 
-# ============================================================
 # 1. Legacy / full_pg / preview_only -> node_rows path
-# ============================================================
 
 
 def test_legacy_full_pg_node_rows_path_unchanged(superadmin_user):
@@ -151,9 +147,7 @@ def test_preview_only_node_rows_path(superadmin_user):
     assert body["truncated"] is True  # row_count > limit
 
 
-# ============================================================
 # 2. metadata_only -> rows=[] + message
-# ============================================================
 
 
 def test_metadata_only_returns_empty_rows_and_message(superadmin_user):
@@ -193,9 +187,7 @@ def test_metadata_only_returns_empty_rows_and_message(superadmin_user):
     fake_get_storage.assert_not_called()
 
 
-# ============================================================
 # 3. full_artifact + complete -> legge parquet
-# ============================================================
 
 
 def test_full_artifact_complete_returns_parquet_preview(superadmin_user):
@@ -295,9 +287,7 @@ def test_full_artifact_complete_sanitizes_nan_and_inf(superadmin_user):
     )
 
 
-# ============================================================
 # 4. full_artifact failed/pending/missing -> 200 operativo
-# ============================================================
 
 
 def test_full_artifact_failed_returns_200_with_message(superadmin_user):
@@ -377,9 +367,7 @@ def test_full_artifact_with_no_uri_returns_200_operational_message(superadmin_us
     assert body["rows"] == []
 
 
-# ============================================================
 # 5. Object storage disabled + full_artifact -> message chiaro
-# ============================================================
 
 
 def test_full_artifact_with_storage_disabled_returns_operational_message(
@@ -415,9 +403,7 @@ def test_full_artifact_with_storage_disabled_returns_operational_message(
     assert "non disponibile" in body.get("message", "")
 
 
-# ============================================================
 # 6. Limit rispettato sul Parquet (default 100)
-# ============================================================
 
 
 def test_full_artifact_default_limit_is_100(superadmin_user):
@@ -453,9 +439,7 @@ def test_full_artifact_default_limit_is_100(superadmin_user):
     assert body["truncated"] is True
 
 
-# ============================================================
 # 7. Campi additivi sempre presenti
-# ============================================================
 
 
 def test_response_contains_additive_fields_for_legacy_path(superadmin_user):

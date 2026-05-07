@@ -66,9 +66,7 @@ def template_text() -> str:
     return _TEMPLATE.read_text(encoding="utf-8")
 
 
-# =====================================================================
 # 1. Top-level section headers present
-# =====================================================================
 
 
 _REQUIRED_HEADERS: tuple[tuple[str, str], ...] = (
@@ -143,9 +141,7 @@ def test_section_ordering_is_canonical(checklist_text: str):
         last = idx
 
 
-# =====================================================================
 # 2. Stream tag + companion-doc cross-link
-# =====================================================================
 
 
 def test_stream_tag_present(checklist_text: str):
@@ -180,9 +176,7 @@ def test_checklist_cross_links_back_to_template(checklist_text: str):
     )
 
 
-# =====================================================================
 # 3. Honesty contract -- Docker FIRST SCAFFOLD / NOT YET VALIDATED
-# =====================================================================
 
 
 def test_docker_section_keeps_first_scaffold_markers(checklist_text: str):
@@ -223,9 +217,7 @@ def test_checklist_does_not_claim_install_is_validated(checklist_text: str):
         )
 
 
-# =====================================================================
 # 4. ASCII-only (per the install-doc family scope rule)
-# =====================================================================
 
 
 def test_checklist_is_ascii_only(checklist_text: str):

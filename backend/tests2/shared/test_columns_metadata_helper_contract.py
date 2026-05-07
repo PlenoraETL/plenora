@@ -43,9 +43,7 @@ def _call_helper(project_service, logger, project_id="p1", columns=None):
     )
 
 
-# =============================================================================
 # Happy path
-# =============================================================================
 
 
 def test_helper_happy_path_one_attempt(fast_backoff, mock_logger):
@@ -64,9 +62,7 @@ def test_helper_happy_path_no_sleep(fast_backoff, mock_logger, monkeypatch):
     assert sleeps == []
 
 
-# =============================================================================
 # Retry transient
-# =============================================================================
 
 
 def test_helper_retries_on_operational_error_and_succeeds(fast_backoff, mock_logger):
@@ -102,9 +98,7 @@ def test_helper_raises_after_all_retries(fast_backoff, mock_logger):
     assert ei.value.result_already_persisted is True
 
 
-# =============================================================================
 # Non-transient
-# =============================================================================
 
 
 @pytest.mark.parametrize("exc", [
@@ -124,9 +118,7 @@ def test_helper_non_transient_raises_immediately(fast_backoff, mock_logger, exc)
     assert type(exc).__name__ in ei.value.reason
 
 
-# =============================================================================
 # Service ritorna False (progetto inesistente)
-# =============================================================================
 
 
 def test_helper_service_returns_false_raises_no_retry(fast_backoff, mock_logger):
@@ -140,9 +132,7 @@ def test_helper_service_returns_false_raises_no_retry(fast_backoff, mock_logger)
     assert ei.value.project_id == "p-ghost"
 
 
-# =============================================================================
 # Invariante backoff
-# =============================================================================
 
 
 def test_all_backoff_values_used_on_full_failure(fast_backoff, mock_logger, monkeypatch):

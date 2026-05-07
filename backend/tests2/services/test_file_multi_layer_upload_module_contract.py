@@ -47,9 +47,7 @@ import pytest
 pytestmark = [pytest.mark.unit, pytest.mark.contract]
 
 
-# =============================================================================
 # Fixtures
-# =============================================================================
 
 
 @pytest.fixture
@@ -102,9 +100,7 @@ def collaborators(fake_logger, tmp_path):
     }
 
 
-# =============================================================================
 # 1. layers_config empty/None -> ValueError, no side effect
-# =============================================================================
 
 
 @pytest.mark.parametrize("empty_value", [None, []])
@@ -124,9 +120,7 @@ def test_empty_layers_config_raises_value_error(collaborators, empty_value):
     collaborators["load_by_format"].assert_not_called()
 
 
-# =============================================================================
 # 2. MIME block prima di parse/dispatch/save_batch
-# =============================================================================
 
 
 def test_mime_block_short_circuits_before_any_layer_processing(collaborators):
@@ -152,9 +146,7 @@ def test_mime_block_short_circuits_before_any_layer_processing(collaborators):
     assert "create_multi_layer_from_upload bloccato (MIME)" in msg
 
 
-# =============================================================================
 # 3. XLSX multi-sheet -> N FileSource, sheet valorizzato (E3: 1 save_batch)
-# =============================================================================
 
 
 def test_xlsx_multi_sheet_creates_n_file_sources_with_sheet_field(collaborators):
@@ -190,9 +182,7 @@ def test_xlsx_multi_sheet_creates_n_file_sources_with_sheet_field(collaborators)
     assert load_calls[1].args[3] == "Sheet2"
 
 
-# =============================================================================
 # 4. GPKG multi-layer -> N FileSource, layer valorizzato + CRS detection
-# =============================================================================
 
 
 def test_gpkg_multi_layer_creates_n_file_sources_with_layer_and_crs(collaborators):
@@ -228,9 +218,7 @@ def test_gpkg_multi_layer_creates_n_file_sources_with_layer_and_crs(collaborator
     assert all(c.args[3] is None for c in load_calls)
 
 
-# =============================================================================
 # 5. ZIP unwrap .gpkg -> parse usa extracted path
-# =============================================================================
 
 
 def test_zip_unwrap_finds_gpkg_and_uses_extracted_path(
@@ -268,9 +256,7 @@ def test_zip_unwrap_finds_gpkg_and_uses_extracted_path(
     assert build_kwargs["format"] == "gpkg"
 
 
-# =============================================================================
 # 6. BadZipFile -> ValueError, no save_batch
-# =============================================================================
 
 
 def test_bad_zip_file_raises_value_error_no_save_batch(collaborators, tmp_path):
@@ -291,9 +277,7 @@ def test_bad_zip_file_raises_value_error_no_save_batch(collaborators, tmp_path):
     collaborators["delete_blob"].assert_not_called()
 
 
-# =============================================================================
 # 7. ZipSlipError -> ValueError, no save_batch
-# =============================================================================
 
 
 def test_zip_slip_error_raises_value_error_no_save_batch(collaborators):
@@ -317,9 +301,7 @@ def test_zip_slip_error_raises_value_error_no_save_batch(collaborators):
     collaborators["delete_blob"].assert_not_called()
 
 
-# =============================================================================
 # 8. Parse failure per-layer: loop continua (soft preserve, E3 decision)
-# =============================================================================
 
 
 def test_parse_failure_per_layer_continues_with_empty_columns(collaborators):
@@ -360,9 +342,7 @@ def test_parse_failure_per_layer_continues_with_empty_columns(collaborators):
     assert len(rows_arg) == 3
 
 
-# =============================================================================
 # 9. group_id None -> default_group propagato a tutti
-# =============================================================================
 
 
 def test_default_group_used_when_group_id_is_none(collaborators):
@@ -383,9 +363,7 @@ def test_default_group_used_when_group_id_is_none(collaborators):
     assert all(r["group_id"] == "default_grp" for r in rows_arg)
 
 
-# =============================================================================
 # 10. safe layer name sanitization
-# =============================================================================
 
 
 def test_safe_layer_name_sanitization_replaces_spaces_and_dashes(collaborators):
@@ -410,9 +388,7 @@ def test_safe_layer_name_sanitization_replaces_spaces_and_dashes(collaborators):
     assert fid_calls == ["Pack_my_layer_name", "Pack_another_one_with_spaces"]
 
 
-# =============================================================================
 # 11. Wrapper FileSourceService delega coi 17 collaborator (E3)
-# =============================================================================
 
 
 def test_file_service_wrapper_delegates_with_save_batch_and_delete_blob():
@@ -472,9 +448,7 @@ def test_file_service_wrapper_delegates_with_save_batch_and_delete_blob():
     assert kwargs["logger"] is svc._logger
 
 
-# =============================================================================
 # 11b. BE-DELETE-001: _delete_blob short-circuit on object_storage_enabled()
-# =============================================================================
 
 
 def _capture_delete_blob_callback():
@@ -555,9 +529,7 @@ def test_delete_blob_calls_storage_when_object_storage_enabled():
     fake_storage.delete.assert_called_once_with("file-sources/batch_y/data.gpkg")
 
 
-# =============================================================================
 # 12. MULTI-GDB-001 fix: GDB directory in ZIP -> raw_data resta lo ZIP
-# =============================================================================
 
 
 def test_zip_unwrap_gdb_directory_uses_original_zip_blob(
@@ -612,9 +584,7 @@ def test_zip_unwrap_gdb_directory_uses_original_zip_blob(
     assert build_kwargs["file_size"] == len(zip_bytes)
 
 
-# =============================================================================
 # 13. BE-HARDEN-001C E1: shared blob dispatch (1 dispatch, N row condivise)
-# =============================================================================
 
 
 def test_multi_layer_uses_single_dispatch_with_batch_id_storage_key(collaborators):
@@ -708,9 +678,7 @@ def test_dispatch_failure_before_loop_no_save_batch_no_cleanup(collaborators):
     collaborators["cleanup_file"].assert_called()
 
 
-# =============================================================================
 # 14. BE-HARDEN-001C E3: batch save all-or-nothing + cleanup compensativo
-# =============================================================================
 
 
 def test_batch_save_called_once_with_n_rows_in_object_storage_mode(collaborators):

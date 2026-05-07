@@ -17,11 +17,6 @@ from app.core.auth.dependencies import (
     get_current_user,
     require_not_esecutore,
 )
-# BE-GO-READY-AUTH-ENGINE-012: pure-contract symbols
-# (`CurrentUser`, `group_filter`) consumed from
-# `app.shared.contracts.auth`. DB-bound `assert_group_access`
-# stays on `app.core.auth.ownership` (NOT a contract — drags
-# `app.db.db_service`).
 from app.shared.contracts.auth import CurrentUser, group_filter
 from app.core.auth.ownership import assert_group_access
 from app.core.intermediate import db as idb
@@ -62,9 +57,7 @@ def _sanitize_for_json(value):
     return value
 
 
-# ============================================================
 # MODELS
-# ============================================================
 
 class RunSummary(BaseModel):
     run_id: str
@@ -98,9 +91,7 @@ class PinRequest(BaseModel):
     pinned: bool = True
 
 
-# ============================================================
 # HELPERS
-# ============================================================
 
 def _run_to_summary(run: dict) -> RunSummary:
     return RunSummary(
@@ -129,9 +120,7 @@ def _check_run_access(run_id: str, current_user: CurrentUser) -> dict:
     return run
 
 
-# ============================================================
 # ENDPOINTS
-# ============================================================
 
 @router.get("/{canvas_id}", response_model=List[RunSummary])
 def list_runs(
@@ -290,7 +279,6 @@ def get_node_data(
             "col_schema": col_schema,
             "rows": rows,
             "truncated": (row_count or 0) > limit,
-            # Campi additivi (compat: i client esistenti li ignorano).
             "persistence_mode": persistence_mode,
             "persisted_rows_count": persisted_rows_count,
             "preview_truncated": preview_truncated_meta,
@@ -433,7 +421,6 @@ def compare_runs_l2(
                 "message": message,
             }
 
-        # ---- Casi non-diff (HTTP 422 / 501) ----
 
         # full_artifact e' supportato in scrittura (parquet+manifest)
         # ma il diff completo da artifact richiede download + set-diff
@@ -509,7 +496,6 @@ def compare_runs_l2(
                 ),
             )
 
-        # ---- Casi diff (HTTP 200) ----
         # Solo full_pg+full_pg e preview_only+preview_only arrivano qui.
         is_partial = (mode_a == MODE_PREVIEW_ONLY and mode_b == MODE_PREVIEW_ONLY)
 
@@ -592,7 +578,6 @@ def compare_runs_l2(
             "removed": removed_list,   # righe in A non in B
             "added": added_list,        # righe in B non in A
             "truncated": len(removed_list) == 500 or len(added_list) == 500,
-            # Campi additivi Phase 6 batch L2 semantics (2026-04-28)
             "persistence_mode_a": mode_a,
             "persistence_mode_b": mode_b,
             "diff_available": True,

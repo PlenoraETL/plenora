@@ -74,8 +74,6 @@ from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
 
-# ─── Eccezioni ───────────────────────────────────────────────────────────────
-
 
 class CredentialUnavailableError(Exception):
     """Raised quando un secret cifrato a-rest non e' ricostruibile.
@@ -91,8 +89,6 @@ class CredentialUnavailableError(Exception):
     """
 
 
-# ─── Costanti ────────────────────────────────────────────────────────────────
-
 #: Prefisso che marca un valore come cifrato. Sceglie ``enc:`` (no versione)
 #: per coerenza con il formato già presente in connection_service.py legacy.
 ENC_PREFIX = "enc:"
@@ -105,8 +101,6 @@ _DEV_DEFAULT_KEY = "urby-etl-default-key-change-in-production"
 #: a ogni chiamata. Resettabile per i test via ``_reset_cache_for_tests()``.
 _FERNET_CACHE: Optional[Fernet] = None
 
-
-# ─── Helper interni ──────────────────────────────────────────────────────────
 
 #: Lunghezza minima accettabile per una chiave (in caratteri).
 #: Chiavi più corte sono troppo deboli e probabilmente errori di configurazione.
@@ -207,8 +201,6 @@ def _reset_cache_for_tests() -> None:
     global _FERNET_CACHE
     _FERNET_CACHE = None
 
-
-# ─── API pubblica ────────────────────────────────────────────────────────────
 
 def is_encrypted(value: Optional[str]) -> bool:
     """True se ``value`` è una stringa con il prefisso di cifratura."""

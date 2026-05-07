@@ -31,9 +31,7 @@ from app.core.manipola.transforms.base import op_concat_columns
 from .conftest import make_pandas_df
 
 
-# ─────────────────────────────────────────────────────────────────────
 # Oracle: legacy impl (verbatim da base.py:599 @ afe47ce)
-# ─────────────────────────────────────────────────────────────────────
 
 
 def _legacy_op_concat_columns(
@@ -73,9 +71,7 @@ def _legacy_op_concat_columns(
         return df
 
 
-# ─────────────────────────────────────────────────────────────────────
 # Naive: apply(axis=1) (pre-Fase0, dal baseline file)
-# ─────────────────────────────────────────────────────────────────────
 
 
 def _naive_concat_apply(
@@ -106,9 +102,7 @@ def _naive_concat_apply(
     return result
 
 
-# ─────────────────────────────────────────────────────────────────────
 # Bench harness (warmup + median of N)
-# ─────────────────────────────────────────────────────────────────────
 
 
 def _median_runtime(
@@ -125,9 +119,7 @@ def _median_runtime(
     return statistics.median(times)
 
 
-# ─────────────────────────────────────────────────────────────────────
 # Bench assertions
-# ─────────────────────────────────────────────────────────────────────
 
 _MIN_SPEEDUP_VS_LEGACY = 3.0
 _MIN_THROUGHPUT_ROWS_PER_SEC = 150_000  # naive era ~180k; il nuovo deve almeno tenere il passo

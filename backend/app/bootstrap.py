@@ -54,16 +54,6 @@ _PSYCOPG2_SSL_ENV_VARS: tuple[str, ...] = (
 )
 
 
-# BE-GO-READY-BOOTSTRAP-ENGINE-013-DEPENDENCY-GRAPH-LOCK.
-# Typed completion flag. Flipped to True only after all four
-# canonical bootstrap steps have returned successfully. Reset on
-# `teardown()` so a hot-reload / test-harness can re-bootstrap.
-#
-# Intentionally NOT a DI container: this is a single boolean used
-# only as a read-only "boundary completed" indicator. Writers stay
-# in this module; readers consume `is_bootstrapped()` and never
-# mutate the flag directly. Drift guard lives in
-# `tests2/shared/test_bootstrap_dependency_graph_lock.py`.
 _BOOT_COMPLETE: bool = False
 
 

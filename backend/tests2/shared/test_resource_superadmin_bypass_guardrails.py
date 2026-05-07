@@ -82,7 +82,6 @@ _BACKEND_ROOT = _REPO_ROOT / "backend"
 _APP_ROOT = _BACKEND_ROOT / "app"
 
 
-# ---------------------------------------------------------------------------
 # Allowlist of production files allowed to contain a literal
 # ``is_superadmin=True`` token. Empty by design.
 #
@@ -90,7 +89,6 @@ _APP_ROOT = _BACKEND_ROOT / "app"
 #   - WHY the caller is system-level (not a user request);
 #   - WHERE the audit log lives;
 #   - WHEN the bypass fires (caller context).
-# ---------------------------------------------------------------------------
 
 _PRIVILEGED_BYPASS_ALLOWLIST: frozenset[str] = frozenset(
     {
@@ -99,12 +97,10 @@ _PRIVILEGED_BYPASS_ALLOWLIST: frozenset[str] = frozenset(
 )
 
 
-# ---------------------------------------------------------------------------
 # Routers / services that MUST NOT construct privileged refs with the
 # literal True bypass. Listed for documentation: the source-bound scan
 # below already covers ``app/`` exhaustively, but pinning the user-facing
 # entrypoints makes the failure message diagnostic.
-# ---------------------------------------------------------------------------
 
 _NORMAL_REQUEST_ENTRYPOINT_GLOBS: tuple[str, ...] = (
     "core/*/router.py",
@@ -114,9 +110,7 @@ _NORMAL_REQUEST_ENTRYPOINT_GLOBS: tuple[str, ...] = (
 )
 
 
-# ---------------------------------------------------------------------------
 # Tokenize helpers
-# ---------------------------------------------------------------------------
 
 
 def _iter_app_py():
@@ -145,9 +139,7 @@ def _has_literal_superadmin_true(code_only: str) -> bool:
     return "is_superadmin=True" in compact
 
 
-# ---------------------------------------------------------------------------
 # Source-bound guard tests
-# ---------------------------------------------------------------------------
 
 
 def test_no_literal_is_superadmin_true_in_app_outside_allowlist():

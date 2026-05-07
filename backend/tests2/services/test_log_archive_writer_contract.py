@@ -85,8 +85,6 @@ def _decompress_lines(payload: bytes) -> list[str]:
     return [line for line in gzip.decompress(payload).decode("utf-8").splitlines() if line]
 
 
-# ─── T1 ──────────────────────────────────────────────────────────────────
-
 def test_serialize_logs_rows_produces_ndjson_gzip():
     """Output e' gzip UTF-8 con N righe NDJSON, una per riga DB, ciascuna
     JSON valida."""
@@ -106,8 +104,6 @@ def test_serialize_logs_rows_produces_ndjson_gzip():
         parsed = json.loads(line)
         assert isinstance(parsed, dict)
 
-
-# ─── T2 ──────────────────────────────────────────────────────────────────
 
 def test_serialize_preserves_column_shape_logs():
     """Shape canonico per `logs`: keyset esatto, ordine preservato, extra
@@ -141,8 +137,6 @@ def test_serialize_preserves_column_shape_logs():
     assert list(parsed_partial.keys()) == list(_LOGS_CANONICAL_FIELDS)
 
 
-# ─── T3 ──────────────────────────────────────────────────────────────────
-
 def test_serialize_preserves_column_shape_audit_actions():
     """Shape canonico per `audit_actions`: keyset esatto (con chiave
     `timestamp`, non `ts`) + ordine + pass-through di valori."""
@@ -169,8 +163,6 @@ def test_serialize_preserves_column_shape_audit_actions():
     assert _table_ts_column("audit_actions") == "timestamp"
     assert _table_ts_column("logs") == "ts"
 
-
-# ─── T4 ──────────────────────────────────────────────────────────────────
 
 def test_serialize_datetime_iso8601_utc_suffix_Z_and_rejects_naive():
     """`ts`/`timestamp` normalizzati a ISO 8601 UTC con suffisso `Z`;
@@ -221,8 +213,6 @@ def test_serialize_datetime_iso8601_utc_suffix_Z_and_rejects_naive():
     parsed_audit = json.loads(_decompress_lines(out_audit)[0])
     assert parsed_audit["timestamp"] == "2026-04-21T10:00:00Z"
 
-
-# ─── T5 ──────────────────────────────────────────────────────────────────
 
 def test_build_object_key_pattern_and_padding():
     """Pattern deterministico O-ARC §5.2:
@@ -283,8 +273,6 @@ def test_build_object_key_pattern_and_padding():
     assert "2026-05" not in key_rome
 
 
-# ─── T6 ──────────────────────────────────────────────────────────────────
-
 def test_build_object_key_rejects_invalid_inputs():
     """Fail-fast sugli input invalidi: prefix mal formato, table ignota,
     run_date naive o non-datetime, seq fuori range."""
@@ -325,7 +313,6 @@ def test_build_object_key_rejects_invalid_inputs():
         _build_object_key("p/", "logs", ts, True)  # type: ignore[arg-type]
 
 
-# ─── Fake storage (scope: solo tests T7-T12) ─────────────────────────────
 # Mock in-memory di `ObjectStorage` sufficiente per il loop di
 # `archive_and_purge`. NON implementa l'intero Protocol (download,
 # get_object_stream, delete, upload su file): chiamarli farebbe fallire
@@ -374,8 +361,6 @@ def _collector():
     return deletes, _delete
 
 
-# ─── T7 ──────────────────────────────────────────────────────────────────
-
 def test_archive_and_purge_noop_on_empty_select():
     """Zero righe: nessun upload, nessuna DELETE, result coerente
     (archived_rows=0, object_keys=[], cutoff_ts preservato)."""
@@ -406,8 +391,6 @@ def test_archive_and_purge_noop_on_empty_select():
     assert deletes == []
     assert select_calls == [(cutoff, 100)]  # SELECT interrogata una sola volta
 
-
-# ─── T8 ──────────────────────────────────────────────────────────────────
 
 def test_archive_and_purge_single_batch_happy_path():
     """Singolo batch: 1 upload, 1 verify, 1 DELETE, key deterministica,
@@ -461,8 +444,6 @@ def test_archive_and_purge_single_batch_happy_path():
     assert call_count["n"] == 2
 
 
-# ─── T9 ──────────────────────────────────────────────────────────────────
-
 def test_archive_and_purge_multi_batch_deterministic_order():
     """N batch in sequenza: seq incrementa, keys emesse in ordine,
     DELETE per batch con max_id corretto. `archived_rows` cumulativo."""
@@ -506,8 +487,6 @@ def test_archive_and_purge_multi_batch_deterministic_order():
     assert deletes[1][1] == (cutoff, 4)
     assert deletes[2][1] == (cutoff, 5)
 
-
-# ─── T10 ─────────────────────────────────────────────────────────────────
 
 def test_archive_and_purge_verify_failure_blocks_delete():
     """Se `list_objects(prefix=key)` non trova la key con `size > 0`:
@@ -557,8 +536,6 @@ def test_archive_and_purge_verify_failure_blocks_delete():
     assert len(storage_zero.uploaded) == 1
     assert deletes_b == []
 
-
-# ─── T11 ─────────────────────────────────────────────────────────────────
 
 def test_archive_and_purge_rejects_bad_inputs_before_any_side_effect():
     """Fail-fast: naive cutoff_ts / naive run_date / table ignota -> errore
@@ -620,8 +597,6 @@ def test_archive_and_purge_rejects_bad_inputs_before_any_side_effect():
     assert storage.list_calls == []
 
 
-# ─── T12 ─────────────────────────────────────────────────────────────────
-
 def test_archive_and_purge_delete_scoped_to_cutoff_and_batch_max_id():
     """Il callable DELETE riceve SQL + params coerenti:
     - per `logs`: `DELETE FROM plenora.logs WHERE ts < %s AND id <= %s`
@@ -636,7 +611,6 @@ def test_archive_and_purge_delete_scoped_to_cutoff_and_batch_max_id():
     cutoff = datetime(2026, 4, 21, 12, 0, 0, tzinfo=timezone.utc)
     run_date = datetime(2026, 4, 21, 10, 0, 0, tzinfo=timezone.utc)
 
-    # --- logs (ts column) ---
     storage_logs = _FakeObjectStorage()
     writer_logs = LogArchiveWriter(storage_logs, "p/", batch_size=100)
 
@@ -661,7 +635,6 @@ def test_archive_and_purge_delete_scoped_to_cutoff_and_batch_max_id():
     assert "timestamp" not in sql_logs  # non la colonna di audit
     assert params_logs == (cutoff, 30)
 
-    # --- audit_actions (timestamp column) ---
     storage_audit = _FakeObjectStorage()
     writer_audit = LogArchiveWriter(storage_audit, "p/", batch_size=100)
 

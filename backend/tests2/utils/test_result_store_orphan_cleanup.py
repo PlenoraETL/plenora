@@ -32,9 +32,7 @@ from app.utils.result_store import (
 pytestmark = [pytest.mark.unit, pytest.mark.shared, pytest.mark.contract]
 
 
-# ---------------------------------------------------------------------------
 # Stubs
-# ---------------------------------------------------------------------------
 
 class _StubStorage:
     """Storage stub configurabile per scenario.
@@ -152,9 +150,7 @@ def caplog_app(caplog):
     stdlib_logger.setLevel(prev_level)
 
 
-# ---------------------------------------------------------------------------
 # Helpers
-# ---------------------------------------------------------------------------
 
 def _write_temp_file(tmp_path: Path, name: str, payload: bytes) -> Path:
     p = tmp_path / name
@@ -162,9 +158,7 @@ def _write_temp_file(tmp_path: Path, name: str, payload: bytes) -> Path:
     return p
 
 
-# =============================================================================
 # (a) upload OK + DB save OK -> nessun delete
-# =============================================================================
 
 
 def test_object_storage_save_ok_does_not_delete(
@@ -194,9 +188,7 @@ def test_object_storage_save_ok_bytes_path_does_not_delete(
     assert storage.deletes == []
 
 
-# =============================================================================
 # (b) upload OK + DB save fails -> delete chiamato + ResultSaveError
-# =============================================================================
 
 
 def test_object_storage_db_save_failure_triggers_compensating_delete(
@@ -234,10 +226,8 @@ def test_object_storage_db_save_failure_bytes_path_triggers_delete(
     assert storage.deletes == ["results/p1/res-orph.bin"]
 
 
-# =============================================================================
 # (c) upload OK + DB save fails + delete fails
 #     -> structured log + original DB-save error preserved
-# =============================================================================
 
 
 def test_db_save_failure_with_cleanup_failure_logs_orphan_event(
@@ -287,9 +277,7 @@ def test_db_save_failure_with_cleanup_failure_bytes_path(
     ), f"missing structured log; got: {messages}"
 
 
-# =============================================================================
 # (c-extra) Successful cleanup also emits structured log
-# =============================================================================
 
 
 def test_successful_cleanup_emits_ok_event(
@@ -310,9 +298,7 @@ def test_successful_cleanup_emits_ok_event(
     ), f"missing ok event; got: {messages}"
 
 
-# =============================================================================
 # (d) policy=db -> nessun touch a object storage anche su DB save failure
-# =============================================================================
 
 
 def test_db_policy_db_save_failure_does_not_touch_object_storage(

@@ -63,9 +63,7 @@ _client: Optional[Any] = None  # redis.Redis-like instance
 # al Redis locale.
 _client_explicit: bool = False
 
-# ============================================================
 # METRICHE (contatori in-process)
-# ============================================================
 #
 # Contatori sincroni protetti da lock. Esposti via get_metrics() →
 # admin_system_status.get_blacklist_status → dashboard admin.
@@ -206,9 +204,7 @@ def is_jti_blacklisted(jti: Optional[str]) -> bool:
         return False
 
 
-# ============================================================
 # METRICHE + HEALTH
-# ============================================================
 
 
 def get_metrics() -> Dict[str, Any]:

@@ -40,9 +40,7 @@ import pytest
 pytestmark = [pytest.mark.unit, pytest.mark.intermediate, pytest.mark.contract]
 
 
-# ============================================================
 # Fixture comuni
-# ============================================================
 
 def _make_cfg(mode: str = "metadata_only", **overrides) -> dict:
     """Settings dict minimale per `_read_settings` mockato."""
@@ -82,9 +80,7 @@ def small_df():
     return pd.DataFrame({"a": [1, 2, 3], "b": ["x", "y", "z"]})
 
 
-# ============================================================
 # A. policy.resolve_intermediate_policy con override
-# ============================================================
 
 class TestResolvePolicyOverride:
     """L'override per-call sostituisce la mode globale al boundary
@@ -167,9 +163,7 @@ class TestResolvePolicyOverride:
         assert result.should_record_rows is False
 
 
-# ============================================================
 # B. snapshot wrappers propagano il kwarg
-# ============================================================
 
 class TestSnapshotWrappersPropagation:
     """`record_final_snapshot` e `record_checkpoint_snapshot` accettano
@@ -277,9 +271,7 @@ class TestSnapshotWrappersPropagation:
         assert call_kwargs["persistence_mode"] == "full_pg"
 
 
-# ============================================================
 # C. QueryExecutor.execute_query propaga (kwarg esplicito, no stato)
-# ============================================================
 
 class TestQueryExecutorPropagation:
     """Il kwarg `intermediate_mode_override` su `execute_query` arriva

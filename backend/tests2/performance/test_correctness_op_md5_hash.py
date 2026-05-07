@@ -34,9 +34,7 @@ from shapely.geometry import Point
 from app.core.manipola.transforms.base import op_md5_hash
 
 
-# ─────────────────────────────────────────────────────────────────────
 # Oracle: legacy impl (verbatim da base.py:1102 @ aea1f63)
-# ─────────────────────────────────────────────────────────────────────
 
 
 def _legacy_op_md5_hash(
@@ -77,9 +75,7 @@ def _legacy_op_md5_hash(
         return df
 
 
-# ─────────────────────────────────────────────────────────────────────
 # Helpers
-# ─────────────────────────────────────────────────────────────────────
 
 
 def _assert_hash_columns_equal(new_df, legacy_df, output_col, ctx):
@@ -107,9 +103,7 @@ def _assert_hash_columns_equal(new_df, legacy_df, output_col, ctx):
         )
 
 
-# ─────────────────────────────────────────────────────────────────────
 # Fixtures
-# ─────────────────────────────────────────────────────────────────────
 
 
 def _df_plain_strings():

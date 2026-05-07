@@ -47,9 +47,7 @@ def _attach_handler(logger_name: str):
 _PROJ_SVC_LOGGER = "app.services.project_service"
 
 
-# =============================================================================
 # F6.7 — _find_dependent_projects narrow
-# =============================================================================
 
 
 def test_find_dependent_projects_skips_malformed_json_canvas(monkeypatch):
@@ -151,9 +149,7 @@ def test_find_dependent_projects_narrow_catches_typeerror_in_json_loads(monkeypa
     )
 
 
-# =============================================================================
 # F6.6 — _assert_no_lineage_cycle.get_sources narrow
-# =============================================================================
 
 
 def test_assert_no_lineage_cycle_skips_malformed_canvas_in_sources(monkeypatch):

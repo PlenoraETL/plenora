@@ -27,9 +27,7 @@ from app.shared.clock import FakeClock
 pytestmark = [pytest.mark.unit, pytest.mark.scheduler, pytest.mark.contract]
 
 
-# =============================================================================
 # _start_lock_heartbeat / _stop_lock_heartbeat (helpers isolati)
-# =============================================================================
 
 
 def _build_manager_with_mock_concurrency():

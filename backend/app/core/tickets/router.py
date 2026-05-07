@@ -24,9 +24,7 @@ from typing import Any, Dict, List, Optional
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Response, UploadFile
 from pydantic import BaseModel, Field
 
-# BE-GO-READY-AUTH-ENGINE-016 dep-import off facade.
 from app.core.auth.dependencies import get_current_user
-# BE-GO-READY-AUTH-ENGINE-015 Phase-9 contract fan-out.
 from app.shared.contracts.auth import CurrentUser
 from app.core.tickets import service as svc
 from app.db import tickets_db_service as tdb
@@ -37,9 +35,7 @@ logger = get_logger(__name__)
 router = APIRouter(prefix="/tickets", tags=["tickets"])
 
 
-# ============================================================
 # MIME ALLOWLIST — solo immagini + log (da scelta deliberata)
-# ============================================================
 
 # Chiavi: estensione normalizzata (lowercase, no punto). Valori: MIME type
 # atteso o None se non vincolato.
@@ -73,9 +69,7 @@ def _require_not_esecutore(current_user: CurrentUser = Depends(get_current_user)
     return current_user
 
 
-# ============================================================
 # MODELS
-# ============================================================
 
 
 class TicketCreateRequest(BaseModel):
@@ -105,9 +99,7 @@ class CommentCreateRequest(BaseModel):
     body: str
 
 
-# ============================================================
 # ENDPOINTS — META & COUNTS
-# ============================================================
 
 
 @router.get("/meta")
@@ -178,9 +170,7 @@ def get_counts(current_user: CurrentUser = Depends(_require_not_esecutore)) -> D
     }
 
 
-# ============================================================
 # ENDPOINTS — CRUD
-# ============================================================
 
 
 @router.post("", status_code=201)
@@ -250,9 +240,7 @@ def update_ticket_endpoint(
     )
 
 
-# ============================================================
 # COMMENTS
-# ============================================================
 
 
 @router.post("/{ticket_id}/comments", status_code=201)
@@ -264,9 +252,7 @@ def add_comment_endpoint(
     return svc.add_comment(ticket_id, payload.body, current_user)
 
 
-# ============================================================
 # ATTACHMENTS
-# ============================================================
 
 
 @router.post("/{ticket_id}/attachments", status_code=201)

@@ -67,9 +67,7 @@ def mock_tdb(monkeypatch):
     return m
 
 
-# =============================================================================
 # Sentinel __UNSET__ behavior
-# =============================================================================
 
 
 def test_patch_without_assignee_key_keeps_assignee_untouched(mock_tdb):
@@ -99,9 +97,7 @@ def test_patch_assignee_string_assigns(mock_tdb):
     assert mock_tdb.update_ticket.call_args.kwargs["assignee"] == "u-target"
 
 
-# =============================================================================
 # Validazione enum
-# =============================================================================
 
 
 def test_patch_invalid_status_returns_400(mock_tdb):
@@ -126,9 +122,7 @@ def test_patch_invalid_category_returns_400(mock_tdb):
     mock_tdb.update_ticket.assert_not_called()
 
 
-# =============================================================================
 # Validazione title
-# =============================================================================
 
 
 def test_patch_title_too_short_returns_400(mock_tdb):
@@ -152,9 +146,7 @@ def test_patch_title_at_boundary_succeeds(mock_tdb):
     assert mock_tdb.update_ticket.call_args.kwargs["title"] == "y" * 200
 
 
-# =============================================================================
 # Full update + 404
-# =============================================================================
 
 
 def test_patch_admin_full_update_passes_through(mock_tdb):

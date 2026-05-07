@@ -24,9 +24,7 @@ from app.utils.logger import get_logger
 logger = get_logger(__name__)
 
 
-# ============================================================
 # TICKETS — CRUD
-# ============================================================
 
 
 def create_ticket(
@@ -244,9 +242,7 @@ def counts_by_severity(
     return out
 
 
-# ============================================================
 # COMMENTS
-# ============================================================
 
 
 def add_comment(ticket_id: str, author_id: str, body: str) -> Dict[str, Any]:
@@ -283,9 +279,7 @@ def list_comments(ticket_id: str) -> List[Dict[str, Any]]:
     )
 
 
-# ============================================================
 # ATTACHMENTS
-# ============================================================
 
 
 def link_attachment(
@@ -345,9 +339,7 @@ def get_attachment(attachment_id: str) -> Optional[Dict[str, Any]]:
     )
 
 
-# ============================================================
 # DELETE TICKET (cascade su comments/attachments via FK ON DELETE CASCADE)
-# ============================================================
 
 
 def soft_delete_ticket(ticket_id: str) -> bool:

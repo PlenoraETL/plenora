@@ -331,9 +331,7 @@ def mark_lost(reconciliation_id: str, *, error: str) -> None:
     )
 
 
-# ---------------------------------------------------------------------------
 # Reconciler boundary (BE-GO-READY-STORAGE-ENGINE-006)
-# ---------------------------------------------------------------------------
 
 
 _FETCH_DUE_PENDING_DELETES_SQL = (
@@ -478,9 +476,7 @@ def compute_next_retry_at(
     return base_now + timedelta(seconds=delta_seconds)
 
 
-# ---------------------------------------------------------------------------
 # Operational guardrails (BE-GO-READY-STORAGE-ENGINE-008)
-# ---------------------------------------------------------------------------
 #
 # Goal: prevent `plenora.storage_reconciliation_log` from becoming a
 # silent landfill. Two minimal, additive helpers — NO new transitions
@@ -639,9 +635,7 @@ def prune_terminal_older_than(
         return 0
 
 
-# ---------------------------------------------------------------------------
 # Upload-intent lifecycle (BE-GO-READY-STORAGE-ENGINE-008-UPLOAD-INTENT-PATTERN)
-# ---------------------------------------------------------------------------
 #
 # Closes R-021.1: `app/services/file_storage_dispatch.py` had an
 # upload-then-DB-save W2 orphan race. Pattern is "self-clearing":
@@ -914,9 +908,7 @@ def is_storage_key_referenced(storage_key: str) -> Optional[bool]:
     return bool(rows)
 
 
-# ---------------------------------------------------------------------------
 # Per-operation visibility (BE-GO-READY-STORAGE-ENGINE-023)
-# ---------------------------------------------------------------------------
 #
 # `count_active_by_state_domain` aggregates by `(state, domain)` —
 # it does NOT differentiate between `operation='delete'` and

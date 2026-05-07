@@ -52,18 +52,13 @@ from typing import Union
 
 from app.utils.logger import get_logger
 
-# Stesso logger name di `base.py`: i record sono indistinguibili dai
-# consumer che attaccano handler / filtrano per
-# "app.core.manipola.transforms.base" (pattern §6.1 facade).
 logger = get_logger("app.core.manipola.transforms.base")
 
 DataFrame = Union[pd.DataFrame, gpd.GeoDataFrame]
 
 
-# =============================================================================
 # GEOMETRIA DA COORDINATE
 # Crea colonna geometry Point da colonne latitudine/longitudine.
-# =============================================================================
 
 def op_geo_from_coords(
     df: DataFrame,

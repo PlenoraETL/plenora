@@ -41,9 +41,7 @@ import pytest
 pytestmark = [pytest.mark.unit, pytest.mark.arricchisci, pytest.mark.contract]
 
 
-# ---------------------------------------------------------------------------
 # 1. Module exposure + re-export from canvas_orchestrator
-# ---------------------------------------------------------------------------
 
 
 def test_execution_context_module_exposes_typed_boundary():
@@ -74,9 +72,7 @@ def test_canvas_orchestrator_reexports_context_boundary():
     assert co.build_execution_context is build_from_origin
 
 
-# ---------------------------------------------------------------------------
 # 2. Frozen / immutable
-# ---------------------------------------------------------------------------
 
 
 def test_context_is_frozen_dataclass():
@@ -104,9 +100,7 @@ def test_context_fields_typed():
     assert field_names == {"project_id", "group_id", "preview_limit"}
 
 
-# ---------------------------------------------------------------------------
 # 3. Concurrency / isolation
-# ---------------------------------------------------------------------------
 
 
 def test_two_contexts_are_isolated():
@@ -129,9 +123,7 @@ def test_two_contexts_are_isolated():
     assert ctx_a is not ctx_b
 
 
-# ---------------------------------------------------------------------------
 # 4. Builder fail-closed on DB error
-# ---------------------------------------------------------------------------
 
 
 def test_build_context_raises_execution_context_error_on_db_error(monkeypatch):
@@ -155,9 +147,7 @@ def test_build_context_raises_execution_context_error_on_db_error(monkeypatch):
     assert exc_info.value.__cause__ is original
 
 
-# ---------------------------------------------------------------------------
 # 5. Builder happy path + missing project
-# ---------------------------------------------------------------------------
 
 
 def test_build_context_happy_path(monkeypatch):
@@ -186,9 +176,7 @@ def test_build_context_missing_project_yields_none_group(monkeypatch):
     assert ctx.preview_limit is None
 
 
-# ---------------------------------------------------------------------------
 # 6. init_execution_context returns the typed context (no singleton write)
-# ---------------------------------------------------------------------------
 
 
 def test_init_execution_context_returns_typed_context(api_service, monkeypatch):
@@ -258,9 +246,7 @@ def test_init_execution_context_does_not_write_singleton_state(
     assert api_service._preview_limit == 9999
 
 
-# ---------------------------------------------------------------------------
 # 7. (RITIRATO post-OE012) apply_to_legacy_state mirroring tests
-# ---------------------------------------------------------------------------
 #
 # Pre-OE012 questa sezione locckava due test che esercitavano la
 # funzione `apply_to_legacy_state` in modalita' standalone:

@@ -35,9 +35,7 @@ import pytest
 pytestmark = [pytest.mark.unit, pytest.mark.intermediate, pytest.mark.contract]
 
 
-# ============================================================
 # Helpers
-# ============================================================
 
 def _make_cfg(mode: str = "metadata_only", **overrides) -> dict:
     cfg = {
@@ -74,9 +72,7 @@ def small_df():
     return pd.DataFrame({"a": [1, 2, 3], "b": ["x", "y", "z"]})
 
 
-# ============================================================
 # A. manipola.executor.execute  ->  record_final_snapshot
-# ============================================================
 
 class TestManipolaFinalPropagation:
     """`manipola/executor.py:execute` accetta intermediate_mode_override e
@@ -101,9 +97,7 @@ class TestManipolaFinalPropagation:
         assert sig.parameters["intermediate_mode_override"].default is None
 
 
-# ============================================================
 # B. manipola.executor._applica_trasformazioni  ->  record_checkpoint_snapshot
-# ============================================================
 
 class TestManipolaCheckpointPropagation:
     """Il loop checkpoint dentro _applica_trasformazioni passa
@@ -130,9 +124,7 @@ class TestManipolaCheckpointPropagation:
         )
 
 
-# ============================================================
 # C. arricchisci.api_connection_support._write_intermediate_snapshot
-# ============================================================
 
 class TestArricchisciCheckpointPropagation:
     """`_write_intermediate_snapshot` accetta `mode_override` e lo passa
@@ -181,9 +173,7 @@ class TestArricchisciCheckpointPropagation:
         assert captured.get("mode_override") == "full_pg"
 
 
-# ============================================================
 # D. api_connector.execute_enrichment  ->  _write_intermediate_snapshot
-# ============================================================
 
 class TestApiConnectorExecuteEnrichmentPropagation:
     """`ApiConnectionService.execute_enrichment` accetta il kwarg e lo
@@ -198,9 +188,7 @@ class TestApiConnectorExecuteEnrichmentPropagation:
         assert sig.parameters["intermediate_mode_override"].default is None
 
 
-# ============================================================
 # E. EnrichExecutor.execute (orchestrator entry-point)
-# ============================================================
 
 class TestEnrichExecutorExecutePropagation:
     def test_signature_accepts_intermediate_mode_override(self):
@@ -212,9 +200,7 @@ class TestEnrichExecutorExecutePropagation:
         assert sig.parameters["intermediate_mode_override"].default is None
 
 
-# ============================================================
 # F. EstraiExecutor.execute (orchestrator entry-point)
-# ============================================================
 
 class TestEstraiExecutorExecutePropagation:
     def test_signature_accepts_intermediate_mode_override(self):
@@ -233,9 +219,7 @@ class TestEstraiExecutorExecutePropagation:
         assert "intermediate_mode_override" in sig.parameters
 
 
-# ============================================================
 # G. OrchestratorService.execute_pipeline (entry boundary)
-# ============================================================
 
 class TestOrchestratorServicePropagation:
     def test_signature_accepts_intermediate_mode_override(self):
@@ -247,9 +231,7 @@ class TestOrchestratorServicePropagation:
         assert sig.parameters["intermediate_mode_override"].default is None
 
 
-# ============================================================
 # H. Celery tasks (boundary worker)
-# ============================================================
 
 class TestCeleryTasksSignatures:
     def test_execute_pipeline_task_signature(self):
@@ -269,9 +251,7 @@ class TestCeleryTasksSignatures:
         assert sig.parameters["intermediate_mode_override"].default is None
 
 
-# ============================================================
 # I. task_service create_*_task (boundary HTTP -> Celery)
-# ============================================================
 
 class TestTaskServiceSignatures:
     def test_create_pipeline_task_signature(self):

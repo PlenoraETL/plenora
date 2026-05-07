@@ -23,9 +23,7 @@ from fastapi import HTTPException
 pytestmark = [pytest.mark.unit, pytest.mark.security, pytest.mark.contract]
 
 
-# =============================================================================
 # Login timing parity
-# =============================================================================
 
 
 @pytest.fixture(autouse=True)
@@ -112,9 +110,7 @@ def test_login_uses_real_argon2id_dummy_hash():
     assert result is False
 
 
-# =============================================================================
 # Admin endpoint enumeration (reset-password + delete-user)
-# =============================================================================
 
 
 def _admin_user(group="g1"):

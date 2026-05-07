@@ -54,9 +54,7 @@ _BACKEND_ROOT = Path(__file__).resolve().parent.parent.parent
 _APP = _BACKEND_ROOT / "app"
 
 
-# ---------------------------------------------------------------------------
 # Bounded-read inventory
-# ---------------------------------------------------------------------------
 #
 # Each entry is keyed by (rel_path, lineno) of the b"".join(...) /
 # list(...) callsite that consumes a get_object_stream body. The
@@ -107,9 +105,7 @@ _BLOB_CONSUMER_INVENTORY: dict[tuple[str, int], tuple[
 }
 
 
-# ---------------------------------------------------------------------------
 # AST scan: find b"".join(<x>["body"]) and list(<x>["body"])
-# ---------------------------------------------------------------------------
 
 
 def _is_body_subscript(node: ast.AST) -> bool:
@@ -184,9 +180,7 @@ def _scan_blob_consumer_callsites() -> dict[tuple[str, int], str]:
     return found
 
 
-# ---------------------------------------------------------------------------
 # Tests
-# ---------------------------------------------------------------------------
 
 
 def test_blob_consumer_inventory_is_complete():

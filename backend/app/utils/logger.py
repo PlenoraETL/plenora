@@ -110,9 +110,7 @@ from typing import Optional
 from app.config import settings
 
 
-# =============================================================================
 # SANIFICAZIONE LOG (difesa in profondità contro leak credenziali)
-# =============================================================================
 # Anche se i call site dovrebbero sanificare a monte (vedi
 # app/shared/api_utils.sanitize_for_log / sanitize_url_for_log), il logger
 # applica un secondo passaggio sui campi di output per intercettare casi come
@@ -182,16 +180,12 @@ class SanitizingFilter(logging.Filter):
 # Singleton filter — uno per tutta l'app
 _sanitizing_filter = SanitizingFilter()
 
-# =============================================================================
 # COSTANTI
-# =============================================================================
 
 CONSOLE_FORMAT = "%(asctime)s | %(levelname)-5s | %(name)s | %(message)s"
 DATE_FORMAT    = "%H:%M:%S"
 
-# =============================================================================
 # COLORED CONSOLE FORMATTER
-# =============================================================================
 # Colori ANSI — applicati solo su stdout, non su log.db (zero impatto sul DB)
 
 _ANSI_RESET  = "[0m"
@@ -283,11 +277,6 @@ _BULK_TELEMETRY_LOGGERS: frozenset[str] = frozenset({
     "app.core.carica.writer",
 })
 
-# Whitelist di chiavi `extra` strutturate emesse dai batch 3.1/3.2/3.4/3.5.
-# PostgresLogHandler.emit() le serializza nella colonna `details` JSONB se
-# presenti come attributi del LogRecord, cosi' da renderle query-abili via
-# SQL (es. details->>'event' = 'bulk.success'). Qualunque chiave non qui
-# elencata viene ignorata — whitelist esplicita per zero-ambiguita'.
 _BULK_TELEMETRY_EXTRA_WHITELIST: tuple[str, ...] = (
     "event",       # 3.1/3.2/3.4/3.5 — label primaria di aggregazione
     "reason",      # 3.1 — classificazione fallback
@@ -306,9 +295,7 @@ _bulk_telemetry_installed: bool = False
 _db_lock = Lock()
 
 
-# =============================================================================
 # POSTGRES LOG HANDLER
-# =============================================================================
 
 def _resolve_level(name: str, default: int) -> int:
     """Converte il nome del livello (es. 'WARNING') nel costante int.
@@ -361,11 +348,6 @@ class PostgresLogHandler(logging.Handler):
                     details_raw["request_id"] = req_id
                 if uid and "user_id" not in details_raw:
                     details_raw["user_id"] = uid
-            # Batch 3.10: serializzazione whitelist dei campi `extra`
-            # strutturati emessi dai batch 3.1/3.2/3.4/3.5. Se il record
-            # porta almeno uno di questi attributi, viene aggiunto a
-            # `details` JSONB (query-abile via `details->>'event'` in
-            # SQL). Whitelist esplicita — zero chiavi ignote serializzate.
             for _key in _BULK_TELEMETRY_EXTRA_WHITELIST:
                 _val = getattr(record, _key, None)
                 if _val is None:
@@ -523,9 +505,7 @@ def _install_bulk_telemetry_handler() -> None:
     _bulk_telemetry_installed = True
 
 
-# =============================================================================
 # STRUCTURED LOGGER
-# =============================================================================
 
 class StructuredLogger:
     """
@@ -600,9 +580,6 @@ def get_logger(name: str, level: int = None) -> StructuredLogger:
     """
     logger = logging.getLogger(name)
 
-    # Batch 3.10: install idempotente del bulk telemetry handler (INFO
-    # per i 2 logger `_BULK_TELEMETRY_LOGGERS`, con filter). Chiamato
-    # alla prima invocazione di `get_logger` da qualunque modulo.
     _install_bulk_telemetry_handler()
 
     if name not in _configured_loggers:
@@ -663,9 +640,7 @@ def log_event(
 app_logger = get_logger("app")
 
 
-# =============================================================================
 # FUNZIONI MODULO — open/close run
-# =============================================================================
 
 def open_run(
     run_id: str,
@@ -715,4 +690,3 @@ def close_run(
         error_message=error_message,
         debug_payload=debug_payload,
     )
-

@@ -86,55 +86,18 @@ from app.shared.api_utils import (
 # (verificato pre-extraction: zero consumer esterni, ma cheap insurance).
 from app.core.arricchisci._rate_limiter import RateLimiter  # noqa: F401  (re-export)
 
-# Phase 5 B3-A.2 cutover: cluster TEMPLATE_PARAMS (`_is_template`,
-# `_template_columns`, `_interpolate_template`, `_build_params`,
-# `_has_null_params`, `_make_cache_key`) spostato in
-# `app.core.arricchisci.enrichment_template_params.EnrichmentTemplateParamsMixin`.
-# `EnrichmentExecutor` eredita dal mixin (vedi class declaration sotto).
-# I 6 metodi restano accessibili via MRO. Le call-site
-# `self._is_template / _interpolate_template / _build_params / _has_null_params /
-# _template_columns / _make_cache_key` da `validate_input` /
-# `_execute_*` / `_group_by_params` continuano a risolvere via MRO
-# senza modifiche. Vedi `orchestrate/PHASE_5_ENTRY_PLAN.md` §3 P5-B3-A.
 from app.core.arricchisci.enrichment_template_params import (
     EnrichmentTemplateParamsMixin,
 )
 
-# Phase 5 B3-A.3 cutover: cluster RESPONSE_PROCESSING (`_extract_output`,
-# `_explode_rows`, `_auto_flatten`, `_detect_geometry_type`,
-# `_infer_scalar_type`, `_flatten_dict`, `_apply_result`,
-# `_resolve_nested_list`, `_extract_json_value`) spostato in
-# `app.core.arricchisci.enrichment_response_processing.EnrichmentResponseProcessingMixin`.
-# `EnrichmentExecutor` eredita dal mixin (vedi class declaration sotto).
-# I 9 metodi restano accessibili via MRO. Le call-site
-# `self._apply_result / _extract_output / _extract_json_value` da
-# `_call_api_with_retry / _execute_* / _call_batch_api` continuano a
-# risolvere via MRO senza modifiche. Vedi
-# `orchestrate/PHASE_5_ENTRY_PLAN.md` §3 P5-B3-A.
 from app.core.arricchisci.enrichment_response_processing import (
     EnrichmentResponseProcessingMixin,
 )
 
-# Phase 5 B3-A.4 cutover: cluster BATCH_MODE (`_execute_batch_native`,
-# `_call_batch_api`, `_build_batch_payload`, `_extract_batch_output`)
-# spostato in
-# `app.core.arricchisci.enrichment_batch_mode.EnrichmentBatchModeMixin`.
-# `EnrichmentExecutor` eredita dal mixin (vedi class declaration sotto).
-# I 4 metodi restano accessibili via MRO. Le call-site
-# `self._execute_batch_native` da `execute()` (entry point dispatcher)
-# continuano a risolvere via MRO senza modifiche. Vedi
-# `orchestrate/PHASE_5_ENTRY_PLAN.md` §3 P5-B3-A.
 from app.core.arricchisci.enrichment_batch_mode import (
     EnrichmentBatchModeMixin,
 )
 
-# Phase 5 B3-A.5 cutover: cluster VALIDATION_PREVIEW (`validate_input`,
-# `preview`) spostato in
-# `app.core.arricchisci.enrichment_validation_preview.EnrichmentValidationPreviewMixin`.
-# `EnrichmentExecutor` eredita dal mixin (vedi class declaration sotto).
-# I 2 metodi restano accessibili via MRO. `validate_input` chiamato
-# da `execute()` interno (line 411 pre-extraction); `preview` entry
-# point pubblico API. Vedi `orchestrate/PHASE_5_ENTRY_PLAN.md` §3 P5-B3-A.
 from app.core.arricchisci.enrichment_validation_preview import (
     EnrichmentValidationPreviewMixin,
 )
@@ -154,45 +117,15 @@ from app.core.arricchisci.enrichment_retry_http import (
     EnrichmentRetryHttpMixin,
 )
 
-# Phase 5 B3-A.7 cutover: cluster EXECUTION_ENGINES
-# (`_execute_parallel`, `_execute_parallel_async`, `_execute_internal`)
-# spostato in
-# `app.core.arricchisci.enrichment_execution_engines.EnrichmentExecutionEnginesMixin`.
-# `EnrichmentExecutor` eredita dal mixin (vedi class declaration sotto).
-# I 3 metodi runtime engine restano accessibili via MRO. Le call-site
-# `self._execute_parallel / _execute_parallel_async / _execute_internal`
-# da `execute()` dispatcher continuano a risolvere via MRO. Vedi
-# `orchestrate/PHASE_5_ENTRY_PLAN.md` §3 P5-B3-A.
 from app.core.arricchisci.enrichment_execution_engines import (
     EnrichmentExecutionEnginesMixin,
 )
 
-# Phase 5 B3-A.8 cutover: cluster GROUPING (`_group_by_params`,
-# `_count_unique_combinations`) spostato in
-# `app.core.arricchisci.enrichment_grouping.EnrichmentGroupingMixin`.
-# `EnrichmentExecutor` eredita dal mixin (vedi class declaration sotto).
-# I 2 metodi restano accessibili via MRO. Le call-site
-# `self._group_by_params` da `_execute_*` (ExecutionEngines mixin) +
-# `self._count_unique_combinations` da `preview` (ValidationPreview
-# mixin) continuano a risolvere via MRO. Vedi
-# `orchestrate/PHASE_5_ENTRY_PLAN.md` §3 P5-B3-A.
 from app.core.arricchisci.enrichment_grouping import (
     EnrichmentGroupingMixin,
 )
 
 logger = get_logger(__name__)
-
-
-# Phase 5 B3-A.8 cleanup: il wrapper module-level `_geojson_to_wkt`
-# era dead code post-B3-A.3: `EnrichmentResponseProcessingMixin` ha
-# la sua copia locale (`enrichment_response_processing.py:137`) per
-# evitare circular import; nessun consumer esterno verificato (grep
-# `from enrichment_service import _geojson_to_wkt` → 0 match). Rimosso.
-
-
-# Phase 5 B3-A.1 cutover: `class RateLimiter` spostato in
-# `app.core.arricchisci._rate_limiter`. Re-import in testa al file
-# (vedi block sopra) per preservare i path simbolici esistenti.
 
 
 class EnrichmentExecutor(
@@ -281,21 +214,11 @@ class EnrichmentExecutor(
         batch_data = api_config.get("batch", {})
         self.batch_config = BatchConfig.from_dict(batch_data)
     
-    # =========================================================================
     # API PUBBLICA
-    # =========================================================================
     # Metodi chiamabili dall'esterno: validate_input(), preview(), execute().
     # L'ordine tipico è: validate -> preview (opzionale) -> execute.
     
-    # Phase 5 B3-A.5 cutover: cluster VALIDATION_PREVIEW
-    # (`validate_input`, `preview`) spostato in
-    # `EnrichmentValidationPreviewMixin`. I 2 metodi restano accessibili
-    # via MRO. `validate_input` chiamato da `execute()` sotto;
-    # `preview` entry point pubblico API. Vedi class declaration +
-    # import block in testa. Logger non definito nel mixin: i 2 metodi
-    # non emettono log (verificato pre-extraction).
 
-    
     def execute(self, df: pd.DataFrame) -> Tuple[pd.DataFrame, EnrichmentResult]:
         """
         Esegue l'enrichment completo.
@@ -364,64 +287,6 @@ class EnrichmentExecutor(
         )
     
 
-    # =========================================================================
-    # ESECUZIONE — RUNTIME ENGINE (post-Phase-5-B3-A.7)
-    # Phase 5 B3-A.7 cutover: cluster EXECUTION_ENGINES
-    # (`_execute_parallel`, `_execute_parallel_async`, `_execute_internal`)
-    # spostato in `EnrichmentExecutionEnginesMixin`. I 3 path runtime
-    # engine restano accessibili via MRO. Le call-site `self._execute_*`
-    # da `execute()` dispatcher continuano a risolvere via MRO.
-    # Vedi class declaration + import block in testa.
-    # =========================================================================
-
-
-    # =========================================================================
-    # METODI HELPER (post-Phase-5-B3-A)
-    # Phase 5 B3-A.2 cutover: cluster TEMPLATE_PARAMS (`_is_template`,
-    # `_template_columns`, `_interpolate_template`, `_build_params`,
-    # `_has_null_params`) spostato in
-    # `app.core.arricchisci.enrichment_template_params.EnrichmentTemplateParamsMixin`.
-    # `EnrichmentExecutor` eredita dal mixin (vedi class declaration sopra).
-    # I 5 metodi restano accessibili via MRO. Le call-site
-    # `self._is_template / _interpolate_template / _build_params /
-    # _has_null_params / _template_columns` da `validate_input` /
-    # `_execute_*` continuano a risolvere via MRO senza modifiche.
-    # `_make_cache_key` (staticmethod) idem (vedi cutover B3-A.2 #2).
-    # Restano in questa sezione (gia' nel file): `_call_api_with_retry`
-    # (HTTP retry + 429), `_extract_output`, `_explode_rows`,
-    # `_auto_flatten`, `_detect_geometry_type`, `_infer_scalar_type`,
-    # `_flatten_dict`, `_apply_result`, `_resolve_nested_list`,
-    # `_extract_json_value`, `_prepare_headers`, OAuth2 helpers
-    # (candidati per future B3-A.3+ extraction).
-    # Vedi `orchestrate/PHASE_5_ENTRY_PLAN.md` §3 P5-B3-A.
-    # =========================================================================
-
-    # Phase 5 B3-A.6 cutover: `_call_api_with_retry` (HTTP per-row
-    # retry chain) spostato in `EnrichmentRetryHttpMixin`. Risolve via
-    # MRO. Le call-site `self._call_api_with_retry(params, idx)` da
-    # `_execute_internal` / `_execute_parallel` continuano a risolvere
-    # via MRO. Vedi class declaration + import block in testa.
-
-    # Phase 5 B3-A.3 cutover: cluster RESPONSE_PROCESSING (`_extract_output`,
-    # `_explode_rows`, `_auto_flatten`, `_detect_geometry_type`,
-    # `_infer_scalar_type`, `_flatten_dict`, `_apply_result`) spostato in
-    # `EnrichmentResponseProcessingMixin`. I 7 metodi restano accessibili
-    # via MRO. Le call-site `self._extract_output / _apply_result` da
-    # `_call_api_with_retry / _execute_*` continuano a risolvere via MRO.
-    # `_resolve_nested_list` + `_extract_json_value` (cluster B3-A.3
-    # parte 2) anch'essi nel mixin (vedi cutover sotto).
-    # `_group_by_params` + `_count_unique_combinations` restano qui:
-    # candidati per B3-A.7 ExecutionEngines o cluster progress separato.
-
-    # Phase 5 B3-A.8 cutover: cluster GROUPING (`_group_by_params`,
-    # `_count_unique_combinations`) spostato in
-    # `EnrichmentGroupingMixin`. Risolvono via MRO. Vedi class
-    # declaration + import block in testa.
-
-    # Phase 5 B3-A.2 cutover: `_make_cache_key` (staticmethod, MD5 cache
-    # key da dict params) spostato in `EnrichmentTemplateParamsMixin`.
-    # Risolve via MRO. Vedi class declaration + import block in testa.
-
     def _prepare_headers(self) -> Dict:
         """Prepara headers HTTP. Delegato a shared/api_utils."""
         return _shared_prepare_headers(self.auth)
@@ -435,10 +300,6 @@ class EnrichmentExecutor(
         return _shared_get_oauth2_cc_token(self.auth)
 
 
-    # Phase 5 B3-A.3 cutover: `_resolve_nested_list` + `_extract_json_value`
-    # spostati in `EnrichmentResponseProcessingMixin`. Risolvono via MRO.
-    # Vedi class declaration + import block in testa.
-
     def _update_progress(self, processed: int, total: int, stats: EnrichmentStats):
         """Aggiorna progress callback."""
         if self.progress_callback:
@@ -450,9 +311,7 @@ class EnrichmentExecutor(
             self.progress_callback(percent, message)
 
 
-# =============================================================================
 # FUNZIONI HELPER GLOBALI
-# =============================================================================
 
 def generate_error_report(
     errors: List[RowError],

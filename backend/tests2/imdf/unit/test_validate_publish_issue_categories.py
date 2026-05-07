@@ -60,9 +60,7 @@ import app.core.imdf.validator as validator_mod
 pytestmark = [pytest.mark.unit, pytest.mark.contract]
 
 
-# ---------------------------------------------------------------------------
 # Fixtures: bundle dir + settings + collaborator stubs
-# ---------------------------------------------------------------------------
 
 
 @pytest.fixture
@@ -180,9 +178,7 @@ def _layer_name_from_url(url: str) -> str:
     return url.rstrip("/").rsplit("/", 1)[-1]
 
 
-# ---------------------------------------------------------------------------
 # Helpers per costruire i layer dict
-# ---------------------------------------------------------------------------
 
 
 def _make_layer_info(name: str, layer_id: int = 0, feature_count: Optional[int] = 0) -> dict:
@@ -239,9 +235,7 @@ def _has_top_issue(report: dict, code: str) -> bool:
     return _find_issue(report.get("top_issues", []), code) is not None
 
 
-# ---------------------------------------------------------------------------
 # Sanity: no-op happy-ish path (zero issue su FS senza problemi)
-# ---------------------------------------------------------------------------
 
 
 def test_validate_publish_returns_dict_with_canonical_shape(
@@ -272,9 +266,7 @@ def test_validate_publish_returns_dict_with_canonical_shape(
         assert key in report["summary"], f"missing summary.{key}"
 
 
-# ---------------------------------------------------------------------------
 # 1. TYPE_MISMATCH (schema_issues)
-# ---------------------------------------------------------------------------
 
 
 def test_type_mismatch_emits_warning_in_replace(
@@ -351,9 +343,7 @@ def test_type_mismatch_on_non_match_column_is_warning(
     assert score_issue["severity"] == "warning"
 
 
-# ---------------------------------------------------------------------------
 # 2. NULL_MATCH_KEY (data_issues)
-# ---------------------------------------------------------------------------
 
 
 def test_null_match_key_warning_in_replace(imdf_bundle_dir, patch_collaborators):
@@ -411,9 +401,7 @@ def test_null_match_key_error_in_upsert(imdf_bundle_dir, patch_collaborators):
     assert issue["severity"] == "error"
 
 
-# ---------------------------------------------------------------------------
 # 3. DUPLICATE_MATCH_KEY (data_issues)
-# ---------------------------------------------------------------------------
 
 
 def test_duplicate_match_key_warning_in_upsert(imdf_bundle_dir, patch_collaborators):
@@ -481,9 +469,7 @@ def test_duplicate_match_key_error_in_update(imdf_bundle_dir, patch_collaborator
     assert issue["severity"] == "error"
 
 
-# ---------------------------------------------------------------------------
 # 4. STRING_TRUNCATION (data_issues)
-# ---------------------------------------------------------------------------
 
 
 def test_string_truncation_warning_for_normal_field(
@@ -553,9 +539,7 @@ def test_string_truncation_error_for_match_column(
     assert issue["severity"] == "error"  # match column
 
 
-# ---------------------------------------------------------------------------
 # 5. NULL_ON_NON_NULLABLE (data_issues)
-# ---------------------------------------------------------------------------
 
 
 def test_null_on_non_nullable_warning_in_replace(
@@ -627,9 +611,7 @@ def test_null_on_non_nullable_error_in_append(
     assert issue["severity"] == "error"
 
 
-# ---------------------------------------------------------------------------
 # 6. MISSING_CAPABILITIES (top_issues)
-# ---------------------------------------------------------------------------
 
 
 def test_missing_capabilities_for_append(imdf_bundle_dir, patch_collaborators):
@@ -694,9 +676,7 @@ def test_missing_capabilities_for_upsert(imdf_bundle_dir, patch_collaborators):
     assert "delete" in issue["message"].lower()
 
 
-# ---------------------------------------------------------------------------
 # 7. FOLDER_MISMATCH (top_issues)
-# ---------------------------------------------------------------------------
 
 
 def test_folder_mismatch_warning_when_request_differs(
@@ -763,9 +743,7 @@ def test_folder_match_no_warning(imdf_bundle_dir, patch_collaborators):
     assert not _has_top_issue(report, "FOLDER_MISMATCH")
 
 
-# ---------------------------------------------------------------------------
 # 8. CRS_MISMATCH (top_issues)
-# ---------------------------------------------------------------------------
 
 
 def test_crs_mismatch_warning_when_bundle_and_fs_differ(
@@ -833,9 +811,7 @@ def test_crs_match_no_warning(imdf_bundle_dir, patch_collaborators):
     assert not _has_top_issue(report, "CRS_MISMATCH")
 
 
-# ---------------------------------------------------------------------------
 # Sentinel: report-level invariants comuni a tutti i test
-# ---------------------------------------------------------------------------
 
 
 def test_summary_counters_match_severities(

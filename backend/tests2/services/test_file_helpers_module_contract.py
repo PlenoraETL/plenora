@@ -27,9 +27,7 @@ import pytest
 pytestmark = [pytest.mark.unit, pytest.mark.contract]
 
 
-# =============================================================================
 # 1. Esposizione simboli + identity re-export
-# =============================================================================
 
 
 def test_file_helpers_module_exposes_four_helpers():
@@ -56,9 +54,7 @@ def test_file_service_reexports_helpers_with_object_identity():
     assert fs_mod.ColumnInfoBuilder is fh.ColumnInfoBuilder
 
 
-# =============================================================================
 # 2. FormatDetector
-# =============================================================================
 
 
 def test_format_detector_csv_xlsx_gpkg_unknown():
@@ -89,9 +85,7 @@ def test_format_detector_geo_vs_tabular():
         assert FormatDetector.is_geospatial(tab) is False
 
 
-# =============================================================================
 # 3. TypeInferrer
-# =============================================================================
 
 
 def test_type_inferrer_int_float_bool_datetime():
@@ -148,9 +142,7 @@ def test_type_inferrer_detect_geometry_type_mapping():
     assert TypeInferrer.detect_geometry_type(["UnknownThing"]) == "geometry"
 
 
-# =============================================================================
 # 4. FileIdGenerator
-# =============================================================================
 
 
 def test_file_id_generator_opaque_format():
@@ -173,9 +165,7 @@ def test_file_id_generator_sanitize_name():
     assert len(truncated) == 10
 
 
-# =============================================================================
 # 5. ColumnInfoBuilder
-# =============================================================================
 
 
 def test_column_info_builder_from_simple_dataframe():

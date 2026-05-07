@@ -39,10 +39,6 @@ from app.core.auth.dependencies import (
     require_superadmin,
 )
 from app.core.auth.owner_dependencies import require_project_owner
-# BE-GO-READY-AUTH-ENGINE-012: pure-contract symbols
-# (`CurrentUser`, `group_filter`) consumed from
-# `app.shared.contracts.auth`. DB-bound `assert_group_access`
-# stays on `app.core.auth.ownership`.
 from app.shared.contracts.auth import CurrentUser, group_filter
 from app.core.auth.ownership import assert_group_access
 from .models import ProjectCreate
@@ -72,8 +68,6 @@ def init_projects(project_service):
     _validator = ConnectionValidator(_schema_service)
 
 
-# ==================== CRUD PROGETTI ====================
-
 @router.post("", status_code=201)
 @audit_action(action="project.create")
 def create_project(data: ProjectCreateWithCanvas, current_user: CurrentUser = Depends(require_user_or_above)):
@@ -84,9 +78,6 @@ def create_project(data: ProjectCreateWithCanvas, current_user: CurrentUser = De
         created_by=current_user.user_id,
     )
 
-    # Se canvas fornito, salvalo direttamente. Errori specifici di parsing/
-    # validazione sono catturati e segnalati nel response come warning, ma
-    # non rollbackano la creazione del progetto (per backward compat).
     canvas_warning = None
     if data.canvas:
         try:
@@ -203,9 +194,6 @@ def _visible_project_ids_strict(
         return ids
     if not owner_group_id:
         return set()
-    # BE-GO-READY-CONNECTION-ENGINE-003: la query inline e' migrata
-    # in `app.db.config.projects.list_owned_project_ids`. Stesso
-    # behavior (single query, batch-safe, ritorna set[str]).
     from app.db.config.projects import list_owned_project_ids
     return list_owned_project_ids(ids, owner_group_id=owner_group_id)
 
@@ -420,13 +408,6 @@ def delete_project(project_id: str, current_user: CurrentUser = Depends(require_
             },
         )
     except ProjectCleanupPartialError as e:
-        # Shape 500 cleanup-partial (Batch 9 C6):
-        # { error, message, project_id, failed_steps:{critical,derived},
-        #   project_preserved:true }.
-        # Fail-closed: la row config.projects e' preservata (vedi C5).
-        # `project_preserved:true` telegrama l'invariante al caller che puo'
-        # ritentare o escalare senza rischiare di lasciare il sistema in
-        # stato incoerente.
         raise HTTPException(
             status_code=500,
             detail={
@@ -757,8 +738,6 @@ def update_project_canvas(
     return {"status": "ok", "project_id": project_id}
 
 
-# ==================== SCHEMA INFERENCE ====================
-
 class ValidationRequest(BaseModel):
     """Request per validazione connessione"""
     source_node_id: str
@@ -842,8 +821,6 @@ def validate_all_connections(project_id: str, current_user: CurrentUser = Depend
     except Exception as e:
         raise_typed_http(error_codes.INTERNAL_ERROR, status_code=500, message="Errore interno del server")
 
-
-# ==================== ADMIN: ORPHAN CLEANUP ====================
 
 @router.post("/admin/cleanup-orphans")
 @audit_action(action="admin.cleanup_orphans")

@@ -31,9 +31,7 @@ import pytest
 pytestmark = [pytest.mark.unit, pytest.mark.intermediate, pytest.mark.contract]
 
 
-# ============================================================
 # Helpers
-# ============================================================
 
 
 def _settings_baseline(**overrides) -> dict:
@@ -102,9 +100,7 @@ def _patch_run_meta(canvas_id: str = "proj-1", group_id: str = "grp-1"):
     )
 
 
-# ============================================================
 # A. Default mode = metadata_only
-# ============================================================
 
 
 def test_default_persistence_mode_is_metadata_only():
@@ -112,9 +108,7 @@ def test_default_persistence_mode_is_metadata_only():
     assert settings.INTERMEDIATE_PERSISTENCE_MODE == "metadata_only"
 
 
-# ============================================================
 # B. mode=full_artifact: parquet + manifest + meta
-# ============================================================
 
 
 def test_full_artifact_writes_parquet_and_manifest_to_runtime_object_storage():
@@ -213,9 +207,7 @@ def test_full_artifact_parquet_payload_roundtrip():
     assert roundtrip["a"].tolist() == [1, 2, 3, 4]
 
 
-# ============================================================
 # C. Object storage disabled
-# ============================================================
 
 
 def test_full_artifact_validate_fails_when_object_storage_disabled():
@@ -270,9 +262,7 @@ def test_full_artifact_runtime_capability_collapse_marks_failed():
     assert "disabled" in (captured_db["artifact_error"] or "")
 
 
-# ============================================================
 # D. Layout key deterministico
-# ============================================================
 
 
 def test_artifact_layout_key_is_deterministic_and_well_formed():
@@ -313,9 +303,7 @@ def test_artifact_layout_strips_trailing_slash_from_prefix():
     assert "//" not in key.replace("kind=", "k=")
 
 
-# ============================================================
 # E. Niente df.to_dict full in mode full_artifact
-# ============================================================
 
 
 def test_full_artifact_does_not_call_to_dict_full():
@@ -345,9 +333,7 @@ def test_full_artifact_does_not_call_to_dict_full():
     spy_to_dict.assert_not_called()
 
 
-# ============================================================
 # F. write_node legacy / full_pg invariato
-# ============================================================
 
 
 def test_full_pg_legacy_path_does_not_touch_object_storage():
@@ -420,9 +406,7 @@ def test_metadata_only_path_does_not_touch_object_storage():
     assert captured_db["node_hash"]
 
 
-# ============================================================
 # G. Status "failed" propagato a node_meta in caso di parquet error
-# ============================================================
 
 
 def test_full_artifact_serialize_error_marks_failed_and_does_not_crash():

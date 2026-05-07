@@ -44,9 +44,7 @@ def _join(left, right, *, left_on, right_on):
     )
 
 
-# =============================================================================
 # Different keys: right_on resta col nome originale (BUG #40)
-# =============================================================================
 
 
 def test_different_keys_right_join_key_keeps_original_name():
@@ -76,9 +74,7 @@ def test_different_keys_no_collision_no_duplicates():
     assert len(names) == len(set(names)), f"Nomi duplicati: {names}"
 
 
-# =============================================================================
 # Same keys: join key di destra skipped (no duplicato)
-# =============================================================================
 
 
 def test_same_keys_skips_right_join_key():
@@ -97,9 +93,7 @@ def test_same_keys_skips_right_join_key():
     assert "id_R" not in names
 
 
-# =============================================================================
 # Tipi e is_calculated preservati
-# =============================================================================
 
 
 def test_column_metadata_preserved_through_suffix_rename():
@@ -122,9 +116,7 @@ def test_column_metadata_preserved_through_suffix_rename():
     assert by_name["qty_R"].is_calculated is False
 
 
-# =============================================================================
 # Source node tagged
-# =============================================================================
 
 
 def test_result_columns_tagged_with_join_node_id():

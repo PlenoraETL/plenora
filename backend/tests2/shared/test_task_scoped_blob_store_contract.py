@@ -43,9 +43,7 @@ pytestmark = [pytest.mark.unit, pytest.mark.shared, pytest.mark.contract]
 _BACKEND_APP = Path(__file__).resolve().parent.parent.parent / "app"
 
 
-# ---------------------------------------------------------------------------
 # 1. TaskBlobSaveResult shape
-# ---------------------------------------------------------------------------
 
 
 def test_task_blob_save_result_fields():
@@ -85,9 +83,7 @@ def test_task_blob_save_result_field_types():
     assert hints["sidecar_key"] is not None
 
 
-# ---------------------------------------------------------------------------
 # 2. TaskScopedBlobStore Protocol shape
-# ---------------------------------------------------------------------------
 
 
 def test_protocol_has_required_methods():
@@ -130,9 +126,7 @@ def test_protocol_rejects_incomplete_impl():
     assert not isinstance(_NoDelete(), TaskScopedBlobStore)
 
 
-# ---------------------------------------------------------------------------
 # 3. Pure module — niente import pesanti
-# ---------------------------------------------------------------------------
 
 
 def test_module_has_no_heavy_imports():
@@ -170,9 +164,7 @@ def test_module_only_has_dataclass_and_protocol():
     assert set(public) >= {"TaskBlobSaveResult", "TaskScopedBlobStore"}
 
 
-# ---------------------------------------------------------------------------
 # 4. Parity audit: existing wrappers vs Protocol common denominator
-# ---------------------------------------------------------------------------
 
 
 def test_eseguibili_storage_has_common_methods():
@@ -218,9 +210,7 @@ def test_specialized_methods_are_per_wrapper():
     assert getattr(ese_storage, "get_meta_only", None) is None
 
 
-# ---------------------------------------------------------------------------
 # 5. Storage prefix alignment with app.shared.storage_layout
-# ---------------------------------------------------------------------------
 
 
 def test_prefixes_aligned_with_storage_layout():

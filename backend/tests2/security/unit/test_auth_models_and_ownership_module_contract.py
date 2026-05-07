@@ -198,9 +198,7 @@ def test_require_owner_dependencies_remain_in_auth_module():
         )
 
 
-# ---------------------------------------------------------------------------
 # AUTH-ENGINE-021 removal locks
-# ---------------------------------------------------------------------------
 
 
 def test_auth_no_longer_reexports_removed_dtos():
@@ -274,9 +272,7 @@ def test_auth_no_longer_reexports_removed_handlers_via_import():
         )
 
 
-# ---------------------------------------------------------------------------
 # AUTH-ENGINE-014 removal lock
-# ---------------------------------------------------------------------------
 
 
 def test_auth_no_longer_reexports_group_filter():

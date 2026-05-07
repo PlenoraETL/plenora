@@ -307,9 +307,7 @@ class ReplaceStrategiesMixin:
 
         return result
 
-    # ========================================================================
     # STAGE + SWAP (C5 fix 3 — UNDO safety su dataset grandi)
-    # ========================================================================
 
     def _truncate_insert_stage_swap(
         self,
@@ -373,7 +371,6 @@ class ReplaceStrategiesMixin:
             f"shadow={stg_table}, backup={backup_table}"
         )
 
-        # -------- PHASE 1+2: cleanup orfani + CREATE shadow --------
         mssql_name_mapping: Dict[str, Tuple[str, str]] = {}  # constraint/index suffixed→original (MSSQL only)
         try:
             with self.engine.connect() as conn:
@@ -382,10 +379,6 @@ class ReplaceStrategiesMixin:
                 conn.execute(text(drop_stg_sql))
                 conn.execute(text(drop_bak_sql))
                 conn.execute(text(create_like_sql))
-                # MSSQL: CREATE e' SELECT INTO, perde PK/UK/CHECK/indici.
-                # Introspect sys catalog + replay con suffisso __stg per
-                # evitare collisioni. Post-swap (PHASE 6) rinomineremo
-                # via sp_rename per ripristinare i nomi originali.
                 if self.db_type == "mssql":
                     mssql_name_mapping = self._mssql_replicate_schema_to_shadow(
                         conn, schema, src_table, stg_table
@@ -426,7 +419,6 @@ class ReplaceStrategiesMixin:
             logger.error(f"[STAGE+SWAP] errore non-permission: {e}", exc_info=True)
             return result
 
-        # -------- PHASE 3: INSERT batch nella shadow --------
         active_cols = [c for c in columns if not c.skip]
         batch_size = self.config.batch_size
         total_batches = math.ceil(total_rows / batch_size) if total_rows else 0
@@ -482,7 +474,6 @@ class ReplaceStrategiesMixin:
             result.error_details = repr(e)
             return result
 
-        # -------- PHASE 4: SWAP atomico target<->shadow --------
         try:
             # Postgres/MSSQL: multi-statement DDL in UNA txn.
             # MySQL: singola RENAME TABLE atomica.
@@ -529,7 +520,6 @@ class ReplaceStrategiesMixin:
             result.error_details = repr(e)
             return result
 
-        # -------- PHASE 5: DROP backup (best-effort) --------
         try:
             with self.engine.connect() as conn:
                 conn.execute(text(drop_bak_sql))
@@ -540,7 +530,6 @@ class ReplaceStrategiesMixin:
                 f"(orfano lasciato, verra' rimosso alla prossima run): {e}"
             )
 
-        # -------- PHASE 6 (MSSQL only): ripristina nomi originali --------
         # Dopo il DROP bak i nomi costraint/indice originali sono liberi,
         # quindi usiamo sp_rename per spogliare il suffisso __stg e
         # ottenere uno schema identico a quello pre-swap.
@@ -573,9 +562,7 @@ class ReplaceStrategiesMixin:
         )
         return result
 
-    # ========================================================================
     # REPLACE ATOMICO (C6 critical fix: drop+create+insert → stage+swap)
-    # ========================================================================
 
     def _replace_atomic(
         self,
@@ -631,7 +618,6 @@ class ReplaceStrategiesMixin:
         # Check se target esiste (decide se swap vs single rename)
         target_exists = self._table_exists_for(schema, src_table)
 
-        # -------- PHASE 1: CREATE shadow con schema fresh --------
         try:
             create_sql = self.ddl.generate_create_table(
                 schema, stg_table, columns, pandas_dtypes or {},
@@ -649,7 +635,6 @@ class ReplaceStrategiesMixin:
             )
             return result
 
-        # -------- PHASE 2: INSERT batch --------
         insert_sql, _ = self.ddl.generate_insert(schema, stg_table, columns)
         active_cols = [c for c in columns if not c.skip]
         batch_size = self.config.batch_size
@@ -705,7 +690,6 @@ class ReplaceStrategiesMixin:
             result.error_details = repr(e)
             return result
 
-        # -------- PHASE 3: SWAP rename --------
         try:
             if target_exists:
                 swap_stmts = self.ddl.generate_swap_rename(
@@ -754,7 +738,6 @@ class ReplaceStrategiesMixin:
             result.error_message = f"SWAP fallito: {e}"
             return result
 
-        # -------- PHASE 4: DROP backup (se target esisteva) --------
         if target_exists:
             try:
                 with self.engine.connect() as conn:
@@ -799,9 +782,7 @@ class ReplaceStrategiesMixin:
             f"{self.db_type}"
         )
 
-    # ========================================================================
     # MSSQL schema introspection + replay (C6 fix: schema preservation)
-    # ========================================================================
 
     def _mssql_replicate_schema_to_shadow(
         self, conn, schema: str, src_table: str, stg_table: str,
@@ -829,7 +810,6 @@ class ReplaceStrategiesMixin:
         suffix = "__stg"
         mapping: Dict[str, Tuple[str, str]] = {}
 
-        # ---- PK ----
         pk_rows = conn.execute(text("""
             SELECT kc.name AS cname,
                    STRING_AGG(QUOTENAME(c.name), ',')
@@ -856,7 +836,6 @@ class ReplaceStrategiesMixin:
             ))
             mapping[new_name] = (orig_name, "OBJECT")
 
-        # ---- UK ----
         uk_rows = conn.execute(text("""
             SELECT kc.name AS cname,
                    STRING_AGG(QUOTENAME(c.name), ',')
@@ -883,7 +862,6 @@ class ReplaceStrategiesMixin:
             ))
             mapping[new_name] = (orig_name, "OBJECT")
 
-        # ---- CHECK ----
         ck_rows = conn.execute(text("""
             SELECT cc.name AS cname, cc.definition AS def
             FROM sys.check_constraints cc
@@ -901,7 +879,6 @@ class ReplaceStrategiesMixin:
             ))
             mapping[new_name] = (orig_name, "OBJECT")
 
-        # ---- Non-PK, Non-UK indexes ----
         idx_rows = conn.execute(text("""
             SELECT i.name AS iname,
                    i.is_unique AS uq,
@@ -936,9 +913,7 @@ class ReplaceStrategiesMixin:
 
         return mapping
 
-    # ========================================================================
     # ORACLE DBMS_REDEFINITION (C6 fix: atomicity + schema preservation)
-    # ========================================================================
 
     def _truncate_insert_oracle_redef(
         self,
@@ -1022,7 +997,6 @@ class ReplaceStrategiesMixin:
                 cleanup_err,
             )
 
-        # -------- PHASE 1: eligibility check --------
         options_flag = None
         for opt in ("CONS_USE_PK", "CONS_USE_ROWID"):
             try:
@@ -1054,7 +1028,6 @@ END;"""))
             )
             return self._truncate_insert_atomic(df, columns, result)
 
-        # -------- PHASE 2: CREATE interim shell --------
         try:
             create_sql = (
                 f"CREATE TABLE {interim_qualified} AS "
@@ -1070,7 +1043,6 @@ END;"""))
             )
             return self._truncate_insert_atomic(df, columns, result)
 
-        # -------- PHASE 3: START_REDEF_TABLE (copia baseline) --------
         try:
             with self.engine.connect() as conn:
                 conn.execute(text(f"""
@@ -1105,7 +1077,6 @@ END;"""))
 
         # Da qui in poi, qualunque errore richiede ABORT_REDEF
         try:
-            # -------- PHASE 4: wipe baseline + INSERT dati nuovi --------
             with self.engine.connect() as conn:
                 self._oracle_setup(conn)
                 conn.execute(text(f"DELETE FROM {interim_qualified}"))
@@ -1135,7 +1106,6 @@ END;"""))
 
                 conn.commit()
 
-            # -------- PHASE 5: COPY_TABLE_DEPENDENTS --------
             with self.engine.connect() as conn:
                 conn.execute(text(f"""
 DECLARE
@@ -1155,7 +1125,6 @@ BEGIN
 END;"""))
                 conn.commit()
 
-            # -------- PHASE 6: FINISH_REDEF_TABLE (atomic swap) --------
             with self.engine.connect() as conn:
                 conn.execute(text(f"""
 BEGIN
@@ -1167,7 +1136,6 @@ BEGIN
 END;"""))
                 conn.commit()
 
-            # -------- PHASE 7: DROP interim (contiene i dati vecchi) --------
             try:
                 with self.engine.connect() as conn:
                     conn.execute(text(

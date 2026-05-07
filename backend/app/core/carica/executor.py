@@ -94,7 +94,6 @@ def _resolve_aliases_in_mappings(
             cm.dest_column = original
 
 
-
 logger = get_logger("app.core.carica.executor")
 
 
@@ -366,9 +365,7 @@ class CaricaExecutor:
             "total_rows": len(df),
         }
 
-    # ========================================================================
     # HELPER INTERNI
-    # ========================================================================
 
     def _get_connection(self, connection_id: str) -> Dict[str, Any]:
         """Recupera la configurazione di connessione."""

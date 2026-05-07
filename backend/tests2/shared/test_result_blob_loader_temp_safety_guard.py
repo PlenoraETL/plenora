@@ -57,9 +57,7 @@ from tests2.shared._resource_loader_helpers import (
 pytestmark = [pytest.mark.unit, pytest.mark.shared, pytest.mark.contract]
 
 
-# ---------------------------------------------------------------------------
 # 1. Prefix invariant
-# ---------------------------------------------------------------------------
 
 
 def test_materialize_to_temp_path_uses_plenora_prefix():
@@ -109,9 +107,7 @@ def test_materialize_writes_into_stdlib_tempdir():
         cleanup_temp_path(path)
 
 
-# ---------------------------------------------------------------------------
 # 2. No leak on write failure
-# ---------------------------------------------------------------------------
 
 
 def test_materialize_unlinks_partial_on_write_failure():
@@ -174,9 +170,7 @@ def test_materialize_unlinks_partial_on_write_failure():
     )
 
 
-# ---------------------------------------------------------------------------
 # 3. Cleanup helper is path-bounded
-# ---------------------------------------------------------------------------
 
 
 def test_cleanup_refuses_path_without_prefix(tmp_path):
@@ -298,9 +292,7 @@ def test_cleanup_never_raises_on_filesystem_errors(tmp_path):
     assert result is False
 
 
-# ---------------------------------------------------------------------------
 # 4. is_temporary=True contract — docstring lock
-# ---------------------------------------------------------------------------
 
 
 def test_loader_path_mode_returns_is_temporary_true():
@@ -375,11 +367,9 @@ def test_loader_docstring_documents_caller_cleanup_responsibility():
     )
 
 
-# ---------------------------------------------------------------------------
 # 5. Path mode stays fallback-only — bytes mode is the default for new
 #    consumers. Source-bound check that bytes mode is documented as
 #    the default surface on the loader.
-# ---------------------------------------------------------------------------
 
 
 def test_path_mode_documented_as_fallback_in_module_docstring():

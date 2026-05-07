@@ -51,10 +51,8 @@ class ZipBombError(ValueError):
     count o compression ratio) — indicatore di zip bomb."""
 
 
-# ─────────────────────────────────────────────────────────────────────
 # Cap defaults (lazy-read from env ad ogni chiamata: no import-time
 # freeze, cosi' test + tuning operational senza restart del processo)
-# ─────────────────────────────────────────────────────────────────────
 
 _DEFAULT_MAX_UNCOMPRESSED_BYTES = 500 * 1024 * 1024  # 500 MB
 _DEFAULT_MAX_FILES = 5000

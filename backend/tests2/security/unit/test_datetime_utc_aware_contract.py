@@ -93,10 +93,8 @@ def test_no_naive_datetime_now_in_production_code():
     )
 
 
-# =============================================================================
 # Self-test del pattern AST: i casi accettati DEVONO essere riconosciuti
 # come tali, altrimenti il guard genererebbe falsi positivi.
-# =============================================================================
 
 
 @pytest.mark.parametrize("code", [

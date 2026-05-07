@@ -23,9 +23,7 @@ def init_db():
     pass
 
 
-# ============================================================
 # RESULTS
-# ============================================================
 
 def save_result(result_id: str, project_id: str, group_id: str,
                 filename: str, fmt: str, data: Optional[bytes] = None,
@@ -208,9 +206,6 @@ def delete_result(result_id: str) -> bool:
             if outcome in ("ok", "skipped"):
                 mark_done(reconciliation_ref.id)
             else:
-                # outcome == "failed": ADR-0011 posture preserved
-                # (orphan accepted, DB row stays deleted), but now
-                # persisted for the reconciler beat hook (batch 006).
                 mark_failed_attempt(
                     reconciliation_ref.id,
                     error=f"compensating_delete_outcome={outcome}",
@@ -308,9 +303,7 @@ def delete_results_for_project(project_id: str) -> int:
     return deleted_count
 
 
-# ============================================================
 # EXECUTION LOGS
-# ============================================================
 
 def log_execution(log_id: str, group_id: str, project_id: str = None,
                   schedule_id: str = None, status: str = "running",

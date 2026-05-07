@@ -121,9 +121,7 @@ class SchemaIntrospectionMixin:
     Zero transaction semantics, zero DDL execution.
     """
 
-    # ========================================================================
     # INTROSPECTION DB-SIDE
-    # ========================================================================
 
     def table_exists(self) -> bool:
         """Verifica se la tabella destinazione esiste.
@@ -232,9 +230,7 @@ class SchemaIntrospectionMixin:
             )
             raise
 
-    # ========================================================================
     # INTROSPECTION DATAFRAME-SIDE (DDL planning)
-    # ========================================================================
 
     def _compute_schema_hints(
         self,

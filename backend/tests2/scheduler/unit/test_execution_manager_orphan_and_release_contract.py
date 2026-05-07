@@ -43,9 +43,6 @@ from app.core.scheduler.execution_manager import ExecutionManager
 pytestmark = [pytest.mark.unit, pytest.mark.scheduler, pytest.mark.contract]
 
 
-# ─── Helpers ─────────────────────────────────────────────────────────────
-
-
 def _make_manager() -> ExecutionManager:
     """ExecutionManager bypassando ``__init__`` per non creare
     connessioni reali (pattern dagli altri file test del modulo)."""
@@ -93,9 +90,6 @@ def _make_manager_for_cleanup_test(schedule_config) -> ExecutionManager:
         return_value={"success": False, "status": "failed", "message": "forced"}
     )
     return manager
-
-
-# ─── 1) Orphan project: mark_as_orphan + log + early return ──────────────
 
 
 def test_execute_marks_schedule_as_orphan_when_project_does_not_exist(
@@ -165,9 +159,6 @@ def test_execute_marks_schedule_as_orphan_when_project_does_not_exist(
     manager.concurrency.try_acquire.assert_not_called()
 
 
-# ─── 2) Release retry nel finally dopo transient failure ─────────────────
-
-
 def test_finally_release_lock_retries_once_after_transient_db_failure(
     schedule_config, monkeypatch
 ):
@@ -234,9 +225,6 @@ def test_finally_release_lock_retries_once_after_transient_db_failure(
     # non solleva niente visibile al caller.
     assert result is not None
     assert result["status"] == "failed"
-
-
-# ─── 3) Release entrambi i tentativi falliti: log + no propagation ──────
 
 
 def test_finally_does_not_propagate_when_both_release_attempts_fail(

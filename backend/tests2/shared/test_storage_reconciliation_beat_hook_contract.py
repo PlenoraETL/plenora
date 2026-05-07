@@ -26,9 +26,7 @@ import pytest
 pytestmark = [pytest.mark.unit, pytest.mark.shared, pytest.mark.contract]
 
 
-# ---------------------------------------------------------------------------
 # Settings.DEFAULTS — 4 new tunables
-# ---------------------------------------------------------------------------
 
 
 def test_settings_defaults_expose_storage_reconcile_tunables():
@@ -46,9 +44,7 @@ def test_settings_defaults_expose_storage_reconcile_tunables():
     assert Settings.DEFAULTS["STORAGE_RECONCILE_BACKOFF_BASE_SECONDS"] > 0
 
 
-# ---------------------------------------------------------------------------
 # compute_next_retry_at — pure backoff helper
-# ---------------------------------------------------------------------------
 
 
 def test_compute_next_retry_at_first_attempt_no_backoff():
@@ -99,9 +95,7 @@ def test_compute_next_retry_at_rejects_invalid_base_seconds():
         compute_next_retry_at(1, base_seconds=-5)
 
 
-# ---------------------------------------------------------------------------
 # fetch_due_pending_deletes — read-only fetch
-# ---------------------------------------------------------------------------
 
 
 def _capture_fetchall(monkeypatch, return_rows):
@@ -211,9 +205,7 @@ def test_fetch_due_pending_deletes_handles_tuple_rows():
     assert out[0].attempts == 2
 
 
-# ---------------------------------------------------------------------------
 # mark_lost — terminal autocommit
-# ---------------------------------------------------------------------------
 
 
 def _capture_pg_execute(monkeypatch):
@@ -258,9 +250,7 @@ def test_mark_lost_swallows_exception(monkeypatch):
     assert mark_lost("rec-z", error="boom") is None
 
 
-# ---------------------------------------------------------------------------
 # Beat hook _reconcile_storage — wiring + dispatch
-# ---------------------------------------------------------------------------
 
 
 def _make_scheduler():
@@ -579,9 +569,7 @@ def test_reconcile_storage_swallows_compensating_delete_exception(monkeypatch):
     assert all(rid != "rec-A" for rid, _ in lost_calls)
 
 
-# ---------------------------------------------------------------------------
 # Source-bound: tick wires _reconcile_storage
-# ---------------------------------------------------------------------------
 
 
 def test_tick_wires_reconcile_storage_call():

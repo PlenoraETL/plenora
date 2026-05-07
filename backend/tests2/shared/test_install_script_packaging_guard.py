@@ -47,9 +47,7 @@ def install_sh_text() -> str:
     return _INSTALL_SH.read_text(encoding="utf-8")
 
 
-# =====================================================================
 # 1. Required commands array stays canonical
-# =====================================================================
 
 
 _EXPECTED_REQUIRED_COMMANDS = (
@@ -81,9 +79,7 @@ def test_installer_required_commands_array_is_canonical(install_sh_text: str):
         )
 
 
-# =====================================================================
 # 2. Python pin matches CI
-# =====================================================================
 
 
 def test_installer_pins_python_major_minor_to_3_11(install_sh_text: str):
@@ -96,9 +92,7 @@ def test_installer_pins_python_major_minor_to_3_11(install_sh_text: str):
     )
 
 
-# =====================================================================
 # 3. Native shared lib probe mentions gdal
-# =====================================================================
 
 
 def test_installer_shared_lib_probe_includes_gdal(install_sh_text: str):
@@ -118,9 +112,7 @@ def test_installer_shared_lib_probe_includes_gdal(install_sh_text: str):
     )
 
 
-# =====================================================================
 # 4. --check flag wired and short-circuits
-# =====================================================================
 
 
 def test_check_flag_is_parsed(install_sh_text: str):
@@ -158,9 +150,7 @@ def test_check_only_short_circuits_before_prompts(install_sh_text: str):
     )
 
 
-# =====================================================================
 # 5. step_validate_packaging exists and is invoked in main
-# =====================================================================
 
 
 def test_step_validate_packaging_defined_and_invoked(install_sh_text: str):
@@ -180,9 +170,7 @@ def test_step_validate_packaging_defined_and_invoked(install_sh_text: str):
     )
 
 
-# =====================================================================
 # 6. ASCII-only
-# =====================================================================
 
 
 def test_install_sh_is_ascii_only(install_sh_text: str):
@@ -199,9 +187,7 @@ def test_install_sh_is_ascii_only(install_sh_text: str):
     )
 
 
-# =====================================================================
 # 7. No destructive package install automation
-# =====================================================================
 
 
 _DESTRUCTIVE_PATTERNS = (
@@ -243,9 +229,7 @@ def test_install_sh_does_not_invoke_package_managers(install_sh_text: str):
     )
 
 
-# =====================================================================
 # 8. Sanity: file exists and is non-trivial
-# =====================================================================
 
 
 def test_install_sh_exists_and_is_executable_text():
@@ -262,9 +246,7 @@ def test_install_sh_exists_and_is_executable_text():
     )
 
 
-# =====================================================================
 # 9. --smoke flag wired and short-circuits without prompts/writes
-# =====================================================================
 #
 # BE-GO-READY-INSTALL-009-SMOKE-SCRIPT-GUARDS. The --smoke option is
 # the post-install verification hook (rows 7-8 of the canonical
@@ -352,9 +334,7 @@ def test_smoke_only_short_circuits_before_prompts_and_writes(
     )
 
 
-# =====================================================================
 # 10. INSTALLER_SMOKE_MEMORY_CAPS canonical (six caps)
-# =====================================================================
 #
 # The smoke harness reads runtime-effective memory caps via
 # `app.config.settings.get(...)`. The list is the single source of
@@ -413,9 +393,7 @@ def test_installer_smoke_memory_caps_includes_artifact_preview(
     )
 
 
-# =====================================================================
 # 11. Smoke branch is non-destructive (no writes, no service mutation)
-# =====================================================================
 
 
 def _slice_smoke_block(text: str) -> str:
@@ -505,9 +483,7 @@ def test_smoke_branch_does_not_call_write_env_or_probe_services(
         )
 
 
-# =====================================================================
 # 12. Optional health/ready curl uses bounded --max-time
-# =====================================================================
 
 
 def test_smoke_health_ready_curl_uses_max_time(install_sh_text: str):
@@ -542,9 +518,7 @@ def test_smoke_health_ready_curl_uses_max_time(install_sh_text: str):
         )
 
 
-# =====================================================================
 # 13. cleanroom.ping uses bounded AsyncResult.get(timeout=)
-# =====================================================================
 
 
 def test_smoke_cleanroom_ping_uses_bounded_get(install_sh_text: str):
@@ -563,9 +537,7 @@ def test_smoke_cleanroom_ping_uses_bounded_get(install_sh_text: str):
     )
 
 
-# =====================================================================
 # 14. Smoke branch reads only the operator-controlled smoke env vars
-# =====================================================================
 
 
 def test_smoke_branch_only_reads_smoke_env_vars(install_sh_text: str):
@@ -597,9 +569,7 @@ def test_smoke_branch_only_reads_smoke_env_vars(install_sh_text: str):
         )
 
 
-# =====================================================================
 # 15. --check reports env file + venv status (BE-GO-READY-INSTALL-020)
-# =====================================================================
 
 
 def test_check_env_status_function_defined(install_sh_text: str):
@@ -672,9 +642,7 @@ def test_check_env_status_called_in_check_only_branch(install_sh_text: str):
     )
 
 
-# =====================================================================
 # 16. INSTALLER_MANAGED_KEYS all documented in backend/.env.example
-# =====================================================================
 #
 # BE-GO-READY-ARCH-059-W6: Every key in INSTALLER_MANAGED_KEYS must
 # appear in backend/.env.example so operators know what the installer

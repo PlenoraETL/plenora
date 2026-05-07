@@ -30,9 +30,7 @@ pytestmark = [
 ]
 
 
-# =============================================================================
 # Contract: QueryResult dataclass
-# =============================================================================
 
 
 class TestQueryResultDataclass:
@@ -56,9 +54,7 @@ class TestQueryResultDataclass:
         assert result.result_id is None or result.result_id == ""
 
 
-# =============================================================================
 # Contract: ResultBuilder.success + to_dict
-# =============================================================================
 
 
 class TestResultBuilderPropagation:
@@ -99,9 +95,7 @@ class TestResultBuilderPropagation:
         assert "result_id" not in d or d["result_id"] is None
 
 
-# =============================================================================
 # End-to-end: QueryExecutor.execute_query propaga result_id al dict
-# =============================================================================
 
 
 class TestQueryExecutorEndToEnd:
@@ -163,9 +157,7 @@ class TestQueryExecutorEndToEnd:
         )
 
 
-# =============================================================================
 # PipelineArtifact interop: il dict estrai deve diventare artifact_kind=blob
-# =============================================================================
 
 
 class TestPipelineArtifactInterop:

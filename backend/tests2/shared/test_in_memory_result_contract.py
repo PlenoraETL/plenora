@@ -38,9 +38,7 @@ import pytest
 pytestmark = [pytest.mark.unit, pytest.mark.shared, pytest.mark.contract]
 
 
-# =============================================================================
 # Helpers: fixture base DB-mock + fake settings
-# =============================================================================
 
 
 @pytest.fixture
@@ -70,9 +68,7 @@ def mock_db(monkeypatch):
     return saved
 
 
-# =============================================================================
 # 1. REGRESSION — path-based save_result_blob
-# =============================================================================
 
 
 def test_regression_path_based_save_preserves_bytes_exactly(mock_db, tmp_path):
@@ -121,9 +117,7 @@ def test_regression_path_based_save_keeps_temp_on_db_error(monkeypatch, tmp_path
     )
 
 
-# =============================================================================
 # 2. CONTRACT sul nuovo API in-memory
-# =============================================================================
 
 
 @pytest.mark.parametrize("fmt", ["csv", "xlsx", "json", "parquet"])
@@ -247,9 +241,7 @@ def test_get_result_as_bytes_returns_none_when_missing(monkeypatch):
     assert result_store.get_result_as_bytes("missing") is None
 
 
-# =============================================================================
 # 3. SENTINEL no-temp-file-leak
-# =============================================================================
 
 
 def test_save_result_blob_from_bytes_creates_no_files_on_disk(

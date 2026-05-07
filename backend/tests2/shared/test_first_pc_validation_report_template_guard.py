@@ -57,9 +57,7 @@ def template_text() -> str:
     return _TEMPLATE.read_text(encoding="utf-8")
 
 
-# =====================================================================
 # 1. Load-bearing commands - present and not truncated
-# =====================================================================
 
 
 _REQUIRED_COMMAND_SHAPES: tuple[tuple[str, str], ...] = (
@@ -142,9 +140,7 @@ def test_required_command_shapes_present(template_text: str):
     )
 
 
-# =====================================================================
 # 2. Non-interactive env shape - full 7 vars, no truncation
-# =====================================================================
 
 
 _REQUIRED_PLENORA_INSTALL_VARS: tuple[str, ...] = (
@@ -186,9 +182,7 @@ def test_no_truncated_env_shape(template_text: str):
     )
 
 
-# =====================================================================
 # 3. Docker honesty markers - FIRST SCAFFOLD / NOT YET VALIDATED
-# =====================================================================
 
 
 def test_docker_section_keeps_first_scaffold_markers(template_text: str):
@@ -231,9 +225,7 @@ def test_template_does_not_claim_install_is_validated(template_text: str):
         )
 
 
-# =====================================================================
 # 4. ASCII-only (per the install-doc family scope rule)
-# =====================================================================
 
 
 def test_template_is_ascii_only(template_text: str):

@@ -50,18 +50,13 @@ from typing import List, Union
 
 from app.utils.logger import get_logger
 
-# Stesso logger name di `base.py`: i record sono indistinguibili dai
-# consumer che attaccano handler / filtrano per
-# "app.core.manipola.transforms.base" (pattern §6.1 facade).
 logger = get_logger("app.core.manipola.transforms.base")
 
 DataFrame = Union[pd.DataFrame, gpd.GeoDataFrame]
 
 
-# =============================================================================
 # STRING PAD — Riempimento stringa a larghezza fissa
 # Aggiunge caratteri di riempimento a sinistra o a destra.
-# =============================================================================
 
 def op_string_pad(
     df: DataFrame,
@@ -113,10 +108,8 @@ def op_string_pad(
         raise
 
 
-# =============================================================================
 # STRING LENGTH — Calcola la lunghezza delle stringhe
 # Aggiunge una colonna con la lunghezza di ogni valore.
-# =============================================================================
 
 def op_string_length(
     df: DataFrame,
@@ -155,10 +148,8 @@ def op_string_length(
         raise
 
 
-# =============================================================================
 # STRING EXTRACT — StringSearcher
 # Estrae testo da una colonna tramite espressione regolare.
-# =============================================================================
 
 def op_string_extract(
     df: DataFrame,
@@ -245,10 +236,8 @@ def op_string_extract(
         raise
 
 
-# =============================================================================
 # NORMALIZZAZIONE TESTO
 # Operazioni su testo: upper, lower, trim, title, strip accenti.
-# =============================================================================
 
 def op_text_normalize(
     df: DataFrame,

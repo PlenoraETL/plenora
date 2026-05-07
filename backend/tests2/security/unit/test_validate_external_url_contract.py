@@ -46,9 +46,7 @@ def _clean_loopback_env(monkeypatch):
     api_utils._warn_urby_loopback_alias_once.cache_clear()
 
 
-# =============================================================================
 # Schema validation
-# =============================================================================
 
 
 @pytest.mark.parametrize("url", [
@@ -67,9 +65,7 @@ def test_rejects_missing_hostname():
         validate_external_url("http:///")
 
 
-# =============================================================================
 # SSRF: IP privati, link-local, riservati, multicast
-# =============================================================================
 
 
 @pytest.mark.parametrize("url", [
@@ -91,9 +87,7 @@ def test_rejects_loopback_by_default():
         validate_external_url("http://127.0.0.1:6379/")
 
 
-# =============================================================================
 # Test opt-in: PLENORA_ALLOW_LOOPBACK_OUTBOUND (canonical)
-# =============================================================================
 
 
 def test_loopback_allowed_when_opt_in_env_is_set(monkeypatch):
@@ -130,9 +124,7 @@ def test_opt_in_strict_value_check(monkeypatch):
             validate_external_url("http://127.0.0.1/")
 
 
-# =============================================================================
 # Retro-compat alias + guard hardened env (P1.5 + S6/P2.4, 2026-04-23)
-# =============================================================================
 
 
 def test_legacy_urby_alias_still_honored_in_dev(monkeypatch):
@@ -167,9 +159,7 @@ def test_flag_ignored_in_hardened_environments(hardened_env, flag_name, monkeypa
         validate_external_url("http://127.0.0.1:6379/")
 
 
-# =============================================================================
 # B3-B.8 bugfix (2026-04-27): IPv6 (AAAA) coverage + is_unspecified
-# =============================================================================
 #
 # Pre-B3-B.8 `validate_external_url` usava `socket.gethostbyname_ex` che
 # ritorna solo record A (IPv4). Un hostname che risolveva esclusivamente
@@ -296,9 +286,7 @@ def test_loopback_opt_in_still_works_for_ipv6_loopback(monkeypatch):
         validate_external_url("http://internal-test.example/q")
 
 
-# =============================================================================
 # A3: deprecation warning one-shot per URBY_ALLOW_LOOPBACK_OUTBOUND
-# =============================================================================
 #
 # Verifica che usare l'alias retro-compat senza il canonical generi UN warning
 # loud, e che chiamate successive nello stesso processo non lo ripetano (cache

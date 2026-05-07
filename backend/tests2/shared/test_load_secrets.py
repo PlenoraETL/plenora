@@ -49,9 +49,7 @@ class _FakeSecretsBackend:
         return dict(self._response)
 
 
-# =============================================================================
 # 1. fetch_secrets — delega al backend
-# =============================================================================
 
 
 def test_fetch_secrets_delegates_to_backend(ssm_mod):
@@ -82,9 +80,7 @@ def test_fetch_secrets_empty_returns_empty_dict(ssm_mod):
         assert ssm_mod.fetch_secrets() == {}
 
 
-# =============================================================================
 # 2. inject_into_environ — priorita' env pre-esistente
-# =============================================================================
 
 
 def test_inject_sets_new_keys(ssm_mod, monkeypatch):
@@ -118,9 +114,7 @@ def test_inject_empty_dict_is_noop(ssm_mod):
     assert ssm_mod.inject_into_environ({}) == 0
 
 
-# =============================================================================
 # 3. CLI exit codes
-# =============================================================================
 
 
 def test_main_rejects_missing_args(ssm_mod, monkeypatch):
@@ -140,9 +134,7 @@ def test_main_rejects_nonexistent_target(ssm_mod, monkeypatch, tmp_path):
     assert exc.value.code == 2
 
 
-# =============================================================================
 # 4. execv behavior
-# =============================================================================
 
 
 def test_main_calls_execv_with_target(ssm_mod, monkeypatch, tmp_path):

@@ -73,9 +73,7 @@ def _client_and_conn_info():
     return ArcGISClient(), conn_info
 
 
-# =============================================================================
 # Scenari
-# =============================================================================
 
 
 def test_authenticate_returns_token_via_generateToken():

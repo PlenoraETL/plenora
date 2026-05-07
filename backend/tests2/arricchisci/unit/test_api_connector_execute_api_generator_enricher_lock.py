@@ -33,9 +33,7 @@ pytestmark = [
 ]
 
 
-# =============================================================================
 # Mock HTTP response builder
-# =============================================================================
 
 
 def _resp(status=200, json_body=None, text="", headers=None):
@@ -50,9 +48,7 @@ def _resp(status=200, json_body=None, text="", headers=None):
     return r
 
 
-# =============================================================================
 # Fixture
-# =============================================================================
 
 
 @pytest.fixture
@@ -94,9 +90,7 @@ def gen_env(api_service):
         yield mocks
 
 
-# =============================================================================
 # _execute_api_generator — config & basic
-# =============================================================================
 
 
 class TestGeneratorBasics:
@@ -172,9 +166,7 @@ class TestGeneratorBasics:
             gen_env.svc._execute_api_generator(cfg)
 
 
-# =============================================================================
 # _execute_api_generator — URL path param substitution
-# =============================================================================
 
 
 class TestGeneratorPathParams:
@@ -198,9 +190,7 @@ class TestGeneratorPathParams:
         assert "city" not in kwargs.get("params", {})
 
 
-# =============================================================================
 # _execute_api_generator — pagination
-# =============================================================================
 
 
 class TestGeneratorPagination:
@@ -292,9 +282,7 @@ class TestGeneratorPagination:
         assert "p2" in second_url
 
 
-# =============================================================================
 # _execute_api_enricher
-# =============================================================================
 
 
 class TestEnricher:

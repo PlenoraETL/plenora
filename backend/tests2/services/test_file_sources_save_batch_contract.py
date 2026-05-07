@@ -74,9 +74,7 @@ def _row(file_id: str, **overrides):
     return base
 
 
-# =============================================================================
 # 1. Happy path: 1 transazione + 1 executemany con N tuple
-# =============================================================================
 
 
 def test_save_batch_happy_path_single_executemany_in_transaction(patched_transaction):
@@ -122,9 +120,7 @@ def test_save_batch_shares_single_timestamp_across_rows(patched_transaction):
         assert t[9] == t[10]
 
 
-# =============================================================================
 # 2. Validation pre-transaction: fail-fast SENZA acquisire connessione
-# =============================================================================
 
 
 def test_save_batch_raises_before_transaction_when_row_missing_blob():
@@ -162,9 +158,7 @@ def test_save_batch_storage_key_only_row_is_valid(patched_transaction):
     cursor.executemany.assert_called_once()
 
 
-# =============================================================================
 # 3. DB exception inside transaction -> propaga, rollback gestito da tx CM
-# =============================================================================
 
 
 def test_save_batch_rolls_back_on_executemany_exception(patched_transaction):
@@ -181,9 +175,7 @@ def test_save_batch_rolls_back_on_executemany_exception(patched_transaction):
             fs_db.save_file_sources_batch(rows)
 
 
-# =============================================================================
 # 4. Empty rows -> early return, no DB call
-# =============================================================================
 
 
 def test_save_batch_empty_rows_is_noop():
@@ -196,9 +188,7 @@ def test_save_batch_empty_rows_is_noop():
     mock_tx.assert_not_called()
 
 
-# =============================================================================
 # 5. No fetchone post-insert (E3: caller possiede gia' i DTO)
-# =============================================================================
 
 
 def test_save_batch_does_not_call_fetchone_post_insert(patched_transaction):

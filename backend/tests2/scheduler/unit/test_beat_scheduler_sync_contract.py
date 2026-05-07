@@ -55,9 +55,7 @@ def scheduler():
     return _FakeScheduler()
 
 
-# =============================================================================
 # tick() — delega a super + chiama sync + heartbeat + 4 cleanup
-# =============================================================================
 
 
 def test_tick_calls_sync_heartbeat_and_all_cleanups(scheduler):
@@ -100,9 +98,7 @@ def test_tick_delegates_event_t_to_super_when_provided(scheduler):
     assert kwargs.get("event_t") == ("tick", 100, super_tick.call_args.kwargs["event_t"][2])
 
 
-# =============================================================================
 # _sync_from_db — carica schedule dal DB in self.data
-# =============================================================================
 
 
 def test_sync_from_db_adds_entry_for_enabled_schedule(scheduler):
@@ -189,9 +185,7 @@ def test_sync_from_db_updates_entry_when_cron_changes(scheduler):
     assert str(old_schedule) != str(new_schedule)
 
 
-# =============================================================================
 # _parse_cron — validazione espressione cron
-# =============================================================================
 
 
 def test_parse_cron_accepts_standard_5_field_expression(scheduler):

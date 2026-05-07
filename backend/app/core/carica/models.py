@@ -34,9 +34,7 @@ from typing import Any, Dict, List, Optional
 from datetime import datetime, timezone
 
 
-# ============================================================================
 # ENUMERAZIONI
-# ============================================================================
 
 class WriteMode(str, Enum):
     """Modalità di scrittura su database.
@@ -108,9 +106,7 @@ class ConflictPolicy(str, Enum):
     ABORT = "abort"
 
 
-# ============================================================================
 # DATACLASS DI CONFIGURAZIONE
-# ============================================================================
 
 @dataclass
 class ColumnMapping:
@@ -287,9 +283,7 @@ class BatchProgress:
         )
 
 
-# ============================================================================
 # DATACLASS PER RISULTATI
-# ============================================================================
 
 @dataclass
 class ConflictDetail:

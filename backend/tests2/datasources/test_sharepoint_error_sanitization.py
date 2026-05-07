@@ -36,9 +36,6 @@ from app.core.datasources.sharepoint import (
 pytestmark = [pytest.mark.unit, pytest.mark.contract, pytest.mark.security]
 
 
-# ─── Mapping helper: AADSTS / OAuth auth ────────────────────────────────────
-
-
 def test_sanitize_maps_aadsts_to_auth_fail():
     """AADSTS token in str(e) → messaggio canonico auth; token NON leakato."""
     e = Exception(
@@ -61,9 +58,6 @@ def test_sanitize_maps_invalid_client_to_client_credentials_error():
     msg = _sanitize_sharepoint_error(e)
     assert msg == "Autenticazione SharePoint fallita: client credentials non valide"
     assert "SECRET_GUID_CLIENT" not in msg
-
-
-# ─── Mapping helper: HTTP status codes ──────────────────────────────────────
 
 
 def test_sanitize_maps_401_unauthorized_to_canonical():
@@ -101,9 +95,6 @@ def test_sanitize_maps_5xx_server_error():
     assert "SECRET_TRACE_ID" not in msg
 
 
-# ─── Mapping helper: network / TLS ──────────────────────────────────────────
-
-
 def test_sanitize_maps_tls_keywords_to_tls_error():
     """SSL / TLS / certificate / handshake → canonical TLS."""
     e = Exception(
@@ -131,9 +122,6 @@ def test_sanitize_maps_generic_to_fallback():
     assert msg == "Errore connessione SharePoint"
     assert "SECRET_TOKEN_VALUE_HERE" not in msg
     assert "Bearer" not in msg
-
-
-# ─── End-to-end: SharePointDataSource._test_connection / ops ───────────────
 
 
 def _make_ds() -> SharePointDataSource:

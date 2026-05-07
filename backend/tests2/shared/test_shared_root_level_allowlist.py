@@ -25,24 +25,19 @@ pytestmark = [pytest.mark.unit, pytest.mark.shared]
 
 _SHARED_DIR = Path(__file__).parents[2] / "app" / "shared"
 
-# -----------------------------------------------------------------
 # Allowlist - organized by cross-cutting bucket.
 # Every root-level *.py file in app/shared/ must appear here.
 # Engine-specific code belongs in the engine subpackages above.
-# -----------------------------------------------------------------
 _ALLOWED_ROOT_MODULES: frozenset[str] = frozenset(
     {
-        # --- API / HTTP ---
         "api_utils",          # generic FastAPI helpers (response shaping, pagination)
         "async_http",         # thin httpx async wrapper used across domains
         "request_utils",      # request context extraction helpers
         "async_user_recheck", # async per-request permission re-validation helper
-        # --- Errors ---
         "error_codes",        # shared error code registry
         "error_envelope",     # standard error response envelope
         "error_sanitizer",    # strip sensitive data from error messages
         "exceptions",         # shared exception hierarchy
-        # --- Security / Auth ---
         "audit_action",       # audit log action registry
         "authz_helpers",      # authorization predicate helpers
         "crypto",             # cryptographic primitives (fernet, hashing)
@@ -52,7 +47,6 @@ _ALLOWED_ROOT_MODULES: frozenset[str] = frozenset(
         "sharing",            # resource sharing primitives
         "token_blacklist",    # JWT revocation store
         "upload_guards",      # upload size / MIME type enforcement
-        # --- Storage ---
         "cloud_backends",          # object storage backend registry
         "file_cleanup",            # temp-file cleanup helpers
         "file_helpers",            # path / mime utilities
@@ -62,14 +56,12 @@ _ALLOWED_ROOT_MODULES: frozenset[str] = frozenset(
         "storage_layout",          # storage path/key construction
         "storage_reconciliation",  # stale-blob reconciliation helpers
         "task_scoped_blob_store",  # per-task ephemeral blob store
-        # --- Canvas / Column models ---
         "canvas_columns",         # CanvasColumn dataclass (used across features)
         "canvas_types_enricher",  # enriches canvas node types from source schema
         "column_types",           # column type enum / classification
         "columns_metadata",       # column-level metadata helpers
         "esri_system_fields",     # Esri/ArcGIS system field constants
         "models",                 # shared Pydantic base models
-        # --- Utilities ---
         "clock",                       # wall-clock abstraction for testability
         "external_artifact_processor", # cross-domain artifact post-processing helpers
         "idempotency",                 # idempotency key helpers
@@ -77,9 +69,7 @@ _ALLOWED_ROOT_MODULES: frozenset[str] = frozenset(
     }
 )
 
-# -----------------------------------------------------------------
 # Subpackages - not checked here; they have their own boundary tests.
-# -----------------------------------------------------------------
 _KNOWN_SUBPACKAGES: frozenset[str] = frozenset(
     {"execution", "connections", "resources", "contracts"}
 )

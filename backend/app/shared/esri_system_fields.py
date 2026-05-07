@@ -39,9 +39,7 @@ from __future__ import annotations
 from typing import Final
 
 
-# ---------------------------------------------------------------------------
 # Field name sets (immutabili)
-# ---------------------------------------------------------------------------
 
 # Subset auto-generated OID/GUID: ArcGIS assegna OBJECTID e (se abilitato)
 # GLOBALID al server-side; inviarli da `addFeatures` causa errori o duplica
@@ -74,16 +72,8 @@ ESRI_SYSTEM_FIELDS_LITERAL: Final[frozenset[str]] = ESRI_OID_FIELDS_LITERAL | fr
 })
 
 
-# ---------------------------------------------------------------------------
 # Normalized lookup (helper case-insensitive)
-# ---------------------------------------------------------------------------
 
-# Set normalizzato (uppercase, senza underscore) per il match
-# case-insensitive del validator schema-compat. La normalizzazione
-# `name.upper().replace("_", "")` permette di matchare sia le varianti
-# Esri classiche (`Shape_Area`) sia quelle del nuovo hosted FS
-# (`Shape__Area` con doppio underscore) sia il GDB internal
-# `GDBArchiveOID`.
 _SYS_NORMALIZED: Final[frozenset[str]] = frozenset({
     "OBJECTID",
     "GLOBALID",

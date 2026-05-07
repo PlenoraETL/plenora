@@ -26,9 +26,7 @@ import pytest
 pytestmark = [pytest.mark.unit, pytest.mark.contract]
 
 
-# ============================================================
 # A. Settings validation fail-fast
-# ============================================================
 
 
 def _settings_baseline(**overrides) -> dict:
@@ -136,9 +134,7 @@ def test_validate_settings_rejects_arricchisci_other_than_final_only():
         )
 
 
-# ============================================================
 # B. ESTRAI / ARRICCHISCI checkpoint -> skip
-# ============================================================
 
 
 def _patch_settings(**overrides):
@@ -178,9 +174,7 @@ def test_arricchisci_checkpoint_always_skipped():
     assert "arricchisci_checkpoints_disabled_in_batch1" in p.reason
 
 
-# ============================================================
 # C. MANIPOLA checkpoint policy
-# ============================================================
 
 
 def test_manipola_checkpoint_critical_join_recorded():
@@ -261,9 +255,7 @@ def test_manipola_multi_join_always_critical():
     assert p.reason == "manipola_multi_join"
 
 
-# ============================================================
 # D. Final sempre registrato (mode globale decide row write)
-# ============================================================
 
 
 def test_estrai_final_recorded_with_mode_preview_only():
@@ -301,9 +293,7 @@ def test_arricchisci_final_recorded_with_mode_full_pg():
     assert p.should_record_rows is True
 
 
-# ============================================================
 # E. record_checkpoint_snapshot skip path: no work
-# ============================================================
 
 
 def _make_spied_df(nrows: int = 1000, ncols: int = 3) -> MagicMock:
@@ -366,9 +356,7 @@ def test_checkpoint_skip_does_not_touch_dataframe_or_db():
     db_spy.assert_not_called()
 
 
-# ============================================================
 # F. compute_dataframe_fingerprint
-# ============================================================
 
 
 def test_fingerprint_deterministic_on_identical_dataframe():
@@ -410,9 +398,7 @@ def test_fingerprint_none_dataframe():
     assert algo == "pandas_sample_hash_v1"
 
 
-# ============================================================
 # G. record_final_snapshot end-to-end (DB mocked)
-# ============================================================
 
 
 def _capture_db_call():
@@ -530,9 +516,7 @@ def test_record_final_full_pg_persists_all_rows():
     assert len(captured["rows_to_persist"]) == 50
 
 
-# ============================================================
 # Hash invariante fra mode (sullo stesso DataFrame)
-# ============================================================
 
 
 def test_node_hash_invariant_across_modes_on_same_dataframe():
@@ -570,9 +554,7 @@ def test_node_hash_invariant_across_modes_on_same_dataframe():
     assert h_meta == h_prev == h_full
 
 
-# ============================================================
 # H. Legacy NULL records -> full_pg
-# ============================================================
 
 
 def test_persistence_mode_for_record_null_returns_full_pg():
@@ -592,9 +574,7 @@ def test_persistence_mode_for_record_passes_through_known_value():
     ) == "metadata_only"
 
 
-# ============================================================
 # I. flush_snapshots stub (Batch 1)
-# ============================================================
 
 
 def test_flush_snapshots_stub_returns_zero_pending():

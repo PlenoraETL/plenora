@@ -25,9 +25,7 @@ from app.shared.execution.canvas_node import CanvasNode  # BE-GO-READY-ARCH-055-
 logger = get_logger(__name__)
 
 
-# ============================================================
 # EXECUTE_IF — conditional skip
-# ============================================================
 
 def _parse_execute_if(node_data: Dict):
     """Parsa la condizione execute_if e ritorna (col, expected, negate) o None se assente."""
@@ -96,9 +94,7 @@ def should_execute_node(node_data: Dict, input_df: Any) -> bool:
     return (not match) if negate else match
 
 
-# ============================================================
 # PARALLEL GROUPS — raggruppamento nodi indipendenti
-# ============================================================
 
 def _extract_consumed_columns(node_data: Dict) -> Set[str]:
     """Estrae le colonne del DataFrame che un nodo api_enrich effettivamente legge.
@@ -314,9 +310,7 @@ def compute_parallel_groups(
     return groups
 
 
-# ============================================================
 # ESECUZIONE PARALLELA DI UN GRUPPO
-# ============================================================
 
 def execute_parallel_enrichers(
     node_ids: List[str],

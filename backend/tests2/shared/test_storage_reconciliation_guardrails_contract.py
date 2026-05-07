@@ -37,9 +37,7 @@ from app.shared.storage_reconciliation import (
 pytestmark = [pytest.mark.unit, pytest.mark.shared, pytest.mark.contract]
 
 
-# ---------------------------------------------------------------------------
 # Helpers
-# ---------------------------------------------------------------------------
 
 
 class _FakeResult:
@@ -80,9 +78,7 @@ def _patch_execute(monkeypatch, *, rowcount: int = 0, raise_exc: Exception | Non
     return calls
 
 
-# ---------------------------------------------------------------------------
 # ReconciliationStateCount
-# ---------------------------------------------------------------------------
 
 
 def test_reconciliation_state_count_is_frozen():
@@ -91,9 +87,7 @@ def test_reconciliation_state_count_is_frozen():
         c.count = 99  # type: ignore[misc]
 
 
-# ---------------------------------------------------------------------------
 # count_active_by_state_domain
-# ---------------------------------------------------------------------------
 
 
 def test_count_active_by_state_domain_filters_terminals_in_sql(monkeypatch):
@@ -153,9 +147,7 @@ def test_count_active_by_state_domain_empty_table(monkeypatch):
     assert count_active_by_state_domain() == []
 
 
-# ---------------------------------------------------------------------------
 # prune_terminal_older_than
-# ---------------------------------------------------------------------------
 
 
 def test_prune_terminal_older_than_issues_canonical_delete(monkeypatch):

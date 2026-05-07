@@ -20,7 +20,6 @@ from fastapi import HTTPException
 
 from app.utils.logger import get_logger
 from app.db.config.users import get_user
-# BE-GO-READY-AUTH-ENGINE-015 Phase-9 contract fan-out.
 from app.shared.contracts.auth import CurrentUser
 from app.shared.authz_helpers import assert_project_access
 

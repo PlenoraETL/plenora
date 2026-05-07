@@ -38,9 +38,7 @@ import pytest
 pytestmark = [pytest.mark.unit, pytest.mark.contract]
 
 
-# ---------------------------------------------------------------------------
 # Fixtures
-# ---------------------------------------------------------------------------
 
 
 _NO_ROW = object()
@@ -107,9 +105,7 @@ def _executed_sqls(cursor):
     return [c.args[0] for c in cursor.execute.call_args_list]
 
 
-# ---------------------------------------------------------------------------
 # 1. Last-reference: record_pending called inside transaction
-# ---------------------------------------------------------------------------
 
 
 def test_last_reference_records_pending_inside_transaction():
@@ -161,9 +157,7 @@ def test_last_reference_records_pending_inside_transaction():
     assert mark_failed_calls == []
 
 
-# ---------------------------------------------------------------------------
 # 2. compensating_delete returns "ok" -> mark_done
-# ---------------------------------------------------------------------------
 
 
 def test_compensating_delete_ok_marks_done():
@@ -190,9 +184,7 @@ def test_compensating_delete_ok_marks_done():
     assert mark_failed_calls == []
 
 
-# ---------------------------------------------------------------------------
 # 3. compensating_delete returns "failed" -> mark_failed_attempt + return True
-# ---------------------------------------------------------------------------
 
 
 def test_compensating_delete_failed_marks_failed_attempt_and_returns_true():
@@ -232,9 +224,7 @@ def test_compensating_delete_failed_marks_failed_attempt_and_returns_true():
     assert kw == {"error": "compensating_delete_outcome=failed"}
 
 
-# ---------------------------------------------------------------------------
 # 4. Capability disabled -> compensating_delete returns "skipped" -> mark_done
-# ---------------------------------------------------------------------------
 
 
 def test_capability_disabled_marks_done():
@@ -265,9 +255,7 @@ def test_capability_disabled_marks_done():
     assert mark_failed_calls == []
 
 
-# ---------------------------------------------------------------------------
 # 5. Shared blob (siblings exist) -> NO record_pending, NO mark_*
-# ---------------------------------------------------------------------------
 
 
 def test_shared_blob_path_does_not_record_pending():
@@ -305,9 +293,7 @@ def test_shared_blob_path_does_not_record_pending():
     assert mark_failed_calls == []
 
 
-# ---------------------------------------------------------------------------
 # 6. BYTEA path (storage_key None) -> NO record_pending
-# ---------------------------------------------------------------------------
 
 
 def test_bytea_path_does_not_record_pending():
@@ -340,9 +326,7 @@ def test_bytea_path_does_not_record_pending():
     assert mark_failed_calls == []
 
 
-# ---------------------------------------------------------------------------
 # 7. record_pending happens BEFORE the DELETE inside the transaction
-# ---------------------------------------------------------------------------
 
 
 def test_record_pending_is_inside_transaction_before_delete():

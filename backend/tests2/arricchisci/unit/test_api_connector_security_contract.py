@@ -111,9 +111,7 @@ def test_resolve_file_source_id_path_no_longer_falls_back_to_current_group_id(ap
     )
 
 
-# ---------------------------------------------------------------------------
 # BE-GO-READY-TRANSFORMATION-ENGINE-024: ctx-strict file-source path
-# ---------------------------------------------------------------------------
 
 
 def test_assert_file_source_group_access_ctx_wins_over_stale_singleton(api_service):
@@ -228,9 +226,7 @@ def test_resolve_file_source_id_path_ctx_wins_over_stale_singleton(api_service, 
     assert result is not None, "blob materialization deve aver successo per winner-grp-B"
 
 
-# ---------------------------------------------------------------------------
 # BE-GO-READY-TRANSFORMATION-ENGINE-026: ctx-strict project_source path
-# ---------------------------------------------------------------------------
 
 
 def test_resolve_file_source_path_project_source_ctx_wins_over_stale_singleton(api_service, monkeypatch):
@@ -346,9 +342,7 @@ def test_resolve_file_source_id_path_requires_visibility_before_materializing_bl
         api_service._resolve_file_source_id_path("fs-1", ctx=_ctx())
 
 
-# =============================================================================
 # C-API-01: cross-tenant recompute via force_recalculate
-# =============================================================================
 
 
 def test_load_source_project_force_recalculate_blocks_cross_tenant_before_recompute(

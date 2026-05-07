@@ -69,15 +69,11 @@ from typing import Dict, List, Optional, Union
 
 from app.utils.logger import get_logger
 
-# Stesso logger name di `base.py`: i record sono indistinguibili dai
-# consumer che attaccano handler / filtrano per
-# "app.core.manipola.transforms.base" (pattern §6.1 facade).
 logger = get_logger("app.core.manipola.transforms.base")
 
 DataFrame = Union[pd.DataFrame, gpd.GeoDataFrame]
 
 
-# =============================================================================
 # PIVOT TABLE
 # Trasforma righe in colonne: la colonna pivot_col viene "spalmata"
 # orizzontalmente, i valori di value_col diventano i contenuti,
@@ -85,11 +81,9 @@ DataFrame = Union[pd.DataFrame, gpd.GeoDataFrame]
 #
 # Esempio classico ICSC:
 #   immobile | tipo_valore | importo       immobile | canone | rendita
-#   ---------------------+--------  →    -----------+--------+--------
 #   A        | canone      | 1000         A        | 1000   | 500
 #   A        | rendita     | 500          B        | 2000   | NULL
 #   B        | canone      | 2000
-# =============================================================================
 
 def op_pivot(
     df: DataFrame,
@@ -144,7 +138,6 @@ def op_pivot(
         #   A        | 1000       | 500
         #   B        | 2000       | NaN
     """
-    # --- Validazioni --------------------------------------------------------
     if not index_col or not pivot_col or not value_col:
         logger.warning("Pivot: parametri obbligatori mancanti (index_col, pivot_col, value_col)")
         return df
@@ -167,7 +160,6 @@ def op_pivot(
     result = df.copy()
     result[pivot_col] = result[pivot_col].fillna('').astype(str).str.strip()
     try:
-        # --- Filtra solo valori nel mapping (se fornito) --------------------
         if mapping:
             allowed_values = list(mapping.keys())
             result = result[result[pivot_col].isin(allowed_values)]
@@ -178,7 +170,6 @@ def op_pivot(
                 )
                 return df
 
-        # --- Funzione di aggregazione --------------------------------------
         aggr_func_lower = aggr_func.lower().strip() if aggr_func else 'first'
 
         if aggr_func_lower == 'concat':
@@ -190,7 +181,6 @@ def op_pivot(
             logger.warning(f"Pivot: funzione '{aggr_func}' non supportata, uso 'first'")
             agg_fn = 'first'
 
-        # --- Costruzione pivot table ---------------------------------------
         pivoted = pd.pivot_table(
             result,
             index=index_cols,
@@ -214,7 +204,6 @@ def op_pivot(
         # Riporta index_cols come colonne normali
         pivoted = pivoted.reset_index()
 
-        # --- Applica mapping nomi colonne output ---------------------------
         if mapping:
             rename_map = {}
             for pivot_val, output_name in mapping.items():
@@ -248,9 +237,7 @@ def op_pivot(
         raise
 
 
-# ============================================================================
 # TABLE DIFF (Confronta Tabelle)
-# ============================================================================
 
 def op_table_diff(
     inputs: List[DataFrame],
@@ -285,7 +272,6 @@ def op_table_diff(
     new_df = inputs[1].copy()
     sep = separator.strip() if separator else "#"
 
-    # === Normalizza chiavi ===
     if isinstance(left_keys, str):
         left_keys = [k.strip() for k in left_keys.split(",") if k.strip()]
     if isinstance(right_keys, str):
@@ -312,13 +298,11 @@ def op_table_diff(
             logger.warning(f"Table Diff: chiave '{k}' non trovata in tabella DX")
             return old_df
 
-    # === Normalizza colonne confronto ===
     if isinstance(compare_columns, str):
         compare_columns = [c.strip() for c in compare_columns.split(",") if c.strip()]
     if not compare_columns:
         compare_columns = None  # confronta tutte
 
-    # === Rinomina chiavi DX per allinearle a SX se diverse ===
     key_rename = {}
     for lk, rk in zip(left_keys, right_keys):
         if lk != rk:
@@ -329,13 +313,11 @@ def op_table_diff(
     # Le chiavi unificate (nomi SX)
     key_cols = list(left_keys)
 
-    # === Auto-conversione tipi chiave ===
     for k in key_cols:
         if old_df[k].dtype != new_df[k].dtype:
             old_df[k] = old_df[k].astype(str)
             new_df[k] = new_df[k].astype(str)
 
-    # === Colonne non-chiave da confrontare ===
     old_value_cols = [c for c in old_df.columns if c not in key_cols]
     new_value_cols = [c for c in new_df.columns if c not in key_cols]
     common_value_cols = [c for c in old_value_cols if c in new_value_cols]
@@ -347,7 +329,6 @@ def op_table_diff(
     only_old_cols = [c for c in old_value_cols if c not in new_value_cols]
     only_new_cols = [c for c in new_value_cols if c not in old_value_cols]
 
-    # === Merge outer ===
     merged = old_df.merge(
         new_df,
         on=key_cols,
@@ -356,7 +337,6 @@ def op_table_diff(
         indicator=True
     )
 
-    # === Classificazione righe — vectorized ===
     # Prima: iterrows su ogni riga con confronto cella-per-cella Python.
     # Su 1M righe -> timeout garantito.
     # Ora: boolean masks pandas + 1 pass per raccogliere le colonne cambiate
@@ -494,10 +474,8 @@ def op_table_diff(
     return result_df
 
 
-# =============================================================================
 # MELT (UNPIVOT)
 # Trasforma colonne in righe: da formato wide a formato long.
-# =============================================================================
 
 def op_melt(
     df: DataFrame,
@@ -546,10 +524,8 @@ def op_melt(
         raise
 
 
-# =============================================================================
 # TRANSPOSE — Trasponi righe e colonne
 # Scambia righe e colonne del DataFrame.
-# =============================================================================
 
 def op_transpose(
     df: DataFrame,

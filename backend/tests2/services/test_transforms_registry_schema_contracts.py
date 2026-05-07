@@ -61,9 +61,7 @@ def _get_param(registry: dict, transform_id: str, param_id: str) -> dict | None:
     return None
 
 
-# ---------------------------------------------------------------------------
 # 1. `output_columns` parameter must exist on each contracted transform
-# ---------------------------------------------------------------------------
 
 
 @pytest.mark.parametrize("transform_id", sorted(TRANSFORMS_WITH_OUTPUT_COLUMNS_CONTRACT))
@@ -144,9 +142,7 @@ def test_output_columns_has_label_and_description(transform_id):
     )
 
 
-# ---------------------------------------------------------------------------
 # 2. Registry preserves all transforms (no accidental drop / rename)
-# ---------------------------------------------------------------------------
 
 
 def test_registry_size_unchanged_after_metadata_addition():
@@ -175,9 +171,7 @@ def test_no_other_transform_uses_output_columns_id():
     )
 
 
-# ---------------------------------------------------------------------------
 # 3. BE handler/registry coherence — schema_contract handlers exist
-# ---------------------------------------------------------------------------
 
 
 def test_schema_handler_exists_for_each_contracted_transform():

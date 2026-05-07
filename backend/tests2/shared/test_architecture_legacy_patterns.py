@@ -69,9 +69,7 @@ def _parse(p: Path) -> ast.AST | None:
         return None
 
 
-# ---------------------------------------------------------------------------
 # Rule 1 — HTTPException(detail=str(e)) cross-reference
-# ---------------------------------------------------------------------------
 
 
 def test_value_error_str_e_lock_exists_in_catalog_test():
@@ -99,9 +97,7 @@ def test_value_error_str_e_lock_exists_in_catalog_test():
     )
 
 
-# ---------------------------------------------------------------------------
 # Rule 2 — os.getenv allowed only at boundary modules
-# ---------------------------------------------------------------------------
 
 
 # Allowlist per `os.getenv` in `backend/app/`.
@@ -190,9 +186,7 @@ def test_os_getenv_only_at_boundary_modules():
     )
 
 
-# ---------------------------------------------------------------------------
 # Rule 3 — `app.db.pg_connection` direct access from routers
-# ---------------------------------------------------------------------------
 
 
 # Allowlist: router legacy che importano `app.db.pg_connection`
@@ -278,9 +272,7 @@ def test_pg_connection_not_imported_from_new_routers():
     )
 
 
-# ---------------------------------------------------------------------------
 # Rule 4 — `app.main` imports inside shared/unit tests
-# ---------------------------------------------------------------------------
 
 
 # Allowlist test file che importano `app.main`. Razionale:
@@ -342,9 +334,7 @@ def test_app_main_not_imported_from_new_unit_tests():
     )
 
 
-# ---------------------------------------------------------------------------
 # Rule 5 — `raise_typed_http(code="...")` literal vs catalog constant
-# ---------------------------------------------------------------------------
 
 
 def _extract_code_arg(call: ast.Call) -> ast.AST | None:
@@ -404,9 +394,7 @@ def test_raise_typed_http_uses_catalog_constant_only():
     )
 
 
-# ---------------------------------------------------------------------------
 # Sanity: scanner funzionano davvero (anti-regression)
-# ---------------------------------------------------------------------------
 
 
 def test_scanners_find_expected_baseline_files():

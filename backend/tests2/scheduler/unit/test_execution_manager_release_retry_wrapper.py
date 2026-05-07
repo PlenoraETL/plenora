@@ -97,9 +97,7 @@ def _run_execute_with_patches(manager, schedule_id, monkeypatch):
         return manager.execute(schedule_id)
 
 
-# =============================================================================
 # TEST 1 — Budget N=3 esaurito su transient PG continui
-# =============================================================================
 
 
 def test_release_retry_budget_n3_on_all_transient(schedule_config, monkeypatch):
@@ -134,9 +132,7 @@ def test_release_retry_budget_n3_on_all_transient(schedule_config, monkeypatch):
     assert isinstance(result, dict)
 
 
-# =============================================================================
 # TEST 2 — Exit early sul primo success (no retry inutili)
-# =============================================================================
 
 
 def test_release_retry_exits_early_on_success(schedule_config, monkeypatch):
@@ -162,9 +158,7 @@ def test_release_retry_exits_early_on_success(schedule_config, monkeypatch):
     assert critico_errors == []
 
 
-# =============================================================================
 # TEST 3 — Non-transient errors NOT retried + log non-transient CRITICO
-# =============================================================================
 
 
 def test_release_retry_non_transient_does_not_retry(schedule_config, monkeypatch):
@@ -193,9 +187,7 @@ def test_release_retry_non_transient_does_not_retry(schedule_config, monkeypatch
     assert isinstance(result, dict)
 
 
-# =============================================================================
 # TEST 4 — Backoff esponenziale con jitter ±20%
-# =============================================================================
 
 
 def test_release_retry_backoff_exponential_with_jitter(schedule_config, monkeypatch):
@@ -238,9 +230,7 @@ def test_release_retry_backoff_exponential_with_jitter(schedule_config, monkeypa
     )
 
 
-# =============================================================================
 # TEST 5 — Budget T=10s interrompe il retry anche se N non raggiunto
-# =============================================================================
 
 
 def test_release_retry_budget_total_10s_interrupts(schedule_config, monkeypatch):
@@ -282,9 +272,7 @@ def test_release_retry_budget_total_10s_interrupts(schedule_config, monkeypatch)
     assert manager.concurrency.release.call_count == 2
 
 
-# =============================================================================
 # TEST 6 — Warning [GESTITO] per ogni tentativo transient che fallisce
-# =============================================================================
 
 
 def test_release_retry_log_warning_per_attempt(schedule_config, monkeypatch):

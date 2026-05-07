@@ -36,9 +36,7 @@ from app.core.features.arcgis_client import (
 pytestmark = [pytest.mark.unit, pytest.mark.contract]
 
 
-# ---------------------------------------------------------------------------
 # AddLayerResult — typed dataclass shape
-# ---------------------------------------------------------------------------
 
 
 def test_add_layer_result_fields():
@@ -75,9 +73,7 @@ def test_add_layer_result_equality_by_value():
     assert hash(a) == hash(b)
 
 
-# ---------------------------------------------------------------------------
 # to_compat_dict — KEEP_COMPAT bridge
-# ---------------------------------------------------------------------------
 
 
 def test_to_compat_dict_returns_legacy_shape():
@@ -103,9 +99,7 @@ def test_to_compat_dict_failure_shape():
     assert d["errors"] == ["addToDefinition fallito"]
 
 
-# ---------------------------------------------------------------------------
 # ArcGISClient.add_layer_to_service — public method exists + signature
-# ---------------------------------------------------------------------------
 
 
 def test_add_layer_to_service_is_public_method():
@@ -130,9 +124,7 @@ def test_add_layer_to_service_signature_has_typed_kwargs():
     assert sig.return_annotation is AddLayerResult
 
 
-# ---------------------------------------------------------------------------
 # Public method end-to-end: returns AddLayerResult
-# ---------------------------------------------------------------------------
 
 
 def _make_response(payload: dict) -> MagicMock:
@@ -230,9 +222,7 @@ def test_add_layer_to_service_errors_is_tuple_not_list(real_client):
     assert result.errors == ("a", "b")
 
 
-# ---------------------------------------------------------------------------
 # IMDF wrapper delegate — BE-IMDF-006B compat path
-# ---------------------------------------------------------------------------
 
 
 def test_imdf_wrapper_delegates_to_client_method(real_client):

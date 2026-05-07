@@ -45,9 +45,7 @@ def _reset_trusted_proxies(monkeypatch):
     monkeypatch.delenv("TRUSTED_PROXIES", raising=False)
 
 
-# =============================================================================
 # Peer trusted
-# =============================================================================
 
 
 def test_trusted_peer_with_single_xff_returns_xff():
@@ -97,9 +95,7 @@ def test_ipv6_localhost_is_trusted_by_default():
     assert get_client_ip(req) == "1.2.3.4"
 
 
-# =============================================================================
 # Peer NON trusted (anti-spoofing)
-# =============================================================================
 
 
 def test_untrusted_peer_with_xff_ignores_xff():
@@ -122,9 +118,7 @@ def test_untrusted_peer_with_xff_chain_ignores_xff():
     assert get_client_ip(req) == "5.6.7.8"
 
 
-# =============================================================================
 # Edge case: peer None
-# =============================================================================
 
 
 def test_none_peer_returns_unknown():
@@ -134,9 +128,7 @@ def test_none_peer_returns_unknown():
     assert get_client_ip(req) == "unknown"
 
 
-# =============================================================================
 # Override TRUSTED_PROXIES via env var
-# =============================================================================
 
 
 def test_env_override_adds_custom_trusted_proxy(monkeypatch):
@@ -161,9 +153,7 @@ def test_env_override_can_drop_default_trusted_list(monkeypatch):
     assert get_client_ip(req) == "127.0.0.1"
 
 
-# =============================================================================
 # CIDR support (range di IP come trusted proxies)
-# =============================================================================
 
 
 def test_cidr_range_matches_peer_in_range(monkeypatch):
@@ -224,9 +214,7 @@ def test_malformed_cidr_entry_ignored_silently(monkeypatch):
     assert get_client_ip(req2) == "5.6.7.8"
 
 
-# =============================================================================
 # IP validation su XFF (anti-injection)
-# =============================================================================
 
 
 def test_invalid_xff_falls_back_to_peer():

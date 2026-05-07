@@ -51,79 +51,17 @@ from typing import Union
 
 from app.utils.logger import get_logger
 
-# Cleanup imports B1.11 (Phase 5 closeout):
-#   - `import uuid` rimosso (era usato solo da op_uuid_generator,
-#     extracted in B1.3c — oversight residuale chiuso ora).
-#   - `import numpy as np` rimosso (era usato solo da op_md5_hash,
-#     extracted in B1.11).
-#   - `List, Dict, Any, Optional` rimossi da `typing` (erano usati
-#     solo nelle signature delle funzioni; tutte le funzioni con
-#     body sono extracted post-B1.11).
-# Restano: `pd`, `gpd`, `Union` per il tipo alias `DataFrame`;
-# `get_logger` + `logger` mantenuti come scheletro modulo (no
-# function body, ma future-proof + symmetry con altri transforms.*).
 logger = get_logger(__name__)
 
 DataFrame = Union[pd.DataFrame, gpd.GeoDataFrame]
 
 
-# =============================================================================
 # JOIN — Unione tabelle per colonna chiave
 # Supporta: inner, left, right, outer, cross. Gestisce suffissi per colonne omonime.
-# =============================================================================
 
-# Phase 5 B1.1b + B1.2 cutover: cluster JOINS spostato in
-# `app.core.manipola.transforms.joins`. Re-export per preservare i path
-# pubblici esistenti:
-#   - `from app.core.manipola.transforms.base import op_join`
-#       (idem op_union, op_cross_join)
-#   - `from app.core.manipola.transforms import op_join` (via __init__)
-#   - `transforms_registry.json` entries "base.op_join" / "base.op_union"
-#     / "base.op_cross_join" risolte da plugin_executor via
-#     `getattr(<base module>, "<func>")`.
-# Single-source canonica ora vive in `joins.py`. Vedi anche
-# `orchestrate/PHASE_5_ENTRY_PLAN.md` §3 P5-B1 + §6.1 facade pattern.
 from .joins import op_join, op_union, op_cross_join  # noqa: F401  (re-export, consumato via getattr)
 
-# Alias storico per retrocompatibilità: `op_concat` = `op_union`.
-# Re-bind dopo l'import facade per mantenere il nome importabile da
-# `app.core.manipola.transforms.base` (consumer noto: __init__.py
-# `from .base import op_union as op_concat`).
 op_concat = op_union
-
-
-# Phase 5 B1.8 cutover: op_filter moved to `transforms.filtering`
-# (re-exported in testa al file via facade).
-
-
-# Phase 5 B1.5 cutover: cluster FORMULA (op_formula + _validate_formula_ast
-# + AST whitelists + `import ast as _ast` locale) spostato in
-# `app.core.manipola.transforms.formula`. Re-export in testa al file via
-# facade. `import ast as _ast` rimosso da base.py: era usato esclusivamente
-# da questo cluster, no consumer altrove.
-
-
-# Phase 5 B1.4 cutover: op_concat_columns moved to `transforms.columns`
-# (re-exported in testa al file via facade).
-
-
-# Phase 5 B1.7 cutover: op_aggregate + op_sort + op_distinct moved to
-# `transforms.aggregation` (re-exported in testa al file via facade).
-
-
-# Phase 5 B1.4 cutover: op_rename + op_drop_columns moved to
-# `transforms.columns` (re-exported in testa al file via facade).
-
-
-# Phase 5 B1.6 cutover: op_fill_na (+ helper privati
-# _is_strict_numeric_series e _coerce_fill_value_for_numeric)
-# e op_replace moved to `transforms.cleansing` (re-exported in
-# testa al file via facade). I 2 helper privati restano single-source
-# in `cleansing.py`: nessun consumer esterno li importa (verificato).
-
-
-# Phase 5 B1.4 cutover: op_split_column moved to `transforms.columns`
-# (re-exported in testa al file via facade).
 
 
 # Phase 5 B1.11 cutover: cluster SECURITY (op_md5_hash + op_mask_data
@@ -143,77 +81,6 @@ op_concat = op_union
 # docstring `transforms/security.py` sezione "Coupling".
 
 
-# Phase 5 B1.6 cutover: op_type_cast moved to `transforms.cleansing`
-# (re-exported in testa al file via facade).
-
-
-# Phase 5 B1.11 cutover: op_geo_from_coords moved to `transforms.geo`
-# (re-exported in coda al file via facade). Singleton self-contained
-# senza helper privati ne' coupling. Imports `Point`/`wkt` restano
-# function-local (lazy) preservati bit-per-bit.
-
-
-# Phase 5 B1.8 cutover: op_conditional + _evaluate_condition (helper
-# privato, NON re-exported) moved to `transforms.filtering` (re-exported
-# in testa al file via facade per la sola op_conditional).
-
-
-# Phase 5 B1.3b cutover: op_text_normalize moved to `transforms.strings`
-# (re-exported in testa al file via facade).
-
-
-# Phase 5 B1.10 cutover: op_pivot moved to `transforms.reshape`
-# (re-exported in testa al file via facade).
-
-
-# Phase 5 B1.10 cutover: op_table_diff moved to transforms.reshape
-# (re-exported in testa al file via facade).
-
-
-# Phase 5 B1.9 cutover: op_sample moved to `transforms.analysis`
-# (re-exported in testa al file via facade).
-
-
-# Phase 5 B1.10 cutover: op_melt moved to transforms.reshape
-# (re-exported in testa al file via facade).
-# Phase 5 B1.3c cutover: op_add_row_number + op_date_extract moved to
-# `transforms.utility` (re-exported in testa al file via facade).
-
-
-# =============================================================================
-# LOOKUP / BINNING / FLATTEN JSON / STATISTICS
-# Phase 5 B1.9 cutover: cluster ANALYSIS (op_lookup, op_bin,
-# op_flatten_json, op_statistics) moved to `transforms.analysis`
-# (re-exported in testa al file via facade).
-# =============================================================================
-
-
-# Phase 5 B1.3b cutover: op_string_extract moved to `transforms.strings`
-# (re-exported in testa al file via facade).
-
-
-# Phase 5 B1.2 cutover: op_cross_join moved to `transforms.joins`
-# (re-exported in testa al file via facade). Sezione lasciata vuota
-# per preservare l'ancoraggio storico delle linee successive.
-
-
-# Phase 5 B1.10 cutover: op_transpose moved to transforms.reshape
-# (re-exported in testa al file via facade).
-# Phase 5 B1.4 cutover: op_reorder_columns moved to `transforms.columns`
-# (re-exported in testa al file via facade).
-
-
-# Phase 5 B1.3a + B1.3b cutover: cluster STRINGS spostato in
-# `app.core.manipola.transforms.strings`. Re-export per preservare i
-# path pubblici esistenti:
-#   - `from app.core.manipola.transforms.base import op_string_pad`
-#       (idem op_string_length, op_string_extract, op_text_normalize)
-#   - `from app.core.manipola.transforms import op_string_extract`
-#     (idem op_text_normalize) — `__init__.py` resta `from .base import
-#     op_string_extract, op_text_normalize` e cattura il facade.
-#   - `transforms_registry.json` entries "base.op_string_*" /
-#     "base.op_text_normalize" risolte via `getattr(<base>, "<func>")`.
-# Vedi anche `orchestrate/PHASE_5_ENTRY_PLAN.md` §3 P5-B1 + §6.1.
 from .strings import (  # noqa: F401  (re-export)
     op_string_pad,
     op_string_length,
@@ -221,37 +88,12 @@ from .strings import (  # noqa: F401  (re-export)
     op_text_normalize,
 )
 
-# Phase 5 B1.3c cutover: cluster UTILITY (op_add_row_number,
-# op_date_extract, op_uuid_generator) spostato in
-# `app.core.manipola.transforms.utility`. Re-export per preservare i
-# path pubblici esistenti:
-#   - `from app.core.manipola.transforms.base import <op>`
-#   - `transforms_registry.json` entries "base.op_add_row_number" /
-#     "base.op_date_extract" / "base.op_uuid_generator" risolte via
-#     `getattr(<base module>, "<func>")`.
-# Nessuna delle 3 e' esposta da `transforms/__init__.py` (verificato
-# pre-extraction) → nessun cambio init richiesto.
-# Vedi anche `orchestrate/PHASE_5_ENTRY_PLAN.md` §3 P5-B1 + §6.1.
 from .utility import (  # noqa: F401  (re-export)
     op_add_row_number,
     op_date_extract,
     op_uuid_generator,
 )
 
-# Phase 5 B1.4 cutover: cluster COLUMNS (op_drop_columns, op_rename,
-# op_reorder_columns, op_concat_columns, op_split_column) spostato in
-# `app.core.manipola.transforms.columns`. Approvazione esplicita
-# all'eccezione del target commit-size <600 (effettivo ~645, +45):
-# cluster cohesive, 5 funzioni self-contained, zero coupling, rollback
-# atomico. Re-export per preservare i path pubblici esistenti:
-#   - `from app.core.manipola.transforms.base import <op>`
-#   - `from app.core.manipola.transforms import <op>` per le 4 esposte
-#     da __init__.py (op_concat_columns, op_rename, op_drop_columns,
-#     op_split_column) — `__init__.py` resta `from .base import ...`
-#     e cattura il facade. `op_reorder_columns` non e' in init.
-#   - `transforms_registry.json` entries "base.<op>" risolte via
-#     `getattr(<base module>, "<func>")` dal `PluginExecutor`.
-# Vedi anche `orchestrate/PHASE_5_ENTRY_PLAN.md` §3 P5-B1 + §6.1.
 from .columns import (  # noqa: F401  (re-export)
     op_drop_columns,
     op_rename,
@@ -277,39 +119,12 @@ from .formula import (  # noqa: F401  (re-export)
     _validate_formula_ast,
 )
 
-# Phase 5 B1.6 cutover: cluster CLEANSING (op_fill_na + op_replace +
-# op_type_cast) spostato in `app.core.manipola.transforms.cleansing`.
-# I 2 helper privati `_is_strict_numeric_series` e
-# `_coerce_fill_value_for_numeric` restano single-source nel nuovo
-# modulo (verificato pre-extraction: zero consumer esterni). Re-export
-# delle 3 funzioni pubbliche per preservare i path:
-#   - `from app.core.manipola.transforms.base import op_fill_na`
-#       (idem op_replace, op_type_cast)
-#   - `from app.core.manipola.transforms import op_fill_na` /
-#     `op_replace` / `op_type_cast` — `__init__.py` resta `from .base
-#     import ...` e cattura il facade.
-#   - `transforms_registry.json` entries "base.op_fill_na" /
-#     "base.op_replace" / "base.op_type_cast" risolte via
-#     `getattr(<base module>, "<func>")`.
-# Vedi anche `orchestrate/PHASE_5_ENTRY_PLAN.md` §3 P5-B1 + §6.1.
 from .cleansing import (  # noqa: F401  (re-export)
     op_fill_na,
     op_replace,
     op_type_cast,
 )
 
-# Phase 5 B1.7 cutover: cluster AGGREGATION (op_aggregate, op_sort,
-# op_distinct, op_dedup_advanced, op_window_function) spostato in
-# `app.core.manipola.transforms.aggregation`. Re-export per preservare
-# i path pubblici esistenti:
-#   - `from app.core.manipola.transforms.base import <op>` per tutte e 5
-#   - `from app.core.manipola.transforms import op_aggregate` /
-#     `op_sort` / `op_distinct` (via __init__) — `__init__.py` resta
-#     `from .base import ...` e cattura il facade. `op_dedup_advanced`
-#     e `op_window_function` non sono in init (verificato pre-extraction).
-#   - `transforms_registry.json` entries "base.op_*" risolte via
-#     `getattr(<base module>, "<func>")`.
-# Vedi anche `orchestrate/PHASE_5_ENTRY_PLAN.md` §3 P5-B1 + §6.1.
 from .aggregation import (  # noqa: F401  (re-export)
     op_aggregate,
     op_sort,
@@ -318,38 +133,11 @@ from .aggregation import (  # noqa: F401  (re-export)
     op_window_function,
 )
 
-# Phase 5 B1.8 cutover: cluster FILTERING (op_filter, op_conditional)
-# spostato in `app.core.manipola.transforms.filtering`. Il private
-# helper `_evaluate_condition` resta single-source nel nuovo modulo
-# (verificato pre-extraction: zero consumer esterni, usato solo da
-# op_conditional). Re-export delle 2 funzioni pubbliche per preservare
-# i path:
-#   - `from app.core.manipola.transforms.base import op_filter` /
-#     `op_conditional`
-#   - `from app.core.manipola.transforms import op_filter` /
-#     `op_conditional` — `__init__.py` resta `from .base import ...`
-#     e cattura il facade.
-#   - `transforms_registry.json` entries "base.op_filter" /
-#     "base.op_conditional" risolte via `getattr(<base>, "<func>")`.
-# Vedi anche `orchestrate/PHASE_5_ENTRY_PLAN.md` §3 P5-B1 + §6.1.
 from .filtering import (  # noqa: F401  (re-export)
     op_filter,
     op_conditional,
 )
 
-# Phase 5 B1.9 cutover: cluster ANALYSIS (op_sample, op_lookup, op_bin,
-# op_flatten_json, op_statistics) spostato in
-# `app.core.manipola.transforms.analysis`. Re-export delle 5 funzioni
-# pubbliche per preservare i path:
-#   - `from app.core.manipola.transforms.base import <op>`
-#   - `from app.core.manipola.transforms import op_statistics` —
-#     unica esposta da `__init__.py` (le altre 4 non in init);
-#     resta `from .base import op_statistics` e cattura il facade.
-#   - `transforms_registry.json` entries "base.op_*" risolte via
-#     `getattr(<base module>, "<func>")`.
-# Cleanup naturale: `import json` rimosso da base.py (era usato solo
-# da op_flatten_json, ora in analysis.py).
-# Vedi anche `orchestrate/PHASE_5_ENTRY_PLAN.md` §3 P5-B1 + §6.1.
 from .analysis import (  # noqa: F401  (re-export)
     op_sample,
     op_lookup,
@@ -358,18 +146,6 @@ from .analysis import (  # noqa: F401  (re-export)
     op_statistics,
 )
 
-# Phase 5 B1.10 cutover: cluster RESHAPE (op_pivot, op_table_diff,
-# op_melt, op_transpose) spostato in
-# `app.core.manipola.transforms.reshape`. Re-export per preservare i
-# path pubblici esistenti:
-#   - `from app.core.manipola.transforms.base import <op>` per tutte e 4
-#   - `from app.core.manipola.transforms import op_pivot` /
-#     `op_table_diff` (le 2 esposte da __init__.py) — `__init__.py`
-#     resta `from .base import ...` e cattura il facade. `op_melt` e
-#     `op_transpose` non sono in init.
-#   - `transforms_registry.json` entries "base.op_*" risolte via
-#     `getattr(<base module>, "<func>")`.
-# Vedi anche `orchestrate/PHASE_5_ENTRY_PLAN.md` §3 P5-B1 + §6.1.
 from .reshape import (  # noqa: F401  (re-export)
     op_pivot,
     op_table_diff,
@@ -406,22 +182,4 @@ from .security import (  # noqa: F401  (re-export)
     MASK_FUNCTIONS,
 )
 
-# Phase 5 B1.11 cutover: op_geo_from_coords (singleton geo) spostato
-# in `app.core.manipola.transforms.geo`. Re-export della singola
-# funzione pubblica:
-#   - `from app.core.manipola.transforms.base import op_geo_from_coords`
-#   - `from app.core.manipola.transforms import op_geo_from_coords` —
-#     `__init__.py` resta `from .base import op_geo_from_coords` e
-#     cattura il facade.
-#   - `transforms_registry.json` entry "base.op_geo_from_coords"
-#     risolta via `getattr(<base module>, "op_geo_from_coords")`.
-# Vedi anche `orchestrate/PHASE_5_ENTRY_PLAN.md` §3 P5-B1 + §6.1.
 from .geo import op_geo_from_coords  # noqa: F401  (re-export)
-
-
-# Phase 5 B1.7 cutover: op_dedup_advanced + op_window_function moved to
-# `transforms.aggregation` (re-exported in testa al file via facade).
-
-
-# Phase 5 B1.3c cutover: op_uuid_generator moved to `transforms.utility`
-# (re-exported in testa al file via facade).

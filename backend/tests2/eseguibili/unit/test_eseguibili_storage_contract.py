@@ -62,9 +62,7 @@ def fake_storage(monkeypatch):
     return fake
 
 
-# =============================================================================
 # save()
-# =============================================================================
 
 
 def test_save_uploads_and_deletes_local(fake_storage, tmp_path):
@@ -146,9 +144,7 @@ def test_save_rejects_directory(fake_storage, tmp_path):
         st.save("task-1", d)
 
 
-# =============================================================================
 # find_keys()
-# =============================================================================
 
 
 def test_find_keys_uses_task_prefix(fake_storage):
@@ -174,9 +170,7 @@ def test_find_keys_returns_empty_when_no_match(fake_storage):
     assert st.find_keys("task-unknown") == []
 
 
-# =============================================================================
 # open_stream()
-# =============================================================================
 
 
 def test_open_stream_delegates_to_backend(fake_storage):
@@ -196,9 +190,7 @@ def test_open_stream_delegates_to_backend(fake_storage):
     assert chunks == [b"abc", b"def"]
 
 
-# =============================================================================
 # delete_by_task()
-# =============================================================================
 
 
 def test_delete_by_task_removes_all_keys(fake_storage):

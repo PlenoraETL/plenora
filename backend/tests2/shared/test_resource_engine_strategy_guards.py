@@ -60,9 +60,7 @@ def _iter_loader_modules():
         yield path
 
 
-# =====================================================================
 # Group A — per-kind dispatch invariant
-# =====================================================================
 
 
 def test_each_loader_module_declares_exactly_one_kind_via_property():
@@ -247,9 +245,7 @@ def test_loader_load_rejects_mismatched_kind_with_value_error():
         ResultBlobLoader().load(ref, mode="bytes")
 
 
-# =====================================================================
 # Group B — mandatory tenant binding (defense-in-depth)
-# =====================================================================
 
 
 def test_resource_ref_post_init_is_present_in_source():
@@ -305,9 +301,7 @@ def test_resource_ref_construction_rejects_empty_group_id_parametrized(bad_group
         )
 
 
-# =====================================================================
 # Group C — byte-level output invariant (metadata only)
-# =====================================================================
 
 
 def test_resource_envelope_has_no_parsed_object_field_via_ast():

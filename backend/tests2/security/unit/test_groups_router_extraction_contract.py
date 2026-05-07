@@ -39,9 +39,7 @@ pytestmark = [pytest.mark.unit, pytest.mark.security, pytest.mark.contract]
 _BACKEND_ROOT = Path(__file__).resolve().parent.parent.parent.parent
 
 
-# ---------------------------------------------------------------------------
 # 1. Source location
-# ---------------------------------------------------------------------------
 
 
 def test_groups_router_module_exists():
@@ -95,9 +93,7 @@ def test_groups_endpoints_present_in_new_module():
         )
 
 
-# ---------------------------------------------------------------------------
 # 2 + 3. KEEP_COMPAT re-export
-# ---------------------------------------------------------------------------
 
 
 def test_groups_router_importable_from_auth_module():
@@ -143,9 +139,7 @@ def test_group_crud_handlers_canonical_home_is_groups_router():
         )
 
 
-# ---------------------------------------------------------------------------
 # 4. URL paths preserved (router-level)
-# ---------------------------------------------------------------------------
 
 
 def test_groups_router_url_paths_locked():
@@ -178,9 +172,7 @@ def test_groups_router_prefix_and_tags():
     assert "groups" in groups_router.tags
 
 
-# ---------------------------------------------------------------------------
 # 5. Mount in main.py (source-bound)
-# ---------------------------------------------------------------------------
 
 
 def test_main_mounts_groups_router_with_api_prefix():
@@ -192,9 +184,7 @@ def test_main_mounts_groups_router_with_api_prefix():
     assert 'app.include_router(groups_router, prefix="/api")' in src
 
 
-# ---------------------------------------------------------------------------
 # 6. No circular import (top-level imports)
-# ---------------------------------------------------------------------------
 
 
 def test_groups_router_does_not_top_level_import_auth_dependencies():

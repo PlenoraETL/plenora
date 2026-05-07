@@ -26,9 +26,7 @@ import pytest
 pytestmark = [pytest.mark.unit, pytest.mark.orchestrator, pytest.mark.contract]
 
 
-# =============================================================================
 # Helpers
-# =============================================================================
 
 
 def _make_task_info(project_id="p1", result_id="res-1", output_file=None):
@@ -114,9 +112,7 @@ def _patched_cleanup(
         return client.delete(f"/api/tasks/{task_id}/full-cleanup")
 
 
-# =============================================================================
 # CLEAN PATH (204 invariato)
-# =============================================================================
 
 
 def test_full_cleanup_returns_204_when_all_steps_succeed(client, tmp_path):
@@ -131,9 +127,7 @@ def test_full_cleanup_returns_204_when_all_steps_succeed(client, tmp_path):
     assert response.content == b""
 
 
-# =============================================================================
 # PARTIAL PATH — singoli step che falliscono (207 Multi-Status)
-# =============================================================================
 
 
 def test_full_cleanup_returns_207_when_delete_result_fails(client, tmp_path):
@@ -181,9 +175,7 @@ def test_full_cleanup_returns_207_when_celery_forget_fails(client, tmp_path):
     assert body["failed_steps"] == ["celery_forget"]
 
 
-# =============================================================================
 # PARTIAL PATH — multipli step falliscono, ordine d'esecuzione preservato
-# =============================================================================
 
 
 def test_full_cleanup_returns_207_with_multiple_failures(client, tmp_path):
@@ -223,9 +215,7 @@ def test_full_cleanup_returns_207_all_four_steps_fail(client, tmp_path):
     ]
 
 
-# =============================================================================
 # PRE-CHECK 404 invariati (non contati in failed_steps)
-# =============================================================================
 
 
 def test_full_cleanup_preserves_404_when_no_project_id(client, tmp_path):
@@ -248,9 +238,7 @@ def test_full_cleanup_preserves_404_when_no_project_id(client, tmp_path):
     )
 
 
-# =============================================================================
 # Breadcrumb exc_info=True sui 4 logger.warning promossi
-# =============================================================================
 
 
 def test_full_cleanup_breadcrumb_has_exc_info_on_failed_step(client, tmp_path):

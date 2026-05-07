@@ -17,7 +17,6 @@ from app.core.auth.dependencies import (
     get_current_user,
     require_not_esecutore,
 )
-# BE-GO-READY-AUTH-ENGINE-014 Phase-8 contract fan-out.
 from app.shared.contracts.auth import CurrentUser
 from app.db.pg_connection import fetchone as _fetchone, fetchall as _fetchall
 from app.shared import error_codes
@@ -47,9 +46,7 @@ def _log_to_dict(row: dict) -> dict:
     return {k: v for k, v in d.items() if v not in (None, "", [])}
 
 
-# =============================================================================
 # GET /api/runs
-# =============================================================================
 
 @router.get("")
 def get_runs(
@@ -112,9 +109,7 @@ def get_runs(
     }
 
 
-# =============================================================================
 # GET /api/runs/{run_id}
-# =============================================================================
 
 @router.get("/{run_id}")
 def get_run(
@@ -159,9 +154,7 @@ def get_run(
     return run
 
 
-# =============================================================================
 # GET /api/runs/{run_id}/payload
-# =============================================================================
 
 @router.get("/{run_id}/payload")
 def get_run_payload(

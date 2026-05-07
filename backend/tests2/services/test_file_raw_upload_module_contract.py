@@ -29,9 +29,7 @@ import pytest
 pytestmark = [pytest.mark.unit, pytest.mark.contract]
 
 
-# =============================================================================
 # Fixtures
-# =============================================================================
 
 
 @pytest.fixture
@@ -63,9 +61,7 @@ def collaborators(fake_logger):
     }
 
 
-# =============================================================================
 # 1. Happy path DB BYTEA
-# =============================================================================
 
 
 def test_happy_path_db_storage_calls_dispatch_and_db_save(collaborators):
@@ -114,9 +110,7 @@ def test_happy_path_db_storage_calls_dispatch_and_db_save(collaborators):
     collaborators["logger"].info.assert_called_once()
 
 
-# =============================================================================
 # 2. Happy path object_storage
-# =============================================================================
 
 
 def test_happy_path_object_storage_returns_storage_key(collaborators):
@@ -140,9 +134,7 @@ def test_happy_path_object_storage_returns_storage_key(collaborators):
     assert db_kwargs["size_bytes"] == 100
 
 
-# =============================================================================
 # 3. MIME block: ValueError, no side effect
-# =============================================================================
 
 
 def test_mime_block_raises_value_error_and_logs_warning(collaborators):
@@ -175,9 +167,7 @@ def test_mime_block_raises_value_error_and_logs_warning(collaborators):
     assert "innocent.dxf" in msg
 
 
-# =============================================================================
 # 4. Orphan guard: dispatch exception -> no db_save
-# =============================================================================
 
 
 def test_dispatch_exception_propagates_and_db_save_not_called(collaborators):
@@ -200,9 +190,7 @@ def test_dispatch_exception_propagates_and_db_save_not_called(collaborators):
     collaborators["db_save_file_source"].assert_not_called()
 
 
-# =============================================================================
 # 5. DB save exception propaga
-# =============================================================================
 
 
 def test_db_save_exception_propagates(collaborators):
@@ -221,9 +209,7 @@ def test_db_save_exception_propagates(collaborators):
     collaborators["dispatch_blob_storage"].assert_called_once()
 
 
-# =============================================================================
 # 6. group_id None -> default_group propagato coerente
-# =============================================================================
 
 
 def test_default_group_used_when_group_id_is_none(collaborators):
@@ -244,9 +230,7 @@ def test_default_group_used_when_group_id_is_none(collaborators):
     assert db_kwargs["group_id"] == "default_grp"
 
 
-# =============================================================================
 # 7. file_ext lowercased + fallback "bin"
-# =============================================================================
 
 
 @pytest.mark.parametrize(
@@ -274,9 +258,7 @@ def test_file_extension_lowercased_or_bin_fallback(
     assert build_kwargs["format"] == expected_fmt
 
 
-# =============================================================================
 # 8. Wrapper FileSourceService.create_raw_from_upload delega
-# =============================================================================
 
 
 def test_file_service_wrapper_delegates_to_module():

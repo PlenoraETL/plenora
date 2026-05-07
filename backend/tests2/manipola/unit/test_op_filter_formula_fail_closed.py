@@ -33,9 +33,7 @@ from app.core.manipola.transforms.base import op_filter, op_formula
 pytestmark = [pytest.mark.unit, pytest.mark.manipola, pytest.mark.contract]
 
 
-# =============================================================================
 # SITO W2 — op_filter fail-closed su operatore/valore incompatibile
-# =============================================================================
 
 
 def test_op_filter_incompatible_operator_value_raises_value_error(monkeypatch):
@@ -79,9 +77,7 @@ def test_op_filter_happy_path_preserved():
     assert list(result["a"]) == [3, 4]
 
 
-# =============================================================================
 # SITO W3 — op_formula fail-closed su formula invalida / AST-blocked
-# =============================================================================
 
 
 def test_op_formula_invalid_formula_raises_value_error():

@@ -50,9 +50,7 @@ class _ListHandler(logging.Handler):
 _AUDIT_LOGGER = "app.shared.audit_action"
 
 
-# ---------------------------------------------------------------------------
 # Fixture: cattura chiamate a pg_connection.execute via monkeypatch
-# ---------------------------------------------------------------------------
 
 
 @pytest.fixture
@@ -126,9 +124,7 @@ def _fake_request(host="10.0.0.7"):
     return SimpleNamespace(client=client)
 
 
-# ---------------------------------------------------------------------------
 # 1. Success path
-# ---------------------------------------------------------------------------
 
 
 def test_success_path_writes_audit_row_with_status_200(audit_writes):
@@ -170,9 +166,7 @@ def test_success_path_writes_audit_row_with_status_200(audit_writes):
     assert metrics["last_ok_epoch"] is not None
 
 
-# ---------------------------------------------------------------------------
 # 2. Failure path applicativo (HTTPException) — audit comunque tentato
-# ---------------------------------------------------------------------------
 
 
 def test_http_exception_is_audited_with_status_and_reraised(audit_writes):
@@ -227,9 +221,7 @@ def test_generic_exception_is_audited_as_500_and_reraised(audit_writes):
     assert "oracledb" in params[5]
 
 
-# ---------------------------------------------------------------------------
 # 3. Fail-open: audit write failure NON rompe il path principale
-# ---------------------------------------------------------------------------
 
 
 def test_audit_write_failure_does_not_break_business_path(audit_write_raises):
@@ -298,9 +290,7 @@ def test_audit_write_failure_does_not_mask_business_exception(audit_write_raises
     )
 
 
-# ---------------------------------------------------------------------------
 # 4. Anonymous / system action — user assente gestito esplicitamente
-# ---------------------------------------------------------------------------
 
 
 def test_anonymous_action_writes_null_user_id(audit_writes):
@@ -347,9 +337,7 @@ def test_current_user_explicit_none_writes_null_user_id(audit_writes):
     assert params[0] is None
 
 
-# ---------------------------------------------------------------------------
 # 5. Async path — stessa semantica su funzione async
-# ---------------------------------------------------------------------------
 
 
 def test_async_function_success_writes_audit(audit_writes):
@@ -401,9 +389,7 @@ def test_async_function_http_exception_audited_and_reraised(audit_writes):
     assert audit_writes[0][1][3] == 413
 
 
-# ---------------------------------------------------------------------------
 # 6. Target extraction — solo str/int accettati
-# ---------------------------------------------------------------------------
 
 
 def test_target_extraction_int_is_stringified(audit_writes):
@@ -452,9 +438,7 @@ def test_target_param_none_writes_null_target(audit_writes):
     assert audit_writes[0][1][2] is None
 
 
-# ---------------------------------------------------------------------------
 # Guard: validazione argomenti del decorator
-# ---------------------------------------------------------------------------
 
 
 def test_decorator_rejects_empty_action():

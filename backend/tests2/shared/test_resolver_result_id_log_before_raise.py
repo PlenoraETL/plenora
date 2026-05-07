@@ -109,8 +109,6 @@ def _assert_gestito_error_with_exc_info(
     )
 
 
-# ─── 1) get_result (lookup row) broad catch ───────────────────────────────
-
 def test_materialize_from_result_id_logs_error_before_raise_on_lookup_failure(
     monkeypatch, capture_resolver_logs,
 ):
@@ -162,8 +160,6 @@ def test_materialize_from_result_id_logs_error_before_raise_on_lookup_failure(
         expected_phrase="lookup result_id",
     )
 
-
-# ─── 2) get_result_data (blob read) broad catch ───────────────────────────
 
 def test_materialize_from_result_id_logs_error_before_raise_on_blob_read_failure(
     monkeypatch, capture_resolver_logs,
@@ -237,8 +233,6 @@ def test_materialize_from_result_id_logs_error_before_raise_on_blob_read_failure
         expected_phrase="lettura blob result_id",
     )
 
-
-# ─── 3) Happy path e branch tenant-mismatch non-toccati dal fix ──────────
 
 def test_materialize_from_result_id_happy_path_unaffected_by_log_fix(
     monkeypatch, capture_resolver_logs,

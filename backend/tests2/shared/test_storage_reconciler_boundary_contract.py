@@ -48,9 +48,7 @@ from app.shared.storage_reconciliation import (
 pytestmark = [pytest.mark.unit, pytest.mark.shared, pytest.mark.contract]
 
 
-# ---------------------------------------------------------------------------
 # fetch_due_pending_deletes
-# ---------------------------------------------------------------------------
 
 
 def _captured_fetchall(rows):
@@ -175,9 +173,7 @@ def test_fetch_due_pending_deletes_rejects_invalid_limit(bad_limit):
         fetch_due_pending_deletes(limit=bad_limit)  # type: ignore[arg-type]
 
 
-# ---------------------------------------------------------------------------
 # mark_lost
-# ---------------------------------------------------------------------------
 
 
 def test_mark_lost_runs_autocommit_update():
@@ -223,9 +219,7 @@ def test_mark_lost_swallows_exceptions():
         ) is None
 
 
-# ---------------------------------------------------------------------------
 # compute_next_retry_at
-# ---------------------------------------------------------------------------
 
 
 def test_compute_next_retry_at_first_attempt_is_base_seconds():
@@ -294,9 +288,7 @@ def test_compute_next_retry_at_is_pure_no_io():
     assert isinstance(out, datetime)
 
 
-# ---------------------------------------------------------------------------
 # PendingReconciliationRow shape lock
-# ---------------------------------------------------------------------------
 
 
 def test_pending_reconciliation_row_is_frozen_dataclass():

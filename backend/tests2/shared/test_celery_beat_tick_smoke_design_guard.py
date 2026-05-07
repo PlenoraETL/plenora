@@ -92,9 +92,7 @@ def doc_section_12_7(doc_text: str) -> str:
     return doc_text[start:end]
 
 
-# =====================================================================
 # Group A - Design section present (today: must PASS)
-# =====================================================================
 
 
 def test_design_section_12_7_exists(doc_text: str):
@@ -199,9 +197,7 @@ def test_design_section_is_ascii_only(doc_section_12_7: str):
     )
 
 
-# =====================================================================
 # Group B - Silent-close guard (today: must PASS)
-# =====================================================================
 
 
 def test_workflow_does_not_silently_close_gap_without_beat_primitive():
@@ -228,9 +224,7 @@ def test_workflow_does_not_silently_close_gap_without_beat_primitive():
     )
 
 
-# =====================================================================
 # Group C - Implementation contract (today: skipped; activates with 021)
-# =====================================================================
 
 
 @pytest.fixture(scope="module")

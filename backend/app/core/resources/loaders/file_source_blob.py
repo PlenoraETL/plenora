@@ -109,7 +109,6 @@ from app.core.resources.loaders._shared import (
 )
 
 
-# ---------------------------------------------------------------------------
 # Cap resolution — single source of truth shared with
 # ``result_blob.py`` via
 # ``app.core.resources.resource_caps.resolve_resource_max_bytes``
@@ -118,7 +117,6 @@ from app.core.resources.loaders._shared import (
 # place; the source-bound contract in
 # ``tests2/shared/test_resource_caps_centralization_contract.py``
 # bans local env parsing here.
-# ---------------------------------------------------------------------------
 
 
 # BE-GO-READY-MEMORY-ENGINE-007: the loader-local
@@ -127,9 +125,7 @@ from app.core.resources.loaders._shared import (
 # ``app.core.resources.resource_caps`` (already imported above).
 
 
-# ---------------------------------------------------------------------------
 # Internal helpers — log key abbreviation + SQL row fetch
-# ---------------------------------------------------------------------------
 
 
 def _fetch_row(
@@ -272,9 +268,7 @@ def _dispatch_by_id(
     return data, "db_legacy"
 
 
-# ---------------------------------------------------------------------------
 # FileSourceBlobLoader — Protocol-compliant loader for `file_source_blob`
-# ---------------------------------------------------------------------------
 
 
 class FileSourceBlobLoader:

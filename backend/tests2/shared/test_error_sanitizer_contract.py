@@ -23,8 +23,6 @@ from app.shared.error_sanitizer import sanitize_http_detail
 pytestmark = [pytest.mark.unit, pytest.mark.contract, pytest.mark.shared]
 
 
-# ─── Regola 1: URL completi ───────────────────────────────────────────
-
 def test_strips_https_url_with_query_token():
     msg = "Layer https://tenant.arcgis.com/rest/FS/0?token=abc123 non trovato"
     out = sanitize_http_detail(msg)
@@ -48,8 +46,6 @@ def test_strips_sftp_url():
     assert "[URL]" in out
 
 
-# ─── Regola 2: JWT standalone ─────────────────────────────────────────
-
 def test_strips_standalone_jwt():
     # JWT fake ma con marker ``eyJ`` + 3 sezioni
     jwt = "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ1In0.s1gn4tur3"
@@ -57,8 +53,6 @@ def test_strips_standalone_jwt():
     assert jwt not in out
     assert "[REDACTED]" in out
 
-
-# ─── Regola 3: coppie sensibili key=value / key: value ────────────────
 
 def test_strips_password_equals():
     out = sanitize_http_detail("auth failed: password=supersecret123")
@@ -81,8 +75,6 @@ def test_strips_api_key_variant():
         assert "[REDACTED]" in out
 
 
-# ─── Regola 4: path Windows ───────────────────────────────────────────
-
 def test_strips_windows_path():
     msg = r"Errore parsing C:\Users\Marco\tmp\file.dxf: PROJCRS not defined"
     out = sanitize_http_detail(msg)
@@ -91,8 +83,6 @@ def test_strips_windows_path():
     assert "[PATH]" in out
     assert "PROJCRS not defined" in out  # parte benigna preservata
 
-
-# ─── Regola 5: path POSIX in directory sensibili ──────────────────────
 
 def test_strips_posix_home_path():
     out = sanitize_http_detail("cannot read /home/urby/data/export.csv")
@@ -105,8 +95,6 @@ def test_does_not_strip_non_sensitive_posix_path():
     out = sanitize_http_detail("file /projects/proj-1 non trovato")
     assert "/projects/proj-1" in out  # preservato
 
-
-# ─── Fallback + truncate ──────────────────────────────────────────────
 
 def test_fallback_on_none():
     assert sanitize_http_detail(None) == "Errore non specificato"

@@ -89,10 +89,6 @@ class OrchestratorService:
             project_service=project_service
         )
 
-        # BE-GO-READY-ARCH-056-W2: Protocol tripwire — fire once at init to
-        # catch misconfigured executor objects before any request is served.
-        # MagicMock satisfies the Protocol (it responds to any attr access),
-        # so test harnesses that replace executor attrs post-init are unaffected.
         for _mtype, _exc in [
             ("estrai",      self.estrai_executor),
             ("manipola",    self.manipola_executor),
@@ -126,10 +122,8 @@ class OrchestratorService:
             "arricchisci": self.enrich_executor,
         }
 
-    # =========================================================================
     # PUNTI DI INGRESSO
     # Metodi chiamati da main.py per eseguire o visualizzare in anteprima.
-    # =========================================================================
 
     def execute_pipeline(self, project_id: str, force_recalculate: bool = False, skip_carica: bool = False, run_id: str = None, intermediate_mode_override: Optional[str] = None) -> PipelineArtifact:
         """Punto di ingresso principale: decide se estrarre, manipolare o arricchire.
@@ -169,21 +163,12 @@ class OrchestratorService:
             )
 
 
-        # BE-GO-READY-ARCH-056-W2: dispatch guard — check supported types via
-        # the typed dispatch table before calling any executor. Replaces the
-        # old `else: return failure` branch at the bottom of the if/elif chain.
         if metadata.project_type not in self._executor_dispatch:
             return PipelineArtifact.failure(
                 project_id=project_id,
                 message=f"Tipo progetto '{metadata.project_type}' non supportato",
             )
 
-        # Esegui la pipeline in base al tipo.
-        # `intermediate_mode_override` (R-25 PR-B2.b): kwarg passing-through
-        # a tutti e 3 gli executor (estrai/manipola/arricchisci). None = bit-compat.
-        # Engine-specific kwargs differ (estrai has no force_recalculate), so
-        # we call through concrete attributes rather than the Protocol interface
-        # whose execute() signature captures only the common surface.
         if metadata.project_type == "estrai":
             _raw = self.estrai_executor.execute(
                 project_id, canvas, run_id=run_id,
@@ -200,11 +185,6 @@ class OrchestratorService:
                 intermediate_mode_override=intermediate_mode_override,
             )
 
-        # BE-GO-READY-ARCH-059-W3: typed payload boundary — normalise executor
-        # dict via ExecutionResult, then hand a typed ExecutionResult directly
-        # to PipelineArtifact.from_execution_result (instead of passing the raw
-        # dict). exec_result.artifact_payload() is available for callers that
-        # need typed access to result_id / rows_count / etc. before construction.
         exec_result = ExecutionResult.from_executor_dict(_raw)
         artifact = PipelineArtifact.from_execution_result(exec_result, project_id=project_id)
 
@@ -233,17 +213,12 @@ class OrchestratorService:
         if not metadata or not canvas:
             return {"success": False, "message": f"Progetto {project_id} non trovato"}
 
-        # BE-GO-READY-ARCH-056-W2: preview uses the full typed dispatch table.
-        # All three executors share the same preview(project_id, canvas, limit)
-        # signature (Protocol surface), so no engine-specific branching needed.
         executor = self._executor_dispatch.get(metadata.project_type)
         if executor is None:
             return {"success": False, "message": f"Preview non supportata per tipo '{metadata.project_type}'"}
         return executor.preview(project_id, canvas, limit)
 
-    # =========================================================================
     # CARICA — Rilevamento e avvio task caricamento su database
-    # =========================================================================
 
     def _execute_carica_if_present(self, project_id: str, canvas: CanvasState) -> Optional[Dict[str, Any]]:
         """
@@ -345,4 +320,3 @@ class OrchestratorService:
             e.source == output_node_id and e.target == carica_node.id
             for e in canvas.edges
         )
-

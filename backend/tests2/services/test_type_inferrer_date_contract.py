@@ -38,9 +38,7 @@ from app.services.file_service import TypeInferrer
 pytestmark = [pytest.mark.unit, pytest.mark.contract, pytest.mark.regression]
 
 
-# =============================================================================
 # Casi positivi: classificati come 'date'
-# =============================================================================
 
 
 def test_infer_iso_date_only_returns_date():
@@ -73,9 +71,7 @@ def test_infer_italian_dd_dash_mm_dash_yyyy_returns_date():
     assert TypeInferrer._infer_from_values(series) == 'date'
 
 
-# =============================================================================
 # Casi negativi: classificati come 'str' (no falsi positivi)
-# =============================================================================
 
 
 def test_infer_us_mm_dd_yyyy_with_day_gt_12_is_not_date():
@@ -104,9 +100,7 @@ def test_infer_below_threshold_is_not_date():
     assert TypeInferrer._infer_from_values(series) == 'str'
 
 
-# =============================================================================
 # Anti-rumore: nessun UserWarning emesso
-# =============================================================================
 
 
 def test_no_pandas_user_warning_emitted_during_inference():
@@ -137,9 +131,7 @@ def test_no_pandas_user_warning_emitted_during_inference():
     )
 
 
-# =============================================================================
 # Helper standalone: smoke test
-# =============================================================================
 
 
 def test_looks_like_date_column_empty_series_returns_false():

@@ -41,9 +41,7 @@ class _FakeScheduler(PlenoraBeatScheduler):
         self._redis_client = None
 
 
-# =============================================================================
 # Default: fail-closed
-# =============================================================================
 
 
 def test_default_fail_closed_when_redis_unavailable(monkeypatch):
@@ -98,9 +96,7 @@ def test_fail_closed_tick_skips_all_work_when_redis_down(monkeypatch):
     super_tick.assert_not_called()
 
 
-# =============================================================================
 # Fail-open esplicito (flag True)
-# =============================================================================
 
 
 def test_fail_open_flag_restores_single_instance_leader(monkeypatch):
@@ -117,9 +113,7 @@ def test_fail_open_flag_restores_single_instance_leader(monkeypatch):
     assert scheduler._is_leader is True
 
 
-# =============================================================================
 # Errore durante acquire/refresh: stessa semantica del ping down
-# =============================================================================
 
 
 def test_exception_during_acquire_is_fail_closed_by_default(monkeypatch):

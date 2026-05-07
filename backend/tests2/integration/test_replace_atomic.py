@@ -158,9 +158,7 @@ def _pg_writer(engine, table: str) -> DatabaseWriter:
     return DatabaseWriter(cfg, engine=engine, db_type="postgres")
 
 
-# =============================================================================
 # Oracle scenarios
-# =============================================================================
 
 
 @pytest.mark.skipif(not _oracle_reachable(), reason="Oracle non raggiungibile")
@@ -244,9 +242,7 @@ class TestOracleReplaceAtomic:
             _oracle_drop(f"{table}__BAK")
 
 
-# =============================================================================
 # Postgres scenarios
-# =============================================================================
 
 
 @pytest.mark.skipif(not _pg_reachable(), reason="Postgres non raggiungibile")

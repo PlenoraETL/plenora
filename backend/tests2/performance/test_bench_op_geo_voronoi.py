@@ -31,9 +31,7 @@ from shapely.geometry import Point
 from app.core.manipola.transforms.spatial import op_geo_voronoi
 
 
-# ─────────────────────────────────────────────────────────────────────
 # Oracle: legacy impl (verbatim)
-# ─────────────────────────────────────────────────────────────────────
 
 
 def _legacy_op_geo_voronoi(df, geom_column):
@@ -67,9 +65,7 @@ def _legacy_op_geo_voronoi(df, geom_column):
         return df
 
 
-# ─────────────────────────────────────────────────────────────────────
 # Harness
-# ─────────────────────────────────────────────────────────────────────
 
 
 def _make_points(n: int, seed: int = 42) -> gpd.GeoDataFrame:
@@ -98,9 +94,7 @@ def _median_runtime(
     return statistics.median(times)
 
 
-# ─────────────────────────────────────────────────────────────────────
 # Assertions
-# ─────────────────────────────────────────────────────────────────────
 
 _MIN_SPEEDUP_VS_LEGACY = 3.0
 

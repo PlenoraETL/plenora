@@ -36,9 +36,7 @@ from shapely.geometry import Point
 from app.core.manipola.transforms.spatial import op_geo_voronoi
 
 
-# ─────────────────────────────────────────────────────────────────────
 # Oracle: legacy impl (verbatim da spatial.py:1252 @ 7f024be)
-# ─────────────────────────────────────────────────────────────────────
 
 
 def _legacy_op_geo_voronoi(df, geom_column):
@@ -76,9 +74,7 @@ def _legacy_op_geo_voronoi(df, geom_column):
         return df
 
 
-# ─────────────────────────────────────────────────────────────────────
 # Helpers
-# ─────────────────────────────────────────────────────────────────────
 
 
 def _assert_geometries_equal(new_gdf, legacy_gdf, ctx):
@@ -121,9 +117,7 @@ def _assert_geometries_equal(new_gdf, legacy_gdf, ctx):
         )
 
 
-# ─────────────────────────────────────────────────────────────────────
 # Fixtures
-# ─────────────────────────────────────────────────────────────────────
 
 
 def _gdf_small_grid():
@@ -202,9 +196,7 @@ _CASES = [
 ]
 
 
-# ─────────────────────────────────────────────────────────────────────
 # Tests
-# ─────────────────────────────────────────────────────────────────────
 
 
 @pytest.mark.perf_correctness

@@ -57,9 +57,7 @@ def _mock_sa_conn():
     return sa_conn, cursor
 
 
-# =============================================================================
 # Feature flag — `CARICA_BULK_INSERT` / `is_bulk_enabled()`
-# =============================================================================
 
 
 def test_is_bulk_enabled_default_auto(monkeypatch):
@@ -79,9 +77,7 @@ def test_is_bulk_enabled_disabled(monkeypatch, val):
     assert is_bulk_enabled() is False
 
 
-# =============================================================================
 # Dispatch — post-rimozione raise sempre `dialect_not_supported`
-# =============================================================================
 
 
 @pytest.mark.parametrize(
@@ -114,9 +110,7 @@ def test_dispatch_unsupported_dialect(dialect):
         bulk_insert(sa_conn, dialect, "s", "t", cols, df)
 
 
-# =============================================================================
 # Telemetria dispatcher — correlation IDs + tombstone
-# =============================================================================
 
 
 @pytest.fixture

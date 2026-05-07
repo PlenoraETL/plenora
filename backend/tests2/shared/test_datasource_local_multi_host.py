@@ -21,9 +21,7 @@ import pytest
 pytestmark = [pytest.mark.unit, pytest.mark.shared, pytest.mark.contract]
 
 
-# =============================================================================
 # _classify_path_for_multi_host
-# =============================================================================
 
 
 @pytest.mark.parametrize("path,expected", [
@@ -66,9 +64,7 @@ def test_classify_none_or_invalid_returns_unknown():
     assert _classify_path_for_multi_host("//") == "unknown"
 
 
-# =============================================================================
 # test_connection include advisory
-# =============================================================================
 
 
 def _make_local_datasource(tmp_path):

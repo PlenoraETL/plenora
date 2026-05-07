@@ -38,9 +38,7 @@ import pytest
 pytestmark = [pytest.mark.unit, pytest.mark.shared, pytest.mark.contract]
 
 
-# ---------------------------------------------------------------------------
 # 1. Public API shape
-# ---------------------------------------------------------------------------
 
 
 def test_runtime_module_exposes_registry_surface():
@@ -73,9 +71,7 @@ def test_router_binding_fields_are_typed_and_minimal():
     assert field_names == {"name", "init_fn", "extract"}
 
 
-# ---------------------------------------------------------------------------
 # 2. Orchestrator binding shape
-# ---------------------------------------------------------------------------
 
 
 def test_orchestrator_binding_name_is_stable():
@@ -128,9 +124,7 @@ def test_orchestrator_init_fn_invokes_router_module_init(monkeypatch):
     assert captured == [sentinel]
 
 
-# ---------------------------------------------------------------------------
 # 3. bind_router_services dispatcher contract
-# ---------------------------------------------------------------------------
 
 
 def test_bind_router_services_calls_init_fn_exactly_once_with_extracted_args():
@@ -214,10 +208,8 @@ def test_bind_router_services_attribute_error_on_missing_field_propagates():
         bind_router_services(SimpleNamespace(), binding)
 
 
-# ---------------------------------------------------------------------------
 # 4. Source-bound: main.py no longer calls init_orchestrator directly,
 #    orchestrator router does not import from app.main.
-# ---------------------------------------------------------------------------
 
 
 _BACKEND_ROOT = Path(__file__).resolve().parents[2]
@@ -301,9 +293,7 @@ def test_orchestrator_router_does_not_import_from_main():
             )
 
 
-# ---------------------------------------------------------------------------
 # 5. Module hygiene: the registry must be import-cheap
-# ---------------------------------------------------------------------------
 
 
 @pytest.mark.parametrize(
@@ -355,9 +345,7 @@ def test_router_registry_does_not_import_orchestrator_router_at_top_level():
             )
 
 
-# ---------------------------------------------------------------------------
 # 6. BE-GO-READY-BOOTSTRAP-ENGINE-019: connections binding (2-arg slice)
-# ---------------------------------------------------------------------------
 
 
 def test_runtime_module_exposes_connections_binding():
@@ -569,9 +557,7 @@ def test_router_registry_does_not_import_connections_router_at_top_level():
             )
 
 
-# ---------------------------------------------------------------------------
 # 7. BE-GO-READY-BOOTSTRAP-ENGINE-020: projects binding (1-arg slice)
-# ---------------------------------------------------------------------------
 
 
 def test_runtime_module_exposes_projects_binding():
@@ -759,9 +745,7 @@ def test_router_registry_does_not_import_projects_router_at_top_level():
             )
 
 
-# ---------------------------------------------------------------------------
 # 8. BE-GO-READY-BOOTSTRAP-ENGINE-021: arricchisci binding (2-arg slice)
-# ---------------------------------------------------------------------------
 
 
 def test_runtime_module_exposes_arricchisci_binding():
@@ -968,9 +952,7 @@ def test_router_registry_does_not_import_arricchisci_router_at_top_level():
             )
 
 
-# ---------------------------------------------------------------------------
 # 9. BE-GO-READY-BOOTSTRAP-ENGINE-022: datasources binding (1-arg slice)
-# ---------------------------------------------------------------------------
 
 
 def test_runtime_module_exposes_datasources_binding():
@@ -1199,9 +1181,7 @@ def test_router_registry_does_not_import_datasources_router_at_top_level():
             )
 
 
-# ---------------------------------------------------------------------------
 # 10. BE-GO-READY-BOOTSTRAP-ENGINE-022/023: startup order lock
-# ---------------------------------------------------------------------------
 #
 # Post-stream-023 the migrated init order in `main.py` MUST be (all
 # 6 are typed bindings — no procedural ``init_*`` left):
@@ -1263,9 +1243,7 @@ def test_main_py_init_order_is_canonical():
     )
 
 
-# ---------------------------------------------------------------------------
 # 11. BE-GO-READY-BOOTSTRAP-ENGINE-023: carica binding (1-arg slice)
-# ---------------------------------------------------------------------------
 
 
 def test_runtime_module_exposes_carica_binding():

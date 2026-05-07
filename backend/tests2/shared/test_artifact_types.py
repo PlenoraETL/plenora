@@ -13,9 +13,7 @@ from app.core.artifacts.types import (
 pytestmark = [pytest.mark.unit, pytest.mark.contract]
 
 
-# ---------------------------------------------------------------------------
 # RunArtifactRef
-# ---------------------------------------------------------------------------
 
 
 def test_run_artifact_ref_requires_project_id():
@@ -50,9 +48,7 @@ def test_run_artifact_ref_is_frozen():
         ref.result_id = "res-2"  # type: ignore[misc]
 
 
-# ---------------------------------------------------------------------------
 # LatestProjectArtifactRef
-# ---------------------------------------------------------------------------
 
 
 def test_latest_project_ref_requires_project_id():
@@ -60,9 +56,7 @@ def test_latest_project_ref_requires_project_id():
         LatestProjectArtifactRef(project_id="")
 
 
-# ---------------------------------------------------------------------------
 # MaterializedArtifact
-# ---------------------------------------------------------------------------
 
 
 def test_materialized_artifact_requires_path_or_df():

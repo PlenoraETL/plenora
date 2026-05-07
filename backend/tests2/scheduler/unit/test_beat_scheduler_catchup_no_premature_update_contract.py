@@ -62,9 +62,7 @@ def _schedule_row(sid="sched-1", cron="0 6 * * *",
 _NOW_FIXED = datetime(2026, 4, 16, 10, 0, tzinfo=timezone.utc)
 
 
-# =============================================================================
 # Fix 2a: last_run NON aggiornato al emit
-# =============================================================================
 
 
 def test_emit_catchup_does_not_update_last_run_to_expected(scheduler):
@@ -98,9 +96,7 @@ def test_emit_catchup_does_not_update_last_run_to_expected(scheduler):
     )
 
 
-# =============================================================================
 # Fix 2b: dedupe via history (skip se gia' emesso per lo stesso scheduled_for)
-# =============================================================================
 
 
 def test_skips_reemit_when_recent_catchup_for_same_scheduled_for_exists(scheduler):
@@ -149,9 +145,7 @@ def test_reemits_when_previous_catchup_is_stale(scheduler):
     scheduler.app.send_task.assert_called_once()
 
 
-# =============================================================================
 # Fix 2c: audit insert sempre fatto (per il dedupe al tick successivo)
-# =============================================================================
 
 
 def test_emit_catchup_still_writes_audit_history_entry(scheduler):

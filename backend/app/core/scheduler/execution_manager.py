@@ -111,9 +111,7 @@ class ExecutionManager:
             features_service=features_service,
         )
     
-    # =========================================================================
     # HEARTBEAT LOCK (C3 fix 4)
-    # =========================================================================
 
     def _start_lock_heartbeat(self, schedule_id: str, interval: float = None, clock=None) -> Dict[str, Any]:
         """Lancia un thread daemon che rinfresca periodicamente il lock
@@ -199,9 +197,7 @@ class ExecutionManager:
         if thread is not None and thread.is_alive():
             thread.join(timeout=5.0)
 
-    # =========================================================================
     # ESECUZIONE PRINCIPALE
-    # =========================================================================
 
     def execute(
         self,
@@ -233,7 +229,6 @@ class ExecutionManager:
         steps = []
         run_id = str(_uuid.uuid4())
 
-        # --- Carica configurazione schedule ---
         config = self.schedule_service.get_schedule(schedule_id)
         if not config:
             logger.error(f"[GESTITO] Schedule non trovato: {schedule_id}")
@@ -251,7 +246,6 @@ class ExecutionManager:
             f"scheduled_for={_scheduled_for_display})"
         )
 
-        # --- 1. Validazioni PRIMA di open_run ---
         # I check su project_meta e group isolation devono precedere
         # `open_run`: se un check fallisce e il run e' gia' aperto, un
         # `return` senza `close_run` lascia il record in stato 'running'
@@ -322,7 +316,6 @@ class ExecutionManager:
                 "schedule e progetto appartengono a gruppi diversi"
             )
 
-        # --- 2. Validazioni passate: ora e' sicuro aprire il run ---
         _group_id = getattr(project_meta, "group_id", "") or ""
         open_run(
             run_id=run_id,
@@ -333,7 +326,6 @@ class ExecutionManager:
         )
         set_run_context(run_id=run_id, project_id=project_id)
         
-        # --- 2. Concurrency check ---
         lock_result = self.concurrency.try_acquire(
             schedule_id, 
             max_queue_size=config.concurrency.max_queue_size
@@ -361,7 +353,6 @@ class ExecutionManager:
             # Il task Celery con countdown gestirà il retry dalla coda
             return {"success": True, "status": "queued", "message": "In coda"}
         
-        # --- Lock acquisito, procediamo ---
         self.schedule_service.set_runtime_status(schedule_id, "running")
 
         # Avvia heartbeat del lock (C3 fix 4): il TTL del lock e' corto
@@ -371,7 +362,6 @@ class ExecutionManager:
         heartbeat_state = self._start_lock_heartbeat(schedule_id)
 
         try:
-            # --- 3. Pre-check connessione CARICA ---
             if config.destination and config.pre_check.verify_destination_connection:
                 pre_check_ok = self._pre_check_connection(config)
                 if not pre_check_ok:
@@ -381,7 +371,6 @@ class ExecutionManager:
                     )
                 steps.append(LogStep(step="CARICA", status="success", duration_ms=0))
             
-            # --- 4. Esegui pipeline headless ---
             pipeline_start = time.time()
             
             orchestrator = self._get_orchestrator()
@@ -462,7 +451,6 @@ class ExecutionManager:
                         exc_info=True,
                     )
 
-            # --- 4b. Archivia output in cartella timestamped ---
             # L'orchestrator salva in results/{project_id}/ (sovrascrive)
             # Lo scheduler copia in results/{project_id}/runs/{schedule}/{timestamp}/
             archived_path = self._artifact_store.archive(
@@ -478,7 +466,6 @@ class ExecutionManager:
                 file=archived_path or output_file or "N/A"
             ))
             
-            # --- 5. Esegui CARICA (se configurato) ---
             rows_written = 0
             rows_skipped = 0
             
@@ -509,7 +496,6 @@ class ExecutionManager:
                         step="CARICA"
                     )
             
-            # --- 6. Successo — aggiorna runtime + log ---
             total_duration = int((time.time() - start_time) * 1000)
             
             decision = self.policy.decide_after_success(rows_written, rows_skipped)
@@ -556,7 +542,6 @@ class ExecutionManager:
             )
             log_path = self.log_service.write_log(entry)
 
-            # --- Chiudi run su log.db ---
             _steps_json = [
                 {
                     "module":      s.step.lower(),
@@ -728,9 +713,7 @@ class ExecutionManager:
             except Exception as e:
                 logger.debug(f"close_connection config fallito: {type(e).__name__}: {e}")
     
-    # =========================================================================
     # PRE-CHECK CONNESSIONE
-    # =========================================================================
     
     def _pre_check_connection(self, config: ScheduleConfig) -> bool:
         """
@@ -760,9 +743,7 @@ class ExecutionManager:
             logger.error(f"[CRASH] Errore pre-check: {e}", exc_info=True)
             return False
     
-    # =========================================================================
     # ESECUZIONE CARICA
-    # =========================================================================
     
     def _execute_carica(
         self,
@@ -928,9 +909,7 @@ class ExecutionManager:
                 "message": "Errore esecuzione CARICA scheduler (consulta log)",
             }
     
-    # =========================================================================
     # GESTIONE FALLIMENTI
-    # =========================================================================
     
     def _handle_failure(
         self,
@@ -976,7 +955,6 @@ class ExecutionManager:
         )
         log_path = self.log_service.write_log(entry)
 
-        # --- Chiudi run su log.db ---
         if run_id:
             _steps_json = [
                 {

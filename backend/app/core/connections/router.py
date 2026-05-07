@@ -24,10 +24,6 @@ from app.core.auth.dependencies import (
     require_not_esecutore,
     require_admin,
 )
-# BE-GO-READY-AUTH-ENGINE-013 Phase-7 contract fan-out: pure
-# contract symbols (`CurrentUser`, `group_filter`) come from the
-# shared contract module. DB-bound ownership helpers stay on
-# `app.core.auth.ownership`. Facade KEEP_COMPAT preserved.
 from app.shared.contracts.auth import CurrentUser, group_filter
 from app.core.auth.ownership import (
     assert_group_access,
@@ -63,8 +59,6 @@ def init_connections(connection_service, database_inspector):
     _connection_service = connection_service
     _database_inspector = database_inspector
 
-
-# ==================== CONNESSIONI DATABASE ====================
 
 @router.post("/connections", response_model=DatabaseConnection, status_code=201)
 @audit_action(action="connection.create")

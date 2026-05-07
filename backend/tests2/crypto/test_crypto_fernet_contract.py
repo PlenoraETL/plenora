@@ -37,8 +37,6 @@ from app.shared import crypto
 pytestmark = [pytest.mark.unit, pytest.mark.security, pytest.mark.contract]
 
 
-# ─── Fixtures ────────────────────────────────────────────────────────────────
-
 @pytest.fixture(autouse=True)
 def _reset_fernet_cache():
     """Garantisce che ogni test parta con la cache Fernet pulita.
@@ -51,8 +49,6 @@ def _reset_fernet_cache():
     yield
     crypto._reset_cache_for_tests()
 
-
-# ─── 1) Roundtrip ─────────────────────────────────────────────────────────────
 
 def test_encrypt_decrypt_roundtrip_preserves_plaintext():
     """Blinda il contratto canonico: decrypt(encrypt(x)) == x.
@@ -74,8 +70,6 @@ def test_encrypt_decrypt_roundtrip_preserves_plaintext():
     assert crypto.is_encrypted(ciphertext) is True
     assert crypto.decrypt(ciphertext) == plaintext
 
-
-# ─── 2) Tamper detection (MAC fail) ───────────────────────────────────────────
 
 def test_decrypt_tampered_ciphertext_returns_none_and_logs_error(monkeypatch):
     """Blinda §2 riga decrypt: bit flip nel ciphertext → None, log error.
@@ -116,8 +110,6 @@ def test_decrypt_tampered_ciphertext_returns_none_and_logs_error(monkeypatch):
     )
 
 
-# ─── 3) Wrong key (key rotation / decrypt con chiave diversa) ─────────────────
-
 def test_decrypt_with_different_key_returns_none(monkeypatch):
     """Blinda la semantica di fallback: chiave sbagliata → None, mai raise.
 
@@ -146,8 +138,6 @@ def test_decrypt_with_different_key_returns_none(monkeypatch):
         f"decrypt con chiave diversa DEVE ritornare None, ottenuto {result!r}"
     )
 
-
-# ─── 4) Allowlist plaintext (encrypt_dict_fields disciplina) ──────────────────
 
 def test_encrypt_dict_fields_skips_missing_non_string_and_non_listed():
     """Blinda la disciplina di ``encrypt_dict_fields``:
@@ -184,8 +174,6 @@ def test_encrypt_dict_fields_skips_missing_non_string_and_non_listed():
         "missing_field non presente DEVE rimanere assente (no side-effect add)"
     )
 
-
-# ─── 5) Nonce uniqueness (Fernet IV random) ───────────────────────────────────
 
 def test_encrypt_same_plaintext_twice_produces_different_ciphertext():
     """Blinda la proprietà IV-random di Fernet: due encrypt dello stesso

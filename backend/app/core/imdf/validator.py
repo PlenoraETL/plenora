@@ -195,11 +195,6 @@ def validate_publish(
     report["summary"]["layers_count"] = len(layers_present)
     report["summary"]["total_features"] = sum(len(bundle_layers[n]) for n in layers_present)
 
-    # ── 2. Connessione ArcGIS ──────────────────────────────────────
-    # BE-GO-READY-ARCH-059-W4: FeaturesService replaced by the thin
-    # adapter resolve_arcgis_connection. The validator receives only
-    # (ArcGISConnectionInfo, ArcGISProviderProtocol); the DB lookup
-    # remains in the features domain without exposing the full class.
     _resolved = resolve_arcgis_connection(connection_id)
     if _resolved is None:
         _add_top_issue("error", "CONNECTION_NOT_FOUND",
@@ -586,7 +581,6 @@ def validate_publish(
                                 )
                             })
 
-        # ── 4b. Schema compat check ──────────────────────────────
         if existing_info and existing_schema_by_layer.get(name):
             fs_schema = existing_schema_by_layer[name]
             # Campi bundle (esclusa geometry). Per ogni campo raccogliamo
@@ -629,9 +623,6 @@ def validate_publish(
             fs_fields_lower = {k.lower(): k for k in fs_fields_info}
             bundle_fields_lower = {k.lower(): k for k in bundle_fields_info}
 
-            # View "retro-compat" che il resto del loop usa: dict
-            # field_name_upper → coarse type. Serve per mantenere la
-            # logica successiva al minimo.
             fs_fields = {k: v["coarse"] for k, v in fs_fields_info.items()}
             bundle_fields = {k: v["coarse"] for k, v in bundle_fields_info.items()}
 

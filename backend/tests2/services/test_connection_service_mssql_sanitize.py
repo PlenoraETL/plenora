@@ -36,9 +36,6 @@ from app.services.connection_service import (  # noqa: E402
 pytestmark = [pytest.mark.unit, pytest.mark.contract, pytest.mark.security]
 
 
-# ─── Sanitize helper — mapping SQLSTATE → canonical ────────────────────────
-
-
 class _PyodbcLikeError(Exception):
     """Fake pyodbc.Error. str(e) rispecchia il formato reale:
     '[SQLSTATE] [vendor][driver][provider]message'."""
@@ -96,9 +93,6 @@ def test_sanitize_mssql_error_generic_exception_returns_canonical_fallback():
     # Un match su 'token' non e' previsto, cade in fallback
     assert msg == "Errore connessione MS SQL"
     assert "TOKEN_XYZ_LEAK" not in msg
-
-
-# ─── _test_mssql — user-facing ConnectionTestResult sanitized ──────────────
 
 
 def _make_mssql_conn():

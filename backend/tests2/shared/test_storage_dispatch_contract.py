@@ -24,9 +24,7 @@ from app.shared.storage_dispatch import (
 )
 
 
-# ---------------------------------------------------------------------------
 # Truth table
-# ---------------------------------------------------------------------------
 
 @pytest.mark.parametrize(
     "policy, size_bytes, threshold_bytes, expected",
@@ -58,9 +56,7 @@ def test_truth_table(policy, size_bytes, threshold_bytes, expected):
     ) == expected
 
 
-# ---------------------------------------------------------------------------
 # Case insensitivity + strip
-# ---------------------------------------------------------------------------
 
 @pytest.mark.parametrize(
     "policy",
@@ -97,9 +93,7 @@ def test_hybrid_policy_case_insensitive_with_strip(policy):
     ) == "object_storage"
 
 
-# ---------------------------------------------------------------------------
 # Unknown / empty policy fallback
-# ---------------------------------------------------------------------------
 
 @pytest.mark.parametrize("policy", ["", " ", None, "ram", "unknown", "s3", "azure"])
 def test_unknown_or_empty_policy_falls_back_to_threshold(policy):
@@ -124,9 +118,7 @@ def test_none_policy_does_not_crash():
     ) == "db"
 
 
-# ---------------------------------------------------------------------------
 # Threshold edge cases
-# ---------------------------------------------------------------------------
 
 def test_hybrid_threshold_zero_means_always_object_storage():
     """Edge: threshold=0 e size=0 -> 0>=0 -> object_storage. Preserva
@@ -143,9 +135,7 @@ def test_hybrid_inclusive_at_boundary():
     ) == "object_storage"
 
 
-# ---------------------------------------------------------------------------
 # Purity: nessun env read, nessun import da services/db
-# ---------------------------------------------------------------------------
 
 def test_module_has_no_settings_or_services_imports():
     """Verifica statica che `storage_dispatch.py` non importi
@@ -188,9 +178,7 @@ def test_resolve_does_not_read_env(monkeypatch):
     ) == "db"
 
 
-# ---------------------------------------------------------------------------
 # Constants exposed for callers
-# ---------------------------------------------------------------------------
 
 def test_policy_constants_match_canonical_strings():
     assert POLICY_DB == "db"
@@ -198,9 +186,7 @@ def test_policy_constants_match_canonical_strings():
     assert POLICY_HYBRID == "hybrid"
 
 
-# ---------------------------------------------------------------------------
 # Equivalenza con i dispatch pre-001B
-# ---------------------------------------------------------------------------
 
 def _legacy_should_use_object_storage_result_store(size: int, policy: str, threshold: int) -> bool:
     """Replica testuale del `result_store._should_use_object_storage`

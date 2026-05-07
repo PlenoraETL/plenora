@@ -25,17 +25,12 @@ from app.utils.logger import get_logger
 from app.shared import error_codes
 from app.shared.error_envelope import raise_typed_http
 from app.shared.audit_action import audit_action
-# BE-GO-READY-AUTH-ENGINE-019 dep-import off facade.
 from app.core.auth.dependencies import (
     get_current_user,
     require_not_esecutore,
     require_user_or_above,
     require_admin,
 )
-# BE-GO-READY-AUTH-ENGINE-013 Phase-7 contract fan-out: pure
-# contract symbols (`CurrentUser`, `group_filter`) come from the
-# shared contract module. DB-bound ownership helpers stay on
-# `app.core.auth.ownership`. Facade KEEP_COMPAT preserved.
 from app.shared.contracts.auth import CurrentUser, group_filter
 from app.core.auth.ownership import (
     assert_group_access,
@@ -102,9 +97,7 @@ def _ds_error_to_http(e: DataSourceError) -> HTTPException:
     )
 
 
-# =============================================================================
 # CRUD CONFIGURAZIONE
-# =============================================================================
 
 @router.post("", response_model=DataSource, status_code=201)
 @audit_action(action="datasource.create")
@@ -328,9 +321,7 @@ def test_connection(ds_id: str, current_user: CurrentUser = Depends(require_not_
         raise HTTPException(status_code=422, detail=str(e))
 
 
-# =============================================================================
 # OPERAZIONI FILE
-# =============================================================================
 
 @router.get("/{ds_id}/files", response_model=list[FileInfoResponse])
 def list_files(
@@ -428,5 +419,3 @@ def upload_file(
     except Exception as e:
         logger.error(f"[CRASH] Errore upload {ds_id}/{path}: {e}", exc_info=True)
         raise_typed_http(error_codes.INTERNAL_ERROR, status_code=500, message="Errore interno del server")
-
-

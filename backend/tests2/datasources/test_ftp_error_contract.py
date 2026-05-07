@@ -48,8 +48,6 @@ from app.core.datasources.interface import (
 pytestmark = [pytest.mark.unit, pytest.mark.contract, pytest.mark.shared]
 
 
-# ─── Fake FTP minimal per mocking deterministico ──────────────────────────
-
 class _FakeFTP:
     """Stand-in di ``ftplib.FTP`` per test di error mapping.
 
@@ -127,8 +125,6 @@ def _make_ds(host: str = "ftp.example.com", root_path: str = "/",
     return FTPDataSource(config)
 
 
-# ─── 1) Missing host → fail-fast senza toccare la rete ────────────────────
-
 def test_connect_without_host_raises_connection_error_no_network_call(monkeypatch):
     """Blinda fail-fast: ``host=""`` deve produrre ``DataSourceConnectionError``
     PRIMA di istanziare ``ftplib.FTP`` e tentare socket.
@@ -159,8 +155,6 @@ def test_connect_without_host_raises_connection_error_no_network_call(monkeypatc
         f"Istanziazioni osservate: {ftp_calls}"
     )
 
-
-# ─── 2) ftplib.all_errors generico (timeout/network) → wrap chained ───────
 
 def test_connect_wraps_generic_ftplib_error_as_connection_error_chained(monkeypatch):
     """Blinda il wrap `except ftplib.all_errors: raise DataSourceConnectionError
@@ -198,8 +192,6 @@ def test_connect_wraps_generic_ftplib_error_as_connection_error_chained(monkeypa
     )
 
 
-# ─── 3) Auth failure (error_perm su login) → ConnectionError ──────────────
-
 def test_connect_wraps_auth_failure_as_connection_error(monkeypatch):
     """Blinda auth failure: ``ftplib.error_perm`` su login (es. ``530 Login
     incorrect``) cade nel branch ``except ftplib.all_errors`` e diventa
@@ -230,8 +222,6 @@ def test_connect_wraps_auth_failure_as_connection_error(monkeypatch):
     assert "530" not in str(exc.value)
 
 
-# ─── 4) Root path inaccessibile → messaggio specifico ─────────────────────
-
 def test_connect_with_inaccessible_root_raises_specific_message(monkeypatch):
     """Blinda il branch dedicato per CWD fail: la root path configurata
     NON accessibile ritorna ``DataSourceConnectionError`` con messaggio
@@ -261,8 +251,6 @@ def test_connect_with_inaccessible_root_raises_specific_message(monkeypatch):
     )
 
 
-# ─── 5) Operation senza connect → _check gate ─────────────────────────────
-
 def test_operation_without_connect_raises_connection_error_not_connected():
     """Blinda il contract di ``_check``: chiamare un'operazione file senza
     aver chiamato ``connect()`` (o senza context manager) produce
@@ -286,8 +274,6 @@ def test_operation_without_connect_raises_connection_error_not_connected():
         ):
             op()
 
-
-# ─── 6) read_file mappa 550 → FileNotFound ────────────────────────────────
 
 def test_read_file_maps_550_error_perm_to_file_not_found(monkeypatch):
     """Blinda il discriminante ``"550"``: FTP code 550 è la canonica
@@ -314,8 +300,6 @@ def test_read_file_maps_550_error_perm_to_file_not_found(monkeypatch):
         ds.read_file("missing.csv")
 
 
-# ─── 7) read_file mappa non-550 error_perm → PermissionError ──────────────
-
 def test_read_file_maps_non_550_error_perm_to_permission_error(monkeypatch):
     """Blinda il complementare: ``error_perm`` SENZA "550" (es. ``530``,
     ``553``) → ``DataSourcePermissionError``.
@@ -338,8 +322,6 @@ def test_read_file_maps_non_550_error_perm_to_permission_error(monkeypatch):
     ):
         ds.read_file("forbidden.csv")
 
-
-# ─── 8) file_exists fail-closed → False silent ────────────────────────────
 
 def test_file_exists_swallows_ftplib_errors_and_returns_false(monkeypatch):
     """Blinda contract semantico di ``file_exists``: è un predicate, non
@@ -365,9 +347,7 @@ def test_file_exists_swallows_ftplib_errors_and_returns_false(monkeypatch):
     )
 
 
-# =============================================================================
 # F5-B2 Anti-leak (2026-04-24) — sanitize str(e) SDK in messaggi utente
-# =============================================================================
 
 
 def test_test_connection_sanitizes_ftplib_error_no_sdk_leak(monkeypatch):

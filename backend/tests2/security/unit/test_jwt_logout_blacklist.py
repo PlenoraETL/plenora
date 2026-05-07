@@ -40,9 +40,7 @@ from fastapi.testclient import TestClient
 pytestmark = [pytest.mark.unit, pytest.mark.security, pytest.mark.contract]
 
 
-# =============================================================================
 # Fixtures
-# =============================================================================
 
 
 @pytest.fixture
@@ -129,9 +127,7 @@ def _issue_token(auth_mod, **overrides) -> str:
     return auth_mod.create_access_token(user_id, username, group_id, role)
 
 
-# =============================================================================
 # 1-2. jti claim esiste e univoco
-# =============================================================================
 
 
 def test_token_contains_jti_claim(auth_client):
@@ -153,9 +149,7 @@ def test_two_tokens_have_distinct_jti(auth_client):
     assert p1["jti"] != p2["jti"]
 
 
-# =============================================================================
 # 3. Endpoint protetto accetta token NON blacklistato
-# =============================================================================
 
 
 def test_protected_endpoint_ok_when_jti_not_blacklisted(auth_client):
@@ -166,9 +160,7 @@ def test_protected_endpoint_ok_when_jti_not_blacklisted(auth_client):
     assert r.json()["username"] == "testuser"
 
 
-# =============================================================================
 # 4. Logout → jti blacklistato → 401 sul prossimo uso
-# =============================================================================
 
 
 def test_logout_blacklists_jti_and_next_request_401(auth_client, fake_redis):
@@ -203,9 +195,7 @@ def test_logout_blacklists_jti_and_next_request_401(auth_client, fake_redis):
     assert "revocato" in detail_after["message"].lower()
 
 
-# =============================================================================
 # 5. Logout idempotente
-# =============================================================================
 
 
 def test_logout_idempotent(auth_client):
@@ -223,9 +213,7 @@ def test_logout_idempotent(auth_client):
     assert r2.json()["blacklisted"] is True
 
 
-# =============================================================================
 # 6. Logout senza bearer → 401
-# =============================================================================
 
 
 def test_logout_without_bearer_returns_401(auth_client):
@@ -234,9 +222,7 @@ def test_logout_without_bearer_returns_401(auth_client):
     assert r.status_code == 401
 
 
-# =============================================================================
 # 7. Logout con token invalido/expired → 401
-# =============================================================================
 
 
 def test_logout_with_invalid_token_returns_401(auth_client):
@@ -266,9 +252,7 @@ def test_logout_with_expired_token_returns_401(auth_client, monkeypatch):
     assert r.status_code == 401
 
 
-# =============================================================================
 # 8. Logout con token legacy (senza jti) → 200 ma blacklisted=False
-# =============================================================================
 
 
 def test_logout_legacy_token_without_jti(auth_client):
@@ -292,9 +276,7 @@ def test_logout_legacy_token_without_jti(auth_client):
     assert body["blacklisted"] is False
 
 
-# =============================================================================
 # 9. Logout con Redis giu' → 503 (fail-loud)
-# =============================================================================
 
 
 def test_logout_redis_down_returns_503(auth_client):
@@ -313,9 +295,7 @@ def test_logout_redis_down_returns_503(auth_client):
     assert "revoca" in detail["message"].lower()
 
 
-# =============================================================================
 # 10. Blacklist check fail-open su Redis down
-# =============================================================================
 
 
 def test_blacklist_check_fail_open_on_redis_down(auth_client):
@@ -330,9 +310,7 @@ def test_blacklist_check_fail_open_on_redis_down(auth_client):
     assert r.status_code == 200
 
 
-# =============================================================================
 # 11. TTL della chiave ≈ exp - now
-# =============================================================================
 
 
 def test_blacklist_ttl_matches_remaining_token_lifetime(auth_client, fake_redis):
@@ -350,9 +328,7 @@ def test_blacklist_ttl_matches_remaining_token_lifetime(auth_client, fake_redis)
     assert expected - 5 <= ttl_stored <= expected
 
 
-# =============================================================================
 # 12. Blacklist di un jti NON impatta altri jti
-# =============================================================================
 
 
 def test_blacklist_is_per_jti(auth_client):
@@ -373,9 +349,7 @@ def test_blacklist_is_per_jti(auth_client):
     assert r_b.status_code == 200
 
 
-# =============================================================================
 # 13. blacklist_jti util: ttl<=0 o jti vuoto → no-op
-# =============================================================================
 
 
 def test_blacklist_jti_noop_on_invalid_input(patched_blacklist, fake_redis):
@@ -393,9 +367,7 @@ def test_is_jti_blacklisted_noop_on_empty_jti(patched_blacklist):
     assert tb.is_jti_blacklisted("") is False
 
 
-# =============================================================================
 # METRICHE + HEALTH PROBE
-# =============================================================================
 
 
 def test_metrics_increment_on_write_ok(patched_blacklist):
@@ -496,9 +468,7 @@ def test_healthcheck_does_not_create_key(patched_blacklist, fake_redis):
     assert fake_redis.exists("plenora:jwt_blacklist:healthcheck") == 0
 
 
-# =============================================================================
 # Env JWT_BLACKLIST_REDIS_TIMEOUT_SEC
-# =============================================================================
 
 
 def test_redis_timeout_env_override_parses(monkeypatch, patched_blacklist):

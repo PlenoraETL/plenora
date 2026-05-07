@@ -121,9 +121,6 @@ from app.utils.logger import get_logger
 
 from .service_discovery import _search_user_items
 
-# Stesso logger name di `arcgis_uploader.py`: i record sono
-# indistinguibili dai consumer che attaccano handler / filtrano per
-# "app.core.imdf.arcgis_uploader" (pattern §6.1 facade).
 logger = get_logger("app.core.imdf.arcgis_uploader")
 
 

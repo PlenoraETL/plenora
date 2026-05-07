@@ -24,9 +24,7 @@ import pytest
 pytestmark = [pytest.mark.unit, pytest.mark.contract]
 
 
-# ============================================================
 # A. object_storage_enabled
-# ============================================================
 
 
 def _patch_capability(enabled, backend):
@@ -55,9 +53,7 @@ def test_object_storage_enabled_false_when_backend_none():
         assert cb.object_storage_enabled() is False
 
 
-# ============================================================
 # B. Runtime / backup factories
-# ============================================================
 
 
 def test_runtime_factory_raises_when_disabled():
@@ -187,9 +183,7 @@ def test_backup_factory_returns_backup_bucket(monkeypatch):
     assert captured["bucket"] == "backup-bucket"
 
 
-# ============================================================
 # C. Runtime callsite guards
-# ============================================================
 
 
 def test_results_db_service_s3_download_returns_none_when_disabled():
@@ -303,9 +297,7 @@ def test_imdf_storage_get_meta_only_returns_none_when_disabled():
         assert imdf_storage.get_meta_only("any-task") is None
 
 
-# ============================================================
 # D. Admin backups
-# ============================================================
 
 
 def test_admin_backups_list_raises_disabled_without_touching_runtime_factory():
@@ -334,9 +326,7 @@ def test_admin_backups_list_raises_disabled_without_touching_runtime_factory():
     build_spy.assert_not_called()
 
 
-# ============================================================
 # E. Compat get_object_storage
-# ============================================================
 
 
 def test_get_object_storage_delegates_to_runtime():

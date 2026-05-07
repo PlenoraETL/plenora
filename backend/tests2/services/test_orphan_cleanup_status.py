@@ -27,9 +27,7 @@ import pytest
 pytestmark = [pytest.mark.unit, pytest.mark.contract]
 
 
-# =============================================================================
 # status "clean" — scan ok senza orfani
-# =============================================================================
 
 
 def test_cleanup_orphans_status_clean_when_no_orphans():
@@ -76,9 +74,7 @@ def test_cleanup_orphans_status_clean_when_all_deletes_succeed():
     assert report["orphan_runs"]["runs_deleted"] == 2
 
 
-# =============================================================================
 # status "partial" — almeno un fallimento inner o outer
-# =============================================================================
 
 
 def test_cleanup_orphans_status_partial_when_per_pid_delete_fails():
@@ -160,9 +156,7 @@ def test_cleanup_orphans_status_partial_when_both_scans_fail():
     )
 
 
-# =============================================================================
 # Log level: warning su partial, info su clean
-# =============================================================================
 
 
 def test_cleanup_orphans_final_log_is_warning_when_partial():
@@ -228,9 +222,7 @@ def test_cleanup_orphans_final_log_is_info_when_clean():
     assert not summary_warnings
 
 
-# =============================================================================
 # Backwards compat: chiavi pre-esistenti intatte
-# =============================================================================
 
 
 def test_cleanup_orphans_report_backward_compat_keys_present():

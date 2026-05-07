@@ -121,28 +121,6 @@ def _ensure_active_geometry(gdf: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
     return gdf
 
 
-# =============================================================================
-# CRS HELPERS — supporto parametri opt-in output_crs / metric_crs
-# =============================================================================
-# Opt-in API: gli operator metrici (buffer/centroid/area/length/perimeter/
-# distance/nearest) accettano due parametri opzionali per controllare
-# esplicitamente il CRS di calcolo e il CRS di output geometrico.
-#
-#   metric_crs:
-#     - None (default) -> auto-UTM via get_utm_crs_for_geometry se l'input
-#                         e' in CRS geografico, altrimenti nessuna reproject
-#     - "EPSG:xxxx"    -> usa quel CRS per il calcolo metrico (utile per
-#                         dataset multi-zona: Lambert conformico, LAEA)
-#   output_crs (solo operator con output geometrico):
-#     - "same"  (default) -> ritorna geometrie nel CRS dell'input
-#     - "metric"          -> ritorna geometrie nel metric_crs usato
-#                            (evita roundtrip)
-#     - "EPSG:xxxx"       -> riproietta esplicitamente al CRS specificato
-#
-# Invariante backward-compat: omettere entrambi e' identico al comportamento
-# pre-refactor.
-
-
 def _resolve_metric_crs(
     gdf: gpd.GeoDataFrame, metric_crs: Optional[str]
 ) -> Optional[str]:
@@ -178,10 +156,8 @@ def _resolve_output_geom_crs(
     return output_crs
 
 
-# =============================================================================
 # JOIN SPAZIALE
 # Unisce due GeoDataFrame per relazione spaziale (intersects, contains, within).
-# =============================================================================
 
 def op_sjoin(
     inputs: List[DataFrame],
@@ -231,10 +207,8 @@ def op_sjoin(
         raise
 
 
-# =============================================================================
 # BUFFER
 # Crea area di rispetto attorno alle geometrie. Distanza in metri, riproiezione automatica.
-# =============================================================================
 
 def op_geo_buffer(
     df: DataFrame,
@@ -293,10 +267,8 @@ def op_geo_buffer(
         raise
 
 
-# =============================================================================
 # CENTROIDE
 # Calcola il punto centrale di ogni geometria.
-# =============================================================================
 
 def op_geo_centroid(
     df: DataFrame,
@@ -346,10 +318,8 @@ def op_geo_centroid(
         raise
 
 
-# =============================================================================
 # AREA
 # Calcola area in m². Riproietta automaticamente in CRS metrico se necessario.
-# =============================================================================
 
 def op_geo_area(
     df: DataFrame,
@@ -389,10 +359,8 @@ def op_geo_area(
         raise
 
 
-# =============================================================================
 # RITAGLIO (CLIP)
 # Ritaglia le geometrie del primo layer usando il secondo come maschera.
-# =============================================================================
 
 def op_geo_clip(
     inputs: List[DataFrame],
@@ -434,10 +402,8 @@ def op_geo_clip(
         raise
 
 
-# =============================================================================
 # DISSOLVE (FUSIONE)
 # Fonde geometrie raggruppate per attributo con funzione di aggregazione.
-# =============================================================================
 
 def op_geo_dissolve(
     df: DataFrame,
@@ -493,10 +459,8 @@ def op_geo_dissolve(
         raise
 
 
-# =============================================================================
 # INTERSEZIONE
 # Operazione insiemistica: area comune tra due layer.
-# =============================================================================
 
 def op_geo_intersection(
     inputs: List[DataFrame],
@@ -536,10 +500,8 @@ def op_geo_intersection(
         raise
 
 
-# =============================================================================
 # UNIONE GEOMETRICA
 # Operazione insiemistica: unione delle aree di due layer.
-# =============================================================================
 
 def op_geo_union(
     inputs: List[DataFrame],
@@ -579,10 +541,8 @@ def op_geo_union(
         raise
 
 
-# =============================================================================
 # DIFFERENZA
 # Operazione insiemistica: aree del primo layer NON coperte dal secondo.
-# =============================================================================
 
 def op_geo_difference(
     inputs: List[DataFrame],
@@ -622,10 +582,8 @@ def op_geo_difference(
         raise
 
 
-# =============================================================================
 # SEMPLIFICAZIONE
 # Riduce complessità geometrie mantenendo la forma (algoritmo Douglas-Peucker).
-# =============================================================================
 
 def op_geo_simplify(
     df: DataFrame,
@@ -661,10 +619,8 @@ def op_geo_simplify(
         raise
 
 
-# =============================================================================
 # INVILUPPO CONVESSO
 # Calcola il poligono convesso minimo che contiene ogni geometria.
-# =============================================================================
 
 def op_geo_convex_hull(
     df: DataFrame,
@@ -698,10 +654,8 @@ def op_geo_convex_hull(
         raise
 
 
-# =============================================================================
 # RIPROIEZIONE CRS
 # Cambia sistema di coordinate (es: WGS84 → UTM 32N, EPSG:4326 → EPSG:32632).
-# =============================================================================
 
 def op_geo_reproject(
     df: DataFrame,
@@ -743,9 +697,6 @@ def op_geo_reproject(
             gdf = gdf.set_crs(source_crs)
 
         if gdf.crs is None:
-            # B2 Phase 4: source_crs mancante e nessun CRS auto-rilevabile
-            # (no EWKB SRID, no CRS sul GeoDataFrame). Preferenza reviewer:
-            # fail-loud chiaro invece di assumere EPSG:4326.
             raise ValueError(
                 "op_geo_reproject: source_crs non fornito e nessun CRS "
                 "rilevabile dalle geometrie (no EWKB SRID, no CRS sul "
@@ -764,10 +715,8 @@ def op_geo_reproject(
         logger.error(f"[CRASH] Errore Reproject: {e}", exc_info=True)
         raise
 
-# =============================================================================
 # BOUNDING BOX (INVILUPPO RETTANGOLARE)
 # Calcola il rettangolo minimo che contiene ogni geometria.
-# =============================================================================
 
 def op_geo_envelope(
     df: DataFrame,
@@ -801,10 +750,8 @@ def op_geo_envelope(
         raise
 
 
-# =============================================================================
 # DISTANZA TRA GEOMETRIE
 # Calcola la distanza tra geometrie di due layer in metri.
-# =============================================================================
 
 def op_geo_distance(
     dfs: List[DataFrame],
@@ -867,10 +814,8 @@ def op_geo_distance(
         raise
 
 
-# =============================================================================
 # NEAREST NEIGHBOR JOIN
 # Join per vicinanza: associa ad ogni geometria il vicino più prossimo.
-# =============================================================================
 
 def op_geo_nearest(
     dfs: List[DataFrame],
@@ -952,10 +897,8 @@ def op_geo_nearest(
         raise
 
 
-# =============================================================================
 # LUNGHEZZA LINEE
 # Calcola la lunghezza in metri di geometrie lineari.
-# =============================================================================
 
 def op_geo_length(
     df: DataFrame,
@@ -995,10 +938,8 @@ def op_geo_length(
         raise
 
 
-# =============================================================================
 # PERIMETRO POLIGONI
 # Calcola il perimetro in metri dei poligoni.
-# =============================================================================
 
 def op_geo_perimeter(
     df: DataFrame,
@@ -1039,10 +980,8 @@ def op_geo_perimeter(
         raise
 
 
-# =============================================================================
 # ESPLODI MULTI-GEOMETRIE
 # Converte MultiPolygon/MultiLineString/MultiPoint in geometrie singole.
-# =============================================================================
 
 def op_geo_explode(
     df: DataFrame,
@@ -1074,10 +1013,8 @@ def op_geo_explode(
         raise
 
 
-# =============================================================================
 # CORREGGI GEOMETRIE INVALIDE
 # Ripara geometrie con auto-intersezioni o altri problemi topologici.
-# =============================================================================
 
 def op_geo_make_valid(
     df: DataFrame,
@@ -1129,10 +1066,8 @@ def op_geo_make_valid(
         raise
 
 
-# =============================================================================
 # FILTRO WITHIN (CONTENUTO IN)
 # Filtra geometrie contenute interamente in un altro layer.
-# =============================================================================
 
 def op_geo_within(
     dfs: List[DataFrame],
@@ -1186,10 +1121,8 @@ def op_geo_within(
         raise
 
 
-# =============================================================================
 # PUNTO SULLA SUPERFICIE
 # Punto garantito all'interno del poligono (a differenza del centroide).
-# =============================================================================
 
 def op_geo_point_on_surface(
     df: DataFrame,
@@ -1224,10 +1157,8 @@ def op_geo_point_on_surface(
         raise
 
 
-# =============================================================================
 # BORDO (BOUNDARY)
 # Estrae il bordo delle geometrie poligonali come linee.
-# =============================================================================
 
 def op_geo_boundary(
     df: DataFrame,
@@ -1262,10 +1193,8 @@ def op_geo_boundary(
         raise
 
 
-# =============================================================================
 # DIAGRAMMA DI VORONOI
 # Genera poligoni di Voronoi a partire da geometrie puntuali.
-# =============================================================================
 
 def op_geo_voronoi(
     df: DataFrame,
@@ -1336,10 +1265,8 @@ def op_geo_voronoi(
         raise
 
 
-# =============================================================================
 # ESPORTA GEOMETRIA COME WKT / LAT-LON
 # Aggiunge colonne testuali WKT e/o coordinate lat/lon.
-# =============================================================================
 
 def op_geo_to_wkt(
     df: DataFrame,
@@ -1390,10 +1317,8 @@ def op_geo_to_wkt(
         raise
 
 
-# =============================================================================
 # DIFFERENZA SIMMETRICA
 # Operazione insiemistica: aree appartenenti a un solo layer (non comuni).
-# =============================================================================
 
 def op_geo_symmetric_difference(
     dfs: List[DataFrame],
@@ -1436,10 +1361,8 @@ def op_geo_symmetric_difference(
         raise
 
 
-# =============================================================================
 # COUNT POINTS IN POLYGONS — PointOnAreaOverlayer
 # Conta/aggrega punti che ricadono dentro ciascun poligono.
-# =============================================================================
 
 def op_geo_count_points_in_polygons(
     dfs: List[DataFrame],
@@ -1532,10 +1455,8 @@ def op_geo_count_points_in_polygons(
         raise
 
 
-# =============================================================================
 # CLEAN TOPOLOGY — AreaGapAndOverlapCleaner
 # Corregge gap e sovrapposizioni tra aree adiacenti.
-# =============================================================================
 
 def op_geo_clean_topology(
     df: DataFrame,
@@ -1647,10 +1568,8 @@ def op_geo_clean_topology(
         raise
 
 
-# =============================================================================
 # OVERLAY — AreaOnAreaOverlayer
 # Overlay tra due layer poligonali con condivisione attributi.
-# =============================================================================
 
 def op_geo_overlay(
     dfs: List[DataFrame],
@@ -1711,10 +1630,8 @@ def op_geo_overlay(
         raise
 
 
-# =============================================================================
 # GEO BOUNDS EXTRACTOR — Estrai bounding box come attributi
 # Calcola le coordinate min/max del rettangolo contenitore di ogni geometria.
-# =============================================================================
 
 def op_geo_bounds_extractor(
     df: DataFrame,
@@ -1759,10 +1676,8 @@ def op_geo_bounds_extractor(
         raise
 
 
-# =============================================================================
 # GEO VERTEX COUNT — Conta i vertici di ogni geometria
 # Utile per analisi della complessità geometrica.
-# =============================================================================
 
 def op_geo_vertex_count(
     df: DataFrame,
@@ -1814,10 +1729,8 @@ def op_geo_vertex_count(
         raise
 
 
-# =============================================================================
 # GEO LINE BUILDER — Crea linee da punti ordinati raggruppati
 # Collega punti in LineString per gruppo, con ordine opzionale.
-# =============================================================================
 
 def op_geo_line_builder(
     df: DataFrame,
@@ -1876,10 +1789,8 @@ def op_geo_line_builder(
         raise
 
 
-# =============================================================================
 # GEO POLYGON BUILDER — Crea poligoni da punti ordinati raggruppati
 # Collega punti in Polygon per gruppo, chiudendo automaticamente l'anello.
-# =============================================================================
 
 def op_geo_polygon_builder(
     df: DataFrame,

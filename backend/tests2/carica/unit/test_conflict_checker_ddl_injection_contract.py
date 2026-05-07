@@ -52,9 +52,7 @@ def _read(p: Path) -> str:
     return p.read_text(encoding="utf-8")
 
 
-# ---------------------------------------------------------------------------
 # 1. Constructor: injected DDLGenerator is stored as self.ddl
-# ---------------------------------------------------------------------------
 
 
 def test_constructor_accepts_injected_ddl():
@@ -94,9 +92,7 @@ def test_constructor_ddl_is_keyword_only():
     assert "ddl:" in sig
 
 
-# ---------------------------------------------------------------------------
 # 2. _qualified_name and _quote_col delegate to DDLGenerator
-# ---------------------------------------------------------------------------
 
 
 @pytest.mark.parametrize(
@@ -158,9 +154,7 @@ def test_quote_col_uses_injected_ddl_not_self_db_type():
     assert checker._quote_col("MyCol") == '"MYCOL"'
 
 
-# ---------------------------------------------------------------------------
 # 3. Source-bound: no inline duplicated dialect branching
-# ---------------------------------------------------------------------------
 
 
 def test_helpers_delegate_to_ddl_no_inline_branching():
@@ -208,9 +202,7 @@ def test_module_imports_ddl_generator():
     assert "from app.core.carica.ddl_generator import DDLGenerator" in text
 
 
-# ---------------------------------------------------------------------------
 # 4. Caller WriterPreflightLifecycleMixin.check_conflicts injects self.ddl
-# ---------------------------------------------------------------------------
 
 
 def test_preflight_lifecycle_injects_self_ddl_into_checker():
@@ -231,9 +223,7 @@ def test_preflight_lifecycle_injects_self_ddl_into_checker():
     )
 
 
-# ---------------------------------------------------------------------------
 # 5. Generated SQL preserves dialect quoting end-to-end (smoke)
-# ---------------------------------------------------------------------------
 
 
 def test_check_uses_quoted_names_in_select_for_postgres(monkeypatch):

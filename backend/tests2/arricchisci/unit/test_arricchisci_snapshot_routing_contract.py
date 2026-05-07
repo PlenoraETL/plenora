@@ -49,9 +49,7 @@ def _reset_policy_cache():
     reset_validation_cache()
 
 
-# ============================================================
 # Helpers
-# ============================================================
 
 
 class _SupportTarget:
@@ -73,9 +71,7 @@ def _bind_helper():
     return target
 
 
-# ============================================================
 # A. Helper sync routes through record_checkpoint_snapshot
-# ============================================================
 
 
 def test_write_intermediate_snapshot_routes_through_record_checkpoint():
@@ -129,9 +125,7 @@ def test_write_intermediate_snapshot_noop_on_empty_or_none():
     record_spy.assert_not_called()
 
 
-# ============================================================
 # B. Policy final_only -> nessun DB write per api_enrich
-# ============================================================
 
 
 def test_api_enrich_with_final_only_policy_does_not_reach_db():

@@ -58,9 +58,7 @@ def mock_tdb(monkeypatch):
     return m
 
 
-# =============================================================================
 # CREATE
-# =============================================================================
 
 
 def test_esecutore_cannot_create_ticket(mock_tdb):
@@ -181,9 +179,7 @@ def test_non_admin_cannot_preassign(mock_tdb):
     assert ei.value.status_code == 403
 
 
-# =============================================================================
 # VIEW / LIST
-# =============================================================================
 
 
 def test_user_sees_only_own_tickets(mock_tdb):
@@ -239,9 +235,7 @@ def test_admin_cannot_view_other_group_ticket(mock_tdb):
     assert ei.value.status_code == 404
 
 
-# =============================================================================
 # UPDATE — RBAC sui privileged fields
-# =============================================================================
 
 
 def test_user_cannot_change_severity(mock_tdb):
@@ -319,9 +313,7 @@ def test_admin_full_update_in_own_group(mock_tdb):
     mock_tdb.update_ticket.assert_called_once()
 
 
-# =============================================================================
 # COMMENTS
-# =============================================================================
 
 
 def test_user_can_comment_on_own_ticket(mock_tdb):
@@ -363,9 +355,7 @@ def test_comment_empty_body_rejected(mock_tdb):
     assert ei.value.status_code == 400
 
 
-# =============================================================================
 # STATUS TRANSITIONS (resolved_at)
-# =============================================================================
 
 
 def test_resolving_sets_resolved_at(mock_tdb):
@@ -384,9 +374,7 @@ def test_resolving_sets_resolved_at(mock_tdb):
     assert kwargs["status"] == "resolved"
 
 
-# =============================================================================
 # NOTIFIER HOOK — invocato ma best-effort
-# =============================================================================
 
 
 def test_notifier_called_on_create(mock_tdb, monkeypatch):

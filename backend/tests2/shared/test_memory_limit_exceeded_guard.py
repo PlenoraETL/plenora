@@ -36,9 +36,7 @@ from app.shared.exceptions import MemoryLimitExceededError
 pytestmark = [pytest.mark.unit, pytest.mark.contract]
 
 
-# ---------------------------------------------------------------------------
 # 1. Catalog membership
-# ---------------------------------------------------------------------------
 
 
 def test_memory_limit_exceeded_constant_value():
@@ -49,9 +47,7 @@ def test_memory_limit_exceeded_in_known_domain_codes():
     assert "memory_limit_exceeded" in error_codes.KNOWN_DOMAIN_CODES
 
 
-# ---------------------------------------------------------------------------
 # 2. Exception purity (no FastAPI / starlette imports)
-# ---------------------------------------------------------------------------
 
 
 def test_exception_module_does_not_import_fastapi():
@@ -83,9 +79,7 @@ def test_exception_carries_typed_attributes():
     assert "huge_file.csv" in str(e)
 
 
-# ---------------------------------------------------------------------------
 # 3. Preflight guard — load_dataframe_from_file
-# ---------------------------------------------------------------------------
 
 
 def _write_csv(path: Path, rows: int = 5) -> None:
@@ -155,9 +149,7 @@ def test_guard_zero_or_negative_cap_disables_check(tmp_path, monkeypatch):
     assert len(df) == 5
 
 
-# ---------------------------------------------------------------------------
 # 4. HTTP boundary mapping — 413 dual-shape envelope
-# ---------------------------------------------------------------------------
 
 
 @pytest.fixture
@@ -276,9 +268,7 @@ def test_envelope_does_not_leak_absolute_path(memory_limit_app):
     # piu' lungo sarebbe un leak).
 
 
-# ---------------------------------------------------------------------------
 # 5. Source-bound: handler registrato in main.py
-# ---------------------------------------------------------------------------
 
 
 def test_main_py_registers_memory_limit_exceeded_handler():

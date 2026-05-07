@@ -44,9 +44,7 @@ from app.shared.error_envelope import (
 pytestmark = [pytest.mark.unit, pytest.mark.contract]
 
 
-# ---------------------------------------------------------------------------
 # 1. Helper unit tests — envelope shape, dual-shape, status code
-# ---------------------------------------------------------------------------
 
 
 def test_envelope_body_has_top_level_error_message_keys():
@@ -135,9 +133,7 @@ def test_raise_typed_http_preserves_headers():
     }
 
 
-# ---------------------------------------------------------------------------
 # 2. Helper unit tests — normalize_http_exception_detail
-# ---------------------------------------------------------------------------
 
 
 def test_normalize_string_detail_yields_http_status_code():
@@ -196,9 +192,7 @@ def test_normalize_dict_without_extras_yields_none_details():
     assert norm["details"] is None
 
 
-# ---------------------------------------------------------------------------
 # 3. Integration tests — handler wired su un'app minima
-# ---------------------------------------------------------------------------
 
 
 @pytest.fixture
@@ -392,9 +386,7 @@ def test_envelope_response_is_json_content_type(envelope_app):
     assert r.headers["content-type"].startswith("application/json")
 
 
-# ---------------------------------------------------------------------------
 # 4. Source-bound checks — i 3 handler sono registrati in main.py
-# ---------------------------------------------------------------------------
 
 
 def test_main_py_registers_envelope_handlers():
@@ -419,9 +411,7 @@ def test_main_py_registers_envelope_handlers():
     assert "from fastapi.exceptions import RequestValidationError" in src
 
 
-# ---------------------------------------------------------------------------
 # 5. RequestValidationError (422) — BE-GO-READY-ERROR-CONTRACT-004
-# ---------------------------------------------------------------------------
 #
 # Lock i requirement del batch 004:
 # 1. invalid body → status 422

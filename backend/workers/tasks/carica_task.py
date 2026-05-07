@@ -127,7 +127,6 @@ def execute_carica_task(
         _revoked.update({"run_id": run_id, "task_id": task_id, "rows_written": 0})
         return _revoked
 
-    # --- Leggi metadata progetto ---
     _group_id = ""
     try:
         from app.services.project_service import ProjectService as _PS
@@ -136,7 +135,6 @@ def execute_carica_task(
     except Exception as e:
         logger.debug(f"group_id lookup fallito: {type(e).__name__}: {e}")
 
-    # --- Apri run su log.db ---
     open_run(
         run_id=run_id,
         project_id=project_id,
@@ -147,11 +145,9 @@ def execute_carica_task(
     )
     set_run_context(run_id=run_id, project_id=project_id)
 
-    # === 1. Aggiorna stato: PARTENZA ===
     _update_progress(self, 0, "Inizializzazione CARICA...")
 
     try:
-        # === 2. Carica il DataFrame upstream ===
         _update_progress(self, 5, "Caricamento dati dal nodo Output...")
         df = _load_upstream_data(project_id, canvas, force_recalculate, output_format)
 
@@ -203,7 +199,6 @@ def execute_carica_task(
         else:
             result = _execute_db_write(self, df, carica_node_data, project_id, task_id, triggered_by, run_id)
 
-        # --- Step tracking + close run ---
         is_success = result.get("success", False)
         rows_written = result.get("rows_written", 0) or 0
         elapsed_ms = int((_time.time() - _run_start) * 1000)

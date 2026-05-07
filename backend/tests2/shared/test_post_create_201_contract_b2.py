@@ -32,9 +32,6 @@ pytestmark = [pytest.mark.unit, pytest.mark.contract, pytest.mark.regression]
 from tests2.shared._route_status_helpers import _assert_post_route_status_201
 
 
-# ─── 1) POST /api/projects/ → 201 ────────────────────────────────────────
-
-
 def test_post_projects_declares_201_on_route():
     """F3-B2: POST /api/projects/ dichiara status_code=201.
 
@@ -48,9 +45,6 @@ def test_post_projects_declares_201_on_route():
     )
 
 
-# ─── 2) POST /api/eseguibili → 201 ───────────────────────────────────────
-
-
 def test_post_eseguibili_declares_201_on_route():
     """F3-B2: POST /api/eseguibili dichiara status_code=201."""
     from app.core.eseguibili.router import router as eseguibili_router
@@ -58,9 +52,6 @@ def test_post_eseguibili_declares_201_on_route():
     _assert_post_route_status_201(
         eseguibili_router, "/eseguibili", "POST /api/eseguibili"
     )
-
-
-# ─── 3) POST /api/features/connections → 201 ────────────────────────────
 
 
 def test_post_features_connections_declares_201_on_route():

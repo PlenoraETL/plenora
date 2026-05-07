@@ -35,10 +35,6 @@ from app.core.auth.dependencies import (
     require_admin,
 )
 from app.core.auth.owner_dependencies import require_schedule_owner
-# BE-GO-READY-AUTH-ENGINE-012: pure-contract symbols
-# (`CurrentUser`, `group_filter`) consumed from
-# `app.shared.contracts.auth`. DB-bound `assert_group_access`
-# stays on `app.core.auth.ownership`.
 from app.shared.contracts.auth import CurrentUser, group_filter
 from app.core.auth.ownership import assert_group_access
 import app.db.db_service as db
@@ -61,8 +57,6 @@ from app.core.scheduler.models import (
 
 router = APIRouter(prefix="/schedules", tags=["schedules"])
 
-
-# ==================== HEALTHCHECK (prima delle route con {id}) ====================
 
 @router.get("/healthcheck", response_model=BeatHealthcheck)
 async def beat_healthcheck(current_user: CurrentUser = Depends(require_not_esecutore)):
@@ -122,8 +116,6 @@ async def beat_healthcheck(current_user: CurrentUser = Depends(require_not_esecu
             message=f"Errore: {str(e)}"
         )
 
-
-# ==================== LISTA + CREAZIONE ====================
 
 @router.get("", response_model=ScheduleList)
 async def list_schedules(project_id: Optional[str] = Query(None, description="Filtra per progetto"), current_user: CurrentUser = Depends(require_not_esecutore)):
@@ -199,8 +191,6 @@ async def create_schedule(data: ScheduleCreate, current_user: CurrentUser = Depe
         logger.error(f"[GESTITO] Errore creazione schedule: {e}", exc_info=True)
         raise_typed_http(error_codes.INTERNAL_ERROR, status_code=500, message="Errore interno del server")
 
-
-# ==================== SINGOLO SCHEDULE ====================
 
 @router.get("/{schedule_id}", response_model=ScheduleConfig)
 async def get_schedule(schedule_id: str, current_user: CurrentUser = Depends(require_not_esecutore)):
@@ -290,8 +280,6 @@ async def delete_schedule(schedule_id: str, current_user: CurrentUser = Depends(
         logger.error(f"[GESTITO] Errore eliminazione schedule {schedule_id}: {e}", exc_info=True)
         raise_typed_http(error_codes.INTERNAL_ERROR, status_code=500, message="Errore interno del server")
 
-
-# ==================== TOGGLE + RUN MANUALE ====================
 
 @router.patch("/{schedule_id}/toggle", response_model=ScheduleConfig)
 @audit_action(action="schedule.toggle", target_param="schedule_id")
@@ -405,8 +393,6 @@ async def run_schedule_now(schedule_id: str, current_user: CurrentUser = Depends
         logger.error(f"[GESTITO] Errore invio task manuale {schedule_id}: {e}", exc_info=True)
         raise_typed_http(error_codes.INTERNAL_ERROR, status_code=500, message="Errore interno del server")
 
-
-# ==================== DOWNLOAD OUTPUT ====================
 
 @router.get("/{schedule_id}/download")
 async def download_schedule_output(
@@ -576,8 +562,6 @@ def _format_size(size_bytes: int) -> str:
         size_bytes /= 1024
     return f"{size_bytes:.1f} TB"
 
-
-# ==================== LOG ESECUZIONI ====================
 
 @router.get("/{schedule_id}/logs", response_model=ScheduleLogList)
 async def get_schedule_logs(

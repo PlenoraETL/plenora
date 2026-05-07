@@ -35,9 +35,7 @@ import pytest
 pytestmark = [pytest.mark.unit, pytest.mark.shared, pytest.mark.contract]
 
 
-# ---------------------------------------------------------------------------
 # 1. Public API shape
-# ---------------------------------------------------------------------------
 
 
 def test_runtime_module_exposes_typed_factory_and_container():
@@ -103,9 +101,7 @@ def test_runtime_services_is_frozen():
         instance.datasource_service = object()  # type: ignore[misc]
 
 
-# ---------------------------------------------------------------------------
 # 2. Factory dependency order — locked behavioural test
-# ---------------------------------------------------------------------------
 
 
 def test_build_runtime_services_constructs_in_canonical_order():
@@ -270,9 +266,7 @@ def test_build_runtime_services_kw_only():
         build_runtime_services(MagicMock(), MagicMock())  # type: ignore[misc]
 
 
-# ---------------------------------------------------------------------------
 # 3. main.py consumes the factory; module-globals re-export from container
-# ---------------------------------------------------------------------------
 
 
 def test_main_py_consumes_runtime_services_factory():
@@ -342,9 +336,7 @@ def test_main_py_rebinds_globals_from_runtime_container():
         )
 
 
-# ---------------------------------------------------------------------------
 # 4. Bootstrap completion semantics — locked
-# ---------------------------------------------------------------------------
 
 
 def test_bootstrap_completion_flag_exists_and_is_initially_false():
@@ -413,9 +405,7 @@ def test_bootstrap_flips_completion_flag_only_on_success(monkeypatch):
     assert bootstrap_mod.is_bootstrapped() is False
 
 
-# ---------------------------------------------------------------------------
 # 5. Module hygiene
-# ---------------------------------------------------------------------------
 
 
 def test_runtime_services_module_does_not_import_fastapi_or_starlette():
@@ -439,9 +429,7 @@ def test_runtime_services_module_does_not_import_fastapi_or_starlette():
             )
 
 
-# ---------------------------------------------------------------------------
 # 6. BE-GO-READY-BOOTSTRAP-ENGINE-016 — api_connection_service slice
-# ---------------------------------------------------------------------------
 
 
 def test_runtime_container_owns_api_connection_service_field():
@@ -538,9 +526,7 @@ def test_factory_does_not_reconstruct_api_connection_service():
     )
 
 
-# ---------------------------------------------------------------------------
 # 7. BE-GO-READY-BOOTSTRAP-ENGINE-017 — datasource_service slice
-# ---------------------------------------------------------------------------
 
 
 def test_runtime_container_owns_datasource_service_field():

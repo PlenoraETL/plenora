@@ -47,9 +47,7 @@ from app.db.pg_connection import (
 )
 
 
-# ============================================================
 # COSTANTI
-# ============================================================
 
 MAGIC_ALL = "*"
 
@@ -64,9 +62,7 @@ _SHAREABLE: dict[str, tuple[str, str]] = {
 }
 
 
-# ============================================================
 # UTILS
-# ============================================================
 
 def _conn():
     """Ritorna una connessione dal pool PostgreSQL."""
@@ -96,9 +92,7 @@ def is_shareable(resource_table: str) -> bool:
     return resource_table in _SHAREABLE
 
 
-# ============================================================
 # QUERY DI VISIBILITÀ
-# ============================================================
 
 def build_visible_where_clause(
     resource_table: str,
@@ -220,9 +214,7 @@ def is_resource_visible(
         _pg_put_conn(conn)
 
 
-# ============================================================
 # CRUD SU RIGHE DI SHARING
-# ============================================================
 
 def list_resource_shares(resource_table: str, resource_id: str) -> list[str]:
     """

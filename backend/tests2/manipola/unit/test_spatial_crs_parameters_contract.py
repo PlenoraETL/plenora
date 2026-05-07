@@ -31,9 +31,7 @@ from shapely.geometry import Point, Polygon, LineString
 pytestmark = [pytest.mark.unit, pytest.mark.manipola, pytest.mark.contract]
 
 
-# =============================================================================
 # Fixtures
-# =============================================================================
 
 
 @pytest.fixture
@@ -66,9 +64,7 @@ def gdf_line_bologna():
     )
 
 
-# =============================================================================
 # 1. BUFFER — geom output
-# =============================================================================
 
 
 def test_buffer_default_preserves_input_crs(gdf_point_bologna):
@@ -139,9 +135,7 @@ def test_buffer_100m_precision_regression(gdf_point_bologna):
     assert abs(dist - 100.0) < 0.01, f"raggio misurato: {dist} m"
 
 
-# =============================================================================
 # 2. CENTROID — geom output
-# =============================================================================
 
 
 def test_centroid_default_preserves_input_crs(gdf_polygon_bologna):
@@ -169,9 +163,7 @@ def test_centroid_output_crs_explicit_epsg(gdf_polygon_bologna):
     assert 1200000 < centroid.x < 1300000
 
 
-# =============================================================================
 # 3. AREA — numeric output
-# =============================================================================
 
 
 def test_area_default_in_square_meters_via_auto_utm(gdf_polygon_bologna):
@@ -198,9 +190,7 @@ def test_area_metric_crs_changes_measurement(gdf_polygon_bologna):
     assert abs(utm_area - laea_area) / utm_area < 0.05
 
 
-# =============================================================================
 # 4. LENGTH — numeric output
-# =============================================================================
 
 
 def test_length_default_via_auto_utm(gdf_line_bologna):
@@ -220,9 +210,7 @@ def test_length_metric_crs_overrides_utm(gdf_line_bologna):
     assert utm_result["l"].iloc[0] != laea_result["l"].iloc[0]
 
 
-# =============================================================================
 # 5. PERIMETER — numeric output
-# =============================================================================
 
 
 def test_perimeter_default_via_auto_utm(gdf_polygon_bologna):
@@ -242,9 +230,7 @@ def test_perimeter_metric_crs_overrides(gdf_polygon_bologna):
     assert utm_result["p"].iloc[0] != laea_result["p"].iloc[0]
 
 
-# =============================================================================
 # 6. DISTANCE — numeric output (2-input)
-# =============================================================================
 
 
 def test_distance_default_meters_via_auto_utm():
@@ -275,9 +261,7 @@ def test_distance_metric_crs_overrides_utm():
     assert utm_result["d"].iloc[0] != laea_result["d"].iloc[0]
 
 
-# =============================================================================
 # 7. NEAREST — geom + numeric output (2-input)
-# =============================================================================
 
 
 def test_nearest_default_preserves_input_crs():

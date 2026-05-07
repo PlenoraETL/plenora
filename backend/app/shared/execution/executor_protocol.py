@@ -55,8 +55,6 @@ if TYPE_CHECKING:
     from app.models import CanvasState
 
 
-# ArtifactPayload re-exported here so existing callers that import it from
-# executor_protocol continue to work without changes.
 __all__ = ["CanvasExecutorProtocol", "ExecutionResult", "ArtifactPayload"]
 
 

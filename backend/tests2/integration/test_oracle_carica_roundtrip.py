@@ -109,9 +109,7 @@ def _make_writer(engine, table: str, mode: WriteMode,
     return DatabaseWriter(cfg, engine=engine, db_type="oracle")
 
 
-# =============================================================================
 # Scenario 1 — smoke test base
-# =============================================================================
 
 
 def test_oracle_create_and_insert_smoke():
@@ -130,9 +128,7 @@ def test_oracle_create_and_insert_smoke():
         _drop_if_exists(table)
 
 
-# =============================================================================
 # Scenario 2 — C5 fix 1: TRUNCATE rollback safety
-# =============================================================================
 
 
 def test_oracle_truncate_insert_rolls_back_on_insert_failure():
@@ -190,9 +186,7 @@ def test_oracle_truncate_insert_rolls_back_on_insert_failure():
         _drop_if_exists(table)
 
 
-# =============================================================================
 # Scenario 3 — C5 fix 2: CLOB auto-promote su colonne > 4000 char
-# =============================================================================
 
 
 def test_oracle_long_string_column_creates_clob():
@@ -232,9 +226,7 @@ def test_oracle_long_string_column_creates_clob():
         _drop_if_exists(table)
 
 
-# =============================================================================
 # Scenario 4 — append per_batch fail-partial documented behavior
-# =============================================================================
 
 
 def test_oracle_append_per_batch_keeps_committed_batches_on_failure():

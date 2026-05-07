@@ -148,23 +148,6 @@ class DatabaseWriter(
         self.ddl = DDLGenerator(self.db_type)
 
 
-    # Phase 5 B2.5b cutover: cluster PREFLIGHT_LIFECYCLE (`validate`,
-    # `_check_create_permission`, `_assert_safe_write_config`,
-    # `_build_initial_result`, `check_conflicts`, `create_table`,
-    # `drop_table`, `truncate_table`) spostato in
-    # `app.core.carica.writer_preflight_lifecycle.WriterPreflightLifecycleMixin`.
-    # `DatabaseWriter` eredita dal mixin (vedi class declaration sopra).
-    # Le call-site `self.<method>(...)` da `_dispatch_write_mode` /
-    # `write` continuano a risolvere via MRO senza modifiche.
-    # Warning di `_assert_safe_write_config` catturato dal test
-    # modernizzato B2.5a via handler stdlib agganciato al logger
-    # canonico `"app.core.carica.writer"` per nome.
-    # Vedi `orchestrate/PHASE_5_ENTRY_PLAN.md` §3 P5-B2.
-
-    # Phase 5 B2.2 cutover: `_compute_schema_hints` spostato in
-    # `SchemaIntrospectionMixin` (DataFrame-side schema introspection
-    # per DDL planning). Vedi class declaration + writer_introspection.py.
-
     def _dispatch_write_mode(
         self,
         prepared_df: pd.DataFrame,
@@ -197,22 +180,11 @@ class DatabaseWriter(
         """
         mode = self.config.write_mode
 
-        # === CREATE / REPLACE ===
         if mode in (WriteMode.CREATE, WriteMode.REPLACE):
             if mode == WriteMode.REPLACE or (
                 mode == WriteMode.CREATE
                 and self.config.if_table_exists == "replace"
             ):
-                # C6 critical: REPLACE pre-fix faceva drop_table()
-                # (DDL auto-commit) + create_table() + _batch_insert().
-                # Se l'INSERT falliva, la tabella del cliente non
-                # esisteva piu' -> data loss deterministica.
-                # Con _replace_atomic: CREATE shadow + INSERT +
-                # RENAME atomico -> target mai esposto a stato
-                # intermedio. Route REPLACE attraverso questo path
-                # e saltiamo l'attuale drop/create/insert in-line.
-                # Calcolo dtypes/max_lengths via helper condiviso
-                # (C4.2 Phase 4) cosi' sono disponibili a _replace_atomic.
                 real_dtypes, max_lengths = self._compute_schema_hints(
                     prepared_df, columns
                 )
@@ -222,13 +194,6 @@ class DatabaseWriter(
                 # Skip il path non-atomic originale (drop+create+insert)
                 result.completed_at = datetime.now(timezone.utc).isoformat()
                 return result, True
-            # CREATE puro (senza if_table_exists=replace): path
-            # originale — no drop (se la tabella esiste e
-            # if_table_exists=error, il create_table() fallira').
-            # Calcolo dtypes/max_lengths via helper condiviso
-            # (C4.2 Phase 4): real_dtypes copre sia nomi colonna del
-            # DataFrame sia source/dest dei ColumnMapping (override
-            # esplicito); max_lengths abilita VARCHAR2->CLOB su Oracle.
             real_dtypes, max_lengths = self._compute_schema_hints(
                 prepared_df, columns
             )
@@ -238,7 +203,6 @@ class DatabaseWriter(
             result = self._batch_insert(prepared_df, columns, result)
             return result, False
 
-        # === APPEND ===
         if mode == WriteMode.APPEND:
             # Applica conflict_policy se ci sono match_columns configurate
             if self.config.match_columns:
@@ -294,17 +258,14 @@ class DatabaseWriter(
             result = self._batch_insert(prepared_df, columns, result)
             return result, False
 
-        # === UPDATE ===
         if mode == WriteMode.UPDATE:
             result = self._batch_update(prepared_df, columns, result)
             return result, False
 
-        # === UPSERT ===
         if mode == WriteMode.UPSERT:
             result = self._batch_upsert(prepared_df, columns, result)
             return result, False
 
-        # === TRUNCATE + INSERT ===
         if mode == WriteMode.TRUNCATE_INSERT:
             # C5 fix 1/3: per ALL_OR_NOTHING scegliamo la strategia
             # in base al volume:
@@ -404,21 +365,7 @@ class DatabaseWriter(
         return result
 
 
-    # Phase 5 B2.6 cutover: cluster BATCH_DISPATCH (`_batch_insert`,
-    # `_batch_update`, `_batch_upsert`) spostato in
-    # `app.core.carica.writer_batch_dispatch.BatchDispatchMixin`.
-    # `DatabaseWriter` eredita dal mixin (vedi class declaration sopra).
-    # I 3 metodi seguono il pattern unico "build SQL template +
-    # delegate a `_execute_in_batches`". `_batch_upsert` ha SAVEPOINT
-    # scope-limitato (PG-only auto-create UNIQUE INDEX B-BE-61)
-    # preservato bit-per-bit. Le call-site `self._batch_*(...)` da
-    # `_dispatch_write_mode` continuano a risolvere via MRO senza
-    # modifiche. Vedi `orchestrate/PHASE_5_ENTRY_PLAN.md` §3 P5-B2.
-
-
-    # ========================================================================
     # MOTORE BATCH GENERICO
-    # ========================================================================
 
     # Phase 5 B2.3 cutover: cluster TRANSACTION_EXECUTION
     # (`_execute_in_batches`, `_execute_all_or_nothing`,
@@ -429,18 +376,8 @@ class DatabaseWriter(
     # commit/rollback timing) sono incapsulate nel mixin IDENTICHE al
     # pre-extraction. Vedi `orchestrate/PHASE_5_ENTRY_PLAN.md` §3 P5-B2.
 
-    # Phase 5 B2.1 cutover: cluster DATA_PREP (`_build_params`,
-    # `_prepare_dataframe`, `_fix_mixed_type_columns`, `_geometry_to_wkt`)
-    # spostato in `app.core.carica.writer_data_prep.DataPrepMixin`.
-    # `DatabaseWriter` eredita da `DataPrepMixin` (vedi class declaration
-    # sopra). I 4 metodi restano accessibili come `DatabaseWriter._<method>`
-    # via MRO; `inspect.getsource(DatabaseWriter._<method>)` legge il
-    # source dal mixin (verificato: `inspect` usa `__code__.co_filename`).
-    # Vedi anche `orchestrate/PHASE_5_ENTRY_PLAN.md` §3 P5-B2.
 
-    # ========================================================================
     # HELPER DATABASE-SPECIFICI
-    # ========================================================================
 
     def _oracle_setup(self, conn):
         """Configurazione Oracle per gestione SDO_GEOMETRY.

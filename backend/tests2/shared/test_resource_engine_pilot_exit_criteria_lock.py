@@ -79,9 +79,7 @@ _PILOT_EXIT_HEADER = (
 )
 
 
-# =====================================================================
 # ResourceKind literal cardinality
-# =====================================================================
 
 
 def test_resource_kind_literal_has_pilot_graduation_entries():
@@ -137,9 +135,7 @@ def test_default_registry_singleton_has_graduation_loaders():
     )
 
 
-# =====================================================================
 # Audit documentation contract
-# =====================================================================
 
 
 def test_audit_doc_contains_pilot_exit_criteria_section():
@@ -199,9 +195,7 @@ def test_audit_doc_records_kill_deadline_date():
     )
 
 
-# =====================================================================
 # Public surface (no private-by-stealth retreat)
-# =====================================================================
 
 
 def test_default_registry_remains_publicly_exported():
@@ -257,9 +251,7 @@ def test_no_new_kind_in_loaders_directory_without_registration():
     )
 
 
-# =====================================================================
 # KEEP-3 positive lock: registry has at least one production caller
-# =====================================================================
 #
 # BE-GO-READY-RESOURCE-ENGINE-019 wired the FIRST real production
 # caller of `default_registry().get(...)` --

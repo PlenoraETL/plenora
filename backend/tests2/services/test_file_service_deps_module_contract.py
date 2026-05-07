@@ -35,9 +35,7 @@ _DEFAULTS = ("NullLogger", "DefaultTimeProvider", "DefaultFileSystem", "DefaultD
 _ALL = _PROTOCOLS + _DEFAULTS
 
 
-# =============================================================================
 # 1. Esposizione + identity re-export
-# =============================================================================
 
 
 def test_file_service_deps_module_exposes_eight_symbols():
@@ -65,9 +63,7 @@ def test_file_service_reexports_deps_with_object_identity():
         )
 
 
-# =============================================================================
 # 2. DefaultTimeProvider
-# =============================================================================
 
 
 def test_default_time_provider_now_is_utc_aware():
@@ -88,9 +84,7 @@ def test_default_time_provider_generate_uuid_is_32_hex():
     int(out, 16)  # deve essere parsabile come hex
 
 
-# =============================================================================
 # 3. NullLogger
-# =============================================================================
 
 
 def test_null_logger_is_no_op_on_all_levels():
@@ -104,9 +98,7 @@ def test_null_logger_is_no_op_on_all_levels():
     assert log.warning("x") is None
 
 
-# =============================================================================
 # 4. DefaultFileSystem (smoke su tmp_path)
-# =============================================================================
 
 
 def test_default_file_system_smoke_mkdir_write_read(tmp_path: Path):
@@ -146,9 +138,7 @@ def test_default_file_system_unlink_and_rmtree(tmp_path: Path):
     assert not fs.exists(sub)
 
 
-# =============================================================================
 # 5. DefaultDataLoader.load_csv (round-trip minimo)
-# =============================================================================
 
 
 def test_default_data_loader_load_csv_round_trip(tmp_path: Path):

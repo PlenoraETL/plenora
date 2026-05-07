@@ -47,9 +47,7 @@ pytestmark = [
 ]
 
 
-# ---------------------------------------------------------------------------
 # 1. Forward: _to_jsonable produce dict-sentinel namespaced
-# ---------------------------------------------------------------------------
 
 def test_to_jsonable_nan_returns_sentinel_dict_not_none():
     """NaN -> dict-sentinel namespaced, NON None come pre-fix e
@@ -92,9 +90,7 @@ def test_to_jsonable_none_stays_none():
     assert _to_jsonable(None) is None
 
 
-# ---------------------------------------------------------------------------
 # 2. Reverse: _from_jsonable_value ricostruisce float
-# ---------------------------------------------------------------------------
 
 def test_from_jsonable_nan_dict_sentinel_restores_nan():
     """Dict-sentinel canonico -> float NaN."""
@@ -130,9 +126,7 @@ def test_from_jsonable_passes_through_non_sentinel_values():
     assert _from_jsonable_value(True) is True
 
 
-# ---------------------------------------------------------------------------
 # 3. Anti-collision: stringhe omonime e dict utente NON vengono corrotti
-# ---------------------------------------------------------------------------
 
 def test_user_string_nan_is_not_converted():
     """Un valore utente uguale alla stringa "__nan__" deve restare
@@ -205,9 +199,7 @@ def test_from_jsonable_recurses_into_list_and_dict_with_sentinels():
     assert out_dict["c"] == "hello"
 
 
-# ---------------------------------------------------------------------------
 # 4. Round-trip su valori misti
-# ---------------------------------------------------------------------------
 
 def test_roundtrip_preserves_mixed_special_floats():
     """Forward + reverse su un dict realistico: valori finiti invariati,
@@ -241,9 +233,7 @@ def test_roundtrip_preserves_mixed_special_floats():
     assert deserialized["missing"] is None
 
 
-# ---------------------------------------------------------------------------
 # 5. Hash recompute: invariante chiave del fix
-# ---------------------------------------------------------------------------
 
 def test_compute_row_hash_matches_after_jsonb_roundtrip():
     """L'invariante chiave di F-DATA-01: hash dei dati ricostruiti
@@ -304,9 +294,7 @@ def test_compute_row_hash_diverges_pre_fix_with_none():
     )
 
 
-# ---------------------------------------------------------------------------
 # 6. Compat con dati pre-fix
-# ---------------------------------------------------------------------------
 
 def test_legacy_null_jsonb_stays_none_after_reverse_mapping():
     """Run vecchie hanno NaN persistiti come `null` (pre-fix). Il reverse

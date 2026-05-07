@@ -40,9 +40,7 @@ pytestmark = [
 ]
 
 
-# ---------------------------------------------------------------------------
 # Fix 2: imdf/loader.extract_imdf_zip cleanup tmp on extraction error
-# ---------------------------------------------------------------------------
 
 
 def test_extract_imdf_zip_cleans_up_on_zip_error(tmp_path):
@@ -114,14 +112,10 @@ def test_extract_imdf_zip_does_not_cleanup_caller_provided_dest(tmp_path):
     assert (caller_dest / "marker.txt").exists()
 
 
-# ---------------------------------------------------------------------------
 # Fix 3: api_connector._rest_file _cleanup_tmp on error path
-# ---------------------------------------------------------------------------
 
 
-# ---------------------------------------------------------------------------
 # Fix bonus: file_service._temp_file_for branch SHP/GDB cleanup
-# ---------------------------------------------------------------------------
 
 
 def test_temp_file_for_cleans_up_tmp_dir_when_zip_extraction_fails(tmp_path):

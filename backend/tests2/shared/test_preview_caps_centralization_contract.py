@@ -75,9 +75,7 @@ def _python_code_only(text: str) -> str:
     return out
 
 
-# ---------------------------------------------------------------------------
 # 1. Helper exists with the documented surface
-# ---------------------------------------------------------------------------
 
 
 def test_helper_module_is_importable_with_canonical_surface():
@@ -170,9 +168,7 @@ def test_settings_default_matches_helper_default():
     )
 
 
-# ---------------------------------------------------------------------------
 # 2. Source-bound: artifact_reader.py MUST consume the canonical helper
-# ---------------------------------------------------------------------------
 
 
 def test_artifact_reader_imports_the_shared_helper():
@@ -277,9 +273,7 @@ def test_artifact_reader_compat_alias_is_removed():
     )
 
 
-# ---------------------------------------------------------------------------
 # 3. Resource cap and preview cap stay separate
-# ---------------------------------------------------------------------------
 #
 # TEST-ENGINE-001 slim: the prior 6 separation tests were collapsed
 # to 3 (one source-bound, one combined value/env identity, one

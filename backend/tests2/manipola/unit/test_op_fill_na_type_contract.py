@@ -34,9 +34,7 @@ pytestmark = [
 ]
 
 
-# =============================================================================
 # 1. Casi canonici richiesti dal prompt
-# =============================================================================
 
 
 def test_fill_na_numeric_column_with_non_numeric_string_raises():
@@ -112,9 +110,7 @@ def test_fill_na_object_column_accepts_arbitrary_string():
     assert result["label"].tolist() == ["a", "b", "N/A", "d"]
 
 
-# =============================================================================
 # 2. Edge cases della policy
-# =============================================================================
 
 
 def test_fill_na_numeric_column_with_none_value_is_noop():
@@ -194,9 +190,7 @@ def test_fill_na_all_columns_with_compatible_value():
     assert result["amount"].iloc[1] == 0
 
 
-# =============================================================================
 # 3. ffill/bfill restano invariati (regression check)
-# =============================================================================
 
 
 def test_fill_na_ffill_bfill_unchanged_by_c2_policy():

@@ -21,11 +21,7 @@ from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
 
 import app.db.db_service as db
-# BE-GO-READY-AUTH-ENGINE-019 dep-import off facade.
 from app.core.auth.dependencies import require_superadmin
-# BE-GO-READY-AUTH-ENGINE-018 Phase-12 contract fan-out: pure
-# `CurrentUser` consumed from the shared contract module. Facade
-# keeps `require_superadmin` (FastAPI Depends).
 from app.shared.contracts.auth import CurrentUser
 from app.shared.audit_action import audit_action
 from app.shared.sharing import (
@@ -40,9 +36,7 @@ from app.shared.sharing import (
 router = APIRouter(prefix="/shares", tags=["shares"])
 
 
-# ============================================================
 # UTILS
-# ============================================================
 
 def _validate_resource_type(resource_type: str) -> None:
     """Solleva 400 se il tipo di risorsa non è shareable."""
@@ -82,9 +76,7 @@ def _check_owner_access(resource_type: str, resource_id: str, current_user: Curr
     _load_resource_owner_group(resource_type, resource_id)  # 404 se non esiste
 
 
-# ============================================================
 # MODELS
-# ============================================================
 
 class SharesResponse(BaseModel):
     resource_type: str
@@ -96,9 +88,7 @@ class SetSharesRequest(BaseModel):
     group_ids: List[str]
 
 
-# ============================================================
 # ENDPOINT
-# ============================================================
 
 @router.get("/{resource_type}/{resource_id}", response_model=SharesResponse)
 def get_shares(

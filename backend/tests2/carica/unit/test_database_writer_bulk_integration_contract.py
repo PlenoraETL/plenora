@@ -59,9 +59,7 @@ def conn():
     return MagicMock()
 
 
-# =============================================================================
 # Bulk INSERT path attivo
-# =============================================================================
 
 
 def test_insert_postgres_falls_back_to_executemany(monkeypatch, df, cols, conn):
@@ -118,9 +116,7 @@ def test_insert_mysql_falls_back_to_executemany(monkeypatch, df, cols, conn):
     assert n == 3
 
 
-# =============================================================================
 # Fallback automatico
-# =============================================================================
 
 
 def test_insert_falls_back_to_executemany_on_not_supported(
@@ -160,9 +156,7 @@ def test_insert_falls_back_silently_on_geometry(monkeypatch, df, conn):
     conn.execute.assert_called_once()
 
 
-# =============================================================================
 # Operation diverse da INSERT: niente bulk
-# =============================================================================
 
 
 @pytest.mark.parametrize("op", ["update", "upsert"])
@@ -178,9 +172,7 @@ def test_non_insert_operations_skip_bulk_path(op, df, cols, conn):
     conn.execute.assert_called_once()
 
 
-# =============================================================================
 # Feature flag
-# =============================================================================
 
 
 def test_env_off_disables_bulk_even_on_insert(monkeypatch, df, cols, conn):
@@ -197,9 +189,7 @@ def test_env_off_disables_bulk_even_on_insert(monkeypatch, df, cols, conn):
     conn.execute.assert_called_once()
 
 
-# =============================================================================
 # Dialect non supportati
-# =============================================================================
 
 
 @pytest.mark.parametrize("dialect", ["oracle", "mssql", "sqlite"])
@@ -215,9 +205,7 @@ def test_unsupported_dialect_falls_back_to_executemany(
     conn.execute.assert_called_once()
 
 
-# =============================================================================
 # Empty batch shortcut
-# =============================================================================
 
 
 def test_empty_batch_returns_zero_no_bulk_call(cols, conn):
@@ -232,9 +220,7 @@ def test_empty_batch_returns_zero_no_bulk_call(cols, conn):
     conn.execute.assert_not_called()
 
 
-# =============================================================================
 # CRITICAL: target_table override (stage+swap correctness)
-# =============================================================================
 # Pre-fix il bulk path passava SEMPRE config.table_name. Nei flow
 # stage+swap (replace_atomic, stage_swap_replace), insert_sql punta a
 # `<target>__stg` ma il bulk caricava direttamente sul `<target>`,
@@ -327,10 +313,8 @@ def test_target_schema_empty_string_is_passed_through(df, cols, conn):
     assert kwargs["schema"] == ""
 
 
-# =============================================================================
 # Stage+swap call paths integration: i 3 path che oggi passano
 # target_table devono propagarlo correttamente fino al bulk dispatcher
-# =============================================================================
 
 
 def test_stage_swap_callsite_propagates_stg_table_to_bulk():
@@ -443,10 +427,8 @@ def test_stage_swap_callsite_propagates_stg_table_to_bulk():
     )
 
 
-# =============================================================================
 # Stage+swap dispatch telemetry (Batch 3.4) — chiude il gap di visibilita'
 # sulle invocazioni TRUNCATE_INSERT grandi per dialect
-# =============================================================================
 #
 # Emit 1 log INFO all'ingresso di _truncate_insert_stage_swap e di
 # _truncate_insert_oracle_redef con event="stage_swap.dispatched", path,

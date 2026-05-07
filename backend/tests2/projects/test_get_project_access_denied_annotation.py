@@ -283,9 +283,7 @@ def test_get_project_skips_visibility_check_when_no_cross_tenant_refs():
     visible_spy.assert_not_called()
 
 
-# =============================================================================
 # RB.7.B (2026-04-27): annotation cross-tenant per ArcGIS connections
-# =============================================================================
 #
 # BUG.md #7: post rebrand 2026-04-18 alcuni canvas storici contenevano
 # `arcgis_connection_id` / `imdf_arcgis_connection_id` ora rinominati o

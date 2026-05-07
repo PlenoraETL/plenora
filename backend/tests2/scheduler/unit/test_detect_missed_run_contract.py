@@ -26,9 +26,7 @@ from app.core.scheduler.schedule_service import detect_missed_run
 pytestmark = [pytest.mark.unit, pytest.mark.scheduler, pytest.mark.contract]
 
 
-# =============================================================================
 # No-catchup cases (ritorna None)
-# =============================================================================
 
 
 def test_returns_none_when_last_run_is_none():
@@ -56,9 +54,7 @@ def test_returns_none_when_last_run_more_recent_than_expected():
     assert result is None
 
 
-# =============================================================================
 # Catchup cases (ritorna datetime)
-# =============================================================================
 
 
 def test_detects_missed_run_within_grace():
@@ -86,9 +82,7 @@ def test_detects_hourly_missed_run():
     assert result == datetime(2026, 4, 16, 12, 0, tzinfo=timezone.utc)
 
 
-# =============================================================================
 # Grace window enforcement
-# =============================================================================
 
 
 def test_returns_none_when_missed_beyond_grace_hours():
@@ -121,9 +115,7 @@ def test_respects_custom_grace_hours_tight_window():
     assert result == datetime(2026, 4, 16, 14, 0, tzinfo=timezone.utc)
 
 
-# =============================================================================
 # Error handling: graceful None
-# =============================================================================
 
 
 def test_returns_none_on_invalid_cron_expression():
@@ -135,9 +127,7 @@ def test_returns_none_on_invalid_cron_expression():
     assert result is None
 
 
-# =============================================================================
 # Timezone handling
-# =============================================================================
 
 
 def test_handles_timezone_aware_datetimes():

@@ -102,9 +102,7 @@ def manager(monkeypatch):
     return mgr
 
 
-# =============================================================================
 # Test struttura base: available / bootstrap failure
-# =============================================================================
 
 
 def test_available_stays_false_when_table_bootstrap_fails():
@@ -121,9 +119,7 @@ def test_available_is_true_on_normal_bootstrap(manager):
     assert manager.available is True
 
 
-# =============================================================================
 # try_acquire: acquired / queued / skipped
-# =============================================================================
 
 
 def test_try_acquire_on_free_schedule_returns_acquired(manager):
@@ -167,9 +163,7 @@ def test_try_acquire_isolates_different_schedules(manager):
     assert manager.is_running("sched-b") is True
 
 
-# =============================================================================
 # release: rilascio + decremento coda
-# =============================================================================
 
 
 def test_release_removes_lock(manager):
@@ -202,9 +196,7 @@ def test_release_idempotent_when_lock_already_free(manager):
     assert manager.is_running("sched-1") is False
 
 
-# =============================================================================
 # get_status / is_running
-# =============================================================================
 
 
 def test_get_status_reports_locked_and_queue_size(manager):
@@ -231,9 +223,7 @@ def test_is_running_reflects_lock_state(manager):
     assert manager.is_running("sched-1") is False
 
 
-# =============================================================================
 # force_release / cleanup
-# =============================================================================
 
 
 def test_force_release_clears_both_lock_and_queue(manager):
@@ -248,9 +238,7 @@ def test_force_release_clears_both_lock_and_queue(manager):
     assert status["queue_size"] == 0
 
 
-# =============================================================================
 # refresh_lock (C3 fix 4) — heartbeat per lock orfano su SIGKILL
-# =============================================================================
 
 
 def test_refresh_lock_returns_true_when_lock_held(manager, monkeypatch):

@@ -169,9 +169,7 @@ def test_load_request_data_returns_none_when_no_source_specified():
     loader_cls.return_value.load.assert_not_called()
 
 
-# =============================================================================
 # Regression: _load_request_data propaga is_superadmin a SourceLoader
-# =============================================================================
 
 
 def test_load_request_data_propagates_is_superadmin_for_admin_user():

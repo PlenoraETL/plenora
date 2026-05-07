@@ -198,9 +198,7 @@ class EstraiExecutor:
         self.connection_service = connection_service
         self.features_service = features_service
 
-    # =========================================================================
     # RISOLUZIONE CONNESSIONE (DB o ArcGIS)
-    # =========================================================================
 
     def _resolve_connection(self, connection_id: str) -> Tuple[Any, str]:
         """
@@ -225,9 +223,7 @@ class EstraiExecutor:
         
         raise ValueError(f"Connessione {connection_id} non trovata")
 
-    # =========================================================================
     # ESECUZIONE COMPLETA
-    # =========================================================================
 
     def execute(
         self, project_id: str, canvas: CanvasState, run_id: str = None,
@@ -275,7 +271,6 @@ class EstraiExecutor:
                 intermediate_mode_override=intermediate_mode_override,
             )
 
-        # --- Step tracking ---
         duration_ms = int((_time.time() - _step_start) * 1000)
         append_step({
             "module":      "estrai",
@@ -286,8 +281,6 @@ class EstraiExecutor:
         })
 
         return res
-
-
 
 
     def _execute_database(
@@ -388,9 +381,7 @@ class EstraiExecutor:
             logger.error(f"[GESTITO] Errore esecuzione Feature Service: {e}", op="execute", exc_info=True)
             return {"success": False, "message": str(e)}
 
-    # =========================================================================
     # ANTEPRIMA (PREVIEW)
-    # =========================================================================
 
     def preview(self, project_id: str, canvas: CanvasState, limit: int) -> Dict[str, Any]:
         """
@@ -558,9 +549,7 @@ class EstraiExecutor:
             logger.error(f"[GESTITO] Errore preview Feature Service: {e}", op="preview", exc_info=True)
             return {"success": False, "message": str(e)}
 
-    # =========================================================================
     # HELPER: COLONNE VISIBILI DA NODO FEATURE_SOURCE
-    # =========================================================================
 
     def _get_visible_columns(self, node) -> List[str]:
         """
@@ -615,9 +604,7 @@ class EstraiExecutor:
         # Colonna non trovata nella lista → default visibile
         return True
 
-    # =========================================================================
     # SALVATAGGIO TIPI COLONNE
-    # =========================================================================
 
     def _salva_tipi_colonne_da_canvas(self, project_id: str, canvas: CanvasState, res: Dict):
         """Salva i tipi colonne definiti nel canvas nei metadati del progetto.
@@ -658,9 +645,7 @@ class EstraiExecutor:
         )
         res['columns_metadata'] = columns_metadata
 
-    # =========================================================================
     # SQL HELPERS (per percorso database)
-    # =========================================================================
 
     def _rimuovi_limit(self, sql: str) -> str:
         """Rimuove clausole LIMIT/TOP/FETCH FIRST esistenti dalla query SQL."""
@@ -723,9 +708,7 @@ class EstraiExecutor:
         else:
             raise ValueError(f"Tipo database '{db_type}' non supportato per preview")
 
-    # =========================================================================
     # MAPPA TIPI DAL CANVAS
-    # =========================================================================
 
     def _build_canvas_type_map(self, canvas: CanvasState) -> Dict[str, str]:
         """
@@ -741,7 +724,6 @@ class EstraiExecutor:
         canvas_type_map = {}
 
         for node in canvas.nodes:
-            # --- Nodi feature_source: mappa geometry al tipo geometrico ---
             if node.type == "feature_source":
                 geom_type = (
                     node.geometry_type 
@@ -752,7 +734,6 @@ class EstraiExecutor:
                     normalized = self._normalize_geometry_type(geom_type)
                     canvas_type_map['geometry'] = normalized
 
-            # --- Colonne normali ---
             columns = None
             if hasattr(node, 'columns') and node.columns:
                 columns = node.columns
@@ -773,7 +754,6 @@ class EstraiExecutor:
                     if original_name and original_name != col_name:
                         canvas_type_map[original_name] = col_type
 
-            # --- Colonne calcolate ---
             calculated = None
             if hasattr(node, 'calculated_columns') and node.calculated_columns:
                 calculated = node.calculated_columns
@@ -828,9 +808,7 @@ class EstraiExecutor:
 
         return columns
 
-    # =========================================================================
     # HELPER: NORMALIZZAZIONE TIPO GEOMETRIA
-    # =========================================================================
 
     def _normalize_geometry_type(self, geom_type: str) -> str:
         """
@@ -879,9 +857,7 @@ class EstraiExecutor:
         
         return "geometry"
 
-    # =========================================================================
     # ESTRAZIONE SRID
-    # =========================================================================
 
     def extract_srid_from_canvas(self, canvas: CanvasState) -> Optional[int]:
         """

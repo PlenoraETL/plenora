@@ -67,18 +67,13 @@ from typing import Dict, List, Union
 
 from app.utils.logger import get_logger
 
-# Stesso logger name di `base.py`: i record sono indistinguibili dai
-# consumer che attaccano handler / filtrano per
-# "app.core.manipola.transforms.base" (pattern §6.1 facade).
 logger = get_logger("app.core.manipola.transforms.base")
 
 DataFrame = Union[pd.DataFrame, gpd.GeoDataFrame]
 
 
-# =============================================================================
 # RIMOZIONE COLONNE
 # Rimuove colonne selezionate dal DataFrame.
-# =============================================================================
 
 def op_drop_columns(
     df: DataFrame,
@@ -111,10 +106,8 @@ def op_drop_columns(
         raise
 
 
-# =============================================================================
 # RINOMINA COLONNE
 # Rinomina colonne secondo mapping {vecchio_nome: nuovo_nome}.
-# =============================================================================
 
 def op_rename(
     df: DataFrame,
@@ -162,10 +155,8 @@ def op_rename(
         raise
 
 
-# =============================================================================
 # REORDER COLUMNS — Riordina le colonne del DataFrame
 # Permette di specificare un ordine personalizzato o alfabetico.
-# =============================================================================
 
 def op_reorder_columns(
     df: DataFrame,
@@ -209,10 +200,8 @@ def op_reorder_columns(
         raise
 
 
-# =============================================================================
 # CONCATENAZIONE COLONNE
 # Unisce più colonne in una nuova colonna con separatore.
-# =============================================================================
 
 def op_concat_columns(
     df: DataFrame,
@@ -308,10 +297,8 @@ def op_concat_columns(
         raise
 
 
-# =============================================================================
 # DIVISIONE COLONNA
 # Divide colonna su separatore e crea N nuove colonne.
-# =============================================================================
 
 def op_split_column(
     df: DataFrame,

@@ -37,9 +37,7 @@ import pytest
 pytestmark = [pytest.mark.unit, pytest.mark.security, pytest.mark.contract]
 
 
-# =============================================================================
 # 1. Helper contract: signature + behavior
-# =============================================================================
 
 
 def test_enricher_signature_is_stable():
@@ -157,9 +155,7 @@ def test_enricher_handles_empty_metadata(monkeypatch):
     assert "canvas_types" not in node_data or node_data["canvas_types"] == {}
 
 
-# =============================================================================
 # 2. Orchestrator callsite integration
-# =============================================================================
 
 
 def _module_references_name(module, name: str) -> bool:

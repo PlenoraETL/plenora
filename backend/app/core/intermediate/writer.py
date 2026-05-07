@@ -18,9 +18,7 @@ from app.core.intermediate import db
 logger = get_logger(__name__)
 
 
-# ============================================================
 # HASH AGGREGATO (opzione 2) per input_hash / output_hash
-# ============================================================
 
 def compute_aggregate_hash(rows: List[Dict], col_schema: dict) -> str:
     """
@@ -87,9 +85,7 @@ def compute_aggregate_hash(rows: List[Dict], col_schema: dict) -> str:
     return hashlib.sha256(combined.encode("utf-8")).hexdigest()
 
 
-# ============================================================
 # ROW HASH MD5 per _row_hash
-# ============================================================
 
 def _format_float_stable(v: float) -> str:
     """Formatta un float in modo stabile per hashing (N10).
@@ -161,9 +157,7 @@ def compute_row_hash(row: Dict, col_names_sorted: List[str]) -> str:
     return hashlib.md5("|".join(parts).encode("utf-8", errors="replace")).hexdigest()
 
 
-# ============================================================
 # SCRITTURA NODO COMPLETO
-# ============================================================
 
 def write_node(run_id: str, node_id: str, node_type: str,
                rows: List[Dict], col_schema: dict,

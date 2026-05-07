@@ -88,9 +88,7 @@ class _FakeScheduler(PlenoraBeatScheduler):
         self._redis_client = redis_client
 
 
-# =============================================================================
 # ACQUISIZIONE LEADERSHIP
-# =============================================================================
 
 
 def test_first_tick_acquires_leader_lock_when_key_absent():
@@ -170,9 +168,7 @@ def test_leader_refreshes_ttl_on_subsequent_ticks():
     assert new_expire > original_expire
 
 
-# =============================================================================
 # LEADERSHIP LOST / RIPRESA
-# =============================================================================
 
 
 def test_leader_loses_lock_to_another_process_and_logs_warning(caplog):
@@ -202,9 +198,7 @@ def test_leader_loses_lock_to_another_process_and_logs_warning(caplog):
     assert any("LEADER" in rec.getMessage() for rec in caplog.records)
 
 
-# =============================================================================
 # DEGRADED MODE: Redis non raggiungibile
-# =============================================================================
 
 
 def test_redis_unavailable_falls_back_to_single_instance_leader(monkeypatch):
@@ -234,9 +228,7 @@ def test_redis_unavailable_falls_back_to_single_instance_leader(monkeypatch):
     assert scheduler._is_leader is True
 
 
-# =============================================================================
 # SHUTDOWN: release del lock
-# =============================================================================
 
 
 def test_close_releases_leader_lock_when_still_owned():

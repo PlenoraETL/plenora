@@ -116,9 +116,7 @@ def _warn_fallback_once(reason: str) -> None:
         )
 
 
-# ============================================================
 # Implementazione Redis
-# ============================================================
 
 
 def _redis_check(
@@ -177,9 +175,7 @@ def _redis_clear(ip: str) -> None:
     client.delete(_key(ip))
 
 
-# ============================================================
 # API pubblica usata da `app.core.auth.auth`
-# ============================================================
 
 
 def check_rate_limit(
@@ -240,9 +236,7 @@ def clear_failed_logins(
         fallback(ip)
 
 
-# ============================================================
 # Hooks test-only
-# ============================================================
 
 
 def _set_client_for_tests(client: Optional[Any]) -> None:

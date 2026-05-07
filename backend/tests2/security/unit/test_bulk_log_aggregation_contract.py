@@ -43,9 +43,7 @@ from app.utils.logger import (
 pytestmark = [pytest.mark.unit, pytest.mark.contract]
 
 
-# ─────────────────────────────────────────────────────────────────────
 # Fixture
-# ─────────────────────────────────────────────────────────────────────
 
 
 @pytest.fixture
@@ -90,9 +88,7 @@ def _emit_bulk_warning(logger_name: str, msg: str, **extra):
     lg.warning(msg, extra=extra)
 
 
-# ─────────────────────────────────────────────────────────────────────
 # Sanity: whitelist e logger set costanti del modulo
-# ─────────────────────────────────────────────────────────────────────
 
 
 def test_whitelist_contains_expected_keys():
@@ -112,9 +108,7 @@ def test_bulk_telemetry_logger_set_matches_runtime_emitters():
     })
 
 
-# ─────────────────────────────────────────────────────────────────────
 # Contract 1 — bulk.success INFO arriva al DB con whitelist serializzata
-# ─────────────────────────────────────────────────────────────────────
 
 
 def test_bulk_info_extras_are_serialized_into_details_jsonb(pg_execute_mock):
@@ -185,10 +179,8 @@ def test_stage_swap_dispatched_info_is_serialized(pg_execute_mock):
     assert details["threshold"] == 500_000
 
 
-# ─────────────────────────────────────────────────────────────────────
 # Contract 2 — bulk WARNING non duplicato fra handler WARNING e
 # handler bulk-telemetry INFO (filter `levelno == INFO`)
-# ─────────────────────────────────────────────────────────────────────
 
 
 def test_bulk_warning_is_not_duplicated(pg_execute_mock):
@@ -213,9 +205,7 @@ def test_bulk_warning_is_not_duplicated(pg_execute_mock):
     assert _level_from_call(pg_execute_mock.call_args) == "WARNING"
 
 
-# ─────────────────────────────────────────────────────────────────────
 # Contract 3 — INFO su logger non-bulk NON arriva al DB
-# ─────────────────────────────────────────────────────────────────────
 
 
 def test_non_bulk_info_does_not_reach_db(pg_execute_mock):
@@ -240,9 +230,7 @@ def test_non_bulk_warning_still_reaches_db_via_default_handler(pg_execute_mock):
         assert key not in details, f"chiave whitelist '{key}' spuria in details"
 
 
-# ─────────────────────────────────────────────────────────────────────
 # Contract 4 — solo la whitelist finisce in details; altre chiavi NO
-# ─────────────────────────────────────────────────────────────────────
 
 
 def test_non_whitelist_extras_are_not_serialized(pg_execute_mock):
@@ -263,9 +251,7 @@ def test_non_whitelist_extras_are_not_serialized(pg_execute_mock):
     assert "random_noise" not in details
 
 
-# ─────────────────────────────────────────────────────────────────────
 # Contract 5 — ContextVar injection (C8) preservata e coesistente
-# ─────────────────────────────────────────────────────────────────────
 
 
 def test_bulk_info_preserves_contextvar_injection(pg_execute_mock):
@@ -294,9 +280,7 @@ def test_bulk_info_preserves_contextvar_injection(pg_execute_mock):
         set_user_id("")
 
 
-# ─────────────────────────────────────────────────────────────────────
 # Contract 6 — shape JSONB query-abile via `->>` SQL operator
-# ─────────────────────────────────────────────────────────────────────
 
 
 def test_details_jsonb_supports_top_level_key_extraction(pg_execute_mock):

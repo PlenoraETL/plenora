@@ -55,9 +55,7 @@ import pytest
 pytestmark = [pytest.mark.unit, pytest.mark.shared, pytest.mark.contract]
 
 
-# =============================================================================
 # Provider matrix — baseline moto + opt-in real MinIO
-# =============================================================================
 
 _MINIO_MOTO_ENDPOINT = "http://minio-moto.test:9000"  # valore usato solo dal
                                                       # client; moto intercetta
@@ -166,9 +164,7 @@ def _make_real_minio_provider():
             pass
 
 
-# =============================================================================
 # C1 — upload + download roundtrip small (<1 KB)
-# =============================================================================
 
 
 def test_upload_download_roundtrip_small(provider, tmp_path):
@@ -184,16 +180,12 @@ def test_upload_download_roundtrip_small(provider, tmp_path):
     assert dst.read_bytes() == payload
 
 
-# =============================================================================
 # C2 — upload_bytes multipart >8MB: ESCLUSO dal baseline (vedi docstring file).
 # Il test resta commentato e NON registrato nella suite finche' non ci sara'
 # un path pulito contro server reale (opt-in MinIO) separato dal baseline moto.
-# =============================================================================
 
 
-# =============================================================================
 # C3 — list_objects con prefix (set semantic)
-# =============================================================================
 
 
 def test_list_objects_prefix_semantic(provider):
@@ -216,9 +208,7 @@ def test_list_objects_prefix_semantic(provider):
         assert obj["size"] >= 0
 
 
-# =============================================================================
 # C4 — delete idempotente (S3/MinIO spec: 204 no error su key inesistente)
-# =============================================================================
 
 
 def test_delete_idempotent(provider):
@@ -233,9 +223,7 @@ def test_delete_idempotent(provider):
     provider.delete("exists.bin")  # secondo delete: no error
 
 
-# =============================================================================
 # C5 — overwrite (upload su key esistente sostituisce)
-# =============================================================================
 
 
 def test_overwrite_replaces(provider):
@@ -250,10 +238,8 @@ def test_overwrite_replaces(provider):
     assert stream["size"] == len(b"version-2")
 
 
-# =============================================================================
 # C6 — content_type default: ESCLUSO dal baseline (vedi docstring file).
 # Non e' un contract cross-provider: S3/moto/MinIO server tutti ritornano
 # `binary/octet-stream`, mentre la docstring del Protocol dichiara
 # `application/octet-stream` come fallback in-code. Allineare richiede
 # cambio runtime o docstring, fuori scope A1-B3.
-# =============================================================================

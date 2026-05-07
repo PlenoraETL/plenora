@@ -55,7 +55,6 @@ from app.db.cleanup_middleware import DBConnectionCleanupMiddleware
 
 logger = get_logger(__name__)
 
-# ==================== APP ====================
 
 # In produzione (ENVIRONMENT=production) disabilita /docs e /openapi.json
 # per non esporre lo schema API pubblicamente. In sviluppo restano attivi.
@@ -185,15 +184,6 @@ async def http_exception_handler(
     )
 
 
-# Handler per RequestValidationError (Pydantic 422):
-# trasforma la shape FastAPI default `{"detail": [{loc, msg, type}, ...]}`
-# in envelope dual-shape go-ready preservando la lista validation
-# errors. Compat FE: `detail.errors` espone direttamente la lista
-# per consumer non migrati al top-level `details.errors`.
-#
-# Logging: 422 e' un client error. NESSUN `logger.error`/`warning`:
-# evitiamo rumore sui dashboard di metric server-side. La FastAPI
-# default non logga; manteniamo lo stesso silenzio.
 @app.exception_handler(RequestValidationError)
 async def validation_exception_handler(
     request: Request, exc: RequestValidationError,
@@ -211,12 +201,6 @@ async def validation_exception_handler(
         for err in exc.errors()
     ]
 
-    # Costruisci l'envelope canonico dual-shape e poi aggiungi
-    # `errors` come campo top-level del mirror `detail` per
-    # backward compat con FE non migrato al top-level
-    # `response.json().details.errors`.
-    # Il helper resta puro e canonico; la patch `detail.errors`
-    # vive qui perche' e' un compat-shim 422-specifico.
     body = build_error_envelope_body(
         error=error_codes.VALIDATION_ERROR,
         message="Dati richiesta non validi",
@@ -361,16 +345,6 @@ async def memory_limit_exceeded_handler(
     )
 
 
-# ==================== INIZIALIZZA SERVIZI SHARED ====================
-#
-# BE-GO-READY-BOOTSTRAP-ENGINE-011-RUNTIME-CONTAINER-FIRST-SLICE:
-# il 6-tuple di shared services + l'orchestrator e' costruito da
-# `app.runtime.build_runtime_services(...)` come singolo typed
-# container `RuntimeServices`. I module-globals sotto sono RE-EXPORT
-# del container per preservare la monkeypatch surface dei test
-# (`patch.object(main_mod, "orchestrator", ...)`). Il source of truth
-# del wiring e' la factory, non queste 7 righe.
-
 from app.runtime import build_runtime_services
 
 _runtime_services = build_runtime_services(
@@ -385,21 +359,9 @@ query_generator = _runtime_services.query_generator
 query_executor = _runtime_services.query_executor
 features_service = _runtime_services.features_service
 orchestrator = _runtime_services.orchestrator
-# BE-GO-READY-BOOTSTRAP-ENGINE-016-API-CONNECTION-SLICE: il
-# singleton `api_connection_service` ora vive esplicitamente nel
-# container. Identita' preservata: e' il MEDESIMO oggetto del
-# canonical module-level
-# `app.core.arricchisci.api_connector.api_connection_service`. Il
-# patch surface esistente continua a funzionare invariata.
 api_connection_service = _runtime_services.api_connection_service
-# BE-GO-READY-BOOTSTRAP-ENGINE-017-DATASOURCE-SLICE: il singleton
-# `datasource_service` ora vive esplicitamente nel container.
-# Identita' preservata: e' il MEDESIMO oggetto del canonical
-# module-level `app.core.datasources.service.datasource_service`.
 datasource_service = _runtime_services.datasource_service
 
-
-# ==================== INIT MODULI ====================
 
 from app.core.connections.router import router as connections_router
 from app.core.projects.router import router as projects_router
@@ -416,18 +378,8 @@ from app.core.scheduler.router import router as schedules_router
 from app.core.orchestrator.router import pipeline_router, tasks_router
 from app.core.logs.router import router as logs_router
 from app.core.logs.runs_router import router as runs_router
-# BE-GO-READY-BOOTSTRAP-ENGINE-022: `init_datasources` ora viene
-# invocata via `DATASOURCES_BINDING` nel typed router registry
-# (vedi linea ~445). Il direct import qui sotto e' rimosso —
-# l'unica importazione necessaria e' il `router` per il
-# `app.include_router(...)` piu' avanti.
 from app.core.datasources.router import router as datasources_router
 from app.core.intermediate.router import router as intermediate_router
-# BE-GO-READY-BOOTSTRAP-ENGINE-017: `datasource_service` is now
-# bound at module-top from the runtime container (see line ~395).
-# The previous `from app.core.datasources.service import
-# datasource_service` is removed; identity is preserved (same
-# singleton, exposed via `_runtime_services.datasource_service`).
 from app.core.eseguibili.router import router as eseguibili_router
 from app.core.imdf.router import router as imdf_router
 from app.core.auth.shares_router import router as shares_router
@@ -435,13 +387,6 @@ from app.core.admin_backups.router import router as admin_backups_router
 from app.core.admin_system_status.router import router as admin_system_status_router
 from app.core.tickets.router import router as tickets_router
 
-# Inizializza moduli che necessitano di servizi
-# BE-GO-READY-BOOTSTRAP-ENGINE-018/019/020/021/022/023-ROUTER-REGISTRY:
-# tutti i 6 init_* router-side fluiscono ora attraverso il typed
-# registry. Order preserved: connections, projects, arricchisci,
-# datasources, carica, orchestrator. Stream 023 ha chiuso
-# l'ultimo init procedurale (`init_carica_service`) migrandolo a
-# `CARICA_BINDING`.
 from app.runtime.router_registry import (
     bind_router_services,
     ARRICCHISCI_BINDING,
@@ -460,12 +405,8 @@ bind_router_services(_runtime_services, ORCHESTRATOR_BINDING)
 # features: usa lazy init interno, nessuna init_* necessaria
 
 
-# ==================== REGISTRA ROUTER ====================
-
 # Auth (auth in signature di ogni endpoint)
 app.include_router(auth_router, prefix="/api")
-# BE-GO-READY-AUTH-ENGINE-003: users CRUD admin endpoints estratti
-# in modulo dedicato. URL pattern preservati: /api/auth/users*.
 app.include_router(users_router, prefix="/api")
 app.include_router(groups_router, prefix="/api")
 app.include_router(shares_router, prefix="/api")
@@ -527,7 +468,6 @@ app.include_router(admin_system_status_router, prefix="/api")
 # Tickets (tech_debt + user_support, RBAC nel router)
 app.include_router(tickets_router, prefix="/api")
 
-# ==================== HEALTH CHECK ====================
 
 @app.get("/")
 def root():
@@ -567,8 +507,6 @@ def ready():
     payload = gather_readiness()
     return JSONResponse(content=payload.body, status_code=payload.status_code)
 
-
-# ==================== STARTUP ====================
 
 if __name__ == "__main__":
     import uvicorn

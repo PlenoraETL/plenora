@@ -177,7 +177,6 @@ def parse_parquet_preview(
     import pyarrow as pa
     import pyarrow.parquet as pq
 
-    # ---- Stage 1: open + footer + schema -----------------------
     try:
         # ``pa.BufferReader`` is a zero-copy seekable view over
         # ``body_bytes``. ``ParquetFile`` parses only the file
@@ -236,7 +235,6 @@ def parse_parquet_preview(
             cause=e,
         ) from e
 
-    # ---- Stage 3: rows = head_df.to_dict(...) ------------------
     try:
         rows = head_df.to_dict(orient="records")
     except Exception as e:

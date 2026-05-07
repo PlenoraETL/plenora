@@ -48,9 +48,7 @@ _FRONTEND_DIR = _REPO_ROOT / "frontend"
 _WORKFLOWS_DIR = _REPO_ROOT / ".github" / "workflows"
 
 
-# =====================================================================
 # 0. State of the world (used to gate the negative locks below)
-# =====================================================================
 
 
 def _frontend_dockerfile_exists() -> bool:
@@ -110,9 +108,7 @@ def _ci_invokes_docker_compose() -> bool:
     return False
 
 
-# =====================================================================
 # 1. Today's truth: backend scaffold yes; FE / full-stack / CI no
-# =====================================================================
 
 
 def test_no_frontend_dockerfile_today():
@@ -158,9 +154,7 @@ def test_ci_does_not_invoke_docker_compose_today():
     )
 
 
-# =====================================================================
 # 2. Doc-side honesty contract: no claim of full-stack validation
-# =====================================================================
 
 
 _FORBIDDEN_DOC_PHRASES: tuple[str, ...] = (
@@ -228,9 +222,7 @@ def test_install_docker_doc_keeps_first_scaffold_markers():
     )
 
 
-# =====================================================================
 # 3. FE-gap subsection present in install-docker.md
-# =====================================================================
 
 
 def test_install_docker_has_fe_gap_audit_subsection():

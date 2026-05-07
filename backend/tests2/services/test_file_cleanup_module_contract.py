@@ -28,9 +28,7 @@ import pytest
 pytestmark = [pytest.mark.unit, pytest.mark.contract]
 
 
-# =============================================================================
 # 1. Rimozione di un file regolare
-# =============================================================================
 
 
 def test_rmtree_safe_removes_regular_file(tmp_path):
@@ -44,9 +42,7 @@ def test_rmtree_safe_removes_regular_file(tmp_path):
     assert not target.exists()
 
 
-# =============================================================================
 # 2. Rimozione di una directory annidata
-# =============================================================================
 
 
 def test_rmtree_safe_removes_directory_with_nested_content(tmp_path):
@@ -62,9 +58,7 @@ def test_rmtree_safe_removes_directory_with_nested_content(tmp_path):
     assert not root.exists()
 
 
-# =============================================================================
 # 3. Best-effort: path gia' assente non solleva
-# =============================================================================
 
 
 def test_rmtree_safe_silent_on_missing_path(tmp_path):
@@ -78,9 +72,7 @@ def test_rmtree_safe_silent_on_missing_path(tmp_path):
     rmtree_safe(ghost, retries=1)
 
 
-# =============================================================================
 # 4. onerror chmod path: file read-only viene comunque rimosso
-# =============================================================================
 
 
 @pytest.mark.skipif(sys.platform == "win32", reason="Su Windows il bit ro su file singoli e' inconsistente; il path onerror si esercita meglio su POSIX")
@@ -106,9 +98,7 @@ def test_rmtree_safe_handles_readonly_file_in_directory(tmp_path):
                 pass
 
 
-# =============================================================================
 # 5. Failure persistente -> logger.debug chiamato (no raise)
-# =============================================================================
 
 
 def test_rmtree_safe_calls_logger_debug_on_persistent_failure(tmp_path):
@@ -143,9 +133,7 @@ def test_rmtree_safe_uses_module_logger_when_no_logger_passed(tmp_path):
     rmtree_safe(target, logger=None)
 
 
-# =============================================================================
 # 6. Wrapper compat (file_service + file_preview_temp) delegano alla shared
-# =============================================================================
 
 
 def test_file_service_wrapper_delegates_to_shared_rmtree_safe(tmp_path):

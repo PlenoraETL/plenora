@@ -22,9 +22,7 @@ from fastapi import HTTPException
 pytestmark = [pytest.mark.unit, pytest.mark.security, pytest.mark.contract]
 
 
-# =============================================================================
 # Helpers
-# =============================================================================
 
 
 @pytest.fixture(autouse=True)
@@ -58,9 +56,7 @@ def _fake_request():
     )
 
 
-# =============================================================================
 # hash_password / verify_password
-# =============================================================================
 
 
 def test_hash_password_produces_argon2id():
@@ -109,9 +105,7 @@ def test_verify_password_none_type_returns_false():
     assert verify_password("x", None) is False  # type: ignore[arg-type]
 
 
-# =============================================================================
 # needs_rehash
-# =============================================================================
 
 
 def test_needs_rehash_bcrypt_true():
@@ -138,9 +132,7 @@ def test_needs_rehash_corrupt_false():
         )
 
 
-# =============================================================================
 # Login: rehash progressivo bcrypt → Argon2id
-# =============================================================================
 
 
 def test_login_rehashes_bcrypt_user_on_success(monkeypatch):

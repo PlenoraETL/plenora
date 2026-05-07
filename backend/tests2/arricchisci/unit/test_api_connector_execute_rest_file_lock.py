@@ -35,9 +35,7 @@ pytestmark = [
 ]
 
 
-# =============================================================================
 # Builders
-# =============================================================================
 
 
 def _api_config(
@@ -82,9 +80,7 @@ def _mock_http_response(status_code=200, body_chunks=None, json_body=None, text=
     return resp
 
 
-# =============================================================================
 # Fixture
-# =============================================================================
 
 
 @pytest.fixture
@@ -126,9 +122,7 @@ def rf_env(api_service, tmp_path):
         yield mocks
 
 
-# =============================================================================
 # Section 1: validazione config (endpoint, method, format, SSRF)
-# =============================================================================
 
 
 class TestExecuteRestFileConfigValidation:
@@ -328,9 +322,7 @@ class TestExecuteRestFileConfigValidation:
             )
 
 
-# =============================================================================
 # Section 2: file fields (node_input, extra_input, required vs optional)
-# =============================================================================
 
 
 class TestExecuteRestFileFileFields:
@@ -384,9 +376,7 @@ class TestExecuteRestFileFileFields:
         assert "non trovato" in result["error"] or "fs-missing" in result["error"]
 
 
-# =============================================================================
 # Section 3: HTTP error response parsing
-# =============================================================================
 
 
 class TestExecuteRestFileHttpErrors:
@@ -416,9 +406,7 @@ class TestExecuteRestFileHttpErrors:
         assert "upstream crashed" in result["error"]
 
 
-# =============================================================================
 # Section 4: download response
-# =============================================================================
 
 
 class TestExecuteRestFileDownload:
@@ -450,9 +438,7 @@ class TestExecuteRestFileDownload:
         assert "execution_time_ms" in result
 
 
-# =============================================================================
 # Section 5: exception handling + tmp cleanup
-# =============================================================================
 
 
 class TestExecuteRestFileExceptions:

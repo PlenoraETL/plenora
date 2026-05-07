@@ -76,9 +76,7 @@ def _settings_ns(**overrides) -> SimpleNamespace:
     return _Settings(**defaults)
 
 
-# ---------------------------------------------------------------------------
 # Summary log
-# ---------------------------------------------------------------------------
 
 
 def test_summary_log_emitted_when_active_rows_exist(caplog):
@@ -175,9 +173,7 @@ def test_summary_failure_does_not_crash_tick(caplog):
         sched._reconcile_storage()
 
 
-# ---------------------------------------------------------------------------
 # Prune
-# ---------------------------------------------------------------------------
 
 
 def test_prune_invoked_with_settings_values():
@@ -304,9 +300,7 @@ def test_prune_failure_does_not_crash_tick():
         sched._reconcile_storage()
 
 
-# ---------------------------------------------------------------------------
 # Existing transition flow preserved
-# ---------------------------------------------------------------------------
 
 
 def test_existing_transitions_still_run_alongside_guardrails():
@@ -345,9 +339,7 @@ def test_existing_transitions_still_run_alongside_guardrails():
     prune_spy.assert_called_once()
 
 
-# ---------------------------------------------------------------------------
 # Cadence gate still applies to guardrails
-# ---------------------------------------------------------------------------
 
 
 def test_guardrails_skipped_when_within_interval():

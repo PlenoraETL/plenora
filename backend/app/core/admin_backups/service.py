@@ -141,8 +141,6 @@ def list_backups() -> List[Dict[str, Any]]:
                 "size_bytes": o["size"],
                 "size_mb": round(o["size"] / 1024 / 1024, 2),
                 "last_modified": o["last_modified"].isoformat(),
-                # `list_objects` di cloud_backends non espone storage_class
-                # nello shape ObjectMeta; default STANDARD per UI compat.
                 "storage_class": "STANDARD",
             }
             for o in objects
@@ -150,10 +148,6 @@ def list_backups() -> List[Dict[str, Any]]:
         result.sort(key=lambda o: o["last_modified"], reverse=True)
         return result
     except Exception as e:
-        # Bug #4 (2026-04-23): distingue MissingDependencyException
-        # (es. botocore[crt] assente per SSO/IAM Identity Center provider)
-        # dagli altri errori transitori. Dep mancante -> 503 via router;
-        # altri errori -> degradazione silenziosa a lista vuota (backward compat).
         try:
             from botocore.exceptions import MissingDependencyException
             if isinstance(e, MissingDependencyException):
@@ -286,10 +280,6 @@ def get_schedule_info() -> Dict[str, Any]:
         timer_active (bool), next_run (ISO), last_run (ISO), schedule_cron,
         description, timezone.
     """
-    # BE-GO-READY-CONFIG-BOUNDARY-001: schedule cron + descrizione
-    # leggibili dalla UI. APP_POLICY/OPERATIONAL_TUNING (ADR-0021):
-    # passano per `Settings.DEFAULTS` + `settings.get(...)`. Override
-    # env preservato dalla `Settings.get` chain.
     from app.config import settings
     schedule_cron = settings.get("BACKUP_SCHEDULE_CRON", "0 2 * * *")
     description = settings.get(

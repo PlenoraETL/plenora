@@ -150,9 +150,7 @@ def bind_router_services(
     binding.init_fn(*args)
 
 
-# ---------------------------------------------------------------------------
 # Concrete bindings
-# ---------------------------------------------------------------------------
 #
 # IMPORTANT: bindings live here (not in ``main.py``) so that contract
 # tests can assert their typed shape without importing ``main.py``

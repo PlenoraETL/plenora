@@ -49,9 +49,7 @@ from app.shared.storage_reconciliation import ReconciliationEntryRef
 pytestmark = [pytest.mark.unit, pytest.mark.contract, pytest.mark.shared]
 
 
-# ---------------------------------------------------------------------------
 # Helpers — fake transaction + cursor
-# ---------------------------------------------------------------------------
 
 
 class _FakeCursor:
@@ -138,9 +136,7 @@ def _patched_transaction(cursor: _FakeCursor):
     return _cm, state
 
 
-# ---------------------------------------------------------------------------
 # delete_result (single)
-# ---------------------------------------------------------------------------
 
 
 def test_delete_result_records_pending_inside_transaction_and_marks_done(
@@ -333,9 +329,7 @@ def test_delete_result_row_not_found_skips_reconciliation(monkeypatch):
     comp_called.assert_not_called()
 
 
-# ---------------------------------------------------------------------------
 # delete_results_for_project (bulk)
-# ---------------------------------------------------------------------------
 
 
 def test_delete_results_for_project_records_pending_per_key_in_one_tx(

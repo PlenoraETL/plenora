@@ -38,9 +38,7 @@ from shapely.ops import unary_union
 from app.core.manipola.transforms.spatial import op_geo_clean_topology
 
 
-# ─────────────────────────────────────────────────────────────────────
 # Oracle: legacy impl (verbatim)
-# ─────────────────────────────────────────────────────────────────────
 
 
 def _legacy_op_geo_clean_topology(
@@ -99,9 +97,7 @@ def _legacy_op_geo_clean_topology(
         return df
 
 
-# ─────────────────────────────────────────────────────────────────────
 # Dataset generator
-# ─────────────────────────────────────────────────────────────────────
 
 
 def _make_overlapping_polys(n: int, seed: int = 42, side: float = 100.0):
@@ -128,9 +124,7 @@ def _make_overlapping_polys(n: int, seed: int = 42, side: float = 100.0):
     )
 
 
-# ─────────────────────────────────────────────────────────────────────
 # Harness
-# ─────────────────────────────────────────────────────────────────────
 
 
 def _median_runtime(
@@ -147,9 +141,7 @@ def _median_runtime(
     return statistics.median(times)
 
 
-# ─────────────────────────────────────────────────────────────────────
 # Assertions
-# ─────────────────────────────────────────────────────────────────────
 
 _MIN_SPEEDUP_VS_LEGACY = 3.0
 

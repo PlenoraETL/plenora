@@ -28,9 +28,7 @@ from typing import Any, Dict, List, Optional, Tuple
 from app.core.carica.models import ColumnMapping
 
 
-# ============================================================================
 # MAPPING TIPI PANDAS → SQL PER OGNI DATABASE
-# ============================================================================
 
 # Mappa dtype Pandas/Python → tipo SQL
 # I tipi geometrici sono gestiti separatamente tramite ColumnMapping.is_geometry
@@ -105,9 +103,7 @@ PANDAS_TO_SQL = {
 PANDAS_TO_SQL["mariadb"] = PANDAS_TO_SQL["mysql"]
 
 
-# ============================================================================
 # MAPPING TIPI PLENORA INTERNI → SQL
-# ============================================================================
 
 # Quando il tipo viene dal canvas (tipi interni PLENORA), usiamo questa mappa
 URBY_TO_SQL = {
@@ -166,9 +162,7 @@ class DDLGenerator:
             raise ValueError(f"Database type '{db_type}' non supportato. "
                            f"Supportati: {list(PANDAS_TO_SQL.keys())}")
 
-    # ========================================================================
     # QUALIFICAZIONE NOMI
-    # ========================================================================
 
     def qualified_table_name(self, schema: str, table: str) -> str:
         """Genera il nome tabella qualificato con schema.
@@ -205,9 +199,7 @@ class DDLGenerator:
         else:
             return f'"{name}"'
 
-    # ========================================================================
     # RISOLUZIONE TIPI
-    # ========================================================================
 
     def resolve_column_type(self, mapping: ColumnMapping, pandas_dtype: str = "") -> str:
         """Risolve il tipo SQL per una colonna.
@@ -280,9 +272,7 @@ class DDLGenerator:
             return f"GEOMETRY /*!80003 SRID {srid} */"
         return "geometry"
 
-    # ========================================================================
     # GENERAZIONE CREATE TABLE
-    # ========================================================================
 
     def generate_create_table(
         self,
@@ -338,9 +328,7 @@ class DDLGenerator:
         cols_sql = ",\n".join(col_defs)
         return f"CREATE TABLE {full_name} (\n{cols_sql}\n)"
 
-    # ========================================================================
     # GENERAZIONE INDICI SPAZIALI
-    # ========================================================================
 
     def generate_spatial_index(
         self,
@@ -415,9 +403,7 @@ WITH (
 
         return []
 
-    # ========================================================================
     # GENERAZIONE DROP / TRUNCATE
-    # ========================================================================
 
     def generate_drop_table(self, schema: str, table: str) -> str:
         """Genera DROP TABLE IF EXISTS."""
@@ -443,9 +429,7 @@ END;"""
     def generate_drop_if_exists(self, schema: str, table: str) -> str:
         return self.generate_drop_table(schema, table)
 
-    # ========================================================================
     # GENERAZIONE STAGE+SWAP (C5 fix 3)
-    # ========================================================================
 
     def generate_create_like(
         self, schema: str, src_table: str, stg_table: str
@@ -573,9 +557,7 @@ END;"""
 
         return f"TRUNCATE TABLE {full_name}"
 
-    # ========================================================================
     # GENERAZIONE INSERT
-    # ========================================================================
 
     def generate_insert(
         self,
@@ -631,9 +613,7 @@ END;"""
             return f"ST_GeomFromText(:{param_name}, {srid})"
         return f":{param_name}"
 
-    # ========================================================================
     # GENERAZIONE UPSERT (multi-database)
-    # ========================================================================
 
     def generate_upsert(
         self,
@@ -790,9 +770,7 @@ WHEN NOT MATCHED THEN INSERT ({insert_cols}) VALUES ({src_cols});"""
         )
         return sql, params
 
-    # ========================================================================
     # GENERAZIONE UPDATE
-    # ========================================================================
 
     def generate_update(
         self,
@@ -839,9 +817,7 @@ WHEN NOT MATCHED THEN INSERT ({insert_cols}) VALUES ({src_cols});"""
         sql = f"UPDATE {full_name} SET {set_sql} WHERE {where_sql}"
         return sql, params
 
-    # ========================================================================
     # HELPER: LISTA SCHEMA E TABELLE
-    # ========================================================================
 
     def query_list_schemas(self) -> str:
         """Genera la query per elencare gli schema disponibili."""

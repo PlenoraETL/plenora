@@ -71,9 +71,7 @@ class QueryGenerator:
         # Schema database (es. dbo per SQL Server, public per PostgreSQL)
         self.db_schema = None
 
-    # =========================================================================
     # METODO PRINCIPALE
-    # =========================================================================
 
     def generate_sql(
         self,
@@ -216,9 +214,7 @@ class QueryGenerator:
 
         return table_name
 
-    # =========================================================================
     # CONFIGURAZIONE GROUP BY
-    # =========================================================================
 
     def _estrai_config_group_by(self, result_node: Node) -> Dict[str, Any]:
         """
@@ -325,9 +321,7 @@ class QueryGenerator:
 
         return config
 
-    # =========================================================================
     # NAVIGAZIONE GRAFO
-    # =========================================================================
 
     def _trova_tabelle_connesse(
         self,
@@ -443,9 +437,7 @@ class QueryGenerator:
 
         return ordered
 
-    # =========================================================================
     # GENERAZIONE CLAUSOLA SELECT
-    # =========================================================================
 
     def _genera_select(
         self,
@@ -472,14 +464,12 @@ class QueryGenerator:
         for node in table_nodes:
             table_alias = node.alias or self._get_node_table_name(node)
 
-            # --- datasource_node senza colonne configurate → SELECT table.* ---
             if node.type == 'datasource_node':
                 visible_cols = [c for c in (node.columns or []) if getattr(c, 'visible', True)]
                 if not visible_cols:
                     columns.append(f"{table_alias}.*")
                     continue
 
-            # --- Colonne normali ---
             for col in node.columns:
                 if not col.visible:
                     continue
@@ -503,7 +493,6 @@ class QueryGenerator:
                     else:
                         columns.append(f"{table_alias}.{col_name_sql}")
 
-            # --- Colonne calcolate ---
             calculated_columns = getattr(node, 'calculated_columns', None) or []
             for calc_col in calculated_columns:
                 try:
@@ -667,9 +656,7 @@ class QueryGenerator:
 
         return ", ".join(qualified)
 
-    # =========================================================================
     # ORDER BY
-    # =========================================================================
 
     def _genera_order_by(
         self,
@@ -748,9 +735,7 @@ class QueryGenerator:
 
         return ", ".join(parti)
 
-    # =========================================================================
     # HAVING
-    # =========================================================================
 
     def _genera_having(
         self,
@@ -816,9 +801,7 @@ class QueryGenerator:
 
         return " AND ".join(parti)
 
-    # =========================================================================
     # GEOMETRIE — CONVERSIONE WKT
-    # =========================================================================
 
     def _wrap_geometry_as_wkt(self, col_ref: str) -> str:
         """
@@ -834,9 +817,7 @@ class QueryGenerator:
         except (ValueError, KeyError):
             return f"ST_AsText({col_ref})"
 
-    # =========================================================================
     # GENERAZIONE CLAUSOLA FROM + JOIN
-    # =========================================================================
 
     def _genera_from(self, table_nodes: List[Node], edges: List[Edge]) -> str:
         """
@@ -1209,9 +1190,7 @@ class QueryGenerator:
         
         return " AND ".join(parts)
 
-    # =========================================================================
     # GENERAZIONE CLAUSOLA WHERE
-    # =========================================================================
 
     def _genera_where(self, table_nodes: List[Node], params: Dict[str, Any]) -> str:
         """
@@ -1297,23 +1276,19 @@ class QueryGenerator:
         if operator not in valid_operators:
             raise ValueError(f"Operatore non valido: {operator}")
 
-        # --- Operatori senza valore ---
         if operator == 'IS NULL':
             return f"{col_ref} IS NULL"
         if operator == 'IS NOT NULL':
             return f"{col_ref} IS NOT NULL"
 
-        # --- Operatore IN (gestisce lista e stringa con virgole) ---
         if operator == 'IN':
             return self._crea_condizione_in(col_ref, value, params)
 
-        # --- Operatore LIKE (aggiunge automaticamente % intorno al valore) ---
         if operator == 'LIKE':
             param_name = self._prossimo_nome_param()
             params[param_name] = f"%{value}%"
             return f"{col_ref} LIKE :{param_name}"
 
-        # --- Operatori standard (=, !=, >, <, >=, <=) ---
 
         # Se il valore è una funzione SQL nativa (es. GETDATE(), DATEADD(...), NOW())
         # lo inietta inline invece di parametrizzarlo — i parametri bind non supportano
@@ -1529,9 +1504,7 @@ class QueryGenerator:
                 params[param_name] = value
             return f"{col_ref} IN (:{param_name})"
 
-    # =========================================================================
     # ASSEMBLAGGIO QUERY
-    # =========================================================================
 
     def _assembla_query(self, sql_parts: Dict) -> str:
         """
@@ -1583,9 +1556,7 @@ class QueryGenerator:
 
         return query
 
-    # =========================================================================
     # UTILITÀ
-    # =========================================================================
 
     def _prossimo_nome_param(self) -> str:
         """Genera il prossimo nome parametro univoco incrementale (:p_0, :p_1, ...)."""

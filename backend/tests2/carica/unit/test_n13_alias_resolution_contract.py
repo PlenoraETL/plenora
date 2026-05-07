@@ -42,9 +42,7 @@ def _make_mapping(source: str, dest: str) -> ColumnMapping:
     return ColumnMapping(source_column=source, dest_column=dest)
 
 
-# =============================================================================
 # 1. Behavior base — alias presente in availableColumns viene risolto
-# =============================================================================
 
 
 def test_dest_column_rewritten_when_alias_present():
@@ -76,9 +74,7 @@ def test_multiple_aliases_all_resolved():
     assert mappings[1].dest_column == "nome"
 
 
-# =============================================================================
 # 2. No-op cases
-# =============================================================================
 
 
 def test_unchanged_when_no_aliases_in_availableColumns():
@@ -130,9 +126,7 @@ def test_call_is_idempotent():
     assert first == second == "id"
 
 
-# =============================================================================
 # 3. Mixed cases — alcune colonne con alias, altre no
-# =============================================================================
 
 
 def test_mixed_aliased_and_non_aliased_columns():
@@ -152,9 +146,7 @@ def test_mixed_aliased_and_non_aliased_columns():
     assert mappings[1].dest_column == "valore"
 
 
-# =============================================================================
 # 4. Robustezza input malformato (best-effort)
-# =============================================================================
 
 
 def test_availableColumns_with_malformed_entries_is_tolerated():
@@ -177,9 +169,7 @@ def test_empty_mappings_no_error():
     _resolve_aliases_in_mappings([], available_cols)  # no-op, no exception
 
 
-# =============================================================================
 # 5. Sentinel: Gap 2 — entrambi i path chiamano il helper
-# =============================================================================
 # Se qualcuno sposta il fix solo dentro `if not config.column_mappings:`
 # riaprendo Gap 2, questo test cattura la regressione.
 

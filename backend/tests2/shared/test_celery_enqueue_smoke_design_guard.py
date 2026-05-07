@@ -89,9 +89,7 @@ def doc_section_12_6(doc_text: str) -> str:
     return doc_text[start:end]
 
 
-# =====================================================================
 # Group A - Doc section 12.6 documents the bounded smoke (must PASS)
-# =====================================================================
 
 
 def test_design_section_12_6_exists(doc_text: str):
@@ -152,9 +150,7 @@ def test_design_section_is_ascii_only(doc_section_12_6: str):
     )
 
 
-# =====================================================================
 # Group B - "Workflow does NOT silently claim closure" (today: must PASS)
-# =====================================================================
 
 
 def test_workflow_does_not_silently_close_gap_without_real_smoke():
@@ -183,9 +179,7 @@ def test_workflow_does_not_silently_close_gap_without_real_smoke():
     )
 
 
-# =====================================================================
 # Group C - "Implementation contract" (today: skipped; activates with 019)
-# =====================================================================
 
 
 @pytest.fixture(scope="module")

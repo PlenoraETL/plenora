@@ -95,9 +95,7 @@ class ScheduleArtifactStore:
             logger.warning(f"Errore archiviazione output: {e}", exc_info=True)
             return None
 
-    # ------------------------------------------------------------------
     # internals
-    # ------------------------------------------------------------------
 
     def _select_files_to_copy(
         self, project_output_dir: Path, output_file: str

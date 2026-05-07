@@ -91,9 +91,6 @@ def client(current_user: CurrentUser, monkeypatch) -> TestClient:
     return TestClient(app, raise_server_exceptions=False)
 
 
-# ─── 1) Progetto con canvas corrotto: marker + reason presenti ──────────────
-
-
 def test_list_projects_includes_canvas_corrupted_marker_when_canvas_raises(client):
     """F7-B1: progetto manipola con `CanvasCorruptedError` nella list →
     response contiene `canvas_corrupted=True` + `canvas_corrupted_reason`."""
@@ -122,9 +119,6 @@ def test_list_projects_includes_canvas_corrupted_marker_when_canvas_raises(clien
     assert p["file_source_ids"] == []
 
 
-# ─── 2) Progetti healthy: sparse — marker NON presente ──────────────────────
-
-
 def test_list_projects_healthy_projects_have_no_canvas_corrupted_marker(client):
     """Sparse contract: sui progetti con canvas valido, le chiavi
     `canvas_corrupted` e `canvas_corrupted_reason` NON devono comparire
@@ -151,9 +145,6 @@ def test_list_projects_healthy_projects_have_no_canvas_corrupted_marker(client):
     assert "canvas_corrupted_reason" not in p, (
         f"sparse violata: reason presente su progetto healthy: {p!r}"
     )
-
-
-# ─── 3) Anti-leak: reason safe-by-construction ──────────────────────────────
 
 
 def test_list_projects_canvas_corrupted_reason_does_not_leak_original_error(client):

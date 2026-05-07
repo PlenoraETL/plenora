@@ -93,9 +93,7 @@ def _row(*, row_id="11111111-1111-1111-1111-111111111111",
     )
 
 
-# ---------------------------------------------------------------------------
 # Cadence gate
-# ---------------------------------------------------------------------------
 
 
 def test_reconcile_storage_skips_within_interval(monkeypatch):
@@ -172,9 +170,7 @@ def test_reconcile_storage_updates_last_run_slot_even_on_empty_fetch():
     assert sched._last_storage_reconcile > before
 
 
-# ---------------------------------------------------------------------------
 # Pickup + per-row outcome dispatch
-# ---------------------------------------------------------------------------
 
 
 def test_reconcile_storage_passes_batch_size_to_fetch():
@@ -393,9 +389,7 @@ def test_reconcile_storage_processes_multiple_rows_independently():
     assert mark_failed.call_args.args[0] == "bbbb-2"
 
 
-# ---------------------------------------------------------------------------
 # Best-effort error propagation
-# ---------------------------------------------------------------------------
 
 
 def test_reconcile_storage_per_row_exception_does_not_break_batch():
@@ -441,9 +435,7 @@ def test_reconcile_storage_fetch_error_does_not_raise():
     comp_mock.assert_not_called()
 
 
-# ---------------------------------------------------------------------------
 # tick() wiring
-# ---------------------------------------------------------------------------
 
 
 def test_reconcile_storage_called_from_tick():

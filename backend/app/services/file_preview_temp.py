@@ -213,5 +213,3 @@ def preview_file_temp(
                 logger.debug(
                     f"cleanup preview tmp_path fallito ({tmp_path}): {e}"
                 )
-
-

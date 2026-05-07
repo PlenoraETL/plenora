@@ -83,9 +83,7 @@ class HealthPayload:
     body: dict
 
 
-# ---------------------------------------------------------------------------
 # Single dependency checks — preservato verbatim da main.py:502-559
-# ---------------------------------------------------------------------------
 
 
 def check_postgres() -> CheckOutcome:
@@ -582,9 +580,7 @@ def check_bootstrap_complete() -> CheckOutcome:
     return False, "bootstrap not complete"
 
 
-# ---------------------------------------------------------------------------
 # Payload composition — gather_liveness / gather_readiness
-# ---------------------------------------------------------------------------
 
 
 def gather_liveness() -> HealthPayload:

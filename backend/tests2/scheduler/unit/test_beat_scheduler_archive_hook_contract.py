@@ -32,9 +32,7 @@ from workers.beat_scheduler import PlenoraBeatScheduler
 pytestmark = [pytest.mark.unit, pytest.mark.scheduler, pytest.mark.contract]
 
 
-# ---------------------------------------------------------------------------
 # Helpers
-# ---------------------------------------------------------------------------
 
 
 def _make_scheduler() -> PlenoraBeatScheduler:
@@ -105,9 +103,7 @@ def _capture_closures(mock_writer: MagicMock) -> dict:
     return captured
 
 
-# ===========================================================================
 # Section 1 — _archive_old_logs hook (B3-T1..T5)
-# ===========================================================================
 
 
 def test_archive_old_logs_invokes_writer_when_enabled(monkeypatch):
@@ -294,9 +290,7 @@ def test_archive_old_logs_failure_swallowed(monkeypatch):
     assert scheduler._last_logs_archive == 0.0
 
 
-# ===========================================================================
 # Section 2 — _cleanup_old_logs gate (B3-T6..T7)
-# ===========================================================================
 
 
 def test_cleanup_old_logs_skipped_when_archive_enabled():
@@ -358,9 +352,7 @@ def test_cleanup_old_logs_still_runs_when_archive_disabled():
     assert delete_call.args[1] == (30,)
 
 
-# ===========================================================================
 # Section 3 — _archive_old_audit_actions hook (B3-T8..T10)
-# ===========================================================================
 
 
 def test_archive_old_audit_actions_invokes_writer_when_enabled(monkeypatch):
@@ -472,9 +464,7 @@ def test_archive_old_audit_actions_24h_gate(monkeypatch):
         assert mock_writer_cls.call_count == 2
 
 
-# ===========================================================================
 # Section 4 — closure contract verso il writer (B3-T11..T12)
-# ===========================================================================
 
 
 def test_select_rows_closure_builds_ordered_query_for_logs():
@@ -612,9 +602,7 @@ def test_retention_bypass_execute_closure_sets_local_flag_on_same_cursor():
     assert delete_call.args[1] == ("cutoff_sentinel", 123)
 
 
-# ===========================================================================
 # Section 5 — B4 observability circolare (ADR-0014 §B)
-# ===========================================================================
 #
 # Verifica che al termine di un archive successo venga emessa una riga
 # INFO su plenora.logs via pg_execute diretta. LOG_LEVEL_DB=WARNING

@@ -98,9 +98,7 @@ class TaskService:
     def __init__(self):
         self.app = celery_app
     
-    # =========================================================================
     # CREAZIONE TASK
-    # =========================================================================
     
     def create_enrichment_task(
         self,
@@ -214,9 +212,7 @@ class TaskService:
             created_at=datetime.now(timezone.utc).isoformat()
         )
     
-    # =========================================================================
     # RECUPERA STATO E PROGRESSO
-    # =========================================================================
     
     def create_pipeline_task(
         self,
@@ -383,9 +379,7 @@ class TaskService:
             error=error
         )
     
-    # =========================================================================
     # ANNULLAMENTO TASK
-    # =========================================================================
     
     def cancel_task(self, task_id: str) -> bool:
         """
@@ -405,9 +399,7 @@ class TaskService:
             logger.error(f"[CRASH] Errore annullamento task {task_id}: {e}", exc_info=True)
             return False
     
-    # =========================================================================
     # RECUPERA RISULTATO
-    # =========================================================================
     
     def get_task_result(self, task_id: str) -> Optional[Dict]:
         """
@@ -425,9 +417,7 @@ class TaskService:
             return result.result
         return None
     
-    # =========================================================================
     # LISTA TASK ATTIVI
-    # =========================================================================
     
     def list_active_tasks(self) -> List[Dict]:
         """
@@ -470,10 +460,7 @@ class TaskService:
             logger.error(f"[CRASH] Errore listing task: {e}", exc_info=True)
             return []
     
-    # =========================================================================
-    # =========================================================================
     # PULIZIA TASK SCADUTI
-    # =========================================================================
 
     def cleanup_old_results(self, max_age_hours: int = 24) -> int:
         """

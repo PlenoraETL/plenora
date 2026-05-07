@@ -38,9 +38,7 @@ _VERIFY_WARN_DAYS = 8        # cron weekly Sun 03:00, tolleranza 1 giorno
 _VERIFY_ERROR_DAYS = 14
 
 
-# =============================================================================
 # Backup (ultimo dump su S3)
-# =============================================================================
 
 
 def get_backup_status() -> Dict[str, Any]:
@@ -120,9 +118,7 @@ def get_backup_status() -> Dict[str, Any]:
     }
 
 
-# =============================================================================
 # Verify restore (ultima esecuzione plenora-backup-test via DB)
-# =============================================================================
 # Fonte di verita': plenora.verify_runs. Scritta da scripts/test_restore.py
 # a fine job. Container-safe: nessuna dipendenza da systemctl/journalctl.
 
@@ -211,9 +207,7 @@ def get_verify_restore_status() -> Dict[str, Any]:
     }
 
 
-# =============================================================================
 # Schedules (DB query: attivi, failing recenti)
-# =============================================================================
 
 
 def get_schedules_status() -> Dict[str, Any]:
@@ -275,9 +269,7 @@ def get_schedules_status() -> Dict[str, Any]:
     }
 
 
-# =============================================================================
 # Celery workers (inspect().active() via broker)
-# =============================================================================
 
 
 def get_workers_status() -> Dict[str, Any]:
@@ -414,9 +406,7 @@ def get_workers_status() -> Dict[str, Any]:
     }
 
 
-# =============================================================================
 # Host resources (psutil)
-# =============================================================================
 
 # Soglie host (documentate per review)
 _DISK_WARN_PCT = 80
@@ -604,9 +594,7 @@ def get_host_resources() -> Dict[str, Any]:
     }
 
 
-# =============================================================================
 # DB pool stats (Postgres)
-# =============================================================================
 
 
 def get_db_pool_status() -> Dict[str, Any]:
@@ -671,9 +659,7 @@ def get_db_pool_status() -> Dict[str, Any]:
     }
 
 
-# =============================================================================
 # Redis info
-# =============================================================================
 
 
 def get_redis_status() -> Dict[str, Any]:
@@ -739,9 +725,7 @@ def get_redis_status() -> Dict[str, Any]:
     }
 
 
-# =============================================================================
 # JWT blacklist (Redis) — health dedicato
-# =============================================================================
 
 
 def get_blacklist_status() -> Dict[str, Any]:
@@ -785,9 +769,7 @@ def get_blacklist_status() -> Dict[str, Any]:
         }
 
 
-# =============================================================================
 # Ticketing — count attivi cross-group per dashboard superadmin
-# =============================================================================
 
 
 def get_tickets_status() -> Dict[str, Any]:
@@ -856,9 +838,7 @@ def get_tickets_status() -> Dict[str, Any]:
     }
 
 
-# =============================================================================
 # DB schema size + row counts tabelle critiche
-# =============================================================================
 
 # Tabelle da tracciare per growth insights (oversize detection)
 _CRITICAL_TABLES = [
@@ -947,9 +927,7 @@ def get_db_schema_size() -> Dict[str, Any]:
     }
 
 
-# =============================================================================
 # Aggregator
-# =============================================================================
 
 
 def get_system_status() -> Dict[str, Any]:

@@ -42,9 +42,7 @@ class MimeMismatchError(ValueError):
     """Raised quando contenuto file non coincide con estensione/allowlist."""
 
 
-# ─────────────────────────────────────────────────────────────────────
 # MIME consentiti per estensione
-# ─────────────────────────────────────────────────────────────────────
 # Per ciascuna estensione: insieme di MIME che `filetype` puo' tornare
 # legittimamente. None significa "formato testuale, nessun magic byte
 # atteso" (validato via fallback `_is_textual`).

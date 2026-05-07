@@ -20,10 +20,6 @@ from app.core.auth.dependencies import (
     get_current_user,
     require_not_esecutore,
 )
-# BE-GO-READY-AUTH-ENGINE-012: pure-contract symbols
-# (`CurrentUser`, `group_filter`) consumed from
-# `app.shared.contracts.auth`. Facade KEEP_COMPAT chain preserved
-# (auth → ownership → contract; identity locked by strangler test).
 from app.shared.contracts.auth import CurrentUser, group_filter
 from app.db.pg_connection import fetchone as _fetchone, fetchall as _fetchall
 from app.shared.authz_helpers import assert_project_visible

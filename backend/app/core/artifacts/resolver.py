@@ -20,13 +20,6 @@ from app.core.artifacts.types import (
     RunArtifactRef,
     RunBlob,
 )
-# BE-GO-READY-RESOURCE-ENGINE-019: top-level import so the
-# `default_registry` symbol is patchable on this module via
-# `monkeypatch.setattr(resolver_mod, "default_registry", ...)`.
-# The registry singleton is itself lazy (constructed on first
-# call by `default_registry()` -- not at import time), so this
-# import does not eagerly build the loader graph; it merely
-# brings the function reference into the resolver's namespace.
 from app.core.resources import ResourceRef, default_registry
 from app.shared.exceptions import MemoryLimitExceededError
 
@@ -320,9 +313,7 @@ class ArtifactResolver:
             result_id=row["id"],
         )
 
-    # ------------------------------------------------------------------
     # internals
-    # ------------------------------------------------------------------
 
     def _materialize_from_result_id(
         self, *, result_id: str, expected_project_id: str

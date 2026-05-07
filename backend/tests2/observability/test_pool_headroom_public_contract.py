@@ -25,9 +25,7 @@ import pytest
 pytestmark = [pytest.mark.unit, pytest.mark.observability, pytest.mark.contract]
 
 
-# ---------------------------------------------------------------------------
 # PoolHeadroom dataclass
-# ---------------------------------------------------------------------------
 
 
 def test_pool_headroom_is_frozen_dataclass():
@@ -61,9 +59,7 @@ def test_pool_headroom_not_saturated_when_in_use_below_max():
     assert PoolHeadroom(max=12, in_use=0, free=12).saturated is False
 
 
-# ---------------------------------------------------------------------------
 # get_pool_headroom() — read pool internals
-# ---------------------------------------------------------------------------
 
 
 def test_get_pool_headroom_reads_pool_internals():
@@ -132,9 +128,7 @@ def test_get_pool_headroom_propagates_pool_init_failure():
             get_pool_headroom()
 
 
-# ---------------------------------------------------------------------------
 # Public surface: importable + module-level
-# ---------------------------------------------------------------------------
 
 
 def test_get_pool_headroom_is_module_level_public():

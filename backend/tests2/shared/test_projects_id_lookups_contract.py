@@ -36,9 +36,7 @@ import pytest
 pytestmark = [pytest.mark.unit, pytest.mark.shared, pytest.mark.contract]
 
 
-# ---------------------------------------------------------------------------
 # Helpers
-# ---------------------------------------------------------------------------
 
 
 def _capture_fetchall(monkeypatch, *, response):
@@ -66,9 +64,7 @@ def _capture_fetchall(monkeypatch, *, response):
     return calls
 
 
-# ---------------------------------------------------------------------------
 # list_owned_project_ids
-# ---------------------------------------------------------------------------
 
 
 def test_list_owned_project_ids_short_circuits_on_empty_input(monkeypatch):
@@ -142,9 +138,7 @@ def test_list_owned_project_ids_dedupes_input(monkeypatch):
     assert params == ("p1", "g1")
 
 
-# ---------------------------------------------------------------------------
 # list_project_ids_for_group
-# ---------------------------------------------------------------------------
 
 
 def test_list_project_ids_for_group_short_circuits_on_falsy_group(monkeypatch):
@@ -187,9 +181,7 @@ def test_list_project_ids_for_group_returns_empty_set_for_unknown_group(monkeypa
     assert list_project_ids_for_group("g-nobody") == set()
 
 
-# ---------------------------------------------------------------------------
 # Router-level integration: imports use the new helpers, not pg_connection
-# ---------------------------------------------------------------------------
 
 
 def test_projects_router_uses_helper_not_pg_connection():

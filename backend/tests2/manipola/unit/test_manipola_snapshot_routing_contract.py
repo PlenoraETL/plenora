@@ -89,9 +89,7 @@ def _df(n: int = 5) -> pd.DataFrame:
     return pd.DataFrame({"a": list(range(n)), "b": list(range(n))})
 
 
-# ============================================================
 # A. Loop trasformazioni: routing snapshot per ogni nodo
-# ============================================================
 
 
 def test_transform_loop_calls_record_checkpoint_for_each_non_source_node():
@@ -171,9 +169,7 @@ def test_transform_loop_does_not_call_legacy_write_node():
     write_node_spy.assert_not_called()
 
 
-# ============================================================
 # B. Skip path: noncritical transform -> no df.to_dict, no DB
-# ============================================================
 
 
 def test_noncritical_transform_does_not_materialize_dataframe():
@@ -267,9 +263,7 @@ def test_multi_join_always_checkpointed():
     assert kwargs["node_id"] == "mj"
 
 
-# ============================================================
 # C. Policy matrix
-# ============================================================
 
 
 def test_policy_none_skips_all_checkpoint_transforms():
@@ -328,9 +322,7 @@ def test_policy_all_records_every_transform_including_noncritical():
     assert persisted_ids == {"t1", "t2"}
 
 
-# ============================================================
 # D. Result via record_final_snapshot
-# ============================================================
 
 
 def test_result_node_uses_record_final_snapshot():

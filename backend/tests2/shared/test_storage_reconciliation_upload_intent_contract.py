@@ -38,9 +38,7 @@ import pytest
 pytestmark = [pytest.mark.unit, pytest.mark.shared, pytest.mark.contract]
 
 
-# ---------------------------------------------------------------------------
 # Settings.DEFAULTS — 2 new tunables
-# ---------------------------------------------------------------------------
 
 
 def test_settings_defaults_expose_upload_intent_tunables():
@@ -55,9 +53,7 @@ def test_settings_defaults_expose_upload_intent_tunables():
     assert isinstance(batch, int) and batch > 0
 
 
-# ---------------------------------------------------------------------------
 # record_upload_intent
-# ---------------------------------------------------------------------------
 
 
 def _capture_pg_fetchone(monkeypatch, *, return_id="11111111-1111-1111-1111-111111111111"):
@@ -140,9 +136,7 @@ def test_record_upload_intent_returns_none_on_db_error(monkeypatch):
     assert out is None
 
 
-# ---------------------------------------------------------------------------
 # fetch_due_stale_upload_intents
-# ---------------------------------------------------------------------------
 
 
 def test_fetch_due_stale_upload_intents_filters_correctly():
@@ -215,9 +209,7 @@ def test_fetch_due_stale_upload_intents_swallows_db_error():
     assert out == []
 
 
-# ---------------------------------------------------------------------------
 # is_storage_key_referenced — three-valued result
-# ---------------------------------------------------------------------------
 
 
 def test_is_storage_key_referenced_returns_true_when_row_exists():
@@ -269,9 +261,7 @@ def test_is_storage_key_referenced_uses_indexed_column():
     assert captured["params"] == ("file-sources/x/y.csv",)
 
 
-# ---------------------------------------------------------------------------
 # dispatch_blob_storage wiring
-# ---------------------------------------------------------------------------
 
 
 def _settings_get_stub(**overrides):
@@ -463,9 +453,7 @@ def test_dispatch_proceeds_when_record_upload_intent_returns_none(monkeypatch):
     assert out["storage_key"].startswith("file-sources/file-4/")
 
 
-# ---------------------------------------------------------------------------
 # Beat hook _reconcile_storage upload_intent branch
-# ---------------------------------------------------------------------------
 
 
 def _make_scheduler():

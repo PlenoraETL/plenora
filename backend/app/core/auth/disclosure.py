@@ -85,9 +85,7 @@ class DisclosureDecision:
     headers: Optional[Mapping[str, str]] = None
 
 
-# ---------------------------------------------------------------------------
 # Pre-auth — token presence/validity disclosure (401, WWW-Authenticate: Bearer)
-# ---------------------------------------------------------------------------
 
 
 _BEARER_HEADER: Mapping[str, str] = {"WWW-Authenticate": "Bearer"}
@@ -127,9 +125,7 @@ def token_revoked() -> DisclosureDecision:
     )
 
 
-# ---------------------------------------------------------------------------
 # Post-token user state — anti-enumeration #2 (UNIFORM 401)
-# ---------------------------------------------------------------------------
 
 
 def user_not_found_or_disabled() -> DisclosureDecision:
@@ -145,9 +141,7 @@ def user_not_found_or_disabled() -> DisclosureDecision:
     )
 
 
-# ---------------------------------------------------------------------------
 # Login — anti-enumeration #1 + #4 + ADR-0018 MFA trade-offs
-# ---------------------------------------------------------------------------
 
 
 def invalid_credentials() -> DisclosureDecision:
@@ -225,9 +219,7 @@ def revocation_unavailable() -> DisclosureDecision:
     )
 
 
-# ---------------------------------------------------------------------------
 # Post-authz — role-based disclosure (403, LEAKY_BY_DESIGN UI-friendly)
-# ---------------------------------------------------------------------------
 
 
 def role_insufficient_for_write() -> DisclosureDecision:
@@ -279,9 +271,7 @@ def field_role_restricted_group_id() -> DisclosureDecision:
     )
 
 
-# ---------------------------------------------------------------------------
 # Self-action guards — UNIFORM
-# ---------------------------------------------------------------------------
 
 
 def self_modify_denied() -> DisclosureDecision:
@@ -308,9 +298,7 @@ def self_delete_denied() -> DisclosureDecision:
     )
 
 
-# ---------------------------------------------------------------------------
 # Anti-enumeration #3 — admin reset/delete on missing-or-out-of-group target
-# ---------------------------------------------------------------------------
 
 
 def access_denied() -> DisclosureDecision:
@@ -344,9 +332,7 @@ def admin_target_not_visible(*, is_superadmin: bool) -> DisclosureDecision:
     return access_denied()
 
 
-# ---------------------------------------------------------------------------
 # Generic 404 / 409 / 400 disclosure for auth-domain admin endpoints
-# ---------------------------------------------------------------------------
 
 
 def user_not_found() -> DisclosureDecision:
@@ -389,9 +375,7 @@ def group_default_not_deletable() -> DisclosureDecision:
     )
 
 
-# ---------------------------------------------------------------------------
 # Ownership disclosure (403 LEAKY_BY_DESIGN, label-driven)
-# ---------------------------------------------------------------------------
 
 
 def hierarchical_owner_required(label: str) -> DisclosureDecision:
@@ -419,9 +403,7 @@ def owner_only_required(resource_label: str) -> DisclosureDecision:
     )
 
 
-# ---------------------------------------------------------------------------
 # Side-effecting boundary: raise the decision as HTTPException
-# ---------------------------------------------------------------------------
 
 
 def raise_disclosure(decision: DisclosureDecision) -> NoReturn:

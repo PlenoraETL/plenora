@@ -36,9 +36,7 @@ from tests2.helpers.builders import build_current_user
 pytestmark = [pytest.mark.unit, pytest.mark.orchestrator, pytest.mark.security, pytest.mark.contract]
 
 
-# ============================================================
 # Fixtures: TestClient orchestrator
-# ============================================================
 
 def _build_orchestrator_client(role: str = "admin"):
     """Monta un FastAPI minimale con il router orchestrator + dependency
@@ -81,9 +79,7 @@ def _build_arricchisci_client(role: str = "admin"):
     return TestClient(app, raise_server_exceptions=False)
 
 
-# ============================================================
 # A. orchestrator.execute_project_pipeline
-# ============================================================
 
 class TestOrchestratorExecuteEndpoint:
     """POST /api/projects/{id}/execute con e senza intermediate_mode."""
@@ -204,9 +200,7 @@ class TestOrchestratorExecuteEndpoint:
         assert kwargs.get("intermediate_mode_override") == mode
 
 
-# ============================================================
 # B. arricchisci.execute_enrichment_async
-# ============================================================
 
 class TestArricchisciEnrichAsyncEndpoint:
     """POST /api/arricchisci/{id}/enrich-async con dual-auth."""

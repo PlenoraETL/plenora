@@ -26,9 +26,7 @@ from app.utils.logger import get_logger
 logger = get_logger(__name__)
 
 
-# ──────────────────────────────────────────────────────────────────────
 # HTTP Session pool condivisa (riuso connessioni TCP)
-# ──────────────────────────────────────────────────────────────────────
 
 _shared_session: Optional[requests.Session] = None
 _shared_session_lock = threading.Lock()
@@ -61,9 +59,7 @@ def get_shared_session() -> requests.Session:
     return _shared_session
 
 
-# ──────────────────────────────────────────────────────────────────────
 # Anti-SSRF: validazione URL esterni
-# ──────────────────────────────────────────────────────────────────────
 
 
 @functools.lru_cache(maxsize=1)
@@ -158,7 +154,6 @@ def _check_outbound_address(
         if _env in ("production", "prod", "staging", "stage"):
             allow_loopback = False
         else:
-            # Canonical PLENORA_*, alias retro-compat URBY_* (deprecato).
             plenora_set = os.environ.get(
                 "PLENORA_ALLOW_LOOPBACK_OUTBOUND", ""
             ).strip() == "1"
@@ -228,16 +223,12 @@ def validate_external_url_silent(url: str) -> Optional[str]:
     return _check_outbound_address(url, allow_loopback_opt_in=True)
 
 
-# ──────────────────────────────────────────────────────────────────────
 # Cache thread-safe per token ArcGIS (un token per (token_url, username))
-# ──────────────────────────────────────────────────────────────────────
 _ARCGIS_TOKEN_CACHE: Dict[str, Dict[str, Any]] = {}
 _ARCGIS_TOKEN_LOCK = threading.Lock()
 
 
-# ──────────────────────────────────────────────────────────────────────
 # Cache thread-safe per token OAuth2 (lifecycle basato su expires_at)
-# ──────────────────────────────────────────────────────────────────────
 #
 # Sostituisce il pattern "rinnova ogni N righe" che era sbagliato:
 # il counter non ha nulla a che vedere con il tempo di vita reale del token.
@@ -325,9 +316,7 @@ def invalidate_oauth2_token(auth: Dict) -> None:
         _OAUTH2_TOKEN_CACHE.pop(cache_key, None)
 
 
-# ──────────────────────────────────────────────────────────────────────
 # Sanificazione log per evitare leak di credenziali
-# ──────────────────────────────────────────────────────────────────────
 
 # Pattern di chiavi che indicano valori sensibili (case-insensitive, match parziale)
 _SENSITIVE_KEY_PATTERNS = (
@@ -649,11 +638,9 @@ def _fetch_oauth2_client_credentials_token(auth: Dict) -> Optional[Dict]:
         return None
 
 
-# ──────────────────────────────────────────────────────────────────────
 # Wrapper legacy: API pubbliche che ritornano solo la stringa del token.
 # Usano get_cached_oauth2_token per beneficiare automaticamente del
 # lifecycle tracking e del refresh on-demand. Backward compatible.
-# ──────────────────────────────────────────────────────────────────────
 
 @functools.lru_cache(maxsize=1)
 def _warn_get_oauth2_token_deprecated_once() -> None:

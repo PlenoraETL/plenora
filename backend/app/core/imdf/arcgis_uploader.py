@@ -44,19 +44,6 @@ from typing import Dict, Optional
 
 from app.utils.logger import get_logger
 
-# Cleanup imports B4.4 (Phase 5 publish_ops extraction):
-#   - `List` / `Tuple` rimossi da `typing` (erano usati solo nelle
-#     signature di `_add_layer_to_service` / `_publish_mode_existing`,
-#     extracted in B4.4) — solo `Dict` / `Optional` restano per la
-#     signature di `upload_imdf_layers`.
-#   - `from urllib.parse import urlparse` rimosso (era usato dai 6
-#     helper di `service_discovery` extracted in B4.2 e dai 2 helper
-#     di `service_lifecycle` extracted in B4.3 — l'orchestrator
-#     `upload_imdf_layers` non ne fa uso diretto).
-#   - `import requests` rimosso (top-level, mai usato direttamente
-#     da `upload_imdf_layers`; i moduli figli usano `client._http`).
-# `json` mantenuto: serve a `upload_imdf_layers` per
-# `updateDefinition: json.dumps(update_def)` (renderers application).
 
 logger = get_logger(__name__)
 
@@ -405,74 +392,12 @@ def upload_imdf_layers(
     return result
 
 
-# =============================================================================
 # HELPER PRIVATI
-# =============================================================================
-
-# Phase 5 B4.2 cutover: cluster SERVICE_DISCOVERY (`_list_user_folders`,
-# `_ensure_folder`, `_is_service_name_available`,
-# `_enumerate_all_user_items`, `_search_user_items`,
-# `_find_existing_service`) spostato in
-# `app.core.imdf.arcgis.service_discovery`. Re-export in coda al file
-# via facade. Vedi `orchestrate/phase_5_b4/preflight.md` §6.
 
 
-# Phase 5 B4.3 cutover: cluster SERVICE_LIFECYCLE
-# (`_try_cleanup_zombie_service`, `_delete_existing_service`) spostato
-# in `app.core.imdf.arcgis.service_lifecycle`. Re-export in coda al
-# file via facade. Vedi `orchestrate/phase_5_b4/preflight.md` §6.
-
-
-# Phase 5 B4.4 cutover: cluster PUBLISH_OPS (`_add_layer_to_service`,
-# `_publish_mode_existing`) spostato in
-# `app.core.imdf.arcgis.publish_ops`. Re-export in coda al file via
-# facade. Vedi `orchestrate/phase_5_b4/preflight.md` §6.
-
-
-# =============================================================================
 # APPEND / UPSERT su FS esistente
-# =============================================================================
-
-# Phase 5 B4.2 cutover: `_find_existing_service` spostato in
-# `app.core.imdf.arcgis.service_discovery` (re-exported in coda
-# al file via facade).
 
 
-# Phase 5 B4.1 cutover: cluster SQL_HELPERS (_quote_sql_value,
-# _chunked, _query_oid_by_key) spostato in
-# `app.core.imdf.arcgis.sql_helpers`. Re-export in coda al file via
-# facade. Le 3 funzioni sono internamente coese (`_query_oid_by_key`
-# usa `_chunked` e `_quote_sql_value` per name lookup nello stesso
-# nuovo modulo, NESSUNA dipendenza esterna verso `arcgis_uploader`).
-#
-# Invarianti pubbliche preservate:
-#   - `from app.core.imdf.arcgis_uploader import _quote_sql_value` /
-#     `_chunked` / `_query_oid_by_key` continua a funzionare grazie al
-#     facade re-export.
-#   - `validator.py:130` lazy-import `_quote_sql_value` + `_chunked`
-#     da `app.core.imdf.arcgis_uploader` continua a funzionare.
-#   - `tests2/shared/test_hypothesis_property_contract.py:16` con
-#     `from app.core.imdf.arcgis_uploader import _quote_sql_value`
-#     continua a funzionare.
-# Vedi anche `orchestrate/phase_5_b4/preflight.md` §6.
-
-
-# Phase 5 B4.4 cutover: `_publish_mode_existing` spostato in
-# `app.core.imdf.arcgis.publish_ops` (re-exported in coda al file
-# via facade).
-
-
-# Phase 5 B4.1 cutover: cluster SQL_HELPERS spostato in
-# `app.core.imdf.arcgis.sql_helpers`. Re-export per preservare i path
-# pubblici esistenti:
-#   - `from app.core.imdf.arcgis_uploader import _quote_sql_value` /
-#     `_chunked` / `_query_oid_by_key`
-#   - `validator.py:130` lazy-import `_quote_sql_value` + `_chunked`
-#   - `tests2/shared/test_hypothesis_property_contract.py:16`
-#     property test su `_quote_sql_value`
-# Pattern §6.1 facade — single-source canonica vive in
-# `arcgis/sql_helpers.py`. Vedi `orchestrate/phase_5_b4/preflight.md`
-# §6 + §3.2 (semantica monkeypatch.setattr su uploader_mod).
 from .arcgis.sql_helpers import (  # noqa: F401  (re-export)
     _quote_sql_value,
     _chunked,
@@ -521,48 +446,11 @@ from .arcgis.service_discovery import (  # noqa: F401  (re-export)
     _find_existing_service,
 )
 
-# Phase 5 B4.3 cutover: cluster SERVICE_LIFECYCLE (2 helper di
-# rimozione/cleanup Feature Service) spostato in
-# `app.core.imdf.arcgis.service_lifecycle`. Re-export per preservare i
-# path pubblici esistenti + la propagazione di `monkeypatch.setattr`
-# su `uploader_mod`:
-#   - `from app.core.imdf.arcgis_uploader import
-#     _try_cleanup_zombie_service` / `_delete_existing_service` continua
-#     a funzionare (anche se nessun caller esterno li importa attualmente).
-#   - Internal caller `upload_imdf_layers` (in uploader.py) usa name
-#     lookup nello scope uploader → vede l'attributo facade rebindato
-#     da eventuali `monkeypatch.setattr(uploader_mod, ...)` (Path B).
-#   - Cross-cluster call `_delete_existing_service → _search_user_items`
-#     avviene dentro `service_lifecycle.py` via
-#     `from .service_discovery import _search_user_items`. Patch su
-#     `uploader_mod._search_user_items` NON sarebbe vista da questo
-#     path (Path C — nessun test contract attuale dipende, verificato
-#     in B4.2 mini-scan).
-# Pattern §6.1 facade. Vedi `orchestrate/phase_5_b4/preflight.md` §3.2.
 from .arcgis.service_lifecycle import (  # noqa: F401  (re-export)
     _try_cleanup_zombie_service,
     _delete_existing_service,
 )
 
-# Phase 5 B4.4 cutover: cluster PUBLISH_OPS (2 helper di scrittura
-# layer-level su Feature Service: replace + append/upsert/update)
-# spostato in `app.core.imdf.arcgis.publish_ops`. Re-export per
-# preservare i path pubblici esistenti + la propagazione di
-# `monkeypatch.setattr` su `uploader_mod`:
-#   - `from app.core.imdf.arcgis_uploader import _add_layer_to_service`
-#     / `_publish_mode_existing` continua a funzionare (anche se nessun
-#     caller esterno li importa attualmente).
-#   - Internal caller `upload_imdf_layers` (in uploader.py) usa name
-#     lookup nello scope uploader → vede l'attributo facade rebindato
-#     da eventuali `monkeypatch.setattr(uploader_mod, ...)` (Path B).
-#   - Cross-cluster call `_publish_mode_existing → _query_oid_by_key`
-#     / `_chunked` / `_quote_sql_value` avviene dentro `publish_ops.py`
-#     via `from .sql_helpers import ...`. Patch su
-#     `uploader_mod.<sql_helper>` NON sarebbe vista da questo path
-#     (Path C — nessun test contract attuale dipende, verificato in
-#     B4.1 mini-scan: solo property test su `_quote_sql_value`,
-#     no monkeypatch).
-# Pattern §6.1 facade. Vedi `orchestrate/phase_5_b4/preflight.md` §3.2.
 from .arcgis.publish_ops import (  # noqa: F401  (re-export)
     _add_layer_to_service,
     _publish_mode_existing,

@@ -70,18 +70,13 @@ from typing import Any, Union
 
 from app.utils.logger import get_logger
 
-# Stesso logger name di `base.py`: i record sono indistinguibili dai
-# consumer che attaccano handler / filtrano per
-# "app.core.manipola.transforms.base" (pattern §6.1 facade).
 logger = get_logger("app.core.manipola.transforms.base")
 
 DataFrame = Union[pd.DataFrame, gpd.GeoDataFrame]
 
 
-# =============================================================================
 # RIEMPIMENTO VALORI NULLI
 # Riempie NULL con: valore costante, media, mediana, moda, ffill, bfill.
-# =============================================================================
 
 def _is_strict_numeric_series(s: "pd.Series") -> bool:
     """True se la Series ha dtype numerico (int/float) ma NON booleano.
@@ -195,9 +190,6 @@ def op_fill_na(
             else:
                 result = getattr(result, fill_func)()
         else:
-            # method='value': itera per colonna cosi' possiamo validare il
-            # type-vs-dtype prima del fillna (cf. C2 Phase 4). Comportamento
-            # invariato sulle colonne object/string: il fill raw passa.
             target_cols = (
                 [column] if (column and column in result.columns)
                 else list(result.columns)
@@ -220,10 +212,8 @@ def op_fill_na(
         raise
 
 
-# =============================================================================
 # SOSTITUZIONE VALORI
 # Sostituisce valori in colonna. Supporta regex opzionale.
-# =============================================================================
 
 def op_replace(
     df: DataFrame,
@@ -266,10 +256,8 @@ def op_replace(
         raise
 
 
-# =============================================================================
 # CONVERSIONE TIPI
 # Converte colonne tra tipi: int, float, str, bool, date/datetime.
-# =============================================================================
 
 def op_type_cast(
     df: DataFrame,

@@ -9,8 +9,6 @@ from typing import List, Optional, Literal, Any
 from datetime import datetime
 
 
-# ==================== CONFIGURAZIONE ====================
-
 class DataSourceCreate(BaseModel):
     """Dati per creare un nuovo Data Source."""
     name: str
@@ -110,8 +108,6 @@ class DataSourceTestResult(BaseModel):
     details: Optional[dict] = None
 
 
-# ==================== OPERAZIONI FILE ====================
-
 class FileInfoResponse(BaseModel):
     """Metadata di un file nello storage — risposta API."""
     name: str
@@ -133,8 +129,6 @@ class WriteFileRequest(BaseModel):
     """Non usata per upload multipart — placeholder per documentazione."""
     path: str
 
-
-# ==================== SCAN STATE ====================
 
 class ProcessedEntry(BaseModel):
     """Traccia un file già processato dallo scheduler."""

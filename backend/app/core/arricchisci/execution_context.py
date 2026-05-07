@@ -141,14 +141,3 @@ def build_execution_context(
         group_id=group_id,
         preview_limit=preview_limit,
     )
-
-# BE-GO-READY-ORCHESTRATION-ENGINE-012: `apply_to_legacy_state`
-# was deleted. Pre-012 it mirrored ctx values onto
-# `svc._current_group_id` / `svc._preview_limit` for legacy
-# mixin readers; OE011 retired the only production caller (the
-# orchestrator) and made every mixin ctx-strict. The standalone
-# function then existed only to keep retired tests green and was
-# itself documented as test-surface-only. OE012 removes it
-# entirely; the negative source-bound lock in
-# `tests2/arricchisci/unit/test_external_consumers_ctx_migration_contract.py`
-# enforces that no production / test code re-introduces it.

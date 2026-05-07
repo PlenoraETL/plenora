@@ -59,7 +59,6 @@ except ImportError:
     import logging as _logging
     _logger = _logging.getLogger(__name__)
 
-# ==================== IMPORT CONDIZIONALI ====================
 # Usa modelli da app.models in produzione, fallback a dataclass per test standalone
 
 try:
@@ -77,7 +76,6 @@ except ImportError:
     _USE_APP_MODELS = False
 
 
-# ==================== DEFINIZIONI TIPI (FALLBACK PER TEST) ====================
 # Usate solo quando app.models non è disponibile (test standalone)
 
 if not _USE_APP_MODELS:
@@ -138,7 +136,6 @@ if not _USE_APP_MODELS:
             return cls(**data)
 
 
-# ==================== PROTOCOLLI + DEFAULT IMPLS ====================
 #
 # STRUCT-001 Seam B: i 4 Protocols (Logger/FileSystem/DataLoader/TimeProvider)
 # e le 4 Default impls (NullLogger/DefaultTimeProvider/DefaultFileSystem/
@@ -161,15 +158,6 @@ from app.services.file_service_deps import (  # noqa: F401  (re-export pubblico)
 )
 
 
-# ==================== FUNZIONI PURE ====================
-#
-# STRUCT-001 Seam A: i 4 helper pure (FormatDetector, TypeInferrer,
-# FileIdGenerator, ColumnInfoBuilder) vivono in `app.shared.file_helpers`.
-# Re-export per backward-compat coi test/consumer che importano da
-# `app.services.file_service` (es. test_n1_file_service_cross_tenant_contract
-# che usa FileIdGenerator). Identita' preservata: Module attribute is the same
-# object as in app.shared.file_helpers (pattern Seam A R-01 / STRUCT-005).
-
 from app.shared.file_helpers import (  # noqa: F401  (re-export pubblico)
     FormatDetector,
     TypeInferrer,
@@ -178,7 +166,6 @@ from app.shared.file_helpers import (  # noqa: F401  (re-export pubblico)
 )
 
 
-# ==================== SERVIZIO PRINCIPALE ====================
 # Classe FileService: CRUD completo per file source con DI.
 # Gestisce il ciclo di vita dei file caricati dall'utente come sorgenti dati.
 # Usa Dependency Injection per testabilità: ogni dipendenza esterna (filesystem,
@@ -237,19 +224,16 @@ class FileSourceService:
         self._id_generator = FileIdGenerator
         self._column_builder = ColumnInfoBuilder
 
-    # ==================== GENERAZIONE ID ====================
     
     def _generate_file_id(self, name: str) -> str:
         timestamp = self._time.now().strftime("%Y%m%d_%H%M%S")
         uuid_part = self._time.generate_uuid()
         return self._id_generator.generate(name, timestamp, uuid_part)
     
-    # ==================== RILEVAMENTO FORMATO ====================
     
     def _detect_format(self, filename: str) -> str:
         return self._format_detector.detect(filename)
     
-    # ==================== LISTA LAYERS / FOGLI ====================
     # Per file multi-layer (GPKG, XLSX, SHP in directory, FileGDB).
     
     def list_layers(self, file_path: Path) -> List[str]:
@@ -268,7 +252,6 @@ class FileSourceService:
             self._logger.error(f"[CRASH] Errore listing sheets: {e}", exc_info=True)
             return []
     
-    # ==================== N1 CROSS-TENANT FAIL-CLOSED CHECK ====================
 
     # Sentinel per bypass esplicito superadmin. L'uso di questo valore
     # scrive un log INFO (audit trail); pass-through di un group_id
@@ -352,7 +335,6 @@ class FileSourceService:
             f"'{expected_group_id}'"
         )
 
-    # ==================== CARICAMENTO DATI ====================
     # Carica DataFrame da file con gestione automatica formato e layer.
     # La definizione canonica di `load_dataframe` e' piu' in basso
     # (~riga 1200): estrae blob dal DB in temp file, carica via parser,
@@ -380,13 +362,11 @@ class FileSourceService:
             logger=self._logger,
         )
     
-    # ==================== OPERAZIONI CRUD ====================
     # Upload, lista, preview, aggiornamento, eliminazione file source.
     # Lettura, creazione, aggiornamento, eliminazione file source.
     # Tutti i metodi usano il Protocol filesystem per I/O,
     # permettendo mock completi nei test unitari.
     
-    # ==================== DB STORAGE HELPERS ====================
     #
     # STRUCT-001 Seam C: la logica policy-aware (db/object_storage/hybrid +
     # threshold) vive in `app.services.file_storage_dispatch.dispatch_blob_storage`.
@@ -635,7 +615,6 @@ class FileSourceService:
         tmp.close()
         return Path(tmp.name)
 
-    # ==================== CRUD ====================
 
     def get_file_source(self, file_id: str) -> Optional[FileSource]:
         """Ottieni file source specifico dal DB."""
@@ -991,7 +970,6 @@ class FileSourceService:
         )
 
 
-# ==================== FACTORY ====================
 # Costruisce FileService con tutte le dipendenze di produzione.
 # Per creare istanze con dependency injection personalizzata (test, ambienti custom)
 
@@ -1006,7 +984,6 @@ def create_file_service(
     )
 
 
-# ==================== SINGLETON PRODUZIONE ====================
 # Istanza globale per uso da router FastAPI (evita ri-creazione ad ogni richiesta).
 # Per test, usare create_file_service() con mock iniettati.
 def _create_production_service() -> FileSourceService:

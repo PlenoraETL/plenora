@@ -95,9 +95,7 @@ def _clean_policy_env(monkeypatch):
     yield
 
 
-# =============================================================================
 # policy = db
-# =============================================================================
 
 
 def test_db_policy_small_payload_stays_in_bytea(mock_db, stub_storage, monkeypatch):
@@ -144,9 +142,7 @@ def test_db_policy_ignores_threshold(mock_db, stub_storage, monkeypatch):
     assert stub_storage.uploads == []
 
 
-# =============================================================================
 # policy = object_storage
-# =============================================================================
 
 
 def test_object_storage_policy_small_payload_uploads(mock_db, stub_storage, monkeypatch):
@@ -199,9 +195,7 @@ def test_object_storage_policy_upload_failure_no_db_row(mock_db, monkeypatch):
     assert mock_db == {}
 
 
-# =============================================================================
 # policy = hybrid (comportamento attuale: threshold-based)
-# =============================================================================
 
 
 def test_hybrid_below_threshold_stays_in_db(mock_db, stub_storage, monkeypatch):

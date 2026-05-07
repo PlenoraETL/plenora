@@ -204,7 +204,6 @@ class ConcurrencyManager:
     def _delete(self, key: str):
         db.execute("DELETE FROM scheduler_locks WHERE key = ?", (key,))
 
-    # =========================================================================
 
     def try_acquire(self, schedule_id: str, max_queue_size: int = 3) -> Literal["acquired", "queued", "skipped"]:
         """Acquisisce il lock per lo schedule, o lo accoda, o lo skippa.

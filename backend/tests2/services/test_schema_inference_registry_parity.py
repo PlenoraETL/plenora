@@ -51,9 +51,7 @@ _SCHEMA_INFER_PY = _BACKEND_ROOT / "app" / "services" / "schema_inference.py"
 _REGISTRY_JSON = _BACKEND_ROOT / "app" / "core" / "manipola" / "transforms_registry.json"
 
 
-# ---------------------------------------------------------------------------
 # Source-bound parsing
-# ---------------------------------------------------------------------------
 
 # Post BE-PHASE2-SCHEMA-INFER-008-FINAL: il dispatcher e' un map
 # lookup (`_build_transform_handlers`), non piu' un'if/elif chain.
@@ -94,9 +92,7 @@ def _load_registry_ids() -> Set[str]:
     return set(data.get("transforms", {}).keys())
 
 
-# ---------------------------------------------------------------------------
 # Reference snapshots — failure here = registry/dispatcher drift
-# ---------------------------------------------------------------------------
 
 # Branch attive nel dispatcher al momento del lock BE-SCHEMA-INFER-001A.
 # Aggiungere/rimuovere una branch aggiorna questo set + il classifier
@@ -199,9 +195,7 @@ PASSTHROUGH_OK_GAP: Set[str] = {
 }
 
 
-# ---------------------------------------------------------------------------
 # 1. Branch dispatcher — snapshot lock
-# ---------------------------------------------------------------------------
 
 
 def test_dispatcher_branches_match_expected_snapshot():
@@ -218,9 +212,7 @@ def test_dispatcher_branches_match_expected_snapshot():
     )
 
 
-# ---------------------------------------------------------------------------
 # 2. Registry — load + sanity
-# ---------------------------------------------------------------------------
 
 
 def test_registry_loads_and_has_known_size():
@@ -236,9 +228,7 @@ def test_registry_loads_and_has_known_size():
     )
 
 
-# ---------------------------------------------------------------------------
 # 3. Parity audit — registry vs dispatcher
-# ---------------------------------------------------------------------------
 
 
 def test_dispatcher_extras_are_aliases_only():
@@ -301,9 +291,7 @@ def test_passthrough_wrong_gap_size_lock():
     )
 
 
-# ---------------------------------------------------------------------------
 # 4. Behavioral verification — fallback path
-# ---------------------------------------------------------------------------
 
 
 def test_dispatcher_falls_back_to_passthrough_for_unknown_ops():
@@ -362,9 +350,7 @@ def test_dispatcher_falls_back_for_unknown_phantom_op():
     assert out[0].type == "real"
 
 
-# ---------------------------------------------------------------------------
 # 5. Behavioral tests — BE-PHASE2-SCHEMA-INFER-002 batch 1
-# ---------------------------------------------------------------------------
 
 from types import SimpleNamespace  # noqa: E402
 
@@ -600,9 +586,7 @@ def test_geo_to_wkt_unknown_mode_falls_back_to_wkt():
     assert [c.name for c in out] == ["id", "geometry_wkt"]
 
 
-# ---------------------------------------------------------------------------
 # 6. Behavioral tests — BE-PHASE2-SCHEMA-INFER-003 batch 2
-# ---------------------------------------------------------------------------
 
 
 def _geo_input():
@@ -835,9 +819,7 @@ def test_string_pad_no_column_passthrough():
     assert [(c.name, c.type) for c in out] == [("a", "int"), ("b", "str")]
 
 
-# ---------------------------------------------------------------------------
 # 7. Behavioral tests — BE-PHASE2-SCHEMA-INFER-004 batch 3
-# ---------------------------------------------------------------------------
 
 
 def _poly_input():
@@ -1129,9 +1111,7 @@ def test_geo_boundary_custom_output_column():
     assert out[-1].type == "geometry"
 
 
-# ---------------------------------------------------------------------------
 # 8. Behavioral tests — BE-PHASE2-SCHEMA-INFER-005 batch 4
-# ---------------------------------------------------------------------------
 #
 # 4 transform riclassificati come PASSTHROUGH_OK_GAP via verifica
 # runtime (nessun handler dedicato richiesto, restano in fallback):
@@ -1284,9 +1264,7 @@ def test_rows_only_passthrough_ok_membership_is_locked():
     assert expected_in_ok.isdisjoint(PASSTHROUGH_WRONG_GAP)
 
 
-# ---------------------------------------------------------------------------
 # 9. Behavioral tests — BE-PHASE2-SCHEMA-INFER-006 batch 5
-# ---------------------------------------------------------------------------
 #
 # 6 transform multi-input/lookup promossi a dispatcher dedicato:
 #   - cross_join, geo_within, geo_overlay, geo_symmetric_difference,
@@ -1549,9 +1527,7 @@ def test_lookup_empty_mapping_passthrough():
     assert [c.name for c in out] == ["a", "b"]
 
 
-# ---------------------------------------------------------------------------
 # 10. Behavioral tests — BE-PHASE2-SCHEMA-INFER-007 batch 6
-# ---------------------------------------------------------------------------
 #
 # 4 transform deterministici promossi a dispatcher dedicato:
 #   - table_diff, melt, statistics, window_function
@@ -1966,9 +1942,7 @@ def test_window_function_missing_column_passthrough():
     assert [c.name for c in out] == ["a", "b"]
 
 
-# ---------------------------------------------------------------------------
 # 11. Classification lock — MIGRATE_NEXT_NEEDS_RUNTIME_CONTRACT
-# ---------------------------------------------------------------------------
 
 
 def test_migrate_next_set_matches_residual_passthrough_wrong():
@@ -2015,9 +1989,7 @@ def test_migrate_next_ops_fall_through_to_passthrough(op):
     ]
 
 
-# ---------------------------------------------------------------------------
 # 12. Registry dispatch — runtime introspection (BE-PHASE2-SCHEMA-INFER-008)
-# ---------------------------------------------------------------------------
 #
 # Lock complementare al parser source-bound: il dict restituito da
 # `_build_transform_handlers` deve combaciare esattamente con
@@ -2119,9 +2091,7 @@ def test_registry_geo_overlay_dispatch_reads_how_from_config():
     assert [c.name for c in out_overlay] == [c.name for c in out_intersection]
 
 
-# ---------------------------------------------------------------------------
 # 13. Behavioral tests — BE-PHASE2-SCHEMA-INFER-009-ZERO-RESIDUALS batch 7
-# ---------------------------------------------------------------------------
 #
 # 2 transform precedentemente classificati MIGRATE_NEXT
 # (data-dependent) sono ora chiusi via contratto config-explicit
@@ -2385,9 +2355,7 @@ def test_transpose_id_column_collision_with_output_dedupes():
     assert [c.name for c in out] == ["metric", "x"]
 
 
-# ---------------------------------------------------------------------------
 # 14. Phase 2 closure invariants (post BE-PHASE2-SCHEMA-INFER-009)
-# ---------------------------------------------------------------------------
 
 
 def test_phase_2_closed_with_zero_wrong_residuals():

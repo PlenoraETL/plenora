@@ -40,9 +40,7 @@ pytestmark = [
 ]
 
 
-# =============================================================================
 # Logging fixture — pattern allineato a test_n4_formula_validator_contract
-# =============================================================================
 
 
 class _ListHandler(logging.Handler):
@@ -76,9 +74,7 @@ def _nan_key_warnings(records):
     ]
 
 
-# =============================================================================
 # 1. Semantica NaN per how
-# =============================================================================
 
 
 def test_inner_join_excludes_rows_with_nan_keys():
@@ -140,9 +136,7 @@ def test_outer_join_separates_nan_on_both_sides_no_cross_match():
     )
 
 
-# =============================================================================
 # 2. Anti-stringificazione: stringhe legittime vs veri NaN
-# =============================================================================
 
 
 def test_legitimate_nan_string_matches_on_both_sides_when_dtypes_align():
@@ -230,9 +224,7 @@ def test_real_nan_in_int64_does_not_collide_with_na_string_after_coercion():
     assert matched_lv == ["a", "c"]
 
 
-# =============================================================================
 # 3. Compatibilita' coercion numeric/object con valori validi
-# =============================================================================
 
 
 def test_dtype_mismatch_numeric_object_with_valid_values_still_matches():
@@ -261,9 +253,7 @@ def test_dtype_mismatch_both_numeric_uses_to_numeric_coerce():
     assert len(result) == 3
 
 
-# =============================================================================
 # 4. Telemetria warning
-# =============================================================================
 
 
 def test_warning_emitted_when_left_has_nan_keys(base_log_records):

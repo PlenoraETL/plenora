@@ -80,9 +80,7 @@ def _boom() -> OperationalError:
     return OperationalError("stmt", {}, Exception("lock wait timeout"))
 
 
-# =============================================================================
 # _check_create_permission: fail-closed su errori non-permission
-# =============================================================================
 
 
 def test_check_create_permission_fail_closed_on_unknown_error():
@@ -122,9 +120,7 @@ def test_check_create_permission_preserves_permission_denied_branch():
     )
 
 
-# =============================================================================
 # truncate_table: solleva invece di ritornare False
-# =============================================================================
 
 
 def test_truncate_table_raises_instead_of_returning_false():
@@ -139,9 +135,7 @@ def test_truncate_table_raises_instead_of_returning_false():
         writer.truncate_table()
 
 
-# =============================================================================
 # _table_exists_for: solleva invece di ritornare False silenziosamente
-# =============================================================================
 
 
 def test_table_exists_for_raises_instead_of_returning_false():
@@ -156,9 +150,7 @@ def test_table_exists_for_raises_instead_of_returning_false():
         writer._table_exists_for("public", "some_target")
 
 
-# =============================================================================
 # Boundary end-to-end: write() PER_BATCH TRUNCATE_INSERT con truncate fallito
-# =============================================================================
 
 
 def test_write_truncate_insert_per_batch_reports_write_error_when_truncate_fails():

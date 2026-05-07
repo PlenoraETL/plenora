@@ -39,9 +39,7 @@ def _read_src() -> str:
     return _TARGET.read_text(encoding="utf-8")
 
 
-# =============================================================================
 # TEST 1 — err_msg ramo broad Exception sanitizzato (no str(e) interpolato)
-# =============================================================================
 
 
 def test_err_msg_inatteso_no_str_e_interpolation():
@@ -61,9 +59,7 @@ def test_err_msg_inatteso_no_str_e_interpolation():
     ) in src
 
 
-# =============================================================================
 # TEST 2 — Ramo ExecutionError preservato invariato
-# =============================================================================
 
 
 def test_err_msg_execution_error_branch_preserved():
@@ -92,9 +88,7 @@ def test_err_msg_execution_error_branch_preserved():
     )
 
 
-# =============================================================================
 # TEST 3 — _handle_failure failed branch ha token canonico schedule_execution_fatal
-# =============================================================================
 
 
 def test_handle_failure_failed_branch_has_canonical_error_token():

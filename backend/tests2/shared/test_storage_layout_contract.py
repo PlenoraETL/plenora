@@ -19,9 +19,7 @@ import pytest
 from app.shared import storage_layout
 
 
-# ---------------------------------------------------------------------------
 # Naming rules
-# ---------------------------------------------------------------------------
 
 def test_all_prefixes_are_non_empty_strings():
     for prefix in storage_layout.ALL_PREFIXES:
@@ -53,9 +51,7 @@ def test_is_valid_prefix_rejects_invalid_values(bad: str):
     assert not storage_layout.is_valid_prefix(bad)
 
 
-# ---------------------------------------------------------------------------
 # Uniqueness + non-prefix-of-another
-# ---------------------------------------------------------------------------
 
 def test_all_prefixes_are_unique():
     assert len(storage_layout.ALL_PREFIXES) == len(set(storage_layout.ALL_PREFIXES)), (
@@ -92,9 +88,7 @@ def test_all_prefixes_matches_declared_constants():
     assert declared == set(storage_layout.ALL_PREFIXES)
 
 
-# ---------------------------------------------------------------------------
 # Call site usage — i moduli storage usano gli alias dichiarati qui
-# ---------------------------------------------------------------------------
 
 def test_file_storage_dispatch_uses_shared_prefix():
     from app.services import file_storage_dispatch

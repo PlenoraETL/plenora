@@ -48,9 +48,7 @@ _BACKEND_ROOT = Path(__file__).resolve().parent.parent.parent  # .../backend
 _CORE_ROOT = _BACKEND_ROOT / "app" / "core"
 
 
-# ---------------------------------------------------------------------------
 # 1. Catalog membership locks
-# ---------------------------------------------------------------------------
 
 
 # Lock atteso del catalog domain (BE-GO-READY-ERROR-CODES-006).
@@ -281,9 +279,7 @@ def test_not_found_family_uses_consistent_suffix():
         )
 
 
-# ---------------------------------------------------------------------------
 # 2. Convenzioni codici
-# ---------------------------------------------------------------------------
 
 
 _SNAKE_CASE_RE = re.compile(r"^[a-z][a-z0-9]*(_[a-z0-9]+)*$")
@@ -327,9 +323,7 @@ def test_http_status_code_factory_produces_http_prefix():
     assert error_codes.http_status_code(503) == "http_503"
 
 
-# ---------------------------------------------------------------------------
 # 3. raise_typed_http helper — shape + round-trip envelope
-# ---------------------------------------------------------------------------
 
 
 def test_raise_typed_http_raises_http_exception():
@@ -439,9 +433,7 @@ def test_raise_typed_http_works_with_catalog_constant():
     assert exc_info.value.detail["error"] == "object_storage_disabled"
 
 
-# ---------------------------------------------------------------------------
 # 4. Source-bound drift detection: app/core/**/*.py
-# ---------------------------------------------------------------------------
 
 
 _ERROR_LITERAL_RE = re.compile(

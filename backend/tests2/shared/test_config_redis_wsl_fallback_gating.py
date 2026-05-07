@@ -29,9 +29,7 @@ from app.config import Settings
 pytestmark = [pytest.mark.unit, pytest.mark.shared, pytest.mark.contract]
 
 
-# ---------------------------------------------------------------------------
 # Helpers
-# ---------------------------------------------------------------------------
 
 
 class _FakeSocket:
@@ -75,9 +73,7 @@ def _patch_platform_env(
     monkeypatch.delenv("ENV", raising=False)
 
 
-# ---------------------------------------------------------------------------
 # Gating predicate
-# ---------------------------------------------------------------------------
 
 
 @pytest.mark.parametrize(
@@ -122,9 +118,7 @@ def test_wsl_fallback_gating_default_dev(monkeypatch):
     assert Settings._wsl_redis_fallback_allowed() is True
 
 
-# ---------------------------------------------------------------------------
 # _ensure_redis: server path (no WSL, operational message)
-# ---------------------------------------------------------------------------
 
 
 @pytest.mark.parametrize(
@@ -181,9 +175,7 @@ def test_server_path_uses_default_url_when_unset(monkeypatch):
     assert "wsl" not in errors[0].lower()
 
 
-# ---------------------------------------------------------------------------
 # _ensure_redis: dev Windows path (WSL fallback preserved)
-# ---------------------------------------------------------------------------
 
 
 def test_dev_windows_path_invokes_wsl(monkeypatch):
@@ -206,9 +198,7 @@ def test_dev_windows_path_invokes_wsl(monkeypatch):
     assert any("wsl" in e.lower() for e in errors)
 
 
-# ---------------------------------------------------------------------------
 # _ensure_redis: Redis raggiungibile -> nessun side effect
-# ---------------------------------------------------------------------------
 
 
 @pytest.mark.parametrize(

@@ -33,9 +33,7 @@ import pytest
 pytestmark = [pytest.mark.unit, pytest.mark.carica, pytest.mark.contract]
 
 
-# =============================================================================
 # Helper puro: is_already_completed
-# =============================================================================
 
 
 def test_is_already_completed_returns_false_when_run_does_not_exist():
@@ -90,9 +88,7 @@ def test_is_already_completed_swallows_db_error_returning_false():
         assert is_already_completed("run-1") is False
 
 
-# =============================================================================
 # Integration nel task: accetta run_id kwarg + skip se completato
-# =============================================================================
 
 
 def test_carica_task_accepts_run_id_kwarg():

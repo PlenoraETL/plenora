@@ -47,9 +47,7 @@ def _node_meta(persistence_mode=None, **extra):
     return base
 
 
-# ============================================================
 # 1. full_pg + full_pg -> diff completo invariato
-# ============================================================
 
 
 def test_l2_full_pg_full_pg_returns_full_diff(superadmin_user):
@@ -113,9 +111,7 @@ def test_l2_legacy_null_treated_as_full_pg(superadmin_user):
     assert body["diff_available"] is True
 
 
-# ============================================================
 # 2. preview_only + preview_only -> 200 partial=True
-# ============================================================
 
 
 def test_l2_preview_only_pair_is_partial(superadmin_user):
@@ -149,9 +145,7 @@ def test_l2_preview_only_pair_is_partial(superadmin_user):
     assert "preview" in body.get("message", "").lower()
 
 
-# ============================================================
 # 3. metadata_only -> 422 operativo
-# ============================================================
 
 
 def test_l2_metadata_only_returns_422_operational(superadmin_user):
@@ -207,9 +201,7 @@ def test_l2_metadata_only_on_one_side_only_returns_422(superadmin_user):
     assert detail["persistence_mode_b"] == "full_pg"
 
 
-# ============================================================
 # 4. full_artifact + complete -> 501 non implementato
-# ============================================================
 
 
 def test_l2_full_artifact_complete_returns_501_not_implemented(superadmin_user):
@@ -249,9 +241,7 @@ def test_l2_full_artifact_complete_returns_501_not_implemented(superadmin_user):
     assert detail["artifact_status_b"] == "complete"
 
 
-# ============================================================
 # 5. full_artifact pending/failed -> 422 non pronto
-# ============================================================
 
 
 def test_l2_full_artifact_pending_returns_422_operational(superadmin_user):
@@ -303,9 +293,7 @@ def test_l2_full_artifact_failed_returns_422_operational(superadmin_user):
     assert detail["reason"] == "full_artifact_not_ready"
 
 
-# ============================================================
 # 6. Mixed mode (preview_only vs full_pg) -> 422 conservativo
-# ============================================================
 
 
 def test_l2_preview_only_vs_full_pg_returns_422_mode_mismatch(superadmin_user):
@@ -359,10 +347,8 @@ def test_l2_full_pg_vs_preview_only_symmetric(superadmin_user):
     assert response.json()["detail"]["reason"] == "persistence_mode_mismatch"
 
 
-# ============================================================
 # 7. Mixed metadata + full_pg -> 422 metadata (precedenza
 #    "non disponibile" su "mode mismatch")
-# ============================================================
 
 
 def test_l2_mixed_metadata_full_pg_returns_metadata_reason(superdmin_or_admin: bool = False):
@@ -393,9 +379,7 @@ def test_l2_mixed_metadata_full_pg_returns_metadata_reason(superdmin_or_admin: b
     assert response.json()["detail"]["reason"] == "metadata_only_no_rows"
 
 
-# ============================================================
 # 8. Anti-regression: nessun 500
-# ============================================================
 
 
 def test_l2_does_not_return_500_on_any_documented_mode(superadmin_user):

@@ -41,9 +41,7 @@ from app.core.auth.auth import require_admin, require_not_esecutore
 pytestmark = [pytest.mark.unit, pytest.mark.security, pytest.mark.regression]
 
 
-# =============================================================================
 # Helpers
-# =============================================================================
 
 
 def _admin_grp1() -> CurrentUser:
@@ -87,9 +85,7 @@ def _assert_no_leak(detail, *, leaked_name: str, leaked_id: str):
     )
 
 
-# =============================================================================
 # datasources DELETE
-# =============================================================================
 
 
 @pytest.fixture
@@ -143,9 +139,7 @@ def test_datasources_delete_cascade_superadmin_sees_all(datasources_client):
     assert detail["hidden_count"] == 0
 
 
-# =============================================================================
 # connections DELETE
-# =============================================================================
 
 
 @pytest.fixture
@@ -202,9 +196,7 @@ def test_connections_delete_cascade_superadmin_sees_all(connections_client):
     assert detail["hidden_count"] == 0
 
 
-# =============================================================================
 # api-connections DELETE
-# =============================================================================
 
 
 @pytest.fixture

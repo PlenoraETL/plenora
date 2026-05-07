@@ -54,9 +54,7 @@ _ARTIFACT_READER_PY = (
 )
 
 
-# ---------------------------------------------------------------------------
 # 1. Cap resolution mirror of result_blob loader
-# ---------------------------------------------------------------------------
 
 
 def test_default_cap_is_25_mib(monkeypatch):
@@ -129,9 +127,7 @@ def test_settings_default_matches_module_default():
     )
 
 
-# ---------------------------------------------------------------------------
 # 2. Source-bound: no inline unbounded read pattern
-# ---------------------------------------------------------------------------
 
 
 def test_source_has_no_unbounded_body_join():
@@ -155,9 +151,7 @@ def test_source_has_no_unbounded_body_join():
     )
 
 
-# ---------------------------------------------------------------------------
 # 3. Oversize raises typed exception, not best-effort error
-# ---------------------------------------------------------------------------
 
 
 class _FakeStorage:
@@ -230,9 +224,7 @@ def test_under_cap_proceeds_without_raising_oom(monkeypatch):
     assert result.rows == []
 
 
-# ---------------------------------------------------------------------------
 # 4. Parser-boundary split (BE-GO-READY-RESOURCE-ENGINE-016)
-# ---------------------------------------------------------------------------
 #
 # 016 moved the pandas-bound parsing of the downloaded byte buffer
 # into a dedicated leaf module
@@ -595,9 +587,7 @@ def test_oversize_still_propagates_after_parser_split(monkeypatch):
     )
 
 
-# ---------------------------------------------------------------------------
 # 5. Leaf parser unit-level (BE-GO-READY-RESOURCE-ENGINE-016)
-# ---------------------------------------------------------------------------
 
 
 def test_parser_raises_typed_error_on_bad_bytes():

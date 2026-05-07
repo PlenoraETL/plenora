@@ -48,9 +48,7 @@ def _make_conn(server="https://arcgis.example.com", user="alice", pwd="pwd"):
     )
 
 
-# =============================================================================
 # 1. Token nell'header Authorization, NON in params/data
-# =============================================================================
 
 
 def test_request_passes_token_in_authorization_header_not_params():
@@ -145,9 +143,7 @@ def test_post_data_has_token_in_header_not_body():
     assert kwargs["headers"]["Authorization"] == "Bearer tok-CCC"
 
 
-# =============================================================================
 # 2. Retry su 498/499 con refresh token
-# =============================================================================
 
 
 def test_request_retries_once_on_body_error_498():
@@ -226,9 +222,7 @@ def test_request_does_not_loop_on_repeated_498():
     assert response.json()["error"]["code"] == 498
 
 
-# =============================================================================
 # 3. 429 rate limit con backoff
-# =============================================================================
 
 
 def test_request_backoffs_and_retries_on_429(monkeypatch):
@@ -326,9 +320,7 @@ def test_request_uses_exponential_backoff_when_retry_after_is_malformed(monkeypa
     assert 0 < sleeps[0] <= 30.0
 
 
-# =============================================================================
 # 4. Batch writer mid-batch refresh
-# =============================================================================
 
 
 def test_write_batch_refreshes_token_mid_batch_on_498(monkeypatch):

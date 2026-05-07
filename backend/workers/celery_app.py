@@ -43,13 +43,7 @@ celery_app = Celery(
         "workers.tasks.schedule_task",
         "workers.tasks.pipeline_task",
         "workers.tasks.imdf_publish_task",
-        # BE-GO-READY-INSTALLATION-019: pure no-op `cleanroom.ping`
-        # task used by the CI cleanroom enqueue/dequeue smoke. Zero
-        # production cost; see backend/workers/tasks/cleanroom_task.py.
         "workers.tasks.cleanroom_task",
-        # BE-GO-READY-INSTALLATION-021: pure no-op `cleanroom.beat_ping`
-        # task fired by the CI cleanroom beat tick smoke (env-gated).
-        # Zero production cost; see workers/tasks/cleanroom_beat_task.py.
         "workers.tasks.cleanroom_beat_task",
     ]
 )
@@ -91,30 +85,6 @@ celery_app.conf.update(
 )
 
 
-# ============================================================
-# BE-GO-READY-INSTALLATION-021-CELERY-BEAT-TICK-SMOKE-IMPL
-# Env-gated cleanroom beat tick smoke firing path.
-# ============================================================
-#
-# Production deploys leave `PLENORA_CLEANROOM_BEAT_PING` UNSET so this
-# block is a no-op: nothing is added to `beat_schedule`, beat behaves
-# exactly as today (DB-driven schedules only via
-# `PlenoraBeatScheduler._sync_from_db`).
-#
-# The CI cleanroom workflow sets `PLENORA_CLEANROOM_BEAT_PING=1` ONLY
-# on the spawned beat process; the env var is NOT propagated to web /
-# worker / production beat. When set, this populates
-# `celery_app.conf.beat_schedule` with a 5-second interval entry that
-# fires `cleanroom.beat_ping` (pure no-op task at
-# `workers/tasks/cleanroom_beat_task.py`). The matching shim in
-# `PlenoraBeatScheduler.setup_schedule()` merges config-based
-# `beat_schedule` entries into `self.data` alongside DB schedules so
-# the parent `Scheduler.tick()` fires them.
-#
-# The `import os` at top-of-module is intentional: this is the
-# single ADR-0021 TEST_ONLY env-read in this file, gated to the
-# cleanroom path. No other behaviour depends on env state at import
-# time.
 if os.getenv("PLENORA_CLEANROOM_BEAT_PING") == "1":
     from celery.schedules import schedule as _celery_schedule
 
@@ -149,9 +119,7 @@ class BaseTaskWithRetry(celery_app.Task):
 celery_app.Task = BaseTaskWithRetry
 
 
-# ============================================================
 # C8: request_id propagation via Celery signals
-# ============================================================
 # Il request_id impostato nel ContextVar dal RequestIdMiddleware HTTP
 # deve seguire il task attraverso il broker Redis fino al worker child
 # che lo esegue. Senza questi signal handler, il task parte con
@@ -177,9 +145,7 @@ from celery.signals import (
 )
 
 
-# ============================================================
 # BE-GO-READY-BOOTSTRAP-ENGINE-014: worker bootstrap parity
-# ============================================================
 # Web boot path (`app.main`) calls `app.bootstrap.bootstrap()` once
 # before any router import. Workers and beat must cross the SAME
 # four-step boundary (validate_startup → validate_storage_config →

@@ -55,9 +55,7 @@ def _fake_db_with(canvases):
     return module
 
 
-# =============================================================================
 # Happy path
-# =============================================================================
 
 
 def test_update_canvas_accepts_canvas_without_project_sources():
@@ -86,9 +84,7 @@ def test_update_canvas_accepts_linear_chain_without_cycle():
         assert result is True
 
 
-# =============================================================================
 # Cycle rejection
-# =============================================================================
 
 
 def test_update_canvas_rejects_self_reference():
@@ -137,9 +133,7 @@ def test_cycle_error_message_is_readable():
     assert "→" in str(exc.value)
 
 
-# =============================================================================
 # Missing project handling
-# =============================================================================
 
 
 def test_update_canvas_returns_false_for_missing_project():

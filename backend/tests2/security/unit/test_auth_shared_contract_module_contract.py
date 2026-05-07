@@ -57,9 +57,7 @@ _CONTRACT_PATH = _APP / "shared" / "contracts" / "auth.py"
 _CONTRACT_PKG_INIT = _APP / "shared" / "contracts" / "__init__.py"
 
 
-# ---------------------------------------------------------------------------
 # 1. Purity: the contract module imports zero forbidden surfaces
-# ---------------------------------------------------------------------------
 
 
 _FORBIDDEN_IMPORTS = {
@@ -139,9 +137,7 @@ def test_contract_init_imports_no_forbidden_surface():
     )
 
 
-# ---------------------------------------------------------------------------
 # 2. Public surface: exactly the documented symbols
-# ---------------------------------------------------------------------------
 
 
 _EXPECTED_PUBLIC_SYMBOLS = {
@@ -228,9 +224,7 @@ def test_contract_module_exports_each_documented_symbol():
         )
 
 
-# ---------------------------------------------------------------------------
 # 3. Identity: contract symbols == leaf symbols (same Python objects)
-# ---------------------------------------------------------------------------
 
 
 def test_contract_current_user_is_leaf_identity():
@@ -337,9 +331,7 @@ def test_contract_group_filter_identity_chain():
     )
 
 
-# ---------------------------------------------------------------------------
 # 4. group_filter behaviour preserved from Phase-6
-# ---------------------------------------------------------------------------
 
 
 def test_group_filter_superadmin_returns_none():
@@ -362,9 +354,7 @@ def test_group_filter_non_superadmin_returns_group_id():
     assert group_filter(user) == "g42"
 
 
-# ---------------------------------------------------------------------------
 # 5. Migrated routers consume the contract (source-bound)
-# ---------------------------------------------------------------------------
 
 
 _PHASE7_MIGRATED_ROUTERS = (

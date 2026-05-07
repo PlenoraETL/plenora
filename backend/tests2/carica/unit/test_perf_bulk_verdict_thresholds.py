@@ -26,9 +26,7 @@ import perf_bulk_verdict as pbv  # noqa: E402
 pytestmark = [pytest.mark.unit, pytest.mark.carica]
 
 
-# =============================================================================
 # §9.2 MySQL — soglie decommission
-# =============================================================================
 
 
 def test_mysql_verdict_sample_insufficiente_returns_invalid():
@@ -100,9 +98,7 @@ def test_mysql_verdict_zero_success_full_fallback_proposta_deprec():
     assert v.rate == pytest.approx(0.0)
 
 
-# =============================================================================
 # §9.3 PG — soglie keep-confirmed / regression-alert
-# =============================================================================
 
 
 def test_pg_verdict_sample_insufficiente_returns_invalid():
@@ -169,9 +165,7 @@ def test_pg_verdict_zero_fallback_perfect_keep():
     assert v.rate == pytest.approx(1.0)
 
 
-# =============================================================================
 # Trigger stratificazione per-tenant (§9.2 zona 5-30%)
-# =============================================================================
 
 
 def test_stratification_triggered_only_in_5_to_30_zone():
@@ -194,9 +188,7 @@ def test_stratification_triggered_only_in_5_to_30_zone():
     assert pbv.mysql_needs_stratification(v) is False
 
 
-# =============================================================================
 # Costanti soglie — congelamento dei valori verbatim da §9.2/§9.3
-# =============================================================================
 
 
 def test_thresholds_match_kickoff_sections_verbatim():
@@ -215,9 +207,7 @@ def test_thresholds_match_kickoff_sections_verbatim():
     assert pbv.STRATIFICATION_MIN_TENANT_SAMPLE == 10
 
 
-# =============================================================================
 # CLI date parsing (sanity — non esegue query)
-# =============================================================================
 
 
 def test_cli_parse_iso_date_accepts_date_only():
@@ -234,9 +224,7 @@ def test_cli_parse_iso_date_rejects_invalid():
         pbv._parse_iso_date("not-a-date")
 
 
-# =============================================================================
 # Output formatting smoke test (no DB, solo stringhe)
-# =============================================================================
 
 
 def test_format_mysql_section_keep_includes_rate_and_verdict():

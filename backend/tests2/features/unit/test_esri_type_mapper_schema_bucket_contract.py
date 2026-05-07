@@ -31,9 +31,7 @@ pytestmark = [pytest.mark.unit, pytest.mark.contract]
 _BACKEND_APP = Path(__file__).resolve().parent.parent.parent.parent / "app"
 
 
-# ---------------------------------------------------------------------------
 # 1. map_esri_field_to_schema_bucket: esri-type → schema bucket
-# ---------------------------------------------------------------------------
 
 
 @pytest.mark.parametrize(
@@ -92,9 +90,7 @@ def test_map_esri_field_to_schema_bucket_case_insensitive_substring(esri_type, e
     assert EsriTypeMapper.map_esri_field_to_schema_bucket(esri_type) == expected
 
 
-# ---------------------------------------------------------------------------
 # 2. map_pandas_dtype_to_schema_bucket: pandas/numpy dtype → schema bucket
-# ---------------------------------------------------------------------------
 
 
 @pytest.mark.parametrize(
@@ -162,9 +158,7 @@ def test_map_pandas_dtype_to_schema_bucket_none_returns_other():
     assert EsriTypeMapper.map_pandas_dtype_to_schema_bucket(None) == "other"  # type: ignore[arg-type]
 
 
-# ---------------------------------------------------------------------------
 # 3. Schema separation: map_field_type (Plenora) vs schema bucket
-# ---------------------------------------------------------------------------
 
 
 @pytest.mark.parametrize(
@@ -187,9 +181,7 @@ def test_two_schemes_distinct(esri_type, plenora_internal, coarse):
     assert EsriTypeMapper.map_esri_field_to_schema_bucket(esri_type) == coarse
 
 
-# ---------------------------------------------------------------------------
 # 4. Cross-bucket parity: bundle vs FS si confrontano nello stesso schema
-# ---------------------------------------------------------------------------
 
 
 def test_coarse_buckets_match_for_compat_check():
@@ -226,9 +218,7 @@ def test_coarse_buckets_diverge_for_real_mismatches():
     assert fs_bucket == "string"
 
 
-# ---------------------------------------------------------------------------
 # 5. Validator wrapper backward-compat (BE-IMDF-003 thin delegate)
-# ---------------------------------------------------------------------------
 
 
 def test_validator_coarse_from_esri_delegates():
@@ -261,9 +251,7 @@ def test_validator_symbols_remain_module_level():
     assert callable(validator._coarse_type_from_dtype)
 
 
-# ---------------------------------------------------------------------------
 # 6. Source-bound: il validator delega senza re-implementare il match
-# ---------------------------------------------------------------------------
 
 
 def _read(path: Path) -> str:

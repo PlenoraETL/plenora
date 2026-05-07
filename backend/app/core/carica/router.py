@@ -34,9 +34,7 @@ from typing import Any, Dict, List, Optional
 from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
 
-# BE-GO-READY-AUTH-ENGINE-016 dep-import off facade.
 from app.core.auth.dependencies import get_current_user, require_not_esecutore
-# BE-GO-READY-AUTH-ENGINE-014 Phase-8 contract fan-out.
 from app.shared.contracts.auth import CurrentUser
 from app.core.auth.ownership import assert_resource_visible
 from app.core.carica.executor import CaricaExecutor, _dict_to_conn_obj
@@ -64,9 +62,7 @@ def init_carica_service(connection_service):
     _executor = CaricaExecutor(connection_service=connection_service)
 
 
-# ============================================================================
 # MODELLI REQUEST / RESPONSE
-# ============================================================================
 
 class AutoMappingRequest(BaseModel):
     """Richiesta per auto-mapping colonne."""
@@ -122,9 +118,7 @@ class ColumnListResponse(BaseModel):
     table_name: str
 
 
-# ============================================================================
 # ENDPOINT: LISTA SCHEMA
-# ============================================================================
 
 @router.get("/schemas/{connection_id}")
 async def get_schemas(connection_id: str, current_user: CurrentUser = Depends(require_not_esecutore)):
@@ -157,9 +151,7 @@ async def get_schemas(connection_id: str, current_user: CurrentUser = Depends(re
         raise_typed_http(error_codes.INTERNAL_ERROR, status_code=500, message="Errore interno del server")
 
 
-# ============================================================================
 # ENDPOINT: LISTA TABELLE
-# ============================================================================
 
 @router.get("/tables/{connection_id}/{schema_name}")
 async def get_tables(connection_id: str, schema_name: str, current_user: CurrentUser = Depends(require_not_esecutore)):
@@ -186,9 +178,7 @@ async def get_tables(connection_id: str, schema_name: str, current_user: Current
         raise_typed_http(error_codes.INTERNAL_ERROR, status_code=500, message="Errore interno del server")
 
 
-# ============================================================================
 # ENDPOINT: COLONNE TABELLA
-# ============================================================================
 
 @router.get("/columns/{connection_id}/{schema_name}/{table_name}")
 async def get_columns(connection_id: str, schema_name: str, table_name: str, current_user: CurrentUser = Depends(require_not_esecutore)):
@@ -224,9 +214,7 @@ async def get_columns(connection_id: str, schema_name: str, table_name: str, cur
         raise_typed_http(error_codes.INTERNAL_ERROR, status_code=500, message="Errore interno del server")
 
 
-# ============================================================================
 # ENDPOINT: AUTO-MAPPING
-# ============================================================================
 
 @router.post("/auto-mapping")
 async def auto_mapping(request: AutoMappingRequest, current_user: CurrentUser = Depends(require_not_esecutore)):
@@ -317,9 +305,7 @@ async def auto_mapping(request: AutoMappingRequest, current_user: CurrentUser = 
         raise_typed_http(error_codes.INTERNAL_ERROR, status_code=500, message="Errore interno del server")
 
 
-# ============================================================================
 # ENDPOINT: CHECK CONFLITTI
-# ============================================================================
 
 @router.post("/check-conflicts")
 async def check_conflicts(request: ConflictCheckRequest, current_user: CurrentUser = Depends(require_not_esecutore)):
@@ -447,9 +433,7 @@ async def check_conflicts(request: ConflictCheckRequest, current_user: CurrentUs
         raise_typed_http(error_codes.INTERNAL_ERROR, status_code=500, message="Errore interno del server")
 
 
-# ============================================================================
 # HELPER
-# ============================================================================
 
 def _get_connection(connection_id: str) -> Dict[str, Any]:
     """Recupera la configurazione di connessione come dizionario."""

@@ -27,9 +27,7 @@ import pytest
 pytestmark = [pytest.mark.unit, pytest.mark.contract]
 
 
-# =============================================================================
 # 1. FileSourceRow contract
-# =============================================================================
 
 
 def test_file_source_row_keys_cover_save_file_source_kwargs():
@@ -77,9 +75,7 @@ def test_file_source_row_reexported_from_facades():
     assert via_db_facade is canonical
 
 
-# =============================================================================
 # 2. BlobDispatchResult contract
-# =============================================================================
 
 
 def test_blob_dispatch_result_has_exactly_three_keys():

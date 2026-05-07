@@ -56,9 +56,7 @@ from datetime import datetime, timedelta
 from typing import Optional, Tuple
 
 
-# =============================================================================
 # Soglie — copiate VERBATIM da kickoff.md §9.2 / §9.3 (non reinterpretare)
-# =============================================================================
 
 # §9.2 MySQL LOAD DATA (decommission criterion)
 MYSQL_MIN_SAMPLE = 100
@@ -73,12 +71,6 @@ PG_RATE_OBSERVATION = 0.90               # 90% <= rate < 95% -> osservazione
 # §9.2 stratificazione per-tenant: soglia di esclusione tenant micro
 STRATIFICATION_MIN_TENANT_SAMPLE = 10
 
-
-# =============================================================================
-# Query SQL canoniche — usano JSONB operatori -> e ->> su `logs.details`.
-# La colonna `details` e' popolata dalla whitelist di Batch 3.10
-# (`_BULK_TELEMETRY_EXTRA_WHITELIST` in app/utils/logger.py).
-# =============================================================================
 
 QUERY_MYSQL_RATE = """
     SELECT
@@ -134,10 +126,8 @@ QUERY_MYSQL_BY_TENANT = """
 """
 
 
-# =============================================================================
 # Verdetti (funzioni pure, zero dipendenza DB — testate in
 # backend/tests2/carica/unit/test_perf_bulk_verdict_thresholds.py)
-# =============================================================================
 
 
 @dataclass
@@ -244,9 +234,7 @@ def mysql_needs_stratification(verdict: Verdict) -> bool:
     return verdict.code == "STRATIFICAZIONE PER-TENANT"
 
 
-# =============================================================================
 # Output format
-# =============================================================================
 
 
 def _format_header(title: str) -> str:
@@ -340,9 +328,7 @@ def format_stratification_section(rows: list) -> str:
     return "\n".join(lines) + "\n"
 
 
-# =============================================================================
 # Run (I/O: DB + stdout) — separato da logica pura per testabilita'
-# =============================================================================
 
 
 def run(from_ts: str, to_ts: str) -> int:
@@ -399,9 +385,7 @@ def run(from_ts: str, to_ts: str) -> int:
     return 0
 
 
-# =============================================================================
 # CLI
-# =============================================================================
 
 
 def _parse_iso_date(s: str) -> str:

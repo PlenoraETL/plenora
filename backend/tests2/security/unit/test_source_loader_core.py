@@ -41,9 +41,7 @@ pytestmark = [
 ]
 
 
-# ---------------------------------------------------------------------------
 # 1. expected_group_id obbligatorio
-# ---------------------------------------------------------------------------
 
 
 def test_load_requires_expected_group_id_keyword():
@@ -67,9 +65,7 @@ def test_load_rejects_blank_expected_group_id():
         loader.load(ref, expected_group_id=None)  # type: ignore[arg-type]
 
 
-# ---------------------------------------------------------------------------
 # 2. branch project propaga expected_group_id al resolver
-# ---------------------------------------------------------------------------
 
 
 def test_load_project_propagates_expected_group_id_to_resolver():
@@ -89,9 +85,7 @@ def test_load_project_propagates_expected_group_id_to_resolver():
     assert call_args.kwargs.get("expected_group_id") == "grp-A"
 
 
-# ---------------------------------------------------------------------------
 # 3. branch project mismatch → block
-# ---------------------------------------------------------------------------
 
 
 def test_load_project_blocks_cross_tenant_via_resolver():
@@ -124,9 +118,7 @@ def test_load_project_returns_none_when_no_latest_result():
     assert result is None
 
 
-# ---------------------------------------------------------------------------
 # resolve_project_path: variante "ritorna path" del branch project
-# ---------------------------------------------------------------------------
 
 
 def test_resolve_project_path_requires_expected_group_id():
@@ -202,9 +194,7 @@ def test_resolve_project_path_returns_path_string_when_materialized():
     assert result.endswith("proj-1.csv")
 
 
-# ---------------------------------------------------------------------------
 # 4. branch file: visibility check enforced dal loader stesso
-# ---------------------------------------------------------------------------
 
 
 def test_load_file_blocks_invisible_resource():
@@ -239,9 +229,7 @@ def test_load_file_visibility_check_exception_is_fail_closed():
             loader.load(ref, expected_group_id="grp-1")
 
 
-# ---------------------------------------------------------------------------
 # 5. branch file: GDF preservato se presente
-# ---------------------------------------------------------------------------
 
 
 def test_load_file_returns_geodataframe_when_available():
@@ -275,9 +263,7 @@ def test_load_file_returns_dataframe_when_no_geodataframe():
     assert out is df
 
 
-# ---------------------------------------------------------------------------
 # 6. branch static: output coerente, no dipendenze HTTP/user
-# ---------------------------------------------------------------------------
 
 
 def test_load_static_with_simple_fields():
@@ -321,9 +307,7 @@ def test_load_static_does_not_touch_db_or_http():
     get_project.assert_not_called()
 
 
-# ---------------------------------------------------------------------------
 # 7. SourceRef enforced exactly-one-source
-# ---------------------------------------------------------------------------
 
 
 def test_source_ref_rejects_zero_sources():
@@ -354,9 +338,7 @@ def test_source_ref_kind_dispatch():
     assert SourceRef(static_fields=tuple([{"name": "x", "value": "1"}])).kind() == "static"
 
 
-# ---------------------------------------------------------------------------
 # Bonus: from_node_data factory
-# ---------------------------------------------------------------------------
 
 
 def test_from_node_data_project_source():

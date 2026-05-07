@@ -493,9 +493,7 @@ def test_authz_helpers_imports_models_and_ownership_leaves():
     assert "assert_resource_visible" in text
 
 
-# ---------------------------------------------------------------------------
 # Phase-2 leaf-import presence assertions
-# ---------------------------------------------------------------------------
 
 
 def test_phase2_orchestrator_imports_assert_group_access_from_ownership():
@@ -555,9 +553,7 @@ def test_phase2_imdf_lazy_assert_resource_visible_migrated_to_leaf():
     )
 
 
-# ---------------------------------------------------------------------------
 # Phase-3 leaf-import presence assertions
-# ---------------------------------------------------------------------------
 
 
 def test_phase3_features_routes_imports_ownership_helpers_from_leaf():
@@ -583,9 +579,7 @@ def test_phase3_features_routes_imports_ownership_helpers_from_leaf():
         )
 
 
-# ---------------------------------------------------------------------------
 # Phase-4 leaf-import presence assertions
-# ---------------------------------------------------------------------------
 
 
 @pytest.mark.parametrize(
@@ -638,9 +632,7 @@ def test_phase4_imports_ownership_helpers_from_leaf(
         )
 
 
-# ---------------------------------------------------------------------------
 # Phase-7 (BE-GO-READY-AUTH-ENGINE-013) contract fan-out
-# ---------------------------------------------------------------------------
 #
 # Phase-7 moves pure-contract consumption (`CurrentUser`,
 # `group_filter`) for a coherent group of routers from the leaf
@@ -736,9 +728,7 @@ def test_phase7_does_not_import_group_filter_from_ownership_leaf(path: Path):
             )
 
 
-# ---------------------------------------------------------------------------
 # Phase-8 (BE-GO-READY-AUTH-ENGINE-014) contract fan-out
-# ---------------------------------------------------------------------------
 #
 # Phase-8 closes TE13-R1/R2: the 5 routers below previously
 # imported `CurrentUser` from `app.core.auth.models`. They are
@@ -803,9 +793,7 @@ def test_phase8_does_not_import_currentuser_from_models_leaf(path: Path):
             )
 
 
-# ---------------------------------------------------------------------------
 # Phase-9 (BE-GO-READY-AUTH-ENGINE-015) contract fan-out + facade death map
-# ---------------------------------------------------------------------------
 #
 # Phase-9 closes TE14-R1: the remaining 8 non-router consumers of
 # `CurrentUser` from `app.core.auth.models` migrate to consume
@@ -949,9 +937,7 @@ def test_phase9_models_leaf_currentuser_consumers_locked_to_allowlist():
     )
 
 
-# ---------------------------------------------------------------------------
 # BE-GO-READY-AUTH-ENGINE-011-SHARED-CURRENT-USER-CONTRACT
-# ---------------------------------------------------------------------------
 #
 # W-011 migrated the three remaining `app.core.auth/` consumers
 # (`ownership.py`, `users_router.py`, `groups_router.py`) to
@@ -1044,9 +1030,7 @@ def test_auth_engine_011_migrated_does_not_import_current_user_from_models(
     )
 
 
-# ---------------------------------------------------------------------------
 # BE-GO-READY-AUTH-ENGINE-013-ROUTER-IMPORTS-OFF-AUTH-FACADE
-# ---------------------------------------------------------------------------
 #
 # W-013 created the canonical leaf `app.core.auth.dependencies`
 # for the five FastAPI auth Depends callables
@@ -1204,9 +1188,7 @@ def test_auth_engine_013_facade_reexports_share_identity_with_leaf():
         )
 
 
-# ---------------------------------------------------------------------------
 # Phase-10 (BE-GO-READY-AUTH-ENGINE-016) minor-DTO contract fan-out
-# ---------------------------------------------------------------------------
 #
 # Phase-10 extends the contract module to expose 12 pure auth
 # DTOs (`LoginRequest`, `TokenResponse`, `UserCreate`, etc.).
@@ -1318,10 +1300,8 @@ def test_phase10_contract_module_exposes_all_minor_dtos():
     )
 
 
-# ---------------------------------------------------------------------------
 # Phase-11 (BE-GO-READY-AUTH-ENGINE-017) — pure-DTO consumer migration
 # in tests2/ + workers/
-# ---------------------------------------------------------------------------
 #
 # Phase-11 extends the Phase-9/10 contract fan-out to the test
 # tree (`tests2/`) and worker tree (`workers/`). Pure-DTO names
@@ -1483,10 +1463,8 @@ def test_phase11_allowlist_is_used_only_when_legitimate():
     )
 
 
-# ---------------------------------------------------------------------------
 # Phase-12 (BE-GO-READY-AUTH-ENGINE-018) — pure-DTO consumer migration
 # in app/+workers/ FROM the facade
-# ---------------------------------------------------------------------------
 #
 # Phase-12 closes the symmetry gap left by Phase-9/10/11:
 #
@@ -1588,9 +1566,7 @@ def test_phase12_app_workers_no_pure_dto_imports_from_facade():
     )
 
 
-# ---------------------------------------------------------------------------
 # Phase-13 (BE-GO-READY-AUTH-ENGINE-019) ownership re-export removal
-# ---------------------------------------------------------------------------
 #
 # Stream 019 removed 4 ownership helper re-exports from the facade
 # (`app.core.auth.auth`):
@@ -1747,9 +1723,7 @@ def test_phase13_facade_does_not_expose_removed_ownership_names():
     )
 
 
-# ---------------------------------------------------------------------------
 # BE-GO-READY-AUTH-ENGINE-016 — dep-import off facade, Slice A
-# ---------------------------------------------------------------------------
 #
 # Migrated 6 routers to import the five FastAPI dependency callables
 # from `app.core.auth.dependencies` (the canonical leaf) instead of
@@ -1857,9 +1831,7 @@ def test_phase13_facade_no_longer_exposes_check_ownership():
     )
 
 
-# ---------------------------------------------------------------------------
 # BE-GO-READY-AUTH-ENGINE-017 — dep-import off facade, Slice B
-# ---------------------------------------------------------------------------
 #
 # Migrated 6 routers to import the five FastAPI dependency callables
 # from `app.core.auth.dependencies` (the canonical leaf) instead of
@@ -1948,9 +1920,7 @@ def test_auth_engine_017_migrated_router_does_not_import_dependencies_from_facad
     )
 
 
-# ---------------------------------------------------------------------------
 # BE-GO-READY-AUTH-ENGINE-018 — owner dependency leaf extraction
-# ---------------------------------------------------------------------------
 #
 # AUTH-ENGINE-018 extracted the three DB-bound owner FastAPI Depends
 # callables from ``app.core.auth.auth`` into the new canonical leaf
@@ -2139,9 +2109,7 @@ def test_auth_engine_018_projects_router_no_standard_deps_from_facade():
     )
 
 
-# ---------------------------------------------------------------------------
 # BE-GO-READY-AUTH-ENGINE-019 — dep-import sweep, wider slice
-# ---------------------------------------------------------------------------
 #
 # Migrated 7 files + cleaned main.py:
 #

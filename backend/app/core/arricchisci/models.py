@@ -36,9 +36,7 @@ from dataclasses import dataclass, field, asdict
 from datetime import datetime, timezone
 
 
-# =============================================================================
 # ENUMERAZIONI
-# =============================================================================
 
 class RowStatus(str, Enum):
     """Stato elaborazione singola riga."""
@@ -56,9 +54,7 @@ class BatchInputFormat(str, Enum):
     OBJECT = "object"             # {"items": [{"q": "addr1"}, ...]}
 
 
-# =============================================================================
 # CONFIGURAZIONE BATCH
-# =============================================================================
 
 @dataclass
 class BatchConfig:
@@ -114,9 +110,7 @@ class BatchConfig:
         }
 
 
-# =============================================================================
 # MODELLI PER SINGOLA RIGA
-# =============================================================================
 
 @dataclass
 class RowError:
@@ -136,9 +130,7 @@ class RowError:
         return result
 
 
-# =============================================================================
 # STATISTICHE E RISULTATI AGGREGATI
-# =============================================================================
 
 @dataclass
 class EnrichmentStats:
@@ -181,9 +173,7 @@ class EnrichmentStats:
         return result
 
 
-# =============================================================================
 # OPZIONI DI ESECUZIONE
-# =============================================================================
 
 @dataclass
 class EnrichmentOptions:

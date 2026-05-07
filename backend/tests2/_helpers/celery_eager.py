@@ -34,9 +34,7 @@ from unittest.mock import MagicMock
 import pytest
 
 
-# =============================================================================
 # 1. Eager mode fixture
-# =============================================================================
 
 
 @pytest.fixture
@@ -58,9 +56,7 @@ def celery_eager(monkeypatch):
     return celery_app
 
 
-# =============================================================================
 # 2. Fake ApiConnectionService — spy sui tenant binding
-# =============================================================================
 
 
 class FakeApiConnectionService:
@@ -141,9 +137,7 @@ class _HarnessAbort(Exception):
         self.marker = marker
 
 
-# =============================================================================
 # 3. Composite harness — wiring completo per execute_enrichment_task
-# =============================================================================
 
 
 @dataclass
@@ -379,9 +373,7 @@ def invoke_enrichment_task(
     return res.get(disable_sync_subtasks=False)
 
 
-# =============================================================================
 # 4. Spy su update_task_progress per verificare task_id propagation
-# =============================================================================
 
 
 def install_update_task_progress_spy(monkeypatch) -> List[Dict[str, Any]]:

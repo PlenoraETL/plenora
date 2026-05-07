@@ -19,17 +19,8 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
 from app.config import settings
-# BE-GO-READY-AUTH-ENGINE-019 dep-import off facade.
 from app.core.auth.dependencies import get_current_user
-# BE-GO-READY-AUTH-ENGINE-015 Phase-9 contract fan-out.
 from app.shared.contracts.auth import CurrentUser
-# BE-GO-READY-AUTH-ENGINE-020-IMDF-OWNERSHIP-MIGRATION:
-# `assert_resource_visible` consumed from the leaf
-# `app.core.auth.ownership` (canonical home). Closes
-# AUTH R-019.1: prior body-local lazy
-# `from app.core.auth.auth import assert_resource_visible`
-# is gone, the facade re-export is removed too. Tests
-# monkeypatch via the consuming router-module surface.
 from app.core.auth.ownership import assert_resource_visible
 from app.shared import error_codes
 from app.shared.error_envelope import raise_typed_http
@@ -478,14 +469,6 @@ def list_bundles(
     visible_project_ids: Optional[set] = None
     if current_user.role != "superadmin":
         try:
-            # RB.4.A.16: projects non e' shareable (no project_shares
-            # table). visible_resource_ids("projects",...) solleverebbe
-            # ValueError -> 500 verso l'utente con detail opaco. Qui la
-            # visibilita' coincide col gruppo proprietario.
-            # BE-GO-READY-CONNECTION-ENGINE-003: query inline migrata
-            # in `app.db.config.projects.list_project_ids_for_group`.
-            # Stesso behavior; il fail-CLOSED del blocco except sotto
-            # resta invariato.
             from app.db.config.projects import list_project_ids_for_group
             visible_project_ids = list_project_ids_for_group(
                 current_user.group_id,

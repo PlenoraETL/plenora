@@ -84,9 +84,7 @@ def mock_file_service():
         yield fake_fs
 
 
-# =============================================================================
 # SOFT DELETE (default)
-# =============================================================================
 
 
 def test_admin_soft_deletes_own_group_ticket(mock_tdb, mock_file_service):
@@ -126,9 +124,7 @@ def test_soft_delete_does_not_cleanup_blob(mock_tdb, mock_file_service):
     mock_file_service.delete_file_source.assert_not_called()
 
 
-# =============================================================================
 # HARD DELETE (?hard=true)
-# =============================================================================
 
 
 def test_superadmin_hard_deletes_with_cascade(mock_tdb, mock_file_service):
@@ -197,9 +193,7 @@ def test_soft_delete_db_returns_false_propagates_404(mock_tdb, mock_file_service
     assert response.status_code == 404
 
 
-# =============================================================================
 # RBAC comuni (sia soft che hard)
-# =============================================================================
 
 
 def test_admin_other_group_gets_404(mock_tdb, mock_file_service):

@@ -197,9 +197,7 @@ def _create_schema_rich_mssql_table(table: str) -> None:
         cur.close()
 
 
-# =============================================================================
 # Scenario 1 — schema preservation post-swap
-# =============================================================================
 
 
 def test_mssql_stage_swap_preserves_pk_uk_check_and_index(monkeypatch):
@@ -270,9 +268,7 @@ def test_mssql_stage_swap_preserves_pk_uk_check_and_index(monkeypatch):
         _drop_if_exists(f"{table}__bak")
 
 
-# =============================================================================
 # Scenario 2 — INSERT fail: target INTATTO + schema INTATTO
-# =============================================================================
 
 
 def test_mssql_stage_swap_insert_failure_preserves_target_and_schema(monkeypatch):

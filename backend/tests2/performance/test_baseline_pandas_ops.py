@@ -39,9 +39,7 @@ from .conftest import (
 )
 
 
-# ─────────────────────────────────────────────────────────────────────
 # Naive reconstructions (pre-Fase 0 impl, per baseline comparison)
-# ─────────────────────────────────────────────────────────────────────
 
 
 def _naive_concat_columns(
@@ -170,9 +168,7 @@ def _naive_table_diff(
     return pd.DataFrame(rows)
 
 
-# ─────────────────────────────────────────────────────────────────────
 # Baselines (mark perf_baseline = skip di default, attiva con -m perf_baseline)
-# ─────────────────────────────────────────────────────────────────────
 
 
 @pytest.mark.perf_baseline

@@ -45,9 +45,7 @@ pytestmark = [pytest.mark.unit, pytest.mark.shared, pytest.mark.contract]
 _BACKEND_APP = Path(__file__).resolve().parent.parent.parent / "app"
 
 
-# ---------------------------------------------------------------------------
 # 1. ArtifactSource shape
-# ---------------------------------------------------------------------------
 
 
 def test_artifact_source_fields():
@@ -77,9 +75,7 @@ def test_artifact_source_field_types():
     assert hints["content_type"] is str
 
 
-# ---------------------------------------------------------------------------
 # 2. ProcessorConfig shape
-# ---------------------------------------------------------------------------
 
 
 def test_processor_config_required_endpoint():
@@ -116,9 +112,7 @@ def test_processor_config_is_frozen():
         c.timeout_seconds = 1.0  # type: ignore[misc]
 
 
-# ---------------------------------------------------------------------------
 # 3. ArtifactResult shape
-# ---------------------------------------------------------------------------
 
 
 def test_artifact_result_fields():
@@ -156,9 +150,7 @@ def test_artifact_result_equality_by_value():
     assert a == b
 
 
-# ---------------------------------------------------------------------------
 # 4. Protocol shape
-# ---------------------------------------------------------------------------
 
 
 def test_protocol_has_process_method():
@@ -184,9 +176,7 @@ def test_protocol_rejects_incomplete_impl():
     assert not isinstance(_NoProcess(), ExternalArtifactProcessor)
 
 
-# ---------------------------------------------------------------------------
 # 5. Pure module — niente import pesanti
-# ---------------------------------------------------------------------------
 
 
 def test_module_has_no_heavy_imports():
@@ -218,9 +208,7 @@ def test_module_has_no_heavy_imports():
         )
 
 
-# ---------------------------------------------------------------------------
 # 6. Parity audit: Protocol common denominator vs current mixin
-# ---------------------------------------------------------------------------
 
 
 def test_existing_mixin_has_equivalent_concept():

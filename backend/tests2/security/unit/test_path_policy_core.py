@@ -28,9 +28,7 @@ pytestmark = [
 ]
 
 
-# ---------------------------------------------------------------------------
 # UNC reject (Windows network share / SMB)
-# ---------------------------------------------------------------------------
 
 
 @pytest.mark.parametrize(
@@ -49,9 +47,7 @@ def test_rejects_unc_paths_before_resolve(unc_path, tmp_path):
         assert_path_within(unc_path, [tmp_path])
 
 
-# ---------------------------------------------------------------------------
 # Path traversal blocked
-# ---------------------------------------------------------------------------
 
 
 def test_rejects_path_traversal_outside_root(tmp_path):
@@ -77,9 +73,7 @@ def test_rejects_path_inside_other_root(tmp_path):
         assert_path_within(str(target_b), [root_a])
 
 
-# ---------------------------------------------------------------------------
 # Multi-root: passa se dentro QUALSIASI root
-# ---------------------------------------------------------------------------
 
 
 def test_accepts_path_in_first_trusted_root(tmp_path):
@@ -106,9 +100,7 @@ def test_accepts_path_in_second_trusted_root(tmp_path):
     assert resolved == target.resolve()
 
 
-# ---------------------------------------------------------------------------
 # Trusted roots vuoto = caller bug, fail-closed
-# ---------------------------------------------------------------------------
 
 
 def test_empty_trusted_roots_is_caller_bug():
@@ -119,9 +111,7 @@ def test_empty_trusted_roots_is_caller_bug():
         assert_path_within("/etc/passwd", [])
 
 
-# ---------------------------------------------------------------------------
 # must_exist
-# ---------------------------------------------------------------------------
 
 
 def test_must_exist_false_accepts_nonexistent_path_inside_root(tmp_path):
@@ -162,9 +152,7 @@ def test_must_exist_true_accepts_existing_directory(tmp_path):
     assert resolved == subdir.resolve()
 
 
-# ---------------------------------------------------------------------------
 # Input flexibility: stringa o Path
-# ---------------------------------------------------------------------------
 
 
 def test_accepts_path_object_as_candidate(tmp_path):
@@ -188,9 +176,7 @@ def test_accepts_string_roots(tmp_path):
     assert resolved == target.resolve()
 
 
-# ---------------------------------------------------------------------------
 # Return value: Path resolved (utility per caller che evita doppio resolve)
-# ---------------------------------------------------------------------------
 
 
 def test_returns_resolved_path_not_raw_input(tmp_path):
@@ -208,9 +194,7 @@ def test_returns_resolved_path_not_raw_input(tmp_path):
     assert resolved == target.resolve()
 
 
-# ---------------------------------------------------------------------------
 # Path malformato → ValueError, non eccezione cruda
-# ---------------------------------------------------------------------------
 
 
 def test_malformed_path_raises_value_error(tmp_path):

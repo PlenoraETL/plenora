@@ -90,16 +90,13 @@ class DebugPayloadBuilder:
 
         return payload
 
-    # =========================================================================
     # PIPELINE CONTEXT
-    # =========================================================================
 
     def _build_pipeline_context(self, project_id: str, steps: list) -> dict:
         """
         Legge metadata e canvas dal DB config (PG) e costruisce il contesto pipeline.
         """
         try:
-            # BE-GO-READY-DB-ENGINE-004: leaf canonico invece del facade.
             from app.db.config.projects import get_project
 
             metadata = get_project(project_id) or {}
@@ -181,9 +178,7 @@ class DebugPayloadBuilder:
             logger.warning(f"DebugPayloadBuilder: errore canvas summary: {e}")
             return "non disponibile"
 
-    # =========================================================================
     # FAILING NODE CONFIG
-    # =========================================================================
 
     def _extract_node_config(self, project_id: str, node_id: Optional[str]) -> dict:
         """
@@ -193,7 +188,6 @@ class DebugPayloadBuilder:
             return {}
 
         try:
-            # BE-GO-READY-DB-ENGINE-004: leaf canonico invece del facade.
             from app.db.config.projects import get_project
 
             project_raw = get_project(project_id) or {}

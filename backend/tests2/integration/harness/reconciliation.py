@@ -28,9 +28,7 @@ from tests2.integration.harness.postgres_ext import (
 )
 
 
-# ---------------------------------------------------------------------------
 # Dataset deterministico
-# ---------------------------------------------------------------------------
 
 # Mix di nomi italiani + ASCII puro per coprire encoding cross-DB.
 _NAMES_POOL = (
@@ -79,9 +77,7 @@ def gen_deterministic_dataset(n: int, seed: int = 42) -> list[dict]:
     return rows
 
 
-# ---------------------------------------------------------------------------
 # DDL / INSERT su PG ext
-# ---------------------------------------------------------------------------
 
 # Schema esplicito: NUMERIC(12,2) preserva la precisione esatta dei
 # Decimal generati. Usare DOUBLE PRECISION qui introdurrebbe drift
@@ -123,9 +119,7 @@ def drop_table_if_exists(table_name: str) -> None:
             cur.execute(f"DROP TABLE IF EXISTS public.{table_name}")
 
 
-# ---------------------------------------------------------------------------
 # Checksum simmetrici source vs destination
-# ---------------------------------------------------------------------------
 
 # Ordered MD5: STRING_AGG con separatore esplicito per evitare collisioni
 # tra valori adiacenti. ORDER BY id garantisce determinismo dell'aggregazione.

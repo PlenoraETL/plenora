@@ -83,17 +83,12 @@ from typing import Union
 
 from app.utils.logger import get_logger
 
-# Stesso logger name di `base.py`: i record sono indistinguibili dai
-# consumer che attaccano handler / filtrano per
-# "app.core.manipola.transforms.base" (pattern §6.1 facade).
 logger = get_logger("app.core.manipola.transforms.base")
 
 DataFrame = Union[pd.DataFrame, gpd.GeoDataFrame]
 
 
-# =============================================================================
 # COLONNA CALCOLATA (FORMULA) — Validazione AST anti-RCE
-# =============================================================================
 
 # Attributi pandas "safe" che le formule possono chiamare (es. col.str.upper()).
 # Tutto ciò che NON è in questa whitelist viene rifiutato dall'AST validator.
@@ -226,10 +221,8 @@ def _validate_formula_ast(formula: str) -> None:
             )
 
 
-# =============================================================================
 # COLONNA CALCOLATA (FORMULA)
 # Aggiunge colonna con espressione Python/Pandas valutata per riga.
-# =============================================================================
 
 def op_formula(
     df: DataFrame,
@@ -285,7 +278,6 @@ def op_formula(
         # tentativi con la stessa whitelist.
         _validate_formula_ast(formula)
 
-        # --- Tentativo 1: pandas.eval() ---
         # Gestisce espressioni matematiche e booleane vettoriali.
         # Non regge per: metodi stringa (.str.upper()), concatenazioni con costanti stringa.
         try:
@@ -298,7 +290,6 @@ def op_formula(
                 f"eval() con namespace colonne: {_pd_eval_err}"
             )
 
-        # --- Tentativo 2: eval() con namespace colonne ---
         # Passa le colonne come variabili locali — nessuna sostituzione nel testo della formula.
         # Auto-conversione a numerico per colonne object (es. CSV importato come stringa).
         local_vars = {}

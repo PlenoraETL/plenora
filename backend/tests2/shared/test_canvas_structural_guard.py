@@ -104,9 +104,7 @@ def test_canvas_structural_module_has_no_business_identifiers(module_name: str) 
     )
 
 
-# ---------------------------------------------------------------------------
 # Sanity: the modules themselves must actually exist and be parseable
-# ---------------------------------------------------------------------------
 
 
 @pytest.mark.parametrize("module_name", _STRUCTURAL_MODULES, ids=lambda m: m)
@@ -119,9 +117,7 @@ def test_canvas_structural_module_is_parseable(module_name: str) -> None:
         pytest.fail(f"{module_name} has a syntax error: {e}")
 
 
-# ---------------------------------------------------------------------------
 # Allowed vocabulary: structural names expected to always be present
-# ---------------------------------------------------------------------------
 
 
 def test_canvas_node_exposes_structural_interface() -> None:

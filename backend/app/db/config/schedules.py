@@ -49,11 +49,6 @@ def save_schedule(schedule_id: str, group_id: str, project_id: str, name: str,
 
 def update_schedule(schedule_id: str, **fields) -> Optional[Dict]:
     from datetime import datetime, timezone
-    # Lazy import: `_safe_set_clause` è helper private cross-cluster nel facade
-    # `config_db_service` (usato da 5 cluster: users/projects/connections/
-    # datasources/schedules). Import locale rompe ciclo facade ↔ config/schedules
-    # senza spostare il helper (violerebbe zero call site touched sugli altri 4
-    # cluster). Vedi invariants §6 commit `61b5058`.
     from app.db.config_db_service import _safe_set_clause
     if "config" in fields and isinstance(fields["config"], dict):
         fields["config"] = json.dumps(fields["config"])

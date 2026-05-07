@@ -66,9 +66,7 @@ def test_resolve_input_path_accepts_path_inside_whitelist(monkeypatch, tmp_path)
     assert resolved.is_temporary is False
 
 
-# =============================================================================
 # Refactor #2 cleanup: expected_group_id keyword-only required
-# =============================================================================
 
 
 def test_resolve_input_path_requires_expected_group_id_keyword():

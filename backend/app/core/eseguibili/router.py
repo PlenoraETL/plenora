@@ -22,10 +22,6 @@ from app.core.auth.dependencies import (
     get_current_user,
     require_admin,
 )
-# BE-GO-READY-AUTH-ENGINE-013 Phase-7 contract fan-out: pure
-# contract symbols (`CurrentUser`, `group_filter`) come from the
-# shared contract module. DB-bound ownership helpers stay on
-# `app.core.auth.ownership`. Facade KEEP_COMPAT preserved.
 from app.shared.contracts.auth import CurrentUser, group_filter
 from app.core.auth.ownership import (
     assert_group_access,
@@ -73,9 +69,7 @@ def _inject_can_edit(record: dict, user: CurrentUser) -> dict:
     return record
 
 
-# ──────────────────────────────────────────────────────────────
 # LIST
-# ──────────────────────────────────────────────────────────────
 
 @router.get("", response_model=List[EseguibileSummary])
 def list_eseguibili(current_user: CurrentUser = Depends(get_current_user)):
@@ -99,9 +93,7 @@ def list_eseguibili(current_user: CurrentUser = Depends(get_current_user)):
     return rows
 
 
-# ──────────────────────────────────────────────────────────────
 # CREATE (solo admin)
-# ──────────────────────────────────────────────────────────────
 
 @router.post("", response_model=EseguibileDetails, status_code=201)
 @audit_action(action="eseguibile.create")
@@ -135,9 +127,7 @@ def create_eseguibile(
     return _to_details(record)
 
 
-# ──────────────────────────────────────────────────────────────
 # GET ONE
-# ──────────────────────────────────────────────────────────────
 
 @router.get("/{eseguibile_id}", response_model=EseguibileDetails)
 def get_eseguibile(
@@ -151,9 +141,7 @@ def get_eseguibile(
     return _to_details(record)
 
 
-# ──────────────────────────────────────────────────────────────
 # UPDATE (solo admin)
-# ──────────────────────────────────────────────────────────────
 
 @router.put("/{eseguibile_id}", response_model=EseguibileDetails)
 @audit_action(action="eseguibile.update", target_param="eseguibile_id")
@@ -177,9 +165,7 @@ def update_eseguibile(
     return _to_details(updated)
 
 
-# ──────────────────────────────────────────────────────────────
 # DELETE (solo admin)
-# ──────────────────────────────────────────────────────────────
 
 @router.delete("/{eseguibile_id}", status_code=204)
 @audit_action(action="eseguibile.delete", target_param="eseguibile_id")
@@ -197,13 +183,9 @@ def delete_eseguibile(
     # scope separato, NON toccato qui.
 
 
-# ──────────────────────────────────────────────────────────────
 # ANALYZE UPLOAD
-# ──────────────────────────────────────────────────────────────
 
-# ──────────────────────────────────────────────────────────────
 # Upload metadata store (su disco, multi-worker safe)
-# ──────────────────────────────────────────────────────────────
 # Era in-memory (_UPLOAD_CACHE) ma non funzionava con piu worker uvicorn:
 # il dict non era condiviso tra processi → analyze e execute potevano
 # finire su worker diversi e il secondo non trovava l'entry.
@@ -409,9 +391,7 @@ async def analyze_upload(
         raise_typed_http(error_codes.INTERNAL_ERROR, status_code=500, message="Errore interno del server")
 
 
-# ──────────────────────────────────────────────────────────────
 # EXECUTE
-# ──────────────────────────────────────────────────────────────
 
 @router.post("/{eseguibile_id}/execute")
 @audit_action(action="eseguibile.execute", target_param="eseguibile_id")
@@ -487,9 +467,7 @@ def execute_eseguibile(
     return result
 
 
-# ──────────────────────────────────────────────────────────────
 # DOWNLOAD OUTPUT
-# ──────────────────────────────────────────────────────────────
 
 @router.get("/{eseguibile_id}/download/{task_id}")
 def download_eseguibile_output(
@@ -590,9 +568,7 @@ def download_eseguibile_output(
     )
 
 
-# ──────────────────────────────────────────────────────────────
 # HELPER
-# ──────────────────────────────────────────────────────────────
 
 def _detect_file_based_output(canvas: dict) -> tuple:
     """Ispeziona il canvas per determinare se il flusso finisce con un

@@ -55,11 +55,6 @@ from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
 
-# ── JSONB come stringa (backward compat) ────────────────────────────────────
-# Il codice esistente fa json.loads(row["canvas"]) ovunque. Con psycopg2,
-# JSONB verrebbe ritornato come dict (auto-parsed), rompendo json.loads(dict).
-# Registrando JSONB come TEXT, psycopg2 ritorna la stringa JSON raw e il
-# codice esistente continua a funzionare senza modifiche.
 import psycopg2.extensions
 _JSONB_OID = 3802
 _JSON_OID = 114
@@ -74,11 +69,6 @@ psycopg2.extensions.register_type(
     psycopg2.extensions.new_type((_JSON_OID,), 'JSON_AS_TEXT', _json_as_text)
 )
 
-# ── TIMESTAMPTZ come stringa ISO (backward compat) ──────────────────────────
-# Il codice esistente ha Pydantic models con `created_at: str`, `updated_at: str`.
-# Con psycopg2, TIMESTAMPTZ viene ritornato come datetime.datetime, rompendo
-# la validazione Pydantic. Registrando come TEXT, le date tornano come stringhe
-# ISO e il codice esistente continua a funzionare.
 _TIMESTAMPTZ_OID = 1184
 _TIMESTAMP_OID = 1114
 _DATE_OID = 1082
@@ -254,7 +244,6 @@ def close_pool():
         _pool = None
 
 
-# Alias per backward compat con il middleware cleanup
 def close_connection():
     """No-op per PostgreSQL: il pool gestisce le connessioni.
 
@@ -263,9 +252,6 @@ def close_connection():
     esplicitamente — la connessione viene restituita al pool automaticamente.
     """
     pass
-
-
-# ── Pool headroom (BE-GO-READY-BOOTSTRAP-ENGINE-010) ────────────────────────
 
 
 @dataclass(frozen=True)

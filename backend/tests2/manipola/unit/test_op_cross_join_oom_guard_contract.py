@@ -33,9 +33,7 @@ from app.shared.exceptions import MemoryLimitExceededError
 pytestmark = [pytest.mark.unit, pytest.mark.contract]
 
 
-# ---------------------------------------------------------------------------
 # 1. Config presence
-# ---------------------------------------------------------------------------
 
 
 def test_cross_join_max_output_rows_in_settings_defaults():
@@ -46,9 +44,7 @@ def test_cross_join_max_output_rows_in_settings_defaults():
     assert Settings.DEFAULTS["CROSS_JOIN_MAX_OUTPUT_ROWS"] > 0
 
 
-# ---------------------------------------------------------------------------
 # 2. Guard rejects cross-join above cap
-# ---------------------------------------------------------------------------
 
 
 def test_cross_join_above_cap_raises_memory_limit_exceeded(monkeypatch):
@@ -73,9 +69,7 @@ def test_cross_join_above_cap_raises_memory_limit_exceeded(monkeypatch):
     assert e.path_basename == "cross_join_output"
 
 
-# ---------------------------------------------------------------------------
 # 3. Guard allows cross-join below cap
-# ---------------------------------------------------------------------------
 
 
 def test_cross_join_below_cap_passes(monkeypatch):
@@ -96,9 +90,7 @@ def test_cross_join_below_cap_passes(monkeypatch):
     assert set(result.columns) >= {"a", "b"}
 
 
-# ---------------------------------------------------------------------------
 # 4. Cap <= 0 disables guard (escape hatch)
-# ---------------------------------------------------------------------------
 
 
 def test_cross_join_cap_zero_disables_guard(monkeypatch):
@@ -130,9 +122,7 @@ def test_cross_join_cap_negative_disables_guard(monkeypatch):
     assert len(result) == 4
 
 
-# ---------------------------------------------------------------------------
 # 5. Edge: empty / single-input keep historical fail-soft
-# ---------------------------------------------------------------------------
 
 
 def test_cross_join_empty_input_returns_empty_no_guard(monkeypatch):
@@ -161,9 +151,7 @@ def test_cross_join_single_input_returns_first_no_guard(monkeypatch):
     assert len(result) == 3
 
 
-# ---------------------------------------------------------------------------
 # 6. Non-cross join NOT impacted by the guard
-# ---------------------------------------------------------------------------
 
 
 def test_op_join_not_impacted_by_cross_join_cap(monkeypatch):
@@ -182,9 +170,7 @@ def test_op_join_not_impacted_by_cross_join_cap(monkeypatch):
     assert len(result) == 3
 
 
-# ---------------------------------------------------------------------------
 # 7. Source-bound: handler in main.py routes the new stage
-# ---------------------------------------------------------------------------
 
 
 def test_main_py_recognizes_manipola_cross_join_stage():

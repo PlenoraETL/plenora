@@ -36,10 +36,6 @@ from app.models import (
 )
 import app.db.db_service as db
 
-# BE-GO-READY-DB-ENGINE-003-GROUPS-CALLSITE-MIGRATION: groups
-# cluster moved off the strangler facade. The 2 callsites in
-# `_ensure_default_group` go through the canonical leaf instead
-# of `db.*` (which still re-exports for legacy consumers).
 from app.db.config import groups as _groups
 
 logger = get_logger(__name__)
@@ -184,9 +180,6 @@ class ProjectService:
                 reason=f"tipo inatteso '{got_type}', atteso dict",
             )
 
-        # Schema Pydantic: eccezioni tipiche sono ValidationError (pydantic
-        # v2) che eredita da ValueError. Gestiamo anche TypeError per
-        # compat con altri modelli.
         try:
             return CanvasState(**canvas_data)
         except (TypeError, ValueError) as e:
@@ -462,17 +455,6 @@ class ProjectService:
             )
             derived_failures.append("comparison_keys")
 
-        # Fail-closed gate: se uno step critical e' fallito, la row config
-        # NON viene rimossa e si solleva ProjectCleanupPartialError. Questo
-        # preserva l'invariante "o progetto cancellato pulito, o progetto
-        # ancora presente", evitando che `config.projects` resti senza
-        # orfani intermediate/results cross-DB (con dati utente residui).
-        #
-        # Step derivati falliti NON bloccano: vengono riportati sugli attributi
-        # dell'eccezione per diagnostica ma non impediscono la cancellazione
-        # quando solo derived hanno fallito. Il caller `projects/router.py`
-        # cattura l'eccezione e mappa a HTTP 500 con shape strutturata
-        # (Batch 9 C6).
         if critical_failures:
             logger.error(
                 f"[CRASH] delete_project abort: critical cleanup fallito per {project_id}. "
@@ -537,19 +519,12 @@ class ProjectService:
         Tutti i call-site (estrai/manipola/arricchisci/enrichment_task)
         passano dall'helper condiviso — niente try/except locali.
         """
-        # BE-GO-READY-DB-ENGINE-007: facade cut — the helper now lives
-        # in the projects leaf. Tests that injected failures here used
-        # to monkeypatch `app.db.config_db_service.update_project_canvas_key_atomic`;
-        # post-007 they patch the leaf symbol
-        # `app.db.config.projects.update_project_canvas_key_atomic`.
         from app.db.config.projects import update_project_canvas_key_atomic
         return update_project_canvas_key_atomic(
             project_id, "columns_metadata", columns_metadata
         )
 
-    # =========================================================================
     # RISULTATI (file output pipeline)
-    # =========================================================================
 
     def save_result(self, project_id: str, filename: str, fmt: str,
                     data: bytes, rows_count: int = None,

@@ -157,9 +157,7 @@ class ApiConnectionSupportMixin:
     `execute_enrichment`).
     """
 
-    # =========================================================================
     # FIELD_INTROSPECTION — analisi struttura JSON response per UI output mapping
-    # =========================================================================
 
     def _extract_available_fields(self, data: Any, prefix: str = "", max_depth: int = 3) -> List[Dict]:
         """
@@ -317,12 +315,10 @@ class ApiConnectionSupportMixin:
             return sample[:max_len] + "..."
         return sample
 
-    # =========================================================================
     # RESULT_BUILDING — orchestration helpers per `execute_enrichment`
     # Pipeline: carica sorgenti → esegui nodi in ordine topologico →
     # arricchisci via API → salva output finale.
     # Supporta nodi: project_source, file_source, staticValues, api_enrich, result
-    # =========================================================================
 
     def _find_final_result(
         self,

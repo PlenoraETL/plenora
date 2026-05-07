@@ -38,9 +38,7 @@ pytestmark = [pytest.mark.unit, pytest.mark.security, pytest.mark.contract]
 _BACKEND_ROOT = Path(__file__).resolve().parent.parent.parent.parent
 
 
-# ---------------------------------------------------------------------------
 # 1. Source location
-# ---------------------------------------------------------------------------
 
 
 def test_users_router_module_exists():
@@ -91,9 +89,7 @@ def test_users_endpoints_present_in_new_module():
         )
 
 
-# ---------------------------------------------------------------------------
 # 2 + 3. KEEP_COMPAT re-export
-# ---------------------------------------------------------------------------
 
 
 def test_users_router_importable_from_auth_module():
@@ -139,9 +135,7 @@ def test_user_crud_handlers_canonical_home_is_users_router():
         )
 
 
-# ---------------------------------------------------------------------------
 # 4. URL paths preserved (router-level)
-# ---------------------------------------------------------------------------
 
 
 def test_users_router_url_paths_locked():
@@ -177,9 +171,7 @@ def test_users_router_prefix_and_tags():
     assert "users" in users_router.tags
 
 
-# ---------------------------------------------------------------------------
 # 5. Mount in main.py (source-bound — non importa main per evitare boot)
-# ---------------------------------------------------------------------------
 
 
 def test_main_mounts_users_router_with_api_prefix():
@@ -191,9 +183,7 @@ def test_main_mounts_users_router_with_api_prefix():
     assert 'app.include_router(users_router, prefix="/api")' in src
 
 
-# ---------------------------------------------------------------------------
 # 6. Auth.py non importa users_router prima delle dependency necessarie
-# ---------------------------------------------------------------------------
 
 
 def test_auth_module_imports_users_router_after_dependencies():

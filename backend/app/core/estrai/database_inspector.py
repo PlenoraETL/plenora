@@ -45,9 +45,7 @@ from app.utils.logger import get_logger
 logger = get_logger(__name__)
 
 
-# =============================================================================
 # DEFINIZIONI DI TIPO
-# =============================================================================
 
 class ColumnInfo(TypedDict):
     """
@@ -78,10 +76,8 @@ class DatabaseConnection:
     password: str
 
 
-# =============================================================================
 # PROTOCOLLI PER DEPENDENCY INJECTION
 # Questi Protocol permettono di sostituire le dipendenze reali con mock nei test
-# =============================================================================
 
 class DatabaseCursor(Protocol):
     """Protocollo per cursor database — permette mock nei test."""
@@ -102,9 +98,7 @@ class ConnectionFactoryProtocol(Protocol):
     def create_connection(self, conn: DatabaseConnection) -> DatabaseConnectorProtocol: ...
 
 
-# =============================================================================
 # FACTORY DI CONNESSIONE (PRODUZIONE)
-# =============================================================================
 
 class DefaultConnectionFactory:
     """
@@ -222,10 +216,8 @@ class DefaultConnectionFactory:
         return sqlite3.connect(conn.database, timeout=10)
 
 
-# =============================================================================
 # QUERY SQL PER ISPEZIONE SCHEMA
 # Ogni query restituisce colonne e tipi nel formato specifico del DBMS
-# =============================================================================
 
 class SQLQueries:
     """
@@ -235,7 +227,6 @@ class SQLQueries:
     separatamente dalla logica di esecuzione.
     """
 
-    # --- PostgreSQL ---
     # Usa information_schema.columns + geometry_columns per PostGIS.
     # I COALESCE con subquery estraggono tipo geometria e SRID dalla
     # tabella geometry_columns (presente solo con estensione PostGIS).
@@ -266,7 +257,6 @@ class SQLQueries:
         ORDER BY c.table_name, c.ordinal_position;
     """
 
-    # --- PostgreSQL Views ---
     # Stessa struttura della query tabelle, ma filtrata sulle viste tramite
     # information_schema.views (che contiene solo le viste, non le tabelle).
     POSTGRES_VIEW_COLUMNS = """
@@ -299,7 +289,6 @@ class SQLQueries:
         ORDER BY c.table_name, c.ordinal_position;
     """
 
-    # --- SQL Server ---
     # Usa sys.tables + sys.columns + sys.types.
     # Il tipo geometry/geography è direttamente nel nome del tipo.
     MSSQL_COLUMNS = """
@@ -314,7 +303,6 @@ class SQLQueries:
         ORDER BY t.name, c.column_id;
     """
 
-    # --- SQL Server Views ---
     # Usa sys.views invece di sys.tables per ottenere solo le viste.
     MSSQL_VIEW_COLUMNS = """
         SELECT 
@@ -328,7 +316,6 @@ class SQLQueries:
         ORDER BY v.name, c.column_id;
     """
 
-    # --- MySQL ---
     # Versione con SRID: usa JOIN su ST_GEOMETRY_COLUMNS (disponibile in MySQL 8+).
     # La versione semplice viene usata come fallback per MariaDB e MySQL < 8.
     # NB: alias `c` e `g` per evitare ambiguità sulle colonne TABLE_NAME/COLUMN_NAME
@@ -361,7 +348,6 @@ class SQLQueries:
         ORDER BY TABLE_NAME, ORDINAL_POSITION;
     """
 
-    # --- MySQL Views ---
     # Filtra INFORMATION_SCHEMA.COLUMNS solo per le viste presenti in INFORMATION_SCHEMA.VIEWS.
     MYSQL_VIEW_COLUMNS_WITH_SRID = """
         SELECT 
@@ -397,7 +383,6 @@ class SQLQueries:
         ORDER BY c.TABLE_NAME, c.ORDINAL_POSITION;
     """
 
-    # --- Oracle ---
     # Usa USER_TAB_COLUMNS. Il tipo NUMBER viene disambiguato tramite
     # precision e scale (es. NUMBER(1) = bool, NUMBER(*,0) = int).
     ORACLE_COLUMNS = """
@@ -411,7 +396,6 @@ class SQLQueries:
         ORDER BY TABLE_NAME, COLUMN_ID
     """
 
-    # --- Oracle Views ---
     # Filtra USER_TAB_COLUMNS solo per le viste presenti in USER_VIEWS.
     ORACLE_VIEW_COLUMNS = """
         SELECT 
@@ -425,12 +409,10 @@ class SQLQueries:
         ORDER BY utc.TABLE_NAME, utc.COLUMN_ID
     """
 
-    # --- SQLite ---
     # Non ha information_schema: si usa sqlite_master per l'elenco tabelle
     # e PRAGMA table_info(nome) per le colonne di ogni tabella.
     SQLITE_TABLES = "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%';"
 
-    # --- SQLite Views ---
     SQLITE_VIEWS = "SELECT name FROM sqlite_master WHERE type='view';"
 
     @staticmethod
@@ -439,10 +421,8 @@ class SQLQueries:
         return f"PRAGMA table_info({table_name});"
 
 
-# =============================================================================
 # MAPPER DEI TIPI (FUNZIONI PURE)
 # Converte i tipi nativi di ogni DBMS nel formato interno PLENORA
-# =============================================================================
 
 class TypeMapper:
     """
@@ -456,7 +436,6 @@ class TypeMapper:
     Formato geometrie: "geometry[:sottotipo[:srid]]"
     """
 
-    # --- Mappe statiche tipo nativo → tipo PLENORA ---
 
     POSTGRES_TYPE_MAP = {
         # Interi
@@ -545,7 +524,6 @@ class TypeMapper:
         'boolean': 'bool', 'bool': 'bool',
     }
 
-    # --- Metodi di mapping specifici per database ---
 
     @classmethod
     def map_postgres(cls, data_type: str, udt_name: str,
@@ -660,10 +638,8 @@ class TypeMapper:
         return 'str'
 
 
-# =============================================================================
 # PROCESSORI DI RISULTATI (FUNZIONI PURE)
 # Trasformano righe SQL grezze → Dict[tabella → lista colonne]
-# =============================================================================
 
 class ResultProcessor:
     """
@@ -751,9 +727,7 @@ class ResultProcessor:
         return columns
 
 
-# =============================================================================
 # CLASSE PRINCIPALE — ISPETTORE DATABASE
-# =============================================================================
 
 class DatabaseInspector:
     """
@@ -829,7 +803,6 @@ class DatabaseInspector:
             raise ValueError(f"Tipo database '{connection.type}' non supportato")
         return metodo(connection)
 
-    # --- Helper comune per ispezione con singola query ---
 
     def _esegui_ispezione(
         self,
@@ -870,7 +843,6 @@ class DatabaseInspector:
         except ImportError:
             raise ImportError(f"Driver {driver_name} non installato")
 
-    # --- Metodi specifici per database ---
 
     def _inspect_postgres(self, conn: DatabaseConnection) -> Dict[str, List[ColumnInfo]]:
         """Ispeziona PostgreSQL — include tipo geometria e SRID da PostGIS."""
@@ -959,7 +931,6 @@ class DatabaseInspector:
         except Exception as e:
             raise RuntimeError(f"Errore ispezionando SQLite: {e}")
 
-    # --- Metodi specifici per viste ---
 
     def _inspect_postgres_views(self, conn: DatabaseConnection) -> Dict[str, List[ColumnInfo]]:
         """Ispeziona viste PostgreSQL — include tipo geometria e SRID da PostGIS."""

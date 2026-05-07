@@ -38,9 +38,7 @@ import pytest
 pytestmark = [pytest.mark.unit, pytest.mark.contract]
 
 
-# =============================================================================
 # Fixtures
-# =============================================================================
 
 
 @pytest.fixture
@@ -85,9 +83,7 @@ def collaborators(fake_logger, tmp_path):
     }
 
 
-# =============================================================================
 # 1. Happy path tabular CSV
-# =============================================================================
 
 
 def test_happy_path_csv_calls_parse_dispatch_db_save_and_cleanup(collaborators):
@@ -120,9 +116,7 @@ def test_happy_path_csv_calls_parse_dispatch_db_save_and_cleanup(collaborators):
     collaborators["logger"].info.assert_called_once()
 
 
-# =============================================================================
 # 2. Happy path geospatial: GPKG single-layer auto-pick + CRS detection
-# =============================================================================
 
 
 def test_happy_path_gpkg_single_layer_autopicks_and_detects_crs(collaborators):
@@ -175,9 +169,7 @@ def test_geo_crs_fallback_to_authority_when_no_epsg(collaborators):
     assert build_kwargs["crs"] == "ESRI:102100"
 
 
-# =============================================================================
 # 3. MIME block prima di parse/dispatch/DB
-# =============================================================================
 
 
 def test_mime_block_short_circuits_before_parse_dispatch_db(collaborators):
@@ -210,9 +202,7 @@ def test_mime_block_short_circuits_before_parse_dispatch_db(collaborators):
     collaborators["cleanup"].assert_called()
 
 
-# =============================================================================
 # 4. Parse failure: best-effort, NON aborta il flusso DB save
-# =============================================================================
 
 
 def test_parse_failure_continues_with_empty_columns_and_saves_to_db(collaborators):
@@ -247,9 +237,7 @@ def test_parse_failure_continues_with_empty_columns_and_saves_to_db(collaborator
     collaborators["cleanup"].assert_called()
 
 
-# =============================================================================
 # 5. Dispatch failure (orphan guard)
-# =============================================================================
 
 
 def test_dispatch_failure_propagates_no_db_save(collaborators):
@@ -274,9 +262,7 @@ def test_dispatch_failure_propagates_no_db_save(collaborators):
     collaborators["cleanup"].assert_called()
 
 
-# =============================================================================
 # 6. DB save failure propaga
-# =============================================================================
 
 
 def test_db_save_failure_propagates_with_cleanup(collaborators):
@@ -297,9 +283,7 @@ def test_db_save_failure_propagates_with_cleanup(collaborators):
     collaborators["cleanup"].assert_called()
 
 
-# =============================================================================
 # 7. group_id None -> default_group propagato
-# =============================================================================
 
 
 def test_default_group_used_when_group_id_is_none(collaborators):
@@ -318,9 +302,7 @@ def test_default_group_used_when_group_id_is_none(collaborators):
     assert db_kwargs["group_id"] == "default_grp"
 
 
-# =============================================================================
 # 8. Wrapper FileSourceService.create_from_upload delega
-# =============================================================================
 
 
 def test_file_service_wrapper_delegates_to_module():

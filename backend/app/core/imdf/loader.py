@@ -295,5 +295,3 @@ def load_imdf_layers(
         result[layer_name] = gdf
 
     return result
-
-

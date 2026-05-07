@@ -84,7 +84,6 @@ class SQLFunctionTranslator:
     - Costruzione condizioni buffer + predicato combinate
     """
 
-    # --- Variabili di classe per il pattern Singleton ---
     _instance = None
     _registry = None
 
@@ -95,9 +94,7 @@ class SQLFunctionTranslator:
             cls._instance._load_registry()
         return cls._instance
 
-    # =========================================================================
     # CARICAMENTO E INTERROGAZIONE REGISTRY
-    # =========================================================================
 
     def _load_registry(self):
         """
@@ -198,9 +195,7 @@ class SQLFunctionTranslator:
             return False
         return db_type in info.get('dialects', {})
 
-    # =========================================================================
     # TRADUZIONE FUNZIONE SINGOLA
-    # =========================================================================
 
     def translate(
         self,
@@ -328,9 +323,7 @@ class SQLFunctionTranslator:
 
         return result
 
-    # =========================================================================
     # TRADUZIONE ESPRESSIONI COMPLESSE
-    # =========================================================================
 
     def translate_expression(
         self,
@@ -455,9 +448,7 @@ class SQLFunctionTranslator:
 
         return args
 
-    # =========================================================================
     # HELPER PER PREDICATI SPAZIALI
-    # =========================================================================
 
     def get_spatial_predicate(
         self,
@@ -548,9 +539,7 @@ class SQLFunctionTranslator:
         return self.get_spatial_predicate(predicate, db_type, geom1=geom1, geom2=buffered)
 
 
-# =============================================================================
 # ISTANZA SINGLETON GLOBALE E FUNZIONI SHORTCUT
-# =============================================================================
 
 # Istanza globale del traduttore, usata dalle funzioni shortcut sottostanti
 sql_translator = SQLFunctionTranslator()

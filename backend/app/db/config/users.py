@@ -65,11 +65,6 @@ def create_user(user_id: str, username: str, password_hash: str, group_id: str,
 
 def update_user(user_id: str, **fields) -> Optional[Dict]:
     from datetime import datetime, timezone
-    # Lazy import: `_safe_set_clause` è helper private cross-cluster nel facade
-    # `config_db_service` (usato da users/projects/schedules + datasources/
-    # connections via lazy). Import locale rompe ciclo facade ↔ config/users
-    # senza spostare il helper (violerebbe zero call site touched sugli altri
-    # 4 cluster). Vedi invariants §6 commit `16bebfa`.
     from app.db.config_db_service import _safe_set_clause
     fields["updated_at"] = datetime.now(timezone.utc).isoformat()
     set_clause, vals = _safe_set_clause("users", fields)

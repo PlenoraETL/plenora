@@ -15,9 +15,7 @@ from app.shared.execution.executor_protocol import ExecutionResult, ArtifactPayl
 pytestmark = [pytest.mark.unit, pytest.mark.contract]
 
 
-# ---------------------------------------------------------------------------
 # from_executor_dict - happy path (success)
-# ---------------------------------------------------------------------------
 
 def test_from_dict_success_extracts_typed_fields():
     d = {"success": True, "result_id": "r-1", "rows_count": 42}
@@ -68,9 +66,7 @@ def test_from_dict_payload_preserves_all_extra_keys():
     }
 
 
-# ---------------------------------------------------------------------------
 # from_executor_dict - non-dict input
-# ---------------------------------------------------------------------------
 
 def test_from_dict_non_dict_returns_failed_result():
     r = ExecutionResult.from_executor_dict(None)
@@ -82,9 +78,7 @@ def test_from_dict_non_dict_returns_failed_result():
     assert r2.success is False
 
 
-# ---------------------------------------------------------------------------
 # to_dict - round-trip fidelity
-# ---------------------------------------------------------------------------
 
 def test_to_dict_success_round_trip():
     original = {"success": True, "result_id": "r-1", "rows_count": 42}
@@ -117,9 +111,7 @@ def test_to_dict_payload_keys_not_duplicated():
     assert d == {"success": True, "a": 1, "b": 2}
 
 
-# ---------------------------------------------------------------------------
 # Frozen dataclass invariants
-# ---------------------------------------------------------------------------
 
 def test_execution_result_is_frozen():
     r = ExecutionResult(success=True)
@@ -127,9 +119,7 @@ def test_execution_result_is_frozen():
         r.success = False  # type: ignore[misc]
 
 
-# ---------------------------------------------------------------------------
 # Integration: orchestrator uses ExecutionResult at the boundary
-# ---------------------------------------------------------------------------
 
 def test_orchestrator_execute_pipeline_passes_through_via_execution_result():
     """execute_pipeline wraps executor dict via ExecutionResult before
@@ -196,9 +186,7 @@ def test_orchestrator_execute_pipeline_error_key_preserved():
     assert artifact["user_error"] is True
 
 
-# ---------------------------------------------------------------------------
 # Payload guard - BE-GO-READY-ARCH-058-W4
-# ---------------------------------------------------------------------------
 
 
 def test_payload_guard_rejects_pandas_dataframe():
@@ -275,9 +263,7 @@ def test_payload_guard_empty_payload_allowed():
     assert r.payload == {}
 
 
-# ---------------------------------------------------------------------------
 # ArtifactPayload typed accessor - BE-GO-READY-ARCH-059-W3
-# ---------------------------------------------------------------------------
 
 
 def test_artifact_payload_from_success_result_typed_fields():

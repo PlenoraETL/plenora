@@ -87,11 +87,6 @@ def create_project(project_id: str, group_id: str, name: str, project_type: str,
 
 def update_project(project_id: str, **fields) -> Optional[Dict]:
     from datetime import datetime, timezone
-    # Lazy import: `_safe_set_clause` è helper private cross-cluster nel facade
-    # `config_db_service` (usato da users/schedules + datasources/connections/
-    # projects via lazy). Import locale rompe ciclo facade ↔ config/projects
-    # senza spostare il helper (violerebbe zero call site touched sugli altri
-    # cluster). Vedi invariants §6 commit `7a00c1f`.
     from app.db.config_db_service import _safe_set_clause
     if "canvas" in fields and isinstance(fields["canvas"], dict):
         fields["canvas"] = json.dumps(fields["canvas"])
@@ -113,24 +108,6 @@ def get_project_retention_n(project_id: str) -> Optional[int]:
     """Ritorna retention_n del canvas (None = usa default globale)."""
     row = fetchone("SELECT retention_n FROM projects WHERE id = ?", (project_id,))
     return row["retention_n"] if row else None
-
-
-# ---------------------------------------------------------------------------
-# Project-id lookups (BE-GO-READY-CONNECTION-ENGINE-003)
-# ---------------------------------------------------------------------------
-#
-# Two read-only helpers extracted from `app/core/projects/router.py` and
-# `app/core/imdf/router.py` so those routers can stop importing
-# `app.db.pg_connection` directly. Both return `set[str]` because the
-# only consumer-side need is membership testing / set algebra. Returning
-# `set` (not `list`) also expresses the contract that order is not
-# meaningful and that the result is deduplicated.
-#
-# Tabella `projects` non e' shareable (no `project_shares`): la
-# visibilita' coincide col gruppo proprietario. Vedi RB.4.A.16. Questi
-# helper NON conoscono il concetto di share / `is_superadmin`: il caller
-# decide se applicare la lista `project_ids` (last-mile filter) oppure
-# lasciar passare tutto via early-return prima di chiamare il DB.
 
 
 def list_owned_project_ids(
@@ -202,9 +179,7 @@ def list_project_ids_for_group(group_id: str) -> Set[str]:
     return {r["id"] for r in rows}
 
 
-# ============================================================
 # ATOMIC CANVAS-KEY UPDATE (BE-GO-READY-DB-ENGINE-007)
-# ============================================================
 #
 # Moved verbatim from `app.db.config_db_service` (the 7th projects-cluster
 # function the original scope-split kept in the facade). Production callers

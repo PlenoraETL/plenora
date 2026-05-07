@@ -37,9 +37,7 @@ import pytest
 pytestmark = [pytest.mark.unit, pytest.mark.shared, pytest.mark.contract]
 
 
-# =====================================================================
 # 1. Non-outbox docstring lock
-# =====================================================================
 
 
 def test_record_upload_intent_docstring_disclaims_outbox_semantics():
@@ -101,9 +99,7 @@ def test_record_upload_intent_docstring_points_at_visibility_helpers():
     )
 
 
-# =====================================================================
 # 2. count_pending_by_operation contract
-# =====================================================================
 
 
 def test_count_pending_by_operation_sql_filters_pending_groups_by_operation():
@@ -178,9 +174,7 @@ def test_count_pending_by_operation_empty_table_returns_empty_dict():
     assert out == {}
 
 
-# =====================================================================
 # 3. check_reconciliation_backlog extension
-# =====================================================================
 
 
 def _stub_state_domain_counts(*, pending_total=0, lost_total=0):

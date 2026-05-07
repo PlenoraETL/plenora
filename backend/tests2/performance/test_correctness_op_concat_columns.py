@@ -33,9 +33,7 @@ import pytest
 from app.core.manipola.transforms.base import op_concat_columns
 
 
-# ─────────────────────────────────────────────────────────────────────
 # Oracle: legacy impl copiato verbatim da base.py:599 @ afe47ce
-# ─────────────────────────────────────────────────────────────────────
 
 
 def _legacy_op_concat_columns(
@@ -80,9 +78,7 @@ def _legacy_op_concat_columns(
         return df
 
 
-# ─────────────────────────────────────────────────────────────────────
 # Helper: equivalenza value-wise con NaN/None trattati come equivalenti
-# ─────────────────────────────────────────────────────────────────────
 
 
 def _series_equivalent(a: pd.Series, b: pd.Series) -> tuple[bool, str]:
@@ -136,9 +132,7 @@ def _assert_output_invariant(new_df: pd.DataFrame, legacy_df: pd.DataFrame,
     assert ok, f"[{context}] divergenza: {reason}"
 
 
-# ─────────────────────────────────────────────────────────────────────
 # Fixture di casi edge
-# ─────────────────────────────────────────────────────────────────────
 
 
 def _df_plain_strings():
@@ -216,9 +210,7 @@ def _df_non_monotonic_index():
     return df
 
 
-# ─────────────────────────────────────────────────────────────────────
 # Test matrix
-# ─────────────────────────────────────────────────────────────────────
 
 
 _CASES = [

@@ -26,9 +26,7 @@ from fastapi.testclient import TestClient
 pytestmark = [pytest.mark.unit, pytest.mark.contract]
 
 
-# =============================================================================
 # Fixture: app minimale con router + handler globale registrato
-# =============================================================================
 
 
 @pytest.fixture
@@ -100,9 +98,7 @@ def app_with_handler(monkeypatch):
         yield tc, fake_svc
 
 
-# =============================================================================
 # Test: endpoint ritorna 500 strutturato su canvas corrotto
-# =============================================================================
 
 
 def test_get_project_with_corrupted_canvas_returns_500_explicit(app_with_handler):

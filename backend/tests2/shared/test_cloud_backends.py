@@ -49,9 +49,7 @@ def _requires_boto3():
     pytest.importorskip("boto3", reason="boto3 non installato su dev")
 
 
-# =============================================================================
 # 1. Factory — CLOUD_PROVIDER dispatch
-# =============================================================================
 
 
 def test_factory_default_provider_is_aws(cb, monkeypatch):
@@ -112,9 +110,7 @@ def test_object_storage_factory_prefers_new_env_name(cb, monkeypatch):
     assert storage.bucket == "new-name"
 
 
-# =============================================================================
 # 2. AwsSsmSecretsBackend.get_secrets — contract
-# =============================================================================
 
 
 def _make_fake_ssm_client(params):
@@ -174,9 +170,7 @@ def test_ssm_uses_with_decryption_and_recursive(cb):
     assert kwargs["WithDecryption"] is True
 
 
-# =============================================================================
 # 3. AwsS3ObjectStorage — wrap contract
-# =============================================================================
 
 
 def test_s3_list_objects_shape(cb):
@@ -266,9 +260,7 @@ def test_s3_download_delegates_correctly(cb, tmp_path):
     fake_client.download_file.assert_called_once_with("my-bucket", "key.dump", str(dest))
 
 
-# =============================================================================
 # 4. Protocol conformance (duck-typing sanity)
-# =============================================================================
 
 
 def test_aws_backends_satisfy_protocols(cb):
@@ -280,9 +272,7 @@ def test_aws_backends_satisfy_protocols(cb):
     assert isinstance(s3, cb.ObjectStorage)
 
 
-# =============================================================================
 # 5. MinioObjectStorage — provider A1-B2 (ADR-0015)
-# =============================================================================
 
 
 def _set_minio_env(monkeypatch):

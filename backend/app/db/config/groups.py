@@ -111,10 +111,6 @@ def delete_group_cascade(group_id: str) -> dict:
     sono andati a buon fine.
     """
     from app.utils.logger import get_logger as _get_logger
-    # Logger namespace preservato dal facade pre-estrazione: dashboard
-    # e filtri ops esistenti continuano a matchare. Migrare al
-    # namespace `config.groups.delete_group_cascade` e' una decisione
-    # ops-visible — fuori scope per DB-ENGINE-002.
     _log = _get_logger("config_db_service.delete_group_cascade")
 
     report = {

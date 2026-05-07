@@ -34,9 +34,7 @@ pytestmark = [
 ]
 
 
-# ---------------------------------------------------------------------------
 # Helpers
-# ---------------------------------------------------------------------------
 
 def _make_input_df() -> pd.DataFrame:
     """3 righe con index default (RangeIndex 0..2)."""
@@ -78,9 +76,7 @@ def _permutes_index_executor(node, api_connections, df: pd.DataFrame) -> pd.Data
     return out
 
 
-# ---------------------------------------------------------------------------
 # Tests
-# ---------------------------------------------------------------------------
 
 def test_merge_succeeds_when_index_matches():
     """Happy path: executor preserva index -> merge ok, valori allineati."""

@@ -42,8 +42,6 @@ import pytest
 pytestmark = [pytest.mark.unit, pytest.mark.contract, pytest.mark.shared]
 
 
-# ─── Fixtures ──────────────────────────────────────────────────────────────
-
 @pytest.fixture(autouse=True)
 def _ensure_database_url_for_module_import(monkeypatch):
     """``app.db.pg_connection`` at-import-time richiede ``DATABASE_URL``.
@@ -83,8 +81,6 @@ def _make_row(ds_id: str, group_id: str, name: str = "test ds",
         "created_by": "user-x",
     }
 
-
-# ─── 1) Cross-tenant fail-closed ──────────────────────────────────────────
 
 def test_list_datasources_filters_by_group_id_uses_where_clause(monkeypatch):
     """Blinda §4.1 tenant isolation: con ``group_id`` non-None la query SQL
@@ -162,8 +158,6 @@ def test_list_datasources_no_where_clause_when_group_id_is_none(monkeypatch):
     )
 
 
-# ─── 2) N+1 guard ─────────────────────────────────────────────────────────
-
 def test_list_datasources_uses_single_fetchall_no_per_row_requery(monkeypatch):
     """Blinda il fix N+1 (service.py:52-68): ``list_datasources`` DEVE usare
     1 sola ``fetchall`` e parse in memoria — MAI ``get_datasource(id)`` per-row.
@@ -214,8 +208,6 @@ def test_list_datasources_uses_single_fetchall_no_per_row_requery(monkeypatch):
     )
 
 
-# ─── 3) Delete non-existent ───────────────────────────────────────────────
-
 def test_delete_datasource_returns_false_for_nonexistent_no_db_delete(monkeypatch):
     """Blinda idempotenza delete: id inesistente → ``False`` SENZA side-effect.
 
@@ -251,8 +243,6 @@ def test_delete_datasource_returns_false_for_nonexistent_no_db_delete(monkeypatc
         f"Chiamate osservate: {delete_called_with}"
     )
 
-
-# ─── 4) Create: ID pattern canonico ───────────────────────────────────────
 
 def test_create_datasource_generates_id_with_canonical_pattern(monkeypatch):
     """Blinda il contract pubblico di ``_generate_id``: ID segue il pattern
@@ -309,8 +299,6 @@ def test_create_datasource_generates_id_with_canonical_pattern(monkeypatch):
     assert saved[0]["group_id"] == "tenant-x"
     assert saved[0]["created_by"] == "user-1"
 
-
-# ─── 5) get_scan_state: JSON corrotto → rename + empty ───────────────────
 
 def test_get_scan_state_renames_corrupted_file_and_returns_empty(tmp_path):
     """Blinda policy recovery (service.py:254-285): JSON corrotto →

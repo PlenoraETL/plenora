@@ -30,9 +30,7 @@ go-ready dedicata.
 from __future__ import annotations
 
 
-# ============================================================
 # Generic / framework-level
-# ============================================================
 
 INTERNAL_ERROR = "internal_error"
 """Catch-all per eccezioni Python non gestite (status 500)."""
@@ -56,9 +54,7 @@ def http_status_code(status_code: int) -> str:
     return f"http_{status_code}"
 
 
-# ============================================================
 # Domain-specific (codici gia' lockati nei test esistenti)
-# ============================================================
 
 CONNECTION_IN_USE = "connection_in_use"
 """409: tentativo di delete di una connection referenziata."""
@@ -75,12 +71,6 @@ PROJECT_CLEANUP_PARTIAL = "project_cleanup_partial"
 DATASOURCE_IN_USE = "datasource_in_use"
 """409: tentativo di delete di un datasource referenziato."""
 
-
-# ============================================================
-# Domain-specific (BE-GO-READY-ERROR-CODES-006-CATALOG)
-# Estensione del catalog per coprire i 6 codici emessi nei
-# router che oggi sono literal-only.
-# ============================================================
 
 OBJECT_STORAGE_DISABLED = "object_storage_disabled"
 """503: object storage non configurato/disabilitato (admin_backups)."""
@@ -100,16 +90,6 @@ CARICA_SCHEDULER_FAILED = "carica_scheduler_failed"
 SCHEDULE_EXECUTION_FATAL = "schedule_execution_fatal"
 """500-state: errore fatale schedule execution (execution_manager)."""
 
-
-# ============================================================
-# Domain-specific — Not-Found family
-# (BE-GO-READY-ERROR-CODES-009-NOT-FOUND-PROMOTION)
-# ============================================================
-# Promozione mirata di 10 famiglie 404 da `http_404` generico a
-# codici domain. FE puo' branchare differente UX (redirect,
-# toast, retry, refresh-list) per tipo di risorsa.
-# Status code resta sempre 404. Messaggi italiani user-facing
-# invariati.
 
 PROJECT_NOT_FOUND = "project_not_found"
 """404: progetto non trovato (projects/orchestrator/scheduler/imdf/arricchisci)."""
@@ -142,10 +122,8 @@ TICKET_NOT_FOUND = "ticket_not_found"
 """404: ticket o allegato ticket non trovato (tickets)."""
 
 
-# ============================================================
 # Domain-specific — External-Service family
 # (BE-GO-READY-ERROR-CODES-010-EXTERNAL-SERVICE)
-# ============================================================
 # Promozione mirata della famiglia 502 "upstream/external service
 # unreachable" da `http_502` generico a codice domain. Permette al
 # FE di distinguere "errore di rete su servizio esterno" (retry
@@ -159,10 +137,8 @@ arricchisci/OpenAPI). FE branching: retry, fallback offline, o
 notifica admin."""
 
 
-# ============================================================
 # Domain-specific — Memory/OOM family
 # (BE-GO-READY-MEMORY-OOM-001-LOAD-FILE-PREFLIGHT-GUARD)
-# ============================================================
 # Promozione mirata della famiglia 413 "memory limit exceeded"
 # emessa dai preflight guard di OOM-prevention. Permette al FE di
 # distinguere "input troppo grande" (suggerire chunking, formato
@@ -178,50 +154,12 @@ branching: messaggio "file troppo grande per il caricamento
 immediato; contatta l'admin" + suggerimento chunking/streaming."""
 
 
-# ============================================================
-# Domain-specific — Service initialization family
-# (BE-GO-READY-ERROR-CODES-013-SERVICE-INIT-GUARD-PROMOTION)
-# ============================================================
-# Promozione del pattern `service_init_guard`: i sette call site
-# che sollevavano `HTTPException(500|503, "... non inizializzato")`
-# (router_utils helper + projects/datasources/carica router) ora
-# usano `raise_typed_http(SERVICE_NOT_INITIALIZED, ...)`. Status
-# code preservato per ogni call site (alcuni 500, altri 503): la
-# semantica HTTP non e' uniforme nel codice esistente e questo
-# batch e' di chiusura, non di refactor di status. Messaggio
-# italiano preservato.
-
 SERVICE_NOT_INITIALIZED = "service_not_initialized"
 """500/503: un servizio module-level non e' stato inizializzato
 da `main.py` (init_*) prima di servire la richiesta. Failure di
 startup, non operational; FE branching: invitare a riprovare e
 contattare l'admin se persiste."""
 
-
-# ============================================================
-# Domain-specific — Access Denied family
-# (BE-GO-READY-ERROR-CODES-014-GENERIC-ACCESS-DENIED-PROMOTION)
-# ============================================================
-# Promozione del pattern `generic_access_denied`: i 12 call site
-# che sollevavano `HTTPException(403, "Accesso negato")` (auth/
-# ownership helpers, auth user-management endpoints, logs runs
-# router, files router, orchestrator download) ora usano
-# `raise_typed_http(ACCESS_DENIED, ...)`. Status code 403 e
-# messaggio italiano "Accesso negato" preservati invariati per
-# tutte le 12 call site: nessuna nuova disclosure.
-#
-# Disclosure rationale:
-# - I due call site anti-enumeration in `auth.py` (reset_password,
-#   delete_user, lines 757/785) restavano deliberatamente 403 con
-#   stesso messaggio sia per target inesistente che per target
-#   fuori gruppo, per impedire user enumeration agli admin di
-#   gruppo. Promozione preserva l'uniformita': stesso codice
-#   `access_denied` per entrambi i rami → enumeration non
-#   ricostruibile dal codice.
-# - Path-traversal denial in `orchestrator/router.py:274` usa
-#   intenzionalmente lo stesso messaggio generico ("Accesso
-#   negato") di una denial di gruppo per non rivelare dettagli
-#   filesystem; promozione preserva il messaggio.
 
 ACCESS_DENIED = "access_denied"
 """403: l'utente non ha i permessi per accedere alla risorsa
@@ -232,10 +170,8 @@ FE branching: redirect a list view, toast generico "non
 autorizzato"; NON usare per autenticazione mancante (401)."""
 
 
-# ============================================================
 # Domain-specific — Auth family
 # (BE-GO-READY-AUTH-DOMAIN-PROMOTION-001, ADR-0022)
-# ============================================================
 # Promozione dei call site auth-domain (auth.py + ownership.py) da
 # literal HTTPException a raise_typed_http preservando status code,
 # messaggio italiano user-facing e headers (`WWW-Authenticate`,
@@ -248,7 +184,6 @@ autorizzato"; NON usare per autenticazione mancante (401)."""
 # uniform-401, admin reset/delete uniform-403, path-traversal
 # uniform-403) restano source-bound nei test esistenti.
 
-# --- 401 (autenticazione) ---
 AUTH_TOKEN_MISSING = "auth_token_missing"
 """401 + WWW-Authenticate: Bearer. Token Bearer assente nella
 request. Status/message preservati."""
@@ -280,7 +215,6 @@ AUTH_MFA_INVALID = "auth_mfa_invalid"
 """401. Codice TOTP fornito ma errato al login. Conta su rate-limit
 IP (auth.py:417)."""
 
-# --- 403 (autorizzazione) ---
 AUTH_ACCOUNT_DISABLED = "auth_account_disabled"
 """403. Utente esiste, password ok, ma `is_active=False`. Disclosure
 post-password-ok intenzionale (UX-required: amministrazione utenti).
@@ -332,7 +266,6 @@ AUTH_OWNER_ONLY = "auth_owner_only"
 """403. La risorsa richiede l'owner originale (created_by) oppure
 un admin/superadmin. LEAKY_BY_DESIGN (UI-friendly)."""
 
-# --- 404 (after-auth resource not found) ---
 USER_NOT_FOUND = "user_not_found"
 """404. Utente target non trovato. NB: per admin non-superadmin, le
 operazioni `reset-password`/`delete` su target fuori-gruppo o
@@ -342,7 +275,6 @@ Solo superadmin vede 404 distinto."""
 GROUP_NOT_FOUND = "group_not_found"
 """404. Gruppo target non trovato. Endpoint admin-only."""
 
-# --- 409 (conflict) ---
 USERNAME_ALREADY_EXISTS = "username_already_exists"
 """409. Username gia' presente. Disclosure intenzionale (admin DEVE
 saperlo per gestione utenti). LEAKY_BY_DESIGN."""
@@ -350,7 +282,6 @@ saperlo per gestione utenti). LEAKY_BY_DESIGN."""
 GROUP_ID_ALREADY_EXISTS = "group_id_already_exists"
 """409. group_id gia' presente. LEAKY_BY_DESIGN."""
 
-# --- 400 (validation auth-related) ---
 GROUP_DEFAULT_NOT_DELETABLE = "group_default_not_deletable"
 """400. Tentativo di eliminare il gruppo `default`. UNIFORM."""
 
@@ -361,20 +292,16 @@ da `auth_mfa_invalid` (401, login)."""
 AUTH_SELF_DELETE_DENIED = "auth_self_delete_denied"
 """400. Un utente non puo' eliminare il proprio account. UNIFORM."""
 
-# --- 429 (rate-limit) ---
 AUTH_RATE_LIMIT_EXCEEDED = "auth_rate_limit_exceeded"
 """429 + Retry-After. Lockout login per IP
 (LOGIN_LOCKOUT_SECONDS). UNIFORM."""
 
-# --- 503 (infra fail-loud) ---
 AUTH_REVOCATION_UNAVAILABLE = "auth_revocation_unavailable"
 """503. Redis blacklist non disponibile durante logout. Fail-loud
 (ADR-0009): il client deve sapere se la revoca e' effettiva."""
 
 
-# ============================================================
 # Catalog set — drift detection
-# ============================================================
 # `KNOWN_DOMAIN_CODES` espone l'intero catalog domain-specific
 # (codici NON globali) come `frozenset[str]`. Usato dal test
 # contract `test_error_codes_catalog.py` per il drift detection
@@ -398,7 +325,6 @@ KNOWN_DOMAIN_CODES: frozenset[str] = frozenset({
     CARICA_LAUNCH_FAILED,
     CARICA_SCHEDULER_FAILED,
     SCHEDULE_EXECUTION_FATAL,
-    # Not-Found family (BE-GO-READY-ERROR-CODES-009)
     PROJECT_NOT_FOUND,
     TASK_NOT_FOUND,
     SCHEDULE_NOT_FOUND,
@@ -409,16 +335,11 @@ KNOWN_DOMAIN_CODES: frozenset[str] = frozenset({
     FILE_SOURCE_NOT_FOUND,
     DATASOURCE_NOT_FOUND,
     TICKET_NOT_FOUND,
-    # External-Service family (BE-GO-READY-ERROR-CODES-010)
     EXTERNAL_SERVICE_UNREACHABLE,
     # Memory/OOM family (BE-GO-READY-MEMORY-OOM-001)
     MEMORY_LIMIT_EXCEEDED,
-    # Service initialization family (BE-GO-READY-ERROR-CODES-013)
     SERVICE_NOT_INITIALIZED,
-    # Access Denied family (BE-GO-READY-ERROR-CODES-014)
     ACCESS_DENIED,
-    # Auth family (BE-GO-READY-AUTH-DOMAIN-PROMOTION-001)
-    # 401 — autenticazione
     AUTH_TOKEN_MISSING,
     AUTH_TOKEN_INVALID,
     AUTH_TOKEN_REVOKED,
@@ -464,10 +385,8 @@ KNOWN_GLOBAL_CODES: frozenset[str] = frozenset({
 })
 
 
-# ============================================================
 # Pattern accettati come `http_<status>` fallback intenzionale
 # (BE-GO-READY-ERROR-CODES-009-NOT-FOUND-PROMOTION)
-# ============================================================
 # Questi pattern di `raise HTTPException(<n>, "<msg>")` NON sono
 # residui da promuovere a codici domain. Sono stringhe locali
 # stabili gia' coperte semanticamente da:
@@ -531,8 +450,4 @@ ACCEPTED_HTTP_FALLBACK_PATTERNS: frozenset[str] = frozenset({
     #    o rimozioni richiedono aggiornamento esplicito del lock e
     #    classificazione del nuovo sito.
     "value_error_str_e",
-    # "service_init_guard" promoted to raise_typed_http(SERVICE_NOT_INITIALIZED)
-    # in BE-GO-READY-ERROR-CODES-013. Zero residuals remain.
-    # "generic_access_denied" promoted to raise_typed_http(ACCESS_DENIED)
-    # in BE-GO-READY-ERROR-CODES-014. Zero residuals remain.
 })

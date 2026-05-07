@@ -109,9 +109,7 @@ def _make_writer(
     return DatabaseWriter(cfg, engine=engine, db_type="postgres")
 
 
-# =============================================================================
 # Scenario 1 — happy path
-# =============================================================================
 
 
 def test_stage_swap_happy_path_replaces_target(monkeypatch):
@@ -149,9 +147,7 @@ def test_stage_swap_happy_path_replaces_target(monkeypatch):
         _drop_if_exists(bak_table)
 
 
-# =============================================================================
 # Scenario 2 — orfano recovery
-# =============================================================================
 
 
 def test_stage_swap_cleans_orphan_shadow_from_prior_crash(monkeypatch):
@@ -196,9 +192,7 @@ def test_stage_swap_cleans_orphan_shadow_from_prior_crash(monkeypatch):
         _drop_if_exists(bak_table)
 
 
-# =============================================================================
 # Scenario 3 — INSERT shadow fallisce → target INTATTO
-# =============================================================================
 
 
 def test_stage_swap_insert_failure_preserves_target_data(monkeypatch):
@@ -247,9 +241,7 @@ def test_stage_swap_insert_failure_preserves_target_data(monkeypatch):
         _drop_if_exists(bak_table)
 
 
-# =============================================================================
 # Scenario 4 — sotto soglia: atomic path
-# =============================================================================
 
 
 def test_below_threshold_uses_atomic_not_stage_swap(monkeypatch):

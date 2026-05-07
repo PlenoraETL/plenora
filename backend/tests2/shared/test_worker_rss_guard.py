@@ -21,9 +21,7 @@ from app.shared import error_codes
 pytestmark = [pytest.mark.unit, pytest.mark.contract]
 
 
-# ---------------------------------------------------------------------------
 # 1. Helper purity
-# ---------------------------------------------------------------------------
 
 def test_memory_guard_module_does_not_import_fastapi():
     """memory_guard.py must be pure — no FastAPI/starlette imports."""
@@ -35,9 +33,7 @@ def test_memory_guard_module_does_not_import_fastapi():
     assert "import fastapi" not in text
 
 
-# ---------------------------------------------------------------------------
 # 2. Guard behavior
-# ---------------------------------------------------------------------------
 
 def test_check_worker_rss_raises_when_above_cap():
     """RSS above cap -> MemoryLimitExceededError."""
@@ -79,9 +75,7 @@ def test_check_worker_rss_skips_when_psutil_unavailable():
         check_worker_rss(cap_bytes=1, stage="pipeline_execute")
 
 
-# ---------------------------------------------------------------------------
 # 3. Envelope shape: 503 for RSS stages
-# ---------------------------------------------------------------------------
 
 def test_rss_stage_maps_to_503_in_handler_source_bound():
     """RSS stages must map to 503 in `app/main.py`, without importing
@@ -113,9 +107,7 @@ def test_rss_exception_carries_worker_process_resource():
         assert exc_info.value.path_basename == "worker_process"
 
 
-# ---------------------------------------------------------------------------
 # 4. Config
-# ---------------------------------------------------------------------------
 
 def test_worker_rss_max_bytes_in_settings_defaults():
     """WORKER_RSS_MAX_BYTES must be present in Settings.DEFAULTS."""

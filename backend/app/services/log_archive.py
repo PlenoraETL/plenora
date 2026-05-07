@@ -39,9 +39,7 @@ from typing import Callable, Literal, TypedDict
 from app.shared.cloud_backends import ObjectStorage
 
 
-# ---------------------------------------------------------------------------
 # Canonical NDJSON shapes (O-ARC §5.1)
-# ---------------------------------------------------------------------------
 # Ordine vincolante: garantisce output deterministico byte-level in
 # combinazione con gzip(mtime=0). Un'eventuale aggiunta di colonna al
 # DB (migration futura) richiede aggiornamento coordinato qui + ADR.
@@ -68,9 +66,7 @@ _TS_COLUMN_BY_TABLE: dict[str, str] = {
 }
 
 
-# ---------------------------------------------------------------------------
 # Helpers (private) — serializzazione NDJSON gzip
-# ---------------------------------------------------------------------------
 
 
 def _table_ts_column(table: str) -> str:
@@ -163,9 +159,7 @@ def _serialize_rows(rows: list[dict], table: str) -> bytes:
     return gzip.compress(payload, compresslevel=6, mtime=0)
 
 
-# ---------------------------------------------------------------------------
 # Helpers (private) — object key naming (O-ARC §5.2)
-# ---------------------------------------------------------------------------
 # Pattern deterministico:
 #   <prefix><table>/<YYYY-MM>/<table>-<YYYY-MM-DD>-<NNN>.ndjson.gz
 #
@@ -233,9 +227,7 @@ def _build_object_key(
     return f"{prefix}{table}/{month}/{table}-{day}-{seq:03d}.ndjson.gz"
 
 
-# ---------------------------------------------------------------------------
 # Public API
-# ---------------------------------------------------------------------------
 
 
 class ArchiveResult(TypedDict):
@@ -347,7 +339,6 @@ class LogArchiveWriter:
             Qualsiasi eccezione da `upload_bytes` o dalla callable DELETE
             propaga senza swallow.
         """
-        # ---- fail-fast validation (prima di qualsiasi side-effect) ------
         if not isinstance(cutoff_ts, datetime):
             raise TypeError(
                 f"archive_and_purge expected datetime for cutoff_ts, "
@@ -368,7 +359,6 @@ class LogArchiveWriter:
         # qui, non a meta' iterazione.
         _build_object_key(self._key_prefix, table, effective_run_date, 0)
 
-        # ---- loop SELECT -> serialize -> upload -> verify -> DELETE -----
         archived_rows_total = 0
         object_keys: list[str] = []
         seq = 0
@@ -385,10 +375,6 @@ class LogArchiveWriter:
 
             self._storage.upload_bytes(payload, key)
 
-            # Unico meccanismo di verify: `list_objects(prefix=key)` deve
-            # ritornare almeno un `ObjectMeta` con `key` esattamente pari
-            # e `size > 0`. Nessun HEAD, nessun checksum: il Protocol
-            # non viene esteso in Batch 1 (ADR-0014 §Decision 7).
             listed = self._storage.list_objects(prefix=key)
             if not any(
                 obj["key"] == key and obj["size"] > 0 for obj in listed

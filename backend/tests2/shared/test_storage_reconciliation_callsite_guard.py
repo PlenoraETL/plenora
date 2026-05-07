@@ -78,9 +78,7 @@ Classification = Literal[
 ]
 
 
-# ---------------------------------------------------------------------------
 # Classification map - POST-021 BASELINE
-# ---------------------------------------------------------------------------
 #
 # Keys: `<rel-path-from-backend>` (forward slashes, no leading slash).
 # Values: (classification, reason).
@@ -99,7 +97,6 @@ Classification = Literal[
 # designed to surface NEW files that haven't been audited.
 
 _CALLSITE_CLASSIFICATION: dict[str, tuple[Classification, str]] = {
-    # --- Tracked: paired record_pending + compensating_delete -----------
     #
     # Note: the consumer files that go through the canonical
     # `compensating_delete` wrapper (results_db_service, file_sources,
@@ -117,7 +114,6 @@ _CALLSITE_CLASSIFICATION: dict[str, tuple[Classification, str]] = {
         "pending entries pre-commit.",
     ),
 
-    # --- Safe / no persistent artifact ---------------------------------
     "app/services/log_archive.py": (
         "safe_no_persistent_artifact",
         "ADR-0014 contract: post-upload verify "
@@ -127,7 +123,6 @@ _CALLSITE_CLASSIFICATION: dict[str, tuple[Classification, str]] = {
         "rows (rerun safe). No orphan possible by construction.",
     ),
 
-    # --- Intentionally excluded ----------------------------------------
     "app/core/intermediate/artifact_writer.py": (
         "intentionally_excluded",
         "Pair (data.parquet + manifest.json) artifact whose "
@@ -177,9 +172,7 @@ _CALLSITE_CLASSIFICATION: dict[str, tuple[Classification, str]] = {
 }
 
 
-# ---------------------------------------------------------------------------
 # Scanner
-# ---------------------------------------------------------------------------
 
 
 # Storage-method invocations. `.upload(` and `.upload_bytes(` are
@@ -272,9 +265,7 @@ def _scan_for_storage_callsites() -> dict[str, list[tuple[int, str]]]:
     return hits
 
 
-# ---------------------------------------------------------------------------
 # Tests
-# ---------------------------------------------------------------------------
 
 
 def test_every_storage_callsite_file_is_classified():

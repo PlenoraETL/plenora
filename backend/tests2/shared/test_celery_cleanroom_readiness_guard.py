@@ -60,9 +60,7 @@ def beat_scheduler_text() -> str:
     return _BEAT_SCHEDULER_PY.read_text(encoding="utf-8")
 
 
-# =====================================================================
 # 1. Workflow contains the Celery readiness step
-# =====================================================================
 
 
 def test_ci_cleanroom_workflow_has_celery_readiness_step(workflow_text: str):
@@ -161,9 +159,7 @@ def test_ci_cleanroom_celery_probe_is_bounded_and_sleep_free(
     )
 
 
-# =====================================================================
 # 2. workers.celery_app contract preserved
-# =====================================================================
 
 
 def test_celery_app_module_pins_canonical_main_name(celery_app_text: str):
@@ -199,9 +195,7 @@ def test_celery_app_includes_canonical_task_modules(celery_app_text: str):
         )
 
 
-# =====================================================================
 # 3. PlenoraBeatScheduler symbol preserved
-# =====================================================================
 
 
 def test_beat_scheduler_class_name_preserved(beat_scheduler_text: str):

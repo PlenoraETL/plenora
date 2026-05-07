@@ -92,10 +92,8 @@ def test_save_result_blob_keeps_temp_file_when_db_save_fails(monkeypatch, tmp_pa
     assert temp_dir.exists()
 
 
-# =============================================================================
 # RB.2 (2026-04-27): AWS credentials expired -> ResultSaveError con messaggio
 # operativo, no fallback silenzioso a DB se policy/threshold dice S3.
-# =============================================================================
 
 
 def _force_object_storage(monkeypatch, tmp_path):
@@ -213,11 +211,9 @@ def test_save_result_blob_generic_storage_error_keeps_old_message(
     assert "AWS credentials" not in msg  # NON deve essere mappato erroneamente
 
 
-# =============================================================================
 # A1 batch — STORAGE_POLICY=object_storage: capability off => fail-closed.
 # Niente fallback BYTEA per i nuovi result quando la policy chiede object
 # storage e la capability runtime e' disabilitata.
-# =============================================================================
 
 
 class _RecordingStorage:
@@ -270,11 +266,9 @@ def _wire_object_storage_writer(monkeypatch, *, fake_storage, saved):
     )
 
 
-# =============================================================================
 # A1 batch — CASO 1 + 2: policy=object_storage forza l'upload runtime ANCHE
 # per payload sotto threshold. Contratto centrale del batch: niente fallback
 # BYTEA per i nuovi result quando la policy chiede object storage.
-# =============================================================================
 
 
 def test_save_result_blob_object_storage_small_file_goes_to_runtime(

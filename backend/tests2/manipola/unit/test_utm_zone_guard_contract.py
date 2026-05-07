@@ -48,9 +48,7 @@ def _gdf_from_lon_range(lon_min: float, lon_max: float, lat: float = 44.0):
     return gpd.GeoDataFrame(geometry=pts, crs="EPSG:4326")
 
 
-# =============================================================================
 # 1. Caso nominale — nessun warning
-# =============================================================================
 
 
 @pytest.mark.parametrize("lon_min,lon_max", [
@@ -71,9 +69,7 @@ def test_utm_guard_silent_for_compact_datasets(lon_min, lon_max, geo_caplog):
     assert not guard_records, f"Warning inatteso: {[r.message for r in guard_records]}"
 
 
-# =============================================================================
 # 2. Bbox moderato (> 3 gradi) — warning standard
-# =============================================================================
 
 
 @pytest.mark.parametrize("lon_min,lon_max", [
@@ -97,9 +93,7 @@ def test_utm_guard_warns_for_multizone_moderate(lon_min, lon_max, geo_caplog):
     assert guard_records[0].levelno == logging.WARNING
 
 
-# =============================================================================
 # 3. Bbox molto ampio (> 6 gradi) — warning critico
-# =============================================================================
 
 
 @pytest.mark.parametrize("lon_min,lon_max", [
@@ -122,9 +116,7 @@ def test_utm_guard_warns_critical_for_multizone_wide(lon_min, lon_max, geo_caplo
     assert "CRITICAL" in guard_records[0].message
 
 
-# =============================================================================
 # 4. Regression: casi patologici esistenti continuano a funzionare
-# =============================================================================
 
 
 def test_utm_guard_empty_gdf_returns_default_no_warning(caplog):

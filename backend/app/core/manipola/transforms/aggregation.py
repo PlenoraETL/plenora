@@ -77,18 +77,13 @@ from typing import Dict, List, Union
 
 from app.utils.logger import get_logger
 
-# Stesso logger name di `base.py`: i record sono indistinguibili dai
-# consumer che attaccano handler / filtrano per
-# "app.core.manipola.transforms.base" (pattern §6.1 facade).
 logger = get_logger("app.core.manipola.transforms.base")
 
 DataFrame = Union[pd.DataFrame, gpd.GeoDataFrame]
 
 
-# =============================================================================
 # AGGREGAZIONE (GROUP BY)
 # Raggruppa per colonne e applica funzioni: count, sum, mean, min, max, first, last.
-# =============================================================================
 
 def op_aggregate(
     df: DataFrame,
@@ -197,10 +192,8 @@ def op_aggregate(
         raise
 
 
-# =============================================================================
 # ORDINAMENTO
 # Ordina DataFrame per una o più colonne (asc/desc).
-# =============================================================================
 
 def op_sort(
     df: DataFrame,
@@ -234,10 +227,8 @@ def op_sort(
         raise
 
 
-# =============================================================================
 # DEDUPLICAZIONE
 # Rimuove righe duplicate su colonne selezionate. Default: tutte le colonne.
-# =============================================================================
 
 def op_distinct(
     df: DataFrame,
@@ -270,10 +261,8 @@ def op_distinct(
         raise
 
 
-# =============================================================================
 # DEDUP ADVANCED — Deduplicazione avanzata con ordinamento prioritario
 # Rimuove duplicati con possibilità di ordinare prima per priorità.
-# =============================================================================
 
 def op_dedup_advanced(
     df: DataFrame,
@@ -330,10 +319,8 @@ def op_dedup_advanced(
         raise
 
 
-# =============================================================================
 # WINDOW FUNCTION — Funzioni finestra: rank, cumsum, lag, lead, etc.
 # Calcola funzioni analitiche per gruppo con ordinamento.
-# =============================================================================
 
 def op_window_function(
     df: DataFrame,

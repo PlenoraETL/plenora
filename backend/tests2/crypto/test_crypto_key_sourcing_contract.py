@@ -74,8 +74,6 @@ def _reset_fernet_cache_and_clean_env(monkeypatch):
     crypto._reset_cache_for_tests()
 
 
-# ─── 1) Chain canonical + tombstone alias legacy (D4 chiuso 2026-04-23) ──────
-
 def test_key_chain_plenora_is_used_and_legacy_aliases_are_ignored(monkeypatch):
     """Blinda §1.5 + §6 D4: la chain legge SOLO PLENORA_ENCRYPTION_KEY.
 
@@ -143,8 +141,6 @@ def test_conn_encrypt_key_tombstoned_alone(monkeypatch):
     )
 
 
-# ─── 2) D5 regression — niente fallback su SECRET_KEY / JWT_SECRET_KEY ────────
-
 def test_d5_no_fallback_on_secret_key_or_jwt_secret_key(monkeypatch):
     """Blinda §6 D5 (chiusa 2026-04-20): la chain NON fallbacka più su
     ``SECRET_KEY`` / ``JWT_SECRET_KEY``. Quei nomi appartengono al
@@ -177,8 +173,6 @@ def test_d5_no_fallback_on_secret_key_or_jwt_secret_key(monkeypatch):
         "Regressione D5: JWT_SECRET_KEY è stato usato come crypto key"
     )
 
-
-# ─── 3) Fail-fast in produzione ───────────────────────────────────────────────
 
 def test_fail_fast_in_production_when_no_key_configured(monkeypatch):
     """Blinda §3 riga ``ENVIRONMENT``: in prod niente chiave → RuntimeError.
@@ -253,8 +247,6 @@ def test_fail_fast_when_key_shorter_than_minimum_in_any_environment(monkeypatch)
     with pytest.raises(RuntimeError, match="troppo corta"):
         crypto._get_raw_key()
 
-
-# ─── 4) Opt-in dev fail-fast replica ──────────────────────────────────────────
 
 def test_disable_default_key_opt_in_triggers_fail_fast_in_dev(monkeypatch):
     """Blinda §3 riga ``PLENORA_DISABLE_DEFAULT_KEY``: opt-in dev che

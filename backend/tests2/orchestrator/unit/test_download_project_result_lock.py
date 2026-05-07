@@ -55,9 +55,7 @@ def pipeline_client(current_user: CurrentUser) -> TestClient:
     return TestClient(app, raise_server_exceptions=False)
 
 
-# =============================================================================
 # Scenario 1: filesystem vuoto + blob DB presente → scarica dal blob
-# =============================================================================
 
 
 def test_download_project_result_falls_back_to_db_blob(pipeline_client, tmp_path):

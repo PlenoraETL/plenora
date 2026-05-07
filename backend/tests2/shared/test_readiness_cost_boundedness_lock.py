@@ -40,9 +40,7 @@ _HEALTH_PY = (
 )
 
 
-# =====================================================================
 # 1. Default-disabled posture for opt-in checks
-# =====================================================================
 #
 # A new readiness check that defaults to ENABLED can unexpectedly
 # turn dev/test/CLI deploys into 503-on-/ready. Both opt-in checks
@@ -96,9 +94,7 @@ def test_pool_headroom_check_does_not_have_default_threshold_setting():
     )
 
 
-# =====================================================================
 # 2. Capability-disabled / threshold-disabled skip paths produce 200
-# =====================================================================
 
 
 def test_object_storage_skip_path_returns_true():
@@ -160,9 +156,7 @@ def test_beat_heartbeat_default_threshold_skip_returns_true():
     assert "disabled" in detail
 
 
-# =====================================================================
 # 3. Keyset count + ordering lock
-# =====================================================================
 #
 # The 8-key shape is asserted by
 # `tests2/observability/test_health_module_contract.py::
@@ -239,9 +233,7 @@ def test_gather_readiness_keyset_canonical_order():
     )
 
 
-# =====================================================================
 # 4. Source-bound: no direct network call without timeout/skip path
-# =====================================================================
 #
 # The cost-boundedness invariant: any check that does network I/O
 # MUST either:
@@ -324,9 +316,7 @@ def test_object_storage_check_goes_through_cloud_backends_capability_gate():
     )
 
 
-# =====================================================================
 # 5. Defense-in-depth: heavy checks declare fail-OPEN posture
-# =====================================================================
 #
 # `check_pool_headroom` / `check_migrations_aligned` /
 # `check_reconciliation_backlog` / `check_beat_heartbeat` are
@@ -399,9 +389,7 @@ def test_check_redis_remains_fail_closed():
     assert "RuntimeError" in detail
 
 
-# =====================================================================
 # 6. OPS-001: liveness cheapness + Redis PING-level timeout
-# =====================================================================
 #
 # BE-GO-READY-OPS-001-READINESS-COST-BOUNDEDNESS adds three locks:
 #   (a) liveness must NEVER call any of the 6 readiness-only checks
@@ -589,9 +577,7 @@ def test_health_module_has_no_top_level_heavy_imports():
     )
 
 
-# =====================================================================
 # 7. OPS-002: PG + object-storage readiness timeout bounds
-# =====================================================================
 #
 # BE-GO-READY-OPS-002-READINESS-PG-OBJECTSTORE-TIMEOUTS adds two
 # bounds matching the OPS-001 Redis pattern:

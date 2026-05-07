@@ -163,9 +163,7 @@ def _make_writer(
     return DatabaseWriter(cfg, engine=engine, db_type="oracle")
 
 
-# =============================================================================
 # Setup helper: crea tabella con schema completo (PK + UK + CHECK)
-# =============================================================================
 
 
 def _create_schema_rich_table(table: str) -> None:
@@ -192,9 +190,7 @@ def _create_schema_rich_table(table: str) -> None:
         cur.close()
 
 
-# =============================================================================
 # Scenario 1 — schema preservation: PK, UK, CHECK dopo redef
-# =============================================================================
 
 
 def test_redef_preserves_pk_unique_and_check_constraints(monkeypatch):
@@ -277,9 +273,7 @@ def test_redef_preserves_pk_unique_and_check_constraints(monkeypatch):
         _drop_if_exists(interim)
 
 
-# =============================================================================
 # Scenario 2 — tabella senza PK → fallback a ROWID o atomic
-# =============================================================================
 
 
 def test_redef_without_pk_falls_back_gracefully(monkeypatch):
@@ -324,9 +318,7 @@ def test_redef_without_pk_falls_back_gracefully(monkeypatch):
         _drop_if_exists(f"{table}__RDF")
 
 
-# =============================================================================
 # Scenario 3 — INSERT in interim fallisce → target INTATTO, interim droppato
-# =============================================================================
 
 
 def test_redef_insert_failure_aborts_and_preserves_target(monkeypatch):

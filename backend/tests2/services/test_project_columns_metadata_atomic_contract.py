@@ -42,9 +42,7 @@ import pytest
 pytestmark = [pytest.mark.unit, pytest.mark.contract]
 
 
-# =============================================================================
 # Fixture — mock della pg transaction()
-# =============================================================================
 
 
 @pytest.fixture
@@ -104,9 +102,7 @@ def mock_pg_conn(monkeypatch):
     return {"executed": executed, "state": state}
 
 
-# =============================================================================
 # SEQUENCE — SELECT FOR UPDATE deve precedere UPDATE, entrambi in transaction
-# =============================================================================
 
 
 def test_select_for_update_precedes_update(mock_pg_conn):
@@ -137,9 +133,7 @@ def test_select_for_update_precedes_update(mock_pg_conn):
     assert new_canvas["edges"] == []
 
 
-# =============================================================================
 # MERGE — scrivere una key non deve cancellare le altre
-# =============================================================================
 
 
 def test_writing_columns_metadata_preserves_nodes_and_edges(mock_pg_conn):
@@ -166,9 +160,7 @@ def test_writing_columns_metadata_preserves_nodes_and_edges(mock_pg_conn):
     assert final_canvas["retention_n"] == 5
 
 
-# =============================================================================
 # PROJECT NOT FOUND — False, no crash
-# =============================================================================
 
 
 def test_project_not_found_returns_false(mock_pg_conn):
@@ -185,9 +177,7 @@ def test_project_not_found_returns_false(mock_pg_conn):
     assert "select" in executed[0][0].lower()
 
 
-# =============================================================================
 # CANVAS CORROTTO — raise, no silent overwrite
-# =============================================================================
 
 
 def test_corrupted_canvas_raises_instead_of_overwriting(mock_pg_conn):
@@ -236,9 +226,7 @@ def test_canvas_null_treated_as_empty_dict(mock_pg_conn):
     assert final_canvas == {"columns_metadata": [{"name": "x", "type": "str"}]}
 
 
-# =============================================================================
 # project_service.update_project_columns_metadata delega alla versione atomica
-# =============================================================================
 
 
 def test_project_service_delegates_to_atomic_helper(monkeypatch):

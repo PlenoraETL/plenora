@@ -30,9 +30,7 @@ from typing import Any, Dict, List, Optional, Literal
 from datetime import datetime
 
 
-# =============================================================================
 # TIPI E COSTANTI
-# =============================================================================
 
 # Stati possibili per uno schedule
 ScheduleStatus = Literal[
@@ -65,9 +63,7 @@ ScheduleEventType = Literal[
 LogLevel = Literal["DEBUG", "INFO", "WARNING", "ERROR"]
 
 
-# =============================================================================
 # CONFIGURAZIONE SCHEDULE
-# =============================================================================
 
 class ScheduleFrequency(BaseModel):
     """
@@ -214,9 +210,7 @@ class SchedulePipeline(BaseModel):
     project_type: Literal["estrai", "manipola", "arricchisci"] = "estrai"
 
 
-# =============================================================================
 # SCHEDULE CONFIG — Modello principale
-# =============================================================================
 
 class ScheduleConfig(BaseModel):
     """
@@ -261,9 +255,7 @@ class ScheduleConfig(BaseModel):
     runtime: ScheduleRuntime = ScheduleRuntime()
 
 
-# =============================================================================
 # CRUD — Richieste API
-# =============================================================================
 
 class ScheduleCreate(BaseModel):
     """
@@ -430,9 +422,7 @@ class ScheduleCatchupUpdate(BaseModel):
     grace_hours: int = Field(default=24, gt=0)
 
 
-# =============================================================================
 # LOG ESECUZIONI
-# =============================================================================
 
 class LogStep(BaseModel):
     """
@@ -496,9 +486,7 @@ class ScheduleLogList(BaseModel):
     page_size: int = 20
 
 
-# =============================================================================
 # HEALTHCHECK
-# =============================================================================
 
 class BeatHealthcheck(BaseModel):
     """

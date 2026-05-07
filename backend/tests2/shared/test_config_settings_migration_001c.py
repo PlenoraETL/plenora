@@ -29,9 +29,7 @@ pytestmark = [pytest.mark.unit, pytest.mark.shared, pytest.mark.contract]
 _BACKEND_APP = Path(__file__).resolve().parent.parent.parent / "app"
 
 
-# ---------------------------------------------------------------------------
 # Defaults present + tipati + valori storici
-# ---------------------------------------------------------------------------
 
 @pytest.mark.parametrize(
     "key, expected_type, expected_default",
@@ -55,9 +53,7 @@ def test_default_present_and_typed(key, expected_type, expected_default):
     )
 
 
-# ---------------------------------------------------------------------------
 # Override env via Settings._converti_tipo_env
-# ---------------------------------------------------------------------------
 
 @pytest.mark.parametrize(
     "key, env_value, expected",
@@ -77,9 +73,7 @@ def test_env_override_typed(monkeypatch, key, env_value, expected):
     assert isinstance(val, int)
 
 
-# ---------------------------------------------------------------------------
 # Source-bound: ogni consumer legge via settings.get, no os.getenv residuo
-# ---------------------------------------------------------------------------
 
 def _read(path: Path) -> str:
     return path.read_text(encoding="utf-8")
@@ -114,9 +108,7 @@ def test_admin_system_status_reads_stale_threshold_via_settings():
     assert "os.getenv(\"JWT_BLACKLIST_STALE_THRESHOLD_SEC" not in src
 
 
-# ---------------------------------------------------------------------------
 # auth.LOGIN_* resta module-level + monkeypatch-friendly
-# ---------------------------------------------------------------------------
 
 def test_auth_login_constants_are_module_level_ints():
     """I test rate-limit esistenti monkeypatch-ano `auth.LOGIN_*`. Se le

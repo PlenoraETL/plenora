@@ -31,9 +31,7 @@ os.environ.setdefault(
 )
 
 
-# ---------------------------------------------------------------------------
 # DB-init isolation a session bootstrap (Phase 3 Batch B closeout, 3)
-# ---------------------------------------------------------------------------
 #
 # Problema: `app/main.py:51` chiama `init_all_dbs()` AL TOP-LEVEL del
 # modulo. Qualsiasi test (es. `test_c8_observability_contract.py`) che fa
@@ -175,9 +173,7 @@ def backend_root() -> Path:
     return Path(__file__).resolve().parent.parent
 
 
-# ---------------------------------------------------------------------------
 # Audit-action isolation per test unit/contract (Phase 3 Batch B closeout)
-# ---------------------------------------------------------------------------
 #
 # Problema: dopo Batch B, ~26 endpoint hanno `@audit_action(...)`. Sui test
 # che chiamano gli endpoint via FastAPI TestClient (o invocano la view
@@ -231,9 +227,7 @@ def _stub_audit_action_write(request, monkeypatch):
     yield
 
 
-# ---------------------------------------------------------------------------
 # DB-logger isolation per test unit/contract (Phase 3 Batch B closeout, 2)
-# ---------------------------------------------------------------------------
 #
 # Problema simmetrico ad audit_action: `PostgresLogHandler.emit` (definito
 # in `app/utils/logger.py:323`) e' attaccato ai logger applicativi e fa

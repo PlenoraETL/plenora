@@ -66,9 +66,7 @@ pytestmark = [
 ]
 
 
-# ─────────────────────────────────────────────────────────────────────
 # Harness mini-bench (copiato dal pattern di test_bench_bulk_vs_execu*)
-# ─────────────────────────────────────────────────────────────────────
 
 
 def _median_runtime(
@@ -86,9 +84,7 @@ def _median_runtime(
     return statistics.median(times)
 
 
-# =============================================================================
 # Candidato A — spatial.py::op_geo_clean_topology Step 1 (make_valid loop)
-# =============================================================================
 
 
 def _baseline_fix_geom_validity(gdf: gpd.GeoDataFrame) -> int:
@@ -262,9 +258,7 @@ def _alternative_fix_geom_validity_inplace(gdf: gpd.GeoDataFrame) -> int:
     return n_fixed
 
 
-# =============================================================================
 # Candidato B — features_service.py WKT parse per-riga
-# =============================================================================
 
 
 def _baseline_wkt_parse_apply(df: pd.DataFrame, col: str) -> pd.Series:
@@ -375,9 +369,7 @@ def test_bench_wkt_parse_speedup():
     )
 
 
-# =============================================================================
 # Candidato C — transforms/base.py::op_text_normalize (apply-lambda) — Batch 3.8
-# =============================================================================
 
 
 def _baseline_text_normalize(series: pd.Series, ops: str) -> pd.Series:

@@ -298,14 +298,12 @@ class ApiConnectionSourceLoadingMixin:
     fail-closed) + SSRF (outbound URL guard).
     """
 
-    # =========================================================================
     # SOURCE_LOADING / TENANCY
     # Wrapper sopra `app.core.artifacts.SourceLoader`. I wrapper di
     # api_connector aggiungono solo cio' che e' specifico al modulo:
     #   - `_load_source_project`: recompute upstream + fallback filesystem
     #   - `_load_file_source`: preview_limit
     #   - tutti: `filter_visible_columns` sul DataFrame ritornato
-    # =========================================================================
 
     def _assert_source_project_in_tenant(
         self, source_project_id: str, executing_group_id: str
@@ -667,9 +665,7 @@ class ApiConnectionSourceLoadingMixin:
         executing_group_id = _group_id_from_ctx(ctx) or "_static_"
         return SourceLoader().load(ref, expected_group_id=executing_group_id)
 
-    # =========================================================================
     # SSRF — outbound URL guard per `_execute_rest_file`
-    # =========================================================================
 
     @staticmethod
     def _validate_outbound_url(url: str) -> Optional[str]:

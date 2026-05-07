@@ -83,9 +83,7 @@ def _login_fail(client: TestClient, xff_ip: str):
     )
 
 
-# =============================================================================
 # Test: rate-limit isolato per-IP
-# =============================================================================
 
 
 def test_login_rate_limit_triggers_after_max_attempts(client_with_auth_router):

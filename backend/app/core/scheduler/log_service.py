@@ -46,9 +46,7 @@ class ScheduleLogService:
     a basso costo in ogni handler (come gia' fanno router/schedule_service).
     """
 
-    # =========================================================================
     # SCRITTURA
-    # =========================================================================
 
     def write_log(self, log_entry: ScheduleLogEntry) -> str:
         """INSERT del log entry. Ritorna il log_id (identificatore canonico).
@@ -85,9 +83,7 @@ class ScheduleLogService:
             logger.error(f"[CRASH] Errore scrittura log {log_entry.log_id}: {e}", exc_info=True)
             raise
 
-    # =========================================================================
     # LETTURA
-    # =========================================================================
 
     def _row_to_entry(self, row: dict) -> ScheduleLogEntry:
         """Mappa una row DB → ScheduleLogEntry (deserializza JSONB fields)."""
@@ -203,9 +199,7 @@ class ScheduleLogService:
             logger.error(f"[CRASH] Errore get_latest_log {schedule_id}: {e}", exc_info=True)
             return None
 
-    # =========================================================================
     # CANCELLAZIONE
-    # =========================================================================
 
     def delete_logs_before(self, before_date: date) -> int:
         """Cancella log con timestamp < before_date. Ritorna righe eliminate.
@@ -243,9 +237,7 @@ class ScheduleLogService:
             logger.error(f"[CRASH] Errore delete_schedule_logs {schedule_id}: {e}", exc_info=True)
             return 0
 
-    # =========================================================================
     # HELPER — Creazione log entry
-    # =========================================================================
 
     def _generate_log_id(self, schedule_id: str, timestamp: datetime) -> str:
         """Genera log_id univoco: sched_{short_id}_{HHMMSS_ffffff}.

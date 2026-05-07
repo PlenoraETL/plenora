@@ -176,9 +176,7 @@ class WriterPreflightLifecycleMixin:
     la propria connection).
     """
 
-    # ========================================================================
     # PREFLIGHT VALIDATION
-    # ========================================================================
 
     def validate(self) -> Tuple[bool, str]:
         """Valida le pre-condizioni prima della scrittura."""
@@ -297,9 +295,7 @@ class WriterPreflightLifecycleMixin:
                 f"'{self.config.schema_name}' fallita: {str(e)}"
             )
 
-    # ========================================================================
     # GESTIONE TABELLA (DDL lifecycle)
-    # ========================================================================
 
     def create_table(
         self,
@@ -409,9 +405,7 @@ class WriterPreflightLifecycleMixin:
             logger.error(f"[CRASH] Errore truncate tabella: {e}", exc_info=True)
             raise
 
-    # ========================================================================
     # CHECK CONFLITTI
-    # ========================================================================
 
     def check_conflicts(
         self,
@@ -434,9 +428,7 @@ class WriterPreflightLifecycleMixin:
             match_columns,
         )
 
-    # ========================================================================
     # WRITE RESULT FACTORY + SAFE-CONFIG GATE
-    # ========================================================================
 
     def _build_initial_result(
         self, total_rows: int, started_at: str

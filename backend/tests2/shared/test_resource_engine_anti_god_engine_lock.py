@@ -47,9 +47,7 @@ _SHARED_LOADER_PY = _RESOURCES_PKG / "loaders" / "_shared.py"
 _RESULTS_DB_PY = _BACKEND_ROOT / "app" / "db" / "results_db_service.py"
 
 
-# =====================================================================
 # Group A — type-level contract
-# =====================================================================
 
 
 def test_canonical_names_exported_from_package():
@@ -120,9 +118,7 @@ def test_resource_is_frozen():
         r.size_bytes = 99  # type: ignore[misc]
 
 
-# =====================================================================
 # Group B — banned imports under app/core/resources/
-# =====================================================================
 
 
 _BANNED_IMPORT_NEEDLES = (
@@ -218,9 +214,7 @@ def test_loader_pkg_does_not_pull_pandas_at_import_time():
     )
 
 
-# =====================================================================
 # Group C — single-dispatch lock (de-duplication invariant)
-# =====================================================================
 
 
 def test_storage_key_dispatch_lives_in_exactly_one_module():
@@ -317,9 +311,7 @@ def test_loader_owns_the_dispatch_tokens():
     )
 
 
-# =====================================================================
 # Group D — registry contract
-# =====================================================================
 
 
 def test_default_registry_resolves_result_blob_kind():
@@ -374,9 +366,7 @@ def test_registry_raises_on_missing_kind():
         reg.get(ref, mode="bytes")
 
 
-# =====================================================================
 # Group E — registry public API is bounded
-# =====================================================================
 
 
 def test_registry_protocol_has_only_register_and_get():

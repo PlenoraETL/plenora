@@ -67,9 +67,7 @@ def client(current_user: CurrentUser, monkeypatch) -> TestClient:
     return TestClient(app, raise_server_exceptions=False)
 
 
-# =============================================================================
 # Shape 500 canonica — campi top-level nel detail
-# =============================================================================
 
 
 def test_delete_project_500_shape_on_cleanup_partial_critical(client):
@@ -164,9 +162,7 @@ def test_delete_project_500_message_human_readable(client):
     assert "intermediate_runs" in msg or "results_blobs" in msg
 
 
-# =============================================================================
 # Anti-regressione: 500 generico FastAPI non deve mai scattare
-# =============================================================================
 
 
 def test_delete_project_does_not_fall_back_to_generic_500(client):

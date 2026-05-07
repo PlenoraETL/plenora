@@ -42,9 +42,7 @@ from app.core.carica.models import WriteStatus
 pytestmark = [pytest.mark.unit, pytest.mark.contract]
 
 
-# =============================================================================
 # 1. WriteStatus enum include SKIPPED_IDEMPOTENT
-# =============================================================================
 
 
 def test_write_status_has_skipped_idempotent():
@@ -54,9 +52,7 @@ def test_write_status_has_skipped_idempotent():
     assert WriteStatus.SKIPPED_IDEMPOTENT.value == "skipped_idempotent"
 
 
-# =============================================================================
 # 2. Signature: run_id param present + default None
-# =============================================================================
 
 
 def test_execute_signature_accepts_run_id():
@@ -65,9 +61,7 @@ def test_execute_signature_accepts_run_id():
     assert sig.parameters["run_id"].default is None
 
 
-# =============================================================================
 # 3. run_id + already_completed -> short-circuit
-# =============================================================================
 
 
 def test_execute_short_circuits_when_run_id_already_completed(monkeypatch):
@@ -116,9 +110,7 @@ def test_execute_short_circuit_result_has_idempotent_flag():
     assert result.rows_written == 0 or result.rows_written is None
 
 
-# =============================================================================
 # 4. run_id + NOT completed -> flow normale (guard no-op)
-# =============================================================================
 
 
 def test_execute_proceeds_when_run_id_not_completed(monkeypatch):
@@ -156,9 +148,7 @@ def test_execute_proceeds_when_run_id_not_completed(monkeypatch):
         )
 
 
-# =============================================================================
 # 5. Nessun run_id -> guard no-op (retro-compat con callers esistenti)
-# =============================================================================
 
 
 def test_execute_without_run_id_skips_guard(monkeypatch):
@@ -187,9 +177,7 @@ def test_execute_without_run_id_skips_guard(monkeypatch):
     )
 
 
-# =============================================================================
 # 6. Fail-open: eccezione nel check non blocca il flusso
-# =============================================================================
 
 
 def test_execute_proceeds_when_idempotency_check_raises(monkeypatch):
@@ -224,9 +212,7 @@ def test_execute_proceeds_when_idempotency_check_raises(monkeypatch):
     )
 
 
-# =============================================================================
 # 7. Sentinel: import e chiamata corretti nell'executor
-# =============================================================================
 
 
 def test_execute_calls_is_already_completed_when_run_id_present():

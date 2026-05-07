@@ -79,9 +79,7 @@ def _python_code_only(text: str) -> str:
     return out
 
 
-# ---------------------------------------------------------------------------
 # 1. Helper exists with the documented surface
-# ---------------------------------------------------------------------------
 
 
 def test_helper_module_is_importable_with_canonical_surface():
@@ -146,9 +144,7 @@ def test_helper_accepts_explicit_env_mapping():
     ) == RESOURCE_MAX_BYTES_DEFAULT
 
 
-# ---------------------------------------------------------------------------
 # 2. Source-bound: loaders MUST NOT reimplement env parsing
-# ---------------------------------------------------------------------------
 
 
 def test_loaders_import_the_shared_helper():

@@ -18,9 +18,7 @@ from app.db.sql_functions import (
     get_function_catalog,
     translate_calculated_column,
 )
-# BE-GO-READY-AUTH-ENGINE-016 dep-import off facade.
 from app.core.auth.dependencies import get_current_user, require_not_esecutore
-# BE-GO-READY-AUTH-ENGINE-014 Phase-8 contract fan-out.
 from app.shared.contracts.auth import CurrentUser
 from app.utils.logger import get_logger
 
@@ -28,8 +26,6 @@ logger = get_logger(__name__)
 
 functions_router = APIRouter(prefix="/functions", tags=["functions"])
 
-
-# ==================== MODELLI ====================
 
 class TranslateRequest(BaseModel):
     """Richiesta traduzione espressione."""
@@ -45,8 +41,6 @@ class TranslateResponse(BaseModel):
     """Risposta traduzione"""
     sql: str
 
-
-# ==================== CATALOGO FUNZIONI ====================
 
 @functions_router.get("/catalog")
 async def get_catalog(current_user: CurrentUser = Depends(require_not_esecutore)) -> Dict[str, Any]:

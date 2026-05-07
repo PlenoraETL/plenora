@@ -36,9 +36,7 @@ import pytest
 pytestmark = [pytest.mark.unit, pytest.mark.security, pytest.mark.contract]
 
 
-# =============================================================================
 # 1. Float: noise sotto-microscopico -> stesso hash
-# =============================================================================
 
 
 @pytest.mark.parametrize("a,b", [
@@ -64,9 +62,7 @@ def test_float_distant_values_produce_different_output():
     assert _format_float_stable(1.234568) != _format_float_stable(1.234569)
 
 
-# =============================================================================
 # 2. Coerenza int/float
-# =============================================================================
 
 
 @pytest.mark.parametrize("n", [0, 1, 100, -42, 1000000])
@@ -79,9 +75,7 @@ def test_int_and_float_same_value_produce_same_normalized_output(n):
     )
 
 
-# =============================================================================
 # 3. Decimal coerente con float
-# =============================================================================
 
 
 @pytest.mark.parametrize("v", ["1.23", "0.1", "100.5", "-42.0"])
@@ -94,9 +88,7 @@ def test_decimal_and_float_produce_same_normalized_output(v):
     assert _normalize_value(d) == _normalize_value(f)
 
 
-# =============================================================================
 # 4. NaN / Inf deterministici
-# =============================================================================
 
 
 def test_nan_produces_stable_output():
@@ -115,9 +107,7 @@ def test_negative_inf_produces_stable_output():
     assert _format_float_stable(float("-inf")) == "-inf"
 
 
-# =============================================================================
 # 5. Output canonico: zeri trailing e punto finale rimossi
-# =============================================================================
 
 
 @pytest.mark.parametrize("v,expected", [
@@ -133,9 +123,7 @@ def test_canonical_output_no_trailing_zeros_or_dot(v, expected):
     assert _format_float_stable(v) == expected
 
 
-# =============================================================================
 # 6. row_hash end-to-end: dedup funziona
-# =============================================================================
 
 
 def test_row_hash_stable_across_floating_point_noise():
@@ -162,9 +150,7 @@ def test_row_hash_still_distinguishes_different_values():
     assert h1 != h2
 
 
-# =============================================================================
 # 7. Policy esplicita: coarse quantization at 6 decimals
-# =============================================================================
 # Il fix N10 non e' "semanticamente neutro": sceglie una tolleranza
 # applicativa di 6 decimali. Questi test la nominano esplicitamente
 # perche' e' una SCELTA di business (normalizzazione per dedup stabile),

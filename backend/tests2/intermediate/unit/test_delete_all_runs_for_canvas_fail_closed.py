@@ -27,9 +27,7 @@ import pytest
 pytestmark = [pytest.mark.unit, pytest.mark.contract, pytest.mark.regression]
 
 
-# =============================================================================
 # HAPPY PATH / EARLY EXIT (firma -> int preservata)
-# =============================================================================
 
 
 def test_delete_all_runs_happy_path_returns_count():
@@ -60,9 +58,7 @@ def test_delete_all_runs_no_runs_returns_zero():
     mock_delete.assert_not_called()
 
 
-# =============================================================================
 # INNER PER-ROW FAIL — best-effort continue (fail-open con breadcrumb)
-# =============================================================================
 
 
 def test_delete_all_runs_inner_fail_continues_and_logs_warning():
@@ -92,9 +88,7 @@ def test_delete_all_runs_inner_fail_continues_and_logs_warning():
     assert inner_warnings[0].kwargs.get("exc_info") is True
 
 
-# =============================================================================
 # OUTER CATASTROPHIC FAIL — fail-closed (raise invece di return 0)
-# =============================================================================
 
 
 def test_delete_all_runs_outer_fail_raises_not_returns_zero():

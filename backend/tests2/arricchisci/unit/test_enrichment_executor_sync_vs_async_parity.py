@@ -42,9 +42,7 @@ from app.core.arricchisci.models import (
 pytestmark = [pytest.mark.unit, pytest.mark.arricchisci]
 
 
-# ---------------------------------------------------------------------------
 # Helpers
-# ---------------------------------------------------------------------------
 
 def _make_executor(
     *,
@@ -95,9 +93,7 @@ def _install_fake_call(executor, fn):
     executor._call_api_with_retry = fn
 
 
-# ---------------------------------------------------------------------------
 # T1 — Happy path, no dedup (parity stabile)
-# ---------------------------------------------------------------------------
 def test_t1_happy_path_parity_no_dedup(monkeypatch):
     monkeypatch.setenv("ENRICHMENT_POOL_SIZE", "5")
     df = pd.DataFrame({"q": [f"v{i}" for i in range(10)]})
@@ -119,9 +115,7 @@ def test_t1_happy_path_parity_no_dedup(monkeypatch):
     assert len(sync_errors) == len(async_errors) == 0
 
 
-# ---------------------------------------------------------------------------
 # T2 — Dedup con 3 cache_key distinti (parity stabile)
-# ---------------------------------------------------------------------------
 def test_t2_dedup_three_cache_keys_parity(monkeypatch):
     monkeypatch.setenv("ENRICHMENT_POOL_SIZE", "5")
     values = ["a", "b", "c", "a", "b", "c", "a", "b", "c", "a"]
@@ -153,9 +147,7 @@ def test_t2_dedup_three_cache_keys_parity(monkeypatch):
     assert list(sync_df["result"]) == list(async_df["result"])
 
 
-# ---------------------------------------------------------------------------
 # T3 — Cache stampede (HARDENING: rosso pre-fix, verde post-fix)
-# ---------------------------------------------------------------------------
 def test_t3_cache_stampede_parity(monkeypatch):
     """20 righe con un solo cache_key. Grazie al grouping 1 task : 1 cache_key
     entrambi i path fanno UNA chiamata API. Il test presidia il contratto:
@@ -201,9 +193,7 @@ def test_t3_cache_stampede_parity(monkeypatch):
     )
 
 
-# ---------------------------------------------------------------------------
 # T4 — Rate limiter (HARDENING: rosso pre-fix, verde post-fix)
-# ---------------------------------------------------------------------------
 def test_t4_rate_limiter_invoked_parity(monkeypatch):
     """Il rate limiter e' parte del contratto enrichment: ogni chiamata API
     deve passare per RateLimiter.acquire(). Sync lo rispetta. Async pre-fix
@@ -254,9 +244,7 @@ def test_t4_rate_limiter_invoked_parity(monkeypatch):
     )
 
 
-# ---------------------------------------------------------------------------
 # T5 — skip_null_params (parity stabile)
-# ---------------------------------------------------------------------------
 def test_t5_skip_null_params_parity(monkeypatch):
     monkeypatch.setenv("ENRICHMENT_POOL_SIZE", "5")
     df = pd.DataFrame({"q": ["a", None, "b", "", "c"]})
@@ -277,9 +265,7 @@ def test_t5_skip_null_params_parity(monkeypatch):
     assert async_stats.skipped == 2
 
 
-# ---------------------------------------------------------------------------
 # T6 — Error granularity (HARDENING: rosso pre-fix, verde post-fix)
-# ---------------------------------------------------------------------------
 def test_t6_error_granularity_parity(monkeypatch):
     """20 righe con cache_key identico, errore dall'API con http_status
     e retry_count. Sync replica RowError per ogni riga del gruppo (20).
@@ -326,9 +312,7 @@ def test_t6_error_granularity_parity(monkeypatch):
     assert all(e.retry_count == 3 for e in async_errors)
 
 
-# ---------------------------------------------------------------------------
 # T7 — Early stop: divergenza accettata (documentativo)
-# ---------------------------------------------------------------------------
 def test_t7_early_stop_accepted_divergence(monkeypatch):
     """Async implementa early stop su stop_on_error_threshold a granularita'
     chunk (CHUNK=1000). Sync non ha early stop: processa sempre tutte le
@@ -378,9 +362,7 @@ def test_t7_early_stop_accepted_divergence(monkeypatch):
     assert async_count[0] == 10, "async early stop non si attiva dentro chunk"
 
 
-# ---------------------------------------------------------------------------
 # T8 — Progress callback: divergenza accettata (documentativo)
-# ---------------------------------------------------------------------------
 def test_t8_progress_callback_accepted_divergence(monkeypatch):
     """Sync invoca progress_callback ad ogni gruppo completato via
     _update_progress (signature: (percent, message)). Async invoca

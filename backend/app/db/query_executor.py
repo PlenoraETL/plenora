@@ -54,9 +54,7 @@ logger = get_logger(__name__)
 from app.utils.result_store import get_temp_output_path, save_result_blob
 
 
-# =============================================================================
 # DEFINIZIONI TIPI
-# =============================================================================
 
 @dataclass
 class DatabaseConnection:
@@ -101,9 +99,7 @@ class QueryResult:
     result_id: Optional[str] = None
 
 
-# =============================================================================
 # PROTOCOLLI PER DEPENDENCY INJECTION
-# =============================================================================
 
 class EngineFactoryProtocol(Protocol):
     """Protocollo per la factory di SQLAlchemy engines — iniettabile per test."""
@@ -137,9 +133,7 @@ class NullLogger:
     def warning(self, msg: str) -> None: pass
 
 
-# =============================================================================
 # ENGINE FACTORY (default)
-# =============================================================================
 
 class DefaultEngineFactory:
     """
@@ -375,9 +369,7 @@ class DefaultEngineFactory:
         return args_per_tipo.get(conn.type, {})
 
 
-# =============================================================================
 # BUILDER PER RISULTATI (funzioni pure)
-# =============================================================================
 
 class ResultBuilder:
     """Costruttore di QueryResult — funzioni pure senza stato."""
@@ -449,9 +441,7 @@ class DataFrameBuilder:
         return pd.DataFrame(rows, columns=columns)
 
 
-# =============================================================================
 # QUERY EXECUTOR
-# =============================================================================
 
 class QueryExecutor:
     """
@@ -530,9 +520,7 @@ class QueryExecutor:
         """Directory risultati (per compatibilità con codice esistente)."""
         return self._results_dir
 
-    # =========================================================================
     # ESECUZIONE RAW (metodo unificato)
-    # =========================================================================
 
     def execute_raw(
         self,
@@ -644,9 +632,7 @@ class QueryExecutor:
 
             return rows, columns
 
-    # =========================================================================
     # C11: STREAMING CSV / PARQUET (zero full-materialization)
-    # =========================================================================
 
     def _execute_streaming_to_file(
         self,
@@ -768,9 +754,7 @@ class QueryExecutor:
 
         return total_rows, columns
 
-    # =========================================================================
     # ESECUZIONE COMPLETA (con salvataggio file)
-    # =========================================================================
 
     def execute_query(
         self,
@@ -964,9 +948,7 @@ class QueryExecutor:
             return self._result_builder.to_dict(result)
 
 
-# =============================================================================
 # FACTORY FUNCTION
-# =============================================================================
 
 def create_executor(
     engine_factory: EngineFactoryProtocol = None,

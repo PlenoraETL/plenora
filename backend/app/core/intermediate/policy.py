@@ -29,9 +29,7 @@ from dataclasses import dataclass
 from typing import Optional
 
 
-# ============================================================
 # Costanti / valori ammessi
-# ============================================================
 
 # Mode globale di persistenza. Tutti supportati end-to-end:
 # metadata_only/preview_only/full_pg via node_rows (PG); full_artifact
@@ -71,7 +69,6 @@ SUPPORTED_MANIPOLA_CHECKPOINTS = frozenset({
     MANIPOLA_CHECKPOINTS_ALL,
 })
 
-# ESTRAI / ARRICCHISCI: in Batch 1 solo final_only.
 MODULE_CHECKPOINTS_FINAL_ONLY = "final_only"
 SUPPORTED_FINAL_ONLY_CHECKPOINTS = frozenset({MODULE_CHECKPOINTS_FINAL_ONLY})
 
@@ -140,9 +137,7 @@ ARTIFACT_STATUS_COMPLETE = "complete"
 ARTIFACT_STATUS_FAILED = "failed"
 
 
-# ============================================================
 # Dataclass output policy
-# ============================================================
 
 @dataclass(frozen=True)
 class IntermediatePolicy:
@@ -191,9 +186,7 @@ def _skip(reason: str) -> IntermediatePolicy:
     )
 
 
-# ============================================================
 # Lettura settings (lazy)
-# ============================================================
 
 def _read_settings() -> dict:
     """Snapshot dei valori settings rilevanti.
@@ -217,9 +210,7 @@ def _read_settings() -> dict:
     }
 
 
-# ============================================================
 # Validazione settings (fail-fast)
-# ============================================================
 
 class IntermediateSettingsError(ValueError):
     """Settings persistenza intermedi non valide.
@@ -352,9 +343,7 @@ def reset_validation_cache() -> None:
     _validated_once = False
 
 
-# ============================================================
 # Per-call mode override (R-25 PR-B1)
-# ============================================================
 
 def resolve_intermediate_mode(
     default_mode: str,
@@ -417,9 +406,7 @@ def resolve_intermediate_mode(
     return override_mode
 
 
-# ============================================================
 # Resolver policy
-# ============================================================
 
 def _checkpoint_decision_manipola(
     node_type: str,
@@ -539,7 +526,6 @@ def resolve_intermediate_policy(
     )
     preview_rows = int(cfg["preview_rows"])
 
-    # ESTRAI / ARRICCHISCI: in Batch 1 solo final viene registrato.
     if module in (MODULE_ESTRAI, MODULE_ARRICCHISCI):
         if snapshot_kind == SNAPSHOT_KIND_CHECKPOINT:
             return _skip(f"{module}_checkpoints_disabled_in_batch1")
@@ -625,9 +611,7 @@ def _build_record_policy(
     )
 
 
-# ============================================================
 # Lettura record legacy
-# ============================================================
 
 def persistence_mode_for_record(node_meta_row: dict) -> str:
     """Risolve la `persistence_mode` apparente di un record `node_meta`.

@@ -19,9 +19,7 @@ import pytest
 pytestmark = [pytest.mark.unit, pytest.mark.manipola]
 
 
-# ---------------------------------------------------------------------------
 # Helpers
-# ---------------------------------------------------------------------------
 
 class _Node:
     type = "file_source"
@@ -52,9 +50,7 @@ class _StubLoader:
         return LoadedResource(data=self._df, metadata=metadata)
 
 
-# ---------------------------------------------------------------------------
 # 1. metadata_map populated for a file node with a geometry column
-# ---------------------------------------------------------------------------
 
 
 def test_metadata_map_receives_resource_metadata():
@@ -89,9 +85,7 @@ def test_metadata_map_receives_resource_metadata():
     assert meta.source_kind == "file"
 
 
-# ---------------------------------------------------------------------------
 # 2. metadata_map unchanged when load fails
-# ---------------------------------------------------------------------------
 
 
 def test_metadata_map_not_populated_on_load_error():
@@ -121,9 +115,7 @@ def test_metadata_map_not_populated_on_load_error():
     assert metadata_map == {}
 
 
-# ---------------------------------------------------------------------------
 # 3. metadata_map=None (default) - no error, existing behaviour unchanged
-# ---------------------------------------------------------------------------
 
 
 def test_default_metadata_map_none_does_not_raise():
@@ -145,9 +137,7 @@ def test_default_metadata_map_none_does_not_raise():
     assert "node-1" in dataframes
 
 
-# ---------------------------------------------------------------------------
 # 4. pre-built meta passed to _applica_crs_da_colonne - no double construction
-# ---------------------------------------------------------------------------
 
 
 def test_applica_crs_accepts_pre_built_meta():
@@ -171,9 +161,7 @@ def test_applica_crs_accepts_pre_built_meta():
     assert result.crs.to_epsg() == 4326
 
 
-# ---------------------------------------------------------------------------
 # 5. legacy path (no meta) still works
-# ---------------------------------------------------------------------------
 
 
 def test_applica_crs_fallback_builds_meta_from_node_columns():
@@ -193,9 +181,7 @@ def test_applica_crs_fallback_builds_meta_from_node_columns():
     assert result.crs.to_epsg() == 4326
 
 
-# ---------------------------------------------------------------------------
 # 6. alias normalisation preserved in metadata_map
-# ---------------------------------------------------------------------------
 
 
 def test_metadata_map_uses_alias_as_column_name():

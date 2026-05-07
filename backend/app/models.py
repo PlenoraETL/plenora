@@ -23,7 +23,6 @@ from app.shared.models import (
     ExecuteRequest,
 )
 
-# Re-export modelli di dominio dai rispettivi moduli
 try:
     from app.core.projects.models import (
         ProjectMetadata,

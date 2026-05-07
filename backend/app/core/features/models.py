@@ -17,9 +17,7 @@ from typing import List, Optional, Literal, Dict, Any
 from datetime import datetime
 
 
-# =============================================================================
 # MODELLI CONNESSIONE
-# =============================================================================
 
 class ArcGISConnection(BaseModel):
     """
@@ -98,9 +96,7 @@ class ArcGISTestResult(BaseModel):
     details: Optional[dict] = None
 
 
-# =============================================================================
 # MODELLI PER SCRITTURA
-# =============================================================================
 
 class FeatureWriteRequest(BaseModel):
     """Parametri per la scrittura su un Feature Service."""

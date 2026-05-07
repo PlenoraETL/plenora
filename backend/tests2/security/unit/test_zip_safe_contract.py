@@ -20,9 +20,7 @@ def _build_zip(*entries, compression=zipfile.ZIP_STORED):
     return zipfile.ZipFile(buffer, "r")
 
 
-# =============================================================================
 # Zip slip (regression)
-# =============================================================================
 
 
 def test_safe_extractall_rejects_parent_traversal(tmp_path):
@@ -44,9 +42,7 @@ def test_safe_extractall_extracts_regular_members(tmp_path):
     assert (tmp_path / "nested" / "data.txt").read_text(encoding="utf-8") == "ok"
 
 
-# =============================================================================
 # Zip bomb: total uncompressed size cap
-# =============================================================================
 
 
 def test_safe_extractall_rejects_total_size_over_cap(tmp_path, monkeypatch):
@@ -72,9 +68,7 @@ def test_safe_extractall_total_size_at_cap_succeeds(tmp_path, monkeypatch):
     assert (tmp_path / "only.bin").stat().st_size == 500
 
 
-# =============================================================================
 # Zip bomb: per-single-file cap
-# =============================================================================
 
 
 def test_safe_extractall_rejects_single_file_over_cap(tmp_path, monkeypatch):
@@ -109,9 +103,7 @@ def test_single_file_cap_default_equals_total(tmp_path, monkeypatch):
     assert (tmp_path / "solo.bin").stat().st_size == 1000
 
 
-# =============================================================================
 # Zip bomb: file count cap
-# =============================================================================
 
 
 def test_safe_extractall_rejects_too_many_files(tmp_path, monkeypatch):
@@ -133,9 +125,7 @@ def test_safe_extractall_file_count_at_cap_succeeds(tmp_path, monkeypatch):
     assert len(list(tmp_path.iterdir())) == 3
 
 
-# =============================================================================
 # Zip bomb: compression ratio
-# =============================================================================
 
 
 def test_safe_extractall_rejects_high_compression_ratio(tmp_path, monkeypatch):
@@ -174,9 +164,7 @@ def test_safe_extractall_normal_compression_ratio_passes(tmp_path, monkeypatch):
     assert (tmp_path / "data.bin").stat().st_size == 2 * 1024 * 1024
 
 
-# =============================================================================
 # Env override semantics
-# =============================================================================
 
 
 def test_invalid_env_value_falls_back_to_default(tmp_path, monkeypatch):
@@ -195,9 +183,7 @@ def test_negative_env_value_falls_back_to_default(tmp_path, monkeypatch):
     assert (tmp_path / "a.txt").exists()
 
 
-# =============================================================================
 # Bomb checks pre-extract: nessun file scritto se cap violato
-# =============================================================================
 
 
 def test_bomb_check_runs_before_any_disk_write(tmp_path, monkeypatch):

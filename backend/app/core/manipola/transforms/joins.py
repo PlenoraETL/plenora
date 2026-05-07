@@ -48,16 +48,6 @@ from typing import List, Union
 
 from app.utils.logger import get_logger
 
-# Logger naming intenzionale: usiamo "app.core.manipola.transforms.base"
-# (NON `__name__` che sarebbe `...joins`) per preservare il contratto
-# osservabile pre-extraction. I record `[JOIN]` / `Join completato` /
-# warning chiavi NaN escono dallo stesso logger di base, cosi' i test
-# che attaccano handler a "app.core.manipola.transforms.base" (vedi
-# `test_op_join_nan_key_contract.py::base_log_records`) e i consumer
-# di log aggregation che filtrano per quel logger name continuano a
-# vedere identicamente i record di op_join. Questo e' parte
-# dell'invariante "zero call-site changes" del facade re-export
-# (vedi `PHASE_5_ENTRY_PLAN.md` §6.1).
 logger = get_logger("app.core.manipola.transforms.base")
 
 # Stesso alias dtype-union usato in base.py: copre sia pandas DataFrame
@@ -65,10 +55,8 @@ logger = get_logger("app.core.manipola.transforms.base")
 DataFrame = Union[pd.DataFrame, gpd.GeoDataFrame]
 
 
-# =============================================================================
 # JOIN — Unione tabelle per colonna chiave
 # Supporta: inner, left, right, outer, cross. Gestisce suffissi per colonne omonime.
-# =============================================================================
 
 def op_join(
     inputs: List[DataFrame],
@@ -98,7 +86,6 @@ def op_join(
     left_df = inputs[0].copy()
     right_df = inputs[1].copy()
 
-    # === PRE-VALIDATION CHIAVE JOIN ===
     # La chiave deve esistere PRIMA di qualsiasi manipolazione (dedup,
     # conversione tipi, rename suffissi). Senza questo, la KeyError
     # arriverebbe post-safe_rename con colonne _L / _R fuorvianti:
@@ -118,7 +105,6 @@ def op_join(
             f"Colonne disponibili nel right (prime 20): {list(right_df.columns)[:20]}"
         )
 
-    # === DEDUPLICAZIONE COLONNE ===
     # Se ci sono colonne duplicate, pandas merge fallisce con KeyError.
     # Strategia: se la chiave è duplicata tieni solo la prima occorrenza,
     # per le altre colonne aggiungi suffisso progressivo.
@@ -147,7 +133,6 @@ def op_join(
     left_df = dedup_columns(left_df, left_on)
     right_df = dedup_columns(right_df, right_on)
 
-    # === AUTO-CONVERSIONE TIPI CHIAVI DI JOIN ===
     # Se i tipi delle chiavi non corrispondono, prova a convertire.
     if left_on in left_df.columns and right_on in right_df.columns:
         left_dtype = left_df[left_on].dtype
@@ -157,17 +142,6 @@ def op_join(
 
             # Strategia: converti entrambi a stringa se uno è object, altrimenti a numerico.
             if left_dtype == 'object' or right_dtype == 'object':
-                # C1 Phase 4: niente .replace({'nan': None, '<NA>': None, ...}).
-                # Il pattern legacy mappava le stringhe 'nan' / '<NA>' / 'None' / ''
-                # a None per "ripulire" i missing dopo astype(str). Due bug:
-                #  1. una stringa LEGITTIMA "nan" (testo, non missing) veniva
-                #     trasformata in None -> esclusa silenziosamente dal join.
-                #  2. asimmetria: se la coercion non scattava (stessi dtype),
-                #     stringhe "nan" vere collidevano fra di loro come match
-                #     fittizi.
-                # Fix: cattura la maschera dei missing PRIMA di astype(str) e
-                # riapplicala con pd.NA dopo. Solo i veri null tornano null;
-                # le stringhe identiche a "nan" / "<NA>" passano invariate.
                 def clean_to_str(series):
                     null_mask = series.isna()
                     if pd.api.types.is_numeric_dtype(series):
@@ -243,7 +217,6 @@ def op_join(
             f"Colonne dopo rename: {list(right_df.columns)}"
         )
 
-    # === C1 Phase 4: telemetria + sentinel substitution per chiavi NaN ===
     # pandas non considera "NaN==NaN" in linea generale, MA:
     #  - how='outer' con NaN su entrambi i lati: pandas fonde le due righe
     #    NaN in un'unica riga di output (regression vs policy "righe
@@ -325,10 +298,8 @@ def op_join(
     return result
 
 
-# =============================================================================
 # UNIONE / CONCATENAZIONE VERTICALE
 # Impila righe di più DataFrame. Allinea automaticamente colonne per nome.
-# =============================================================================
 
 def op_union(
     inputs: List[DataFrame],
@@ -355,10 +326,8 @@ def op_union(
     return result
 
 
-# =============================================================================
 # CROSS JOIN — Prodotto cartesiano di due DataFrame
 # Genera tutte le combinazioni possibili di righe tra due tabelle.
-# =============================================================================
 
 CROSS_JOIN_STAGE = "manipola_cross_join"
 
@@ -385,7 +354,6 @@ def op_cross_join(
     left_df = dfs[0]
     right_df = dfs[1]
 
-    # === BE-GO-READY-TRANSFORMATION-ENGINE-001 — Preflight OOM guard ===
     # Cross-join produce |left| * |right| righe. Inputs anche modesti
     # (10k x 10k = 100M righe) generano un DataFrame che certamente
     # sfora la memoria del worker (1.5 GB cap RSS, vedi

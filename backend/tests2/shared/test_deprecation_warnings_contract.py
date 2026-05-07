@@ -41,9 +41,7 @@ import pytest
 pytestmark = [pytest.mark.unit, pytest.mark.contract]
 
 
-# ---------------------------------------------------------------------------
 # Alias matrix
-# ---------------------------------------------------------------------------
 
 
 @dataclass(frozen=True)
@@ -166,9 +164,7 @@ def _ids(cases: tuple[_AliasCase, ...]) -> list[str]:
     return [f"{c.rid}/{c.label}" for c in cases]
 
 
-# ---------------------------------------------------------------------------
 # Per-alias contract: emit + content
-# ---------------------------------------------------------------------------
 
 
 @pytest.mark.parametrize("case", _ALIAS_CASES, ids=_ids(_ALIAS_CASES))
@@ -201,9 +197,7 @@ def test_alias_emits_deprecation_warning_with_canonical_message(case: _AliasCase
         )
 
 
-# ---------------------------------------------------------------------------
 # Per-alias contract: emit-once cache
-# ---------------------------------------------------------------------------
 
 
 @pytest.mark.parametrize("case", _ALIAS_CASES, ids=_ids(_ALIAS_CASES))
@@ -230,9 +224,7 @@ def test_alias_emit_is_cached_once_per_process(case: _AliasCase):
     )
 
 
-# ---------------------------------------------------------------------------
 # Cross-cutting: independent caches across the four aliases
-# ---------------------------------------------------------------------------
 
 
 def test_each_alias_has_an_independent_cache():
@@ -254,9 +246,7 @@ def test_each_alias_has_an_independent_cache():
         assert "get_oauth2_token" in str(record[0].message)
 
 
-# ---------------------------------------------------------------------------
 # Cross-cutting: stacklevel propagation (R-23 representative)
-# ---------------------------------------------------------------------------
 
 
 def test_get_oauth2_token_stacklevel_points_to_caller():

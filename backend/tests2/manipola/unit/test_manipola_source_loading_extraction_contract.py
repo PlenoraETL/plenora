@@ -52,9 +52,7 @@ _SOURCE_LOADING_PY = (
 )
 
 
-# ---------------------------------------------------------------------------
 # Module surface
-# ---------------------------------------------------------------------------
 
 
 def test_source_loading_module_exists():
@@ -98,9 +96,7 @@ def test_load_file_sources_is_a_pure_function():
     )
 
 
-# ---------------------------------------------------------------------------
 # Delegator
-# ---------------------------------------------------------------------------
 
 
 def test_executor_delegates_to_source_loading_helper():
@@ -251,9 +247,7 @@ def test_helper_passes_explicit_group_id_to_source_loader():
     )
 
 
-# ---------------------------------------------------------------------------
 # Source-bound: executor delegator stays thin
-# ---------------------------------------------------------------------------
 
 
 def test_executor_does_not_reinline_file_source_business_logic():

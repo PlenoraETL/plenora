@@ -25,9 +25,7 @@ import pytest
 pytestmark = [pytest.mark.unit, pytest.mark.security, pytest.mark.contract]
 
 
-# ─────────────────────────────────────────────────────────────────────
 # Helpers payload
-# ─────────────────────────────────────────────────────────────────────
 
 
 def _png_bytes() -> bytes:
@@ -57,9 +55,7 @@ def _make_service():
     return FileSourceService()
 
 
-# ─────────────────────────────────────────────────────────────────────
 # create_raw_from_upload
-# ─────────────────────────────────────────────────────────────────────
 
 
 @pytest.mark.parametrize("payload,name", [
@@ -113,9 +109,7 @@ def test_create_raw_from_upload_accepts_legitimate_binary(monkeypatch):
     save_mock.assert_called_once()
 
 
-# ─────────────────────────────────────────────────────────────────────
 # create_multi_layer_from_upload
-# ─────────────────────────────────────────────────────────────────────
 
 
 def test_create_multi_layer_from_upload_blocks_executable(monkeypatch):
@@ -151,9 +145,7 @@ def test_create_multi_layer_requires_layers_config_first(monkeypatch):
         )
 
 
-# ─────────────────────────────────────────────────────────────────────
 # preview_file_temp
-# ─────────────────────────────────────────────────────────────────────
 
 
 def test_preview_file_temp_blocks_executable():

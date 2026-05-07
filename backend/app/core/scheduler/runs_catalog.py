@@ -71,9 +71,7 @@ class ScheduleRunsCatalog:
         else:
             self._results_dir = Path(results_dir)
 
-    # ------------------------------------------------------------------
     # path helpers
-    # ------------------------------------------------------------------
 
     @staticmethod
     def _schedule_short(schedule_id: str) -> str:
@@ -96,9 +94,7 @@ class ScheduleRunsCatalog:
             self._results_dir / project_id / "runs" / self._schedule_short(schedule_id)
         ).resolve()
 
-    # ------------------------------------------------------------------
     # API: listing
-    # ------------------------------------------------------------------
 
     def list_runs(
         self, project_id: str, schedule_id: str
@@ -132,9 +128,7 @@ class ScheduleRunsCatalog:
             )
         return runs
 
-    # ------------------------------------------------------------------
     # API: lookup specifico
-    # ------------------------------------------------------------------
 
     def get_run_dir(
         self, project_id: str, schedule_id: str, run_token: str
@@ -194,9 +188,7 @@ class ScheduleRunsCatalog:
         run_dirs.sort(key=lambda d: (d.name, d.stat().st_mtime), reverse=True)
         return run_dirs[0]
 
-    # ------------------------------------------------------------------
     # API: file lookup dentro una run
-    # ------------------------------------------------------------------
 
     def first_file_in(self, run_dir: Path) -> Optional[Path]:
         """Primo file (non directory) dentro una run.

@@ -66,9 +66,7 @@ def _read(p: Path) -> str:
     return p.read_text(encoding="utf-8")
 
 
-# ---------------------------------------------------------------------------
 # Source-bound: signals imported and handlers connected
-# ---------------------------------------------------------------------------
 
 
 def test_celery_app_imports_three_bootstrap_signals():
@@ -162,9 +160,7 @@ def test_handlers_for_worker_init_and_beat_init_do_not_force_reset():
         )
 
 
-# ---------------------------------------------------------------------------
 # Behavioural: handlers actually call bootstrap
-# ---------------------------------------------------------------------------
 
 
 @pytest.fixture
@@ -260,9 +256,7 @@ def test_beat_init_handler_skips_when_already_bootstrapped(
     assert calls == []
 
 
-# ---------------------------------------------------------------------------
 # Fail-closed: bootstrap exception propagates from the handler
-# ---------------------------------------------------------------------------
 
 
 def test_worker_process_init_propagates_bootstrap_exception(
@@ -311,9 +305,7 @@ def test_beat_init_propagates_bootstrap_exception(
     assert bootstrap_module.is_bootstrapped() is False
 
 
-# ---------------------------------------------------------------------------
 # _bootstrap_worker_process direct API contract
-# ---------------------------------------------------------------------------
 
 
 def test_bootstrap_worker_process_default_is_idempotent(

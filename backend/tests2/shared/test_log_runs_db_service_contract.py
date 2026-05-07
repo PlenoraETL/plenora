@@ -32,9 +32,7 @@ import pytest
 pytestmark = [pytest.mark.unit, pytest.mark.shared, pytest.mark.contract]
 
 
-# ---------------------------------------------------------------------------
 # Helpers
-# ---------------------------------------------------------------------------
 
 
 class _FakeResult:
@@ -71,9 +69,7 @@ def _capture_execute(
     return calls
 
 
-# ---------------------------------------------------------------------------
 # delete_log_run_by_run_id
-# ---------------------------------------------------------------------------
 
 
 def test_delete_log_run_by_run_id_issues_canonical_sql(monkeypatch):
@@ -132,9 +128,7 @@ def test_delete_log_run_by_run_id_propagates_sql_error(monkeypatch):
         delete_log_run_by_run_id("task-x")
 
 
-# ---------------------------------------------------------------------------
 # Router source-bound: orchestrator no longer imports pg_connection
-# ---------------------------------------------------------------------------
 
 
 def test_orchestrator_router_uses_helper_not_pg_connection():
@@ -152,9 +146,7 @@ def test_orchestrator_router_uses_helper_not_pg_connection():
     assert "delete_log_run_by_run_id" in src
 
 
-# ---------------------------------------------------------------------------
 # Module hygiene
-# ---------------------------------------------------------------------------
 
 
 def test_module_is_leaf_no_app_core_or_app_services_imports():

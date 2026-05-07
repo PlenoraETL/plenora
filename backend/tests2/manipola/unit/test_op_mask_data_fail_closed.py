@@ -43,9 +43,7 @@ from app.core.manipola.transforms.base import op_mask_data
 pytestmark = [pytest.mark.unit, pytest.mark.manipola, pytest.mark.contract]
 
 
-# =============================================================================
 # FAIL-CLOSED — mask_fn explode → raise RuntimeError (NO continue silent)
-# =============================================================================
 
 
 def test_op_mask_data_fails_closed_on_mask_fn_error():
@@ -126,9 +124,7 @@ def test_op_mask_data_no_partial_output_on_fail():
     assert df["email"].tolist() == ["a@b.com", "c@d.com"]
 
 
-# =============================================================================
 # HAPPY PATH — nessun raise, tutte colonne mascherate correttamente
-# =============================================================================
 
 
 def test_op_mask_data_happy_path_preserved():

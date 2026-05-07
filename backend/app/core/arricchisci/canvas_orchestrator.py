@@ -65,18 +65,6 @@ import app.db.db_service as db_svc  # noqa: F401  (test-monkeypatch surface pres
 from app.shared.execution.canvas_node import CanvasNode  # BE-GO-READY-ARCH-056-W3
 from app.shared.execution.canvas_graph import CanvasGraph  # BE-GO-READY-ARCH-058-W3
 from app.shared.execution.graph import kahn_topological_order  # BE-GO-READY-ARCH-060-W4
-# BE-GO-READY-ORCHESTRATION-ENGINE-011-CANVAS-CTX-NO-LEGACY-STATE-CUT
-# + BE-GO-READY-ORCHESTRATION-ENGINE-012-KILL-APPLY-TO-LEGACY-STATE:
-# the orchestrator no longer mirrors `ctx` values onto
-# `svc._current_group_id` / `svc._preview_limit`. Production mixin
-# readers (`_extract_file_source_group_id` /
-# `_extract_project_source_group_id` in `api_connection_rest_file`;
-# `_group_id_from_ctx` / `_preview_limit_from_ctx` in
-# `api_connection_source_loading`) are all CTX-STRICT. The
-# `apply_to_legacy_state` helper was deleted from
-# `execution_context.py` in OE012; the negative source-bound lock in
-# `tests2/arricchisci/unit/test_external_consumers_ctx_migration_contract.py`
-# enforces that nothing re-introduces it.
 from app.core.arricchisci.execution_context import (
     ArricchisciExecutionContext,
     build_execution_context,
@@ -97,17 +85,12 @@ __all__ = [
     "get_execution_order",
     "run_single_enricher",
     "is_file_source_for_file_processor",
-    # BE-GO-READY-TRANSFORMATION-ENGINE-015: re-export per consumer
-    # esterni che vogliono il typed boundary senza dover importare
-    # il modulo `execution_context` separatamente.
     "ArricchisciExecutionContext",
     "build_execution_context",
 ]
 
 
-# ---------------------------------------------------------------------------
 # Pure / orchestration helpers
-# ---------------------------------------------------------------------------
 
 
 def get_execution_order(
@@ -250,9 +233,7 @@ def run_single_enricher(
     return svc._execute_api_enricher(in_df, api_config, param_mapping)
 
 
-# ---------------------------------------------------------------------------
 # Top-level orchestrator
-# ---------------------------------------------------------------------------
 
 
 def execute_canvas_enrichment(
@@ -320,9 +301,6 @@ def execute_canvas_enrichment(
         )
         logger.info(f"Gruppi di esecuzione: {[(t, len(ids)) for t, ids in groups]}")
 
-        # BE-GO-READY-ARCH-058-W3: single parsed intake replaces two parallel
-        # dicts (node_map + node_wrappers). raw_map still available for legacy
-        # callers (execute_parallel_enrichers, _find_final_result).
         graph = CanvasGraph.from_nodes_edges(nodes, edges)
         node_results: Dict[str, Any] = {}
 
@@ -338,9 +316,6 @@ def execute_canvas_enrichment(
                 logger.debug(f"Esecuzione nodo: {node_id} ({node_type})")
 
                 if node_type == "project_source":
-                    # BE-GO-READY-TRANSFORMATION-ENGINE-019: Phase 2 —
-                    # passa il typed `ctx` al posto di affidarsi al
-                    # singleton state.
                     node_results[node_id] = svc._load_source_project(
                         node_data, force_recalculate, ctx=ctx,
                     )
@@ -354,13 +329,11 @@ def execute_canvas_enrichment(
                             "file_source_id": graph.get(node_id).get_field("file_source_id"),
                         }
                     else:
-                        # BE-GO-READY-TRANSFORMATION-ENGINE-019: typed ctx.
                         node_results[node_id] = svc._load_file_source(
                             node_data, ctx=ctx,
                         )
 
                 elif node_type == "staticValues":
-                    # BE-GO-READY-TRANSFORMATION-ENGINE-019: typed ctx.
                     node_results[node_id] = svc._load_static_values(
                         node_data, ctx=ctx,
                     )

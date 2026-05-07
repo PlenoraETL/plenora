@@ -46,9 +46,7 @@ from typing import Any, Dict, Optional
 __all__ = ["ArtifactPayload"]
 
 
-# ---------------------------------------------------------------------------
 # Payload safety guard (used by ExecutionResult.__post_init__)
-# ---------------------------------------------------------------------------
 
 # Module-name prefixes that signal a heavy DataFrame runtime.
 # Checked by string comparison - no import of these libraries.
@@ -86,9 +84,7 @@ def _check_payload_safe(payload: Dict[str, Any]) -> None:
             )
 
 
-# ---------------------------------------------------------------------------
 # Typed payload value objects
-# ---------------------------------------------------------------------------
 
 
 @dataclass(frozen=True)

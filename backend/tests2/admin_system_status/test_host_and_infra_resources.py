@@ -16,9 +16,7 @@ import pytest
 pytestmark = [pytest.mark.unit, pytest.mark.contract]
 
 
-# =============================================================================
 # get_host_resources — psutil
-# =============================================================================
 
 
 def test_host_resources_when_psutil_missing(monkeypatch):
@@ -334,9 +332,7 @@ def test_host_resources_no_loadavg_on_windows(monkeypatch):
     assert out["cpu"]["load_15m"] is None
 
 
-# =============================================================================
 # get_db_pool_status
-# =============================================================================
 
 
 def test_db_pool_when_db_fails_returns_unknown(monkeypatch):
@@ -404,9 +400,7 @@ def test_db_pool_many_idle_in_transaction_triggers_warn(monkeypatch):
     assert out["status"] == "warn"
 
 
-# =============================================================================
 # get_redis_status
-# =============================================================================
 
 
 def test_redis_unreachable_returns_error(monkeypatch):
@@ -485,9 +479,7 @@ def test_redis_without_maxmemory_has_no_percent(monkeypatch):
     assert out["percent"] is None
 
 
-# =============================================================================
 # get_db_schema_size
-# =============================================================================
 
 
 def test_db_schema_size_when_db_fails_returns_unknown(monkeypatch):
@@ -549,9 +541,7 @@ def test_db_schema_size_env_override(monkeypatch):
     assert out["status"] == "ok"  # 2GB < 10GB warn (override)
 
 
-# =============================================================================
 # Aggregator include i nuovi blocchi
-# =============================================================================
 
 
 def test_aggregator_includes_new_blocks(monkeypatch):
@@ -579,9 +569,7 @@ def test_aggregator_includes_new_blocks(monkeypatch):
         assert k in out, f"Mancante: {k}"
 
 
-# =============================================================================
 # get_blacklist_status — wrapper graceful su token_blacklist.get_blacklist_status
-# =============================================================================
 
 
 def test_blacklist_status_ok_via_wrapper(monkeypatch):
@@ -656,9 +644,7 @@ def test_blacklist_status_env_threshold_invalid_fallback(monkeypatch):
     assert captured["threshold"] == 1800
 
 
-# =============================================================================
 # get_tickets_status — graceful + soglie severity
-# =============================================================================
 
 
 def test_tickets_status_ok_when_no_critical(monkeypatch):

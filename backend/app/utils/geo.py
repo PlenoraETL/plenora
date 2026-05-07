@@ -39,9 +39,7 @@ from app.utils.logger import get_logger
 logger = get_logger(__name__)
 
 
-# =============================================================================
 # COSTANTI
-# =============================================================================
 
 # Nomi comunemente usati per le colonne geometriche nei database e file GIS
 GEOMETRY_COLUMN_NAMES = [
@@ -56,9 +54,7 @@ WKT_PREFIXES = (
 )
 
 
-# =============================================================================
 # PARSING GEOMETRIE
-# =============================================================================
 
 def parse_geometry(value: Any) -> Optional[Any]:
     """
@@ -218,9 +214,7 @@ def extract_srid_from_ewkb(value_str: str) -> Optional[int]:
     return None
 
 
-# =============================================================================
 # CONVERSIONE GEODATAFRAME
-# =============================================================================
 
 def to_geodataframe(
     df: pd.DataFrame,
@@ -390,9 +384,7 @@ def detect_geometry_column(df: pd.DataFrame) -> Optional[str]:
     return None
 
 
-# =============================================================================
 # UTILITY DI CONVERSIONE
-# =============================================================================
 
 def ensure_same_crs(
     gdf1: gpd.GeoDataFrame,

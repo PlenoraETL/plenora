@@ -45,9 +45,7 @@ from app.utils.logger import get_logger
 logger = get_logger(__name__)
 
 
-# =============================================================================
 # CARICAMENTO DATAFRAME
-# =============================================================================
 
 def load_dataframe_from_file(
     file_path: Union[str, Path],
@@ -346,9 +344,7 @@ def find_latest_output_file(output_dir: Union[str, Path]) -> Optional[Path]:
     return max(files, key=lambda x: x.stat().st_mtime)
 
 
-# =============================================================================
 # SALVATAGGIO DATAFRAME
-# =============================================================================
 
 def save_dataframe(
     df: pd.DataFrame,
@@ -389,7 +385,6 @@ def save_dataframe(
 
 
     try:
-        # --- Formati tabulari ---
 
         if formato == "csv":
             final_path = base_path.with_suffix(".csv")
@@ -422,7 +417,6 @@ def save_dataframe(
             final_path = base_path.with_suffix(".parquet")
             df.to_parquet(final_path, index=False)
 
-        # --- Formati geospaziali ---
 
         elif formato in formati_geo:
             final_path = _salva_formato_geo(
@@ -582,12 +576,10 @@ def _salva_formato_geo(
     from shapely import wkt
     from shapely.geometry.base import BaseGeometry
 
-    # --- Gestione DataFrame vuoto ---
     if len(df) == 0:
         logger.warning(f"DataFrame vuoto, creazione {formato} vuoto")
         return _salva_geo_vuoto(df, base_path, formato)
 
-    # --- Preparazione GeoDataFrame ---
     if isinstance(df, gpd.GeoDataFrame):
         gdf = df.copy()
 
@@ -639,7 +631,6 @@ def _salva_formato_geo(
 
         gdf = to_geodataframe(df, geom_column, crs=crs)
 
-    # --- Salvataggio nel formato richiesto ---
     if formato == "geojson":
         final_path = base_path.with_suffix(".geojson")
         gdf.to_file(final_path, driver="GeoJSON")
@@ -801,9 +792,7 @@ def _salva_shapefile_zippato(
     return zip_path
 
 
-# =============================================================================
 # FILTRAGGIO COLONNE
-# =============================================================================
 
 def filter_visible_columns(
     df: pd.DataFrame,
@@ -861,9 +850,7 @@ def filter_visible_columns(
     return result
 
 
-# =============================================================================
 # SERIALIZZAZIONE JSON
-# =============================================================================
 
 def sanitize_for_json(rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     """
@@ -948,9 +935,7 @@ def sanitize_for_json(rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     return rows
 
 
-# =============================================================================
 # UTILITY COLONNE
-# =============================================================================
 
 def infer_column_types(df: pd.DataFrame) -> List[Dict[str, str]]:
     """

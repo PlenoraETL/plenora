@@ -39,9 +39,7 @@ def _mapper():
     return ColumnMapper(db_type="postgres")
 
 
-# =============================================================================
 # 1. Caso specifico del finding: int promosso a float per NaN -> rilevato come int
-# =============================================================================
 
 
 def test_float_col_with_all_integer_values_classified_as_int():
@@ -65,9 +63,7 @@ def test_float_col_all_nan_falls_back_to_real():
     assert m._infer_type_from_pandas(series) == "real"
 
 
-# =============================================================================
 # 2. Sanity: float veri non diventano int
-# =============================================================================
 
 
 def test_float_col_with_fractional_values_stays_real():
@@ -84,9 +80,7 @@ def test_float_col_mixed_integer_and_fractional_stays_real():
     assert m._infer_type_from_pandas(series) == "real"
 
 
-# =============================================================================
 # 3. Regressione: int puro resta int
-# =============================================================================
 
 
 def test_int_col_stays_int():
@@ -102,9 +96,7 @@ def test_int64_col_with_pd_na_stays_int():
     assert m._infer_type_from_pandas(series) == "int"
 
 
-# =============================================================================
 # 4. Regressione: altri tipi invariati
-# =============================================================================
 
 
 def test_bool_col_stays_bool():
@@ -129,9 +121,7 @@ def test_object_col_with_numeric_strings_becomes_real():
     assert m._infer_type_from_pandas(pd.Series(["1.5", "2.7"], dtype=object)) == "real"
 
 
-# =============================================================================
 # 5. Policy esplicita: trade-off documentato
-# =============================================================================
 
 
 def test_policy_float_as_integer_may_mislabel_intentional_floats():

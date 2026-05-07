@@ -50,9 +50,7 @@ import pytest
 pytestmark = [pytest.mark.unit, pytest.mark.security, pytest.mark.contract]
 
 
-# ============================================================
 # Helpers — bytecode probe (refactor-resilient)
-# ============================================================
 
 def _underlying(callable_or_task):
     """Estrae la funzione Python sottostante da un task Celery wrappato.
@@ -87,9 +85,7 @@ def _references_name(callable_or_task, name: str) -> bool:
     return _walk(code)
 
 
-# =============================================================================
 # 1. Task accetta user_id
-# =============================================================================
 
 
 def test_execute_pipeline_task_accepts_user_id_kwarg():
@@ -134,9 +130,7 @@ def test_execute_pipeline_task_references_recheck_helper():
 #   garantita dal behavior test.
 
 
-# =============================================================================
 # 2. Service e router forward user_id
-# =============================================================================
 
 
 def test_create_pipeline_task_accepts_user_id():
@@ -232,9 +226,7 @@ def test_execute_endpoint_passes_current_user_id(monkeypatch):
     )
 
 
-# =============================================================================
 # 3. Hardening (refinement N9): assert_project_access + user_id persistito
-# =============================================================================
 
 
 def test_shared_recheck_invokes_assert_project_access(monkeypatch):
@@ -396,9 +388,7 @@ def test_open_run_writes_user_id_in_insert_sql(monkeypatch):
     )
 
 
-# =============================================================================
 # 4. Scope completo N9 — preview, carica, enrichment (+ helper condiviso)
-# =============================================================================
 
 
 def test_shared_recheck_helper_exists_and_has_correct_contract():
@@ -559,9 +549,7 @@ def test_migration_for_log_runs_user_id_exists():
     )
 
 
-# =============================================================================
 # 5. Allineamento terminologico: user_id persistito anche in intermediate.runs
-# =============================================================================
 
 
 def test_migration_for_intermediate_runs_user_id_exists():

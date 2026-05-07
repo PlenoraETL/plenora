@@ -113,9 +113,7 @@ class ResponseParser:
         logger.info(f"ResponseParser: estratte {len(righe)} righe")
         return righe
 
-    # =========================================================================
     # ITERAZIONE RICORSIVA
-    # =========================================================================
 
     def _itera_ricorsivamente(
         self, data: Any, livello: int, contesto: Dict, righe: List[Dict]
@@ -217,9 +215,7 @@ class ResponseParser:
             return self._naviga_path(oggetto, path_rimanente)
         return oggetto
 
-    # =========================================================================
     # NAVIGAZIONE PATH
-    # =========================================================================
 
     def _naviga_path(self, data: Any, path: str) -> Any:
         """
@@ -345,9 +341,7 @@ class ResponseParser:
 
         return None
 
-    # =========================================================================
     # ESTRAZIONE SEMPLICE (senza iterate_on)
-    # =========================================================================
 
     def _estrazione_semplice(self, data: Any) -> List[Dict]:
         """
@@ -379,9 +373,7 @@ class ResponseParser:
 
         return self._applica_trasformazioni(righe)
 
-    # =========================================================================
     # TRASFORMAZIONI POST-ESTRAZIONE
-    # =========================================================================
 
     def _applica_trasformazioni(self, righe: List[Dict]) -> List[Dict]:
         """
@@ -517,9 +509,7 @@ class ResponseParser:
             return True
 
 
-# =============================================================================
 # FUNZIONE HELPER
-# =============================================================================
 
 def parse_response(data: Any, config: Dict) -> List[Dict]:
     """
@@ -539,9 +529,7 @@ def parse_response(data: Any, config: Dict) -> List[Dict]:
     return parser.parse(data)
 
 
-# =============================================================================
 # CONFIGURAZIONI PRESET PER FORMATI COMUNI
-# =============================================================================
 
 PRESET_CONFIGS = {
     # ItaliaMeteo: risposta con stazioni → prodotti → misurazioni

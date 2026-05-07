@@ -32,9 +32,7 @@ from typing import List, Protocol, TypedDict, runtime_checkable
 logger = logging.getLogger(__name__)
 
 
-# ---------------------------------------------------------------------------
 # Protocols (interface contract)
-# ---------------------------------------------------------------------------
 
 
 class ObjectMeta(TypedDict):
@@ -105,9 +103,7 @@ class ObjectStorage(Protocol):
         ...
 
 
-# ---------------------------------------------------------------------------
 # AWS credential error classification (helper boundary)
-# ---------------------------------------------------------------------------
 
 
 # Messaggio operativo unico per tutti i casi di credenziali AWS scadute o
@@ -185,9 +181,7 @@ def aws_credentials_error_message(exc: BaseException) -> "str | None":
     return None
 
 
-# ---------------------------------------------------------------------------
 # AWS implementations
-# ---------------------------------------------------------------------------
 
 
 class AwsSsmSecretsBackend:
@@ -426,9 +420,7 @@ class MinioObjectStorage(AwsS3ObjectStorage):
         return {"StorageClass": "STANDARD"}
 
 
-# ---------------------------------------------------------------------------
 # Factory — dispatch via CLOUD_PROVIDER env
-# ---------------------------------------------------------------------------
 
 
 def _get_provider() -> str:
@@ -475,9 +467,7 @@ def get_secrets_backend() -> SecretsBackend:
     raise ValueError(f"CLOUD_PROVIDER non supportato: {provider!r}")
 
 
-# ---------------------------------------------------------------------------
 # Object storage capability (Batch 1.5)
-# ---------------------------------------------------------------------------
 #
 # Tre factory pubbliche, una per dominio:
 #   - get_runtime_object_storage(): result/file_source/eseguibili/IMDF/intermediate.
@@ -530,11 +520,6 @@ def _read_object_storage_capability() -> dict:
 
     backend = os.getenv("OBJECT_STORAGE_BACKEND") or None
     if backend is None:
-        # Deriva da CLOUD_PROVIDER per retro-compat: aws->s3, minio->minio,
-        # none->none. Provider sconosciuti vengono passati through come
-        # backend = nome provider, cosi' la capability check resta True
-        # e la build factory solleva il proprio ValueError("non supportato")
-        # sul provider — niente short-circuit silenzioso.
         provider = _get_provider()
         if provider == "aws":
             backend = "s3"
@@ -774,9 +759,7 @@ def get_log_archive_storage() -> ObjectStorage:
     raise ValueError(f"CLOUD_PROVIDER non supportato: {provider!r}")
 
 
-# ---------------------------------------------------------------------------
 # Storage policy — boot-time validation (A1)
-# ---------------------------------------------------------------------------
 
 
 VALID_STORAGE_POLICIES = ("db", "object_storage", "hybrid")
@@ -943,12 +926,6 @@ def validate_storage_config() -> None:
     if policy in ("db", "hybrid"):
         _check_positive_int("RESULT_DB_HARD_CAP_BYTES")
 
-    # O-ARC Batch 2 — coerenza config archive log (ADR-0014 §A1-§A5).
-    # Attivo solo se LOG_ARCHIVE_ENABLED=true: con ENABLED=false (default)
-    # il boot passa silenzioso anche se altre LOG_ARCHIVE_* sono settate
-    # nel .env (pattern preparazione pre-flip, §A4). Zero refactor dei
-    # check A1 sopra: il blocco riusa policy/provider/bucket gia'
-    # normalizzati + gli helper _fail / _check_positive_int.
     archive_enabled_raw = (os.getenv("LOG_ARCHIVE_ENABLED") or "false").strip().lower()
     if archive_enabled_raw in ("true", "1", "yes"):
         # 1. STORAGE_POLICY deve essere object_storage o hybrid.

@@ -20,14 +20,12 @@ def resolver():
     return ArtifactResolver()
 
 
-# ---------------------------------------------------------------------------
 # Helpers for the BE-GO-READY-RESOURCE-ENGINE-019 registry boundary tests.
 # The resolver's `_materialize_from_result_id` now delegates blob fetch +
 # tempfile materialization to `default_registry().get(ref, mode='path')`.
 # Tests that previously mocked `db_service.get_result_data` now mock the
 # registry's `get(ref, mode)` surface AS IMPORTED INTO the resolver
 # module so the patch lands at the canonical boundary.
-# ---------------------------------------------------------------------------
 
 
 def _fake_registry_returning_blob(payload: bytes, *, suffix: str = "") -> tuple[list, object]:
@@ -77,9 +75,7 @@ def _fake_registry_raising(exc: BaseException) -> object:
     return SimpleNamespace(get=_get)
 
 
-# ---------------------------------------------------------------------------
 # materialize_run
-# ---------------------------------------------------------------------------
 
 
 def test_materialize_run_inline_df_takes_priority(resolver):
@@ -438,9 +434,7 @@ def test_materialize_run_rejects_unc_output_path(resolver):
         resolver.materialize_run(ref)
 
 
-# ---------------------------------------------------------------------------
 # materialize_latest
-# ---------------------------------------------------------------------------
 
 
 def test_materialize_latest_returns_none_when_no_result(resolver, monkeypatch):
@@ -513,9 +507,7 @@ def test_materialize_latest_enforces_group_binding(resolver, monkeypatch):
         resolver.materialize_latest(ref, expected_group_id="grp-mine")
 
 
-# ---------------------------------------------------------------------------
 # fetch_run_blob
-# ---------------------------------------------------------------------------
 
 
 def _fake_registry_returning_bytes(payload: bytes) -> tuple[list, object]:
@@ -783,9 +775,7 @@ def test_materialize_latest_non_superadmin_blocks_cross_tenant(resolver, monkeyp
         )
 
 
-# ---------------------------------------------------------------------------
 # BE-GO-READY-RESOURCE-ENGINE-021: materialize_latest registry boundary
-# ---------------------------------------------------------------------------
 
 
 def test_materialize_latest_returns_none_on_loader_filenotfound(

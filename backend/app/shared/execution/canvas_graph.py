@@ -88,9 +88,6 @@ class CanvasGraph:
             if isinstance(n, dict):
                 raw_dict = n
             elif hasattr(n, "model_dump"):
-                # BE-GO-READY-ARCH-059-W2: Pydantic v2 model - convert once
-                # at the intake boundary so all downstream lookups are plain
-                # dicts (position, data, etc.) without dual isinstance checks.
                 raw_dict = n.model_dump()
             else:
                 continue

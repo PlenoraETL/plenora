@@ -83,9 +83,7 @@ def test_get_result_data_uses_group_filter_when_provided(monkeypatch):
     assert seen["params"] == (expected_cap, "res-1", "grp-1")
 
 
-# ==============================================================================
 # A1 batch — log naming contract: backend=object_storage / backend=db_legacy
-# ==============================================================================
 
 
 def test_get_result_data_logs_backend_db_legacy_for_bytea_row(monkeypatch):

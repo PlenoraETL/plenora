@@ -25,9 +25,7 @@ from pydantic import ValidationError
 pytestmark = [pytest.mark.unit, pytest.mark.security, pytest.mark.contract]
 
 
-# =============================================================================
 # A. ESTRAI_MAX_ROWS cap
-# =============================================================================
 
 
 def test_execute_raw_raises_when_rows_exceed_cap(monkeypatch):
@@ -71,9 +69,7 @@ def test_execute_raw_raises_when_rows_exceed_cap(monkeypatch):
         executor.execute_raw(connection, "SELECT ...", None)
 
 
-# =============================================================================
 # D. query_generator refuse CROSS JOIN implicito
-# =============================================================================
 
 
 def test_query_generator_raises_on_orphan_join_node():
@@ -103,9 +99,7 @@ def test_query_generator_raises_on_orphan_join_node():
         )
 
 
-# =============================================================================
 # E. Canvas validator — orphan non-source nodes
-# =============================================================================
 
 
 def test_canvas_put_rejects_orphan_transform_node():
@@ -168,9 +162,7 @@ def test_canvas_put_accepts_source_nodes_without_incoming_edges():
     assert resp.get("status") == "ok"
 
 
-# =============================================================================
 # RB.4.A (2026-04-27): cross-tenant ref validation in update_project_canvas
-# =============================================================================
 #
 # BUG.md #8: un canvas con file_source_id / source_project_id non visibili
 # al gruppo del progetto poteva essere salvato senza errore (passava i
@@ -410,9 +402,7 @@ def test_canvas_put_superadmin_can_save_any_ref():
     fake_svc.update_canvas.assert_called_once()
 
 
-# =============================================================================
 # RB.7.A (2026-04-27): estensione cross-tenant validation a ArcGIS connections
-# =============================================================================
 #
 # BUG.md #7: post rebrand 2026-04-18 (urby-* -> plenora-*) alcuni canvas
 # storici contenevano `arcgis_connection_id` / `imdf_arcgis_connection_id`
@@ -587,9 +577,7 @@ def test_canvas_put_collects_arcgis_connection_id_from_node_data_dict():
     assert "arcgis_inside_data_BAD" in excinfo.value.detail
 
 
-# =============================================================================
 # RB.4.A.16 (2026-04-27): _visible_project_ids_strict
-# =============================================================================
 #
 # BUG.md #16: `visible_resource_ids("projects",...)` solleva ValueError
 # perche' projects non e' nel whitelist `_SHAREABLE` (no project_shares
@@ -710,9 +698,7 @@ def test_canvas_put_with_project_source_does_not_raise_value_error_anymore():
             pytest.fail(f"Regression #16: ValueError leaked: {e}")
 
 
-# =============================================================================
 # F. Pydantic tight contract
-# =============================================================================
 
 
 def test_canvas_with_plugins_rejects_non_list_nodes():
@@ -760,9 +746,7 @@ def test_edge_rejects_empty_id_source_target():
         Edge(id="e1", source="n1", target="")
 
 
-# =============================================================================
 # C11-nit: CROSS JOIN esplicito
-# =============================================================================
 
 
 def test_edge_accepts_explicit_cross_join_type():

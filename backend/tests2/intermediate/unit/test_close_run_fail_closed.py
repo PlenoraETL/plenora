@@ -28,9 +28,7 @@ import pytest
 pytestmark = [pytest.mark.unit, pytest.mark.contract, pytest.mark.regression]
 
 
-# =============================================================================
 # HAPPY PATH — nessun cambio al ramo success
-# =============================================================================
 
 
 def test_close_run_happy_path_returns_none():
@@ -63,9 +61,7 @@ def test_close_run_happy_path_returns_none():
     mock_retention.assert_called_once()
 
 
-# =============================================================================
 # PRIMARY FAIL + FALLBACK OK → raise (fail-closed)
-# =============================================================================
 
 
 def test_close_run_primary_fail_with_fallback_ok_raises():
@@ -103,9 +99,7 @@ def test_close_run_primary_fail_with_fallback_ok_raises():
     assert "input_hash" not in fallback_call.kwargs
 
 
-# =============================================================================
 # PRIMARY FAIL + FALLBACK FAIL → raise dell'ORIGINALE (non della fallback)
-# =============================================================================
 
 
 def test_close_run_primary_fail_and_fallback_fail_still_raises():
@@ -147,9 +141,7 @@ def test_close_run_primary_fail_and_fallback_fail_still_raises():
     assert len(debug_calls) == 1
 
 
-# =============================================================================
 # BREADCRUMB — [CRASH] + exc_info=True
-# =============================================================================
 
 
 def test_close_run_logs_crash_with_exc_info_on_outer_fail():
@@ -188,9 +180,7 @@ def test_close_run_logs_crash_with_exc_info_on_outer_fail():
     assert gestito_errors == []
 
 
-# =============================================================================
 # FALLBACK update_run(status="failed") — firma esatta
-# =============================================================================
 
 
 def test_close_run_fallback_update_run_called_with_status_failed():

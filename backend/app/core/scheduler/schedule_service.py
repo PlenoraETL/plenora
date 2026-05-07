@@ -24,9 +24,7 @@ from app.config import settings
 from app.utils.logger import get_logger
 
 
-# =============================================================================
 # FUNZIONE PURA — detect_missed_run (C3 fix 3)
-# =============================================================================
 #
 # Estratta come funzione a livello-modulo (non metodo di ScheduleService)
 # per essere banalmente testabile e riusabile dal beat scheduler senza
@@ -109,9 +107,7 @@ class ScheduleService:
 
     DEFAULT_GROUP = settings.DEFAULT_GROUP
 
-    # ========================================================================
     # LOCK PER-SCHEDULE — Race condition guard
-    # ========================================================================
     # mark_as_orphan, set_runtime_status e update_runtime fanno tutti
     # read-modify-write sul blob `config` (lettura piena, modifica in memoria,
     # write piena). Senza lock, due thread che operano sullo stesso schedule
@@ -169,9 +165,7 @@ class ScheduleService:
             "config": config.model_dump(mode='json'),
         }
 
-    # =========================================================================
     # LETTURA
-    # =========================================================================
 
     def get_schedule(self, schedule_id: str) -> Optional[ScheduleConfig]:
         """Carica un singolo schedule per ID."""
@@ -198,9 +192,7 @@ class ScheduleService:
     def schedule_exists(self, schedule_id: str) -> bool:
         return db.get_schedule(schedule_id) is not None
 
-    # =========================================================================
     # CREAZIONE
-    # =========================================================================
 
     def create_schedule(self, schedule_data: ScheduleCreate,
                         project_name: str = "", project_type: str = "estrai",
@@ -259,9 +251,7 @@ class ScheduleService:
         logger.info(f"Schedule creato: {schedule_id} -> progetto {schedule_data.project_id}")
         return config
 
-    # =========================================================================
     # MODIFICA
-    # =========================================================================
 
     def update_schedule(self, schedule_id: str,
                         update_data: ScheduleUpdate) -> Optional[ScheduleConfig]:
@@ -314,9 +304,7 @@ class ScheduleService:
         logger.info(f"Schedule aggiornato: {schedule_id}")
         return config
 
-    # =========================================================================
     # TOGGLE ENABLE/DISABLE
-    # =========================================================================
 
     def update_catchup_config(
         self,
@@ -373,9 +361,7 @@ class ScheduleService:
         logger.info(f"Schedule {'abilitato' if enabled else 'disabilitato'}: {schedule_id}")
         return config
 
-    # =========================================================================
     # ELIMINAZIONE
-    # =========================================================================
 
     def delete_schedule(self, schedule_id: str) -> bool:
         """Elimina uno schedule e i suoi log."""
@@ -398,9 +384,7 @@ class ScheduleService:
 
         return True
 
-    # =========================================================================
     # GESTIONE ORFANI
-    # =========================================================================
 
     def mark_as_orphan(self, schedule_id: str) -> Optional[ScheduleConfig]:
         """Segna uno schedule come orfano (progetto eliminato).
@@ -455,9 +439,7 @@ class ScheduleService:
         """Lista tutti gli schedule di un progetto specifico."""
         return self.list_schedules(project_id=project_id).schedules
 
-    # =========================================================================
     # AGGIORNAMENTO RUNTIME
-    # =========================================================================
 
     def set_runtime_status(self, schedule_id: str, status: str,
                            current_task_id: str = None) -> Optional[ScheduleConfig]:
@@ -521,9 +503,7 @@ class ScheduleService:
             db.update_schedule(schedule_id, config=config.model_dump(mode='json'))
             return config
 
-    # =========================================================================
     # HELPER INTERNI
-    # =========================================================================
 
     def _save_to_db(self, config: ScheduleConfig, group_id: str, created_by: str = None) -> None:
         """Salva config schedule nel DB."""

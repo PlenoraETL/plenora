@@ -106,11 +106,9 @@ class ConflictChecker:
             logger.warning(f"Colonne match mancanti nel DataFrame: {missing}")
             return report
 
-        # === Passaggio 1: Duplicati interni ===
         internal_dups = self._check_internal_duplicates(df, match_columns)
         report.internal_duplicates = internal_dups
 
-        # === Passaggio 2: Conflitti con DB ===
         db_conflicts, details = self._check_db_conflicts(
             df, schema, table, match_columns
         )
@@ -311,24 +309,6 @@ class ConflictChecker:
 
         return conflict_count, details[:self.MAX_DETAILS]
 
-    # ========================================================================
-    # HELPER
-    # ========================================================================
-    #
-    # BE-GO-READY-TRANSFORMATION-ENGINE-013: i due helper `_qualified_name`
-    # e `_quote_col` ora delegano a `DDLGenerator` (la stessa boundary che
-    # il writer usa per CREATE/DROP/INSERT). Pre-stream questi metodi
-    # duplicavano la logica di `DDLGenerator.qualified_table_name` /
-    # `DDLGenerator.quote_column` (TE11-R4). Lasciati come thin wrapper
-    # per minimizzare la diff sui callsite interni
-    # (`_check_single_column`, `_check_multi_column`).
-    #
-    # Differenza minore vs pre-stream: `DDLGenerator.qualified_table_name`
-    # fa `.strip()` su schema/table (B-BE-60). Per `ConflictChecker`
-    # il caller tipico passa `self.config.schema_name` / `table_name`
-    # gia' validati: lo strip non cambia il SQL emesso. Per i pochi
-    # casi con whitespace accidentale, il nuovo path produce un nome
-    # piu' robusto.
 
     def _qualified_name(self, schema: str, table: str) -> str:
         """Nome tabella qualificato con schema (delega a DDLGenerator)."""

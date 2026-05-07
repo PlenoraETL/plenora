@@ -67,9 +67,7 @@ def patched_settings_temp_dir(tmp_path, monkeypatch):
     return tmp_path
 
 
-# =============================================================================
 # 1. Happy path: CSV minimo
-# =============================================================================
 
 
 def test_preview_csv_returns_columns_and_row_count(
@@ -101,9 +99,7 @@ def test_preview_csv_returns_columns_and_row_count(
     loader.load_csv.assert_called_once()
 
 
-# =============================================================================
 # 2. MIME validation defense-in-depth
-# =============================================================================
 
 
 def test_preview_blocks_executable_mime_with_value_error(
@@ -134,9 +130,7 @@ def test_preview_blocks_executable_mime_with_value_error(
     loader.load_csv.assert_not_called()
 
 
-# =============================================================================
 # 3. Format unknown
-# =============================================================================
 
 
 def test_preview_unknown_format_raises_value_error(
@@ -158,9 +152,7 @@ def test_preview_unknown_format_raises_value_error(
         )
 
 
-# =============================================================================
 # 4. Cleanup garantito su success e exception
-# =============================================================================
 
 
 def test_preview_cleans_up_tmp_file_on_success(
@@ -208,9 +200,7 @@ def test_preview_cleans_up_tmp_file_on_parser_exception(
     assert post == pre, f"tmp file leak su exception: {post - pre}"
 
 
-# =============================================================================
 # 5. Wrapper FileSourceService.preview_file_temp delega correttamente
-# =============================================================================
 
 
 def test_file_service_wrapper_delegates_with_service_collaborators(
@@ -236,9 +226,7 @@ def test_file_service_wrapper_delegates_with_service_collaborators(
     assert {c["name"] for c in out["columns"]} == {"k"}
 
 
-# =============================================================================
 # 6. parser dispatch (Seam D-B: load_by_format e' ora condivisa)
-# =============================================================================
 
 
 def test_load_by_format_unsupported_raises(fake_logger, tmp_path):
@@ -254,9 +242,7 @@ def test_load_by_format_unsupported_raises(fake_logger, tmp_path):
         load_by_format(loader, tmp_path / "x", "foo", None, None, logger=fake_logger)
 
 
-# =============================================================================
 # 7. GPKG multi-layer senza layer -> early return con lista layers
-# =============================================================================
 
 
 def test_preview_gpkg_multi_layer_without_selection_returns_layers(
@@ -289,9 +275,7 @@ def test_preview_gpkg_multi_layer_without_selection_returns_layers(
     loader.load_geospatial.assert_not_called()
 
 
-# =============================================================================
 # 8. XLSX multi-sheet senza sheet -> early return con lista sheets
-# =============================================================================
 
 
 def test_preview_xlsx_multi_sheet_without_selection_returns_sheets(
@@ -324,9 +308,7 @@ def test_preview_xlsx_multi_sheet_without_selection_returns_sheets(
     loader.load_excel.assert_not_called()
 
 
-# =============================================================================
 # 9. ZIP unwrap -> dispatch al format interno (gpkg)
-# =============================================================================
 
 
 def test_preview_zip_unwrap_dispatches_to_inner_gpkg_format(

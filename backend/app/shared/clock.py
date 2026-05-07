@@ -168,5 +168,3 @@ class FakeClock:
                         f"correnti: {len(self._waiters)}"
                     )
                 self._cond.wait(timeout=remaining)
-
-

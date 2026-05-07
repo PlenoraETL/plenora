@@ -28,12 +28,10 @@ _IMDF_DIR = Path(__file__).parents[2] / "app" / "core" / "imdf"
 
 _FORBIDDEN_PREFIXES = ("app.core.features",)
 
-# -----------------------------------------------------------------
 # Known violations - TODO: fix these per macro-components.md section 2.3.
 # Each entry is (filename -> exact imported modules). The guard is strict
 # on all other files and on any new module inside known-bad files.
 # Remove an entry only when the cross-domain import is gone.
-# -----------------------------------------------------------------
 _KNOWN_VIOLATIONS: dict[str, set[str]] = {
     "validator.py": {
         # batch 059-W4: FeaturesService replaced by the thin adapter module.
@@ -117,9 +115,7 @@ def test_imdf_does_not_import_from_features_domain(src_file: Path) -> None:
         )
 
 
-# -----------------------------------------------------------------
 # Protocol shape contracts — BE-GO-READY-ARCH-058-W5
-# -----------------------------------------------------------------
 
 
 def test_arcgis_provider_protocol_importable_from_shared():

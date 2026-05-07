@@ -58,9 +58,7 @@ import pytest
 pytestmark = [pytest.mark.unit, pytest.mark.contract]
 
 
-# ---------------------------------------------------------------------------
 # Helpers
-# ---------------------------------------------------------------------------
 
 
 _NEXT_ID = [0]
@@ -123,9 +121,7 @@ def _executed_sqls(cursor):
     return [c.args[0] for c in cursor.execute.call_args_list]
 
 
-# ---------------------------------------------------------------------------
 # 1. No artifacts: only DELETE, no reconciliation calls
-# ---------------------------------------------------------------------------
 
 
 def test_no_artifacts_only_deletes_run_no_reconciliation(monkeypatch):
@@ -172,9 +168,7 @@ def test_no_artifacts_only_deletes_run_no_reconciliation(monkeypatch):
     assert mark_fail_calls == []
 
 
-# ---------------------------------------------------------------------------
 # 2. Single complete artifact: 2 pending (parquet + manifest), 2 mark_done
-# ---------------------------------------------------------------------------
 
 
 def test_single_complete_artifact_records_pair_and_marks_done(monkeypatch):
@@ -248,9 +242,7 @@ def test_single_complete_artifact_records_pair_and_marks_done(monkeypatch):
     assert len(mark_done_calls) == 2
 
 
-# ---------------------------------------------------------------------------
 # 3. URI with scheme is skipped (Python-side filter)
-# ---------------------------------------------------------------------------
 
 
 def test_artifact_uri_with_scheme_is_skipped(monkeypatch):
@@ -287,9 +279,7 @@ def test_artifact_uri_with_scheme_is_skipped(monkeypatch):
     assert len(sqls) == 1
 
 
-# ---------------------------------------------------------------------------
 # 4. Non-canonical path: parquet recorded, manifest NOT derived
-# ---------------------------------------------------------------------------
 
 
 def test_artifact_uri_not_ending_in_data_parquet_skips_manifest(monkeypatch):
@@ -325,9 +315,7 @@ def test_artifact_uri_not_ending_in_data_parquet_skips_manifest(monkeypatch):
     assert rec[0]["extras"]["kind"] == "data.parquet"
 
 
-# ---------------------------------------------------------------------------
 # 5. compensating_delete failure → mark_failed_attempt
-# ---------------------------------------------------------------------------
 
 
 def test_compensating_delete_failed_marks_failed_attempt(monkeypatch):
@@ -374,9 +362,7 @@ def test_compensating_delete_failed_marks_failed_attempt(monkeypatch):
         assert rid in ref_ids
 
 
-# ---------------------------------------------------------------------------
 # 6. SQL filter: status=complete + artifact_uri IS NOT NULL
-# ---------------------------------------------------------------------------
 
 
 def test_pre_fetch_sql_excludes_failed_and_null_at_db_level(monkeypatch):
@@ -402,9 +388,7 @@ def test_pre_fetch_sql_excludes_failed_and_null_at_db_level(monkeypatch):
     assert "plenora.node_meta" not in sql
 
 
-# ---------------------------------------------------------------------------
 # 7. Multiple nodes: scales to 2N pending + 2N compensating_delete
-# ---------------------------------------------------------------------------
 
 
 def test_multiple_nodes_each_yield_pair_entries(monkeypatch):
@@ -455,9 +439,7 @@ def test_multiple_nodes_each_yield_pair_entries(monkeypatch):
     assert manifest_count == 3
 
 
-# ---------------------------------------------------------------------------
 # 8. delete_all_runs_for_canvas integrates per-run reconciliation
-# ---------------------------------------------------------------------------
 
 
 def test_delete_all_runs_for_canvas_reconciles_each_run(monkeypatch):

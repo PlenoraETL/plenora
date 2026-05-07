@@ -41,9 +41,7 @@ _EXECUTOR_PY = (
 )
 
 
-# ---------------------------------------------------------------------------
 # 1. Source-bound: no more `_get_execution_order` call via singleton
-# ---------------------------------------------------------------------------
 
 
 def test_executor_does_not_call_get_execution_order_via_singleton():
@@ -100,9 +98,7 @@ def test_executor_calls_canvas_orchestrator_get_execution_order():
     )
 
 
-# ---------------------------------------------------------------------------
 # 2. Import esplicito top-level
-# ---------------------------------------------------------------------------
 
 
 def test_executor_imports_canvas_orchestrator_helpers():
@@ -127,9 +123,7 @@ def test_executor_imports_canvas_orchestrator_helpers():
     )
 
 
-# ---------------------------------------------------------------------------
 # 3. Preview ctx-strict callsites
-# ---------------------------------------------------------------------------
 
 
 def test_executor_preview_passes_ctx_to_source_loaders():
@@ -169,9 +163,7 @@ def test_executor_preview_passes_ctx_to_source_loaders():
     )
 
 
-# ---------------------------------------------------------------------------
 # 4. Behavior preservation (smoke parity)
-# ---------------------------------------------------------------------------
 
 
 # BE-GO-READY-CONNECTION-ENGINE-009: rimosso

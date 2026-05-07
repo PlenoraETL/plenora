@@ -61,9 +61,7 @@ def _reset_policy_cache():
     reset_validation_cache()
 
 
-# ============================================================
 # A. Settings validation
-# ============================================================
 
 
 def test_validate_settings_rejects_unknown_fingerprint_mode():
@@ -118,9 +116,7 @@ def test_validate_settings_accepts_full_mode():
     validate_intermediate_settings(cfg)  # no raise
 
 
-# ============================================================
 # B. Determinismo + dispatch algoritmo
-# ============================================================
 
 
 def test_fingerprint_sample_returns_pandas_sample_hash_v1():
@@ -150,9 +146,7 @@ def test_fingerprint_sample_deterministic_on_same_df():
     assert h1 == h2
 
 
-# ============================================================
 # C. Sensibilita' schema/head/len
-# ============================================================
 
 
 def test_fingerprint_sample_changes_when_schema_changes():
@@ -201,9 +195,7 @@ def test_fingerprint_sample_changes_on_row_count_change_even_if_sample_identical
     assert h_a != h_b
 
 
-# ============================================================
 # D. Limite documentato del sample
-# ============================================================
 
 
 def test_fingerprint_sample_may_miss_changes_outside_sample_window():
@@ -238,9 +230,7 @@ def test_fingerprint_full_does_detect_changes_outside_sample_window():
     assert h_a != h_b
 
 
-# ============================================================
 # E. Niente df.to_dict full
-# ============================================================
 
 
 def test_fingerprint_sample_does_not_call_to_dict_full():
@@ -263,9 +253,7 @@ def test_fingerprint_sample_does_not_call_to_dict_full():
     spy_to_dict.assert_not_called()
 
 
-# ============================================================
 # F. Performance smoke
-# ============================================================
 
 
 def test_fingerprint_sample_is_fast_on_large_dataframe():
@@ -289,9 +277,7 @@ def test_fingerprint_sample_is_fast_on_large_dataframe():
     )
 
 
-# ============================================================
 # G. Sample size influenza il digest
-# ============================================================
 
 
 def test_fingerprint_sample_size_influences_digest():
