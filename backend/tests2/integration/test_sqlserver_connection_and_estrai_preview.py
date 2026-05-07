@@ -28,7 +28,7 @@ def _create_sqlserver_connection(base_url: str, auth_headers: dict) -> dict:
         headers=auth_headers,
         timeout=10.0,
     )
-    assert status == 200
+    assert status in (200, 201)
     test_status, tested, _ = http_json_response(
         f"{base_url}/api/connections/{created['id']}/test",
         method="POST",

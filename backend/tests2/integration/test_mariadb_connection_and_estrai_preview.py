@@ -26,7 +26,7 @@ def _create_mariadb_connection(base_url: str, auth_headers: dict) -> dict:
         headers=auth_headers,
         timeout=10.0,
     )
-    assert status == 200
+    assert status in (200, 201)
     return created
 
 

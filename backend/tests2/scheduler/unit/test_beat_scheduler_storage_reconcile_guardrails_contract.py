@@ -49,6 +49,7 @@ def _settings_ns(**overrides) -> SimpleNamespace:
         STORAGE_RECONCILE_BACKOFF_BASE_SECONDS=60,
         STORAGE_RECONCILE_TERMINAL_RETENTION_DAYS=30,
         STORAGE_RECONCILE_PRUNE_BATCH_SIZE=500,
+        STORAGE_RECONCILE_UPLOAD_INTENT_BATCH_SIZE=0,
     )
     defaults.update(overrides)
 
