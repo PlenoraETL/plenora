@@ -9,6 +9,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import pandas as pd
 
+from app.shared.execution.canvas_node import CanvasNode
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)

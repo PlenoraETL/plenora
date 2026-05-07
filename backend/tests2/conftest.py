@@ -6,7 +6,12 @@ Centralizes local pytest setup for the surrounding test package.
 
 import os
 from pathlib import Path
+import shutil
 import sys
+import time
+from typing import Callable
+import uuid
+import warnings
 
 import pytest
 
@@ -19,6 +24,171 @@ def _ensure_backend_on_path() -> None:
 
 
 _ensure_backend_on_path()
+
+
+_BACKEND_ROOT = Path(__file__).resolve().parent.parent
+_PYTEST_RUN_ROOT = _BACKEND_ROOT / ".pytest-run"
+_PYTEST_RUN_PREFIX = "run-"
+_PYTEST_RUN_MAX_AGE_SECONDS = 2 * 24 * 60 * 60
+
+
+def _ensure_pytest_run_root() -> Path:
+    try:
+        _PYTEST_RUN_ROOT.mkdir(parents=True, exist_ok=True)
+    except OSError as exc:
+        raise RuntimeError(
+            "Cannot create repo-local pytest temp root "
+            f"{_PYTEST_RUN_ROOT}. Check Windows ACLs or stale locks before "
+            "running backend tests."
+        ) from exc
+    return _PYTEST_RUN_ROOT
+
+
+def _normalize_windows_temp_env() -> None:
+    """Keep tempfile users away from locked OS pytest temp roots on Windows."""
+    if sys.platform != "win32":
+        return
+
+    temp_root = _ensure_pytest_run_root() / "env-temp"
+    try:
+        temp_root.mkdir(parents=True, exist_ok=True)
+    except OSError as exc:
+        raise RuntimeError(
+            "Cannot create repo-local Windows TEMP for pytest at "
+            f"{temp_root}. Check Windows ACLs or stale locks."
+        ) from exc
+
+    temp_value = str(temp_root)
+    os.environ["TMPDIR"] = temp_value
+    os.environ["TEMP"] = temp_value
+    os.environ["TMP"] = temp_value
+
+
+def _safe_prune_old_pytest_run_dirs(now: float | None = None) -> None:
+    """Best-effort cleanup for directories created by this conftest only."""
+    root = _ensure_pytest_run_root()
+    cutoff = (time.time() if now is None else now) - _PYTEST_RUN_MAX_AGE_SECONDS
+    try:
+        entries = list(root.iterdir())
+    except OSError as exc:
+        warnings.warn(
+            f"Cannot inspect pytest temp root {root}: {exc}",
+            RuntimeWarning,
+            stacklevel=2,
+        )
+        return
+
+    for entry in entries:
+        if not entry.is_dir() or not entry.name.startswith(_PYTEST_RUN_PREFIX):
+            continue
+        try:
+            if entry.stat().st_mtime >= cutoff:
+                continue
+            shutil.rmtree(entry)
+        except OSError as exc:
+            warnings.warn(
+                f"Cannot remove stale pytest temp dir {entry}: {exc}",
+                RuntimeWarning,
+                stacklevel=2,
+            )
+
+
+def _normalize_pytest_basetemp(config: object) -> None:
+    option = getattr(config, "option", None)
+    if option is None:
+        return
+
+    root = _ensure_pytest_run_root()
+    explicit_basetemp = getattr(option, "basetemp", None)
+    if explicit_basetemp:
+        run_dir = Path(str(explicit_basetemp)).resolve()
+        if not _path_is_under(run_dir, root):
+            return
+        if run_dir.exists():
+            shutil.rmtree(run_dir, ignore_errors=True)
+    else:
+        run_dir = root / f"{_PYTEST_RUN_PREFIX}{os.getpid()}-{uuid.uuid4().hex[:12]}"
+
+    try:
+        run_dir.mkdir(parents=True, exist_ok=False)
+    except OSError as exc:
+        raise RuntimeError(
+            "Cannot create repo-local pytest basetemp "
+            f"{run_dir}. Check Windows ACLs or stale locks."
+        ) from exc
+
+    temp_path_factory = getattr(config, "_tmp_path_factory", None)
+    if temp_path_factory is not None:
+        temp_path_factory._basetemp = run_dir.resolve()
+    else:
+        setattr(option, "basetemp", str(run_dir))
+
+
+def _path_is_under(path: Path, parent: Path) -> bool:
+    try:
+        path.resolve(strict=False).relative_to(parent.resolve(strict=False))
+    except ValueError:
+        return False
+    return True
+
+
+def _patch_pytest_dead_symlink_cleanup() -> None:
+    """Make pytest's own teardown cleanup best-effort for our temp root."""
+    if sys.platform != "win32":
+        return
+
+    import _pytest.tmpdir as pytest_tmpdir
+
+    original = pytest_tmpdir.cleanup_dead_symlinks
+    if getattr(original, "_plenora_windows_temp_guard", False):
+        return
+
+    def _cleanup_dead_symlinks_guarded(root: Path) -> None:
+        try:
+            original(root)
+        except OSError as exc:
+            root_path = Path(root)
+            if not _path_is_under(root_path, _PYTEST_RUN_ROOT):
+                raise
+            warnings.warn(
+                "Pytest could not scan repo-local temp dir during Windows "
+                f"dead-symlink cleanup ({root_path}): {exc}",
+                RuntimeWarning,
+                stacklevel=2,
+            )
+
+    cleanup_guard: Callable[[Path], None] = _cleanup_dead_symlinks_guarded
+    setattr(cleanup_guard, "_plenora_windows_temp_guard", True)
+    pytest_tmpdir.cleanup_dead_symlinks = cleanup_guard
+
+
+def _patch_pytest_windows_temp_dir_modes() -> None:
+    """Avoid pytest's POSIX-private mode creating unusable Windows ACLs."""
+    if sys.platform != "win32":
+        return
+
+    import _pytest.tmpdir as pytest_tmpdir
+
+    original = pytest_tmpdir.make_numbered_dir
+    if getattr(original, "_plenora_windows_temp_mode_guard", False):
+        return
+
+    def _make_numbered_dir_guarded(
+        root: Path,
+        prefix: str,
+        mode: int = 0o700,
+    ) -> Path:
+        root_path = Path(root)
+        if _path_is_under(root_path, _PYTEST_RUN_ROOT):
+            return original(root_path, prefix, 0o777)
+        return original(root_path, prefix, mode)
+
+    make_guard = _make_numbered_dir_guarded
+    setattr(make_guard, "_plenora_windows_temp_mode_guard", True)
+    pytest_tmpdir.make_numbered_dir = make_guard
+
+
+_normalize_windows_temp_env()
 
 # A1: i test non usano un bucket reale. Di default la test session vive in
 # STORAGE_POLICY=db (= on-prem single-node), cosi' `app.main` boota senza
@@ -35,6 +205,14 @@ os.environ.setdefault("STORAGE_POLICY", "db")
 os.environ.setdefault(
     "DATABASE_URL", "postgresql://test:test@127.0.0.1:5432/test"
 )
+
+
+@pytest.hookimpl(trylast=True)
+def pytest_configure(config: object) -> None:
+    _normalize_pytest_basetemp(config)
+    _patch_pytest_dead_symlink_cleanup()
+    _patch_pytest_windows_temp_dir_modes()
+    _safe_prune_old_pytest_run_dirs()
 
 
 # DB-init isolation a session bootstrap (Phase 3 Batch B closeout, 3)

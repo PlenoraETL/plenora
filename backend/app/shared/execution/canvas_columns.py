@@ -1,12 +1,12 @@
 """
-canvas_columns.py — Computazione autorevole delle colonne del ResultNode (C9).
+canvas_columns.py - Computazione autorevole delle colonne del ResultNode (C9).
 
 Motivazione
 """
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 from app.utils.logger import get_logger
 
@@ -14,7 +14,7 @@ from app.utils.logger import get_logger
 logger = get_logger(__name__)
 
 
-def _existing_by_name(result_node) -> Dict[str, Dict[str, Any]]:
+def _existing_by_name(result_node: object) -> Dict[str, Dict[str, Any]]:
     """Estrae le customizzazioni utente (alias, visible) dal
     result_node corrente, indicizzate per nome colonna originale.
 
@@ -48,10 +48,10 @@ def _existing_by_name(result_node) -> Dict[str, Dict[str, Any]]:
 
 
 def compute_result_columns(
-    canvas,
+    canvas: object,
     result_id: str,
     project_id: str,
-    project_service,
+    project_service: object,
 ) -> List[Dict[str, Any]]:
     """Computa le colonne autorevoli del result_node via BFS backward.
 
@@ -60,7 +60,7 @@ def compute_result_columns(
 
     Args:
         canvas: CanvasState con .nodes e .edges (in-memory, NON caricato
-                da DB — utile al PUT dove il canvas e' il body della
+                da DB - utile al PUT dove il canvas e' il body della
                 request, non ancora persistito).
         result_id: id del nodo 'result' per cui calcolare le colonne.
         project_id: id progetto corrente (serve a project_source per
@@ -121,7 +121,7 @@ def compute_result_columns(
     return out
 
 
-def find_result_node(canvas):
+def find_result_node(canvas: object) -> object | None:
     """Helper: localizza il nodo 'result' nel canvas. Return None se
     non esiste (canvas senza terminale, come una tappa intermedia o un
     canvas non-result)."""

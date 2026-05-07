@@ -9,7 +9,7 @@ import uuid
 from pathlib import Path
 from typing import Dict, Optional
 
-from app.shared.storage_layout import RESULTS_PREFIX
+from app.shared.resources.storage_layout import RESULTS_PREFIX
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)

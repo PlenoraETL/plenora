@@ -155,6 +155,46 @@ def test_canvas_graph_edges_property():
     assert g.edges == _EDGES
 
 
+def test_canvas_graph_raw_nodes_property_returns_intake_order():
+    g = CanvasGraph.from_nodes_edges(_NODES, _EDGES)
+    assert g.raw_nodes == _NODES
+    assert g.raw_nodes is not _NODES
+
+
+def test_canvas_graph_from_canvas_accepts_plain_canvas_dict():
+    g = CanvasGraph.from_canvas({"nodes": _NODES, "edges": _EDGES})
+    assert g.raw_nodes == _NODES
+    assert g.edges == _EDGES
+    assert g.get("n2").get_field("api_id") == "api-x"
+
+
+def test_canvas_graph_from_canvas_accepts_pydantic_like_canvas():
+    class _PydanticNode:
+        def __init__(self, id, type_):
+            self._id = id
+            self._type = type_
+
+        def model_dump(self):
+            return {"id": self._id, "type": self._type, "data": {}}
+
+    class _PydanticEdge:
+        def model_dump(self):
+            return {"source": "src", "target": "result"}
+
+    class _Canvas:
+        nodes = [_PydanticNode("src", "file_source")]
+        edges = [_PydanticEdge()]
+
+    g = CanvasGraph.from_canvas(_Canvas())
+    assert g.raw("src") == {"id": "src", "type": "file_source", "data": {}}
+    assert g.edges == [{"source": "src", "target": "result"}]
+
+
+def test_canvas_graph_from_canvas_rejects_non_canvas_root():
+    with pytest.raises(TypeError, match="CanvasGraph expects a canvas"):
+        CanvasGraph.from_canvas("not-a-canvas")
+
+
 def test_canvas_graph_raw_map_usable_by_legacy_callers():
     """raw_map can be passed directly to is_file_source_for_file_processor."""
     from app.core.arricchisci.canvas_orchestrator import is_file_source_for_file_processor

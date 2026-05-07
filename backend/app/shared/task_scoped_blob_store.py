@@ -47,7 +47,7 @@ class TaskScopedBlobStore(Protocol):
     Attributi:
         prefix: object storage root prefix per il dominio (es.
             `"imdf-bundles"`, `"eseguibili-outputs"`). Source-of-truth
-            in `app.shared.storage_layout`. Letto-only sul Protocol;
+            in `app.shared.resources.storage_layout`. Letto-only sul Protocol;
             l'impl lo expose come module-level constant.
     """
 

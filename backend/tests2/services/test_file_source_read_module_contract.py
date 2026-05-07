@@ -43,7 +43,7 @@ def test_load_dataframe_uses_explicit_collaborators_and_cleans_temp(tmp_path):
     temp_file_for = MagicMock(return_value=tmp_file)
     load_by_format = MagicMock(return_value=(df, None))
 
-    with patch("app.shared.file_cleanup.rmtree_safe") as cleanup:
+    with patch("app.shared.resources.file_cleanup.rmtree_safe") as cleanup:
         result_df, result_gdf = load_dataframe(
             "file-1",
             expected_group_id="grp-1",
@@ -69,7 +69,7 @@ def test_load_dataframe_prefers_explicit_layer_and_sheet(tmp_path):
     tmp_file.write_text("x", encoding="utf-8")
     load_by_format = MagicMock(return_value=(pd.DataFrame({"x": [1]}), None))
 
-    with patch("app.shared.file_cleanup.rmtree_safe"):
+    with patch("app.shared.resources.file_cleanup.rmtree_safe"):
         load_dataframe(
             "file-1",
             layer="explicit-layer",
@@ -112,7 +112,7 @@ def test_get_layers_info_lists_geospatial_layers_and_cleans_temp(tmp_path):
     logger = MagicMock()
     list_layers = MagicMock(return_value=["roads", "buildings"])
 
-    with patch("app.shared.file_cleanup.rmtree_safe") as cleanup:
+    with patch("app.shared.resources.file_cleanup.rmtree_safe") as cleanup:
         result = get_layers_info(
             "file-1",
             expected_group_id="grp-1",
@@ -138,7 +138,7 @@ def test_get_layers_info_lists_excel_sheets(tmp_path):
     tmp_file.write_text("x", encoding="utf-8")
     list_sheets = MagicMock(return_value=["Sheet1", "Sheet2"])
 
-    with patch("app.shared.file_cleanup.rmtree_safe"):
+    with patch("app.shared.resources.file_cleanup.rmtree_safe"):
         result = get_layers_info(
             "file-1",
             expected_group_id="grp-1",

@@ -11,7 +11,7 @@ from unittest.mock import patch, MagicMock
 
 import pytest
 
-from app.shared.canvas_columns import compute_result_columns, find_result_node
+from app.shared.execution.canvas_columns import compute_result_columns, find_result_node
 
 
 pytestmark = [pytest.mark.unit, pytest.mark.security, pytest.mark.contract]

@@ -142,15 +142,15 @@ if not _USE_APP_MODELS:
 # data loader, logger, time) è iniettabile con un mock nei test
 
 
-# STRUCT-001 Seam D-C: la logica vive in `app.shared.file_cleanup.rmtree_safe`
+# STRUCT-001 Seam D-C: la logica vive in `app.shared.resources.file_cleanup.rmtree_safe`
 # Wrapper compat per i call site interni che usano `_rmtree_safe(path)` senza
 # passare logger esplicito. La funzione condivisa accetta `logger=None` e usa
 # il logger del modulo come fallback (best-effort silenzioso); qui passiamo
 # `_logger` del modulo file_service per preservare il naming dei log
 
 def _rmtree_safe(path: Path | str, _retries: int = 3) -> None:
-    """Wrapper compat: delega a `app.shared.file_cleanup.rmtree_safe`."""
-    from app.shared.file_cleanup import rmtree_safe
+    """Wrapper compat: delega a `app.shared.resources.file_cleanup.rmtree_safe`."""
+    from app.shared.resources.file_cleanup import rmtree_safe
     rmtree_safe(path, retries=_retries, logger=_logger)
 
 class FileSourceService:
@@ -506,7 +506,7 @@ class FileSourceService:
         ``_assert_visible`` invocato da ``_get_blob_from_db``).
         """
         from app.config import settings
-        from app.shared.file_cleanup import rmtree_safe
+        from app.shared.resources.file_cleanup import rmtree_safe
         from app.utils.zip_safe import safe_extractall
         import app.db.db_service as db
 
@@ -670,7 +670,7 @@ class FileSourceService:
         """
         from app.services.file_upload import create_from_upload as _impl
         from app.config import settings
-        from app.shared.file_cleanup import rmtree_safe
+        from app.shared.resources.file_cleanup import rmtree_safe
         from app.utils.zip_safe import safe_extractall, ZipSlipError
         import app.db.db_service as db
         return _impl(
@@ -753,7 +753,7 @@ class FileSourceService:
             create_multi_layer_from_upload as _impl,
         )
         from app.config import settings
-        from app.shared.file_cleanup import rmtree_safe
+        from app.shared.resources.file_cleanup import rmtree_safe
         from app.utils.zip_safe import safe_extractall, ZipSlipError
         import app.db.db_service as db
 

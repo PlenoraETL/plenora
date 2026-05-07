@@ -37,19 +37,14 @@ _ALLOWED_ROOT_MODULES: frozenset[str] = frozenset(
         "token_blacklist",    # JWT revocation store
         "upload_guards",      # upload size / MIME type enforcement
         "cloud_backends",          # object storage backend registry
-        "file_cleanup",            # temp-file cleanup helpers
         "file_helpers",            # path / mime utilities
         "memory_guard",            # per-tenant memory allocation guard
         "storage_compensation",    # object-storage failure compensation helpers
         "storage_dispatch",        # storage backend routing
-        "storage_layout",          # storage path/key construction
         "storage_reconciliation",  # stale-blob reconciliation helpers
         "task_scoped_blob_store",  # per-task ephemeral blob store
-        "canvas_columns",         # CanvasColumn dataclass (used across features)
-        "canvas_types_enricher",  # enriches canvas node types from source schema
         "column_types",           # column type enum / classification
         "columns_metadata",       # column-level metadata helpers
-        "esri_system_fields",     # Esri/ArcGIS system field constants
         "models",                 # shared Pydantic base models
         "clock",                       # wall-clock abstraction for testability
         "external_artifact_processor", # cross-domain artifact post-processing helpers
@@ -86,7 +81,7 @@ def test_no_new_root_level_modules_without_allowlist_entry() -> None:
         f"New root-level module(s) detected in app/shared/: {sorted(unknown)}\n\n"
         "Engine-oriented code should go in a subpackage:\n"
         "  app.shared.execution.*   - canvas nodes, executor protocol, context\n"
-        "  app.shared.resources.*   - metadata, loaders\n"
+        "  app.shared.resources.*   - metadata, loaders, storage/path helpers\n"
         "  app.shared.connections.* - provider protocols, connection info\n"
         "  app.shared.contracts.*   - cross-cutting auth contracts\n\n"
         "If this module is genuinely cross-cutting, add it to _ALLOWED_ROOT_MODULES "

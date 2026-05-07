@@ -8,10 +8,10 @@ from __future__ import annotations
 
 from typing import Any, Optional, TypedDict
 
-from app.shared.storage_layout import FILE_SOURCES_PREFIX
+from app.shared.resources.storage_layout import FILE_SOURCES_PREFIX
 
 
-# Alias modulare verso `app.shared.storage_layout.FILE_SOURCES_PREFIX`
+# Alias modulare verso `app.shared.resources.storage_layout.FILE_SOURCES_PREFIX`
 # BE-DATA-PLANE-001A): single source-of-truth per i prefix object
 # storage. Mantenuto come name privato per backward-compat dei test
 # che leggono `_OBJECT_STORAGE_PREFIX`

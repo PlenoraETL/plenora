@@ -119,10 +119,10 @@ def test_canvas_node_exposes_structural_interface() -> None:
 
 
 def test_canvas_graph_exposes_structural_interface() -> None:
-    """CanvasGraph must expose from_nodes_edges, raw, get, result_node, edges."""
+    """CanvasGraph must expose from_canvas, raw, get, result_node, edges."""
     path = _EXECUTION_ROOT / "canvas_graph.py"
     names = set(_definition_site_names(path))
-    for expected in ("from_nodes_edges", "raw", "get", "result_node"):
+    for expected in ("from_canvas", "from_nodes_edges", "raw", "get", "result_node"):
         assert expected in names, (
             f"CanvasGraph is missing expected structural name {expected!r}. "
             "Do not remove structural interface without updating this guard."

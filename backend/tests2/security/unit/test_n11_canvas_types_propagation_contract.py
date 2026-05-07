@@ -18,7 +18,7 @@ pytestmark = [pytest.mark.unit, pytest.mark.security, pytest.mark.contract]
 
 
 def test_enricher_signature_is_stable():
-    from app.shared.canvas_types_enricher import enrich_canvas_types_from_metadata
+    from app.shared.execution.canvas_types_enricher import enrich_canvas_types_from_metadata
 
     sig = inspect.signature(enrich_canvas_types_from_metadata)
     params = list(sig.parameters.keys())
@@ -29,7 +29,7 @@ def test_enricher_signature_is_stable():
 
 def test_enricher_populates_canvas_types_from_project_metadata(monkeypatch):
     """columns_metadata -> canvas_types quando node_data e' vuoto."""
-    from app.shared import canvas_types_enricher as mod
+    from app.shared.execution import canvas_types_enricher as mod
 
     fake_metadata = [
         {"name": "id", "type": "int"},
@@ -50,7 +50,7 @@ def test_enricher_populates_canvas_types_from_project_metadata(monkeypatch):
     # `pg_connection.fetchone` reale → access violation se DB non
     # raggiungibile (vedi review #7 Batch B).
     monkeypatch.setattr(
-        "app.shared.canvas_types_enricher.ProjectService",
+        "app.shared.execution.canvas_types_enricher.ProjectService",
         FakeProjectService,
     )
 
@@ -64,7 +64,7 @@ def test_enricher_populates_canvas_types_from_project_metadata(monkeypatch):
 def test_enricher_respects_node_data_priority_over_project_metadata(monkeypatch):
     """Se frontend ha impostato canvas_types espliciti in node_data,
     NON vengono sovrascritti dal project metadata."""
-    from app.shared import canvas_types_enricher as mod
+    from app.shared.execution import canvas_types_enricher as mod
 
     class FakeProjectService:
         def get_project_columns_metadata(self, pid):
@@ -80,7 +80,7 @@ def test_enricher_respects_node_data_priority_over_project_metadata(monkeypatch)
     # `pg_connection.fetchone` reale → access violation se DB non
     # raggiungibile (vedi review #7 Batch B).
     monkeypatch.setattr(
-        "app.shared.canvas_types_enricher.ProjectService",
+        "app.shared.execution.canvas_types_enricher.ProjectService",
         FakeProjectService,
     )
 
@@ -95,14 +95,14 @@ def test_enricher_respects_node_data_priority_over_project_metadata(monkeypatch)
 def test_enricher_best_effort_on_project_service_failure(monkeypatch):
     """Se ProjectService esplode (DB giu', project non trovato), l'helper
     non deve propagare: node_data resta invariato ma utilizzabile."""
-    from app.shared import canvas_types_enricher as mod
+    from app.shared.execution import canvas_types_enricher as mod
 
     class BrokenProjectService:
         def get_project_columns_metadata(self, pid):
             raise RuntimeError("DB down")
 
     monkeypatch.setattr(
-        "app.shared.canvas_types_enricher.ProjectService",
+        "app.shared.execution.canvas_types_enricher.ProjectService",
         BrokenProjectService,
     )
 
@@ -115,14 +115,14 @@ def test_enricher_best_effort_on_project_service_failure(monkeypatch):
 
 def test_enricher_handles_empty_metadata(monkeypatch):
     """Project senza columns_metadata -> node_data invariato."""
-    from app.shared import canvas_types_enricher as mod
+    from app.shared.execution import canvas_types_enricher as mod
 
     class EmptyProjectService:
         def get_project_columns_metadata(self, pid):
             return []
 
     monkeypatch.setattr(
-        "app.shared.canvas_types_enricher.ProjectService",
+        "app.shared.execution.canvas_types_enricher.ProjectService",
         EmptyProjectService,
     )
 

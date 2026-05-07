@@ -212,7 +212,7 @@ def test_enricher_bridge_reads_from_columns_metadata():
     Replacement R-04b di `inspect.getsource(enricher_mod) + str in src`:
     bytecode probe sui callee identifier.
     """
-    from app.shared import canvas_types_enricher as enricher_mod
+    from app.shared.execution import canvas_types_enricher as enricher_mod
     assert _module_references_any(enricher_mod, [
         "get_project_columns_metadata",
     ]), (

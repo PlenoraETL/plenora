@@ -626,7 +626,7 @@ def update_project_canvas(
     # salvato ha result.columns corrette, il reload UI legge il
     # canvas e il ResultNode mostra le colonne giuste
     try:
-        from app.shared.canvas_columns import (
+        from app.shared.execution.canvas_columns import (
             compute_result_columns,
             find_result_node,
         )

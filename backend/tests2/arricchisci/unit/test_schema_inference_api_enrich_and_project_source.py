@@ -120,7 +120,7 @@ def test_compute_result_columns_includes_api_enrich_added_columns():
     canvas con un api_enrich a monte del result deve produrre risultato
     `input_cols + output_mapping_cols` quando passato a
     `compute_result_columns`."""
-    from app.shared.canvas_columns import compute_result_columns
+    from app.shared.execution.canvas_columns import compute_result_columns
 
     # Mock project_service: project_source upstream non risolve niente
     # (lo testiamo separatamente in Test 4/5). Qui usiamo file_source

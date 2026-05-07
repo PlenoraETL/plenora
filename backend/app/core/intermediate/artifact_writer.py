@@ -13,7 +13,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any, Optional
 
-from app.shared.storage_layout import INTERMEDIATE_PREFIX
+from app.shared.resources.storage_layout import INTERMEDIATE_PREFIX
 
 logger = logging.getLogger(__name__)
 

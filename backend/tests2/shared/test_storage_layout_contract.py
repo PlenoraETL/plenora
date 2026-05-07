@@ -1,5 +1,5 @@
 """
-Contract test per `app.shared.storage_layout`.
+Contract test per `app.shared.resources.storage_layout`.
 
 Verifica che:
 """
@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import pytest
 
-from app.shared import storage_layout
+from app.shared.resources import storage_layout
 
 
 # Naming rules

@@ -5,12 +5,23 @@ CanvasGraph - parsed intake object for canvas node/edge graphs.
 
 from __future__ import annotations
 
-from typing import Dict, List, Optional
+from collections.abc import Mapping, Sequence
+from typing import Any, Dict, List, Optional
 
 from app.shared.execution.canvas_node import CanvasNode
 
 
 __all__ = ["CanvasGraph"]
+
+
+def _plain_dict(value: Any) -> Optional[Dict]:
+    if isinstance(value, dict):
+        return value
+    if hasattr(value, "model_dump"):
+        dumped = value.model_dump()
+        if isinstance(dumped, dict):
+            return dumped
+    return None
 
 
 class CanvasGraph:
@@ -27,46 +38,74 @@ class CanvasGraph:
     - ``edges`` - the original edge list.
     """
 
-    __slots__ = ("_raw_map", "_typed_map", "_edges")
+    __slots__ = ("_raw_nodes", "_raw_map", "_typed_map", "_edges")
 
     def __init__(
         self,
+        raw_nodes: List[Dict],
         raw_map: Dict[str, Dict],
         typed_map: Dict[str, CanvasNode],
         edges: List[Dict],
     ) -> None:
+        self._raw_nodes = raw_nodes
         self._raw_map = raw_map
         self._typed_map = typed_map
         self._edges = edges
 
     @classmethod
+    def from_canvas(cls, canvas: Any) -> "CanvasGraph":
+        """Build a CanvasGraph from a full canvas object or mapping.
+
+        This is the preferred intake boundary for orchestrators. It accepts
+        the legacy plain-dict canvas shape and Pydantic-like canvas objects
+        with ``nodes`` / ``edges`` attributes. Node normalization still
+        delegates to ``from_nodes_edges`` so accepted node shapes stay aligned.
+        """
+        if isinstance(canvas, Mapping):
+            nodes = canvas.get("nodes", [])
+            edges = canvas.get("edges", [])
+        elif hasattr(canvas, "nodes") or hasattr(canvas, "edges"):
+            nodes = getattr(canvas, "nodes", [])
+            edges = getattr(canvas, "edges", [])
+        else:
+            raise TypeError(
+                f"CanvasGraph expects a canvas mapping or object, "
+                f"got {type(canvas).__name__}"
+            )
+        return cls.from_nodes_edges(nodes or [], edges or [])
+
+    @classmethod
     def from_nodes_edges(
         cls,
-        nodes: List,
-        edges: List,
+        nodes: Sequence[Any],
+        edges: Sequence[Any],
     ) -> "CanvasGraph":
         """Build a CanvasGraph from canvas ``nodes`` and ``edges`` lists.
 
         Accepts both plain dicts (Arricchisci canvas shape) and Pydantic
-        model instances (Manipola CanvasState shape). Pydantic nodes are
+        model instances (Manipola CanvasState shape). Pydantic values are
         converted once via ``model_dump`` so the rest of the graph is
         always plain-dict based. Nodes that are neither are silently skipped.
         """
+        raw_nodes: List[Dict] = []
         raw_map: Dict[str, Dict] = {}
         typed_map: Dict[str, CanvasNode] = {}
         for n in nodes:
-            if isinstance(n, dict):
-                raw_dict = n
-            elif hasattr(n, "model_dump"):
-                raw_dict = n.model_dump()
-            else:
+            raw_dict = _plain_dict(n)
+            if raw_dict is None:
                 continue
             nid = raw_dict.get("id")
             if nid is None:
                 continue
+            raw_nodes.append(raw_dict)
             raw_map[nid] = raw_dict
             typed_map[nid] = CanvasNode(raw_dict)
-        return cls(raw_map, typed_map, list(edges) if edges else [])
+        raw_edges = [
+            raw_edge
+            for edge in edges or []
+            if (raw_edge := _plain_dict(edge)) is not None
+        ]
+        return cls(raw_nodes, raw_map, typed_map, raw_edges)
 
     # lookups
 
@@ -91,6 +130,11 @@ class CanvasGraph:
     def nodes(self) -> List[CanvasNode]:
         """All nodes as typed CanvasNode objects, in intake order."""
         return list(self._typed_map.values())
+
+    @property
+    def raw_nodes(self) -> List[Dict]:
+        """All accepted raw node dicts, in intake order."""
+        return list(self._raw_nodes)
 
     @property
     def raw_map(self) -> Dict[str, Dict]:

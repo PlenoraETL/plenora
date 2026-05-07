@@ -231,9 +231,9 @@ def test_node_wrappers_built_once_at_entry_boundary():
     """BE-GO-READY-ARCH-057-W2 / 058-W3: source-bound guard.
 
     `execute_canvas_enrichment` must parse the canvas graph exactly once at
-    the entry boundary via ``CanvasGraph.from_nodes_edges(...)``.  No raw
+    the entry boundary via ``CanvasGraph.from_canvas(...)``.  No raw
     ``CanvasNode(...)`` calls may appear inside the function body — they all
-    live inside ``CanvasGraph.from_nodes_edges``.
+    live inside ``CanvasGraph.from_canvas``.
 
     Updated in BE-GO-READY-ARCH-058-W6: W3 replaced the ``node_wrappers``
     comprehension (1 × CanvasNode call) with ``CanvasGraph.from_nodes_edges``
@@ -273,16 +273,16 @@ def test_node_wrappers_built_once_at_entry_boundary():
         f"at the entry boundary instead."
     )
 
-    # Exactly 1 CanvasGraph.from_nodes_edges call at the entry boundary.
+    # Exactly 1 CanvasGraph.from_canvas call at the entry boundary.
     graph_intake_calls = [
         n
         for n in _ast.walk(exec_fn)
         if isinstance(n, _ast.Call)
         and isinstance(n.func, _ast.Attribute)
-        and n.func.attr == "from_nodes_edges"
+        and n.func.attr == "from_canvas"
     ]
     assert len(graph_intake_calls) == 1, (
-        f"Expected exactly 1 CanvasGraph.from_nodes_edges(...) call in "
+        f"Expected exactly 1 CanvasGraph.from_canvas(...) call in "
         f"execute_canvas_enrichment; found {len(graph_intake_calls)}. "
         f"The canvas graph must be parsed once at the entry boundary."
     )

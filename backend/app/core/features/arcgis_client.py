@@ -1820,9 +1820,9 @@ class ArcGISClient:
             # Attributi (tutto tranne geometria e campi auto-generati da ArcGIS
             # Per update/delete: OBJECTID serve come chiave, non va escluso
             # BE-IMDF-001: il subset OID/GLOBALID e' canonizzato in
-            # `app.shared.esri_system_fields.ESRI_OID_FIELDS_LITERAL`
+            # `app.shared.connections.esri_system_fields.ESRI_OID_FIELDS_LITERAL`
             # 5 varianti casing). Behavior bit-per-bit invariato
-            from app.shared.esri_system_fields import ESRI_OID_FIELDS_LITERAL
+            from app.shared.connections.esri_system_fields import ESRI_OID_FIELDS_LITERAL
             skip_cols = {geometry_column, "geometry"}
             if operation in ("add", "create_service"):
                 skip_cols.update(ESRI_OID_FIELDS_LITERAL)

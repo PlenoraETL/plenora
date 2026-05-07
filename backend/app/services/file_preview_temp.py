@@ -14,14 +14,14 @@ from typing import BinaryIO, Optional
 _logger_module = logging.getLogger(__name__)
 
 
-# STRUCT-001 Seam D-C: la logica vive in `app.shared.file_cleanup.rmtree_safe`
+# STRUCT-001 Seam D-C: la logica vive in `app.shared.resources.file_cleanup.rmtree_safe`
 # Alias locale per minimizzare il diff al body di preview_file_temp che chiama
 # _rmtree_safe(path). Stessa firma originale; logger=_logger_module passato
 # esplicito cosi' i debug log restano nel namespace del modulo preview
 
 def _rmtree_safe(path, _retries: int = 3) -> None:
-    """Wrapper compat: delega a `app.shared.file_cleanup.rmtree_safe`."""
-    from app.shared.file_cleanup import rmtree_safe
+    """Wrapper compat: delega a `app.shared.resources.file_cleanup.rmtree_safe`."""
+    from app.shared.resources.file_cleanup import rmtree_safe
     rmtree_safe(path, retries=_retries, logger=_logger_module)
 
 

@@ -191,16 +191,16 @@ def test_specialized_methods_are_per_wrapper():
     assert getattr(ese_storage, "get_meta_only", None) is None
 
 
-# 5. Storage prefix alignment with app.shared.storage_layout
+# 5. Storage prefix alignment with app.shared.resources.storage_layout
 
 
 def test_prefixes_aligned_with_storage_layout():
     """Audit: i prefix dei due wrapper coincidono con le constants
-    centralizzate in `app.shared.storage_layout` (BE-DATA-PLANE-001A).
+    centralizzate in `app.shared.resources.storage_layout` (BE-DATA-PLANE-001A).
     Sentinel cross-cluster."""
     from app.core.eseguibili import storage as ese_storage
     from app.core.imdf import storage as imdf_storage
-    from app.shared.storage_layout import (
+    from app.shared.resources.storage_layout import (
         ESEGUIBILI_OUTPUTS_PREFIX,
         IMDF_BUNDLES_PREFIX,
     )

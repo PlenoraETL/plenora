@@ -64,7 +64,7 @@ def test_carica_launch_failure_returns_sanitized_error_string():
         "app.services.task_service.task_service.create_carica_task",
         side_effect=sensitive_exc,
     ), patch(
-        "app.shared.canvas_types_enricher.enrich_canvas_types_from_metadata"
+        "app.shared.execution.canvas_types_enricher.enrich_canvas_types_from_metadata"
     ):
         artifact = svc.execute_pipeline("p1")
 
@@ -86,7 +86,7 @@ def test_carica_launch_failure_does_not_leak_exception_args():
         "app.services.task_service.task_service.create_carica_task",
         side_effect=exc,
     ), patch(
-        "app.shared.canvas_types_enricher.enrich_canvas_types_from_metadata"
+        "app.shared.execution.canvas_types_enricher.enrich_canvas_types_from_metadata"
     ):
         artifact = svc.execute_pipeline("p1")
 
@@ -108,7 +108,7 @@ def test_carica_launch_failure_logs_exception_with_exc_info():
         "app.services.task_service.task_service.create_carica_task",
         side_effect=exc,
     ), patch(
-        "app.shared.canvas_types_enricher.enrich_canvas_types_from_metadata"
+        "app.shared.execution.canvas_types_enricher.enrich_canvas_types_from_metadata"
     ), patch(
         "app.core.orchestrator.service.logger"
     ) as mock_logger:
@@ -143,7 +143,7 @@ def test_carica_launch_success_unchanged_contract():
         "app.services.task_service.task_service.create_carica_task",
         return_value=fake_task_info,
     ), patch(
-        "app.shared.canvas_types_enricher.enrich_canvas_types_from_metadata"
+        "app.shared.execution.canvas_types_enricher.enrich_canvas_types_from_metadata"
     ):
         artifact = svc.execute_pipeline("p1")
 

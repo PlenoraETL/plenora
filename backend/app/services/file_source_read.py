@@ -17,7 +17,7 @@ LoadByFormat = Callable[[Path, str, Optional[str], Optional[str]], Tuple[pd.Data
 ListLayers = Callable[[Path], list[str]]
 ListSheets = Callable[[Path], list[str]]
 def _cleanup_temp_path(tmp_path: Path, format_type: str, *, logger: Any) -> None:
-    from app.shared.file_cleanup import rmtree_safe
+    from app.shared.resources.file_cleanup import rmtree_safe
 
     if format_type in ("shp", "gdb"):
         try:

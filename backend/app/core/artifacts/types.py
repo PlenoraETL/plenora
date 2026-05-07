@@ -195,14 +195,19 @@ class PipelineArtifact(dict):
     ) -> "PipelineArtifact":
         """Typed factory: constructs a PipelineArtifact from an ExecutionResult.
 
-         typed payload boundary between executor and
-        artifact. Delegates to ``from_executor_result`` via
-        ``exec_result.to_dict`` so that the full backward-compatible dict
-        shape is preserved. The typed boundary here is ``ExecutionResult``
-        rather than the raw executor dict, enabling callers to reason about
-        ``exec_result.artifact_payload`` before the artifact is constructed.
+        Preserves the typed payload boundary between executor and artifact.
+        The legacy dict-compatible shape is reconstructed locally from typed
+        fields instead of calling ``exec_result.to_dict`` at this internal
+        boundary; explicit dict conversion remains available for API/task
+        edges that need a serializable mapping.
         """
-        return cls.from_executor_result(exec_result.to_dict(), project_id=project_id)
+        merged = {"success": exec_result.success}
+        if exec_result.message is not None:
+            merged["message"] = exec_result.message
+        if exec_result.error is not None:
+            merged["error"] = exec_result.error
+        merged.update(exec_result.payload)
+        return cls.from_executor_result(merged, project_id=project_id)
 
     @classmethod
     def failure(

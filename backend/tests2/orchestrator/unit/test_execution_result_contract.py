@@ -154,6 +154,30 @@ def test_orchestrator_execute_pipeline_passes_through_via_execution_result():
     assert artifact["format"] == "csv"
 
 
+def test_pipeline_artifact_consumes_execution_result_without_to_dict(monkeypatch):
+    """Internal artifact factory consumes ExecutionResult natively."""
+    from app.core.artifacts.types import PipelineArtifact
+
+    def fail_to_dict(_result: ExecutionResult) -> dict[str, object]:
+        raise AssertionError("internal boundary called ExecutionResult.to_dict()")
+
+    monkeypatch.setattr(ExecutionResult, "to_dict", fail_to_dict)
+
+    artifact = PipelineArtifact.from_execution_result(
+        ExecutionResult(
+            success=True,
+            message="ok",
+            payload={"result_id": "res-native", "rows_count": 3},
+        ),
+        project_id="proj-native",
+    )
+
+    assert artifact.success is True
+    assert artifact.message == "ok"
+    assert artifact.result_id == "res-native"
+    assert artifact["rows_count"] == 3
+
+
 def test_orchestrator_execute_pipeline_error_key_preserved():
     """Arricchisci-style 'error' key survives the ExecutionResult boundary."""
     from app.core.orchestrator.service import OrchestratorService

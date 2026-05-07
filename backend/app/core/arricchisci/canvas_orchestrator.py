@@ -14,6 +14,9 @@ from app.core.arricchisci.execution_context import (
     ArricchisciExecutionContext,
     build_execution_context,
 )
+from app.shared.execution.canvas_graph import CanvasGraph
+from app.shared.execution.canvas_node import CanvasNode
+from app.shared.execution.graph import kahn_topological_order
 from app.utils.logger import get_logger
 
 
@@ -216,8 +219,9 @@ def execute_canvas_enrichment(
     propagato a `_write_intermediate_snapshot`. None = bit-compat.
     """
     try:
-        nodes = canvas.get("nodes", [])
-        edges = canvas.get("edges", [])
+        graph = CanvasGraph.from_canvas(canvas)
+        nodes = graph.raw_nodes
+        edges = graph.edges
 
         if not nodes:
             return {"success": False, "error": "Nessun nodo nel canvas"}
@@ -243,7 +247,6 @@ def execute_canvas_enrichment(
         )
         logger.info(f"Gruppi di esecuzione: {[(t, len(ids)) for t, ids in groups]}")
 
-        graph = CanvasGraph.from_nodes_edges(nodes, edges)
         node_results: Dict[str, Any] = {}
 
         for step_type, step_node_ids in groups:

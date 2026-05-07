@@ -10,7 +10,7 @@ from pathlib import Path
 
 import pytest
 
-from app.shared.esri_system_fields import (
+from app.shared.connections.esri_system_fields import (
     ESRI_OID_FIELDS_LITERAL,
     ESRI_SYSTEM_FIELDS_LITERAL,
     is_esri_system_field,
@@ -130,7 +130,9 @@ def test_is_esri_system_field_none_safe():
 def test_module_has_no_heavy_imports():
     """Il modulo shared deve restare pure: niente pandas/geopandas/
     requests/ArcGIS clients, niente env reads, niente I/O."""
-    src = (_BACKEND_APP / "shared" / "esri_system_fields.py").read_text(encoding="utf-8")
+    src = (
+        _BACKEND_APP / "shared" / "connections" / "esri_system_fields.py"
+    ).read_text(encoding="utf-8")
     forbidden = [
         "import pandas",
         "from pandas",
@@ -163,7 +165,8 @@ def _read(path: Path) -> str:
 def test_loader_aliases_esri_system_fields_to_shared():
     src = _read(_BACKEND_APP / "core" / "imdf" / "loader.py")
     assert (
-        "from app.shared.esri_system_fields import ESRI_SYSTEM_FIELDS_LITERAL as ESRI_SYSTEM_FIELDS"
+        "from app.shared.connections.esri_system_fields import "
+        "ESRI_SYSTEM_FIELDS_LITERAL as ESRI_SYSTEM_FIELDS"
         in src
     )
     # Niente piu' definizione inline del set
@@ -181,7 +184,8 @@ def test_loader_alias_identity_with_shared():
 def test_validator_uses_shared_helper():
     src = _read(_BACKEND_APP / "core" / "imdf" / "validator.py")
     assert (
-        "from app.shared.esri_system_fields import is_esri_system_field as _is_system_field"
+        "from app.shared.connections.esri_system_fields import "
+        "is_esri_system_field as _is_system_field"
         in src
     )
     # Niente piu' set SYS_NORMALIZED locale
@@ -190,7 +194,7 @@ def test_validator_uses_shared_helper():
 
 def test_arcgis_client_uses_shared_oid_set():
     src = _read(_BACKEND_APP / "core" / "features" / "arcgis_client.py")
-    assert "from app.shared.esri_system_fields import ESRI_OID_FIELDS_LITERAL" in src
+    assert "from app.shared.connections.esri_system_fields import ESRI_OID_FIELDS_LITERAL" in src
     assert "skip_cols.update(ESRI_OID_FIELDS_LITERAL)" in src
     # Niente piu' literal set inline (la riga `{"OBJECTID", "objectid", ...}`)
     assert (

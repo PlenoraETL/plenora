@@ -22,7 +22,7 @@ pytestmark = [pytest.mark.unit, pytest.mark.contract]
 
 
 def test_rmtree_safe_removes_regular_file(tmp_path):
-    from app.shared.file_cleanup import rmtree_safe
+    from app.shared.resources.file_cleanup import rmtree_safe
 
     target = tmp_path / "x.txt"
     target.write_text("hello")
@@ -36,7 +36,7 @@ def test_rmtree_safe_removes_regular_file(tmp_path):
 
 
 def test_rmtree_safe_removes_directory_with_nested_content(tmp_path):
-    from app.shared.file_cleanup import rmtree_safe
+    from app.shared.resources.file_cleanup import rmtree_safe
 
     root = tmp_path / "deletable"
     sub = root / "sub"
@@ -52,7 +52,7 @@ def test_rmtree_safe_removes_directory_with_nested_content(tmp_path):
 
 
 def test_rmtree_safe_silent_on_missing_path(tmp_path):
-    from app.shared.file_cleanup import rmtree_safe
+    from app.shared.resources.file_cleanup import rmtree_safe
 
     ghost = tmp_path / "never_existed"
     assert not ghost.exists()
@@ -67,7 +67,7 @@ def test_rmtree_safe_silent_on_missing_path(tmp_path):
 
 @pytest.mark.skipif(sys.platform == "win32", reason="Su Windows il bit ro su file singoli e' inconsistente; il path onerror si esercita meglio su POSIX")
 def test_rmtree_safe_handles_readonly_file_in_directory(tmp_path):
-    from app.shared.file_cleanup import rmtree_safe
+    from app.shared.resources.file_cleanup import rmtree_safe
 
     root = tmp_path / "ro_dir"
     root.mkdir()
@@ -94,14 +94,14 @@ def test_rmtree_safe_handles_readonly_file_in_directory(tmp_path):
 def test_rmtree_safe_calls_logger_debug_on_persistent_failure(tmp_path):
     """Simula `shutil.rmtree` che fallisce sempre: dopo i retry, logger.debug
     chiamato con il path; nessuna exception propagata al chiamante."""
-    from app.shared.file_cleanup import rmtree_safe
+    from app.shared.resources.file_cleanup import rmtree_safe
 
     target = tmp_path / "stuck"
     target.mkdir()
     fake_logger = MagicMock()
 
     # Mock: shutil.rmtree solleva persistente, p.exists() resta True
-    with patch("app.shared.file_cleanup.shutil.rmtree",
+    with patch("app.shared.resources.file_cleanup.shutil.rmtree",
                side_effect=PermissionError("locked")):
         # Best-effort: nessuna exception propagata
         rmtree_safe(target, retries=2, logger=fake_logger)
@@ -115,7 +115,7 @@ def test_rmtree_safe_calls_logger_debug_on_persistent_failure(tmp_path):
 
 def test_rmtree_safe_uses_module_logger_when_no_logger_passed(tmp_path):
     """Se logger=None, usa il logger del modulo come fallback (no raise)."""
-    from app.shared.file_cleanup import rmtree_safe
+    from app.shared.resources.file_cleanup import rmtree_safe
 
     target = tmp_path / "ghost"
     # Path non esistente: rmtree_safe deve essere idempotente e non sollevare,
@@ -134,7 +134,7 @@ def test_file_service_wrapper_delegates_to_shared_rmtree_safe(tmp_path):
     target = tmp_path / "y.txt"
     target.write_text("z")
 
-    with patch("app.shared.file_cleanup.rmtree_safe") as mock_shared:
+    with patch("app.shared.resources.file_cleanup.rmtree_safe") as mock_shared:
         fs_mod._rmtree_safe(target)
 
     mock_shared.assert_called_once()
@@ -152,7 +152,7 @@ def test_file_preview_temp_wrapper_delegates_to_shared_rmtree_safe(tmp_path):
     target = tmp_path / "y.txt"
     target.write_text("z")
 
-    with patch("app.shared.file_cleanup.rmtree_safe") as mock_shared:
+    with patch("app.shared.resources.file_cleanup.rmtree_safe") as mock_shared:
         fp_mod._rmtree_safe(target)
 
     mock_shared.assert_called_once()

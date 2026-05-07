@@ -237,7 +237,7 @@ class SchemaInferenceService:
 
             # Fonte primaria: `result_node.columns` del canvas sorgente, scritto
             # autorevolmente al PUT /canvas dal C9 fix
-            # app/shared/canvas_columns.compute_result_columns -> mutate
+            # app/shared/execution/canvas_columns.compute_result_columns -> mutate
             # canvas.nodes[result].columns prima della persistenza
             # Fallback: `canvas.columns_metadata` (legacy / canvas mai salvato
             # post-C9 / progetti pre-fix). Niente chiamata a
