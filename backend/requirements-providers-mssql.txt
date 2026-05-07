@@ -1,5 +1,3 @@
-# Optional Microsoft SQL Server provider driver.
-# Requires OS-level ODBC libraries plus a Microsoft ODBC driver.
-# Install only when running MSSQL integration/provider lanes.
+# Compatibility alias: SQL Server Python driver is now part of requirements.txt.
+# Still requires OS-level ODBC libraries plus a Microsoft ODBC driver.
 -r requirements.txt
-pyodbc>=5.2.0

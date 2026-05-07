@@ -8,6 +8,11 @@ starlette>=0.36.0
 # Database
 psycopg2-binary>=2.9.10
 sqlalchemy>=2.0.25
+# External DB providers supported by ESTRAI/CARICA integration paths.
+# SQL Server also needs OS-level ODBC libraries and a Microsoft ODBC driver.
+pymysql>=1.1.0
+oracledb>=2.4.0
+pyodbc>=5.2.0
 
 # Auth & Security
 PyJWT>=2.10.0
