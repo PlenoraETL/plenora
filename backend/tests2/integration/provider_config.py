@@ -104,5 +104,6 @@ def require_provider_enabled(name: str, config: ProviderConfig) -> None:
     if not config.enabled:
         pytest.skip(
             f"{name} integration disabilitato in provider_config.toml; "
-            "abilitalo in provider_config.local.toml per eseguirlo."
+            "abilitalo in provider_config.local.toml per eseguirlo.",
+            allow_module_level=True,
         )
