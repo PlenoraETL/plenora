@@ -16,7 +16,13 @@ from unittest.mock import patch
 import pytest
 
 
-pytestmark = [pytest.mark.integration, pytest.mark.scheduler, pytest.mark.contract]
+pytestmark = [
+    pytest.mark.integration,
+    pytest.mark.scheduler,
+    pytest.mark.contract,
+    pytest.mark.requires_postgres,
+    pytest.mark.developer_nightly,
+]
 
 
 # Fake in-memory ObjectStorage (Protocol-compatible)

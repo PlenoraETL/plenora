@@ -1932,32 +1932,31 @@ def test_migrate_next_set_matches_residual_passthrough_wrong():
     )
 
 
-_MIGRATE_NEXT_PARAMS = (
-    sorted(MIGRATE_NEXT_NEEDS_RUNTIME_CONTRACT)
-    if MIGRATE_NEXT_NEEDS_RUNTIME_CONTRACT
-    else [pytest.param(
-        "__migrate_next_empty__",
-        marks=pytest.mark.skip(
-            reason="MIGRATE_NEXT_NEEDS_RUNTIME_CONTRACT vuoto post "
-                   "BE-PHASE2-SCHEMA-INFER-009-ZERO-RESIDUALS — Phase 2 chiusa."
-        ),
-    )]
-)
 
 
-@pytest.mark.parametrize("op", _MIGRATE_NEXT_PARAMS)
-def test_migrate_next_ops_fall_through_to_passthrough(op):
+def test_migrate_next_runtime_contract_has_zero_residuals():
+    """Post BE-PHASE2-SCHEMA-INFER-009 the residual set must stay empty.
+
+    This replaces the old empty parametrized skip placeholder: zero
+    residuals is an assertion, not a skipped test.
+    """
+    assert MIGRATE_NEXT_NEEDS_RUNTIME_CONTRACT == set()
+
+
+def test_migrate_next_ops_fall_through_to_passthrough():
     """Storico (Phase 2 pre-009): i transform `MIGRATE_NEXT`
-    ricadevano in `_schema_passthrough`. Post-009 il set e' vuoto e
-    il test e' auto-skip; la struttura resta come trap di
-    drift-detection (se qualcuno aggiunge un nuovo MIGRATE_NEXT, il
-    test torna ad eseguire e verifica il fallback)."""
-    service, input_schema = _service_and_input()
-    node = _node(op, {"column": "b"})
-    out = service._infer_transform_schema(node, [input_schema], edges_by_target={})
-    assert [(c.name, c.type) for c in out] == [
-        (c.name, c.type) for c in input_schema
-    ]
+    ricadevano in `_schema_passthrough`. Post-009 il set e' vuoto; se
+    qualcuno aggiunge un nuovo MIGRATE_NEXT, questo loop torna ad
+    eseguire e verifica il fallback."""
+    for op in sorted(MIGRATE_NEXT_NEEDS_RUNTIME_CONTRACT):
+        service, input_schema = _service_and_input()
+        node = _node(op, {"column": "b"})
+        out = service._infer_transform_schema(
+            node, [input_schema], edges_by_target={},
+        )
+        assert [(c.name, c.type) for c in out] == [
+            (c.name, c.type) for c in input_schema
+        ]
 
 
 # 12. Registry dispatch — runtime introspection (BE-PHASE2-SCHEMA-INFER-008)

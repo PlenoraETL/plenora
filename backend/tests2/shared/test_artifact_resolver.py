@@ -501,15 +501,20 @@ def test_materialize_latest_enforces_group_binding(resolver, monkeypatch):
     import app.db.results_db_service as _rdb
     import app.db.config.projects as _projects_leaf
 
+    def _tenant_scoped_project(pid, group_id=None):
+        assert pid == "proj-1"
+        assert group_id == "grp-mine"
+        return None
+
     monkeypatch.setattr(
         _projects_leaf,
         "get_project",
-        lambda pid: {"id": pid, "group_id": "grp-other"},
+        _tenant_scoped_project,
     )
     monkeypatch.setattr(_rdb, "get_latest_result", lambda pid: None)
 
     ref = LatestProjectArtifactRef(project_id="proj-1")
-    with pytest.raises(ArtifactResolutionError, match="Cross-tenant"):
+    with pytest.raises(ArtifactResolutionError, match="Progetto proj-1 non trovato"):
         resolver.materialize_latest(ref, expected_group_id="grp-mine")
 
 
@@ -665,10 +670,15 @@ def test_materialize_latest_passes_when_group_matches(resolver, monkeypatch):
     import app.db.config.projects as _projects_leaf
     import app.core.artifacts.resolver as resolver_mod
 
+    def _tenant_scoped_project(pid, group_id=None):
+        assert pid == "proj-1"
+        assert group_id == "grp-mine"
+        return {"id": pid, "group_id": "grp-mine"}
+
     monkeypatch.setattr(
         _projects_leaf,
         "get_project",
-        lambda pid: {"id": pid, "group_id": "grp-mine"},
+        _tenant_scoped_project,
     )
     monkeypatch.setattr(
         _rdb,
@@ -761,19 +771,28 @@ def test_materialize_latest_superadmin_bypass_cross_tenant(resolver, monkeypatch
 
 def test_materialize_latest_non_superadmin_blocks_cross_tenant(resolver, monkeypatch):
     """Mirror del test sopra: senza `is_superadmin=True` il check
-    cross-tenant deve scattare. Il default e' fail-closed."""
+    cross-tenant deve scattare senza rivelare il tenant reale. Il
+    default e' fail-closed."""
     import app.db.results_db_service as _rdb
     import app.db.config.projects as _projects_leaf
+
+    def _tenant_scoped_project(pid, group_id=None):
+        assert pid == "proj-cross"
+        assert group_id == "default"
+        return None
 
     monkeypatch.setattr(
         _projects_leaf,
         "get_project",
-        lambda pid: {"id": pid, "group_id": "gruppo_ania"},
+        _tenant_scoped_project,
     )
     monkeypatch.setattr(_rdb, "get_latest_result", lambda pid: None)
 
     ref = LatestProjectArtifactRef(project_id="proj-cross")
-    with pytest.raises(ArtifactResolutionError, match="Cross-tenant"):
+    with pytest.raises(
+        ArtifactResolutionError,
+        match="Progetto proj-cross non trovato",
+    ):
         resolver.materialize_latest(
             ref,
             expected_group_id="default",

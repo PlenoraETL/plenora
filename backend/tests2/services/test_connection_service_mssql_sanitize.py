@@ -6,16 +6,18 @@ Blinda: il path MS SQL di `ConnectionService._test_mssql` non espone mai
 
 from __future__ import annotations
 
+import sys
+import types
 from unittest.mock import MagicMock, patch
 
 import pytest
 
-# Skip a collection time se pyodbc non e' installato. I test patchano
-# pyodbc.drivers / pyodbc.connect via unittest.mock.patch, che risolve
-# il target string all'enter del with → richiede pyodbc importabile,
-# altrimenti ModuleNotFoundError. Allineato col pattern degli harness
-# integration (tests2/integration/harness/{mssql,mariadb,mysql,oracle}.py).
-pytest.importorskip("pyodbc")
+# Unit tests use a fake pyodbc module when the optional driver is absent.
+if "pyodbc" not in sys.modules:
+    fake_pyodbc = types.ModuleType("pyodbc")
+    fake_pyodbc.drivers = lambda: []
+    fake_pyodbc.connect = lambda *args, **kwargs: None
+    sys.modules["pyodbc"] = fake_pyodbc
 
 from app.services.connection_service import (  # noqa: E402
     ConnectionService,

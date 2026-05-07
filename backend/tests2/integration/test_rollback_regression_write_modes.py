@@ -16,8 +16,7 @@ from tests2.integration.harness.oracle import (
     ORACLE_USER, ORACLE_PASSWORD, oracle_conn,
 )
 from tests2.integration.harness.postgres_ext import (
-    PG_EXT_HOST, PG_EXT_PORT, PG_EXT_DATABASE,
-    PG_EXT_USER, PG_EXT_PASSWORD, postgres_ext_conn,
+    postgres_ext_conn, postgres_ext_sqlalchemy_url,
 )
 
 from app.core.carica.database_writer import DatabaseWriter
@@ -54,10 +53,7 @@ def _oracle_engine():
 
 
 def _pg_engine():
-    return create_engine(
-        f"postgresql+psycopg2://{PG_EXT_USER}:{PG_EXT_PASSWORD}@"
-        f"{PG_EXT_HOST}:{PG_EXT_PORT}/{PG_EXT_DATABASE}"
-    )
+    return create_engine(postgres_ext_sqlalchemy_url())
 
 
 def _oracle_drop(t):

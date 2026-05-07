@@ -59,4 +59,7 @@ def test_api_connection_test_requires_auth(backend_server, fake_api_server):
         timeout=10.0,
     )
     assert status == 401
-    assert created["detail"] == "Token mancante"
+    detail = created["detail"]
+    assert detail["error"] == "auth_token_missing"
+    assert detail["message"] == "Token mancante"
+    assert detail["details"] == {}

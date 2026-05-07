@@ -565,7 +565,7 @@ def test_te029_source_loading_migratable_tests_use_ctx_and_stale_singleton():
     I 6 test target (in `test_api_connector_source_loading_core.py`):
       - `test_load_source_project_propagates_group_id_via_source_loader`
       - `test_load_source_project_blocks_cross_tenant_via_loader`
-      - `test_load_source_project_preserves_cross_tenant_detail_in_message`
+      - `test_load_source_project_does_not_leak_cross_tenant_detail_in_message`
       - `test_load_source_project_distinguishes_project_not_found_from_cross_tenant`
       - `test_resolve_file_source_path_project_branch_passes_through_source_loader`
       - `test_resolve_file_source_path_blocks_cross_tenant_project_source`
@@ -580,7 +580,7 @@ def test_te029_source_loading_migratable_tests_use_ctx_and_stale_singleton():
     migrated_tests = {
         "test_load_source_project_propagates_group_id_via_source_loader",
         "test_load_source_project_blocks_cross_tenant_via_loader",
-        "test_load_source_project_preserves_cross_tenant_detail_in_message",
+        "test_load_source_project_does_not_leak_cross_tenant_detail_in_message",
         "test_load_source_project_distinguishes_project_not_found_from_cross_tenant",
         "test_resolve_file_source_path_project_branch_passes_through_source_loader",
         "test_resolve_file_source_path_blocks_cross_tenant_project_source",

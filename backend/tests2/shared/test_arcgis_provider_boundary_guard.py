@@ -97,10 +97,12 @@ def test_imdf_does_not_import_from_features_domain(src_file: Path) -> None:
                 "If this is intentional, add to _KNOWN_VIOLATIONS with a reason."
             )
 
-    if allowed_known and seen_known:
-        pytest.skip(
-            f"Known ADR-0023 violation remains in {src_file.name}: "
-            f"{sorted(seen_known)}. {_KNOWN_VIOLATION_REASONS[src_file.name]}"
+    if allowed_known:
+        assert seen_known == allowed_known, (
+            f"{src_file.name}: known ADR-0023 residual allowlist drift. "
+            f"Expected {sorted(allowed_known)}, saw {sorted(seen_known)}. "
+            "If the import was removed, trim _KNOWN_VIOLATIONS. "
+            f"Residual rationale: {_KNOWN_VIOLATION_REASONS[src_file.name]}"
         )
 
 

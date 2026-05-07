@@ -31,6 +31,7 @@ from tests2.integration.harness.postgres_ext import (
     PG_EXT_PORT,
     PG_EXT_USER,
     postgres_ext_conn,
+    postgres_ext_sqlalchemy_url,
 )
 from tests2.integration.harness.reconciliation import (
     assert_reconciliation_match,
@@ -42,6 +43,16 @@ from tests2.integration.harness.reconciliation import (
 )
 
 
+pytestmark = [
+    pytest.mark.integration,
+    pytest.mark.contract,
+    pytest.mark.regression,
+    pytest.mark.requires_postgres,
+    pytest.mark.developer_nightly,
+    pytest.mark.db_live_opt_in,
+]
+
+
 # Skip policy: env opt-in + probe-connect, no `psycopg2.connect` se mancano.
 
 _RUN_DB_LIVE = os.getenv("URBY_RUN_DB_LIVE_TESTS") == "1"
@@ -51,7 +62,7 @@ _SKIP_NO_DB_LIVE_OPT_IN = pytest.mark.skipif(
     reason=(
         "DB-live opt-in mancante: settare URBY_RUN_DB_LIVE_TESTS=1 "
         "per eseguire il smoke reconciliation su PG ext "
-        "(127.0.0.1:5432/dataflow_test). Skip default per evitare "
+        f"({PG_EXT_HOST}:{PG_EXT_PORT}/{PG_EXT_DATABASE}). Skip default per evitare "
         "access violation su psycopg2 in ambienti senza PG ext "
         "raggiungibile."
     ),
@@ -159,10 +170,7 @@ def pg_ext_reachable():
 
 def _pg_ext_engine():
     """SQLAlchemy engine verso lo stesso PG ext del harness."""
-    return create_engine(
-        f"postgresql+psycopg2://{PG_EXT_USER}:{PG_EXT_PASSWORD}@"
-        f"{PG_EXT_HOST}:{PG_EXT_PORT}/{PG_EXT_DATABASE}"
-    )
+    return create_engine(postgres_ext_sqlalchemy_url())
 
 
 def _make_write_config(dest_table: str) -> WriteConfig:
@@ -197,9 +205,6 @@ def _make_write_config(dest_table: str) -> WriteConfig:
 
 # Test: smoke reconciliation 10k righe
 
-@pytest.mark.integration
-@pytest.mark.contract
-@pytest.mark.regression
 @_SKIP_NO_DB_LIVE_OPT_IN
 def test_pg_reconciliation_smoke_10k_rows(pg_ext_reachable):
     """Source PG -> DatabaseWriter -> Dest PG. Reconciliation 3-metriche.

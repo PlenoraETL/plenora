@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 from tests2.functional.harness.http import http_json_response, poll_json_until
-from tests2.integration.harness.postgres_ext import seeded_postgres_ext_table
+from tests2.integration.harness.postgres_ext import (
+    postgres_ext_connection_payload,
+    seeded_postgres_ext_table,
+)
 from tests2.integration.harness.projects import managed_project
 
 
@@ -12,12 +15,7 @@ def _create_postgres_connection(base_url: str, auth_headers: dict) -> dict:
         "name": "Integration Postgres Connection",
         "description": "tests2 postgres integration",
         "type": "postgres",
-        "host": "127.0.0.1",
-        "port": 5432,
-        "database": "dataflow_test",
-        "db_schema": "public",
-        "username": "dataflow",
-        "password": "dataflow_test_2026",
+        **postgres_ext_connection_payload(),
     }
     status, created, _ = http_json_response(
         f"{base_url}/api/connections",

@@ -14,7 +14,14 @@ from pathlib import Path
 import pytest
 
 
-pytestmark = [pytest.mark.unit, pytest.mark.security, pytest.mark.contract]
+pytestmark = [
+    pytest.mark.unit,
+    pytest.mark.security,
+    pytest.mark.contract,
+    pytest.mark.requires_postgres,
+    pytest.mark.developer_nightly,
+    pytest.mark.db_live_opt_in,
+]
 
 
 # PATHS (backend/tests2/security/unit/ → backend)
