@@ -238,7 +238,7 @@ def test_compose_worker_uses_pool_solo_and_beat_uses_plenora_scheduler():
     assert "--pool=solo" in text, (
         "docker-compose.yml worker service must launch celery "
         "with `--pool=solo` -- matches the single-machine "
-        "smoke (dry-run pack §2.7) and the cleanroom CI lane. "
+        "smoke (dry-run pack section 2.7) and the cleanroom CI lane. "
         "Switching to prefork in the scaffold would diverge "
         "from the validated path without justification."
     )
@@ -352,7 +352,7 @@ def test_env_docker_example_documents_six_memory_caps():
         assert cap in text, (
             f".env.docker.example must reference memory cap "
             f"{cap!r} (commented is fine; the SHAPE matters). "
-            "Mirrors the dry-run pack §5.2 memory-caps "
+            "Mirrors the dry-run pack section 5.2 memory-caps "
             "visibility list."
         )
 
@@ -430,3 +430,72 @@ def test_install_docker_doc_documents_validation_gaps():
         "missing Linux-PC validation report as the primary "
         "scaffold gap."
     )
+
+
+# =====================================================================
+# BE-GO-READY-ARCH-060-W6: same-image contract + dockerignore venv
+# =====================================================================
+
+
+def test_compose_worker_and_beat_share_backend_image():
+    """worker and beat must reference the same image tag as backend.
+
+    The scaffold reuses one image for all three backend-type services,
+    overriding CMD for celery roles (Dockerfile comment: 'Reused for
+    backend / worker / beat by overriding the CMD'). If worker or beat
+    drift to a different image, the smoke cleanroom.ping check fails
+    with a misleading 'task not registered' error instead of an obvious
+    image-mismatch diagnosis. This guard catches the drift at source level.
+    """
+    text = _COMPOSE.read_text(encoding="utf-8")
+    # The canonical plenora application image tag. It must appear in
+    # exactly the three app-tier services (backend, worker, beat).
+    # postgres:17-alpine and redis:7-alpine are infrastructure images
+    # and do not use this tag.
+    canonical = "plenora-backend:scaffold"
+    count = text.count(canonical)
+    assert count >= 3, (
+        f"Expected the plenora application image {canonical!r} to "
+        f"appear in at least 3 compose services (backend, worker, beat); "
+        f"found {count} occurrence(s). worker and beat must reuse the "
+        "backend image so the smoke harness cleanroom.ping resolves "
+        "against the correct Plenora application code."
+    )
+
+
+def test_compose_worker_and_beat_use_same_dockerfile_as_backend():
+    """All three app-tier services must build from the same Dockerfile.
+
+    Diverging build contexts (e.g., worker switching to a generic
+    celery base image) would silently exclude the Plenora application
+    code from the worker container, making cleanroom.ping fail without
+    a clear reason.
+    """
+    text = _COMPOSE.read_text(encoding="utf-8")
+    canonical_dockerfile = "backend/Dockerfile"
+    count = text.count(canonical_dockerfile)
+    assert count >= 3, (
+        f"Expected {canonical_dockerfile!r} to appear in at least 3 "
+        f"compose services (backend, worker, beat); found {count}. "
+        "All app-tier services must build from the same Dockerfile "
+        "to guarantee consistent application code."
+    )
+
+
+def test_dockerignore_excludes_venv_directories():
+    """The build context must exclude Python virtual environments.
+
+    A developer venv under backend/venv/ or .venv/ can be 1+ GB and
+    includes dev-only packages that must not land in the image. The
+    canonical pattern `**/venv/` covers any nesting depth; the flat
+    `venv/` entry covers the repo-root case.
+    """
+    text = _DOCKERIGNORE.read_text(encoding="utf-8")
+    for pattern in ("venv/", "**/venv/"):
+        assert pattern in text, (
+            f".dockerignore must exclude {pattern!r} so local Python "
+            "virtual environments are not included in the Docker build "
+            "context. A developer venv can be 1+ GB and includes "
+            "dev-only packages that should never land in a production "
+            "image layer. (BE-GO-READY-ARCH-060-W6)"
+        )

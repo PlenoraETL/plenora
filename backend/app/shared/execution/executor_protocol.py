@@ -49,111 +49,15 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Dict, Optional, Protocol, runtime_checkable
 
+from app.shared.execution.payloads import ArtifactPayload, _check_payload_safe
 
 if TYPE_CHECKING:
     from app.models import CanvasState
 
 
+# ArtifactPayload re-exported here so existing callers that import it from
+# executor_protocol continue to work without changes.
 __all__ = ["CanvasExecutorProtocol", "ExecutionResult", "ArtifactPayload"]
-
-
-# Modules whose top-level package name indicates a heavy DataFrame runtime.
-# Checked by string comparison - no import of these libraries.
-_UNSAFE_PAYLOAD_MODULES = frozenset({"pandas", "geopandas", "polars"})
-
-
-def _check_payload_safe(payload: Dict[str, Any]) -> None:
-    """Raise ValueError if any top-level payload value is a DataFrame, bytes, or file-like.
-
-    Uses type.__module__ string inspection - never imports Pandas/GeoPandas.
-    Called from ExecutionResult.__post_init__ so it guards all construction paths.
-    """
-    for key, value in payload.items():
-        t = type(value)
-        base_module = (getattr(t, "__module__", None) or "").split(".")[0]
-        if base_module in _UNSAFE_PAYLOAD_MODULES:
-            raise ValueError(
-                f"ExecutionResult.payload[{key!r}] carries {t.__qualname__!r} "
-                f"from {base_module!r} - DataFrames are forbidden in payload. "
-                "Store row counts, paths, or result_ids instead."
-            )
-        if isinstance(value, (bytes, bytearray)):
-            raise ValueError(
-                f"ExecutionResult.payload[{key!r}] carries raw "
-                f"{t.__name__!r} - binary blobs are forbidden in payload."
-            )
-        if callable(getattr(value, "read", None)) and not isinstance(value, (str, bytes)):
-            raise ValueError(
-                f"ExecutionResult.payload[{key!r}] is a file-like stream "
-                f"({t.__name__!r}) - forbidden in payload."
-            )
-
-
-@dataclass(frozen=True)
-class ArtifactPayload:
-    """Typed payload for standard artifact execution success results.
-
-    Covers the common reference keys shared by all three executors:
-    ``result_id`` (blob stored in DB), ``output_path`` (file on disk),
-    ``filename``, ``format``, ``rows_count``, ``run_id``.
-
-    Extra executor-specific keys (e.g. ``user_error``, ``error_node_id``)
-    are not covered here; they stay in ``ExecutionResult.payload`` as raw
-    dict entries until they acquire their own typed representation.
-
-    Boundary: leaf contract - no Pandas, DB, FastAPI, or ArcGIS imports.
-
-    Go-ready mapping::
-
-        type ArtifactPayload struct {
-            ResultID   *string
-            OutputPath *string
-            Filename   *string
-            Format     *string
-            RowsCount  *int
-            RunID      *string
-        }
-    """
-
-    result_id: Optional[str] = None
-    output_path: Optional[str] = None
-    filename: Optional[str] = None
-    format: Optional[str] = None
-    rows_count: Optional[int] = None
-    run_id: Optional[str] = None
-
-    @classmethod
-    def from_payload_dict(cls, d: Dict[str, Any]) -> "ArtifactPayload":
-        """Extract known artifact keys from a payload dict.
-
-        Unknown keys are silently ignored; the caller retains them in
-        ``ExecutionResult.payload`` for backward compatibility.
-        """
-        return cls(
-            result_id=d.get("result_id") or None,
-            output_path=d.get("output_path") or None,
-            filename=d.get("filename") or None,
-            format=d.get("format") or None,
-            rows_count=d.get("rows_count"),
-            run_id=d.get("run_id") or None,
-        )
-
-    def to_dict(self) -> Dict[str, Any]:
-        """Return only non-None fields for dict-compat reconstruction."""
-        out: Dict[str, Any] = {}
-        if self.result_id is not None:
-            out["result_id"] = self.result_id
-        if self.output_path is not None:
-            out["output_path"] = self.output_path
-        if self.filename is not None:
-            out["filename"] = self.filename
-        if self.format is not None:
-            out["format"] = self.format
-        if self.rows_count is not None:
-            out["rows_count"] = self.rows_count
-        if self.run_id is not None:
-            out["run_id"] = self.run_id
-        return out
 
 
 @dataclass(frozen=True)

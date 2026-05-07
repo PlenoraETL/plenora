@@ -19,8 +19,9 @@ from __future__ import annotations
 
 from typing import Optional, Tuple
 
-from app.core.features.arcgis_client import ArcGISConnectionInfo, create_client
+from app.core.features.arcgis_client import create_client
 from app.core.features.features_service import get_connection_db
+from app.shared.connections.arcgis_connection import ArcGISConnectionInfo
 from app.shared.connections.arcgis_provider import ArcGISProviderProtocol
 
 

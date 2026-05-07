@@ -31,7 +31,7 @@ from app.utils.template_variables import process_static_fields
 from .plugin_executor import get_executor
 from .source_loading import load_file_sources
 
-from app.shared.graph import kahn_topological_order, GraphCycleError  # BE-GO-READY-ARCH-058-W6
+from app.shared.execution.graph import kahn_topological_order, GraphCycleError  # BE-GO-READY-ARCH-060-W4
 from app.shared.execution.canvas_graph import CanvasGraph  # BE-GO-READY-ARCH-059-W2
 
 logger = get_logger(__name__)
@@ -901,7 +901,7 @@ class ManipolaExecutor:
 
         BE-GO-READY-GRAPH-ENGINE-001-SHARED-TOPOLOGICAL-SORT: the
         Kahn implementation moved to the shared leaf
-        ``app.shared.graph.kahn_topological_order``. This method
+        ``app.shared.execution.graph.kahn_topological_order``. This method
         is the Manipola canvas adapter: it extracts ``.id`` from
         the typed node objects + ``.source`` / ``.target`` from
         the typed edge objects and forwards to the pure utility
@@ -1200,10 +1200,17 @@ class ManipolaExecutor:
             return {"success": False, "message": f"Errore salvataggio: {e}"}
 
     def _estrai_srid_da_canvas(self, canvas):
-        """Estrae primo SRID da tipi geometry nel canvas via ResourceMetadata."""
+        """Estrae primo SRID da tipi geometry nel canvas via ResourceMetadata.
+
+        BE-GO-READY-ARCH-060-W5: Parses canvas once through CanvasGraph so
+        node field access uses CanvasNode.get_field instead of ad-hoc
+        getattr/data.get dual-path.  CanvasGraph stays structural: no
+        Manipola-specific logic added to it.
+        """
         from app.shared.resources.metadata import ResourceMetadata
-        for node in canvas.nodes:
-            raw = getattr(node, 'columns', None) or (node.data.get('columns') if node.data else None)
+        graph = CanvasGraph.from_nodes_edges(canvas.nodes, [])
+        for cn in graph.nodes:
+            raw = cn.get_field('columns')
             if not raw:
                 continue
             cols_dicts = [

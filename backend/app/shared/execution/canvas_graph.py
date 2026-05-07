@@ -121,6 +121,11 @@ class CanvasGraph:
     # -- bulk access -----------------------------------------------------------
 
     @property
+    def nodes(self) -> List[CanvasNode]:
+        """All nodes as typed CanvasNode objects, in intake order."""
+        return list(self._typed_map.values())
+
+    @property
     def raw_map(self) -> Dict[str, Dict]:
         """Raw dict map ``{node_id: raw_dict}`` for legacy callers."""
         return self._raw_map

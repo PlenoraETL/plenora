@@ -42,8 +42,9 @@ _KNOWN_VIOLATIONS: dict[str, set[str]] = {
         "app.core.features.arcgis_connection_adapter",
     },
     "arcgis_uploader.py": {
-        "app.core.features.arcgis_client",
-        "app.core.features.features_service",
+        # batch 060-W2: FeaturesService + create_client replaced by the thin adapter.
+        # Remaining: one cross-domain import — the same adapter as validator.py.
+        "app.core.features.arcgis_connection_adapter",
     },
 }
 
@@ -57,8 +58,11 @@ _KNOWN_VIOLATION_REASONS: dict[str, str] = {
         "can move to app.shared.connections without duplicating DB logic."
     ),
     "arcgis_uploader.py": (
-        "TODO ADR-0023: replace FeaturesService lookup with explicit ArcGIS "
-        "connection info plus client protocol."
+        "TODO ADR-0023: FeaturesService + create_client replaced by "
+        "arcgis_connection_adapter.resolve_arcgis_connection (batch 060-W2). "
+        "Remaining: adapter lives in app.core.features because get_connection_db "
+        "needs the DB. Next cut: connection repository leaf so adapter can move "
+        "to app.shared.connections."
     ),
 }
 

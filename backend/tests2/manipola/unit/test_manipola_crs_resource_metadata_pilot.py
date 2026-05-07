@@ -9,6 +9,7 @@ Tests cover the six behavioural cases that matter for correctness.
 
 from __future__ import annotations
 
+import itertools
 import pandas as pd
 import geopandas as gpd
 import pytest
@@ -163,11 +164,19 @@ def _executor():
     return ManipolaExecutor.__new__(ManipolaExecutor)
 
 
+_node_seq = itertools.count(1)
+
+
 class _Node:
-    """Minimal canvas node stub."""
+    """Minimal canvas node stub compatible with CanvasGraph (has model_dump)."""
+
     def __init__(self, columns=None, data=None):
+        self._id = f"test-node-{next(_node_seq)}"
         self.columns = columns
-        self.data = data
+        self.data = data or {}
+
+    def model_dump(self):
+        return {"id": self._id, "columns": self.columns, "data": self.data}
 
 
 class _Canvas:
@@ -223,12 +232,15 @@ def test_estrai_srid_handles_empty_canvas():
 
 
 def test_estrai_srid_from_node_data_columns():
-    """Columns supplied via node.data dict (CanvasNode-style fallback)."""
+    """Columns supplied via node.data dict (CanvasGraph fallback to data key)."""
     ex = _executor()
 
     class _DataNode:
         columns = None
         data = {"columns": [{"name": "geom", "type": "geometry:point:32632"}]}
+
+        def model_dump(self):
+            return {"id": "data-node-1", "columns": self.columns, "data": self.data}
 
     canvas = _Canvas([_DataNode()])
     assert ex._estrai_srid_da_canvas(canvas) == 32632

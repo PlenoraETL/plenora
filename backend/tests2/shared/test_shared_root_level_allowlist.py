@@ -74,8 +74,6 @@ _ALLOWED_ROOT_MODULES: frozenset[str] = frozenset(
         "external_artifact_processor", # cross-domain artifact post-processing helpers
         "idempotency",                 # idempotency key helpers
         "path_policy",                 # canonical path/slug policy
-        # --- Graph (legacy flat; candidate for execution/ in a future cut) ---
-        "graph",  # generic graph utilities; ADR-0023: move to execution/ when callers updated
     }
 )
 

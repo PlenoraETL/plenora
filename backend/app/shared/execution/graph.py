@@ -1,6 +1,8 @@
 """Domain-agnostic graph utilities.
 
 BE-GO-READY-GRAPH-ENGINE-001-SHARED-TOPOLOGICAL-SORT.
+BE-GO-READY-ARCH-060-W4: moved from app.shared.graph to
+app.shared.execution.graph (correct engine subpackage).
 
 Tiny shared module: ONE primitive (Kahn topological sort with
 optional cycle detection) plus its typed cycle exception. Pure
@@ -38,7 +40,7 @@ Usage
 =====
 ::
 
-    from app.shared.graph import kahn_topological_order, GraphCycleError
+    from app.shared.execution.graph import kahn_topological_order, GraphCycleError
 
     # Truncate-on-cycle (legacy Arricchisci shape):
     order = kahn_topological_order(

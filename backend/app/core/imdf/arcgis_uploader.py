@@ -129,8 +129,7 @@ def upload_imdf_layers(
                 "errors": [str, ...],
             }
     """
-    from app.core.features.features_service import FeaturesService
-    from app.core.features.arcgis_client import create_client
+    from app.core.features.arcgis_connection_adapter import resolve_arcgis_connection
 
     if mode not in PUBLISH_MODES:
         return {
@@ -162,17 +161,14 @@ def upload_imdf_layers(
     }
 
     # ── 1. Carica connection ──────────────────────────────────────────
-    fs_svc = FeaturesService()
-    conn_pyd = fs_svc.get_connection(connection_id)
-    if not conn_pyd:
+    _resolved = resolve_arcgis_connection(connection_id)
+    if _resolved is None:
         result["errors"].append(f"Connessione ArcGIS '{connection_id}' non trovata")
         return result
-    conn = fs_svc._to_connection_info(conn_pyd)
+    conn, client = _resolved
     if not conn.username:
         result["errors"].append("La connection ArcGIS non ha username (richiesto per createService)")
         return result
-
-    client = create_client()
 
     # Total steps for progress: folder + delete + N layers + (renderers?)
     layers_present_preview = [n for n in LAYER_ORDER if n in layers and len(layers[n]) > 0]

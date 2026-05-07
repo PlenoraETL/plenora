@@ -64,7 +64,7 @@ import pandas as pd
 import app.db.db_service as db_svc  # noqa: F401  (test-monkeypatch surface preserved)
 from app.shared.execution.canvas_node import CanvasNode  # BE-GO-READY-ARCH-056-W3
 from app.shared.execution.canvas_graph import CanvasGraph  # BE-GO-READY-ARCH-058-W3
-from app.shared.graph import kahn_topological_order
+from app.shared.execution.graph import kahn_topological_order  # BE-GO-READY-ARCH-060-W4
 # BE-GO-READY-ORCHESTRATION-ENGINE-011-CANVAS-CTX-NO-LEGACY-STATE-CUT
 # + BE-GO-READY-ORCHESTRATION-ENGINE-012-KILL-APPLY-TO-LEGACY-STATE:
 # the orchestrator no longer mirrors `ctx` values onto
@@ -122,7 +122,7 @@ def get_execution_order(
 
     BE-GO-READY-GRAPH-ENGINE-001-SHARED-TOPOLOGICAL-SORT: the
     Kahn implementation moved to the shared leaf
-    ``app.shared.graph.kahn_topological_order``. This wrapper
+    ``app.shared.execution.graph.kahn_topological_order``. This wrapper
     is the canvas-arricchisci adapter: it pulls ``id`` /
     ``source`` / ``target`` from the canvas dict shape and
     forwards to the pure utility with ``on_cycle='truncate'``
