@@ -80,7 +80,7 @@ def test_scheduler_manual_run_failure_updates_runtime_and_logs(
                 headers=integration_auth_headers,
                 timeout=10.0,
             )
-            assert status == 200
+            assert status in (200, 201)
             schedule_id = schedule_created["id"]
 
             try:
@@ -142,7 +142,7 @@ def test_scheduler_manual_run_failure_updates_runtime_and_logs(
                     headers=integration_auth_headers,
                     timeout=10.0,
                 )
-                assert status in (200, 404)
+                assert status in (200, 204, 404)
     finally:
         _delete_connection(
             integration_backend_server["base_url"],

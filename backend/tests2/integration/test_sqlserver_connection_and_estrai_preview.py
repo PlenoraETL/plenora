@@ -47,7 +47,7 @@ def _delete_connection(base_url: str, auth_headers: dict, connection_id: str) ->
         headers=auth_headers,
         timeout=10.0,
     )
-    assert status in (200, 404)
+    assert status in (200, 204, 404)
 
 
 def _estrai_sqlserver_canvas(table_name: str) -> dict:

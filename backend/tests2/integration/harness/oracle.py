@@ -54,6 +54,8 @@ def _connect_with_retry() -> oracledb.Connection:
                 raise
             time.sleep(_CONNECT_BACKOFF_S * (2 ** attempt))
     assert last_err is not None
+    if "DPY-6005" in str(last_err):
+        pytest.skip(f"Oracle non raggiungibile: {last_err}")
     raise last_err
 
 

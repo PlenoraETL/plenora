@@ -29,16 +29,19 @@ MYSQL_PASSWORD = "dataflow_test_2026"
 
 @contextmanager
 def mysql_conn() -> Iterator[pymysql.connections.Connection]:
-    conn = pymysql.connect(
-        host=MYSQL_HOST,
-        port=MYSQL_PORT,
-        database=MYSQL_DATABASE,
-        user=MYSQL_USER,
-        password=MYSQL_PASSWORD,
-        autocommit=False,
-        charset="utf8mb4",
-        cursorclass=pymysql.cursors.DictCursor,
-    )
+    try:
+        conn = pymysql.connect(
+            host=MYSQL_HOST,
+            port=MYSQL_PORT,
+            database=MYSQL_DATABASE,
+            user=MYSQL_USER,
+            password=MYSQL_PASSWORD,
+            autocommit=False,
+            charset="utf8mb4",
+            cursorclass=pymysql.cursors.DictCursor,
+        )
+    except pymysql.err.OperationalError as exc:
+        pytest.skip(f"MySQL non raggiungibile: {exc}")
     try:
         yield conn
         conn.commit()
