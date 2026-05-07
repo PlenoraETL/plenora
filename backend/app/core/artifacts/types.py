@@ -23,7 +23,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Optional
+from typing import TYPE_CHECKING, Any, Optional
+
+if TYPE_CHECKING:
+    from app.shared.execution.executor_protocol import ExecutionResult
 
 
 class ArtifactResolutionError(Exception):
@@ -197,6 +200,24 @@ class PipelineArtifact(dict):
             )
         merged["project_id"] = project_id
         return cls(merged)
+
+    @classmethod
+    def from_execution_result(
+        cls,
+        exec_result: "ExecutionResult",
+        *,
+        project_id: str,
+    ) -> "PipelineArtifact":
+        """Typed factory: constructs a PipelineArtifact from an ExecutionResult.
+
+        BE-GO-READY-ARCH-059-W3: typed payload boundary between executor and
+        artifact. Delegates to ``from_executor_result`` via
+        ``exec_result.to_dict()`` so that the full backward-compatible dict
+        shape is preserved. The typed boundary here is ``ExecutionResult``
+        rather than the raw executor dict, enabling callers to reason about
+        ``exec_result.artifact_payload()`` before the artifact is constructed.
+        """
+        return cls.from_executor_result(exec_result.to_dict(), project_id=project_id)
 
     @classmethod
     def failure(

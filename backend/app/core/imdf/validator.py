@@ -103,7 +103,7 @@ def validate_publish(
         Non lancia eccezioni per errori di validazione — li riporta nel dict.
     """
     from app.config import settings
-    from app.core.features.features_service import FeaturesService
+    from app.core.features.arcgis_connection_adapter import resolve_arcgis_connection
     from app.core.imdf.loader import load_imdf_layers
     from app.core.imdf.arcgis_uploader import (
         DEFAULT_MATCH_COLUMNS, LAYER_ORDER, PUBLISH_MODES,
@@ -196,20 +196,16 @@ def validate_publish(
     report["summary"]["total_features"] = sum(len(bundle_layers[n]) for n in layers_present)
 
     # ── 2. Connessione ArcGIS ──────────────────────────────────────
-    fs_svc = FeaturesService()
-    conn_pyd = fs_svc.get_connection(connection_id)
-    if not conn_pyd:
+    # BE-GO-READY-ARCH-059-W4: FeaturesService replaced by the thin
+    # adapter resolve_arcgis_connection. The validator receives only
+    # (ArcGISConnectionInfo, ArcGISProviderProtocol); the DB lookup
+    # remains in the features domain without exposing the full class.
+    _resolved = resolve_arcgis_connection(connection_id)
+    if _resolved is None:
         _add_top_issue("error", "CONNECTION_NOT_FOUND",
                        f"Connessione ArcGIS '{connection_id}' non trovata")
         return report
-    conn: ArcGISConnectionInfo = fs_svc._to_connection_info(conn_pyd)
-    # Reuse the ArcGISClient already held by FeaturesService (avoids a
-    # second create_client() call and shares the token cache).
-    # ADR-0023 / BE-GO-READY-ARCH-058-W5: typed against ArcGISProviderProtocol
-    # so the validator is decoupled from the concrete client class.
-    # FeaturesService import remains (see KNOWN_VIOLATIONS): it is the only
-    # way to do the connection DB lookup without duplicating that logic.
-    client: ArcGISProviderProtocol = fs_svc._client
+    conn, client = _resolved
 
     # ── 3. Cerca FS esistente globalmente ──────────────────────────
     try:

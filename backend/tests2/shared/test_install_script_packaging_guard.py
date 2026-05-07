@@ -670,3 +670,68 @@ def test_check_env_status_called_in_check_only_branch(install_sh_text: str):
         "in the --check transcript before the final PASS/FAIL "
         "verdict (BE-GO-READY-INSTALL-020)."
     )
+
+
+# =====================================================================
+# 16. INSTALLER_MANAGED_KEYS all documented in backend/.env.example
+# =====================================================================
+#
+# BE-GO-READY-ARCH-059-W6: Every key in INSTALLER_MANAGED_KEYS must
+# appear in backend/.env.example so operators know what the installer
+# writes on every run. This guard prevents silent drift where a new
+# installer-managed key is added to install.sh without a corresponding
+# operator-facing entry in the template.
+
+
+_ENV_EXAMPLE = _REPO_ROOT / "backend" / ".env.example"
+
+
+def _parse_installer_managed_keys(text: str) -> set:
+    start = text.index("INSTALLER_MANAGED_KEYS=(")
+    end = text.index(")", start)
+    array_block = text[start + len("INSTALLER_MANAGED_KEYS=("):end]
+    keys = set()
+    for line in array_block.splitlines():
+        token = line.strip()
+        if token and not token.startswith("#"):
+            keys.add(token)
+    return keys
+
+
+def _parse_env_example_keys(text: str) -> set:
+    import re
+    # Match `KEY=` and `# KEY=` lines where KEY starts the non-comment
+    # portion - avoids matching KEY= inside prose or code examples such
+    # as `python -c "... KEY=..."` (those lines start with non-uppercase
+    # tokens before the key name).
+    pattern = re.compile(r"^#?\s*([A-Z_][A-Z0-9_]*)=", re.MULTILINE)
+    return {m.group(1) for m in pattern.finditer(text)}
+
+
+@pytest.fixture(scope="module")
+def env_example_text() -> str:
+    assert _ENV_EXAMPLE.is_file(), f"backend/.env.example not found at {_ENV_EXAMPLE}"
+    return _ENV_EXAMPLE.read_text(encoding="utf-8")
+
+
+def test_installer_managed_keys_all_documented_in_env_example(
+    install_sh_text: str,
+    env_example_text: str,
+):
+    """Every key in INSTALLER_MANAGED_KEYS must appear in
+    backend/.env.example so operators know what the installer writes.
+
+    Failure means a key was added to INSTALLER_MANAGED_KEYS without a
+    corresponding commented entry in the operator-facing template.
+    Add `# KEY=<default>` and a short description to .env.example.
+    """
+    managed = _parse_installer_managed_keys(install_sh_text)
+    documented = _parse_env_example_keys(env_example_text)
+    missing = managed - documented
+    assert not missing, (
+        f"INSTALLER_MANAGED_KEYS key(s) not documented in "
+        f"backend/.env.example: {sorted(missing)}. "
+        f"Add a commented `# KEY=` entry with a short description "
+        f"so operators know the installer writes these keys. "
+        f"(BE-GO-READY-ARCH-059-W6-CLEAN-INSTALL-AUTOMATION-CUT)"
+    )

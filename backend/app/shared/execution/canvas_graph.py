@@ -72,24 +72,33 @@ class CanvasGraph:
     @classmethod
     def from_nodes_edges(
         cls,
-        nodes: List[Dict],
-        edges: List[Dict],
+        nodes: List,
+        edges: List,
     ) -> "CanvasGraph":
         """Build a CanvasGraph from canvas ``nodes`` and ``edges`` lists.
 
-        Nodes that are not dicts are silently skipped (defensive - canvas
-        input validation lives upstream).
+        Accepts both plain dicts (Arricchisci canvas shape) and Pydantic
+        model instances (Manipola CanvasState shape). Pydantic nodes are
+        converted once via ``model_dump()`` so the rest of the graph is
+        always plain-dict based. Nodes that are neither are silently skipped.
         """
         raw_map: Dict[str, Dict] = {}
         typed_map: Dict[str, CanvasNode] = {}
         for n in nodes:
-            if not isinstance(n, dict):
+            if isinstance(n, dict):
+                raw_dict = n
+            elif hasattr(n, "model_dump"):
+                # BE-GO-READY-ARCH-059-W2: Pydantic v2 model - convert once
+                # at the intake boundary so all downstream lookups are plain
+                # dicts (position, data, etc.) without dual isinstance checks.
+                raw_dict = n.model_dump()
+            else:
                 continue
-            nid = n.get("id")
+            nid = raw_dict.get("id")
             if nid is None:
                 continue
-            raw_map[nid] = n
-            typed_map[nid] = CanvasNode(n)
+            raw_map[nid] = raw_dict
+            typed_map[nid] = CanvasNode(raw_dict)
         return cls(raw_map, typed_map, list(edges) if edges else [])
 
     # -- lookups ---------------------------------------------------------------

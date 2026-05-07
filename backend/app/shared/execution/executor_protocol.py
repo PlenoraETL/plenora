@@ -54,7 +54,7 @@ if TYPE_CHECKING:
     from app.models import CanvasState
 
 
-__all__ = ["CanvasExecutorProtocol", "ExecutionResult"]
+__all__ = ["CanvasExecutorProtocol", "ExecutionResult", "ArtifactPayload"]
 
 
 # Modules whose top-level package name indicates a heavy DataFrame runtime.
@@ -87,6 +87,73 @@ def _check_payload_safe(payload: Dict[str, Any]) -> None:
                 f"ExecutionResult.payload[{key!r}] is a file-like stream "
                 f"({t.__name__!r}) - forbidden in payload."
             )
+
+
+@dataclass(frozen=True)
+class ArtifactPayload:
+    """Typed payload for standard artifact execution success results.
+
+    Covers the common reference keys shared by all three executors:
+    ``result_id`` (blob stored in DB), ``output_path`` (file on disk),
+    ``filename``, ``format``, ``rows_count``, ``run_id``.
+
+    Extra executor-specific keys (e.g. ``user_error``, ``error_node_id``)
+    are not covered here; they stay in ``ExecutionResult.payload`` as raw
+    dict entries until they acquire their own typed representation.
+
+    Boundary: leaf contract - no Pandas, DB, FastAPI, or ArcGIS imports.
+
+    Go-ready mapping::
+
+        type ArtifactPayload struct {
+            ResultID   *string
+            OutputPath *string
+            Filename   *string
+            Format     *string
+            RowsCount  *int
+            RunID      *string
+        }
+    """
+
+    result_id: Optional[str] = None
+    output_path: Optional[str] = None
+    filename: Optional[str] = None
+    format: Optional[str] = None
+    rows_count: Optional[int] = None
+    run_id: Optional[str] = None
+
+    @classmethod
+    def from_payload_dict(cls, d: Dict[str, Any]) -> "ArtifactPayload":
+        """Extract known artifact keys from a payload dict.
+
+        Unknown keys are silently ignored; the caller retains them in
+        ``ExecutionResult.payload`` for backward compatibility.
+        """
+        return cls(
+            result_id=d.get("result_id") or None,
+            output_path=d.get("output_path") or None,
+            filename=d.get("filename") or None,
+            format=d.get("format") or None,
+            rows_count=d.get("rows_count"),
+            run_id=d.get("run_id") or None,
+        )
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Return only non-None fields for dict-compat reconstruction."""
+        out: Dict[str, Any] = {}
+        if self.result_id is not None:
+            out["result_id"] = self.result_id
+        if self.output_path is not None:
+            out["output_path"] = self.output_path
+        if self.filename is not None:
+            out["filename"] = self.filename
+        if self.format is not None:
+            out["format"] = self.format
+        if self.rows_count is not None:
+            out["rows_count"] = self.rows_count
+        if self.run_id is not None:
+            out["run_id"] = self.run_id
+        return out
 
 
 @dataclass(frozen=True)
@@ -158,6 +225,23 @@ class ExecutionResult:
             out["error"] = self.error
         out.update(self.payload)
         return out
+
+    def artifact_payload(self) -> Optional[ArtifactPayload]:
+        """Extract typed ``ArtifactPayload`` from this result's payload.
+
+        Returns ``None`` for failure results - no artifact was produced.
+        For success results, extracts the standard artifact reference keys
+        (``result_id``, ``output_path``, ``filename``, ``format``,
+        ``rows_count``, ``run_id``) from ``self.payload``.
+
+        Extra payload keys not covered by ``ArtifactPayload`` (e.g.
+        ``user_error``, ``error_node_id``) remain in ``self.payload``
+        and are not surfaced by this accessor; use ``self.payload`` or
+        ``to_dict()`` to access them.
+        """
+        if not self.success:
+            return None
+        return ArtifactPayload.from_payload_dict(self.payload)
 
 
 @runtime_checkable

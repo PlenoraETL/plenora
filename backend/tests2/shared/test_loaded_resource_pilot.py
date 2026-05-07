@@ -1,10 +1,13 @@
 """Focused contract test: SourceLoader.load_with_metadata produces LoadedResource.
 
-BE-GO-READY-ARCH-058-W1-SOURCELOADER-LOADEDRESOURCE-METADATA.
+BE-GO-READY-ARCH-058-W1 / BE-GO-READY-ARCH-059-W1.
 
 Verifies the new runtime path: load_with_metadata() returns a typed
 LoadedResource envelope carrying both data and ResourceMetadata at load
 time, without touching the legacy load() return value.
+
+059-W1 expansion: all three SourceRef.kind() values covered (file, project,
+static); _source_kind_for_ref is tested independently.
 """
 
 from __future__ import annotations
@@ -29,6 +32,14 @@ def _make_file_ref(fid="fs-1"):
 def _make_project_ref(pid="p-1"):
     from app.core.artifacts import SourceRef
     return SourceRef.from_node_data("project_source", {"source_project_id": pid})
+
+
+def _make_static_ref():
+    from app.core.artifacts import SourceRef
+    return SourceRef.from_node_data(
+        "staticValues",
+        {"fields": [{"name": "label", "value": "test"}]},
+    )
 
 
 _COLUMNS = [
@@ -178,3 +189,76 @@ def test_legacy_load_still_returns_raw_data():
         raw = loader.load(ref, expected_group_id="grp-1")
 
     assert raw is df
+
+
+# ---------------------------------------------------------------------------
+# 7. _source_kind_for_ref — unit tests for the extracted mapping function
+# ---------------------------------------------------------------------------
+
+
+def test_source_kind_for_file_ref():
+    from app.core.artifacts.source_loader import _source_kind_for_ref
+    assert _source_kind_for_ref(_make_file_ref()) == "file"
+
+
+def test_source_kind_for_project_ref():
+    from app.core.artifacts.source_loader import _source_kind_for_ref
+    assert _source_kind_for_ref(_make_project_ref()) == "project"
+
+
+def test_source_kind_for_static_ref():
+    from app.core.artifacts.source_loader import _source_kind_for_ref
+    assert _source_kind_for_ref(_make_static_ref()) == "static"
+
+
+# ---------------------------------------------------------------------------
+# 8. Static source kind coverage (059-W1 expansion)
+# ---------------------------------------------------------------------------
+
+
+def test_static_source_no_columns_metadata_gives_none():
+    """Static values carry schema in static_fields, not canvas columns.
+    When no columns_metadata is supplied (the typical case), metadata=None.
+    """
+    from app.core.artifacts import SourceLoader
+    from app.shared.resources.metadata import LoadedResource
+
+    df = pd.DataFrame({"label": ["test"]})
+    ref = _make_static_ref()
+
+    loader = SourceLoader()
+    with patch.object(loader, "load", return_value=df):
+        result = loader.load_with_metadata(
+            ref,
+            expected_group_id="grp-1",
+            columns_metadata=None,
+        )
+
+    assert isinstance(result, LoadedResource)
+    assert result.metadata is None
+
+
+def test_static_source_with_columns_metadata_gives_static_source_kind():
+    """When a caller explicitly provides columns_metadata for a static ref,
+    metadata is built with source_kind='static' — not silently coerced to 'file'.
+    """
+    from app.core.artifacts import SourceLoader
+    from app.shared.resources.metadata import ResourceMetadata
+
+    df = pd.DataFrame({"label": ["test"], "value": [42]})
+    ref = _make_static_ref()
+
+    loader = SourceLoader()
+    with patch.object(loader, "load", return_value=df):
+        result = loader.load_with_metadata(
+            ref,
+            expected_group_id="grp-1",
+            columns_metadata=[
+                {"name": "label", "type": "str"},
+                {"name": "value", "type": "int"},
+            ],
+        )
+
+    assert isinstance(result.metadata, ResourceMetadata)
+    assert result.metadata.source_kind == "static"
+    assert result.metadata.geometry_column is None

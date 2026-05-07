@@ -36,8 +36,10 @@ _FORBIDDEN_PREFIXES = ("app.core.features",)
 # -----------------------------------------------------------------
 _KNOWN_VIOLATIONS: dict[str, set[str]] = {
     "validator.py": {
-        # create_client removed (batch 057-W6): validator now uses fs_svc._client.
-        "app.core.features.features_service",
+        # batch 059-W4: FeaturesService replaced by the thin adapter module.
+        # The adapter is the one remaining cross-domain import; it encapsulates
+        # the DB lookup so the validator does not duplicate that logic.
+        "app.core.features.arcgis_connection_adapter",
     },
     "arcgis_uploader.py": {
         "app.core.features.arcgis_client",
@@ -48,9 +50,11 @@ _KNOWN_VIOLATIONS: dict[str, set[str]] = {
 _KNOWN_VIOLATION_REASONS: dict[str, str] = {
     "validator.py": (
         "TODO ADR-0023: EsriTypeMapper moved to app/shared/esri_types (batch 056). "
-        "create_client cut (batch 057-W6): validator reuses fs_svc._client. "
-        "Remaining: FeaturesService connection lookup — replace with a shared "
-        "ArcGIS connection leaf that does not import the Features domain."
+        "FeaturesService replaced by arcgis_connection_adapter (batch 059-W4). "
+        "Remaining: the adapter module is in app.core.features because the DB "
+        "connection lookup (get_connection_db) lives there. Next cut: move the "
+        "connection DB table to a shared/connection_repository leaf so the adapter "
+        "can move to app.shared.connections without duplicating DB logic."
     ),
     "arcgis_uploader.py": (
         "TODO ADR-0023: replace FeaturesService lookup with explicit ArcGIS "

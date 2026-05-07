@@ -52,7 +52,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Literal, Optional, Sequence
 
-SourceKind = Literal["file", "db", "project", "api"]
+SourceKind = Literal["file", "db", "project", "api", "static"]
 
 _GEOMETRY_PREFIX = "geometry"
 

@@ -28,6 +28,27 @@ from app.core.artifacts.types import (
 logger = get_logger(__name__)
 
 
+def _source_kind_for_ref(ref: SourceRef) -> str:
+    """Map a ``SourceRef`` to the ``SourceKind`` vocabulary used in ``ResourceMetadata``.
+
+    Extracted so callers and tests can verify the mapping independently of
+    the full ``load_with_metadata`` call.
+
+    - ``"file"``    -> ``"file"``
+    - ``"project"`` -> ``"project"``
+    - ``"static"``  -> ``"static"`` (single-row key-value DataFrame; typically
+      no canvas column definitions are available, so metadata will be ``None``
+      in practice unless the caller explicitly supplies ``columns_metadata``).
+    - any future kind falls back to ``"file"`` (safe default until extended).
+    """
+    kind = ref.kind()
+    if kind == "project":
+        return "project"
+    if kind == "static":
+        return "static"
+    return "file"
+
+
 class SourceLoader:
     """Carica una `SourceRef` in DataFrame (o GeoDataFrame se applicabile).
 
@@ -287,6 +308,9 @@ class SourceLoader:
             columns_metadata: optional ``[{"name": str, "type": str}]``
                 list. When present, ``LoadedResource.metadata`` is
                 populated. When absent, ``metadata`` is ``None``.
+                For static-source refs this is typically ``None`` because
+                static values carry their schema in ``static_fields``,
+                not in canvas column definitions.
             is_superadmin: bypass visibility check, forwarded to
                 ``load()``.
 
@@ -306,11 +330,9 @@ class SourceLoader:
 
         metadata: Optional[ResourceMetadata] = None
         if columns_metadata is not None:
-            _kind_map = {"file": "file", "project": "project", "static": "file"}
-            source_kind = _kind_map.get(ref.kind(), "file")
             metadata = ResourceMetadata.from_columns_list(
                 columns_metadata,
-                source_kind=source_kind,
+                source_kind=_source_kind_for_ref(ref),
             )
 
         return LoadedResource(data=data, metadata=metadata)

@@ -9,7 +9,7 @@ from __future__ import annotations
 import pytest
 from unittest.mock import MagicMock
 
-from app.shared.execution.executor_protocol import ExecutionResult
+from app.shared.execution.executor_protocol import ExecutionResult, ArtifactPayload
 
 
 pytestmark = [pytest.mark.unit, pytest.mark.contract]
@@ -273,3 +273,126 @@ def test_payload_guard_empty_payload_allowed():
     """Empty payload dict must not raise."""
     r = ExecutionResult(success=True)
     assert r.payload == {}
+
+
+# ---------------------------------------------------------------------------
+# ArtifactPayload typed accessor - BE-GO-READY-ARCH-059-W3
+# ---------------------------------------------------------------------------
+
+
+def test_artifact_payload_from_success_result_typed_fields():
+    """Success ExecutionResult exposes typed ArtifactPayload with known fields."""
+    r = ExecutionResult.from_executor_dict({
+        "success": True,
+        "result_id": "res-1",
+        "output_path": "/out/file.csv",
+        "filename": "file.csv",
+        "format": "csv",
+        "rows_count": 42,
+        "run_id": "run-abc",
+    })
+    ap = r.artifact_payload()
+    assert isinstance(ap, ArtifactPayload)
+    assert ap.result_id == "res-1"
+    assert ap.output_path == "/out/file.csv"
+    assert ap.filename == "file.csv"
+    assert ap.format == "csv"
+    assert ap.rows_count == 42
+    assert ap.run_id == "run-abc"
+
+
+def test_artifact_payload_none_for_failure_result():
+    """Failure ExecutionResult returns None from artifact_payload()."""
+    r = ExecutionResult.from_executor_dict({"success": False, "error": "upstream"})
+    assert r.artifact_payload() is None
+
+
+def test_artifact_payload_none_fields_when_absent():
+    """ArtifactPayload fields are None when keys absent from payload."""
+    r = ExecutionResult(success=True, payload={"result_id": "r-x"})
+    ap = r.artifact_payload()
+    assert ap.result_id == "r-x"
+    assert ap.output_path is None
+    assert ap.rows_count is None
+    assert ap.run_id is None
+
+
+def test_artifact_payload_to_dict_omits_none():
+    """ArtifactPayload.to_dict() only includes non-None fields."""
+    ap = ArtifactPayload(result_id="r-1", rows_count=10)
+    d = ap.to_dict()
+    assert d == {"result_id": "r-1", "rows_count": 10}
+    assert "output_path" not in d
+    assert "filename" not in d
+
+
+def test_artifact_payload_from_payload_dict_round_trip():
+    """from_payload_dict -> to_dict reconstructs only known keys."""
+    d = {"result_id": "r-2", "format": "csv", "rows_count": 5, "unknown_key": "x"}
+    ap = ArtifactPayload.from_payload_dict(d)
+    out = ap.to_dict()
+    assert out == {"result_id": "r-2", "format": "csv", "rows_count": 5}
+    assert "unknown_key" not in out
+
+
+def test_artifact_payload_extra_payload_keys_preserved_in_execution_result():
+    """Extra keys beyond ArtifactPayload coverage remain in ExecutionResult.payload."""
+    r = ExecutionResult.from_executor_dict({
+        "success": True,
+        "result_id": "r-3",
+        "user_error": False,
+        "error_node_id": "n-42",
+    })
+    ap = r.artifact_payload()
+    assert ap.result_id == "r-3"
+    assert r.payload["user_error"] is False
+    assert r.payload["error_node_id"] == "n-42"
+
+
+def test_artifact_payload_is_frozen():
+    ap = ArtifactPayload(result_id="r-1")
+    with pytest.raises((AttributeError, TypeError)):
+        ap.result_id = "other"  # type: ignore[misc]
+
+
+def test_orchestrator_artifact_payload_accessible_after_execute_pipeline():
+    """After execute_pipeline, exec_result.artifact_payload() exposes typed fields.
+
+    Integration: verifies the real caller path from orchestrator through
+    PipelineArtifact.from_execution_result uses the typed boundary.
+    """
+    from app.core.orchestrator.service import OrchestratorService
+    from app.core.artifacts.types import PipelineArtifact
+
+    mock_ps = MagicMock()
+    mock_ps.get_project_metadata.return_value = MagicMock(project_type="estrai")
+    mock_ps.get_project_canvas.return_value = MagicMock()
+
+    svc = OrchestratorService(
+        project_service=mock_ps,
+        executor=MagicMock(),
+        generator=MagicMock(),
+        connection_service=MagicMock(),
+    )
+    raw_executor_dict = {
+        "success": True,
+        "result_id": "typed-r-1",
+        "rows_count": 7,
+        "format": "csv",
+    }
+    svc.estrai_executor = MagicMock()
+    svc.estrai_executor.execute.return_value = raw_executor_dict
+    svc._find_all_carica_nodes = MagicMock(return_value=[])
+
+    artifact = svc.execute_pipeline("proj-typed")
+
+    assert isinstance(artifact, PipelineArtifact)
+    assert artifact.result_id == "typed-r-1"
+    assert artifact["rows_count"] == 7
+
+    # Verify the typed payload is extractable from the same data
+    exec_result = ExecutionResult.from_executor_dict(raw_executor_dict)
+    ap = exec_result.artifact_payload()
+    assert ap.result_id == "typed-r-1"
+    assert ap.rows_count == 7
+    assert ap.format == "csv"

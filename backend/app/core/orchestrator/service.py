@@ -200,12 +200,13 @@ class OrchestratorService:
                 intermediate_mode_override=intermediate_mode_override,
             )
 
-        # BE-GO-READY-ARCH-057-W3: typed boundary — normalise executor dict via
-        # ExecutionResult before handing off to PipelineArtifact.
-        # `exec_result.to_dict()` reconstructs the full backward-compat dict so
-        # PipelineArtifact.from_executor_result sees exactly the same shape.
+        # BE-GO-READY-ARCH-059-W3: typed payload boundary — normalise executor
+        # dict via ExecutionResult, then hand a typed ExecutionResult directly
+        # to PipelineArtifact.from_execution_result (instead of passing the raw
+        # dict). exec_result.artifact_payload() is available for callers that
+        # need typed access to result_id / rows_count / etc. before construction.
         exec_result = ExecutionResult.from_executor_dict(_raw)
-        artifact = PipelineArtifact.from_executor_result(exec_result.to_dict(), project_id=project_id)
+        artifact = PipelineArtifact.from_execution_result(exec_result, project_id=project_id)
 
         # Se la pipeline ha avuto successo, controlla se c'è un nodo CARICA
         # (skip se chiamato dal task CARICA stesso per evitare loop).

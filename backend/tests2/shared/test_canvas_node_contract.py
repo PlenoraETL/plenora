@@ -189,3 +189,59 @@ def test_canvas_graph_empty_inputs():
     assert g.raw_map == {}
     assert g.edges == []
     assert g.result_node() is None
+
+
+def test_canvas_graph_accepts_pydantic_like_nodes():
+    """BE-GO-READY-ARCH-059-W2: from_nodes_edges handles Pydantic model nodes
+    (those with model_dump()) alongside plain dicts. This lets Manipola build a
+    CanvasGraph from CanvasState.nodes without pre-converting to raw dicts."""
+
+    class _PydanticNode:
+        """Minimal stand-in for a Pydantic CanvasState node."""
+        def __init__(self, id, type_, position=None):
+            self._id = id
+            self._type = type_
+            self._position = position or {"x": 0, "y": 0}
+
+        def model_dump(self):
+            return {
+                "id": self._id,
+                "type": self._type,
+                "position": self._position,
+                "data": {},
+            }
+
+    nodes = [
+        _PydanticNode("n1", "transform", {"x": 10, "y": 100}),
+        _PydanticNode("n2", "result", {"x": 20, "y": 200}),
+    ]
+    g = CanvasGraph.from_nodes_edges(nodes, [])
+
+    assert set(g.raw_map.keys()) == {"n1", "n2"}
+    # raw dict exposes position as a plain dict (model_dump output)
+    assert g.raw("n1")["position"] == {"x": 10, "y": 100}
+    # typed accessor works normally
+    assert g.get("n2").type == "result"
+    assert g.result_node() is not None
+    assert g.result_node().type == "result"
+
+
+def test_canvas_graph_mixed_dict_and_pydantic_nodes():
+    """from_nodes_edges accepts a mixed list of plain dicts and Pydantic nodes."""
+
+    class _PydanticNode:
+        def __init__(self, id, type_):
+            self._id = id
+            self._type = type_
+
+        def model_dump(self):
+            return {"id": self._id, "type": self._type, "data": {}}
+
+    nodes = [
+        {"id": "dict-node", "type": "file_source"},
+        _PydanticNode("pydantic-node", "transform"),
+    ]
+    g = CanvasGraph.from_nodes_edges(nodes, [])
+    assert set(g.raw_map.keys()) == {"dict-node", "pydantic-node"}
+    assert g.get("dict-node").type == "file_source"
+    assert g.get("pydantic-node").type == "transform"

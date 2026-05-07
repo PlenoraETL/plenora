@@ -32,6 +32,7 @@ from .plugin_executor import get_executor
 from .source_loading import load_file_sources
 
 from app.shared.graph import kahn_topological_order, GraphCycleError  # BE-GO-READY-ARCH-058-W6
+from app.shared.execution.canvas_graph import CanvasGraph  # BE-GO-READY-ARCH-059-W2
 
 logger = get_logger(__name__)
 
@@ -801,9 +802,13 @@ class ManipolaExecutor:
         sorted_nodes = self._ordina_topologicamente(process_nodes, canvas.edges)
         
         current_df = None
-        # Mappa nodi per accedere alle posizioni
-        node_map_all = {n.id: n for n in canvas.nodes}
-        
+        # BE-GO-READY-ARCH-059-W2: parse canvas nodes once through CanvasGraph
+        # at the entry boundary. Replaces the local node_map_all dict and
+        # removes the dual isinstance(pos, dict)/getattr(pos, 'y') branch:
+        # model_dump() inside from_nodes_edges always produces plain dicts,
+        # so position is always a dict in graph.raw(...).
+        graph = CanvasGraph.from_nodes_edges(canvas.nodes, [])
+
         # Helper per estrarre targetHandle dall'edge (da attributo o da ID)
         def get_target_handle(edge):
             # Prima prova attributo diretto
@@ -816,23 +821,25 @@ class ManipolaExecutor:
             if match:
                 return match.group(1)
             return None
-        
+
         for node in sorted_nodes:
             # Trova input per questo nodo - ORDINA per targetHandle o posizione Y
             incoming = [e for e in canvas.edges if e.target == node.id]
-            
+
             # Ordina edges per garantire ordine consistente left/right
             def edge_sort_key(edge):
                 # Prima prova targetHandle (da attributo o ID)
                 handle = get_target_handle(edge)
                 if handle:
                     return (0, handle)
-                # Fallback: posizione Y del nodo sorgente
-                source_node = node_map_all.get(edge.source)
-                if source_node and hasattr(source_node, 'position'):
-                    pos = source_node.position
-                    y = pos.get('y', 0) if isinstance(pos, dict) else getattr(pos, 'y', 0)
-                    return (1, y)
+                # Fallback: posizione Y del nodo sorgente via CanvasGraph raw lookup.
+                # graph.raw() returns a plain dict (model_dump at intake), so
+                # position is always a dict — no isinstance dual-path needed.
+                _raw_src = graph.raw(edge.source)
+                if _raw_src:
+                    pos = _raw_src.get("position") or {}
+                    if isinstance(pos, dict):
+                        return (1, pos.get("y", 0))
                 return (2, edge.source)
             
             incoming.sort(key=edge_sort_key)
