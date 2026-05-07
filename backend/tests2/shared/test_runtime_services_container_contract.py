@@ -1,25 +1,7 @@
-"""Contract test BE-GO-READY-BOOTSTRAP-ENGINE-011-RUNTIME-CONTAINER-FIRST-SLICE.
+"""
+Contract test BE-GO-READY-BOOTSTRAP-ENGINE-011-RUNTIME-CONTAINER-FIRST-SLICE.
 
 Lock the new typed runtime composition boundary:
-
-  - `app.runtime.build_runtime_services(...)` returns a frozen
-    `RuntimeServices` dataclass with 7 fields (project + connection +
-    database_inspector + query_generator + query_executor + features +
-    orchestrator), constructed in dependency order.
-  - The orchestrator depends on the 5 prior services. The container
-    exposes them as instances, not classes.
-  - `app/main.py` consumes the factory and re-exports the resulting
-    fields as module-level names for monkeypatch backward compat.
-  - `is_bootstrapped()` semantics are not weakened: bootstrap stays
-    the gate for runtime-composed services to be usable. A contract
-    here proves that the bootstrap completion flag exists and is
-    flipped by `bootstrap()` (drift detection: a future refactor
-    that decouples the factory from bootstrap must update this lock
-    explicitly).
-
-Source-bound where possible to avoid pulling settings/DB into unit
-tests. Behavioural tests stub the constructors so the container can
-be exercised in isolation.
 """
 
 from __future__ import annotations

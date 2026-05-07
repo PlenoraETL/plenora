@@ -1,15 +1,7 @@
-"""Integration test CARICA su Oracle reale (C5 fix 3).
+"""
+Integration test CARICA su Oracle reale (C5 fix 3).
 
 Scenari coperti:
-1. create + batch insert base — smoke test del path happy
-2. truncate_insert + INSERT failure → tabella NON vuota (C5 fix 1)
-3. colonna string > 4000 char → CLOB auto-promote (C5 fix 2)
-4. append + per_batch con fail a meta': i batch committati restano
-   (behavior voluto e documentato dal WARNING)
-
-Requisito: istanza Oracle locale raggiungibile via
-tests2/integration/harness/oracle.py. Se non disponibile, i test
-vengono skippati automaticamente.
 """
 
 from __future__ import annotations

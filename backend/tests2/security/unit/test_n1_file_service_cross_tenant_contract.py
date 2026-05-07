@@ -1,20 +1,7 @@
-"""Contract test N1 — FileSourceService fail-closed cross-tenant guard.
+"""
+Contract test N1 — FileSourceService fail-closed cross-tenant guard.
 
 Scenario di sicurezza:
-- Tenant A (group='A') possiede file_id='f1'.
-- Tenant B (group='B') conosce/indovina 'f1'.
-- Pre-N1: se un endpoint dimenticava assert_resource_visible, B
-  chiamava file_source_service.load_dataframe('f1') e leggeva i dati.
-- Post-N1: il service stesso chiama _assert_visible('f1','B') che
-  rileva mismatch e solleva PermissionError.
-
-Copre:
-1. group match → OK
-2. group mismatch → PermissionError (core fix)
-3. expected_group_id vuoto/None → PermissionError (fail-closed)
-4. superadmin bypass con sentinel → OK con log
-5. file_id non esistente → ValueError (distinct da PermissionError)
-6. file ID entropy: uuid.uuid4().hex → 32-hex (no piu' [:8])
 """
 
 from __future__ import annotations

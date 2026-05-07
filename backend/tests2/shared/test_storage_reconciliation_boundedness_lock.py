@@ -1,49 +1,7 @@
-"""Architectural lock for storage_reconciliation boundedness.
+"""
+Architectural lock for storage_reconciliation boundedness.
 
 BE-GO-READY-STORAGE-ENGINE-014-RECONCILIATION-BOUNDEDNESS-LOCK.
-
-Source-bound guard suite that asserts the reconciliation backlog
-cannot grow silently forever. The runtime mechanics already exist
-(batch 005/006/008):
-
-  - max attempts cap → terminal `lost` state via `mark_lost`;
-  - exponential backoff capped at `2 ** 8`;
-  - operational summary log every reconciler tick
-    (`storage_reconciliation_summary`);
-  - bounded retention prune every reconciler tick
-    (`storage_reconciliation_prune_tick`).
-
-The risk this lock addresses: a future refactor could silently drop
-one of these wires (e.g., remove the prune call from
-`_reconcile_storage`, or drop a `Settings.DEFAULTS` key) and the
-reconciler would still function while quietly accumulating an
-infinite backlog.
-
-These tests are AST/text-level on the source files. They do NOT run
-the reconciler at runtime; they assert that the source preserves
-the boundedness contract.
-
-Locked invariants
------------------
-1. `app/shared/storage_reconciliation.py` exposes the 4 boundedness
-   public symbols (`mark_lost`, `compute_next_retry_at`,
-   `count_active_by_state_domain`, `prune_terminal_older_than`).
-2. The state machine has 4 states; 2 are terminal (`done`,
-   `orphan_deleted`); 1 is sad-terminal (`lost`).
-3. `compute_next_retry_at` caps the exponent (no unbounded backoff).
-4. `count_active_by_state_domain` filters out terminals (the
-   "active" definition).
-5. `prune_terminal_older_than` only touches terminal states (never
-   `pending` / `lost`).
-6. `_reconcile_storage` in `workers/beat_scheduler.py`:
-   a. invokes `mark_lost` (max-attempts terminal reachable);
-   b. invokes `count_active_by_state_domain` (summary observability);
-   c. invokes `prune_terminal_older_than` (bounded retention);
-   d. honours `STORAGE_RECONCILE_MAX_ATTEMPTS`,
-      `STORAGE_RECONCILE_TERMINAL_RETENTION_DAYS`,
-      `STORAGE_RECONCILE_PRUNE_BATCH_SIZE` from Settings.
-7. `Settings.DEFAULTS` retains the 6 boundedness tunables with
-   sensible default types (positive ints).
 """
 
 from __future__ import annotations

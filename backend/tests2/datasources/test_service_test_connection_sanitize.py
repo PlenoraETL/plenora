@@ -1,26 +1,7 @@
-"""Contract test per sanitizzazione ``str(e)`` in ``test_connection``.
+"""
+Contract test per sanitizzazione ``str(e)`` in ``test_connection``.
 
 Blinda il fix Batch 8 / C1 (audit storage/provider 2026-04-22, S1→F1):
-il ramo ``except Exception`` di ``DataSourceService.test_connection`` NON
-deve propagare ``str(e)`` nella response model ``DataSourceTestResult.message``.
-
-Motivazione:
-- La response viene serializzata JSON verso il FE, inclusa audit log ed
-  eventuali export/screenshot di supporto.
-- ``str(e)`` degli SDK provider (Office365-REST-Python-Client, paramiko,
-  ftplib) può contenere URL autenticati, token OAuth, credenziali parziali
-  e path interni: leak equivalente a ``HTTPException(500, detail=str(e))``.
-
-Invariants bloccati:
-- ``result.success is False`` su qualunque eccezione nel catch.
-- ``result.message`` === literal fisso (sanitizzato, user-facing).
-- Stacktrace completo preservato lato server via ``logger.error(exc_info=True)``.
-- Il log server-side mantiene il tag ``[GESTITO]`` per coerenza col cluster
-  storage/provider.
-
-Regressione protetta:
-- Un refactor che reintroducesse ``message=str(e)`` (oppure
-  ``message=f"... {e}"``) rompe il test e viene rigettato in review.
 """
 
 from __future__ import annotations

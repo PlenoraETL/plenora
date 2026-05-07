@@ -1,24 +1,7 @@
-"""Contract test R-25 PR-B3 — endpoint dual-auth intermediate_mode.
+"""
+Contract test R-25 PR-B3 — endpoint dual-auth intermediate_mode.
 
 Endpoint coperti:
-  - POST /api/projects/{project_id}/execute
-    (orchestrator/router.py:execute_project_pipeline)
-  - POST /api/arricchisci/{project_id}/enrich-async
-    (arricchisci/router.py:execute_enrichment_async)
-
-Invarianti:
-  1. Nessun param `intermediate_mode` -> behavior identico al pre-PR
-     (compat: admin/viewer accedono).
-  2. `intermediate_mode=full_pg` con superadmin -> 200 + task service
-     riceve `intermediate_mode_override="full_pg"`.
-  3. `intermediate_mode=full_pg` con admin/viewer/esecutore -> 403
-     ("intermediate_mode override richiede ruolo superadmin").
-  4. `intermediate_mode=INVALID_MODE` (qualsiasi ruolo) -> 422 da
-     Pydantic Literal validation (boundary HTTP, prima dell'auth).
-  5. Esecutori (require_not_esecutore) restano bloccati dal gate
-     base, anche senza param.
-
-Test usano FastAPI TestClient con dependency override.
 """
 
 from __future__ import annotations

@@ -1,11 +1,7 @@
-"""Helper condivisi per validare gli `UploadFile` FastAPI prima di
-leggerne il contenuto in RAM.
+"""
+Helper condivisi per validare gli `UploadFile` FastAPI prima di
 
-Contratto stabilito da T-04 / Phase 3 Batch B su `files/router.py` e
-riusato in B1 Phase 4 per `eseguibili/router.py`: determinare la
-dimensione del file via seek+tell **senza** chiamare `file.read()`,
-cosi' un attacker autenticato non puo' forzare il backend a caricare
-N GB in RAM uvicorn prima del rifiuto.
+leggerne il contenuto in RAM.
 """
 
 from __future__ import annotations

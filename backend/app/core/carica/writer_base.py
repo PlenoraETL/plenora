@@ -1,27 +1,7 @@
 """
 Interfaccia astratta per la scrittura dati su destinazioni.
 
-Architettura
-============
-Definisce il contratto (ABC) che tutte le implementazioni di destinazione
-devono rispettare. Questo permette di avere diverse destinazioni con la
-stessa interfaccia:
-
-- DatabaseWriter (ora): scrive su database relazionali via SQLAlchemy
-- FeatureServiceWriter (futuro): scrive su ArcGIS FeatureService via REST
-
-Il pattern è Strategy: l'Executor sceglie l'implementazione corretta
-in base al tipo di nodo CARICA nel canvas.
-
-Flusso standard di un writer:
-1. validate() → verifica pre-condizioni (connessione, permessi, schema)
-2. get_existing_columns() → recupera schema tabella esistente (se c'è)
-3. check_conflicts() → pre-check conflitti PK/UNIQUE (solo APPEND)
-4. write() → scrittura effettiva con batch e transazioni
-5. create_table() → creazione tabella (solo modo CREATE/REPLACE)
-
-Ogni metodo può lanciare eccezioni specifiche che vengono catturate
-dall'Executor e convertite in WriteResult con lo status appropriato.
+Keeps database loading behavior isolated from orchestration callers.
 """
 
 from abc import ABC, abstractmethod

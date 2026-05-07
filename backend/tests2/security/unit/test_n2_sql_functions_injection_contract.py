@@ -1,26 +1,7 @@
-"""Contract test N2 — SQL injection guards in sql_functions.py.
+"""
+Contract test N2 — SQL injection guards in sql_functions.py.
 
 Pre-N2, ~50 metodi `_translate_*` costruivano frammenti SQL via
-f-string senza validazione dei params numerici/identifier. Payload
-tipo `distance='1); DROP TABLE x;--'` finiva concatenato letterale
-nella query emessa verso il DB del cliente.
-
-Post-N2 helpers:
-- `_safe_number(v, kind)`: float/int cast con ValueError su non-numerico
-- `_safe_identifier(v)`: regex whitelist [A-Za-z_][A-Za-z0-9_]{0,62}
-- `_safe_qualified_identifier(v)`: idem + supporto "table.col"
-- `_qualify_column`: applica whitelist su path identifier
-
-Scope tests:
-1. Helpers rifiutano payload malformati
-2. Metodi numerici critici (buffer/simplify/transform/mod/power/left/right/
-   substring) rifiutano injection numerici
-3. `_qualify_column` rifiuta identifier invalidi (regression guard sul
-   path piu' grave: column name user-controlled)
-4. Regression: metodi gia' validati (DATE_ADD/DATE_FORMAT) restano tali
-
-NB: questo contract NON converte il modulo a parameter binding (B-scope).
-E' defense-in-depth via validation helpers (A-scope).
 """
 
 from __future__ import annotations

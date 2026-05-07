@@ -1,48 +1,7 @@
-"""Storage dispatch policy-aware per file source blob (STRUCT-001 Seam C).
+"""
+Storage dispatch policy-aware per file source blob (STRUCT-001 Seam C).
 
 Estratto da `FileSourceService._dispatch_blob_storage` senza alcun
-cambio comportamentale. Rimane un solo punto di decisione su come
-persistere il blob:
-
-  - `STORAGE_POLICY=db`             -> sempre DB BYTEA
-  - `STORAGE_POLICY=object_storage` -> sempre object storage
-  - `STORAGE_POLICY=hybrid` (def.)  -> threshold-based su
-                                       FILE_SOURCE_S3_THRESHOLD_BYTES
-                                       (default 50 MB)
-
-API pubblica:
-    dispatch_blob_storage(file_id, raw_data, filename, *, logger) -> dict
-        Ritorna kwargs per `db.save_file_source`:
-        {"data": bytes|None, "storage_key": str|None, "size_bytes": int}
-
-Logger e' passato come parametro (LoggerProtocol-compatibile, vedi
-`app.services.file_service_deps`): la funzione non importa
-FileSourceService, evita coupling al ciclo di vita del service e
-resta facilmente unit-testabile con un MagicMock logger.
-
-Side-effect:
-  - Legge `app.config.settings` (env-aware via `settings.get`).
-  - Legge `settings.get("FILE_SOURCE_S3_THRESHOLD_BYTES")` (default
-    tipato in `Settings.DEFAULTS`).
-  - Per object_storage path: chiama
-    `app.shared.cloud_backends.get_runtime_object_storage().upload_bytes(...)`.
-    Eccezioni dell'upload vengono LOGGATE e RILANCIATE - il caller
-    (FileSourceService) e' responsabile dell'orphan guard
-    (no row DB se l'upload fallisce).
-  - BE-GO-READY-STORAGE-ENGINE-008-UPLOAD-INTENT-PATTERN: per il
-    branch object_storage registra autocommit una riga
-    `operation='upload_intent'` in
-    `plenora.storage_reconciliation_log` PRIMA dell'upload.
-    Su exception dell'upload chiama `mark_done` per chiudere
-    l'intento (nessun blob caricato → nessun orphan possibile).
-    Su success lascia la row `pending`: il reconciler beat hook
-    la chiude dopo il grace window controllando se la
-    `storage_key` e' stata referenziata in `plenora.file_sources`.
-
-Cycle: leaf module rispetto a `app.services.file_service`. Importa
-solo stdlib, app.config, app.shared.cloud_backends. Nessun import
-da `app.services.*`. Importa `app.shared.storage_reconciliation`
-solo nel branch object_storage (lazy import dentro il try block).
 """
 
 from __future__ import annotations

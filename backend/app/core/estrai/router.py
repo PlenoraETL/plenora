@@ -2,10 +2,6 @@
 Router API per il modulo ESTRAI.
 
 Catalogo funzioni e traduzione espressioni per colonne calcolate.
-
-Endpoints:
-- GET  /api/functions/catalog                → catalogo funzioni SQL
-- POST /api/functions/translate              → traduce espressione in SQL
 """
 
 from fastapi import APIRouter, HTTPException, Depends

@@ -1,67 +1,7 @@
 """
 Cluster CLEANSING — pulizia dati e coercion di tipo per colonna.
 
-Origine
-=======
-Estratto da `app.core.manipola.transforms.base` come parte di Phase 5
-Batch B1.6 (cluster split, vedi
-`orchestrate/PHASE_5_ENTRY_PLAN.md` §3 P5-B1 + §6.1 facade pattern).
-
-Razionale del raggruppamento: tutte le funzioni qui dentro fanno
-**data quality / type hygiene** su una colonna esistente, senza
-cambiare la forma del DataFrame:
-  - riempire valori mancanti (`op_fill_na`) con guard type-vs-dtype
-    (Phase 4 C2: niente upcast a object silenzioso su colonne numeriche).
-  - sostituire valori puntuali (`op_replace`).
-  - convertire dtype esplicitamente (`op_type_cast`).
-
-I due private helper (`_is_strict_numeric_series` /
-`_coerce_fill_value_for_numeric`) sono **solo internal a `op_fill_na`**:
-nessun consumer esterno li importa (verificato pre-extraction). Restano
-private al modulo `cleansing` e non sono re-exportati da `base.py`.
-
-Contenuto:
-  - `_is_strict_numeric_series`        — helper privato (filtro dtype).
-  - `_coerce_fill_value_for_numeric`   — helper privato (validation/coerce
-                                         del fill value contro dtype numerico,
-                                         policy C2 fail-loud).
-  - `op_fill_na`                       — fillna con guard type-vs-dtype.
-  - `op_replace`                       — sostituzione valori (regex opzionale).
-  - `op_type_cast`                     — conversione esplicita di dtype.
-
-Invarianti pubbliche preservate (regola §6.1 zero call-site changes):
-  - `from app.core.manipola.transforms.base import <op>` continua a
-    funzionare per le 3 funzioni pubbliche grazie al facade re-export
-    in `base.py`.
-  - `from app.core.manipola.transforms import op_fill_na` /
-    `op_replace` / `op_type_cast` continuano a funzionare:
-    `__init__.py` resta `from .base import op_fill_na, op_replace,
-    op_type_cast` e cattura il facade.
-  - `transforms_registry.json` con entries `"base.op_fill_na"`,
-    `"base.op_replace"`, `"base.op_type_cast"` continua a risolvere
-    via `getattr(<base module>, "<func>")` dal `PluginExecutor`.
-  - Nuovo path canonico `from app.core.manipola.transforms.cleansing
-    import <op>` disponibile per le 3 pubbliche.
-  - I 2 private helper NON sono re-exported da base (verificato:
-    nessun consumer esterno li importa). Restano single-source qui.
-
-Logger naming
-=============
-Logger creato esplicitamente come
-`"app.core.manipola.transforms.base"` (NON `__name__`) per preservare
-il contratto osservabile pre-extraction: i record `Fill NA: ...`,
-`[CRASH] Errore Fill NA`, `Replace: ...`, `[CRASH] Errore Replace`,
-`Type Cast: ...`, `Type Cast: colonna ... non trovata`,
-`[CRASH] Errore Type Cast` continuano ad apparire sotto il logger
-name dei consumer. Stesso pattern di `joins.py` (B1.1b),
-`strings.py` (B1.3a), `utility.py` (B1.3c), `columns.py` (B1.4),
-`formula.py` (B1.5).
-
-Il body sotto e' una copia BIT-PER-BIT delle implementazioni in
-`base.py` al momento di B1.6. Nessuna modifica di logica, comment,
-log payload, ordine di operazione, fail-closed semantics. Le 2
-frozenset interne a op_type_cast (`truthy`) restano locali alla
-funzione.
+Keeps transformation behavior isolated from orchestration callers.
 """
 
 import pandas as pd

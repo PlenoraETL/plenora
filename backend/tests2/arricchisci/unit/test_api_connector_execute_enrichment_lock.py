@@ -1,28 +1,7 @@
-"""Lock tests per ApiConnectionService.execute_enrichment.
+"""
+Lock tests per ApiConnectionService.execute_enrichment.
 
-Scopo
-=====
-Congelare il contratto osservabile di `execute_enrichment` PRIMA del
-refactor C1 (estrazione helpers dalla funzione da 328 righe). Questi
-test NON verificano l'implementazione interna: verificano solo cosa e'
-visibile da fuori della funzione — return value, chiamate ai
-collaborator diretti, propagazione errori.
-
-Se un refactor cambia uno di questi test, e' legittimo aggiornarlo
-**solo** se il cambio di contratto e' intenzionale e documentato.
-Altrimenti il refactor sta rompendo un invariant.
-
-I collaborator mockati sono:
-  - self.list_api_connections_decrypted
-  - self._load_source_project / _load_file_source / _load_static_values
-  - self._execute_api_enricher / _execute_api_generator
-  - self._execute_rest_file
-  - app.core.arricchisci.api_connector.{save_dataframe, save_result_blob,
-    get_temp_output_path, compute_parallel_groups}
-  - app.db.db_service.get_project (per il tenant lookup iniziale)
-
-`_get_execution_order` e `get_execute_mask` NON sono mockati: sono
-algoritmi deterministici puri usati direttamente.
+Locks backend contracts and regression boundaries for the current architecture.
 """
 
 from contextlib import ExitStack
@@ -464,7 +443,7 @@ class TestExecuteEnrichmentFinalResult:
         assert result["rows_count"] == 2
         assert result["columns_count"] == 2
         # `result_id` e' il riferimento canonico al blob salvato; i campi
-        # legacy `output_file`/`output_path` sono stati rimossi perche'
+        # NOTE: legacy `output_file`/`output_path` sono stati rimossi perche'
         # il file temp non esiste piu' dopo `save_result_blob*`.
         assert "result_id" in result
         assert "output_filename" in result

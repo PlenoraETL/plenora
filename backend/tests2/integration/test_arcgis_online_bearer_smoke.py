@@ -1,21 +1,7 @@
-"""Integration smoke test — C12 Bearer token su ArcGIS Online reale.
+"""
+Integration smoke test — C12 Bearer token su ArcGIS Online reale.
 
 Verifica end-to-end che il nuovo _request_with_token funzioni contro
-un vero server ArcGIS Online:
-1. authenticate() ottiene un token classico via generateToken
-2. list_services passa via Bearer header e ArcGIS Online accetta
-3. list_layers su un Feature Service carica i layer
-4. query_features su un layer esegue una GET paginata
-
-Scope: READ-ONLY. Niente addFeatures/deleteFeatures per non toccare
-dati di produzione. Se serve copertura write, passare
-ARCGIS_TEST_DISPOSABLE_LAYER_URL via env.
-
-Skip automatico se:
-- la connection id hard-coded non esiste nel DB produzione, oppure
-- DATABASE_URL o PLENORA_ENCRYPTION_KEY (o l'alias legacy URBY_ENCRYPTION_KEY)
-  non sono configurati localmente (impedisce di decifrare la password dalla
-  tabella arcgis_connections).
 """
 
 from __future__ import annotations

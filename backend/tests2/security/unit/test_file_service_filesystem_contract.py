@@ -1,3 +1,9 @@
+"""
+Tests the file service filesystem behavior.
+
+Locks backend contracts and regression boundaries for the current architecture.
+"""
+
 from io import BytesIO
 import zipfile
 

@@ -2,29 +2,6 @@
 Entry point dell'applicazione FastAPI PLENORA-ETL.
 
 Architettura (post-rework)
-==========================
-main.py è ora snello: configura l'app, il CORS middleware, inizializza
-i servizi shared e registra i router dei moduli autocontenuti.
-
-Ogni modulo in app/core/<modulo>/ contiene:
-- models.py:   modelli Pydantic specifici del dominio
-- router.py:   endpoint FastAPI
-- executor.py: logica di esecuzione
-- service.py:  logica di business (dove applicabile)
-
-Moduli registrati:
-- connections  → /api/connections
-- projects     → /api/projects (CRUD + canvas + schema)
-- files        → /api/files
-- estrai       → /api/functions, /api/projects/{id}/generate-sql
-- manipola     → /api/transforms
-- arricchisci  → /api/enrichment, /api/api-connections, /api/templates
-- carica       → /api/carica
-- features     → /api/features (ArcGIS Feature Service: connessioni, browse, query, write)
-- scheduler    → /api/schedules
-- orchestrator → /api/projects/{id}/execute|preview|download, /api/tasks
-
-Porte: backend su 8000, frontend React su 5173
 """
 
 import os

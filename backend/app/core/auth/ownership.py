@@ -1,32 +1,7 @@
-"""Ownership / authorization helpers per risorse owned-by-group.
+"""
+Ownership / authorization helpers per risorse owned-by-group.
 
 Estratto verbatim da `app.core.auth.auth` (STRUCT-005 Seam B'). Contiene
-i sei helper puri usati dai router su risorse con `group_id`/`created_by`:
-
-  - `_extract_group_and_id(resource)`        — coercizione dict|object
-  - `assert_group_access(resource, user)`    — write su risorse owned (404/403)
-  - `compute_can_edit(resource, user)`       — flag UI hide-buttons
-  - `assert_can_modify(resource, user)`      — write hierarchical (admin vs superadmin)
-  - `assert_resource_visible(resource, …)`   — read soft + share-aware
-  - `_check_ownership(resource, …)`          — helper interno per require_*_owner
-
-Le 3 dependency FastAPI (`require_project_owner`, `require_schedule_owner`,
-`require_file_owner`) restano in `auth.py` perche' usano
-`Depends(get_current_user)`: estrarle qui creerebbe un cycle
-`auth.py ↔ ownership.py`. Sono ridotte a thin wrapper che chiamano
-`_check_ownership` re-esportato.
-
-`auth.py` re-esporta tutti i 6 simboli per backward-compat: i 17 router
-che fanno `from app.core.auth.auth import assert_group_access, …`
-continuano a funzionare invariati.
-
-Cycle prevention:
-  - `CurrentUser` viene da `app.core.auth.models` (leaf module).
-  - `ROLES_ADMIN_OR_ABOVE` viene da `app.core.auth.roles` (leaf module
-    senza dipendenze app — vedi roles.py:1). BE-GO-READY-AUTH-ENGINE-005
-    ha promosso questo import da lazy a eager (top-level): la facade
-    `auth.py` non e' piu' nella catena.
-  - `app.shared.sharing` resta lazy dentro `assert_resource_visible`.
 """
 
 from __future__ import annotations

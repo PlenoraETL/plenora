@@ -1,40 +1,7 @@
-"""Source-bound contract for the centralized artifact-preview cap resolver.
+"""
+Source-bound contract for the centralized artifact-preview cap resolver.
 
 BE-GO-READY-RUNTIME-002-CENTRALIZE-PREVIEW-CAP-RESOLVER.
-
-Mirror of ``test_resource_caps_centralization_contract.py`` for
-the preview-side cap. Locks that:
-
-  - the canonical resolver lives in
-    ``app.core.resources.preview_caps`` with the documented
-    surface (``ARTIFACT_PREVIEW_MAX_BYTES_DEFAULT``,
-    ``ARTIFACT_PREVIEW_MAX_BYTES_ENV``,
-    ``resolve_artifact_preview_max_bytes``);
-  - the default is 25 MB and matches
-    ``Settings.DEFAULTS["ARTIFACT_PREVIEW_MAX_BYTES"]``;
-  - ``app/core/intermediate/artifact_reader.py`` consumes the
-    canonical helper and does NOT redeclare a private
-    ``_DEFAULT_ARTIFACT_PREVIEW_MAX_BYTES`` constant or a
-    ``_resolve_max_bytes`` function;
-  - the reader does NOT read ``ARTIFACT_PREVIEW_MAX_BYTES``
-    from ``os.environ`` directly anymore (single point of
-    parsing);
-  - the preview cap and the resource cap stay separate -- the
-    preview helper does NOT reference ``RESOURCE_MAX_BYTES``,
-    and ``resource_caps.py`` does NOT reference
-    ``ARTIFACT_PREVIEW_MAX_BYTES`` (locked by the sibling
-    centralization test).
-
-Drift mode the lock prevents
-----------------------------
-Pre-002 the reader owned a private ``_resolve_max_bytes`` that
-duplicated the canonical
-``resource_caps.resolve_resource_max_bytes`` parsing shape.
-A future env-validation tweak (e.g. ``"500MB"`` suffix syntax)
-would have landed in one resolver and not the other, producing
-a behaviour split. Centralising both into siblings (same shape,
-distinct cap/env) keeps any future tweak in lockstep without
-ever merging the two values.
 """
 
 from __future__ import annotations

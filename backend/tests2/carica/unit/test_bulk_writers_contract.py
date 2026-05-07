@@ -1,24 +1,7 @@
-"""Contract test — `app.core.carica.bulk_writers`.
+"""
+Contract test — `app.core.carica.bulk_writers`.
 
 Copertura post-rimozione dei path bulk (2026-04-23):
-  - feature flag `CARICA_BULK_INSERT` / `is_bulk_enabled()`
-  - dispatcher `bulk_insert` — raise `BulkInsertNotSupportedError
-    (reason="dialect_not_supported")` per tutti i dialect post-rimozione
-  - telemetria strutturata `event=bulk.fallback` con correlation IDs
-    (`request_id`, `user_id`) su ogni invocazione del dispatcher
-  - tombstone anti-regressione: PG e MySQL non devono tornare nel
-    dispatcher (`test_dispatcher_*_tombstoned_*`)
-
-Storico coperture rimosse con i path:
-  - MySQL LOAD DATA (kickoff §9.5, commit 54d6e44): 11 test PG-specific
-    rimossi in quel batch
-  - Postgres COPY (kickoff §9.6, questo commit): ~28 test PG-specific
-    rimossi (roundtrip types, happy path, quoting, NULL serialization,
-    escape, column order, missing col, db error fallback, no DBAPI,
-    geometry raise, empty df, all skipped, dispatch aliases, telemetry
-    fallback PG, success PG, correlation PG). Helpers correlati
-    (`_has_geometry`, `_ordered_*`, `_quote_pg_ident`,
-    `_df_subset_for_bulk`) rimossi in runtime.
 """
 
 from __future__ import annotations

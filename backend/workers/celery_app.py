@@ -2,23 +2,6 @@
 Configurazione applicazione Celery — broker e backend su Redis.
 
 Broker:  redis://localhost:6379/0
-Backend: redis://localhost:6379/0   (condiviso col broker — pattern Celery upstream; in prod e' cosi')
-Beat:    PlenoraBeatScheduler              (legge schedule da config.db)
-
-Avvio worker (TEST ONLY):
-    celery -A workers.celery_app worker --loglevel=info --pool=solo
-
-Avvio worker (PRODUZIONE):
-    celery -A workers.celery_app worker --loglevel=info --concurrency=4
-
-NB (C7): `--pool=solo` e' solo per test locali o debug (single-threaded,
-no concurrency). In produzione il systemd unit `plenora-celery.service`
-usa il pool default `prefork` con `--concurrency=N` (piu' child worker
-processi paralleli). Ogni child ha il proprio pool psycopg2 — vedi
-`app/db/pg_connection.py` per il sizing PG aggregato.
-
-Avvio Beat:
-    celery -A workers.celery_app beat -S workers.beat_scheduler.PlenoraBeatScheduler --loglevel=info
 """
 
 import os

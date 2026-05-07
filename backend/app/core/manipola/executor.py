@@ -1,13 +1,7 @@
 """
 Executor del modulo MANIPOLA - pipeline di trasformazione dati.
 
-Architettura
-============
-Orchestra la pipeline di trasformazione: carica sorgenti (progetti, file,
-valori statici), applica trasformazioni definite nel canvas tramite
-PluginExecutor, e salva il risultato nel formato richiesto.
-
-Flusso: Carica sorgenti → Applica trasformazioni → GROUP BY → Salva output
+Keeps transformation behavior isolated from orchestration callers.
 """
 
 import re
@@ -603,7 +597,7 @@ class ManipolaExecutor:
                 except Exception as _ce:
                     logger.warning(f"Chiusura run upstream {source_project_id} fallita (non bloccante): {_ce}")
             if not upstream.success:
-                # Bug #25 (2026-04-28): pre-fix `return upstream`
+                # FIXME: #25 (2026-04-28): pre-fix `return upstream`
                 # propagava un PipelineArtifact con project_id=
                 # source_project_id (canvas upstream). Saliva fino
                 # a `OrchestratorService.execute_pipeline` che lo

@@ -1,52 +1,7 @@
-"""Pure decision boundary: DB vs object storage payload target.
+"""
+Pure decision boundary: DB vs object storage payload target.
 
 Source-of-truth per la decisione "questo payload va in DB BYTEA o su
-runtime object storage?". Vivevano duplicati in
-`app.utils.result_store._should_use_object_storage` e
-`app.services.file_storage_dispatch.dispatch_blob_storage` (ramo
-policy/threshold). Estratto in `BE-DATA-PLANE-001B` come funzione PURA
-condivisa.
-
-Vincoli go-like:
-
-- pure: zero env reads, zero import da `app.config.settings`, zero
-  import da services/db/object_storage. Solo stdlib `typing`;
-- decisione = solo `{"db", "object_storage"}`. Niente side-effect, niente
-  upload, niente save.
-- env parsing resta nei moduli dominio (`result_store`, `file_storage_dispatch`):
-  questo modulo accetta i valori gia' risolti come argomenti keyword;
-- DB hard cap NON e' parte della decisione: e' una guard post-decisione,
-  enforced dal caller (`result_store._enforce_db_hard_cap`). Lasciato
-  fuori per non confondere "decisione" con "fail-fast policy=db oversize";
-- object-storage capability NON e' consultata qui: la coerenza
-  policy/capability e' garantita al boot da
-  `cloud_backends.validate_storage_config`. Aggiungerla qui sarebbe
-  duplicare il check, oltre a cambiare il behavior runtime.
-
-Mapping go target:
-
-```go
-type PayloadTarget string
-
-const (
-    PayloadTargetDB            PayloadTarget = "db"
-    PayloadTargetObjectStorage PayloadTarget = "object_storage"
-)
-
-func ResolvePayloadTarget(policy string, sizeBytes int64, thresholdBytes int64) PayloadTarget {
-    switch strings.ToLower(strings.TrimSpace(policy)) {
-    case "db":
-        return PayloadTargetDB
-    case "object_storage":
-        return PayloadTargetObjectStorage
-    default:
-        if sizeBytes >= thresholdBytes {
-            return PayloadTargetObjectStorage
-        }
-        return PayloadTargetDB
-    }
-}
-```
 """
 
 from __future__ import annotations

@@ -1,23 +1,7 @@
-"""Clock seam for time-dependent code (R-05).
+"""
+Clock seam for time-dependent code (R-05).
 
 Production: `WALL_CLOCK` (singleton `WallClock`) avvolge
-`time.monotonic()` e `threading.Event.wait(timeout)`. Comportamento
-identico al pre-R-05 - i moduli che lo adottano restano byte-per-byte
-equivalenti finche' non viene iniettato un altro `Clock`.
-
-Test: `FakeClock` permette di avanzare il tempo virtuale via
-`advance(seconds)`, sbloccando deterministicamente i thread che sono
-in attesa su `wait()`. Il sync e' fatto via `Event` per-call piu'
-una `Condition` interna usata da `wait_for_pending_waiters()`.
-
-Out-of-scope (R-05 ridotto al loop heartbeat):
-  - `time.sleep` retry budget di `execution_manager.release_lock`:
-    gia' coperto da test che mockano `app.core.scheduler.execution_manager.time.sleep`.
-    Resta wall-clock in produzione, non passa per questo seam.
-
-Go-portability: la API `now()/wait(stop, timeout)` e' minima e
-replicabile in altri linguaggi (es. `interface { Now() float64;
-Wait(stopCh, timeout) bool }` in Go).
 """
 
 from __future__ import annotations

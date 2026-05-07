@@ -1,21 +1,7 @@
-"""Core-level contract test per Refactor #3 SourceLoader.
+"""
+Core-level contract test per Refactor #3 SourceLoader.
 
 `SourceLoader` e' il dispatch unico per file_source / project_source /
-staticValues. Sostituisce la duplicazione presente in
-`manipola/executor._carica_sorgenti_*` e `api_connector/_load_*`.
-
-Contratti chiave (tutti fail-closed, no CurrentUser, no HTTP):
-
-1. `expected_group_id` obbligatorio → bypass impossibile
-2. branch project propaga `expected_group_id` al resolver
-3. branch project: cross-tenant mismatch → block
-4. branch file: visibility check enforced dal loader stesso → block
-5. branch file: GeoDataFrame preservato se presente
-6. branch static: output coerente, nessuna dipendenza HTTP/user
-7. SourceRef enforced exactly-one-source
-
-Questi test girano DIRETTAMENTE su `SourceLoader.load(...)` —
-nessun TestClient, nessun CurrentUser, nessun router.
 """
 
 from unittest.mock import MagicMock, patch

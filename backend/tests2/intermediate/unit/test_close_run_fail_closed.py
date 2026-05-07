@@ -1,21 +1,7 @@
-"""[phase-2-err][batch8] C6 — close_run re-raise dopo nested cleanup.
+"""
+[phase-2-err][batch8] C6 — close_run re-raise dopo nested cleanup.
 
 Audit Batch 8 §3.1 S3 / fix F3: `intermediate/writer.py:close_run` pre-fix
-outer catch loggava `[GESTITO]` e tentava fallback `update_run(status="failed")`
-come cleanup annidato, ma NON rifaceva raise dell'eccezione originale. Il
-pattern resource guard era incompleto: un fallimento di close_run lasciava
-la row `intermediate.runs` in stato ambiguo rispetto allo stato Celery task.
-
-Post-fix:
-  - Outer catch: log `[CRASH]` (era `[GESTITO]`) + `exc_info=True` + nested
-    fallback update_run (invariato) + `raise` bare finale.
-  - Il pattern resource guard e' ora chiuso: cattura → cleanup best-effort
-    → propagazione errore originale.
-  - Caller Celery (pipeline_task, carica_task, enrichment_task) gia' wrappano
-    `idb_close_run(...)` in try/except → il raise viene catturato lato caller,
-    nessun cambio al flow del task.
-  - Nessuna nuova exception class: `raise` bare propaga l'eccezione originale
-    (psycopg2.Error, RuntimeError, ecc.).
 """
 
 from __future__ import annotations

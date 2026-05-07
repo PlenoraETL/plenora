@@ -1,45 +1,7 @@
-"""Contract test per `app.core.scheduler.policy_engine.PolicyEngine`.
+"""
+Contract test per `app.core.scheduler.policy_engine.PolicyEngine`.
 
 Gap reale: la dir `tests2/scheduler/unit/` ha 27 file ma ZERO test su
-``policy_engine.py`` (214 LOC). PolicyEngine è stateless e gestisce
-retry/backoff, conflict resolution e decisione di status finale — la
-dorsale di ogni retry automatico post-failure dello scheduler.
-
-Contratti blindati:
-
-- ``should_retry(policy, attempt)`` ritorna ``(True, backoff[attempt])``
-  finché ``attempt < max_retries``; ``(False, 0)`` oltre.
-- Backoff list più corta di ``max_retries`` → ripete l'ULTIMO valore
-  (documentato in source: *"Se ci sono più retry che backoff, usa
-  l'ultimo valore"*). Regressione classica: qualcuno introduce un
-  raise IndexError al posto del fallback.
-- Backoff list vuota → fallback a 60s. Regressione: rimuovere il
-  check ``backoff_list else 60`` lascerebbe passare un IndexError su
-  ``backoff_list[-1]``.
-- ``evaluate_result`` three-way: failed (success=False) > partial
-  (skipped>0) > completed. Regressione: invertire l'ordine di check
-  farebbe risultare "completed" un run con skipped > 0 (silente).
-- ``decide_after_failure`` con attempts disponibili ritorna
-  ``action=retry``, ``attempt+1``, ``event=RETRY_SCHEDULED``,
-  ``log_level=WARNING``. Esauriti → ``action=give_up``,
-  ``event=RETRY_EXHAUSTED``, ``log_level=ERROR``, attempt invariato.
-  La distinzione log_level è critica per l'alerting operativo.
-- ``decide_after_success`` differenzia PIPELINE_PARTIAL (WARNING) da
-  PIPELINE_COMPLETED (INFO). Regressione: uniformare a INFO
-  nasconderebbe i partial success nell'observability.
-- Idempotenza: PolicyEngine è stateless, chiamate ripetute sullo
-  stesso input DEVONO restituire lo stesso output e non mutare la
-  policy passata. Regressione: introdurre cache interna o mutazione
-  del config rompe il contract stateless.
-- ``resolve_conflict`` + ``should_log_skipped`` sono passthrough, ma
-  blindati per bloccare rename silenzioso dei field della policy.
-
-Invariants blindati (``backend/docs/architecture/invariants.md``):
-
-- §1.6 scheduler fail-fast: ``decide_after_failure`` NON può
-  silentemente degradare a give_up se attempts sono disponibili.
-- §1.3 idempotenza policy engine: stateless = output deterministico
-  per input uguali.
 """
 
 from __future__ import annotations

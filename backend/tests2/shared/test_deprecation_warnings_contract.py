@@ -1,31 +1,7 @@
-"""Contract test R-21/R-22/R-23 -- DeprecationWarning emit-once per legacy alias.
+"""
+Contract test R-21/R-22/R-23 -- DeprecationWarning emit-once per legacy alias.
 
 Verifies that the four legacy alias helpers in the codebase emit a
-standard Python ``DeprecationWarning`` plus a ``logger.warning`` the
-first time they are invoked, that the emit is cached (emit-once per
-process), that each alias has its own LRU cache (no cross-contamination),
-and that the warning stack-level points at the external caller (not the
-internal emit helper).
-
-Aliases covered:
-  R-21: ``URBY_ALLOW_LOOPBACK_OUTBOUND`` env alias
-        (``api_utils._warn_urby_loopback_alias_once``).
-  R-23: ``api_utils.get_oauth2_token`` legacy wrapper.
-  R-23: ``api_utils.get_oauth2_client_credentials_token`` legacy wrapper.
-  R-22: ``cloud_backends.get_object_storage`` legacy wrapper.
-
-TEST-ENGINE-003 collapse: the prior 297-line form had eight per-alias
-test functions plus two cross-cutting tests. The matrix is now driven
-by a parametrized ALIAS_CASES table; the per-alias tests collapse into
-two parametrized tests (`emit-warning` + `cache-once`). The
-cross-contamination + stack-level invariants stay as singleton tests
-because they assert different shapes.
-
-pytest filterwarnings note:
-  ``backend/tests2/pytest.ini`` ignores ``DeprecationWarning`` by
-  default to keep the suite quiet. ``pytest.warns(DeprecationWarning)``
-  bypasses the filter inside its context, so these tests still see
-  the warning.
 """
 
 from __future__ import annotations

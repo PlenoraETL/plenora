@@ -2,14 +2,6 @@
 Modelli Pydantic per il modulo Features (ArcGIS Feature Service).
 
 Gestisce connessioni ad ArcGIS Server, ArcGIS Enterprise e ArcGIS Online
-per lettura/scrittura di Feature Service via REST API.
-
-Architettura parallela a connections/models.py:
-- ArcGISConnection    ↔ DatabaseConnection
-- ArcGISCreate        ↔ ConnectionCreate
-- ArcGISUpdate        ↔ ConnectionUpdate
-- ArcGISList          ↔ ConnectionList
-- ArcGISTestResult    ↔ ConnectionTestResult
 """
 
 from pydantic import BaseModel, Field

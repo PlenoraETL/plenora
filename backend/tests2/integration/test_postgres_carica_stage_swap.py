@@ -1,9 +1,7 @@
-"""Integration test stage+swap su Postgres reale (C5 fix 3).
+"""
+Integration test stage+swap su Postgres reale (C5 fix 3).
 
 Stessi 4 scenari di test_oracle_carica_stage_swap.py — Postgres e'
-il DB primary di PLENORA-ETL, quindi coverage critica.
-
-Skip automatico se Postgres non raggiungibile.
 """
 
 from __future__ import annotations

@@ -1,20 +1,7 @@
-"""Smoke contract - STRUCT-001 Seam D-E: estrazione create_raw_from_upload.
+"""
+Smoke contract - STRUCT-001 Seam D-E: estrazione create_raw_from_upload.
 
 Verifica le invarianti minime del refactor:
-
-  1. Happy path DB BYTEA: dispatch + db_save chiamati con kwargs corretti.
-  2. Happy path object_storage: storage_key propagato a db_save.
-  3. MIME block: ValueError + logger.warning, NO dispatch, NO db_save.
-  4. Dispatch exception (orphan guard): propaga, NO db_save.
-  5. DB save exception: propaga al caller.
-  6. group_id None -> default_group propagato sia al DTO sia al DB save.
-  7. file_ext lowercased + fallback "bin" su filename senza estensione.
-  8. Wrapper FileSourceService.create_raw_from_upload delega coi 8
-     collaborator del service.
-
-Mock dei collaborator: nessun DB/storage reale. mime_validate iniettato
-come MagicMock per controllare happy/block path indipendentemente
-dall'implementazione di app.utils.mime_validator.
 """
 
 from __future__ import annotations
@@ -159,7 +146,7 @@ def test_mime_block_raises_value_error_and_logs_warning(collaborators):
     collaborators["dispatch_blob_storage"].assert_not_called()
     collaborators["db_save_file_source"].assert_not_called()
     collaborators["build_file_source"].assert_not_called()
-    # Warning loggato col contesto (name, filename)
+    # NOTE: loggato col contesto (name, filename)
     collaborators["logger"].warning.assert_called_once()
     msg = collaborators["logger"].warning.call_args[0][0]
     assert "create_raw_from_upload bloccato (MIME)" in msg

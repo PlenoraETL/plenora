@@ -1,8 +1,7 @@
-"""Contract test — propagation `ColumnsMetadataSaveError` da MANIPOLA.
+"""
+Contract test — propagation `ColumnsMetadataSaveError` da MANIPOLA.
 
 Regression: pre-refactor il call-site catchava con `logger.warning`
-silenzioso, il task risultava SUCCESS con metadata stale. Ora deve
-usare il helper condiviso e propagare `ColumnsMetadataSaveError`.
 """
 
 from __future__ import annotations

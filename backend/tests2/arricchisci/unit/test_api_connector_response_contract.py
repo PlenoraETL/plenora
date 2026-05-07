@@ -1,3 +1,9 @@
+"""
+Tests the api connector response behavior.
+
+Locks backend contracts and regression boundaries for the current architecture.
+"""
+
 import pytest
 
 

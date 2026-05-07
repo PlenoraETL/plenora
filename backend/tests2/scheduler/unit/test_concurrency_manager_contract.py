@@ -1,21 +1,7 @@
-"""Caratterizzazione di ConcurrencyManager.
+"""
+Caratterizzazione di ConcurrencyManager.
 
 Scopo: cristallizzare il comportamento ATTUALE del lock+queue manager
-prima di toccarlo per il fix del TTL/heartbeat (C3 punto 4). Se uno di
-questi test si rompe durante il refactor, o e' una regressione vera o
-il contract e' cambiato intenzionalmente (e va documentato nel commit).
-
-Strategia di isolamento
------------------------
-ConcurrencyManager e' un layer pubblico (try_acquire/release/ecc.) che
-internamente passa per 5 helper privati (`_set_nx`, `_get`, `_incr`,
-`_decr`, `_delete`) che a loro volta parlano col DB. Per testare il
-*contract pubblico* senza dipendere da Postgres reale, sostituiamo i
-5 helper con un in-memory store. I test coprono la composizione dei
-pubblici sopra questi primitivi: try_acquire vs _set_nx+_incr+_decr,
-release vs _delete+_decr, ecc.
-
-Il bootstrap della tabella in `__init__._ensure_table` e' mockato.
 """
 
 from datetime import datetime, timedelta, timezone

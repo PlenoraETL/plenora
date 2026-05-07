@@ -1,17 +1,7 @@
 """
 Servizio CRUD per gli schedule PLENORA-ETL.
 
-Architettura
-============
-Storage: PostgreSQL via app.db.db_service (niente filesystem, niente RedBeat).
-Il beat scheduler custom legge direttamente dal DB per decidere cosa eseguire.
-
-Relazione con i progetti:
-    - Uno schedule punta a un project_id
-    - Un progetto può avere più schedule
-    - Se il progetto viene eliminato, gli schedule diventano "orphan"
-
-Storage: tabella `schedules` nel database PostgreSQL.
+Keeps this module's responsibility explicit and isolated from adjacent code.
 """
 
 import json

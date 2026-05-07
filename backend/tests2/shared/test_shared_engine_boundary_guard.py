@@ -1,32 +1,7 @@
-"""Architecture guard - app.shared engine subpackages must stay clean.
+"""
+Architecture guard - app.shared engine subpackages must stay clean.
 
 BE-GO-READY-ARCH-057-W1-SHARED-FOLDER-SHAPE-AND-GUARD
-
-The three engine-shaped subpackages added in Batch 055-057 are leaf
-contract modules. They must never import heavy runtime libraries or
-vertical domain code:
-
-  app/shared/execution/    - canvas execution contracts
-  app/shared/resources/    - resource/schema/CRS contracts
-  app/shared/connections/  - provider-neutral type mappers
-
-Forbidden imports (any of these disqualify a module from staying in
-an engine subpackage):
-
-  app.core.*     - vertical domain code; shared is imported BY core, not vice-versa
-  app.db.*       - database I/O
-  fastapi        - HTTP framework
-  starlette      - HTTP framework (FastAPI base)
-  pandas         - heavy DataFrame runtime
-  geopandas      - heavy GeoDataFrame runtime
-  fiona          - heavy geo I/O
-  shapely        - heavy geometry runtime
-  polars         - heavy DataFrame runtime
-
-The old flat ``app/shared/*.py`` modules are intentionally NOT covered
-here - they predate this guard and include legitimate heavyweight usage
-(auth, storage, background tasks). Only the new engine subpackages are
-enforced clean in this batch.
 """
 
 from __future__ import annotations

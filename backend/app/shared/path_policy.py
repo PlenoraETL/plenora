@@ -1,27 +1,7 @@
-"""Path policy minimale: validazione fail-closed di un path utente
+"""
+Path policy minimale: validazione fail-closed di un path utente
+
 contro una whitelist di trusted roots.
-
-Sostituisce il pattern duplicato in 6 call site:
-- `app/core/artifacts/resolver.py:_materialize_from_output_path`
-- `app/services/file_service.py:240` (zip member validation)
-- `app/core/imdf/router.py:_safe_bundle_dir`
-- `app/core/features/routes.py:_resolve_input_path`
-- `app/core/datasources/local.py:absolute_path`
-- `app/core/files/router.py:_assert_path_within`
-
-Tutti facevano `Path.resolve() + relative_to(...)` con UNC reject
-preventivo; questo modulo centralizza la logica in **una sola
-funzione pura**, niente classi, niente framework di astrazione.
-
-Non esporta helper accessori (es. get_trusted_data_roots): se un
-caller vuole costruire una lista di root da settings, lo fa nel
-suo namespace. Centralizziamo il check, non la composizione.
-
-`validate_imdf_task_id` (D3 commit 1) sposta qui la regex +
-path-traversal guard che viveva triplicata in router/validator/
-worker IMDF. Stesso principio "centralizziamo il check":
-la funzione e' pura, caller traducono `ValueError` nel proprio
-contratto di errore (HTTPException, report issue, Optional return).
 """
 
 from __future__ import annotations

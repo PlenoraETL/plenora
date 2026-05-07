@@ -1,10 +1,7 @@
-"""Contract tests for BE-GO-READY-TRANSFORMATION-ENGINE-002.
+"""
+Contract tests for BE-GO-READY-TRANSFORMATION-ENGINE-002.
 
 Locks the multi-join row-count guard:
-- reuses MemoryLimitExceededError and stage ``manipola_multi_join``;
-- estimates merge output rows before ``pd.merge`` materializes the result;
-- preserves cap-disabled and historical fail-soft branches;
-- keeps ``app.main`` row-count routing aware of the multi-join stage.
 """
 
 from __future__ import annotations

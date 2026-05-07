@@ -1,36 +1,7 @@
-"""Contract test per `app.core.datasources.service` — crypto at-rest.
+"""
+Contract test per `app.core.datasources.service` — crypto at-rest.
 
 Scope: blindare il contratto **crypto round-trip via service**
-(create/update/_to_model/redaction) senza duplicare i 2 test già
-presenti in ``tests2/security/unit/test_datasource_crypto_contract.py``
-(encrypt-before-save + decrypt-from-storage).
-
-Gap coperto qui (non altrove):
-- `update_datasource` → re-cifra i campi sensibili con nuovo valore
-- `update_datasource` → salta il valore mascherato ``"***"`` inviato dal
-  client per i campi non modificati (senza sovrascrivere il reale)
-- `update_datasource` → non persiste ``group_id`` / ``created_by`` nel
-  blob JSON config (sono colonne DB separate)
-- `_to_model(redact=True)` → tutti e 4 i sensitive field sono ``"***"``
-- `_to_model(redact=False)` → plaintext preservato per uso interno
-
-Invariants blindati (da ``backend/docs/architecture/invariants.md``):
-- §1.6 riga crypto: encrypt fail-fast; decrypt ritorna None ma qui il
-  consumer (service) dipende dal contract "if decrypt succeeds ↔
-  plaintext valido"
-- §2 riga decrypt: fallback autorizzato InvalidToken (coperto altrove)
-- §4.1 fail-fast su dato critico: password/private_key sono dato critico;
-  la policy di mascheramento ``"***"`` in output API blinda la redaction
-
-Regressioni protette:
-- Un refactor di ``update_datasource`` che dimenticasse il filtro
-  ``"***"`` provocherebbe una rewrite silenziosa delle credenziali con
-  un placeholder, rompendo tutte le connessioni esistenti.
-- Un refactor di ``_to_model`` che rimuovesse il set ``_SENSITIVE_FIELDS``
-  leakerebbe plaintext password nella response API — CRITICO.
-- Un refactor di ``update_datasource`` che non pulisse ``group_id`` /
-  ``created_by`` dal blob duplicherebbe il dato (una copia nel JSON,
-  una nella colonna DB) → incoerenze al prossimo update.
 """
 
 from __future__ import annotations
@@ -319,7 +290,7 @@ def test_update_nonexistent_datasource_returns_none_no_db_write(service, fake_db
     )
 
 
-# Bug #2 (2026-04-23): test_connection decrypt-fail policy
+# FIXME: #2 (2026-04-23): test_connection decrypt-fail policy
 
 
 def test_get_full_config_strict_raises_on_undecryptable_field(service, monkeypatch):

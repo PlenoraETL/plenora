@@ -1,27 +1,7 @@
-"""Contract test BE-GO-READY-TRANSFORMATION-ENGINE-014 — executor.py callsite migration.
+"""
+Contract test BE-GO-READY-TRANSFORMATION-ENGINE-014 — executor.py callsite migration.
 
 Lock i 3 invariant del migration batch:
-
-1. **Source-bound**: `executor.py` chiama
-   `canvas_orchestrator.get_execution_order(...)` (pure function
-   modulo-level), NON `api_connection_service._get_execution_order(...)`
-   (singleton wrapper KEEP_COMPAT).
-2. **Import esplicito**: `executor.py` importa
-   `get_execution_order` e `init_execution_context` da
-   `app.core.arricchisci.canvas_orchestrator` al top-level (no
-   lazy import, no re-export via api_connection_service).
-3. **Preview ctx-strict**: i tre loader source/static in
-   `EnrichExecutor.preview()` ricevono `ctx=ctx`, cosi' la rimozione
-   del fallback singleton in TE-030B non rompe la preview HTTP.
-4. **Behavior preservation**: la chiamata diretta alla pure
-   function ritorna lo stesso ordering del wrapper KEEP_COMPAT
-   (Kahn topo-sort deterministico byte-per-byte).
-
-Lo scope di questo batch e' rigorosamente l'1-line callsite
-migration. NON copre R-011-B (i 4 mixin private methods chiamati
-da executor.py:176-202: `_load_static_values`, `_load_file_source`,
-`_load_source_project`, `_execute_api_generator`) — tracciato come
-audit dedicato.
 """
 
 from __future__ import annotations

@@ -1,19 +1,7 @@
-"""Funzione pura `detect_missed_run` — rileva se uno schedule ha
+"""
+Funzione pura `detect_missed_run` — rileva se uno schedule ha
+
 un run mancante da recuperare (C3 fix 3: missed runs catchup).
-
-Contratto
----------
-`detect_missed_run(cron_expression, last_run, now, grace_hours)
--> Optional[datetime]`:
-- Ritorna `None` se NON c'e' un missed run da recuperare:
-  - last_run is None (primo run di sempre)
-  - last_run >= expected_last (nessun tick perso)
-  - expected_last troppo vecchio (oltre grace_hours)
-  - cron expression invalida
-- Ritorna il timestamp dell'`expected_last` cron tick se c'e' un
-  missed run da recuperare (entro la grace window).
-
-"expected_last" = l'ultimo tick cron calcolato a partire da `now`.
 """
 
 from datetime import datetime, timedelta, timezone

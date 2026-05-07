@@ -1,113 +1,7 @@
 """
 Mixin VALIDATION_PREVIEW — preflight validation + preview campione per
+
 `EnrichmentExecutor`: entry point pubblici di prova/validazione
-pre-execute().
-
-Origine
-=======
-Estratto da `app.core.arricchisci.enrichment_service.EnrichmentExecutor`
-come parte di Phase 5 Batch B3-A.5 (cluster split + mixin pattern,
-vedi `orchestrate/PHASE_5_ENTRY_PLAN.md` §3 P5-B3-A; mixin pattern
-ratificato in B2.1+...+B2.6 + B3-A.2/A.3/A.4).
-
-Razionale del raggruppamento: 2 metodi pubblici che insieme implementano
-la "fase pre-execute" di prova/validazione del DataFrame input:
-
-  - `validate_input`     — preflight validation: colonne richieste
-                           presenti (per parametri required), valori
-                           nulli/vuoti su parametri required (vectorized).
-                           Helper interni `_is_blocking` (closure
-                           per required vs legacy) + `_required_columns`
-                           (closure per template vs mapping classico).
-  - `preview`            — esecuzione su campione (default
-                           `options.preview_sample_size`): stima tempo
-                           totale considerando deduplicazione cache +
-                           parallelismo, ritorna `PreviewResult` con
-                           anteprima righe + warning per dataset grandi
-                           o alto error rate. Save/restore di
-                           `progress_callback` locale per disabilitarlo
-                           in preview mode.
-
-Cluster coeso "preflight + preview UI". Entry point pubblici, chiamati
-da:
-  - `validate_input` solo da `execute()` interno (line 411).
-  - `preview` esposto come pubblico (UI/router preview button), nessun
-    caller interno verificato.
-
-Pattern: Mixin class via MRO
-============================
-`EnrichmentValidationPreviewMixin` viene ereditato da
-`EnrichmentExecutor`:
-
-    class EnrichmentExecutor(
-        EnrichmentTemplateParamsMixin,
-        EnrichmentResponseProcessingMixin,
-        EnrichmentBatchModeMixin,
-        EnrichmentValidationPreviewMixin,
-    ):
-        ...
-
-I 2 metodi restano accessibili come `EnrichmentExecutor.<method>` via
-MRO. `inspect.getsource(EnrichmentExecutor.<method>)` legge il source
-DA QUESTO FILE.
-
-Coupling cross-mixin
-====================
-- `validate_input → self._is_template, self._template_columns` →
-  `EnrichmentTemplateParamsMixin` (B3-A.2). MRO.
-- `preview → self._count_unique_combinations, self._execute_internal`
-  → restano in `EnrichmentExecutor` core (candidati per future batch:
-  B3-A.7 ExecutionEngines per `_execute_internal`,
-  `_count_unique_combinations` rimane probabilmente core).
-
-Coupling esterno (instance attrs)
-==================================
-- `self.param_mapping`, `self._has_param_definitions`,
-  `self._required_param_names`, `self.options`,
-  `self.progress_callback` — tutti instance attrs di
-  `EnrichmentExecutor.__init__`.
-- `pd` (pandas), `time` (top-level).
-- `EnrichmentValidationResult`, `PreviewResult` (models).
-
-Cluster zero-transaction, zero DB I/O, zero side-effects esterni
-diversi dalla mutazione temporanea di `self.progress_callback`
-(save/restore local).
-
-Coupling test contract
-======================
-Verificato pre-extraction (preflight B3-A.5):
-  - 0 `patch.object(executor, "validate_input" / "preview", ...)` su
-    `EnrichmentExecutor`.
-  - 0 `inspect.getsource(EnrichmentExecutor.validate_input)` o
-    `EnrichmentExecutor.preview`.
-  - 0 AST scan su `enrichment_service.py` per pattern in questi metodi.
-  - 0 `monkeypatch.setattr` su attributi del modulo.
-
-Estrazione safe per costruzione. Nessuna pre-modernization richiesta.
-
-Logger naming contract
-======================
-**ZERO `logger.*` calls** in entrambi i metodi (verificato awk grep
-pre-extraction). Quindi il mixin NON definisce `logger`. Documentato
-qui esplicitamente per non destare confusione con gli altri mixin
-B3-A.x che hanno definito `logger`.
-
-Behavior-preserving
-===================
-NESSUN cambio architetturale in B3-A.5:
-  - Validazione: closure `_is_blocking` / `_required_columns` +
-    vectorized null check via `df.index[null_mask].tolist()`.
-  - Preview: save/restore `progress_callback`, sample tramite
-    `df.sample(n=..., random_state=42)` o `df.copy()` se piu' piccolo.
-  - Stima tempo: branching su parallelismo (`parallel_workers > 1`
-    + effective_parallelism > 1) → `estimated_api_calls / rate`,
-    altrimenti `(estimated_api_calls * avg_time_per_row) / 1000`.
-
-Il body sotto e' una copia BIT-PER-BIT delle implementazioni in
-`enrichment_service.py` al momento di B3-A.5. Nessuna modifica di
-logica, comment, ordine di operazione, vectorized null check,
-preview stima tempo branching, warning thresholds (10000 righe,
-20% error rate), random_state seed.
 """
 
 from __future__ import annotations
@@ -151,7 +45,7 @@ class EnrichmentValidationPreviewMixin:
         # (required oppure abbiamo fallback legacy senza definizioni).
         def _is_blocking(api_param: str) -> bool:
             if not self._has_param_definitions:
-                return True  # legacy: tratta tutto come required
+                return True  # NOTE: tratta tutto come required
             return api_param in self._required_param_names
 
         # Helper: ritorna l'elenco delle colonne richieste da un mapping value.
@@ -271,7 +165,7 @@ class EnrichmentValidationPreviewMixin:
             # Sequenziale: tempo per riga * chiamate
             estimated_time = (estimated_api_calls * avg_time_per_row) / 1000
 
-        # Warning se tante righe
+        # NOTE: se tante righe
         warnings = []
         if len(df) > 10000:
             warnings.append(f"Dataset grande ({len(df)} righe). Considera di usare batch.")

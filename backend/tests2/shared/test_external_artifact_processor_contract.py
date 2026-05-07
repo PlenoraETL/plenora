@@ -1,26 +1,7 @@
-"""Contract test BE-REST-001A — `ExternalArtifactProcessor` Protocol.
+"""
+Contract test BE-REST-001A — `ExternalArtifactProcessor` Protocol.
 
 Audit/test-first batch (lane C di BE-PHASE2-PARALLEL-PACK-001).
-
-Verifica:
-
-1. shape `ArtifactSource`/`ProcessorConfig`/`ArtifactResult` (frozen
-   dataclass, campi tipati, default sensati);
-2. Protocol shape `ExternalArtifactProcessor` espone `process` con
-   firma tipata;
-3. modulo shared e' pure: niente import pesanti / I/O / env / requests
-   / httpx;
-4. parita' parziale fra il Protocol e l'unica impl concrete attuale
-   (`ApiConnectionRestFileMixin._execute_rest_file`):
-   - parametri equivalenti (endpoint URL, timeout, multipart field
-     name, extra form fields, headers);
-   - non si crea wiring di delega ora — il Protocol e' future-proofing;
-5. `runtime_checkable` accetta impl minima e rifiuta impl incompleta.
-
-Niente runtime change: il mixin esistente resta com'e'. Il Protocol e'
-contract-only finche' un secondo consumer (capability AI assist /
-satellitare / streaming / ecc.) non legittimi l'estrazione effettiva
-in `HttpRestFileProcessor`.
 """
 
 from __future__ import annotations

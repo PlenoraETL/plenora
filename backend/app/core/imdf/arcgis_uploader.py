@@ -2,39 +2,6 @@
 IMDF ArcGIS uploader — caricamento dei 5 layer IMDF su ArcGIS Online.
 
 Orchestrator end-to-end (Fase 1B):
-
-    upload_imdf_layers(
-        connection_id="arcgis_...",
-        layers={"Localita": gdf, "OperaPrincipale": gdf, ...},
-        fs_name="LO2244_test",
-        folder_name="test_plenora",
-        apply_renderers=False,
-        renderers_data=None,
-    )
-
-Cosa fa, in ordine:
- 1. Carica `ArcGISConnectionInfo` dal DB usando features_service
- 2. Trova (o crea) la folder ArcGIS dove salvare il Feature Service
- 3. Se un FS con `fs_name` esiste gia' nella folder lo elimina (idempotenza)
- 4. Crea un nuovo FS vuoto via createService
- 5. Per ogni layer nell'ordine canonico (Localita, OperaPrincipale, Livello,
-    Locale, Details) aggiunge la definizione (`addToDefinition`) e popola
-    le features (`addFeatures` con batching nativo del client).
- 6. Opzionalmente applica i renderers.json layer per layer.
- 7. Ritorna un dict con esito e dettagli per ogni layer.
-
-Riusa quanto possibile da `app.core.features.arcgis_client` (un singolo
-ArcGISClient) per evitare di duplicare logica esistente di:
-  - autenticazione + token cache
-  - batching addFeatures
-  - schema field derivation (`_python_type_to_esri_field`)
-  - geom type detection (`_esri_geometry_type`)
-  - feature serialization (`dataframe_to_esri_features`)
-  - update renderer (`update_renderer`)
-
-Il metodo `create_service` di ArcGISClient pero' supporta solo single layer:
-per i layer 2-5 questo modulo costruisce direttamente il payload
-`addToDefinition` con la stessa struttura di `create_service`.
 """
 
 from __future__ import annotations
@@ -48,7 +15,7 @@ from app.utils.logger import get_logger
 logger = get_logger(__name__)
 
 # Ordine canonico dei layer IMDF dentro il Feature Service.
-# Importante: il layer 0 e' "Localita" (gerarchia top-down).
+# NOTE: il layer 0 e' "Localita" (gerarchia top-down).
 LAYER_ORDER = ["Localita", "OperaPrincipale", "Livello", "Locale", "Details"]
 
 # Colonne business-key per layer IMDF. Usate dalle modalita' `upsert` per

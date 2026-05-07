@@ -1,23 +1,7 @@
-"""Shared typed execution context contract.
+"""
+Shared typed execution context contract.
 
 BE-GO-READY-ARCH-056-W1-SHARED-CANVAS-EXECUTION-CONTEXT
-
-Defines `CanvasExecutionContext`: the immutable, domain-agnostic
-per-execution boundary type shared across canvas engines
-(Arricchisci, and future Manipola migration).
-
-Go-ready mapping
-================
-    type CanvasExecutionContext struct {
-        ProjectID    string
-        GroupID      *string  // nil = security context unknown (fail-closed downstream)
-        PreviewLimit *int     // nil or <=0 = full execution
-    }
-
-Leaf contract
-=============
-No imports from `app.core.*`. No DB, no HTTP, no Pandas.
-Domain engines import this module; this module never imports them.
 """
 
 from __future__ import annotations

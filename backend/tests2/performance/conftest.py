@@ -1,12 +1,7 @@
-"""Fixture e helper comuni per i test perf di stream-perf.
+"""
+Fixture e helper comuni per i test perf di stream-perf.
 
 Obiettivi:
-- generare dataset sintetici riproducibili (seed fisso)
-- fornire helper di timing basato su time.perf_counter (no dep extra)
-- registrare i marker perf_baseline / perf_bench / perf_correctness
-
-Non tocchiamo il conftest di livello superiore (tests2/conftest.py): le fixture
-qui sono additive e non interferiscono con i fixture di session.
 """
 
 from __future__ import annotations

@@ -2,19 +2,6 @@
 IMDF loader — estrazione zip + lettura File Geodatabase.
 
 Funzioni pubbliche:
-  extract_imdf_zip(zip_path, dest_dir=None) -> ImdfBundle
-      Estrae lo zip in una directory temporanea e indicizza i contenuti
-      noti (gdb, ifc, manifest, validation, renderers, geojson IMDF).
-
-  load_imdf_layers(gdb_path, target_srid=4326, drop_z=True) -> dict[str, GeoDataFrame]
-      Apre il File Geodatabase con pyogrio/OpenFileGDB e ritorna i 5 layer
-      Localita / OperaPrincipale / Livello / Locale / Details, riproiettati
-      a `target_srid` (default 4326), con eventuale appiattimento Z (default
-      True), filtrando i campi di sistema ESRI (GLOBALID, CREATED_USER,
-      CREATED_DATE, Shape_Length, Shape_Area).
-
-Niente effetti collaterali, niente chiamate di rete, niente scrittura su
-DB. Pensato per essere richiamato da `processor.py` o testato in isolamento.
 """
 
 from __future__ import annotations

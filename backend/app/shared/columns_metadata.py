@@ -1,28 +1,7 @@
 """
 columns_metadata.py — Helper condiviso per salvare `columns_metadata`
+
 sul canvas di un progetto, con retry su errori transient e raise su
-fallimenti permanenti.
-
-Pattern centralizzato (vedi `app/shared/exceptions.py::ColumnsMetadataSaveError`):
-estratto da `estrai/executor.py::_salva_tipi_colonne_da_canvas` per
-essere riusato dai 3 altri call-site (manipola, arricchisci,
-enrichment_task) che pre-fix swallowavano qualsiasi eccezione con
-`logger.warning`, contaminando silenziosamente il lineage downstream.
-
-Tutti i call-site del progetto che devono persistere `columns_metadata`
-DEVONO passare da qui — niente try/except ad-hoc altrove.
-
-Eccezioni transient (retry con backoff):
-  - psycopg2.OperationalError: pool exhausted, connessione chiusa, network blip
-  - psycopg2.errors.DeadlockDetected: lock ring tra writer concorrenti
-  - psycopg2.errors.LockNotAvailable: altro client tiene il lock oltre il timeout
-  - psycopg2.errors.IdleInTransactionSessionTimeout: server ha killato la sessione
-  - TimeoutError: generico
-
-NON-transient (raise subito, senza retry):
-  - ValueError: canvas corrotto (vedi update_project_canvas_key_atomic)
-  - TypeError/KeyError/AttributeError: bug di logica
-  - psycopg2.IntegrityError: vincolo DB
 """
 
 from __future__ import annotations

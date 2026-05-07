@@ -1,39 +1,7 @@
 """
 zip_safe.py — Estrazione ZIP con guard contro path traversal (zip slip)
+
 e contro zip bomb (size cap pre-extract + file count + compression ratio).
-
-Uso raccomandato (sostituisce `zipfile.ZipFile.extractall(dest)`):
-
-    from app.utils.zip_safe import safe_extractall
-    with zipfile.ZipFile(path, 'r') as zf:
-        safe_extractall(zf, dest_dir)
-
-Oppure, se il caller controlla gia' un `ZipFile`:
-
-    safe_extract_zip_path(zip_path, dest_dir)
-
-Protezioni attive:
-  - **Zip slip** (path traversal):
-    - rifiuta path assoluti (Unix `/foo`, Windows `C:\\foo`, UNC `\\\\srv`)
-    - rifiuta member che dopo resolve escono da `dest_dir`
-  - **Zip bomb** (pre-extract, solo header — non si tocca il disco
-    finche' tutti i controlli passano):
-    - cap totale uncompressed: `ZIP_MAX_UNCOMPRESSED_BYTES` (default 500 MB)
-    - cap singolo file uncompressed: `ZIP_MAX_SINGLE_FILE_BYTES`
-      (default = cap totale; abbassare per scenari "molti file piccoli"
-      dove non e' atteso alcun member singolo > N MB)
-    - cap numero file: `ZIP_MAX_FILES` (default 5000)
-    - compression ratio per singolo file > 1MB uncompressed:
-      `file_size / compress_size > ZIP_MAX_COMPRESSION_RATIO` (default 100)
-      → tipicamente indica un bomb (uno ZIP legittimo raramente supera 30x)
-
-Tutti i cap sono sovrascrivibili da env var — es. un caller per backup
-GDB può alzare `ZIP_MAX_UNCOMPRESSED_BYTES=5368709120` (5 GB).
-
-L'estrazione e' member-by-member: la prima violazione rilevata solleva
-(con tmp_dir eventualmente parzialmente popolata — il caller e' gia'
-responsabile del cleanup su eccezione, vedi callsite pattern in
-`file_service.py` con `_rmtree_safe`).
 """
 
 import os

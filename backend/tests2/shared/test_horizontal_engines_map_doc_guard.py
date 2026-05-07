@@ -1,45 +1,7 @@
-"""Architectural lock for the horizontal engines map.
+"""
+Architectural lock for the horizontal engines map.
 
 BE-GO-READY-DOCS-001-CODEMAP-ARCHITECTURE-REFRESH.
-
-Source-bound assertions on `docs/architecture/horizontal-engines.md`,
-the concise canonical map of the six horizontal engine boundaries
-the backend is converging onto. The page is the single-screen
-index linked from the README and from
-`docs/development/code-map.md`. Without these locks a future doc
-edit could silently:
-
-  - drop one of the six horizontal sections;
-  - drop the "Do not import" guidance the Phase 2 BE_RULES rely
-    on;
-  - break the cross-link from the README so the page is
-    discoverable;
-  - drift the canonical import paths away from the current
-    package layout.
-
-Locks today:
-
-  - the page exists with the canonical title and stream tag;
-  - the six horizontal sections appear in canonical order with
-    matching engine alignment tags
-    (`AUTH_SECURITY_ENGINE`, `STORAGE_ARTIFACT_ENGINE`,
-    `CONNECTION_ENGINE`, `OBSERVABILITY_ENGINE`,
-    `DEPLOYMENT_RUNTIME_ENGINE`);
-  - the "Do not import" section enumerates the four canonical
-    anti-patterns (auth.auth re-export, config_db_service
-    facade, unbounded stream join, mode="path" without
-    inventory);
-  - cross-links from README and from
-    `docs/development/code-map.md` remain;
-  - the page is ASCII-only.
-
-Outside scope:
-  - the per-module vertical map (locked by other code-map
-    contracts);
-  - the install-doc guards
-    (`test_install_smoke_harness_doc_guard.py` etc.);
-  - the Resource Engine pilot exit lock
-    (`test_resource_engine_pilot_exit_criteria_lock.py`).
 """
 
 from __future__ import annotations

@@ -1,3 +1,9 @@
+"""
+Tests the artifact resolver behavior.
+
+Locks backend contracts and regression boundaries for the current architecture.
+"""
+
 import tempfile
 from pathlib import Path
 from types import SimpleNamespace

@@ -1,28 +1,7 @@
-"""Contract test per `app.core.datasources.factory` — dispatch tipo → backend.
+"""
+Contract test per `app.core.datasources.factory` — dispatch tipo → backend.
 
 Invariants blindati (da ``backend/docs/architecture/invariants.md``):
-
-- §4.1 layer business: fail-fast su dato critico. ``create_backend`` è il
-  singolo entry point del modulo datasources; accettare silentemente un
-  ds_type sconosciuto o cadere su un default arbitrario violerebbe la
-  policy del modulo.
-- §1.1 "un solo entry point, una sola policy di transazione, un solo
-  modello di errore": il factory è l'unico punto di accoppiamento tra
-  ``DataSourceService`` e le 4 implementazioni. Un secondo dispatch
-  parallelo violerebbe il principio canonico.
-
-Regressioni protette:
-
-- Nuovo backend aggiunto a ``_BACKENDS`` senza aggiornare i test: il
-  parametrize su ``supported_types()`` scopre subito se una classe non
-  è più registrata.
-- Fail-fast su ds_type sconosciuto: un merge futuro che sostituisse il
-  ``raise ValueError`` con un fallback (es. ``LocalDataSource`` default)
-  romperebbe il contratto — Silent compromise sul tipo storage.
-- Campi non-string di configurazione (porta numerica, booleani, None):
-  un refactor che normalizzasse indifferentemente in ``extra`` o
-  rimuovesse il filtro ``None`` romperebbe i backend che si aspettano
-  valori puliti.
 """
 
 from __future__ import annotations

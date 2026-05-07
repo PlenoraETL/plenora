@@ -1,18 +1,7 @@
-"""ArcGIS connection resolver - thin adapter for IMDF validation.
+"""
+ArcGIS connection resolver - thin adapter for IMDF validation.
 
 BE-GO-READY-ARCH-059-W4: narrows the Features domain surface that
-``imdf/validator.py`` needs. The validator only receives
-(ArcGISConnectionInfo, ArcGISProviderProtocol) - it no longer imports
-the full FeaturesService class.
-
-This module remains in ``app.core.features`` because the DB lookup
-(``get_connection_db``) lives there. The goal is not to move DB logic
-into shared but to present a minimal seam: one function, typed return,
-no FeaturesService class exposure.
-
-ADR-0023 / CONNECTION_ENGINE: validator dependency surface before this
-batch was ``FeaturesService`` (CRUD + browse + query + write). After
-this batch it is ``resolve_arcgis_connection`` only.
 """
 
 from __future__ import annotations

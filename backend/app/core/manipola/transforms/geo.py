@@ -1,49 +1,7 @@
 """
 Cluster GEO — costruzione geometria da coordinate (lat/lon o WKT).
 
-Origine
-=======
-Estratto da `app.core.manipola.transforms.base` come parte di Phase 5
-Batch B1.11 (cluster split + closeout runtime residuals base.py, vedi
-`orchestrate/PHASE_5_ENTRY_PLAN.md` §3 P5-B1 + §6.1 facade pattern).
-
-Razionale del raggruppamento: singolo op self-contained che costruisce
-geometria shapely/geopandas a partire da colonne sorgente. Nessun
-helper privato, nessuna dipendenza con altri cluster di transforms.
-Imports `Point` / `wkt` mantenuti come function-local (lazy) per
-preservare bit-per-bit il pattern legacy.
-
-Contenuto:
-  - `op_geo_from_coords` — crea colonna `geometry` (Point) da
-                           colonne lat/lon, oppure parsa WKT con
-                           `safe_wkt_parse` (debug-log su parse fail
-                           singola riga, no flood).
-
-Invarianti pubbliche preservate (regola §6.1 zero call-site changes):
-  - `from app.core.manipola.transforms.base import op_geo_from_coords`
-    continua a funzionare grazie al facade re-export in `base.py`.
-  - `from app.core.manipola.transforms import op_geo_from_coords`
-    continua a funzionare (`__init__.py` re-exporta via
-    `from .base import op_geo_from_coords` che cattura il facade).
-  - `transforms_registry.json` con entry `"base.op_geo_from_coords"`
-    continua a risolvere via `getattr(<base module>, "op_geo_from_coords")`
-    dal `PluginExecutor`.
-  - Nuovo path canonico `from app.core.manipola.transforms.geo
-    import op_geo_from_coords` disponibile.
-
-Logger naming
-=============
-Logger creato esplicitamente come
-`"app.core.manipola.transforms.base"` (NON `__name__`) per preservare
-il contratto osservabile pre-extraction: i record `Geo from Coords:
-...`, `[CRASH] Errore Geo from Coords` continuano ad apparire sotto
-il logger name dei consumer. Stesso pattern di tutti i moduli figli
-estratti nei batch B1.1-B1.10.
-
-Il body sotto e' una copia BIT-PER-BIT dell'implementazione in
-`base.py` al momento di B1.11. Nessuna modifica di logica, comment,
-log payload, ordine di operazione, fallback warning-on-missing-cols,
-debug-on-bad-wkt, GeoDataFrame conversion in coda.
+Keeps transformation behavior isolated from orchestration callers.
 """
 
 import pandas as pd
@@ -125,7 +83,7 @@ def op_geo_from_coords(
                     return wkt.loads(str(val))
                 except Exception as _wkt_err:
                     # Parse WKT fallito per riga singola — debug (row-loop:
-                    # warning causerebbe flood su dataset con WKT malformati).
+                    # NOTE: causerebbe flood su dataset con WKT malformati).
                     logger.debug(f"safe_wkt_parse fallita: {_wkt_err}")
                     return None
 

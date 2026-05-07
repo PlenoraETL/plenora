@@ -1,27 +1,7 @@
-"""Contract test BE-GO-READY-AUTH-ENGINE-001-DISCLOSURE-POLICY-EXTRACTION.
+"""
+Contract test BE-GO-READY-AUTH-ENGINE-001-DISCLOSURE-POLICY-EXTRACTION.
 
 Pure-decision contract test for `app.core.auth.disclosure`. Verifies:
-
-1. **Per-policy decision lock**: each pure function returns the
-   exact `(code, status_code, message, headers)` tuple historically
-   emitted by `auth.py` / `ownership.py`. Drift = silent disclosure
-   regression.
-2. **Anti-enumeration invariant encoding**:
-   a. `invalid_credentials()` is a *single* function — no per-branch
-      variant. Login bad-creds vs user-not-exist must collapse here.
-   b. `user_not_found_or_disabled()` is a *single* function — post-token
-      user-deleted vs user-disabled must collapse.
-   c. `admin_target_not_visible(is_superadmin=...)` returns
-      USER_NOT_FOUND only for superadmin, else uniform ACCESS_DENIED.
-3. **Header preservation**: WWW-Authenticate: Bearer on the 4 token
-   sites; Retry-After on the rate-limit 429.
-4. **`raise_disclosure` boundary**: applies the decision via
-   `raise_typed_http` (with headers when set), preserving status,
-   message, headers, and the structured detail envelope shape.
-5. **Source-bound delegation lock**: `app/core/auth/auth.py` and
-   `ownership.py` no longer hold inline `raise_typed_http(code=...)`
-   calls for auth-domain disclosures — they delegate to the
-   disclosure module.
 """
 
 from __future__ import annotations

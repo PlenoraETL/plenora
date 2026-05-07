@@ -1,20 +1,7 @@
-"""[phase-2-err][batch7] 7.b — retry wrapper classified su release lock.
+"""
+[phase-2-err][batch7] 7.b — retry wrapper classified su release lock.
 
 Audit Batch 7 §3.3 [ALTA] pseudo-retry cieco su `concurrency.release` in
-`execution_manager.py:667-676`. Pre-fix: `except Exception + sleep(1) +
-1 retry + log [CRITICO]` — classe broad, no backoff+jitter, no budget.
-
-Post-7.b:
-  - Classi narrow: `psycopg2.OperationalError` + `psycopg2.errors.DeadlockDetected`
-    (transient PG). Altri errori (non-transient) catturati da outer guard.
-  - Budget bounded: N=3 tentativi AND T=10s totali (prima condizione vince).
-  - Backoff esponenziale: base=0.5s, max=5s, jitter ±20%.
-  - Terminal `[CRITICO]` con `exc_info=True` dopo esaurimento.
-  - Outer guard non-transient: `[CRITICO]` non-transient + NO propagation
-    (il finally deve sempre completare, altrimenti Celery retry duplicato).
-
-Il finally di `execute()` NON accumula flag nel result dict (per non
-rompere il flow del method — scope ridotto ratificato in checkpoint).
 """
 
 from __future__ import annotations
@@ -293,7 +280,7 @@ def test_release_retry_log_warning_per_attempt(schedule_config, monkeypatch):
     ) as mock_logger:
         _run_execute_with_patches(manager, "s-attempts", monkeypatch)
 
-    # Warning emessi sui tentativi 1 e 2 (prima del sleep). Il 3° non
+    # NOTE: emessi sui tentativi 1 e 2 (prima del sleep). Il 3° non
     # emette warning perche' il budget e' esaurito e si va al log CRITICO.
     transient_warnings = [
         c for c in mock_logger.warning.call_args_list

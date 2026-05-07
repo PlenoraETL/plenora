@@ -1,54 +1,7 @@
-"""Auth disclosure policy — typed boundary.
+"""
+Auth disclosure policy — typed boundary.
 
 BE-GO-READY-AUTH-ENGINE-001-DISCLOSURE-POLICY-EXTRACTION.
-
-Pure decision layer for auth-domain HTTP error disclosure. The
-module owns *what* the client sees (status code, italian message,
-machine-readable code, custom headers) for every auth-domain
-denial / failure. It does **not** own:
-
-- token verification / decoding (`app.shared.jwt_token`);
-- password hashing (`app.shared.password_hashing`);
-- MFA secret/code logic (`app.core.auth.mfa`);
-- session / blacklist (`app.shared.token_blacklist`);
-- rate-limit accounting (`app.shared.login_rate_limiter`);
-- group / ownership checks (`app.core.auth.ownership`);
-- DB queries (`app.db.*`).
-
-Boundary contract
-=================
-- **Input**: stable Python primitives (int, bool, str). No
-  `Request`, no DB row, no Pydantic model.
-- **Output**: `DisclosureDecision` frozen dataclass — typed,
-  hashable, easy to compare in tests.
-- **Side effect** (only via `raise_disclosure`): raises a
-  `HTTPException` whose `detail` is the dict-shape envelope
-  `{error, message, details}` consumed by the central
-  `app.main` handler. Status code and headers preserved.
-
-Policy invariants (ADR-0022)
-============================
-The four anti-enumeration invariants are *encoded in the function
-boundaries themselves*:
-
-1. **Login bad creds vs user-not-exist** — single function
-   `invalid_credentials()`. No way to call a different code for
-   "user gone" vs "wrong password".
-2. **Post-token user-deleted vs user-disabled** — single function
-   `user_not_found_or_disabled()`. Same code, same message.
-3. **Admin reset/delete out-of-group vs not-existing** —
-   `admin_target_not_visible(is_superadmin)` returns 404 only
-   for superadmin, otherwise uniform 403 access_denied. The
-   call site cannot accidentally split the two.
-4. **Account disabled distinct from invalid_credentials** —
-   `account_disabled()` returns 403 (post-password-ok), distinct
-   from `invalid_credentials()` 401 (LEAKY_BY_DESIGN, ADR-0018-style).
-
-References
-==========
-- ADR-0022 §"Catalog: famiglia auth (27 codici)";
-- ADR-0022 §"Anti-enumeration invariants (locked source-bound)";
-- BE_AUTH_DOMAIN_ADR audit (40 call site → 27 promotion).
 """
 
 from __future__ import annotations

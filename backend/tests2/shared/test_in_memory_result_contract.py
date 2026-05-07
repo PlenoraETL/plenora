@@ -1,26 +1,7 @@
-"""Contract test — in-memory pipeline result storage.
+"""
+Contract test — in-memory pipeline result storage.
 
 Cintura anti-regression + TDD per il refactor che elimina il filesystem
-staging tra "DataFrame serializzato" e "DB blob". I 4 callsite
-(ESTRAI/MANIPOLA/ARRICCHISCI/features) scrivevano un temp file in
-DATA_DIR/temp prima di farsi leggere da save_result_blob per uploadare
-sul DB. In-memory bytes elimina il hop inutile.
-
-Suite articolata in 3 blocchi:
-
-  1. REGRESSION sui path-based esistenti (save_result_blob, save_dataframe):
-     congela il comportamento osservabile prima del refactor.
-
-  2. CONTRACT sul nuovo API in-memory:
-     - save_dataframe_to_bytes(df, format) -> bytes
-     - save_result_blob_from_bytes(project_id, data, filename, fmt, ...)
-     - get_result_as_bytes(project_id) -> bytes
-     Questi test inizialmente FALLISCONO (API non esiste), poi passano
-     dopo l'implementazione — TDD vero.
-
-  3. SENTINEL "no temp file leak":
-     Dopo una chiamata al nuovo flusso in-memory, nessun file residuo
-     in DATA_DIR/temp. Garanzia contro regressione futura.
 """
 
 from __future__ import annotations

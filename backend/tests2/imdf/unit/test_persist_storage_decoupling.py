@@ -1,16 +1,7 @@
-"""Contract test D3 commit 4 — persist.py non chiama storage.
+"""
+Contract test D3 commit 4 — persist.py non chiama storage.
 
 Inversione di dep rimossa (d3_imdf_boundaries.md §3.4 + §4.2 + §8 Opzione D,
-R2 ratificata 2026-04-22):
-- persist.py = local materializer puro, non conosce S3 ne' object storage.
-- storage.py = cross-node backup invariato.
-- enrichment_task (worker) = orchestrator esplicito: chiama persist e poi
-  storage.save_bundle, con error policy (best-effort logger.warning) decisa
-  nel worker invece che dentro persist.
-
-Pre-commit: persist.py:147-159 chiamava inline _imdf_storage.save_bundle
-con try/except. Post-commit quelle righe sono rimosse; il worker invoca
-save_bundle esplicitamente dopo persist.
 """
 from __future__ import annotations
 
@@ -211,7 +202,7 @@ def test_enrichment_task_imdf_branch_calls_storage_save_after_persist():
         "`persist_imdf_bundle_to_disk`."
     )
 
-    # Warning text: contract verbatim verso ops (grep su alert/dashboard).
+    # NOTE: text: contract verbatim verso ops (grep su alert/dashboard).
     # Restiamo source-bound qui di proposito — la stringa e' un contract
     # pubblico, non un dettaglio implementativo. Source dell'intero modulo
     # garantisce di catturarla anche se vive in funzioni nested.

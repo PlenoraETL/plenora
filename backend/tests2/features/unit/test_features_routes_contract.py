@@ -1,3 +1,9 @@
+"""
+Tests the features routes behavior.
+
+Locks backend contracts and regression boundaries for the current architecture.
+"""
+
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch

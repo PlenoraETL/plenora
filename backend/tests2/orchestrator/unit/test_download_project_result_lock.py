@@ -1,16 +1,7 @@
-"""Lock tests per `GET /api/projects/{project_id}/download`.
+"""
+Lock tests per `GET /api/projects/{project_id}/download`.
 
 Regression guard + scaglione 0 per il bug segnalato: l'endpoint
-legge solo da `settings.RESULTS_DIR/{project_id}/` (path pre-R#1
-dove i risultati vivevano su disco). Dopo R#1 i result blob vivono
-nel DB e il file temp viene cancellato da `save_result_blob` nel
-finally success — quindi l'endpoint ritorna 404 per qualsiasi
-progetto post-R#1.
-
-I test coprono 3 scenari:
-  1. Filesystem vuoto + blob DB presente → scarica dal blob (fix)
-  2. Filesystem con file reale → FileResponse (compat legacy)
-  3. Ne' filesystem ne' blob → 404
 """
 
 from pathlib import Path

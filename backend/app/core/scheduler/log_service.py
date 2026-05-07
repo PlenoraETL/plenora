@@ -1,25 +1,7 @@
-"""Servizio per la gestione dei log di esecuzione dello Scheduler.
+"""
+Servizio per la gestione dei log di esecuzione dello Scheduler.
 
 Architettura (FS-B3 post-migration)
-====================================
-I log vivono nella tabella `plenora.schedule_logs`. Zero FS. Benefici
-rispetto all'implementazione pre-migration (`data/scheduler_logs/
-YYYY-MM-DD/*.json`):
-
-  - Container-safe: zero persistenza locale, qualsiasi pod backend
-    legge lo stesso set
-  - Paginazione indicizzata: list O(page_size) anche su anni di log
-  - Transazionalita': `INSERT` atomico, no dir vuote orfane su crash
-  - Retention via `DELETE WHERE timestamp < ?` (indexed)
-
-API pubblica invariata rispetto alla versione FS:
-    - write_log(entry) -> log_id (string, prima era relative file path)
-    - get_log(log_id) -> ScheduleLogEntry | None
-    - get_logs(schedule_id, page, page_size, status_filter) -> ScheduleLogList
-    - get_latest_log(schedule_id) -> ScheduleLogEntry | None
-    - delete_logs_before(date) -> int (righe eliminate)
-    - delete_schedule_logs(schedule_id) -> int
-    - create_log_entry(...) -> ScheduleLogEntry helper
 """
 
 from __future__ import annotations

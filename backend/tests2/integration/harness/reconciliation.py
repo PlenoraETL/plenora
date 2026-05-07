@@ -1,20 +1,7 @@
-"""Helper per il smoke di reconciliation E2E PG (T-08 / D2).
+"""
+Helper per il smoke di reconciliation E2E PG (T-08 / D2).
 
 Genera dataset deterministico, esegue DDL/INSERT su PG ext, calcola
-checksum simmetrici (count, sum, ordered MD5) per il confronto
-source <-> destination.
-
-Scope:
-  - dataset deterministico: int, NUMERIC(12,2) come centesimi interi
-    espressi come Decimal stabile, text con accenti italiani
-  - NO NaN/Inf: P1-04 e' coperto da test unit dedicati, qui evitiamo
-    ambiguita' SQL/pandas
-  - checksum a 3 metriche complementari per diagnosi del drift
-  - cleanup dei nomi tabella e' responsabilita' del caller (vedi
-    `make_it_id` in `harness.db`)
-
-Tutto opera su `postgres_ext_conn()` (PG ext locale, credenziali test
-hardcoded). Niente DSN dinamici, niente fallback su DB applicativo.
 """
 
 from __future__ import annotations

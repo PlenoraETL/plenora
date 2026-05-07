@@ -1,3 +1,9 @@
+"""
+Tests the local datasource behavior.
+
+Locks backend contracts and regression boundaries for the current architecture.
+"""
+
 import pytest
 
 from app.core.datasources.interface import BackendConfig, DataSourcePermissionError

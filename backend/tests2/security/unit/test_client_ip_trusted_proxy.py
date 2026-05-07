@@ -1,18 +1,7 @@
-"""Contract test — `app.shared.request_utils.get_client_ip`.
+"""
+Contract test — `app.shared.request_utils.get_client_ip`.
 
 Blinda la semantica anti-spoofing del resolve client IP dietro reverse
-proxy. Regressione bloccata: il codice pre-fix usava sempre
-`request.client.host` — in setup nginx→uvicorn locale tutti i client
-diventavano `127.0.0.1`, collassando il rate-limit login su un bucket
-condiviso (DoS amplification: un attacker bloccava il login di tutti).
-
-Cases (6):
-  1. peer trusted + XFF singolo     → primo IP XFF
-  2. peer trusted + XFF chain       → primo IP (client originale)
-  3. peer trusted + XFF assente     → fallback peer
-  4. peer NON trusted + XFF valido  → peer (ignora XFF spoofabile)
-  5. peer None                      → sentinel "unknown"
-  6. peer trusted + XFF vuoto/ws    → fallback peer
 """
 
 from __future__ import annotations

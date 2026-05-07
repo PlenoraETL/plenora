@@ -1,10 +1,7 @@
-"""Focused contract test - _applica_crs_da_colonne uses ResourceMetadata.
+"""
+Focused contract test - _applica_crs_da_colonne uses ResourceMetadata.
 
 BE-GO-READY-ARCH-056-W6-RESOURCE-METADATA-CRS-PILOT.
-
-Verifies that the CRS-from-node-columns lookup now routes through
-`ResourceMetadata.from_columns_list()` rather than inline string parsing.
-Tests cover the six behavioural cases that matter for correctness.
 """
 
 from __future__ import annotations

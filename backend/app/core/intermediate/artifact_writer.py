@@ -2,28 +2,6 @@
 Intermediate full artifact writer — Batch object storage intermedi (2026-04-28).
 
 Persiste lo snapshot completo di un nodo come `data.parquet` +
-`manifest.json` su runtime object storage (bucket
-`OBJECT_STORAGE_BUCKET` / `PLENORA_ARTIFACT_BUCKET`).
-
-Layout (deterministico):
-    <prefix>/group=<group_id>/project=<project_id>/run=<run_id>/
-        module=<module>/node=<node_id>/kind=<checkpoint|final>/
-            data.parquet
-            manifest.json
-
-Vincoli:
-- Niente `df.to_dict(full)`. Serializzazione Parquet via BytesIO
-  (`pd.DataFrame.to_parquet`).
-- Niente save/load nella chain pipeline: questo modulo persiste post-fact,
-  il DataFrame continua a fluire in memoria.
-- Best-effort: errori upload/serialize NON crashano la run; vengono
-  riportati al caller come `(uri=None, status="failed", error="...")`
-  cosi' che `node_meta.artifact_status="failed"` rifletta il fatto.
-- Capability gate: `get_runtime_object_storage()` solleva
-  `ObjectStorageDisabledError` se la capability e' off; il caller
-  in `snapshot.py` riceve l'errore e segnala `failed`.
-
-Vedi anche `intermediate_persistence_to_be.md` §"Struttura object store / S3".
 """
 
 from __future__ import annotations

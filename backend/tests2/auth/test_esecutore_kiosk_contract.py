@@ -1,37 +1,7 @@
-"""Contract tests — ruolo `esecutore` (kiosk-only).
+"""
+Contract tests — ruolo `esecutore` (kiosk-only).
 
 Il ruolo `esecutore` e' stato aggiunto come 5o ruolo (post audit RBAC
-2026-04-09) per uso "kiosk": vede SOLO la lista degli eseguibili del
-proprio gruppo (+ condivisi) e puo' lanciarli, ma e' bloccato su
-qualsiasi router di gestione (connections, datasources, projects,
-schedules, logs, ecc.).
-
-Nessun test mirato esisteva su questo ruolo: la maggior parte dei test
-in `tests2/` usa `app.dependency_overrides[require_not_esecutore] =
-lambda: current_user` per BYPASSARE il guard mentre testa altre cose.
-Questo file invece BLINDA il guard, in 5 sezioni:
-
-  Sez. A — contratto positivo eseguibili: list/get/execute permessi
-           (override solo `get_current_user` con esecutore, senza
-           toccare guard/visibility helpers reali nei punti critici)
-  Sez. B — contratto negativo parametrico: 403 atteso su un dummy
-           endpoint per ognuna delle 3 dependency che escludono
-           esecutore (require_not_esecutore / require_admin /
-           require_user_or_above) + smoke wiring su 1 router reale
-  Sez. C — eseguibili admin-mutativo: POST/PUT/DELETE bloccati per
-           esecutore (require_admin guard)
-  Sez. D — dependency-direct: chiamata diretta su
-           `require_not_esecutore` — 403 per esecutore, pass per altri
-  Sez. E — `GET /api/auth/me` consentito a qualsiasi autenticato,
-           incluso esecutore
-
-Nota di scope:
-- niente prod code
-- niente migration
-- niente FE
-- niente DB live
-- mock minimi: solo quanto basta per ottenere 200/403 sul contratto
-  RBAC, NON per testare la business logic di eseguibili
 """
 
 from __future__ import annotations

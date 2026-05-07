@@ -1,50 +1,8 @@
 #!/usr/bin/env python3
-"""Batch 3.12 — calcolo verdetto post-osservazione su bulk MySQL / PG.
+"""
+Batch 3.12 — calcolo verdetto post-osservazione su bulk MySQL / PG.
 
 Applica meccanicamente le soglie dichiarate in
-`orchestrate/phase_2_hardening/kickoff.md §9.2` (MySQL LOAD DATA
-decommission criterion) e `§9.3` (Postgres COPY keep-confirmed /
-regression-alert criterion) sui log strutturati prodotti da Batch
-3.1/3.2/3.4/3.5 e resi query-abili da Batch 3.10 (whitelist extras in
-`logs.details` JSONB).
-
-Obiettivo: ridurre a zero l'ambiguita' post-osservazione. Un singolo
-comando produce il verdetto univoco per ciascun ramo.
-
-Uso:
-    python backend/scripts/perf_bulk_verdict.py --from 2026-05-12 --to 2026-05-26
-
-Esempio di output (numeri sintetici):
-
-    === Verdetto §9.2 MySQL LOAD DATA ===
-    Periodo: 2026-05-12 -> 2026-05-26
-    N_success_mysql:               42
-    N_fallback_disabled (1148):    18
-    Sample totale:                 60
-    success_rate_mysql:            70.00%
-    Verdetto: PERIODO INVALIDO - sample 60 < 100 (§9.2). Estendere.
-
-    === Verdetto §9.3 Postgres COPY ===
-    Periodo: 2026-05-12 -> 2026-05-26
-    N_success_pg:                  4213
-    N_fallback_operational:        3
-    Sample totale:                 4216
-    success_rate_pg:               99.93%
-    Verdetto: KEEP CONFERMATO - rate 99.93% >= 95% (§9.3).
-
-    === Gap §6.R2 — stage_swap MySQL ===
-    Invocazioni (event=stage_swap.dispatched dialect=mysql): 0
-    -> OK, nessun stage+swap MySQL nel periodo. Rimozione LOAD DATA
-       safe lato stage+swap.
-
-Exit code:
-    0 - tutte le query OK (verdetto prodotto, anche PERIODO INVALIDO)
-    1 - errore DB / query / parsing
-    2 - argomenti CLI invalidi (gestito da argparse)
-
-NON tocca runtime applicativo. Legge solo la tabella `logs` esistente.
-Soglie copiate verbatim da `§9.2` / `§9.3` — se si modificano li', va
-aggiornato anche questo file.
 """
 
 from __future__ import annotations

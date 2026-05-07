@@ -1,26 +1,7 @@
-"""Source-loading extraction contract for ManipolaExecutor.
+"""
+Source-loading extraction contract for ManipolaExecutor.
 
 BE-GO-READY-TRANSFORMATION-ENGINE-006-MANIPOLA-SOURCE-LOADING-SLICE.
-
-Locks the new boundary between ``ManipolaExecutor`` and the pure
-``app.core.manipola.source_loading`` helper module:
-
-  - ``app.core.manipola.source_loading.load_file_sources`` exists
-    and exposes a function-only signature
-    (``canvas``, ``dataframes``, ``group_id``, ``logger=``);
-  - ``ManipolaExecutor._carica_sorgenti_file`` is a thin delegator
-    that calls ``load_file_sources`` (no inline business logic
-    re-introduced after the extraction);
-  - the delegator does NOT pass ``self._current_group_id`` to the
-    helper — the TE-005 ctx-strict contract is preserved across
-    the boundary;
-  - the helper itself is a pure function with no class state
-    (no ``self`` parameter; nothing from
-    ``ManipolaExecutor`` is bound at module load time).
-
-Source-bound + behavioural locks; mirrors the posture of
-``test_manipola_executor_security_contract`` and adds a thin
-delegation proof.
 """
 
 from __future__ import annotations

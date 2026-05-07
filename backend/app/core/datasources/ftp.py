@@ -1,15 +1,7 @@
 """
 PLENORA-ETL — Data Source Backend: FTP
-Supporta FTP attivo/passivo con TLS opzionale (FTPS).
-Usa solo la stdlib: ftplib (nessuna dipendenza esterna).
 
-Configurazione extra attesa in config.extra:
-    host (str)      es. "ftp.server.it"
-    port (int)      default 21
-    username (str)
-    password (str)
-    tls (bool)      default False — se True usa FTP_TLS (FTPS)
-    passive (bool)  default True
+Supporta FTP attivo/passivo con TLS opzionale (FTPS).
 """
 
 import ftplib

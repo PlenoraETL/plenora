@@ -2,13 +2,6 @@
 Configurazione PLENORA-ETL — solo DEFAULTS + variabili d'ambiente, niente config.json.
 
 Priorità:
-    1. Variabile d'ambiente (es. export CELERY_BROKER_URL=...)
-    2. File backend/.env (caricato all'import di questo modulo — SOLO in development)
-    3. DEFAULTS della classe
-
-In production/staging il file backend/.env viene ignorato: i secret devono
-arrivare da variabili d'ambiente iniettate da systemd o da un secret manager.
-Se il file è presente in prod/staging viene loggato un warning.
 """
 
 import logging
@@ -525,7 +518,7 @@ class Settings:
         # per supporto multi-formato senza schema change.
         "INTERMEDIATE_FULL_ARTIFACT_FORMAT": "parquet",
 
-        # Bug #24 (perf, 2026-04-28): mode di calcolo del node_hash
+        # FIXME: #24 (perf, 2026-04-28): mode di calcolo del node_hash
         # del DataFrame al checkpoint/final snapshot.
         #   - "sample": hash di (schema, len(df), df.head(N)). Costo
         #     ~10-20 ms anche su DataFrame da 275k righe (vs 1.0-1.5 s

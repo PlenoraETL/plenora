@@ -1,28 +1,7 @@
-"""Contract test N10 — row_hash MD5 stabile su float / Decimal.
+"""
+Contract test N10 — row_hash MD5 stabile su float / Decimal.
 
 Pre-fix scenario:
-  `_normalize_value(float)` usava `str(v)` crudo. Due float semanticamente
-  uguali ma prodotti da path diversi (es. lettura ripetuta da Postgres con
-  arrotondamenti minimi, o aritmetica che introduce errore di floating
-  point) davano output diverso:
-      str(1.23)          == "1.23"
-      str(1.2300000001)  == "1.2300000001"
-  -> MD5 row_hash diverso -> dedup row-level rotto -> righe "uguali"
-  venivano considerate distinte, causando duplicati invisibili nella
-  pipeline.
-
-Fix (2026-04-17): helper `_format_float_stable(v)` usa
-`f"{v:.6f}".rstrip('0').rstrip('.')`:
-  - 6 decimali fissi (precisione ragionevole per ETL tipico)
-  - strip zeri trailing e punto -> output canonico
-  - NaN/Inf gestiti esplicitamente
-  - coerente tra float e Decimal (entrambi passano per l'helper)
-
-Questo contract congela:
-  1. float vicini semanticamente uguali -> stesso hash
-  2. int N e float N.0 -> stesso output normalizzato (coerenza)
-  3. Decimal(x) e float(x) -> stesso output
-  4. NaN / Inf gestiti in modo deterministico
 """
 
 from __future__ import annotations

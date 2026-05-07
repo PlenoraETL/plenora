@@ -1,10 +1,7 @@
-"""Contract test C8 — health/readiness + request correlation.
+"""
+Contract test C8 — health/readiness + request correlation.
 
 Copre i pezzi che finora erano meno blindati:
-1. `/health` e `/ready` ritornano 200/503 in base ai check dipendenze.
-2. `RequestIdMiddleware` propaga/echoa `X-Request-ID` e ne genera uno se manca.
-3. `JWTMiddleware` resetta `user_id` tra richieste consecutive.
-4. Celery signal hooks propagano e puliscono il `request_id`.
 """
 
 from __future__ import annotations

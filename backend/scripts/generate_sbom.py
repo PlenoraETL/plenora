@@ -1,27 +1,7 @@
-"""Genera SBOM CycloneDX-JSON dell'inventario dipendenze backend.
+"""
+Genera SBOM CycloneDX-JSON dell'inventario dipendenze backend.
 
 T-05 Phase 3 Batch D — baseline SBOM ripetibile.
-
-Scope:
-  Produce `docs/compliance/sbom.json` (formato CycloneDX 1.x JSON)
-  parsando i `requirements.txt` + `requirements-dev.txt` del backend.
-  Lo SBOM e' dichiarativo, non riflette il sito-packages corrente:
-  pip-audit con `--requirement` risolve le dipendenze in un venv
-  temporaneo isolato. Questo evita di catturare pacchetti casuali
-  installati nell'environment Python globale dell'operatore.
-
-Uso:
-    python backend/scripts/generate_sbom.py
-
-Niente argomenti, niente env variables, niente shell pipe-up. Lo script
-e' deterministico e ripetibile.
-
-Cadenza consigliata:
-  - manuale trimestrale (vedi `docs/compliance/sbom.md` §4)
-  - ad-hoc post-merge di un update major su `requirements.txt`
-
-Niente CI scheduled, niente PR automatica per ora: la decisione e'
-documentata in `sbom.md` come scelta consapevole pre-go-live.
 """
 
 from __future__ import annotations

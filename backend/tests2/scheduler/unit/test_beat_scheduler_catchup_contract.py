@@ -1,14 +1,7 @@
-"""Orchestration del catchup nel beat scheduler (C3 fix 3).
+"""
+Orchestration del catchup nel beat scheduler (C3 fix 3).
 
 Contratto `_emit_catchup_runs()`:
-1. Legge solo schedule enabled con `catchup_missed_runs=True`.
-2. Per ciascuno: calcola `detect_missed_run()`. Se c'e' missed:
-   a. Emette `schedule_pipeline_task` con
-      `triggered_by="catchup"` + `scheduled_for=<ISO>`.
-   b. Aggiorna `last_run` al timestamp expected (evita re-trigger).
-   c. Scrive riga in `schedule_catchup_history` (audit).
-3. Cap consecutivi: se uno schedule ha emesso >N catchup nei
-   precedenti 10 minuti, skip con WARNING (protegge da runaway).
 """
 
 import json

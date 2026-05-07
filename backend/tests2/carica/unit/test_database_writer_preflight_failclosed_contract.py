@@ -1,26 +1,7 @@
-"""Phase 2 err-dbwriter commit A — fail-closed su preflight/routing silenziosi.
+"""
+Phase 2 err-dbwriter commit A — fail-closed su preflight/routing silenziosi.
 
 Pre-fix: tre entry point di preflight/routing in `DatabaseWriter`
-silenziavano errori non classificati come "permission denied":
-
-- `_check_create_permission()` su errore sconosciuto loggava `warning`
-  e ritornava `(True, "")` ("logga ma non blocca"): permetteva il
-  proseguimento di CREATE TABLE senza aver verificato davvero i
-  permessi, producendo fallimento confuso piu' avanti nella write.
-- `truncate_table()` su errore ritornava `False`: il caller in
-  `write()` PER_BATCH (TRUNCATE_INSERT) procedeva comunque con
-  `_batch_insert` appendendo anziche' truncate-inserting —
-  correttezza dati compromessa.
-- `_table_exists_for(schema, table)` su errore loggava `warning` e
-  ritornava `False`: il valore guida la scelta swap vs single-rename
-  in `_replace_atomic`, quindi un errore query silenziato produceva
-  routing errato e fallimento confuso piu' avanti.
-
-Post-fix: tutti e tre propagano / ritornano fail-closed esplicito.
-Il boundary di `write()` (unico callsite interno) cattura il raise
-e lo converte in `WriteResult(status=WRITE_ERROR)`.
-
-Rif. audit Batch 2 §4.1 commit A (smell A, B, C).
 """
 
 from __future__ import annotations

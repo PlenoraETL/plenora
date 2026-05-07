@@ -1,20 +1,7 @@
-"""Lock tests per _execute_api_generator e _execute_api_enricher.
+"""
+Lock tests per _execute_api_generator e _execute_api_enricher.
 
 Scopo: congelare il contratto osservabile di entrambi i metodi prima
-del refactor C4 (estrazione helpers + condivisione URL path
-substitution).
-
-Collaborator mockati:
-  - app.shared.api_utils.get_shared_session → mock requests session
-  - app.shared.api_utils.validate_external_url → no-op (SSRF)
-  - self._prepare_headers → return fixed headers
-  - self._extract_rows_from_response → identita' (per generator)
-
-Le branche coperte:
-  - Generator: no URL, input_df row, static_params, no pagination,
-    offset/cursor/link pagination, HTTP error
-  - Enricher: no URL, output cols init, success path, HTTP error
-    counting, exception in row, rate limit delay
 """
 
 from contextlib import ExitStack

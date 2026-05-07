@@ -1,17 +1,7 @@
-"""[phase-2-err][batch9] C2 — breadcrumb + detail fisso in orchestrator/router.
+"""
+[phase-2-err][batch9] C2 — breadcrumb + detail fisso in orchestrator/router.
 
 Audit Batch 9 §3.2 S4/S5/S8/S9 — fix F6.1-F6.5:
-  - F6.1: `_assert_task_group` broad→404 ora emette `logger.warning([GESTITO])`
-    con exc_info prima del raise (DB/Redis transient distinguibili in log).
-  - F6.2: `get_task_status` endpoint 404 con `detail="Task non trovato"` fisso
-    (rimuove interpolazione task_id che e' input utente).
-  - F6.3: `full-cleanup` tenant check su ProjectService lookup: breadcrumb
-    warning prima di `_meta = None` (bypass admin non piu' silent).
-  - F6.4: S3 eseguibili lookup `exc_info=True` aggiunto al warning.
-  - F6.5: S3 open_stream boundary `exc_info=True` aggiunto al [CRASH] error.
-
-Tutti i fix sono **additive**: zero cambio HTTP status code, zero cambio
-logica di flusso. Solo breadcrumb + sanitize detail string.
 """
 
 from __future__ import annotations

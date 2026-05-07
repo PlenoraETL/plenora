@@ -1,22 +1,7 @@
-"""Default in-process resource registry.
+"""
+Default in-process resource registry.
 
 BE-GO-READY-RESOURCE-ENGINE-002-RESULT-BLOB-LOADER-PILOT.
-BE-GO-READY-RESOURCE-ENGINE-020-FILE-SOURCE-BLOB-LOADER.
-
-The registry is intentionally trivial: a `dict[ResourceKind,
-ResourceLoader]` with explicit `register` (raises on duplicate) and
-`get` (raises on missing). NO domain logic. NO tenant check. NO
-size guard. Each loader owns its own checks; the registry is a
-router only.
-
-Pilot uses a module-level singleton built lazily by
-``default_registry()``. Test code that needs a fresh registry can
-call ``build_default_registry()`` directly.
-
-Anti-god-engine: this module imports only `app.core.resources.types`
-and the loader modules under `app.core.resources.loaders.*`.
-Adding any other loader here MUST be paired with adding its kind
-to `ResourceKind` AND wiring its tenant binding plumbing.
 """
 
 from __future__ import annotations

@@ -1,18 +1,7 @@
-"""Rollback regression test per APPEND/UPDATE/UPSERT (C6).
+"""
+Rollback regression test per APPEND/UPDATE/UPSERT (C6).
 
 Scopo: garantire che `_execute_all_or_nothing` rollbacki tutte le righe
-scritte se un batch fallisce, anche su write_mode diversi da
-TRUNCATE_INSERT (che gia' ha i suoi test in C5).
-
-Pattern per scenario:
-1. Pre-popola target con N righe note
-2. Esegui write_mode con mock_execute_batch che fa fail dopo il primo
-   batch committato-in-memory
-3. Verifica che target abbia ancora SOLO le N righe originali (zero
-   righe nuove committate, zero righe modificate)
-
-Coverage: APPEND, UPDATE, UPSERT × {Oracle, Postgres}. Batch_size
-piccolo (2) per forzare piu' batch ed esercitare il fail-mid-stream.
 """
 
 from __future__ import annotations

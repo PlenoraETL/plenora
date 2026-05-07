@@ -1,28 +1,7 @@
-"""Anti-god-engine source-bound lock for the Resource Engine pilot.
+"""
+Anti-god-engine source-bound lock for the Resource Engine pilot.
 
 BE-GO-READY-RESOURCE-ENGINE-002-RESULT-BLOB-LOADER-PILOT.
-
-Locks the architectural rules from
-``.agent-temp/BE_RESOURCE_ENGINE_AUDIT.md`` sec. 6:
-
-  - the engine is a CAPABILITY REGISTRY, not a god-engine;
-  - the engine returns byte-level resources, not parsed objects;
-  - tenant binding is required at the type level (fail-closed);
-  - the storage-key dispatch lives in EXACTLY ONE place after
-    migration (de-duplication invariant);
-  - banned imports under ``app/core/resources/`` are checked
-    source-bound (so the lock catches diffs that would compose a
-    god-engine via convenience imports).
-
-These tests are SOURCE-BOUND: they read the file content and grep
-for forbidden patterns. A loader file that imports `pandas` will
-fail this test even if the import is unused at runtime, because
-the architectural rule is "no domain libs in the engine" — the
-import alone is the regression signal.
-
-Group A — type-level contract (always active)
-Group B — banned imports (always active)
-Group C — single-dispatch lock (always active post-migration)
 """
 
 from __future__ import annotations

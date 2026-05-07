@@ -1,17 +1,7 @@
-"""Contract test — defense-in-depth MIME nei service entry-point.
+"""
+Contract test — defense-in-depth MIME nei service entry-point.
 
 Difesa secondaria: i 3 metodi di FileSourceService che ricevono blob
-da upload (`create_raw_from_upload`, `create_multi_layer_from_upload`,
-`preview_file_temp`) ri-validano i magic bytes con `validate_no_executable`
-prima di toccare il DB / disco.
-
-Motivazione: anche se i router HTTP gia' validano upstream, un caller
-futuro (task Celery, batch import, CLI tool, refactor accidentale) puo'
-chiamare il service direttamente. Senza questa difesa secondaria, una
-chiamata diretta con un blob eseguibile bypasserebbe la sicurezza.
-
-I test passano contenuto non-eseguibile per il happy path e payload
-PE/ELF/Mach-O per verificare il blocco.
 """
 
 from __future__ import annotations

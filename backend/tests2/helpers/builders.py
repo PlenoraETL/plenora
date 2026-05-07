@@ -1,3 +1,9 @@
+"""
+Shared test data builders for backend contract tests.
+
+Provides small fixtures used by multiple test domains without importing runtime services.
+"""
+
 from datetime import datetime, timezone
 from types import SimpleNamespace
 

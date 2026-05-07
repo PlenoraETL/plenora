@@ -1,9 +1,7 @@
-"""Contract test — propagation `ColumnsMetadataSaveError` dal task Celery
-`workers/tasks/enrichment_task.py`.
+"""
+Contract test — propagation `ColumnsMetadataSaveError` dal task Celery
 
-Critico: se il save fallisce in modo permanente, il task DEVE terminare
-FAILED. Pre-refactor swallowavamo con warning → task SUCCESS + metadata
-stale → downstream (manipola, carica) riceveva tipi `str` fallback.
+`workers/tasks/enrichment_task.py`.
 """
 
 from __future__ import annotations

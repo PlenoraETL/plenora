@@ -1,27 +1,7 @@
-"""Contract tests for the shared Kahn topological-sort utility.
+"""
+Contract tests for the shared Kahn topological-sort utility.
 
 BE-GO-READY-GRAPH-ENGINE-001-SHARED-TOPOLOGICAL-SORT.
-
-Locks the deterministic behavior of
-``app.shared.execution.graph.kahn_topological_order``:
-
-  - simple chain ordering;
-  - independent / disconnected nodes preserve input order;
-  - dangling edges are silently dropped;
-  - duplicate edges contribute multiple in-degree counts and
-    therefore require multiple decrements;
-  - on_cycle='truncate' silently omits cycle nodes (Arricchisci
-    legacy shape);
-  - on_cycle='raise' raises ``GraphCycleError`` with the
-    canonical Italian message AND the cycle-node list (Manipola
-    legacy shape);
-  - ``GraphCycleError`` subclasses ``ValueError`` so legacy
-    ``except ValueError`` paths keep working.
-
-All tests are pure / stdlib-only and run without any DB /
-FastAPI / pandas import; they catch a regression in the shared
-algorithm before either the Arricchisci or Manipola callsite
-sees it.
 """
 
 from __future__ import annotations
@@ -181,7 +161,7 @@ def test_two_node_cycle_raise_lists_cycle_nodes():
     err = exc_info.value
     assert err.cycle_nodes == ["A", "B"]
     # Verbatim Italian operator message preserved from the
-    # legacy Manipola implementation:
+    # NOTE: legacy Manipola implementation:
     msg = str(err)
     assert "Ciclo rilevato nel canvas tra i nodi" in msg
     assert "Rimuovere le connessioni circolari" in msg

@@ -1,23 +1,7 @@
-"""Parser dispatch per file source (STRUCT-001 Seam D-B).
+"""
+Parser dispatch per file source (STRUCT-001 Seam D-B).
 
 Estratto da `FileSourceService._load_by_format` + duplicato di
-`file_preview_temp._load_by_format` (ora rimosso) per eliminare la
-duplicazione 1:1 introdotta da Seam D-A.
-
-API go-ready:
-    load_by_format(loader, file_path, format_type, layer=None, sheet=None, *, logger)
-        -> tuple[pd.DataFrame, object | None]
-
-Tutti i collaborator sono espliciti come argomenti (loader: DataLoaderProtocol,
-logger: LoggerProtocol-like). Modulo leaf: zero import da
-`app.services.file_service` o `app.services.file_preview_temp`.
-
-Format supportati (mantenuti 1:1 col legacy):
-  - csv, xlsx, json -> tabular via loader.load_csv/load_excel/load_json
-  - geojson, gpkg, shp, gdb -> geospatial via loader.load_geospatial
-                               + conversione `geometry` colonna in WKT.
-
-Format non in lista -> ValueError esplicito (parser non disponibile).
 """
 
 from __future__ import annotations

@@ -1,20 +1,7 @@
-"""[phase-2-err][batch8] C5 — delete_all_runs_for_canvas fail-closed outer.
+"""
+[phase-2-err][batch8] C5 — delete_all_runs_for_canvas fail-closed outer.
 
 Audit Batch 8 §3.1 S4 / fix F4: `intermediate/db.py:delete_all_runs_for_canvas`
-pre-fix aveva outer `except Exception: logger.warning + return 0`. Un
-catastrophic failure (DB pool exhausted, fetchall raise, vincolo FK inatteso)
-restituiva `0` indistinguibile da "canvas senza run" → il caller
-`ProjectService.delete_project` proseguiva allo step 5 (config DELETE) →
-orfani cross-DB garantiti.
-
-Post-fix:
-  - Outer catch → `logger.error('[CRASH] ...', exc_info=True) + raise`
-    (fail-closed). Il caller Batch 9 C5 cattura + accumula critical_failures
-    + solleva ProjectCleanupPartialError → 500 JSON strutturato.
-  - Inner per-row catch invariato nel comportamento (best-effort continue),
-    con `exc_info=True` aggiunto per diagnosticita'.
-  - Firma `-> int` invariata.
-  - Nessuna nuova exception class: bare `raise` propaga l'eccezione originale.
 """
 
 from __future__ import annotations
@@ -79,7 +66,7 @@ def test_delete_all_runs_inner_fail_continues_and_logs_warning():
 
     # count include solo i successi
     assert result == 2
-    # warning emesso per la run broken, con exc_info=True
+    # NOTE: emesso per la run broken, con exc_info=True
     inner_warnings = [
         c for c in mock_logger.warning.call_args_list
         if "errore su run r-broken" in str(c)

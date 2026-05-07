@@ -1,18 +1,7 @@
-"""Phase 2 err-dbwriter commit B — preserve exception chain in upsert auto-index.
+"""
+Phase 2 err-dbwriter commit B — preserve exception chain in upsert auto-index.
 
 Pre-fix: in `_batch_upsert`, quando `check_conn.execute(create_idx)`
-falliva (es. permessi insufficienti per CREATE UNIQUE INDEX), il
-codice rilanciava `ValueError(f"... fallita: {idx_err}")` senza
-`from idx_err`. Conseguenza: il traceback originale veniva scartato
-(Python mette `__context__` ma non `__cause__`), e chi debugga vede
-solo la stringa formattata senza la classe/stack dell'errore
-sottostante — smell #10 kickoff §3.4.
-
-Post-fix (audit Batch 2 §4.1 commit B): aggiunta `from idx_err`
-al raise. `ValueError.__cause__` punta esplicitamente all'eccezione
-originale. Nessun cambio di classe (resta `ValueError`); upgrade a
-domain exception dedicata (`UpsertMatchConstraintError`) e' debito
-separato fuori perimetro Batch 2.
 """
 
 from __future__ import annotations

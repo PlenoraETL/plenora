@@ -1,29 +1,7 @@
-"""Correctness invariant: `op_geo_voronoi` post-refactor == impl legacy.
+"""
+Correctness invariant: `op_geo_voronoi` post-refactor == impl legacy.
 
 Il refactor di Batch 3A sostituisce il `for idx, row in gdf.iterrows()`
-+ loop lineare su tutti i voronoi_polygons con uno STRtree query.
-L'output deve restare bit-per-bit identico: ogni input point deve
-essere associato allo stesso poligono di Voronoi che il legacy
-gli avrebbe assegnato.
-
-Coperture richieste dal vincolo del checkpoint:
-  - **correttezza topologica**: ogni poligono di Voronoi ritornato per
-    il punto i-esimo deve essere esattamente il poligono che il legacy
-    avrebbe selezionato (first-match per contains/touches, fallback
-    nearest-distance)
-  - **ordine-preservante**: se un punto e' al confine tra piu' celle
-    (touches su entrambi), il legacy picca quello con index minore
-    nella lista voronoi_polygons — anche noi dobbiamo
-  - **fallback nearest**: casi degeneri (punto fuori da tutti, che
-    non dovrebbe succedere con voronoi_diagram ma capita se il
-    diagramma e' ritagliato)
-  - **colonne preservate**: gdf input ha attributi, result deve
-    preservare attributi + index
-  - **input non mutato**
-
-Esecuzione:
-    pytest backend/tests2/performance/test_correctness_op_geo_voronoi.py \
-        -m perf_correctness -s -q
 """
 
 from __future__ import annotations

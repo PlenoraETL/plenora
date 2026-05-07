@@ -1,17 +1,7 @@
-"""[phase-2-err][batch9] C2 — narrow canvas JSON parser in project_service.
+"""
+[phase-2-err][batch9] C2 — narrow canvas JSON parser in project_service.
 
 Audit Batch 9 §3.2 S6 / fix F6.6-F6.7: due metodi di ProjectService
-parsavano il canvas JSON dei progetti candidati con `except Exception`
-→ qualsiasi errore (inclusi RuntimeError, OperationalError) veniva
-mascherato come "canvas corrotto, skip".
-
-Post-fix: narrow a `(json.JSONDecodeError, TypeError, AttributeError)`
-(parse/shape attesi). Qualsiasi altro errore propaga fail-loud.
-Warning log con project_id aggiunto per diagnostica.
-
-Siti coperti:
-  - `_assert_no_lineage_cycle.get_sources` (project_service.py:258-268)
-  - `_find_dependent_projects` (project_service.py:305-314)
 """
 
 from __future__ import annotations
@@ -87,7 +77,7 @@ def test_find_dependent_projects_skips_malformed_json_canvas(monkeypatch):
     assert len(deps) == 1
     assert deps[0]["id"] == "cand-valid"
 
-    # Warning emesso per il candidato malformato, con il suo id nel messaggio
+    # NOTE: emesso per il candidato malformato, con il suo id nel messaggio
     warning_msgs = [
         r.getMessage() for r in handler.records if r.levelno == logging.WARNING
     ]

@@ -1,10 +1,7 @@
-"""Contract test A1 — validate_storage_config (fail-fast boot check).
+"""
+Contract test A1 — validate_storage_config (fail-fast boot check).
 
 Copre la validazione di coerenza config per la storage policy introdotta
-da A1 (orchestrate/phase_1_stabilization/a1_storage_policy.md §5). NON
-testa il dispatch (commit B/C) ne' la raggiungibilita' del provider:
-qui si blinda solo che il boot fallisca loud se la combinazione di
-STORAGE_POLICY, CLOUD_PROVIDER, bucket e soglie non e' consistente.
 """
 
 from __future__ import annotations

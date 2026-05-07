@@ -1,19 +1,7 @@
-"""Contract test Phase 6 batch L2 semantics (2026-04-28).
+"""
+Contract test Phase 6 batch L2 semantics (2026-04-28).
 
 `GET /api/runs/compare/l2` deve essere onesto rispetto alla
-`persistence_mode` delle due run. Non finge diff completo quando
-i dati non sono entrambi su node_rows.
-
-Casi:
-1. full_pg + full_pg (o legacy NULL): 200, diff completo, partial=False.
-2. preview_only + preview_only: 200, diff parziale, partial=True,
-   message chiaro.
-3. metadata_only su almeno un lato: 422 operativo, diff_available=False.
-4. full_artifact + complete: 501 "non implementato".
-5. full_artifact pending/failed: 422 "non pronto".
-6. mode mismatch (preview vs full_pg): 422 conservativo.
-
-Niente HTTP 500.
 """
 
 from __future__ import annotations
@@ -87,7 +75,7 @@ def test_l2_legacy_null_treated_as_full_pg(superadmin_user):
     client = build_client(superadmin_user)
 
     def _fake_meta(rid, _nid):
-        return _node_meta(persistence_mode=None)  # legacy
+        return _node_meta(persistence_mode=None)  # NOTE: legacy record without persistence_mode.
 
     with patch(
         "app.core.intermediate.router._check_run_access",
@@ -397,7 +385,7 @@ def test_l2_does_not_return_500_on_any_documented_mode(superadmin_user):
         ("full_artifact", "full_artifact", "pending", "complete", 422),
         ("full_artifact", "full_artifact", "failed", "complete", 422),
         ("preview_only", "full_pg", None, None, 422),
-        (None, None, None, None, 200),  # legacy NULL = full_pg
+        (None, None, None, None, 200),  # NOTE: legacy NULL = full_pg
     ]
 
     for mode_a, mode_b, sa, sb, expected in cases:

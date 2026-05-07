@@ -1,28 +1,7 @@
-"""Contract test per breadcrumb ``logger.debug`` su silent skip (Batch 8 C2).
+"""
+Contract test per breadcrumb ``logger.debug`` su silent skip (Batch 8 C2).
 
 Blinda il fix §6.2 F6.1-F6.5 (audit storage/provider 2026-04-22, smell S9+S10):
-ogni path che prima era ``except X: pass``/``continue`` senza visibilità ora
-emette un ``logger.debug`` con il ``type(e).__name__`` e l'eccezione, così
-che in prod sia possibile riconoscere optional-feature skip vs bug latente.
-
-Pattern testato (rappresentativo, uno per file del batch):
-- ftp._maybe_hash: hash opzionale fallisce → return None con breadcrumb
-- sftp.disconnect: close() fallisce → swallow con breadcrumb
-- local list_files: OSError su stat → continue con breadcrumb
-- service.mark_as_processed: file_info fallisce → swallow con breadcrumb
-
-Closed (BE-GO-READY-RESOURCE-ENGINE-023): the
-`resolver._write_temp_blob` TEMP_DIR breadcrumb test was
-removed as dead code along with the helper itself. Path-mode
-tempfile materialization now lives in
-``ResultBlobLoader._materialize_to_temp_path`` whose temp
-lifecycle contract is locked in
-``tests2/shared/test_result_blob_loader_path_mode_contract.py``.
-
-Invariants bloccati:
-- il flow resta invariato (return/continue/raise esterno preservati)
-- il breadcrumb contiene ``type(e).__name__`` (per distinguere classi di errore)
-- il livello è DEBUG (non inquina prod log che filtra >=INFO/WARNING)
 """
 
 from __future__ import annotations

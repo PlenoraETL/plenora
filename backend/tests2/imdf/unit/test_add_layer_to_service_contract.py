@@ -1,49 +1,7 @@
-"""Contract test BE-IMDF-006A — `_add_layer_to_service` request/result shape lock.
+"""
+Contract test BE-IMDF-006A — `_add_layer_to_service` request/result shape lock.
 
 Lock the current behavior of
-`app.core.imdf.arcgis.publish_ops._add_layer_to_service` BEFORE
-promoting it to `ArcGISClient.add_layer_to_service` (BE-IMDF-006B).
-
-Coverage:
-
-1. **Happy path**: addToDefinition POST → add_features → result dict
-   `{success, feature_count, errors}`.
-2. **Request shape**:
-   - URL: `service_url.replace("/rest/services/", "/rest/admin/services/")` + `/addToDefinition`;
-   - body has `addToDefinition: json.dumps(layer_def)` + `f=json`;
-   - body has `token` IFF `client.authenticate(conn)` returned truthy;
-   - headers `{"Referer": conn.server_url}`;
-   - timeout 60.
-3. **Schema/layer_def shape**:
-   - first field is `OBJECTID` esriFieldTypeOID, editable=False;
-   - subsequent fields built via `client._python_type_to_esri_field(col, dtype)`;
-   - `geometry`, `OBJECTID`, `objectid` columns excluded;
-   - `geometryType` derived from `client._esri_geometry_type(majority_type)`;
-   - `extent`/`spatialReference` filled from gdf.bounds when valid;
-   - `extent` defaults to world bbox when no bounds;
-   - `objectIdField=OBJECTID`, `hasAttachments=False`,
-     `capabilities="Create,Delete,Query,Update,Editing"`;
-   - `srid` overridden by `gdf.crs.to_epsg()` when available.
-4. **Failure paths**:
-   - `addToDefinition` returns `{success: False, ...}` → result
-     `{success: False, feature_count: 0, errors: ["addToDefinition fallito: ..."]}`;
-   - `client.add_features` returns 0-added → `success=False` (from
-     `added_count > 0`).
-5. **Result shape (KEEP_COMPAT)**: dict opaque
-   `{success, feature_count, errors}`. Documented as KEEP_COMPAT for
-   the future BE-IMDF-006B promote where it will become a
-   `dataclass(frozen=True) AddLayerResult`.
-
-Strategy:
-
-- Direct `MagicMock(spec=...)` per `client` con tutti i metodi
-  collaboratori stub-pati: `_http.post`, `authenticate`,
-  `_esri_geometry_type`, `_python_type_to_esri_field`,
-  `_default_drawing_info`, `dataframe_to_esri_features`,
-  `add_features`.
-- `gdf` reali via `geopandas.GeoDataFrame` con CRS impostato per il
-  test boundary (`gdf.crs.to_epsg()` letto dal codice).
-- Niente HTTP reale, niente ArcGIS reale.
 """
 
 from __future__ import annotations

@@ -2,13 +2,6 @@
 Router FastAPI per gli eseguibili.
 
 Endpoint:
-- GET    /api/eseguibili                 — lista del gruppo
-- POST   /api/eseguibili                 — crea da progetto arricchisci (solo admin)
-- GET    /api/eseguibili/{id}            — dettagli con expected_columns
-- PUT    /api/eseguibili/{id}            — aggiorna metadata (solo admin)
-- DELETE /api/eseguibili/{id}            — elimina (solo admin)
-- POST   /api/eseguibili/{id}/analyze-upload  — upload file + analisi colonne
-- POST   /api/eseguibili/{id}/execute         — esegue con mapping + lancia task
 """
 
 import os

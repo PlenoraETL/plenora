@@ -1,45 +1,7 @@
 """
 Servizio di esecuzione arricchimento dati via API esterne.
 
-Architettura
-============
-Questo modulo implementa l'esecuzione dell'arricchimento: dato un DataFrame di input
-e una configurazione API, itera le righe, chiama l'API per ciascuna, e arricchisce
-il DataFrame con i dati estratti dalla risposta JSON.
-
-Componenti:
-- RateLimiter: token bucket thread-safe per rispettare i limiti API
-- EnrichmentExecutor: classe principale con tre strategie di esecuzione
-- generate_error_report(): utility per esportare errori in CSV
-
-Strategie di esecuzione (scelta automatica in execute()):
-1. Batch nativo -> per API che accettano array di input in una sola chiamata
-2. Parallelo -> ThreadPoolExecutor con N worker + rate limiting
-3. Sequenziale -> riga per riga con deduplicazione cache
-
-Flusso di ogni chiamata API:
-1. _build_params(): costruisce parametri dalla riga (static + mapping + auth)
-2. _call_api_with_retry(): chiama con retry + exponential backoff
-3. _extract_output(): naviga la risposta JSON con dot notation annidata
-4. _apply_result(): scrive i valori estratti nelle colonne output
-
-Funzionalità chiave:
-- Deduplicazione: raggruppa righe con parametri identici, chiama API una volta
-  e applica risultato a tutto il gruppo (cache in-memory con chiave MD5)
-- Gestione errori granulare per riga (SUCCESS/ERROR/SKIPPED/RETRY_EXHAUSTED)
-- Preview su campione per stimare tempo totale prima dell'esecuzione
-- Validazione input: controlla colonne richieste e valori nulli
-- Rate limiting: token bucket + rispetto header Retry-After (HTTP 429)
-- Retry: exponential backoff configurabile con status code retriabili
-
-Autenticazione: API key (header/query), OAuth2 password grant
-
-Thread safety: cache, response_times e statistiche protetti da Lock dedicati.
-RateLimiter thread-safe per esecuzione parallela.
-
-Uso:
-    executor = EnrichmentExecutor(api_config, param_mapping, options)
-    result_df, result = executor.execute(df)
+Keeps API enrichment behavior isolated from orchestration callers.
 """
 
 import os
@@ -193,7 +155,7 @@ class EnrichmentExecutor(
         # solo quando manca un parametro davvero obbligatorio (gli opzionali null
         # vengono semplicemente omessi dalla chiamata).
         # Se l'info non è disponibile (parameters vuoto), fallback al comportamento
-        # legacy: tutti i parametri sono trattati come required.
+        # NOTE: tutti i parametri sono trattati come required.
         params_def = api_config.get("parameters") or []
         self._required_param_names = {
             p.get("name") for p in params_def

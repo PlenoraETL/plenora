@@ -1,20 +1,7 @@
-"""Contract test — gpkg/shp usano TemporaryDirectory, NON DATA_DIR/temp.
+"""
+Contract test — gpkg/shp usano TemporaryDirectory, NON DATA_DIR/temp.
 
 Post-hardening (opzione B del piano FS-residual):
-  - gpkg/shp per save_pipeline_result e enrichment_task eseguibile
-    non usano piu' `DATA_DIR/temp/urby_<pid>_<hash>/` (che orfana su
-    SIGKILL) ma `tempfile.TemporaryDirectory()` (auto-cleanup al
-    __exit__ + pulizia OS di /tmp a reboot).
-  - Upload via bytes (save_result_blob_from_bytes / eseguibili.storage.save_bytes)
-    — nessun path cleanup sovrapposto che possa confliggere col
-    context manager.
-
-Sentinel:
-  1. Dopo save_pipeline_result(gpkg): DATA_DIR/temp/ resta vuota
-  2. Il path usato nel save_dataframe inizia con `urby_gpkg_shp_` (o
-     `urby_eseg_gpkg_shp_`), NON con `DATA_DIR/temp/urby_<pid>_<hash>/`
-  3. Anche su upload failure (save_result_blob_from_bytes raise),
-     la tmp_dir viene comunque pulita.
 """
 
 from __future__ import annotations

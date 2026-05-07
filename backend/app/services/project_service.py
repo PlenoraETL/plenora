@@ -1,24 +1,7 @@
 """
 Servizio CRUD per progetti PLENORA-ETL.
 
-Architettura
-============
-Questo servizio gestisce il ciclo di vita dei progetti.
-Storage: PostgreSQL via app.db.db_service (niente filesystem per i metadati).
-
-I file risultato (CSV, XLSX, GeoPackage) vengono salvati come blob
-nella tabella `results` del DB.
-
-Operazioni:
-- list_projects(): lista tutti i progetti del gruppo
-- get_project(): recupera metadati + canvas per ID
-- create_project(): crea record progetto con canvas vuoto
-- update_canvas(): aggiorna canvas JSON
-- delete_project(): elimina progetto e risultati collegati
-- save_result(): salva file output come blob nel DB
-- get_result(): recupera blob per download
-
-Tipi progetto: ESTRAI, MANIPOLA, ARRICCHISCI
+Keeps this module's responsibility explicit and isolated from adjacent code.
 """
 
 import uuid

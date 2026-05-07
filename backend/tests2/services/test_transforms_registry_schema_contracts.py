@@ -1,22 +1,7 @@
-"""Contract test BE-PHASE3-SCHEMA-CONTRACTS-001-REGISTRY-METADATA —
+"""
+Contract test BE-PHASE3-SCHEMA-CONTRACTS-001-REGISTRY-METADATA —
+
 `output_columns` schema contract metadata in `transforms_registry.json`.
-
-Verifica che il registry esponga il contratto schema-inference per i
-transform i cui handler accettano `output_columns` (introdotti in
-BE-PHASE2-SCHEMA-INFER-009-ZERO-RESIDUALS):
-
-- `flatten_json`
-- `transpose`
-
-Il parametro `output_columns` e' un **schema contract** (non un
-runtime parameter): viene consumato da
-`SchemaInferenceService._schema_flatten_json` /
-`_schema_transpose` per la dichiarazione canvas-time delle colonne
-attese. Quando vuoto, lo schema cade in passthrough deterministic
-(no MIGRATE_NEXT). Il runtime transform NON legge questo campo.
-
-Source-bound: parsa `transforms_registry.json` come fonte di verita'.
-Failure qui = registry/handler drift sul contratto.
 """
 
 from __future__ import annotations

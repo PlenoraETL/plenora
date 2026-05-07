@@ -2,45 +2,6 @@
 Parser configurabile per risposte API con strutture JSON annidate.
 
 Progettato per gestire risposte API complesse (es. ItaliaMeteo, GeoJSON)
-dove i dati sono annidati in più livelli di array e oggetti.
-
-Architettura del parsing:
-    1. Root path: dove iniziare l'estrazione nell'albero JSON
-    2. Iterate on: array da attraversare gerarchicamente (multi-livello)
-    3. Mappings: regole per estrarre i campi e assegnarli a colonne
-    4. Transforms: trasformazioni post-estrazione (calcoli, conversioni)
-
-Navigazione path supportata:
-    - Dot notation: "stat.lat" → data["stat"]["lat"]
-    - Indice array: "details[0]" → data["details"][0]
-    - Filtro array: "details[var=B01019]" → primo elemento con var=="B01019"
-
-Esempio configurazione per ItaliaMeteo:
-    {
-        "root_path": "data",
-        "iterate_on": [
-            {"path": "", "as": "station"},
-            {"path": "prod", "as": "product"},
-            {"path": "val", "as": "measurement"}
-        ],
-        "mappings": [
-            {"column": "lat", "path": "station.stat.lat"},
-            {"column": "lon", "path": "station.stat.lon"},
-            {"column": "valore", "path": "measurement.val"}
-        ],
-        "transforms": [
-            {"column": "celsius", "source": "valore", "operation": "kelvin_to_celsius"}
-        ]
-    }
-
-Uso:
-    from app.utils.response_parser import ResponseParser, parse_response
-
-    parser = ResponseParser(config)
-    righe = parser.parse(risposta_json)
-
-    # Oppure con helper diretto
-    righe = parse_response(risposta_json, config)
 """
 
 import re

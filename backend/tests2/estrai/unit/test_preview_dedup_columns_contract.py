@@ -1,23 +1,7 @@
-"""Contract test — RB.3 (2026-04-27) duplicate columns nella preview ESTRAI.
+"""
+Contract test — RB.3 (2026-04-27) duplicate columns nella preview ESTRAI.
 
 BUG.md #6:
-    DataFrame con colonne duplicate -> df.to_dict(orient='records') emette
-    UserWarning "DataFrame columns are not unique, some columns will be
-    omitted" e perde silenziosamente colonne. La preview rispondeva 200 OK
-    ma con righe incomplete, l'utente non se ne accorgeva.
-
-Fix:
-    `_dedup_column_names` rinomina in modo stabile aggiungendo suffisso
-    `_2`, `_3`, ... gestendo collisioni con nomi gia' presenti.
-    `_dedup_dataframe_columns_for_serialization` applica la rename al
-    DataFrame e ritorna la lista di warning visibili da inserire nella
-    response.
-
-Scope test:
-    - input puro: nomi colonne (no DataFrame)
-    - input integrato: DataFrame con colonne duplicate
-    - edge case: collisione con suffisso gia' usato come nome colonna
-    - sanity: nessun duplicato -> no rinomina, no warning
 """
 
 from __future__ import annotations
@@ -107,7 +91,7 @@ def test_dedup_dataframe_with_duplicates_preserves_all_columns():
     assert out_df.shape == (2, 3)
     assert list(out_df.columns) == ["id", "nome", "id_2"]
 
-    # Warning visibili nella response
+    # NOTE: visibili nella response
     assert len(warnings) == 1
     assert "id" in warnings[0]
     assert "id_2" in warnings[0]

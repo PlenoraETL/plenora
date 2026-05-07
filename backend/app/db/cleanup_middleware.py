@@ -2,8 +2,6 @@
 Middleware FastAPI per il cleanup delle connessioni DB.
 
 Con PostgreSQL (psycopg2 ThreadedConnectionPool), le connessioni vengono
-restituite al pool automaticamente dai wrapper in pg_connection.py.
-Il middleware è mantenuto come hook per eventuali cleanup futuri.
 """
 
 from starlette.middleware.base import BaseHTTPMiddleware

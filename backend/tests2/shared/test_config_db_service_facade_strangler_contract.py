@@ -1,51 +1,7 @@
-"""Source-bound strangler — `app.db.config_db_service` facade.
+"""
+Source-bound strangler — `app.db.config_db_service` facade.
 
 Locks the config DB facade against new consumers. The facade
-`app/db/config_db_service.py` is a compatibility re-export shell after
-micro-batch G #9: every leaf cluster (users, projects, connections,
-file_sources, datasources, api_connections, schedules, comparison_keys)
-now lives under `app/db/config/<cluster>.py` with a 1:1 signature.
-
-Five symbols are still owned by the facade and may legitimately be
-imported through it:
-
-  - `_safe_set_clause` / `_ALLOWED_UPDATE_FIELDS`: cross-cluster helpers
-    consumed lazily by 5 leaf modules to break a facade ↔ leaf import
-    cycle without duplicating the whitelist.
-  - `init_db`: thin delegate over `pg_connection.init_db`.
-  - `update_project_canvas_key_atomic`: 62-LOC SELECT FOR UPDATE +
-    JSON merge transaction, kept verbatim to preserve atomic contract
-    + the 8 dedicated test files patching `cfg_db.update_*` directly.
-
-GROUPS cluster (`get_group`, `list_groups`, `create_group`,
-`get_group_summary`, `delete_group`, `delete_group_cascade`) was
-extracted to `app/db/config/groups.py` by
-`BE-GO-READY-DB-ENGINE-002-GROUPS-CLUSTER-EXTRACTION`.
-`BE-GO-READY-DB-ENGINE-003-GROUPS-CALLSITE-MIGRATION` then migrated
-the production callsites: `groups_router.py` no longer imports the
-facade (allowlist row removed), and `project_service.py` switched
-its 2 group calls (`_ensure_default_group`) to the canonical leaf
-while keeping the facade import for `update_project_canvas_key_atomic`
-(SELECT FOR UPDATE + JSON merge stays in the facade).
-
-Every other symbol re-exported by the facade has a canonical leaf
-module. New code MUST import those names from the leaf, not from
-the facade.
-
-The allowlist below freezes the current set of production callers
-that still resolve through the facade. Any new file under
-`backend/app/` or `backend/workers/` that imports
-`app.db.config_db_service` (in any form) breaks this test and must
-either:
-
-  1. Migrate to the canonical `app.db.config.<cluster>` module
-     (preferred), or
-  2. Be added to `_FACADE_PROD_ALLOWLIST` with a paired worker
-     task explaining why migration was deferred.
-
-Stays source-bound (AST walk, zero app imports) to mirror the
-posture of `test_auth_facade_strangler_contract.py` and
-`test_architecture_legacy_patterns.py`.
 """
 
 from __future__ import annotations

@@ -1,32 +1,8 @@
 #!/usr/bin/env python3
-"""intermediate_run_report.py — Report read-only per UNA `run_id`.
+"""
+intermediate_run_report.py — Report read-only per UNA `run_id`.
 
 Scope (Phase 6, post-Batch 3):
-  Verificare che la nuova policy `INTERMEDIATE_PERSISTENCE_MODE` abbia
-  davvero ridotto il volume di `node_rows` per i moduli MANIPOLA / ESTRAI
-  / ARRICCHISCI. NON e' un mini-framework: input = `run_id`, output =
-  tabellina + summary.
-
-Cosa stampa per ogni nodo:
-  - node_id
-  - node_type
-  - persistence_mode (NULL legacy = mostrato come `full_pg(legacy)`)
-  - row_count       -> righe reali del dataset
-  - persisted_rows_count -> righe in `node_rows` per questo nodo
-  - preview_truncated
-  - node_hash present? (Y/N)
-  - actual rows in node_rows (COUNT)  -> deve coincidere con
-    persisted_rows_count (drift = bug)
-  - jsonb_bytes (sum di pg_column_size(row_data) sulle righe persistite),
-    skip silenzioso se la query fallisce per privilegi o tipi.
-
-Uso:
-  python scripts/intermediate_run_report.py <run_id>
-
-Read-only: solo SELECT, nessuna scrittura.
-
-NB: il report attinge dal DB applicativo (`app.db.pg_connection`).
-Richiede DATABASE_URL valido nell'env (come gli altri script).
 """
 
 from __future__ import annotations

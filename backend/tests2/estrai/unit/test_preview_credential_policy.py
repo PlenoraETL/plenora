@@ -1,21 +1,7 @@
-"""Contract test — Bug preview/execute consumer post-#6 cluster (2026-04-23).
+"""
+Contract test — Bug preview/execute consumer post-#6 cluster (2026-04-23).
 
 Blinda: quando `connection_service.get_connection` raise
-`CredentialUnavailableError` (policy introdotta in commit fd35cf4 per
-Bug #1 sul path /test), i consumer preview e execute di
-`EstraiExecutor` DEVONO tradurre in result-dict
-``{"success": False, "message": "credenziale ...", "user_error": True}``
-invece di lasciare bubblare al worker Celery (che genererebbe [CRASH]
-+ task FAILURE opaco).
-
-Regression risk: prima del fix, solo `ValueError` era catturato a
-riga 180 (execute) e 317 (preview); `CredentialUnavailableError`
-non e' ValueError, quindi bubbla — coperto qui.
-
-Scope:
-- preview() e execute() ugualmente testati (stesso pattern, stesso difetto)
-- le altre eccezioni (RuntimeError/non-credential) devono continuare a
-  bubblare: il catch nuovo NON e' swallow-all
 """
 
 from __future__ import annotations

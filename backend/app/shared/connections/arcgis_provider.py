@@ -1,18 +1,7 @@
-"""Minimal ArcGIS provider protocol - read operations used by IMDF validation.
+"""
+Minimal ArcGIS provider protocol - read operations used by IMDF validation.
 
 ADR-0023 / BE-GO-READY-ARCH-058-W5.
-
-Defines only what ``imdf/validator.py`` needs from an ArcGIS client:
-  - ``count_features_where``  - WHERE-filtered count via POST /query
-  - ``list_layers``           - layer list for a Feature Service URL
-  - ``get_layer_schema``      - field schema for a single layer
-
-``ArcGISClient`` (``app.core.features.arcgis_client``) satisfies this
-protocol via structural subtyping - no explicit declaration required
-on the concrete class.
-
-Leaf module: stdlib + ``arcgis_connection`` (same package).
-No ``app.core.*``, no heavy runtime libraries.
 """
 
 from __future__ import annotations

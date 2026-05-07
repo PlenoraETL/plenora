@@ -1,20 +1,7 @@
-"""Contract test F5-B4 (2026-04-24) — SharePoint sanitize Office365 SDK leak.
+"""
+Contract test F5-B4 (2026-04-24) — SharePoint sanitize Office365 SDK leak.
 
 Blinda: il path SharePoint non espone mai str(e) Office365-REST/msal/
-requests raw nei messaggi utente (test_connection + DataSourceConnectionError).
-Il dettaglio tecnico (site_url autenticato, tenant_id, client_id, Bearer
-token, AADSTS code, HTTP response body) resta nei log server-side via
-logger.warning con exc_info=True.
-
-Regression history: prima del fix, 9 punti in sharepoint.py leakavano
-str(e) user-facing:
-  - connect auth catch f"Autenticazione SharePoint fallita: {e}"
-  - test_connection catch Exception f"Errore inatteso: {e}"
-  - 6 operazioni file: raise DataSourceConnectionError(f"Errore <op>: {e}")
-  - _upload_chunked: idem
-
-Coerente con F5-B2 (FTP/SFTP) + F5-B3 (MSSQL): mapping canonico italiano,
-priorita' AADSTS -> HTTP status -> network/TLS -> fallback.
 """
 
 from __future__ import annotations

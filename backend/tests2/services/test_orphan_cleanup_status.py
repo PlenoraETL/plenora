@@ -1,20 +1,7 @@
-"""[phase-2-err][batch9] C3 — orphan_cleanup_service status esplicito.
+"""
+[phase-2-err][batch9] C3 — orphan_cleanup_service status esplicito.
 
 Audit Batch 9 §3.2 S7 / fix F5: `cleanup_orphans` ritornava un dict con
-`errors: [...]` ma senza chiave che distinguesse "scan completato con
-successo, nessun orfano" da "scan/delete parzialmente fallito in silenzio".
-Un caller admin che leggeva `rows_deleted=0, errors=[...]` non aveva modo
-dict-shape-level di distinguere dal caso "nothing to do".
-
-Post-fix:
-  - chiave `status` aggiunta al report: `"clean"` di default, `"partial"`
-    se `errors` non vuoto al termine.
-  - log finale promosso da `info` a `warning` quando `status == "partial"`.
-  - `exc_info=True` sui 2 outer catch gia' presente (verifica).
-
-Tutti i fix sono **additive**: nessun cambio di contratto esistente
-(chiavi precedenti intatte), solo aggiunta di `status` nel dict returned
-+ livello log piu' severo su partial.
 """
 
 from __future__ import annotations

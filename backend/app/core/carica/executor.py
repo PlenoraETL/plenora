@@ -1,30 +1,7 @@
 """
 Entry point per l'esecuzione del modulo CARICA.
 
-Architettura
-============
-Questo modulo è il punto di ingresso per il modulo CARICA. Riceve il
-DataFrame (output del nodo Result) e la configurazione dal nodo canvas,
-e orchestra il processo di scrittura:
-
-1. Parsing configurazione dal nodo canvas
-2. Creazione engine SQLAlchemy (riusa DefaultEngineFactory di ESTRAI)
-3. Auto-mapping colonne se non configurate dall'utente
-4. Validazione pre-scrittura
-5. Creazione del DatabaseWriter e esecuzione
-6. Salvataggio audit record
-
-Questo file è intenzionalmente snello: la logica complessa è nei moduli
-specializzati (database_writer per la scrittura, ddl_generator per il DDL,
-column_mapper per il mapping, conflict_checker per i conflitti).
-
-Chiamato da:
-- core/manipola/executor.py quando il nodo Output ha un nodo CARICA collegato
-- workers/tasks/carica_task.py per l'esecuzione asincrona via Celery
-
-Uso:
-    executor = CaricaExecutor(connection_service)
-    result = executor.execute(df, canvas_node_data, project_id)
+Keeps database loading behavior isolated from orchestration callers.
 """
 
 import json

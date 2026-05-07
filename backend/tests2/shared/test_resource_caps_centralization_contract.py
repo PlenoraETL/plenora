@@ -1,46 +1,7 @@
-"""Source-bound contract for the centralized resource cap resolver.
+"""
+Source-bound contract for the centralized resource cap resolver.
 
 BE-GO-READY-MEMORY-ENGINE-006-CENTRALIZE-RESOURCE-CAPS.
-
-Locks that the two resource-engine loaders use the shared helper
-(``app.core.resources.resource_caps.resolve_resource_max_bytes``)
-and do NOT reimplement env parsing locally.
-
-Drift mode the lock prevents
-----------------------------
-Pre-006 the result-blob loader and the file-source-blob loader
-each owned a private ``_resolve_max_bytes`` that read the
-``RESOURCE_MAX_BYTES`` env, did the same int-coerce + non-positive
-fallback, and returned the same 200 MB default. Two copies, one
-contract; the canonical drift is a future env-validation tweak
-(e.g. accept ``"500MB"`` suffix syntax) landing in one loader and
-not the other, producing a tenant-visible behavioral split that
-no test would catch.
-
-What this contract bans (per loader file)
------------------------------------------
-- direct reads of ``os.environ.get("RESOURCE_MAX_BYTES")`` or any
-  variant (``os.getenv("RESOURCE_MAX_BYTES")``);
-- a private ``_DEFAULT_*_MAX_BYTES`` integer constant in the
-  loader (the canonical default lives in
-  ``resource_caps.RESOURCE_MAX_BYTES_DEFAULT``);
-- a function body that contains both an ``int(...)`` cast AND a
-  ``RESOURCE_MAX_BYTES`` literal -- that is structurally a local
-  env-parsing reimplementation.
-
-Both loaders MUST NOT expose a ``_resolve_max_bytes`` compat alias
-anymore. BE-GO-READY-MEMORY-ENGINE-007 made the shared helper the
-only public entry point for this cap.
-
-Why source-bound
-----------------
-The helper is stdlib-only and the loaders' import boundary is
-already locked by
-``test_resource_engine_anti_god_engine_lock.py``. This test is
-narrower: it inspects each loader's source for forbidden tokens
-(env reads + parallel default constants), so a future contributor
-who copy-pastes a private resolver gets a fail-loud signal at
-test time.
 """
 
 from __future__ import annotations

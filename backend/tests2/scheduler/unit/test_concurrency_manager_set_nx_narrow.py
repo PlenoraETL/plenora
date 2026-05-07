@@ -1,20 +1,7 @@
-"""[phase-2-err][batch7] 7.d — narrow catch su concurrency_manager._set_nx.
+"""
+[phase-2-err][batch7] 7.d — narrow catch su concurrency_manager._set_nx.
 
 Audit Batch 7 §3.6 [MEDIA] — pre-fix `_set_nx` aveva `except Exception:
-return False` con commento "chiave gia' esistente": QUALUNQUE errore DB
-(pool exhausted, connection down, bug logici) veniva mascherato come "lock
-gia' preso". Il caller `try_acquire` poi incrementava `queue_key` e
-ritornava "queued" → task accodato su DB non funzionante → stato corrotto.
-
-Post-7.d:
-  - Catch narrow `(psycopg2.errors.UniqueViolation, psycopg2.IntegrityError)`
-    preserva la semantica control-flow UNIQUE constraint.
-  - Altri errori propagano: il caller `try_acquire` li propaga a
-    `ExecutionManager.execute` outer boundary che traduce in status
-    failure esplicito.
-  - Nessuna nuova exception class: riuso tipi psycopg2 standard.
-  - Nessun logger warning/error nel path UniqueViolation (control-flow
-    tipizzato, non diagnostica).
 """
 
 from __future__ import annotations

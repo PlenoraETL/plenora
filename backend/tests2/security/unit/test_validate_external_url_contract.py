@@ -1,16 +1,7 @@
-"""Lock tests per `app.shared.api_utils.validate_external_url`.
+"""
+Lock tests per `app.shared.api_utils.validate_external_url`.
 
 Garantisce il contratto SSRF anti-loopback + l'opt-in di test
-`PLENORA_ALLOW_LOOPBACK_OUTBOUND=1` (canonical) / `URBY_ALLOW_LOOPBACK_OUTBOUND=1`
-(alias retro-compat, deprecato — rinominato 2026-04-23 / P1.5). Senza
-questi test, una regression silente nella validazione SSRF abiliterebbe
-richieste backend verso servizi bind-loopback (Redis, Postgres, EC2
-metadata, ecc.).
-
-Blinda anche S6 / P2.4 (chiuso 2026-04-23): il flag e' IGNORATO by
-design in ambienti hardened (`ENVIRONMENT in {production, prod,
-staging, stage}`), simmetrico a `crypto.py` guard e
-`config.py _DOTENV_DISABLED_ENVS`.
 """
 
 import pytest

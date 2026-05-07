@@ -1,17 +1,7 @@
-"""Bench formalizzato: `op_md5_hash` nuovo impl vs legacy vs naive apply.
+"""
+Bench formalizzato: `op_md5_hash` nuovo impl vs legacy vs naive apply.
 
 L'impl pre-Batch-2B di `op_md5_hash` costruisce un parts_df colonna-per-colonna
-(ok, vettoriale), poi fa `parts_df.agg(separator.join, axis=1)` seguito da
-`combined.map(hashlib.md5(...).hexdigest())`. Le ultime due sono Python
-row-iter: due passaggi indipendenti su n righe.
-
-Questo file formalizza il confronto con il legacy e impone speedup ≥ 3x
-e throughput minimo. Stessa disciplina di test_bench_op_concat_columns:
-warmup + median di N, assertion esplicite, stampa parametri.
-
-Esecuzione:
-    pytest backend/tests2/performance/test_bench_op_md5_hash.py \
-        -m perf_bench -s -q
 """
 
 from __future__ import annotations

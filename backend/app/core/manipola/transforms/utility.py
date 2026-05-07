@@ -1,48 +1,7 @@
 """
 Cluster UTILITY — operazioni di colonna derivata per-riga.
 
-Origine
-=======
-Estratto da `app.core.manipola.transforms.base` come parte di Phase 5
-Batch B1.3c (cluster split, vedi
-`orchestrate/PHASE_5_ENTRY_PLAN.md` §3 P5-B1 + §6.1 facade pattern).
-
-Contenuto:
-  - `op_add_row_number` — colonna progressiva (globale o per partizione,
-                          con eventuale ordinamento prima della numerazione).
-  - `op_date_extract`   — estrazione componenti (year/month/day/quarter/
-                          weekday/week/hour/minute/second) da una colonna
-                          datetime.
-  - `op_uuid_generator` — UUID v4 random per riga (chiavi sintetiche).
-
-Razionale del raggruppamento: tutte e tre creano una **colonna derivata
-per-riga** senza trasformare i dati di input esistenti (non sono
-filtri, join, aggregati, normalizzazioni). Singolo cluster cohesive.
-
-Invarianti pubbliche preservate (regola §6.1 zero call-site changes):
-  - `from app.core.manipola.transforms.base import <op>` continua a
-    funzionare per tutte e 3 le funzioni grazie al facade re-export
-    in `base.py`.
-  - Nessuna delle 3 funzioni e' esposta da `transforms/__init__.py`
-    (verificato pre-extraction) → nessun cambio init richiesto.
-  - `transforms_registry.json` con entries `"base.op_add_row_number"` /
-    `"base.op_date_extract"` / `"base.op_uuid_generator"` continua a
-    risolvere via `getattr(<base module>, "<func>")` dal `PluginExecutor`.
-  - Nuovo path canonico `from app.core.manipola.transforms.utility
-    import <op>` disponibile.
-
-Logger naming
-=============
-Logger creato esplicitamente come
-`"app.core.manipola.transforms.base"` (NON `__name__`) per preservare
-il contratto osservabile pre-extraction: i record `AddRowNumber`,
-`DateExtract`, `UUIDGenerator` (incluso `[CRASH] ...`) continuano ad
-apparire sotto il logger name dei consumer. Stesso pattern di
-`joins.py` (B1.1b) e `strings.py` (B1.3a).
-
-Il body sotto e' una copia BIT-PER-BIT delle implementazioni in
-`base.py` al momento di B1.3c. Nessuna modifica di logica, comment,
-log payload, o ordine di operazione.
+Keeps transformation behavior isolated from orchestration callers.
 """
 
 import uuid

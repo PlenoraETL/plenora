@@ -1,26 +1,7 @@
-"""Contract test — ogni `datetime.now()` nel codebase e' UTC aware.
+"""
+Contract test — ogni `datetime.now()` nel codebase e' UTC aware.
 
 Pattern AST-based (stessa filosofia di `test_csv_encoding_explicit_contract.py`):
-catturiamo a CI-time qualsiasi PR che reintroduca `datetime.now()` o
-`datetime.utcnow()` naive (deprecated dal 3.12) nei moduli di produzione.
-
-Block:
-  - `datetime.now()`           (no args, no `tz` kwarg) → naive local-time
-  - `datetime.utcnow()`        (deprecated dal 3.12) → naive UTC
-
-Allow:
-  - `datetime.now(timezone.utc)`
-  - `datetime.now(tz=timezone.utc)` (qualsiasi tz kwarg esplicito)
-  - `time_provider.now()`, `self._time.now()`, ecc. (receiver != Name 'datetime')
-
-Scope: `app/` + `workers/`. Test e scripts esclusi: i test possono
-freezare timestamp in modi vari, gli script CLI tipicamente girano
-una volta sola e il rischio drift non si materializza.
-
-Motivazione: timestamp naive salvati in DB TIMESTAMPTZ vengono
-interpretati da PostgreSQL come local time del server, generando bug
-temporali invisibili (off-by-N-hours, ordering errato in catene
-con failover cross-AZ, audit log con offset incoerenti).
 """
 
 from __future__ import annotations

@@ -1,64 +1,7 @@
-"""Arricchisci execution context — typed boundary.
+"""
+Arricchisci execution context — typed boundary.
 
 BE-GO-READY-TRANSFORMATION-ENGINE-015-ARRICCHISCI-EXECUTION-CONTEXT.
-BE-GO-READY-ORCHESTRATION-ENGINE-012-KILL-APPLY-TO-LEGACY-STATE.
-BE-GO-READY-ARCH-056-W1-SHARED-CANVAS-EXECUTION-CONTEXT.
-
-Introduce un boundary tipato per il contesto di una singola
-esecuzione canvas-arricchisci. Post-OE011 / OE012 il modulo
-NON scrive piu' alcuno stato sul singleton
-`api_connection_service`: i mixin di produzione consumano
-direttamente il `ctx`, e il vecchio scaffold "mirror legacy"
-(`apply_to_legacy_state`) e' stato eliminato.
-
-KEEP_COMPAT: `ArricchisciExecutionContext` is now a thin frozen
-subclass of `app.shared.execution.context.CanvasExecutionContext`
-(W1, 056). The shared base carries the three fields; the Arricchisci
-class adds nothing — its only purpose is to preserve the
-`__name__ == "ArricchisciExecutionContext"` contract required by
-existing tests and call sites. Manipola migration is deferred
-to a later batch (Worker 6 owns Manipola).
-
-Boundary contract
-=================
-`ArricchisciExecutionContext` e' un `@dataclass(frozen=True)`
-immutabile che incapsula i 3 dati per-execution:
-
-- `project_id` — id del progetto in esecuzione (input al
-  `db_svc.get_project` lookup);
-- `group_id` — tenant binding fail-closed; None significa
-  "contesto di sicurezza non determinabile" (i mixin downstream
-  rifiutano l'operazione con `ValueError` esplicito);
-- `preview_limit` — opzionale `int>0` per truncating del
-  DataFrame in modalita' preview (`_load_file_source`).
-
-Pattern di uso
-==============
-```python
-ctx = build_execution_context(project_id, preview_limit)
-# ctx.group_id == _proj_row['group_id'] o None se progetto inesistente
-# I mixin di produzione ricevono il ctx come parametro esplicito
-# (signature *_with_ctx); nessuno stato viene mirror-ato sul
-# singleton.
-```
-
-Concurrency
-===========
-`@dataclass(frozen=True)` produce un'istanza immutabile dopo la
-costruzione (raise `FrozenInstanceError` su setattr). Due
-esecuzioni concorrenti che istanziano due
-`ArricchisciExecutionContext` distinti hanno tenant/preview
-state isolato byte-per-byte. Il `workers/tasks/enrichment_task.py`
-istanzia una nuova `ApiConnectionService` per task; questo
-modulo offre lo stesso pattern come boundary tipato esplicito.
-
-Go-ready mapping
-================
-    type ExecutionContext struct {
-        ProjectID    string
-        GroupID      *string  // nullable
-        PreviewLimit *int     // nullable, >0 if set
-    }
 """
 
 from __future__ import annotations

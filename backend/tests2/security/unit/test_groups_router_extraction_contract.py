@@ -1,29 +1,7 @@
-"""Contract test BE-GO-READY-AUTH-ENGINE-004 — groups_router extraction.
+"""
+Contract test BE-GO-READY-AUTH-ENGINE-004 — groups_router extraction.
 
 Lock i 6 invariant dell'estrazione:
-
-1. **Source location**: i 4 endpoint admin CRUD vivono in
-   `app/core/auth/groups_router.py` (non piu' in `auth.py`).
-2. **KEEP_COMPAT**: `from app.core.auth.auth import groups_router`
-   continua a funzionare (re-export pubblico).
-3. **KEEP_COMPAT funzionale**: i 4 handler sono raggiungibili come
-   `auth_mod.<name>(...)` per i test esistenti
-   (`test_auth_delete_group_logging_contract.py::auth_mod.delete_group`).
-4. **URL paths preserved**: `/auth/groups` GET/POST,
-   `/auth/groups/{id}/summary` GET, `/auth/groups/{id}` DELETE.
-5. **Mount**: `main.py` espone gli endpoint
-   `/api/auth/groups*` tramite
-   `app.include_router(groups_router, prefix="/api")`.
-6. **No circular import**: `groups_router.py` NON importa al
-   top-level `from app.core.auth.auth import require_admin /
-   require_superadmin / get_current_user`. Usa il proxy-locale
-   con import lazy (mirror del fix users_router).
-
-Boundary contract NON toccato: error code, messaggi italiani,
-status code, headers, cascade-delete behavior restano gestiti dal
-layer `disclosure` + `cfg_db.delete_group_cascade`. Suite
-`test_auth_delete_group_logging_contract.py` resta verde
-post-batch.
 """
 
 from __future__ import annotations

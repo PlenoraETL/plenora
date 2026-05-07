@@ -1,9 +1,7 @@
-"""ArtifactResolver: dispatch unico per materializzare un Ref in un
-file su disco / DataFrame inline / blob raw.
+"""
+ArtifactResolver: dispatch unico per materializzare un Ref in un
 
-Core-level: nessuna dipendenza da `CurrentUser` o dal layer HTTP.
-Lavora con `project_id` / `group_id` espliciti, fail-closed sui
-check di tenant binding.
+file su disco / DataFrame inline / blob raw.
 """
 
 from __future__ import annotations
@@ -173,7 +171,7 @@ class ArtifactResolver:
         try:
             resource = default_registry().get(result_ref, mode="path")
         except FileNotFoundError:
-            # Legacy semantics: missing / unavailable blob -> None
+            # NOTE: legacy semantics: missing / unavailable blob -> None
             # (NOT ArtifactResolutionError). The router/UI treats
             # None as "no latest result available"; raising would
             # 500 the request.

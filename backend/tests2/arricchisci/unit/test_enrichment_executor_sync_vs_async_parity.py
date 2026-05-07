@@ -1,28 +1,7 @@
 """
 Parity test tra _execute_parallel (sync) e _execute_parallel_async (async).
 
-Contesto
-========
-Il flag ENABLE_ASYNC_ENRICHMENT=true e' attivo in produzione
-(/home/ubuntu/plenora-etl/backend/.env). I due path vivono insieme.
-Questi test fissano il contratto osservabile atteso per entrambi.
-
-Tassonomia:
-- T1, T2, T3, T5 = parity stabile (gia' passanti pre-fix).
-- T4, T6         = parity di hardening (rossi pre-fix del path async, verdi dopo).
-- T7, T8         = divergenze accettate: documentano il comportamento attuale
-                   di ciascun path senza forzarne l'allineamento.
-
-Nota su T3: lo "stampede cache" teorico non e' osservabile perche'
-_group_by_params mappa ogni cache_key a un singolo task. Il test resta a
-presidio: se qualcuno in futuro cambia la costruzione di unique_groups,
-la regressione emergerebbe qui.
-
-Vincoli del test:
-- Nessuna rete: _call_api_with_retry monkeypatchato a livello di istanza.
-- Nessun DB: EnrichmentExecutor non tocca il catalogo PG.
-- Nessun import di app.db.*: il conftest di unit/ risolve eventuali
-  dipendenze tramite ApiConnectionService, non toccato qui.
+Locks backend contracts and regression boundaries for the current architecture.
 """
 import asyncio
 import threading

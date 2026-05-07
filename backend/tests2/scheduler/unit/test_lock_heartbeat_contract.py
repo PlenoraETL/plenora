@@ -1,22 +1,7 @@
-"""Contract test PR-#36 - LockHeartbeat class API (R-05 deterministic).
+"""
+Contract test PR-#36 - LockHeartbeat class API (R-05 deterministic).
 
 Scope: blinda l'API pubblica della class estratta in
-`app.core.scheduler._lock_heartbeat.LockHeartbeat`.
-
-Invarianti testati:
-  - `start()` spawn thread daemon
-  - `stop()` set stop_event + join idempotente, timeout 5s
-  - `get_state_dict()` ritorna reference live (non copia) cosi' le
-    mutazioni del thread loop sono visibili al chiamante
-  - lock_lost flag: True solo se refresh_lock False AND try_acquire
-    NON "acquired"; rimane False altrimenti
-  - exception in refresh_lock / try_acquire NON propaga ma logga
-    warning e continua (transient blip safe)
-  - context manager (`with LockHeartbeat(...)`) chiama start/stop
-
-R-05: i test usano FakeClock invece di time.sleep reali. Il thread
-heartbeat e' parked su clock.wait(stop, interval); per forzare un tick
-basta wait_for_pending_waiters(1) + advance(interval+epsilon).
 """
 
 from __future__ import annotations

@@ -1,16 +1,7 @@
-"""ScheduleArtifactStore: archiviazione output run schedulate.
+"""
+ScheduleArtifactStore: archiviazione output run schedulate.
 
 Responsabilita' singola: copiare i file output di un progetto in una
-cartella timestamped sotto `RESULTS_DIR/{project_id}/runs/...`,
-preservando lo storico delle esecuzioni schedulate (l'orchestrator
-sovrascrive sempre lo stesso path `RESULTS_DIR/{project_id}/`).
-
-Vive come classe dedicata (non come metodo di `ExecutionManager`) per:
-- testabilita' isolata (niente mock di mezzo execution manager)
-- DI esplicito su `results_dir` (no monkey-patch di settings)
-
-`ExecutionManager` istanzia `self._artifact_store` nel costruttore e
-i caller interni chiamano direttamente `self._artifact_store.archive(...)`.
 """
 
 from __future__ import annotations

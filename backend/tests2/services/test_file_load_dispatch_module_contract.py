@@ -1,20 +1,7 @@
-"""Smoke contract - STRUCT-001 Seam D-B: estrazione load_by_format.
+"""
+Smoke contract - STRUCT-001 Seam D-B: estrazione load_by_format.
 
 Verifica le invarianti minime del refactor:
-
-  1. Format tabular -> dispatch al loader.load_csv/load_excel/load_json,
-     gdf=None.
-  2. Format geo-spaziale -> dispatch a loader.load_geospatial + conversione
-     della colonna `geometry` in WKT (gdf NON None).
-  3. Format geo-spaziale senza colonna `geometry` -> nessuna conversione,
-     ma gdf comunque ritornato.
-  4. Format unsupported -> ValueError con il nome del format nel messaggio.
-  5. Logger.info chiamato con il count di righe e colonne (osservabilita').
-  6. Wrapper FileSourceService._load_by_format delega correttamente alla
-     funzione comune con il loader e logger del service.
-
-Mock dei loader (DataLoaderProtocol-like) per evitare geopandas/fiona/
-parser reali. Nessun touch a load_dataframe/get_preview/get_layers_info.
 """
 
 from __future__ import annotations

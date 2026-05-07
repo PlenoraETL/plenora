@@ -1,3 +1,9 @@
+"""
+Provides pytest fixtures for tests2 tests.
+
+Centralizes local pytest setup for the surrounding test package.
+"""
+
 import os
 from pathlib import Path
 import sys
@@ -232,7 +238,7 @@ def _stub_audit_action_write(request, monkeypatch):
 # Problema simmetrico ad audit_action: `PostgresLogHandler.emit` (definito
 # in `app/utils/logger.py:323`) e' attaccato ai logger applicativi e fa
 # `pg_connection.execute(INSERT INTO logs ...)` per ogni record di livello
-# WARNING+. Quando un test unit/contract triggera un `logger.error(...)`
+# NOTE: +. Quando un test unit/contract triggera un `logger.error(...)`
 # (es. `[CRASH]` su un router decorato chiamato via TestClient), l'handler
 # tenta `psycopg2.connect` su un DATABASE_URL non disponibile in unit-env.
 # L'eccezione e' catturata da `self.handleError` (vedi logger.py:393-394)

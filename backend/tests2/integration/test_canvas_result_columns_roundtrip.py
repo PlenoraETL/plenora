@@ -1,23 +1,7 @@
-"""Integration test C9 — canvas round-trip ResultNode columns.
+"""
+Integration test C9 — canvas round-trip ResultNode columns.
 
 Pre-C9 bug: il PUT /canvas salvava `result_node.columns` as-is dal
-frontend. Se il frontend inviava columns vuote (caso comune con
-api_enrich upstream senza `data.columns`), al reload la UI mostrava
-ResultNode vuoto anche con un grafo logicamente valido.
-
-Post-C9 fix: al PUT /canvas il backend ricomputa autorevolmente le
-colonne del result via SchemaInferenceService e le inietta nel canvas
-in-memory prima di persistere. Il canvas salvato contiene quindi
-columns corrette, che sopravvivono al reload.
-
-Questo test esercita direttamente la funzione endpoint
-`update_project_canvas` con service mockati — verifica che:
-1. Con canvas source → api_enrich → result (result.columns=[],
-   api_enrich.output_mapping popolato), dopo il PUT il canvas
-   passato a `update_canvas` ha result_node.columns NON VUOTO e
-   con i campi dell'output_mapping.
-2. Le customizzazioni utente (alias/visible) pre-esistenti su
-   result_node sopravvivono al recompute.
 """
 
 from __future__ import annotations
@@ -71,7 +55,7 @@ def _build_canvas_with_empty_result_columns():
             id="res1",
             type="result",
             position=Position(x=400, y=0),
-            columns=[],  # BUG SCENARIO: frontend ha inviato vuoto
+            columns=[],  # FIXME scenario: frontend ha inviato vuoto
             data={},
         ),
     ]

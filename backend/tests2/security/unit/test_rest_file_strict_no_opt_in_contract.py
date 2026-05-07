@@ -1,15 +1,7 @@
-"""Contract test PR-#35 P1-C — REST_FILE shim strict-no-opt-in.
+"""
+Contract test PR-#35 P1-C — REST_FILE shim strict-no-opt-in.
 
 Scope: blinda la decisione di design dietro PR-#35 (SSRF single-source):
-il shim REST_FILE `ApiConnectionSourceLoadingMixin._validate_outbound_url`
-delega alla primitive `_check_outbound_address(url,
-allow_loopback_opt_in=False)`, quindi loopback (IPv4 e IPv6) resta
-bloccato anche se l'env opt-in `PLENORA_ALLOW_LOOPBACK_OUTBOUND=1` e'
-settata.
-
-Il behavior di `validate_external_url` (raise wrapper, opt-in onorato
-in dev) NON cambia: questo file aggiunge un guard test su quella
-proprieta' per evitare regressioni accidentali del refactor.
 """
 
 from __future__ import annotations

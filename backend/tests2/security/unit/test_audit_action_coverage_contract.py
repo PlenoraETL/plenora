@@ -1,23 +1,7 @@
-"""Contract test AST-based — coverage @audit_action sugli endpoint sensibili.
+"""
+Contract test AST-based — coverage @audit_action sugli endpoint sensibili.
 
 Scope (Phase 3 Batch B / P1-01):
-  Per ciascun endpoint mutating "realmente sensibile" (CRUD credenziali,
-  scrittura/distruttiva su risorse esterne, lifecycle pipeline schedulate,
-  esecuzione codice, trigger backup, cancel/cleanup task), verifichiamo
-  che la funzione router definita nel sorgente abbia il decorator
-  `@audit_action(...)` applicato. Il check e' AST-based per non dipendere
-  dalla risoluzione dei kwarg di FastAPI o dall'import effettivo dei moduli.
-
-  Regressione protetta:
-    - rimuovere uno dei `@audit_action` da un endpoint listato fa fallire
-      questo test prima della build, evitando il drift dichiarato in
-      `soa-iso-27001.md` ("29 endpoint coperti") rispetto alla copertura
-      reale (P1-03 in `AUDIT_REPORT_security.md`).
-
-Pattern coerente con altri AST guard del repo:
-  - `tests2/security/unit/test_csv_encoding_explicit_contract.py`
-  - `tests2/security/unit/test_datetime_utc_aware_contract.py`
-  - `tests2/shared/test_tests2_antipattern_contract.py`
 """
 
 from __future__ import annotations

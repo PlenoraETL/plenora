@@ -1,24 +1,7 @@
-"""Contract tests BE-GO-READY-STORAGE-ENGINE-008-RECONCILIATION-OPERATIONAL-GUARDRAILS.
+"""
+Contract tests BE-GO-READY-STORAGE-ENGINE-008-RECONCILIATION-OPERATIONAL-GUARDRAILS.
 
 Verify the beat-hook integration of the two new guardrails:
-
-  1. Summary log: per-tick `event=storage_reconciliation_summary`
-     INFO line with `pending_total` / `lost_total` plus per-row
-     breakdown. Emitted ALSO when there are no due rows in the
-     batch — that's the silent-landfill scenario the guardrail
-     exists to surface.
-  2. Prune of terminals: `prune_terminal_older_than` invoked with
-     `older_than = now - retention_days` and bounded
-     `limit = STORAGE_RECONCILE_PRUNE_BATCH_SIZE`. Skipped
-     entirely when either knob is `<= 0` (escape hatch).
-
-Plus invariants preserved:
-
-  - existing transition flow (`mark_orphan_deleted` /
-    `mark_failed_attempt` / `mark_lost`) untouched on tick;
-  - cadence gate still applies (no summary/prune when interval
-    not elapsed);
-  - fetch failure no longer silences the summary/prune section.
 """
 
 from __future__ import annotations

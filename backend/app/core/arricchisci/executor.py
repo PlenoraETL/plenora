@@ -1,23 +1,7 @@
 """
 Entry point per l'esecuzione di progetti ARRICCHISCI.
 
-Architettura
-============
-Questo modulo è il punto di ingresso per eseguire un progetto di tipo
-ARRICCHISCI. Riceve il canvas state dal frontend, estrae la configurazione
-API e i mapping, e delega l'esecuzione effettiva a EnrichmentExecutor
-(enrichment_service.py) o ApiConnectionService (api_connector.py).
-
-Responsabilità:
-- Parsing del canvas state per estrarre configurazione arricchimento
-- Routing alla strategia di esecuzione corretta
-- Gestione risultati e salvataggio output
-
-Questo file è intenzionalmente snello: la logica complessa è nei moduli
-specializzati (enrichment_service per l'esecuzione avanzata, api_connector
-per le connessioni API).
-
-Chiamato da: core/orchestrator/service.py quando il progetto è di tipo ARRICCHISCI
+Keeps API enrichment behavior isolated from orchestration callers.
 """
 
 import time as _time

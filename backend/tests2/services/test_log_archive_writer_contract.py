@@ -1,16 +1,7 @@
-"""Contract test — `LogArchiveWriter` NDJSON serialization (O-ARC Batch 1, ADR-0014).
+"""
+Contract test — `LogArchiveWriter` NDJSON serialization (O-ARC Batch 1, ADR-0014).
 
 Blinda i vincoli di formato (O-ARC §5.1 + ADR-0014 §Decision 5-8):
-
-- Una riga NDJSON per riga DB, gzip UTF-8.
-- Shape canonica per `logs` e `audit_actions` (keyset + ordine).
-- `ts`/`timestamp` normalizzati a ISO 8601 UTC con suffisso `Z`.
-- `datetime` naive in qualsiasi campo -> `ValueError` (fail-fast su tz
-  upstream).
-
-Scope Batch 1 in questo file: solo test di serializzazione (T1-T4).
-L'object key naming (T5-T6) e il loop upload/verify/delete (T7-T12)
-vengono aggiunti nei commit 1c-1d dello stesso file.
 """
 
 from __future__ import annotations
@@ -656,7 +647,7 @@ def test_archive_and_purge_delete_scoped_to_cutoff_and_batch_max_id():
     assert "DELETE FROM plenora.audit_actions" in sql_audit
     assert "WHERE timestamp < %s" in sql_audit
     assert "AND id <= %s" in sql_audit
-    # Importante: la clausola WHERE NON deve referenziare la colonna `ts`
+    # NOTE: la clausola WHERE NON deve referenziare la colonna `ts`
     # (che non esiste in audit_actions). Cerchiamo la parola isolata.
     assert " ts " not in sql_audit and " ts<" not in sql_audit
     assert params_audit == (cutoff, 15)

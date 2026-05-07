@@ -1,13 +1,7 @@
-"""Contract test — helper `save_columns_metadata_with_retry`.
+"""
+Contract test — helper `save_columns_metadata_with_retry`.
 
 Coperture (integrano i test estrai che verificano il flusso end-to-end):
-  - retry solo su transient (OperationalError, TimeoutError)
-  - non-transient → raise subito
-  - return False del service → raise subito
-  - campo `attempts` accurato nella eccezione
-  - chained exception (__cause__) preservata
-  - happy path no sleep
-  - tutti i backoff usati (invariante: len(_BACKOFF_SEC) + 1 == _MAX_ATTEMPTS)
 """
 
 from __future__ import annotations

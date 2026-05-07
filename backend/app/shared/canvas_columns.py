@@ -2,36 +2,6 @@
 canvas_columns.py — Computazione autorevole delle colonne del ResultNode (C9).
 
 Motivazione
-===========
-Pre-C9, il flusso di persistenza columns era frammentato:
-
-1. Frontend `canvasSerializer._computeResultColumns` guarda SOLO il parent
-   diretto del result e legge `sourceNode.data.columns`. Se il parent e'
-   un `api_enrich` senza `data.columns` popolato, ricade su `saved`
-   (colonne del run precedente, potenzialmente vuote/stale).
-
-2. Backend PUT `/projects/{id}/canvas` salva il canvas as-is e poi
-   fa fallback su `api_enrich.output_mapping` SOLO per
-   `columns_metadata` (la view), NON per `canvas.result_node.columns`
-   persistita. Quindi al reload la UI mostra il canvas con result
-   vuoto.
-
-Questo modulo chiude il bug con una singola funzione autorevole:
-
-    compute_result_columns(canvas, result_id, project_id, project_service)
-
-Che usa `SchemaInferenceService._infer_node_schema` (logica gia' battaglia-
-provata per tutti i node type: source, project_source, file_source,
-transform, api_enrich, merge/join, result), e preserva le
-customizzazioni utente (`alias`, `visible`) dal canvas corrente.
-
-Il chiamante e' responsabile di:
-- Mutare `canvas.nodes[i].columns = risultato` per l'i del result
-- Persistere il canvas (update_canvas)
-- Aggiornare `project.columns_metadata` per compat
-
-Usabile sia dal PUT /canvas che da executor pre-run come single
-source of truth.
 """
 
 from __future__ import annotations

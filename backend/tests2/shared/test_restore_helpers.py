@@ -1,12 +1,7 @@
-"""Contract test — helper puri di scripts/test_restore.py.
+"""
+Contract test — helper puri di scripts/test_restore.py.
 
 Il grosso dello script e' subprocess shell-out a psql/pg_restore (non
-testabile in isolation). Ma ci sono parti pure che meritano sanity:
-
-1. `derive_test_db_name` produce nomi che matchano il pattern safe
-2. `split_db_url` + `make_target_url` compongono URL correttamente
-3. `TEST_DB_PATTERN` rifiuta forme di injection ovvie
-4. `dropdb` e' una safety gate che rifiuta nomi fuori pattern
 """
 
 from __future__ import annotations

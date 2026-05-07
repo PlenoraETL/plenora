@@ -1,19 +1,7 @@
-"""Integration test MSSQL stage+swap — schema preservation (C6).
+"""
+Integration test MSSQL stage+swap — schema preservation (C6).
 
 Motivazione
------------
-Pre-C6 su MSSQL lo stage+swap usava `SELECT INTO ... WHERE 1=0` che NON
-preserva PK/UK/CHECK/indexes (solo colonne). Dopo ogni refresh oltre
-soglia, lo schema del target si degradava silenziosamente.
-
-Con C6: introspection su `sys.key_constraints`, `sys.check_constraints`,
-`sys.indexes`, applicata sulla shadow con suffisso `__stg` e ripristinata
-ai nomi originali via `sp_rename` post-swap.
-
-Test verifica:
-1. PK + UK + CHECK + indice non-unique tutti preservati post-swap
-2. Schema preservato anche in caso di INSERT failure (target intatto)
-3. Nomi costraint ripristinati (no suffisso __stg residuo)
 """
 
 from __future__ import annotations

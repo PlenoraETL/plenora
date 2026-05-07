@@ -1,17 +1,7 @@
-"""Contract test BE-CONFIG-001E — DEDUP direct env reads su chiavi gia' in DEFAULTS.
+"""
+Contract test BE-CONFIG-001E — DEDUP direct env reads su chiavi gia' in DEFAULTS.
 
 Coperti:
-
-1. `INTERMEDIATE_ARTIFACT_PREFIX` letto via `settings.get(...)` in
-   `intermediate/artifact_writer.py` (era duplicato `os.getenv`).
-2. Le 3 chiavi `LOG_ARCHIVE_KEY_PREFIX` / `LOG_ARCHIVE_BATCH_ROWS` /
-   `AUDIT_RETENTION_DAYS` restano con direct `os.getenv` nel
-   boot-time validator `validate_storage_config` per fail-fast su env
-   malformata (vedi commento + ADR-0021 allowlist). Il runtime path
-   continua a leggerle via property `settings.LOG_ARCHIVE_*` /
-   `settings.AUDIT_RETENTION_DAYS`.
-3. La migrazione `INTERMEDIATE_ARTIFACT_PREFIX` rispetta il default
-   `"intermediate"` e l'override env via `_converti_tipo_env`.
 """
 
 from __future__ import annotations

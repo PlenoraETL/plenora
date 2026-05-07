@@ -1,12 +1,7 @@
-"""Router admin backups — endpoint REST per la gestione backup PG -> S3.
+"""
+Router admin backups — endpoint REST per la gestione backup PG -> S3.
 
 Tutti gli endpoint richiedono ruolo superadmin.
-
-Endpoint:
-  - GET  /api/admin/backups          lista oggetti S3
-  - GET  /api/admin/backups/status   stato ultimo run (da DB `plenora.backup_runs`)
-  - GET  /api/admin/backups/schedule metadati schedule (env var, no systemctl)
-  - POST /api/admin/backups/trigger  lancia backup manuale on-demand
 """
 
 from typing import Any, Dict, List
@@ -32,7 +27,7 @@ def list_backups_endpoint(
     _user: CurrentUser = Depends(require_superadmin),
 ) -> Dict[str, Any]:
     """Lista dei dump presenti nel bucket S3."""
-    # Bug #4 (2026-04-23): dep runtime mancante (botocore[crt]) -> 503
+    # FIXME: #4 (2026-04-23): dep runtime mancante (botocore[crt]) -> 503
     # esplicito invece di lista vuota fuorviante.
     # RB.2 (2026-04-27): credenziali AWS scadute -> 503 strutturato con
     # messaggio operativo (cattura LoginRefreshRequired / NoCredentialsError /

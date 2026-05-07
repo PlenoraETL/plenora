@@ -2,10 +2,6 @@
 test_rest_file_timeout_contract.py
 
 Verifica che `_parse_rest_file_config` NON usi mai il fallback legacy
-`options.timeout` (pensato per connettori generici: default 30s) per
-rest_file. Il timeout canonico è `request.timeout`; se mancante, il
-default è 600s (10min), adeguato a processi server che possono
-richiedere minuti (es. imdf.plenora.it/api/process).
 """
 import pytest
 
@@ -51,7 +47,7 @@ def test_request_timeout_missing_uses_600_not_options_timeout(connector):
     essere 600s, NON options.timeout."""
     cfg = _base_cfg()
     cfg["request"].pop("timeout", None)
-    cfg["options"] = {"timeout": 30}  # legacy/shared-field valore alto
+    cfg["options"] = {"timeout": 30}  # NOTE: legacy / shared-field valore alto
     parsed, err = connector._parse_rest_file_config(cfg)
     assert err is None
     assert parsed["timeout"] == 600, (

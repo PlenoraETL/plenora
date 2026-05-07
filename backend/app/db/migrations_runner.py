@@ -2,29 +2,6 @@
 migrations_runner.py — Applicazione e tracking delle migration PostgreSQL.
 
 Motivazione (C8-nit)
-====================
-Fino a C8, le migration in `migrations/*.sql` erano applicate
-manualmente via `psql -f ...` e non c'era tracking di quali fossero
-gia' state applicate. L'endpoint `/ready` non poteva quindi dire
-"schema allineato" o "migration X pendente".
-
-Questo runner risolve con:
-- Tabella `<DB_SCHEMA>.schema_migrations(filename TEXT PRIMARY KEY, applied_at)`
-- All'avvio dell'app: scan di `migrations/*.sql`, esegue quelle non
-  ancora registrate, inserisce una riga per ognuna.
-- Le migration esistenti usano `CREATE ... IF NOT EXISTS` → rieseguirle
-  e' no-op, quindi il primo run post-deploy non rompe nulla.
-- `/ready` compara files vs righe nella tabella → 503 se ci sono
-  pending.
-
-Convenzioni
-===========
-- File naming: `YYYY-MM-DD_description.sql` (ordinamento lessicografico
-  corrisponde all'ordine cronologico)
-- Ogni file deve essere idempotente (IF NOT EXISTS / IF EXISTS) —
-  cosi' un re-run accidentale non rompe la produzione.
-- Se una migration fallisce, il runner solleva e l'app non parte:
-  meglio un crash loud che una prod con schema inconsistente.
 """
 
 from __future__ import annotations

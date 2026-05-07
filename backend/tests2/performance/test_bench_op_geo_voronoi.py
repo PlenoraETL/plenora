@@ -1,20 +1,7 @@
-"""Bench formalizzato: `op_geo_voronoi` nuovo impl vs legacy.
+"""
+Bench formalizzato: `op_geo_voronoi` nuovo impl vs legacy.
 
 Il legacy associa punto->poligono con `for idx, row in gdf.iterrows():
-for poly in voronoi_polygons: poly.contains(pt)` — O(n^2) di contains
-check, che su shapely 2.x costa ~1-2us/check → ~2s per 1000 punti.
-
-Il nuovo impl usa STRtree (shapely.strtree): query O(log n) per punto,
-con fallback nearest solo se nessun cell matcha.
-
-Baseline misurato in Batch 0:
-  - 250 punti → 0.146s
-  - 500 punti → 0.545s
-  - 1000 punti → 2.152s   (scaling 14.7x su 4x dati, near-O(n^2))
-
-Esecuzione:
-    pytest backend/tests2/performance/test_bench_op_geo_voronoi.py \
-        -m perf_bench -s -q
 """
 
 from __future__ import annotations
@@ -107,7 +94,7 @@ def test_bench_geo_voronoi_speedup_vs_legacy(n):
     gdf = _make_points(n)
     kwargs = dict(geom_column="geometry")
 
-    # Legacy in genere ha rounds=2 per ridurre tempo totale bench
+    # NOTE: legacy in genere ha rounds=2 per ridurre tempo totale bench
     t_legacy = _median_runtime(
         _legacy_op_geo_voronoi, (gdf,), kwargs, warmup=1, rounds=2
     )

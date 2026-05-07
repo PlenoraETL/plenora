@@ -1,36 +1,7 @@
 """
 Servizio di cleanup degli orfani cross-DB di PLENORA-ETL.
 
-Contesto
-========
-PLENORA-ETL usa PostgreSQL canonico (single DB, schema `plenora`).
-Le tre famiglie di tabelle che questo cleanup attraversa:
-  - config tables   (progetti, utenti, ecc.)
-  - results tables  (output finali pipeline)
-  - intermediate tables (run intermedie + tabelle dinamiche)
-
-`results.project_id` e `runs.canvas_id` referenziano logicamente
-`projects.id`. Se un progetto viene cancellato senza usare
-`ProjectService.delete_project` (es. cancellazione diretta dal DB,
-crash a metà del cleanup, restore parziale, ecc.), restano orfani
-nelle tabelle results e intermediate.
-
-Questo servizio:
-  - Trova orfani (project_id che non esistono più in config.projects)
-  - Cancella orfani (sia results blob che intermediate runs+tabelle dinamiche)
-  - Supporta dry-run per audit prima della cancellazione
-
-API
-===
-  find_orphan_result_project_ids() -> List[str]
-  find_orphan_run_canvas_ids() -> List[str]
-  cleanup_orphans(dry_run: bool = False) -> dict
-
-Quando usarlo
-=============
-  - Endpoint admin POST /projects/admin/cleanup-orphans (manualmente)
-  - Job periodico (es. cron settimanale) — non implementato qui ma è facile
-    da wrappare con celery beat o un comando CLI
+Keeps this module's responsibility explicit and isolated from adjacent code.
 """
 
 from typing import List, Dict, Any

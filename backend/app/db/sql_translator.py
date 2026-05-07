@@ -1,62 +1,7 @@
 """
 Traduttore di funzioni SQL tra dialetti database.
 
-Architettura
-============
-Questo modulo implementa un traduttore basato su registry JSON che mappa funzioni
-SQL generiche (es. ST_Buffer, UPPER, ROUND) nei dialetti specifici di ogni database
-supportato. Il design disaccoppia la definizione delle funzioni (nel file JSON) dalla
-logica di traduzione (in questa classe), permettendo di aggiungere nuove funzioni
-senza modificare codice Python.
-
-Componenti principali:
-- SQLFunctionTranslator: classe Singleton che carica il registry e traduce funzioni
-- Template engine: sistema di sostituzione parametri con supporto variadico
-- Expression parser: parser ricorsivo per espressioni annidate (es. ST_Area(ST_Buffer(...)))
-- Helper per predicati spaziali: shortcut per condizioni JOIN geospaziali
-
-Registry JSON (sql_functions_registry.json)
--------------------------------------------
-Struttura per ogni funzione:
-{
-    "categoria": {
-        "NOME_FUNZIONE": {
-            "description": "...",
-            "params": [{"name": "param", "type": "geometry", "required": true}],
-            "returns": "geometry|numeric|string",
-            "dialects": {
-                "postgres": "ST_Buffer({geom}, {distance})",
-                "mssql":    "{geom}.STBuffer({distance})",
-                "mysql":    "ST_Buffer({geom}, {distance})",
-                "oracle":   "SDO_GEOM.SDO_BUFFER({geom}, {distance}, 0.005)",
-                "sqlite":   "Buffer({geom}, {distance})"
-            }
-        }
-    }
-}
-
-Database supportati: postgres, mssql, mysql, oracle, sqlite
-
-Uso:
-    translator = SQLFunctionTranslator()
-
-    # Traduzione singola funzione
-    sql = translator.translate('ST_Buffer', 'postgres', geom='t.geom', distance=100)
-    # -> "ST_Buffer(t.geom, 100)"
-
-    sql = translator.translate('ST_Buffer', 'mssql', geom='t.geom', distance=100)
-    # -> "t.geom.STBuffer(100)"
-
-    # Traduzione espressione complessa annidata
-    sql = translator.translate_expression("ST_Area(ST_Buffer(geom, 100))", "postgres")
-    # -> "ST_Area(ST_Buffer(geom, 100))"
-
-    # Predicato spaziale per JOIN
-    cond = translator.get_spatial_predicate('intersects', 'postgres', geom1='a.geom', geom2='b.geom')
-    # -> "ST_Intersects(a.geom, b.geom)"
-
-    # Shortcut globali
-    sql = translate_sql_function('ST_Buffer', 'postgres', geom='t.geom', distance=100)
+Keeps persistence access isolated from service and router layers.
 """
 
 import json

@@ -1,30 +1,7 @@
-"""Contract test N11 (propagazione) — canvas_types bridge verso CARICA.
+"""
+Contract test N11 (propagazione) — canvas_types bridge verso CARICA.
 
 Il fix puntuale precedente (commit 136d750) in ColumnMapper recuperava
-int-promoted-to-float euristicamente. Non chiudeva il finding originale
-"Type inference loss" che riguardava la PROPAGAZIONE architetturale:
-  - projects.columns_metadata e' aggiornato da ESTRAI/ARRICCHISCI dopo
-    ogni run con i tipi canvas semantici.
-  - Ma l'orchestrator costruiva carica_node_data SENZA leggere
-    columns_metadata.
-  - Risultato: CARICA riceveva canvas_types vuoto -> cadeva sul dtype
-    post-manipolazione (anche col fix euristico, meno preciso di
-    columns_metadata).
-
-Fix architetturale (2026-04-17):
-  - Helper `enrich_canvas_types_from_metadata(carica_node_data, project_id)`
-    in `app/shared/canvas_types_enricher.py`.
-  - Applicato in 2 punti:
-      * orchestrator/service.py loop carica (pipeline end-to-end)
-      * orchestrator/router.py endpoint /create-task CARICA diretto
-  - Merge: project columns_metadata come default, node_data prevale
-    (frontend autorevole se imposta canvas_types espliciti).
-
-Questo contract congela:
-  1. Helper signature + priority merge (node_data > project_metadata)
-  2. Orchestrator service usa l'helper prima di creare task CARICA
-  3. Router diretto CARICA usa l'helper
-  4. Best-effort: lookup project fallisce -> nessuna exception
 """
 
 from __future__ import annotations

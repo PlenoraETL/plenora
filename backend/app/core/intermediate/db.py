@@ -2,13 +2,6 @@
 Intermediate DB — accesso a PostgreSQL.
 
 Gestisce runs, node_meta e node_rows (tabella unificata JSONB per i dati
-intermedi dei nodi pipeline). Usa pg_connection pool.
-
-Nota design: in passato ogni nodo di ogni run aveva una tabella Postgres
-fisica dedicata (run_{uuid}_{node_id}) — anti-pattern che causava bloat
-del pg_catalog, lock contention e orphan tables. Ora tutti i dati finiscono
-in plenora.node_rows con FK ON DELETE CASCADE a runs, che garantisce
-retention atomica.
 """
 
 import json
@@ -253,7 +246,7 @@ def write_node_snapshot_atomic(
     records = _build_node_row_records(run_id, node_id, rows_to_persist or [])
     persisted_rows_count = len(records)
     # row_count reale: se il caller non lo passa cadiamo sul fallback
-    # legacy (count = righe persistite). Per metadata_only il caller
+    # NOTE: legacy (count = righe persistite). Per metadata_only il caller
     # DEVE passare row_count esplicito, altrimenti perdiamo l'invariante
     # "row_count e' sempre la lunghezza reale del dataset".
     if row_count is None:
@@ -423,7 +416,7 @@ _SQL_INSERT_NODE_ROW = (
     "VALUES (%s, %s, %s, %s, %s::jsonb)"
 )
 
-# Bug #22 (perf, 2026-04-28): SQL e template per insert batch via
+# FIXME: #22 (perf, 2026-04-28): SQL e template per insert batch via
 # `psycopg2.extras.execute_values`. Pre-fix: `cur.executemany(...)` su
 # 500 record preview faceva 500 round-trip al server (4–8s misurati).
 # Post-fix: 1 sola INSERT multi-VALUES, ~50–300ms.

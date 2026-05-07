@@ -1,33 +1,7 @@
-"""[phase-2-err][batch5] γ1b (E5) — op_mask_data fail-closed privacy.
+"""
+[phase-2-err][batch5] γ1b (E5) — op_mask_data fail-closed privacy.
 
 Audit Batch 5 §5.3 smell S3 (C1) — `op_mask_data` loop per-colonna aveva
-`except Exception: logger.error([CRASH] ...) + continue`. Se la maschera
-falliva su una colonna (regex rotta, mask_fn explode), il loop proseguiva
-sulle colonne successive; `result` ritornato aveva la colonna fallita NON
-mascherata → scrittura DB downstream = leak PII silenzioso.
-
-Scenario privacy-critical (audit §5.3):
-  Canvas mask_data [cf, email, phone]. Mask `cf` fallisce → `continue`.
-  Output: cf in chiaro, email/phone mascherate → DB scrittura = leak PII.
-
-Post-fix (γ1b — Opzione A fail-closed ratificata, RuntimeError):
-  - `continue` → `raise RuntimeError(...) from e` dopo il
-    logger.error([CRASH] ..., exc_info=True) che preserva str(e) tecnico
-    lato server per postmortem admin.
-  - Messaggio safe user-facing italiano: "Mask Data: mascheramento fallito
-    per la colonna '{column}'. Operazione interrotta per prevenire leak
-    PII parziale." — niente str(e) interpolato nel message.
-  - Chain `__cause__` preservata via `from e`.
-  - All-or-nothing: il raise avviene PRIMA di `return result`, quindi
-    il `result` parzialmente mascherato non e' mai esposto al caller.
-  - Nessuna nuova exception class: RuntimeError built-in (semantica
-    "errore runtime mascheramento", non input utente).
-
-Coerenza pattern:
-  - Batch 5 E1 chiuso applica gia' fail-closed sui 32 siti transform
-    top-level (E01-E32). γ1b estende privacy-safe al loop per-column.
-  - Caller executor manipola gia' wrappato (E1 chiuso) → RuntimeError
-    catturato + tradotto in error dict node pattern uniform.
 """
 
 from __future__ import annotations

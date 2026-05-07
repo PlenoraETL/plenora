@@ -1,70 +1,7 @@
 """
 Cluster ANALYSIS — operazioni di inspection/analisi del DataFrame.
 
-Origine
-=======
-Estratto da `app.core.manipola.transforms.base` come parte di Phase 5
-Batch B1.9 (cluster split, vedi
-`orchestrate/PHASE_5_ENTRY_PLAN.md` §3 P5-B1 + §6.1 facade pattern).
-
-Razionale del nome `analysis.py` (vs `stats.py`)
-=================================================
-Il cluster contiene operazioni eterogenee per natura: statistiche
-descrittive (`op_statistics`), discretizzazione numerica (`op_bin`),
-mapping chiave→valore (`op_lookup`), espansione JSON (`op_flatten_json`),
-campionamento (`op_sample`). Il filo conduttore non e' "stats" in
-senso stretto ma piuttosto "operazioni di **analisi/inspection** del
-dataset che producono colonne derivate o sottoinsiemi senza alterare
-la semantica delle righe esistenti".
-
-Contenuto:
-  - `op_sample`        — campionamento casuale (n / fraction /
-                         stratificato proporzionale).
-  - `op_lookup`        — mappatura valori via dizionario chiave→valore.
-  - `op_bin`           — discretizzazione numerica in N intervalli
-                         (cut con bordi custom o auto).
-  - `op_flatten_json`  — espansione colonna JSON/dict in colonne
-                         separate via `pd.json_normalize`.
-  - `op_statistics`    — statistiche descrittive (count/min/max/sum/
-                         mean/median/std/var/q25/q75) globali o
-                         per-gruppo (FME StatisticsCalculator equiv).
-
-Invarianti pubbliche preservate (regola §6.1 zero call-site changes):
-  - `from app.core.manipola.transforms.base import <op>` continua a
-    funzionare per tutte e 5 grazie al facade re-export in `base.py`.
-  - `from app.core.manipola.transforms import op_statistics` continua
-    a funzionare (`__init__.py` re-exporta gia' `op_statistics` via
-    `from .base import ...` che cattura il facade). Le altre 4
-    (`op_sample`, `op_lookup`, `op_bin`, `op_flatten_json`) non sono
-    esposte da init (verificato pre-extraction) → nessun cambio
-    richiesto.
-  - `transforms_registry.json` con entries `"base.op_*"` per tutte e 5
-    continua a risolvere via `getattr(<base module>, "<func>")` dal
-    `PluginExecutor`.
-  - Nuovo path canonico `from app.core.manipola.transforms.analysis
-    import <op>` disponibile.
-
-Cleanup naturale (effetto del move)
-====================================
-`import json` rimosso da `base.py`: era usato esclusivamente da
-`op_flatten_json` (verificato pre-extraction). Le altre occorrenze
-del token `json` in `base.py` post-move sono in docstring/commenti
-che citano il file `transforms_registry.json` come oggetto referenziato
-(non sono import o consumer del modulo Python).
-
-Logger naming
-=============
-Logger creato esplicitamente come
-`"app.core.manipola.transforms.base"` (NON `__name__`) per preservare
-il contratto osservabile pre-extraction: i record `Sample: ...`,
-`[CRASH] Errore Sample`, `Lookup: ...`, `Bin: ...`, `FlattenJSON: ...`,
-`Statistics completato` continuano ad apparire sotto il logger name
-dei consumer. Stesso pattern di tutti i moduli figli estratti nei
-batch B1.1-B1.8.
-
-Il body sotto e' una copia BIT-PER-BIT delle implementazioni in
-`base.py` al momento di B1.9. Nessuna modifica di logica, comment,
-log payload, ordine di operazione, fail-closed semantics.
+Keeps transformation behavior isolated from orchestration callers.
 """
 
 import json

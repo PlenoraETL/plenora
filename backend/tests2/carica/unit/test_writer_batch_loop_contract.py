@@ -1,27 +1,7 @@
-"""Contract test BE-GO-READY-TRANSFORMATION-ENGINE-012-WRITER-BATCH-LOOP-EXTRACT.
+"""
+Contract test BE-GO-READY-TRANSFORMATION-ENGINE-012-WRITER-BATCH-LOOP-EXTRACT.
 
 Locks the boundary contract of the new helper
-`app.core.carica.writer_batch_loop.run_batched_inserts`. The helper
-collapses the 6 duplicated batched-insert loops (2 in
-`writer_transaction_exec.py`, 4 in `writer_replace_strategies.py`).
-This test pins:
-
-1. **Slicing**: `df.iloc[batch_num*batch_size : (batch_num+1)*batch_size]`
-   for each batch; last batch clamped to `len(df)`.
-2. **Iteration count**: `total_batches` invocations of
-   `process_batch`. `total_batches=0` ⇒ no iteration, no progress.
-3. **process_batch contract**: invoked with `(batch_df, batch_num)`
-   in this exact order. Helper does NOT mutate `result` itself.
-4. **Progress reporting**: `report_progress(BatchProgress(...))`
-   called once per batch AFTER `process_batch`. Payload reads
-   `result.rows_written` / `result.total_rows` AT REPORT TIME (so
-   it reflects the callback's mutation).
-5. **Elapsed seconds**: `time.time() - start_time` at the moment
-   of the progress emit (monotonic increase across batches).
-6. **Exception propagation**: callback exceptions propagate
-   verbatim; the helper does NOT catch them.
-7. **No connection / settings I/O**: helper imports nothing that
-   touches DB / settings / env (source-bound).
 """
 
 from __future__ import annotations

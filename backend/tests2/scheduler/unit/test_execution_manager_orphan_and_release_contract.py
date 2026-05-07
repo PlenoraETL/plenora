@@ -1,33 +1,7 @@
-"""Contract test per ExecutionManager — orphan handling + release retry.
+"""
+Contract test per ExecutionManager — orphan handling + release retry.
 
 Gap reale vs i 5 file test esistenti su ``execution_manager``
-(``contract``, ``heartbeat``, ``lock_lost``, ``lock_lost_propagation``,
-``scheduled_for_persist`` — 23 test totali): nessuno copre i due rami
-mappati sulle priorità Batch 3:
-
-- **orphan cleanup post-task-kill**: il progetto viene cancellato mentre
-  lo schedule è attivo. ``execute()`` incontra ``project_meta is None``
-  e deve: (1) marcare lo schedule come orphan, (2) scrivere log
-  ``PIPELINE_FAILED``, (3) ritornare ``status="orphan"`` SENZA acquisire
-  il lock né aprire il run. Regression guard: se qualcuno rimuove
-  ``mark_as_orphan``, lo schedule resta attivo ma fallisce ogni tick
-  successivo → job polling infinito su progetto inesistente.
-
-- **fail-closed DB/lock backend** sul release finale: il finally di
-  ``execute()`` tenta il release; se il primo solleva, dorme 1s e
-  ritenta. Se il secondo solleva, logga CRITICO e procede comunque
-  (il lock "scadrà per TTL"). Regression guard: rimuovere il retry
-  lascerebbe lock orfani in ogni blip DB transient; rimuovere il
-  ``try/except`` esterno farebbe propagare l'eccezione, corrompendo
-  il contract che ``execute()`` sempre ritorna un result dict.
-
-Invariants blindati:
-
-- §1.6 scheduler fail-closed: esecuzione su progetto inesistente
-  NON può silentemente continuare né lasciare lo schedule in stato
-  "running".
-- §1.3 idempotenza release: il contract è "sempre rilascia o segnala
-  che TTL scadrà". Nessun ramo del finally deve propagare exception.
 """
 
 from __future__ import annotations

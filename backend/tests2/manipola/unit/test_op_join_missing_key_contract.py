@@ -1,19 +1,7 @@
-"""Contract test — `op_join` pre-validation chiave mancante (2026-04-23).
+"""
+Contract test — `op_join` pre-validation chiave mancante (2026-04-23).
 
 Blinda: quando ``left_on`` o ``right_on`` non esiste nel DataFrame raw
-(pre-rename), ``op_join`` raise ``KeyError`` con **nomi colonne
-originali** (non suffissati ``_L`` / ``_R``).
-
-Regression observed: in passato il check era post-``safe_rename`` →
-messaggio con colonne tipo ``bl_state_L, bl_zip_L, ...``, dando
-l'illusione che la rename avesse distrutto la chiave. La chiave non
-era mai stata presente nel DataFrame di input — bug di diagnostica,
-non di logica merge.
-
-Fix: pre-validation in testa a ``op_join`` prima di dedup + rename.
-Guard post-rename preservato come marcatore ``[internal]``: se mai
-scatta, segnala un bug interno di ``safe_rename`` (non un errore
-utente).
 """
 
 from __future__ import annotations

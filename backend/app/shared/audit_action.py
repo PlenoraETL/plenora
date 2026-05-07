@@ -1,70 +1,7 @@
-"""Decorator `@audit_action` per audit trail automatico su endpoint sensibili.
+"""
+Decorator `@audit_action` per audit trail automatico su endpoint sensibili.
 
 Wrappa funzioni router FastAPI (sync o async): al termine della request
-— success OR failure — scrive una riga in `plenora.audit_actions` con
-`user_id`, `action`, `target`, `status` HTTP, `ip_address`, e (se il
-path e' fallito) `error_message`.
-
-Design
-
-- **Fail-open sulla write di audit**: se la INSERT in `plenora.audit_actions`
-  solleva, il decorator logga un warning + incrementa una metrica in-process
-  e lascia la request business passare inalterata. Il contratto e' "audit
-  best-effort con segnale osservabile", non "audit garantito, magari al prezzo
-  di 503 utente". Allineato a `invariants.md §4.4` (osservabilita' non
-  propaga al business path) e al pattern asimmetrico di `token_blacklist.py`.
-
-- **Non maschera errori business**: qualsiasi `HTTPException` o altra
-  eccezione sollevata dalla funzione wrappata viene prima audit-loggata (con
-  lo status code catturato) e poi ri-sollevata. Mai swallowed.
-
-- **Extractor minimali**: il decorator legge SOLO da kwargs espliciti
-  (`current_user`, `request`, e il `target_param` configurato). Nessun
-  accesso a `request.state.*` per rispettare il contratto FastAPI-idiomatico
-  "dependencies = kwargs".
-
-Uso
-
-    from app.shared.audit_action import audit_action
-
-    @router.delete("/projects/{project_id}")
-    @audit_action(action="project.delete", target_param="project_id")
-    def delete_project(
-        project_id: str,
-        current_user: CurrentUser = Depends(require_user_or_above),
-    ):
-        ...
-
-Note ordine decoratori:
-  `@audit_action` deve stare *sotto* `@router.delete` cosi' il router
-  vede la funzione gia' wrappata. Invertirli fa si' che il decorator
-  avvolga l'oggetto router invece della funzione originale.
-
-Limiti noti
-
-- Status code catturato solo da `HTTPException` o return normale (200).
-  Se la funzione ritorna una `Response` custom con `status_code` diverso
-  (pattern poco usato in questa codebase), l'audit lo registra come 200.
-  Accettato: i router qui tornano dict/Pydantic model gestiti da FastAPI.
-
-- `target_param` supporta solo valori str/int/None. Pydantic model o
-  dict passati come target → audit registra `target=NULL` (non vogliamo
-  serializzare oggetti arbitrari, per evitare payload abuse nella colonna).
-
-- Metriche in-process: azzerate a ogni restart del processo. Sufficienti
-  per "health at a glance" nella futura dashboard admin; per lo storico
-  persistente va usata log aggregation sui warning emessi qui.
-
-Follow-up invariants (scope INTEGRATION, vedi STREAM_REPORT.md):
-  Il fallback "audit write fail → warning + pass" e' un fallback
-  autorizzato che va promosso in `backend/docs/architecture/invariants.md`
-  §2 con PR dedicata `[invariants]`. Le 4 proprieta' charter:
-    - motivo: availability > audit perfect (ISO 27001 non richiede
-      write garantita, richiede best-effort + log)
-    - perimetro: solo il ramo `except` della INSERT su audit_actions;
-      non maschera errori business della funzione wrappata
-    - log: `logger.warning` + metrica in-process `write_fail`
-    - piano rimozione: non prevista (observability marker permanente)
 """
 
 from __future__ import annotations

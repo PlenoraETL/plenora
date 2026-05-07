@@ -1,9 +1,7 @@
-"""Go-ready read/preview orchestration for FileSourceService.
+"""
+Go-ready read/preview orchestration for FileSourceService.
 
 This module keeps DB/security-bound read workflows out of the large
-`file_service.py` file while making every collaborator explicit. It does not
-import `app.services.file_service`; callers pass callbacks for visibility,
-metadata lookup, temp-file materialization and parser dispatch.
 """
 
 from pathlib import Path

@@ -1,58 +1,7 @@
-"""Source-bound policy lock — bytes-first temp/path materialization.
+"""
+Source-bound policy lock — bytes-first temp/path materialization.
 
 BE-GO-READY-RESOURCE-ENGINE-005-TEMP-USAGE-AUDIT-BYTES-FIRST-POLICY.
-
-This module locks two horizontal policies for temp/path
-materialization across `app/` + `workers/`:
-
-A) **Bytes-first preference for the Resource Engine**:
-   ``app/core/resources/__init__.py`` documents the canonical
-   usage as ``default_registry().get(ref, mode="bytes")``. Any
-   production callsite that passes ``mode="path"`` to the
-   engine must be allowlisted with rationale. Pre-batch the
-   allowlist is empty — no production caller has migrated to
-   the engine yet (the loader is implemented; resolver
-   migration is gated on R-003.1 project-level binding gap).
-
-B) **Temp materialization inventory ratchet**:
-   ``NamedTemporaryFile`` + ``tempfile.mkdtemp`` + nested
-   ``tempfile.TemporaryDirectory`` callsites are inventoried
-   below into 4 categories:
-     - PATH_REQUIRED_FILE: a single tempfile with a stable
-       path for a downstream library that demands a path
-       (driver OGR / pandas read_csv with a path arg / etc.).
-     - DIR_MULTIFILE: a tempdir hosting a multi-file artifact
-       (SHP/GDB extraction; IMDF zip extraction; gpkg+aux).
-       Bytes mode is structurally not applicable.
-     - STAGING_INGESTION: file ingestion (upload preview,
-       multi-layer probe) where the temp is the ingestion
-       stage between HTTP body and persistent storage.
-     - MIGRATION_CANDIDATE: known site where the temp could
-       be replaced by bytes/BytesIO (downstream API supports
-       bytes). Tracked here so future streams can pick them
-       up without re-discovering them.
-
-   The scan asserts every site found in source matches a
-   classified line in the inventory (no orphan tempfile
-   sites). Adding a NEW tempfile callsite without an
-   inventory entry fails this lock — that is the ratchet.
-
-Why source-bound
-----------------
-Importing the modules at test time would drag heavy
-transitive imports (geopandas, fiona, sqlalchemy, ...). The
-contract is structural: ``ast`` walks each scoped file and
-checks call expressions. Same posture as
-``tests2/security/unit/test_auth_facade_strangler_contract.py``
-and ``tests2/shared/test_architecture_legacy_patterns.py``.
-
-Out of scope (per task brief)
------------------------------
-- Cleanup / eviction policy (Worker 2 owns temp safety).
-- ArtifactResolver migration (still gated on R-003.1).
-- Implementing `mode="bytes"` callers (the engine has no
-  production callers yet; the resolver migration is its
-  intended first consumer).
 """
 
 from __future__ import annotations

@@ -1,32 +1,7 @@
 """
 log_archive.py — writer isolato PG-agnostic per archive+purge di
+
 `plenora.logs` e `plenora.audit_actions` (O-ARC Batch 1, ADR-0014).
-
-Perimetro Batch 1
-=================
-Modulo puro, non importato da alcun file di produzione. Hook beat,
-env var (`LOG_ARCHIVE_*`, `AUDIT_RETENTION_DAYS`), estensione di
-`validate_storage_config()` e runbook arrivano nei batch successivi:
-
-- Batch 2: env var + fail-fast check a boot.
-- Batch 3: chiamata dal beat, gate retention su archive success.
-- Batch 4: integration test + runbook ops.
-
-Contratto
-=========
-- Storage via Protocol `ObjectStorage` (ADR-0007), costruttore injection.
-- SELECT e DELETE iniettate come callables dal chiamante (beat in Batch 3).
-- Il bypass PG `SET LOCAL plenora.retention_cleanup = 'true'` NON vive qui:
-  resta scoped al chiamante autorizzato (un solo titolare = beat job).
-- datetime naive -> `ValueError` (fail-fast su tz upstream).
-- Verifica post-upload via `list_objects(prefix=key)`: se la key non
-  risulta presente con `size > 0`, la DELETE non viene mai invocata.
-
-Riferimenti
-===========
-- ADR-0014: backend/docs/architecture/decisions/0014-2026-04-21-log-archive-pipeline.md
-- Design:   orchestrate/phase_2_hardening/o_arc_archive_pipeline.md §4, §5
-- Triage:   orchestrate/phase_2_hardening/o_arc_batch1_triage.md §3, §6
 """
 
 from __future__ import annotations

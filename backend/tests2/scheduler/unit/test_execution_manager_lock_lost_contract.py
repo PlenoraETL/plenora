@@ -1,23 +1,7 @@
-"""Heartbeat lock lost detection (C3 follow-up fix A) - R-05 deterministic.
+"""
+Heartbeat lock lost detection (C3 follow-up fix A) - R-05 deterministic.
 
 Contratto
----------
-Se `concurrency.refresh_lock(schedule_id)` ritorna False (lock
-scaduto o rilasciato da un altro processo), il thread heartbeat:
-
-1. Tenta re-acquire atomico con il suo original value "running".
-2. Se re-acquire riesce -> WARNING "temporaneamente perso, riacquisito".
-   Il lock era scaduto per un blip ma nessun altro ha acquisito.
-3. Se re-acquire fallisce -> ERROR "lock perso, esecuzione concorrente
-   possibile" + setta flag `lock_lost` sullo state dell'heartbeat.
-   Il thread continua il loop (prossimo tick potrebbe riprendere il
-   lock se il detentore rilascia).
-
-Il flag e' leggibile via `state["lock_lost"]` ed e' usato da
-`execute()` per tracciare nel result che il run ha perso protezione.
-
-R-05: ogni tick e' guidato da FakeClock.advance(); zero time.sleep
-reali.
 """
 
 from unittest.mock import MagicMock

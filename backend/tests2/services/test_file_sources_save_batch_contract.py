@@ -1,20 +1,7 @@
-"""Contract test - BE-HARDEN-001C E3: save_file_sources_batch atomic.
+"""
+Contract test - BE-HARDEN-001C E3: save_file_sources_batch atomic.
 
 Verifica le invarianti del nuovo `app.db.config.file_sources.save_file_sources_batch`:
-
-  1. Happy path: N row passate -> 1 transazione, 1 cur.executemany con
-     N tuple, autocommit a fine `with transaction()`.
-  2. Validation pre-transaction: row senza data ne storage_key ->
-     ValueError SOLLEVATA PRIMA di acquisire la connessione DB
-     (zero side effect).
-  3. DB exception inside executemany -> rollback automatico via
-     transaction(), eccezione propaga al caller.
-  4. Empty rows list -> early return, nessuna connessione acquisita.
-  5. Ritorno: None (no fetchone post-insert).
-  6. SQL preserva ON CONFLICT (id) DO UPDATE SET (idempotency upsert).
-
-Mock di `app.db.config.file_sources.transaction` (context manager):
-nessun DB reale, solo verifica chiamate al cursor.
 """
 
 from __future__ import annotations

@@ -1,16 +1,7 @@
-"""Integration contract test: sanitizer applicato sui 2 punti HIGH RISK
+"""
+Integration contract test: sanitizer applicato sui 2 punti HIGH RISK
+
 di ``eseguibili/router.py`` (Batch Fix 6.2).
-
-Punti protetti:
-    - ``analyze_upload`` MIME reject (linea 343): ``MimeMismatchError``
-      esposto come 400 passa attraverso ``sanitize_http_detail``.
-    - ``analyze_upload`` parsing (linea 362): ``ValueError`` da
-      ``eseguibili_service.analyze_file_upload`` passa attraverso il
-      sanitizer.
-
-Regressione protetta: se qualcuno rimuovesse la chiamata a
-``sanitize_http_detail`` lasciando ``str(e)`` raw, il test fallirebbe
-perche' vedrebbe il payload sporco nella response.
 """
 
 from __future__ import annotations

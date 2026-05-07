@@ -1,38 +1,7 @@
 """
 Servizio gestione connessioni API esterne per arricchimento dati.
 
-Architettura
-============
-Gestisce il ciclo di vita delle API connections usate dal modulo
-ARRICCHISCI: creazione, configurazione, test, esecuzione, salvataggio
-risultati. Ogni connection vive come row in `plenora.api_connections`
-(colonna `config jsonb`); i campi sensibili (password, client_secret,
-token, ...) sono cifrati at-rest via `app.shared.crypto`.
-
-Componenti:
-- ApiConnectionService: classe principale con operazioni CRUD + esecuzione
-
-Sezioni principali:
-- CRUD: list, get, create, update, delete connessioni API
-- TEST API: test singola chiamata con parsing risposta JSON per validazione
-- EXECUTE ENRICHMENT: esecuzione completa su DataFrame (riga per riga)
-
-Flusso di esecuzione enrichment:
-1. Carica DataFrame sorgente (da progetto ESTRAI/MANIPOLA o file)
-2. Per ogni riga: costruisci URL con variabili template → chiama API → parsa risposta
-3. Arricchisci DataFrame con colonne output mappate dalla risposta JSON
-4. Salva risultato come file (CSV/GeoJSON/etc.)
-5. Aggiorna tracking progresso in tempo reale
-
-Supporto autenticazione:
-- API key (header o query string)
-- OAuth2 password grant (token_url + username/password)
-- Headers custom
-
-Integrazione con altri moduli:
-- utils/dataframe.py: caricamento/salvataggio DataFrame
-- utils/template_variables.py: sostituzione variabili nei parametri
-- utils/response_parser.py: parsing strutturato risposte JSON
+Keeps API enrichment behavior isolated from orchestration callers.
 """
 
 from typing import Dict, List, Optional

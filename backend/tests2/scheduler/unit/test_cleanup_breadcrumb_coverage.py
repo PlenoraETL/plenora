@@ -1,28 +1,7 @@
-"""[phase-2-err][batch7] 7.f — breadcrumb coverage su cleanup except: pass.
+"""
+[phase-2-err][batch7] 7.f — breadcrumb coverage su cleanup except: pass.
 
 Audit Batch 7 §3.4 [MEDIA] — 15 siti `except Exception: pass` cleanup nei
-worker Celery e execution_manager violavano §5.1.4 Batch 1 kickoff: fail-open
-senza breadcrumb, nessuna visibilita' in caso di fallimento ripetuto del
-cleanup (close_connection, close_run, progress update, shutil.rmtree, ecc.).
-
-Post-7.f:
-  - Ogni catch puro ha ora `logger.debug(f"<context>: {type(e).__name__}: {e}")`.
-  - Level `debug` (non warning) coerente con volumi alti e pattern already
-    adottato in Batch 8 C2 (storage/provider breadcrumb).
-  - Nessun cambio comportamento: cleanup resta best-effort, nessuna
-    propagazione, nessun re-raise.
-
-Approccio test source-based (come 7.c): i Celery tasks con decorator +
-bind=True + thread-local DB fanno mock runtime fragili. Scansioniamo il
-codice sorgente e blindiamo:
-  1. Zero bare `except Exception:\n    pass` nei 5 file target.
-  2. Per ciascuno dei 15 siti noti, presenza di `logger.debug` con
-     `type(e).__name__` in prossimita'.
-  3. Contatore siti coperti == 15 (sanity aggregata).
-
-I 5 silent-assignment (pipeline_task:60, carica_task:256, enrichment_task:
-1140, enrichment_task:1300, execution_manager:1026) restano fuori scope
-come ratificato (7.f-bis debito).
 """
 
 from __future__ import annotations

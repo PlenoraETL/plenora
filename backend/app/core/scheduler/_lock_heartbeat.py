@@ -1,24 +1,7 @@
-"""LockHeartbeat — class per il TTL refresh thread del lock scheduler
+"""
+LockHeartbeat — class per il TTL refresh thread del lock scheduler
+
 (PR-#36 REFACTOR-EXEC-MGR c1).
-
-Estratto 1:1 da `execution_manager._start_lock_heartbeat` (line 152-200
-pre-refactor). Behavior change: zero.
-
-Lock lost handling (C3 follow-up fix A): se `refresh_lock` ritorna
-False, il thread tenta re-acquire. Se riesce → WARNING; se fallisce →
-ERROR + flag `state["lock_lost"] = True` cosi' `execute()` lo include
-nel risultato.
-
-Design:
-  - `start()`/`stop()` API esplicita
-  - `get_state_dict()` ritorna **reference** mutabile (non copia) per
-    far vedere a `execute()` le mutazioni live di `state["lock_lost"]`
-  - Wrapper compat in `execution_manager` aggiunge chiave opaca `_hb`
-    al dict ritornato (vedi `get_state_dict` per accoppiamento noto).
-
-Out of scope c1 (deferred c2): context manager `__enter__/__exit__` per
-uso `with LockHeartbeat(...) as hb` in `execute()`. Non aggiunti qui
-perche' non usati e aumentano LOC senza coverage rilevante.
 """
 
 from __future__ import annotations

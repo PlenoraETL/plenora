@@ -1,30 +1,7 @@
-"""Source-bound guard for the Docker / frontend-container gap audit.
+"""
+Source-bound guard for the Docker / frontend-container gap audit.
 
 BE-GO-READY-INSTALL-018-DOCKER-FE-GAP-AUDIT.
-
-Locks the honesty contract for the Docker scaffold: no install
-doc may claim the full-stack Docker path is validated until
-THREE artifacts exist on disk:
-
-  1. a `frontend/Dockerfile*` file (current state: missing);
-  2. a `frontend` service inside `docker-compose.yml` (current
-     state: 5 services, none of which is the frontend);
-  3. a CI workflow under `.github/workflows/` that invokes
-     `docker compose` (current state: zero workflows do).
-
-When all three land, this guard short-circuits its negative
-locks (each via an `if ... else assert False`-style invariant)
-and the follow-up stream `INSTALL-013-FRONTEND-DOCKER` /
-`INSTALL-015-DOCKER-CI` can flip the FIRST SCAFFOLD / NOT YET
-VALIDATED markers in
-`docs/ops/install-docker.md` and
-`docs/ops/install-marco-dry-run.md`.
-
-Stays source-bound (zero app imports). Mirrors the install-doc
-family guard posture
-(`test_install_smoke_harness_doc_guard.py`,
-`test_first_pc_validation_report_template_guard.py`,
-`test_first_pc_report_review_checklist_guard.py`).
 """
 
 from __future__ import annotations

@@ -2,7 +2,6 @@
 Results DB Service — accesso a PostgreSQL (ex SQLite results.db).
 
 Contiene: results (output pipeline), execution_logs.
-Migrato a PostgreSQL: usa pg_connection pool.
 """
 
 from typing import Dict, List, Optional

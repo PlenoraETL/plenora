@@ -1,16 +1,7 @@
-"""Contract test — classificazione multi-host per DataSource local.
+"""
+Contract test — classificazione multi-host per DataSource local.
 
-R4 multi-host audit: path locale (es. C:\\data) non e' accessibile a
-worker Celery distribuiti su altre VM. `test_connection` ritorna un
-advisory per avvisare l'operatore.
-
-Copre:
-1. UNC path -> network
-2. Linux mount convenzionali -> network
-3. Windows drive letter -> local
-4. Linux /home|/var|... -> local
-5. Path ambiguo -> unknown
-6. test_connection include advisory nel details
+R4 multi-host audit: verifica path locali non accessibili ai worker remoti.
 """
 
 from __future__ import annotations

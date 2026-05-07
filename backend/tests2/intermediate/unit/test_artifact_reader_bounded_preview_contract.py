@@ -1,37 +1,7 @@
-"""Bounded-preview contract for ``app.core.intermediate.artifact_reader``.
+"""
+Bounded-preview contract for ``app.core.intermediate.artifact_reader``.
 
 BE-GO-READY-RESOURCE-ENGINE-012-INTERMEDIATE-ARTIFACT-BOUNDED-READ.
-BE-GO-READY-RUNTIME-002-CENTRALIZE-PREVIEW-CAP-RESOLVER:
-the reader's private ``_resolve_max_bytes`` and
-``_DEFAULT_ARTIFACT_PREVIEW_MAX_BYTES`` symbols are gone; the
-canonical resolver lives in
-``app.core.resources.preview_caps`` (sibling of
-``resource_caps`` — same shape, separate cap/env).
-
-Locks the intermediate artifact preview cap:
-
-  - object-storage reads are bounded by
-    ``resolve_artifact_preview_max_bytes()``; iteration stops
-    AT the first cap-exceeding chunk (no
-    ``b"".join(stream["body"])`` materialization);
-  - exceeding the cap raises :class:`MemoryLimitExceededError`
-    rather than returning ``ArtifactPreviewResult(error=...)`` —
-    oversize is a typed/controlled resource cap signal, NOT a
-    best-effort connectivity error;
-  - the cap is the dedicated ``ARTIFACT_PREVIEW_MAX_BYTES`` env
-    (default 25 MiB, ``Settings.DEFAULTS`` mirror; no
-    ``app.config`` import in the reader). Separate from
-    ``RESOURCE_MAX_BYTES`` (200 MiB post MEMORY-005) because preview is
-    concurrency-sensitive (BE-GO-READY-RUNTIME-001-PREVIEW-MAX-
-    BYTES-CAP);
-  - connectivity / parser / schema failures continue to flow
-    through the existing best-effort ``error=...`` channel.
-
-Source-bound check: the reader's source MUST NOT contain the
-inline unbounded ``b"".join(stream["body"])`` /
-``list(stream["body"])`` pattern. This guard is independent of
-the runtime stream and prevents the pre-012 shape from
-re-appearing.
 """
 
 from __future__ import annotations

@@ -1,42 +1,7 @@
-"""Contract tests BE-GO-READY-STORAGE-ENGINE-016-INTERMEDIATE-ARTIFACT-RECONCILIATION.
+"""
+Contract tests BE-GO-READY-STORAGE-ENGINE-016-INTERMEDIATE-ARTIFACT-RECONCILIATION.
 
 Lock the W1 reconciliation wiring on `_delete_run` in
-`app.core.intermediate.db`. Closes residual `R-007.1` from the
-storage-engine audit: `_delete_run` cascade-deletes `node_meta`
-rows holding `artifact_uri` (full-artifact mode), and the prior
-implementation had no `compensating_delete` and no
-`record_pending` for that path.
-
-Invariants pinned:
-
-  1. **No-artifact runs**: when no `node_meta` row has a
-     non-NULL `artifact_uri` with `artifact_status='complete'`,
-     `_delete_run` performs ONLY the `DELETE FROM runs` and does
-     NOT call `record_pending` / `compensating_delete` /
-     `mark_*`. This is the dominant case in production
-     (`metadata_only` default).
-  2. **Single complete artifact**: a node with
-     `artifact_uri="<prefix>/data.parquet"` and
-     `artifact_status='complete'` produces TWO `record_pending`
-     entries (parquet + derived `manifest.json` sibling), both
-     inside the same transaction as the DELETE. Post-commit
-     each gets a `compensating_delete` + `mark_done` on the
-     happy path.
-  3. **artifact_status='failed'** rows are skipped at the SQL
-     level (the SELECT filter `artifact_status='complete'`
-     excludes them). The same goes for `artifact_uri IS NULL`.
-  4. **URI with scheme** (`s3://`, `file://`, ...) is skipped
-     at the Python filter level. Defense against a future writer
-     emitting a different shape.
-  5. **Non-canonical path** (artifact_uri does NOT end with
-     `/data.parquet`): only ONE `record_pending` (the parquet),
-     manifest sibling NOT derived. Avoids guessing layout for
-     unknown writers.
-  6. **compensating_delete failure**: `mark_failed_attempt` is
-     called with `error="compensating_delete_outcome=failed"`.
-     Run DB row is still gone (ADR-0011 posture preserved).
-  7. **Atomicity**: `record_pending` happens BEFORE
-     `DELETE FROM runs` on the same cursor.
 """
 
 from __future__ import annotations

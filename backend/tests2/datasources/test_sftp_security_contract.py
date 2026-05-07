@@ -1,38 +1,7 @@
-"""Contract test per `SFTPDataSource` — sicurezza + error mapping.
+"""
+Contract test per `SFTPDataSource` — sicurezza + error mapping.
 
 Il backend SFTP ha due classi di contract critici:
-
-1. **Host key policy** — la configurazione ``host_key_policy`` dell'utente
-   DEVE tradursi in un setup paramiko coerente. Il valore ``"reject"``
-   è l'UNICA via sicura contro MITM (blocca host ignoti, carica
-   known_hosts di sistema). Ogni altro valore cade su ``AutoAddPolicy``
-   che accetta silent chiavi nuove — utile per dev, insicuro in prod.
-
-2. **Credenziali fail-closed** — senza ``password`` E senza
-   ``private_key`` il connect DEVE fallire esplicitamente. Niente
-   tentativi di connect "anonimo" o default.
-
-Invariants blindati:
-
-- §1.6 SFTP fail-closed: host key policy canonica (``reject`` vs altro)
-  mappa deterministicamente, niente ambiguità silent.
-- §1.6 credential fail-fast: config senza credenziali → stop, NON
-  retry con "" silent.
-- Error mapping paramiko → eccezioni tipate: ``AuthenticationException``,
-  ``SSHException``, ``OSError`` tradotti in ``DataSourceConnectionError``
-  con messaggi distintivi per diagnostica admin.
-
-Regressioni protette:
-
-- Inversione policy setup: se qualcuno sposta ``load_system_host_keys``
-  nel branch ``auto_add`` (o lo rimuove dal ``reject``), la policy
-  reject bloccherebbe ANCHE gli host legittimi in known_hosts.
-- Degradazione del check ``== "reject"`` a ``startswith("rej")`` o
-  case-insensitive: sembrerebbe benigno ma introduce ambiguità sul
-  valore canonico esatto che l'admin si aspetta.
-- Credential silent fallback: rimuovere il raise "Credenziali mancanti"
-  e lasciare che paramiko fallisca internamente maschererebbe la
-  misconfigurazione dietro un ``AuthenticationException`` ambiguo.
 """
 
 from __future__ import annotations

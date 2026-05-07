@@ -1,44 +1,7 @@
-"""Architectural lock for the operator-facing clean-install checklist.
+"""
+Architectural lock for the operator-facing clean-install checklist.
 
 BE-GO-READY-INSTALLATION-023-CLEAN-INSTALL-DOCKER-SINGLE-MACHINE-CHECKLIST.
-
-Source-bound assertions on `docs/ops/install-non-docker.md`
-section 13 (Operator quick-reference checklist). The section
-is the single page Marco (or any first-time installer) reads
-to perform a real Linux PC install. If the checklist drifts
-out of sync with the runtime - or if it ever pretends Docker
-alone is sufficient - operators get a broken install.
-
-Locks today:
-
-  - section 13 with the canonical header exists;
-  - 13.1 explicitly classifies Docker as NOT INSTALLABLE
-    today (no Dockerfile, no compose);
-  - 13.2 covers the 11 critical install steps (OS packages,
-    Python venv, Postgres, Redis, object storage choice,
-    Celery worker/beat count, env/secrets, migrations, smoke,
-    rollback);
-  - 13.2.1 documents the four object storage options
-    (disabled / local / S3-compatible / AWS) AND classifies
-    "local" as NOT IMPLEMENTED;
-  - 13.2.2 references `scripts/install.sh` so the operator
-    is funneled through the idempotent installer instead of
-    a manual rebuild every time;
-  - 13.2.3 documents the rollback procedure so a failed PC
-    test can be cleaned without manual archaeology;
-  - 13.2.4 calls out the four critical gotchas that surface
-    in real installs (schema autocreate, single Redis URL,
-    object storage cap on db policy, cleanroom != prod);
-  - 13.4 has the literal command sequence Marco can copy/paste;
-  - section is ASCII-only.
-
-Outside scope:
-  - the detailed step content (locked by their own sections
-    1 to 11);
-  - the cleanroom drift table (locked by
-    `test_cleanroom_celery_drift_doc_guard.py`);
-  - the install script packaging contract (locked by
-    `test_install_script_packaging_guard.py`).
 """
 
 from __future__ import annotations

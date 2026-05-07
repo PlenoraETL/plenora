@@ -1,21 +1,7 @@
-"""Contract test per shape 409 canonica su DELETE /api/datasources/{id}.
+"""
+Contract test per shape 409 canonica su DELETE /api/datasources/{id}.
 
 Invariante blindato (Batch Fix 6.1 — error-handling-governance):
-    Quando un Data Source e' referenziato nel canvas di uno o piu'
-    progetti, la delete ritorna 409 con shape canonica:
-        {
-            "detail": {
-                "error": "datasource_in_use",
-                "message": <str>,
-                "dependencies": [
-                    {"kind": "project", "id": str, "name": str,
-                     "project_type": str}
-                ]
-            }
-        }
-
-Reperto pre-fix (API audit §3.3): il campo lista era ``projects`` con
-shape flat. Post 6.1 e' ``dependencies`` con ``kind``.
 """
 
 from __future__ import annotations

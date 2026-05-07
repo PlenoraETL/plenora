@@ -1,17 +1,7 @@
-"""Core-level test per Refactor #5 Step B: ScheduleRunsCatalog.
+"""
+Core-level test per Refactor #5 Step B: ScheduleRunsCatalog.
 
 Sostituisce la logica di lookup runs sparsa fra `download_schedule_output`
-e `list_schedule_runs` di `scheduler/router.py`. Test su DI diretto,
-niente HTTP, niente CurrentUser, niente patch di settings.
-
-Contratti chiave:
-1. `runs_root_for` calcola path coerente con `ScheduleArtifactStore`
-2. `_schedule_short` e' l'unica fonte della convenzione (replace + [:12])
-3. `list_runs` ordina dal piu' recente, escludendo file/non-dir
-4. `get_run_dir` rifiuta token malformati (path traversal)
-5. `get_run_dir` valida via `assert_path_within` (R#4)
-6. `latest_run_dir` ordina lessicograficamente (timestamp YYYYMMDD)
-7. `first_file_in` ignora subdir
 """
 
 from datetime import datetime

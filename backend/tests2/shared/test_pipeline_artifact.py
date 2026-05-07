@@ -1,3 +1,9 @@
+"""
+Tests the pipeline artifact behavior.
+
+Locks backend contracts and regression boundaries for the current architecture.
+"""
+
 import pytest
 
 from app.core.artifacts.types import (

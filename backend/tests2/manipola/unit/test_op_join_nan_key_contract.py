@@ -1,27 +1,7 @@
-"""Contract test — op_join NaN key handling (C1 Phase 4).
+"""
+Contract test — op_join NaN key handling (C1 Phase 4).
 
 Background:
-  Pre-C1 il pre-processing dei dtype mismatch in op_join faceva:
-    series.astype(str).replace({'nan': None, '<NA>': None, 'None': None, '': None})
-  con due bug correlati:
-    1. una stringa LEGITTIMA "nan" (testo nei dati, non missing) veniva
-       silenziosamente convertita in None e quindi esclusa dal join.
-    2. asimmetria tra il path "stessi dtype" (no cleanup, "nan"=="nan"
-       collide come match fittizio) e "dtype mismatch" (cleanup elimina
-       i veri null ma anche le stringhe legittime).
-
-Policy C1 (no nuove ValueError):
-  - veri NaN/None/pd.NA -> restano missing dopo coercion
-  - stringhe legittime "nan", "<NA>", "None" -> restano valori reali, joinabili
-  - vero NaN su un lato + stringa "nan" sull'altro -> NON match
-  - pandas merge non considera NaN==NaN (semantica nativa, lasciata):
-      * inner: righe key-NaN escluse
-      * left:  righe left key-NaN preservate, colonne right NaN
-      * right: simmetrico
-      * outer: NaN left/right separati, mai matchati tra loro
-  - log WARNING con how + conteggi quando key-null > 0; nessun warning altrimenti
-
-Scope: 13 contract test focalizzati. Niente multi-key (out of scope C1).
 """
 
 from __future__ import annotations

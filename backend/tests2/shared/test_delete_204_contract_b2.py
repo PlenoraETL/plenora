@@ -1,24 +1,7 @@
-"""Contract test F2-B2 (2026-04-24) — DELETE → 204 (estensione F2-B1).
+"""
+Contract test F2-B2 (2026-04-24) — DELETE → 204 (estensione F2-B1).
 
 Estensione del pattern `DELETE → 204 No Content` a 3 endpoint CRUD
-restanti dopo F2-B1 (connections/api-connections/schedules):
-
-  - DELETE /api/projects/{id}               -> 204 No Content
-  - DELETE /api/eseguibili/{id}             -> 204 No Content
-  - DELETE /api/features/connections/{id}   -> 204 No Content
-
-Breaking change: body dict di conferma rimosso
-(`{"status":"deleted",...}` / `{"success":True,...}`). Audit FE
-pre-fix conferma tutti e 3 fanno "fire-and-refresh" senza leggere il
-body.
-
-Strategia: introspection del router (coerente con F2-B1 + F3-B2/B3).
-
-Fuori scope F2-B2 (batch F2-B3):
-  - DELETE /api/tickets/{id}
-  - DELETE /api/tickets/{id}/attachments/{aid}
-  - DELETE /api/files/{id}
-  - DELETE /api/imdf/bundles/{id}
 """
 
 from __future__ import annotations

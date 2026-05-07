@@ -1,9 +1,7 @@
-"""Contract tests for CanvasNode typed accessor and CanvasGraph intake.
+"""
+Contract tests for CanvasNode typed accessor and CanvasGraph intake.
 
 BE-GO-READY-ARCH-055-W3: typed node accessor pilot.
-BE-GO-READY-ARCH-058-W3: CanvasGraph intake replaces parallel local dicts.
-Verifies the two-level field lookup, typed properties, TypeError guard,
-and CanvasGraph from_nodes_edges / lookup / result_node contract.
 """
 import pytest
 from app.shared.execution.canvas_node import CanvasNode

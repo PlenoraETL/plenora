@@ -1,24 +1,7 @@
-"""[phase-2-err][batch8] C7 — write_node fail-closed + IntermediateWriteError.
+"""
+[phase-2-err][batch8] C7 — write_node fail-closed + IntermediateWriteError.
 
 Audit Batch 8 §3.1 S2 / fix F2: `intermediate/writer.py:write_node` pre-fix
-ritornava `hashlib.sha256(b"error").hexdigest()` in caso di errore outer.
-Un hash sintatticamente valido (64 hex chars) ma semanticamente fake,
-indistinguibile da un hash reale a valle → `input_hash`/`output_hash` del
-run potevano contenere marker "error" invisibile, violando l'invariante
-di determinismo dedup/replay.
-
-Post-fix (C7):
-  - Sentinel fake `sha256(b"error")` eliminato: non viene piu' ritornato.
-  - Outer catch solleva `IntermediateWriteError(run_id, node_id,
-    original_error)` con chain preservata via `raise ... from e`.
-  - Log promosso a `[CRASH]` con `exc_info=True` (coerenza C5/C6).
-  - Fallback `upsert_node_meta(status="error")` preservato come resource
-    guard PRIMA del raise.
-  - I 7 caller attuali (query_executor, manipola/executor, arricchisci/
-    api_connector, enrichment_task, carica_task) gia' wrappano in
-    try/except → swallowano il raise come best-effort (intermediate snapshot
-    e' optional feature dichiarato dai caller), comportamento macroscopico
-    invariato post-fix.
 """
 
 from __future__ import annotations

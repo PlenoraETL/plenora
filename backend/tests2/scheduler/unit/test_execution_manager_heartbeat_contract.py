@@ -1,19 +1,7 @@
-"""Heartbeat thread dentro ExecutionManager.execute (C3 fix 4) - R-05 deterministic.
+"""
+Heartbeat thread dentro ExecutionManager.execute (C3 fix 4) - R-05 deterministic.
 
 Contratto:
-1. Helper `_start_lock_heartbeat(schedule_id)` lancia un thread daemon
-   che chiama `concurrency.refresh_lock(schedule_id)` periodicamente.
-   Ritorna uno stato opaco da passare a _stop_lock_heartbeat.
-2. Helper `_stop_lock_heartbeat(state)` segnala lo stop e fa join con
-   timeout. Idempotente.
-3. Thread e' daemon=True: muore col processo Python (se SIGKILL del
-   worker Celery, il thread non sopravvive - il lock scade per TTL).
-4. Il thread NON rinfresca piu' dopo lo stop_event.
-5. execute() integra: dopo try_acquire success chiama _start, nel
-   finally chiama _stop.
-
-R-05: tutti i tick sono pilotati da FakeClock.advance(); zero time.sleep
-reali.
 """
 
 from unittest.mock import MagicMock

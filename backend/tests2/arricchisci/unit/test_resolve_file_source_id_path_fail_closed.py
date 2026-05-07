@@ -1,36 +1,7 @@
-"""Regression guards per `_resolve_file_source_id_path` fail-closed su
+"""
+Regression guards per `_resolve_file_source_id_path` fail-closed su
+
 errori tecnici (DB lookup + scrittura FS cache).
-
-Batch 3 Fix-A (audit `arricchisci/api_connector` §7.1 + checkpoint
-blocco Fix-A + Fix-D).
-
-Pre-fix: catch broad `Exception` outer -> `logger.warning + return
-None`. Conflato: errori DB (pool exhausted, conn drop), errori FS
-(filesystem read-only, permission denied), file_source inesistente
-(`row_meta is None`), blob vuoto (`row_full["data"] is None`) -
-tutti diventavano `None`. I caller (`_resolve_file_source_path`,
-`_build_rest_file_multipart` ramo extra_input) producevano messaggi
-"file_source non trovato / non risolvibile" indistinguibili tra
-errore tecnico e ramo dati legittimo.
-
-Post-fix:
-- `psycopg2.Error` su lookup metadata / lookup blob -> raise
-  `FileSourceResolutionError(cause="lookup", ...)` con chain `from e`.
-- `OSError` su mkdir / write_bytes / os.replace -> raise
-  `FileSourceResolutionError(cause="materialization", ...)` con chain.
-- `row_meta is None` / blob vuoto -> `return None` INVARIATO (ramo
-  dati legittimo).
-- outer broad `except Exception` eliminato.
-- cleanup finally unlink tmp_path invariato (best-effort con
-  `logger.debug`, nessuna regressione).
-
-Il boundary `_execute_rest_file` ramo input resolve catturera'
-`FileSourceResolutionError` in Fix-D (commit successivo) e la
-traduce in response `{success:False, error:"Risoluzione input
-fallita: ..."}`. Fino a Fix-D merged, l'eccezione fluisce al ramo
-outer `except Exception` del boundary (ancora broad pre-Fix-D) con
-messaggio meno specifico -- funzionalmente equivalente a un task
-fallito, solo meno descrittivo.
 """
 
 from unittest.mock import patch

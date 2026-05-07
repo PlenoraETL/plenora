@@ -1,27 +1,7 @@
-"""Contract test — _salva_tipi_colonne_da_canvas retry selettivo + raise.
+"""
+Contract test — _salva_tipi_colonne_da_canvas retry selettivo + raise.
 
 Reperto: il save di `columns_metadata` (contratto forte per lineage
-downstream via hook N11) era degradato a `logger.warning` in caso di
-fail. Downstream riceveva tipi fallback `str` senza segnali all'utente.
-
-Post-refactor: la logica retry+backoff+raise vive in
-`app.shared.columns_metadata.save_columns_metadata_with_retry` e
-viene usata da 4 call-site (estrai/manipola/arricchisci/enrichment_task).
-Questi test restano in estrai perche' coprono il flusso end-to-end
-specifico dell'executor ESTRAI (transform canvas → columns_metadata
-prima del save); la logica pura e' coperta anche in
-`tests2/shared/test_columns_metadata_helper_contract.py`.
-
-Test casi:
-  1. Happy path: save al 1° tentativo → no retry, no raise
-  2. Retry + succeed al 2°: 1 transient poi OK → no raise
-  3. Retry + succeed al 3°: 2 transient poi OK → no raise
-  4. Fail dopo 3 retry: tutti transient → raise ColumnsMetadataSaveError
-  5. Non-transient (ValueError): raise immediato, no retry
-  6. Non-transient (TypeError): raise immediato, no retry
-  7. Il messaggio di errore include project_id + attempts + hint recovery
-  8. Il blob flag 'result_already_persisted' = True (documenta che
-     il risultato è safe da scaricare)
 """
 
 from __future__ import annotations
@@ -305,7 +285,7 @@ def test_backoff_applied_between_retries(executor_with_mocks, monkeypatch):
 # Questi test patchano lo strato piu' basso (`update_project_canvas_key_atomic`)
 # e verificano che l'intero stack propaghi correttamente:
 #     executor → project_service → config_db_service
-# Bug scenario bloccato:
+# FIXME: scenario bloccato:
 #   project_service.update_project_columns_metadata cattura tutte le
 #   eccezioni → ritorna False → executor non fa retry → scrive
 #   res["columns_metadata"] comunque → falso positivo.

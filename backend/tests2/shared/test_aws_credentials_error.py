@@ -1,18 +1,7 @@
-"""Unit test per `app.shared.cloud_backends.aws_credentials_error_message`.
+"""
+Unit test per `app.shared.cloud_backends.aws_credentials_error_message`.
 
 Helper boundary che riconosce errori boto3/botocore di credenziali AWS
-scadute o non disponibili e ritorna un messaggio operativo unico
-("Run 'aws sso login' or refresh AWS credentials, then retry.").
-
-Usato da `result_store.save_result_blob*` e da
-`admin_backups.service.list_backups` per uniformare l'errore percepito
-dall'utente, senza mascherarlo come success.
-
-Telemetria di riferimento (BUG.md, 2026-04-27):
-    botocore.errorfactory.AccessDeniedException: CreateOAuth2Token ->
-    The refresh token has expired
-    -> botocore.exceptions.LoginRefreshRequired: Please reauthenticate
-       using 'aws login'.
 """
 
 import pytest

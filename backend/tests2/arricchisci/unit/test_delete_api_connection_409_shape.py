@@ -1,22 +1,7 @@
-"""Contract test per shape 409 canonica su DELETE /api/api-connections/{id}.
+"""
+Contract test per shape 409 canonica su DELETE /api/api-connections/{id}.
 
 Invariante blindato (Batch Fix 6.1 — error-handling-governance):
-    Quando una API connection e' referenziata nel canvas di uno o piu'
-    progetti arricchisci, la delete ritorna 409 con shape canonica:
-        {
-            "detail": {
-                "error": "api_connection_in_use",
-                "message": <str>,
-                "dependencies": [
-                    {"kind": "project", "id": str, "name": str}
-                ]
-            }
-        }
-
-Reperto pre-fix (API audit §3.3): la shape era {message, in_use_by:
-[{project_id, project_name}]} SENZA chiave ``error`` e con nomi campo
-divergenti (``project_id`` invece di ``id``). Il FE non poteva scrivere
-un handler uniforme. Post 6.1 allineata alle altre 3 cascade-delete.
 """
 
 from __future__ import annotations

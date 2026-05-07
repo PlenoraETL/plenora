@@ -1,8 +1,7 @@
-"""Contract tests for ExecutionResult typed boundary value.
+"""
+Contract tests for ExecutionResult typed boundary value.
 
 BE-GO-READY-ARCH-057-W3: validates the from_executor_dict / to_dict
-round-trip and the typed properties that replace raw dict guessing at
-the OrchestratorService -> PipelineArtifact boundary.
 """
 from __future__ import annotations
 

@@ -1,9 +1,7 @@
 """
 PLENORA-ETL — Data Source Interface
-Classe base astratta comune a tutti i backend di storage.
 
-Il Data Source è un componente "stupido": solo trasporto bytes raw.
-Nessuna logica di parsing o business — quella appartiene a MANIPOLA.
+Classe base astratta comune a tutti i backend di storage.
 """
 
 from abc import ABC, abstractmethod

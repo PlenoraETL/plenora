@@ -1,25 +1,7 @@
-"""Correctness invariant: `op_md5_hash` post-refactor == impl legacy (hash-bit identico).
+"""
+Correctness invariant: `op_md5_hash` post-refactor == impl legacy (hash-bit identico).
 
 Critico: l'hash e' usato per change detection; qualunque divergenza vs legacy
-romperebbe l'idempotenza dei pipeline che confrontano hash tra run successivi.
-
-Coperture richieste dal checkpoint:
-  - **normalizzazione tipi**: int vs float (NaN-induced dtype promotion),
-    datetime, bool, Decimal, object mixed
-  - **NaN/None**: colonna numeric con NaN, colonna object con None,
-    NaT, tutte-NaN su riga
-  - **stabilita' hash**: hash[i] stesso bit-per-bit a ogni chiamata
-  - **ordering/index effects**: `valid_columns = sorted(...)` e' garanzia
-    dell'impl; verifichiamo che riordinando l'input si ottengano gli
-    stessi hash; indice duplicato / non-monotonic non deve alterare
-    i risultati per-riga
-  - **geometry** via `v.wkt`
-  - **Unicode multibyte** (le stringhe vanno in md5 via utf-8)
-  - **normalize=True vs False** (strip+lower per-colonna)
-
-Esecuzione:
-    pytest backend/tests2/performance/test_correctness_op_md5_hash.py \
-        -m perf_correctness -s -q
 """
 
 from __future__ import annotations

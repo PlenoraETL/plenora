@@ -1,18 +1,7 @@
-"""Contract test — OrchestratorService wrap di executor result in PipelineArtifact.
+"""
+Contract test — OrchestratorService wrap di executor result in PipelineArtifact.
 
 Il contratto centrale: `execute_pipeline` chiama l'executor specifico
-(estrai/manipola/arricchisci), riceve un dict raw, poi lo wrappa in
-PipelineArtifact via `from_executor_result(result, project_id=...)`.
-
-Questo test verifica il contratto di traduzione:
-  - artifact_kind in {'inline', 'blob', 'file', 'none'} derivato corretto
-  - result_id / output_path / inline_df propagati
-  - project_id binding autorevole (override discreto / fail-closed su mismatch)
-  - dict-like access (artifact["success"], artifact["result_id"]) OK
-  - to_run_artifact_ref() produce Ref risolvibile per kind != 'none'
-
-Locka invariante cruciale che altrimenti si potrebbe rompere in modi
-silenziosi durante refactor di piping (es. cambio shape dict executor).
 """
 
 from __future__ import annotations
@@ -222,7 +211,7 @@ def test_orchestrator_wraps_estrai_executor_result_as_blob_artifact():
     assert artifact.result_id == "res-est-123"
     assert artifact.project_id == "p1"
     assert artifact.success is True
-    # Legacy consumer access
+    # NOTE: legacy consumer access
     assert artifact["result_id"] == "res-est-123"
     assert artifact["rows_count"] == 42
 
@@ -291,6 +280,6 @@ def test_orchestrator_preserves_carica_info_on_wrapped_artifact():
 
     assert artifact.success is True
     assert artifact.artifact_kind == "blob"
-    # Legacy consumer access: artifact["carica"] deve esistere post-wrap
+    # NOTE: legacy consumer access: artifact["carica"] deve esistere post-wrap
     assert "carica" in artifact
     assert artifact["carica"]["tasks"][0]["task_id"] == "ct-1"

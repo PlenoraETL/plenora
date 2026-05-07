@@ -1,32 +1,7 @@
 """
 Implementazione DatabaseWriter per il modulo CARICA.
 
-Architettura
-============
-Implementa l'interfaccia DestinationWriter per scrivere dati su database
-relazionali via SQLAlchemy. Supporta tutti i 5 database di PLENORA-ETL.
-
-Flusso di scrittura (metodo write()):
-1. Prepara il DataFrame (conversione geometrie WKT, gestione NULL)
-2. Genera SQL (INSERT, UPSERT, UPDATE) tramite DDLGenerator
-3. Esegue in batch con strategia transazionale configurata
-4. Aggiorna progresso ad ogni batch completato
-5. Restituisce WriteResult con esito dettagliato
-
-La connessione SQLAlchemy viene creata riusando DefaultEngineFactory
-dal modulo db/query_executor.py, garantendo consistenza con ESTRAI.
-
-Gestione geometrie:
-- GeoDataFrame con colonna GeoSeries -> converte in WKT
-- Colonna stringa con WKT -> passa direttamente
-- Colonna con WKB hex -> converte in WKT
-- Il DDLGenerator gestisce la conversione WKT -> tipo nativo DB
-
-Uso:
-    from app.core.carica.database_writer import DatabaseWriter
-
-    writer = DatabaseWriter(config, engine, db_type, progress_callback)
-    result = writer.write(df)
+Keeps database loading behavior isolated from orchestration callers.
 """
 
 from app.utils.logger import get_logger, get_request_id, get_user_id

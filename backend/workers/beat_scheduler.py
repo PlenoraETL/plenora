@@ -1,19 +1,7 @@
 """
 PlenoraBeatScheduler — subclass di celery.beat.Scheduler con:
+
 - schedule caricati dal DB Postgres (tabella `schedules`)
-- leader election via Redis SETNX (scheduler:beat:leader) per
-  evitare doppio enqueue quando due processi beat partono in parallelo
-- heartbeat + cleanup jobs integrati nel tick
-
-Funzionamento:
-- Ogni tick (default 60s), prima verifica leadership via Redis SETNX.
-  Se non-leader → standby (skippa tutto, incluso super().tick()).
-- Se leader: _sync_from_db legge la tabella `schedules`, popola
-  self.data con ScheduleEntry, delega a super().tick() che emette
-  i task Celery scaduti.
-
-Avvio (CLI Celery):
-    celery -A workers.celery_app beat -S workers.beat_scheduler.PlenoraBeatScheduler --loglevel=info
 """
 
 import os

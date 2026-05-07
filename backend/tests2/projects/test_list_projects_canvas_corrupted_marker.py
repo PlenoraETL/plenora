@@ -1,28 +1,7 @@
-"""Contract test F7-B1 (2026-04-24) — list_projects marker fail-open per
+"""
+Contract test F7-B1 (2026-04-24) — list_projects marker fail-open per
+
 canvas corrotto.
-
-Invariant blindato:
-    Quando `GET /api/projects/` incontra un progetto (manipola) con canvas
-    corrotto, il consumer `list_projects` NON rompe la risposta (fail-open
-    per UX), ma marca il project_dict con:
-        - `canvas_corrupted`: True
-        - `canvas_corrupted_reason`: <reason safe-by-construction>
-        - `source_project_ids`: []
-        - `file_source_ids`: []
-
-Regole "sparse":
-    Sui progetti healthy, le due chiavi `canvas_corrupted` e
-    `canvas_corrupted_reason` sono ASSENTI (non serializzate come False/
-    null). Il FE usa `if 'canvas_corrupted' in p:` per discriminare.
-
-Regressioni protette:
-    - Pre-F7-B1 il marker esponeva solo `canvas_corrupted=True` senza
-      reason → admin doveva aprire il progetto (che pero' genera 500 via
-      handler globale) per capire perche'. Ora il reason e' gia' nel
-      payload della lista.
-    - `canvas_corrupted_reason` NON deve leakare `str(original_error)`:
-      il reason e' safe-by-construction (costruito da project_service
-      raise sites con messaggi domain-safe).
 """
 
 from __future__ import annotations

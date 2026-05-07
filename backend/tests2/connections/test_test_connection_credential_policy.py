@@ -1,13 +1,7 @@
-"""Contract test Bug #1 (2026-04-23): test_connection password None/corrotta → 422.
+"""
+Contract test Bug #1 (2026-04-23): test_connection password None/corrotta → 422.
 
 Blinda il contratto: l'endpoint POST /api/connections/{id}/test non deve
-andare in 500 ASGI se la password nel DB e' NULL o non decriptabile. Deve
-rispondere HTTP 422 Unprocessable Entity con detail esplicito.
-
-Regression risk: in passato _row_to_connection(mask_password=False)
-passava password=None a DatabaseConnection (str) → Pydantic ValidationError
-→ 500. Il fix (2026-04-23) raise CredentialUnavailableError che il router
-traduce in 422.
 """
 
 from __future__ import annotations

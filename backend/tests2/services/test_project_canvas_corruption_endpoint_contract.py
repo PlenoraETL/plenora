@@ -1,16 +1,7 @@
-"""Endpoint contract test — /projects/{id} traduce CanvasCorruptedError
+"""
+Endpoint contract test — /projects/{id} traduce CanvasCorruptedError
+
 in HTTP 500 esplicito via global exception handler.
-
-Pre-fix: canvas corrotto in DB → get_project_canvas ritornava
-CanvasState() vuoto → endpoint rispondeva 200 con canvas vuoto →
-l'utente salvava sopra i dati corrotti.
-
-Post-fix: canvas corrotto → CanvasCorruptedError → handler globale
-in main.py → 500 JSON con:
-  - detail: messaggio in italiano con project_id e reason
-
-Questo test monta FastAPI con il router projects + il global handler
-registrato, e verifica che la chain raise→handler→response funzioni.
 """
 
 from __future__ import annotations

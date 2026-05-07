@@ -1,24 +1,7 @@
-"""Contract test per fail-closed sul pre-check cascade di
+"""
+Contract test per fail-closed sul pre-check cascade di
+
 DELETE /api/datasources/{id}.
-
-Invariante blindato (Batch Fix 6.3 — error-handling-governance):
-    Il helper ``_find_projects_using_datasource`` scansiona tutti i
-    progetti per cercare nodi che referenziano il ``ds_id``. Due classi
-    di failure:
-
-    - partial failure (alcune rows non checkabili, altre si') →
-      fail-open legittimo: breadcrumb warning + continue sulle rows
-      rotte, risultato basato sulle rows checkate.
-
-    - total failure (TUTTE le rows falliscono il check) → fail-closed
-      obbligatorio: il helper solleva ``RuntimeError`` (sentinel interno
-      al batch 6.3, non esteso oltre questo scope) e il caller
-      ``delete_datasource`` lo traduce in ``HTTPException(500)``.
-
-Reperto pre-fix (audit §4.1 S-FAILOPEN-CASCADE): i due ``except
-Exception: continue`` nudi (linee 213, 229) non loggavano e non
-contavano i fallimenti; se tutti i canvas erano non parsabili, la
-delete procedeva silent.
 """
 
 from __future__ import annotations

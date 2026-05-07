@@ -1,35 +1,7 @@
-"""Contract test BE-GO-READY-AUTH-ENGINE-012-SHARED-CONTRACT-BOUNDARY.
+"""
+Contract test BE-GO-READY-AUTH-ENGINE-012-SHARED-CONTRACT-BOUNDARY.
 
 Lock the new shared auth contract module
-`app.shared.contracts.auth`. Three classes of invariants:
-
-1. **Purity**: the module MUST NOT import FastAPI / Starlette /
-   `app.db.*` / psycopg2 / redis / `app.config.settings` /
-   `app.core.auth.disclosure` / `app.core.auth.ownership` /
-   `app.core.auth.mfa` / `app.shared.token_blacklist` /
-   `app.shared.cloud_backends` / boto3. The contract is a pure
-   types + pure policy boundary; if any of the forbidden imports
-   appear, the contract has been polluted.
-
-2. **Public surface**: exposes exactly the symbols documented in
-   the module's `__all__`: `CurrentUser`, the 4 role tuples,
-   `group_filter`. No more, no less. Adding a symbol is a
-   deliberate contract change and must update both `__all__` and
-   this test.
-
-3. **Identity**: the contract symbols are the same Python
-   objects as their canonical-leaf counterparts. `CurrentUser` is
-   re-exported from `app.core.auth.models`; role tuples from
-   `app.core.auth.roles`. `group_filter` is defined in the
-   contract and re-exported by `app.core.auth.ownership` (and
-   transitively by `app.core.auth.auth`) — identity preserved
-   across the chain.
-
-Plus a source-bound migration check: the 4 routers migrated by
-this stream (logs / intermediate / projects / scheduler) MUST
-import `CurrentUser` and `group_filter` from
-`app.shared.contracts.auth` (not from `app.core.auth.models` or
-`app.core.auth.ownership`).
 """
 
 from __future__ import annotations

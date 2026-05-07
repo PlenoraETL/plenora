@@ -1,20 +1,7 @@
-"""Contract tests per gli archive hook del beat scheduler (O-ARC Batch 3).
+"""
+Contract tests per gli archive hook del beat scheduler (O-ARC Batch 3).
 
 Pattern mock-based, clonato da test_beat_scheduler_cleanup_contract.py.
-Nessuna integration con PG o S3: writer, factory storage e DB driver
-sono tutti mockati. La suite valida:
-- gate sequenziali (24h / LOG_ARCHIVE_ENABLED / retention)
-- invocazione del writer con parametri corretti (tabella, cutoff
-  tz-aware, closures non-None, run_date default)
-- retry-on-failure (slot NON aggiornato su exception -> riprova il
-  prossimo tick)
-- contratto delle closures SELECT (ORDER BY stabile, ts column per
-  table) e retention_bypass_execute (SET LOCAL + DELETE sullo stesso
-  cursor)
-- interazione del gate introdotto in _cleanup_old_logs quando
-  LOG_ARCHIVE_ENABLED flippa
-
-Mappatura triage §4.1: B3-T1..T12 + T11 gemello audit.
 """
 
 from __future__ import annotations

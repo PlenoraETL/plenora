@@ -1,17 +1,7 @@
-"""Contract test — login rate limiter Redis-backed (R-01).
+"""
+Contract test — login rate limiter Redis-backed (R-01).
 
 Copre il modulo `app.shared.login_rate_limiter`:
-
-  1. limit applicato per IP (sliding window) usando un fakeredis;
-  2. window/reset: dopo che il window scade, il bucket si svuota;
-  3. cluster-safety simulata: due "istanze" che condividono lo
-     stesso fakeredis store vedono lo stesso bucket;
-  4. Redis unavailable: il limiter delega al `fallback` callable
-     (in single-node = parita' col vecchio limiter in-memory).
-
-I test usano `time.time()` reale per pochi secondi: settiamo window
-piccoli (2-3s) cosi' il wall-clock e' lecito senza freezegun. Soglie
-generose (1.5s) per evitare flake.
 """
 
 from __future__ import annotations

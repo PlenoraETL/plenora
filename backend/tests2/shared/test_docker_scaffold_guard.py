@@ -1,35 +1,7 @@
-"""Architectural lock for the Plenora-ETL first Docker scaffold.
+"""
+Architectural lock for the Plenora-ETL first Docker scaffold.
 
 BE-GO-READY-INSTALL-011-FIRST-DOCKER-SCAFFOLD.
-
-Source-bound assertions that the four scaffold artifacts ship
-with the canonical contract:
-
-  - `backend/Dockerfile` (multi-stage build/runtime, non-root,
-    HEALTHCHECK on /health, EXPOSE 5004, libgdal/libpq native
-    deps);
-  - `docker-compose.yml` (5 services: postgres, redis, backend,
-    worker, beat; healthchecks; depends_on conditions; named
-    volumes; cleanroom-aligned worker `--pool=solo` and beat
-    `PlenoraBeatScheduler`);
-  - `.dockerignore` (excludes `.env*`, venvs, agent state,
-    pytest temps);
-  - `.env.docker.example` (template; gitignored real
-    `.env.docker` references; six commented memory caps).
-
-Scope: existence + canonical-contract phrases. We do NOT spin
-up Docker daemons or run `docker compose config` here -- the
-test runs on Windows / CI without Docker. The contract is the
-*shape* of the files; runtime validation is a separate stream.
-
-Outside scope:
-  - the install-docker.md scaffold runbook (locked by
-    `test_install_docker_scaffold_doc_guard` below + the
-    install-execution-pack guard);
-  - the dry-run pack disclaimer (locked by
-    `test_install_marco_dry_run_doc_guard.py`);
-  - the canonical 8-item smoke harness (locked by
-    `test_install_smoke_harness_doc_guard.py`).
 """
 
 from __future__ import annotations

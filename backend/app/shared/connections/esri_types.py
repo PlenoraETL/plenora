@@ -1,14 +1,7 @@
-"""Esri type mapping constants - provider-neutral shared module.
+"""
+Esri type mapping constants - provider-neutral shared module.
 
 BE-GO-READY-ARCH-056-W4-ARCGIS-PROVIDER-TYPES-CUT.
-
-Moved from ``app.core.features.arcgis_client`` per ADR-0023: type
-mappers are shared provider knowledge, not Features-domain internals.
-``arcgis_client`` re-exports this class for backward compatibility.
-
-No heavy imports: zero pandas/geopandas/requests/DB/FastAPI.
-Accepts ``dtype: object`` in pandas-facing helpers so callers can
-pass a numpy dtype without creating an import dependency here.
 """
 
 from __future__ import annotations

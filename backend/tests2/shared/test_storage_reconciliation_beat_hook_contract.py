@@ -1,15 +1,7 @@
-"""Contract tests BE-GO-READY-STORAGE-ENGINE-006-RECONCILIATION-BEAT-HOOK.
+"""
+Contract tests BE-GO-READY-STORAGE-ENGINE-006-RECONCILIATION-BEAT-HOOK.
 
 Lock the boundary additions and the beat hook wiring:
-
-1. New typed boundary: `fetch_due_pending_deletes` (read), `mark_lost`
-   (terminal autocommit), `compute_next_retry_at` (pure backoff
-   helper).
-2. Beat hook `_reconcile_storage` wired into `tick()` with a cadence
-   gate; respects `STORAGE_RECONCILE_INTERVAL_SECONDS` <= 0 disable.
-3. Per-row dispatch: ok/skipped → `mark_orphan_deleted`; failed →
-   `mark_failed_attempt` + `next_retry_at`; max attempts → `mark_lost`.
-4. Settings.DEFAULTS expose the 4 new tunables.
 """
 
 from __future__ import annotations

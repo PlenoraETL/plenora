@@ -1,13 +1,7 @@
-"""Contract test — download endpoint + cleanup + task result payload shape.
+"""
+Contract test — download endpoint + cleanup + task result payload shape.
 
 Post-refactor multi-host (R1 + in-memory): verifica che i path di
-download e cleanup restino corretti:
-
-1. /api/tasks/{task_id}/download fast-path eseguibile: stream da S3,
-   cleanup eager post-send via background_tasks.
-2. /api/eseguibili/{id}/download/{task_id}: idem con ACL + cleanup owner meta.
-3. Task result payload shape: dopo save_pipeline_result il dict contiene
-   result_id, output_filename, NO stale output_path.
 """
 
 from __future__ import annotations

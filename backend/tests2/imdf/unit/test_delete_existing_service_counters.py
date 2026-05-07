@@ -1,30 +1,7 @@
-"""[phase-5-b4][batch3] Bugfix copertura — `_delete_existing_service`
+"""
+[phase-5-b4][batch3] Bugfix copertura — `_delete_existing_service`
+
 contatori `attempted`/`succeeded` non inizializzati.
-
-Pre-B4.3:
-  - Il body di `_delete_existing_service` referenziava
-    `attempted += 1` e `succeeded += 1` senza init esplicito.
-  - Quando `matching` non era vuoto, il primo `attempted += 1`
-    sollevava `UnboundLocalError`.
-  - I test esistenti coprivano solo il path early-return
-    `if not matching: return (0, 0)` — mascheravano il bug.
-
-B4.3 chiude il debito dentro il cluster lifecycle (cfr. docstring di
-`app/core/imdf/arcgis/service_lifecycle.py` sezione "Bugfix incluso
-in B4.3 — UnboundLocalError contatori delete"). Init esplicito
-`attempted = 0` e `succeeded = 0` aggiunto dopo l'early-return,
-prima del loop.
-
-Questo file aggiunge 2 test mirati sul path non coperto:
-  1. **happy**: 1 item trovato, delete primario success →
-     ritorna `(1, 1)` SENZA UnboundLocalError.
-  2. **partial/fail**: 1 item trovato, delete primario fail +
-     fallback fail → ritorna `(1, 0)`.
-
-I test patchano `_search_user_items` (tramite il facade del modulo
-service_lifecycle dove la chiamata avviene per name lookup importato)
-e `client._http.post` per controllare lo stato senza chiamate REST
-reali.
 """
 
 from __future__ import annotations

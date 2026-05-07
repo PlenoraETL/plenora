@@ -1,48 +1,7 @@
-"""Health / readiness boundary.
+"""
+Health / readiness boundary.
 
 BE-GO-READY-BOOTSTRAP-ENGINE-009-HEALTH-EXTRACTION.
-
-Estratto verbatim dai 4 helper `_check_*` che vivevano in
-`backend/app/main.py:502-559`. Behavior user-visible invariato:
-stessi tuple `(ok, detail)`, stessa exception classification
-("<ExcType>: <msg>"), stessi fail-OPEN fallback per i due helper
-diagnostic (pool headroom + migrations aligned).
-
-Boundary
---------
-Leaf module: NO import di FastAPI / Starlette / boto3. Lazy import
-verso `app.db.pg_connection`, `app.db.migrations_runner`, `redis`
-(SDK) per preservare il pattern del codice originale (no top-level
-side effect su un dependency che potrebbe essere assente in
-contesti CLI/test).
-
-Settings consumato via attribute read su `app.config.settings`
-(singleton ADR-0021); zero `os.getenv`.
-
-Architettura
-------------
-4 funzioni `check_*` ritornano `CheckOutcome = tuple[bool, str]`.
-2 funzioni `gather_*` compongono il payload finale e ritornano un
-`HealthPayload` typed (frozen dataclass: `status_code` + `body`)
-che le route in `main.py` consegnano a `JSONResponse`.
-
-Le route restano nei loro decoratori FastAPI in `main.py` per
-preservare il routing wiring; questo modulo non sa che FastAPI
-esiste.
-
-Go-ready mapping
-----------------
-::
-
-    type CheckOutcome struct { OK bool; Detail string }
-    type HealthPayload struct { StatusCode int; Body map[string]any }
-
-    func CheckPostgres() CheckOutcome
-    func CheckRedis() CheckOutcome
-    func CheckPoolHeadroom() CheckOutcome
-    func CheckMigrationsAligned() CheckOutcome
-    func GatherLiveness() HealthPayload
-    func GatherReadiness() HealthPayload
 """
 
 from __future__ import annotations

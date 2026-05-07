@@ -1,57 +1,7 @@
 """
 Cluster SQL_HELPERS — quoting valori SQL ArcGIS-safe + chunking generico
+
 + batch-resolution OBJECTID via business-key.
-
-Origine
-=======
-Estratto da `app.core.imdf.arcgis_uploader` come parte di Phase 5
-Batch B4.1 (cluster split, vedi
-`orchestrate/phase_5_b4/preflight.md` §6 + §6.1 facade pattern
-ratificato in B1).
-
-Razionale del raggruppamento: tutte le entita' qui dentro condividono
-il dominio "preparazione query SQL ArcGIS":
-  - `_quote_sql_value`   — type-aware quoting per WHERE clause SQL,
-                            con gestione esplicita di numpy dtypes
-                            (int64/float64/bool_) provenienti da
-                            GeoDataFrame caricati via pyogrio.
-  - `_chunked`           — generic batch generator usato per spezzare
-                            le liste di business-key in WHERE IN (...)
-                            da 200 valori.
-  - `_query_oid_by_key`  — orchestrator che usa entrambi i precedenti
-                            per risolvere `{match_val: OBJECTID}` su
-                            un Feature Service ArcGIS.
-
-`_query_oid_by_key` chiama `_quote_sql_value` e `_chunked` come
-funzioni module-level — risoluzione per name lookup nello stesso
-modulo, NESSUNA dipendenza esterna verso `arcgis_uploader.py`.
-
-Invarianti pubbliche preservate (regola §6.1 zero call-site changes):
-  - `from app.core.imdf.arcgis_uploader import _quote_sql_value`
-    continua a funzionare grazie al facade re-export in
-    `arcgis_uploader.py`. Stesso per `_chunked` e `_query_oid_by_key`.
-  - `validator.py` lazy-import `_quote_sql_value` + `_chunked` da
-    `app.core.imdf.arcgis_uploader` continua a funzionare.
-  - `tests2/shared/test_hypothesis_property_contract.py:16` con
-    `from app.core.imdf.arcgis_uploader import _quote_sql_value`
-    (property test Hypothesis) continua a funzionare.
-  - Nuovo path canonico `from app.core.imdf.arcgis.sql_helpers import
-    <fn>` disponibile per future referenze interne al package arcgis.
-
-Logger naming
-=============
-Logger creato esplicitamente come
-`"app.core.imdf.arcgis_uploader"` (NON `__name__`) per preservare il
-contratto osservabile pre-extraction: il record warning emesso da
-`_query_oid_by_key` (`_query_oid_by_key({match_col}): expected ...`)
-continua ad apparire sotto il logger name dei consumer. Stesso
-pattern dei moduli figli estratti in B1 (vedi
-`transforms/joins.py`, `transforms/security.py`, ecc.).
-
-Il body sotto e' una copia BIT-PER-BIT delle implementazioni in
-`arcgis_uploader.py` al momento di B4.1. Nessuna modifica di logica,
-comment, log payload, ordine di operazione, type-handling numpy,
-batch-size 200, partial-result semantics di `_query_oid_by_key`.
 """
 
 from typing import Dict, List, Tuple

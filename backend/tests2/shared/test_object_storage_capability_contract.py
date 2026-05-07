@@ -1,15 +1,7 @@
-"""Contract test Phase 6 Batch 1.5 — object storage capability globale.
+"""
+Contract test Phase 6 Batch 1.5 — object storage capability globale.
 
 Verifica:
-  A. object_storage_enabled() rispetta OBJECT_STORAGE_ENABLED + BACKEND
-  B. get_runtime_object_storage / get_backup_object_storage:
-     - sollevano ObjectStorageDisabledError quando capability off
-     - usano bucket distinti
-  C. result_store / file_service / file_sources / eseguibili / IMDF
-     non tentano upload/list S3 quando capability off
-  D. admin_backups list ritorna feature-disabled (no boto3 import)
-     quando capability off
-  E. compat: get_object_storage delega a get_runtime_object_storage
 """
 
 from __future__ import annotations

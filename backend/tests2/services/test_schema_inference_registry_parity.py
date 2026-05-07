@@ -1,36 +1,7 @@
-"""Contract test BE-SCHEMA-INFER-001A — `_infer_transform_schema`
+"""
+Contract test BE-SCHEMA-INFER-001A — `_infer_transform_schema`
+
 parity vs `transforms_registry.json`.
-
-Audit-only batch (lane D di BE-PHASE2-PARALLEL-PACK-001).
-
-Verifica la parita' fra:
-- il registry dispatch in
-  `SchemaInferenceService._build_transform_handlers` (mappa
-  `transform_op` -> handler callable; pre-008-FINAL era un'if/elif
-  chain in `_infer_transform_schema`);
-- i transform IDs definiti in `app/core/manipola/transforms_registry.json`,
-  fonte di verita' per le trasformazioni eseguibili (PluginExecutor).
-
-Ogni transform_op presente nel registry ma NON nella dispatcher chain
-cade nel fallback `_schema_passthrough` con warning. Per le transform
-shape-preserving (sort, filter, distinct, sample) il passthrough e'
-corretto. Per le transform che ALTERANO lo schema (es.
-`add_row_number`, `geo_explode`, `geo_length`, `melt`, ecc.) il
-passthrough produce uno schema sbagliato — il FE mostrera' colonne
-disallineate dal runtime.
-
-BE-SCHEMA-INFER-001A outcome (audit-only):
-1. snapshot esatto delle 34 branch attive nel dispatcher;
-2. snapshot esatto delle 70 transform IDs nel registry;
-3. snapshot del gap (registry-only, dispatcher-only);
-4. classificazione del gap in "passthrough-OK" vs "passthrough-WRONG".
-
-Trigger di follow-up (BE-SCHEMA-INFER-002): ogni nuova entry nel gap
-"passthrough-WRONG" richiede un metodo `_schema_xxx` dedicato +
-estensione del dispatcher prima del rilascio della transform al FE.
-
-Niente runtime change qui: solo test go-ready che fallisce
-rumorosamente quando registry/dispatcher divergono.
 """
 
 from __future__ import annotations

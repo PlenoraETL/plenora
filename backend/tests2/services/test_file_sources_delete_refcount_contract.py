@@ -1,26 +1,7 @@
-"""Contract test - BE-HARDEN-001C E2 + E4 (BE-DELETE-002):
+"""
+Contract test - BE-HARDEN-001C E2 + E4 (BE-DELETE-002):
+
 reference-aware + race-safe `delete_file_source`.
-
-Verifica le invarianti del nuovo flow transactional:
-
-  E2 (refcount):
-    1. row unica con storage_key (refcount=0): storage.delete chiamata.
-    2. row con altri ref sullo stesso storage_key (refcount>0):
-       storage.delete NON chiamata + log structured `delete_skip_storage_shared_ref`.
-    3. delete dell'ULTIMO ref (refcount=0): storage.delete chiamata.
-    4. BYTEA mode (storage_key=None): early skip della refcount query.
-    5. row inesistente: returns False, no side effect.
-
-  E4 (race-safe):
-    6. usa `pg_connection.transaction()` (single conn, atomic);
-    7. SELECT corrente row con `FOR UPDATE`;
-    8. SELECT siblings con `FOR UPDATE`;
-    9. DELETE row dentro la transazione;
-   10. storage.delete (se applicabile) AFTER commit (fuori dal CM).
-
-Mock di `app.db.config.file_sources.transaction` (context manager) +
-cursor: nessun DB reale. Lo storage layer e' patched a livello di
-`app.shared.cloud_backends`.
 """
 
 from __future__ import annotations
@@ -434,7 +415,7 @@ def test_storage_delete_failure_after_commit_does_not_undo_db_delete(
 
     # Row gia' cancellata pre-storage-call -> True (no rollback DB)
     assert out is True
-    # Warning emesso (BE-GO-READY-STORAGE-ENGINE-002: log shape
+    # NOTE: emesso (BE-GO-READY-STORAGE-ENGINE-002: log shape
     # unificato `event=storage_compensating_delete_failed`).
     fake_logger.warning.assert_called_once()
     msg = fake_logger.warning.call_args[0]

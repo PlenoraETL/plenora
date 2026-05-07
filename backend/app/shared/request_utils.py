@@ -1,8 +1,7 @@
-"""Request helpers — cross-cutting utilities per endpoint FastAPI.
+"""
+Request helpers — cross-cutting utilities per endpoint FastAPI.
 
 Qui convergono le utility che servono a piu' di un router/middleware
-(es. resolve del client IP con trusted proxy allowlist). Niente logica
-di business: solo helper puri su `fastapi.Request`.
 """
 
 from __future__ import annotations

@@ -1,11 +1,7 @@
-"""Static-source ctx-strict contract (BE-GO-READY-TRANSFORMATION-ENGINE-008).
+"""
+Static-source ctx-strict contract (BE-GO-READY-TRANSFORMATION-ENGINE-008).
 
 Proves that ``_carica_sorgenti_statiche`` does NOT read
-``self._current_group_id``:
-
-  - stale singleton is invisible to this chain (sentinel used instead);
-  - explicit ``group_id`` kwarg is forwarded verbatim to SourceLoader;
-  - absent both, the ``"_static_"`` sentinel is used (non-authorizing).
 """
 
 from __future__ import annotations

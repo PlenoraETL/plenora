@@ -1,15 +1,7 @@
-"""Contract test per i fix puntuali su transforms/base.py.
+"""
+Contract test per i fix puntuali su transforms/base.py.
 
 Dalla sessione di audit 2026-04-17:
-  1. op_filter su colonna mancante -> raise ValueError (non piu' silent)
-  2. op_concat_columns skip_null=True -> vectorized (no apply axis=1)
-  3. op_md5_hash -> vectorized preparation (speedup)
-  4. op_table_diff -> itertuples + ottimizzazioni (no iterrows)
-
-Test coprono:
-  - Semantica corretta (input -> output atteso)
-  - Regression su bug noti
-  - Determinismo (stesso input -> stesso output)
 """
 
 from __future__ import annotations

@@ -1,42 +1,7 @@
-"""Architectural lock for the upload_intent debt classification.
+"""
+Architectural lock for the upload_intent debt classification.
 
 BE-GO-READY-INSTALLATION-022-CELERY-DRIFT-STORAGE-DEBT-GUARD
-(storage half).
-
-Source-bound assertions on
-`.agent-temp/BE_STORAGE_ENGINE_AUDIT.md` section 22.1
-("upload_intent as accepted architectural debt"). The section
-records the W2 race coverage shipped by STORAGE-ENGINE-008 as
-"accepted, mitigated" and explicitly classifies it as debt with
-two named target architectures (presigned upload + object event,
-or transactional outbox).
-
-If a future PR silently rewrites the section to claim the debt
-is closed without delivering one of the targets, this lock test
-fails before merge. Likewise if the canonical primitive name
-`upload_intent` is renamed in docs without coordinating the
-runtime rename.
-
-Locks today (all PASS):
-
-  - section 22.1 exists with the canonical title;
-  - text names `upload_intent` explicitly;
-  - both target architectures (presigned + event, transactional
-    outbox) are documented;
-  - status table classifies current state as "accepted,
-    mitigated" AND "debt, not target";
-  - both closure stream IDs are named so the discoverable trail
-    is intact;
-  - the hard non-goal "no replacement of the existing PG-backed
-    reconciler" is preserved;
-  - section is ASCII-only.
-
-Outside scope:
-  - the runtime upload_intent implementation (locked separately
-    by `test_storage_reconciliation_upload_intent_contract.py`
-    from STORAGE-ENGINE-008);
-  - the cleanroom Celery drift doc (locked by
-    `test_cleanroom_celery_drift_doc_guard.py`).
 """
 
 from __future__ import annotations

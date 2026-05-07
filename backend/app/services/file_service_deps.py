@@ -1,22 +1,7 @@
-"""Protocols + default implementations per FileSourceService DI (STRUCT-001 Seam B).
+"""
+Protocols + default implementations per FileSourceService DI (STRUCT-001 Seam B).
 
 Estratto verbatim da `app.services.file_service` senza alcun cambio
-comportamentale. `file_service.py` re-esporta gli 8 simboli per
-backward-compat con i test e con `FileSourceService.__init__`
-(continua a istanziare i Default come fallback).
-
-Contenuto:
-  - 4 Protocols (DI interfaces): LoggerProtocol, FileSystemProtocol,
-    DataLoaderProtocol, TimeProviderProtocol.
-  - 4 Default implementations (production-ready, stdlib + pandas):
-    NullLogger, DefaultTimeProvider, DefaultFileSystem, DefaultDataLoader.
-
-Leaf module: zero `app.services.*` imports. Lazy imports preservati
-per zip_safe, geopandas, fiona (cycle/optional-dep safety).
-
-Go-portability: le 4 Protocols mappano 1:1 a Go interface
-(`type FileSystem interface { Mkdir(...); ... }`) - chiarisce il
-contract DI verso un eventuale control-plane Go.
 """
 
 from __future__ import annotations

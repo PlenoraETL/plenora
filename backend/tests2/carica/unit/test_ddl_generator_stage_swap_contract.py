@@ -1,19 +1,7 @@
-"""Stage+swap DDL contracts (C5 fix 3 — UNDO safety cross-dialect).
+"""
+Stage+swap DDL contracts (C5 fix 3 — UNDO safety cross-dialect).
 
 Motivazione
------------
-Per TRUNCATE_INSERT + ALL_OR_NOTHING su dataset molto grandi (sopra
-CARICA_STAGE_SWAP_THRESHOLD righe), DELETE+INSERT in una singola txn
-satura UNDO/log del DBMS (ORA-01555, undo log too large MySQL,
-transaction log full MSSQL, bloat Postgres). Il pattern stage+swap
-risolve:
-
-1. CREATE tabella shadow `{table}__stg` con struttura = target
-2. INSERT tutti i batch nella shadow (zero pressione su target)
-3. RENAME atomico: target→backup, shadow→target, DROP backup
-
-Questo contract verifica che il DDL generator emette il SQL corretto
-per ogni dialetto supportato.
 """
 
 import pytest

@@ -2,11 +2,6 @@
 Transforms Package — Funzioni di trasformazione per MANIPOLA.
 
 Nota: il PluginExecutor carica le funzioni direttamente dai sottomoduli
-base.py e spatial.py tramite importlib dinamico. Questo __init__.py
-serve per import espliciti nei test e negli strumenti di sviluppo.
-
-Alias disponibili:
-    op_concat → op_union  (entrambi sono unione verticale di DataFrame)
 """
 
 # ── Trasformazioni base ──────────────────────────────────────────────────────

@@ -1,27 +1,7 @@
-"""Contract test trigger append-only su plenora.logs + plenora.audit_actions.
+"""
+Contract test trigger append-only su plenora.logs + plenora.audit_actions.
 
 Scope:
-  Fissa il contratto dei trigger BEFORE UPDATE/DELETE introdotti dalla
-  migration `2026-04-21_log_immutable_triggers.sql`:
-
-    1. UPDATE sempre vietato (immutability assoluta su log/audit).
-    2. DELETE vietato nel ramo normale.
-    3. DELETE ammesso SOLO con `SET LOCAL plenora.retention_cleanup = 'true'`
-       (bypass esplicito per job di retention autorizzati).
-    4. Il bypass NON permette UPDATE (immutabilita' su UPDATE e' totale).
-
-Divisione in due sezioni:
-
-  A) Static — leggono il file SQL della migration e asseriscono la
-     struttura: nomi trigger, tabelle coperte, presenza del bypass,
-     direzioni BEFORE/FOR EACH ROW. Girano senza PG.
-
-  B) Integration — applicano la migration dentro una transazione PG
-     isolata e verificano il comportamento effettivo dei trigger. Skip
-     con reason chiaro se `DATABASE_URL` non e' configurato.
-
-Le assertion integration si fanno dentro una tx con SAVEPOINT: ogni
-test rollbacka le righe inserite, zero residuo nel DB condiviso.
 """
 
 from __future__ import annotations

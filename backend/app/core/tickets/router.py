@@ -1,17 +1,7 @@
-"""Router API — /api/tickets.
+"""
+Router API — /api/tickets.
 
 Endpoints:
-  POST   /api/tickets                    → crea ticket
-  GET    /api/tickets                    → lista filtrata (RBAC applicato)
-  GET    /api/tickets/meta               → enum per frontend (categories, statuses, severities, kinds)
-  GET    /api/tickets/counts             → counts aggregati (badge sidebar + card dashboard)
-  GET    /api/tickets/{id}               → dettaglio + commenti + allegati
-  PATCH  /api/tickets/{id}               → update (RBAC)
-  DELETE /api/tickets/{id}               → soft delete (admin/superadmin); ?hard=true purge superadmin
-  POST   /api/tickets/{id}/comments      → aggiungi commento
-  POST   /api/tickets/{id}/attachments   → upload allegato (mime allowlist)
-  GET    /api/tickets/{id}/attachments/{aid}/download → scarica blob
-  DELETE /api/tickets/{id}/attachments/{attachment_id} → rimuove allegato
 """
 
 from __future__ import annotations

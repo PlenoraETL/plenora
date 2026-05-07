@@ -1,58 +1,7 @@
-"""Canvas-based enrichment orchestrator.
+"""
+Canvas-based enrichment orchestrator.
 
 BE-GO-READY-TRANSFORMATION-ENGINE-011-API-CONNECTOR-ORCHESTRATOR-EXTRACTION.
-
-Estrae da `app.core.arricchisci.api_connector.ApiConnectionService` la
-logica di esecuzione del canvas-graph arricchisci (`execute_enrichment`)
-+ i 5 helper strettamente coupled: `_init_execution_context`,
-`_get_execution_order` (Kahn), `_run_single_enricher`,
-`_is_file_source_for_file_processor`. Quei 5 metodi non parlano di
-"come fare una API call" — descrivono "come orchestrare un canvas
-arricchisci" (BFS topologica, dispatch per node_type, parallel
-groups, error boundary, final result shaping).
-
-Boundary contract
-=================
-Il modulo orchestrator NON conosce:
-- come parlare HTTP / OAuth / pagination (vivono in
-  `app.core.arricchisci.api_connection_generator_enricher` mixin via
-  `svc._execute_api_*`);
-- la shape di una `api_connection` row (vive nel mixin management);
-- come risolvere un `file_source_id` su FS/DB/S3 (vive nel mixin
-  rest_file);
-- come materializzare un DataFrame in CSV/GeoJSON/etc. (vive nel
-  mixin support → `_save_and_build_dataframe_response`).
-
-Il modulo orchestrator riceve un `svc: ApiConnectionService` come
-parametro e ne usa i metodi pubblici/protected come capability
-boundary (DI per dipendenza, anche se classe esistente). Lo state
-`svc._current_group_id` / `svc._preview_limit` viene scritto qui
-(orchestrator owns the execution context) e letto dai mixin
-SOURCE_LOADING / REST_FILE per il tenant binding.
-
-KEEP_COMPAT
-===========
-`ApiConnectionService.execute_enrichment(...)` resta come metodo
-sulla classe (wrapper thin che delega a
-`canvas_orchestrator.execute_canvas_enrichment(self, ...)`).
-Ragioni: ~5 consumer esterni esistenti
-(`executor.py`, `router.py`, `eseguibili/scanner.py`, test legacy
-`test_api_connector_execute_enrichment_lock.py` patchano via
-`svc.execute_enrichment(...)`). Senza il wrapper il refactor
-romperebbe il contratto pubblico.
-
-Test esistenti: il fixture `env` in
-`tests2/arricchisci/unit/test_api_connector_execute_enrichment_lock.py`
-fa `patch.object(api_service, "_load_source_project", ...)` ecc. —
-i 5 metodi mockati restano sulla classe via mixin; il dispatch
-`svc._load_source_project` continua a funzionare.
-
-Go-ready mapping
-================
-    type CanvasOrchestrator struct {
-        Svc *ApiConnectionService
-    }
-    func (o *CanvasOrchestrator) Execute(ctx, projectID, canvas, ...)
 """
 
 from __future__ import annotations

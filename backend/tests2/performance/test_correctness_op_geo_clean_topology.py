@@ -1,34 +1,7 @@
-"""Correctness invariant: `op_geo_clean_topology` post-refactor vs legacy.
+"""
+Correctness invariant: `op_geo_clean_topology` post-refactor vs legacy.
 
 Il refactor di Batch 3B sostituisce l'O(n^2) unary_union-accumulator
-(`preceding = unary_union(geometries[:i])` dentro un for-loop) con
-un accumulator incrementale (`accumulated = accumulated.union(diff)`
-al passo i).
-
-Rischio principale: i risultati di `unary_union([a, b, c])` e di
-`a.union(b).union(c)` possono differire a livello di coordinate per
-floating-point (GEOS interno e' deterministico per input fissi, ma
-l'ordine e la strategia di union cambiano il cammino numerico).
-
-Vincolo del checkpoint utente:
-  "quality of data > raw speed"
-  "se per unary_union emerge un tradeoff forte tra performance e
-   correttezza topologica, fermati a checkpoint"
-
-Policy di questo test:
-  - Confronto primario con `equals_exact(tol=1e-9)`.
-  - Se fallisce, fallback a `equals()` topologica (che usa la
-    tolerance interna GEOS): se passa = "FP noise accettabile".
-  - Se fallisce anche `equals()`, confronto a tolerance di area
-    relativa: `symmetric_difference.area / total.area < 1e-6`.
-  - Se anche quello fallisce → AssertionError + report diff.
-
-Qualsiasi divergenza oltre la tolerance viene riportata al
-checkpoint utente prima del commit.
-
-Esecuzione:
-    pytest backend/tests2/performance/test_correctness_op_geo_clean_topology.py \
-        -m perf_correctness -s -q
 """
 
 from __future__ import annotations

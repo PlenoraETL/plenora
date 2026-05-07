@@ -1,13 +1,7 @@
-"""Contract test — app/shared/path_policy.validate_imdf_task_id (D3 commit 1).
+"""
+Contract test — app/shared/path_policy.validate_imdf_task_id (D3 commit 1).
 
 Centralizza la validazione formato bundle_task_id + path traversal guard
-precedentemente triplicata in:
-- app/core/imdf/router.py:_safe_bundle_dir
-- app/core/imdf/validator.py (inline)
-- workers/tasks/imdf_publish_task.py:_safe_bundle_dir
-
-I 3 call site delegano qui; ogni caller traduce `ValueError` nel proprio
-contratto errore (HTTPException 400 / report issue / Optional return).
 """
 
 from __future__ import annotations

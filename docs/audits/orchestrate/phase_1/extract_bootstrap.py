@@ -1,15 +1,7 @@
-"""Estrai dal dump prod il bootstrap base per `0000_bootstrap_base_tables.sql`.
+"""
+Estrai dal dump prod il bootstrap base per `0000_bootstrap_base_tables.sql`.
 
 Uso: invocato manualmente, NON committato. Output:
-  backend/migrations/0000_bootstrap_base_tables.sql
-
-Vincoli:
-- legge solo `orchestrate/phase_1/b2_prod_schema_dump.sql`
-- niente DML (INSERT/COPY/DROP/TRUNCATE/DELETE)
-- niente OWNER/GRANT/COMMENT/CREATE INDEX
-- 27 CREATE TABLE IF NOT EXISTS, 3 CREATE SEQUENCE IF NOT EXISTS
-- 27 PK + 1 UNIQUE + 27 FK + 3 sequence ownership in DO block idempotenti
-- DO block catturano duplicate_object + undefined_table/undefined_column dove serve
 """
 
 from __future__ import annotations

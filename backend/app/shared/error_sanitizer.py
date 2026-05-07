@@ -1,23 +1,7 @@
-"""Sanitizer per messaggi di errore esposti al client HTTP.
+"""
+Sanitizer per messaggi di errore esposti al client HTTP.
 
 Batch Fix 6.2 (error-handling-governance, Phase 2 Hardening).
-Applicato ai 9 punti HIGH RISK di leak ``str(e)`` in 4xx sui router
-sensibili (``eseguibili/router.py``, ``features/routes.py``). Rimuove
-dai messaggi esposti via ``HTTPException.detail``:
-
-    - URL completi (http/https/ftp/sftp/ssh) -> ``[URL]``
-    - Coppie chiave=valore sensibili (token, api_key, password, secret,
-      auth, bearer, client_secret) -> ``<key>=[REDACTED]``
-    - JWT standalone (3 sezioni base64 separate da ``.``) -> ``[REDACTED]``
-    - Path Windows assoluti (``C:\\...``) -> ``[PATH]``
-    - Path POSIX assoluti in directory sensibili (``/home/...``,
-      ``/Users/...``, ``/tmp/...``, ...) -> ``[PATH]``
-
-Applica inoltre truncate a 500 char e fallback su input vuoto/None.
-
-Non dipende da librerie esterne. Deterministico. Le regole sono chiuse
-(nessuna euristica extra). Ogni estensione va ratificata in un batch
-dedicato con contract test aggiornati.
 """
 
 from __future__ import annotations

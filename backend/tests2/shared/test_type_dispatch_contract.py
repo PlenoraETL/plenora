@@ -1,25 +1,7 @@
-"""Contract test — dispatch dei tipi colonna (post-refactor C).
+"""
+Contract test — dispatch dei tipi colonna (post-refactor C).
 
 Dopo la centralizzazione in `app.shared.column_types`, il vocabolario
-canonico e le dispatch table vivono in un solo modulo. Questa suite
-blinda il contract osservabile sui 3 entry point storici:
-
-  1. app/core/carica/router.py::auto_mapping — canvas-type -> pandas dtype
-     (delega a canvas_type_to_pandas_dtype)
-  2. ColumnMapper._infer_type_from_canvas — canvas-type -> canonical
-     (delega a normalize_canvas_type)
-  3. ColumnMapper._infer_type_from_pandas — pandas Series -> canonical
-     (delega a pandas_series_to_canvas_type, include euristica N11)
-
-Copertura:
-- matrice I/O di ogni dispatch (canonical, alias, geometry con suffissi,
-  case-insensitive, unknown/empty)
-- sentinel anti-reintroduzione dispatch inline in auto_mapping
-- euristica N11 (ribadita come boundary del vocabolario — copertura
-  primaria in tests2/security/.../test_n11_type_inference_loss_contract.py)
-
-Qualsiasi cambio di output va trattato come decisione esplicita:
-aggiornare test + docstring insieme al codice.
 """
 
 from __future__ import annotations

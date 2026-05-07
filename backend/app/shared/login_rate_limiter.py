@@ -1,35 +1,7 @@
-"""Login rate limiter — Redis-backed sliding window con fallback in-memory.
+"""
+Login rate limiter — Redis-backed sliding window con fallback in-memory.
 
 Sostituisce/affianca il limiter in-memory in `app.core.auth.auth` (R-01).
-
-Semantica preservata 1:1 dal vecchio limiter:
-  - sliding window di `LOGIN_WINDOW_SECONDS`,
-  - 429 quando i tentativi nel window >= `LOGIN_MAX_ATTEMPTS`,
-  - `Retry-After = LOGIN_LOCKOUT_SECONDS - (now - oldest_in_window)`,
-    clampato a >=1.
-
-Backend Redis (cluster-safe):
-  Chiave: `plenora:login_rl:<ip>` — sorted set con score = epoch ts,
-  member = `<ts>:<uuid4>` per evitare collisioni di score.
-  Atomicità via pipeline `MULTI`. TTL = window + 60s buffer (chiave
-  auto-rimossa quando inattiva).
-
-Policy fallback (FAIL-SOFT):
-  Se il client Redis non e' disponibile (redis-py non installato,
-  init fallita, errore I/O su una specifica chiamata), il limiter
-  delega al `fallback` callable passato dal chiamante. Il chiamante
-  in `auth.py` mantiene `_failed_attempts`/`_rate_lock` come store
-  in-memory di fallback: in single-node con Redis down il
-  comportamento e' identico al vecchio limiter byte-per-byte.
-
-  Rationale: indisponibilita' Redis non deve bloccare l'auth, e
-  perdere completamente la difesa (fail-open puro) sarebbe peggio
-  del comportamento attuale single-node.
-
-Test hooks:
-  - `_set_client_for_tests(client)`  inietta fakeredis o None
-  - `_reset_client_for_tests()`      torna al lazy-init reale
-  - `_reset_state_for_tests()`       azzera il warning "emit-once"
 """
 
 from __future__ import annotations
@@ -52,7 +24,7 @@ _TTL_BUFFER_SECONDS = 60
 _client_lock = threading.Lock()
 _client: Optional[Any] = None
 _client_explicit: bool = False
-# Warning emit-once: evita rumore su ogni request quando Redis e' giu'.
+# NOTE: emit-once: evita rumore su ogni request quando Redis e' giu'.
 _warned_fallback: bool = False
 
 

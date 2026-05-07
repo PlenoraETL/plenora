@@ -1,63 +1,7 @@
-"""Contract test per `app.core.scheduler.concurrency_manager.ConcurrencyManager` — TTL / expiration semantics.
+"""
+Contract test per `app.core.scheduler.concurrency_manager.ConcurrencyManager` — TTL / expiration semantics.
 
 Gap reale vs ``test_concurrency_manager_contract.py`` (17 test esistenti):
-
-Il test esistente **sostituisce i 5 helper privati** (``_set_nx``, ``_get``,
-``_incr``, ``_decr``, ``_delete``) con un in-memory store custom. Questo
-copre bene la composizione dei metodi pubblici (``try_acquire``,
-``release``, ecc.) ma **NON blinda la semantica TTL nativa di `_get` e
-`_set_nx`** — cioè il cuore del "lock expire" nel brief Batch 3.
-
-Contratti blindati qui (NON duplicati altrove):
-
-- ``_get`` su lock scaduto → auto-cleanup via DELETE + ritorna None.
-  Regressione: se qualcuno rimuove il check TTL, i lock non scadrebbero
-  mai dal punto di vista del caller → su un SIGKILL il lock resterebbe
-  appeso fino a cleanup manuale.
-- ``_get`` su expires_at malformato (non-ISO8601) → ``except pass`` →
-  ritorna value (lock preservato). Contract fail-closed documentato:
-  una corruzione dati NON deve né crashare né perdere il lock. Guard
-  contro refactor che sostituisca ``except Exception: pass`` con
-  ``raise`` o che delete la row corrotta.
-- ``_get`` su expires_at NULL → ritorna sempre value (lock persistente).
-  Contract: un lock senza TTL vive finché non lo si rilascia
-  esplicitamente (use case: ``force_release``-only locks o dati legacy
-  pre-TTL).
-- ``try_acquire`` su lock con TTL scaduto → "acquired" (non "queued").
-  Catena completa: ``_set_nx`` chiama ``_get`` come side-effect, che
-  cleanuppa il lock scaduto, e l'INSERT successivo riesce. Regressione
-  classica: se qualcuno spostasse il check TTL solo in ``_get`` usato
-  come read-only (togliendo il DELETE), il nuovo worker dopo un SIGKILL
-  continuerebbe a vedere lock "running" e accodarsi invece di ripartire.
-- ``is_running`` su lock scaduto → False. Delega a ``_get``, ma vale
-  la pena blindarlo a livello pubblico: un caller che non sa del TTL
-  interno si aspetta che ``is_running`` dica la verità operativa.
-- ``refresh_lock`` su lock scaduto → False, **senza eseguire l'UPDATE**.
-  Contract documentato in source: *"se il lock e' stato rilasciato tra
-  due chiamate, ritorna False"*. Regressione: se qualcuno rimuovesse
-  il guard ``_get() is None → return False``, l'UPDATE verrebbe
-  comunque eseguito → rowcount=0 → return False. Stesso risultato ma
-  il comportamento diverge: il guard è cruciale perché con
-  ``_get`` → auto-cleanup, il caller che refresha un lock morto NON
-  deve reinstaurarlo.
-
-Invariants blindati (``backend/docs/architecture/invariants.md``):
-
-- §1.6 scheduler fail-closed: lock scaduto = lock libero. NESSUN ramo
-  deve preservarlo tacitamente.
-- §1.3 fail-closed su corruzione dati: malformed TTL → lock resta
-  (preferiamo un lock "stuck" riconoscibile al cleanup manuale rispetto
-  a un lock che sparisce silent su parse error).
-
-Strategia di mocking
---------------------
-Sostituisco ``db.execute`` e ``db.fetchone`` con un ``_FakeDb`` minimale
-che simula la tabella ``scheduler_locks`` in-memory e capisce i 4-5
-pattern SQL che ``concurrency_manager`` usa. Così il codice VERO di
-``_get``/``_set_nx`` gira, e posso osservare:
-- la row memorizzata (per verificare INSERT/DELETE)
-- la lista degli SQL statement invocati (per verificare che UPDATE sia
-  o non sia stato emesso)
 """
 
 from __future__ import annotations

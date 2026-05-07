@@ -1,11 +1,7 @@
-"""Focused test: ResourceMetadata travels with load_file_sources.
+"""
+Focused test: ResourceMetadata travels with load_file_sources.
 
 BE-GO-READY-ARCH-057-W4-LOADEDRESOURCE-METADATA-SOURCE-PILOT.
-
-Verifies that ``load_file_sources`` now produces ``ResourceMetadata``
-at load time and stores it in an optional ``metadata_map`` dict,
-so that downstream code can read schema/CRS without re-parsing legacy
-type strings.
 """
 
 from __future__ import annotations

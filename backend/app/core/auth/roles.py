@@ -1,7 +1,7 @@
-"""Auth role constants.
+"""
+Auth role constants.
 
 Small shared boundary used by auth routers without importing the whole
-`auth.py` module. Keeps router extraction free from circular imports.
 """
 
 from __future__ import annotations

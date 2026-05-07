@@ -1,25 +1,7 @@
-"""Source-bound tombstone for the removed POST /api/logs/clear endpoint.
+"""
+Source-bound tombstone for the removed POST /api/logs/clear endpoint.
 
 Contract test P-CLR -- POST /api/logs/clear rimosso (anti-reintroduzione).
-
-Background: P-CLR removed `POST /logs/clear` (commit 698ff9d, 2026-04-22).
-Log retention is now driven by the beat worker (O-ARC pipeline
-archive-before-purge) as the only authorised consumer of DELETE on
-`plenora.logs`. References:
-  - `orchestrate/phase_2_hardening/p_clr_finalization.md` sec. 5.4;
-  - `backend/docs/architecture/invariants.md` sec. 1.4.
-
-This test blocks re-introduction: if anyone re-adds `@router.post("/clear")`
-in `backend/app/core/logs/router.py` (even as a no-op or compat shim),
-this source-bound check fails and forces explicit team review.
-
-TEST-ENGINE-003 shrink: replaced the prior 100-line TestClient-based
-form (3 HTTP round-trips: POST, GET, OpenAPI schema absence) with a
-single AST scan of the router source. Equivalent regression coverage:
-the only realistic path that would re-expose `/clear` is a future PR
-that adds `@router.post("/clear")` (or any verb) back to
-`logs/router.py`. The HTTP-side tests would have caught the same
-re-introduction one boot earlier; an AST scan catches it at PR time.
 """
 
 from __future__ import annotations

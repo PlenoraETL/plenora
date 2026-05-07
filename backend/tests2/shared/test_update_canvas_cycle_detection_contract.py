@@ -1,11 +1,7 @@
-"""Integrazione detect_project_lineage_cycle con ProjectService.update_canvas.
+"""
+Integrazione detect_project_lineage_cycle con ProjectService.update_canvas.
 
 Contratto:
-- Al save di un canvas, se i `project_source` nel canvas + le
-  dipendenze transitive degli altri progetti formano un ciclo,
-  `update_canvas` solleva `ProjectLineageCycleError`.
-- Il messaggio contiene la catena leggibile (A → B → A).
-- Canvas senza cicli passano normalmente (retrocompat totale).
 """
 
 from unittest.mock import MagicMock, patch

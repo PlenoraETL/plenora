@@ -1,38 +1,7 @@
-"""Contract test per `app.shared.crypto._get_raw_key` — key sourcing.
+"""
+Contract test per `app.shared.crypto._get_raw_key` — key sourcing.
 
 Invariants blindati (da ``backend/docs/architecture/invariants.md``):
-
-- §1.5 "Config loading" + coda §1.5 riga "env var crypto-key": la chain
-  contiene solo ``PLENORA_ENCRYPTION_KEY`` (D4 chiuso 2026-04-23). Gli
-  alias legacy ``URBY_ENCRYPTION_KEY`` e ``CONN_ENCRYPT_KEY`` NON sono
-  piu' letti. Ogni nuovo alias deve passare da qui con PR dedicata.
-- §3 riga ``ENVIRONMENT``: in produzione niente chiave → fail-fast
-  ``RuntimeError``; in produzione chiave uguale a ``_DEV_DEFAULT_KEY`` →
-  fail-fast; chiave più corta di ``_MIN_KEY_LENGTH`` → fail-fast in
-  qualunque ambiente.
-- §3 riga ``PLENORA_DISABLE_DEFAULT_KEY``: dev opt-in che replica
-  fail-fast prod.
-- §6 D5 chiusa 2026-04-20: il fallback su ``SECRET_KEY`` e
-  ``JWT_SECRET_KEY`` è stato RIMOSSO dalla chain. Questo test blinda
-  la regressione: un merge futuro che riesuma il fallback deve rompere
-  qui.
-- §6 D4 chiusa 2026-04-23 (O-D4-B rollout ``.env`` prod + O-D4-C rimozione
-  codice/doc): gli alias ``URBY_ENCRYPTION_KEY`` e ``CONN_ENCRYPT_KEY``
-  sono tombstoned. Settare queste env var da sole NON produce piu' una
-  chiave valida (fallback a dev default in dev, fail-fast in prod).
-
-Regressioni protette:
-
-- Riesumazione silenziosa del fallback ``SECRET_KEY`` / ``JWT_SECRET_KEY``
-  (D5): se qualcuno riaggiunge quei nomi alla chain, un ``SECRET_KEY``
-  settato per JWT verrebbe usato anche come crypto key → rotazione JWT
-  romperebbe silent la decifratura dei record. Test esplicito che
-  quei nomi NON vengono più letti.
-- Alias legacy tombstoned (D4): se qualcuno riaggiunge
-  ``URBY_ENCRYPTION_KEY`` o ``CONN_ENCRYPT_KEY`` alla chain, i test
-  tombstone sotto rompono. Regressione reale: deploy che ha ancora la
-  env legacy nel ``.env`` produrrebbe chiavi Fernet diverse da quella
-  attesa → record indecifrabili.
 """
 
 from __future__ import annotations

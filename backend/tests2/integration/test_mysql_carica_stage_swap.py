@@ -1,7 +1,7 @@
-"""Integration test stage+swap su MySQL reale (C5 fix 3).
+"""
+Integration test stage+swap su MySQL reale (C5 fix 3).
 
 Stessi 4 scenari di test_oracle_carica_stage_swap.py.
-Skip automatico se MySQL non raggiungibile.
 """
 
 from __future__ import annotations

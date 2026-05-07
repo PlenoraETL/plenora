@@ -1,15 +1,7 @@
-"""Contract test — size cap upload (T-04 Batch B).
+"""
+Contract test — size cap upload (T-04 Batch B).
 
 Verifica che `_enforce_upload_size_limit` rifiuti con 413 file oltre la
-soglia configurata (`settings.MAX_FILE_SIZE`) e ritorni la dimensione
-quando sotto soglia, **senza leggere il contenuto in RAM**: l'helper deve
-usare seek-end + tell + seek-zero, lasciando il cursore a 0 per il caller.
-
-Regressione protetta:
-  - prima del fix Batch B, `preview_file_temp` e `upload_multi_layer`
-    facevano `file.file.read()` per il MIME check senza guard di size →
-    DoS interno credenziato (qualsiasi utente non-esecutore caricava N GB
-    in RAM uvicorn). L'helper centralizzato rimette il guard PRIMA del read.
 """
 
 from __future__ import annotations

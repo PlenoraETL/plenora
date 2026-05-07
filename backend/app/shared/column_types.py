@@ -1,26 +1,7 @@
-"""Tipi colonna canvas — nome canonico, adapter di shape e dispatch table.
+"""
+Tipi colonna canvas — nome canonico, adapter di shape e dispatch table.
 
 Tre concetti, oggi con nomi vicini ma semantica distinta:
-
-  1. Tipo logico applicativo ("int", "real", "str", "bool", "date", "geometry[:...]")
-     — si incarna in due shape:
-       a. `columns_metadata` persistito: list[{"name": str, "type": str}]
-          (project-level, in canvas["columns_metadata"])
-       b. `canvas_types` in memoria: dict[str, str] (per-nodo, in node.data)
-
-  2. Dtype runtime pandas (in intermediate.node_meta.col_schema).
-     NON e' un tipo logico — e' il risultato dopo eventuali promozioni
-     (es. int64 -> float64 per NaN). Il fix N11 esiste proprio per NON
-     dipendere da questo quando serve il tipo semantico.
-
-Questo modulo e' la SINGOLA FONTE DI VERITA' per:
-  - il vocabolario canonico (`CANONICAL_BASE_TYPES`)
-  - gli alias di ingresso (`TYPE_ALIASES`)
-  - le dispatch table fra canvas-type / pandas-dtype / canonical
-  - gli adapter di shape (list <-> dict)
-
-Regola: ovunque serva conversione o dispatch sul tipo semantico, importa
-da qui. Non duplicare tuple inline o if/elif chain.
 """
 
 from __future__ import annotations

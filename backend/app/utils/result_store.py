@@ -1,7 +1,7 @@
 """
 PLENORA-ETL — Result Store
+
 Helper per salvare i risultati pipeline nel DB.
-I file vengono scritti in tempdir, salvati nel DB, poi eliminati.
 """
 
 import os

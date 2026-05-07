@@ -1,76 +1,7 @@
-"""Leaf Parquet preview parser.
+"""
+Leaf Parquet preview parser.
 
 BE-GO-READY-RESOURCE-ENGINE-016-ARTIFACT-PREVIEW-PARSER-BOUNDARY.
-BE-GO-READY-RESOURCE-ENGINE-018-PREVIEW-STREAMING-FIRST-STEP.
-
-Owns the pyarrow/pandas-bound parsing of a Parquet byte buffer
-into a typed preview shape (rows + column schema + total row
-count). Imported only by ``artifact_reader.py`` (the I/O
-orchestrator); ``import pyarrow`` / ``import pandas`` live
-**only** inside this module so the rest of
-``app/core/intermediate/`` and ``app/core/resources/`` does not
-pull pyarrow/pandas at import time.
-
-Streaming row-group decode (018)
---------------------------------
-Pre-018 the parser did ``pd.read_parquet(BytesIO(body_bytes))``
-on the FULL buffer, which materialized every row of the file in
-RAM as a single DataFrame before ``df.head(limit)`` trimmed
-back. Memory cost was O(file_rows × ncols × dtype_width)
-regardless of how few rows the caller actually wanted.
-
-Post-018 the parser opens a ``pyarrow.parquet.ParquetFile`` over
-a zero-copy ``pa.BufferReader`` view of ``body_bytes`` and reads
-ONLY the first batch sized to ``limit`` via
-``ParquetFile.iter_batches(batch_size=limit)``. Once we have
-``>= limit`` rows we break out of the iterator; remaining
-row-groups are NOT decoded. This bounds the materialized
-DataFrame cost to O(limit × ncols), independent of the file's
-row count.
-
-The byte cap (``ARTIFACT_PREVIEW_MAX_BYTES`` = 25 MB) remains
-upstream as a SAFETY NET: even with streaming decode, the
-caller still reads the full file bytes into memory because
-``pyarrow.parquet`` needs random access to the parquet footer
-(at the END of the file) plus the row-groups it actually
-decodes. A truly streaming pull-from-S3 path would require
-``pyarrow.fs.S3FileSystem`` and lives in residual scope; that
-is BE-GO-READY-RESOURCE-ENGINE-019.
-
-``row_count`` is read from ``pf.metadata.num_rows`` — the
-parquet footer carries this value, so it is O(1) regardless of
-file size. ``col_schema`` is derived deterministically from
-``pf.schema_arrow.empty_table().to_pandas()`` so the dtype
-strings match the legacy ``pd.read_parquet`` path bit-for-bit
-even when the file has zero rows.
-
-Boundary contract
------------------
-- Pure function: bytes in, ``ParquetPreview`` out (or
-  ``ParquetPreviewParseError`` on decode/conversion failure).
-  No I/O, no FastAPI, no ``app.config``, no object storage,
-  no logging.
-- pyarrow + pandas are the ONLY heavy imports here. Both
-  imports sit inside the function body so the *module* import
-  edge stays cheap; the function's *runtime* edge is where
-  pyarrow/pandas are unavoidable for the parquet decode
-  boundary.
-- The decode-error envelope (``ParquetPreviewParseError``) is
-  typed and carries the ``stage`` (``"read_parquet"`` or
-  ``"to_dict"``) plus the original exception so the caller can
-  build the user-visible error string in its own format
-  without leaking pyarrow / pandas internals.
-- On ``to_dict`` failure the error carries partial schema +
-  row_count so the caller can surface "rows unavailable but
-  schema known" — preserving the pre-016 surface of
-  ``ArtifactPreviewResult``.
-
-Anti-god-engine note
---------------------
-This module is a pure parser. It MUST NOT gain dependencies on
-``app.config``, ``app.core.auth``, ``app.shared.cloud_backends``,
-FastAPI, or object storage. The existing import-boundary tests
-under ``tests2/intermediate/unit/`` lock this contract.
 """
 
 from __future__ import annotations

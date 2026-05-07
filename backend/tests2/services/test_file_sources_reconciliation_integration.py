@@ -1,30 +1,7 @@
-"""Integration test - BE-GO-READY-STORAGE-ENGINE-005:
+"""
+Integration test - BE-GO-READY-STORAGE-ENGINE-005:
+
 `delete_file_source` ←→ reconciliation log boundary.
-
-Locks the integration contract:
-
-  1. Last-reference path (`storage_key` set, no siblings):
-     `record_pending(cur, ...)` is called inside the same
-     transaction as the DB DELETE, with the canonical kwargs
-     (domain, storage_key, operation, reason, extras).
-  2. `compensating_delete` outcome `"ok"` -> `mark_done(ref.id)`.
-  3. `compensating_delete` outcome `"failed"` -> `mark_failed_attempt`
-     with `error="compensating_delete_outcome=failed"`.
-     Return value of `delete_file_source` is still `True`
-     (ADR-0011 posture preserved: orphan accepted, but tracked).
-  4. Capability disabled (`compensating_delete` returns `"skipped"`)
-     -> `mark_done(ref.id)` (no orphan possible).
-  5. Shared-blob path (siblings exist): `record_pending` is NOT
-     called (no orphan possible — the shared blob keeps a live
-     reference). Neither `mark_done` nor `mark_failed_attempt`
-     is called.
-  6. BYTEA path (`storage_key=None`): `record_pending` is NOT
-     called (no storage cleanup at all).
-
-The cursor mock + `transaction()` patch follow the same pattern
-as `test_file_sources_delete_refcount_contract.py`, extended with
-a 2nd `fetchone` response for `record_pending`'s `INSERT ...
-RETURNING id`.
 """
 
 from __future__ import annotations

@@ -2,42 +2,6 @@
 PLENORA-ETL — Global API error envelope (BE-GO-READY-ERROR-CONTRACT-002).
 
 Helper centrale per costruire risposte di errore con shape standard
-go-ready:
-
-    {
-      "error":   "code_snake_case",
-      "message": "frase italiana per UI / log",
-      "details": { ...optional_structured_payload... }
-    }
-
-Compatibilita' transitoria
-==========================
-Per non rompere i ~10 test contract gia' esistenti che lockano
-`response.json()["detail"]["error"]` (forma FastAPI legacy), il body
-include un `detail` mirror della stessa shape. Schema dual-shape:
-
-    {
-      "error":   "...",
-      "message": "...",
-      "details": {...},
-      "detail": { "error": "...", "message": "...", "details": {...} }
-    }
-
-Il mirror `detail` e' una copia delle stesse 3 chiavi. Quando il FE
-avra' migrato i consumer su `response.json().error`, un batch
-successivo rimuovera' il mirror.
-
-Boundary
-========
-Modulo puro: nessun I/O, nessun env read, nessuna importazione di
-servizi/repository. La risorsa esposta e' una funzione che riceve
-parametri espliciti e ritorna una `JSONResponse` o un dict
-serializzabile. Coerente con BE_RULES §3 (I/O fuori dal core).
-
-Headers di response (CORS, X-Request-ID) vengono passati come
-argomento dal caller (l'exception handler ha accesso al `Request`),
-quindi questo helper non li costruisce: si limita a includerli
-nella risposta finale se forniti.
 """
 
 from __future__ import annotations

@@ -1,63 +1,7 @@
 """
 Cluster COLUMNS — operazioni di shaping/managing della struttura colonne.
 
-Origine
-=======
-Estratto da `app.core.manipola.transforms.base` come parte di Phase 5
-Batch B1.4 (cluster split, vedi
-`orchestrate/PHASE_5_ENTRY_PLAN.md` §3 P5-B1 + §6.1 facade pattern).
-
-B1.4 e' stato approvato come **eccezione esplicita** al target
-commit-size <600 (effettivo ~645): il cluster e' cohesive, le 5
-funzioni sono self-contained, nessun helper condiviso, nessun
-monkey-patch coupling, rollback atomico. Spezzare il cluster per
-~45 righe sarebbe stato churn.
-
-Contenuto:
-  - **Strutturali** (no value transformation):
-    - `op_drop_columns`    — elimina colonne dal DataFrame.
-    - `op_rename`          — rinomina colonne via mapping.
-    - `op_reorder_columns` — riordina colonne (custom o alphabetical).
-  - **Cell-level su colonne** (creano colonne derivate da valori):
-    - `op_concat_columns`  — concatena valori N colonne in 1 nuova.
-    - `op_split_column`    — divide 1 colonna in N nuove via separator.
-
-Razionale del raggruppamento: tutte e 5 lavorano sulla **forma del
-DataFrame** (shape delle colonne), o aggiungendo colonne derivate
-(concat/split) o riorganizzando il set esistente (drop/rename/reorder).
-Nessuna calcola aggregati, nessuna filtra righe, nessuna trasforma
-geometrie.
-
-Invarianti pubbliche preservate (regola §6.1 zero call-site changes):
-  - `from app.core.manipola.transforms.base import <op>` continua a
-    funzionare per tutte e 5 grazie al facade re-export in `base.py`.
-  - `from app.core.manipola.transforms import <op>` continua a
-    funzionare per le 4 esposte da `__init__.py` (`op_concat_columns`,
-    `op_rename`, `op_drop_columns`, `op_split_column`): l'import in
-    `__init__.py` resta `from .base import ...` e cattura il facade.
-    `op_reorder_columns` non e' re-exported via init (verificato
-    pre-extraction) → nessun cambio init richiesto.
-  - `transforms_registry.json` con entries `"base.<op>"` per tutte e 5
-    continua a risolvere via `getattr(<base module>, "<func>")` dal
-    `PluginExecutor`.
-  - Nuovo path canonico `from app.core.manipola.transforms.columns
-    import <op>` disponibile per tutte e 5.
-
-Logger naming
-=============
-Logger creato esplicitamente come
-`"app.core.manipola.transforms.base"` (NON `__name__`) per preservare
-il contratto osservabile pre-extraction: i record `Rename`,
-`[CRASH] Errore Drop Columns`, `concat_columns`, `Split column`,
-`ReorderColumns` continuano ad apparire sotto il logger name dei
-consumer. Stesso pattern di `joins.py` (B1.1b), `strings.py` (B1.3a),
-`utility.py` (B1.3c).
-
-Il body sotto e' una copia BIT-PER-BIT delle implementazioni in
-`base.py` al momento di B1.4. Nessuna modifica di logica, comment,
-log payload, ordine di operazione, o local imports (es.
-`from itertools import compress` resta inline in op_concat_columns
-come hot-path local import).
+Keeps transformation behavior isolated from orchestration callers.
 """
 
 import numpy as np

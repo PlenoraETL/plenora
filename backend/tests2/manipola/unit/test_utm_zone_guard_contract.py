@@ -1,18 +1,7 @@
-"""Contract test — guard su dataset che attraversano piu' zone UTM.
+"""
+Contract test — guard su dataset che attraversano piu' zone UTM.
 
 `get_utm_crs_for_geometry()` sceglie una singola zona UTM basata sul
-centroide del dataset. Se il bbox copre piu' zone (> ~6 gradi di
-longitudine), le geometrie ai bordi vengono proiettate fuori zona e
-le operazioni metriche (buffer, area, length) accumulano errore
-misurabile — silenziosamente, nel caso attuale.
-
-Il guard non cambia la scelta di zona (breaking change) ma emette
-segnalazioni proporzionate al range di longitudine del bbox:
-
-- <= 3 gradi: nessuna segnalazione (caso nominale)
-- > 3 e <= 6 gradi: warning standard (accuratezza marginale al bordo)
-- > 6 gradi: warning critico (accuratezza compromessa — riproiettare
-  per aree o usare CRS custom, es. Lambert conformico)
 """
 
 from __future__ import annotations

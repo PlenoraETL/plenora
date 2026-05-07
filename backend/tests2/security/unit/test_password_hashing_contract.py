@@ -1,13 +1,7 @@
-"""Contract test — migrazione hashing password bcrypt → Argon2id.
+"""
+Contract test — migrazione hashing password bcrypt → Argon2id.
 
 Copertura:
-1. hash_password produce SEMPRE Argon2id.
-2. verify_password accetta sia Argon2id (nuovi) sia bcrypt (legacy).
-3. verify_password su hash corrotto/sconosciuto → False, no raise.
-4. needs_rehash: True su bcrypt, False su Argon2id fresco, False su corrotto.
-5. Rehash progressivo nel login riuscito per utenti bcrypt legacy.
-6. Nessun rehash se la password e' gia' Argon2id.
-7. Nessun rehash se la verify fallisce.
 """
 
 from __future__ import annotations

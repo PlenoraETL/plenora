@@ -1,50 +1,7 @@
-"""Resource metadata contract - typed envelope for schema and CRS.
+"""
+Resource metadata contract - typed envelope for schema and CRS.
 
 BE-GO-READY-ARCH-055-W4-SCHEMA-CRS-METADATA-STRATEGY.
-
-Defines the first explicit metadata contract so that schema (column
-names + types) and CRS travel with data instead of being re-guessed at
-each pipeline stage.
-
-Current state (audit 2026-05-06)
----------------------------------
-Schema and CRS are inferred at file upload time, encoded into a type
-string such as ``geometry:polygon:4326``, and persisted as::
-
-    columns_metadata: [{"name": str, "type": str}]
-
-in the project canvas.  Downstream stages that re-read a file (e.g.
-MANIPOLA reading a CSV produced by an upstream run) call
-``_applica_crs_da_colonne()`` to recover the CRS by parsing those same
-type strings.  The EPSG code and the geometry column name are implicit
-- callers must split the type string on ``:`` every time instead of
-reading an authoritative field.
-
-Target contract
----------------
-``ResourceMetadata`` is an immutable typed envelope that carries:
-
-- ``columns``: tuple of ``ColumnMeta`` (name + PLENORA canonical type).
-- ``geometry_column``: the name of the geometry column - explicit.
-- ``crs_epsg``: the EPSG code - explicit, not embedded in a type string.
-- ``source_kind``: where the data came from.
-- ``row_count``: approximate row count at capture time.
-- ``group_id`` / ``project_id``: tenant and project binding.
-
-Design constraints
-------------------
-- Pure Python: zero imports of pandas, geopandas, psycopg2, FastAPI.
-- ``frozen=True`` dataclass: immutable after construction.
-- Interoperates with the existing ``[{"name": str, "type": str}]``
-  format via ``from_columns_list()`` / ``to_columns_list()``.
-- Not wired broadly in this batch: callers will migrate incrementally.
-
-Safe first runtime migration candidate (next batch)
-----------------------------------------------------
-``_applica_crs_da_colonne`` in ``manipola/executor.py`` loops over
-``node_columns: list[dict]`` and parses each type string to find
-``geom_col`` and ``srid``.  Replacing its input with ``ResourceMetadata``
-makes CRS lookup a plain attribute read instead of a loop + string parse.
 """
 
 from __future__ import annotations

@@ -1,21 +1,7 @@
-"""Smoke contract - STRUCT-001 Seam B: estrazione Protocols + Defaults file_service.
+"""
+Smoke contract - STRUCT-001 Seam B: estrazione Protocols + Defaults file_service.
 
 Verifica le invarianti minime del refactor:
-
-  1. Il nuovo modulo `app.services.file_service_deps` espone gli 8
-     simboli attesi (4 Protocols + 4 Default impls).
-  2. `app.services.file_service` re-esporta gli stessi oggetti
-     (identity check) per backward-compat coi test che importano
-     direttamente (test_file_service_filesystem_contract,
-     test_n1_file_service_cross_tenant_contract).
-  3. Behavior smoke per i Default:
-     - DefaultTimeProvider.now() UTC-aware
-     - DefaultTimeProvider.generate_uuid() lunghezza 32 hex
-     - DefaultFileSystem mkdir/exists/iterdir/read_text/write_text
-     - DefaultDataLoader.load_csv round-trip su CSV minimo
-
-La copertura funzionale full (extract_zip security, list_layers fiona
-fallback, etc.) e' nei test esistenti.
 """
 
 from __future__ import annotations

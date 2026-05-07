@@ -1,11 +1,7 @@
-"""ArcGIS connection info - lightweight provider-neutral dataclass.
+"""
+ArcGIS connection info - lightweight provider-neutral dataclass.
 
 ADR-0023 / BE-GO-READY-ARCH-058-W5: moved from
-``app.core.features.arcgis_client`` so that shared and IMDF validation
-code can reference the connection type without importing the concrete
-client module.
-
-Leaf module: stdlib only (``dataclasses``).
 """
 
 from __future__ import annotations

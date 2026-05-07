@@ -2,9 +2,6 @@
 Business logic per gli eseguibili.
 
 Operazioni principali:
-- create_from_project(): clona il canvas di un progetto arricchisci e crea un eseguibile
-- analyze_file_upload(): carica file utente, estrae colonne, suggerisce mapping
-- execute(): sostituisce la sorgente nel canvas clonato e lancia il task di enrichment
 """
 
 import copy

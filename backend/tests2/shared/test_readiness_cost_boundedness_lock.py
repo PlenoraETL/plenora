@@ -1,24 +1,7 @@
-"""Cost-boundedness lock for `gather_readiness()` checks.
+"""
+Cost-boundedness lock for `gather_readiness()` checks.
 
 BE-GO-READY-OBSERVABILITY-ENGINE-025-READINESS-COST-BOUNDEDNESS-AUDIT.
-
-Locks the architectural rules from the audit:
-
-  - `/ready` is composed of bounded checks only (cheap/local,
-    DB-bounded query, or network-bounded with explicit timeout
-    or capability-disabled skip path);
-  - heavy checks are opt-in-disabled by default OR have an
-    explicit fail-OPEN skip path so dev/test/CLI environments
-    do NOT trigger 503 unexpectedly;
-  - new checks added to `gather_readiness()` MUST follow the
-    same pattern (no direct `requests.get` / `urllib` /
-    `http.client` without explicit timeout).
-
-These tests are SOURCE-BOUND for the network-call lock + setting
-defaults, and behavioural for the keyset count + skip paths.
-The audit document
-(`.agent-temp/BE_INSTALLATION_AUDIT.md` §19) contains the full
-classification and rationale.
 """
 
 from __future__ import annotations

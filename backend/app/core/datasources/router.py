@@ -2,19 +2,6 @@
 PLENORA-ETL — Router Data Source
 
 Endpoints CRUD per la gestione dei Data Source e operazioni sui file.
-
-Endpoints configurazione:
-    POST   /api/datasources                      → crea Data Source
-    GET    /api/datasources                      → lista Data Source
-    GET    /api/datasources/{id}                 → dettaglio
-    PUT    /api/datasources/{id}                 → aggiorna
-    DELETE /api/datasources/{id}                 → elimina
-    POST   /api/datasources/{id}/test            → testa connessione
-
-Endpoints operazioni file:
-    GET    /api/datasources/{id}/files           → list_files
-    GET    /api/datasources/{id}/files/download  → leggi file raw
-    POST   /api/datasources/{id}/files/upload    → scrivi file (multipart)
 """
 
 from fastapi import APIRouter, HTTPException, Query, UploadFile, File, Depends
@@ -312,7 +299,7 @@ def test_connection(ds_id: str, current_user: CurrentUser = Depends(require_not_
     """Testa la connessione di un Data Source. Read-only su risorsa visibile."""
     existing = _svc().get_datasource(ds_id)
     assert_resource_visible(existing, "datasources", current_user, "Data Source")
-    # Bug #2 (2026-04-23): credenziale cifrata non decriptabile → 422,
+    # FIXME: #2 (2026-04-23): credenziale cifrata non decriptabile → 422,
     # non 200-OK fasullo ne' 500 ASGI.
     from app.shared.crypto import CredentialUnavailableError
     try:

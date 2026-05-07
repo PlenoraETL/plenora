@@ -1,58 +1,7 @@
-"""backup_db.py — Backup PostgreSQL PLENORA-ETL su AWS S3.
+"""
+backup_db.py — Backup PostgreSQL PLENORA-ETL su AWS S3.
 
 Scope: dump dello schema applicativo (default: `plenora`, ~20 MB) — non
-dell'intero DB. Il DB puo' contenere altri schemi con dati di dominio
-(catasto, aste, OMI, ecc. — decine di GB rigenerabili da sorgenti pubbliche)
-che NON hanno senso nel backup giornaliero.
-
-Prerequisiti per il restore:
-  - DB target con estensioni installate in public: postgis, h3, h3_postgis,
-    postgis_raster, postgis_topology (in topology schema)
-  - Lo schema `plenora` e' self-contained: zero FK cross-schema verso
-    aste/catasto/login/ecc. (verificato 2026-04-17)
-
-Flusso:
-  1. pg_dump --schema=plenora (formato custom, compresso) -> file temporaneo
-  2. pg_restore --list sul dump -> verifica integrita' del TOC
-  3. Upload del dump su S3 via boto3 (credenziali via IAM role EC2)
-  4. Cleanup del file locale
-  5. Exit code 0 se tutto ok, 1 su errore (cron decide cosa farne)
-
-Retention: gestita lato AWS via lifecycle rule sul bucket, non da questo
-script. Transition a Standard-IA dopo 30 giorni, delete dopo 365 giorni.
-
-Requisiti sul server di produzione:
-  - `pg_dump` e `pg_restore` binari nel PATH, versione >= server Postgres
-    (su Ubuntu 24.04 apt installa la 16.x; se server e' 17.x serve il
-    repo PGDG: postgresql-client-17)
-  - Env var DATABASE_URL (formato: postgresql://user:pass@host:port/db)
-    letta dal .env via systemd unit wrapper
-  - IAM role attached all'istanza EC2 con permessi s3:PutObject + s3:GetObject
-    + s3:ListBucket sul bucket target
-  - Python deps nel venv backend: boto3
-
-Schedulazione produzione: systemd timer `plenora-backup.timer` (daily
-02:00 UTC + RandomizedDelaySec=300). Unit files in /etc/systemd/system/:
-  - plenora-backup.service  (oneshot che esegue questo script)
-  - plenora-backup.timer    (OnCalendar=*-*-* 02:00:00, Persistent=true)
-
-Uso manuale:
-  # Da chiamante interattivo (CWD = backend/):
-  DATABASE_URL=... python3 scripts/backup_db.py
-
-  # Tramite systemd (produzione):
-  sudo systemctl start plenora-backup.service
-  sudo journalctl -u plenora-backup --since '1 hour ago'
-
-  # Via API (solo superadmin):
-  POST /api/admin/backups/trigger
-
-Exit codes:
-    0 success
-    1 pg_dump failed
-    2 integrity check failed
-    3 S3 upload failed
-    4 environment/config error
 """
 
 from __future__ import annotations

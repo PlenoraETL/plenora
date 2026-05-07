@@ -1,3 +1,9 @@
+"""
+Tests the artifact characterization behavior.
+
+Locks backend contracts and regression boundaries for the current architecture.
+"""
+
 from pathlib import Path
 from types import SimpleNamespace
 

@@ -1,29 +1,7 @@
 """
 Router API per il modulo Scheduler PLENORA-ETL.
 
-Architettura
-============
-Espone gli endpoint REST per gestire gli schedule automatici delle pipeline.
-
-Endpoints (8 totali):
-- GET    /api/schedules                → lista tutti gli schedule
-- POST   /api/schedules               → crea nuovo schedule (dal wizard)
-- GET    /api/schedules/healthcheck    → stato Celery Beat
-- GET    /api/schedules/{id}           → dettaglio schedule
-- PUT    /api/schedules/{id}           → modifica schedule (wizard precompilato)
-- DELETE /api/schedules/{id}           → elimina schedule + log
-- PATCH  /api/schedules/{id}/toggle    → abilita/disabilita
-- POST   /api/schedules/{id}/run       → esegui ora (manuale)
-- GET    /api/schedules/{id}/logs      → log esecuzioni (paginati)
-- POST   /api/schedules/check-orphans  → verifica schedule orfani
-
-Flusso wizard:
-1. Frontend compila 6 step → POST /api/schedules con ScheduleCreate
-2. Backend crea JSON + registra in RedBeat → ritorna ScheduleConfig
-3. Frontend mostra nella lista → polling stato via GET /{id}
-
-Registrazione: montato in main.py come:
-    app.include_router(schedules_router)
+Owns the HTTP boundary and delegates business logic to services or helpers.
 """
 
 from fastapi import APIRouter, HTTPException, Query, Depends

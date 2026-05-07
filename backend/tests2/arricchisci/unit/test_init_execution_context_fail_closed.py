@@ -1,32 +1,7 @@
-"""Regression guards per `_init_execution_context` fail-closed su errori DB.
+"""
+Regression guards per `_init_execution_context` fail-closed su errori DB.
 
 Batch 3 Fix-B (audit `arricchisci/api_connector` §7.2 + checkpoint C3).
-
-Pre-fix: catch broad `Exception` -> `logger.warning` +
-`_current_group_id = None`, fail-soft delegato a check downstream
-che riportavano "Contesto di sicurezza non determinabile"
-indistinguibile da progetto inesistente.
-
-Post-fix:
-- catch ristretto a `psycopg2.Error`.
-- re-raise come `ExecutionContextError` con chain preservata via
-  `from e`.
-- ramo `_proj_row is None` INVARIATO (regression guard esplicito).
-- chiamata a `_init_execution_context` spostata dentro il `try`
-  di `execute_enrichment` -> `ExecutionContextError` viene raccolto
-  dal boundary Fix-C e trasformato in response safe con
-  `user_error=False`.
-
-BE-GO-READY-ORCHESTRATION-ENGINE-011-CANVAS-CTX-NO-LEGACY-STATE-CUT
-+ BE-GO-READY-ORCHESTRATION-ENGINE-012-KILL-APPLY-TO-LEGACY-STATE:
-`init_execution_context` no longer mutates
-`svc._current_group_id` / `svc._preview_limit`. Post-OE012 the
-legacy mirror function (`apply_to_legacy_state`) has been
-deleted; production mixin readers are all ctx-strict. The
-tests below now assert the TYPED `ctx` return value carries the
-right tenant binding; the negative source-bound lock in
-`test_external_consumers_ctx_migration_contract.py` enforces
-that the helper is never re-introduced.
 """
 
 import psycopg2

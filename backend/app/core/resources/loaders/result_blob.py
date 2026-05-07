@@ -1,71 +1,7 @@
-"""Result-blob loader — pilot Resource Engine kind.
+"""
+Result-blob loader — pilot Resource Engine kind.
 
 BE-GO-READY-RESOURCE-ENGINE-002-RESULT-BLOB-LOADER-PILOT.
-BE-GO-READY-RESOURCE-ENGINE-004-RESULT-BLOB-PATH-MODE.
-BE-GO-READY-RESOURCE-ENGINE-010-RESULT-BLOB-BOUNDED-BYTES.
-BE-GO-READY-RESOURCE-ENGINE-013-RESULT-BLOB-BYTEA-PREFLIGHT.
-
-Closes the duplication between
-``app/db/results_db_service.py::get_result_data`` and
-``app/db/results_db_service.py::_s3_download_bytes``. Both leaf
-readers shared the same dispatch pattern (storage_key non-null ->
-object storage; else PG BYTEA fallback) and the same byte-level
-output. The loader now owns:
-
-  - the SQL row lookup with optional ``group_id`` filter;
-  - the BYTEA-vs-object-storage dispatch;
-  - the structured timing log shape;
-  - tempfile materialization for ``mode='path'`` (stdlib-only).
-
-What this loader does NOT own (anti-god-engine):
-
-  - parsing the bytes (CSV/Parquet/Geo dispatch lives in
-    ``app/utils/dataframe.py``);
-  - DataFrame / GeoDataFrame construction;
-  - run-artifact materialization (``ArtifactResolver`` owns it;
-    its project-level tenant guard is orthogonal to the engine's
-    group-level guard — see audit R-003.1);
-  - delete / save / list (those are `storage_reconciliation` /
-    `result_store` / domain-specific endpoints).
-
-Tenant binding contract
------------------------
-The Protocol-compliant ``load(ref, mode)`` is **fail-closed** by
-construction (``ResourceRef.__post_init__`` rejects empty
-``expected_group_id``). The full path:
-
-  1. SQL row lookup keyed on ``result_id`` AND ``group_id`` (if
-     ``is_superadmin=False``); the WHERE clause itself produces
-     the fail-closed: a row owned by another group simply does
-     not return.
-  2. ``is_superadmin=True`` skips the SQL filter but the bypass
-     is recorded in the structured log for audit symmetry.
-  3. If the lookup yields no row, raise ``FileNotFoundError``.
-  4. Dispatch on ``storage_key`` (non-null -> object storage;
-     null -> PG BYTEA fallback).
-  5. Return a ``Resource`` matching the requested ``OutputMode``.
-
-Back-compat shim
-----------------
-``app/db/results_db_service.py::get_result_data(result_id,
-group_id=None)`` keeps its public surface. When ``group_id`` is
-None, the shim calls the loader's package-private
-``_dispatch_by_id(result_id, group_id_filter=None)`` helper that
-shares the dispatch code but skips the fail-closed type-level
-guard. New callers should use ``ResourceRef`` directly via the
-registry; old callers (router endpoints, project_service) keep
-working without atomic migration.
-
-Boundary
---------
-Pure leaf module:
-
-  - imports: stdlib + ``app.db.pg_connection`` + lazy imports of
-    ``app.utils.logger`` and ``app.shared.cloud_backends``;
-  - banned: ``pandas`` / ``geopandas`` / ``fiona`` / ``polars`` /
-    ``fastapi`` / ``app.core.auth`` / ``app.core.artifacts``.
-  - locked by
-    ``tests2/shared/test_resource_engine_anti_god_engine_lock.py``.
 """
 
 from __future__ import annotations

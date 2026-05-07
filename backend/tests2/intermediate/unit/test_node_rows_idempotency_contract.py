@@ -1,29 +1,7 @@
-"""[phase-4][a3] Idempotency + atomicity contract per node_rows / node_meta.
+"""
+[phase-4][a3] Idempotency + atomicity contract per node_rows / node_meta.
 
 Scope:
-  Fissa l'invariante che doppia scrittura per stesso (run_id, node_id):
-    - non produce duplicati in node_rows
-    - lascia node_meta.row_count coerente con l'ultima scrittura
-    - su fallimento dopo il DELETE, il rollback ripristina lo stato
-      pre-call (atomicity end-to-end)
-
-  Phase 4 A3: pre-fix `insert_node_rows` faceva plain INSERT senza
-  UNIQUE su (run_id, node_id, row_idx); un retry Celery con
-  `acks_late=True` o un re-run manuale dello stesso (run, node)
-  duplicava le righe in modo silente. Inoltre `writer.write_node`
-  chiamava insert_node_rows + upsert_node_meta in DUE transazioni
-  separate: un fallimento del secondo lasciava node_rows committato
-  ma node_meta.row_count divergente.
-
-  Post-fix:
-    - `db.insert_node_rows`: DELETE-then-INSERT in singola transazione
-      (idempotent standalone).
-    - `db.write_node_atomic`: DELETE + INSERT + UPSERT META in singola
-      transazione (idempotent + atomic end-to-end).
-    - `writer.write_node` (success branch) usa `write_node_atomic`.
-
-Test unit puri, in memoria, zero DB. Mocchiamo `db.transaction()` per
-ispezionare la sequenza SQL emessa sul cursor.
 """
 
 from __future__ import annotations

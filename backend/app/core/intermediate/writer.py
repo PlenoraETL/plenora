@@ -1,12 +1,7 @@
 """
 Intermediate Writer — logica di scrittura nello storage intermediate
-(PostgreSQL via `app.core.intermediate.db`; ex SQLite #3 prima della
-migrazione a PG).
 
-Responsabilità:
-- Calcolo hash aggregato per run (input_hash / output_hash)
-- Calcolo _row_hash MD5 per ogni riga
-- Orchestrazione scrittura nodo completo (schema + righe + node_meta)
+(PostgreSQL via `app.core.intermediate.db`; ex SQLite #3 prima della
 """
 
 import hashlib

@@ -1,20 +1,7 @@
-"""Sentinel contract test - BE-SHAPE-001 + BE-SHAPE-002.
+"""
+Sentinel contract test - BE-SHAPE-001 + BE-SHAPE-002.
 
 Verifica che i due TypedDict introdotti come typed contracts go-ready
-restino allineati ai siti di consumo:
-
-  1. `FileSourceRow` (definito in `app.db.config.file_sources`):
-       - copre tutti i kwargs accettati da `save_file_source`;
-       - viene riesportato da `app.db.config_db_service` e
-         `app.db.db_service` (1:1 con `save_file_sources_batch`).
-
-  2. `BlobDispatchResult` (definito in `app.services.file_storage_dispatch`):
-       - ha esattamente le 3 chiavi `data`, `storage_key`, `size_bytes`
-         che i caller fanno splattare con `**blob_kwargs`.
-
-Sentinel only: nessun side effect, nessun mock DB. Se qualcuno aggiunge
-una colonna alla tabella `file_sources` o cambia il return shape del
-dispatcher, qui il test fallisce E indica esattamente dove allineare.
 """
 
 from __future__ import annotations

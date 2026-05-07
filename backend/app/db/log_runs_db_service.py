@@ -1,31 +1,7 @@
-"""log_runs DAL — single-purpose typed boundary for `plenora.log_runs`.
+"""
+log_runs DAL — single-purpose typed boundary for `plenora.log_runs`.
 
 BE-GO-READY-CONNECTION-ENGINE-006-ORCHESTRATOR-ROUTER-PG-EXTRACTION.
-
-Today this module exposes one helper, `delete_log_run_by_run_id`,
-extracted from `app/core/orchestrator/router.py` so that router
-can stop importing `app.db.pg_connection` directly. Future logs
-router extraction (BE-GO-READY-CONNECTION-ENGINE-004 follow-up)
-will collect the read-side helpers (currently inline `fetchall`
-in `app/core/logs/runs_router.py`) here too — designed as a
-single-domain DAL exactly for that growth path.
-
-Boundary
-========
-Pure DAL: thin wrapper over `app.db.pg_connection.execute`. No
-business logic, no policy decisions, no imports from `app.core.*`
-or `app.services.*`. Logger usage is limited to module-level
-diagnostics; the helper itself never logs and never swallows
-errors — propagation contract intentional so the caller (which
-runs in a best-effort cascade) can decide whether to log+continue
-or fail loud.
-
-Schema convention
-=================
-`plenora.log_runs` is referenced through the pool `search_path`
-(see `pg_connection._DB_SCHEMA`), so the unqualified table name
-matches the runtime path used by `logs/runs_router.py`. No
-schema-qualification leak.
 """
 
 from __future__ import annotations

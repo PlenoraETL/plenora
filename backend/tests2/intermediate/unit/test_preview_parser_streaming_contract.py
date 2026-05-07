@@ -1,30 +1,7 @@
-"""Streaming preview contract for
+"""
+Streaming preview contract for
+
 ``app.core.intermediate.preview_parser``.
-
-BE-GO-READY-RESOURCE-ENGINE-018-PREVIEW-STREAMING-FIRST-STEP.
-
-Locks the row-group streaming behavior of
-``parse_parquet_preview``:
-
-  - the parser opens the parquet via ``pyarrow.parquet.ParquetFile``
-    and reads ONLY the first batch(es) sized to ``limit`` —
-    files with N >> limit rows must NOT cost N-row decode RAM;
-  - ``row_count`` comes from the parquet footer
-    (``ParquetFile.metadata.num_rows``), so it is O(1) regardless
-    of the file's row count;
-  - ``col_schema`` is derived from the footer arrow schema
-    (``schema_arrow.empty_table().to_pandas()``), so a zero-row
-    file still surfaces every declared column with the same
-    dtype string format the legacy ``pd.read_parquet`` path
-    produced;
-  - the error envelope (``ParquetPreviewParseError``) is
-    preserved bit-for-bit so router callers and existing
-    contract tests do not regress.
-
-Source-bound check: the parser MUST NOT call
-``pd.read_parquet(BytesIO(body_bytes))`` (the pre-018 full-file
-materialization). The streaming primitive is
-``pyarrow.parquet.ParquetFile.iter_batches``.
 """
 
 from __future__ import annotations
@@ -207,7 +184,7 @@ def test_parser_does_not_call_pd_read_parquet_on_full_buffer():
     import re
 
     # Strip Python string literals so docstring mentions of the
-    # legacy API do not false-positive.
+    # NOTE: legacy API do not false-positive.
     code_only = re.sub(r'"""[\s\S]*?"""', "", text)
     code_only = re.sub(r"'''[\s\S]*?'''", "", code_only)
 

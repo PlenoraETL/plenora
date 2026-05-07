@@ -1,21 +1,7 @@
-"""Contract test BE-IMDF-002 — `ArcGISClient.count_features_where`.
+"""
+Contract test BE-IMDF-002 — `ArcGISClient.count_features_where`.
 
 Verifica il boundary pubblico consolidato per il count features con
-WHERE arbitrario (POST `/query?returnCountOnly=true`):
-
-- happy path: ritorna `int(payload["count"])`;
-- header `Referer: conn.server_url`;
-- POST body include `where`, `returnCountOnly=true`, `f=json`;
-- `token` aggiunto al body se `authenticate(conn)` lo ritorna;
-- timeout passato al client HTTP (default 60s, override custom);
-- 4 RuntimeError fail-loud paths:
-  - HTTP non-200 → RuntimeError con status + content-type + body
-    preview;
-  - content-type non JSON → RuntimeError;
-  - JSON decode fallito → RuntimeError;
-  - payload con chiave `error` → RuntimeError;
-- `validator._count_features_where_via_post` resta come thin wrapper
-  che delega al metodo pubblico (BE-IMDF-002 backward-compat).
 """
 
 from __future__ import annotations

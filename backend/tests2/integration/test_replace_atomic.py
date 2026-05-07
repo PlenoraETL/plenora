@@ -1,16 +1,7 @@
-"""Integration test REPLACE atomic (C6 critical fix).
+"""
+Integration test REPLACE atomic (C6 critical fix).
 
 Pre-fix: REPLACE faceva drop_table() + create_table() + _batch_insert()
-non-atomic. Se l'INSERT falliva, la tabella del cliente non esisteva
-piu' → data loss deterministica peggiore di TRUNCATE_INSERT pre-C5.
-
-Post-fix: CREATE shadow + INSERT batch + RENAME atomico. Target mai
-esposto a stato intermedio.
-
-Scenari coperti (per Oracle e Postgres — dialetti primari):
-1. Happy path: REPLACE con dati nuovi sostituisce completamente
-2. INSERT fallito → target con dati vecchi intatto
-3. Target non esiste → REPLACE funziona come CREATE
 """
 
 from __future__ import annotations

@@ -1,22 +1,7 @@
-"""Contract test BE-GO-READY-TRANSFORMATION-ENGINE-013-CONFLICT-CHECKER-DDL-DEPENDENCY-INJECTION.
+"""
+Contract test BE-GO-READY-TRANSFORMATION-ENGINE-013-CONFLICT-CHECKER-DDL-DEPENDENCY-INJECTION.
 
 Locks the dependency-injection boundary post-TE11-R4 closure:
-
-1. **Constructor accepts injected DDLGenerator** via `ddl=` kwarg;
-   stores it as `self.ddl`.
-2. **Default DDLGenerator** built from `db_type` when `ddl=None`
-   (backward-compat for callers that didn't migrate yet, e.g.
-   `router.py`).
-3. **`_qualified_name` delegates to `ddl.qualified_table_name`**
-   (no inline branching on `self.db_type` left).
-4. **`_quote_col` delegates to `ddl.quote_column`** (same).
-5. **Dialect-correct quoting** preserved end-to-end for
-   postgres / mssql / oracle / mysql / mariadb (the 5 dialects
-   `DDLGenerator` knows about).
-6. **Source-bound** absence of duplicated dialect-branching
-   helpers in `conflict_checker.py`.
-7. **Caller `WriterPreflightLifecycleMixin.check_conflicts`**
-   passes `self.ddl` to `ConflictChecker(...)`.
 """
 
 from __future__ import annotations

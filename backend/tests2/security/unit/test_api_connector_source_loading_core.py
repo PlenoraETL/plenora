@@ -1,20 +1,7 @@
-"""Core-level test post-Step B Refactor #3.
+"""
+Core-level test post-Step B Refactor #3.
 
 Verifica che `api_connector._load_source_project` e `_load_file_source`
-ora delegano a `SourceLoader`, chiudendo i due bug latenti rilevati
-nell'audit:
-
-**Bug 1 (security)** — `_load_source_project` chiamava
-`materialize_latest(...)` SENZA `expected_group_id`, disabilitando
-il check cross-tenant del resolver. Stesso fail-OPEN che era stato
-chiuso in manipola al review precedente.
-
-**Bug 2 (correctness)** — `_load_file_source` faceva
-`df, _ = file_source_service.load_dataframe(...)`, scartando il
-GeoDataFrame e perdendo il CRS lungo le trasformazioni downstream.
-
-Test diretti su `ApiConnectionService._load_*`, niente HTTP, niente
-CurrentUser.
 """
 
 from unittest.mock import MagicMock, patch
@@ -66,7 +53,7 @@ def _ctx_grp(group_id: str | None = "grp-1",
     )
 
 
-# Bug 1 chiuso: _load_source_project propaga expected_group_id al resolver
+# FIXME: 1 chiuso: _load_source_project propaga expected_group_id al resolver
 
 
 def test_load_source_project_propagates_group_id_via_source_loader():
@@ -296,7 +283,7 @@ def test_resolve_file_source_path_fail_closed_without_ctx_group_id():
         )
 
 
-# Bug 2 chiuso: _load_file_source preserva il GeoDataFrame
+# FIXME: 2 chiuso: _load_file_source preserva il GeoDataFrame
 
 
 def test_load_file_source_preserves_geodataframe():

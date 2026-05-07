@@ -1,9 +1,7 @@
-"""Contract test per migrations_runner (C8-nit).
+"""
+Contract test per migrations_runner (C8-nit).
 
 Testa la logica di listing files + pending computation senza
-toccare PG reale. Per la logica PG-side (CREATE schema_migrations,
-INSERT tracking, rollback su fail) vedi l'integration test
-test_migrations_runner_integration.py.
 """
 
 from __future__ import annotations

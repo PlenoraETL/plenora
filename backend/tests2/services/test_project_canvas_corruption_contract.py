@@ -1,32 +1,7 @@
-"""Contract test — canvas corrotto → CanvasCorruptedError esplicito.
+"""
+Contract test — canvas corrotto → CanvasCorruptedError esplicito.
 
 Reperto coperto: `ProjectService.get_project_canvas` restituiva un
-`CanvasState()` vuoto in caso di canvas corrotto in DB (JSON
-malformato, tipo inatteso, schema Pydantic non valido), loggando
-solo un warning. Conseguenze:
-
-  1. L'utente apriva il progetto, vedeva canvas vuoto, lo salvava
-     sopra il contenuto corrotto → **perdita dati definitiva** (il
-     corrotto veniva sovrascritto dal vuoto).
-  2. Il warning nel log era facilmente perso: nessun segnale all'utente,
-     nessun alert all'admin.
-  3. Impossibile distinguere "progetto nuovo senza canvas" da "progetto
-     con canvas corrotto" dalla UI.
-
-Il fix: `get_project_canvas` solleva `CanvasCorruptedError` con
-`project_id` e `reason` strutturato. Un handler globale in `main.py`
-traduce l'eccezione in HTTP 500 con `error_code=canvas_corrupted` e
-detail esplicito, cosi' l'utente sa che serve ripristino da backup.
-
-Casi coperti:
-  - Canvas valido dict → ok
-  - Canvas None / {} / "" (progetto nuovo) → CanvasState vuoto, NO raise
-  - Canvas string JSON valida → parsing ok
-  - Canvas string JSON malformata → raise con reason "JSON malformato"
-  - Canvas lista (tipo inatteso) → raise con reason "tipo inatteso"
-  - Canvas con nodi di schema invalido → raise con reason "schema non valido"
-  - Progetto inesistente (row=None) → None (non raise)
-  - Verifica che original_error sia preservato per logging strutturato
 """
 
 from __future__ import annotations

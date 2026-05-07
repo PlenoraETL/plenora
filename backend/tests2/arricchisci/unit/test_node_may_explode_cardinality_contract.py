@@ -1,31 +1,7 @@
-"""Contract test RB.#15 (2026-04-28) — detector cardinality-changing nodes
+"""
+Contract test RB.#15 (2026-04-28) — detector cardinality-changing nodes
+
 e isolamento dai batch paralleli.
-
-BUG.md #15 (semantica pipeline FeatureCollection):
-    Il merge column-by-column nei batch paralleli inter-nodo
-    (`enrichment_task._merge_batch_parallel_node_results`) richiede che
-    tutti i nodi del batch ritornino DataFrame della stessa cardinalita'
-    di `common_input_df`. Quando un nodo come `Returnomifrompoint` esplode
-    (FeatureCollection multi-feature, output_mapping con `features[*]`),
-    il merge fallisce fail-hard (RB.#14) -> task `success=False`. Pre-RB.#14
-    falliva silenziosamente con `success=True` + `rows_processed=0` -> PDF
-    senza arricchimenti.
-
-Fix RB.#15 (approach B confermato):
-    Detector statico `_node_may_explode_cardinality` legge il marker reale
-    `output_mapping[].path` con `[]` / `[*]` (verificato sul caso reale
-    `Returnomifrompoint` `api_2cab32fcfb16` 8 path multi-row).
-    `compute_parallel_groups` flusha i nodi cardinality-changing come
-    `("single", [node_id])` separati, simmetrico al pattern esistente per
-    `_is_file_processor`. I nodi cardinality-preserving restano in batch
-    parallelo. Il fail-hard di RB.#14 resta come rete di sicurezza per
-    falsi negativi runtime (path B `_auto_flatten` con response
-    `FeatureCollection`, non rilevabile staticamente).
-
-Test scope:
-    1-7. Detector unit (marker positivi, negativi, cascata di lookup)
-    8-11. compute_parallel_groups integration (isolamento, multipli, all-preserving)
-    12. Anti-regression fail-hard RB.#14 ancora attivo
 """
 
 from __future__ import annotations

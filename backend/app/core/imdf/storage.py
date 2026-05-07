@@ -1,27 +1,7 @@
-"""Storage IMDF bundle su object storage cloud-agnostic.
+"""
+Storage IMDF bundle su object storage cloud-agnostic.
 
 Chiude R2 del multi-host audit: i bundle IMDF non vivono piu' solo su
-local FS. Pattern "lazy local cache":
-
-  - S3 = fonte di verita' persistente (post-task)
-  - Local FS (IMDF_BUNDLES_DIR/{task_id}/) = cache performance
-  - Cache miss → download ZIP da S3 + extract local → cache warm
-
-Vantaggi rispetto a "full S3 refactor":
-  - Gli endpoint reader esistenti funzionano invariati (leggono local FS)
-  - Al primo accesso su un nodo nuovo, paga ~1-5s download + extract
-  - Subsequent reads: cache hit, zero latency extra
-  - Lista bundle: legge solo .meta.json piccoli da S3 (no download full zip)
-
-Convenzione S3 keys:
-  - `imdf-bundles/{task_id}.zip`      → bundle completo (GDB/GeoJSON/IFC/...)
-  - `imdf-bundles/{task_id}.meta.json` → solo plenora_metadata.json
-    (separato per list/summary endpoint senza download del zip)
-
-Cleanup cache locale: beat_scheduler._cleanup_imdf_bundles rotea
-IMDF_BUNDLES_DIR ogni 30min (TTL = IMDF_BUNDLE_TTL_HOURS, default 48h).
-Cancellazione S3: eager al delete endpoint + lifecycle rule safety net
-(TODO AWS config).
 """
 
 from __future__ import annotations

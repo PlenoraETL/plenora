@@ -1,24 +1,7 @@
-"""Cycle detection runtime in _carica_sorgenti_progetto (C3 round 3 fix 3).
+"""
+Cycle detection runtime in _carica_sorgenti_progetto (C3 round 3 fix 3).
 
-Contesto
---------
-Il mio fix precedente (C3 fix 5) aggiunge `detect_project_lineage_cycle`
-chiamato da ProjectService.update_canvas — blocca la creazione di
-canvas ciclici AL SAVE. Non copre:
-- Canvas legacy creati PRIMA del fix con cicli latenti.
-- Bypass del service (direct DB edit).
-- Race save-vs-execute.
-
-In piu' `_carica_sorgenti_progetto` in manipola/executor.py, quando
-un progetto upstream non ha cache, invoca `orchestrator_callback`
-per riesegue la pipeline di quel progetto — che a sua volta puo'
-contenere un altro `project_source`, ricorsione completa. Ciclo
-A → B → A genera quindi stack overflow.
-
-Questo test richiede che l'executor:
-1. Accetti un `visited_set` opzionale tracciando il cammino attuale.
-2. Se il source_project_id e' gia' in visited → solleva
-   ProjectLineageCycleError con la catena readable.
+Locks backend contracts and regression boundaries for the current architecture.
 """
 
 import inspect

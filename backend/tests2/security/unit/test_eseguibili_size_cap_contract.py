@@ -1,24 +1,7 @@
-"""Contract test — size cap upload eseguibili (B1 Phase 4).
+"""
+Contract test — size cap upload eseguibili (B1 Phase 4).
 
 Verifica che l'endpoint `POST /api/eseguibili/{id}/analyze-upload` rifiuti
-con 413 file oltre la soglia configurata e accetti file sotto soglia,
-**senza** chiamare `file.read()` sul payload pre-cap.
-
-Background:
-  - Phase 3 (T-04) ha cappato gli upload solo in `files/router.py`.
-  - Phase 4 B1 estende lo stesso cap a `eseguibili/router.py` via helper
-    condiviso `app.shared.upload_guards.enforce_upload_size_limit`,
-    chiamato all'inizio di `analyze_upload` PRIMA di `file.read()`.
-
-Scope test (mirato come da batch B1):
-  - 413 over limit (rejection con status code corretto)
-  - 200 (anzi: pass del guard) under limit
-  - cursore lasciato a 0 dopo il check (caller deve poter rileggere)
-  - nessun read() del payload pre-cap (difesa-in-profondita')
-
-Nota: testiamo l'helper condiviso direttamente, non l'endpoint via
-TestClient, per restare un unit test puro coerente con il pattern di
-`test_files_router_size_cap_contract.py` e non dipendere da DB/auth fixtures.
 """
 
 from __future__ import annotations

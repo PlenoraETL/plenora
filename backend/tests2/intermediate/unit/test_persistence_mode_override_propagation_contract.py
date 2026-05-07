@@ -1,32 +1,7 @@
-"""Contract test R-25 PR-B2 — propagation `intermediate_mode_override`.
+"""
+Contract test R-25 PR-B2 — propagation `intermediate_mode_override`.
 
 Verifica end-to-end che il kwarg `intermediate_mode_override` propagato
-da `QueryExecutor.execute_query` arrivi senza alterazioni fino a
-`resolve_intermediate_policy`, sostituendo correttamente la
-`INTERMEDIATE_PERSISTENCE_MODE` globale al record-time, mantenendo
-la backward compatibility quando l'override e' None.
-
-Layer testati (top-down):
-  1. policy.resolve_intermediate_policy(..., mode_override=...)
-     -> resolve_intermediate_mode applicato; mode globale sostituita.
-  2. snapshot._record_snapshot(..., mode_override=...) e i due wrapper
-     (record_final_snapshot / record_checkpoint_snapshot) propagano
-     il kwarg al policy resolver.
-  3. db.query_executor.QueryExecutor.execute_query(...,
-     intermediate_mode_override=...) propaga a record_final_snapshot.
-
-Vincoli verificati:
-  - override None -> behavior identico al pre-PR (bit-compat).
-  - override valido -> persistence_mode finale = override.
-  - override invalido -> IntermediateSettingsError fail-loud che
-    propaga al chiamante (mai fallback silenzioso).
-  - kwarg esplicito senza stato d'istanza: due chiamate consecutive
-    di execute_query con override diversi sulla stessa istanza
-    QueryExecutor non si contaminano.
-
-Test puramente unitari: niente DB reale, niente Celery, niente
-SQLAlchemy. Mock di `_read_settings`, `_db.write_node_snapshot_atomic`
-e `compute_dataframe_fingerprint`.
 """
 
 from __future__ import annotations
@@ -344,7 +319,7 @@ class TestQueryExecutorPropagation:
                 sql="SELECT 1",
                 project_id="proj-1",
                 output_filename="out",
-                output_format="json",  # legacy path
+                output_format="json",  # NOTE: legacy path
                 **kwargs,
             )
         return result, captured

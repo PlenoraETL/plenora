@@ -1,18 +1,7 @@
-"""Architecture guard - app.shared root-level module allowlist.
+"""
+Architecture guard - app.shared root-level module allowlist.
 
 BE-GO-READY-ARCH-059-W5: Prevents ``app.shared`` from becoming a junk drawer
-by failing if a new root-level module is added without being explicitly allowlisted.
-
-Engine-oriented code belongs in the engine subpackages:
-  - app.shared.execution.*   - canvas nodes, execution context, executor protocol
-  - app.shared.resources.*   - metadata, loaders
-  - app.shared.connections.* - provider protocols, connection info
-  - app.shared.contracts.*   - cross-cutting auth contracts
-
-Root-level modules here are intentionally cross-cutting utilities, legacy
-storage/security/API helpers.  When adding new shared code, prefer a subpackage.
-If the item genuinely belongs at root level, add it to ``_ALLOWED_ROOT_MODULES``
-with a comment explaining why it is cross-cutting rather than engine-specific.
 """
 
 from __future__ import annotations

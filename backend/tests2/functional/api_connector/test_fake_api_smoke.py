@@ -1,8 +1,7 @@
-"""Smoke test del fake server usato dai future functional test di api_connector.
+"""
+Smoke test del fake server usato dai future functional test di api_connector.
 
 Questi test non esercitano ancora il backend PLENORA completo: verificano che
-il fake esterno sia abbastanza ricco da simulare gli scenari principali
-di `api_connector`.
 """
 
 from __future__ import annotations

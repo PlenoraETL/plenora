@@ -1,24 +1,7 @@
-"""Contract test BE-GO-READY-STORAGE-ENGINE-006 — reconciler boundary.
+"""
+Contract test BE-GO-READY-STORAGE-ENGINE-006 — reconciler boundary.
 
 Locks the new boundary surface added by the reconciler beat hook:
-
-1. `fetch_due_pending_deletes` returns typed `PendingReconciliationRow`
-   instances; SQL filters `state='pending' AND operation='delete' AND
-   (next_retry_at IS NULL OR next_retry_at <= now)`; ORDER BY
-   `next_retry_at NULLS FIRST, created_at ASC`; honors LIMIT.
-2. `fetch_due_pending_deletes` raises `ValueError` on non-positive
-   `limit` (preventing accidental unbounded reads).
-3. `fetch_due_pending_deletes` is best-effort on read error: returns
-   `[]` and emits `event=storage_reconciliation_fetch_failed`.
-4. `mark_lost` runs an autocommit UPDATE with `state='lost'` +
-   `last_error` (no `attempts` increment); never raises.
-5. `compute_next_retry_at` is a pure helper: exponential backoff
-   `base * 2 ** (attempts-1)`, capped at `2**8`. Validates inputs.
-
-Boundary
-========
-Source-bound: monkeypatch `app.db.pg_connection.fetchall` and
-`app.db.pg_connection.execute`. No DB connection required.
 """
 
 from __future__ import annotations

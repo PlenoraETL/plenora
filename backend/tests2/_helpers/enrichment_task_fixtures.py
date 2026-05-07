@@ -1,10 +1,7 @@
-"""Builder canvas minimi per i contract test behavior-bound del task
-`execute_enrichment_task`.
+"""
+Builder canvas minimi per i contract test behavior-bound del task
 
-Ogni canvas e' la rappresentazione minima sufficiente a portare il task
-oltre il punto di osservazione di un test specifico (es. setattr di
-`_current_group_id` PRIMA del primo loader). Niente nodi superflui:
-+LOC giustificato dalla copertura.
+`execute_enrichment_task`.
 """
 
 from __future__ import annotations

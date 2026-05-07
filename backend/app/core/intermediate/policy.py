@@ -2,25 +2,6 @@
 Intermediate persistence policy.
 
 Centralizza la decisione "questo snapshot va registrato? in che mode?".
-Gli executor (MANIPOLA/ESTRAI/ARRICCHISCI) chiamano `record_*_snapshot()`
-da `snapshot.py`, che a sua volta interroga `resolve_intermediate_policy`
-per evitare lavoro inutile (no `df.to_dict`, no hash, no DB) quando la
-policy globale dice di non registrare.
-
-Mode supportati:
-  - metadata_only (default produzione): solo node_meta + node_hash
-  - preview_only (legacy/debug): meta + hash + prime N righe in node_rows
-  - full_pg (legacy compat): tutte le righe in node_rows
-  - full_artifact: meta + hash + Parquet/manifest su runtime object
-    storage. Richiede `OBJECT_STORAGE_ENABLED=true` + bucket runtime;
-    cross-validato in `validate_intermediate_settings`.
-
-Il modulo contiene SOLO logica pura: lettura settings, validazione,
-calcolo policy. Nessun side-effect (no DB, no I/O).
-
-Vedi anche:
-- orchestrate/phase_6_product_grade/intermediate_persistence_to_be.md
-- orchestrate/phase_6_product_grade/manipola_checkpoint_policy.md
 """
 
 from __future__ import annotations
@@ -110,7 +91,7 @@ MANIPOLA_CRITICAL_TRANSFORMS = frozenset({
 })
 
 # Hash algo versione corrente. Persistito in node_meta.hash_algo.
-# Bug #24 (2026-04-28): la mode globale `INTERMEDIATE_FINGERPRINT_MODE`
+# FIXME: #24 (2026-04-28): la mode globale `INTERMEDIATE_FINGERPRINT_MODE`
 # decide quale algoritmo applicare al checkpoint:
 #   - "sample" -> HASH_ALGO_PANDAS_SAMPLE_V1 (default operativo)
 #   - "full"   -> HASH_ALGO_PANDAS_HASH_V1   (audit forte)
@@ -204,7 +185,7 @@ def _read_settings() -> dict:
         "arricchisci_checkpoints": settings.get("ARRICCHISCI_INTERMEDIATE_CHECKPOINTS"),
         "artifact_bucket": settings.get("PLENORA_ARTIFACT_BUCKET"),
         "artifact_prefix": settings.get("INTERMEDIATE_ARTIFACT_PREFIX"),
-        # Bug #24
+        # FIXME: #24
         "fingerprint_mode": settings.get("INTERMEDIATE_FINGERPRINT_MODE"),
         "fingerprint_sample_rows": settings.get("INTERMEDIATE_FINGERPRINT_SAMPLE_ROWS"),
     }
@@ -294,7 +275,7 @@ def validate_intermediate_settings(values: Optional[dict] = None) -> None:
             f"Valori ammessi: {sorted(SUPPORTED_FINAL_ONLY_CHECKPOINTS)}."
         )
 
-    # Bug #24: fingerprint mode + sample rows.
+    # FIXME: #24: fingerprint mode + sample rows.
     fp_mode = cfg.get("fingerprint_mode")
     if fp_mode not in SUPPORTED_FINGERPRINT_MODES:
         raise IntermediateSettingsError(

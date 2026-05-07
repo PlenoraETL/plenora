@@ -1,16 +1,7 @@
-"""Contract test Bug #22 — `node_rows` batch insert via `execute_values`.
+"""
+Contract test Bug #22 — `node_rows` batch insert via `execute_values`.
 
 Pre-fix: `cur.executemany(_SQL_INSERT_NODE_ROW, records)` mandava 500
-INSERT serializate al server (round-trip per ogni riga). Su preview_only
-da 500 righe, db_ms misurato 3.8–8.0 s.
-
-Post-fix: `psycopg2.extras.execute_values` compone una singola
-`INSERT ... VALUES (...), (...), ...` con N tuple e fa 1 round-trip.
-Il test pinna che l'API venga effettivamente usata, con il template
-JSONB cast preservato.
-
-Niente test su DB reale: la verifica e' che l'helper costruisca la
-chiamata corretta. La performance reale verra' osservata via [PERF] log.
 """
 
 from __future__ import annotations

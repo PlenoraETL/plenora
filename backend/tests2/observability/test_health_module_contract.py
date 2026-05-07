@@ -1,17 +1,7 @@
-"""Contract tests BE-GO-READY-BOOTSTRAP-ENGINE-009-HEALTH-EXTRACTION.
+"""
+Contract tests BE-GO-READY-BOOTSTRAP-ENGINE-009-HEALTH-EXTRACTION.
 
 Lock the new boundary `app/observability/health.py`:
-
-1. Module purity: no FastAPI / Starlette import.
-2. Public API: 4 `check_*` + 2 `gather_*` + `HealthPayload`
-   dataclass + `CheckOutcome` type alias.
-3. `check_*` outcome shape: `(bool, str)`.
-4. `check_postgres` / `check_redis` fail-CLOSED on exception.
-5. `check_pool_headroom` / `check_migrations_aligned` fail-OPEN on
-   exception (preserved fallback from main.py).
-6. `gather_liveness`: 200/503 + status "ok"/"unhealthy" + 2 checks.
-7. `gather_readiness`: 200/503 + status "ready"/"not_ready" + 4 checks.
-8. `HealthPayload` is frozen.
 """
 
 from __future__ import annotations

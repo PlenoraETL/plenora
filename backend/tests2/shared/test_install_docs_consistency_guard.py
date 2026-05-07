@@ -1,45 +1,7 @@
-"""Cross-doc consistency lock for install runbooks.
+"""
+Cross-doc consistency lock for install runbooks.
 
 BE-GO-READY-INSTALL-014-DOC-CONSISTENCY-GUARD.
-
-Locks the current truth that the three operator-facing install
-docs MUST agree on:
-
-  - the backend Docker path now ships a **FIRST SCAFFOLD**
-    (`backend/Dockerfile`, `docker-compose.yml`,
-    `.env.docker.example`, `scripts/docker-validate.sh`);
-  - the scaffold is **NOT YET VALIDATED** end-to-end on a real
-    Linux PC (no Linux validation report has been pasted back);
-  - the **non-Docker single-machine path remains the go-ready
-    first-PC path** until that validation report exists.
-
-The companion guards already lock the per-section shape
-(`test_install_marco_dry_run_doc_guard`,
-`test_install_execution_pack_doc_guard`,
-`test_docker_validate_script_guard`,
-`test_install_smoke_harness_doc_guard`,
-`test_install_native_deps_verify_doc_guard`,
-`test_install_checklist_doc_guard`). This file only adds the
-narrow CONSISTENCY layer: the five stale phrases catalogued in
-the INSTALL-014 brief MUST NOT reappear in the in-scope install
-docs.
-
-Stale phrase set (banned in `install-docker.md`,
-`install-marco-dry-run.md`, `install-non-docker.md`):
-
-  - "NO Dockerfile" / "no Dockerfile"
-  - "NO docker-compose" / "no docker-compose"
-  - "Docker not implemented"
-  - "cannot docker compose up"
-  - "target shape only"
-
-The "target shape only" ban explicitly accepts the legitimate
-Helm/K8s case as a per-doc allowlist entry. Adding any new
-exception requires explicit documentation and a paired guard
-update.
-
-Source-bound: each doc is read as text and matched
-case-insensitively. We do NOT execute or render markdown.
 """
 
 from __future__ import annotations

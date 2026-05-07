@@ -1,24 +1,7 @@
-"""Contract test N15b — scheduled_for sempre valorizzato in schedule_pipeline_task.
+"""
+Contract test N15b — scheduled_for sempre valorizzato in schedule_pipeline_task.
 
 Chiude il residuo di N15: i cron "normali" (beat_scheduler.py:502, 522)
-emettono `schedule_pipeline_task(schedule_id, triggered_by="cron")` SENZA
-scheduled_for. Stessa cosa per manuale (scheduler/router.py:345).
-
-Per la chiave idempotency di CARICA (N15), `scheduled_for=None` significa
-no protezione: run_id=None -> guard executor no-op -> retry puo' duplicare
-su write_mode=append.
-
-Fix: nel task stesso, se `scheduled_for is None`, calcolo `now_iso()` al
-task entry. Il retry propaga gia' scheduled_for via retry kwargs (fix N15
-in execution_manager._handle_failure), quindi il valore calcolato resta
-stabile attraverso retry di quella invocazione.
-
-Copertura:
-1. Task con scheduled_for esplicito: lo preserva intatto
-2. Task con scheduled_for=None: calcola valore ISO8601 UTC
-3. Due chiamate senza scheduled_for in momenti diversi: ISO diversi
-   (ogni invocazione e' distinguibile — manuale Esegui Ora multipli OK)
-4. Sentinel: source del task contiene la computation di fallback
 """
 
 from __future__ import annotations

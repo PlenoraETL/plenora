@@ -2,36 +2,6 @@
 PLENORA-ETL — Helper allowed_groups (cross-group sharing)
 
 Centralizza la logica per le risorse "shareable":
-    connections, datasources, eseguibili, api_connections, arcgis_connections.
-
-Modello dati
-------------
-- Ogni risorsa appartiene al suo gruppo proprietario (campo `group_id`).
-- Le 5 tabelle di join `*_shares` permettono di condividerla con altri gruppi.
-- "ALL" è rappresentato dalla riga magica `group_id = '*'` nella join table.
-
-Visibilità di una risorsa al gruppo X:
-    resource.group_id == X
-    OR EXISTS share WHERE share.group_id == X
-    OR EXISTS share WHERE share.group_id == '*'
-
-Superadmin bypassa sempre il filtro (vede tutto).
-
-API
----
-- ``share_table_for(resource_table)`` → nome della join table
-- ``fk_column_for(resource_table)`` → nome FK in join table
-- ``visible_resource_ids(resource_table, user_group_id, is_superadmin)``
-    → set di id visibili (per ownership check rapidi)
-- ``set_resource_shares(resource_table, resource_id, group_ids)``
-    → sostituisce le righe di sharing per quella risorsa
-- ``add_resource_share(resource_table, resource_id, group_id)``
-- ``remove_resource_share(resource_table, resource_id, group_id)``
-- ``list_resource_shares(resource_table, resource_id)``
-    → lista group_id che condividono la risorsa
-- ``build_visible_where_clause(resource_table, resource_alias='r')``
-    → frammento SQL `(r.group_id = %s OR EXISTS (...))` con parametri
-- ``MAGIC_ALL`` → costante "*"
 """
 
 from __future__ import annotations

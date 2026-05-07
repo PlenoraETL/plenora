@@ -1,15 +1,7 @@
-"""Contract test per `app.shared.storage_layout`.
+"""
+Contract test per `app.shared.storage_layout`.
 
 Verifica che:
-1. tutti i prefix siano unici;
-2. nessun prefix sia prefisso di un altro (evita che
-   `list_objects("results/")` raccolga oggetti di un dominio che inizia
-   con la stessa stringa);
-3. ogni prefix rispetti le regole di naming (`is_valid_prefix`);
-4. `ALL_PREFIXES` contenga esattamente le 5 costanti dichiarate (zero
-   drift fra dichiarazione e tupla di registrazione);
-5. i 5 call site live nei moduli storage usino i prefix dichiarati qui
-   (no string literal duplicato).
 """
 
 from __future__ import annotations

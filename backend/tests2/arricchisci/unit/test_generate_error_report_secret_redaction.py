@@ -1,24 +1,7 @@
-"""Phase 4 P0-01: secret redaction in generate_error_report CSV.
+"""
+Phase 4 P0-01: secret redaction in generate_error_report CSV.
 
 Pre-fix `generate_error_report` faceva `json.dumps(error.input_params)` senza
-sanificazione. Quando l'API e' configurata con `auth.type=api_key` +
-`auth.location=query`, `_build_params` materializza la chiave nel dict
-`params` come `{key_name: key_value}`, e quel dict finisce in
-`RowError.input_params`. Il CSV `<output>_errors.csv` veniva quindi scritto
-in chiaro con la chiave API leggibile.
-
-Phase 4 fix: `generate_error_report` applica `sanitize_for_log` (gia' usato
-sul logger) prima di serializzare in CSV. Le chiavi note (token, api_key,
-authorization, password, secret, ...) e — opzionale via `auth.key_name`
-— vengono sostituite con `***REDACTED***`.
-
-Questo test costruisce uno scenario realistico (api_key in query +
-authorization header in input_params + password leftover) e verifica:
-  1. Il valore reale della chiave NON compare nel file CSV.
-  2. Il marker `***REDACTED***` compare al posto del valore.
-  3. Le altre colonne benigne (es. lat/lng) restano leggibili.
-  4. Il caller puo' passare `auth` per coprire chiavi con nome custom non
-     incluse nei pattern generici (es. `subscription-key`).
 """
 from __future__ import annotations
 

@@ -1,42 +1,7 @@
 """
 Cluster JOINS — operazioni di join tra DataFrame.
 
-Origine
-=======
-Estratto da `app.core.manipola.transforms.base` come parte di Phase 5
-Batch B1 (cluster split, vedi
-`orchestrate/PHASE_5_ENTRY_PLAN.md` §3 P5-B1). L'estrazione e' splittata
-in due commit per rispettare la regola §6.4 sul commit-size:
-
-  - **B1.1a (questo commit)**: introduzione del nuovo modulo `joins.py`
-    con `op_join` definita qui. `base.py` resta INVARIATO: il body
-    originale di `op_join` e' ancora presente in `base`. Stato
-    intermedio: la funzione e' presente in DUE punti (qui + `base`),
-    entrambi runtime-equivalenti, importabili indipendentemente.
-    Nessun call site cambia.
-
-  - **B1.1b (commit successivo)**: cutover. `base.py` rimuove il body
-    di `op_join` e lo sostituisce con `from .joins import op_join`
-    (facade re-export). Single-source canonica diventa questo modulo.
-
-Invarianti pubbliche preservate (B1.1a + B1.1b):
-  - `from app.core.manipola.transforms.base import op_join` continua a
-    funzionare (in B1.1a perche' il body e' ancora la', in B1.1b
-    perche' base lo re-importa dal facade).
-  - `from app.core.manipola.transforms import op_join` continua a
-    funzionare (`__init__.py` invariato).
-  - Registry `transforms_registry.json` con entry `"base.op_join"`
-    continua a risolvere via `getattr(base_module, "op_join")` —
-    in B1.1a perche' op_join e' definita in base, in B1.1b perche'
-    re-exported nel namespace di base.
-  - Nuovo path canonico `from app.core.manipola.transforms.joins
-    import op_join` disponibile da B1.1a in poi.
-
-Il body sotto e' una copia BIT-PER-BIT del body presente in `base.py`
-al momento di B1.1a. Nessuna modifica di logica, comment, log payload,
-o ordine di operazione: la decomposizione strutturale e' separata dai
-fix funzionali per rendere il diff review-friendly e il rollback
-chirurgico (vedi regola §6.3 di rollback).
+Keeps transformation behavior isolated from orchestration callers.
 """
 
 import uuid

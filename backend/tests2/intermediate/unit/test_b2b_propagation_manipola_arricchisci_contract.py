@@ -1,26 +1,7 @@
-"""Contract test R-25 PR-B2.b — propagation manipola + arricchisci.
+"""
+Contract test R-25 PR-B2.b — propagation manipola + arricchisci.
 
 Estende il contract di PR-B2 (estrai-final) ai 3 call-site rimasti:
-
-  1. manipola/executor.py -> record_final_snapshot(module="manipola")
-     (nodo result, dopo _applica_trasformazioni).
-  2. manipola/executor.py -> record_checkpoint_snapshot(module="manipola")
-     dentro il loop per ogni transform / multi_join.
-  3. arricchisci/api_connection_support.py:_write_intermediate_snapshot
-     -> record_checkpoint_snapshot(module="arricchisci") (per nodi
-     api_enrich, sempre skipped da policy in Batch 1).
-
-Oltre ai 3 chain interni, valida:
-  - intermediate_mode_override propagato attraverso
-    OrchestratorService.execute_pipeline -> manipola_executor.execute
-    -> _applica_trasformazioni (final + tutti i checkpoint).
-  - intermediate_mode_override propagato attraverso execute_pipeline_task
-    -> orchestrator.execute_pipeline (kwarg passing-through).
-  - execute_enrichment_task -> record_checkpoint_snapshot e
-    record_final_snapshot ricevono il kwarg.
-
-Test puramente unitari: niente DB reale, niente Celery worker, niente
-SQLAlchemy. Mock dei sink finali (`record_*_snapshot`) e dei collaborator.
 """
 
 from __future__ import annotations

@@ -1,13 +1,7 @@
-"""Endpoint contract test — rate-limit login isolato per-IP dietro proxy trusted.
+"""
+Endpoint contract test — rate-limit login isolato per-IP dietro proxy trusted.
 
 Blinda il fix del reperto #27: prima di get_client_ip, TUTTI i login
-venivano rate-limitati come `127.0.0.1` (peer nginx). Un attaccante
-bloccava l'account di chiunque. Ora il rate-limit usa l'IP client vero
-letto da X-Forwarded-For (quando il peer e' un proxy trusted).
-
-Test: N+1 login failed con XFF="A" → il N+1-esimo riceve 429.
-Immediato dopo, login failed con XFF="B" → 401 (non 429) — il bucket
-e' isolato.
 """
 
 from __future__ import annotations

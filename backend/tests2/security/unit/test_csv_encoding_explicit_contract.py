@@ -1,19 +1,7 @@
-"""Contract test — ogni chiamata to_csv(path) esplicita encoding='utf-8'.
+"""
+Contract test — ogni chiamata to_csv(path) esplicita encoding='utf-8'.
 
 Pandas ha utf-8 come default per `to_csv`, ma il contratto non e' leggibile
-se non viene nominato. Il reader (`_read_csv_safe` in app/utils/dataframe.py)
-prova esplicitamente utf-8 per primo: coerenza richiede che il writer lo
-esplicite uguale. Cosi' un refactor su un host con locale non-UTF (es.
-Windows con cp1252) non introduce drift silente.
-
-Il test distingue AST-based:
-  - `df.to_csv(path, ...)`       (primo arg positional = file path/buffer)
-      -> RICHIEDE encoding="utf-8"
-  - `df.to_csv(index=False)`     (no arg positional, ritorna stringa)
-      -> OK senza encoding (il param non si applica, darebbe warning)
-
-Scope: tutto `app/` + `workers/`. Scripts e test non sono checkati (i test
-dovrebbero testare il produzione, non vincolare se stessi).
 """
 
 from __future__ import annotations

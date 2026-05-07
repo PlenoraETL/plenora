@@ -1,27 +1,7 @@
-"""Contract test BE-GO-READY-ERROR-CODES-006-CATALOG —
+"""
+Contract test BE-GO-READY-ERROR-CODES-006-CATALOG —
+
 catalog `error_codes.py` + helper `raise_typed_http` + drift
-detection source-bound sui codici emessi nei router.
-
-Lock i 5 obiettivi del batch 006:
-
-1. catalog estende `app/shared/error_codes.py` con 6 codici
-   domain mancanti + `KNOWN_DOMAIN_CODES` frozenset esposto;
-2. convenzioni catalog (snake_case, unique, lowercase);
-3. helper `raise_typed_http(code, status_code, message, details=None)`
-   solleva `HTTPException` con shape compatibile con
-   `normalize_http_exception_detail`;
-4. helper round-trip: il `detail` strutturato emesso da
-   `raise_typed_http` viene normalizzato dal central handler
-   nell'envelope canonico;
-5. drift detection: `app/core/**/*.py` parsato source-bound,
-   ogni ``"error": "<x>"`` literal deve essere in
-   `KNOWN_DOMAIN_CODES` U `KNOWN_GLOBAL_CODES` U
-   `{http_<status>}`.
-
-NESSUNA call site esistente e' migrata (catalog e' additivo,
-helper e' opzionale). Drift test e' source-bound: parsa file
-.py senza importare i moduli applicativi (zero side effects,
-zero DB/I/O).
 """
 
 from __future__ import annotations

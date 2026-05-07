@@ -1,13 +1,7 @@
-"""Contract test — scripts/load_secrets.py (wrapper exec cloud-agnostic).
+"""
+Contract test — scripts/load_secrets.py (wrapper exec cloud-agnostic).
 
 Wrapper che fetcha secrets dal backend configurato (SSM/Key Vault/
-Secret Manager via factory cloud_backends), popola os.environ, poi
-execv il target script.
-
-1. `fetch_secrets` delega a `app.shared.cloud_backends.get_secrets_backend()`
-2. `inject_into_environ` NON sovrascrive env gia' presenti (env priority)
-3. CLI exit codes: args mancanti -> 2, target non esistente -> 2
-4. Errore backend -> exit 1 con log
 """
 
 from __future__ import annotations

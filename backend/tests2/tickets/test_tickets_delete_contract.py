@@ -1,21 +1,7 @@
-"""Contract test — DELETE /api/tickets/{id}.
+"""
+Contract test — DELETE /api/tickets/{id}.
 
 Default = soft delete (set deleted_at, audit preservato).
-`?hard=true` = purge definitivo via FK cascade (solo superadmin).
-
-Coperture:
-  - SOFT (default):
-    - admin del gruppo: 200 + soft_delete_ticket chiamato + niente cleanup blob
-    - superadmin: 200 cross-group, soft path
-    - admin di altro gruppo: 404 (no info leak)
-    - user (anche creator): 403
-    - esecutore: 403 (filtrato da _require_not_esecutore)
-    - ticket inesistente: 404
-  - HARD (?hard=true):
-    - superadmin: 200 + delete_ticket cascade + cleanup blob loop
-    - admin (non superadmin): 403
-    - cleanup failure best-effort
-    - hard su ticket senza allegati skip cleanup
 """
 
 from __future__ import annotations

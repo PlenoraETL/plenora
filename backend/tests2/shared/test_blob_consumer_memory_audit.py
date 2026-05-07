@@ -1,41 +1,7 @@
-"""Source-bound contract — bounded-read inventory ratchet for
+"""
+Source-bound contract — bounded-read inventory ratchet for
+
 object-storage blob consumers.
-
-BE-GO-READY-RESOURCE-ENGINE-008-BLOB-CONSUMER-MEMORY-AUDIT.
-
-Every production callsite that materializes an
-``ObjectStorage.get_object_stream(...)`` body into a single
-in-memory ``bytes`` buffer (via ``b"".join(...)`` or
-``list(...)`` over the stream's ``body`` iterator) MUST be
-inventoried below with:
-  - the stream's expected payload size (bounded vs unbounded),
-  - the user-control surface (user-controlled / system),
-  - the OOM risk class (HIGH / MEDIUM / LOW),
-  - and a cap rationale (which setting bounds the read, if any).
-
-A new bytes-accumulating callsite without an inventory entry
-fails the ratchet — the contributor must classify it
-intentionally.
-
-Why source-bound
-----------------
-Importing the modules at test time would pull pandas, geopandas,
-boto3, etc. The contract is structural: ``ast`` walks each
-production file and finds ``b"".join(<expr>["body"])`` /
-``list(<expr>["body"])`` patterns. Same posture as
-``test_temp_usage_bytes_first_policy.py``.
-
-Out of scope (per task brief)
------------------------------
-- Implementing bounded-read caps (Worker 2/3/4 owns the
-  production fix per the audit recommendations).
-- Migrating ``imdf/storage.py:199`` (``storage.download(...)``
-  to tempfile) — multi-file ZIP extraction structurally
-  requires a path; not a bytes-buffer site.
-- ``eseguibili/storage.open_stream`` — already TRUE-STREAMING
-  via FastAPI ``StreamingResponse(stream["body"])`` (the body
-  iterator is forwarded byte-for-byte; no ``b"".join`` site
-  exists for it).
 """
 
 from __future__ import annotations

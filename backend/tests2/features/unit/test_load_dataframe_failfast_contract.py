@@ -1,13 +1,7 @@
-"""S3 (inventory 2.9): _load_dataframe non deve ripiegare silenziosamente su CSV
+"""
+S3 (inventory 2.9): _load_dataframe non deve ripiegare silenziosamente su CSV
+
 quando il file non e' ne' un formato geo riconoscibile ne' un CSV plausibile.
-
-Prima del fix: un file con estensione non-CSV che geopandas non riesce a leggere
-viene passato a pandas.read_csv, che spesso restituisce un DataFrame di spazzatura
-senza alcun segnale di errore (tipo-mismatch mascherato).
-
-Dopo il fix:
-- estensione plausibile CSV-like (.tsv, .txt) → fallback CSV esplicito con log
-- altrimenti → ValueError con messaggio chiaro che include l'errore geopandas
 """
 from pathlib import Path
 

@@ -1,34 +1,7 @@
-"""Contract test — update_project_columns_metadata e' atomico (FOR UPDATE).
+"""
+Contract test — update_project_columns_metadata e' atomico (FOR UPDATE).
 
 Reperto coperto: il vecchio `update_project_columns_metadata` faceva
-read-modify-write NON atomico (db.get_project + dict modify +
-db.update_project). Due writer concorrenti producevano lost update:
-
-    Worker A (ESTRAI executor)    Worker B (UI PUT /canvas)
-    -------------------------     ----------------------------
-    canvas = get(p1)
-                                  canvas = get(p1)
-    canvas["columns_metadata"]
-      = X
-                                  canvas["nodes"] = Y
-    update(p1, canvas)
-                                  update(p1, canvas)  ← X perso!
-
-Fix: `app.db.config.projects.update_project_canvas_key_atomic`
-(post BE-GO-READY-DB-ENGINE-007: la funzione vive nel leaf canonico;
-il facade `config_db_service` re-esporta lo stesso simbolo per i test
-gia' agganciati via `cfg_db.update_*` patch path) wrappa SELECT FOR
-UPDATE + merge + UPDATE in una singola transaction.
-Il SELECT FOR UPDATE prende un row-level lock che serializza i writer
-sullo stesso progetto.
-
-Scope di questi test (contract, in-process):
-  - La sequenza SQL emessa e' quella attesa (SELECT FOR UPDATE + UPDATE)
-  - Il canvas viene letto, fatto merge, e scritto con tutti i campi
-  - Canvas corrotto in DB → raise (no silent overwrite)
-  - Progetto inesistente → False (no crash)
-
-Il test "concorrenza reale" sta in integration (DB reale + threading).
 """
 
 from __future__ import annotations

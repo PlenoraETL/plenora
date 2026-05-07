@@ -1,24 +1,7 @@
-"""Typed contracts for the Resource Engine.
+"""
+Typed contracts for the Resource Engine.
 
 BE-GO-READY-RESOURCE-ENGINE-002-RESULT-BLOB-LOADER-PILOT.
-BE-GO-READY-RESOURCE-ENGINE-020-FILE-SOURCE-BLOB-LOADER.
-
-Only four canonical names live here:
-  - ``ResourceKind``        : Literal of supported kinds
-                              (v1: result_blob, file_source_blob).
-  - ``ResourceRef``         : frozen typed reference (kind + id + tenant).
-  - ``Resource``            : frozen result envelope (bytes|path|stream).
-  - ``ResourceLoader``      : Protocol implemented per kind.
-  - ``ResourceRegistry``    : Protocol that routes ref -> loader.
-
-Boundary
---------
-Pure leaf module:
-  - stdlib only;
-  - zero `pandas` / `geopandas` / `fiona` / `polars` /
-    `fastapi` / `app.core.auth` / `app.core.artifacts` imports.
-
-Locked by `tests2/shared/test_resource_engine_anti_god_engine_lock.py`.
 """
 
 from __future__ import annotations

@@ -1,36 +1,7 @@
-"""[phase-2-err][batch7] 7.c — sanitize str(e) in Celery task result dict.
+"""
+[phase-2-err][batch7] 7.c — sanitize str(e) in Celery task result dict.
 
 Audit Batch 7 §3.1 "Boundary top-level che espone str(e) nel result dict":
-i task Celery (schedule_task, carica_task, imdf_publish_task, execution_manager
-_execute_carica) ritornavano dict con campi `error`/`message`/`error_message`
-interpolati con `str(e)`. Il dict finisce in Redis via AsyncResult e viene
-esposto via get_task_status al FE → leak di internals (path moduli, valori
-exception args, stack info).
-
-Post-fix (7.c):
-  - `error` diventa token canonico macchina-leggibile
-  - `message` / `error_message` diventano stringhe italiane fisse "... (consulta log)"
-  - Canali admin diagnostics preservati:
-    - `close_run(error_message=error_msg_internal)` continua a portare str(e)
-    - `log_service.create_log_entry(error_message=...)` idem
-    - `DebugPayloadBuilder.build(failure={error_message: str(e)})` idem
-    - `error_details: traceback` preservato come canale strutturato separato
-
-Approccio test: source-based anti-regressione. I task Celery hanno decorator
-+ bind=True + context complessi che rendono i mock runtime fragili. Qui
-blindiamo contro regressione ispezionando il codice sorgente dei 4 file
-toccati e assertando la presenza dei token canonici + l'assenza di pattern
-`str(e)` nei return dict user-facing. I canali diagnostic (logger.error,
-DebugPayloadBuilder, close_run, log_service) possono continuare a contenere
-str(e) intenzionalmente — quelli NON sono ispezionati qui.
-
-6 siti coperti:
-  1. workers/tasks/schedule_task.py:109-132 → `schedule_task_fatal`
-  2. workers/tasks/carica_task.py:229-273 → `carica_task_fatal`
-  3. workers/tasks/carica_task.py:357-365 → `carica_datasource_write_failed`
-  4. workers/tasks/carica_task.py:511-521 → `carica_arcgis_write_failed`
-  5. workers/tasks/imdf_publish_task.py:260-268 → `imdf_publish_failed`
-  6. app/core/scheduler/execution_manager.py:883-885 → `carica_scheduler_failed`
 """
 
 from __future__ import annotations

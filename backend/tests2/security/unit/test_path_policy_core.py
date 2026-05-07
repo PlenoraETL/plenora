@@ -1,16 +1,7 @@
-"""Core-level test per Refactor #4 Step A: assert_path_within.
+"""
+Core-level test per Refactor #4 Step A: assert_path_within.
 
 Helper minimale che centralizza il pattern path validation duplicato
-in 7 call site del codebase. Test sull'API pura: nessun TestClient,
-nessun CurrentUser, nessuna mock di db_service.
-
-Contratti chiave (tutti fail-closed):
-1. UNC paths rifiutati prima di resolve()
-2. Path traversal bloccato da relative_to
-3. Trusted roots vuoto → ValueError (caller bug, non bypass)
-4. must_exist enforcing
-5. Multi-root: candidate dentro UNO QUALSIASI dei root passa
-6. Ritorna il Path resolved (semantica utility)
 """
 
 from pathlib import Path

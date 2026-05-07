@@ -1,74 +1,7 @@
 """
 Cluster AGGREGATION — operazioni analytics: group-by, sort, dedup, window.
 
-Origine
-=======
-Estratto da `app.core.manipola.transforms.base` come parte di Phase 5
-Batch B1.7 (cluster split, vedi
-`orchestrate/PHASE_5_ENTRY_PLAN.md` §3 P5-B1 + §6.1 facade pattern).
-
-Razionale del raggruppamento: tutte le 5 funzioni sono operazioni
-**analytics che operano su gruppi/ordine di righe**:
-  - `op_aggregate`        — group-by + funzioni di aggregazione
-                            (count/sum/mean/min/max/first/last/concat).
-  - `op_sort`             — ordinamento multi-colonna.
-  - `op_distinct`         — deduplicazione semplice (subset/keep).
-  - `op_dedup_advanced`   — deduplicazione con ordinamento prioritario
-                            (sort_then_dedup).
-  - `op_window_function`  — funzioni finestra (rank/dense_rank/cumsum/
-                            cumcount/lag/lead/pct_change/running_mean)
-                            opzionalmente per gruppo.
-
-Tutte e 5 condividono la mental-model "calcoli su un sottoinsieme
-ordinato di righe" — il dominio piu' coeso rimasto in `base.py` post
-B1.6.
-
-Phase 4 A1 ha applicato `dropna=False` a tutti i `groupby(...)` di
-`op_aggregate` per non perdere righe con NaN nelle chiavi.
-Comportamento preservato bit-per-bit qui.
-
-Contenuto:
-  - `op_aggregate`        — 5 path (count puro, count fallback, agg dict,
-                            con concat custom, con multi-aggregation).
-  - `op_sort`             — sort_values + reset_index.
-  - `op_distinct`         — drop_duplicates con `keep='false'` mappato
-                            a `keep=False` di pandas.
-  - `op_dedup_advanced`   — sort_values opzionale + drop_duplicates +
-                            reset_index.
-  - `op_window_function`  — switch su 8 funzioni con/senza groupby.
-
-Invarianti pubbliche preservate (regola §6.1 zero call-site changes):
-  - `from app.core.manipola.transforms.base import <op>` continua a
-    funzionare per tutte e 5 grazie al facade re-export in `base.py`.
-  - `from app.core.manipola.transforms import op_aggregate` /
-    `op_sort` / `op_distinct` continuano a funzionare (`__init__.py`
-    le re-exporta gia' via `from .base import ...` che cattura il
-    facade). `op_dedup_advanced` e `op_window_function` non sono in
-    init (verificato pre-extraction) → nessun cambio init richiesto.
-  - `transforms_registry.json` con entries `"base.op_*"` per tutte e 5
-    continua a risolvere via `getattr(<base module>, "<func>")` dal
-    `PluginExecutor`.
-  - Nuovo path canonico `from app.core.manipola.transforms.aggregation
-    import <op>` disponibile.
-
-Logger naming
-=============
-Logger creato esplicitamente come
-`"app.core.manipola.transforms.base"` (NON `__name__`) per preservare
-il contratto osservabile pre-extraction: i record `op_aggregate
-CALLED`, `Aggregate (count)`, `Aggregate: ...`, `[CRASH] Errore
-Aggregate`, `[CRASH] Errore Sort`, `Distinct: ...`,
-`DedupAdvanced completato`, `WindowFunction completato`,
-`[CRASH] Errore WindowFunction` continuano ad apparire sotto il
-logger name dei consumer. Stesso pattern di tutti i moduli figli
-estratti nei batch B1.1-B1.6.
-
-Il body sotto e' una copia BIT-PER-BIT delle implementazioni in
-`base.py` al momento di B1.7. Nessuna modifica di logica, comment,
-log payload, ordine di operazione, fail-closed semantics. La nested
-function `make_concat_agg` resta locale a `op_aggregate` come
-factory closure (hot-path: una nuova closure per ogni concat
-configurato).
+Keeps transformation behavior isolated from orchestration callers.
 """
 
 import pandas as pd

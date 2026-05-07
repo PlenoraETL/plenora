@@ -1,28 +1,7 @@
 """
 Pre-check conflitti per il modulo CARICA.
 
-Architettura
-============
-Questo modulo verifica i conflitti prima dell'inserimento in modalità APPEND.
-Il check è in due passaggi:
-
-Passaggio 1 — Duplicati interni:
-    Verifica se il DataFrame sorgente contiene righe duplicate sulle
-    colonne match (PK/UNIQUE). Segnala quante righe sono duplicate.
-
-Passaggio 2 — Conflitti con DB:
-    Interroga la tabella destinazione per verificare se i valori delle
-    colonne match esistono già. Usa query IN(...) in batch per evitare
-    query troppo grandi.
-
-Il risultato è un ConflictReport che il frontend mostra all'utente
-con le opzioni: "Procedi (skip conflitti)", "Forza (sovrascrivi)",
-"Annulla". In modalità CRON, la ConflictPolicy preconfigurata decide
-automaticamente.
-
-Uso:
-    checker = ConflictChecker(engine, db_type)
-    report = checker.check(df, schema, table, match_columns)
+Keeps database loading behavior isolated from orchestration callers.
 """
 
 from app.utils.logger import get_logger

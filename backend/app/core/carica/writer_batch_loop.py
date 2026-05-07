@@ -1,68 +1,7 @@
-"""Helper canonico per il loop batched-insert + progress reporting.
+"""
+Helper canonico per il loop batched-insert + progress reporting.
 
 BE-GO-READY-TRANSFORMATION-ENGINE-012-WRITER-BATCH-LOOP-EXTRACT.
-
-Origine
-=======
-Estratto da `writer_transaction_exec.py` (×2) +
-`writer_replace_strategies.py` (×4) come closure di TE11-R1
-(BE-GO-READY-TRANSFORMATION-ENGINE-011 §3.2 + §5).
-
-Razionale: 6 call site avevano la stessa shape strutturale —
-slicing del DataFrame in batch fixed-size + invocazione
-`_execute_batch(...)` + accumulo `result.rows_written` /
-`result.batches_completed` + `report_progress(BatchProgress(...))`.
-Il delta fra i 6 sites era limitato a:
-
-  - presenza/assenza di `target_table` kwarg sul `_execute_batch`;
-  - per-batch error handling (solo `_execute_per_batch`):
-    rollback + close + reopen + accumulo `rows_failed`;
-  - tutto il resto identico (slicing, progress payload, mutation).
-
-Questa estrazione collassa la parte STRUTTURALE (slicing + progress)
-in un helper unico; il body della singola batch resta a carico del
-caller via callback `process_batch(batch_df, batch_num)`. Cosi':
-
-  - i 5 site "atomic" (single-tx ALL_OR_NOTHING + 4 strategie
-    truncate/replace) passano una callback minimal: `_execute_batch(...)
-    + result mutation`;
-  - il site `_execute_per_batch` passa una callback piu' ricca con
-    try/except per-batch + reopen connection (via mutable
-    conn-holder, vedi callsite migrato).
-
-Boundary contract
-=================
-- **Helper**: pure-loop. Zero I/O proprio (nessun
-  `engine.connect()`, nessun `conn.execute(...)` qui dentro).
-  Zero settings/env reads. Zero logger emits dal helper.
-- **Callback `process_batch(batch_df, batch_num)`**: callable kw-less,
-  ritorna `None`. Il caller possiede la connection, la transazione,
-  il `_execute_batch`, e la mutation di `result.rows_written` /
-  `result.batches_completed` / `result.rows_failed`.
-  Le exception del callback **propagano** fino al caller (il helper
-  non le cattura): cosi' i context manager `engine.begin()` /
-  `engine.connect()` mantengono il loro contratto di rollback come
-  pre-extraction.
-- **`report_progress`**: callable iniettato (di solito
-  `self.report_progress` del writer). Riceve `BatchProgress`
-  immutabile per batch.
-- **`result`**: passato per leggere `rows_written` / `total_rows`
-  e costruire il payload `BatchProgress`. Il helper NON muta
-  `result` (la mutation e' nel callback).
-
-Ordine garantito (bit-per-bit con i 6 site originali):
-  1. compute `start_idx`, `end_idx`, slice `batch_df`;
-  2. `process_batch(batch_df, batch_num)` (callback);
-  3. compute `elapsed = time.time() - start_time`;
-  4. `report_progress(BatchProgress(...))` con i campi correnti.
-
-Out-of-scope (per task brief)
-=============================
-- ❌ NO vectorization di `_build_params` (TE11-R7);
-- ❌ NO bulk writer revival;
-- ❌ NO move di DDLGenerator / ConflictChecker;
-- ❌ NO settings / env reads;
-- ❌ NO connection / transaction management interno.
 """
 
 from __future__ import annotations

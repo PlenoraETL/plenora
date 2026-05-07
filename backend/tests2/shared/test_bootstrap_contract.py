@@ -1,26 +1,7 @@
-"""Contract test BE-GO-READY-BOOTSTRAP-ENGINE-002-EXPLICIT-BOOTSTRAP-FUNCTION.
+"""
+Contract test BE-GO-READY-BOOTSTRAP-ENGINE-002-EXPLICIT-BOOTSTRAP-FUNCTION.
 
 Source-bound + behavioural test for `app.bootstrap.bootstrap()` and
-`app.bootstrap.teardown()`. The bootstrap function replaces the 4
-implicit top-level startup side effects in `app.main` with a single
-named boundary; teardown owns the symmetric shutdown pool close.
-This test locks:
-
-1. **Call order**: `validate_startup → validate_storage_config →
-   init_all_dbs → _repair_psycopg2_ssl_env`. Reordering would
-   break the comment-encoded contract from `main.py`.
-2. **SSL env cleanup runs after init_all_dbs**: psycopg2 sets the
-   three SSL env vars when it opens its first connection; popping
-   before init would be a no-op.
-3. **Idempotency**: calling `bootstrap()` twice has the same
-   effect as calling it once (matches the underlying
-   `validate_startup` / `init_all_dbs` idempotence).
-4. **Exception propagation**: each step's exception type is
-   preserved (no wrapping, no logging, no remapping by `bootstrap`).
-5. **`main.py` delegates to bootstrap/teardown**: source-bound check that
-   the top-level block is replaced by a single `_bootstrap()` call
-   and the 4 inline statements are gone, and that lifespan delegates
-   shutdown to `_teardown()`.
 """
 
 from __future__ import annotations

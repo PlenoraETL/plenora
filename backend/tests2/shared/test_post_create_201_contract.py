@@ -1,22 +1,7 @@
-"""Contract test F3-B1 (2026-04-24) — POST create endpoints ritornano 201.
+"""
+Contract test F3-B1 (2026-04-24) — POST create endpoints ritornano 201.
 
 Blinda convenzione REST (RFC 9110): POST che crea una nuova risorsa
-DEVE restituire 201 Created (non 200 OK), con body = risorsa creata.
-
-Endpoint in scope F3-B1 (3 endpoint CRUD omogenei):
-  - POST /api/connections          -> 201 + DatabaseConnection
-  - POST /api/api-connections      -> 201 + dict api_connection
-  - POST /api/schedules            -> 201 + ScheduleConfig
-
-Breaking change: NONE. Il body e' invariato; cambia solo lo status_code
-da default 200 a 201. FE che controlla `response.ok` (2xx) continua a
-funzionare; solo FE con check esplicito `=== 200` (pattern raro)
-rompono e vanno aggiornati a `=== 201`.
-
-Fuori scope:
-  - POST restanti F3 (projects, eseguibili, features, files/upload*):
-    batch F3-B2/B3 successivi.
-  - DELETE -> 204: batch F2 dopo F3 completo.
 """
 
 from __future__ import annotations

@@ -1,17 +1,7 @@
-"""Contract test A1 — dispatch policy-aware in FileSourceService.
+"""
+Contract test A1 — dispatch policy-aware in FileSourceService.
 
 Copre §6.3 del design A1: `_dispatch_blob_storage` deve ramificare sulla
-policy `STORAGE_POLICY`, non solo sulla soglia
-`FILE_SOURCE_S3_THRESHOLD_BYTES`. I test threshold-only vivono in
-`test_file_service_db_contract.py` (contratto hybrid, esistente).
-
-Casi coperti:
-  - policy=db + payload piccolo              -> DB BYTEA
-  - policy=db + payload oltre threshold      -> DB BYTEA (ignora soglia)
-  - policy=object_storage + payload piccolo  -> upload (ignora soglia)
-  - policy=object_storage upload failure     -> nessuna row DB (orphan guard)
-  - policy=hybrid + sotto soglia             -> DB BYTEA (default attuale)
-  - policy=hybrid + sopra soglia             -> upload (default attuale)
 """
 
 from __future__ import annotations

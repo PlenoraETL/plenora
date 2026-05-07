@@ -1,34 +1,7 @@
-"""Contract test per CRUD + tenant isolation di `DataSourceService`.
+"""
+Contract test per CRUD + tenant isolation di `DataSourceService`.
 
 Invariants blindati (da ``backend/docs/architecture/invariants.md``):
-
-- §4.1 layer business + tenant isolation: ``list_datasources(group_id=X)``
-  DEVE restringere alla query con ``WHERE group_id = %s``. Un bug che
-  omettesse il filtro esporrebbe cross-tenant i datasource di altri
-  gruppi — viola fail-closed.
-- §1.1 "un solo entry point": ``list_datasources`` è il punto canonico
-  di enumeration. Ogni bypass che rileggesse la lista con chiamate
-  parallele violerebbe il contract di policy.
-- Perf invariant N+1: ``list_datasources`` DEVE usare 1 sola ``fetchall``
-  con parse in memoria (vedi ``service.py:52-62``). Un ritorno al pattern
-  ``get_datasource`` per-row porterebbe a N+1 round-trip a DB.
-- Policy recovery ``get_scan_state`` (service.py:254-285): JSON corrotto
-  → rinomina in ``.broken.<ts>`` + log ERROR + ritorna ``ScanState`` vuoto.
-  Il rename È il punto chiave: senza, ogni call successiva ritrova lo
-  stesso errore e lo scan è rotto fino al manual cleanup.
-
-Regressioni protette:
-
-- Cross-tenant leak: rimuovere il filtro ``WHERE group_id`` o cambiarlo
-  in un OR loose esporrebbe dati di tenant altrui.
-- N+1 regressione: un refactor che iterasse ``get_datasource(id)`` per
-  ogni row (apparentemente più "pulito") rompe la garanzia di singola
-  query.
-- Delete idempotente: ``delete_datasource`` su id inesistente deve
-  ritornare ``False`` SENZA chiamare ``db.delete_datasource`` — evita
-  DELETE SQL spurie su id non esistenti (log spam / row count metrics).
-- Scan state "silent corrupt": prima del fix il file corrotto restava
-  su disco e ogni call ri-loggava il warning. Il test blinda il rename.
 """
 
 from __future__ import annotations

@@ -1,30 +1,7 @@
-"""JWT access-token contract - emit/decode + env-loading policy.
+"""
+JWT access-token contract - emit/decode + env-loading policy.
 
 Estratto da `app.core.auth.auth` (STRUCT-005 Seam D) senza alcun cambio
-comportamentale. `auth.py` re-esporta i simboli per backward-compat con
-test (`auth_mod.SECRET_KEY`, `auth_mod.create_access_token`, ...) e con
-consumer legacy che importano ancora JWT helpers dalla facade.
-
-Contratto del payload (claim names invariati, side per Go-portability):
-    sub       -> user_id (id utente)
-    username
-    group_id
-    role
-    exp       -> datetime UTC, ora + ACCESS_TOKEN_EXPIRE_HOURS
-    iat       -> datetime UTC, ora di emissione
-    jti       -> uuid4().hex (32 char esadecimali, ~128 bit)
-
-Algoritmo: HS256.
-
-Policy SECRET_KEY (`JWT_SECRET_KEY` env var):
-  - Produzione/staging:  RuntimeError all'import se non configurata.
-  - Sviluppo (default):  genera secret random per la sessione + warning.
-  - Nessun fallback hardcoded, mai.
-
-Side-effect import:
-  La prima riga sostantiva fa `import app.config` per garantire che
-  `backend/.env` sia caricato (via python-dotenv) PRIMA di leggere
-  `JWT_SECRET_KEY` qui sotto. Pattern gia' presente in auth.py.
 """
 
 from __future__ import annotations

@@ -1,26 +1,7 @@
-"""Bench formalizzato: `op_geo_clean_topology` nuovo impl vs legacy.
+"""
+Bench formalizzato: `op_geo_clean_topology` nuovo impl vs legacy.
 
 Il legacy ha un worst-case O(n^2) nel step "remove overlaps":
-
-    for i in range(1, len(geometries)):
-        preceding = unary_union([g for g in geometries[:i] ...])
-        diff = geometries[i].difference(preceding)
-
-cioe' ricostruisce da zero l'unione dei precedenti ad ogni passo.
-
-Il nuovo impl usa accumulator incrementale:
-    accumulated = accumulated.union(diff)
-
-che riduce il lavoro a ~O(n) union + O(n) difference.
-
-Baseline misurata in Batch 0:
-  - 50 polys → 0.059s
-  - 100 polys → 0.254s
-  - 200 polys → 1.060s   (scaling 17.9x su 4x dati, O(n^2) reale)
-
-Esecuzione:
-    pytest backend/tests2/performance/test_bench_op_geo_clean_topology.py \
-        -m perf_bench -s -q
 """
 
 from __future__ import annotations

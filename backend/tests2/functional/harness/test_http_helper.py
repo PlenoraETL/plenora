@@ -1,10 +1,7 @@
-"""Lock tests per `tests2.functional.harness.http._try_parse_json_body`.
+"""
+Lock tests per `tests2.functional.harness.http._try_parse_json_body`.
 
 Regression guard: l'helper esplodeva con `json.JSONDecodeError` /
-`UnicodeDecodeError` su qualunque body non-JSON (CSV, binari) prima
-ancora di arrivare al check di status code. I test integration di
-download (es. `/api/tasks/{id}/download` che ritorna CSV/zip/parquet)
-fallivano in setup invece che nell'assert.
 """
 
 import pytest

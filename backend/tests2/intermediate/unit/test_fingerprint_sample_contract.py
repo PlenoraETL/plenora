@@ -1,23 +1,7 @@
-"""Contract test Bug #24 — sampled fingerprint per checkpoint snapshots.
+"""
+Contract test Bug #24 — sampled fingerprint per checkpoint snapshots.
 
 Pre-fix: `compute_dataframe_fingerprint` faceva
-`pd.util.hash_pandas_object` sul DataFrame INTERO (algo
-`pandas_hash_v1`). Su DF da 275k righe × 56 cols, 1.0–1.5 s per
-fingerprint -> ~3 s residui sul run reale.
-
-Post-fix: dispatch via `INTERMEDIATE_FINGERPRINT_MODE`:
-  - "sample" (default): hash di (schema, len(df), df.head(N))
-    -> ~10-20 ms anche su DF grandi.
-  - "full":  comportamento legacy.
-
-Trade-off documentato (sample mode):
-  - cambi su righe oltre la N-esima possono non cambiare l'hash.
-  - schema/dtype cambiano sempre l'hash.
-  - len(df) cambia sempre l'hash.
-  - cambi nelle prime N righe cambiano sempre l'hash.
-
-Test pinna determinismo, sensibilita' su schema/head/len, limite
-documentato del sample, niente df.to_dict materializzato, perf smoke.
 """
 
 from __future__ import annotations

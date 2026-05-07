@@ -1,78 +1,7 @@
 """
 Cluster FORMULA — colonna calcolata via espressione utente con
+
 gate AST anti-RCE.
-
-Origine
-=======
-Estratto da `app.core.manipola.transforms.base` come parte di Phase 5
-Batch B1.5 (cluster split, vedi
-`orchestrate/PHASE_5_ENTRY_PLAN.md` §3 P5-B1 + §6.1 facade pattern).
-
-Razionale dell'isolamento
-=========================
-Questo cluster contiene il path piu' security-critical del modulo
-manipola: l'espressione formula utente arriva come stringa dal canvas
-e viene valutata via `pandas.eval` + fallback `eval(formula, ...)`.
-Senza il gate AST a monte, un payload malicioso (gadget chain
-`__class__.__bases__.__subclasses__()`, `__import__('os').system(...)`,
-ecc.) bypasserebbe il namespace ristretto `__builtins__={}` ed
-otterrebbe RCE.
-
-Mettere AST whitelists + validator + op_formula in un modulo dedicato:
-  - Rende il perimetro di sicurezza esplicito (un solo file da
-    auditare per modifiche al sandbox).
-  - Permette al test contract N4
-    (`tests2/security/unit/test_n4_formula_validator_contract.py`,
-    69 test) di restare leggibile senza dover navigare tra le 25+
-    `op_*` di `base.py`.
-  - Allinea il file alla policy "ogni cluster un dominio chiaro"
-    (gli altri cluster split — joins/strings/utility/columns —
-    sono tabular ops; questo e' security boundary).
-
-Contenuto:
-  - **AST whitelist constants** (frozenset, immutabili):
-    - `_SAFE_PANDAS_ATTRS`    — attributi pandas ammessi su `Attribute`
-    - `_ALLOWED_AST_NODES`    — whitelist positiva di nodi AST
-    - `_FORBIDDEN_ATTR_NAMES` — dunder + escape patterns vietati
-    - `_FORBIDDEN_NAMES`      — builtin pericolosi vietati come `Name`
-  - **AST validator**:
-    - `_validate_formula_ast` — chiamata PRIMA di pandas.eval/eval
-  - **Public op**:
-    - `op_formula`            — colonna calcolata user-facing
-
-Invarianti pubbliche preservate (regola §6.1 zero call-site changes):
-  - `from app.core.manipola.transforms.base import op_formula`
-    continua a funzionare grazie al facade re-export in `base.py`.
-  - `from app.core.manipola.transforms.base import _validate_formula_ast`
-    continua a funzionare: nome underscore-prefixed re-exported
-    intenzionalmente perche' il test contract N4 lo importa
-    direttamente (verificato: 3 occorrenze in
-    `test_n4_formula_validator_contract.py`).
-  - `from app.core.manipola.transforms import op_formula` continua a
-    funzionare (`__init__.py` resta `from .base import op_formula` e
-    cattura il facade).
-  - `transforms_registry.json` con entry `"base.op_formula"` continua
-    a risolvere via `getattr(<base module>, "op_formula")` dal
-    `PluginExecutor`.
-  - Nuovo path canonico `from app.core.manipola.transforms.formula
-    import op_formula, _validate_formula_ast` disponibile.
-
-Logger naming
-=============
-Logger creato esplicitamente come
-`"app.core.manipola.transforms.base"` (NON `__name__`) per preservare
-il contratto osservabile pre-extraction: i record `Formula vuota`,
-`Formula (pandas.eval) ok`, `[GESTITO] Formula '...' non valida`,
-`Formula: colonne ... scartate` continuano ad apparire sotto il
-logger name dei consumer. Stesso pattern di `joins.py` (B1.1b),
-`strings.py` (B1.3a), `utility.py` (B1.3c), `columns.py` (B1.4).
-
-Il body sotto e' una copia BIT-PER-BIT delle implementazioni in
-`base.py` al momento di B1.5. Nessuna modifica di logica AST,
-contenuto delle whitelist, ordine di operazione, log payload, fail-
-closed semantics. Le 4 frozenset sono `_*` underscore-prefix (private
-al modulo) ma usate dal validator interno; il fatto che siano private
-non viola il contratto pubblico (nessun consumer le importa).
 """
 
 import ast as _ast

@@ -1,25 +1,7 @@
-"""Contract test BE-GO-READY-CONNECTION-ENGINE-006 — typed boundary
+"""
+Contract test BE-GO-READY-CONNECTION-ENGINE-006 — typed boundary
+
 `app.db.log_runs_db_service.delete_log_run_by_run_id`.
-
-Locks:
-
-  1. SQL shape: exactly `DELETE FROM log_runs WHERE run_id = ?`
-     with the run_id bound positionally as a 1-tuple. Schema is
-     resolved via the pool `search_path`; no `plenora.` prefix
-     leak.
-  2. Return contract: `int` echoing `cursor.rowcount`. The
-     orchestrator caller treats this as "rows touched", NOT as a
-     deleted-bool — the helper must NOT translate.
-  3. Error propagation: any exception from
-     `pg_connection.execute` propagates to the caller. The DAL
-     does not log, does not swallow. (The orchestrator's best-
-     effort `try/except → failed_steps.append("delete_log_runs")`
-     is preserved at the call site, not duplicated here.)
-
-Plus router source-bound assertions:
-
-  4. `orchestrator/router.py` no longer imports
-     `app.db.pg_connection` and references the helper.
 """
 
 from __future__ import annotations

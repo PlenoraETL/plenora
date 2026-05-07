@@ -1,34 +1,7 @@
-"""Contract test BE-GO-READY-AUTH-ENGINE-002 — in-memory rate-limit
+"""
+Contract test BE-GO-READY-AUTH-ENGINE-002 — in-memory rate-limit
+
 fallback estratto da `auth.py` in
-`app.core.auth.rate_limit_fallback`.
-
-Coperti i 4 invariant del fallback (algoritmo preservato 1:1 dal
-legacy `auth._check_rate_limit_in_memory`):
-
-1. **Sliding window per-IP**: pruning dei timestamp piu' vecchi di
-   `window_seconds`; il bucket non cresce indefinitamente.
-2. **Threshold**: `>= max_attempts` nel window solleva
-   `RateLimitFallbackTriggered`. Sotto la soglia: nessun raise.
-3. **Retry-after raw (clamp lo fa il caller)**: l'eccezione
-   trasporta `retry_after = lockout_seconds - (now - oldest)` non
-   clampato. Il clamp >=1 vive in `disclosure.rate_limit_exceeded`
-   (gia' lockato in `test_auth_disclosure_policy_contract.py::
-   test_rate_limit_exceeded_clamps_retry_after_to_min_one`).
-4. **Per-IP isolation**: `record(A)` non riempie il bucket di B;
-   `clear(A)` non tocca il bucket di B.
-
-Inoltre KEEP_COMPAT lock per gli alias che `auth.py` espone:
-
-- `auth_mod._rate_lock` is `rate_limit_fallback._STORE.lock`
-- `auth_mod._failed_attempts` is `rate_limit_fallback._STORE.failed_attempts`
-- `auth_mod._record_failed_login_in_memory` is
-  `rate_limit_fallback.record_failed_login_in_memory`
-- `auth_mod._clear_failed_logins_in_memory` is
-  `rate_limit_fallback.clear_failed_logins_in_memory`
-- `auth_mod._check_rate_limit_in_memory` resta wrapper locale (legge
-  le 3 costanti monkeypatch-ate); converte
-  `RateLimitFallbackTriggered` in disclosure raise via
-  `app.core.auth.disclosure.rate_limit_exceeded`.
 """
 
 from __future__ import annotations

@@ -2,15 +2,6 @@
 router.py — Endpoint IMDF
 
 Endpoint
-========
- POST /api/imdf/publish       — lancia pubblicazione ArcGIS di un bundle
-                                IMDF persistito (task Celery asincrono)
-
- GET  /api/imdf/bundles       — lista bundle IMDF disponibili su disco
-                                (utile per debug / cronologia)
-
-La pubblicazione e' asincrona: l'endpoint ritorna subito il task_id e il
-frontend polla /api/tasks/{task_id} per il progresso.
 """
 
 from pathlib import Path

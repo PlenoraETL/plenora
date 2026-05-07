@@ -1,22 +1,7 @@
-"""Contract test — op_geo_reproject source_crs safety (B2 Phase 4).
+"""
+Contract test — op_geo_reproject source_crs safety (B2 Phase 4).
 
 Background:
-  Pre-B2 il codice aveva `crs_hint = source_crs if source_crs else "EPSG:4326"`,
-  cioe' assumeva silenziosamente EPSG:4326 quando l'utente non specificava
-  source_crs e le geometrie non portavano CRS (no EWKB SRID, no GeoDataFrame
-  con `.crs`). Conseguenza pratica: un dataset metrico (es. UTM EPSG:32632)
-  riproiettato senza source_crs veniva trattato come geografico, producendo
-  coordinate sintatticamente valide ma traslate di centinaia di km. Il bug
-  resta invisibile finche' qualcuno guarda le geometrie su una mappa e si
-  accorge che sono nel posto sbagliato.
-
-Contract B2 (preferenza reviewer: fail-loud chiaro):
-  - source_crs MANCANTE + nessun CRS recuperabile -> ValueError esplicito.
-  - source_crs esplicito                          -> riproiezione ok.
-  - GeoDataFrame con CRS gia' presente            -> riproiezione ok.
-
-Nota scope: mirato ai 3 casi richiesti dal prompt B2. Non testiamo
-internals di to_geodataframe ne EWKB SRID extraction (coperti altrove).
 """
 
 from __future__ import annotations

@@ -1,42 +1,7 @@
-"""Architectural lock for Marco's first-PC clean-install dry-run pack.
+"""
+Architectural lock for Marco's first-PC clean-install dry-run pack.
 
 BE-GO-READY-INSTALLATION-024-LINUX-CLEAN-INSTALL-DRY-RUN-PACK.
-
-Source-bound assertions on `docs/ops/install-marco-dry-run.md`.
-The page is the operator-facing executable subset of the full
-install runbook; if it loses the minimal-env profile, the
-foreground smoke commands, the expected `/health` and `/ready`
-shapes, the failure triage, OR the explicit "Docker is NOT the
-go-ready path today" disclaimer, a real first-PC install
-becomes guesswork again.
-
-Locks today:
-
-  - the page exists with the canonical title;
-  - the Docker honesty disclaimer is intact (NO Dockerfile,
-    NO compose, Docker pre-install does NOT make this the
-    go-ready path);
-  - the manual-choices table covers ENVIRONMENT, Postgres
-    location, Redis location, object storage choice, backup
-    bucket, backend port, worker counts;
-  - the minimal `.env` profile uses STORAGE_POLICY=db, local
-    Postgres, local Redis (the smallest viable smoke profile);
-  - the foreground smoke commands cover API (uvicorn),
-    Celery worker, Celery beat;
-  - the expected `/health` and `/ready` shapes are documented
-    at the high level the brief asked for;
-  - the failure triage checklist is present and covers the
-    four boot gates AND the ready-but-503 path;
-  - the destructive total-reset is flagged as PC-test-only;
-  - the page is ASCII-only.
-
-Outside scope:
-  - the full reference runbook (locked by sections 0-13 of
-    install-non-docker.md and by adjacent guards);
-  - the install script packaging contract (locked by
-    `test_install_script_packaging_guard.py`);
-  - the cleanroom drift doc (locked by
-    `test_cleanroom_celery_drift_doc_guard.py`).
 """
 
 from __future__ import annotations

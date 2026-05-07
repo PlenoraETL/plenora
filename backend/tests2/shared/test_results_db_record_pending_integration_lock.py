@@ -1,65 +1,7 @@
-"""Architectural lock for `record_pending` integration in result-blob deletes.
+"""
+Architectural lock for `record_pending` integration in result-blob deletes.
 
 BE-GO-READY-STORAGE-ENGINE-007-RECONCILIATION-RESULT-BLOB-INTEGRATION.
-
-Source-bound guard suite that asserts the W1-race coverage shipped
-in batch 021 (`delete_result` / `delete_results_for_project` →
-`record_pending` inside the same transaction as `DELETE FROM
-results`) cannot silently regress.
-
-The runtime mechanics already exist (proven by the 8 contract tests
-in `tests2/shared/test_results_db_delete_reconciliation_contract.py`):
-
-  - both delete paths call `record_pending(cur, domain="result_blob",
-    operation="delete", ...)` BEFORE the DELETE statement;
-  - both run inside a single `transaction()` block — commit advances
-    the pending row and the DELETE atomically;
-  - post-commit `compensating_delete` outcome flips the entry to
-    `mark_done` / `mark_failed_attempt`.
-
-The risk this lock addresses: a future refactor could silently drop
-the W1 wire (e.g., remove the `record_pending` call but leave the
-post-commit `compensating_delete`) and the reconciler would lose
-the pre-commit trail. Without the trail, a process death between DB
-commit and storage delete leaves an orphan blob with no
-application-side audit.
-
-These tests are AST/text-level on the source files. They do NOT run
-the runtime; they assert that the source preserves the W1 contract.
-
-Locked invariants
------------------
-1. `app/db/results_db_service.py:delete_result` calls
-   `record_pending` with `domain="result_blob"`, `operation="delete"`,
-   inside a `with transaction()` block.
-2. `record_pending` precedes the `DELETE FROM results WHERE id = %s`
-   statement (lexical order).
-3. `app/db/results_db_service.py:delete_results_for_project` calls
-   `record_pending` with `domain="result_blob"`, `operation="delete"`,
-   inside a `with transaction()` block.
-4. `record_pending` precedes the `DELETE FROM results WHERE
-   project_id = %s` statement (lexical order).
-5. Post-commit, both paths invoke `compensating_delete` with
-   `domain="result_blob"` and dispatch to `mark_done` /
-   `mark_failed_attempt`.
-6. Public boundary surface in `app/shared/storage_reconciliation.py`
-   continues to expose `record_pending`, `mark_done`,
-   `mark_failed_attempt`.
-
-Out of scope (locked separately or tracked as residuals)
---------------------------------------------------------
-- W2 race (`_cleanup_uploaded_result_blob` in `app/utils/result_store.py`):
-  upload-intent pattern, deferred to batch 008
-  (`STORAGE-ENGINE-008-UPLOAD-INTENT-PATTERN`).
-- Multi-layer file_source upload rollback callback in
-  `app/services/file_service.py:_delete_blob`: also W2 (post-rollback
-  cleanup of just-uploaded blob), same batch 008 closure path.
-- Intermediate full_artifact orphans
-  (`app/core/intermediate/db.py:_delete_run` cascade-deletes
-  `node_meta.artifact_uri` rows but performs NO storage cleanup
-  today): different domain, different W1 shape (no compensating
-  delete exists yet), tracked as new residual `R-007.1` in
-  `BE_STORAGE_ENGINE_AUDIT.md`.
 """
 
 from __future__ import annotations

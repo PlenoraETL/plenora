@@ -2,62 +2,6 @@
 Intermediate full artifact reader — Batch API preview da artifact (2026-04-28).
 
 Legge preview da `data.parquet` su runtime object storage per il modo
-`full_artifact`. Read-only, no save/load nella chain — usato solo
-dall'endpoint `GET /api/runs/{run_id}/nodes/{node_id}/data`.
-
-Vincoli:
-- Niente download su disco: stream bytes bounded -> preview parser leaf.
-- Lettura bytes-first BOUNDED via
-  ``app.core.resources.bounded_reader.read_stream_bounded`` con cap
-  DEDICATO ``ARTIFACT_PREVIEW_MAX_BYTES`` (env, default 25 MB).
-  BE-GO-READY-RUNTIME-002-CENTRALIZE-PREVIEW-CAP-RESOLVER: il
-  parsing dell'env vive nel canonico
-  ``app.core.resources.preview_caps.resolve_artifact_preview_max_bytes``
-  (gemello sibling di ``resource_caps.resolve_resource_max_bytes``,
-  shape identica ma cap/env distinti). La preview ha un cap molto
-  piu' basso del generico ``RESOURCE_MAX_BYTES`` (default 200 MB
-  post BE-GO-READY-MEMORY-ENGINE-005) perche' la preview vive sul
-  thread-pool dell'API ed e' concorrente per definizione: N
-  tab/utenti che fanno refresh di N nodi non possono sommare
-  200 MB ciascuno o l'API satura la RAM del processo prima di
-  un OOM kill. Oversize NON viene degradato a errore
-  best-effort: la ``MemoryLimitExceededError`` propaga al boundary
-  FastAPI (handler ``app/main.py``) che mappa a HTTP 413 con stage
-  ``intermediate_artifact_preview``. Questo evita che un artifact
-  corrotto/giga riempia RAM e OOM-killi il worker.
-- Limite righe applicato dal parser leaf via batch streaming
-  (`preview_parser.parse_parquet_preview`, pyarrow iter_batches).
-- Best-effort SOLO per errori non-OOM (capability off, key missing,
-  decode fail): ritornano `ArtifactPreviewResult(rows=[],
-  col_schema={}, error=...)`. L'endpoint puo' rispondere 200 con
-  messaggio operativo invece di 500.
-- Capability gate via `get_runtime_object_storage()` (cloud_backends).
-
-Vedi anche `app/core/intermediate/artifact_writer.py` per il counterpart
-write-side e per il layout key.
-
-Anti-god-engine note:
-``app.core.resources.bounded_reader`` and
-``app.core.resources.preview_caps`` are stdlib-only (no
-FastAPI/DB/config); importing them from this leaf reader does
-not violate the existing import boundary. The cap is read via
-``preview_caps.resolve_artifact_preview_max_bytes`` (canonical
-parsing surface mirroring ``resource_caps.resolve_resource_max_bytes``),
-so the reader stays free of an ``app.config`` dependency and of
-duplicated env-parsing code.
-
-BE-GO-READY-RESOURCE-ENGINE-016 (parser-boundary split): the
-pandas-bound parsing of the downloaded byte buffer is delegated
-to the leaf module ``app.core.intermediate.preview_parser``.
-This file is now a pure I/O orchestrator -- it owns capability
-gating, bounded streaming, and best-effort error envelope
-construction; it does NOT import pandas or perform any
-DataFrame work. ``import pandas`` lives ONLY inside
-``preview_parser.parse_parquet_preview`` (lazy, inside the
-function body). A source-bound test in
-``tests2/intermediate/unit/test_artifact_reader_bounded_preview_contract.py``
-locks that the reader does not regress on the pandas-import
-edge.
 """
 
 from __future__ import annotations

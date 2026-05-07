@@ -1,15 +1,7 @@
-"""Helper centralizzati per i check di autorizzazione sulle risorse
+"""
+Helper centralizzati per i check di autorizzazione sulle risorse
+
 cross-cutting (`project_id`, `file_source_id`) usati dai router HTTP.
-
-Single point of truth: ogni endpoint che accetta un id di risorsa
-dall'utente passa per uno di questi helper PRIMA di leggere i dati,
-cosi' un utente autenticato non puo' esfiltrare risorse di altri
-tenant indovinandone l'id.
-
-  - `assert_project_access`           → owned only (write ops)
-  - `assert_project_visible`          → owned + shared (read ops)
-  - `assert_file_source_access`       → owned + shared (file_sources)
-  - `assert_canvas_resources_access`  → scan completo del canvas
 """
 
 from fastapi import HTTPException

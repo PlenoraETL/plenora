@@ -1,15 +1,7 @@
-"""Catchup non avanza last_run prima del successo del task (C3 follow-up).
+"""
+Catchup non avanza last_run prima del successo del task (C3 follow-up).
 
 Fix 2 del follow-up: l'emit del task catchup NON aggiorna last_run
-immediatamente. Se il task crasha o non viene mai picked-up dal
-worker, al tick successivo detect_missed_run deve ancora vedere il
-missed e poter ri-emettere.
-
-Anti-loop: dedupe via schedule_catchup_history. Se uno stesso
-`scheduled_for` e' stato gia' emesso nelle ultime 2h, skip senza
-ri-emettere (evita spam di task duplicati finche' il primo e' in
-volo nella coda Celery). Dopo 2h, l'entry e' considerata stale e
-il re-emit e' permesso (il task era molto probabilmente fallito).
 """
 
 import json

@@ -1,27 +1,7 @@
-"""[phase-2-err][batch9] C6 — shape 500 `project_cleanup_partial`.
+"""
+[phase-2-err][batch9] C6 — shape 500 `project_cleanup_partial`.
 
 Invariante blindato dal fix C6:
-    Quando `ProjectService.delete_project` solleva `ProjectCleanupPartialError`
-    (C5/C6), il router DELETE /api/projects/{id} mappa a HTTP 500 con shape:
-        {
-            "detail": {
-                "error": "project_cleanup_partial",
-                "message": <str human-readable italiano>,
-                "project_id": <str>,
-                "failed_steps": {
-                    "critical": [<str>, ...],   # subset di {intermediate_runs, results_blobs}
-                    "derived":  [<str>, ...]    # subset di {schedules_orphan, comparison_keys}
-                },
-                "project_preserved": true
-            }
-        }
-
-Il test protegge contro:
-  - regressioni alla shape (campi rinominati, annidamenti diversi)
-  - reintroduzioni del 500 generico FastAPI (`{"detail": "Internal Server Error"}`)
-  - ritorno di status code diverso da 500
-  - dimenticanza del flag `project_preserved: true` (telegramma dell'invariante
-    fail-closed introdotto in C5)
 """
 
 from __future__ import annotations

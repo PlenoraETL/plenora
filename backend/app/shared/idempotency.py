@@ -1,22 +1,7 @@
-"""Idempotency guard condiviso tra i task asincroni (C4 round 3).
+"""
+Idempotency guard condiviso tra i task asincroni (C4 round 3).
 
 Motivazione
------------
-I task che scrivono su sistemi a valle (CARICA → DB cliente, ARRICCHISCI
-con carica encadenato, futuri connettori) hanno tutti lo stesso bisogno:
-se un retry manuale o un replay porta a ri-invocare un task gia'
-completato, non devono ri-scrivere.
-
-Il pattern originale e' stato sviluppato in `app/core/carica/idempotency.py`
-durante C4 round 2; questo modulo condiviso lo promuove a shared/ per
-riuso tra moduli (arricchisci, futuri).
-
-Semantica per status (invariata da C4 round 2):
-- `completed` → True (idempotency hit, skip)
-- `failed`    → False (retry legittimo)
-- `running`   → False (no block su race rara)
-- missing     → False (primo tentativo)
-- DB error    → False (fail-open: meglio ri-eseguire che perdere run legittima)
 """
 
 from app.utils.logger import get_logger

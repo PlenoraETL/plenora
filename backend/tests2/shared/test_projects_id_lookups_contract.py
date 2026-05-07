@@ -1,29 +1,7 @@
-"""Contract test BE-GO-READY-CONNECTION-ENGINE-003 — typed
+"""
+Contract test BE-GO-READY-CONNECTION-ENGINE-003 — typed
+
 project-id lookup helpers in `app.db.config.projects`.
-
-Locks the boundary contract for:
-
-  - `list_owned_project_ids(project_ids, *, owner_group_id) -> set[str]`
-  - `list_project_ids_for_group(group_id) -> set[str]`
-
-Both helpers were extracted from inline `pg_connection.fetchall`
-calls in `projects/router.py` and `imdf/router.py` so those
-routers can be removed from the architecture-guard allowlist.
-The contract tests pin:
-
-  1. Return type is ALWAYS `set[str]` (deduplicated, unordered).
-  2. Empty / falsy inputs short-circuit WITHOUT touching the DB.
-  3. Single-query batch SQL shape (no N+1) for the IN(...) helper.
-  4. Parameter binding is positional (no SQL injection on inputs).
-  5. Behavior is identical to the inline pre-extraction queries
-     (regression for `projects/router._visible_project_ids_strict`
-     and `imdf/router.list_bundles` ACL precheck).
-
-The helpers use `app.db.pg_connection.fetchall`. The autouse
-fixture `_stub_pg_connection_execute` in `tests2/conftest.py`
-stubs `pg_connection.execute` to a no-op for unit tests; for
-read paths we monkeypatch `pg_connection.fetchall` per-test so
-we can spy on the SQL + params.
 """
 
 from __future__ import annotations

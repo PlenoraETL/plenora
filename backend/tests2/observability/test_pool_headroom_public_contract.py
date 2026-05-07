@@ -1,18 +1,7 @@
-"""Contract test BE-GO-READY-BOOTSTRAP-ENGINE-010-OBSERVABILITY-POOL-HEADROOM-PUBLIC.
+"""
+Contract test BE-GO-READY-BOOTSTRAP-ENGINE-010-OBSERVABILITY-POOL-HEADROOM-PUBLIC.
 
 Lock the new public helper `app.db.pg_connection.get_pool_headroom()` +
-`PoolHeadroom` typed dataclass.
-
-Coverage:
-1. `PoolHeadroom` is a frozen dataclass with `max`, `in_use`, `free`
-   int fields and a `saturated` boolean property.
-2. `get_pool_headroom()` reads pool internals via `_get_pool()` and
-   returns typed values: max from `_POOL_MAX`, in_use from
-   `len(_used)`, free from `len(_pool)`.
-3. `get_pool_headroom()` propagates DB errors (lazy init failure) so
-   the consumer can map them to fail-OPEN.
-4. `saturated` property: True when in_use >= max.
-5. The public helper is in `__all__`-equivalent surface (importable).
 """
 
 from __future__ import annotations

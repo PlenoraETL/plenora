@@ -1,3 +1,9 @@
+"""
+Tests the results db service behavior.
+
+Locks backend contracts and regression boundaries for the current architecture.
+"""
+
 import logging
 
 import pytest

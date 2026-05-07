@@ -1,14 +1,7 @@
-"""SourceLoader: dispatch unico file/project/static per il caricamento
+"""
+SourceLoader: dispatch unico file/project/static per il caricamento
+
 delle sorgenti dati di una pipeline.
-
-Core-level: nessuna dipendenza da `CurrentUser` o dal layer HTTP.
-Accetta `expected_group_id` keyword-only **required**: ogni branch e'
-fail-closed.
-
-Il check cross-tenant per il branch `file` e' **enforced dal loader
-stesso** (non delegato al caller): il caller passa un `group_id`
-corretto e il loader chiama `is_resource_visible` prima di qualsiasi
-materializzazione del blob.
 """
 
 from __future__ import annotations

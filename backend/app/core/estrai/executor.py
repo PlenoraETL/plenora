@@ -1,28 +1,7 @@
 """
 Executor del modulo ESTRAI — esecuzione e preview di query SQL e ArcGIS Feature Service.
 
-Architettura
-============
-Questo modulo è il punto di ingresso per le operazioni del modulo ESTRAI.
-Coordina la generazione SQL, l'esecuzione su database e il salvataggio
-dei risultati, fungendo da orchestratore tra i componenti:
-
-- QueryGenerator: genera SQL dal canvas
-- QueryExecutor: esegue le query sul database
-- ProjectService: gestisce metadati e file dei progetti
-- ConnectionService: recupera le connessioni database salvate
-- FeaturesService (opzionale): accesso a Feature Service ArcGIS
-
-Operazioni principali:
-1. execute(): genera SQL, esegue la query completa e salva il file di output
-2. preview(): genera SQL con LIMIT, esegue e restituisce i dati per l'anteprima UI
-
-Supporta due percorsi:
-- Connessione DB → generazione SQL + esecuzione via QueryExecutor
-- Connessione ArcGIS → query REST API via FeaturesService
-
-Il tipo di connessione viene rilevato automaticamente dal default_connection_id
-del progetto: se non trovata tra le DB, viene cercata tra le ArcGIS.
+Keeps this module's responsibility explicit and isolated from adjacent code.
 """
 
 import time as _time
@@ -164,7 +143,7 @@ def _dedup_dataframe_columns_for_serialization(
     df_renamed = df.copy()
     df_renamed.columns = new_columns
 
-    # Warning visibili: uno per coppia rinominata + log server-side aggregato
+    # NOTE: visibili: uno per coppia rinominata + log server-side aggregato
     warnings_list = [
         f"Colonna duplicata rinominata: '{orig}' -> '{new}'"
         for orig, new in renames
@@ -444,7 +423,7 @@ class EstraiExecutor:
 
             df = pd.DataFrame(rows, columns=columns)
 
-            # BUG.md #6: dedup colonne duplicate PRIMA di costruire columns_info
+            # FIXME(BUG.md #6): dedup colonne duplicate PRIMA di costruire columns_info
             # e PRIMA di to_dict, altrimenti pandas le scarta silenziosamente
             # e l'utente non se ne accorge.
             df, dedup_warnings = _dedup_dataframe_columns_for_serialization(df)
@@ -523,7 +502,7 @@ class EstraiExecutor:
 
             df = pd.DataFrame(rows, columns=columns)
 
-            # BUG.md #6: dedup colonne duplicate PRIMA di columns_info e to_dict
+            # FIXME(BUG.md #6): dedup colonne duplicate PRIMA di columns_info e to_dict
             # (vedi _preview_database per il razionale).
             df, dedup_warnings = _dedup_dataframe_columns_for_serialization(df)
 

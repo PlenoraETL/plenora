@@ -1,21 +1,7 @@
-"""Rilevamento cicli nel DAG delle dipendenze cross-project.
+"""
+Rilevamento cicli nel DAG delle dipendenze cross-project.
 
 C3 fix 5: due progetti Manipola possono referenziare l'uno l'altro
-come `project_source` nei propri canvas, creando un grafo di
-dipendenze che teoricamente non dovrebbe mai essere ciclico. Il
-backend attuale caricava in `_carica_sorgenti_progetto` solo l'output
-materializzato dell'ultimo run del progetto sorgente (senza ricorsione
-di esecuzione), quindi un ciclo A → B → A non causa stack overflow
-ma genera *data lineage circolare* (A legge output vecchio di B, B
-legge output vecchio di A — risultato semantico confuso).
-
-Il check scatta al salvataggio del canvas: prima di persistere un
-canvas Manipola, costruiamo il grafo transitivo seguendo i
-`project_source` e cerchiamo cicli. Se trovati, rifiutiamo il save
-con `ProjectLineageCycleError` contenente la catena leggibile.
-
-Implementazione iterativa (no recursion stack overflow su catene
-profonde): DFS con stack esplicito + visited set.
 """
 
 from typing import Callable, List, Optional

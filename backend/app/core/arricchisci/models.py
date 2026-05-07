@@ -1,33 +1,7 @@
 """
 Modelli dati per il modulo ARRICCHISCI.
 
-Architettura
-============
-Questo modulo definisce tutte le strutture dati (dataclass) utilizzate dal
-sistema di arricchimento: status per riga, errori, statistiche aggregate,
-opzioni di esecuzione e risultati. Tutte le classi sono immutabili o
-quasi-immutabili per facilitare il debugging e la serializzazione JSON.
-
-Enumerazioni:
-- RowStatus: stato elaborazione per riga (SUCCESS, ERROR, SKIPPED, RETRY_EXHAUSTED, PENDING)
-- BatchInputFormat: formato payload batch (ARRAY, FLAT_ARRAY, OBJECT)
-
-Dataclass per singola riga:
-- RowError: errore con dettagli (indice riga, tipo errore, HTTP status, retry count)
-
-Dataclass aggregate:
-- EnrichmentStats: contatori globali (success, errors, cached, skipped, api_calls_made/saved)
-- EnrichmentResult: risultato finale con stats + errori + timestamp
-- PreviewResult: risultato preview con stime tempo e campione dati
-- EnrichmentValidationResult: risultato validazione input (colonne mancanti, righe nulle)
-
-Configurazione:
-- EnrichmentOptions: opzioni esecuzione (retry, rate_limit, timeout, parallelismo,
-  deduplicazione, soglia errori, validazione input)
-- BatchConfig: configurazione batch nativo (endpoint, formato, dimensione max)
-
-Le proprietà calcolate (success_rate, cache_hit_rate) sono definite come @property
-per evitare inconsistenze quando le stats vengono aggiornate incrementalmente.
+Keeps API enrichment behavior isolated from orchestration callers.
 """
 
 from enum import Enum

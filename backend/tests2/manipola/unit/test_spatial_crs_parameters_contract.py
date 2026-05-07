@@ -1,24 +1,7 @@
-"""Contract test — parametri output_crs/metric_crs opt-in su operator spatial.
+"""
+Contract test — parametri output_crs/metric_crs opt-in su operator spatial.
 
 Il modulo manipola/transforms/spatial.py ha 7 operator che riproiettano
-internamente in UTM per le operazioni metriche. Questo contract introduce
-due parametri opzionali che espongono esplicitamente la scelta del CRS
-di calcolo e del CRS di output:
-
-- `metric_crs` (str | None): CRS per calcolo metrico. Default None -> auto-UTM.
-- `output_crs` ("same" | "metric" | "EPSG:xxxx"): CRS geometrie output.
-  Default "same" -> roundtrip al CRS input (retrocompat).
-
-Invarianti:
-1. Omettere entrambi i parametri e' bit-per-bit equivalente al comportamento
-   pre-refactor (backward compatibility garantita).
-2. `output_crs="metric"` evita il roundtrip: geometrie restano nel CRS
-   metrico scelto.
-3. `output_crs="EPSG:..."` riproietta alle coordinate richieste.
-4. `metric_crs="EPSG:..."` bypassa `get_utm_crs_for_geometry` (utile per
-   dataset multi-zona: Lambert conformico, LAEA Europa, ecc.).
-5. Per operator con output numerico (area/length/perimeter/distance),
-   `metric_crs` cambia il valore calcolato (diverso CRS = diversa misura).
 """
 
 from __future__ import annotations

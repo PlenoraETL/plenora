@@ -2,14 +2,6 @@
 Helper puri per RSS/memory sampling pre-stage.
 
 BE-GO-READY-MEMORY-OOM-002-WORKER-RSS-SAMPLING.
-
-Funzioni pure: leggono RSS via psutil (opzionale), confrontano con cap,
-sollevano MemoryLimitExceededError se superato. Nessun import FastAPI/web.
-Il mapping HTTP vive nel boundary handler in app/main.py.
-
-psutil e' gia' dipendenza (requirements.txt), ma il fallback e' safe:
-se psutil non e' importabile, il guard e' silenziosamente disabilitato
-(log debug, no raise).
 """
 
 from __future__ import annotations

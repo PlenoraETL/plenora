@@ -1,27 +1,7 @@
-"""Contract test BE-GO-READY-ERROR-CONTRACT-002 — global error
+"""
+Contract test BE-GO-READY-ERROR-CONTRACT-002 — global error
+
 envelope dual-shape.
-
-Lock i 10 requirement del pilot:
-
-1. envelope ha top-level `error`, `message`, `details`;
-2. envelope include `detail` mirror backward-compatible;
-3. status code preservato;
-4. `HTTPException` con `detail: str` → `error: http_<status>`;
-5. `HTTPException` con `detail: dict` (error+message) → normalizza
-   a envelope;
-6. eccezione generica → `error: internal_error`;
-7. `CanvasCorruptedError` → `error: canvas_corrupted`;
-8. CORS header preservati dove l'handler legacy li preservava;
-9. request_id resta nell'header `X-Request-ID`, non duplicato nel
-   body;
-10. test 409-shape esistenti continuano a passare (verificato in
-    suite separata: vedi `tests2/connections/test_delete_connection_409_shape.py`,
-    `tests2/datasources/test_delete_datasource_409_shape.py`,
-    `tests2/arricchisci/unit/test_delete_api_connection_409_shape.py`).
-
-Pure unit tests sull'helper + integration tests su
-`TestClient(app)` con endpoint sintetici che alzano eccezioni
-note. NESSUN router reale toccato.
 """
 
 from __future__ import annotations

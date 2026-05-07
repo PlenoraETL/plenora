@@ -1,21 +1,7 @@
-"""Baseline timing: operazioni geospaziali NON ancora ottimizzate.
+"""
+Baseline timing: operazioni geospaziali NON ancora ottimizzate.
 
 Al contrario di test_baseline_pandas_ops.py, qui il "current" E' il
-baseline vero (nessuna vettorizzazione landed). Il refactor di Batch 3
-(spatial sindex + unary_union chunked) dovra' battere questi numeri
-con speedup >=3x.
-
-Hotspot noti, pre-Batch-3:
-  - op_geo_voronoi (spatial.py:1252): iterrows su punti + contains
-    seriale su voronoi_polygons -> O(n^2)
-  - op_geo_clean_topology (spatial.py:1519):
-      * python-loop make_valid cella per cella
-      * **unary_union accumulator chiamato dentro for-loop** -> O(n^2)
-        reale, il peggiore dei 3 hotspot
-
-Esecuzione:
-    pytest backend/tests2/performance/test_baseline_spatial_ops.py \
-        -m perf_baseline -s -q
 """
 
 from __future__ import annotations

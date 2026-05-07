@@ -1,52 +1,7 @@
-"""Architectural lock for the clean-install smoke harness.
+"""
+Architectural lock for the clean-install smoke harness.
 
 BE-GO-READY-INSTALL-007-CLEAN-INSTALL-SMOKE-HARNESS.
-
-Source-bound assertions on `docs/ops/install-marco-dry-run.md`
-section 5 (Clean-install smoke harness). The section is the
-operator-facing canonical mapping for the eight smoke harness
-items every clean install must verify before being declared
-green. Without these locks a future doc edit could silently
-drop a row, drop the memory-caps visibility step, drop the
-tiny ETL/project smoke, or drop the Docker-vs-single-machine
-deltas - any of which would let an operator declare an install
-green while having skipped a real verification.
-
-Locks today:
-
-  - section 5 with the canonical title exists;
-  - 5.1 enumerates the eight harness rows in canonical order
-    (clone/env, deps, DB init, object storage, workers/beat,
-    health/ready, memory caps, ETL smoke);
-  - 5.2 memory caps visibility lists the six canonical caps
-    (LOAD_FILE_MAX_BYTES, WORKER_RSS_MAX_BYTES,
-    RESOURCE_MAX_BYTES, ARTIFACT_PREVIEW_MAX_BYTES,
-    CROSS_JOIN_MAX_OUTPUT_ROWS, MULTI_JOIN_MAX_OUTPUT_ROWS) AND uses the canonical
-    `app.config.settings.get(...)` accessor - NOT a private
-    attribute or a re-implementation;
-  - 5.3 tiny ETL smoke uses `cleanroom.ping` (the existing
-    pure no-op task) AND the bounded
-    `AsyncResult.get(timeout=...)` pattern - NOT a sleep loop
-    or a real domain task;
-  - 5.4 Docker-vs-single-machine deltas exist with explicit
-    rows for memory caps + tiny ETL smoke;
-  - the new section is ASCII-only.
-
-The harness section sits between section 4 (Failure triage)
-and section 6 (What is NOT in this dry-run pack); the native-
-deps guard test extracts section 3 with `\\n## 4. Failure
-triage checklist` as the canonical end marker, so renumbering
-section 4 would break that lock - this test asserts the
-section ordering as a defensive cross-check.
-
-Outside scope:
-  - the dry-run pack contract tests for STORAGE_POLICY=db,
-    foreground smoke commands, and failure triage (locked by
-    `test_install_marco_dry_run_doc_guard.py`);
-  - the native-deps verification surface (locked by
-    `test_install_native_deps_verify_doc_guard.py`);
-  - the install script `--check` mode (locked by
-    `test_install_script_packaging_guard.py`).
 """
 
 from __future__ import annotations

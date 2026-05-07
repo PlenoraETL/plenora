@@ -1,18 +1,7 @@
-"""[phase-2-err][batch9] C4 — full-cleanup aggregato failures / 207 Multi-Status.
+"""
+[phase-2-err][batch9] C4 — full-cleanup aggregato failures / 207 Multi-Status.
 
 Audit Batch 9 §3.1 S2 / fix F2: l'endpoint DELETE /api/tasks/{id}/full-cleanup
-ritornava 204 No Content anche se 4/6 step falliscono silenziosamente. Claim
-GDPR-style "rimuovere ogni traccia" violato senza segnale al caller.
-
-Post-fix:
-  - 204 No Content (body vuoto) quando tutti e 4 gli step cleanup succedono
-    — clean path INVARIATO.
-  - 207 Multi-Status con body `{"status": "partial", "failed_steps": [...]}`
-    quando almeno uno dei 4 step (delete_result / unlink_output_file /
-    delete_log_runs / celery_forget) solleva.
-  - 4 `logger.warning(..., exc_info=True)` promossi per diagnosticita' server.
-  - Pre-check 404/403 invariati. Ordine degli step invariato. Path traversal
-    safety skip (ValueError sul unlink) NON conta come failed_step.
 """
 
 from __future__ import annotations

@@ -1,23 +1,7 @@
-"""Contract test decorator @audit_action — audit trail automatico.
+"""
+Contract test decorator @audit_action — audit trail automatico.
 
 Scope:
-  Fissa i 4 comportamenti chiave del decorator definito in
-  `app/shared/audit_action.py`:
-
-    1. Success path  — la funzione ritorna, audit write con status=200.
-    2. Failure path  — la funzione solleva HTTPException con status S,
-                        audit write con status=S E l'HTTPException viene
-                        ri-sollevata (non swallowed).
-    3. Fail-open     — la INSERT su plenora.audit_actions solleva,
-                        il valore di ritorno / l'eccezione della funzione
-                        business passa inalterata, warning loggato,
-                        metrica write_fail incrementata.
-    4. Anonymous     — current_user non e' tra i kwargs (o e' None),
-                        la riga audit viene scritta con user_id=None.
-
-  Aggiunge 2 test di supporto per lockare invarianti del contratto:
-    5. Async         — stessa semantica su funzione async.
-    6. Target types  — solo str/int come target; altri tipi → NULL.
 """
 
 from __future__ import annotations
@@ -246,7 +230,7 @@ def test_audit_write_failure_does_not_break_business_path(audit_write_raises):
         "proprio valore, non propagare l'errore di audit"
     )
 
-    # Warning osservabile: il segnale che l'audit non ha scritto.
+    # NOTE: osservabile: il segnale che l'audit non ha scritto.
     warnings = [
         r for r in audit_write_raises.handler.records
         if r.levelno == logging.WARNING
@@ -283,7 +267,7 @@ def test_audit_write_failure_does_not_mask_business_exception(audit_write_raises
     assert excinfo.value.status_code == 403
     assert excinfo.value.detail == "Permesso negato"
 
-    # Warning comunque emesso: l'audit fail-open ha comunque tentato di
+    # NOTE: comunque emesso: l'audit fail-open ha comunque tentato di
     # tracciare il 403 prima di propagare.
     assert any(
         r.levelno == logging.WARNING for r in audit_write_raises.handler.records

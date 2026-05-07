@@ -1,27 +1,7 @@
-"""[phase-2-err][residual ε] 7.f-bis — breadcrumb su silent-assignment fallback.
+"""
+[phase-2-err][residual ε] 7.f-bis — breadcrumb su silent-assignment fallback.
 
 Residual sweep ε del punto 1 — 5 siti `except Exception: <assignment>`
-rimasti esclusi dal 7.f (che copriva solo pure `pass`). Pattern diverso
-semanticamente (fallback a valore default tipizzato invece di swallow
-puro), ma stesso problema §5.1.4: zero breadcrumb sul fail.
-
-5 siti coperti (post-verifica pre-ε):
-  1. workers/tasks/pipeline_task.py:60 — _get_project_info → return {}
-  2. workers/tasks/carica_task.py:256 — DebugPayloadBuilder → debug_payload=None
-  3. workers/tasks/enrichment_task.py:1140 — DebugPayloadBuilder → _debug_payload=None
-  4. workers/tasks/enrichment_task.py:1300 — ProjectService metadata → group_id=None
-  5. app/core/scheduler/execution_manager.py:1032 — DebugPayloadBuilder → _debug_payload=None
-
-Post-fix ε:
-  - Ogni catch ora ha `except Exception as e: logger.debug(
-    f"<context>: {type(e).__name__}: {e}")` + assignment fallback preservato.
-  - Level `debug` coerente con 7.f (volumi potenzialmente alti, no
-    alerting noise).
-  - Zero cambio semantico del fallback (return {}, =None preservati).
-  - Zero cambio firma/flusso.
-
-Approccio test source-based (come 7.f): Celery tasks + DebugPayloadBuilder
-fragile a mock runtime. Scansione sorgente + assertion su pattern.
 """
 
 from __future__ import annotations

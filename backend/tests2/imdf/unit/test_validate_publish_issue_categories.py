@@ -1,42 +1,7 @@
-"""Contract test BE-IMDF-007 — coverage delle categorie di issue
+"""
+Contract test BE-IMDF-007 — coverage delle categorie di issue
+
 emesse da `core/imdf/validator.validate_publish`.
-
-Obiettivo (audit BE-IMDF-BOUNDARY-001 §4): prima di splittare la
-funzione 700+ LOC in 4 fasi (bundle_load / fs_inspect / schema_compat
-/ assemble), ogni codice di issue deve avere un test isolato che
-asserisce comportamento e shape report.
-
-Categorie coperte qui:
-
-- TYPE_MISMATCH       (schema_issues, bundle vs FS field type diff)
-- NULL_MATCH_KEY      (data_issues, NULL su business key)
-- DUPLICATE_MATCH_KEY (data_issues, duplicati su business key)
-- STRING_TRUNCATION   (data_issues, bundle valore > FS length)
-- NULL_ON_NON_NULLABLE (data_issues, NULL su campo NOT NULL FS)
-- MISSING_CAPABILITIES (top_issues, FS senza capability per mode)
-- FOLDER_MISMATCH     (top_issues, request folder != FS folder)
-- CRS_MISMATCH        (top_issues, bundle SRS != FS SRS)
-
-Strategia mocking (no rete, no ArcGIS reale):
-- bundle dir reale in tmp_path con un dir `*.gdb` vuoto (il validator
-  lo trova via `bundle_dir.rglob("*.gdb")`);
-- `load_imdf_layers` patchato a livello module-source per ritornare
-  GeoDataFrame craftate per il caso;
-- `FeaturesService.get_connection` + `_to_connection_info` patchati
-  con stub minimi;
-- `arcgis_client.create_client` patchato per ritornare un MagicMock con
-  `list_layers` / `get_layer_schema` craftati;
-- `_find_existing_service` patchato per controllare presenza/folder FS;
-- `_count_features_where_via_post` patchato per evitare HTTP veri.
-
-NB: il validator fa lazy import dei collaboratori dentro la funzione,
-quindi tutti i patch sono sui SOURCE MODULE (es.
-`app.core.imdf.loader.load_imdf_layers`, NON
-`app.core.imdf.validator.load_imdf_layers`).
-
-Report shape: oggi `validate_publish(...) -> Dict[str, Any]` opaco.
-Vedi sezione "Future typed contract" nel report BE-IMDF-007 per la
-proposta `ValidatePublishReport` Pydantic.
 """
 
 from __future__ import annotations

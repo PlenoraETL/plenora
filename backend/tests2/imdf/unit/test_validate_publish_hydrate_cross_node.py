@@ -1,13 +1,7 @@
-"""Contract test D3 commit 2 — validate_publish_endpoint hydrata cache locale.
+"""
+Contract test D3 commit 2 — validate_publish_endpoint hydrata cache locale.
 
 `/api/imdf/validate-publish` deve chiamare `_hydrate_local_cache` come fanno
-`/publish` (router.py:633) e `/bundles/{id}` (router.py:339), in coerenza
-con la policy "il router decide quando hydratare" (d3_imdf_boundaries.md
-§4.4). Fix bug: bundle solo-S3 (cache miss) -> BUNDLE_MISSING falso-positivo.
-
-R5 (ratificata 2026-04-22): mantenere BUNDLE_MISSING anche se hydrate fallisce.
-NESSUN HYDRATE_FAILED introdotto. _hydrate_local_cache logga warning + silent
-pass; il validator gestisce il caso via BUNDLE_MISSING come prima.
 """
 from __future__ import annotations
 

@@ -1,27 +1,7 @@
-"""Source-bound lock — `app.core.auth.dependencies` must NOT
+"""
+Source-bound lock — `app.core.auth.dependencies` must NOT
+
 import `app.db.db_service`.
-
-BE-GO-READY-AUTH-ENGINE-015-DEPENDENCIES-OFF-DB-SERVICE.
-
-`app.core.auth.dependencies` is the canonical leaf for the five
-FastAPI auth dependency callables (`get_current_user`,
-`require_user_or_above`, `require_not_esecutore`,
-`require_admin`, `require_superadmin`). Pre-015 it consumed
-`app.db.db_service` (the cross-engine bulk re-export bundle)
-via ``import app.db.db_service as db`` and called
-``db.get_user(...)`` for the active-user check inside
-``get_current_user``.
-
-Post-015 the leaf imports the canonical
-``app.db.config.users`` directly. The bulk re-export bundle is
-no longer in dependencies.py's import graph; this test pins the
-boundary so future edits cannot silently re-introduce the
-facade dependency.
-
-Source-bound (AST-based): we read the file as text and walk the
-import nodes. No runtime side effect. Same posture as
-``test_auth_facade_strangler_contract.py`` and
-``test_resource_engine_anti_god_engine_lock.py``.
 """
 
 from __future__ import annotations

@@ -1,16 +1,7 @@
-"""Contract test per narrow catch su PUT /api/projects/{id}/canvas.
+"""
+Contract test per narrow catch su PUT /api/projects/{id}/canvas.
 
 Invariante blindato (Batch Fix 6.4 — error-handling-governance):
-    Il boundary del ``try: update_canvas(...)`` distingue **esplicitamente**
-    ``ProjectLineageCycleError`` (→ 400 con messaggio del dominio) dalle
-    eccezioni non-tipizzate (→ propagano al global handler FastAPI).
-    Nessun pattern ``isinstance inside broad catch`` deve sopravvivere.
-
-Reperto pre-fix (audit §4.2 S-ISINSTANCE):
-    ``except Exception as e: isinstance(e, ProjectLineageCycleError) → 400;
-    raise`` era funzionalmente corretto ma fragile: l'aggiunta di un
-    secondo domain error avrebbe richiesto una catena di isinstance
-    invece di una nuova ``except`` clause.
 """
 
 from __future__ import annotations

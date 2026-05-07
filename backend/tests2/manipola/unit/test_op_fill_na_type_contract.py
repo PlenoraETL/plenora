@@ -1,23 +1,7 @@
-"""Contract test — op_fill_na type compatibility (C2 Phase 4).
+"""
+Contract test — op_fill_na type compatibility (C2 Phase 4).
 
 Background:
-  Pre-C2 `op_fill_na(df, "amount", value="N/A")` su una colonna float
-  passava il valore a `fillna("N/A")`, che pandas accetta upcastando
-  silenziosamente la Series a dtype object. Conseguenza: aggregazioni
-  numeriche downstream (`op_aggregate sum/mean`) sui dati "puliti"
-  fallivano con TypeError oppure producevano output stringa
-  concatenata; join numerici perdevano la chiave.
-
-Policy reviewer C2 (fail-loud su upcast a object):
-  - colonna numerica + value numerico                      -> ok, dtype preservato
-  - colonna numerica + stringa numericamente coercibile    -> ok, coerce
-  - colonna numerica + value non-numerico/non-coercibile   -> ValueError
-  - colonna object/string + qualsiasi value                -> ok (free-form)
-  - colonna numerica + None / NaN                          -> ok (no upcast)
-  - colonna numerica + bool                                -> ValueError (anti-confusione)
-
-Scope minimale (no parametri nuovi, no refactor): testiamo i 4 casi
-canonici richiesti dal prompt + alcuni edge case canonici.
 """
 
 from __future__ import annotations

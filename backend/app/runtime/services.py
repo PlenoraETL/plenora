@@ -1,59 +1,7 @@
-"""Typed runtime composition factory — first slice.
+"""
+Typed runtime composition factory — first slice.
 
 BE-GO-READY-BOOTSTRAP-ENGINE-011-RUNTIME-CONTAINER-FIRST-SLICE.
-
-Replaces the procedural service construction block in
-`app/main.py:363-387` with a typed factory that returns a frozen
-`RuntimeServices` dataclass. The motivation is twofold:
-
-  1. **Explicit dependency order**. The orchestrator depends on 5
-     other services. The procedural form expressed this implicitly
-     by ordering the assignments. The factory expresses it as
-     positional construction of a single typed object whose shape
-     is asserted by a contract test.
-  2. **No more module-global as primary API**. `app/main.py` retains
-     the old names `project_service`, `connection_service`, etc.
-     for monkeypatch backward-compat (tests that do
-     `patch.object(main_mod, "orchestrator", ...)` keep working),
-     but those bindings are NOW DERIVED from the returned container
-     instead of being the source of truth. The factory return value
-     is the canonical surface; the module globals are a compatibility
-     re-export.
-
-Bootstrap relationship
-======================
-The factory MUST be called only after `app.bootstrap.bootstrap()`
-has completed successfully. The construction itself does not touch
-DB / Redis / object storage at import-time, but the services it
-returns assume those subsystems are reachable on first request. The
-contract test locks `is_bootstrapped() == True` before
-`build_runtime_services()` is invoked.
-
-Out of scope (per task brief)
-=============================
-- DI container framework. The factory is hand-wired.
-- Routers, `init_*` glue, middleware, exception handlers, health
-  checks. Those remain in `main.py`.
-- Auth / scheduler / api_connection / datasource / DB facade. Those
-  use module-level singletons (`api_connection_service`,
-  `datasource_service`) and are NOT yet part of the container.
-- Frontend / shutdown / Celery worker bootstrap.
-
-Go-ready mapping
-================
-::
-
-    type RuntimeServices struct {
-        ProjectService     ProjectService
-        ConnectionService  ConnectionService
-        DatabaseInspector  DatabaseInspector
-        QueryGenerator     QueryGenerator
-        QueryExecutor      QueryExecutor
-        FeaturesService    FeaturesService
-        Orchestrator       OrchestratorService
-    }
-
-    func BuildRuntimeServices(deps RuntimeDeps) RuntimeServices
 """
 
 from __future__ import annotations

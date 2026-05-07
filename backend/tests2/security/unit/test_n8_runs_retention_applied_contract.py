@@ -1,20 +1,7 @@
-"""Contract test N8 — apply_runs_retention invocato dopo close_run.
+"""
+Contract test N8 — apply_runs_retention invocato dopo close_run.
 
 Pre-fix: `apply_runs_retention()` in `intermediate/db.py:330` era definita
-ma mai chiamata da alcun callsite. Risultato: `intermediate.runs`,
-`node_meta` e `node_rows` crescevano indefinitamente causando disk fill
-sul server nel tempo (non un crash, ma accumulo silenzioso).
-
-Fix (2026-04-17): chiamata inline in `writer.close_run` subito dopo
-`db.update_run(...)` che marca la run come 'completed'/'failed'.
-Best-effort: un errore nella retention non rollbacka l'update di stato.
-
-Questo contract congela due cose:
-  1. apply_runs_retention esiste ed e' referenziata dal writer (source check)
-  2. L'invocazione parte DOPO update_run (logica di close), non prima
-     (non eliminare righe che ancora stiamo aggiornando)
-  3. Un fallimento di retention non propaga l'eccezione fuori da close_run
-     (il task non deve morire per un cleanup non riuscito)
 """
 
 from __future__ import annotations

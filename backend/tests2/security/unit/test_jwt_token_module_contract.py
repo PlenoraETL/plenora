@@ -1,25 +1,7 @@
-"""Smoke contract - STRUCT-005 Seam D: estrazione JWT/session.
+"""
+Smoke contract - STRUCT-005 Seam D: estrazione JWT/session.
 
 Verifica le invarianti minime del refactor:
-
-  1. Il nuovo modulo `app.shared.jwt_token` espone i 5 simboli attesi
-     (`ALGORITHM`, `ACCESS_TOKEN_EXPIRE_HOURS`, `SECRET_KEY`,
-     `create_access_token`, `decode_token`) con tipi/valori corretti.
-
-  2. `app.core.auth.auth` re-esporta gli stessi oggetti per le 2 funzioni
-     (identita') e gli stessi valori per le 3 costanti (equality -
-     identity per str/int non garantita cross-module rebind).
-
-  3. Round-trip: `create_access_token(...)` produce un token che
-     `decode_token(...)` decodifica restituendo gli 7 claim attesi
-     (`sub`, `username`, `group_id`, `role`, `exp`, `iat`, `jti`),
-     col `jti` di lunghezza 32 (uuid4.hex).
-
-  4. `decode_token` fail-closed: input invalido o token scaduto
-     ritornano `None` (non sollevano).
-
-La copertura funzionale di logout/blacklist/jti uniqueness e' gia' in
-`test_jwt_logout_blacklist.py`.
 """
 
 from __future__ import annotations

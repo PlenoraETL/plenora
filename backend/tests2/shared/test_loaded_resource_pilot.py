@@ -1,13 +1,7 @@
-"""Focused contract test: SourceLoader.load_with_metadata produces LoadedResource.
+"""
+Focused contract test: SourceLoader.load_with_metadata produces LoadedResource.
 
 BE-GO-READY-ARCH-058-W1 / BE-GO-READY-ARCH-059-W1.
-
-Verifies the new runtime path: load_with_metadata() returns a typed
-LoadedResource envelope carrying both data and ResourceMetadata at load
-time, without touching the legacy load() return value.
-
-059-W1 expansion: all three SourceRef.kind() values covered (file, project,
-static); _source_kind_for_ref is tested independently.
 """
 
 from __future__ import annotations

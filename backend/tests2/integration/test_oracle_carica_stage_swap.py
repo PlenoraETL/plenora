@@ -1,15 +1,7 @@
-"""Integration test stage+swap su Oracle reale (C5 fix 3).
+"""
+Integration test stage+swap su Oracle reale (C5 fix 3).
 
 Scenari coperti:
-1. Happy path: >= soglia → stage+swap completa + target ha dati nuovi
-2. Orfano recovery: shadow `_stg` leftover da run crashed → nuova run
-   la droppa e procede correttamente
-3. INSERT in shadow fallisce → target INTATTO (dati vecchi preservati,
-   shadow cleanup-ata)
-4. Threshold NON raggiunto → routing fallback a atomic (non stage+swap)
-
-Requisito: istanza Oracle locale raggiungibile via
-tests2/integration/harness/oracle.py. Skip automatico se non disponibile.
 """
 
 from __future__ import annotations

@@ -1,15 +1,7 @@
-"""Fake HTTP service per test funzionali di `api_connector`.
+"""
+Fake HTTP service per test funzionali di `api_connector`.
 
 Espone pochi endpoint deterministici utili per simulare sistemi esterni:
-
-- JSON happy path
-- error body JSON / text
-- timeout lento
-- download binario
-- multipart upload echo
-
-Pensato per essere avviato via `uvicorn` o direttamente con FastAPI
-TestClient nei functional test.
 """
 
 from __future__ import annotations

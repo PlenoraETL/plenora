@@ -2,9 +2,6 @@
 test_imdf_persist_bundle_contract.py
 
 Contract test per la persistenza di un ImdfBundle su disco. La logica
-estratta da enrichment_task deve garantire cleanup della tmp dir SEMPRE
-(happy path o error), per evitare orfani tipo `/tmp/imdf_XXXX/` che si
-accumulavano quando il move verso IMDF_BUNDLES_DIR crashava a metà.
 """
 import json
 import shutil

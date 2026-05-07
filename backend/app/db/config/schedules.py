@@ -1,10 +1,7 @@
 """
 Schedules DAL — estratto da `config_db_service.py` (scope micro Batch G #9,
-invariants §6 commit `61b5058`).
 
-Cluster `schedules` (5 funzioni): CRUD completo sulla tabella `schedules` +
-helper `_safe_set_clause` importato lazy dal facade per rompere ciclo
-`config_db_service` ↔ `config/schedules`.
+invariants §6 commit `61b5058`).
 """
 
 import json

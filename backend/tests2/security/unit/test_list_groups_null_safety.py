@@ -1,12 +1,7 @@
-"""Contract test Bug #3 (2026-04-23): list_groups NULL-safe su description/name.
+"""
+Contract test Bug #3 (2026-04-23): list_groups NULL-safe su description/name.
 
 Blinda il contratto: GET /api/groups non deve andare in 500 quando un
-record del DB ha ``description = NULL`` o ``name = NULL``. La response
-mappa NULL → stringa vuota (il contratto API continua ad esporre ``str``).
-
-Regression: ``dict.get("description", "")`` applica il default **solo**
-se la chiave manca. Se la chiave esiste ma vale ``None`` (NULL da DB),
-ritorna ``None``, e GroupResponse.description: str alza ValidationError.
 """
 
 from __future__ import annotations

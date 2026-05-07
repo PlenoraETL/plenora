@@ -1,19 +1,7 @@
-"""[phase-2-err][batch7] 7.e — beat_scheduler audit_insert catchup log elevation.
+"""
+[phase-2-err][batch7] 7.e — beat_scheduler audit_insert catchup log elevation.
 
 Audit Batch 7 §3.5/§2.3 [MEDIA] — `_emit_single_catchup` loggava il
-fallimento dell'INSERT `schedule_catchup_history` a severity `warning`.
-Se l'insert fallisce, il tick successivo non trova la riga in history →
-`_catchup_already_emitted_recently` ritorna False → possibile emit
-duplicato del task catchup per lo stesso `scheduled_for`.
-
-Post-7.e:
-  - `logger.warning` → `logger.error("[CRASH] [CATCHUP] ...", exc_info=True)`.
-  - Messaggio esplicita il rischio "possibile emit duplicato al prossimo tick".
-  - Beat-safe preservato: nessuna propagazione dall'interno del catch
-    (il tick continua, altri catchup dello stesso tick non bloccati).
-  - Nessuna nuova exception class.
-  - Solo log elevation, scope minimale ratificato (no re-raise, no counter
-    observability).
 """
 
 from __future__ import annotations

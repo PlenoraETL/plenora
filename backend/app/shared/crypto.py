@@ -1,64 +1,7 @@
 """
 app/shared/crypto.py
-====================
+
 Modulo centralizzato per la cifratura simmetrica di campi sensibili a riposo
-(password DB, token API, secret OAuth, client_secret datasource, ecc.).
-
-Architettura
-------------
-- Algoritmo: Fernet (AES-128-CBC + HMAC-SHA256, IV random per messaggio).
-- Chiave: derivata via SHA-256 da una env var (vedi `_get_raw_key()`).
-- Formato del valore cifrato: ``"enc:<base64token>"``.
-  Il prefisso ``enc:`` permette di:
-    1. distinguere a colpo d'occhio i valori cifrati da quelli in chiaro,
-    2. supportare backward-compat (i valori privi di prefisso vengono
-       considerati legacy plaintext e restituiti tali e quali in lettura),
-    3. cifrare in modo idempotente (encrypt() su un valore già cifrato è
-       no-op, così le migrazioni e i save ripetuti non doppio-cifrano).
-
-Sorgente della chiave
----------------------
-``PLENORA_ENCRYPTION_KEY`` — nome canonico unico.
-
-Gli alias legacy ``URBY_ENCRYPTION_KEY`` e ``CONN_ENCRYPT_KEY`` sono stati
-rimossi il 2026-04-23 (D4 chiuso via O-D4-B rollout ``.env`` prod +
-O-D4-C rimozione codice/doc).
-
-La chain NON fallbacka su ``SECRET_KEY`` / ``JWT_SECRET_KEY``: quei nomi
-appartengono al dominio auth JWT (vedi ``app/core/auth/auth.py``) e vengono
-tenuti distinti di proposito. Condividere il secret tra JWT e crypto-at-rest
-renderebbe la rotazione della chiave JWT (documentata in
-``docs/ops/jwt-incident-response.md``) un'operazione silently distruttiva
-per tutti i record cifrati. Un secret, un consumatore, un nome canonico.
-
-Comportamento se la chiave manca
---------------------------------
-- In produzione (``ENVIRONMENT=production`` o ``ENV=prod``): **fail-fast**
-  con ``RuntimeError`` esplicito. NON c'è fallback hardcoded.
-- In sviluppo: viene usata una chiave di default *con warning rumoroso*.
-  Questo permette di lavorare in locale senza configurare nulla, ma se
-  cambi la chiave dopo aver cifrato dei valori, NON potrai più decifrarli.
-
-Uso tipico
-----------
-    from app.shared.crypto import encrypt, decrypt, is_encrypted
-
-    # in save:
-    config["auth"]["password"] = encrypt(config["auth"]["password"])
-
-    # in load:
-    config["auth"]["password"] = decrypt(config["auth"]["password"])
-
-    # check idempotente:
-    if not is_encrypted(value):
-        value = encrypt(value)
-
-Compatibilità con il vecchio codice in connection_service.py
-------------------------------------------------------------
-La funzione di derivazione chiave è identica a quella usata in passato in
-``app/services/connection_service.py`` (sha256 della raw key → urlsafe_b64
-→ Fernet). I valori cifrati con quel codice vengono decifrati senza problemi
-da questo modulo. Vedi anche test in ``tests_backend/unit/security/``.
 """
 
 from __future__ import annotations
@@ -245,7 +188,7 @@ def decrypt(value: Optional[str]) -> Optional[str]:
     if value is None or value == "":
         return value
     if not is_encrypted(value):
-        return value  # legacy plaintext
+        return value  # NOTE: legacy plaintext
     token = value[len(ENC_PREFIX):]
     try:
         return _get_fernet().decrypt(token.encode("utf-8")).decode("utf-8")

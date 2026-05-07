@@ -1,15 +1,7 @@
-"""Contract test per `app.shared.storage_dispatch.resolve_payload_target`.
+"""
+Contract test per `app.shared.storage_dispatch.resolve_payload_target`.
 
 Verifica:
-
-1. truth table 3x3 (policy x size relativa al threshold);
-2. case-insensitivity policy;
-3. soglia inclusiva (`>=`);
-4. unknown policy fa fallback al branch hybrid;
-5. nessun env read / import da services/db (purity);
-6. equivalenza behavior con i due dispatch pre-001B
-   (`result_store._should_use_object_storage` e il ramo policy/threshold
-   inline di `file_storage_dispatch.dispatch_blob_storage`).
 """
 
 from __future__ import annotations

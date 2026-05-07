@@ -2,15 +2,6 @@
 Router API per il modulo Orchestrator.
 
 Esecuzione pipeline, preview, download risultati e gestione task Celery.
-
-Endpoints:
-- POST /api/projects/{id}/execute       → esegue pipeline
-- GET  /api/projects/{id}/preview        → preview dati
-- GET  /api/projects/{id}/download       → scarica risultato
-- POST /api/tasks                        → crea task asincrono
-- GET  /api/tasks/{id}                   → stato task
-- DELETE /api/tasks/{id}                 → annulla task
-- GET  /api/tasks/{id}/download          → download risultato task
 """
 
 from fastapi import APIRouter, HTTPException, Depends, BackgroundTasks, Query

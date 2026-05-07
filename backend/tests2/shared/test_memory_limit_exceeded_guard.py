@@ -1,22 +1,7 @@
-"""Contract test BE-GO-READY-MEMORY-OOM-001-LOAD-FILE-PREFLIGHT-GUARD.
+"""
+Contract test BE-GO-READY-MEMORY-OOM-001-LOAD-FILE-PREFLIGHT-GUARD.
 
 Lock il primo OOM-prevention guard:
-
-1. catalog: `MEMORY_LIMIT_EXCEEDED = "memory_limit_exceeded"`
-   in `KNOWN_DOMAIN_CODES`;
-2. exception purity: `MemoryLimitExceededError` non importa moduli
-   FastAPI / starlette;
-3. preflight guard: `load_dataframe_from_file` solleva
-   `MemoryLimitExceededError` quando `file.stat().st_size`
-   supera `settings.LOAD_FILE_MAX_BYTES`;
-4. happy path: file sotto cap viene caricato normalmente;
-5. envelope HTTP 413 dual-shape via mini-app TestClient con
-   stesso handler registrato in `app/main.py`;
-6. stable details shape (`stage`, `limit_bytes`, `observed_bytes`,
-   `limit_mb`, `observed_mb`, `suggested_action`, `resource`);
-7. no leak filesystem: solo `path_basename` nel payload, NON path
-   assoluto;
-8. backward compat dual-shape (mirror `detail`).
 """
 
 from __future__ import annotations

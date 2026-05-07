@@ -1,12 +1,7 @@
-"""Contract test — app/core/eseguibili/storage.py (S3 multi-host).
+"""
+Contract test — app/core/eseguibili/storage.py (S3 multi-host).
 
 Copre:
-1. save() carica il file e lo cancella localmente
-2. save() NON cancella il locale se l'upload fallisce (retry-friendly)
-3. find_keys() usa il prefix corretto
-4. open_stream() delega al backend
-5. delete_by_task() e' idempotente (no error se niente)
-6. Protocol conformance: l'API fa quello che il contract dice
 """
 
 from __future__ import annotations

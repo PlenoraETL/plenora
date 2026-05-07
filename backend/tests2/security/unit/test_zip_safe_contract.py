@@ -1,3 +1,9 @@
+"""
+Tests the zip safe behavior.
+
+Locks backend contracts and regression boundaries for the current architecture.
+"""
+
 from io import BytesIO
 import zipfile
 

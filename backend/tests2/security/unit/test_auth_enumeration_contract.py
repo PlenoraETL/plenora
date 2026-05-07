@@ -1,14 +1,7 @@
-"""Contract test C10 — timing parity login + enumeration admin.
+"""
+Contract test C10 — timing parity login + enumeration admin.
 
 Scenari:
-1. LOGIN timing parity: verify_password viene chiamato sia quando l'utente
-   esiste sia quando non esiste. Altrimenti un attaccante misura il tempo
-   di risposta 401 e distingue hit/miss → user enumeration.
-
-2. ADMIN endpoint enumeration: reset-password e delete-user per admin
-   non-superadmin NON devono distinguere tra "utente non esiste" e
-   "utente in altro gruppo". Entrambi i casi → 403. (Superadmin puo'
-   ricevere 404 perche' ha visibilita' totale, nessun enumeration).
 """
 
 from __future__ import annotations

@@ -2,22 +2,6 @@
 Projects DAL - canonical leaf for the `projects` table.
 
 This module owns the 6 pure-DAL CRUD operations on `projects`
-(`get_project`, `list_projects`, `create_project`, `update_project`,
-`delete_project`, plus the `Iterable` / `Set` typed helpers used by
-the orchestrator). All run on `pg_connection` (PostgreSQL).
-
-Atomic helper: `update_project_canvas_key_atomic` now lives in this
-leaf as well. The compatibility facade `config_db_service` re-exports
-it for legacy tests/integrations that still patch `cfg_db.<name>`.
-
-Compat re-exports: `config_db_service` re-exports the 6 names from
-this leaf so legacy callers (`db.*`, `cfg_db.*`) and existing
-monkeypatch targets keep working until they migrate to import this
-leaf directly.
-
-Helper `_safe_set_clause` is imported lazily from the facade inside
-`update_project` to break the `config_db_service` <-> `config/projects`
-cycle without retouching every cluster that still shares the helper.
 """
 
 import json

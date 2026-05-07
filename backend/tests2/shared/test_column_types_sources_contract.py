@@ -1,28 +1,7 @@
-"""Contract test — fonti di tipo colonna nel canvas.
+"""
+Contract test — fonti di tipo colonna nel canvas.
 
 I "tipi canvas delle colonne" vivono in 3 viste parallele dentro lo
-stesso canvas JSON del progetto:
-
-  1. canvas["columns_metadata"]              -> list[{"name","type"}] top-level
-  2. canvas["nodes"][i]["data"]["availableColumns"] -> list[{"name","alias","type"}]
-  3. canvas["nodes"][i]["data"]["canvas_types"]     -> dict{name:type}
-
-Consumer noti:
-  - ESTRAI executor.py:526 scrive columns_metadata post-run
-  - ARRICCHISCI executor.py:100 scrive columns_metadata post-run
-  - ColumnMapper._infer_type_from_canvas legge canvas_type string
-  - app/shared/canvas_types_enricher legge columns_metadata per CARICA
-  - frontend canvasSerializer._computeResultColumns usa parent.data.columns
-
-Il refactor B' (unificazione shape list<->dict via app.shared.column_types)
-e' stato applicato. Questa suite resta attiva come guardia sul contract
-osservabile:
-
-  - formato stabile dei 3 campi
-  - API contract su ProjectService.get/update_columns_metadata
-  - consumatori noti tracciati (sentinel: se spariscono/spostano, test rompe)
-
-Qualsiasi cambio futuro che rompa il contratto visibile verra' catturato.
 """
 
 from __future__ import annotations

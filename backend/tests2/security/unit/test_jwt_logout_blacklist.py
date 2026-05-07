@@ -1,30 +1,7 @@
-"""Unit tests — JWT jti claim + /auth/logout + blacklist Redis.
+"""
+Unit tests — JWT jti claim + /auth/logout + blacklist Redis.
 
 Reperto coperto: revoca token JWT lato server. Pre-feature, l'unica
-invalidazione era la scadenza naturale (`exp`, default 8h). Un token
-compromesso rimaneva valido fino alla exp, senza alcun modo di
-revocarlo via API.
-
-Design della blacklist:
-  - Ogni token ha un `jti` (uuid4 hex) emesso in `create_access_token`.
-  - `/auth/logout` → SETEX `plenora:jwt_blacklist:{jti}` TTL=exp-now.
-  - `get_current_user` → EXISTS check prima della query DB.
-  - Fail-open sulla READ (Redis giu' → blacklist ignorata, JWT.exp
-    resta enforced).
-  - Fail-loud sulla WRITE (Redis giu' → /logout 503).
-
-Copertura:
-  1. `jti` presente e univoco in token
-  2. Token con jti blacklistato → 401 su endpoint protetto
-  3. Token NON blacklistato → 200
-  4. /logout idempotente
-  5. /logout senza bearer → 401
-  6. /logout con token scaduto (payload None) → 401
-  7. /logout con token legacy senza jti → 200, blacklisted=False
-  8. /logout con Redis giu' → 503 (fail-loud)
-  9. blacklist check fail-open su Redis giu' → endpoint non rompe
-  10. TTL della chiave ≈ exp-now (entro tolleranza)
-  11. jti di token diversi sono indipendenti (blacklist A non impatta B)
 """
 
 from __future__ import annotations

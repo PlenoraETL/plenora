@@ -1,15 +1,7 @@
-"""Contract test A1 — dispatch policy-aware in result_store.
+"""
+Contract test A1 — dispatch policy-aware in result_store.
 
 Copre §6.3 del design A1: save_result_blob / save_result_blob_from_bytes
-devono ramificare sulla policy `STORAGE_POLICY`, non solo sulla soglia.
-
-Casi coperti:
-  - policy=db + payload piccolo      -> DB BYTEA (no storage call)
-  - policy=db + payload oltre cap    -> ResultSaveError
-  - policy=object_storage + any size -> object storage (no DB BYTEA)
-  - policy=hybrid + sotto soglia     -> DB BYTEA (comportamento attuale)
-  - policy=hybrid + sopra soglia     -> object storage (comportamento attuale)
-  - policy=hybrid + hard cap hit nel ramo DB -> ResultSaveError
 """
 
 from __future__ import annotations

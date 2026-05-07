@@ -1,23 +1,7 @@
-"""Contract test BE-GO-READY-TRANSFORMATION-ENGINE-001-CROSS-JOIN-GUARD.
+"""
+Contract test BE-GO-READY-TRANSFORMATION-ENGINE-001-CROSS-JOIN-GUARD.
 
 Lock il preflight row-count guard di `op_cross_join`:
-
-1. Catalog reuse: il guard solleva `MemoryLimitExceededError`
-   (eccezione condivisa Memory/OOM, no nuova classe).
-2. Stage discriminator: `manipola_cross_join` distinto da
-   `load_dataframe_from_file` e `pipeline_execute`/`worker_rss`.
-3. Guard behavior:
-   - cross-join sopra cap solleva con `observed_bytes=output_rows`,
-     `limit_bytes=cap_rows`, `path_basename="cross_join_output"`;
-   - cross-join sotto cap procede normalmente;
-   - cap <= 0 disabilita il guard (escape hatch);
-   - cross-join valido (default cap altissimo) preserva il
-     comportamento storico.
-4. Non-cross join: `op_join` NON e' impattato dal guard.
-5. Config: `CROSS_JOIN_MAX_OUTPUT_ROWS` presente in
-   `Settings.DEFAULTS`.
-6. Source-bound: `app/main.py` mappa `manipola_cross_join` a
-   `_ROW_COUNT_STAGES` con `suggested_action="reduce_inputs_or_raise_cap"`.
 """
 
 from __future__ import annotations

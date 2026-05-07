@@ -1,25 +1,7 @@
-"""Path-mode contract for ``ResultBlobLoader``.
+"""
+Path-mode contract for ``ResultBlobLoader``.
 
 BE-GO-READY-RESOURCE-ENGINE-004-RESULT-BLOB-PATH-MODE.
-
-Locks the ``mode='path'`` extension to the loader:
-
-  - path mode reuses the SAME fail-closed lookup + tenant filter as
-    bytes mode (single dispatch site; no parallel SQL or dispatch
-    path);
-  - path mode materializes via stdlib ``tempfile.NamedTemporaryFile``
-    (no ``app.config`` import; ``TMPDIR``/``TEMP`` env vars are
-    honored transparently by stdlib);
-  - return shape is ``Resource(kind='result_blob',
-    size_bytes=len(data), path=Path, is_temporary=True)``;
-  - missing blob data in path mode is surfaced as
-    ``FileNotFoundError`` (NOT a zero-byte tempfile);
-  - cleanup-on-write-failure is hardened (no leaked partial tempfile);
-  - stream mode stays unsupported.
-
-Also locks the architectural inversion: the loader does NOT import
-``app.config``, so changing ``settings.TEMP_DIR`` cannot influence
-the engine. Source-bound check.
 """
 
 from __future__ import annotations

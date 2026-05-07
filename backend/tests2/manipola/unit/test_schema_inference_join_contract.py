@@ -1,19 +1,7 @@
-"""Contract test — `SchemaInferenceService._schema_join` suffix logic.
+"""
+Contract test — `SchemaInferenceService._schema_join` suffix logic.
 
 Bug #40 (V1 baseline 2026-04-17): la condizione ternaria che decideva
-il suffisso `_R` per la join key di destra aveva entrambi i rami uguali.
-Risultato: la join key di destra finiva sempre come `id_right_R`,
-confondendo il downstream sul nome reale (es. il nodo CARICA che
-mappa schema → tabella DB usava il nome sbagliato).
-
-Casi coperti:
-  - same key (left_on == right_on): join key di destra skip-pata (no
-    duplicato), tutte le altre colonne destra → suffisso `_R`
-  - different keys: join key di destra mantenuta col nome originale
-    (no `_R`), altre colonne destra → suffisso `_R`, tutte le colonne
-    sinistra → suffisso `_L` tranne la left_on
-  - colonne con nomi che collidono tra left e right: il suffisso le
-    distingue (left → `_L`, right → `_R`)
 """
 
 from __future__ import annotations

@@ -1,19 +1,7 @@
-"""Contract test BE-IMDF-001 — shared ESRI system fields module.
+"""
+Contract test BE-IMDF-001 — shared ESRI system fields module.
 
 Verifica:
-
-1. forme dei due set canonical (`ESRI_OID_FIELDS_LITERAL` e
-   `ESRI_SYSTEM_FIELDS_LITERAL`) — exact-match casings dei pre-IMDF-001;
-2. `ESRI_OID_FIELDS_LITERAL` e' subset di `ESRI_SYSTEM_FIELDS_LITERAL`;
-3. `normalize_field_name` segue il pattern legacy `(name or "").upper().replace("_", "")`;
-4. `is_esri_system_field` riconosce tutte le varianti note (Shape_Area,
-   Shape__Area, GDBArchiveOID, GlobalID, ecc.) ed esclude i custom field;
-5. il modulo e' pure: import non scatena letture env / import pesanti
-   (statica sul source);
-6. il loader IMDF re-esporta `ESRI_SYSTEM_FIELDS` come alias del nuovo
-   `ESRI_SYSTEM_FIELDS_LITERAL` (`is`-identita');
-7. validator usa `is_esri_system_field` (no piu' `SYS_NORMALIZED` locale);
-8. arcgis_client usa `ESRI_OID_FIELDS_LITERAL` (no piu' set inline).
 """
 
 from __future__ import annotations

@@ -1,40 +1,7 @@
-"""Typed payload value objects for canvas execution results.
+"""
+Typed payload value objects for canvas execution results.
 
 BE-GO-READY-ARCH-060-W3-EXECUTION-PAYLOAD-MODULE-SPLIT.
-
-Moved from ``executor_protocol.py`` to keep that module focused on the
-``ExecutionResult`` / ``CanvasExecutorProtocol`` contract surface.
-
-This module owns:
-
-- ``ArtifactPayload`` - typed representation of common artifact result keys
-  shared by all three executors (estrai / manipola / arricchisci).
-- ``_check_payload_safe`` - internal guard used by ``ExecutionResult.__post_init__``
-  to reject DataFrames, bytes, and file-like streams without importing Pandas.
-- ``_UNSAFE_PAYLOAD_MODULES`` - frozenset of module-name prefixes that signal
-  heavy DataFrame runtimes.
-
-Boundary
-========
-Leaf contract module. Must NOT import:
-
-- ``fastapi`` / ``starlette`` (no HTTP);
-- ``app.db.*`` / ``psycopg2`` / ``redis`` (no I/O);
-- ``pandas`` / ``geopandas`` / ``polars`` (no DataFrame);
-- ``app.core.*`` (consumed by core, not vice-versa).
-
-Go-ready mapping
-================
-::
-
-    type ArtifactPayload struct {
-        ResultID   *string
-        OutputPath *string
-        Filename   *string
-        Format     *string
-        RowsCount  *int
-        RunID      *string
-    }
 """
 
 from __future__ import annotations

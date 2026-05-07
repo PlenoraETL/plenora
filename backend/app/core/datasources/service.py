@@ -1,7 +1,7 @@
 """
 PLENORA-ETL — Data Source Service
+
 CRUD configurazioni Data Source → PostgreSQL via app.db.db_service.
-Scan state → filesystem (dati di runtime effimeri).
 """
 
 import json
@@ -196,7 +196,7 @@ class DataSourceService:
     # ── Test connessione ──────────────────────────────────────────────────
 
     def test_connection(self, ds_id: str) -> DataSourceTestResult:
-        # Bug #2 (2026-04-23): strict=True → se un campo auth cifrato non e'
+        # FIXME: #2 (2026-04-23): strict=True → se un campo auth cifrato non e'
         # decifrabile, CredentialUnavailableError propagato al router per
         # HTTP 422. Evita 200-OK fasullo con secret silent-None.
         config = self._get_full_config(ds_id, strict=True)

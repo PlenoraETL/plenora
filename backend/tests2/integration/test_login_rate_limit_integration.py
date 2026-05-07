@@ -1,19 +1,7 @@
-"""Integration test — rate-limit login per-IP via X-Forwarded-For.
+"""
+Integration test — rate-limit login per-IP via X-Forwarded-For.
 
 A differenza del test unit (`tests2/security/unit/test_login_rate_limit_per_ip.py`
-che usa FastAPI TestClient in-process), qui il backend gira come processo
-uvicorn separato (fixture `integration_backend_server`). Il flusso e'
-quello reale:
-
-    HTTP client → TCP → uvicorn → middleware stack → auth router →
-    get_client_ip(request) → _check_rate_limit(ip) → DB
-
-Copre il reperto #27 end-to-end:
-  - Credenziali errate con stesso XFF "A" → dopo N attempts, 429
-  - Attempt con XFF "B" immediatamente dopo → 401 (bucket isolato)
-
-Il peer TCP del client (127.0.0.1) e' gia' nella TRUSTED_PROXIES default
-(`127.0.0.1,::1`), quindi l'X-Forwarded-For viene rispettato.
 """
 
 from __future__ import annotations

@@ -1,14 +1,7 @@
-"""Regression guard: QueryGenerator deve produrre alias tabella SENZA `AS`.
+"""
+Regression guard: QueryGenerator deve produrre alias tabella SENZA `AS`.
 
 Oracle (ORA-03048) vieta `FROM tabella AS alias` — accetta solo
-`FROM tabella alias`. Postgres/MySQL/MSSQL/SQLite tollerano entrambe
-le sintassi. Lo standard SQL permette `AS` come opzionale solo per
-alias di colonna, non di tabella.
-
-Bug osservato: i task ESTRAI preview/execute contro Oracle restavano
-bloccati (in realta' fallivano con ORA-03048 ma la catch-chain
-restituiva un messaggio generico). Fix: rimuovere ` AS ` dagli alias
-tabella in _genera_from, _genera_join e CROSS JOIN fallback.
 """
 
 from __future__ import annotations

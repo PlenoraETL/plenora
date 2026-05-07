@@ -1,15 +1,7 @@
-"""Contract test — PATCH /api/tickets/{id} a livello router.
+"""
+Contract test — PATCH /api/tickets/{id} a livello router.
 
 Coperture specifiche del wire format del router (non duplica le verifiche
-RBAC del service, gia' coperte da test_tickets_rbac_contract.py):
-
-  - sentinel `__UNSET__` per assignee: se la chiave manca dal JSON,
-    il body Pydantic resta `__UNSET__` e il backend non tocca assignee
-  - `assignee: null` esplicito nel JSON → unassign (passato come None)
-  - status/severity/category invalidi → 400
-  - title troppo corto → 400, troppo lungo → 400
-  - admin update full passa al service
-  - 404 su ticket inesistente
 """
 
 from __future__ import annotations

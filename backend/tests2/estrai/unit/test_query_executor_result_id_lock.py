@@ -1,18 +1,7 @@
-"""Lock tests per `QueryExecutor.execute_query` → `ResultBuilder.success`
+"""
+Lock tests per `QueryExecutor.execute_query` → `ResultBuilder.success`
+
 → `to_dict`.
-
-Regression guard per il bug di propagation `result_id`:
-`save_result_blob` ritorna il `result_id` del blob appena persistito
-ma `query_executor.py:629` scartava il return. Conseguenza: il task
-ESTRAI completava con `success=True` ma il result dict conteneva
-`output_path` stale (file temp gia' unlink-ato da save_result_blob
-nel finally) e nessun `result_id`. Il download via
-`/api/tasks/{task_id}/download` cadeva su `task_info.result["result_id"]
-→ None → 410 Gone`.
-
-E' lo stesso pattern-bug gia' fixato per arricchisci in commit
-`e6b0838` (`_save_and_build_dataframe_response` / `_build_file_result_response`)
-e per EnrichExecutor in `56dc71b`. Riaperto in estrai fino a questo fix.
 """
 
 from pathlib import Path

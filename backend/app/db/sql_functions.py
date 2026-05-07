@@ -1,51 +1,7 @@
 """
 Catalogo funzioni SQL astratte e traduttore multi-database per PLENORA-ETL.
 
-Architettura
-============
-
-Definisce un sistema a due livelli:
-    1. FUNCTION_CATALOG: catalogo di funzioni astratte (indipendenti dal DB)
-    2. SqlFunctionTranslator: traduce ogni funzione nel dialetto SQL specifico
-
-Categorie di funzioni:
-    - Geometriche: CENTROID, BUFFER, TRANSFORM, AREA, LENGTH, PERIMETER,
-                   SIMPLIFY, CONVEX_HULL, ENVELOPE
-    - Numeriche: ROUND, ABS, CEIL, FLOOR, MATH (operazioni aritmetiche)
-    - Stringa: UPPER, LOWER, TRIM, CONCAT, SUBSTRING
-    - Data: YEAR, MONTH, DAY
-
-Database supportati:
-    - PostgreSQL (PostGIS): ST_* functions
-    - SQL Server: .ST*() methods on geometry type
-    - MySQL: ST_* functions (8.0+)
-    - Oracle: SDO_GEOM.*, SDO_UTIL.*, SDO_CS.* packages
-    - SQLite (SpatiaLite): funzioni native SpatiaLite
-
-Sicurezza:
-    La funzione MATH include protezione divisione per zero specifica
-    per ogni database (NULLIF, CASE WHEN, IF).
-
-Uso:
-    from app.db.sql_functions import (
-        get_function_catalog,
-        get_translator,
-        translate_calculated_column
-    )
-
-    # Catalogo per il frontend
-    catalogo = get_function_catalog()
-
-    # Traduzione singola funzione
-    traduttore = get_translator("postgres")
-    sql = traduttore.translate("CENTROID", {"column": "geom"}, table_alias="t")
-    # → "ST_Centroid(t.geom)"
-
-    # Traduzione colonna calcolata (con supporto espressioni annidate)
-    sql = translate_calculated_column("postgres", "centro", {
-        "function": "CENTROID", "params": {"column": "geom"}
-    })
-    # → "ST_AsText(ST_Centroid(geom)) AS centro"
+Keeps persistence access isolated from service and router layers.
 """
 
 from typing import Dict, List, Optional, Any

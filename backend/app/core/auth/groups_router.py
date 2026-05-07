@@ -1,62 +1,7 @@
-"""Auth groups admin CRUD router — typed boundary.
+"""
+Auth groups admin CRUD router — typed boundary.
 
 BE-GO-READY-AUTH-ENGINE-004-GROUPS-ROUTER-EXTRACTION.
-
-Estrae da `auth.py` i 4 endpoint admin CRUD `/auth/groups*`:
-
-- `GET    /auth/groups`
-- `POST   /auth/groups`
-- `GET    /auth/groups/{group_id}/summary`
-- `DELETE /auth/groups/{group_id}`
-
-Boundary contract
-=================
-Il router NON conosce:
-
-- token decode / disclosure-on-token (`get_current_user`,
-  `decode_token`, `is_jti_blacklisted` — vivono in `auth.py`);
-- password hashing low-level (`app.shared.password_hashing`);
-- rate-limit fallback (`app.core.auth.rate_limit_fallback`);
-- MFA enroll/verify/disable (`app.core.auth.mfa`);
-- ownership / require_*_owner (`app.core.auth.ownership`);
-- users CRUD (`app.core.auth.users_router`).
-
-Behavior preserved 1:1
-======================
-- Stessi error code / messaggi italiani / status code / headers /
-  anti-enumeration invariants definiti in
-  `app.core.auth.disclosure`. Nessun cambio user-facing.
-- Stessi audit log via `audit_action` decorator.
-- Stessa dipendenza di accesso:
-  - `require_admin` per `list_groups`;
-  - `require_superadmin` per `create_group`, `get_group_summary`,
-    `delete_group`.
-- Stessa cascade-delete behavior in `delete_group` con `default`
-  group block + `INTERNAL_ERROR` 500 fallback su exception nel
-  cascade.
-
-KEEP_COMPAT
-===========
-`auth.py` ri-esporta `groups_router` (vedi `auth.py` post-batch),
-per cui `from app.core.auth.auth import groups_router` continua a
-funzionare. `main.py` lo importa direttamente dal nuovo modulo per
-montarlo (`app.include_router(groups_router, prefix="/api")`).
-
-Circular-import avoidance
-=========================
-Il router NON fa `from app.core.auth.auth import require_admin /
-require_superadmin / get_current_user` al top-level: quel pattern
-crea un cycle `groups_router -> auth.py -> groups_router` quando
-`auth.py` ri-esporta a sua volta i nomi del modulo nuovo. Mirror
-del fix gia' applicato a `users_router.py`: HTTPBearer +
-proxy-locali con import lazy.
-
-Go-ready mapping
-================
-    type GroupsRouter struct { ... }
-    func (r *GroupsRouter) ListGroups(ctx, currentUser) ([]GroupResponse, error)
-    func (r *GroupsRouter) CreateGroup(ctx, payload, currentUser) (GroupResponse, error)
-    ...
 """
 
 from __future__ import annotations
@@ -130,7 +75,7 @@ def list_groups(current_user: CurrentUser = Depends(require_admin)):
     else:
         g = _groups.get_group(current_user.group_id)
         groups = [g] if g else []
-    # Bug #3 (2026-04-23): description=NULL nel DB ritorna None da dict.get,
+    # FIXME: #3 (2026-04-23): description=NULL nel DB ritorna None da dict.get,
     # non la stringa default; GroupResponse.description: str alza ValidationError.
     # Stesso pattern null-safe applicato su name per robustezza.
     return [GroupResponse(

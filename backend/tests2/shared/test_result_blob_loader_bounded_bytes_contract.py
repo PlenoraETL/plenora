@@ -1,28 +1,7 @@
-"""Bounded-bytes contract for ``ResultBlobLoader``.
+"""
+Bounded-bytes contract for ``ResultBlobLoader``.
 
 BE-GO-READY-RESOURCE-ENGINE-010-RESULT-BLOB-BOUNDED-BYTES.
-
-Locks the result-blob byte cap:
-
-  - object-storage reads are bounded by ``resolve_resource_max_bytes()``;
-    iteration stops AT the first cap-exceeding chunk; remaining
-    chunks are NOT consumed (no OOM amplification);
-  - exceeding the cap raises :class:`MemoryLimitExceededError`
-    rather than returning ``None`` (resource cap is a security
-    signal, NOT a connectivity fallback);
-  - the cap is configurable via ``RESOURCE_MAX_BYTES`` env var;
-    default = 200 MiB matching ``Settings.DEFAULTS`` (lowered from
-    500 MiB by BE-GO-READY-MEMORY-ENGINE-005);
-  - BYTEA path also enforces the cap post-fetch (residual R-010.1:
-    PG already loaded the row by then; preflight via
-    ``SELECT length(data)`` deferred to Worker 6);
-  - path-mode shares the same dispatch + cap (path materialization
-    runs AFTER the cap check; oversize never writes a tempfile);
-  - stream mode stays unsupported and raises BEFORE any storage
-    access (no body read for unsupported modes).
-
-The 010 invariant prevents the previously-unbounded
-``b"".join(list(stream["body"]))`` pattern from re-appearing.
 """
 
 from __future__ import annotations

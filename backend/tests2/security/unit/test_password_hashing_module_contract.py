@@ -1,19 +1,7 @@
-"""Smoke contract — STRUCT-005 Seam A: estrazione password hashing.
+"""
+Smoke contract — STRUCT-005 Seam A: estrazione password hashing.
 
 Verifica due invarianti minime del refactor:
-
-  1. Il nuovo modulo `app.shared.password_hashing` espone i 5 simboli
-     attesi (`_ph`, `hash_password`, `verify_password`, `needs_rehash`,
-     `_DUMMY_PASSWORD_HASH`).
-  2. `app.core.auth.auth` re-esporta gli stessi oggetti (identita'
-     bit-per-bit, non copie). Cosi' i test che fanno
-     `monkeypatch.setattr(auth_mod, "verify_password", ...)` continuano
-     a comportarsi come prima — modificano l'attributo del modulo
-     `auth_mod`, mentre `app.shared.password_hashing.verify_password`
-     resta intatto.
-
-La copertura funzionale (Argon2 round-trip, bcrypt legacy, needs_rehash,
-fail-closed su corrupt) e' gia' in `test_password_hashing_contract.py`.
 """
 
 from __future__ import annotations

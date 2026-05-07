@@ -2,15 +2,6 @@
 test_imdf_validate_publish_robustness_contract.py
 
 Contract test per i check "robustezza pre-publish" aggiunti a
-validate_publish:
-
-  1. STRING_TRUNCATION  — max-length bundle > length FS
-  2. NULL_ON_NON_NULLABLE — NULL nel bundle su campo FS NOT NULL
-  3. CRS_MISMATCH       — EPSG bundle ≠ EPSG FS
-  4. MISSING_CAPABILITIES — FS non ha Create/Update/Delete per mode
-  5. Case-insensitive field name matching — non falsi FIELD_MISSING_*
-
-Usa pandas reale per avere Series con metodi autentici (str.len, isna, ...).
 """
 import pytest
 

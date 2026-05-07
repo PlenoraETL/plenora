@@ -1,38 +1,7 @@
-"""Project-level binding contract for ``ResultBlobLoader``.
+"""
+Project-level binding contract for ``ResultBlobLoader``.
 
 BE-GO-READY-RESOURCE-ENGINE-007-PROJECT-LEVEL-BINDING-AUDIT.
-
-Locks the optional row-metadata project filter on the loader:
-
-  1. ``ResourceRef.expected_project_id`` is OPTIONAL (default
-     ``None``). Construction with no project_id continues to work
-     for every existing caller — backward-compat.
-
-  2. When ``expected_project_id`` is None, NO project filter is
-     applied. The SQL is identical to pre-007 behaviour: the
-     primary group_id filter is the only fail-closed clause.
-
-  3. When ``expected_project_id`` is non-empty, the SQL gains an
-     additional ``AND project_id = ?`` clause. A row whose
-     `project_id` does not match returns no row — surfaced as
-     ``FileNotFoundError`` to the caller (same fail-closed shape
-     as the group-level mismatch).
-
-  4. When ``expected_project_id`` matches, the load succeeds
-     normally (the row is returned and dispatched by backend
-     branch as usual).
-
-  5. Anti-god-engine invariant preserved: types.py + result_blob.py
-     do NOT gain imports from projects/auth/FastAPI/dataframe/GIS.
-     Source-bound check.
-
-  6. ``is_superadmin=True`` does NOT bypass the project filter.
-     The audit-bypass semantics apply ONLY to the primary group
-     filter; project binding is a row-level invariant the caller
-     opted into.
-
-Tests are stdlib + ``unittest.mock``-only; no DB / Redis / FastAPI
-side-effects.
 """
 
 from __future__ import annotations

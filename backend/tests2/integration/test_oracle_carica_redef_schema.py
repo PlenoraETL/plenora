@@ -1,22 +1,7 @@
-"""Integration test Oracle DBMS_REDEFINITION — schema preservation (C6).
+"""
+Integration test Oracle DBMS_REDEFINITION — schema preservation (C6).
 
 Motivazione
------------
-Pre-C6, il path stage+swap su Oracle usava `CREATE AS SELECT WHERE 1=0`,
-che NON preserva PK / UK / FK / indici / check / trigger / grant.
-Dopo ogni swap oltre soglia, lo schema del target si degradava
-silenziosamente in produzione.
-
-Con DBMS_REDEFINITION (+ COPY_TABLE_DEPENDENTS) il schema e'
-integralmente replicato sullo shadow prima del FINISH atomico.
-
-Test verifica:
-1. Primary key preservato
-2. Unique constraint/indice preservato
-3. Check constraint preservato
-4. NOT NULL preservato (regressione test)
-5. Dati = nuovi (swap avvenuto, non merge)
-6. Finestra di inconsistenza assente (FINISH_REDEF e' atomico)
 """
 
 from __future__ import annotations

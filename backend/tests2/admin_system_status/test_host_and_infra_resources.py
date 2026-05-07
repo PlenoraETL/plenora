@@ -1,7 +1,7 @@
-"""Contract test — metriche host + infra (psutil, DB pool, Redis, schema size).
+"""
+Contract test — metriche host + infra (psutil, DB pool, Redis, schema size).
 
 Scope: degraded paths (psutil missing, DB error, Redis down) devono sempre
-ritornare un dict valido con `status`. Mai sollevare al chiamante.
 """
 
 from __future__ import annotations

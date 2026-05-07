@@ -2,42 +2,6 @@
 pg_connection.py — PostgreSQL connection pool per PLENORA-ETL.
 
 Canonical entry point per i query helper DAL (`fetchone`, `fetchall`,
-`execute`, `executemany`, `transaction`) consumati dai leaf
-`app/db/config/*.py`, `results_db_service.py` e dagli altri servizi
-DB. Backed da `psycopg2.pool.ThreadedConnectionPool` (per-processo,
-non thread-local).
-
-    from app.db.pg_connection import fetchone, fetchall, execute, transaction
-
-Configurazione via env var:
-  DATABASE_URL=postgresql://user:pass@host:port/dbname
-  DB_SCHEMA=plenora  (default: plenora)
-  DB_POOL_MIN=2
-  DB_POOL_MAX=12      (default; vedi sizing per-process sotto)
-  DB_IDLE_IN_TRANSACTION_TIMEOUT_MS=300000  (5 min default, set a 0 per disabilitare)
-
-Sizing del pool (IMPORTANTE — C7)
----------------------------------
-`psycopg2.pool.ThreadedConnectionPool` e' un singleton **per-processo**, non
-globale. Ogni processo Python che importa questo modulo crea il proprio
-pool indipendente. La deployment topology produzione PLENORA-ETL e':
-
-    uvicorn --workers N          → N pool indipendenti
-    celery worker --concurrency M → M+1 pool (parent + M prefork children)
-    celery beat (1 processo)     → 1 pool
-
-Consumo PG aggregato worst-case:
-    (uvicorn_workers + celery_concurrency + 1) * DB_POOL_MAX
-
-Formula di dimensionamento (usata per il default=12):
-    DB_POOL_MAX <= (pg_max_connections - reserve) / n_processes
-
-Con produzione corrente (pg_max_connections=100, reserve=5,
-n_processes = 2 uvicorn + 4 celery_children + 1 beat = 7):
-    12 * 7 = 84 → safety margin 16 conn (superuser, autovacuum, ad-hoc).
-
-Se si aumentano worker/concurrency SENZA alzare anche
-`max_connections` su Postgres, abbassare DB_POOL_MAX di conseguenza.
 """
 
 import os

@@ -1,38 +1,7 @@
-"""Contract test BE-GO-READY-AUTH-DOMAIN-PROMOTION-001.
+"""
+Contract test BE-GO-READY-AUTH-DOMAIN-PROMOTION-001.
 
 Source-bound: parsa `app/core/auth/auth.py`, `ownership.py`, e
-`disclosure.py` senza importare moduli che fanno I/O. Verifica che
-le promotion previste dalla ADR-0022 (batch 016) restino in place
-*dopo* l'estrazione del policy boundary in `disclosure.py`
-(BE-GO-READY-AUTH-ENGINE-001, batch 018).
-
-Cinque obiettivi:
-
-1. **Per-resource code + message lock**: per ogni call site auth-domain
-   il codice catalog atteso e il messaggio italiano user-facing
-   appaiono nel modulo `disclosure.py` (il policy boundary). Drift in
-   piu' = qualcuno ha cambiato un message; drift in meno = qualcuno ha
-   rolled-back la migrazione.
-2. **WWW-Authenticate header preservation**: i 4 call site 401
-   token-related devono preservare `headers={"WWW-Authenticate":
-   "Bearer"}` nel modulo `disclosure.py`.
-3. **Retry-After header preservation**: il rate-limit 429 deve
-   continuare ad emettere `Retry-After` nel modulo `disclosure.py`.
-4. **Anti-enumeration invariants** (4): pattern source-bound che
-   bloccano contemporaneamente lo status code, il messaggio e il
-   codice catalog di:
-   a. login bad-creds — UNIFORM 401 + `auth_invalid_credentials`
-      (single function in `disclosure.py`);
-   b. post-token user-not-found-or-disabled — UNIFORM 401 +
-      `auth_user_not_found_or_disabled` (single function);
-   c. admin reset/delete out-of-group OR not-existing — UNIFORM
-      403 + `access_denied` per admin, 404 + `user_not_found` per
-      superadmin (single dispatcher
-      `disclosure.admin_target_not_visible`);
-   d. account disabled (post-password-ok) — `auth_account_disabled`
-      (LEAKY_BY_DESIGN, distinct from invalid_credentials).
-5. **Catalog completeness lock**: i 27 nuovi codici sono in
-   `KNOWN_DOMAIN_CODES`.
 """
 
 from __future__ import annotations

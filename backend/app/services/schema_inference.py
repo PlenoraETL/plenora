@@ -1,36 +1,7 @@
 """
 Servizio di inferenza e propagazione schema attraverso il grafo canvas.
 
-Architettura
-============
-Questo servizio calcola lo schema (colonne + tipi) in output per ogni nodo
-del canvas, permettendo al frontend di popolare dropdown con le colonne
-disponibili, validare connessioni tra nodi, e mostrare preview dei tipi.
-
-Funziona per tutti e tre i moduli:
-- ESTRAI: schema derivato da database_inspector (tabelle reali) + query_generator
-  (colonne calcolate, alias, funzioni aggregate)
-- MANIPOLA: schema propagato attraverso la catena di trasformazioni, simulando
-  l'effetto di ogni operazione (join aggiunge colonne, select le filtra, etc.)
-- ARRICCHISCI: schema base + colonne aggiunte dall'output mapping API
-
-Algoritmo di propagazione:
-1. Visita topologica dei nodi (dalle sorgenti verso il risultato)
-2. Per ogni nodo, calcola lo schema output basandosi su:
-   - Schema input (dal nodo/i predecessore/i)
-   - Tipo di nodo e sua configurazione
-3. Gestisce casi speciali: JOIN (merge colonne), GROUP BY (solo aggregati),
-   trasformazioni che aggiungono/rimuovono/rinominano colonne
-
-Tipi interni PLENORA propagati: int, real, str, bool, date, geometry, geometry:point,
-geometry:polygon, geometry:line, con SRID opzionale (geometry:point:4326).
-
-Cache: i risultati vengono cachati per evitare ricalcoli durante la stessa
-sessione di editing del canvas.
-
-Uso:
-    service = SchemaInferenceService(connection_service, project_service)
-    schema = service.infer_node_schema(canvas, node_id, db_type)
+Keeps this module's responsibility explicit and isolated from adjacent code.
 """
 
 import json

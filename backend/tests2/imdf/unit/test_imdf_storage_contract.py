@@ -1,13 +1,7 @@
-"""Contract test — app/core/imdf/storage.py (lazy cache S3).
+"""
+Contract test — app/core/imdf/storage.py (lazy cache S3).
 
 Copre:
-1. save_bundle zippa local_dir + upload zip + upload meta separato
-2. ensure_local_bundle cache hit (no download)
-3. ensure_local_bundle cache miss -> download + extract
-4. ensure_local_bundle bundle non esiste -> FileNotFoundError
-5. get_meta_only lettura rapida senza download zip
-6. list_task_ids filtra i meta.json (no doppi-conteggio zip+meta)
-7. delete_bundle rimuove sia S3 sia cache locale
 """
 
 from __future__ import annotations

@@ -1,18 +1,7 @@
-"""Contract test Phase 6 Batch 1 — intermediate persistence policy.
+"""
+Contract test Phase 6 Batch 1 — intermediate persistence policy.
 
 Verifica:
-  A. Validazione fail-fast settings
-  B. resolve_intermediate_policy: ESTRAI/ARRICCHISCI checkpoint -> skip
-  C. resolve_intermediate_policy: MANIPOLA checkpoint critical/none/marked/all
-  D. resolve_intermediate_policy: final sempre registrato
-  E. record_checkpoint_snapshot skip path: niente df.to_dict, niente hash, niente DB
-  F. compute_dataframe_fingerprint deterministico + uguale fra mode
-  G. record_final_snapshot:
-     - metadata_only: 0 rows, row_count reale, node_hash presente
-     - preview_only: max N rows, row_count reale, persisted_rows_count=N,
-       preview_truncated=True
-     - full_pg: comportamento legacy (tutte le righe)
-  H. persistence_mode_for_record: NULL legacy -> full_pg
 """
 
 from __future__ import annotations
@@ -39,7 +28,7 @@ def _settings_baseline(**overrides) -> dict:
         "arricchisci_checkpoints": "final_only",
         "artifact_bucket": None,
         "artifact_prefix": "intermediate",
-        # Bug #24: nuove settings fingerprint mode + sample rows
+        # FIXME: #24: nuove settings fingerprint mode + sample rows
         "fingerprint_mode": "sample",
         "fingerprint_sample_rows": 1000,
     }
@@ -432,7 +421,7 @@ def test_record_final_metadata_only_zero_rows_real_count_hash_present():
     assert handle.persisted_rows_count == 0
     assert handle.preview_truncated is False  # in metadata_only non c'e' preview
     assert handle.node_hash and len(handle.node_hash) == 64
-    # Bug #24: default fingerprint mode = "sample" -> hash_algo
+    # FIXME: #24: default fingerprint mode = "sample" -> hash_algo
     # = pandas_sample_hash_v1. Audit forte richiede mode="full".
     assert handle.hash_algo == "pandas_sample_hash_v1"
 

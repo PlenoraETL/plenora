@@ -1,7 +1,7 @@
-"""Contract minimo del processo backend avviato nei test funzionali.
+"""
+Contract minimo del processo backend avviato nei test funzionali.
 
 Questi test non entrano ancora nei flussi autenticati: bloccano solo il
-contratto di boot/health del processo FastAPI reale.
 """
 
 from __future__ import annotations

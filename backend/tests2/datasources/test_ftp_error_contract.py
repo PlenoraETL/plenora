@@ -1,33 +1,7 @@
-"""Contract test per `FTPDataSource` — error mapping.
+"""
+Contract test per `FTPDataSource` — error mapping.
 
 Il backend FTP espone un'API pubblica uniforme (6 operazioni + lifecycle)
-e DEVE tradurre gli errori low-level di ``ftplib`` nei 3 tipi tipati
-dell'interface:
-
-- ``DataSourceConnectionError``: connection, timeout, auth fail, protocol
-- ``DataSourceFileNotFoundError``: file/path non esistente (FTP code 550)
-- ``DataSourcePermissionError``: permessi (non-550 error_perm)
-
-Invariants blindati:
-
-- §1.6 layer business: ogni callpath deve fail-fast su dato critico e
-  convertire gli errori stdlib in eccezioni tipate dell'interface. I
-  caller (scheduler, service) si aspettano UN SOLO modello di errore.
-- Contract ``_check``: operation senza connect → ConnectionError
-  esplicito, niente AttributeError o leak di eccezioni ftplib al caller.
-- Contract fail-closed su ``file_exists``: swallow degli errori bassi,
-  ritorno ``False``. Semantica di predicate (non di gate di sicurezza).
-
-Regressioni protette:
-
-- Una refactor che elimina il ``try/except ftplib.all_errors`` attorno
-  a ``connect()`` farebbe propagare ``OSError``/``gaierror``/
-  ``error_perm`` al caller, rompendo il contract tipato.
-- Il match "550" in ``read_file`` / ``delete_file``: è la sola via per
-  distinguere "file non esiste" da "permessi negati" su protocol FTP.
-  Rimuoverlo collapserebbe due semantiche distinte in PermissionError
-  sempre, mascherando misconfigurazioni di path.
-- ``_check`` gate rimosso = UB (NoneType.size() su ds non-connesso).
 """
 
 from __future__ import annotations

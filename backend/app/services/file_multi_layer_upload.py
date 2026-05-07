@@ -1,53 +1,7 @@
-"""Upload multi-layer/multi-sheet (STRUCT-001 Seam D-G).
+"""
+Upload multi-layer/multi-sheet (STRUCT-001 Seam D-G).
 
 Estratto da `FileSourceService.create_multi_layer_from_upload` senza
-alcun cambio comportamentale. La funzione standalone accetta tutti
-i collaborator come kwargs espliciti per:
-
-  - testabilita' diretta (no FileSourceService.__new__);
-  - go-portability: signature 1:1 con
-    `func CreateMultiLayerFromUpload(content io.Reader, filename, name string, layersCfg []LayerCfg, opts Opts) ([]FileSource, error)`;
-  - leaf module: zero import da `app.services.file_service` (cycle impossibile).
-
-Use case: upload di un file multi-layer (GPKG/GDB) o multi-sheet (XLSX)
-che genera N FileSource (uno per layer/sheet). Tutti condividono lo
-stesso blob; differiscono in `layer`/`sheet`/`columns`.
-
-Invarianti preservate (test-blindabili):
-  1. layers_config vuoto/None -> ValueError immediato, no side effect.
-  2. MIME validation defense-in-depth SEMPRE attiva (default lazy
-     import del validator se mime_validate=None).
-  3. ZIP unwrap target SOLO `.gpkg` / `.gdb` (NO SHP/CSV come
-     create_from_upload). Per .gdb, `tmp_path.read_bytes()` su
-     directory solleverebbe IsADirectoryError - bug latente
-     pre-esistente NON fixato in questo seam (preservato verbatim).
-  4. Loop per-layer: se parse fallisce per UN layer, logger.warning +
-     columns=[]/row_count=0 PER QUEL layer, il loop CONTINUA sui
-     successivi.
-  5. dispatch_blob_storage: chiamato 1 volta PRIMA del loop con
-     `storage_key_id=batch_id` (BE-HARDEN-001C E1 - shared blob).
-     db_save_file_sources_batch: chiamato 1 volta DOPO il loop con la
-     lista delle N row, in UNA SOLA transazione DB (BE-HARDEN-001C E3 -
-     all-or-nothing). Se la transazione fallisce, 0 row persistite e
-     cleanup compensativo del shared storage_key (best-effort).
-  6. Cleanup asimmetrico (preservato verbatim):
-       - tmp file: cleanup_file (in produzione = os.unlink)
-       - zip_tmp_dir: cleanup_dir (in produzione = rmtree_safe)
-  7. group_id or default_group propagato coerente su DTO + DB save.
-  8. shared_blob_kwargs propagato a tutte le N row del batch (data o
-     storage_key, size_bytes condivisi).
-  9. is_sheet_based dispatch: XLSX -> layer arg = None, sheet = valore;
-     GPKG/GDB -> layer arg = valore, sheet = None. DTO field analogo.
-
-Side effect confinati (tutti via callback iniettata):
-  - generate_file_id, time_now, detect_format
-  - load_by_format, column_builder_from_df
-  - dispatch_blob_storage, db_save_file_sources_batch
-  - delete_blob (cleanup compensativo storage su DB rollback)
-  - build_file_source (DTO factory)
-  - cleanup_dir (rmtree_safe), cleanup_file (os.unlink)
-  - safe_extractall, zip_slip_error type
-  - mime_validate (default lazy import del validator)
 """
 
 from __future__ import annotations

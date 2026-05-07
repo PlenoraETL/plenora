@@ -1,33 +1,7 @@
-"""Contract test BE-GO-READY-TRANSFORMATION-ENGINE-020 + closure
+"""
+Contract test BE-GO-READY-TRANSFORMATION-ENGINE-020 + closure
+
 BE-GO-READY-ORCHESTRATION-ENGINE-012-KILL-APPLY-TO-LEGACY-STATE.
-
-Lock degli invariant residui dopo OE012 (deletion del legacy
-mirror scaffold):
-
-1. **Source-bound (worker)**: `workers/tasks/enrichment_task.py`
-   NON contiene piu' direct mutation di
-   `api_connection_service._current_group_id` o `_preview_limit`.
-   Il typed context e' la primary (e unica) surface di tenant
-   binding nel worker path.
-2. **Context construction**: il task istanzia un
-   `ArricchisciExecutionContext` esplicito.
-3. **Threading completo**: i 4 mixin callsite nel task
-   (`_load_source_project`, `_load_file_source`,
-   `_load_static_values`, `_execute_rest_file`) ricevono `ctx=ctx`
-   esplicito.
-4. **Negative source-bound lock (repo-wide)**: NESSUN file sotto
-   `app/`, `workers/`, `tests2/` (eccetto questo modulo che
-   definisce il lock) puo' definire / chiamare / importare
-   `apply_to_legacy_state`. La funzione e' stata cancellata da
-   `app.core.arricchisci.execution_context` in OE012; il lock
-   protegge contro re-introduzione.
-
-Pre-OE012 questo file lockava anche il path "helper preserved
-in canvas_orchestrator" e la concurrency-mirror tramite
-`apply_to_legacy_state`. Entrambi sono stati ritirati: il
-helper non esiste piu', e l'isolamento concorrente e' gia'
-coperto dal frozen-dataclass test in
-`test_arricchisci_execution_context_contract.py`.
 """
 
 from __future__ import annotations

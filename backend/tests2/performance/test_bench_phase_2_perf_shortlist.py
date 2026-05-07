@@ -1,44 +1,7 @@
-"""Benchmark shortlist Fase 2 / punto 3 — Batch 3.7 + 3.8.
+"""
+Benchmark shortlist Fase 2 / punto 3 — Batch 3.7 + 3.8.
 
 Misura lo speedup atteso di candidati "forti" emersi dalla shortlist
-pre-refactor (vedi checkpoint 3.7 e 3.8):
-
-  A. `spatial.py::op_geo_clean_topology` Step 1 — validazione geometrie:
-     loop Python su `.at[idx]` con `make_valid` → vettoriale via mask +
-     batch `shapely.make_valid`.
-     Riferimento runtime: backend/app/core/manipola/transforms/spatial.py:1555-1567
-
-  B. `features_service.py` — parsing WKT per-riga:
-     `df[col].apply(lambda x: wkt.loads(x) if pd.notna(x) else None)` →
-     vettoriale via `gpd.GeoSeries.from_wkt` su subset non-NaN.
-     Riferimento runtime: backend/app/core/features/features_service.py:1214
-
-  C. `transforms/base.py::op_text_normalize` — normalizzazione testo:
-     `series.apply(lambda v: normalize_text(v, ops))` → chain
-     `pd.Series.str.*` per i sotto-passaggi vectorizzabili, fallback
-     `apply` solo su strip_accents (NFKD non vectorial in pandas).
-     Misurato con 2 varianti `ops`: `"lower"` (upper-bound puramente
-     vectoriale) e `"full"` (lower-bound realistico con strip_accents
-     residuo). Riferimento runtime:
-     backend/app/core/manipola/transforms/base.py:1694-1722
-
-Scopo: produrre numeri concreti (baseline vs alternative, speedup ratio)
-per decidere in Fase 3 se procedere con il refactor runtime o scartare
-il candidato come upside insufficiente.
-
-**Nessun codice runtime e' toccato**: le alternative vettoriali sono
-inline in questo file. Il test **asserisce equivalenza semantica** fra
-baseline e alternativa prima di riportare il ratio, pena fallimento.
-
-**Esclusione dal run default**: modulo gatizzato via env
-`URBY_RUN_PERF_SHORTLIST=1`. Senza env var tutti i test vengono
-skippati. Esecuzione manuale:
-
-    URBY_RUN_PERF_SHORTLIST=1 pytest \
-        backend/tests2/performance/test_bench_phase_2_perf_shortlist.py \
-        -v -s
-
-Il marker `perf_bench` e' coerente con `test_bench_bulk_vs_executemany_clientside.py`.
 """
 
 from __future__ import annotations

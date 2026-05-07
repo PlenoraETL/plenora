@@ -1,30 +1,7 @@
 """
 PLENORA-ETL — Catalog dei codici stringa per error envelope
+
 (BE-GO-READY-ERROR-CONTRACT-002).
-
-Costanti per i codici `error` machine-readable usati dall'envelope
-go-ready (`build_error_envelope_body`). Centralizzare i codici
-previene typo nei router e fornisce un'unica sorgente di verita'
-quando il sistema verra' portato in Go (i tag JSON delle struct di
-risposta puntano a queste stringhe).
-
-Convenzioni:
-- `snake_case`;
-- specificita' progressiva (`http_500` generico, `internal_error`
-  per il catch-all, codici domain-specific per casi business);
-- nessuna i18n: i codici sono stringhe stabili, i testi italiani
-  vivono in `message`.
-
-Inventario iniziale: derivato dai codici gia' usati nei test
-contract pre-existing (es. `connection_in_use`,
-`project_has_dependencies`) + i nuovi introdotti dal pilot
-(`internal_error`, `canvas_corrupted`, `http_<status>`).
-
-NOTA: questo modulo NON valida che ogni router usi solo codici
-elencati qui. E' un catalog di riferimento + facility per le import
-nei test. I router possono usare stringhe libere durante la
-transizione; il ridimensionamento a enum/registry typed e' Phase
-go-ready dedicata.
 """
 
 from __future__ import annotations

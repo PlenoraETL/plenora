@@ -1,26 +1,7 @@
-"""Contract test N11 — ColumnMapper preserva int quando pandas promuove a float.
+"""
+Contract test N11 — ColumnMapper preserva int quando pandas promuove a float.
 
 Scenario reale:
-  ESTRAI legge da DB una colonna `id INTEGER` -> pandas la tiene int64.
-  MANIPOLA fa LEFT JOIN con una tabella di lookup; righe non-match
-  hanno NaN nelle colonne destra. Pandas NON supporta int64 con NaN,
-  quindi promuove silenziosamente int64 -> float64 per le colonne con
-  missing values. Anche la colonna `id` originale resta int64 ma altre
-  "lookup_id" intere passano a float.
-  CARICA a questo punto re-inferisce il tipo da `df[col].dtype`:
-  vede float64 e scrive DOUBLE sul DB target, anche se semanticamente
-  quella colonna era INTEGER.
-
-Pre-fix: `_infer_type_from_pandas` su float -> "real" (DOUBLE).
-Post-fix (2026-04-17): su float ispeziona i valori non-null. Se sono
-tutti integer (modulo 1 == 0), ritorna "int". Euristica mirata al
-caso int-promoted-to-float-for-NaN, con trade-off documentato.
-
-Questo contract congela:
-  1. float con TUTTI valori integer + NaN -> classificato come int
-  2. float con valori frazionari reali -> resta "real"
-  3. int puro resta "int" (regression)
-  4. Altri tipi (bool, datetime, object) invariati
 """
 
 from __future__ import annotations

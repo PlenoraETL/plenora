@@ -1,18 +1,7 @@
-"""ScheduleRunsCatalog: catalog delle esecuzioni archiviate di uno schedule.
+"""
+ScheduleRunsCatalog: catalog delle esecuzioni archiviate di uno schedule.
 
 Centralizza il lookup/listing delle runs prodotte da `ScheduleArtifactStore`,
-sostituendo logica di path computation che altrimenti si ripeterebbe
-fra `download_schedule_output` e `list_schedule_runs` del router scheduler.
-
-Convenzione layout (deve restare in sync con `ScheduleArtifactStore`):
-    {results_dir}/{project_id}/runs/{schedule_short}/{YYYYMMDD_HHMMSS}/
-
-`schedule_short = schedule_id.replace("schedule_", "")[:12]` — calcolato in
-**un solo punto** del codebase (`_schedule_short`).
-
-Il catalog e' core-level: niente HTTP, niente CurrentUser. I router HTTP
-catturano `ValueError` / `FileNotFoundError` e li traducono in
-HTTPException con i codici giusti.
 """
 
 from __future__ import annotations

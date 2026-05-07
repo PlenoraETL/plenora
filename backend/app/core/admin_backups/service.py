@@ -78,7 +78,7 @@ def _to_datetime(value: Any) -> datetime:
 #   `BACKUP_BUCKET` -> legacy `BACKUP_S3_BUCKET`. Fallback hardcoded
 #   preservato come prima per deployment legacy senza env.
 # - `REGION` -> single env read `AWS_REGION` (DEPLOY_INFRA). Il
-#   legacy alias `BACKUP_S3_REGION` era un dead alias (zero altri
+#   NOTE: legacy alias `BACKUP_S3_REGION` era un dead alias (zero altri
 #   consumer in repo) e viene retirato qui.
 # - schedule cron / description -> `Settings.DEFAULTS` (APP_POLICY).
 

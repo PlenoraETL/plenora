@@ -1,21 +1,7 @@
-"""Service layer — aggregatore stato sistema per dashboard admin.
+"""
+Service layer — aggregatore stato sistema per dashboard admin.
 
 Ogni metrica (backup, verify-restore, schedules, workers) e' una funzione
-indipendente che ritorna un dict con `status` ("ok"/"warn"/"error"/
-"unknown") + `message` umano + campi specifici.
-
-Fonti container-friendly (niente systemctl/journalctl):
-  - backup status: S3 via boto3 (age-based)
-  - verify restore status: tabella DB `plenora.verify_runs` (scritta da
-    scripts/test_restore.py a fine job)
-  - schedules: tabella DB `schedules`
-  - workers: Celery `inspect()` via broker Redis
-
-Policy di graceful degradation: se una fonte non e' calcolabile (DB
-irraggiungibile, S3 403, broker timeout, boto3 non installato), la
-funzione ritorna `status="unknown"` + messaggio esplicativo. NON
-solleva — il dashboard mostra la card in stato neutro, le altre
-continuano a funzionare.
 """
 
 from __future__ import annotations
@@ -476,7 +462,7 @@ def get_host_resources() -> Dict[str, Any]:
         # R-2 (2026-04-27): psutil.disk_usage emette
         # `SystemError("argument 1 (impossible<bad format char>)")` su Windows
         # locale (telemetria locale post-diagnostic patch). Causa probabile:
-        # bug/edge case in psutil._psplatform (Windows) sulla `struct` C.
+        # FIXME: /edge case in psutil._psplatform (Windows) sulla `struct` C.
         # Fallback: `shutil.disk_usage` (stdlib) usa GetDiskFreeSpaceExW
         # diretto e non passa per psutil. Se anche shutil fallisce -> graceful
         # con log enriched.

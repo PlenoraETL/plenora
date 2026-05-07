@@ -1,30 +1,7 @@
-"""Contract test N15 — idempotency guard in CaricaExecutor.execute().
+"""
+Contract test N15 — idempotency guard in CaricaExecutor.execute().
 
 Scenario:
-  Lo scheduler chiama `CaricaExecutor.execute()` in modo sincrono (non
-  via Celery task). Al primo fallimento la policy di retry re-invoca
-  lo schedule. Senza guard a livello executor, un retry dopo scrittura
-  committata ma prima che close_run() marchi la run completata puo'
-  duplicare righe su write_mode="append".
-
-Il task async `carica_task.py` ha gia' il guard a inizio task (per
-evitare open_run/df load inutili). Questo test copre il guard nuovo
-a livello executor — self-defense per sync caller.
-
-B-alternative: lo scheduler passa un run_id deterministico derivato
-da (schedule_id, scheduled_for). Per catchup run con scheduled_for
-impostato, il retry ottiene lo STESSO run_id -> guard scatta.
-Per cron "normali" senza scheduled_for, il run_id resta uuid fresh
-per retry e il guard non protegge (residuo documentato).
-
-Copertura:
-1. Signature: execute() accetta run_id
-2. Nessun run_id -> comportamento invariato (no-op del guard)
-3. run_id + is_already_completed=True -> short-circuit con
-   WriteStatus.SKIPPED_IDEMPOTENT, NO chiamate a writer/engine
-4. run_id + is_already_completed=False -> flow normale
-5. is_already_completed solleva eccezione -> treat as False (fail-open)
-6. WriteStatus include SKIPPED_IDEMPOTENT
 """
 
 from __future__ import annotations

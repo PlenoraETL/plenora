@@ -2,12 +2,6 @@
 Modelli condivisi del canvas PLENORA-ETL.
 
 Contiene i modelli Pydantic "core" usati trasversalmente da tutti i moduli:
-- Tipi colonna e info base (ColumnType, ColumnInfo)
-- Canvas state (Position, Column, Filter, AggregationConfig, Node, Edge, CanvasState)
-- Validazione e richieste (ValidationError, ValidationResult, ExecuteRequest)
-
-I modelli specifici di dominio (Connection, FileSource, Project, etc.)
-risiedono nei rispettivi moduli sotto app/core/<modulo>/models.py.
 """
 
 from pydantic import BaseModel, Field, field_validator

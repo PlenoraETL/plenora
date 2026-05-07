@@ -1,17 +1,7 @@
-"""Contract test BE-CONFIG-001C — login + redis-timeouts security policy.
+"""
+Contract test BE-CONFIG-001C — login + redis-timeouts security policy.
 
 Coperti:
-
-1. ogni chiave ha un default tipato in `Settings.DEFAULTS`;
-2. ogni consumer legge via `settings.get(...)` (no piu' direct
-   `os.getenv` con default inline);
-3. l'override env continua a funzionare via type coercion;
-4. equivalence pre/post migrazione: i default coincidono con quelli
-   storici (10 / 60 / 300 / 1 / 1 / 1800);
-5. niente direct `os.getenv` residuo nei call site migrati (assert
-   statica sul source);
-6. `auth.LOGIN_*` resta module-level constant (contratto monkeypatch
-   atteso dai test rate-limit esistenti).
 """
 
 from __future__ import annotations

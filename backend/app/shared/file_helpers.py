@@ -1,25 +1,7 @@
-"""Pure helper classes per file source upload/inspection (STRUCT-001 Seam A).
+"""
+Pure helper classes per file source upload/inspection (STRUCT-001 Seam A).
 
 Estratto verbatim da `app.services.file_service` senza alcun cambio
-comportamentale. `file_service.py` re-esporta i 4 simboli per
-backward-compat coi test e i moduli che li usano:
-
-  - FormatDetector     mapping estensione -> format string ("csv", "gpkg", ...)
-                        + classificazione geo/tabular.
-  - TypeInferrer       pandas dtype -> type string ("int", "real", "bool",
-                        "date", "geometry", "str") + WKT detection +
-                        date detection conservativa con cascade di formati
-                        espliciti (RB.#11) + classificazione geometry type.
-  - FileIdGenerator    genera id opaco `file_<uuid_hex>` + sanitize_name
-                        per uso in path (post N1: zero metadata leak).
-  - ColumnInfoBuilder  DataFrame (+ GeoDataFrame opzionale + SRID utente)
-                        -> List[ColumnInfo].
-
-Leaf module: zero `app.services.*` imports. Cycle impossibile.
-
-`ColumnInfo` viene importata da `app.models` quando disponibile, con
-fallback a dataclass per esecuzione standalone (stesso pattern del
-file_service originale).
 """
 
 from __future__ import annotations

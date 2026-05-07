@@ -2,28 +2,6 @@
 Sistema di logging strutturato per PLENORA-ETL — storage su PostgreSQL.
 
 Architettura (v3)
-=================
-Logging a doppia destinazione:
-    1. Console (INFO+) — feedback sviluppo, formato compatto
-    2. PostgreSQL — tabella `logs` per query veloci dal frontend
-
-Schema tabella logs:
-    id         SERIAL PRIMARY KEY
-    ts         TIMESTAMPTZ NOT NULL
-    level      TEXT    NOT NULL  (INFO/WARNING/ERROR)
-    module     TEXT    NOT NULL  (estrai/manipola/...)
-    op         TEXT              (execute/preview/...)
-    msg        TEXT    NOT NULL
-    project_id TEXT
-    details    JSONB             (JSON)
-    error      TEXT              (traceback se presente)
-
-Uso:
-    from app.utils.logger import get_logger, log_event
-
-    logger = get_logger(__name__)
-    logger.info("Estratte 1500 righe", op="execute", project_id="abc123",
-                details={"rows": 1500, "duration_ms": 340})
 """
 
 import json

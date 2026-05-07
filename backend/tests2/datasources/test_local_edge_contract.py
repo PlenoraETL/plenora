@@ -1,40 +1,7 @@
-"""Contract test per `app.core.datasources.local.LocalDataSource` — edge case.
+"""
+Contract test per `app.core.datasources.local.LocalDataSource` — edge case.
 
 Copre gap reali rispetto ai test esistenti:
-- `tests2/shared/test_datasource_local_multi_host.py` — copre solo
-  `_classify_path_for_multi_host` + advisory di `test_connection`.
-- `tests2/security/unit/test_local_datasource_contract.py` — copre
-  `../` traversal, `/etc/passwd` absolute reject, nested join 1-livello,
-  cap 500MB su `_raw_read`.
-
-Gap coperti qui (niente duplicazione):
-- Drive letter rejection (complementa il test su `/etc/passwd`: il check
-  `relative[1] == ':'` è una branch separata della policy in `_abs`).
-- Empty string path → ritorna root_abs (edge case operazionale: chi fa
-  `list_files(path="")` vuole la root).
-- Deep nested join (3+ livelli): valida la normalizzazione su nesting
-  profondo, complementa il test singolo livello esistente.
-- Symlink escape: se dentro root c'è un symlink che punta FUORI root,
-  `_abs` DEVE rifiutare. Blindato perché la policy usa
-  `assert_path_within` che fa `Path.resolve()` → segue symlink. Se
-  qualcuno sostituisse con `absolute()` (non-following), l'escape
-  passerebbe silent. Test skippa su env che non permettono symlink
-  (Windows senza dev-mode).
-- `_rel` normalizzazione separatori: contract di portability Windows ↔
-  Linux. I path tornano a frontend/API come forward-slash sempre.
-- `file_exists` distingue file da directory (uso di `os.path.isfile`,
-  NOT `os.path.exists`). Un refactor che usasse `exists()` darebbe
-  True su directory — semantica diversa, bug cross-layer.
-- `write_file` crea parent directory mancanti (`os.makedirs(exist_ok=True)`):
-  permette upload su path relativi nuovi senza pre-creare la dir.
-
-Invariants blindati (da ``backend/docs/architecture/invariants.md``):
-
-- §1.6 local fail-closed su path traversal: tutte le variant di escape
-  (``..``, assoluto, drive letter, UNC, symlink) DEVONO tradursi in
-  ``DataSourcePermissionError``.
-- §1.1 singolo entry point: ``_abs`` è il filtro unico che ogni op
-  (list/read/write/delete/exists) attraversa.
 """
 
 from __future__ import annotations

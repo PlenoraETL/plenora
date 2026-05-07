@@ -1,27 +1,7 @@
-"""FileSourceBlobLoader contract suite.
+"""
+FileSourceBlobLoader contract suite.
 
 BE-GO-READY-RESOURCE-ENGINE-020-FILE-SOURCE-BLOB-LOADER.
-
-Locks the second Resource Engine loader's behavior:
-
-  - mode='bytes' is the only supported mode (path/stream raise);
-  - SQL preflight has the bounded-BYTEA shape
-    (``length(data) AS data_size`` projection + ``CASE WHEN
-    length(data) > ? THEN NULL`` so oversized BYTEA never crosses
-    the PG/Python wire);
-  - tenant binding is fail-closed by default (SQL ``WHERE
-    group_id = ?``); ``is_superadmin=True`` skips the filter +
-    audit-logs the bypass;
-  - missing row -> ``FileNotFoundError``;
-  - storage_key path delegates to bounded read with cap
-    ``RESOURCE_MAX_BYTES``;
-  - oversized BYTEA -> ``MemoryLimitExceededError`` with stage
-    ``file_source_blob_oversize``;
-  - the loader does NOT support ``mode='path'`` / ``mode='stream'``
-    (deferred; the SHP/GDB temp lifecycle is owned inline by
-    ``FileSourceService._temp_file_for`` -- the legacy
-    ``file_blob_materialization.temp_file_for`` helper was retired
-    in RESOURCE-ENGINE-024).
 """
 
 from __future__ import annotations

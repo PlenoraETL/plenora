@@ -1,8 +1,7 @@
-"""Helper DB reali per gli integration test.
+"""
+Helper DB reali per gli integration test.
 
 Usano lo stesso connection layer dell'app invece di un DSN hardcoded,
-cosi' gli integration test parlano con lo stesso PostgreSQL/schema che
-il backend reale sta gia' usando correttamente.
 """
 
 from __future__ import annotations

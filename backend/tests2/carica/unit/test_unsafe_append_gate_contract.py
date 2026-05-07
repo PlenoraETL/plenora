@@ -1,31 +1,7 @@
-"""Contract test P1-05 / F-DATA-08 — gate fail-loud su combo unsafe append.
+"""
+Contract test P1-05 / F-DATA-08 — gate fail-loud su combo unsafe append.
 
 Scope:
-  Fissa il rifiuto esplicito della combo rischiosa
-    write_mode=APPEND + transaction_mode=PER_BATCH + match_columns=[]
-  quando `allow_unsafe_append=False` (default).
-
-  Pre-fix il writer emetteva solo `logger.warning` e procedeva: in
-  produzione il warning e' di fatto silent, i retry parziali (network
-  glitch, OOM mid-batch) duplicavano righe sulla destinazione. Vedi
-  `AUDIT_REPORT_data.md` F-DATA-08 e `orchestrate/phase_3_audit/TRIAGE.md`
-  P1-05.
-
-  Fix: la combo solleva `ValueError` con messaggio diagnostico che
-  elenca le tre alternative:
-    (1) transaction_mode=all_or_nothing (rollback completo)
-    (2) configurare match_columns per conflict detection
-    (3) settare allow_unsafe_append=true consapevolmente
-
-Sezioni:
-  1. Combo unsafe senza opt-in -> ValueError con detail informativo
-  2. Combo unsafe con opt-in (allow_unsafe_append=True) -> proceed + warning
-  3. Combo sicure non gated (ALL_OR_NOTHING / match_columns / non-APPEND)
-  4. WriteConfig.from_node_data default-safe + opt-in dal canvas
-
-Test in-memory: nessun DB live, nessun engine reale. Il writer viene
-istanziato con un MagicMock engine e il check unsafe-combo scatta
-PRIMA di qualsiasi operazione DB.
 """
 
 from __future__ import annotations
@@ -193,7 +169,7 @@ def test_unsafe_append_combo_with_flag_proceeds(monkeypatch):
         stdlib_logger.removeHandler(handler)
         stdlib_logger.setLevel(prev_level)
 
-    # Warning informativo emesso (opt-in path) sul logger canonico.
+    # NOTE: informativo emesso (opt-in path) sul logger canonico.
     warning_records = [r for r in captured_records if r.levelno == logging.WARNING]
     assert warning_records, (
         f"Atteso almeno 1 record WARNING sul logger canonico "
@@ -202,7 +178,7 @@ def test_unsafe_append_combo_with_flag_proceeds(monkeypatch):
         f"{[(r.levelname, r.getMessage()) for r in captured_records]!r}"
     )
     # Cerca il messaggio specifico del gate opt-in (filtra eventuali
-    # warning rumore da altri sites del flow pre-prepare_dataframe).
+    # NOTE: rumore da altri sites del flow pre-prepare_dataframe).
     optin_msgs = [r.getMessage() for r in warning_records if "opt-in" in r.getMessage()]
     assert optin_msgs, (
         f"Atteso WARNING con marker '[UNSAFE WRITE CONFIG opt-in]'. "

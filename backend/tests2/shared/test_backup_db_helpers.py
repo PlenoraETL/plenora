@@ -1,7 +1,7 @@
-"""Smoke test per gli helper di backend/scripts/backup_db.py.
+"""
+Smoke test per gli helper di backend/scripts/backup_db.py.
 
 Test mirati ai soli helper puri (no subprocess/S3). I percorsi che
-richiedono pg_dump / boto3 sono testati in produzione via cron.
 """
 
 from __future__ import annotations

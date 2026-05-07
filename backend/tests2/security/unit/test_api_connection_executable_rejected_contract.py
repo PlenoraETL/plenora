@@ -1,20 +1,7 @@
-"""Difesa in profondità: `connection_type='executable'` deve essere
+"""
+Difesa in profondità: `connection_type='executable'` deve essere
+
 rifiutato dal router al create e all'update.
-
-Contesto
---------
-Il supporto per `connection_type == 'executable'` (branch python_module +
-subprocess, eseguito dal worker durante l'enrichment) è stato rimosso
-ad aprile 2026 per chiudere una superficie RCE: un admin applicativo
-poteva salvare una connection con `executable.module = 'subprocess'` +
-`function = 'run'` e qualunque editor dello stesso tenant poteva poi
-eseguire comandi arbitrari sul worker OS tramite `exec_params`,
-leggendo `/backend/.env` e propagando cross-tenant.
-
-Questo test vincola i due endpoint POST/PUT `/api/api-connections` a
-restituire 400 se qualcuno (o un record legacy riciclato) prova ancora
-a passare `connection_type='executable'`, in modo che la rimozione non
-possa essere silently reintrodotta da un refactor futuro.
 """
 
 from unittest.mock import MagicMock, patch

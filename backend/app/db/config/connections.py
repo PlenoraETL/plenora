@@ -1,16 +1,7 @@
 """
 Connections DAL — estratto da `config_db_service.py` (scope micro Batch G #9,
+
 invariants §6 commit `2dee7da`).
-
-Cluster `connections` (5 funzioni): CRUD sulla tabella `connections` (catalogo
-connessioni DB utente PLENORA) + helper `_safe_set_clause` importato lazy dal
-facade per rompere ciclo `config_db_service` ↔ `config/connections`.
-
-Note name-collision (ratified ex-ante invariants §6): i nomi funzione omonimi
-in `core/features/*` (ArcGIS CRUD), `core/estrai/database_inspector.py`
-(DatabaseConnectorProtocol factory) e `config.py` (`socket.create_connection`
-stdlib) sono semanticamente distinti a livello namespace — zero ambiguità
-runtime.
 """
 
 import json

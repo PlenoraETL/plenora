@@ -1,28 +1,7 @@
-"""Contract test BE-GO-READY-AUTH-ENGINE-003 — users_router extraction.
+"""
+Contract test BE-GO-READY-AUTH-ENGINE-003 — users_router extraction.
 
 Lock i 5 invariant dell'estrazione:
-
-1. **Source location**: i 5 endpoint admin CRUD vivono in
-   `app/core/auth/users_router.py` (non piu' in `auth.py`).
-2. **KEEP_COMPAT**: `from app.core.auth.auth import users_router`
-   continua a funzionare (re-export pubblico).
-3. **KEEP_COMPAT funzionale**: le 5 funzioni-handler sono ancora
-   raggiungibili come `auth_mod.<name>(...)` per i test esistenti
-   in `test_auth_enumeration_contract.py` /
-   `test_update_user_contract.py`.
-4. **URL paths preserved**: `/auth/users` GET/POST,
-   `/auth/users/{id}` PUT/DELETE,
-   `/auth/users/{id}/reset-password` POST. Stessi metodi e
-   stesso prefisso del pre-batch.
-5. **Mount**: `app.main.app` espone gli endpoint `/api/auth/users*`
-   tramite `app.include_router(users_router, prefix="/api")`.
-
-Boundary contract NON toccato: error code, messaggi italiani,
-status code, headers, anti-enumeration invariants restano gestiti
-dal layer `disclosure` e sono gia' lockati da
-`test_auth_disclosure_policy_contract.py` /
-`test_auth_enumeration_contract.py` (entrambe suite restano verdi
-post-batch).
 """
 
 from __future__ import annotations

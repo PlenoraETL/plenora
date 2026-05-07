@@ -1,11 +1,7 @@
-"""Contract test — app/shared/cloud_backends.py (astrazione cloud-agnostic).
+"""
+Contract test — app/shared/cloud_backends.py (astrazione cloud-agnostic).
 
 1. Factory `get_secrets_backend()` / `get_object_storage()` dispatch via
-   CLOUD_PROVIDER env (default 'aws', solleva su provider non supportati)
-2. AwsSsmSecretsBackend.get_secrets chiama boto3 SSM con gli args corretti
-   e produce la shape contract (strip prefix, / -> _)
-3. AwsS3ObjectStorage.{list,upload,download} wrap boto3 S3 correttamente
-4. Shape ObjectMeta stabile (key, last_modified, size)
 """
 
 from __future__ import annotations

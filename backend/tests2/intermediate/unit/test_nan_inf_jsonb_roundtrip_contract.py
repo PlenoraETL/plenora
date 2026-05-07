@@ -1,35 +1,7 @@
-"""Contract test P1-04 / F-DATA-01 — NaN/Inf JSONB sentinel roundtrip.
+"""
+Contract test P1-04 / F-DATA-01 — NaN/Inf JSONB sentinel roundtrip.
 
 Scope:
-  Fissa la simmetria ser/deser dei float speciali nei row_data JSONB
-  persistiti in `plenora.node_rows`. Pre-fix `_to_jsonable` mappava
-  NaN/+Inf/-Inf a None: divergenza fantasma con `compute_row_hash` (che
-  li preserva come "nan" / "+inf" / "-inf"). Reload da `node_rows` perdeva
-  la distinzione e ricalcolare l'hash dava un risultato diverso da quello
-  stored.
-
-  Il fix introduce sentinel object JSONB namespaced di forma esatta
-  `{"__plenora_special_float__": "nan"|"+inf"|"-inf"}` in `_to_jsonable`
-  e un `_from_jsonable_value` simmetrico applicato in `get_node_table_rows`.
-  La forma object-namespaced (vs string semplice come "__nan__") evita
-  collisioni con valori utente legittimi: un utente che scrive la
-  stringa "__nan__" non viene corrotto al reverse.
-
-  Il writer hash (`writer.py`) NON e' toccato: la coppia ser/deser tiene
-  l'invariante "round-trip preserva semantica float speciali", e questo
-  e' sufficiente perche' `compute_row_hash` resti stabile cross-run.
-
-Sezioni:
-  1. Forward: `_to_jsonable` produce dict-sentinel namespaced
-  2. Reverse: `_from_jsonable_value` ricostruisce float dai dict-sentinel
-  3. Anti-collision: stringhe omonime e dict utente NON vengono corrotti
-  4. Round-trip: ser+deser su valori misti preserva semantica
-  5. Hash recompute: dopo reverse mapping, `compute_row_hash` produce lo
-     stesso digest dell'originale (invariante chiave del fix)
-  6. Compat: pre-fix `null` JSONB resta None (no false-positive sentinel)
-
-Tutti i test sono unit puri, in memoria, zero DB. Niente psycopg2,
-niente fixture DB-live, niente conftest stub aggiuntivi.
 """
 
 from __future__ import annotations

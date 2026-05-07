@@ -1,21 +1,7 @@
-"""Contract test Bug #25 — `_carica_sorgenti_progetto` non deve
+"""
+Contract test Bug #25 — `_carica_sorgenti_progetto` non deve
+
 propagare `project_id` dell'upstream quando questo fallisce.
-
-Pre-fix: `_carica_sorgenti_progetto` ritornava `return upstream`,
-dove `upstream` e' un `PipelineArtifact` con
-`project_id == source_project_id` (il canvas upstream). Il valore
-saliva fino a `OrchestratorService.execute_pipeline`, che chiamava
-`PipelineArtifact.from_executor_result(result, project_id=<corrente>)`.
-Il safety net intercettava il mismatch:
-
-    ValueError: from_executor_result: project_id mismatch
-        (payload='v1geo_strato_3_...', atteso='v1geo_strato_finale_v2_...')
-
-Errore fuorviante: nascondeva la vera causa upstream (es. SSO scaduto)
-dietro un errore di consistenza che sembrava una regressione interna.
-
-Post-fix: ritorna un dict locale senza `project_id`, con messaggio
-diagnostico che cita `source_project_id` + il messaggio upstream.
 """
 
 from __future__ import annotations

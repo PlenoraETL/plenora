@@ -1,22 +1,7 @@
-"""Contract test per fail-closed sul pre-check cascade di
+"""
+Contract test per fail-closed sul pre-check cascade di
+
 DELETE /api/api-connections/{id}.
-
-Invariante blindato (Batch Fix 6.3 — error-handling-governance):
-    Il pre-check cerca le dipendenze sui canvas dei progetti arricchisci.
-    Distinzione chiave tra due classi di failure:
-
-    - per-consumer failure (canvas corrotto di UN singolo progetto) →
-      fail-open legittimo: log warning + continue. La delete procede
-      perche' altri progetti sono stati verificabili.
-
-    - global failure (list_projects() solleva, o il loop esterno crasha)
-      → fail-closed obbligatorio: HTTPException(500). Impossibile dire
-      se il datasource e' usato o no; non possiamo silent-proceed o
-      violeremmo l'invariant "risorsa in uso non cancellabile".
-
-Reperto pre-fix (audit §4.1 S-FAILOPEN-CASCADE): il try esterno faceva
-``logger.warning + prosegue`` anche su global failure. Un glitch DB
-poteva portare a cancellazione di api_connection referenziate.
 """
 
 from __future__ import annotations

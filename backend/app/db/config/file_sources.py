@@ -1,16 +1,7 @@
 """
 File sources DAL — estratto da `config_db_service.py` (scope micro Batch G #9,
+
 invariants §6 commit `093d22b`).
-
-Cluster `file_sources` (5 funzioni): CRUD sulla tabella `file_sources` con
-dispatch FS-B1-large (DB blob vs S3 storage_key, ratifica ADR-0011).
-`delete_file_source` include cleanup S3 best-effort via import lazy di
-`get_object_storage` dal `cloud_backends` per rispettare §1.7 (entry point
-canonico object storage).
-
-Nota logger attribution: post-estrazione il logger name è
-`app.db.config.file_sources` (vs legacy `app.db.config_db_service`).
-Observable non-breaking (0 test verificano il name).
 """
 
 import json

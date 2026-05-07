@@ -1,16 +1,7 @@
 """
 PLENORA-ETL — Data Source Backend: Cartella Locale / Rete
-Supporta path locali (C:\\dati\\) e UNC (\\\\server\\share\\).
 
-**Nota multi-host**: un path puramente locale (es. `C:\\data\\`, `/srv/data/`)
-e' accessibile SOLO dal nodo su cui gira il worker/backend che lo processa.
-In setup multi-VM o container orchestrati, il worker potrebbe girare su un
-nodo che non ha quel filesystem -> errore "cartella non trovata". Per
-multi-host usare UNC (`\\\\server\\share`), NFS/EFS mount, o sharepoint via
-il relativo datasource backend.
-
-`test_connection` ritorna un advisory su questo (campo
-details.multi_host_advisory) — informativo, non fail.
+Supporta path locali e UNC evitando assunzioni sul filesystem del worker.
 """
 
 import os

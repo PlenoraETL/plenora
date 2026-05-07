@@ -1,18 +1,7 @@
-"""Architecture guard - ADR-0023: IMDF publish domain must not import
+"""
+Architecture guard - ADR-0023: IMDF publish domain must not import
+
 from the Features connection-management domain (app.core.features.*).
-
-ArcGIS is an external read/write provider (macro block B - Connections).
-IMDF is a publish consumer (macro block E - Resource/Storage).
-
-Current state: two IMDF files still import Features internals (deferred).
-These are documented as KNOWN_VIOLATIONS below - an explicit TODO list.
-The guard fails on any ADDITIONAL cross-domain import, preventing the
-boundary from widening further while the known violations are cleaned up.
-
-Recommended fixes (see macro-components.md sec. 2.3):
-  - Move EsriTypeMapper to app/shared/ or a provider-agnostic types module.
-  - Replace FeaturesService import with a shared ArcGISClientProtocol or
-    pass the connection info explicitly instead of looking it up via Features.
 """
 
 from __future__ import annotations

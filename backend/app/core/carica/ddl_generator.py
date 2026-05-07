@@ -1,26 +1,7 @@
 """
 Generatore DDL multi-database per il modulo CARICA.
 
-Architettura
-============
-Questo modulo genera le istruzioni DDL (CREATE TABLE, CREATE INDEX,
-DROP TABLE) specifiche per ogni dialetto SQL supportato.
-
-Responsabilità:
-- Mapping tipi Python/Pandas → tipi SQL nativi per ogni database
-- Generazione CREATE TABLE con colonne geometriche e SRID
-- Creazione indici spaziali (PostGIS, Oracle SDO, SQL Server, MySQL)
-- Generazione DROP TABLE IF EXISTS / TRUNCATE
-- Qualificazione nomi tabella con schema (schema.tabella)
-
-Database supportati:
-- PostgreSQL (PostGIS): geometry(tipo, SRID) + CREATE INDEX USING GIST
-- Oracle: SDO_GEOMETRY + INSERT INTO USER_SDO_GEOM_METADATA + MDSYS index
-- SQL Server: geometry + CREATE SPATIAL INDEX con bounding box
-- MySQL/MariaDB: GEOMETRY SRID N + CREATE SPATIAL INDEX
-
-Convenzione: tutti i metodi sono statici o di classe per facilitare
-il testing in isolamento. Nessun effetto collaterale.
+Keeps database loading behavior isolated from orchestration callers.
 """
 
 from typing import Any, Dict, List, Optional, Tuple

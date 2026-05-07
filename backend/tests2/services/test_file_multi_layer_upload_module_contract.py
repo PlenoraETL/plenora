@@ -1,34 +1,7 @@
-"""Smoke contract - STRUCT-001 Seam D-G + BE-HARDEN-001C E1+E3.
+"""
+Smoke contract - STRUCT-001 Seam D-G + BE-HARDEN-001C E1+E3.
 
 Verifica le invarianti minime del refactor multi-layer upload:
-
-  1. layers_config empty/None -> ValueError, NO side effect.
-  2. MIME block -> ValueError, NO parse/dispatch/save_batch.
-  3. XLSX multi-sheet -> N FileSource, sheet valorizzato, layer None.
-  4. GPKG multi-layer -> N FileSource, layer valorizzato, sheet None,
-     CRS detection corretta.
-  5. ZIP unwrap .gpkg -> parse usa extracted path; format passa da
-     'zip' a 'gpkg'.
-  6. BadZipFile -> ValueError("ZIP non valido"), NO save_batch.
-  7. ZipSlipError -> ValueError("path traversal"), NO save_batch.
-  8. Parse failure per-layer: il loop CONTINUA sui successivi
-     (best-effort PER-LAYER, soft-preserve E3 decision); il layer
-     fallito ottiene columns=[]/row_count=0.
-  9. group_id None -> default_group propagato a TUTTI i N FileSource
-     (DTO + batch row).
- 10. safe layer name sanitization: spazi/dash -> underscore.
- 11. Wrapper FileSourceService.create_multi_layer_from_upload delega
-     coi 17 collaborator del service (E3: db_save_file_sources_batch
-     + delete_blob), incluso cleanup_file=os.unlink.
- 12. MULTI-GDB-001 fix: GDB-in-ZIP usa raw_data del ZIP originale.
- 13. BE-HARDEN-001C E1: 1 dispatch_blob_storage per batch con
-     storage_key_id=batch_id; N row condividono storage_key.
- 14. BE-HARDEN-001C E3: 1 save_batch per N row in 1 transazione DB
-     all-or-nothing; rollback -> cleanup compensativo del shared
-     storage_key (best-effort); cleanup failure -> structured log.
-
-Mock dei collaborator: nessun fiona/geopandas/DB reale. tempfile reale
-su pytest tmp_path.
 """
 
 from __future__ import annotations

@@ -52,6 +52,45 @@ Every change should answer these questions:
 - Do not add new error codes unless an existing class cannot express the
   failure.
 
+## Code Comments
+
+Comments are part of the code contract. Keep them sparse, current, and useful.
+
+- Explain why a choice exists, not what the code already says.
+- Do not keep commented-out code. Delete it.
+- Use only standard maintenance tags: `TODO`, `FIXME`, `NOTE`, `HACK`.
+- Keep file-level context at the top of non-trivial modules: purpose and
+  responsibility in the project.
+- Golden rule: if the file purpose cannot be explained in two concise lines,
+  the file is probably doing too much and should be split instead of documented
+  harder.
+- Use structured docstrings for public functions, API handlers, service
+  methods, database helpers, and non-obvious private helpers.
+- Do not add docstrings to trivial private wrappers when the signature and
+  name are already sufficient.
+
+Python docstrings should use this compact shape:
+
+```python
+def load_resource(ref: ResourceRef, ctx: ExecutionContext) -> LoadedResource:
+    """
+    Loads a tenant-bound resource through the registered loader.
+
+    Args:
+        ref: Resource identifier and expected storage kind.
+        ctx: Execution context carrying tenant and project scope.
+
+    Returns:
+        Loaded resource metadata and a bounded data handle.
+
+    Tags:
+        @logic @resources
+    """
+```
+
+Tags should describe the function's responsibility, for example `@api`, `@db`,
+`@logic`, `@resources`, `@storage`, `@security`, `@utils`, `@ui`, or `@ops`.
+
 ## Tests
 
 Prefer targeted tests while iterating. Use wider runs for auth, shared

@@ -2,12 +2,6 @@
 Scanner per estrarre le colonne attese da un canvas arricchisci.
 
 Scansiona tutti i nodi `api_enrich` del canvas e raccoglie le colonne input
-richieste dai param_mapping. Risolve la required-ness dalla config dell'API
-(se disponibile).
-
-Phase 1: supporta solo arricchisci. I nodi sorgente (project_source,
-file_source, staticValues) sono "punti di ingresso" e non contribuiscono alle
-colonne attese — verranno sostituiti a runtime dal file dell'utente.
 """
 
 import re

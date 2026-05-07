@@ -1,19 +1,7 @@
-"""Smoke contract - STRUCT-001 Seam C: estrazione storage dispatch.
+"""
+Smoke contract - STRUCT-001 Seam C: estrazione storage dispatch.
 
 Verifica le invarianti minime del policy dispatch:
-
-  1. STORAGE_POLICY=db   -> sempre BYTEA (data=raw_data, storage_key=None).
-  2. STORAGE_POLICY=object_storage -> sempre object storage upload
-     (data=None, storage_key=`file-sources/<id>/<filename>`).
-  3. STORAGE_POLICY=hybrid (default) -> threshold-based:
-     - size < threshold -> BYTEA
-     - size >= threshold -> object storage
-     Threshold default 50 MB, override via FILE_SOURCE_S3_THRESHOLD_BYTES.
-  4. Logger e' iniettato come parametro (non importa FileSourceService).
-  5. Upload exception viene rilanciata (orphan guard nel caller).
-
-Mock minimale di `app.shared.cloud_backends.get_runtime_object_storage`:
-nessun S3 reale, nessuna dipendenza di rete.
 """
 
 from __future__ import annotations

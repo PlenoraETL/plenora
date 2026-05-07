@@ -1,55 +1,7 @@
-"""Phase 2 err-dbwriter commit C — normalize log levels in cleanup guards + log-only points.
+"""
+Phase 2 err-dbwriter commit C — normalize log levels in cleanup guards + log-only points.
 
 Commit log-only: nessun cambio di flusso, nessun cambio di classe
-exception, nessun cambio di return value. Verifica che:
-
-1. `_geometry_to_wkt` su WKB malformato emette un log prima del
-   `return value` (pre-fix: zero log, causa del fallimento persa).
-   Il contratto di return resta invariato (stringa raw passata
-   al DB a valle).
-2. `_geometry_to_wkt` instrada il warning sul logger canonico
-   `"app.core.carica.writer"` (pre-fix: GeoJSON branch usava
-   `logging.getLogger(__name__)` ad hoc — nome-logger inconsistente).
-3. `_prepare_dataframe` su ImportError di geopandas emette un log
-   (pre-fix: `pass` silenzioso — invisibile in prod).
-4. I cleanup guards `logger.debug` sono stati promossi a
-   `logger.warning`: cleanup che lascia stato orfano e' operator-visible,
-   deve essere chiaramente segnalato.
-
-Rif. audit Batch 2 §4.1 commit C (smell K, L, M, N, I parziale, E parziale log).
-
-Modernization B2.0 — behavior contracts vs source-location contracts
-====================================================================
-Pre-B2.0 i test #1-#3 patchavano `dw_module.logger` (la StructuredLogger
-wrapper instance) con `monkeypatch.setattr(dw_module, "logger", mock_logger)`.
-Questo legava il test alla **posizione fisica** dei metodi nel modulo
-`database_writer.py`: spostarli in mixin/sotto-moduli avrebbe rotto il
-patch (il fake non sarebbe stato visto dai metodi rilocati che leggono
-il proprio `logger` di scope).
-
-Pre-B2.0 il test #4 faceva `inspect.getsource(dw_module)` per cercare
-6 stringhe di cleanup guard nel sorgente del MODULO. Anche questo
-legava il test alla posizione fisica.
-
-Post-B2.0:
-  - I test #1-#3 verificano il **comportamento osservabile** del logging:
-    aggancio di un `logging.Handler` custom al **logger canonico per
-    nome** (`"app.core.carica.writer"`) e ispezione dei `LogRecord`
-    emessi (level + message). La StructuredLogger wrapper internamente
-    delega a `_logger.log(...)` sul logger stdlib omonimo, quindi
-    qualunque chiamata sul wrapper (anche da un futuro modulo figlio
-    estratto) viene catturata — purche' il wrapper sia ottenuto via
-    `get_logger("app.core.carica.writer")`. Il contract anti-regressione
-    "GeoJSON usa logger canonico" e' preservato: un eventuale futuro
-    `logging.getLogger("app.core.carica.database_writer")` (logger ad-hoc
-    di nome diverso) NON sarebbe catturato, e il test fallirebbe come
-    voluto.
-  - Il test #4 fa `inspect.getsource(<unbound_method>)` su ciascuno dei
-    3 metodi che contengono le 6 cleanup guards. `inspect.getsource`
-    legge il source via `__code__.co_filename` + line numbers, quindi
-    funziona correttamente anche se i metodi vivono in un mixin/modulo
-    figlio post-extraction. Il contract "ogni cleanup guard usa
-    logger.warning, non logger.debug" e' preservato bit-per-bit.
 """
 
 from __future__ import annotations

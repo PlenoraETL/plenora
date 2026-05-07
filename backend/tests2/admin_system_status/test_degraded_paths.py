@@ -1,14 +1,7 @@
-"""Contract test — graceful degradation di admin_system_status/service.
+"""
+Contract test — graceful degradation di admin_system_status/service.
 
 Fonte di verita' container-friendly:
-  - backup status: S3 via boto3 (transitive admin_backups.list_backups)
-  - verify restore: plenora.verify_runs (DB)
-  - schedules: plenora.schedules (DB)
-  - workers: Celery inspect() via broker
-
-Policy: ogni path di errore (DB down, S3 403, broker timeout, boto3 missing)
-deve ritornare `status="unknown"` + error message. Mai sollevare al
-chiamante (router).
 """
 
 from __future__ import annotations

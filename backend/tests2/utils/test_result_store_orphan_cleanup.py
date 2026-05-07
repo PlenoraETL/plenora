@@ -1,17 +1,7 @@
-"""Contract test BE-DATA-PLANE-004 — compensating cleanup orphan blob in result_store.
+"""
+Contract test BE-DATA-PLANE-004 — compensating cleanup orphan blob in result_store.
 
 Coperti:
-- (a) upload OK + DB save OK             -> no delete
-- (b) upload OK + DB save fails (object) -> delete chiamato + ResultSaveError
-- (c) upload OK + DB save fails + delete fails -> log strutturato
-                                                  event=storage_compensating_delete_failed
-                                                  (BE-GO-READY-STORAGE-ENGINE-002,
-                                                  log shape unificato; pre-batch:
-                                                  event=storage_compensating_delete_failed),
-                                                  ResultSaveError originale propagato
-- (d) policy=db, DB save fails           -> nessun touch a object storage
-- (e) variante bytes-based: stesso comportamento di (b)
-- (f) variante bytes-based + cleanup fail: stesso comportamento di (c)
 """
 
 from __future__ import annotations

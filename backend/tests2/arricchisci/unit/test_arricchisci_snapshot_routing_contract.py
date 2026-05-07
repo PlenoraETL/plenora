@@ -1,12 +1,7 @@
-"""Contract test Phase 6 Batch 3B — ARRICCHISCI snapshot routing.
+"""
+Contract test Phase 6 Batch 3B — ARRICCHISCI snapshot routing.
 
 Verifica:
-  A. `_write_intermediate_snapshot` (sync helper) instrada via
-     `record_checkpoint_snapshot(module="arricchisci")` invece di
-     `write_node` legacy.
-  B. Con policy `final_only` (default), la policy decide skip per i
-     nodi `api_enrich`: niente df.to_dict, niente DB write.
-  C. Quando un DataFrame e' empty/None, niente chiamata a snapshot.
 """
 
 from __future__ import annotations

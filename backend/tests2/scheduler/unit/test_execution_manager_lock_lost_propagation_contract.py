@@ -1,34 +1,7 @@
-"""Propagazione del flag lock_lost al result dict di execute (C3 round 3) - R-05.
+"""
+Propagazione del flag lock_lost al result dict di execute (C3 round 3) - R-05.
 
 Contract: se durante l'esecuzione il thread heartbeat rileva che il
-lock e' stato perso e non riacquisibile (stato['lock_lost']=True),
-execute() deve:
-1. Includere `lock_lost: True` nel dict ritornato.
-2. Propagarlo nei log entry (warning su possibile concorrenza).
-
-Senza questo, la rilevazione del Fix A del round 2 resta silenziosa:
-visibile solo negli ERROR log del heartbeat thread, invisibile nel
-risultato JSON dello schedule run.
-
-PR-#36 modernizzazione: i 3 test pre-fix usavano `inspect.getsource`
-per scansionare il body di `ExecutionManager.execute` cercando
-sub-string come `'heartbeat_state["lock_lost"]'` e `'logger.warning'`.
-Approccio source-bound fragile: dopo refactor (es. estrazione del
-heartbeat in `LockHeartbeat`) il source potrebbe cambiare anche
-preservando il behavior.
-
-Post-fix: i test sono behavior-bound. Verificano la **proprieta'
-osservabile** che il source-scan voleva proteggere:
-  - il dict ritornato da `_start_lock_heartbeat` ha la chiave
-    `lock_lost` (cosi' `execute()` puo' leggerla)
-  - la chiave `lock_lost` e' una **reference live** allo state interno
-    del thread loop (non una copia), cosi' la mutazione del thread e'
-    visibile al chiamante
-  - il thread loop emette WARNING/ERROR via il logger reale quando
-    transita verso lock_lost (catturato via _ListHandler agganciato
-    al logger di `_lock_heartbeat`)
-
-R-05: tick deterministici via FakeClock, niente time.sleep reali.
 """
 
 from __future__ import annotations

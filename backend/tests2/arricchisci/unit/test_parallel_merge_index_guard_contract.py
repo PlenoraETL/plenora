@@ -1,21 +1,7 @@
-"""Contract test P1-06 / F-DATA-07 — guard index/cardinalita' su parallel merge.
+"""
+Contract test P1-06 / F-DATA-07 — guard index/cardinalita' su parallel merge.
 
 Scope:
-  Fissa il fail-loud su `execute_parallel_enrichers` quando un
-  `EnrichmentExecutor` (o futuro executor analogo) restituisce un
-  DataFrame con index o cardinalita' divergenti dall'`input_df`.
-  Pre-fix il merge usava positional alignment (`.values`) senza guard
-  -> silent corruption riga<->valore in caso di dedup interno o
-  riordino. Vedi `AUDIT_REPORT_data.md` F-DATA-07 e
-  `orchestrate/phase_3_audit/TRIAGE.md` P1-06.
-
-Sezioni:
-  1. Happy path baseline (index identico) -> merge ok
-  2. Cardinalita' mismatch -> RuntimeError diagnostico
-  3. Index permutato stessa cardinalita' (no RangeIndex) -> RuntimeError
-  4. RangeIndex post-`reset_index(drop=True)` su entrambi -> merge ok
-     (path legittimo: executor che fa reset_index su input gia' RangeIndex)
-  5. Branch split `execute_if` (concat + sort_index) -> guard non rompe
 """
 
 from __future__ import annotations

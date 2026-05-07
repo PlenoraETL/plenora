@@ -1,32 +1,7 @@
 """
 Servizio CRUD per connessioni ArcGIS Feature Service.
 
-Architettura
-============
-Servizio parallelo a ConnectionService per gestire le connessioni ad
-ArcGIS Server/Enterprise/Online. Le connessioni sono persistite nella
-tabella PostgreSQL `arcgis_connections` tramite `app.db.db_service`,
-seguendo lo stesso pattern di ConnectionService post-migrazione PG.
-I campi sensibili (`password`, `client_secret`) sono cifrati a riposo
-via `app.shared.crypto` (Fernet, prefisso "enc:", idempotente).
-
-Operazioni CRUD:
-- list_connections(): lista connessioni ArcGIS
-- get_connection(): recupera per ID
-- create_connection(): crea nuova
-- update_connection(): aggiorna
-- delete_connection(): elimina
-- test_connection(): testa connettività
-
-Operazioni di browse (delega a ArcGISClient):
-- browse_services(): lista Feature Service disponibili
-- browse_layers(): lista layer di un servizio
-- get_layer_schema(): schema campi di un layer
-
-Operazioni dati (delega a ArcGISClient):
-- query_layer(): query features → (righe, colonne) — compatibile con QueryExecutor
-- execute_query(): query completa con salvataggio file — compatibile con ESTRAI
-- write_features(): scrittura su Feature Service
+Keeps provider-specific behavior behind a narrow integration boundary.
 """
 
 import json

@@ -1,38 +1,7 @@
-"""Contract test BE-GO-READY-BOOTSTRAP-ENGINE-014-WORKER-BOOTSTRAP-PARITY.
+"""
+Contract test BE-GO-READY-BOOTSTRAP-ENGINE-014-WORKER-BOOTSTRAP-PARITY.
 
 Lock the worker-side bootstrap boundary. Closes residual R-013.4:
-the web boot path calls `app.bootstrap.bootstrap()` once before
-router imports, and now Celery worker / beat startup must cross
-the SAME boundary.
-
-Three signal handlers wired in `workers.celery_app`:
-  - `worker_init`            — main worker process startup (solo /
-                                 threads / gevent / prefork master)
-  - `worker_process_init`    — each prefork child post-fork
-                                 (force_reset=True so inherited PG
-                                 pool is replaced)
-  - `beat_init`              — beat scheduler startup
-
-Invariants pinned:
-  1. Source-bound: `celery_app.py` imports the three signals AND
-     defines a `@<signal>.connect` handler for each.
-  2. The handlers all delegate to `_bootstrap_worker_process(...)`.
-  3. `_bootstrap_worker_process()` is idempotent
-     (`is_bootstrapped()` short-circuit).
-  4. `_bootstrap_worker_process(force_reset=True)` always re-runs
-     bootstrap (post-fork pool re-init).
-  5. Fail-closed: an exception from `bootstrap()` propagates out
-     of the signal handler (Celery → process exit → supervisor
-     restart). The handler does NOT swallow.
-  6. `is_bootstrapped()` flips True after a successful worker boot
-     and False between forks (force_reset path).
-
-The tests stub `app.bootstrap.bootstrap` to a recorded call (no
-real DB / Redis / FS I/O). They exercise the handlers DIRECTLY
-(via `celery_app._bootstrap_on_worker_init(...)` etc.) — this
-mirrors the existing `test_bootstrap_contract.py` pattern of
-calling the un-stubbed function instead of relying on Celery
-signal dispatch.
 """
 
 from __future__ import annotations

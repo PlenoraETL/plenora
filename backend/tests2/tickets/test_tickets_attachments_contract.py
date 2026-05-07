@@ -1,16 +1,7 @@
-"""Contract test — upload/delete allegati ticket.
+"""
+Contract test — upload/delete allegati ticket.
 
 Copre il flusso `/api/tickets/{id}/attachments`:
-  - happy path: upload → 201 con metadata
-  - estensione non in allowlist → 400
-  - file vuoto → 400
-  - oversize (>10MB) → 413
-  - esecutore → 403
-  - cross-tenant (admin altro gruppo) → 404
-  - delete: uploader o admin OK; altro user 403
-  - cleanup file_source su delete (best-effort, errore non rompe risposta)
-
-Mock di tickets_db_service + FileSourceService — niente DB reale ne S3.
 """
 
 from __future__ import annotations

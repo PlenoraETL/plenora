@@ -1,46 +1,7 @@
-"""Architectural lock for the native-dependency verification doc.
+"""
+Architectural lock for the native-dependency verification doc.
 
 BE-GO-READY-INSTALLATION-025-LINUX-NATIVE-DEPS-VERIFY.
-
-Source-bound assertions that
-`docs/ops/install-marco-dry-run.md` continues to enumerate the
-canonical OS-binary, Python-import, and service probes operators
-must run on a fresh Linux host before declaring an install
-ready. The page-level dry-run pack is the operator-facing
-single source; this lock prevents silent regression of the
-verification surface.
-
-Locks today:
-
-  - section 3 with the canonical title exists in the dry-run
-    pack;
-  - 3.1 OS-binary probes enumerate `gdalinfo --version`,
-    `pg_config --version`, `redis-server --version`,
-    `psql --version`, `node --version`, `npm --version`,
-    `python3.11 --version`, `curl --version`, `git --version`;
-  - 3.2 venv import probe enumerates the canonical native-
-    binding modules: `psycopg2`, `redis`, `celery`, `fiona`,
-    `geopandas`, `shapely`, `pyarrow`, `pandas`, `filetype`;
-  - 3.2 explicitly states `fiona` is transitive via
-    `geopandas` AND that `libmagic` is intentionally NOT
-    verified (`filetype` is pure-Python);
-  - 3.3 service probes contain the canonical psql + redis-cli
-    commands and the `has_database_privilege` CREATE check;
-  - the Ubuntu target is documented (Ubuntu 24.04 reference;
-    Fedora / RHEL out of scope);
-  - install-non-docker.md section 1.2 mirrors the binary probe
-    list and links back to the dry-run pack;
-  - both touched docs are ASCII-only on the new sections;
-  - no library is added that was not already imported in
-    runtime code (`libmagic` MUST stay out).
-
-Outside scope:
-  - the install script `--check` mode (locked by
-    `test_install_script_packaging_guard.py`);
-  - the dry-run pack contract tests for
-    `STORAGE_POLICY=db`, foreground smoke commands, and
-    failure triage (locked by
-    `test_install_marco_dry_run_doc_guard.py`).
 """
 
 from __future__ import annotations

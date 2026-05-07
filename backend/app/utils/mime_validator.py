@@ -2,34 +2,6 @@
 mime_validator.py — Validazione MIME degli upload (content sniffing).
 
 Goal: rifiutare file il cui contenuto non corrisponde all'estensione
-dichiarata. Difesa contro:
-  - Eseguibili rinominati (.exe → .csv) per bypassare l'allowlist
-  - PDF/binari iniettati come immagini in ticket attachments
-  - Polyglot (file riconosciuto come MIME diverso da quello atteso)
-  - Estensione binaria nota ma header non valido (es. .xlsx vuoto)
-
-Implementazione: libreria `filetype` (pure-Python, no `libmagic` /
-dipendenze sistema). `filetype` riconosce ~200 MIME tipici (immagini,
-office, archivi, audio/video, eseguibili) tramite magic bytes nei
-primi byte del contenuto.
-
-I file testuali (.csv, .json, .geojson, .log, .txt) NON hanno magic
-bytes — `filetype.guess()` ritorna None. Per questi facciamo un
-fallback heuristic: contenuto deve essere UTF-8 valido senza null
-byte (un .pdf rinominato in .csv contiene `\x00`, viene rifiutato).
-
-Uso:
-
-    from app.utils.mime_validator import validate_upload, MimeMismatchError
-
-    try:
-        validate_upload(
-            content=raw_bytes,
-            filename="upload.csv",
-            allowed_extensions={"csv", "xlsx", "json"},
-        )
-    except MimeMismatchError as e:
-        raise HTTPException(400, str(e))
 """
 
 from __future__ import annotations

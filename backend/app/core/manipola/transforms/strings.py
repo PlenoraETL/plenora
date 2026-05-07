@@ -1,47 +1,7 @@
 """
 Cluster STRINGS — operazioni di utilita' su colonne stringa.
 
-Origine
-=======
-Estratto da `app.core.manipola.transforms.base` come parte di Phase 5
-Batch B1.3a + B1.3b (cluster split, vedi
-`orchestrate/PHASE_5_ENTRY_PLAN.md` §3 P5-B1 + §6.1 facade pattern).
-
-Contenuto:
-  - `op_string_pad`     — padding a larghezza fissa (left/right). [B1.3a]
-  - `op_string_length`  — colonna lunghezza per riga. [B1.3a]
-  - `op_string_extract` — estrazione substring/regex (StringSearcher
-                          equivalente FME, supporta gruppi nominati). [B1.3b]
-  - `op_text_normalize` — operazioni testo (trim/lower/upper/title/
-                          strip_accents/strip_double_spaces/full). [B1.3b]
-
-Invarianti pubbliche preservate (regola §6.1 zero call-site changes):
-  - `from app.core.manipola.transforms.base import <op>` continua a
-    funzionare per tutte e 4 le funzioni (`op_string_pad`,
-    `op_string_length`, `op_string_extract`, `op_text_normalize`)
-    grazie al facade re-export in `base.py`.
-  - `from app.core.manipola.transforms import op_string_extract` e
-    `op_text_normalize` (gia' re-exported in `__init__.py`) continuano
-    a funzionare: l'import in `__init__.py` resta `from .base import
-    op_string_extract, op_text_normalize` e cattura il facade.
-  - `transforms_registry.json` con entries `"base.<func>"` per tutte e
-    4 continua a risolvere via `getattr(<base module>, "<func>")` dal
-    `PluginExecutor`.
-  - Nuovo path canonico `from app.core.manipola.transforms.strings
-    import <op>` disponibile per tutte e 4.
-
-Logger naming
-=============
-Il logger e' creato esplicitamente come
-`"app.core.manipola.transforms.base"` (NON `__name__`) per preservare
-il contratto osservabile pre-extraction: i record `[STRING PAD]` /
-`[CRASH] Errore StringPad` / `[CRASH] Errore StringLength` continuano
-ad apparire sotto lo stesso logger name dei consumer/log aggregation.
-Stesso pattern del fix logger in `joins.py` (B1.1b).
-
-Il body sotto e' una copia BIT-PER-BIT delle implementazioni in
-`base.py` al momento di B1.3a. Nessuna modifica di logica, comment,
-log payload, o ordine di operazione.
+Keeps transformation behavior isolated from orchestration callers.
 """
 
 import pandas as pd

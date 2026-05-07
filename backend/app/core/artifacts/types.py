@@ -1,22 +1,7 @@
-"""Tipi del modello unificato artifact / source.
+"""
+Tipi del modello unificato artifact / source.
 
 Tutti i Ref sono frozen dataclass: niente mutazione dopo costruzione,
-hashable, sicuri da passare cross-thread.
-
-Regole semantiche centrali (testate in tests2/shared/test_artifact_*):
-
-1. `RunArtifactRef` rappresenta UN output specifico di una run. Almeno
-   uno fra inline_df / result_id / output_path deve essere presente.
-   `project_id` e' sempre richiesto come tenant binding.
-
-2. `LatestProjectArtifactRef` rappresenta "l'ultimo output noto di un
-   progetto" (cross-run). E' soggetto a race condition se usato
-   subito dopo `execute_pipeline()`: in quel caso usare invece
-   `RunArtifactRef`.
-
-3. `MaterializedArtifact` e' il risultato di `ArtifactResolver`:
-   un path su disco (eventualmente temporaneo) o un DataFrame inline.
-   Context manager: il `with` garantisce cleanup dei tempfile.
 """
 
 from __future__ import annotations

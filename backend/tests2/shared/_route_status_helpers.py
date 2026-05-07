@@ -1,17 +1,7 @@
-"""Shared route-status assertion helpers for contract tests.
+"""
+Shared route-status assertion helpers for contract tests.
 
 BE-GO-READY-TEST-INFRA-001-ROUTE-STATUS-HELPER-EXTRACTION.
-
-Single home for the two helpers that were previously duplicated
-across `test_post_create_201_contract*.py` and
-`test_delete_204_contract*.py`. Bodies + assertion messages are
-preserved BYTE-EXACT so failing-test diffs do not change.
-
-The leading underscore in the module name keeps pytest from
-collecting it as a test module (pytest collects `test_*.py` by
-default). The helpers themselves keep their leading-underscore
-naming (`_assert_*`) to signal "test-internal helper" to readers
-of the call sites.
 """
 
 from __future__ import annotations

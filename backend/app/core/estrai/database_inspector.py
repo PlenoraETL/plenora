@@ -1,39 +1,7 @@
 """
 Ispettore di schema per database relazionali.
 
-Architettura
-============
-Questo modulo ispeziona lo schema di un database (tabelle e colonne con tipi)
-usando query specifiche per ogni DBMS. Il design usa Dependency Injection per
-permettere il mock completo della connessione nei test.
-
-Componenti:
-- DatabaseInspector: classe principale che orchestra l'ispezione
-- DefaultConnectionFactory: factory che crea connessioni reali con i driver nativi
-- SQLQueries: raccolta delle query SQL specifiche per ogni database
-- TypeMapper: funzioni pure per mappare tipi nativi → tipi interni PLENORA
-- ResultProcessor: funzioni pure per trasformare righe SQL → strutture dati
-
-Flusso di ispezione:
-1. Il chiamante passa un DatabaseConnection con credenziali e tipo
-2. DatabaseInspector sceglie il metodo di ispezione in base al tipo
-3. ConnectionFactory crea la connessione nativa
-4. Viene eseguita la query specifica per quel DBMS
-5. TypeMapper converte i tipi nativi nel formato interno
-6. ResultProcessor organizza i risultati in Dict[tabella → colonne]
-
-Formato tipi interni PLENORA:
-- Scalari: "int", "real", "str", "bool", "date"
-- Geometrie semplici: "geometry"
-- Geometrie tipizzate: "geometry:point", "geometry:line", "geometry:polygon"
-- Geometrie con SRID: "geometry:point:4326", "geometry:polygon:32632"
-
-Database supportati:
-- PostgreSQL (con PostGIS per tipi spaziali e SRID)
-- SQL Server (geometry/geography)
-- MySQL/MariaDB (con fallback per SRID non disponibile)
-- Oracle (SDO_GEOMETRY, NUMBER con precision/scale)
-- SQLite (PRAGMA table_info per ogni tabella)
+Keeps this module's responsibility explicit and isolated from adjacent code.
 """
 
 from abc import ABC, abstractmethod

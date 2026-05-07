@@ -1,27 +1,7 @@
-"""Contract tests for `check_beat_heartbeat`.
+"""
+Contract tests for `check_beat_heartbeat`.
 
 BE-GO-READY-OBSERVABILITY-ENGINE-024-BEAT-HEARTBEAT-READINESS.
-
-Closes STORAGE R-023.1: a stale beat scheduler is now visible
-through `/ready` instead of being a trailing indicator (backlog
-growth). The check is opt-in by default so dev/test/CLI
-environments without a running beat process do NOT trigger 503.
-
-Locks:
-  1. Default behavior is OPT-IN disabled (threshold=0):
-     `gather_readiness` MUST NOT 503 on a fresh dev DB.
-  2. Threshold > 0:
-     - missing row -> `(False, "missing heartbeat ...")`;
-     - stale row -> `(False, "stale beat ...")`;
-     - fresh row -> `(True, "age=...")`.
-  3. DB read errors are fail-OPEN (`check skipped: ...`) parallel
-     to the existing `check_pool_headroom` /
-     `check_migrations_aligned` / `check_reconciliation_backlog`
-     pattern.
-  4. The new check is wired as the 8th key (`beat_heartbeat`) of
-     `gather_readiness` body.
-  5. Settings.DEFAULTS exposes `READINESS_BEAT_HEARTBEAT_MAX_AGE_SECONDS`
-     defaulting to 0.
 """
 
 from __future__ import annotations

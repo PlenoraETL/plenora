@@ -1,41 +1,7 @@
-"""Contract tests per il tenant binding del task `execute_enrichment_task`.
+"""
+Contract tests per il tenant binding del task `execute_enrichment_task`.
 
 Il task deve:
-1. instanziare una `ApiConnectionService()` locale, non usare un
-   singleton condiviso fra task concorrenti;
-2. propagare il tenant binding ai loader/executor con un
-   `ArricchisciExecutionContext` (`ctx.group_id`) esplicito;
-3. propagare gli identificativi (`result_id`, `task_id`) necessari ai
-   consumer downstream.
-
-BE-GO-READY-TRANSFORMATION-ENGINE-030A: post-migrazione il worker
-NON muta piu' `svc._current_group_id` ne' chiama
-`apply_to_legacy_state(...)`. Tutto il tenant binding passa per
-`ctx=ctx` esplicito sui 4 mixin callsite. I test sotto verificano
-il ctx propagato osservando le `kwargs` registrate dal fake
-ApiConnectionService nel `_call_log`.
-
-PR test/phase-1-test-reliability — modernizzazione behavior-bound:
-i test pre-fix usavano `inspect.getsource` + grep stringhe / posizioni
-nel sorgente. Approccio source-bound fragile: dopo refactor (rinomina,
-estrazione helper, riformattazione, lazy import diversi) la regex sul
-source rompe anche preservando il behavior.
-
-Post-fix: i test invocano il task in Celery eager mode (vedi
-`tests2/_helpers/celery_eager.py`) con un fake `ApiConnectionService`
-che registra ogni call e setattr in un call_log. Le proprieta'
-osservabili sono:
-  - istanziazione locale (counter > 0)
-  - prima call a un loader passa `ctx` con `group_id` valido
-    (post-TE-030A; pre-migrazione era setattr di `_current_group_id`
-    PRIMA della prima call al loader)
-  - propagazione di `result_id` nei dict di result
-  - propagazione di `task_id` in tutti i call site di `update_task_progress`
-  - chiamata a `get_eseguibile` con propagazione del group_id nel
-    `ctx` della prima call loader nel branch is_eseguibile
-
-I 3 test gia' behavior-bound (signature/hasattr/stub) sono mantenuti
-invariati.
 """
 
 from __future__ import annotations

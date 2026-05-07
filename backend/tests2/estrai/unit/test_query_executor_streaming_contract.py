@@ -1,10 +1,7 @@
-"""Contract test C11 — streaming path di QueryExecutor.
+"""
+Contract test C11 — streaming path di QueryExecutor.
 
 Copre i gap rimasti dopo il fix C11:
-1. `_execute_streaming_to_file()` scrive davvero CSV in chunk.
-2. `_execute_streaming_to_file()` scrive davvero Parquet in chunk.
-3. `execute_query()` su formato streamable NON costruisce il DataFrame
-   globale e NON passa dal save_function legacy.
 """
 
 from __future__ import annotations

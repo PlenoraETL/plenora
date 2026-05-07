@@ -1,22 +1,7 @@
-"""Contract test F3-B2 (2026-04-24) — POST create → 201 (estensione F3-B1).
+"""
+Contract test F3-B2 (2026-04-24) — POST create → 201 (estensione F3-B1).
 
 Estensione di `test_post_create_201_contract.py` (F3-B1) ai 3 endpoint
-CRUD create rimasti del cluster F3:
-
-  - POST /api/projects/           → 201 Created
-  - POST /api/eseguibili          → 201 Created
-  - POST /api/features/connections → 201 Created
-
-Strategia: introspection del router (come per schedules in F3-B1) —
-questi endpoint hanno schemi Pydantic nested (ProjectCreateWithCanvas,
-EseguibileDetails, ArcGIS) che rendono fragile costruire fixture
-TestClient complete. Il contract da blindare e' la dichiarazione
-`status_code=201` sul decoratore, non il roundtrip end-to-end (gia'
-coperto da integration test esistenti dove il backend gira davvero).
-
-Fuori scope F3-B2 (riservato F3-B3):
-  - POST /api/files/upload
-  - POST /api/files/upload-multi-layer
 """
 
 from __future__ import annotations

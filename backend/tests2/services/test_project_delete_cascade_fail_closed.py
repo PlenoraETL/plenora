@@ -1,27 +1,7 @@
-"""[phase-2-err][batch9] C5 — delete_project fail-closed su step critici.
+"""
+[phase-2-err][batch9] C5 — delete_project fail-closed su step critici.
 
 Audit Batch 9 §3.1 S1 / fix F3: `ProjectService.delete_project` faceva cascade
-a 5 step con 4 `except Exception: warning` → la row `config.projects` veniva
-rimossa SEMPRE, anche se i cleanup cross-DB (intermediate runs, results blob)
-fallivano → orfani garantiti compensati solo post-hoc da `orphan_cleanup_service`.
-
-Post-fix:
-  - critical (intermediate_runs, results_blobs): fallimento → `logger.error`
-    + accumulo + gate pre-step5 che solleva `ProjectCleanupPartialError`
-    (C6 — pre-C6 era `RuntimeError`), preservando la row config. Caller
-    (`projects/router.py`) mappa a HTTP 500 con shape strutturata.
-  - derived (schedules_orphan, comparison_keys): fallimento → `logger.warning`
-    + accumulo ma NON blocca step 5, config row rimossa normalmente.
-  - Tutti i 4 warning/error ora con `exc_info=True` (coerenza C2/C4).
-  - `ProjectCleanupPartialError` espone `.project_id`, `.critical_failed`,
-    `.derived_failed` come attributi tipizzati.
-  - Pre-check `ProjectHasDependenciesError` invariato.
-
-Nomi canonici step nel messaggio RuntimeError:
-  - `schedules_orphan` (step 1 derived)
-  - `intermediate_runs` (step 2 critical)
-  - `results_blobs` (step 3 critical)
-  - `comparison_keys` (step 4 derived)
 """
 
 from __future__ import annotations
@@ -225,7 +205,7 @@ def test_delete_project_best_effort_when_schedule_orphan_fails():
 
     assert result is True
     mock_db_delete.assert_called_once()
-    # Warning con exc_info=True
+    # NOTE: con exc_info=True
     schedule_warnings = [
         c for c in mock_logger.warning.call_args_list
         if "Cleanup schedules fallito" in str(c)

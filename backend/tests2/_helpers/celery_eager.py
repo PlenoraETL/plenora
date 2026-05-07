@@ -1,27 +1,7 @@
-"""Celery eager harness — test-only.
+"""
+Celery eager harness — test-only.
 
 Phase 1 Test Reliability Batch (PR test/phase-1-test-reliability):
-
-Permette di invocare task Celery sincroni in-process. Niente broker Redis
-reale, niente worker, niente DB. Pensato per modernizzare i contract
-test source-bound (`inspect.getsource` + grep stringhe) in test
-behavior-bound (`task.apply().get()` + spy sui side-effect).
-
-API pubblica:
-  - `celery_eager` fixture pytest: flippa `task_always_eager=True` +
-    `task_eager_propagates=True` su `celery_app.conf` via monkeypatch
-  - `EnrichmentTaskHarness`: composite fixture che istanzia spy +
-    monkeypatch per tutte le dipendenze lazy/top-level del task
-    `workers.tasks.enrichment_task.execute_enrichment_task`. Costruito
-    in modo che l'invocazione end-to-end NON tocchi DB, Redis, FS o
-    cloud storage reali.
-
-Vincoli (vedi PR plan):
-  - test-only, NON importare da prod
-  - nessuna modifica a `backend/workers/tasks/enrichment_task.py`
-  - nessuna modifica a `backend/workers/celery_app.py` permanente
-  - se il task tenta DB/Redis reali → STOP (test fallisce con errore
-    chiaro, no fallback)
 """
 
 from __future__ import annotations

@@ -2,18 +2,6 @@
 imdf_publish_task.py — Task Celery per pubblicazione IMDF su ArcGIS.
 
 Workflow
-========
-Il task viene lanciato da POST /api/imdf/publish dopo che un arricchimento
-ha prodotto un bundle IMDF persistito in `IMDF_BUNDLES_DIR/{bundle_task_id}/`.
-
-Flusso:
- 1. Risolve la cartella del bundle su disco
- 2. Carica i 5 layer GDB con `load_imdf_layers`
- 3. Legge `renderers.json` (se apply_renderers)
- 4. Chiama `upload_imdf_layers(mode=...)` con progress_callback
- 5. Ritorna il dict risultato
-
-Il frontend polla il task come fa per l'enrichment (GET /api/tasks/{id}).
 """
 
 import json

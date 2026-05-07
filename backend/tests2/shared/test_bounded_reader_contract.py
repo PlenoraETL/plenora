@@ -1,25 +1,7 @@
-"""Contract test for ``read_stream_bounded``.
+"""
+Contract test for ``read_stream_bounded``.
 
 BE-GO-READY-RESOURCE-ENGINE-009-BOUNDED-STREAM-READER.
-
-Locks the single shared bounded reader's invariants:
-
-  1. Under-limit body returns the joined bytes.
-  2. Body whose total size equals ``max_bytes`` succeeds.
-  3. Body that would exceed ``max_bytes`` raises
-     ``MemoryLimitExceededError`` BEFORE the iterator is fully
-     consumed (memory bound preserved).
-  4. Non-bytes-like chunk fails clearly with ``TypeError``,
-     identifying the chunk's index and observed type.
-  5. ``max_bytes < 0`` raises ``ValueError`` at call time.
-  6. Empty body returns ``b""``.
-  7. Bytes-like alternatives (``bytearray``, ``memoryview``)
-     are accepted and normalized to ``bytes``.
-  8. Anti-god-engine: the helper module imports stdlib + the
-     existing typed exception only — no FastAPI / DB / config /
-     boto3 / requests / pandas / GIS dependencies.
-
-Tests are stdlib-only (`pytest` + `unittest.mock`).
 """
 
 from __future__ import annotations

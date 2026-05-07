@@ -1,68 +1,7 @@
-"""Source-bound guardrail: literal ``is_superadmin=True`` is forbidden
+"""
+Source-bound guardrail: literal ``is_superadmin=True`` is forbidden
+
 in production code under ``backend/app/`` except in an explicit allowlist.
-
-BE-GO-READY-RESOURCE-ENGINE-015-SUPERADMIN-BYPASS-GUARDRAILS.
-
-Why
----
-``is_superadmin=True`` is the canonical bypass for cross-tenant
-checks. It appears as:
-
-  * ``ResourceRef(..., is_superadmin=True)`` — skips the SQL group
-    filter inside ``ResultBlobLoader`` (the bypass is recorded in
-    a structured audit log for symmetry).
-  * ``SourceLoader().load(..., is_superadmin=True)`` — skips
-    ``is_resource_visible`` inside the file branch.
-  * ``ArtifactResolver.materialize_latest(..., is_superadmin=True)``
-    — skips the project's ``group_id`` cross-tenant check.
-  * ``app.shared.sharing.visible_resource_ids/is_resource_visible``
-    — short-circuit the share/owner SQL.
-  * ``app.core.auth.disclosure.admin_target_not_visible`` — chooses
-    404 vs 403 depending on the caller's role (anti-enum invariant).
-
-The privilege MUST follow the authenticated principal: routers and
-services compute it from ``current_user.role == "superadmin"`` (or
-the equivalent for system-level callers). A literal ``True`` in
-production code reads as a *convenience flag* and is almost always
-a regression — either a copy-paste from a test fixture or a quick
-fix that disabled the tenant check while debugging.
-
-What this test does
--------------------
-Source-bound: every ``.py`` under ``backend/app/`` is scanned with
-string literals and comments stripped via ``tokenize``. We look
-for the code-level token sequence ``is_superadmin = True`` (or
-the no-space ``is_superadmin=True`` form). Hits are forbidden
-unless the file is in the ``_PRIVILEGED_BYPASS_ALLOWLIST`` below.
-
-The allowlist is empty by design today: no production callsite
-currently hard-codes the bypass (verified at the time this test
-landed). Future allowlisting requires:
-
-  * documented system-level/admin operation, NOT a normal user
-    request flow;
-  * explicit caller context that cannot be confused with a normal
-    user request (e.g. a worker entrypoint, an admin-only CLI);
-  * an audit log entry on the bypass site (the loader already
-    emits one for ``ResultBlobLoader``).
-
-This guard does NOT touch:
-
-  * tests under ``backend/tests*`` — fixtures and contract tests
-    legitimately construct privileged refs to verify the bypass
-    semantics;
-  * docstrings, comments, and log f-strings inside ``backend/app/``
-    — those describe the contract; tokenize removes them before
-    the scan.
-
-Companion contracts:
-
-  * ``test_resource_engine_anti_god_engine_lock.py`` — locks the
-    engine boundary (no domain libs, byte-level only).
-  * ``test_result_blob_loader_contract.py`` — verifies the audit
-    log fires on ``is_superadmin=True``.
-  * ``test_artifact_resolver.py::*superadmin*`` — verifies the
-    cross-group bypass on ``materialize_latest``.
 """
 
 from __future__ import annotations

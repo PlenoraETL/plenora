@@ -1,31 +1,7 @@
 """
 Orchestratore pipeline — entry point unico per l'esecuzione.
 
-Architettura
-============
-Questo modulo è il punto di ingresso per tutte le esecuzioni di pipeline.
-Riceve un CanvasState dal frontend e lo instrada al modulo corretto
-in base al tipo di progetto.
-
-Routing:
-- Tipo ESTRAI → core/estrai/executor.py (generazione SQL + esecuzione query)
-- Tipo MANIPOLA → core/manipola/executor.py (pipeline trasformazione DataFrame)
-- Tipo ARRICCHISCI → core/arricchisci/executor.py (arricchimento via API)
-
-Post-esecuzione:
-- Se presente nodo CARICA → avvia task asincrono per caricamento su database
-
-Metodi principali:
-- execute_pipeline(canvas, project_id, module_type) → esecuzione completa
-- execute_preview(canvas, project_id, module_type) → anteprima con LIMIT
-
-Questo file è intenzionalmente snello: tutta la logica di business è nei
-moduli specializzati. L'orchestratore si limita a risolvere le dipendenze
-(ProjectService, ConnectionService, etc.) e delegare.
-
-Supporta anche il ricalcolo a cascata: quando un progetto MANIPOLA dipende
-da un progetto ESTRAI sorgente, l'orchestratore può rieseguire il sorgente
-prima di procedere con la trasformazione (force_recalculate=True).
+Keeps this module's responsibility explicit and isolated from adjacent code.
 """
 
 from typing import Dict, Any, Optional

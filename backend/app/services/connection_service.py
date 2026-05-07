@@ -1,17 +1,7 @@
 """
 Servizio CRUD per connessioni database.
+
 Storage: PostgreSQL tramite ``app.db.db_service`` (facade cross-engine)
-per i CRUD canonici. Le query dirette sul catalogo PLENORA (raw
-``fetchall`` per ``list_connections`` N+1 fix) usano
-``app.db.pg_connection.fetchall`` direttamente: post BE-GO-READY-DB-
-ENGINE-005 il file non importa piu' ``app.db.config_db_service``.
-
-Le password vengono cifrate con Fernet prima di essere salvate nel DB.
-La logica di cifratura è centralizzata in app.shared.crypto — qui si fa
-solo l'aliasing per chiarezza nel codice del service.
-
-Retrocompatibilità: i valori senza prefisso "enc:" sono trattati come
-plaintext legacy e vengono cifrati automaticamente al primo update.
 """
 
 import uuid
@@ -98,7 +88,7 @@ class ConnectionService:
         if mask_password:
             display_password = "***"
         else:
-            # Bug #1 (2026-04-23): raise esplicito invece di propagare None
+            # FIXME: #1 (2026-04-23): raise esplicito invece di propagare None
             # a Pydantic (DatabaseConnection.password: str) → ValidationError → 500.
             # Due casi distinti, stessa classe CredentialUnavailableError:
             #   - password NULL nel DB (mai configurata / record legacy invalido)

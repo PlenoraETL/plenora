@@ -1,26 +1,7 @@
 """
 Execution Manager per lo Scheduler PLENORA-ETL.
 
-Architettura
-============
-Cuore dell'esecuzione schedulata. Coordina tutti i componenti:
-
-    1. Pre-check connessione CARICA (se configurato)
-    2. Esecuzione pipeline headless via OrchestratorService
-    3. Salvataggio file output (sempre, gestito dall'orchestrator)
-    4. Esecuzione CARICA su database (se configurato nello schedule)
-    5. Scrittura log strutturato
-    6. Aggiornamento stato runtime dello schedule
-
-Dipendenze:
-    - OrchestratorService → esegue la pipeline (ESTRAI/MANIPOLA/ARRICCHISCI)
-    - ConcurrencyManager → lock Redis per evitare esecuzioni parallele
-    - PolicyEngine → retry, conflitti, valutazione risultato
-    - ScheduleService → aggiornamento stato runtime
-    - ScheduleLogService → log esecuzioni su filesystem
-
-Nota: l'orchestrator viene chiamato con skip_carica=True perché lo scheduler
-gestisce CARICA con la propria configurazione (dallo schedule, non dal canvas).
+Keeps this module's responsibility explicit and isolated from adjacent code.
 """
 
 import random

@@ -1,30 +1,7 @@
-"""Contract test BE-GO-READY-TRANSFORMATION-ENGINE-019 — Phase 2 mixin ctx migration.
+"""
+Contract test BE-GO-READY-TRANSFORMATION-ENGINE-019 — Phase 2 mixin ctx migration.
 
 Lock i 6 invariant della Phase 2:
-
-1. **Signature Phase 2**: i 6 reader site
-   (`_load_source_project`, `_load_file_source`, `_load_static_values`,
-   `_assert_file_source_group_access`, `_resolve_file_source_id_path`,
-   `_resolve_file_source_path`) accettano `ctx:
-   Optional[ArricchisciExecutionContext] = None` come keyword
-   argument.
-2. **Phase 2 path**: quando `ctx` e' fornito, `group_id` e
-   `preview_limit` vengono letti dal context tipato (NON dal
-   singleton). Il typed boundary "vince".
-3. **KEEP_COMPAT phase 1 fallback**: quando `ctx` non e' fornito,
-   i reader fanno fallback a `getattr(self, "_current_group_id",
-   None)` (singleton state). I consumer esterni
-   (`enrichment_task.py`, test setup) continuano a funzionare.
-4. **Tenant isolation**: ctx con un `group_id` diverso dal
-   singleton → il reader usa `ctx.group_id`. Senza questo lock,
-   un tenant leak post-migration sarebbe possibile.
-5. **Fail-closed preservato**: ctx con `group_id=None` →
-   ValueError "Contesto di sicurezza non determinabile" (stesso
-   messaggio del legacy fallback).
-6. **canvas_orchestrator threads ctx**: `execute_canvas_enrichment`
-   passa `ctx=ctx` ai 4 callsite mixin
-   (`_load_source_project`, `_load_file_source`,
-   `_load_static_values`, `_execute_rest_file`). AST-bound check.
 """
 
 from __future__ import annotations

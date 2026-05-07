@@ -1,41 +1,7 @@
-"""Source-bound strangler -- `app.db.db_service` facade.
+"""
+Source-bound strangler -- `app.db.db_service` facade.
 
 BE-GO-READY-DB-ENGINE-011-DB-SERVICE-DEATHMAP-CONTRACT.
-
-Locks the `app.db.db_service` facade against new consumers.
-After the prior config-cluster extraction work the file is a
-thin compat / deathmap shell:
-
-  - it re-exports 30 names from `app.db.config_db_service`
-    (which itself re-exports the canonical leaves under
-    `app/db/config/*.py`);
-  - it re-exports 7 names from `app.db.results_db_service`;
-  - it owns one function `init_all_dbs` (a 7-line orchestrator
-    consumed by `app/bootstrap.py` only).
-
-New code MUST import from the canonical location:
-
-  - cluster CRUD -> `from app.db.config.<cluster> import ...`
-  - results / log_runs -> `from app.db.results_db_service import ...`
-  - DAL primitives -> `from app.db.pg_connection import fetchone, fetchall, execute, ...`
-
-The allowlist below freezes the production-importer snapshot
-captured by the BE-GO-READY-DB-ENGINE-011 audit. Adding a new
-file under `backend/app/` or `backend/workers/` that imports
-`app.db.db_service` (in any AST-detectable form) breaks the
-test and forces the contributor to either:
-
-  1. Migrate to the canonical leaf module (preferred), or
-  2. Add the file to `_DB_SERVICE_PROD_ALLOWLIST` with a
-     paired migration task.
-
-A symmetric stale-entry guard makes sure that callsites which
-HAVE been migrated are removed from the allowlist, so the
-deathmap actually shrinks instead of just naming the past.
-
-Stays source-bound (AST walk, zero app imports) to mirror
-`test_config_db_service_facade_strangler_contract.py` and the
-auth strangler.
 """
 
 from __future__ import annotations

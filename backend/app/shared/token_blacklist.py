@@ -1,41 +1,7 @@
-"""JWT blacklist via Redis — revocation list per jti.
+"""
+JWT blacklist via Redis — revocation list per jti.
 
 Quando un client fa `POST /auth/logout`, il suo `jti` viene scritto
-in Redis con TTL = `exp - now`. Ad ogni richiesta autenticata
-`get_current_user` verifica se il jti e' in blacklist → 401.
-
-Dopo la scadenza naturale del token la chiave si auto-rimuove (no GC
-manuale necessario).
-
-Redis URL
-  Leggiamo `settings.CELERY_BROKER_URL` (canonica unica in tutta l'app:
-  la stessa istanza Redis fa da broker Celery, backend status checks e
-  blacklist JWT). Nessuna variabile dedicata: un solo servizio Redis,
-  una sola env var.
-
-  Convivenza con Celery sullo stesso DB 0: le chiavi blacklist sono
-  prefissate `plenora:jwt_blacklist:` e non collidono con il keyspace
-  celery (`celery`, `_kombu.binding.*`, `unacked*`).
-
-Policy fail-open sulla READ (check):
-  Se Redis e' down, `is_jti_blacklisted()` ritorna False (no blocco).
-  Rationale: JWT exp + signature restano enforced → un attaccante non
-  puo' comunque forgiare/estendere. La finestra di esposizione di un
-  token compromesso ma non ancora scaduto e' limitata dal TTL (default
-  8h). Compromesso disponibilita' vs. security-strict, monitorato
-  tramite alerting su Redis uptime.
-
-Policy fail-loud sulla WRITE (logout):
-  Se Redis e' down, `/auth/logout` ritorna 503. Il client deve sapere
-  se la revoca e' effettiva — confermare falsamente un logout cambia
-  la security posture percepita dall'utente.
-
-Alternative valutate:
-  - Blacklist in Postgres: scrittura/lettura hot path → overhead DB
-    e locking inutili per dato TTL-based puro.
-  - Fail-closed sulla read: Redis giu' => tutti i token invalidi =>
-    blast radius dell'intera app. Troppo fragile per single-instance
-    Redis.
 """
 
 from __future__ import annotations

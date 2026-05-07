@@ -1,45 +1,7 @@
-"""Bootstrap boundary — single explicit init for the FastAPI app.
+"""
+Bootstrap boundary — single explicit init for the FastAPI app.
 
 BE-GO-READY-BOOTSTRAP-ENGINE-002-EXPLICIT-BOOTSTRAP-FUNCTION.
-
-Replaces the implicit top-level init block in `app.main` with one
-named call: `bootstrap()`. The four side-effecting steps that the
-app needs at startup live here in their canonical order:
-
-1. `settings.validate_startup()` — DATA_DIR writability, temp
-   cleanup, Redis reachability gate (`SystemExit(1)` on failure).
-2. `validate_storage_config()` — coherence of `STORAGE_POLICY` ×
-   `CLOUD_PROVIDER` × bucket × thresholds × `LOG_ARCHIVE_*`
-   (`StorageConfigError` on incoherent combos).
-3. `init_all_dbs()` — PG pool init + idempotent migration apply
-   (re-raises `psycopg2.Error` on connection failure).
-4. `_repair_psycopg2_ssl_env()` — pop the three SSL-related env
-   vars that psycopg2 tends to leak into the process environment.
-   Must run AFTER step 3, otherwise the pop is a no-op.
-
-Boundary contract
-=================
-- **Input**: none. Reads `app.config.settings` and the existing
-  app-level helpers; no parameters, no return.
-- **Output**: `None`. Side effects only.
-- **Exceptions**: preserved exactly as raised by the underlying
-  helpers. `bootstrap()` does not wrap, log, or remap.
-- **Idempotency**: `validate_startup()` and `init_all_dbs()` are
-  designed to be re-runnable; `_repair_psycopg2_ssl_env()` uses
-  `pop(..., None)` and is naturally idempotent. So `bootstrap()`
-  itself is idempotent in the same sense as its constituents.
-- **No I/O outside this boundary**: callers that need to test app
-  behavior without DB/Redis should stub `bootstrap` (see
-  `tests2/conftest.py`), not the four constituents individually.
-
-Out of scope (per task brief)
-=============================
-- No DI container introduced.
-- No router registry, no `register_routers(app)` helper.
-- No exception-handler extraction.
-- No health-endpoint relocation.
-- Teardown symmetry is intentionally narrow: `teardown()` owns the
-  existing PostgreSQL pool close side effect and nothing else.
 """
 
 from __future__ import annotations

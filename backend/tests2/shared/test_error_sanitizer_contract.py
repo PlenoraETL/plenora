@@ -1,16 +1,7 @@
-"""Unit contract test per ``app.shared.error_sanitizer``.
+"""
+Unit contract test per ``app.shared.error_sanitizer``.
 
 Batch Fix 6.2 (error-handling-governance). Il sanitizer e' applicato
-ai 9 punti HIGH RISK di leak ``str(e)`` in 4xx sui router
-``eseguibili/router.py`` e ``features/routes.py``. Qui si blinda:
-
-    - ogni regola elencata nel modulo rimuove il pattern atteso
-    - i messaggi benigni NON vengono alterati (no euristiche extra)
-    - truncate + fallback input vuoto/None
-
-Regressione protetta: eventuali modifiche al sanitizer che allarghino
-la blacklist senza ratifica (o che allentino le regole lasciando
-passare URL/token) falliscono qui prima di arrivare in produzione.
 """
 
 from __future__ import annotations

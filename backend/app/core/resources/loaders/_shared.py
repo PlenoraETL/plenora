@@ -1,36 +1,7 @@
-"""Shared micro-utilities for Resource Engine loaders.
+"""
+Shared micro-utilities for Resource Engine loaders.
 
 BE-GO-READY-ARCH-055-W5-RESOURCE-CONTRACT-SIMPLIFICATION.
-BE-GO-READY-RESOURCE-ENGINE-026-EXTRACT-DOWNLOAD-HELPER.
-
-Holds two private helpers shared by both loader modules:
-
-  - ``_short_key`` - log-safe abbreviation of long storage keys.
-    Both ``result_blob`` and ``file_source_blob`` used identical
-    private copies; centralised here to remove the duplication.
-
-  - ``_download_object_storage_impl`` - object-storage GET, bounded
-    by ``resolve_resource_max_bytes()``.  Both loaders shared ~70
-    lines of structurally identical logic; the only differences
-    were the log-prefix tag (``[FS-4]`` vs ``[FS-BLOB]``) and the
-    ``stage`` string passed to ``read_stream_bounded``.  Loaders
-    keep a thin per-kind ``_download_object_storage`` wrapper that
-    supplies those two parameters; existing monkeypatch targets on
-    ``result_blob._download_object_storage`` and
-    ``file_source_blob._download_object_storage`` continue to work
-    unchanged.
-
-Boundary:
-  - stdlib + ``app.shared.exceptions`` + inner-package helpers
-    (``resource_caps``, ``bounded_reader``);
-  - ``get_logger`` and ``cloud_backends`` are lazy-imported inside
-    ``_download_object_storage_impl`` to mirror the pattern already
-    used in the loaders and to avoid pulling heavy deps at import
-    time (the anti-god-engine runtime test verifies this).
-  - No ``pandas`` / ``geopandas`` / ``fiona`` / ``polars`` /
-    ``fastapi`` / ``app.core.auth`` / ``app.core.artifacts``.
-  - Private module (leading underscore): not re-exported from
-    ``loaders/__init__.py``.
 """
 
 from __future__ import annotations

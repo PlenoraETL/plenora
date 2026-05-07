@@ -1,17 +1,7 @@
-"""Contract test C11 — OOM protection + cross-join refuse + Pydantic tight.
+"""
+Contract test C11 — OOM protection + cross-join refuse + Pydantic tight.
 
 Copre:
-A. ESTRAI_MAX_ROWS cap: verifica che il loop fetchmany raise se supera.
-D. query_generator refuse CROSS JOIN implicito (pre-fix era silent).
-E. Canvas validator reject orphan non-source nodes.
-F. Pydantic CanvasWithPlugins.nodes/edges tipizzati (List[Node]/List[Edge]).
-
-Non coperti:
-B. Streaming CSV/Parquet — l'end-to-end richiede connection reale.
-   Test smoke: chiamare _execute_streaming_to_file con mock del
-   cursor per verificare che fetchmany loop termini correttamente.
-C. Intermediate snapshot cap — coperto implicitamente dal path in
-   execute_query (complesso mockarlo in unit; scope integration se serve).
 """
 
 from __future__ import annotations
@@ -164,7 +154,7 @@ def test_canvas_put_accepts_source_nodes_without_incoming_edges():
 
 # RB.4.A (2026-04-27): cross-tenant ref validation in update_project_canvas
 #
-# BUG.md #8: un canvas con file_source_id / source_project_id non visibili
+# FIXME(BUG.md #8): un canvas con file_source_id / source_project_id non visibili
 # al gruppo del progetto poteva essere salvato senza errore (passava i
 # vecchi check orphan + group_access). L'errore arrivava solo a runtime via
 # `_assert_file_source_group_access` con messaggio opaco.
@@ -404,7 +394,7 @@ def test_canvas_put_superadmin_can_save_any_ref():
 
 # RB.7.A (2026-04-27): estensione cross-tenant validation a ArcGIS connections
 #
-# BUG.md #7: post rebrand 2026-04-18 (urby-* -> plenora-*) alcuni canvas
+# FIXME(BUG.md #7): post rebrand 2026-04-18 (urby-* -> plenora-*) alcuni canvas
 # storici contenevano `arcgis_connection_id` / `imdf_arcgis_connection_id`
 # che ora puntavano a connection rinominate o non visibili al gruppo.
 # Il save passava in silenzio, il successivo `listFolders` rispondeva 404
@@ -579,7 +569,7 @@ def test_canvas_put_collects_arcgis_connection_id_from_node_data_dict():
 
 # RB.4.A.16 (2026-04-27): _visible_project_ids_strict
 #
-# BUG.md #16: `visible_resource_ids("projects",...)` solleva ValueError
+# FIXME(BUG.md #16): `visible_resource_ids("projects",...)` solleva ValueError
 # perche' projects non e' nel whitelist `_SHAREABLE` (no project_shares
 # table). Pre-fix: PUT canvas con un project_source restituiva 500
 # "Tabella 'projects' non e' shareable". Post-fix: helper ownership-only

@@ -1,37 +1,13 @@
-import re
 """
-Utility centralizzate per operazioni su DataFrame in PLENORA-ETL.
+DataFrame utilities for Plenora transformation and preview flows.
 
-Architettura
-============
-Questo modulo centralizza le operazioni su DataFrame usate da tutti i moduli,
-eliminando la duplicazione di codice per caricamento, salvataggio e conversione.
-
-Fornisce funzioni comuni per il caricamento, il salvataggio, il filtraggio
-e la serializzazione di DataFrame pandas e GeoDataFrame.
-
-Funzionalità principali:
-    - load_dataframe_from_file(): caricamento multi-formato (CSV, XLSX, JSON, GeoJSON, SHP, GDB, ...)
-    - save_dataframe(): salvataggio multi-formato con supporto geospaziale
-    - filter_visible_columns(): filtraggio colonne in base alla configurazione canvas
-    - sanitize_for_json(): conversione sicura per serializzazione JSON
-    - infer_column_types(): inferenza automatica dei tipi colonna
-
-Modulo creato per centralizzare la logica DataFrame precedentemente
-duplicata in orchestrator_service, api_connection_service, query_executor
-e file_source_service.
-
-Uso:
-    from app.utils.dataframe import (
-        load_dataframe_from_file,
-        save_dataframe,
-        filter_visible_columns,
-        sanitize_for_json
-    )
+Keeps shared pandas/geopandas normalization helpers outside the vertical engines.
 """
+
 
 import io
 import json
+import re
 import tempfile
 import zipfile
 from pathlib import Path
@@ -781,7 +757,7 @@ def _salva_shapefile_zippato(
             for f in Path(tmpdir).glob(f"{nome_shp}.*"):
                 zf.write(f, f.name)
 
-        # Warning per colonne con nomi lunghi (limite Shapefile: 10 caratteri)
+        # NOTE: per colonne con nomi lunghi (limite Shapefile: 10 caratteri)
         colonne_lunghe = [c for c in colonne_originali if len(str(c)) > 10]
         if colonne_lunghe:
             logger.warning(

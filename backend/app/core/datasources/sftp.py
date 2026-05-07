@@ -1,16 +1,7 @@
 """
 PLENORA-ETL — Data Source Backend: SFTP
-Connessione SSH/SFTP con autenticazione tramite password o chiave SSH privata.
-Dipendenza: paramiko (pip install paramiko)
 
-Configurazione extra attesa in config.extra:
-    host (str)                          es. "sftp.server.it"
-    port (int)                          default 22
-    username (str)
-    password (str)                      opzionale se si usa chiave SSH
-    private_key (str)                   contenuto PEM della chiave privata
-    private_key_passphrase (str)        passphrase chiave, opzionale
-    host_key_policy ("auto_add"|"reject")  default "auto_add"
+Connessione SSH/SFTP con autenticazione tramite password o chiave SSH privata.
 """
 
 import io

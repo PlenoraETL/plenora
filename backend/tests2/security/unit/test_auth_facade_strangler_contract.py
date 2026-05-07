@@ -1,46 +1,7 @@
-"""Source-bound guard — facade strangler Phase-1 + Phase-2.
+"""
+Source-bound guard — facade strangler Phase-1 + Phase-2.
 
 Locks the auth-facade strangler against regression. Two contracts:
-
-PHASE-1 (BE-GO-READY-AUTH-ENGINE-005): full facade ban.
-  3 files where NO `from app.core.auth.auth import ...` ImportFrom
-  is allowed at all (every consumed name has a leaf):
-    1. `app/core/auth/auth_middleware.py` — `decode_token` from
-       `app.shared.jwt_token`.
-    2. `app/core/auth/ownership.py` — `ROLES_ADMIN_OR_ABOVE` from
-       `app.core.auth.roles` (was lazy facade import inside
-       `_check_ownership`).
-    3. `app/shared/authz_helpers.py` — `CurrentUser` from
-       `app.core.auth.models`; `assert_group_access` +
-       `assert_resource_visible` from `app.core.auth.ownership`.
-
-PHASE-2 (BE-GO-READY-AUTH-ENGINE-006): per-name facade ban.
-  Files that still legitimately import FastAPI Depends
-  (`get_current_user`, `require_*`) from the facade, but MUST NOT
-  re-import `CurrentUser` or ownership helpers from the facade:
-    - `app/shared/async_user_recheck.py` — full ban (CurrentUser only).
-    - `app/core/tickets/service.py`        — full ban (CurrentUser only).
-    - `app/core/admin_backups/router.py`   — facade may keep
-      `require_superadmin`; CurrentUser banned.
-    - `app/core/admin_system_status/router.py` — same.
-    - `app/core/tickets/router.py` — facade may keep
-      `get_current_user`; CurrentUser banned.
-    - `app/core/orchestrator/router.py` — facade may keep
-      `get_current_user`, `require_not_esecutore`; CurrentUser +
-      `assert_group_access` banned.
-    - `app/core/imdf/router.py` — facade may keep
-      `get_current_user`; CurrentUser + `assert_resource_visible`
-      banned (the latter was a body-local lazy facade import).
-
-Why source-bound:
-  Importing the modules at test time would still drag the facade via
-  transitive imports (e.g. `auth.models` is OK, but loading `auth.py`
-  itself runs `import app.core.auth.disclosure` etc.). The contract we
-  want to lock is purely structural: target names cannot appear in any
-  `ImportFrom(module="app.core.auth.auth")` node of the migrated file.
-
-Stays source-bound to mirror `tests2/shared/test_architecture_legacy_patterns.py`
-posture: zero app imports, zero side effects.
 """
 
 from __future__ import annotations

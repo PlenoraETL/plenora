@@ -1,19 +1,7 @@
-"""Baseline timing: operazioni pandas-based gia' vettorializzate in Fase 0.
+"""
+Baseline timing: operazioni pandas-based gia' vettorializzate in Fase 0.
 
 Misuriamo contemporaneamente:
-  - **current**  = impl attuale in `transforms/base.py` (vectorized)
-  - **naive**    = ricostruzione della versione pre-vectorization
-                   (iterrows / apply(axis=1) con lambda)
-
-La differenza current/naive documenta lo speedup della vectorization gia'
-landed, **condizione per lo score PERF 7.0** (rubrica: speedup >=3x
-documentato sui 4 bottleneck).
-
-Batch 0 (questo file): generazione numeri baseline. Nessuna modifica al
-codice di produzione; solo misura. Esecuzione con:
-
-    pytest backend/tests2/performance/test_baseline_pandas_ops.py \
-        -m perf_baseline -s -q
 """
 
 from __future__ import annotations

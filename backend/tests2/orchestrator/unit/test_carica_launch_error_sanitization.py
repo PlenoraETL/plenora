@@ -1,16 +1,7 @@
-"""[phase-2-err][batch9] C1 — sanitize str(e) in _execute_carica_if_present.
+"""
+[phase-2-err][batch9] C1 — sanitize str(e) in _execute_carica_if_present.
 
 Fix S3 / F1 dell'audit Batch 9: il boundary `OrchestratorService._execute_carica_if_present`
-in caso di eccezione nel launch del task Celery CARICA ritornava un dict
-`{"error": str(e), "message": "..."}` che finiva in `artifact["carica"]`
-e veniva serializzato al FE. Leak di internals (path modulo, valori exception
-args, shape interna pydantic).
-
-Post-fix: il dict returned ha `error="carica_launch_failed"` stringa opaca
-canonica + `message` canonico. Il dettaglio tecnico resta SOLO in
-`logger.error(..., exc_info=True)`.
-
-Intent: optional feature dichiarato. Outcome: fail-open sanitizzato.
 """
 
 from __future__ import annotations

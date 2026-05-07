@@ -1,56 +1,7 @@
-"""Reconciliation E2E smoke — PG source -> DatabaseWriter -> PG dest.
+"""
+Reconciliation E2E smoke — PG source -> DatabaseWriter -> PG dest.
 
 T-08 / D2 Phase 3: chiude il gap F-DATA-09 dell'audit data ("nessun
-test E2E pipeline reconciliation source-DB <-> destination-DB"). Smoke
-piccolo (10k righe), non sostituisce un parity test full pipeline ma
-fissa una baseline reale per il path CARICA.
-
-Scope:
-  1. seed source table su PG ext con dataset deterministico 10k righe
-     (id INTEGER PK, name TEXT, amount NUMERIC(12,2), payload TEXT)
-  2. carica su destination via `DatabaseWriter.write(df)` (modalita'
-     CREATE + ALL_OR_NOTHING)
-  3. confronta src vs dest su 3 metriche complementari:
-     - count(*)
-     - sum(amount)
-     - MD5 ordinato per id su id|name|amount|payload
-  4. fallisce loud su qualsiasi divergenza con messaggio diagnostico
-     (vedi `harness/reconciliation.assert_reconciliation_match`)
-
-Dataset:
-  - int sequenziale, NUMERIC stabile via Decimal centesimi, text con
-    accenti italiani per regressione encoding cross-DB.
-  - NO NaN/Inf in questo smoke. P1-04 ha test unit dedicati
-    (`test_nan_inf_jsonb_roundtrip_contract.py`); qui evitiamo
-    ambiguita' SQL/pandas che mascherebbero divergenze reali.
-
-Skip policy (4 layer prima di toccare psycopg2 nel processo pytest):
-  1. marker `pytest.mark.integration` -> consente `-m "not integration"`
-  2. `_SKIP_NO_DB_LIVE_OPT_IN`: skipif su `URBY_RUN_DB_LIVE_TESTS == "1"`.
-     Lo skip e' al collect time: `psycopg2.connect` non viene mai
-     invocato senza opt-in esplicito.
-  3. preflight **TCP-only** via `socket.create_connection` con timeout
-     2s: se la porta PG ext non risponde a livello rete, skip pulito
-     senza coinvolgere psycopg2. Niente driver C, niente rischio di
-     access violation lato libpq.
-  4. preflight **psycopg2 in subprocess separato** con timeout: il
-     subprocess esegue `psycopg2.connect(...)` isolato. Se crasha
-     nativamente (access violation Windows lato libpq), il subprocess
-     muore ma il processo pytest sopravvive e fa `pytest.skip(...)`.
-     Solo dopo subprocess exit 0 il test usa `postgres_ext_conn()` nel
-     processo principale.
-
-Razionale del subprocess probe:
-  pattern imparato in Batch B (review #1-#5). Su Windows psycopg2
-  puo' produrre Windows fatal access violation lato C prima di sollevare
-  OperationalError. Un try/except Python NON intercetta crash nativi.
-  L'unica difesa solida e' isolare il connect in un sottoprocesso che
-  puo' morire senza portarsi via il pytest runner.
-
-Cleanup:
-  - source + destination droppate in `finally` anche se il writer
-    fallisce mid-write
-  - nomi tabella unici via `make_it_id` -> niente clash cross-test
 """
 
 from __future__ import annotations

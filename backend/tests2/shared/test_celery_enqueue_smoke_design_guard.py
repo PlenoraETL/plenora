@@ -1,38 +1,7 @@
-"""Architectural lock for the Celery worker enqueue/dequeue smoke.
+"""
+Architectural lock for the Celery worker enqueue/dequeue smoke.
 
 BE-GO-READY-INSTALLATION-019-CELERY-WORKER-ENQUEUE-SMOKE-IMPL
-(originally scaffolded by INSTALLATION-018 as design + skipped
-contract; flipped to implemented contract by 019).
-
-The cleanroom CI lane (`.github/workflows/ci-cleanroom.yml`) now
-spawns a real `celery worker` and exercises a real enqueue/
-dequeue round-trip via the pure no-op `cleanroom.ping` task. This
-guard locks the three surfaces of that contract:
-
-  Group A - docs section 12.6 of install-non-docker.md still
-  documents the bounded smoke pattern (no fragile sleep loops,
-  hard timeout via `AsyncResult.get`, `--pool=solo` for
-  determinism, `ignore_result=False` on the primitive task).
-
-  Group B - workflow step and runtime task module land together.
-  Either both present or both absent; one without the other
-  silently breaks the smoke (NotRegistered) or leaves a dead
-  task module in production for no benefit.
-
-  Group C - the runtime task (`workers/tasks/cleanroom_task.py`)
-  satisfies the contract from section 12.6.2 of the install doc:
-  pure no-op, canonical name `cleanroom.ping`, `ignore_result=False`,
-  registered in `celery_app.include=[...]`.
-
-If a future refactor breaks any of these, the guard fails before
-the smoke regression hits CI.
-
-Outside scope of this guard:
-  - the existing INSTALLATION-014 readiness step contracts (locked
-    separately by `test_celery_cleanroom_readiness_guard.py`);
-  - the install script packaging contract (locked by
-    `test_install_script_packaging_guard.py`);
-  - beat schedule tick smoke (open, see section 12.6.4).
 """
 
 from __future__ import annotations

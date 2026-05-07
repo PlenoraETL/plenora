@@ -1,8 +1,7 @@
-"""Core-level test per Refactor #5 Step A: ScheduleArtifactStore.
+"""
+Core-level test per Refactor #5 Step A: ScheduleArtifactStore.
 
 Sostituisce la logica `_archive_output` di `ExecutionManager` come
-classe stand-alone con DI esplicito su `results_dir`. Test su DI
-diretto, niente mock di settings, niente mock di execution manager.
 """
 
 from datetime import datetime

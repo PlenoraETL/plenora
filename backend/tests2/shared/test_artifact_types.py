@@ -1,3 +1,9 @@
+"""
+Tests the artifact types behavior.
+
+Locks backend contracts and regression boundaries for the current architecture.
+"""
+
 from pathlib import Path
 
 import pytest

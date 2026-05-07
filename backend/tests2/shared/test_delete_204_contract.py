@@ -1,32 +1,7 @@
-"""Contract test F2-B1 (2026-04-24) — DELETE endpoints ritornano 204.
+"""
+Contract test F2-B1 (2026-04-24) — DELETE endpoints ritornano 204.
 
 Blinda convenzione REST (RFC 9110): DELETE che elimina una risorsa
-DEVE restituire 204 No Content con body vuoto (non 200 + dict di
-conferma ridondante).
-
-Endpoint in scope F2-B1 (3 endpoint CRUD omogenei, simmetrici a F3-B1):
-  - DELETE /api/connections/{id}      -> 204 No Content
-  - DELETE /api/api-connections/{id}  -> 204 No Content
-  - DELETE /api/schedules/{id}        -> 204 No Content
-
-Breaking change: il body dict `{"status": "deleted", "id": X}` non
-e' piu' restituito. Audit FE verificato pre-fix: i 3 call-site
-(ConnectionManager, ApiConnectionManager, ScheduleList) fanno
-"delete + reload list" senza consumare il body. 204 e' safe.
-
-Fuori scope F2-B1 (batch F2-B2+):
-  - DELETE /api/projects/{id}
-  - DELETE /api/eseguibili/{id}
-  - DELETE /api/tickets/{id}, /api/tickets/{id}/attachments/{aid}
-  - DELETE /api/files/{id}
-  - DELETE /api/features/connections/{id}
-  - DELETE /api/imdf/bundles/{id}
-
-Strategia: introspection del router (coerente con F3-B2/B3). Il
-contract da blindare e' la dichiarazione `status_code=204` sul
-decoratore; il happy path end-to-end e' coperto dai test esistenti
-aggiornati (test_delete_connection_409_shape.py + test_delete_api_
-connection_409_shape.py).
 """
 
 from __future__ import annotations

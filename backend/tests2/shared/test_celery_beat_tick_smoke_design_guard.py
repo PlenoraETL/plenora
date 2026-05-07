@@ -1,42 +1,7 @@
-"""Architectural lock for the Celery beat tick smoke design.
+"""
+Architectural lock for the Celery beat tick smoke design.
 
 BE-GO-READY-INSTALLATION-020-CELERY-BEAT-TICK-SMOKE-DESIGN-FIRST-GUARD.
-
-This stream did NOT add a real beat tick smoke step to
-`.github/workflows/ci-cleanroom.yml`. The brief was explicit on
-three constraints (no fragile sleep loops, no broad production
-schedule seeding, no Docker artifacts), and the audit confirmed
-that no beat-fired Celery task today has `ignore_result=False`.
-The only existing beat-fired primitive (`beat_heartbeat`) is
-`ignore_result=True` and not even wired through the production
-`PlenoraBeatScheduler.tick()` (the heartbeat write happens via
-the in-process `_write_heartbeat()` method).
-
-Implementing a deterministic beat tick smoke therefore requires
-a new app-side primitive (`cleanroom.beat_ping` task + env-gated
-`beat_schedule` wiring) which belongs to a separate stream
-(INSTALLATION-021).
-
-This guard suite locks the gap so it cannot be silently forgotten
-or silently closed. Three groups, mirroring the
-INSTALLATION-018 pattern:
-
-  Group A - design section 12.7 of `install-non-docker.md`
-  exists with the canonical primitive name, the bounded smoke
-  pattern invariants, and the closure stream tag.
-
-  Group B - workflow step (when added) and runtime task module
-  (when added) must land together. Any "one without the other"
-  is silent gap-closure failure mode.
-
-  Group C - implementation contract that activates only when the
-  primitive lands. Today: skipped with explicit pytest.skip
-  pointing at INSTALLATION-021.
-
-Outside scope:
-  - the implementation itself (lives in INSTALLATION-021);
-  - the existing INSTALLATION-014 readiness step contract;
-  - the existing INSTALLATION-019 enqueue smoke contract.
 """
 
 from __future__ import annotations

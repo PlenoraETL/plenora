@@ -1,40 +1,7 @@
-"""Source-bound guard for the first-PC report review / intake checklist.
+"""
+Source-bound guard for the first-PC report review / intake checklist.
 
 BE-GO-READY-INSTALL-017-FIRST-PC-REPORT-INTAKE-CHECKLIST.
-
-Locks the load-bearing reviewer-checklist headers in
-`docs/ops/first-pc-report-review-checklist.md` so a future edit
-cannot silently drop one of the six top-level sections the
-brief named:
-
-  - intake (structural sanity);
-  - non-Docker scoring (top-line + per-step diagnostics);
-  - Docker scoring (FIRST SCAFFOLD / NOT YET VALIDATED);
-  - stop-condition handling;
-  - intake-output artefacts;
-  - "what this checklist does NOT do" honesty section.
-
-Honesty contract (mirror of the template guard):
-  - the checklist MUST keep `FIRST SCAFFOLD` and
-    `NOT YET VALIDATED` literal markers for the Docker path;
-  - the checklist MUST NOT claim the install is validated by
-    its own existence -- only a green report flips a path.
-
-Stays source-bound (zero app imports), mirroring the
-install-doc family guard posture
-(`test_install_smoke_harness_doc_guard.py`,
-`test_first_pc_validation_report_template_guard.py`).
-
-Outside scope:
-  - the report template itself (locked by
-    `test_first_pc_validation_report_template_guard.py`);
-  - the dry-run pack (locked by
-    `test_install_marco_dry_run_doc_guard.py` /
-    `test_install_smoke_harness_doc_guard.py` /
-    `test_install_execution_pack_doc_guard.py`);
-  - the Docker scaffold (locked by
-    `test_docker_scaffold_guard.py` /
-    `test_docker_validate_script_guard.py`).
 """
 
 from __future__ import annotations

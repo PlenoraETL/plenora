@@ -1,20 +1,7 @@
-"""Contract test C12 — ArcGIS token in Authorization header + retry 498/429.
+"""
+Contract test C12 — ArcGIS token in Authorization header + retry 498/429.
 
 Verifica:
-1. Ogni call site passa il token nel header `Authorization: Bearer`,
-   NON in params/data. Previene leak via reverse-proxy logs o
-   observability tracing server-to-server.
-2. Su response body `error.code` in {498, 499}: il client invalida la
-   cache token, riautentica, e ritenta UNA volta. Esclude loop
-   infinito se il secondo tentativo fallisce.
-3. Su HTTP 429: exponential backoff, max 3 retry, rispetta
-   Retry-After se presente.
-4. Caso critico (_write_batch): autentica una volta MA se il token
-   scade mid-batch, la nuova chiamata via helper fa refresh sul
-   singolo batch. Pre-C12 tutti i batch successivi alla scadenza
-   fallivano.
-
-Mock puri: niente chiamate HTTP reali, niente server ArcGIS.
 """
 
 from __future__ import annotations

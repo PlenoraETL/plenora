@@ -1,24 +1,7 @@
-"""Contract test BE-GO-READY-STORAGE-ENGINE-005 — typed boundary
+"""
+Contract test BE-GO-READY-STORAGE-ENGINE-005 — typed boundary
+
 `app.shared.storage_reconciliation`.
-
-Locks the 4 boundary invariants:
-
-1. `record_pending` runs INSERT with RETURNING id inside the
-   caller's cursor; returns a `ReconciliationEntryRef` with the
-   freshly-issued UUID and echoes `domain` / `storage_key` /
-   `operation`. Frozen dataclass.
-2. `record_pending` propagates SQL errors to the caller (no
-   silent swallow — the caller's transaction owns rollback).
-3. `mark_done` / `mark_failed_attempt` / `mark_orphan_deleted`
-   delegate to `app.db.pg_connection.execute` (autocommit) with
-   the right state transition; never raise (best-effort).
-4. `extras` is JSON-serialized; `extras=None` writes SQL NULL.
-
-Boundary
-========
-Source-bound: monkeypatch `app.db.pg_connection.execute`. No
-DB connection required. No import of FastAPI / boto3 / settings
-in the module under test (asserted explicitly).
 """
 
 from __future__ import annotations

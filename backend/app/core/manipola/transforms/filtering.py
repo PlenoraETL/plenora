@@ -1,64 +1,7 @@
 """
 Cluster FILTERING — selezione righe e logica condizionale colonna.
 
-Origine
-=======
-Estratto da `app.core.manipola.transforms.base` come parte di Phase 5
-Batch B1.8 (cluster split, vedi
-`orchestrate/PHASE_5_ENTRY_PLAN.md` §3 P5-B1 + §6.1 facade pattern).
-
-Razionale del raggruppamento: tutte le entita' qui dentro **valutano
-condizioni su valori di colonna**:
-  - `op_filter`           — riduce le righe del DataFrame in base a una
-                            condizione singola (`==`, `>`, `contains`,
-                            `isnull`, ecc.).
-  - `op_conditional`      — crea una nuova colonna con valore dipendente
-                            da N condizioni in cascata (case/when SQL).
-  - `_evaluate_condition` — helper privato condiviso da `op_conditional`
-                            per applicare la singola condizione su una
-                            Series e ottenere la maschera booleana.
-
-Tutti e 3 condividono semantica "condizione su Series → mask booleana".
-Il private helper `_evaluate_condition` resta single-source qui:
-nessun consumer esterno lo importa (verificato pre-extraction).
-
-Contenuto:
-  - `op_filter`           — riduzione righe fail-closed con auto-conversion
-                            tipo + ReDoS-safe `contains` (regex=False).
-  - `op_conditional`      — case/when su colonna sorgente con
-                            auto-detection numerico sull'output.
-  - `_evaluate_condition` — switch su 11 operatori, ritorna maschera
-                            pandas; usato solo da `op_conditional`.
-
-Invarianti pubbliche preservate (regola §6.1 zero call-site changes):
-  - `from app.core.manipola.transforms.base import op_filter` /
-    `op_conditional` continua a funzionare grazie al facade re-export
-    in `base.py`.
-  - `from app.core.manipola.transforms import op_filter` /
-    `op_conditional` continua a funzionare (`__init__.py` re-exporta
-    entrambi via `from .base import ...` che cattura il facade).
-  - `transforms_registry.json` con entries `"base.op_filter"` /
-    `"base.op_conditional"` continua a risolvere via
-    `getattr(<base module>, "<func>")` dal `PluginExecutor`.
-  - Nuovo path canonico `from app.core.manipola.transforms.filtering
-    import <op>` disponibile per le 2 pubbliche.
-  - `_evaluate_condition` NON e' re-exported da base (verificato:
-    nessun consumer esterno). Resta single-source in filtering.
-
-Logger naming
-=============
-Logger creato esplicitamente come
-`"app.core.manipola.transforms.base"` (NON `__name__`) per preservare
-il contratto osservabile pre-extraction: i record `Filter: ...`,
-`[GESTITO] Errore Filter`, `Conditional: ...`, `[CRASH] Errore
-Conditional` continuano ad apparire sotto il logger name dei
-consumer. Stesso pattern di tutti i moduli figli estratti nei batch
-B1.1-B1.7.
-
-Il body sotto e' una copia BIT-PER-BIT delle implementazioni in
-`base.py` al momento di B1.8. Nessuna modifica di logica, comment,
-log payload, ordine di operazione, fail-closed semantics, anti-ReDoS
-regex=False, type auto-conversion.
+Keeps transformation behavior isolated from orchestration callers.
 """
 
 import pandas as pd

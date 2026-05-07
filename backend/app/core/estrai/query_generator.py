@@ -1,42 +1,7 @@
 """
 Generatore di query SQL dal canvas grafico.
 
-Architettura
-============
-Questo modulo analizza il grafo visuale del canvas (nodi tabella, edges di join,
-nodo risultato) e genera la corrispondente query SELECT SQL con protezione
-contro SQL injection tramite parametri preparati.
-
-Pipeline di generazione:
-1. Riceve nodi, edges e ID del nodo risultato
-2. Percorre il grafo all'indietro dal risultato per trovare le tabelle connesse
-3. Estrae configurazione GROUP BY dal nodo risultato (se presente)
-4. Genera separatamente: SELECT, FROM+JOIN, WHERE, GROUP BY
-5. Assembla il tutto in una query completa con sintassi LIMIT specifica per database
-
-Protezione SQL injection:
-- Tutti i valori dei filtri usano parametri preparati (:p_0, :p_1, ...)
-- Nomi di colonne e tabelle vengono validati con _is_valid_identifier()
-- Operatori filtro sono limitati a un set di operatori sicuri
-
-Supporto JOIN:
-- Join su attributi: LEFT, RIGHT, INNER, FULL OUTER, CROSS
-- Join spaziali: usa sql_translator per generare predicati multi-database
-  (ST_Intersects, ST_Contains, ST_Within, ST_DWithin con buffer, ecc.)
-
-Supporto GROUP BY:
-- Colonne di raggruppamento
-- Funzioni aggregate: COUNT, SUM, AVG, MIN, MAX, FIRST, LAST
-- COUNT(*) per conteggio totale righe per gruppo
-
-Colonne calcolate:
-- Tradotte tramite sql_functions.translate_calculated_column()
-- Supporto SQL manuale (is_manual=true) e funzioni database-agnostic
-
-Sintassi LIMIT per database:
-- PostgreSQL, MySQL, SQLite: LIMIT N
-- SQL Server: SELECT TOP N
-- Oracle 12c+: FETCH FIRST N ROWS ONLY
+Keeps this module's responsibility explicit and isolated from adjacent code.
 """
 
 import re
@@ -168,9 +133,7 @@ class QueryGenerator:
         
         if db in ('mssql', 'sqlserver'):
             return 'dbo'
-        # PostgreSQL non richiede obbligatoriamente lo schema public
-        # elif db == 'postgres':
-        #     return 'public'
+        # PostgreSQL non richiede obbligatoriamente lo schema public.
         else:
             return None
 

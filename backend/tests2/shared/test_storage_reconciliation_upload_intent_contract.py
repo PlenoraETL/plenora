@@ -1,28 +1,7 @@
-"""Contract tests BE-GO-READY-STORAGE-ENGINE-008-UPLOAD-INTENT-PATTERN.
+"""
+Contract tests BE-GO-READY-STORAGE-ENGINE-008-UPLOAD-INTENT-PATTERN.
 
 Lock the upload_intent self-clearing lifecycle that closes R-021.1:
-
-1. `record_upload_intent` runs autocommit INSERT with
-   `operation='upload_intent'` + `state='pending'`; returns the
-   freshly-issued UUID; best-effort on DB error (returns None).
-2. `fetch_due_stale_upload_intents` filters by
-   `state='pending' AND operation='upload_intent' AND
-   created_at < now - grace_seconds AND
-   (next_retry_at IS NULL OR next_retry_at <= now)`.
-3. `is_storage_key_referenced` returns
-   `True` / `False` / `None` (read-error) — the three states
-   the beat hook MUST branch on.
-4. `dispatch_blob_storage` records the intent BEFORE upload on the
-   object_storage path; on upload exception the intent is
-   `mark_done`-cleared (no orphan); on the DB-bytea path the
-   intent is NOT recorded.
-5. Beat hook `_reconcile_storage` upload_intent branch:
-   - referenced=True   -> `mark_done`;
-   - referenced=False  -> `compensating_delete` + `mark_orphan_deleted`
-                          (or backoff/lost on failure);
-   - referenced=None   -> `mark_failed_attempt` (skip delete to
-                          avoid data loss on read-error).
-6. Settings.DEFAULTS expose the 2 new tunables.
 """
 
 from __future__ import annotations

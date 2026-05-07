@@ -2,18 +2,6 @@
 Router API per il modulo Projects.
 
 Endpoint CRUD progetti, gestione canvas, e inferenza schema.
-Estratti da main.py e api/schema.py per rendere il modulo autocontenuto.
-
-Endpoints:
-- POST   /api/projects                              → crea progetto
-- GET    /api/projects                               → lista progetti
-- GET    /api/projects/{id}                          → dettaglio progetto
-- DELETE /api/projects/{id}                          → elimina progetto
-- PUT    /api/projects/{id}/canvas                   → aggiorna canvas
-- GET    /api/projects/{id}/schemas                  → schema tutti i nodi
-- GET    /api/projects/{id}/schemas/{node_id}        → schema singolo nodo
-- POST   /api/projects/{id}/validate-connection      → valida connessione nodi
-- GET    /api/projects/{id}/validate-all             → valida tutte le connessioni
 """
 
 from datetime import datetime, timezone

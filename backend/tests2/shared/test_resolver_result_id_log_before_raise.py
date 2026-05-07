@@ -1,33 +1,7 @@
-"""Contract test per log-before-raise nei broad catch di
+"""
+Contract test per log-before-raise nei broad catch di
+
 ``ArtifactResolver._materialize_from_result_id`` (Batch 8 C3).
-
-Blinda il fix §3.2 S8 / §6.2 F6.6 (audit storage/provider 2026-04-22):
-entrambi i broad catch (``db_service.get_result`` e
-``db_service.get_result_data``) emettono ``logger.error`` con tag
-``[GESTITO]`` e ``exc_info=True`` **prima** di rilanciare
-``ArtifactResolutionError(...) from e``.
-
-Motivazione:
-- Il pattern ``raise DomainError(...) from e`` preserva la chain del
-  traceback, ma la visibilità server-side dipende dal caller: se nessuno
-  logga, l'errore originale viene "silenziato" in stacktrace senza mai
-  passare dal log store. Il pattern già consolidato in
-  ``source_loader.py`` (best-in-class del cluster) è
-  ``logger.error([SECURITY]/[GESTITO], exc_info=True)`` **prima** del raise.
-
-Invariants bloccati:
-- ``ArtifactResolutionError`` viene ancora sollevata (fail-closed).
-- ``__cause__`` è l'eccezione originale (chain preservata).
-- Il messaggio di ``ArtifactResolutionError`` è **invariato** rispetto
-  al pre-C3 (UX/contract del caller invariato).
-- Un record ERROR con tag ``[GESTITO]`` è emesso server-side con
-  ``exc_info=True`` (stacktrace catturato).
-
-Regressione protetta:
-- Rimozione del ``logger.error(exc_info=True)`` riporta la silenziosità
-  pre-fix → warning a review.
-- Rimozione del ``from e`` o cambio della classe eccezione rompe il test
-  (fail-closed deve restare ``ArtifactResolutionError`` con chain).
 """
 
 from __future__ import annotations

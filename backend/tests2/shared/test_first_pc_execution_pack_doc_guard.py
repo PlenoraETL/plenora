@@ -1,42 +1,7 @@
-"""Source-bound lock for the first-PC execution pack.
+"""
+Source-bound lock for the first-PC execution pack.
 
 BE-GO-READY-INSTALL-015-FIRST-PC-EXECUTION-PACK.
-
-The first-PC execution pack consists of two coupled artefacts:
-
-  - `docs/ops/install-marco-dry-run.md` section 0 -- the
-    canonical entry point that names the five-step handoff
-    (clone+commit, non-Docker go-ready, Docker FIRST SCAFFOLD
-    validation, report template, stop-on-failure);
-  - `docs/ops/first-pc-validation-report-template.md` -- the
-    fill-in-the-blanks template Marco copies and pastes back.
-
-Without the entry-point section the report template orphans.
-Without the report template the entry-point section points
-at nothing. Both must remain.
-
-Locks today (load-bearing phrases only -- NOT every line):
-
-  - dry-run pack section 0 exists with the canonical title +
-    stream tag;
-  - section 0 names the five canonical steps in order;
-  - section 0 keeps the FIRST SCAFFOLD / NOT YET VALIDATED
-    label on the Docker path;
-  - section 0 cross-links the report template;
-  - report template exists with the canonical title;
-  - report template has the canonical 0-6 sections + stop
-    conditions;
-  - report template keeps the FIRST SCAFFOLD / NOT YET
-    VALIDATED Docker label;
-  - both files are ASCII-only.
-
-Outside scope:
-  - the eight-item smoke harness contract (locked by
-    `test_install_smoke_harness_doc_guard.py`);
-  - the dry-run pack failure-triage / Docker-honesty contract
-    (locked by `test_install_marco_dry_run_doc_guard.py`);
-  - the Docker scaffold runbook contract (locked by
-    `test_docker_scaffold_guard.py`).
 """
 
 from __future__ import annotations

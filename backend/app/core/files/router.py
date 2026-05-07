@@ -2,17 +2,6 @@
 Router API per il modulo Files.
 
 Gestione file sorgente per MANIPOLA e ARRICCHISCI.
-Spostato da app/api/files.py per rendere il modulo autocontenuto.
-
-Endpoints:
-- POST   /api/files/preview-temp  → preview temporanea senza salvare
-- POST   /api/files/upload         → upload nuovo file
-- GET    /api/files                → lista file sources
-- GET    /api/files/{id}           → dettaglio file source
-- DELETE /api/files/{id}           → elimina file
-- GET    /api/files/{id}/layers    → lista layers/sheets
-- GET    /api/files/{id}/preview   → anteprima dati
-- GET    /api/files/{id}/count     → conteggio righe
 """
 
 from pathlib import Path

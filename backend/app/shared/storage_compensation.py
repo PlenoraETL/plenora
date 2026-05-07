@@ -1,67 +1,7 @@
-"""Best-effort compensating-delete helper per object storage.
+"""
+Best-effort compensating-delete helper per object storage.
 
 BE-GO-READY-STORAGE-ENGINE-002-COMPENSATING-DELETE.
-
-Goal: unificare il pattern "upload-then-DB-orphan-delete" che oggi
-vive in 4 callsite quasi identici (vedi `BE_STORAGE_ENGINE_AUDIT.md`
-sezione 3.1):
-
-  - `app.utils.result_store._cleanup_uploaded_result_blob`
-    (compensating delete dopo `db.save_result(...)` fallita post-upload);
-  - `app.db.results_db_service.delete_result` /
-    `delete_results_for_project` (cleanup S3 post-DELETE row /
-    bulk; post BE-GO-READY-STORAGE-ENGINE-007 il vecchio wrapper
-    privato `_s3_delete_best_effort` e' stato rimosso e i due
-    callsite invocano `compensating_delete` direttamente);
-  - `app.db.config.file_sources.delete_file_source`
-    (cleanup post-commit con refcount-aware skip);
-  - `app.services.file_service._delete_blob` callback consumato da
-    `app.services.file_multi_layer_upload`
-    (cleanup compensativo del shared blob su DB rollback).
-
-Contract minimo di tutti i callsite:
-
-  1. Mai sollevare verso il caller (il caller sta gia' propagando
-     un errore root o ha appena committato/cancellato una row e
-     non puo' permettersi di spostare l'orfano da S3 al DB).
-  2. Capability `object_storage_enabled() = False` -> skip silente
-     (non e' un errore, e' una configurazione legittima).
-  3. Log strutturato per consentire alert/debug post-mortem
-     (`event=storage_compensating_delete_{ok|failed|skipped}`).
-
-Boundary
---------
-Modulo puro al filo del cloud SDK: l'unica dipendenza esterna e'
-`app.shared.cloud_backends` (gia' single-boundary verso boto3).
-Nessun I/O DB, nessuna setting, nessuna validazione di policy. Il
-caller fornisce la `domain` come tag testuale (`"result"`,
-`"file_source"`, `"file_source_multi_layer"`, ...) e il
-`storage_key` da cancellare; opzionalmente puo' iniettare
-un'istanza `ObjectStorage` (es. `result_store` la ha gia' in mano
-dal save successo) per evitare un secondo call a
-`get_runtime_object_storage()`.
-
-Go-ready mapping
-----------------
-    type CompensatingDelete func(
-        ctx context.Context,
-        domain string,
-        storageKey string,
-        opts CompensateOptions,
-    ) (CompensateOutcome, error)
-
-    type CompensateOptions struct {
-        Storage  storage.Provider // optional, nil -> resolve via runtime factory
-        Reason   string
-        Extras   map[string]any
-        Logger   *slog.Logger
-    }
-
-    type CompensateOutcome string  // "ok" | "failed" | "skipped"
-
-Lo stato `outcome` e' utile in test e per metrics/observability;
-in Python lo ritorniamo come literal string per evitare un Enum
-dedicato (YAGNI: oggi nessun caller ramifica).
 """
 
 from __future__ import annotations

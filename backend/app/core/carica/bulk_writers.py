@@ -2,38 +2,6 @@
 bulk_writers.py — Scaffolding dispatcher bulk insert (post-rimozione COPY PG).
 
 Storico:
-  - 2026-04-10 circa: implementati bulk nativi per Postgres (`COPY FROM STDIN`
-    via psycopg2) e MySQL (`LOAD DATA LOCAL INFILE` via tempfile CSV).
-  - 2026-04-23: entrambi i path rimossi.
-      * MySQL LOAD DATA: decisione pre-deadline (`kickoff.md §9.5`)
-      * Postgres COPY: decisione diretta accettando regressione
-        user-visible ~19x (`kickoff.md §9.6`, deviazione esplicita da
-        `performance_bulk_review.md §5.1` no-go)
-
-Stato attuale:
-  Tutti i dialect (postgres, postgresql, mysql, mariadb, oracle, mssql,
-  sqlite) cadono nel raise `BulkInsertNotSupportedError(reason=
-  "dialect_not_supported")`. Il caller `_execute_batch` in
-  `database_writer.py` cattura e fa fallback a `conn.execute` con lista
-  `params_list` (executemany SQLAlchemy), path unico post-rimozione.
-
-Path alternativi ancora attivi:
-  - MSSQL: `fast_executemany=True` sull'engine factory
-    (`app/db/query_executor.py::_crea_engine_mssql`) — driver-level,
-    non bulk writer dedicato. Non toccato dalle rimozioni 2026-04-23.
-
-Kill-switch:
-  `CARICA_BULK_INSERT` env preservato come scaffolding per retro-compat
-  operativa. Post-rimozione e' funzionalmente no-op (il bulk non
-  esiste piu'), ma la funzione `is_bulk_enabled()` resta letta dal
-  wiring in `_execute_batch` per decidere se tentare il dispatcher (che
-  raise sempre) o saltare direttamente ad executemany.
-
-Telemetria residua:
-  Il dispatcher emette `event=bulk.fallback reason=dialect_not_supported`
-  con correlation IDs (request_id/user_id) su ogni invocazione. Utile
-  per observability post-deploy: confermera' che il path executemany
-  e' l'unico effettivamente in uso.
 """
 
 from __future__ import annotations

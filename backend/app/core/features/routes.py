@@ -1,29 +1,7 @@
 """
 Endpoint FastAPI per il modulo Features (ArcGIS Feature Service).
 
-Architettura
-============
-API REST parallela alle route di connections/ per gestire connessioni ArcGIS
-e operazioni su Feature Service.
-
-Endpoint CRUD connessioni:
-- POST   /api/features/connections              → crea connessione
-- GET    /api/features/connections              → lista connessioni
-- PUT    /api/features/connections/{id}         → aggiorna connessione
-- DELETE /api/features/connections/{id}         → elimina connessione
-- POST   /api/features/connections/{id}/test    → testa connessione
-
-Endpoint browse:
-- GET    /api/features/connections/{id}/services              → lista servizi
-- GET    /api/features/connections/{id}/services/layers       → lista layer
-- GET    /api/features/connections/{id}/services/layers/schema → schema campi
-
-Endpoint dati:
-- POST   /api/features/query/preview → preview features
-- POST   /api/features/write         → scrivi su Feature Service
-
-Sicurezza:
-    Le password sono oscurate ('***') nelle risposte API.
+Owns the HTTP boundary and delegates business logic to services or helpers.
 """
 
 from fastapi import APIRouter, HTTPException, Query, Depends

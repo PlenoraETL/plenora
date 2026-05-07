@@ -1,61 +1,7 @@
-"""test_restore.py — Verifica restore settimanale del backup su DB usa-e-getta.
+"""
+test_restore.py — Verifica restore settimanale del backup su DB usa-e-getta.
 
 Chiude #25-R1 (memory `backup_test_restore_weekly_pending`). Il backup
-notturno (`backup_db.py`) verifica solo il TOC del dump con
-`pg_restore --list`. Un dump puo' superare quel check e fallire un
-restore reale (FK cross-schema, extension mancanti sul target, blob
-corrotto). "Un backup mai ripristinato non e' un backup."
-
-Flusso:
-  1. Download ultimo dump `plenora_*.dump` dal bucket S3 (piu' recente
-     per LastModified).
-  2. `CREATE DATABASE plenora_restore_test_<ts>` via psql sul cluster locale.
-  3. `pg_restore --dbname <test>` completo, senza --clean/--create
-     (il DB e' fresco appena creato).
-  4. Sanity query: `SELECT COUNT(*)` su 4 tabelle core del schema
-     applicativo (users, projects, connections, schedules). Verifica
-     che lo schema esista e sia queryabile — NON che i count siano
-     validi (un sistema fresh puo' avere 0 progetti).
-  5. `DROP DATABASE` in `finally`: il DB di test non deve mai
-     sopravvivere allo script (ne' in caso di success, ne' di errore).
-  6. Exit 0 se tutto ok, 1 altrimenti.
-
-Perche' NON `pg_restore --clean --create` (deviazione intenzionale dal
-task originale):
-  Il backup nightly e' `pg_dump --schema=plenora`: dump schema-only,
-  NON un dump dell'intero database. In un dump schema-only:
-    - `--create` cerca CREATE DATABASE nel TOC -> non c'e' -> no-op
-      con warning (puo' anche fallire su alcune versioni).
-    - `--clean` droppa oggetti esistenti -> no-op sul DB fresco appena
-      creato (non c'e' nulla da droppare).
-  La coppia ha senso solo su dump full-DB. Per schema-only il pattern
-  corretto e' `CREATE DATABASE` esplicito + `pg_restore --dbname` in
-  DB vuoto — che e' quello che facciamo. Semantica equivalente,
-  compat col formato di dump scelto da backup_db.py.
-
-Prerequisiti runtime:
-  - User Postgres con permesso `CREATEDB` (verificato dall'errore di
-    `createdb` se assente; script fallisce loud prima di toccare S3).
-  - `pg_restore`, `psql` nel PATH (stessa versione del backup).
-  - IAM role EC2 con `s3:GetObject` + `s3:ListBucket` sul bucket
-    (stesso del backup).
-  - boto3 nel venv backend.
-
-Schedulazione produzione: systemd timer `plenora-backup-test.timer`
-(weekly domenica 03:00 UTC, dopo che il backup delle 02:00 e' su S3).
-
-Alerting su failure: systemd `OnFailure=` nel service unit (wiring
-applicativo lasciato vuoto — vedi README.md di systemd).
-
-Uso manuale (da backend/ come CWD):
-  DATABASE_URL=... python3 scripts/test_restore.py
-
-Exit codes:
-    0 restore ok, sanity passed
-    1 errore generico (qualsiasi step)
-    2 nessun dump trovato su S3
-    3 S3 download fallito
-    4 environment/config error
 """
 
 from __future__ import annotations

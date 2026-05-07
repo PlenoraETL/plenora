@@ -1,14 +1,7 @@
-"""Test per app/shared/column_types.py — adapter fra list[{name,type}] e dict{name:type}
-+ dispatch table canvas-type <-> pandas-dtype <-> canonical (fase C).
+"""
+Test per app/shared/column_types.py — adapter fra list[{name,type}] e dict{name:type}
 
-Copre:
-- Conversione base nei due versi
-- Roundtrip idempotente
-- Tolleranza input malformato (best-effort)
-- Vocabolario canonico + suffissi geometry
-- Normalize canvas-type (alias, case, geometry suffix)
-- canvas-type -> pandas dtype string
-- pandas Series -> canonical (con N11)
++ dispatch table canvas-type <-> pandas-dtype <-> canonical (fase C).
 """
 
 from __future__ import annotations

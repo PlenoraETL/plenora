@@ -1,25 +1,7 @@
-"""Filesystem cleanup helpers (STRUCT-001 Seam D-C).
+"""
+Filesystem cleanup helpers (STRUCT-001 Seam D-C).
 
 Estratto da `app.services.file_service._rmtree_safe` + duplicato di
-`app.services.file_preview_temp._rmtree_safe` (ora rimosso) per
-eliminare la duplicazione 1:1 introdotta da Seam D-A.
-
-API go-ready:
-    rmtree_safe(path, retries=3, *, logger=None) -> None
-
-Leaf module: solo stdlib (`pathlib`, `shutil`, `os`, `stat`, `time`,
-`gc`, `logging`). Zero `app.*` imports. Cycle impossibile.
-
-Behavior:
-  - Best-effort cleanup di file o directory.
-  - Retry fino a `retries` volte con backoff fisso 0.3s + gc.collect()
-    per liberare handle Python (es. fiona/GDAL su Windows).
-  - Su directory: callback `onerror` di shutil.rmtree fa chmod
-    +write su file/dir read-only e ritenta la rm (vince i permessi
-    di file estratti da ZIP con bit ro).
-  - Non rilancia se il cleanup fallisce dopo i retry: logga debug
-    se `logger` e' fornito (api stabile per chi vuole monitorare),
-    altrimenti silenziosa (best-effort puro).
 """
 
 from __future__ import annotations

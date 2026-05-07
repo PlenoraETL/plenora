@@ -1,74 +1,7 @@
-"""Auth in-memory rate-limit fallback — typed boundary.
+"""
+Auth in-memory rate-limit fallback — typed boundary.
 
 BE-GO-READY-AUTH-ENGINE-002-RATE-LIMIT-FALLBACK-EXTRACTION.
-
-Extract from `auth.py` the in-memory sliding-window fallback used by
-`app.shared.login_rate_limiter` when Redis is not available
-(FAIL-SOFT, single-node). The store and its 3 functions previously
-lived as module-level globals in `auth.py`; here they live in a
-focused, typed module.
-
-Boundary contract
-=================
-This module owns the *fallback storage and algorithm only*. It does
-NOT know about:
-
-- HTTP disclosure shape (`app.core.auth.disclosure`); the caller
-  catches `RateLimitFallbackTriggered` and converts to a
-  `DisclosureDecision`.
-- Threshold values `LOGIN_MAX_ATTEMPTS` / `LOGIN_WINDOW_SECONDS` /
-  `LOGIN_LOCKOUT_SECONDS`. They are passed as keyword args to
-  `check_rate_limit(...)` so the caller (auth.py) can preserve the
-  module-level monkeypatch surface used by existing tests
-  (`tests2/security/unit/test_login_rate_limit_per_ip.py`).
-- Redis-backed limiter (`app.shared.login_rate_limiter`).
-- Users / MFA / sessions / DB.
-
-Algorithm (preserved 1:1 from the legacy implementation)
-========================================================
-- Per-IP sliding window of `window_seconds` over `_failed_attempts[ip]`
-  (list of `time.monotonic()` timestamps).
-- A check that finds `>= max_attempts` timestamps in window raises
-  `RateLimitFallbackTriggered(retry_after)` with
-  `retry_after = lockout_seconds - (now - oldest_in_window)`. The
-  caller (or the `disclosure.rate_limit_exceeded(...)` helper)
-  clamps to >=1 — the same byte-for-byte semantics as before.
-- A record appends `time.monotonic()` to the per-IP list.
-- A clear pops the IP's list entirely.
-
-KEEP_COMPAT surface in auth.py
-==============================
-`auth.py` keeps these module-level aliases for test compatibility
-(`KEEP_COMPAT`):
-
-- `_rate_lock` -> `_STORE.lock`
-- `_failed_attempts` -> `_STORE.failed_attempts`
-- `_check_rate_limit_in_memory(ip)` -> wrapper that reads thresholds
-  from the auth.py module-level constants and delegates to
-  `check_rate_limit_in_memory(...)`, then converts
-  `RateLimitFallbackTriggered` into the disclosure raise.
-- `_record_failed_login_in_memory(ip)` -> alias of
-  `record_failed_login_in_memory`.
-- `_clear_failed_logins_in_memory(ip)` -> alias of
-  `clear_failed_logins_in_memory`.
-
-The aliases preserve test imports/monkeypatch on
-`app.core.auth.auth._failed_attempts.clear()`,
-`auth_mod._rate_lock`, and the wrapper functions used as `fallback=`
-callables for `app.shared.login_rate_limiter`.
-
-Go-ready mapping
-================
-    type RateLimitFallbackStore struct {
-        Lock           sync.Mutex
-        FailedAttempts map[string][]float64
-    }
-
-    func (s *RateLimitFallbackStore) Check(ip string, opts CheckOpts) error
-    func (s *RateLimitFallbackStore) Record(ip string)
-    func (s *RateLimitFallbackStore) Clear(ip string)
-
-    type RateLimitFallbackTriggered struct{ RetryAfter int }
 """
 
 from __future__ import annotations

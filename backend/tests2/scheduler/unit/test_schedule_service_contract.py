@@ -1,3 +1,9 @@
+"""
+Tests the schedule service behavior.
+
+Locks backend contracts and regression boundaries for the current architecture.
+"""
+
 from datetime import datetime, timezone
 from unittest.mock import patch
 

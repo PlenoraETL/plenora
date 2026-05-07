@@ -1,24 +1,7 @@
-"""Persistenza behavior-bound di scheduled_for nei log/metadata.
+"""
+Persistenza behavior-bound di scheduled_for nei log/metadata.
 
 Contract: il kwarg `scheduled_for` (passato dal beat al task in caso di
-catchup) deve raggiungere il log entry persistito da
-`ExecutionManager.execute`. Senza questo, il catchup funziona ma si
-perde il lineage: l'operatore non distingue "run eseguito alle 10:00
-per il tick delle 06:00" (catchup) da "run alle 10:00 per le 10:00"
-(cron normale).
-
-TR-002 (residuo ADR-0020 Cat-3): pre-modernizzazione questo era
-verificato via `inspect.getsource` (count + window scan). Post-TR-002
-il check e' behavior-bound: si invoca `manager.execute(scheduled_for=...)`
-con dipendenze stubbate fino al log entry, e si verifica che il valore
-arrivi a `log_service.create_log_entry(...)` nei kwargs `schedule_info`
-e `execution_info`. Si verifica anche la propagazione a `_execute_carica`
-(che la usa per derivare la chiave idempotency CARICA — vedi N15).
-
-Coverage equivalente al pattern source-bound, robusto a refactor che
-preservano il behavior. Pattern di mocking derivato da
-`test_execution_manager_contract.py::_make_manager` +
-`test_execution_manager_orphan_and_release_contract.py`.
 """
 
 from __future__ import annotations

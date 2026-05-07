@@ -1,33 +1,7 @@
-"""Contract test BE-GO-READY-TRANSFORMATION-ENGINE-015 — typed
+"""
+Contract test BE-GO-READY-TRANSFORMATION-ENGINE-015 — typed
+
 execution context per arricchisci canvas execution.
-
-Lock degli invariant residui post-OE012:
-
-1. **Module + symbol exposure**: `app.core.arricchisci.execution_context`
-   esporta `ArricchisciExecutionContext` (frozen dataclass) +
-   `build_execution_context`. Re-export da `canvas_orchestrator`
-   per i 2 simboli pubblici (typed shape + builder).
-2. **Frozen / immutable**: il context e' immutabile dopo la
-   costruzione. `setattr` solleva `FrozenInstanceError`.
-3. **Concurrency isolation**: due context distinti hanno valori
-   isolati byte-per-byte (no shared mutable state).
-4. **Builder fail-closed**: `build_execution_context` propaga
-   `psycopg2.Error` come `ExecutionContextError` con chain
-   preservata.
-5. **Builder happy path**: `group_id` letto da `db_svc.get_project`;
-   `None` quando il progetto non esiste; `preview_limit`
-   passato through invariato.
-6. **`init_execution_context` ritorna il context senza scrivere
-   sul singleton**: post-OE011 il legacy mirror e' stato ritirato.
-   OE012 ha cancellato la funzione `apply_to_legacy_state`
-   completamente (nessun caller di produzione ne aveva mai
-   beneficiato, e i test che la proteggevano sono stati eliminati
-   nello stesso diff).
-
-Lock storico ritirato: il punto 7 pre-OE012 ("KEEP_COMPAT
-mirroring tramite `apply_to_legacy_state`") e' stato cancellato
-insieme alla funzione. Il negative source-bound lock vive in
-`test_external_consumers_ctx_migration_contract.py`.
 """
 
 from __future__ import annotations

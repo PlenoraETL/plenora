@@ -1,11 +1,7 @@
-"""Contract test — endpoints /tickets/meta e /tickets/counts.
+"""
+Contract test — endpoints /tickets/meta e /tickets/counts.
 
 Coperture:
-  - meta: contiene tutte le enum + allowlist allegati + size cap
-  - counts superadmin → cross-group, by_severity popolato
-  - counts admin → filtra per group_id, by_severity popolato
-  - counts user → ritorna `active_mine` calcolato sui propri ticket
-  - meta/counts: esecutore → 403
 """
 
 from __future__ import annotations

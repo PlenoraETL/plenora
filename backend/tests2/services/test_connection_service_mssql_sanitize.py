@@ -1,17 +1,7 @@
-"""Contract test F5-B3 (2026-04-24) — `_test_mssql` sanitize str(e) SDK leak.
+"""
+Contract test F5-B3 (2026-04-24) — `_test_mssql` sanitize str(e) SDK leak.
 
 Blinda: il path MS SQL di `ConnectionService._test_mssql` non espone mai
-`str(e)` pyodbc/pymssql raw nei campi user-facing di
-``ConnectionTestResult`` (message + details["errors"]). Il dettaglio
-tecnico (SQLSTATE, hostname echo, UID nell'ODBC string, driver version)
-resta nei log server-side via ``logger.warning/error`` con ``exc_info=True``.
-
-Regression history: prima del fix, 5 punti nello stesso metodo leakavano:
-  - accumulo errors pyodbc (str(e))
-  - accumulo errors pymssql (str(e))
-  - propagazione del primo errore nel message (fan-out del leak)
-  - details["errors"] conteneva stringhe raw
-  - catch-all outer: f"Errore MS SQL: {str(e)}"
 """
 
 from __future__ import annotations

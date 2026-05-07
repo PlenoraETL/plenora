@@ -1,28 +1,7 @@
-"""Contract test F2-B3 (2026-04-24) — DELETE → 204 (F2 chiuso).
+"""
+Contract test F2-B3 (2026-04-24) — DELETE → 204 (F2 chiuso).
 
 Ultimo batch del cluster F2. Canonicalizza 204 sui 4 endpoint DELETE
-restanti: tickets x2 + files + imdf-bundles.
-
-Dopo F2-B3: F2 cluster chiuso — 10/10 DELETE canonicalizzati a
-204 No Content. Unico DELETE a 200 residuo e' /api/shares/...
-(ritorna SharesResponse aggiornato, legittimo 200, fuori scope F2).
-
-Endpoint in scope:
-  - DELETE /api/tickets/{id}                        -> 204
-  - DELETE /api/tickets/{id}/attachments/{aid}      -> 204
-  - DELETE /api/files/{id}                          -> 204
-  - DELETE /api/imdf/bundles/{bundle_task_id}       -> 204
-
-Nota su tickets/{id}: il body pre-fix era
-``{"ok": True, "hard": result.get("hard", False)}``. Il campo ``hard``
-era informativo (distingue soft-delete da purge via ?hard=true). Post
-F2-B3 il body e' vuoto e la semantica soft/hard resta verificabile
-via dispatch al service (mock assertion nel test di contract) +
-logger op "ticket_delete" (PURGED vs soft-deleted). I test
-contract esistenti in tests2/tickets/ sono stati aggiornati per
-asserire via mock invece che via body.
-
-Strategia: introspection del router (coerente con F2-B1/B2 + F3-B2/B3).
 """
 
 from __future__ import annotations

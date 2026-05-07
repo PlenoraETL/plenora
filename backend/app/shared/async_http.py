@@ -1,20 +1,7 @@
 """
 app/shared/async_http.py
-========================
+
 HTTP client async condiviso basato su httpx.AsyncClient.
-
-Usato dal refactor async dell'arricchimento (Fase 1 del piano P0).
-Riutilizza connessioni TCP via connection pool configurabile.
-
-Design:
-- Singleton globale con lifecycle gestito da FastAPI / worker Celery
-- Pool size configurabile via env var ENRICHMENT_POOL_SIZE (default 50)
-- Retry esponenziale su errori transienti (ConnectError, TimeoutException, HTTP 5xx)
-- Rispetta Retry-After header su 429
-- Anti-SSRF già validato dal caller via validate_external_url()
-
-NON sostituisce requests.Session (che rimane per chiamate sync).
-Questo modulo esiste SOLO per codice async.
 """
 
 import asyncio

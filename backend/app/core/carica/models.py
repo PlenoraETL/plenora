@@ -1,31 +1,7 @@
 """
 Modelli dati per il modulo CARICA.
 
-Architettura
-============
-Questo modulo definisce tutte le strutture dati (dataclass ed enum) utilizzate
-dal sistema di caricamento su database. Ogni classe è progettata per essere
-serializzabile in JSON e compatibile con il canvas del frontend.
-
-Enumerazioni:
-- WriteMode: modalità di scrittura (CREATE, APPEND, UPDATE, UPSERT, TRUNCATE_INSERT)
-- WriteStatus: stato finale dell'operazione (SUCCESS, PARTIAL, CONFLICT, *_ERROR)
-- TransactionMode: strategia transazionale (ALL_OR_NOTHING, PER_BATCH)
-- ConflictPolicy: policy automatica per conflitti in CRON (SKIP, FORCE, ABORT)
-
-Dataclass per configurazione:
-- ColumnMapping: mappatura colonna sorgente → destinazione con tipo
-- WriteConfig: configurazione completa del nodo CARICA
-- BatchProgress: progresso per singolo batch durante la scrittura
-
-Dataclass per risultati:
-- ConflictDetail: dettaglio singolo conflitto rilevato
-- ConflictReport: report completo dei conflitti pre-check
-- WriteResult: risultato finale dell'operazione di scrittura
-- AuditRecord: record di audit per logging permanente
-
-Le property calcolate (success_rate, duration_seconds) sono definite come
-@property per evitare inconsistenze.
+Keeps database loading behavior isolated from orchestration callers.
 """
 
 from dataclasses import dataclass, field

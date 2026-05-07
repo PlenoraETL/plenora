@@ -1,23 +1,7 @@
-"""Password hashing helpers — Argon2id (default) + bcrypt (legacy verify).
+"""
+Password hashing helpers — Argon2id (default) + bcrypt (legacy verify).
 
 Estratto da `app.core.auth.auth` (STRUCT-005 Seam A) senza alcun
-cambio comportamentale. `auth.py` re-esporta i simboli per backward
-compat con i test e i moduli esterni che fanno
-`from app.core.auth.auth import hash_password, ...`.
-
-Policy:
-  - `hash_password()` ritorna SEMPRE Argon2id.
-  - `verify_password()` accetta sia `$argon2*` che `$2*` (bcrypt) per
-    permettere la migrazione progressiva degli hash legacy.
-  - `needs_rehash()` indica quando rigenerare l'hash in Argon2id al
-    prossimo login riuscito (rehash progressivo).
-  - `_DUMMY_PASSWORD_HASH` e' un Argon2id di una password casuale,
-    calcolato UNA volta all'import. Usato dal login per timing-parity
-    quando l'username non esiste (mitigazione user enumeration —
-    vedi ADR / commento C10 nel login flow).
-
-Nessuna dipendenza da `app.*`: il modulo importa solo `argon2` e
-`bcrypt`. Niente cycle possibile, niente side-effect su `app.config`.
 """
 
 from __future__ import annotations
@@ -86,6 +70,6 @@ def needs_rehash(hashed: str) -> bool:
 # comunque il lavoro di hashing e il tempo di risposta non rivela se un utente
 # esiste o no (timing attack / user enumeration). Dall'introduzione di
 # Argon2id il dummy e' in Argon2id: coerente con i nuovi utenti. Gli utenti
-# legacy bcrypt hanno un costo di verify leggermente diverso finche' non
+# NOTE: legacy bcrypt hanno un costo di verify leggermente diverso finche' non
 # vengono migrati dal rehash progressivo.
 _DUMMY_PASSWORD_HASH = _ph.hash("c10_dummy_password_for_timing_parity")

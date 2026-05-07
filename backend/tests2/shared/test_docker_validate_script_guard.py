@@ -1,38 +1,7 @@
-"""Source-bound guards for the Docker validation pack.
+"""
+Source-bound guards for the Docker validation pack.
 
 BE-GO-READY-INSTALL-012-DOCKER-LINUX-VALIDATION-PACK.
-
-Two contracts locked here:
-
-  1. ``scripts/docker-validate.sh`` exists, advertises FIRST
-     SCAFFOLD / NOT YET VALIDATED status, runs the eight
-     canonical commands of the validation pack, and is
-     **non-destructive** — it must NEVER call:
-       - ``docker compose down`` (removes containers);
-       - ``docker compose down -v`` (DESTRUCTIVE: removes
-         volumes);
-       - ``rm`` against ``.env.docker``;
-       - ``docker volume rm`` against any ``plenora-*``
-         volume;
-       - ``docker system prune`` (any variant).
-
-  2. ``docs/ops/install-docker.md`` carries the
-     "Validation pack for the Linux PC test" section with
-     the eight numbered expected-output blocks and the
-     "FIRST SCAFFOLD, NOT YET VALIDATED" status line.
-
-Source-bound: the test reads the script + doc as text and
-asserts substring presence / absence. We do NOT execute the
-script (no Docker on CI / Windows dev hosts). Same posture as
-``test_docker_scaffold_guard.py``.
-
-Outside scope:
-  - the Dockerfile / docker-compose.yml / .env.docker.example
-    contracts (locked by ``test_docker_scaffold_guard.py``);
-  - the dry-run pack disclaimer (locked by
-    ``test_install_marco_dry_run_doc_guard.py``);
-  - the canonical 8-item smoke harness (locked by
-    ``test_install_smoke_harness_doc_guard.py``).
 """
 
 from __future__ import annotations

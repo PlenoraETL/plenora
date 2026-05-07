@@ -1,21 +1,7 @@
-"""Smoke contract - STRUCT-001 Seam D-A: estrazione preview_file_temp.
+"""
+Smoke contract - STRUCT-001 Seam D-A: estrazione preview_file_temp.
 
 Verifica le invarianti minime del refactor:
-
-  1. La nuova funzione `app.services.file_preview_temp.preview_file_temp`
-     espone l'API go-ready (kwargs espliciti per fs/loader/format_detector/
-     column_builder/logger).
-  2. Happy path: CSV minimo -> ritorna columns + row_count + format.
-  3. MIME validation defense-in-depth: payload PE/ELF -> ValueError +
-     logger.warning.
-  4. Format unknown -> ValueError.
-  5. Cleanup tmp file su success (no leak).
-  6. Cleanup tmp file su exception nel parser (no leak).
-  7. Wrapper FileSourceService.preview_file_temp delega correttamente
-     con i 5 collaborator del service.
-
-Mock dei collaborator pesanti (loader.load_*, fs.iterdir/extract_zip).
-Nessuna dipendenza da geopandas/fiona/object_storage reali.
 """
 
 from __future__ import annotations

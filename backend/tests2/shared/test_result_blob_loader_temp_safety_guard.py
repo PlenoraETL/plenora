@@ -1,37 +1,7 @@
-"""Path-mode temp-safety guard for ``ResultBlobLoader``.
+"""
+Path-mode temp-safety guard for ``ResultBlobLoader``.
 
 BE-GO-READY-RESOURCE-ENGINE-006-PATH-MODE-TEMP-SAFETY-GUARD.
-
-Locks the ``mode='path'`` tempfile-materialization safety
-invariants:
-
-  1. **Identifiable prefix**: every file produced by
-     ``_materialize_to_temp_path(...)`` is named with the explicit
-     ``plenora-result-blob-`` prefix. Operator audits of the
-     tempdir + cleanup helpers can identify the engine's files.
-
-  2. **No leak on write failure**: when ``tf.write(...)`` raises,
-     the partial tempfile is closed AND unlinked best-effort
-     before the original exception is re-raised. The tempdir must
-     not contain orphaned ``plenora-result-blob-*`` files after a
-     write-failure path.
-
-  3. **Cleanup is path-bounded**: ``cleanup_temp_path(path)``
-     refuses to delete anything that does NOT
-     (a) carry the ``plenora-result-blob-`` prefix on its basename,
-     AND (b) resolve to a parent inside the stdlib tempfile root.
-     Defense-in-depth: a wrong-prefix file outside the tempdir,
-     a right-prefix file outside the tempdir, and a wrong-prefix
-     file inside the tempdir all fail the guard.
-
-  4. **`is_temporary=True` documents caller cleanup contract**:
-     the loader's path-mode return shape carries
-     ``Resource(is_temporary=True)`` and the docstring must
-     explicitly name this responsibility. Source-bound check on
-     the loader docstring + the helper's docstring.
-
-Anti-god-engine: tests are stdlib-only (``tempfile`` + ``pathlib``
-+ ``unittest.mock``); no FastAPI, no DB, no Redis.
 """
 
 from __future__ import annotations

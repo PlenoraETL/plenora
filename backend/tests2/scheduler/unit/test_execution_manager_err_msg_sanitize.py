@@ -1,24 +1,7 @@
-"""[phase-2-err][batch7] 7.c-bis — sanitize err_msg in execution_manager.
+"""
+[phase-2-err][batch7] 7.c-bis — sanitize err_msg in execution_manager.
 
 Audit Batch 7 §3.1 S1 — leak `str(e)` via flow indiretto `err_msg →
-_handle_failure → return dict Celery`. Il ramo `except Exception` broad
-al sito 638 costruiva `err_msg = f"Errore inatteso: {e}"` che finiva
-user-facing tramite `_handle_failure` return `{..., "message":
-error_message, ...}` linea 1107.
-
-Post-fix (7.c-bis — variante B ratificata):
-  - Sito 638: `err_msg` sanitizzato a stringa italiana fissa
-    "Errore inatteso durante l'esecuzione dello schedule (consulta log)".
-  - Ramo `isinstance(e, ExecutionError)` INVARIATO (domain exception safe).
-  - `_handle_failure` failed branch: aggiunto token canonico
-    `"error": "schedule_execution_fatal"`. Retry branch NON toccato
-    (decisione ratificata: niente token retry in questo batch).
-  - Canali admin preservati: logger.error [CRASH] + log_service +
-    close_run continuano a ricevere err_msg tecnico per postmortem.
-
-Approccio test source-based (come 7.c): i mock runtime di
-ExecutionManager.execute sono complessi (Celery + DB + threading).
-Scansioniamo il codice sorgente del file modificato.
 """
 
 from __future__ import annotations

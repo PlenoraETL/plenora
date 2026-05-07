@@ -1,27 +1,7 @@
 """
 Auto-mapping colonne sorgente → destinazione per il modulo CARICA.
 
-Architettura
-============
-Questo modulo gestisce il mapping tra le colonne del DataFrame sorgente
-(output del nodo Result di MANIPOLA) e le colonne della tabella destinazione
-nel database.
-
-Funzionalità:
-1. Auto-mapping per nome: colonne con lo stesso nome vengono mappate automaticamente
-2. Inferenza tipo: dal dtype Pandas → tipo SQL nativo del database
-3. Rilevamento geometria: identifica automaticamente colonne geometry/GeoSeries
-4. Validazione: verifica compatibilità tipi sorgente → destinazione
-5. Override utente: l'utente può modificare il mapping dal frontend
-
-Il mapping viene generato automaticamente quando l'utente configura il nodo
-CARICA e può essere personalizzato manualmente prima dell'esecuzione.
-
-Uso:
-    from app.core.carica.column_mapper import ColumnMapper
-
-    mapper = ColumnMapper("postgres")
-    mappings = mapper.auto_map(dataframe, existing_columns, canvas_types)
+Keeps database loading behavior isolated from orchestration callers.
 """
 
 import re

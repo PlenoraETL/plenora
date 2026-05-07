@@ -1,3 +1,9 @@
+"""
+Tests the imdf security behavior.
+
+Locks backend contracts and regression boundaries for the current architecture.
+"""
+
 import json
 
 import pytest

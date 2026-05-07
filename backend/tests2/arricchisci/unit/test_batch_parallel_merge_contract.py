@@ -1,37 +1,7 @@
-"""Contract test RB.#14 (2026-04-27) — batch parallel merge fail-hard.
+"""
+Contract test RB.#14 (2026-04-27) — batch parallel merge fail-hard.
 
 BUG.md #14:
-    Worker enrichment_task.execute_enrichment_task esegue batch di nodi
-    enrichment in ThreadPoolExecutor, poi mergia i loro risultati in un
-    unico DataFrame `merged` per propagarlo ai nodi a valle.
-
-    Pre-fix: il merge era avvolto da `try/except Exception` che catturava
-    qualunque errore (incluso il ValueError pandas
-    `Length of values (X) does not match length of index (Y)` causato da
-    un nodo che esplodeva una FeatureCollection di N features extra),
-    emetteva `logger.warning("Merge batch parallelo fallito ...
-    Proseguo con node_results per-nodo")` e continuava.
-
-    Risultato osservato in produzione: input 50 righe -> ramo
-    `Returnomifrompoint` esplode a 56 righe -> merge solleva ValueError ->
-    fallback silenzioso -> le colonne arricchite del nodo "esploso" vengono
-    scartate, altri nodi a valle leggono un DataFrame mutilato -> task
-    chiude `success=True` con `rows_processed=0` -> PDF generato senza
-    arricchimenti. L'utente non si accorge del fallimento.
-
-Fix RB.#14 (approach A, fail-hard):
-    `_merge_batch_parallel_node_results` raise `RuntimeError` con messaggio
-    diagnostico (task_id, node_id, len result_df, len common_input_df,
-    cause probabili) se la cardinalita' diverge. Bubble-up al global
-    handler dell'Celery task -> `close_run(success=False)`. Meglio task
-    fallito visibile che success silente con dati persi.
-
-Test scope:
-    1. cardinality mismatch -> RuntimeError con node_id e cardinalita'
-    2. same cardinality -> merge OK, colonne combinate propagate a tutti
-       i node_results del batch (regression)
-    3. anti-regression: nessun fallback silenzioso, nessun warning generico
-       "Merge batch parallelo fallito" emesso
 """
 
 from __future__ import annotations

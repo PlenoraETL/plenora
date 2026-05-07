@@ -1,3 +1,9 @@
+"""
+Tests the resource accesss behavior.
+
+Locks backend contracts and regression boundaries for the current architecture.
+"""
+
 from dataclasses import dataclass
 
 import pytest

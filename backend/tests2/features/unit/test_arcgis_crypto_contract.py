@@ -1,3 +1,9 @@
+"""
+Tests the arcgis crypto behavior.
+
+Locks backend contracts and regression boundaries for the current architecture.
+"""
+
 import pytest
 
 from app.core.features.features_service import _row_to_connection, create_connection_db

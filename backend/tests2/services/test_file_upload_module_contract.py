@@ -1,26 +1,7 @@
-"""Smoke contract - STRUCT-001 Seam D-F: estrazione create_from_upload.
+"""
+Smoke contract - STRUCT-001 Seam D-F: estrazione create_from_upload.
 
 Verifica le invarianti minime del refactor:
-
-  1. Happy path tabular (CSV): parse + columns + dispatch + db_save +
-     cleanup temp.
-  2. Happy path geospatial (GPKG): list_layers per single-layer auto-pick,
-     load_by_format con layer, CRS detection da gdf.crs.
-  3. MIME block (se mime_validate passato e fallisce): ValueError +
-     logger.warning + parse/dispatch/db_save NON chiamati + cleanup
-     temp comunque eseguito.
-  4. Parse failure: load_by_format solleva -> logger.warning, columns=[],
-     row_count=0, MA dispatch e db_save SONO comunque chiamati
-     (best-effort: il file viene salvato anche senza columns).
-  5. Dispatch failure (orphan guard): dispatch_blob_storage solleva ->
-     propaga, db_save NON chiamato, cleanup temp eseguito.
-  6. DB save failure: propaga al caller, cleanup temp eseguito.
-  7. group_id None -> default_group propagato a DTO + DB save.
-  8. Wrapper FileSourceService.create_from_upload delega coi 17
-     collaborator del service.
-
-Mock dei collaborator: nessun fiona/geopandas/DB reale. tempfile reale
-su pytest tmp_path (verifica cleanup deterministica).
 """
 
 from __future__ import annotations

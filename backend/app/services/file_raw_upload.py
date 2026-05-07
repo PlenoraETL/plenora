@@ -1,38 +1,7 @@
-"""Upload "raw" (blob senza parsing) per file source (STRUCT-001 Seam D-E).
+"""
+Upload "raw" (blob senza parsing) per file source (STRUCT-001 Seam D-E).
 
 Estratto da `FileSourceService.create_raw_from_upload` senza alcun
-cambio comportamentale. La funzione standalone accetta tutti i
-collaborator come kwargs espliciti per:
-
-  - testabilita' diretta (no FileSourceService.__new__);
-  - go-portability: signature 1:1 con
-    `func CreateRawFromUpload(content io.Reader, filename, name string, opts Opts) (FileSource, error)`;
-  - leaf module: zero import da `app.services.file_service` (cycle impossibile).
-
-Use case: fallback per formati che il parser non sa gestire (DXF,
-ZIP non standard, allegati ticket, ecc.). Il blob viene salvato nel
-DB come BYTEA o object_storage (via `dispatch_blob_storage`); le
-colonne/layer del DTO restano vuoti.
-
-Invarianti preservate (test-blindabili):
-  1. MIME validation defense-in-depth eseguita PRIMA di qualsiasi
-     side effect (no DTO build, no dispatch, no DB save se MIME block).
-  2. Orphan guard: `dispatch_blob_storage` exception propaga e
-     `db_save_file_source` NON viene chiamato.
-  3. `db_save_file_source` exception propaga al caller.
-  4. `group_id or default_group` propagato coerente sia al DTO sia
-     al DB save (NO drift).
-  5. `blob_kwargs` (chiavi `data`/`storage_key`/`size_bytes`) passato
-     1:1 al `db_save_file_source` via `**kwargs`.
-
-Side effect confinati (tutti via callback iniettata):
-  - generate_file_id(name) -> file_id opaco
-  - time_now() -> datetime UTC-aware per timestamps
-  - dispatch_blob_storage(file_id, raw_data, filename) -> blob_kwargs
-  - db_save_file_source(file_id, group_id, name, original_filename, fmt,
-    metadata, **blob_kwargs)
-  - build_file_source(**fields) -> DTO (Pydantic/dataclass)
-  - mime_validate(content, filename) -> raise MimeMismatchError on block
 """
 
 from __future__ import annotations

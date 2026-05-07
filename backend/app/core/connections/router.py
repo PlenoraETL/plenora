@@ -2,18 +2,6 @@
 Router API per il modulo Connections.
 
 Endpoint CRUD per le connessioni database.
-
-Endpoints:
-- POST   /api/connections                       → crea connessione      [admin+]
-- GET    /api/connections                       → lista connessioni     [auth]
-- PUT    /api/connections/{id}                  → aggiorna connessione  [admin+]
-- DELETE /api/connections/{id}                  → elimina connessione   [admin+]
-- POST   /api/connections/{id}/test             → testa connessione     [auth]
-- GET    /api/connections/{id}/tables           → tabelle/viste DB      [auth]
-
-Auth model uniforme:
-- Ogni endpoint dichiara la sua dependency in signature (no router-level deps).
-- Group ownership check via `assert_group_access(resource, user)`.
 """
 
 from fastapi import APIRouter, HTTPException, Depends
@@ -113,7 +101,7 @@ def update_connection(
     """Aggiorna connessione esistente. Solo admin/superadmin del gruppo, e
     solo se non creata da un superadmin (hierarchical ownership)."""
     require_service(_connection_service, "ConnectionService")
-    # Bug #1: get_connection raise CredentialUnavailableError su password None/corrotta
+    # FIXME: #1: get_connection raise CredentialUnavailableError su password None/corrotta
     from app.shared.crypto import CredentialUnavailableError
     try:
         existing = _connection_service.get_connection(connection_id)
@@ -213,7 +201,7 @@ def test_connection(
 ):
     """Testa una connessione database. Visibile a chi vede la risorsa (owned + shared)."""
     require_service(_connection_service, "ConnectionService")
-    # Bug #1 (2026-04-23): password=None o decrypt-fail → 422 esplicito,
+    # FIXME: #1 (2026-04-23): password=None o decrypt-fail → 422 esplicito,
     # non 500 da Pydantic ValidationError.
     from app.shared.crypto import CredentialUnavailableError
     try:

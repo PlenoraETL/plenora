@@ -1,17 +1,7 @@
-"""Retry policy del carica_task (C4).
+"""
+Retry policy del carica_task (C4).
 
 Contract: `carica_task` scrive su DB cliente. Un retry automatico
-dopo fallimento parziale di un write in append-mode + per-batch
-(senza unique constraints) produce duplicazioni. Politica di
-progetto: **fail-fast**, niente retry automatico.
-
-Razionale: preferiamo un task fallito visibile (l'operatore vede
-"carica fallita al batch 500", ri-lancia manualmente dopo aver
-verificato la tabella) a un retry silenzioso che può scrivere
-N volte lo stesso subset di righe.
-
-Il pipeline_task ha gia' `max_retries=0` per ragione analoga
-(compute-heavy + scritture intermedie). Allineiamo carica_task.
 """
 
 import inspect

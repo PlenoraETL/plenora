@@ -1,12 +1,7 @@
-"""Contract test — `DefaultEngineFactory` MSSQL `fast_executemany`.
+"""
+Contract test — `DefaultEngineFactory` MSSQL `fast_executemany`.
 
 `fast_executemany=True` su pyodbc/MSSQL trasforma l'executemany standard
-in `SQLBulkOperations` ODBC con array binding. Speedup 10-50x sui CARICA
-batch verso MSSQL — equivalente "soft" del COPY/LOAD DATA per dialect
-che non hanno un protocollo bulk dedicato.
-
-Default ON, opt-out via env `MSSQL_FAST_EXECUTEMANY=off` per casi edge
-(es. DECIMAL ad altissima precisione).
 """
 
 from __future__ import annotations

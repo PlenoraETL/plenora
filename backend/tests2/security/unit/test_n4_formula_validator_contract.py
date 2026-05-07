@@ -1,24 +1,7 @@
-"""Contract test N4 — security invariants di op_formula.
+"""
+Contract test N4 — security invariants di op_formula.
 
 Il nodo FORMULA di MANIPOLA esegue eval() su stringhe utente. Due strati
-di protezione esistono nel codice:
-
-1. AST validator (`_validate_formula_ast`): blocca gadget chain, import,
-   class traversal, getattr/setattr, __builtins__ access, ecc.
-2. Namespace ristretto: eval invocato con `__builtins__={}`.
-
-Questo contract congela il comportamento attuale:
-
-Sezione 1: payload di attacco classici -> ValueError (AST validator)
-Sezione 2: formule lecite passano il validator
-Sezione 3: nomi colonna "_"-prefix/dunder vengono scartati dal local_vars
-           popolato in op_formula (defense-in-depth: se un attacker
-           riuscisse a iniettare una colonna con nome speciale, non
-           finisce nel namespace dell'eval)
-
-NB: il codice prod non e' cambiato nei payload della sezione 1 — sono
-gia' bloccati. I test esistono come rete anti-regressione: se qualcuno
-allenta il validator domani, uno di questi test fallisce e si accorge.
 """
 
 from __future__ import annotations

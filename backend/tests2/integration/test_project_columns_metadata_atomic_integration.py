@@ -1,25 +1,7 @@
-"""Integration test — update_project_canvas_key_atomic vs. concorrenza reale.
+"""
+Integration test — update_project_canvas_key_atomic vs. concorrenza reale.
 
 Scenario: due writer concorrenti sullo stesso progetto.
-  - Writer A: update columns_metadata = X (via nostra funzione atomica)
-  - Writer B: update columns_metadata = Y (stessa funzione, altro thread)
-
-Pre-fix: read-modify-write non-atomico → uno dei due valori veniva
-sovrascritto silenziosamente (lost update). Rilevabile solo a valle
-con columns_metadata "saltato" vs quanto atteso.
-
-Post-fix: ogni write gira in una transaction con SELECT FOR UPDATE sul
-row del progetto. Il secondo writer aspetta il commit del primo, quindi:
-  - Se parte solo la ping-pong (A scrive, B scrive): l'ultimo vince,
-    ma nessuno perde intermezzi di merge (entrambi vedono lo stato
-    finale dell'altro).
-  - Testiamo un caso piu' forte: A scrive columns_metadata, B scrive
-    un'altra chiave canvas (es. retention simulata). Entrambi devono
-    essere preservati nel canvas finale.
-
-Usa DB reale via fixture `integration_user_seed` + thread Python
-concorrenti. No uvicorn subprocess — chiamiamo la funzione DB
-direttamente (e' il livello piu' basso del contratto atomico).
 """
 
 from __future__ import annotations

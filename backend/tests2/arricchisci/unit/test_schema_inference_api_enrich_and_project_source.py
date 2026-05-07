@@ -1,32 +1,7 @@
-"""Contract tests — `SchemaInferenceService` per api_enrich + project_source.
+"""
+Contract tests — `SchemaInferenceService` per api_enrich + project_source.
 
 Bug 2026-04-30 (cross-modulo result columns):
-
-  Fix 1: `_infer_api_enrich_schema` leggeva `output_fields` (chiave
-    inesistente nel codebase: 0 occorrenze in BE arricchisci e in tutto
-    il FE). La chiave canonica e' `output_mapping` (lista di dict con
-    `column`, opzionalmente `target_column`/`name`/`type`). Pre-fix il
-    metodo ritornava sempre solo l'input schema, perdendo le colonne
-    aggiunte dall'API → C9 fix in `compute_result_columns` riceveva
-    schema incompleto → `result_node.columns` persistito era stale →
-    consumer chain (project_source) leggeva metadata stale.
-
-  Fix 2: `_infer_project_source_schema` leggeva direttamente
-    `canvas.columns_metadata` del progetto sorgente, ignorando il
-    `result_node.columns` (che invece e' aggiornato autorevolmente al
-    save da C9). Pre-fix: race tra save canvas e save columns_metadata
-    rendeva il consumer schema potenzialmente stale anche dopo Fix 1.
-    Fallback su `columns_metadata` mantenuto per legacy / progetti mai
-    salvati post-C9.
-
-Casi coperti (5):
-  1. api_enrich con `output_mapping` standard (chiave `column`)
-  2. api_enrich con shape variante (`target_column` / `name`)
-  3. compute_result_columns end-to-end: project_source → api_enrich →
-     result deve restituire input_cols + output_mapping_cols
-  4. project_source preferisce `result_node.columns` quando presente
-  5. project_source fallback su `columns_metadata` se result.columns
-     assente / vuoto
 """
 
 from __future__ import annotations
@@ -260,7 +235,7 @@ def test_infer_project_source_schema_fallback_to_columns_metadata_when_result_em
             {
                 "id": "res1",
                 "type": "result",
-                "columns": [],  # legacy / mai computed
+                "columns": [],  # NOTE: legacy / mai computed
             }
         ],
         "columns_metadata": [

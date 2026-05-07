@@ -1,10 +1,7 @@
-"""Campi catchup sulla ScheduleFrequency (C3 fix 3).
+"""
+Campi catchup sulla ScheduleFrequency (C3 fix 3).
 
 Aggiunti:
-- `catchup_missed_runs: bool = False` — opt-in per schedule
-- `catchup_grace_hours: int = 24` — finestra recupero
-
-Default retrocompat: False → schedule esistenti non cambiano behavior.
 """
 
 import pytest

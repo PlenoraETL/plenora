@@ -1,14 +1,7 @@
-"""Contract test — ticket RBAC + state transitions.
+"""
+Contract test — ticket RBAC + state transitions.
 
 Copre le regole descritte in app/core/tickets/service.py:
-  - esecutore: 403 ovunque
-  - viewer/user (creator): crea solo user_support, vede solo i suoi,
-    commenta solo sui suoi, riapre solo i suoi chiusi, NO privileged fields
-  - admin: full entro il proprio gruppo (entrambi kind)
-  - superadmin: cross-group
-
-Usa mock del DB layer (tickets_db_service) per non dipendere da PG:
-l'obiettivo e' il contratto RBAC, non la query SQL.
 """
 
 from __future__ import annotations

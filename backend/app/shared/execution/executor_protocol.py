@@ -1,47 +1,7 @@
-"""Canvas executor protocol - shared execution contract.
+"""
+Canvas executor protocol - shared execution contract.
 
 BE-GO-READY-ARCH-055-W2-EXECUTION-ENGINE-DUPLICATION-SEAM.
-
-Defines the Protocol that all canvas pipeline executors implement
-structurally. Currently satisfied (duck-typing, no inheritance needed)
-by:
-
-- ``EstraiExecutor``   - ``app.core.estrai.executor``
-- ``ManipolaExecutor`` - ``app.core.manipola.executor``
-- ``EnrichExecutor``   - ``app.core.arricchisci.executor``
-
-All three are dispatched through ``OrchestratorService`` (orchestrator/
-service.py) using the same ``execute`` / ``preview`` surface. This
-Protocol makes the shared contract explicit, enables a typed dispatch
-table in the orchestrator, and maps cleanly to a Go interface.
-
-Follows ADR-0007: ``typing.Protocol`` + ``@runtime_checkable`` instead
-of ``abc.ABC``. Concrete executors remain plain classes; zero inheritance
-required.
-
-Boundary
-========
-This is a leaf contract module. It MUST NOT import:
-
-- ``fastapi`` / ``starlette`` (no HTTP / Depends);
-- ``app.db.*`` / ``psycopg2`` / ``redis`` (no I/O);
-- ``pandas`` / ``geopandas`` / ``polars`` (no DataFrame work);
-- ``app.core.*`` (consumed by core, not vice-versa).
-
-``app.models.CanvasState`` is allowed as the canonical canvas domain
-model (imported under ``TYPE_CHECKING`` to avoid circular load-time
-imports).
-
-Go-ready mapping
-================
-::
-
-    type CanvasExecutor interface {
-        Execute(ctx context.Context, projectID string,
-                canvas CanvasState, opts ExecuteOpts) (map[string]any, error)
-        Preview(ctx context.Context, projectID string,
-                canvas CanvasState, limit int) (map[string]any, error)
-    }
 """
 
 from __future__ import annotations

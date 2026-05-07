@@ -2,19 +2,6 @@
 Database Service — compatibility / deathmap facade.
 
 PostgreSQL-only at runtime. Canonical owners: leaves under
-`app/db/config/*.py` and per-domain services (`results_db_service.py`,
-`tickets_db_service.py`, etc.). This module re-exports those names
-for legacy `from app.db.db_service import ...` callers; new code
-MUST import from the canonical leaves.
-
-Strangler / deathmap:
-  - production-import allowlist locked by
-    `tests2/shared/test_db_service_facade_strangler_contract.py`
-    (BE-GO-READY-DB-ENGINE-011);
-  - migration progress tracked in `BE_DB_ENGINE_AUDIT.md`
-    DB-ENGINE-011 + the parent `BE_CODEBASE_AUDIT.md` C-DB-1;
-  - sibling `app.db.config_db_service` strangler:
-    `tests2/shared/test_config_db_service_facade_strangler_contract.py`.
 """
 
 from app.db.config_db_service import (

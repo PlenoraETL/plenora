@@ -1,11 +1,7 @@
-"""Pydantic DTO per il sottosistema auth.
+"""
+Pydantic DTO per il sottosistema auth.
 
 Estratto verbatim da `app.core.auth.auth` (STRUCT-005 Seam C). `auth.py`
-re-esporta tutti i 13 modelli per backward compat con i test
-(`from app.core.auth.auth import CurrentUser, LoginRequest, ...`) e i
-router (`Depends(get_current_user)` annotato con `CurrentUser`).
-
-Nessuna dipendenza da `app.*`: leaf module, niente cycle possibile.
 """
 
 from __future__ import annotations

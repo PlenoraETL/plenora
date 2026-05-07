@@ -1,52 +1,7 @@
-"""Auth users admin CRUD router — typed boundary.
+"""
+Auth users admin CRUD router — typed boundary.
 
 BE-GO-READY-AUTH-ENGINE-003-USERS-ROUTER-EXTRACTION.
-
-Estrae da `auth.py` i 5 endpoint admin CRUD `/auth/users*`:
-
-- `GET    /auth/users`
-- `POST   /auth/users`
-- `PUT    /auth/users/{user_id}`
-- `POST   /auth/users/{user_id}/reset-password`
-- `DELETE /auth/users/{user_id}`
-
-Boundary contract
-=================
-Il router NON conosce:
-
-- token decode / disclosure-on-token (`get_current_user`,
-  `decode_token`, `is_jti_blacklisted` — vivono in `auth.py`);
-- password hashing low-level (`app.shared.password_hashing`); il
-  router consuma solo l'helper re-esportato `hash_password`;
-- rate-limit fallback (`app.core.auth.rate_limit_fallback`);
-- MFA enroll/verify/disable (`app.core.auth.mfa`);
-- ownership / require_*_owner (`app.core.auth.ownership`).
-
-Behavior preserved 1:1
-======================
-- Stessi error code / messaggi italiani / status code / headers /
-  anti-enumeration invariants definiti in
-  `app.core.auth.disclosure`. Nessun cambio user-facing.
-- Stessi audit log via `audit_action` decorator.
-- Stessa dipendenza di accesso `require_admin` (admin + superadmin).
-- Stessa logica di filtering per gruppo (admin), validazione
-  payload, anti-enum #3 (admin reset/delete su target
-  missing-or-out-of-group), self-modify/self-disable/self-delete
-  guards.
-
-KEEP_COMPAT
-===========
-`auth.py` ri-esporta `users_router` (vedi `auth.py` post-batch),
-per cui `from app.core.auth.auth import users_router` continua a
-funzionare. `main.py` lo importa direttamente dal nuovo modulo per
-montarlo (`app.include_router(users_router, prefix="/api")`).
-
-Go-ready mapping
-================
-    type UsersRouter struct { ... }
-    func (r *UsersRouter) ListUsers(ctx, currentUser) ([]UserResponse, error)
-    func (r *UsersRouter) CreateUser(ctx, payload, currentUser) (UserResponse, error)
-    ...
 """
 
 from __future__ import annotations

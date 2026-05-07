@@ -1,43 +1,7 @@
-"""Architectural lock for the Linux PC execution pack.
+"""
+Architectural lock for the Linux PC execution pack.
 
 BE-GO-READY-INSTALL-010-LINUX-EXECUTION-PACK.
-
-Source-bound assertions on:
-
-  - `docs/ops/install-marco-dry-run.md` section 4.8
-    (non-destructive rollback for the foreground smoke);
-  - `docs/ops/install-docker.md` "Status today (command-first,
-    executable)" section.
-
-INSTALL-007 added the canonical 8-item smoke harness; INSTALL-010
-finishes the operator-facing surface by adding (a) a non-
-destructive way to back out of a failed foreground smoke without
-losing the migrated DB / configured `.env` and (b) a command-
-first table in install-docker.md that honestly maps every harness
-item to "the command you run today" plus "Docker side: NOT
-IMPLEMENTED".
-
-Locks today:
-
-  - dry-run pack section 4.8 exists with the canonical
-    BE-GO-READY-INSTALL-010 stream tag;
-  - the rollback uses `pkill -INT` (NOT `kill -9` first, NOT
-    `systemctl stop`, NOT `DROP SCHEMA`, NOT `FLUSHDB`);
-  - the section explicitly enumerates what it does NOT do
-    (no schema drop, no FLUSHDB, no .env wipe);
-  - install-docker.md has a "Status today" command-first
-    section with the eight harness rows; each row has a
-    "NOT IMPLEMENTED" marker on the Docker side AND a
-    pointer back to the single-machine command;
-  - both touched sections are ASCII-only.
-
-Outside scope:
-  - the canonical 8-item smoke harness (locked by
-    `test_install_smoke_harness_doc_guard.py`);
-  - the dry-run pack contract tests (locked by
-    `test_install_marco_dry_run_doc_guard.py`);
-  - the native-deps verification (locked by
-    `test_install_native_deps_verify_doc_guard.py`).
 """
 
 from __future__ import annotations

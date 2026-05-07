@@ -2,11 +2,6 @@
 test_imdf_validate_publish_schema_contract.py
 
 Contract test per la schema-compat logic di validate_publish:
- - I system fields ArcGIS (Shape__Area, Shape__Length, OBJECTID, ...) NON
-   devono mai generare FIELD_MISSING_ON_BUNDLE (sono gestiti server-side).
- - TYPE_MISMATCH con 'other' (type non mappabile) NON deve emettere
-   warning se il campo non è la match_column: è rumore, non un vero
-   mismatch.
 """
 import pytest
 

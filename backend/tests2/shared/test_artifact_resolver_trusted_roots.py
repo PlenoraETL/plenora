@@ -1,18 +1,7 @@
-"""[phase-2-err][batch8] C4 — trusted_roots build fail-closed + breadcrumb.
+"""
+[phase-2-err][batch8] C4 — trusted_roots build fail-closed + breadcrumb.
 
 Audit Batch 8 §3.1 S5 / fix F5: `resolver._materialize_from_output_path`
-costruiva `trusted_roots` con 3 silent catch (`except Exception: pass/continue`).
-Una lista parziale/vuota produceva rifiuti `assert_path_within` con messaggio
-ambiguo (confonde "config rotta" con "path client malicious") e zero
-diagnostica server-side.
-
-Post-fix:
-  - ogni `except` emette `logger.warning(..., exc_info=True)` con attr e
-    project_id identificanti.
-  - `if not base: continue` resta skip legittimo per TEMP_DIR/DATA_DIR non
-    impostati (non genera warning).
-  - se `trusted_roots` finale e' vuota → raise `ArtifactResolutionError`
-    con messaggio canonico che menziona le 3 settings coinvolte.
 """
 
 from __future__ import annotations
@@ -164,7 +153,7 @@ def test_trusted_roots_results_dir_resolve_fails_logs_warning(
         target_logger.removeHandler(handler)
 
     assert m.path == target.resolve()
-    # Warning emesso per RESULTS_DIR, con exc_info presente
+    # NOTE: emesso per RESULTS_DIR, con exc_info presente
     results_warnings = [
         r for r in handler.records
         if r.levelno == logging.WARNING

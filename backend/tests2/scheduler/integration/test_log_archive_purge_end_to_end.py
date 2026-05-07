@@ -1,31 +1,7 @@
-"""Integration e2e del pipeline archive+purge (O-ARC Batch 4).
+"""
+Integration e2e del pipeline archive+purge (O-ARC Batch 4).
 
 Copertura 5 scenari contro PG reale + fake in-memory ObjectStorage
-(pattern clone di fakeredis in test_leader_election_e2e.py):
-
-- B4-E1: happy path logs (50 righe archive-eligible → upload NDJSON gzip,
-  DELETE bypass, riga observability circolare su plenora.logs).
-- B4-E2: happy path audit_actions (gemello B4-E1, observability va su
-  plenora.logs anche per archive di audit_actions).
-- B4-E3: DELETE senza SET LOCAL retention_cleanup → trigger append-only
-  solleva (redundant guard sul cluster O-ARC, §4.3 triage Batch 4).
-- B4-E4: re-run idempotent (run 2 senza righe fresh → archived_rows=0,
-  batch_runs=0, storage immutato da run 1).
-- B4-E5: upload failure → swallow exception, righe restano in DB, slot
-  non aggiornato, nessuna riga observability.
-
-Nessun moto/localstack/Docker: il Protocol ObjectStorage e' implementato
-da una classe in-memory (`_InMemoryObjectStorage`) ~40 righe. Il contract
-S3 reale e' gia' coperto in Batch 1 da `test_log_archive_writer_contract`.
-
-Cleanup: ogni test patch-a `LOG_ARCHIVE_KEY_PREFIX` con un marker unico
-`logs-archive/test-oarc-<uuid>/` + marker su op/action delle righe
-seed. Il teardown fa DELETE con `SET LOCAL plenora.retention_cleanup`
-sia sulle righe sorgenti sia sulla riga observability (filtrata via
-`details` JSONB contenente il key prefix unico del test).
-
-Skip graceful se `app.db.pg_connection.get_connection` non riesce ad
-aprire una connessione.
 """
 
 from __future__ import annotations

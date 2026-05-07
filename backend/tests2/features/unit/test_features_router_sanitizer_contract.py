@@ -1,21 +1,7 @@
-"""Integration contract test: sanitizer applicato sui 7 punti HIGH RISK
+"""
+Integration contract test: sanitizer applicato sui 7 punti HIGH RISK
+
 di ``features/routes.py`` (Batch Fix 6.2).
-
-Punti protetti (tutti ``except ValueError``/``FileNotFoundError`` -> 404):
-    - linea 210: ``browse_services``
-    - linea 225: ``list_folders``
-    - linea 244: ``browse_layers``
-    - linea 263: ``get_layer_schema``
-    - linea 302: ``query_preview``
-    - linea 465: ``write_features`` (FileNotFoundError -> 404)
-    - linea 512: ``create_service`` (FileNotFoundError -> 404)
-
-Scope del test: mostrare che **almeno un** endpoint del cluster applica
-effettivamente il sanitizer (``browse_services`` come rappresentante) +
-blindare il ramo FileNotFoundError di ``create_service``. Non si
-duplica il test per tutti e 7 i punti — la sanitize e' una singola
-funzione idempotente applicata uniformemente, e il contratto del
-sanitizer e' gia' coperto dall'unit test.
 """
 
 from __future__ import annotations

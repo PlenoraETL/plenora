@@ -1,64 +1,7 @@
-"""Domain-agnostic graph utilities.
+"""
+Domain-agnostic graph utilities.
 
 BE-GO-READY-GRAPH-ENGINE-001-SHARED-TOPOLOGICAL-SORT.
-BE-GO-READY-ARCH-060-W4: moved from app.shared.graph to
-app.shared.execution.graph (correct engine subpackage).
-
-Tiny shared module: ONE primitive (Kahn topological sort with
-optional cycle detection) plus its typed cycle exception. Pure
-stdlib; zero domain imports. The Arricchisci and Manipola
-canvas orchestrators each used to ship their own copy of
-Kahn's algorithm with slightly different cycle-handling
-shapes; this module unifies the implementation behind a
-single deterministic API.
-
-Boundary
-========
-This is a leaf utility. It MUST NOT import:
-
-  - ``fastapi`` / ``starlette`` (no HTTP / Depends);
-  - ``app.config`` (no settings dependency);
-  - ``app.db.*`` / ``psycopg2`` / ``redis`` (no I/O);
-  - ``pandas`` / ``geopandas`` / ``polars`` (no DataFrame work);
-  - ``app.core.*`` (the utility is consumed by core modules,
-    not the other way around).
-
-Allowed dependencies:
-
-  - stdlib only (``collections``, ``typing``).
-
-Anti-god-engine note
-====================
-This module exposes ONE primitive: ``kahn_topological_order``.
-Adding shortest-path / strongly-connected-components / DAG
-diff / etc. would turn it into a graph engine; if that is ever
-needed, factor them into separate leaf modules each with
-narrow contracts. For now the only real consumer pressure is
-canvas orchestration (Kahn-style topological order).
-
-Usage
-=====
-::
-
-    from app.shared.execution.graph import kahn_topological_order, GraphCycleError
-
-    # Truncate-on-cycle (legacy Arricchisci shape):
-    order = kahn_topological_order(
-        node_ids=["A", "B", "C"],
-        edges=[("A", "B"), ("B", "C")],
-        on_cycle="truncate",
-    )
-    # -> ["A", "B", "C"]
-
-    # Raise-on-cycle (legacy Manipola shape):
-    try:
-        order = kahn_topological_order(
-            node_ids=["A", "B"],
-            edges=[("A", "B"), ("B", "A")],
-            on_cycle="raise",
-        )
-    except GraphCycleError as exc:
-        cycle_nodes = exc.cycle_nodes  # ["A", "B"]
 """
 
 from __future__ import annotations

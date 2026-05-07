@@ -1,15 +1,7 @@
-"""N9 — helper condiviso per re-check permessi user al pickup di un task Celery.
+"""
+N9 — helper condiviso per re-check permessi user al pickup di un task Celery.
 
 Contesto: tra submit (endpoint HTTP) e pickup (worker Celery) puo' passare
-tempo in coda. Se admin revoca i permessi nel frattempo, la task NON deve
-procedere. Questo helper viene chiamato all'inizio di ogni task
-long-running che opera per conto di un utente umano (pipeline, preview,
-enrichment, carica). Task cron/scheduled senza user -> user_id=None ->
-skip del check (legittimo).
-
-Single source of truth del re-check: se domani cambia
-`assert_project_access` in authz_helpers, tutti i worker si aggiornano
-gratis senza drift tra HTTP-gate e worker-gate.
 """
 
 from __future__ import annotations

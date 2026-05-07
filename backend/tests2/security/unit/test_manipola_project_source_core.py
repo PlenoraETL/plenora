@@ -1,11 +1,7 @@
-"""Core-level contract tests for `_carica_sorgenti_progetto` (project_source
-cross-tenant isolation).
+"""
+Core-level contract tests for `_carica_sorgenti_progetto` (project_source
 
-Post-TE-007/008/009: all three source loaders are ctx-strict. The
-`_current_group_id` instance attribute and the `_resolve_executing_group_id`
-helper have been removed. The `group_id` kwarg (resolved by
-`_init_security_context` in execute/preview and forwarded explicitly) is the
-only tenant channel. Absent an explicit kwarg, the loader fails closed.
+cross-tenant isolation).
 """
 
 from unittest.mock import patch

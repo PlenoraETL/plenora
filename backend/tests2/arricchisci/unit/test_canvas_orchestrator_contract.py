@@ -1,34 +1,7 @@
-"""Contract test BE-GO-READY-TRANSFORMATION-ENGINE-011 — canvas_orchestrator extraction.
+"""
+Contract test BE-GO-READY-TRANSFORMATION-ENGINE-011 — canvas_orchestrator extraction.
 
 Lock i 6 invariant dell'estrazione:
-
-1. **Source location**: `execute_enrichment` + 5 helper coupled
-   vivono in `app/core/arricchisci/canvas_orchestrator.py`,
-   non piu' inline in `api_connector.py`.
-2. **KEEP_COMPAT wrapper**: `ApiConnectionService.execute_enrichment(...)`
-   esiste come thin wrapper che delega a
-   `canvas_orchestrator.execute_canvas_enrichment(self, ...)`.
-3. **KEEP_COMPAT `_get_execution_order`**: il metodo di istanza
-   resta su `ApiConnectionService` come wrapper (per
-   `executor.py:153` e lock test).
-4. **Pure orchestrator API**: il modulo esporta
-   `execute_canvas_enrichment`, `init_execution_context`,
-   `get_execution_order`, `run_single_enricher`,
-   `is_file_source_for_file_processor` come funzioni
-   modulo-level, non agganciate al singleton.
-5. **No re-export maze**: `api_connector.py` NON ri-importa i 5
-   nomi del modulo nuovo (no `from ... canvas_orchestrator import
-   *`); il wrapper KEEP_COMPAT chiama esplicitamente le 2
-   funzioni che servono (`execute_canvas_enrichment`,
-   `get_execution_order`).
-6. **Behavior preservation**: `get_execution_order` e' una pure
-   function deterministica (Kahn topo-sort) byte-per-byte
-   identica al pre-batch.
-
-Ulteriori lock test sul behavior di `execute_enrichment` vivono in
-`test_api_connector_execute_enrichment_lock.py` (23 test).
-Quei test continuano a funzionare invariati post-batch perche'
-chiamano via `svc.execute_enrichment(...)` (wrapper preservato).
 """
 
 from __future__ import annotations

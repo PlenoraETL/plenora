@@ -1,20 +1,7 @@
-"""Caratterizzazione di PlenoraBeatScheduler.tick() e _sync_from_db().
+"""
+Caratterizzazione di PlenoraBeatScheduler.tick() e _sync_from_db().
 
 Scopo: cristallizzare il comportamento ATTUALE del beat scheduler
-prima di aggiungere la leader election (C3 punto 1). I test di questo
-file coprono il contract "pre-refactor" — dopo il fix il contract
-cambiera' leggermente (il tick skippa sync quando non leader) e questi
-test andranno aggiornati con una modifica intenzionale. Qui serve da
-baseline: se un test si rompe durante il refactor senza una modifica
-esplicita del test stesso, e' una regressione vera.
-
-Strategia di isolamento
------------------------
-`PlenoraBeatScheduler(celery.beat.Scheduler)` richiede una Celery app per
-essere costruito via super().__init__. Per unit test bypassiamo il
-bootstrap di Celery con una subclass `_FakeScheduler` che NON chiama
-super().__init__ e imposta direttamente gli attributi richiesti dai
-metodi di interesse (self.data, self.app, i 4 `_last_*_cleanup`).
 """
 
 from unittest.mock import MagicMock, patch

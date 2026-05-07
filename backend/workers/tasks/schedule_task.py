@@ -1,31 +1,7 @@
 """
 Task Celery per l'esecuzione di pipeline schedulate.
 
-Architettura
-============
-Questo task è il punto di ingresso dal mondo Celery/Beat al sistema scheduler.
-Celery Beat (via RedBeat) triggera schedule_pipeline_task ad ogni cron tick.
-
-Il task è volutamente snello: delega tutta la logica all'ExecutionManager
-che gestisce lock, pre-check, esecuzione, retry, log.
-
-Flusso:
-    Beat (cron) → schedule_pipeline_task → ExecutionManager.execute()
-    
-    UI ("Esegui Ora") → API → schedule_pipeline_task.apply_async()
-                              → ExecutionManager.execute(triggered_by="manual")
-
-Registrazione:
-    Aggiunto a celery_app.conf.include come "workers.tasks.schedule_task"
-
-Avvio worker (test only — single thread, no concurrency):
-    celery -A workers.celery_app worker --loglevel=info --pool=solo
-
-Avvio worker (produzione — prefork, vedi plenora-celery.service):
-    celery -A workers.celery_app worker --loglevel=info --concurrency=4
-
-Avvio Beat (con RedBeat per schedule dinamici):
-    celery -A workers.celery_app beat -S redbeat.RedBeatScheduler --loglevel=info
+Runs background execution while preserving backend runtime contracts.
 """
 
 from workers.celery_app import celery_app

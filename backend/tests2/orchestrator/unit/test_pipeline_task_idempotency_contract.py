@@ -1,23 +1,7 @@
-"""Idempotency guard per pipeline_task (C4 round 4).
+"""
+Idempotency guard per pipeline_task (C4 round 4).
 
 Chiude il gap rilevato dall'auditor: `pipeline_task` genera run_id
-fresh ogni invocazione. Se l'admin rilancia l'intera pipeline dopo
-un fail parziale, nuovo run_id → i guard di carica/enrichment
-(che pur avendo run_id kwarg) vedono una chiave sconosciuta →
-l'orchestrator in-process riesegue tutto → duplicazione.
-
-Fix: `pipeline_task` accetta `run_id` optional. Se passato (dal
-retry-handler UI, dal scheduler, da replay), il task:
-- Se e' gia' in intermediate.runs con status='completed' → skip.
-- Altrimenti procede con quel run_id stabile.
-
-Quando il caller non passa run_id → genera fresh (legacy, no
-idempotency). Coerente col pattern di carica_task / enrichment_task.
-
-Nota: pipeline_task chiama l'orchestrator in-process, NON subtask
-Celery separati. Quindi la propagazione del run_id ai "child" non
-si applica qui — l'orchestrator riceve direttamente il run_id via
-`execute_pipeline(run_id=...)` che e' gia' in place.
 """
 
 import inspect

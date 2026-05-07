@@ -1,9 +1,7 @@
-"""Endpoint PATCH /api/schedules/{id}/catchup (C3 fix 3).
+"""
+Endpoint PATCH /api/schedules/{id}/catchup (C3 fix 3).
 
 Permette all'admin/owner di abilitare o disabilitare il catchup su uno
-schedule esistente, e di configurare la grace window, senza dover
-toccare l'intero ScheduleConfig via update generico. Endpoint dedicato
-per pulizia API (stesso pattern di /{id}/toggle).
 """
 
 from unittest.mock import MagicMock, patch

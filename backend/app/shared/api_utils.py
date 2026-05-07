@@ -1,14 +1,7 @@
 """
 app/shared/api_utils.py
-=======================
+
 Logica HTTP/API condivisa tra api_connector.py e enrichment_service.py.
-
-Funzioni estratte per eliminare il dual-code-path che richiedeva
-di applicare ogni fix in due posti separati.
-
-Usato da:
-  - app/core/arricchisci/api_connector.py
-  - app/core/arricchisci/enrichment_service.py
 """
 
 import base64

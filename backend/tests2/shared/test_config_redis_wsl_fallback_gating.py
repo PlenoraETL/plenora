@@ -1,18 +1,7 @@
-"""Contract test BE-GO-READY-INSTALLATION-003-REDIS-WSL-FALLBACK-GATING.
+"""
+Contract test BE-GO-READY-INSTALLATION-003-REDIS-WSL-FALLBACK-GATING.
 
 Coperti:
-
-1. `Settings._wsl_redis_fallback_allowed()` ritorna True solo per
-   dev + Windows; False altrove (prod/staging Windows, dev Linux,
-   prod Linux).
-2. `Settings._ensure_redis()` su path server (Linux o prod) con Redis
-   down: nessun tentativo `subprocess.Popen(["wsl", ...])`, esattamente
-   un errore appended, messaggio cita il broker URL configurato e NON
-   menziona WSL.
-3. `Settings._ensure_redis()` su dev Windows con Redis down: invoca
-   `subprocess.Popen(["wsl", ...])` (fallback opportunistico).
-4. `Settings._ensure_redis()` con Redis raggiungibile: nessun errore,
-   nessun warning, nessuna chiamata a `subprocess.Popen`.
 """
 
 from __future__ import annotations

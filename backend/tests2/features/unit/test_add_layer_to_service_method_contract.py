@@ -1,22 +1,7 @@
-"""Contract test BE-IMDF-006B — `ArcGISClient.add_layer_to_service` typed boundary.
+"""
+Contract test BE-IMDF-006B — `ArcGISClient.add_layer_to_service` typed boundary.
 
 Lock the public method shape post-promote:
-
-- `AddLayerResult` dataclass(frozen=True) con `success/feature_count/errors`;
-- `errors` e' tuple immutabile;
-- `to_compat_dict()` ritorna il legacy dict shape `{success,
-  feature_count, errors: list}` (KEEP_COMPAT per IMDF wrapper
-  `_add_layer_to_service`);
-- `ArcGISClient.add_layer_to_service` e' metodo pubblico, signature
-  tipata, ritorna `AddLayerResult`;
-- delegate path: `_add_layer_to_service(client, ...)` chiama
-  `client.add_layer_to_service(...).to_compat_dict()`.
-
-I test di request shape (URL/body/headers/timeout/fields/extent/...)
-sono in `tests2/imdf/unit/test_add_layer_to_service_contract.py`
-(BE-IMDF-006A) e continuano a testare la stessa logica via il wrapper
-IMDF (che ora delega al metodo pubblico). Qui copriamo solo lo shape
-post-promote.
 """
 
 from __future__ import annotations
@@ -82,7 +67,7 @@ def test_to_compat_dict_returns_legacy_shape():
     r = AddLayerResult(success=True, feature_count=3, errors=("e1",))
     d = r.to_compat_dict()
     assert d == {"success": True, "feature_count": 3, "errors": ["e1"]}
-    assert isinstance(d["errors"], list)  # legacy list, not tuple
+    assert isinstance(d["errors"], list)  # NOTE: legacy list, not tuple
 
 
 def test_to_compat_dict_empty_errors_returns_empty_list():
@@ -240,7 +225,7 @@ def test_imdf_wrapper_delegates_to_client_method(real_client):
         gdf, "L", layer_id=2,
     )
 
-    # Legacy dict shape preservato
+    # NOTE: legacy dict shape preservato
     assert set(result_dict.keys()) == {"success", "feature_count", "errors"}
     assert result_dict["success"] is True
     assert result_dict["feature_count"] == 4

@@ -1,29 +1,7 @@
 """
 Utility centralizzate per operazioni geospaziali in PLENORA-ETL.
 
-Architettura
-============
-Questo modulo centralizza le operazioni geospaziali usate da ESTRAI, MANIPOLA
-e ARRICCHISCI, evitando duplicazione di codice per parsing e conversione geometrie.
-
-Fornisce funzioni comuni per il parsing, la conversione e l'analisi
-di geometrie nei vari formati supportati (WKT, WKB, EWKB, GeoJSON).
-
-Funzionalità principali:
-    - parse_geometry(): parsing multi-formato di geometrie
-    - to_geodataframe(): conversione DataFrame → GeoDataFrame con auto-detect
-    - detect_geometry_column(): rilevamento automatico colonna geometria
-    - ensure_same_crs(): allineamento CRS tra due GeoDataFrame
-    - get_utm_crs_for_geometry(): calcolo zona UTM appropriata
-
-Modulo creato per centralizzare la logica geospaziale precedentemente
-duplicata in orchestrator_service, api_connection_service e query_executor.
-
-Uso:
-    from app.utils.geo import parse_geometry, to_geodataframe, detect_geometry_column
-
-    geom = parse_geometry("POINT(11.35 44.49)")
-    gdf = to_geodataframe(df, geom_column="geometry", crs="EPSG:4326")
+Keeps this module's responsibility explicit and isolated from adjacent code.
 """
 
 import json

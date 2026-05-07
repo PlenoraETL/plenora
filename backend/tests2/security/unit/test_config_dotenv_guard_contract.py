@@ -1,3 +1,9 @@
+"""
+Tests the config dotenv guard behavior.
+
+Locks backend contracts and regression boundaries for the current architecture.
+"""
+
 import logging
 
 import pytest

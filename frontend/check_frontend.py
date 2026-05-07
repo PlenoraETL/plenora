@@ -1,24 +1,8 @@
 #!/usr/bin/env python3
 """
 check_frontend.py — Verifica automatica post-sprint URBY-ETL
-=============================================================
 
 Esecuzione:
-    python check_frontend.py [percorso/src]
-
-Default: cerca ./src nella cartella corrente.
-
-Rileva:
-  - alert() e window.confirm() rimasti
-  - Import dichiarati ma non usati (pattern comuni)
-  - Componenti importati ma non nel JSX
-  - CSS con proprietà senza valore (righe corrotte)
-  - @keyframes duplicati tra file
-  - Colori hardcoded ancora presenti (top-10)
-  - console.log di debug (non warn/error)
-  - window.location.href (bypass React Router)
-  - export default senza memo() nei nodi ReactFlow
-  - variabili CSS definite ma mai usate
 """
 
 import os, re, sys

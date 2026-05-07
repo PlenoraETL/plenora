@@ -2,12 +2,6 @@
 Config DB Service — accesso a PostgreSQL (ex SQLite config.db).
 
 Contiene: groups, users, projects, connections, file_sources,
-          datasources, arcgis_connections, api_connections,
-          schedules, beat_heartbeat, app_settings, comparison_keys.
-
-Migrato da SQLite a PostgreSQL: usa pg_connection pool.
-Le funzioni base (fetchone, fetchall, execute, transaction) sono
-delegate a pg_connection. Le funzioni CRUD restano qui.
 """
 
 import json

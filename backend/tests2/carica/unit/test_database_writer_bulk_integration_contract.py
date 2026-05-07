@@ -1,14 +1,7 @@
-"""Contract test — integrazione bulk insert in `_execute_batch`.
+"""
+Contract test — integrazione bulk insert in `_execute_batch`.
 
 Verifica che:
-  - Per `operation == "insert"` su Postgres/MySQL, il bulk path
-    viene tentato per primo
-  - Su `BulkInsertNotSupportedError` (geometry, server-side disable, ecc.)
-    avviene fallback automatico ad executemany
-  - Per `operation == "update"` o `"upsert"`, il bulk path NON viene
-    chiamato (incompatibile)
-  - Env `CARICA_BULK_INSERT=off` disabilita anche su INSERT
-  - Per dialect Oracle/MSSQL/SQLite, niente bulk (executemany diretto)
 """
 
 from __future__ import annotations

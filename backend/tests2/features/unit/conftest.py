@@ -1,3 +1,9 @@
+"""
+Provides pytest fixtures for unit tests.
+
+Centralizes local pytest setup for the surrounding test package.
+"""
+
 from datetime import datetime, timezone
 
 import pytest

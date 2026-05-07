@@ -2,34 +2,6 @@
 PLENORA-ETL — Middleware JWT
 
 Intercetta ogni richiesta HTTP, legge il token Bearer se presente,
-e propaga `group_id` / `user_id` ai ContextVar del logger
-(`set_log_group`, `set_user_id`).
-
-NON blocca le richieste senza token: quel ruolo e' della
-dependency FastAPI `get_current_user`. Questo middleware serve
-ESCLUSIVAMENTE a propagare la correlazione di logging.
-
-BE-GO-READY-SECURITY-ENGINE-002-AUTH-CLEANUP-RESIDUALS:
-  Le 4 scritture su `request.state.{group_id,user_id,username,role}`
-  sono state rimosse: nessun runtime consumer le leggeva piu' (auth
-  scorre via `Depends(get_current_user)` che ricostruisce il
-  CurrentUser dal JWT, non dal request.state). I ContextVar restano
-  l'unica superficie canonica di correlazione lato logging.
-  `request.state.request_id` (RequestIdMiddleware) NON e' impattato.
-
-SECURITY:
-  - Tutti gli endpoint protetti DEVONO usare `Depends(get_current_user)`
-    o equivalenti — quella dependency rifiuta esplicitamente token
-    mancanti o invalidi con 401.
-  - Non basarsi MAI su `request.state.*` per autorizzare azioni:
-    usare `current_user: CurrentUser = Depends(...)`.
-  - I ContextVar `log_group` / `user_id` servono solo a
-    correlazione log, non hanno alcuna valenza di authorization.
-
-Endpoint pubblici (no auth):
-  - POST /auth/login
-  - GET  /docs, /redoc, /openapi.json
-  - GET  /health
 """
 
 from starlette.middleware.base import BaseHTTPMiddleware

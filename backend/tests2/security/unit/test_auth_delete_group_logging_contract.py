@@ -1,17 +1,7 @@
-"""Contract test S5 — delete_group route non deve silenziare il cascade.
+"""
+Contract test S5 — delete_group route non deve silenziare il cascade.
 
 Scope S5 (inventory_report.md Sez. 5.1):
-  `backend/app/core/auth/auth.py:989-991` catturava `Exception as e` ma
-  scartava `e` (no log, no chain) prima di sollevare un HTTPException 500
-  generico. Questo e' "silent swallow" nel senso charter base 9: la
-  diagnostica lato server spariva, e la policy fail-fast del modulo
-  `app/core/auth/` (routes con HTTPException + log `[CRASH]` nei peer
-  come arricchisci/router.py:499) veniva violata localmente.
-
-Il fix minimo aggiunge `logger.error(..., exc_info=True)` prima del
-raise. Questo test fissa quel contratto: se `delete_group_cascade`
-solleva, il logger del modulo auth deve registrare l'errore con
-stack trace prima che il client riceva il 500.
 """
 
 from __future__ import annotations

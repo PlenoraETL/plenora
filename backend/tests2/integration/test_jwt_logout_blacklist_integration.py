@@ -1,24 +1,7 @@
-"""Integration test — /auth/logout + blacklist Redis end-to-end.
+"""
+Integration test — /auth/logout + blacklist Redis end-to-end.
 
 A differenza dei test unit in tests2/security/unit/test_jwt_logout_blacklist.py
-(FastAPI TestClient in-process con fakeredis iniettato), qui:
-
-  - il backend gira come processo uvicorn separato (fixture
-    `integration_backend_server`)
-  - Redis e' quello reale (container dev, gia' usato da Celery)
-  - il DB e' Postgres reale con utente creato in `integration_user_seed`
-
-Copertura end-to-end:
-  1. login → token con jti valido
-  2. /auth/me con token → 200
-  3. /auth/logout → 200 + blacklisted=True
-  4. /auth/me con STESSO token → 401 (token revocato)
-  5. nuovo login → nuovo token → 200 (jti indipendente)
-
-Valida l'integrazione:
-  - auth.create_access_token emette jti
-  - auth.get_current_user consulta Redis reale per is_jti_blacklisted
-  - /auth/logout scrive in Redis reale con TTL corretto
 """
 
 from __future__ import annotations

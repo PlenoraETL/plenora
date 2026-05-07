@@ -1,25 +1,7 @@
-"""Contract test — fail-closed sui 32 transform top-level di base.py (E1).
+"""
+Contract test — fail-closed sui 32 transform top-level di base.py (E1).
 
 Verifica che un errore interno dei 32 transform top-level di
-`manipola/transforms/base.py` venga propagato al caller invece di
-essere silenziato. Pre-fix E1, ogni transform catturava qualunque
-Exception, loggava "[CRASH] Errore X" e ritornava l'input originale
-(fail-open illegittimo — cfr. audit Batch 5). Post-fix, il catch si
-limita a loggare e rilanciare bare.
-
-Copertura:
-1. Contratto fail-closed locale su 3 transform rappresentative
-   (aggregate, sort, pivot — 3 API pandas differenti).
-2. Smoke regression sull'happy path di op_aggregate.
-3. Test mirato su op_type_cast con errors='coerce': pre-fix silenziava
-   errori esterni a pd.to_numeric; post-fix li propaga, mentre il
-   caso happy (stringhe non numeriche -> NaN) resta invariato.
-
-Il focus e' il contratto fail-closed. Il dettaglio del log (tag [CRASH],
-exc_info) non e' parte dell'asserzione principale.
-
-Smell S2 (W2 op_filter, W3 op_formula) e S3 (C1 op_mask_data) sono
-fuori scope E1 — follow-up E4 ed E5 separati.
 """
 
 from __future__ import annotations

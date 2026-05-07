@@ -1,27 +1,7 @@
-"""Contract tests per il `_reconcile_storage` hook del beat scheduler.
+"""
+Contract tests per il `_reconcile_storage` hook del beat scheduler.
 
 BE-GO-READY-STORAGE-ENGINE-006-RECONCILIATION-BEAT-HOOK.
-
-Pattern mock-based clonato da `test_beat_scheduler_archive_hook_contract.py`.
-Nessuna integration con PG / object storage: `compensating_delete` e i
-4 helper del modulo `storage_reconciliation` sono mockati. La suite
-valida:
-
-- gate cadence (`STORAGE_RECONCILE_INTERVAL_SECONDS`);
-- gate batch_size <= 0 e interval <= 0 (escape hatch ops);
-- pickup ordinato di pending+delete entries;
-- happy path: outcome ok / skipped → `mark_orphan_deleted`;
-- failure path con backoff: outcome failed → `mark_failed_attempt` con
-  `next_retry_at = compute_next_retry_at(...)`;
-- max-attempts: nuovo `attempts` >= cap → `mark_lost` (terminal);
-- best-effort: errori per-row catturati senza rompere il tick;
-- belt-and-suspenders: rows con `operation != "delete"` skipped.
-
-Non e' nello scope:
-- upload-intent / W2 race;
-- result-blob / intermediate artifact integration;
-- storage-side scan;
-- DB reale.
 """
 
 from __future__ import annotations

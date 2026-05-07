@@ -2,38 +2,6 @@
 Esecutore di query SQL unificato per PLENORA-ETL.
 
 Gestisce l'esecuzione di query su tutti i database supportati tramite
-SQLAlchemy come layer di astrazione unificato.
-
-Architettura:
-    - SQLAlchemy text() per parametri preparati (prevenzione SQL injection)
-    - Dependency Injection per testabilità:
-        * EngineFactory: creazione engine SQLAlchemy (mockabile)
-        * SaveFunction: salvataggio DataFrame su file (mockabile)
-        * Logger: logging (NullLogger per test silenziosi)
-    - execute_raw(): metodo unificato per preview e execute
-    - execute_query(): esecuzione completa con salvataggio file
-
-Gestione database-specifica:
-    - Oracle: ALTER SESSION per cursori SDO + normalizzazione nomi colonne lowercase
-    - MSSQL: fallback automatico da ODBC Driver 18 a Driver 17
-    - Oracle: disabilitazione fetch LOB per conversione CLOB/BLOB automatica
-
-Sicurezza:
-    Tutte le query usano parametri preparati (SQLAlchemy text() con :param_name)
-    per prevenire SQL injection. I valori utente non vengono MAI concatenati
-    direttamente nelle stringhe SQL.
-
-Uso:
-    from app.db.query_executor import QueryExecutor, create_executor
-
-    # Produzione (con DI da main.py)
-    executor = QueryExecutor(engine_factory=factory, save_function=save_fn, logger=logger)
-
-    # Test (con mock)
-    executor = QueryExecutor(engine_factory=MockFactory(), logger=NullLogger())
-
-    # Esecuzione query
-    righe, colonne = executor.execute_raw(connessione, sql, params)
 """
 
 import time
@@ -839,7 +807,7 @@ class QueryExecutor:
                     f"(peak memory ~= 1 chunk, non il result set intero)"
                 )
             else:
-                # LEGACY PATH (fetch → DataFrame → save, capped da ESTRAI_MAX_ROWS)
+                # NOTE: legacy path (fetch → DataFrame → save, capped da ESTRAI_MAX_ROWS)
                 t_query = time.time()
                 rows, columns = self.execute_raw(connection, sql, params)
                 timings["query_total"] = time.time() - t_query

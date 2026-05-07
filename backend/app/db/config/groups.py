@@ -1,42 +1,7 @@
 """
 Groups DAL — estratto da `config_db_service.py`
+
 (BE-GO-READY-DB-ENGINE-002-GROUPS-CLUSTER-EXTRACTION).
-
-Cluster `groups` (6 funzioni): CRUD + summary + cascade-delete sulla
-tabella `groups` (root tenant PLENORA — ogni `users.group_id` /
-`projects.group_id` / `connections.group_id` / ... punta qui).
-
-Behavior preserved 1:1
-======================
-- Stesse signature, stesso SQL, stessi tuple di parametri, stesso
-  shape di ritorno.
-- `delete_group_cascade` mantiene il pattern non-bloccante esistente:
-  ogni step e' wrapped in try/except + log warning, l'eliminazione
-  del gruppo finale (step 9) e' l'unica che puo' raisare.
-- Logger namespace preservato: `_get_logger("config_db_service.delete_group_cascade")`
-  cosi' la produzione di log ops esistente non si sposta nei
-  filtri/dashboard.
-- Cross-engine call out (`results_db_service.delete_results_for_project`,
-  `core.intermediate.db.delete_all_runs_for_canvas`) preservati
-  identici al facade pre-estrazione.
-
-KEEP_COMPAT
-===========
-Il facade `app.db.config_db_service` re-esporta queste 6 funzioni
-come attributi modulo (tramite `from app.db.config.groups import ...`),
-preservando i monkeypatch esistenti del tipo
-`monkeypatch.setattr(cfg_db, "get_group", ...)`. Mirror del pattern
-gia' applicato a users/projects/connections/file_sources/datasources/
-api_connections/schedules.
-
-Boundary contract
-=================
-- Modulo leaf: solo `from app.db.pg_connection import fetchone, fetchall, execute`.
-- Niente import top-level da `app.utils.logger` (lazy nel
-  cascade-delete per allinearsi al pattern del facade pre-estrazione).
-- Niente import top-level da `app.db.results_db_service` o
-  `app.core.intermediate.db` (lazy dentro `delete_group_cascade`
-  per evitare cycle ed allinearsi al pre-estrazione).
 """
 
 from typing import Dict, List, Optional

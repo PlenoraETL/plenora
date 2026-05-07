@@ -1,15 +1,7 @@
-"""Contract test N5 — preview endpoint ha cap esplicito su limit.
+"""
+Contract test N5 — preview endpoint ha cap esplicito su limit.
 
 Pre-fix: `limit: int = 100` senza Query validation.
-  -> GET /api/projects/<id>/preview?limit=999999999 materializza miliardi
-     di righe in RAM del worker Celery -> OOM + servizio intasato.
-
-Post-fix: `limit: int = Query(100, ge=1, le=10000)`.
-  -> FastAPI rifiuta a monte con 422 Unprocessable Entity se fuori range.
-
-Il test e' introspection-based: verifica che il parametro abbia il cap
-configurato correttamente. Se qualcuno rimuove il Query wrapper in un
-futuro refactor, questo test fallisce immediatamente.
 """
 
 from __future__ import annotations

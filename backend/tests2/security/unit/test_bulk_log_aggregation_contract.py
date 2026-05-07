@@ -1,25 +1,7 @@
-"""Contract test — Batch 3.10.
+"""
+Contract test — Batch 3.10.
 
 Verifica che la telemetria strutturata emessa dai batch 3.1/3.2/3.4/3.5
-sui logger bulk (`app.core.carica.bulk_writers` e `app.core.carica.writer`)
-sia effettivamente query-abile post-deploy tramite la tabella
-PostgreSQL `logs`, sbloccando la pre-condizione dichiarata in
-`kickoff.md §9.2` / `§9.3` per il calcolo di `success_rate_mysql` e
-`success_rate_pg`.
-
-Contratto atteso:
-  1. I record `INFO` sui 2 logger bulk raggiungono il DB (bypass del
-     default WARNING filter via handler dedicato + filter).
-  2. I campi `extra` whitelist (`event`, `reason`, `dialect`, ecc.)
-     vengono serializzati nella colonna `details` JSONB.
-  3. I record `WARNING` sui 2 logger bulk NON vengono duplicati (il
-     handler dedicato e' filtrato INFO-only).
-  4. I record `INFO` su logger non-bulk NON raggiungono il DB (il
-     handler default PostgresLogHandler e' WARNING).
-  5. Le chiavi `extra` non in whitelist NON finiscono in `details`
-     (whitelist esplicita — zero scrittura ambigua).
-  6. L'iniezione di `request_id` / `user_id` dai ContextVar
-     (`C8 observability`) e' preservata e convive con la whitelist.
 """
 
 from __future__ import annotations

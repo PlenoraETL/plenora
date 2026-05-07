@@ -1,19 +1,7 @@
-"""Lock tests per ApiConnectionService._execute_rest_file.
+"""
+Lock tests per ApiConnectionService._execute_rest_file.
 
 Scopo: congelare il contratto osservabile di `_execute_rest_file` prima
-del refactor C2 (estrazione helpers dalla funzione da 284 righe).
-
-Collaborator mockati:
-  - self._prepare_headers
-  - self._validate_outbound_url
-  - self._resolve_file_source_path
-  - self._resolve_file_source_id_path
-  - requests.post (via il modulo `requests` importato locally dentro la funzione)
-  - tempfile.mkdtemp → Path del tmp_exec_dir
-  - `open` per lettura input file / scrittura output file
-
-I test verificano input/output della funzione (success dict o error dict)
-e l'invariante "cleanup tmp_exec_dir su error, no cleanup su success".
 """
 
 from contextlib import ExitStack

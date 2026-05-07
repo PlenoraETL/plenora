@@ -1,40 +1,7 @@
-"""Centralized object-storage prefix constants.
+"""
+Centralized object-storage prefix constants.
 
 Source-of-truth per i prefix usati come root segment delle key/path nel
-runtime object storage. Vivevano duplicati in 5 file diversi
-(`file_storage_dispatch.py`, `result_store.py`,
-`intermediate/artifact_writer.py`, `imdf/storage.py`,
-`eseguibili/storage.py`); ogni introduzione di un nuovo dominio rischiava
-collisione silenziosa.
-
-Convenzione naming:
-
-- lowercase ASCII;
-- `[a-z0-9]` + `-` come unico separatore;
-- nessun `/` interno (i prefix sono SEGMENTI, il caller compone il path
-  finale con `f"{PREFIX}/{...}"`);
-- nessun trailing slash;
-- nessuna stringa vuota.
-
-Contratti go-like:
-
-- ogni dominio storage ha esattamente un prefix const qui;
-- contract test (`tests2/shared/test_storage_layout_contract.py`) verifica
-  che (a) tutti i prefix siano unici e (b) nessuno sia prefix di un
-  altro (per evitare che un `list_objects("results/")` raccolga
-  oggetti di un dominio diverso che inizia con la stessa stringa).
-
-Go mapping target:
-
-```go
-const (
-    ResultsPrefix          = "results"
-    FileSourcesPrefix      = "file-sources"
-    IntermediatePrefix     = "intermediate"
-    ImdfBundlesPrefix      = "imdf-bundles"
-    EseguibiliOutputsPrefix = "eseguibili-outputs"
-)
-```
 """
 
 from __future__ import annotations

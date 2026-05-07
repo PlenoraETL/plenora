@@ -1,9 +1,7 @@
-"""Smoke test minimo per scripts/intermediate_run_report.py.
+"""
+Smoke test minimo per scripts/intermediate_run_report.py.
 
 Non e' un mini-framework: verifica che lo script:
-  - sia importabile senza side-effect runtime (no DB connect a import time)
-  - esponga `report(run_id)` callable
-  - su run_id inesistente ritorni exit code 2 senza crashare
 """
 
 from __future__ import annotations

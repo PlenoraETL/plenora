@@ -1,31 +1,7 @@
-"""Architectural lock for `scripts/install.sh` cleanroom packaging guard.
+"""
+Architectural lock for `scripts/install.sh` cleanroom packaging guard.
 
 BE-GO-READY-INSTALLATION-013-CLEANROOM-PACKAGING-GUARD.
-
-Source-bound assertions on the installer script. The guard exists to
-catch silent regressions of the cleanroom acceptance contract
-documented in `docs/ops/install-non-docker.md` section 12 (Cleanroom
-acceptance targets):
-
-  - the canonical list of required host commands stays at the
-    documented 7 entries (python3.11, node, npm, psql, redis-cli,
-    curl, git);
-  - the required Python major.minor stays pinned at "3.11" so the
-    installer agrees with all CI lanes
-    (`.github/workflows/{ci,ci-cleanroom,ci-functional}.yml`);
-  - the native shared library probe still mentions `gdal` (the only
-    non-pip-bundled native dep at runtime);
-  - the `--check` preflight flag is wired to `CHECK_ONLY` and the
-    script branches to the validators-only path before any prompt
-    or service probe;
-  - the script is ASCII-only (per scope rule) and does NOT invoke
-    `apt install` / `dnf install` / etc. (no destructive package
-    install automation in the prototype).
-
-These assertions are text-level on the script source. They do NOT
-execute the script; they assert that the contract is preserved by
-reading the file. If a future refactor silently drops a probe, this
-test fails before any operator sees a regressed installer.
 """
 
 from __future__ import annotations

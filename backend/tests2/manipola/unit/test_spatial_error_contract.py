@@ -1,29 +1,7 @@
-"""Contract test — fail-closed su tutti i 32 transform di spatial.py
+"""
+Contract test — fail-closed su tutti i 32 transform di spatial.py
+
 (D1 + D2 + D3).
-
-Verifica che un errore interno dei 32 transform di `spatial.py` (17
-single-input D1 + 11 multi-input D2 + 4 builder/extractor D3) venga
-propagato al caller invece di essere silenziato. Pre-fix, ogni transform
-catturava qualunque Exception, loggava "[CRASH] Errore X" e ritornava
-l'input originale (fail-open illegittimo — cfr. audit Batch 4). Post-fix,
-il catch si limita a loggare e rilanciare bare. D3 chiude anche lo smell
-S6 (fallback rischioso `to_geodataframe` nel ramo except).
-
-Il test copre:
-1. Contratto fail-closed locale sulle 3 transform single-input
-   rappresentative di D1 (buffer, reproject, dissolve).
-2. Integrazione con PluginExecutor (L4): l'errore risale al caller
-   senza essere assorbito.
-3. Smoke regression sull'happy path single-input (op_geo_buffer).
-4. Contratto fail-closed locale sulle 3 transform multi-input
-   rappresentative di D2 (sjoin, overlay, count_points_in_polygons).
-5. Smoke regression sull'happy path multi-input (op_sjoin).
-6. Contratto fail-closed sui 4 builder/extractor D3 + verifica che il
-   ramo except non re-invoca `to_geodataframe` (chiusura smell S6).
-7. Smoke regression sull'happy path builder (op_geo_bounds_extractor).
-
-Il focus e' il contratto fail-closed. Il dettaglio del log (tag [CRASH],
-exc_info) non e' parte dell'asserzione principale.
 """
 
 from __future__ import annotations

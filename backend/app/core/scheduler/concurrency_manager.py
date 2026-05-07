@@ -2,10 +2,6 @@
 Gestione concorrenza per lo Scheduler PLENORA-ETL — su PostgreSQL, no Redis.
 
 Lock e coda memorizzati nella tabella `scheduler_locks` nel database PostgreSQL.
-
-Chiavi:
-    - scheduler:lock:{schedule_id}   → 'running' con expiry timestamp
-    - scheduler:queue:{schedule_id}  → contatore coda (int)
 """
 
 from datetime import datetime, timedelta, timezone
@@ -47,7 +43,7 @@ class ConcurrencyManager:
     """
 
     def __init__(self):
-        # IMPORTANTE: inizializzo _available=True PRIMA di _ensure_table()
+        # NOTE: inizializzo _available=True PRIMA di _ensure_table()
         # e non DOPO. Se _ensure_table() fallisce e setta _available=False,
         # un eventuale `self._available = True` posizionato dopo lo
         # sovrascriverebbe, mascherando la degraded mode.

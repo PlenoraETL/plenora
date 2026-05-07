@@ -1,27 +1,7 @@
-"""Idempotency guard per carica_task (C4 round 2, opzione B).
+"""
+Idempotency guard per carica_task (C4 round 2, opzione B).
 
 Contract: se carica_task viene invocato con un `run_id` esplicito che
-esiste gia' in intermediate.runs con status='completed', il task
-SKIPPA l'esecuzione e ritorna immediatamente un risultato cache-aware.
-
-Razionale: con `max_retries=0` il retry automatico Celery e' gia' stato
-eliminato (C4 round 1). Rimane il caso "retry manuale / double-click /
-replay da log" dove un task completato con successo viene ri-invocato
-con la stessa chiave. L'idempotency chiude questo gap usando
-`intermediate.runs` come backend (tabella gia' esistente, no nuova
-migration).
-
-Chiave: `run_id` passato dal caller. Per scheduler/orchestrator, il
-run_id e' stabile nel contesto di un singolo tick; un doppio invio
-dello stesso task Celery (es. doppio click UI, replay da restore DB)
-viene quindi deduplicato.
-
-Se `run_id` non e' passato → task genera un fresh UUID (behavior
-legacy). Niente idempotency, tutto procede come prima.
-
-Se il run esiste ma status e' `running` o `failed` → il task procede
-(running = race rara, failed = retry legittimo per completare quello
-che era andato storto).
 """
 
 import inspect

@@ -1,27 +1,7 @@
-"""Correctness invariant: `op_concat_columns` post-refactor == impl legacy.
+"""
+Correctness invariant: `op_concat_columns` post-refactor == impl legacy.
 
 Scopo: garantire che la vera vettorizzazione (Batch 2) produca output
-bit-per-bit identico alla versione pre-refactor (commit afe47ce) su una
-batteria di casi edge:
-  - stringhe semplici
-  - NaN parziali / riga tutta-NaN / colonna tutta-NaN
-  - valori numerici / date / bool
-  - stringhe vuote letterali + edge sottile "solo una stringa vuota
-    come risultato" (legacy: None; nuova impl: deve replicare)
-  - separator="" (join senza separatore)
-  - una sola colonna valida
-  - NULL come stringa vuota (skip_null=False)
-  - input DataFrame non deve essere mutato
-  - indice non-monotonic (regressione potenziale: stack+groupby puo'
-    collassare indici duplicati se non gestito)
-
-La legacy impl e' copiata 1:1 dal commit afe47ce (base.py:599) in
-questo file come oracle; cosi' il test e' self-contained e sopravvive
-al refactor.
-
-Esecuzione:
-    pytest backend/tests2/performance/test_correctness_op_concat_columns.py \
-        -m perf_correctness -s -q
 """
 
 from __future__ import annotations
@@ -119,7 +99,7 @@ def _assert_output_invariant(new_df: pd.DataFrame, legacy_df: pd.DataFrame,
     new_has = output_col in new_df.columns
     legacy_has = output_col in legacy_df.columns
     if not legacy_has:
-        # Legacy failure path (exception catturata → df as-is). Il nuovo
+        # NOTE: legacy failure path (exception catturata → df as-is). Il nuovo
         # impl puo' matchare o migliorare. Documentiamo solo che il df
         # resta un DataFrame valido.
         assert isinstance(new_df, pd.DataFrame)

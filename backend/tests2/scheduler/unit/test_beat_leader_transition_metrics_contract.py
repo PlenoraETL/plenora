@@ -1,25 +1,7 @@
-"""Metriche su leader transitions (C3 round 4).
+"""
+Metriche su leader transitions (C3 round 4).
 
 Il commento originale di C3 sul fix 1 diceva:
-  "Log WARNING + metrica quando il leader cambia (serve per capire i flap)"
-
-Il WARNING e' gia' in place. Questo modulo copre la metrica strutturata:
-ogni transizione (acquired / lost / released / standby / degraded) scrive
-un counter su Redis via HINCRBY. Leggibile da CLI Redis o dashboard
-esterni. Nessuna dipendenza prometheus server-side — il beat e un
-processo separato dal FastAPI e non condivide memoria.
-
-Hash Redis usate:
-- `scheduler:beat:leader:transitions` (hash) — counter per transition_type
-- `scheduler:beat:leader:last_transition_at` (string) — ISO timestamp
-- `scheduler:beat:leader:current_leader_id` (string) — leader attivo
-
-Transition types:
-- `acquired`      primo SETNX riuscito
-- `lost`          scoperto altro leader alla refresh
-- `released`      rilascio esplicito su close()
-- `standby`       entrato in standby per Redis down (fail-closed)
-- `degraded_open` entrato in leader degraded (fail-open flag)
 """
 
 import fakeredis

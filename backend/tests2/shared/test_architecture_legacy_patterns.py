@@ -1,38 +1,7 @@
-"""Architecture-guard test suite — BE-GO-READY-ARCH-GUARDS-001.
+"""
+Architecture-guard test suite — BE-GO-READY-ARCH-GUARDS-001.
 
 Source-bound AST guardrails che bloccano la deriva legacy ad alto
-valore senza diventare lint rumoroso. Ogni regola:
-
-- e' parsata via `ast` su `backend/app/` (o `backend/tests2/` per il
-  rule 4): zero import di moduli applicativi (no DB/Redis/init);
-- usa una **allowlist esplicita** per i pattern legittimi, lockata
-  per file con count per evitare drift silente;
-- ha un razionale documentato accanto all'allowlist.
-
-Le 5 regole locked:
-
-1. `HTTPException(detail=str(e))` (`value_error_str_e`) — gia' lockato
-   in `test_error_codes_catalog.py::test_value_error_str_e_callsite_lock`
-   (BE-GO-READY-ERROR-CODES-015). Qui si aggiunge solo un meta-test
-   che verifica che quella protezione esista, per evitare che venga
-   rimossa silenziosamente.
-2. `os.getenv` consentito solo nei moduli boundary
-   (config/bootstrap/secrets/cloud), con count per file lockato.
-3. `app.db.pg_connection` direct import dai router — 6 router legacy
-   allowlistati; nuovi router devono passare per service/repository
-   layer.
-4. `app.main` import dai test `tests2/shared/` o `tests2/**/unit/` —
-   1 file allowlistato (observability contract); altri test devono
-   usare TestClient mini-app o monkeypatch.
-5. `raise_typed_http(code=...)` con `code` literal stringa invece di
-   `error_codes.<CONST>` — 0 hits, locked al baseline pulito.
-
-Convenzioni del file:
-- helper `_walk(...)` parsa una root tree;
-- ogni rule ha:
-  - `ALLOWLIST_*` (dict file -> count atteso) o (set di file ammessi);
-  - `_scan_*` source-bound;
-  - `test_<rule>_*_lock` che fail su drift in piu' o in meno.
 """
 
 from __future__ import annotations

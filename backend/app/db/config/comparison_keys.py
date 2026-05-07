@@ -1,9 +1,7 @@
 """
 Comparison keys DAL — estratto da `config_db_service.py` (scope micro Batch G #9,
-invariants §6 commit `58d98a0`).
 
-Cluster `comparison_keys` (per confronto L3 su intermediate.db). Post `[p7-c1]`
-il cluster ha 1 sola funzione live: `delete_comparison_keys`.
+invariants §6 commit `58d98a0`).
 """
 
 from app.db.pg_connection import execute

@@ -1,18 +1,7 @@
-"""Contract test — invariants di PUT /users/{user_id}.
+"""
+Contract test — invariants di PUT /users/{user_id}.
 
 Endpoint `update_user` (auth.py:721) NON deve:
-  1. Accettare `password` nel payload. Storicamente lo scartava in
-     silenzio: il frontend credeva di aver cambiato password mentre
-     restava la vecchia. Ora deve rispondere 400 esplicito.
-  2. Accettare `group_id` da admin non-superadmin (403).
-  3. Accettare role inesistenti (400).
-
-DEVE:
-  4. Accettare email/is_active da admin.
-  5. Accettare role/group_id da superadmin.
-
-Il test mocka db.get_user + db.update_user per restare puramente
-unit (niente DB).
 """
 
 from __future__ import annotations

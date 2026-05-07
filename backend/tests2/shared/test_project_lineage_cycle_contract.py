@@ -1,13 +1,7 @@
-"""Funzione pura `detect_project_lineage_cycle` (C3 fix 5).
+"""
+Funzione pura `detect_project_lineage_cycle` (C3 fix 5).
 
 Rileva cicli nel DAG delle dipendenze cross-project (nodi
-`project_source` che puntano a un altro progetto). I test coprono:
-- grafo lineare senza ciclo
-- self-reference (A → A)
-- cicli a 2, 3 nodi
-- sottografi non collegati ignorati
-- pattern diamond (no ciclo, solo riuso di nodi downstream)
-- robustezza: `get_sources_fn` che ritorna None o lista vuota
 """
 
 from typing import Dict, List, Optional

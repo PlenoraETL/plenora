@@ -1,41 +1,7 @@
-"""Ticket service — orchestrazione, RBAC, validazione, hook notifiche.
+"""
+Ticket service — orchestrazione, RBAC, validazione, hook notifiche.
 
 Policy RBAC:
-
-  esecutore:
-    Nessun accesso (il ruolo kiosk non vede la UI tickets).
-
-  viewer / user (creator di un ticket):
-    - Crea: solo kind='user_support', nel proprio group_id
-    - Lista: solo ticket creati da se'
-    - Dettaglio: solo ticket creati da se'
-    - Commenti: puo' aggiungere commenti sui propri ticket
-    - Allegati: puo' allegare file sui propri ticket
-    - Status change: puo' riaprire (resolved/closed → reopened) un proprio
-      ticket se la risoluzione non soddisfa
-    - NON puo': cambiare severity, assignee, category; vedere ticket
-      altrui, chiudere definitivamente (closed)
-
-  admin:
-    - Crea: entrambi kind, nel proprio group
-    - Lista/dettaglio: tutti i ticket del proprio gruppo
-    - Update completo (status, assignee, severity, category) entro il gruppo
-    - Commenti / allegati sui ticket del gruppo
-
-  superadmin:
-    - Full access cross-group, entrambi kind
-
-Hook notifiche (email):
-  `TicketNotifier` e' una classe con metodi no-op oggi. L'implementazione
-  email sara' aggiunta plug-in fornendo un NotifierEmail che eredita.
-  Separata dal service cosi':
-    - Test del service NON dipendono da SMTP
-    - Attivazione/disattivazione per-ambiente senza toccare il core
-    - Aggiunta Slack/Teams in futuro senza refactor
-
-Categorie:
-  Enum soft (lista Python) per permettere estensione senza migration DB.
-  Whitelist validata al create/update. Il frontend fetcha `/categories`.
 """
 
 from __future__ import annotations

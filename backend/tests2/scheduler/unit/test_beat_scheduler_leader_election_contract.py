@@ -1,22 +1,7 @@
-"""Leader election del beat scheduler via Redis SETNX (C3 punto 1).
+"""
+Leader election del beat scheduler via Redis SETNX (C3 punto 1).
 
 Contratto atteso
-----------------
-1. A ogni tick, il beat tenta di acquisire (o refreshare) un lock leader
-   su Redis con chiave `scheduler:beat:leader`, TTL breve (~120s).
-2. Se il lock viene acquisito / refreshato → il beat e' leader, procede
-   con _sync_from_db, _write_heartbeat, cleanup jobs, e super().tick().
-3. Se il lock e' gia' posseduto da un altro leader → il beat e' in
-   standby: tick() NON chiama sync/heartbeat/cleanup, NON chiama
-   super().tick(), ritorna max_interval.
-4. Se Redis non e' raggiungibile → fallback degraded mode: il beat
-   si comporta da leader single-instance (meglio "un beat attivo"
-   che "nessun beat"). Warning loggato.
-5. Su `close()`, il leader rilascia il lock (se e' ancora sua proprieta').
-
-Il fix chiude il vettore "doppio beat = doppi enqueue task" che il
-lock per-schedule di ConcurrencyManager NON chiudeva (quello protegge
-la pipeline lato worker, non l'enqueue del task da parte del beat).
 """
 
 import time

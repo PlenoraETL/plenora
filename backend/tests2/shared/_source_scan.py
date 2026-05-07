@@ -1,14 +1,7 @@
-"""Shared source-scanner helpers for source-bound contract tests.
+"""
+Shared source-scanner helpers for source-bound contract tests.
 
 BE-GO-READY-TEST-INFRA-004-CONTRACT-TEST-WALL-REDUCTION.
-
-Six older source-bound tests under ``tests2/shared/`` each shipped
-their own copy of the same ``_python_code_only`` helper. This is
-the canonical version: strings + comments + f-string literal
-portions are stripped so docstring/audit-log text cannot
-false-positive forbidden-token scans. Python 3.12+ tokenises
-f-string literal parts as ``FSTRING_MIDDLE`` (not ``STRING``);
-this helper handles both.
 """
 
 from __future__ import annotations

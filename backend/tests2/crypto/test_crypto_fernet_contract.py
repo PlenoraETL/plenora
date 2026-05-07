@@ -1,27 +1,7 @@
-"""Contract test per `app.shared.crypto` — livello primitive Fernet.
+"""
+Contract test per `app.shared.crypto` — livello primitive Fernet.
 
 Invariants blindati (da ``backend/docs/architecture/invariants.md``):
-
-- §1.6 riga ``app/shared/crypto.py``: encrypt fail-fast su Fernet rotto
-  (S1 chiuso), decrypt ritorna ``None`` su ``InvalidToken`` con
-  ``logger.error`` (fallback autorizzato §2 riga 1).
-- §2 riga ``crypto.decrypt()`` → ``None`` su ``InvalidToken``: perimetro
-  "solo decrypt", log esplicito, piano rimozione legato a policy product
-  "crypto-broken = app down".
-
-Regressioni protette:
-
-- Se la MAC di un token Fernet viene alterata (bit flip), ``decrypt``
-  DEVE ritornare ``None`` (non il plaintext, non raise scoperto). Senza
-  questo contratto, un attaccante che manomette il DB potrebbe confondere
-  i consumer con plaintext in cascata.
-- Due ``encrypt`` della stessa stringa con la stessa chiave DEVONO
-  produrre ciphertext distinti (Fernet garantisce IV random). Se questo
-  smette di valere, pattern di plaintext identici diventano inferibili
-  dal DB dump.
-- ``encrypt_dict_fields`` DEVE saltare in silenzio i campi assenti o
-  non-string (allowlist soft). Un AttributeError su valore ``None``
-  romperebbe i flussi save su record parzialmente popolati.
 """
 
 from __future__ import annotations

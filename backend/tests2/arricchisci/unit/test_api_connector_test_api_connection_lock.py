@@ -1,8 +1,7 @@
-"""Lock tests per ApiConnectionService.test_api_connection.
+"""
+Lock tests per ApiConnectionService.test_api_connection.
 
 Scopo: congelare il contratto osservabile di `test_api_connection`
-prima del refactor C5 (estrazione helpers + uso del condiviso
-`_substitute_url_path_params`).
 """
 
 from contextlib import ExitStack

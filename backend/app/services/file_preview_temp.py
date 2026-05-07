@@ -1,25 +1,7 @@
-"""Preview di un file caricato senza persistenza DB (STRUCT-001 Seam D-A).
+"""
+Preview di un file caricato senza persistenza DB (STRUCT-001 Seam D-A).
 
 Estratto da `FileSourceService.preview_file_temp` senza alcun cambio
-comportamentale. La funzione e' standalone (no DB, no auth, no
-cross-tenant check) e accetta tutti i collaborator come kwargs
-espliciti per:
-
-  - testabilita' diretta con MagicMock (no FileSourceService.__new__);
-  - go-portability: signature 1:1 con
-    `func PreviewFileTemp(content io.Reader, filename string, opts PreviewOpts) (PreviewResult, error)`;
-  - leaf module: zero import da `app.services.file_service` (no cycle).
-
-Side effect confinati:
-  - temp file write su `app.config.settings.TEMP_DIR`;
-  - MIME validation defense-in-depth via `app.utils.mime_validator`
-    (block-only su magic bytes; stesso check del router);
-  - ZIP unwrap (su zip_safe.safe_extract via fs.extract_zip);
-  - parser dispatch via `loader` (DataLoaderProtocol);
-  - cleanup garantito in `finally` per tmp file/dir su success e exception.
-
-Nessuna chiamata DB, nessun auth check: l'autorizzazione e' del router
-(layer auth FastAPI) - qui valida solo che il blob sia parsabile.
 """
 
 from __future__ import annotations

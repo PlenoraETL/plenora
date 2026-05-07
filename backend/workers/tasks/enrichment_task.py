@@ -1,29 +1,7 @@
 """
 Task Celery per arricchimento dati asincrono.
 
-Architettura
-============
-Questo modulo definisce il task Celery che esegue l'arricchimento batch
-in background. Viene invocato dal router /api/tasks quando l'utente
-avvia un arricchimento completo.
-
-Flusso di esecuzione:
-1. Il router crea il task Celery con i parametri (api_id, project_id, options)
-2. Il worker Celery riceve il task e lo esegue in un processo separato
-3. Durante l'esecuzione, il task aggiorna il progresso in Redis tramite
-   task.update_state(state='PROGRESS', meta={'percent': N, 'message': '...'})
-4. Il frontend fa polling su GET /api/tasks/{task_id} per leggere il progresso
-5. Al completamento, il risultato (path file output) viene salvato in Redis
-
-Componenti:
-- run_enrichment_task(): task Celery principale
-- _progress_callback(): callback passato a EnrichmentExecutor per aggiornamenti
-- _save_result(): salvataggio DataFrame arricchito nel formato richiesto
-
-Gestione errori:
-- Timeout configurabile per task lungo
-- Retry automatico su errori transitori (rete, rate limiting)
-- Stato FAILURE con dettagli errore salvati in Redis
+Runs background execution while preserving backend runtime contracts.
 """
 
 import os
@@ -249,7 +227,7 @@ def execute_enrichment_task(
 
     try:
         # Import qui per evitare circular imports.
-        # IMPORTANTE: istanziamo una NUOVA `ApiConnectionService` invece di
+        # NOTE: istanziamo una NUOVA `ApiConnectionService` invece di
         # usare il singleton modulo-level. Il singleton ha stato per-execution
         # che e' soggetto a race condition cross-tenant fra task paralleli
         # sullo stesso worker process (Celery prefork riusa i fork).
@@ -530,7 +508,7 @@ def execute_enrichment_task(
                             seen_cols.add(col)
                             deduped.append(m)
                     batch_from_node = node_data.get("batch", {})
-                    # IMPORTANTE: non riassegnare api_config (variabile closure condivisa
+                    # NOTE: non riassegnare api_config (variabile closure condivisa
                     # tra thread). Usa una copia locale api_config_local.
                     api_config_local = {
                         **api_config,

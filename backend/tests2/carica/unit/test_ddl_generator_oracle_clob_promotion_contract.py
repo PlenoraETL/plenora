@@ -1,16 +1,7 @@
-"""Auto-promote VARCHAR2(4000)→CLOB su Oracle per colonne lunghe (C5 fix 2).
+"""
+Auto-promote VARCHAR2(4000)→CLOB su Oracle per colonne lunghe (C5 fix 2).
 
 Motivazione
------------
-Il mapping default Oracle per str/string/category e' `VARCHAR2(4000)`.
-Una colonna con testo > 4000 char fa fallire l'INSERT con
-`ORA-12899: value too large for column`. Fix: `generate_create_table`
-accetta `max_lengths: Dict[col_name, int]` (calcolato dal
-DataFrame); se su Oracle la colonna e' VARCHAR2 e la sua max_length
-supera 4000, il tipo viene promosso a CLOB.
-
-Altri dialetti (Postgres TEXT, MSSQL NVARCHAR(MAX), MySQL TEXT) hanno
-gia' tipi senza limite → non serve promozione.
 """
 
 from unittest.mock import MagicMock

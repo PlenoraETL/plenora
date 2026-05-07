@@ -1,18 +1,7 @@
-"""Contract test N6 — /api/logs fail-closed su project_id cross-tenant.
+"""
+Contract test N6 — /api/logs fail-closed su project_id cross-tenant.
 
 Scenario pre-fix:
-  U1 (group_A) fa GET /api/logs?project_id=<proj_B> dove proj_B appartiene
-  a group_B. Il filtro SQL `project_id = X AND (group_id = A OR group_id = '')`
-  escludeva log applicativi ma NON log di sistema (group_id = ''), che
-  diventavano leak cross-tenant: U1 poteva scoprire esistenza e attivita'
-  operativa di progetti di altri gruppi.
-
-Post-fix (2026-04-17):
-  Se `project_id` e' specificato nella query e l'utente non e' superadmin,
-  `assert_project_visible` viene chiamato a monte. Rifiuta con 403 (cross-
-  group) o 404 (inesistente) PRIMA di eseguire qualsiasi query sui log.
-
-Superadmin: bypassa il check, puo' filtrare per qualsiasi project_id.
 """
 
 from __future__ import annotations

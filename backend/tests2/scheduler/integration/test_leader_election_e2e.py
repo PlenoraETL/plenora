@@ -1,17 +1,7 @@
-"""Integration test dei 5 scenari operativi della leader election (C3).
+"""
+Integration test dei 5 scenari operativi della leader election (C3).
 
 Copre end-to-end i 5 test suggeriti manualmente via `fakeredis` (in-memory
-drop-in di redis-py) + TTL accelerato:
-
-1. Doppio beat stesso Redis       → un leader + uno in standby
-2. SIGKILL del leader             → standby promosso dopo TTL
-3. Redis down temporaneo          → degraded mode, recovery al restart
-4. SIGTERM graceful (close)       → release immediato, successore subito
-5. TTL vs tick interval           → sweet spot e failure mode
-
-Zero dipendenze Docker/infrastruttura: fakeredis gira in-process e
-supporta SET NX EX, EXPIRE, TTL, DELETE — tutto cio' che usa
-_try_become_leader + close.
 """
 
 import time

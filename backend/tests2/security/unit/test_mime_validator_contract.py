@@ -1,13 +1,7 @@
-"""Contract test — `app.utils.mime_validator.validate_upload`.
+"""
+Contract test — `app.utils.mime_validator.validate_upload`.
 
 Verifica:
-  - Happy path per ogni formato in allowlist
-  - Adversariali: .exe rinominato in .csv/.png/.xlsx
-  - Polyglot: pdf rinominato in .png, png rinominato in .csv
-  - Estensione assente / non in allowlist → MimeMismatchError
-  - File vuoto → MimeMismatchError
-  - File testuali validi (utf-8 / latin-1 / con BOM) accettati
-  - File "testuale" con null bytes (binary mascherato) rifiutato
 """
 
 from __future__ import annotations

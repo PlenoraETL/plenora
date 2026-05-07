@@ -1,26 +1,7 @@
 """
 Task Celery per il modulo CARICA — esecuzione asincrona con progresso Redis.
 
-Architettura
-============
-Questo modulo definisce il task Celery che esegue il caricamento su database
-in background. Viene invocato dal router /api/tasks quando l'utente avvia
-il caricamento dalla UI o dal CRON scheduler.
-
-Flusso di esecuzione:
-1. Il router crea il task Celery con i parametri (project_id, canvas, config)
-2. Il worker Celery riceve il task e lo esegue in un processo separato
-3. Durante l'esecuzione, il task aggiorna il progresso in Redis tramite
-   task.update_state(state='PROGRESS', meta={'percent': N, 'message': '...'})
-4. Il frontend fa polling su GET /api/tasks/{task_id} per leggere il progresso
-5. Al completamento, il risultato viene salvato in Redis
-
-Il pattern è identico a enrichment_task.py di ARRICCHISCI per garantire
-consistenza nell'interfaccia di monitoraggio del frontend.
-
-Uso:
-    task = execute_carica_task.delay(project_id, canvas_dict, carica_config)
-    # Frontend: GET /api/tasks/{task.id} per polling
+Runs background execution while preserving backend runtime contracts.
 """
 
 from app.utils.logger import get_logger, open_run, close_run, set_run_context, append_step

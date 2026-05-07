@@ -1,29 +1,7 @@
-"""Cross-tenant leak regression — cascade 409 detail (PR-δ).
+"""
+Cross-tenant leak regression — cascade 409 detail (PR-δ).
 
 Bug 2026-04-30 (Auth/RBAC fase 2 hardening):
-
-  3 endpoint DELETE che rifiutano con 409 cascade quando una risorsa
-  e' usata in canvas di progetti, esponevano `dependencies[].name` di
-  TUTTI i gruppi nel detail dell'errore. Caso di leak reale: risorsa
-  shared con altri gruppi via allowed_groups, admin del gruppo
-  proprietario tenta delete -> errore 409 espone nomi di progetti del
-  gruppo destinatario dello share.
-
-  Endpoint coinvolti:
-    - DELETE /api/datasources/{ds_id}
-    - DELETE /api/connections/{connection_id}
-    - DELETE /api/api-connections/{api_id}
-
-  Fix PR-δ:
-    - dependencies filtrate per `group_id == current_user.group_id` (o
-      tutte se superadmin)
-    - aggiunto `hidden_count` opzionale nel detail per segnalare i
-      progetti bloccanti non visibili
-    - shape backward-compatible: hidden_count default 0; FE legge il
-      nuovo campo via formatter centralizzato (api/errors.js)
-
-Questo file blinda il contratto "no leak nomi cross-tenant", parametrico
-sui 3 endpoint per uniformita'.
 """
 
 from __future__ import annotations

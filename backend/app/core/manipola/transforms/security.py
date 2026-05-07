@@ -1,103 +1,7 @@
 """
 Cluster SECURITY — hashing MD5 (change detection / anonimizzazione) +
+
 mascheramento PII fail-closed.
-
-Origine
-=======
-Estratto da `app.core.manipola.transforms.base` come parte di Phase 5
-Batch B1.11 (cluster split + closeout runtime residuals base.py, vedi
-`orchestrate/PHASE_5_ENTRY_PLAN.md` §3 P5-B1 + §6.1 facade pattern).
-
-Razionale del raggruppamento: tutte le entita' qui dentro condividono
-dominio "security/privacy":
-  - `op_md5_hash`     — calcolo hash MD5 colonne (change detection +
-                        anonimizzazione 1-way).
-  - `_mask_cf/_mask_email/_mask_phone/_mask_iban/_mask_custom`
-                      — 5 helper privati per pattern di mascheramento
-                        PII per tipo (CF, email, telefono, IBAN, custom).
-  - `MASK_FUNCTIONS`  — dict registry tipo → funzione, consumato da
-                        `op_mask_data` per dispatch.
-  - `op_mask_data`    — fail-closed all-or-nothing PII masking
-                        (γ1b ratificata, RuntimeError + chain
-                        `__cause__` preservata).
-
-Coupling MASK_FUNCTIONS — preservato via patch.dict semantics
-=============================================================
-Il test contract `tests2/manipola/unit/test_op_mask_data_fail_closed.py`
-patcha `MASK_FUNCTIONS['cf']` con:
-
-    patch.dict(
-        "app.core.manipola.transforms.base.MASK_FUNCTIONS",
-        {"cf": broken_cf_mask},
-        clear=False,
-    )
-
-`patch.dict` MUTA il dict in-place (NON rebinda l'attributo modulo).
-Quindi:
-  1. `base.py` re-exporta MASK_FUNCTIONS via `from .security import
-     MASK_FUNCTIONS` → `base.MASK_FUNCTIONS is security.MASK_FUNCTIONS`
-     (stesso oggetto, identita' Python preservata).
-  2. Il patch risolve `base.MASK_FUNCTIONS` → ottiene il dict object →
-     muta i valori in place → la mutazione e' visibile da `op_mask_data`
-     (qui in security.py) che legge `MASK_FUNCTIONS` via module-level
-     name lookup → stesso dict identico.
-  3. Il restore al `__exit__` del context manager ripristina i valori
-     originali (helper _mask_cf/_mask_email/...).
-
-Matematicamente:
-  - `patch.object(base, "MASK_FUNCTIONS", new_dict)` ❌ rebinderebbe
-    solo `base.MASK_FUNCTIONS` → propagation rotta verso security
-  - `patch.dict("...base.MASK_FUNCTIONS", {...})` ✅ muta dict shared
-    → propagation OK
-
-Il test usa `patch.dict`, quindi l'extraction e' safe per costruzione.
-
-Contenuto:
-  - `op_md5_hash`        — vectorized MD5 per change detection
-                           (~10x speedup vs legacy double-pass agg+map).
-  - `_mask_cf`           — RSSMRA80A01H501Z → RSS***********01Z
-  - `_mask_email`        — mario.rossi@gmail.com → m****@gmail.com
-  - `_mask_phone`        — +39 333 1234567 → +39 ***4567
-  - `_mask_iban`         — IT60X0542811101000000123456 →
-                           IT60********************3456
-  - `_mask_custom`       — N caratteri visibili inizio/fine
-  - `MASK_FUNCTIONS`     — dict {tipo: funzione} per dispatch
-  - `op_mask_data`       — loop fail-closed all-or-nothing su PII;
-                           se fallisce su una colonna → `raise
-                           RuntimeError(...)` PRIMA di return result
-                           (no leak PII parziale).
-
-Invarianti pubbliche preservate (regola §6.1 zero call-site changes):
-  - `from app.core.manipola.transforms.base import op_md5_hash` /
-    `op_mask_data` continua a funzionare grazie al facade re-export
-    in `base.py`.
-  - `from app.core.manipola.transforms import op_md5_hash` /
-    `op_mask_data` continua a funzionare (`__init__.py` re-exporta
-    entrambi via `from .base import ...` che cattura il facade).
-  - `transforms_registry.json` con entries `"base.op_md5_hash"` /
-    `"base.op_mask_data"` continua a risolvere via
-    `getattr(<base module>, "<func>")` dal `PluginExecutor`.
-  - `MASK_FUNCTIONS` re-exported da base.py via `from .security
-    import MASK_FUNCTIONS` → identita' oggetto preservata per
-    patch.dict (vedi sezione "Coupling" sopra).
-  - `_mask_cf/_mask_email/_mask_phone/_mask_iban/_mask_custom` NON
-    re-exported da base (verificato: nessun consumer esterno).
-    Restano single-source in security.
-
-Logger naming
-=============
-Logger creato esplicitamente come
-`"app.core.manipola.transforms.base"` (NON `__name__`) per preservare
-il contratto osservabile pre-extraction: i record `MD5 Hash: ...`,
-`[CRASH] Errore MD5 Hash`, `Mask Data: ...`, `[CRASH] Errore
-mascheramento colonna ...` continuano ad apparire sotto il logger
-name dei consumer. Stesso pattern di tutti i moduli figli estratti
-nei batch B1.1-B1.10.
-
-Il body sotto e' una copia BIT-PER-BIT delle implementazioni in
-`base.py` al momento di B1.11. Nessuna modifica di logica, comment,
-log payload, ordine di operazione, fail-closed all-or-nothing
-semantics, vectorized MD5 prep.
 """
 
 import numpy as np
@@ -243,7 +147,7 @@ def _mask_custom(value: str, chars_start: int = 3, chars_end: int = 3, mask_char
 
 # Mappa tipo mascheramento → funzione
 #
-# IMPORTANTE: questo dict viene re-exported da `base.py` via
+# NOTE: questo dict viene re-exported da `base.py` via
 # `from .security import MASK_FUNCTIONS`. Il test contract
 # `tests2/manipola/unit/test_op_mask_data_fail_closed.py:69,110`
 # patcha `"app.core.manipola.transforms.base.MASK_FUNCTIONS"` con

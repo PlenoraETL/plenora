@@ -1,39 +1,7 @@
-"""Contract test N9 — re-check permessi user in pipeline_task.
+"""
+Contract test N9 — re-check permessi user in pipeline_task.
 
 Pre-fix scenario:
-  T0: admin X del gruppo A esegue pipeline -> router fa assert_project_group
-      -> task Celery in coda.
-  T0+Xs: admin B disabilita X, o lo rimuove dal gruppo A.
-  T1: worker Celery prende la task e la esegue lo stesso — i permessi
-      non sono piu' verificati.
-
-Risultato: elevation of privilege temporale. Un admin revocato puo'
-completare operazioni pesanti su risorse a cui non dovrebbe piu' accedere.
-
-Fix (2026-04-17):
-  - `execute_pipeline_task` accetta `user_id` optional
-  - Se passato, il task re-verifica l'utente:
-    * esiste + is_active=True
-    * ha ancora accesso al progetto (same group_id o superadmin)
-  - Se fallisce -> return status='permission_revoked' senza eseguire
-
-Backward compat: user_id=None -> skip re-check (ok per task cron
-schedulate che non hanno un user umano dietro).
-
-R-04 (2026-05-01): modernizzazione da source-bound a behavior-bound.
-Pre-PR: 11 inspect.getsource per asserire stringhe nel codice prod.
-Post-PR: pattern misto refactor-resilient:
-  - bytecode probe (co_names) per "task referenzia callee X" — robusto a
-    rinames di variabili locali, sensibile ai rename del callee (cosa
-    voluta come invariant).
-  - spy diretti su collaborator (recheck_user_authorized,
-    assert_project_access, .delay, open_run, create_run) per kwarg
-    propagation testabile invocando l'helper isolato.
-  - SQL capture via pg_connection.execute spy per asserzioni "INSERT
-    include colonna X" — boundary DB osservabile, non source string.
-  - TestClient + dependency override per endpoint contract.
-  - 1 test droppato per ridondanza con behavior test gia' esistente
-    (vedi `test_shared_recheck_returns_permission_revoked_on_disabled_user`).
 """
 
 from __future__ import annotations

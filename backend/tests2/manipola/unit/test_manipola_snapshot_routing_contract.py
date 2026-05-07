@@ -1,20 +1,7 @@
-"""Contract test Phase 6 Batch 2 — MANIPOLA snapshot routing.
+"""
+Contract test Phase 6 Batch 2 — MANIPOLA snapshot routing.
 
 Verifica che il loop trasformazioni di MANIPOLA passa per la nuova
-policy-based snapshot API (`record_checkpoint_snapshot` /
-`record_final_snapshot`) invece del legacy `write_node` con
-`df.to_dict(full)`.
-
-Scope:
-  - transform NON critical -> record_checkpoint_snapshot e' chiamato MA
-    la policy ritorna recorded=False senza materializzare il DataFrame
-  - transform critical (join, filter, aggregate, geo_explode, ...) ->
-    snapshot con recorded=True
-  - multi_join -> snapshot con recorded=True (sempre critical)
-  - result node -> record_final_snapshot
-  - policy `none` -> solo result registrato; checkpoint tutti skipped
-  - policy `all` -> tutti i transform registrati
-  - executor non chiama piu' `write_node` legacy
 """
 
 from __future__ import annotations

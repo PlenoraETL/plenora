@@ -1,63 +1,7 @@
-"""Manipola source-loading helpers — extraction slice.
+"""
+Manipola source-loading helpers — extraction slice.
 
 BE-GO-READY-TRANSFORMATION-ENGINE-006-MANIPOLA-SOURCE-LOADING-SLICE.
-
-This module owns the **file-source** loading chain previously
-inlined in ``ManipolaExecutor._carica_sorgenti_file``. The
-extraction is behaviour-preserving:
-
-  - same ``SourceLoader.load`` call shape;
-  - same fail-closed dict shape (``{"success": False,
-    "message": ...}``) with byte-for-byte the same operator
-    strings;
-  - same CRS upgrade via ``_applica_crs_da_colonne``;
-  - same node-iteration pattern with ``_nf`` extraction.
-
-The only behaviour the function is NOT given access to is the
-legacy singleton ``self._current_group_id``: post
-``TRANSFORMATION-ENGINE-005`` the file chain is ``ctx-strict``
-and the caller MUST pass an explicit ``group_id``. A stale
-singleton from a previous run cannot reach a visibility check
-through this helper (the executor delegator no longer consults
-it for this chain — see
-``app/core/manipola/executor.py::ManipolaExecutor._carica_sorgenti_file``).
-
-Boundary
---------
-Pure function module: no class, no global state, no side effect
-beyond mutating the caller-owned ``dataframes`` dict and emitting
-log lines through the optional ``logger`` argument. Imports are
-explicit; nothing reaches into ``ManipolaExecutor`` at module-
-load time (the small cross-chain helpers ``_nf`` and
-``_applica_crs_da_colonne`` are imported lazily inside the
-function body to avoid an executor ↔ source_loading import
-cycle).
-
-Out of scope (per ``TE-006`` brief):
-
-  - the project-source chain (``_carica_sorgenti_progetto``)
-    and the static-values chain (``_carica_sorgenti_statiche``)
-    stay in ``executor.py`` for now; their extraction is
-    deferred to follow-up streams.
-  - join / groupby / aggregation logic (``_applica_trasformazioni``,
-    plugin executor) — explicitly out of this slice.
-
-Public surface
---------------
-::
-
-    load_file_sources(
-        canvas,
-        dataframes,
-        *,
-        group_id: Optional[str],
-        logger=None,
-    ) -> Optional[Dict[str, Any]]
-
-Returns ``None`` on success (the caller-owned ``dataframes``
-dict has been populated in place); returns the canonical
-fail-closed dict on tenant-context error or per-node loader
-failure.
 """
 
 from __future__ import annotations

@@ -1,28 +1,7 @@
-"""Contract test BE-GO-READY-STORAGE-ENGINE-002 — compensating-delete
+"""
+Contract test BE-GO-READY-STORAGE-ENGINE-002 — compensating-delete
+
 helper unificato `app.shared.storage_compensation.compensating_delete`.
-
-Lock i 4 invariant del contract:
-
-1. Capability `object_storage_enabled() == False` -> outcome
-   `"skipped"` + log debug `event=storage_compensating_delete_skipped`,
-   nessuna chiamata a `get_runtime_object_storage()`.
-2. Capability ON, storage.delete OK -> outcome `"ok"` + log info
-   `event=storage_compensating_delete_ok`.
-3. Capability ON, storage.delete fallisce -> outcome `"failed"` +
-   log warning `event=storage_compensating_delete_failed` con
-   `cleanup_error=<ExcType>`, MAI solleva.
-4. Caller-supplied `storage` -> usata invece di `get_runtime_object_storage()`,
-   risparmia il roundtrip alla factory.
-
-Plus: race capability-off-during-resolution -> outcome `"skipped"`
-con `skip_reason=capability_disabled_race`.
-
-Boundary
-========
-Source-bound: usa solo lo helper + monkeypatch su
-`app.shared.cloud_backends`. Nessun import di moduli applicativi
-(result_store, file_sources, ecc.) per evitare side effect di
-init.
 """
 
 from __future__ import annotations

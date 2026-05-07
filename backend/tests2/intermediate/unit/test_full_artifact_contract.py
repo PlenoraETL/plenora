@@ -1,20 +1,7 @@
-"""Contract test Batch object storage intermedi (2026-04-28).
+"""
+Contract test Batch object storage intermedi (2026-04-28).
 
 Verifica:
-  A. Default produzione: `INTERMEDIATE_PERSISTENCE_MODE=metadata_only`.
-  B. Mode `full_artifact`:
-     - zero `node_rows` persistite
-     - data.parquet + manifest.json caricati su runtime object storage
-     - layout key deterministico
-     - node_meta `artifact_uri` / `_status` / `_format` valorizzati
-  C. OBJECT_STORAGE_ENABLED=false + mode=full_artifact:
-     - validate fail-fast
-     - se la capability collassa a runtime: `artifact_status="failed"`
-       (no crash run)
-  D. write_node legacy / full_pg invariato.
-  E. Niente `df.to_dict(full)` in mode full_artifact.
-
-NB: niente object storage reale; spy su `get_runtime_object_storage`.
 """
 
 from __future__ import annotations

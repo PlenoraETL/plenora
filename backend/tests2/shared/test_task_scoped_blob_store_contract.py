@@ -1,26 +1,7 @@
-"""Contract test BE-STORAGE-001A — `TaskScopedBlobStore` Protocol.
+"""
+Contract test BE-STORAGE-001A — `TaskScopedBlobStore` Protocol.
 
 Audit/test-first batch (lane B di BE-PHASE2-PARALLEL-PACK-001).
-
-Verifica:
-
-1. shape `TaskBlobSaveResult` (frozen dataclass, campi tipati);
-2. Protocol shape `TaskScopedBlobStore` espone il common denominator
-   (`prefix`, `find_keys`, `delete`);
-3. modulo shared e' pure: niente import pesanti / I/O / env;
-4. parita' parziale fra il Protocol e i 2 wrapper concreti
-   (`imdf.storage`, `eseguibili.storage`):
-   - `find_keys` ed equivalenti sono presenti in entrambi (Eseguibili:
-     `find_keys`; IMDF: derivabile via `list_task_ids` + filter o via
-     `_storage().list_objects(prefix)`);
-   - `delete` per task: presente in entrambi (`delete_by_task`,
-     `delete_bundle`);
-   - le specializzazioni (cache locale IMDF, streaming eseguibili,
-     sidecar IMDF) sono documentate come fuori dal common denominator.
-
-Niente runtime change: i 2 wrapper esistenti restano con le loro API
-attuali. Il Protocol e' future-proofing per estrazione futura quando
-un terzo consumer emerge.
 """
 
 from __future__ import annotations

@@ -1,27 +1,7 @@
-"""Contract test per shape 409 canonica su DELETE /api/projects/{id}.
+"""
+Contract test per shape 409 canonica su DELETE /api/projects/{id}.
 
 Invariante blindato (Batch Fix 6.1 — error-handling-governance):
-    La response 409 cascade-delete ha shape:
-        {
-            "detail": {
-                "error": "project_has_dependencies",
-                "message": <str>,
-                "dependencies": [
-                    {"kind": "eseguibile"|"project", "id": str, "name": str,
-                     "project_type"?: str}
-                ]
-            }
-        }
-
-Reperto pre-fix (API audit §3.3):
-    La shape usava due campi separati ``eseguibili`` e ``dependent_projects``
-    divergente dalle altre 3 409 di connections/datasources/api-connections
-    (che usavano ``projects`` o ``in_use_by``). Post 6.1 tutti i 4 endpoint
-    DELETE cascade espongono una sola shape uniforme con ``dependencies``
-    + ``kind`` per discriminare eseguibili da progetti dipendenti.
-
-Il test protegge contro regressioni alla shape e contro reintroduzioni
-dei campi legacy (``eseguibili``, ``dependent_projects``).
 """
 
 from __future__ import annotations

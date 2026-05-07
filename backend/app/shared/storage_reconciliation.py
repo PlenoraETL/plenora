@@ -1,67 +1,7 @@
-"""Persistent reconciliation log for storage compensating-delete intent.
+"""
+Persistent reconciliation log for storage compensating-delete intent.
 
 BE-GO-READY-STORAGE-ENGINE-005-RECONCILIATION-LOG-FOUNDATION.
-
-Goal
-----
-Track orphan-cleanup intent across the W1 race window — the gap
-between a row's DB DELETE (committed) and the post-commit storage
-delete. Today, if the worker dies in that window the blob becomes
-an orphan with no application-side trail. ADR-0011 accepts this
-("orphan accepted on storage failure"); this module preserves that
-posture but persists the intent so a future reconciler beat hook
-(batch 006) can act on it.
-
-Boundary
---------
-Pure leaf module:
-- stdlib + `psycopg2` cursor types passed by caller;
-- `app.db.pg_connection.execute` for autocommit transitions.
-- Zero FastAPI, zero `app.config.settings`, zero `boto3`.
-
-Three responsibilities:
-1. ``record_pending(cursor, ...)`` — INSERT inside the caller's
-   transaction. Atomic with the caller's DB change: if the caller
-   commits, the pending row exists; if the caller rolls back, no
-   reconciliation row leaks.
-2. ``mark_done(reconciliation_id)`` — autocommit terminal for the
-   happy path (storage delete succeeded or capability disabled).
-3. ``mark_failed_attempt(reconciliation_id, *, error, ...)`` —
-   autocommit increment of attempts + last_error. Does NOT promote
-   to `lost`; that is the reconciler's job (batch 006).
-
-Plus ``mark_orphan_deleted`` for the future reconciler terminal.
-
-Failure semantics
------------------
-- ``record_pending`` propagates SQL errors to the caller. The
-  caller owns the transaction and a SQL error there should
-  rollback the caller's work too.
-- ``mark_done`` / ``mark_failed_attempt`` / ``mark_orphan_deleted``
-  are best-effort: they run AFTER the caller has already committed
-  the DB change and propagated outcome to the user. An exception
-  there would surface as a 500 to a request whose DELETE already
-  succeeded. They swallow exceptions and emit a structured
-  ``event=storage_reconciliation_mark_failed`` warning.
-
-Go-ready mapping
-----------------
-::
-
-    type ReconciliationOperation string  // "delete" | "upload_intent"
-    type ReconciliationState     string  // "pending" | "done" | "orphan_deleted" | "lost"
-
-    type ReconciliationEntryRef struct {
-        ID         string
-        Domain     string
-        StorageKey string
-        Operation  ReconciliationOperation
-    }
-
-    func RecordPending(cur Cursor, p RecordPendingParams) (ReconciliationEntryRef, error)
-    func MarkDone(reconciliationID string)
-    func MarkFailedAttempt(reconciliationID string, p MarkFailedParams)
-    func MarkOrphanDeleted(reconciliationID string)
 """
 
 from __future__ import annotations

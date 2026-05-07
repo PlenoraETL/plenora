@@ -2,11 +2,6 @@
 Intermediate Router — endpoint FastAPI per feature inspection e confronto run.
 
 Endpoints:
-  GET  /api/runs/{canvas_id}                          — lista run per canvas
-  GET  /api/runs/{run_id}/nodes/{node_id}/data        — righe di un nodo
-  GET  /api/runs/compare/l1                           — confronto L1 (hash+contatori), query: run_id_a, run_id_b
-  GET  /api/runs/compare/l2                           — confronto L2 (righe aggiunte/rimosse), query: run_id_a, run_id_b, node_id
-  POST /api/runs/{run_id}/pin                         — pinna/spinna una run
 """
 
 from typing import List, Optional
@@ -28,7 +23,7 @@ logger = get_logger(__name__)
 router = APIRouter(prefix="/runs", tags=["intermediate"])
 
 
-# Bug #23 (2026-04-28): JSON spec non ammette NaN / +Inf / -Inf.
+# FIXME: #23 (2026-04-28): JSON spec non ammette NaN / +Inf / -Inf.
 # `db.get_node_table_rows` ricostruisce questi valori dai sentinel
 # JSONB persistiti (`_from_jsonable_value`) per garantire hash
 # roundtrip-safe. Sul boundary HTTP non serve quella semantica:
@@ -267,7 +262,7 @@ def get_node_data(
                 limit=limit,
             )
 
-        # Bug #23: NaN / +Inf / -Inf non sono JSON compliant.
+        # FIXME: #23: NaN / +Inf / -Inf non sono JSON compliant.
         # Vale per tutte le sorgenti (node_rows, artifact, fallback).
         rows = _sanitize_for_json(rows)
         col_schema = _sanitize_for_json(col_schema)

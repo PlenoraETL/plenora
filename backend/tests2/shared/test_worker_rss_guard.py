@@ -1,10 +1,7 @@
-"""Contract test BE-GO-READY-MEMORY-OOM-002-WORKER-RSS-SAMPLING.
+"""
+Contract test BE-GO-READY-MEMORY-OOM-002-WORKER-RSS-SAMPLING.
 
 Tests:
-1. Helper purity: `check_worker_rss` is pure (no FastAPI import).
-2. Guard behavior: raises above cap, passes below, disabled when cap <= 0.
-3. Envelope shape: 503 with memory_limit_exceeded code for RSS stages.
-4. Config: WORKER_RSS_MAX_BYTES present in Settings.DEFAULTS.
 """
 
 from __future__ import annotations

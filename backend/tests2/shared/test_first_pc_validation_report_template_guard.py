@@ -1,39 +1,7 @@
-"""Source-bound guard for the first-PC validation report template.
+"""
+Source-bound guard for the first-PC validation report template.
 
 BE-GO-READY-INSTALL-016-FIRST-PC-COMMAND-GUARD.
-
-Locks the load-bearing command shapes inside
-`docs/ops/first-pc-validation-report-template.md` so a future
-edit cannot silently drop one of the six commands the brief
-named as the operator-handoff contract:
-
-  1. commit hash + working-tree status (`git rev-parse` + `git status`);
-  2. `bash scripts/install.sh --check`;
-  3. non-interactive install with the full 7-var `PLENORA_INSTALL_*`
-     env shape (no `... \\` truncation);
-  4. `/health` and `/ready` curl probes;
-  5. `cleanroom.ping` round-trip with `AsyncResult.get(timeout=...)`;
-  6. Docker `bash scripts/docker-validate.sh --dry-run` AND a real
-     run path.
-
-Honesty contract: the Docker section must keep the FIRST SCAFFOLD
-/ NOT YET VALIDATED markers; the install MUST NOT be claimed as
-validated by this template (only the report Marco pastes back can
-flip a path to "validated").
-
-Stays source-bound (zero app imports) per the dry-run / smoke
-harness guard family posture (mirror of
-`test_install_smoke_harness_doc_guard.py` and
-`test_install_execution_pack_doc_guard.py`).
-
-Outside scope:
-  - the dry-run pack itself (locked by
-    `test_install_marco_dry_run_doc_guard.py`);
-  - the smoke harness section 5 (locked by
-    `test_install_smoke_harness_doc_guard.py`);
-  - the Docker scaffold scripts (locked by
-    `test_docker_scaffold_guard.py` /
-    `test_docker_validate_script_guard.py`).
 """
 
 from __future__ import annotations

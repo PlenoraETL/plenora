@@ -1,15 +1,7 @@
-"""Typed accessor for canvas node dicts.
+"""
+Typed accessor for canvas node dicts.
 
 Canvas nodes arrive as plain dicts from the frontend/DB with a two-level
-field layout: some fields sit at the top level, others are nested under
-``node['data']`` (backward-compat canvas format). CanvasNode wraps one
-such dict and provides typed properties plus a two-level field reader.
-
-Mirrors the ``_nd`` / ``_nf`` helper pattern used across arricchisci and
-manipola. None-only check: a top-level value of 0, False, or "" is
-returned as-is; callers use ``or default`` to handle falsy-empty cases.
-
-Domain-agnostic: no imports of Pandas, DB, FastAPI, or ArcGIS.
 """
 from __future__ import annotations
 from typing import Any, Optional

@@ -1,31 +1,7 @@
 """
 Router API per il modulo CARICA.
 
-Architettura
-============
-Questo router espone gli endpoint per la configurazione e l'esecuzione
-del modulo CARICA. Il frontend li usa per:
-
-1. Ottenere la lista schema del database destinazione
-2. Ottenere la lista tabelle in uno schema
-3. Ottenere le colonne di una tabella esistente
-4. Generare l'auto-mapping colonne
-5. Validare la configurazione prima dell'esecuzione
-6. Verificare conflitti in modalità APPEND
-
-L'esecuzione vera e propria avviene:
-- Sincrona: tramite l'endpoint execute_pipeline in main.py (che chiama l'orchestrator)
-- Asincrona: tramite POST /api/tasks con type="carica" (task Celery)
-
-Endpoints:
-- GET    /api/carica/schemas/{connection_id}            → lista schema
-- GET    /api/carica/tables/{connection_id}/{schema}    → lista tabelle
-- GET    /api/carica/columns/{connection_id}/{schema}/{table} → colonne tabella
-- POST   /api/carica/auto-mapping                       → genera mapping automatico
-- POST   /api/carica/validate                           → valida configurazione
-- POST   /api/carica/check-conflicts                    → pre-check conflitti
-
-Integrazione: usa CaricaExecutor per logica, ConnectionService per connessioni.
+Owns the HTTP boundary and delegates business logic to services or helpers.
 """
 
 from app.utils.logger import get_logger

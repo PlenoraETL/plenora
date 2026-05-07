@@ -1,66 +1,7 @@
 """
 Cluster RESHAPE — operazioni di trasformazione struttura tabella.
 
-Origine
-=======
-Estratto da `app.core.manipola.transforms.base` come parte di Phase 5
-Batch B1.10 (cluster split, vedi
-`orchestrate/PHASE_5_ENTRY_PLAN.md` §3 P5-B1 + §6.1 facade pattern).
-
-Razionale del raggruppamento: tutte le 4 funzioni qui dentro
-**rimodellano la forma del DataFrame** (righe ↔ colonne, comparison
-across tables) senza inserirsi in famiglie piu' strette tipo
-filtering/aggregation/columns:
-  - `op_pivot`      — wide-from-long: spalma valori di una colonna come
-                      colonne separate (FME PivotTable equiv).
-  - `op_melt`       — unpivot inverso: colonne in righe (wide → long).
-  - `op_transpose`  — trasposizione classica righe ↔ colonne.
-  - `op_table_diff` — confronto fra due DataFrame: ADDED/DELETED/
-                      MODIFIED/UNCHANGED + colonne diff.
-
-Tutte e 4 condividono la mental-model "shape transformation" (cambiano
-il numero di righe O di colonne O di entrambi rispetto all'input).
-
-Contenuto:
-  - `op_pivot`      — multi-key index, mapping pivot→output, 8 aggr_func.
-  - `op_table_diff` — vectorized merge outer + boolean masks +
-                      stack/groupby per `_diff_columns` e
-                      `_diff_old_values` (no iterrows). Inline
-                      `import numpy as np` come hot-path local import,
-                      preservato bit-per-bit.
-  - `op_melt`       — pandas pd.melt wrapper con filter colonne.
-  - `op_transpose`  — set_index + .T + reset_index, con id_column
-                      opzionale.
-
-Invarianti pubbliche preservate (regola §6.1 zero call-site changes):
-  - `from app.core.manipola.transforms.base import <op>` continua a
-    funzionare per tutte e 4 grazie al facade re-export in `base.py`.
-  - `from app.core.manipola.transforms import op_pivot` /
-    `op_table_diff` continuano a funzionare (`__init__.py` re-exporta
-    questi 2 via `from .base import ...` che cattura il facade).
-    `op_melt` e `op_transpose` non sono in init (verificato
-    pre-extraction) → nessun cambio init richiesto.
-  - `transforms_registry.json` con entries `"base.op_*"` per tutte e 4
-    continua a risolvere via `getattr(<base module>, "<func>")` dal
-    `PluginExecutor`.
-  - Nuovo path canonico `from app.core.manipola.transforms.reshape
-    import <op>` disponibile.
-
-Logger naming
-=============
-Logger creato esplicitamente come
-`"app.core.manipola.transforms.base"` (NON `__name__`) per preservare
-il contratto osservabile pre-extraction: i record `Pivot: ...`,
-`[CRASH] Errore Pivot`, `Table Diff: ...`, `Table Diff completato`,
-`Melt: ...`, `[CRASH] Errore Melt`, `Transpose completato`,
-`[CRASH] Errore Transpose` continuano ad apparire sotto il logger
-name dei consumer. Stesso pattern di tutti i moduli figli estratti
-nei batch B1.1-B1.9.
-
-Il body sotto e' una copia BIT-PER-BIT delle implementazioni in
-`base.py` al momento di B1.10. Nessuna modifica di logica,
-vectorization, comment, log payload, ordine di operazione,
-fail-closed semantics, hot-path local imports.
+Keeps transformation behavior isolated from orchestration callers.
 """
 
 import pandas as pd

@@ -1,30 +1,7 @@
-"""Contract test BE-GO-READY-STORAGE-ENGINE-007 —
+"""
+Contract test BE-GO-READY-STORAGE-ENGINE-007 —
+
 result-blob delete reconciliation integration.
-
-Locks the W1 race coverage extension on the two result-blob delete
-call sites in `app.db.results_db_service`:
-
-1. `delete_result(result_id)` — single delete:
-   a. SELECT storage_key + DELETE row + record_pending happen in one
-      transaction;
-   b. compensating_delete runs AFTER commit;
-   c. outcome `ok`/`skipped` → mark_done;
-   d. outcome `failed` → mark_failed_attempt (ADR-0011 posture
-      preserved: row stays deleted, orphan accepted, now tracked).
-   e. legacy BYTEA row (storage_key=NULL) skips reconciliation.
-   f. row not found (deleted=False) skips reconciliation.
-
-2. `delete_results_for_project(project_id)` — bulk delete:
-   a. pre-fetch (id, storage_key) for S3-backed rows;
-   b. record_pending N + DELETE all-by-project_id in one transaction;
-   c. per-key compensating_delete + per-row mark_done/mark_failed;
-   d. project with no S3-backed rows skips reconciliation entirely.
-   e. partial S3 failures don't abort the loop.
-
-Boundary
-========
-Source-bound: monkeypatch `transaction()`, `fetchall`, and the
-storage_compensation/reconciliation helpers. No DB connection.
 """
 
 from __future__ import annotations

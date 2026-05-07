@@ -2,18 +2,6 @@
 PLENORA-ETL — Router per gestione allowed_groups (cross-group sharing).
 
 Espone endpoint REST per leggere/modificare le righe di sharing delle
-risorse condivisibili. **SOLO superadmin** può modificare gli share:
-gli admin di gruppo non hanno questo privilegio (la condivisione cross-tenant
-è una decisione strategica/amministrativa che spetta solo ai superadmin).
-
-Resource types accettati (validati contro `_SHAREABLE` in sharing.py):
-    connections | datasources | eseguibili | api_connections | arcgis_connections
-
-Endpoint (tutti `require_superadmin`):
-- GET    /api/shares/{resource_type}/{resource_id}
-- PUT    /api/shares/{resource_type}/{resource_id}
-- POST   /api/shares/{resource_type}/{resource_id}/{group_id}
-- DELETE /api/shares/{resource_type}/{resource_id}/{group_id}
 """
 
 from typing import List

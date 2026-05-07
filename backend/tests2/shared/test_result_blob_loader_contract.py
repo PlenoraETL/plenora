@@ -1,21 +1,7 @@
-"""Contract tests for `ResultBlobLoader`.
+"""
+Contract tests for `ResultBlobLoader`.
 
 BE-GO-READY-RESOURCE-ENGINE-002-RESULT-BLOB-LOADER-PILOT.
-
-Locks the loader's behavior:
-
-  1. fail-closed mode rejection (only `bytes` in v1);
-  2. fail-closed kind mismatch;
-  3. fail-closed missing result_id;
-  4. SQL filter is keyed on group_id when `is_superadmin=False`;
-  5. SQL filter is skipped when `is_superadmin=True` (with audit
-     log breadcrumb);
-  6. dispatch on `storage_key` non-null -> object storage path;
-  7. dispatch on `storage_key` null -> PG BYTEA fallback;
-  8. memoryview -> bytes conversion preserved (postgres BYTEA);
-  9. row not found -> FileNotFoundError (NOT silent None);
-  10. back-compat shim `_dispatch_by_id` mirrors the legacy
-      `get_result_data(result_id, group_id=None)` semantics.
 """
 
 from __future__ import annotations

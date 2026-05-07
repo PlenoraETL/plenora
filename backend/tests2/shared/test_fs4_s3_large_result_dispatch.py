@@ -1,22 +1,7 @@
-"""Contract test FS-4 — dispatch S3 per result > threshold.
+"""
+Contract test FS-4 — dispatch S3 per result > threshold.
 
 Prima di FS-4, `save_result_blob_from_bytes` sollevava ResultSaveError
-oltre MAX_RESULT_BLOB_SIZE (100MB). Ora:
-
-  - size < RESULT_S3_THRESHOLD_BYTES (default 50MB) -> DB blob (come prima)
-  - size >= threshold -> S3 upload + row con storage_key (data NULL)
-  - size > MAX_RESULT_S3_SIZE (default 5GB) -> ResultSaveError (hard cap)
-
-Reader `get_result_data` gestisce trasparente: se storage_key presente
-scarica da S3, altrimenti ritorna BYTEA. Delete pulisce S3 best-effort.
-
-Sentinel:
-1. Small file (< threshold) -> data=bytes, storage_key=None
-2. Large file (>= threshold) -> storage.upload_bytes chiamato, data=None
-3. Reader usa S3 download quando storage_key set
-4. Hard cap (> 5GB) -> ResultSaveError
-5. Upload S3 fallisce -> ResultSaveError (no row DB orfana)
-6. delete_result su row S3-backed triggers storage.delete
 """
 
 from __future__ import annotations

@@ -1,16 +1,7 @@
 """
 PLENORA-ETL — Data Source Backend: SharePoint Online
+
 Usa la libreria Office365-REST-Python-Client (stessa usata in sharepoint_uploader.py)
-che gestisce correttamente l'autenticazione e i certificati SSL su Windows/Anaconda.
-
-Dipendenza: pip install Office365-REST-Python-Client
-
-Configurazione extra attesa in config.extra:
-    site_url (str)      es. "https://tenant.sharepoint.com/sites/NomeSito"
-    client_id (str)     Application (client) ID
-    client_secret (str) Client secret
-    root_path (str)     Nome della Document Library, es. "Documenti" o "GIS"
-                        (corrisponde al list_name in sharepoint_uploader.py)
 """
 
 import io

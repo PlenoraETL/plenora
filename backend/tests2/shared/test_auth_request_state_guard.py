@@ -1,27 +1,7 @@
-"""Architectural guard for the auth `request.state.*` cleanup.
+"""
+Architectural guard for the auth `request.state.*` cleanup.
 
 BE-GO-READY-SECURITY-ENGINE-002-AUTH-CLEANUP-RESIDUALS.
-
-Prevents the 4 dead `request.state.{group_id,user_id,username,role}`
-fields from coming back. They were removed from `JWTMiddleware`
-because they had zero non-middleware/non-test consumers; the
-canonical surface for auth correlation is the `CurrentUser` returned
-by `Depends(get_current_user)` (router-level) plus the ContextVar
-`set_log_group` / `set_user_id` (logger-level).
-
-Allowlist
-=========
-- `app/core/auth/request_id_middleware.py` may write
-  `request.state.request_id` — that field is a separate, legitimate
-  surface used by RequestIdMiddleware for X-Request-ID propagation.
-- `tests2/security/unit/test_c8_observability_contract.py` may read
-  `request.state.request_id` — this is the only surviving consumer
-  and tests the RequestId pipeline, NOT the JWT auth path.
-
-Anything else accessing `request.state.{group_id,user_id,username,role}`
-is a regression: the symbol does not exist anymore at runtime, and
-re-introducing it would re-create the dead-write situation. Use
-`Depends(get_current_user) -> CurrentUser` instead.
 """
 
 from __future__ import annotations

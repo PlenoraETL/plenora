@@ -1,43 +1,7 @@
 """
 Operazioni di trasformazione geospaziali per MANIPOLA.
 
-Architettura
-============
-Questo modulo contiene le funzioni di trasformazione geospaziali registrate
-nel transforms_registry.json. Tutte le operazioni lavorano su GeoDataFrame
-e gestiscono automaticamente la conversione CRS quando necessario.
-
-Convenzione funzioni:
-- Input singolo: op_geo_xxx(gdf: GeoDataFrame, **kwargs) -> GeoDataFrame
-- Input multiplo: op_geo_xxx(gdfs: List[GeoDataFrame], **kwargs) -> GeoDataFrame
-- I parametri arrivano come kwargs espliciti (preparati da PluginExecutor)
-- Le funzioni NON modificano l'input: lavorano su copie
-
-Catalogo operazioni geospaziali:
-- BUFFER: op_geo_buffer (buffer con distanza in metri, riproiezione automatica)
-- CENTROID: op_geo_centroid (centroide di ogni geometria)
-- AREA: op_geo_area (calcolo area in m², riproiezione se necessario)
-- LENGTH: op_geo_length (lunghezza linee in metri)
-- SIMPLIFY: op_geo_simplify (semplificazione geometrie con tolleranza)
-- CONVEX HULL: op_geo_convex_hull (inviluppo convesso)
-- DISSOLVE: op_geo_dissolve (fusione geometrie per attributo con aggregazione)
-- CLIP: op_geo_clip (ritaglio geometrie con maschera)
-- REPROJECT: op_geo_reproject (cambio sistema di riferimento CRS)
-- SPATIAL JOIN: op_geo_sjoin (join spaziale: intersects, contains, within)
-- NEAREST: op_geo_nearest (join per vicinanza con distanza max opzionale)
-- DISTANCE: op_geo_distance (calcolo distanza tra punti di due layer)
-- OVERLAY: op_geo_overlay (operazioni insiemistiche: intersection, union, difference)
-
-Gestione CRS:
-- Le operazioni metriche (buffer, area, length) riproiettano automaticamente
-  in un CRS metrico appropriato (UTM o EPSG:3857) se l'input è in gradi
-- Le operazioni multi-layer allineano automaticamente i CRS prima dell'operazione
-
-Dipendenze: GeoPandas, Shapely, pyproj
-
-Uso diretto (per test):
-    from app.core.manipola.transforms.spatial import op_geo_buffer
-    result = op_geo_buffer(gdf, distance=100, cap_style="round")
+Keeps transformation behavior isolated from orchestration callers.
 """
 
 import pandas as pd
@@ -1514,7 +1478,7 @@ def op_geo_clean_topology(
             )
 
         # Step 3: rimuovi sovrapposizioni
-        # Legacy: per ogni i, ricostruisce `unary_union(geometries[:i])`
+        # NOTE: per ogni i, ricostruisce `unary_union(geometries[:i])`
         # da zero — O(n^2). Qui teniamo un accumulator incrementale:
         # al passo i, `accumulated` e' gia' l'unione dei geometries[0..i-1]
         # processati. Complessita' effettiva ~O(n) union pairwise.

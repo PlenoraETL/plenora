@@ -1,8 +1,7 @@
-"""Contract test Phase 6 Batch 3A — ESTRAI snapshot routing.
+"""
+Contract test Phase 6 Batch 3A — ESTRAI snapshot routing.
 
 Verifica che `QueryExecutor.execute_query` salvi il final snapshot
-attraverso la nuova policy `record_final_snapshot(module="estrai")`
-invece del legacy write_node + cap custom INTERMEDIATE_SNAPSHOT_MAX_ROWS.
 """
 
 from __future__ import annotations
@@ -159,7 +158,7 @@ def test_estrai_metadata_only_writes_meta_and_hash_no_rows(monkeypatch):
     assert captured["rows_to_persist"] == []
     assert captured["persistence_mode"] == "metadata_only"
     assert captured["node_hash"] is not None
-    # Bug #24: default fingerprint mode = sample.
+    # FIXME: #24: default fingerprint mode = sample.
     assert captured["hash_algo"] == "pandas_sample_hash_v1"
 
 

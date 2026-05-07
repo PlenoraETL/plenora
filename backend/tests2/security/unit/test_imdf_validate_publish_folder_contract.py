@@ -2,14 +2,6 @@
 test_imdf_validate_publish_folder_contract.py
 
 Contract test per il supporto del parametro `folder` in validate_publish.
-Verifica che:
-  1. Il Pydantic model ImdfValidateRequest accetta folder come Optional.
-  2. Chiamare validate_publish senza folder preserva il comportamento
-     baseline (no FOLDER_MISMATCH nel report).
-  3. Chiamare validate_publish con folder che coincide con la ownerFolder
-     dell'FS esistente NON emette FOLDER_MISMATCH.
-  4. Chiamare validate_publish con folder diverso dalla ownerFolder
-     dell'FS esistente emette warning FOLDER_MISMATCH.
 """
 import pytest
 

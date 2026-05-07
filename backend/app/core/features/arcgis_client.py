@@ -1,59 +1,7 @@
 """
 Client REST per ArcGIS Server / Enterprise / Online.
 
-Architettura
-============
-Client HTTP puro che comunica con le REST API di ArcGIS senza dipendenze
-dal pacchetto arcgis Python. Usa solo `requests` per le chiamate HTTP.
-
-Funzionalità:
-- Autenticazione token-based (ArcGIS Server, Enterprise, Online)
-- Browse catalogo servizi e folder
-- Lista layer di un Feature Service
-- Schema campi di un layer
-- Query features con filtri WHERE, bounding box, paginazione
-- Scrittura: addFeatures, updateFeatures, deleteFeatures
-- Conversione Esri JSON ↔ GeoDataFrame
-
-Gestione token (C12)
-====================
-- Il token viene generato al primo utilizzo e cachato con margine 60s
-  rispetto alla scadenza reportata da ArcGIS.
-- Passaggio come `Authorization: Bearer {token}` header — NON piu'
-  come `?token=` query param (pre-C12 era in params/data). Rationale
-  sicurezza per un client backend server-to-server:
-    * log reverse-proxy / upstream ArcGIS non catturano piu' il token
-      nell'URL;
-    * observability HTTP (tracing lato server) non lo espone;
-    * eventuali log applicativi che catturano request URL/params fuori
-      da questo modulo non leakano il segreto.
-  (Browser history / Referer non sono vettori per questo client
-  server-to-server, ma il fix li copre comunque per igiene.)
-- Retry automatico (via `_request_with_token`):
-    * HTTP 401 o body `error.code` in {498, 499} → invalida cache,
-      refresh + retry una volta;
-    * HTTP 429 → exponential backoff con jitter (rispetta Retry-After
-      se presente), max 3 tentativi;
-  Pre-C12 la docstring prometteva retry automatica ma non era
-  implementata — il batch writer autenticava una volta e se il token
-  scadeva a meta' batch falliva tutto.
-- Supporta token URL custom o auto-rilevato dal tipo di server.
-- Compatibilita' server: Bearer e' supportato da ArcGIS Online e
-  ArcGIS Enterprise >= 10.6 (2018). Versioni precedenti non sono piu'
-  supportate da Esri.
-
-Paginazione:
-- La query rispetta il maxRecordCount del server
-- Se i risultati superano il limite, esegue query multiple con resultOffset
-- Il chiamante può specificare un limite massimo di features
-
-Uso:
-    client = ArcGISClient()
-    token = client.authenticate(connection)
-    services = client.list_services(connection)
-    layers = client.list_layers(connection, service_url)
-    schema = client.get_layer_schema(connection, layer_url)
-    rows, cols = client.query_features(connection, layer_url, where="POP > 1000")
+Keeps provider-specific behavior behind a narrow integration boundary.
 """
 
 import time
@@ -2184,7 +2132,7 @@ class ArcGISClient:
                 if len(geom_types) > 0:
                     majority_type = geom_types.value_counts().idxmax()
                     geom_type = self._esri_geometry_type(majority_type)
-                    # Warning se c'e' mix di tipi (ArcGIS non li supporta)
+                    # NOTE: se c'e' mix di tipi (ArcGIS non li supporta)
                     unique_types = set(geom_types)
                     if len(unique_types) > 1:
                         logger.warning(

@@ -1,21 +1,7 @@
-"""Difesa in profondità: `PluginExecutor(registry_path=...)` deve
+"""
+Difesa in profondità: `PluginExecutor(registry_path=...)` deve
+
 rifiutare qualunque path che non sia dentro `app/core/manipola/`.
-
-Contesto
---------
-`PluginExecutor._carica_funzioni` chiama `importlib.import_module(
-"app.core.manipola.transforms.<X>")` dove `<X>` viene dal campo
-`function` del registry JSON. Il prefix e' hardcoded, quindi
-l'importazione e' confinata al namespace `app.core.manipola.transforms`.
-
-Però il registry JSON stesso è input-sensitive: controlla quali
-funzioni vengono caricate e quali kwargs accettano. Oggi `registry_path`
-non viene mai passato da input utente (tutti i call site usano
-`get_executor()` singleton con default), ma un refactor futuro potrebbe
-introdurre un endpoint che lo accetta e aprire il vettore.
-
-Il guard in `__init__` e' fail-closed: `registry_path` esplicito DEVE
-risolvere dentro `app/core/manipola/`, altrimenti `ValueError`.
 """
 
 from pathlib import Path

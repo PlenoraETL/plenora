@@ -1,35 +1,7 @@
 """
 Servizio CRUD per File Source (sorgenti dati da file caricati).
 
-Architettura
-============
-Gestisce il ciclo di vita dei file sources caricati dall'utente.
-Tutto lo storage (blob binario + metadata JSON) vive nel DB
-(`plenora.file_sources` table), niente persistenza su filesystem.
-Il filesystem viene usato solo per file **temporanei** durante il
-processing (fiona/GDAL lavorano con path fisici) e vengono eliminati
-al termine dell'operazione.
-
-Dependency Injection per testabilità:
-- FileSystemProtocol: operazioni temp file (mock per test senza I/O reale)
-- DataLoaderProtocol: caricamento dati (mock per test senza GeoPandas)
-- LoggerProtocol: logging (NullLogger per test silenziosi)
-- TimeProvider: datetime/uuid (mock per test deterministici e riproducibili)
-
-Formati supportati:
-- Tabulari: CSV, XLSX (Excel), JSON
-- Geospaziali: GeoJSON, GeoPackage (.gpkg), Shapefile (.shp/.zip), FileGDB
-- Raw binari: DXF, altri formati non parsabili (salvati solo come blob)
-
-Operazioni principali:
-- create_from_upload(): parsing + infer colonne/layers, blob DB
-- create_raw_from_upload(): salva blob DB senza parsing (fallback per
-  formati non supportati dal parser)
-- load_dataframe(): estrae blob da DB, scrive in temp, legge via parser
-- get_preview(): prime N righe per anteprima UI
-- get_layers_info(): layers/sheets di file multi-layer
-- update_file_source(): aggiorna metadati
-- delete_file_source(): rimuove record DB
+Keeps this module's responsibility explicit and isolated from adjacent code.
 """
 
 import json

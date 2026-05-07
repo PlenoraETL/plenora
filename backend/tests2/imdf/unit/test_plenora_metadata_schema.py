@@ -1,16 +1,7 @@
-"""Contract test D3 commit 5 — schema plenora_metadata.json + invariant §9.6.
+"""
+Contract test D3 commit 5 — schema plenora_metadata.json + invariant §9.6.
 
 Dichiara lo schema di `plenora_metadata.json` come contratto stabile e
-verifica l'invariant "meta sempre presente nel dest dir":
-- Persist scrive i campi required + opzionali documentati in
-  persist.py docstring.
-- Se il write meta fallisce, persist esegue rollback della dest dir
-  (shutil.rmtree) e solleva; il worker cattura senza bloccare il task.
-  Pre-fix (§9.6): warning + continue -> dir orfana senza meta,
-  inaccessibile per ACL fail-closed.
-
-Inoltre verifica la riscrittura di app/core/imdf/__init__.py: rimuove
-`processor` fantasma, menziona i moduli reali + D3.
 """
 from __future__ import annotations
 

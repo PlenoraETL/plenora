@@ -1,3 +1,9 @@
+"""
+Tests the shared crypto behavior.
+
+Locks backend contracts and regression boundaries for the current architecture.
+"""
+
 import pytest
 
 from app.shared import crypto

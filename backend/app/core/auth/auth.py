@@ -2,22 +2,6 @@
 PLENORA-ETL — Autenticazione JWT
 
 Modello RBAC:
-  superadmin → tutto, senza filtro gruppo
-  admin      → CRUD utenti viewer/user/esecutore del proprio gruppo, gestione risorse gruppo
-  user       → CRUD risorse del proprio gruppo (sue + condivise),
-               può lanciare esecuzioni, no gestione utenti
-  viewer     → sola lettura risorse del proprio gruppo (sue + condivise),
-               PUÒ lanciare esecuzioni, NON può creare/modificare/eliminare nulla
-  esecutore  → ruolo "kiosk" totalmente isolato. Vede SOLO la lista degli
-               eseguibili del proprio gruppo (+ shared cross-gruppo) e può
-               lanciarli. NON ha accesso a editor, manager, scheduler, file,
-               connessioni, log, ecc. Pensato per utenti finali non tecnici
-               che consumano pipeline pre-confezionate. Le esecuzioni sono
-               soggette a cleanup post-download (privacy / GDPR).
-
-Ownership: alcune risorse (projects, schedules, files) hanno un campo `created_by`.
-Solo l'owner o un admin/superadmin può modificarle/eliminarle. Vedi
-`require_project_owner`, `require_schedule_owner`, `require_file_owner`.
 """
 
 import os

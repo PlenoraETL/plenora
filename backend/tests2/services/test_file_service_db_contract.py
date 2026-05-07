@@ -1,15 +1,7 @@
-"""Contract test — FileSourceService usa SOLO DB come storage (FS-B1).
+"""
+Contract test — FileSourceService usa SOLO DB come storage (FS-B1).
 
 Blinda il contratto post-migration "nessun FS persistente per file_sources":
-il blob e i metadata vivono esclusivamente in `plenora.file_sources`
-(tabella DB). Il filesystem viene usato solo per file temporanei
-durante il processing (fiona/GDAL path-based) e va sempre pulito.
-
-Scope:
-  - Round-trip: upload -> DB -> read restituisce gli stessi bytes
-  - Zero FS leak: `tempfile.mkdtemp` monitorato per verificare cleanup
-  - DI Protocol funzionante: il service gira con mock
-  - Dead API gone: `files_dir` non piu' accettato
 """
 
 from __future__ import annotations

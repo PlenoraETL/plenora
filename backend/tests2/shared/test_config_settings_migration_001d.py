@@ -1,17 +1,7 @@
-"""Contract test BE-CONFIG-001D — feature flags + tuning misc.
+"""
+Contract test BE-CONFIG-001D — feature flags + tuning misc.
 
 Coperti:
-
-1. ogni chiave ha un default tipato in `Settings.DEFAULTS`;
-2. ogni consumer legge via `settings.get(...)` (no piu' direct
-   `os.getenv` con default inline);
-3. l'override env continua a funzionare via type coercion;
-4. equivalence pre/post migrazione: i default coincidono con quelli
-   storici;
-5. niente direct `os.getenv` residuo nei call site migrati (assert
-   statica sul source);
-6. `_get_pool_size` e `is_bulk_enabled` continuano a comportarsi come
-   pre-001D (clamp + fallback).
 """
 
 from __future__ import annotations

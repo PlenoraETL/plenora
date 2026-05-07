@@ -1,23 +1,7 @@
-"""cloud_backends.py — astrazione cloud-agnostic per secrets + object storage.
+"""
+cloud_backends.py — astrazione cloud-agnostic per secrets + object storage.
 
 Obiettivo: concentrare in UN punto il codice SDK-specifico (oggi boto3).
-Consumer (backup_db, test_restore, load_secrets) parlano solo al
-Protocol, mai direttamente a boto3. Migrazione Azure/GCP = aggiungere
-una classe, aggiornare la factory, zero change nei consumer.
-
-Interface minime (YAGNI):
-  - SecretsBackend.get_secrets(prefix) -> dict[str, str]
-  - ObjectStorage.list_objects(prefix) -> list[dict]
-  - ObjectStorage.upload(path, key)
-  - ObjectStorage.download(key, path)
-
-Scelta provider via env `CLOUD_PROVIDER` (default `aws`). Estensione
-futura: `azure` -> Key Vault + Blob Storage; `gcp` -> Secret Manager +
-Cloud Storage. Ogni nuovo provider tocca solo questo file + la IAM
-policy del nuovo cloud.
-
-Le factory ritornano istanze singleton-friendly ma NON cachate: costo
-trascurabile (client AWS SDK ha la sua pool), semplicita' > micro-ott.
 """
 
 from __future__ import annotations
@@ -457,13 +441,8 @@ def get_secrets_backend() -> SecretsBackend:
             "solo object storage; secrets richiedono CLOUD_PROVIDER=aws. "
             "Decoupling secrets/object-storage provider e' follow-up A1."
         )
-    # Estendere qui per Azure / GCP:
-    # if provider == "azure":
-    #     from azure_backends import AzureKeyVaultSecretsBackend  # lazy import
-    #     return AzureKeyVaultSecretsBackend(vault_url=os.getenv("AZURE_KEY_VAULT_URL"))
-    # if provider == "gcp":
-    #     from gcp_backends import GcpSecretManagerBackend
-    #     return GcpSecretManagerBackend(project=os.getenv("GCP_PROJECT"))
+    # TODO: add Azure Key Vault / GCP Secret Manager backends when those
+    # providers are supported by deployment profiles.
     raise ValueError(f"CLOUD_PROVIDER non supportato: {provider!r}")
 
 
@@ -851,7 +830,7 @@ def validate_storage_config() -> None:
     bucket = os.getenv("BACKUP_BUCKET") or os.getenv("BACKUP_S3_BUCKET")
 
     if policy == "db":
-        # Warning non-blocking: bucket + provider cloud settati ma policy=db
+        # NOTE: non-blocking: bucket + provider cloud settati ma policy=db
         # probabilmente e' cut-paste da altro env. Policy rispettata.
         if bucket and provider != "none":
             logger.warning(
@@ -877,7 +856,7 @@ def validate_storage_config() -> None:
         # Policy `object_storage` richiede bucket runtime esplicito:
         # niente fallback silenzioso su BACKUP_BUCKET (semanticamente
         # diverso, IAM/lifecycle distinti). Con `hybrid` il fallback
-        # legacy resta consentito per retro-compat dev/test.
+        # NOTE: legacy resta consentito per retro-compat dev/test.
         if policy == "object_storage":
             runtime_bucket = (
                 os.getenv("OBJECT_STORAGE_BUCKET")

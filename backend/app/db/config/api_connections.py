@@ -1,20 +1,7 @@
 """
 API Connections DAL — estratto da `config_db_service.py` (scope micro Batch G #9,
+
 invariants §6 commit `b8b3396` — sesta riapertura hard-escalation governance).
-
-Cluster `api_connections` (6 funzioni): CRUD sulla tabella `api_connections`
-(catalogo API utente per arricchimento dati).
-
-Note governance (ratified ex-ante invariants §6 commit `b8b3396`): il consumer
-DAL principale è `backend/app/core/arricchisci/api_connector.py` (in freeze
-god-class §6 #9 via `db_svc.` alias L73). Il freeze vincola la massa netta
-interna del file in freeze, non le sue dipendenze DAL esterne — il refactor
-non modifica `api_connector.py`. Re-export 1:1 preserva identità via attributo
-modulo.
-
-Differenza tecnica rispetto a schedules/datasources/connections: **no
-`_safe_set_clause`** cross-cluster (update mirato su singola colonna `config`),
-quindi no lazy import cross-cluster necessario. Pattern più pulito.
 """
 
 import json

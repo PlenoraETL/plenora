@@ -1,27 +1,7 @@
-"""Contract test BE-GO-READY-BOOTSTRAP-ENGINE-018-ROUTER-REGISTRY-FIRST-SLICE.
+"""
+Contract test BE-GO-READY-BOOTSTRAP-ENGINE-018-ROUTER-REGISTRY-FIRST-SLICE.
 
 Lock the new typed router-init binding registry:
-
-  - ``app.runtime.router_registry`` exposes a frozen
-    :class:`RouterBinding` dataclass and a :func:`bind_router_services`
-    dispatcher.
-  - The first slice ships exactly one binding: ``ORCHESTRATOR_BINDING``.
-    Its ``extract`` returns ``(services.orchestrator,)``; its
-    ``init_fn`` ultimately calls
-    ``app.core.orchestrator.router.init_orchestrator``.
-  - ``bind_router_services`` invokes ``init_fn`` exactly once with the
-    extracted positional args. Identity is preserved: the value passed
-    to ``init_fn`` IS the container's field, not a freshly-constructed
-    double.
-  - Source-bound: ``app/main.py`` no longer calls
-    ``init_orchestrator(orchestrator)`` directly; the orchestrator
-    router does not import from ``app.main``.
-  - The registry module is import-cheap: it must not pull in
-    FastAPI, settings, DB, or boto3 at import time.
-
-Out of scope (locked by parametrize lists / explicit absence):
-  - Registry coverage of the other 5 ``init_*`` calls in ``main.py``
-    (those stay procedural for now; follow-up streams own them).
 """
 
 from __future__ import annotations

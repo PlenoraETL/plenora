@@ -1,18 +1,7 @@
-"""Contract test BE-IMDF-003 — schema-bucket type mappers di `EsriTypeMapper`.
+"""
+Contract test BE-IMDF-003 — schema-bucket type mappers di `EsriTypeMapper`.
 
 Verifica i due helper consolidati:
-
-- `EsriTypeMapper.map_esri_field_to_schema_bucket(esri_type) -> str`
-- `EsriTypeMapper.map_pandas_dtype_to_schema_bucket(dtype) -> str`
-
-Schema bucket: `string | int | float | date | geometry | other`.
-Schema **distinto** da `EsriTypeMapper.map_field_type` (Plenora-internal
-`int/real/str/date/geometry`).
-
-Coperto bit-per-bit il behavior pre-IMDF-003 di
-`validator._coarse_type_from_esri` e `_coarse_type_from_dtype`,
-inclusi gli edge case: name `None`, dtype non standard, substring
-match case-insensitive (esriFieldType vs `string`/`integer`/`oid`/...).
 """
 
 from __future__ import annotations
@@ -54,12 +43,12 @@ _BACKEND_APP = Path(__file__).resolve().parent.parent.parent.parent / "app"
         # float family
         ("esriFieldTypeDouble", "float"),
         ("esriFieldTypeSingle", "float"),
-        ("esriFieldTypeFloat", "float"),  # legacy alias
+        ("esriFieldTypeFloat", "float"),  # NOTE: legacy alias
         # date
         ("esriFieldTypeDate", "date"),
         # geometry
         ("esriFieldTypeGeometry", "geometry"),
-        ("esriFieldTypeShape", "geometry"),  # legacy alias
+        ("esriFieldTypeShape", "geometry"),  # NOTE: legacy alias
         # other
         ("esriFieldTypeBlob", "other"),
         ("esriFieldTypeRaster", "other"),

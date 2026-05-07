@@ -1,32 +1,7 @@
-"""N11: bridge projects.columns_metadata -> carica_node_data.canvas_types.
+"""
+N11: bridge projects.columns_metadata -> carica_node_data.canvas_types.
 
 Risolve il "Type inference loss" tra ESTRAI -> MANIPOLA -> CARICA:
-se MANIPOLA promuove silenziosamente int->float per un LEFT JOIN con
-NaN, CARICA senza canvas_types cadeva sul dtype post-manipolazione ->
-il tipo semantico originale (INTEGER dal DB sorgente) andava perso
-e la tabella target veniva scritta come DOUBLE.
-
-Sorgenti di verita' per il tipo di colonna, in ordine di priorita':
-  1. node_data["canvas_types"] — se il frontend ha settato esplicitamente
-  2. projects.columns_metadata — mantenuto da ESTRAI/ARRICCHISCI dopo ogni run
-  3. ColumnMapper._infer_type_from_pandas — fallback euristico (N11 mirato)
-
-Perche' projects.columns_metadata e NON intermediate.node_meta.col_schema:
-  L'audit originale suggeriva "propagare via intermediate metadata". Ma
-  `node_meta.col_schema` salva il dtype pandas POST-scrittura del nodo
-  (vedi es. api_connector.py:869 -> `col_schema=df.dtypes.astype(str).to_dict()`).
-  Quindi contiene GIA' il tipo promoted int->float — lo stesso bug che
-  stiamo cercando di evitare. `columns_metadata` invece tiene tipi
-  canvas semantici puliti ({"name":"id","type":"int"}) popolati da
-  ESTRAI (executor.py:526) e ARRICCHISCI (executor.py:100) quando hanno
-  ancora accesso ai tipi DB originali / schema API originali.
-
-  In sintesi: il fix chiude il problema pratico con un bridge diverso
-  dall'alternativa proposta. E' una scelta consapevole, non un'omissione.
-
-Questo helper popola (1) dalle sorgenti (2)+(1), cosi' il ColumnMapper
-trova il tipo canvas prima di dover euristicare dal dtype pandas.
-Best-effort: errori di lookup loggano warning ma non bloccano.
 """
 
 from __future__ import annotations

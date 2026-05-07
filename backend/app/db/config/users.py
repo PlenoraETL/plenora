@@ -1,21 +1,7 @@
 """
 Users DAL — estratto da `config_db_service.py` (scope micro Batch G #9 settima
+
 riapertura — governance autonoma auth-critical, invariants §6 commit `16bebfa`).
-
-Cluster `users` (7 funzioni): CRUD sulla tabella `users` (root RBAC PLENORA —
-login/JWT/password Argon2id/role/is_active/group_id). Helper `_safe_set_clause`
-importato lazy dal facade per rompere ciclo `config_db_service` ↔ `config/users`
-e preservare zero-call-site-touched sugli altri 4 cluster che lo condividono
-(projects/schedules + datasources/connections via lazy).
-
-Note auth-critical (ratified ex-ante invariants §6 settima riapertura): questo
-modulo è patch-target di 5 suite security unit via `auth_mod.db.*` (facade
-chain preservata) + 1 patch diretto `app.db.config_db_service.get_user` in
-`test_n9_async_permission_revoked_contract.py:210` (re-export come attributo
-modulo preserva identità per monkeypatch). Consumer non-facade:
-`shared/async_user_recheck.py:22` via `from app.db.config_db_service import
-get_user` → risolve attributo re-exportato. `core/auth/auth.py` 11 call site
-via `import app.db.db_service as db; db.<method>` → chain triplice invariata.
 """
 
 from typing import Dict, List, Optional

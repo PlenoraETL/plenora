@@ -1,14 +1,7 @@
-"""Contract test Bug #23 — `GET /api/runs/.../nodes/.../data` deve
+"""
+Contract test Bug #23 — `GET /api/runs/.../nodes/.../data` deve
+
 sanitizzare NaN / +Inf / -Inf prima di restituire JSON.
-
-Pre-fix: `db.get_node_table_rows` ricostruiva i sentinel JSONB
-(NaN/+Inf/-Inf) come float Python; il JSONEncoder default di FastAPI
-solleva `ValueError("Out of range float values are not JSON
-compliant: nan")`. Il middleware `app.main.global_exception_handler`
-loggava traceback ~150 righe e rispondeva 500.
-
-Post-fix: `_sanitize_for_json` mappa non-finite -> None nella
-response, senza alterare i dati persistiti in `node_rows`.
 """
 
 from __future__ import annotations

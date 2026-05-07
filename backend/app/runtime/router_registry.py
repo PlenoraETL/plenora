@@ -1,86 +1,7 @@
-"""Typed router-init binding registry - first slice.
+"""
+Typed router-init binding registry - first slice.
 
 BE-GO-READY-BOOTSTRAP-ENGINE-018-ROUTER-REGISTRY-FIRST-SLICE.
-
-Goal
-====
-Reduce the procedural-fragility surface of the `init_*(<service>, ...)`
-calls in ``app/main.py`` (lines 433-438 prior to this stream) by
-introducing a *typed* binding helper that maps a router's init function
-to the specific :class:`RuntimeServices` field(s) it consumes, then
-dispatches the init exactly once with the container-owned instance.
-
-Why this is NOT a service locator
----------------------------------
-A service locator is a **runtime** lookup pattern where business code
-asks "give me service X" at call-time. That pattern is explicitly out
-of scope for the bootstrap engine work (BE_RULES: scope narrow, plus
-the audit roadmap rules out service-locator-from-business-code).
-
-This module is **build-time wiring only**: ``bind_router_services()``
-is invoked exactly once during application startup, immediately after
-``build_runtime_services()`` has constructed the typed container. The
-routers themselves keep their existing module-private singleton
-(``_orchestrator``, ``_project_service``, ...) - no router queries the
-registry at request-time.
-
-Why a registry instead of just renaming
----------------------------------------
-The previous form
-
-::
-
-    init_orchestrator(orchestrator)
-
-was fragile because:
-
-  1. The argument was a module-global rebound from the runtime
-     container - drift between the container and the global was
-     silent.
-  2. The argument was *positional*: a refactor renaming a field on
-     :class:`RuntimeServices` would not surface as a missing-kwarg
-     error here, only later when the orchestrator misbehaved.
-  3. There was no programmatic way for a contract test to assert
-     "the router received the container-owned instance, not a
-     freshly-constructed double".
-
-The registry binding form
-
-::
-
-    bind_router_services(_runtime_services, ORCHESTRATOR_BINDING)
-
-addresses all three:
-
-  1. The binding extracts the field via a typed lambda
-     (``lambda s: (s.orchestrator,)``); rebinding the module global
-     is no longer the source of truth.
-  2. A field rename triggers an ``AttributeError`` at the binding's
-     extraction call, on first import - fail-fast.
-  3. Contract tests can verify identity: the value passed to the
-     init function ``is`` the container's field.
-
-First slice
------------
-This stream wires **only one** binding: ``ORCHESTRATOR_BINDING``. The
-other 5 ``init_*`` calls in ``main.py`` stay on the procedural form,
-to be migrated by follow-up streams. The migration order is
-intentionally narrow: this slice proves the pattern; broader uptake
-is gated on a separate audit checkpoint (BE_BOOTSTRAP_ENGINE_AUDIT.md).
-
-Bootstrap relationship
-----------------------
-The registry MUST be invoked AFTER ``app.bootstrap.bootstrap()`` and
-``build_runtime_services()`` have completed successfully. The module
-itself is import-safe (no DB / Redis / object storage at import).
-
-Out of scope (per task brief)
------------------------------
-- DI container framework. The binding is a hand-wired typed value.
-- Generic service-locator pattern from business code.
-- Migrating the other 5 ``init_*`` calls.
-- Replacing FastAPI's own ``include_router`` flow.
-- Module-level globals in ``main.py`` (KEEP_COMPAT preserved).
 """
 
 from __future__ import annotations
@@ -152,7 +73,7 @@ def bind_router_services(
 
 # Concrete bindings
 #
-# IMPORTANT: bindings live here (not in ``main.py``) so that contract
+# NOTE: bindings live here (not in ``main.py``) so that contract
 # tests can assert their typed shape without importing ``main.py``
 # (which has heavy module-load side effects). The router's
 # ``init_*`` is imported lazily inside the extract closure to keep

@@ -1,23 +1,7 @@
-"""Contract tests BE-GO-READY-STORAGE-ENGINE-008-RECONCILIATION-OPERATIONAL-GUARDRAILS.
+"""
+Contract tests BE-GO-READY-STORAGE-ENGINE-008-RECONCILIATION-OPERATIONAL-GUARDRAILS.
 
 Pin the boundary contract for the two new helpers in
-`app.shared.storage_reconciliation`:
-
-  - `count_active_by_state_domain() -> list[ReconciliationStateCount]`
-    aggregates `pending` and `lost` rows by `(state, domain)`.
-    Terminals (`done` / `orphan_deleted`) are intentionally
-    excluded — they are the audit trail, not operator concern.
-  - `prune_terminal_older_than(*, older_than, limit) -> int`
-    deletes ONLY `done` / `orphan_deleted` rows older than the
-    cutoff, bounded by `limit` per call. PG `DELETE WHERE id IN
-    (SELECT ... LIMIT n)` shape (PG does not support
-    `DELETE ... LIMIT` directly).
-
-Both helpers are best-effort on read/write errors (warning log +
-graceful return) because the caller is the beat hook; an
-exception in operational guardrails must not crash the tick.
-
-Plus the typed dataclass `ReconciliationStateCount` (frozen).
 """
 
 from __future__ import annotations

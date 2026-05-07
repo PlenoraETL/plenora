@@ -1,10 +1,7 @@
 """
 Datasources DAL — estratto da `config_db_service.py` (scope micro Batch G #9,
-invariants §6 commit `86ea1c5`).
 
-Cluster `datasources` (5 funzioni): CRUD completo sulla tabella `datasources` +
-helper `_safe_set_clause` importato lazy dal facade per rompere ciclo
-`config_db_service` ↔ `config/datasources`.
+invariants §6 commit `86ea1c5`).
 """
 
 import json

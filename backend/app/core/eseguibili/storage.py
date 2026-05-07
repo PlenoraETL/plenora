@@ -1,26 +1,7 @@
-"""Storage eseguibili su object storage cloud-agnostic.
+"""
+Storage eseguibili su object storage cloud-agnostic.
 
 Chiude R3 del multi-host audit: gli output degli eseguibili non devono
-piu' vivere su `DATA_DIR/eseguibili_outputs/` (local FS del worker). Ora
-vanno su S3 (o Azure Blob / GCS via cloud_backends), cosi' backend e
-worker possono essere su macchine diverse.
-
-Prefix convention: `eseguibili-outputs/{task_id}/{filename}`.
-
-API:
-  - save(task_id, src_path) -> s3_key
-    Upload + delete del file locale.
-  - find_keys(task_id) -> list[str]
-    Elenca le key sotto il prefix del task (supporta future espansioni
-    multi-file; oggi ne scriviamo 1 per task).
-  - open_stream(key) -> dict con body iter + size + content_type
-    Per streaming via FastAPI StreamingResponse.
-  - delete_by_task(task_id) -> int
-    Cleanup eager dopo download. Ritorna n. oggetti eliminati.
-
-Policy cleanup:
-  - Eager: il reader endpoint chiama delete_by_task dopo stream ok
-  - Safety net: S3 lifecycle rule sul prefix (TODO AWS config, non qui)
 """
 
 from __future__ import annotations

@@ -1,17 +1,7 @@
-"""Smoke contract - R-05: app.shared.clock.
+"""
+Smoke contract - R-05: app.shared.clock.
 
 Verifica le invarianti minime del seam:
-  1. WallClock e' identico nel comportamento al pre-R-05
-     (now() == time.monotonic() + wait() == stop_event.wait()).
-  2. FakeClock avanza il tempo virtuale in modo deterministico
-     e libera i waiters quando la deadline scade.
-  3. Sia WallClock che FakeClock soddisfano il Protocol Clock
-     (runtime_checkable).
-  4. wait_for_pending_waiters consente al test di sincronizzarsi
-     col thread parked sul wait virtuale.
-
-Questi test sono real-time ma sub-secondo: nessuna dipendenza da
-sleep multipli a 100ms, tutto su Event/Condition.
 """
 
 from __future__ import annotations

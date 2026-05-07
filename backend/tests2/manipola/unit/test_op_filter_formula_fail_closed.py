@@ -1,25 +1,7 @@
-"""[phase-2-err][batch5] γ1a (E4) — op_filter / op_formula fail-closed.
+"""
+[phase-2-err][batch5] γ1a (E4) — op_filter / op_formula fail-closed.
 
 Audit Batch 5 §5.2 smell S2 (W2, W3) — 2 catch broad
-`except Exception: logger.warning("[GESTITO]") + return df` ingoiavano
-errori runtime su input utente invalido (operatore filter incompatibile
-col tipo colonna, formula sintattica/AST-blocked), lasciando il
-DataFrame originale invariato senza segnale.
-
-Post-fix (γ1a — Opzione A ratificata):
-  - Entrambi i catch ora fanno `raise ValueError(<message safe>) from e`
-    dopo il `logger.warning([GESTITO] ...)` (canale admin preservato
-    con str(e) tecnico).
-  - Il ValueError ha messaggio italiano user-facing fisso, niente
-    str(e) interpolato nel message (no leak pandas/AST internals).
-  - Chain `__cause__` preservata via `from e`.
-  - Nessuna nuova exception class: riuso ValueError built-in.
-
-Coerenza pattern:
-  - op_filter fail-fast su colonna mancante (linee 276-283, pre-esistente)
-    gia' usava ValueError — γ1a estende lo stesso pattern al catch broad.
-  - op_formula AST validator gia' solleva ValueError su formule non sicure
-    — γ1a fa emergere quell'errore all'utente invece di silent return df.
 """
 
 from __future__ import annotations

@@ -1,59 +1,7 @@
-"""Pilot-exit-criteria lock for the Resource Engine.
+"""
+Pilot-exit-criteria lock for the Resource Engine.
 
 BE-GO-READY-RESOURCE-ENGINE-017-PILOT-EXIT-CRITERIA.
-
-The Resource Engine landed in `RESOURCE-ENGINE-002` as a pilot
-with exactly one loader (`ResultBlobLoader`) and zero production
-callers using the `default_registry()` dispatcher: production
-code calls into the loader module's INTERNAL functions
-(`_dispatch_by_id`, `_download_object_storage`) directly via
-`app.db.results_db_service`. The package's `bounded_reader`
-helper IS used in production by three modules
-(`results_db_service`, the legacy `file_blob_materialization`
-reader -- retired in RESOURCE-ENGINE-024 in favor of
-`FileSourceBlobLoader`, `artifact_reader`), but the
-registry/`ResourceRef` plumbing has zero real consumers as of
-this audit.
-
-Risk: the engine becomes speculative architecture - new kinds,
-new loaders, new abstractions land "for the future" with no
-pressure from a real consumer to validate the contract. Phase
-2 BE_RULES rejects this pattern (see §"Generalization Audit
-Bar"; "Generalize when it removes real duplication, makes
-contracts clearer, reduces custom branches, or improves
-testability/go-readiness. Do not force generalization for its
-own sake.").
-
-This lock pins the pilot exit criteria so a future contributor
-adding a new kind / new abstraction has to pass the gate
-explicitly.
-
-Locks today:
-
-  - `ResourceKind` Literal currently has exactly 1 entry
-    (`result_blob`). Adding a 2nd requires the audit doc to
-    document a real production caller for that kind via the
-    registry surface (NOT via internal loader function imports).
-  - The default registry singleton holds exactly 1 loader. Same
-    rule applies: adding a 2nd loader requires audit
-    documentation.
-  - `BE_RESOURCE_ENGINE_AUDIT.md` contains the canonical
-    PILOT-EXIT-CRITERIA section with kill/keep/deadline anchors.
-    Removing the section would lose the kill/keep contract;
-    silent erosion is the canonical drift mode for "pilot
-    becomes permanent" architecture.
-  - `default_registry` and `build_default_registry` are exported
-    from the package; the registry surface area cannot be
-    privatized without an explicit audit decision.
-
-Outside scope:
-
-  - the existing anti-god-engine surface (locked by
-    `test_resource_engine_anti_god_engine_lock.py`);
-  - the strategy/Capability per-loader contract (locked by
-    `test_resource_engine_strategy_guards.py`);
-  - the path-mode inventory (locked by
-    `test_temp_usage_bytes_first_policy.py`).
 """
 
 from __future__ import annotations

@@ -1,15 +1,7 @@
-"""Contract test FS-5 — materialize_node senza tempfile.
+"""
+Contract test FS-5 — materialize_node senza tempfile.
 
 Prima di FS-5, `_resolve_input_path_for_file_processor` creava un
-tempfile tramite `tempfile.NamedTemporaryFile(delete=False)` quando un
-DataFrame upstream doveva essere passato a un file-processor REST.
-
-Post FS-5: bytes in-memory + io.BytesIO nel multipart POST, zero file
-su disco. Questo test blinda:
-
-1. Il branch DataFrame ritorna (bytes, filename), owns=False
-2. Il multipart builder accetta il tuple e produce files={name: (filename, BytesIO)}
-3. Sentinel: chiamare il resolve NON crea file in /tmp/ con prefix urby_materialize_
 """
 
 from __future__ import annotations

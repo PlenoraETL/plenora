@@ -1,35 +1,7 @@
-"""Architectural lock for the cleanroom-vs-production Celery drift doc.
+"""
+Architectural lock for the cleanroom-vs-production Celery drift doc.
 
 BE-GO-READY-INSTALLATION-022-CELERY-DRIFT-STORAGE-DEBT-GUARD.
-
-Source-bound assertions on `docs/ops/install-non-docker.md`
-section 12.8 (Cleanroom Celery smoke vs production drift). The
-section is the contract surface that records the precise gap
-between what `ci-cleanroom.yml` exercises and what
-`plenora-celery.service` / `plenora-beat.service` actually run
-in production. If the drift list is silently elided or weakened,
-operators and reviewers can mistake a green cleanroom for a
-green production change.
-
-Locks today:
-
-  - section header exists with the canonical title;
-  - the four high-impact drift rows are named
-    (pool, concurrency, beat interval, real domain task body);
-  - the explicit "sanity check, not equivalence" wording is
-    present so a reviewer cannot misread the section as a prod
-    parity claim;
-  - the future closure streams are named so the gap is
-    discoverable;
-  - section is ASCII-only.
-
-Outside scope:
-  - the cleanroom workflow itself (locked by
-    `test_celery_cleanroom_readiness_guard.py`,
-    `test_celery_enqueue_smoke_design_guard.py`,
-    `test_celery_beat_tick_smoke_design_guard.py`);
-  - the storage upload_intent debt doc (locked by
-    `test_storage_upload_intent_debt_doc_guard.py`).
 """
 
 from __future__ import annotations

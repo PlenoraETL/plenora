@@ -1,17 +1,7 @@
-"""Smoke contract - STRUCT-001 Seam D-C: estrazione rmtree_safe.
+"""
+Smoke contract - STRUCT-001 Seam D-C: estrazione rmtree_safe.
 
 Verifica le invarianti minime del refactor:
-
-  1. rmtree_safe rimuove un file regolare.
-  2. rmtree_safe rimuove una directory (anche con contenuti annidati).
-  3. rmtree_safe NON solleva su path gia' assente (best-effort).
-  4. onerror chmod path: file read-only viene comunque rimosso.
-  5. Failure persistente: se la rm continua a fallire dopo i retry,
-     il logger.debug e' chiamato (visibilita' opzionale, no raise).
-  6. Wrapper FileSourceService._rmtree_safe e
-     file_preview_temp._rmtree_safe delegano alla shared rmtree_safe.
-
-Modulo leaf: solo stdlib. Test usa pytest tmp_path per isolare l'I/O.
 """
 
 from __future__ import annotations

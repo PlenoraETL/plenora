@@ -1,21 +1,7 @@
-"""Smoke contract - STRUCT-001 Seam A: estrazione helper pure file_service.
+"""
+Smoke contract - STRUCT-001 Seam A: estrazione helper pure file_service.
 
 Verifica le invarianti minime del refactor:
-
-  1. Il nuovo modulo `app.shared.file_helpers` espone i 4 simboli attesi
-     (FormatDetector, TypeInferrer, FileIdGenerator, ColumnInfoBuilder).
-  2. `app.services.file_service` re-esporta gli stessi oggetti (identity
-     check) per backward-compat coi test che importano direttamente.
-  3. Behavior smoke per ogni helper:
-     - FormatDetector: estensione -> format, geo/tabular flag
-     - TypeInferrer: pandas dtype -> type string (int/float/bool/datetime/
-       geometry/str + WKT geometry detection + date detection conservativa)
-     - FileIdGenerator: formato opaco `file_<uuid>` (post N1)
-     - ColumnInfoBuilder: DataFrame piccolo -> List[ColumnInfo]
-
-La copertura funzionale full (date cascade thresholds, multi-layer geometry
-SRID, etc.) e' nei test esistenti del file_service che riferiscono questi
-helper indirettamente via il service.
 """
 
 from __future__ import annotations

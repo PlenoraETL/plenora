@@ -1,29 +1,7 @@
-"""Strategy / capability-registry guards for the Resource Engine.
+"""
+Strategy / capability-registry guards for the Resource Engine.
 
 BE-GO-READY-RESOURCE-ENGINE-003-STRATEGY-GUARD-ARTIFACT-AUDIT.
-
-This file complements
-``tests2/shared/test_resource_engine_anti_god_engine_lock.py`` by
-locking the **strategy-shape** invariants that keep the Resource
-Engine a Capability Registry rather than a god-engine:
-
-  - per-kind dispatch: every loader handles EXACTLY ONE kind and
-    rejects refs of any other kind (no multiplexing inside a loader);
-  - mandatory ``expected_group_id`` at the type level (already
-    locked by `__post_init__`; here we lock a few additional
-    constructions paths that could erode the guard);
-  - byte-level output only: the ``Resource`` envelope's output
-    fields are ``bytes`` / ``Path`` / ``Iterator[bytes]`` plus
-    metadata; no parsed object slot.
-
-These guards are explicitly source-bound where possible: a refactor
-that restored a banned import / a multi-kind loader / a parsed-object
-field would fail this lock at CI time without needing a runtime
-exercise.
-
-Group A — per-kind dispatch invariant
-Group B — mandatory tenant binding (defense-in-depth)
-Group C — byte-level output invariant (metadata-only)
 """
 
 from __future__ import annotations

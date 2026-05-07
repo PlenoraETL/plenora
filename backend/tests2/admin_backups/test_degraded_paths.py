@@ -1,12 +1,7 @@
-"""Contract test — graceful degradation di admin_backups/service.
+"""
+Contract test — graceful degradation di admin_backups/service.
 
 Due superfici:
-  - `list_backups`: S3 via boto3. Mai solleva al chiamante, ritorna []
-    su qualsiasi errore (ImportError/ClientError/etc).
-  - `get_last_run_status`: legge da plenora.backup_runs. Mai solleva,
-    ritorna dict con result='unknown' su DB error.
-  - `get_schedule_info`: ritorna metadati statici da env var (no
-    subprocess systemctl).
 """
 
 from __future__ import annotations

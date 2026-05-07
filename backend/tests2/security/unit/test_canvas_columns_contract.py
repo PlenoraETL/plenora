@@ -1,14 +1,7 @@
-"""Contract test per compute_result_columns (C9).
+"""
+Contract test per compute_result_columns (C9).
 
 Verifica che la funzione:
-1. Deleghi correttamente la risoluzione a SchemaInferenceService
-2. Preservi alias + visible utente dal result_node corrente
-3. Ritorni [] su result_id non trovato o inferenza fallita
-4. Gestisca result_node.columns vuoto (fresh canvas) + non-vuoto (edit)
-
-La correttezza della logica per-node-type (source/transform/api_enrich/
-merge) e' gia' coperta dai test interni di SchemaInferenceService.
-Qui testiamo solo la shim layer.
 """
 
 from __future__ import annotations

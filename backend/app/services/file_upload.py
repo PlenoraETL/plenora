@@ -1,45 +1,7 @@
-"""Upload "single-file" con parsing per file source (STRUCT-001 Seam D-F).
+"""
+Upload "single-file" con parsing per file source (STRUCT-001 Seam D-F).
 
 Estratto da `FileSourceService.create_from_upload` senza alcun cambio
-comportamentale. La funzione standalone accetta tutti i collaborator
-come kwargs espliciti per:
-
-  - testabilita' diretta (no FileSourceService.__new__);
-  - go-portability: signature 1:1 con
-    `func CreateFromUpload(content io.Reader, filename, name string, opts Opts) (FileSource, error)`;
-  - leaf module: zero import da `app.services.file_service` (cycle impossibile).
-
-Use case: upload di un file singolo (CSV/XLSX/JSON/GeoJSON/GPKG/SHP-zip/
-GDB-zip) con parsing colonne, inferenza CRS per geo, save BYTEA o
-object_storage policy-aware, DB write.
-
-Invarianti preservate (test-blindabili):
-  1. MIME validation defense-in-depth (se `mime_validate` fornito):
-     eseguita PRIMA di qualsiasi side effect persistente. Default
-     None = no-op (comportamento attuale di create_from_upload).
-  2. Parse failure NON aborta il flusso: l'inferenza colonne e' best-
-     effort; se solleva, logger.warning + columns=[], row_count=0,
-     DB save procede comunque (preservato byte-per-byte).
-  3. Orphan guard: `dispatch_blob_storage` exception propaga e
-     `db_save_file_source` NON viene chiamato.
-  4. `db_save_file_source` exception propaga al caller.
-  5. Cleanup temp file/dir GARANTITO in `finally` (success + exception).
-  6. `group_id or default_group` propagato coerente sia al DTO sia al
-     DB save.
-  7. `blob_kwargs` da dispatch passato 1:1 a db_save_file_source via
-     `**kwargs`.
-  8. ZIP unwrap: `BadZipFile` -> ValueError("non valido o corrotto"),
-     `zip_slip_error` -> ValueError("path traversal"). Per SHP/GDB il
-     blob salvato resta lo ZIP originale (necessario per .shx/.dbf/
-     directory .gdb).
-
-Side effect confinati (tutti via callback iniettata):
-  - generate_file_id, time_now, detect_format
-  - list_layers, list_sheets, load_by_format, column_builder_from_df
-  - dispatch_blob_storage, db_save_file_source
-  - build_file_source (DTO factory)
-  - cleanup (rmtree_safe), safe_extractall (zip_safe), zip_slip_error type
-  - mime_validate (opzionale; default = nessuna validazione)
 """
 
 from __future__ import annotations

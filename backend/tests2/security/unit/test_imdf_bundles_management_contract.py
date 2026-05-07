@@ -2,11 +2,6 @@
 test_imdf_bundles_management_contract.py
 
 Contract test per la gestione storico bundle IMDF:
-  - GET /api/imdf/bundles arricchito con building_count / level_count /
-    unit_count (da plenora_metadata.json o fallback counting lazily i
-    geojson dentro il bundle dir).
-  - DELETE /api/imdf/bundles/{id} — cancella la cartella del bundle, con
-    path-traversal guard e group-access check.
 """
 import json
 import pytest

@@ -1,28 +1,7 @@
-"""Architectural lock for the Celery cleanroom readiness step.
+"""
+Architectural lock for the Celery cleanroom readiness step.
 
 BE-GO-READY-INSTALLATION-014-CELERY-CLEANROOM-READINESS.
-
-Source-bound assertions that protect three contracts:
-
-  1. The CI cleanroom workflow (`.github/workflows/ci-cleanroom.yml`)
-     contains a Celery readiness step that probes the canonical
-     surface (Celery `main` name, include module imports, broker
-     connectivity, beat scheduler symbol).
-  2. `backend/workers/celery_app.py` exports a `celery_app` symbol
-     whose `Celery` `main` argument is the canonical
-     `"dataflow_tasks"` (the systemd `plenora-celery.service`
-     ExecStart and the production CLI invocation
-     `celery -A workers.celery_app worker` both depend on this
-     name; renaming silently breaks the deploy).
-  3. `backend/workers/beat_scheduler.py` exports
-     `PlenoraBeatScheduler` (the systemd `plenora-beat.service`
-     ExecStart `-S` argument resolves to this class).
-
-These are file-text assertions; they do NOT execute the workflow,
-do NOT instantiate Celery, and do NOT require a broker. The
-runtime probe lives in CI; this lock catches silent regressions
-that would let the runtime probe drift away from the intended
-contract.
 """
 
 from __future__ import annotations

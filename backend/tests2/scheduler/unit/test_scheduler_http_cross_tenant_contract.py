@@ -1,3 +1,9 @@
+"""
+Tests the scheduler http cross tenant behavior.
+
+Locks backend contracts and regression boundaries for the current architecture.
+"""
+
 from unittest.mock import patch
 
 import pytest

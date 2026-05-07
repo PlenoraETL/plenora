@@ -1,18 +1,7 @@
-"""Bench formalizzato: `op_concat_columns` nuovo impl vs legacy vs naive apply.
+"""
+Bench formalizzato: `op_concat_columns` nuovo impl vs legacy vs naive apply.
 
 La baseline (test_baseline_pandas_ops.py) aveva mostrato che l'impl
-pre-Batch-2 — pur commentata come "vectorized 5-10x speedup" — in
-realta' era **6-7x piu' lenta** dell'apply(axis=1) naive (25k vs 180k
-rows/s su 10k). Il Batch 2 rifa vera vettorizzazione via
-stack() + groupby(level=0).agg(join).
-
-Questo file formalizza il confronto e impone un'asserzione di speedup
-≥ 3x rispetto al legacy. Il confronto con il naive apply e' stampato
-ma non asserito (il naive era gia' rapido, vincerlo e' bonus).
-
-Esecuzione:
-    pytest backend/tests2/performance/test_bench_op_concat_columns.py \
-        -m perf_bench -s -q
 """
 
 from __future__ import annotations

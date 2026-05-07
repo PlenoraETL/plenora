@@ -1,21 +1,7 @@
-"""TRUNCATE su Oracle → DELETE FROM (C5 fix 1).
+"""
+TRUNCATE su Oracle → DELETE FROM (C5 fix 1).
 
 Motivazione
------------
-Oracle tratta TRUNCATE come DDL: auto-commit IMPLICITO al suo
-completamento. Se il flow e' `TRUNCATE → INSERT` e l'INSERT fallisce,
-il rollback NON puo' ripristinare le righe cancellate dal TRUNCATE
-(commit gia' avvenuto). Risultato: tabella vuota, perdita dati
-deterministica per write_mode=truncate_insert.
-
-Fix: su Oracle E MySQL usiamo `DELETE FROM` (DML, transazionale).
-Il rollback copre anche la cancellazione. Performance inferiore
-per tabelle grandi, ma safe. Postgres e SQL Server restano su
-TRUNCATE (transazionale nella stessa connection).
-
-Nota MySQL: anche TRUNCATE TABLE su MySQL e' DDL con auto-commit
-implicito (stessa semantica di Oracle, non transazionale), quindi
-il bug pre-fix affliggeva MySQL nello stesso identico modo.
 """
 
 import pytest

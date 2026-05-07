@@ -1,48 +1,7 @@
 """
 Operazioni di trasformazione base (non-geospaziali) per MANIPOLA.
 
-Architettura
-============
-Questo modulo contiene tutte le funzioni di trasformazione non-geospaziali
-registrate nel transforms_registry.json. Ogni funzione è una operazione
-atomica che riceve un DataFrame (o lista di DataFrame) e restituisce
-un DataFrame trasformato.
-
-Convenzione funzioni:
-- Input singolo: op_xxx(df: DataFrame, **kwargs) -> DataFrame
-- Input multiplo: op_xxx(dfs: List[DataFrame], **kwargs) -> DataFrame
-- Tutti i parametri arrivano come kwargs espliciti (preparati da PluginExecutor)
-- Le funzioni NON modificano l'input: lavorano sempre su copie
-
-Catalogo operazioni (~25):
-- JOIN: op_join (inner/left/right/full/cross join tra due tabelle)
-- FILTRO: op_filter (condizioni su colonne con operatori =, !=, >, <, LIKE, IN, etc.)
-- SELEZIONA: op_select_columns (selezione/riordino colonne)
-- RINOMINA: op_rename (rinomina colonne)
-- CAST: op_cast_type (conversione tipi: int, float, str, bool, date)
-- CALCOLA: op_add_column (colonna calcolata con espressioni Python/Pandas)
-- CONCAT: op_concat (unione verticale di più DataFrame con allineamento colonne)
-- DEDUP: op_deduplicate (rimozione duplicati su colonne selezionate)
-- ORDINA: op_sort (ordinamento multi-colonna asc/desc)
-- CAMPIONA: op_sample (campionamento casuale o primi N record)
-- PIVOT: op_pivot (tabella pivot con indice, colonne, valori, aggregazione)
-- MELT: op_melt (unpivot: da colonne a righe)
-- SPLIT: op_split_column (divide colonna su separatore)
-- MERGE: op_merge_columns (unisce colonne con separatore)
-- FILL NULL: op_fill_null (riempimento valori nulli: costante, media, mediana, moda, ffill, bfill)
-- REPLACE: op_replace_values (sostituzione valori con regex opzionale)
-- GROUP BY: op_group_by (aggregazione con funzioni: count, sum, avg, min, max, first, last)
-- COLONNA STATICA: op_add_static_column (aggiunge colonna con valore costante)
-- GEOMETRY TO COLUMNS: op_geometry_to_columns (estrae lat/lon/wkt da geometria)
-- COLUMNS TO GEOMETRY: op_columns_to_geometry (crea geometria da lat/lon)
-
-Integrazione con PluginExecutor:
-Ogni funzione viene importata dinamicamente tramite il path nel registry JSON.
-Es: "base.op_join" → app.core.manipola.transforms.base.op_join
-
-Uso diretto (per test):
-    from app.core.manipola.transforms.base import op_join
-    result = op_join([df1, df2], left_column="id", right_column="id", join_type="inner")
+Keeps transformation behavior isolated from orchestration callers.
 """
 
 import pandas as pd
@@ -70,7 +29,7 @@ op_concat = op_union
 # via facade. I 5 helper privati restano single-source nel nuovo
 # modulo (verificato pre-extraction: zero consumer esterni).
 #
-# IMPORTANTE — patch.dict identita' oggetto:
+# NOTE: — patch.dict identita' oggetto:
 # `MASK_FUNCTIONS` e' re-exported da `base.py` via `from .security
 # import MASK_FUNCTIONS` (NON ribindato): il test contract
 # `tests2/manipola/unit/test_op_mask_data_fail_closed.py:69,110`

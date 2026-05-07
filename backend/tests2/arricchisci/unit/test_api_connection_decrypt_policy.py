@@ -1,15 +1,7 @@
-"""Contract test Bug #2 (2026-04-23): test_api_connection decrypt-fail policy.
+"""
+Contract test Bug #2 (2026-04-23): test_api_connection decrypt-fail policy.
 
 Blinda il contratto: quando un campo auth cifrato e' non decriptabile
-(chiave mancante/sbagliata o token corrotto), `test_api_connection(api_id)`
-chiamato con `get_api_connection(include_token=True, strict=True)` raise
-`CredentialUnavailableError`. Il router traduce in HTTP 422 invece di
-eseguire la chiamata HTTP con `Authorization: Bearer None` (che potrebbe
-dare 200-OK fasullo su endpoint senza auth).
-
-Regression risk: prima del fix, `_decrypt_auth_in_config` impostava il
-campo a None silenziosamente, `_prepare_headers` costruiva auth-header
-con None, e la chiamata partiva comunque.
 """
 
 from __future__ import annotations

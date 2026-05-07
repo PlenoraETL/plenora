@@ -1,25 +1,7 @@
-"""Contract test N13 — risoluzione alias -> nome originale in dest_column.
+"""
+Contract test N13 — risoluzione alias -> nome originale in dest_column.
 
 Scenario reale (pre-fix):
-  MANIPOLA rinomina una colonna via alias (es. "id" -> "id2" nel canvas Result).
-  Il DataFrame output ha "id2" come nome colonna. Il nodo CARICA scrive su
-  una tabella DB che ha la colonna col NOME ORIGINALE "id", non l'alias.
-
-  - Auto-map: mapper.auto_map produce `dest_column = "id2"` (copia il nome df).
-    Senza fix, la scrittura fallisce con 'colonna "id2" inesistente'.
-  - Mapping esplicito: se l'utente configura mapping nel canvas e mette
-    per sbaglio `dest_column = "id2"`, stesso errore.
-
-Fix (app/core/carica/executor.py::_resolve_aliases_in_mappings):
-  Tabella `alias -> name` costruita da `node_data["availableColumns"]`.
-  Applicata a ENTRAMBI i path (auto + esplicito) prima della validazione.
-
-Questa suite congela:
-  1. Comportamento base (alias presente -> dest_column riscritto)
-  2. No-op quando non ci sono alias / availableColumns vuoto
-  3. Gap 2 chiuso: il fix si applica anche al path mapping esplicito
-  4. Parziale: alcune colonne con alias, altre no -> solo le prime sostituite
-  5. Sentinel AST: entrambi i path nell'executor chiamano il helper
 """
 
 from __future__ import annotations

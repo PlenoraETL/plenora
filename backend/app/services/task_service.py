@@ -1,28 +1,7 @@
 """
 Servizio gestione task asincroni Celery.
 
-Architettura
-============
-Questo servizio fornisce un'interfaccia REST-friendly per gestire i task
-Celery in esecuzione. Astrae i dettagli di Celery/Redis e fornisce
-un'API pulita per il frontend.
-
-Componenti:
-- TaskStatus (enum): stati del task (PENDING, RUNNING, COMPLETED, FAILED, CANCELLED)
-- TaskInfo (dataclass): informazioni task (id, tipo, stato, progresso, risultato)
-- TaskService: classe principale con operazioni CRUD sui task
-
-Operazioni:
-- create_task(): crea un task Celery e restituisce il task_id
-- get_task_status(): recupera stato e progresso da Redis/Celery backend
-- cancel_task(): revoca un task in esecuzione (signal SIGTERM)
-- get_task_result(): recupera risultato di un task completato
-- list_active_tasks(): lista task attivi/in attesa
-
-Il progresso viene aggiornato dal worker Celery tramite task.update_state()
-e letto dal frontend tramite polling su GET /api/tasks/{task_id}.
-
-Backend: Redis (sia come broker Celery che come result backend).
+Keeps this module's responsibility explicit and isolated from adjacent code.
 """
 
 import json

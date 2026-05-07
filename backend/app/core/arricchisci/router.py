@@ -2,15 +2,6 @@
 Router API per il modulo ARRICCHISCI.
 
 Unisce tutti gli endpoint relativi all'arricchimento dati:
-- Enrichment validate/estimate (da api/enrichment.py)
-- API connections CRUD (da main.py)
-- Template API preconfigurati (da api/templates.py)
-- Esecuzione sincrona/asincrona arricchimento (da main.py)
-
-Sub-router:
-- /api/enrichment/*    → validazione e stima
-- /api/api-connections → CRUD connessioni API
-- /api/templates       → template preconfigurati (lista)
 """
 
 import json
@@ -714,7 +705,7 @@ def test_api_config(
     except HTTPException:
         raise
     except Exception as e:
-        # Bug #2 (2026-04-23): CredentialUnavailableError → 422 esplicito
+        # FIXME: #2 (2026-04-23): CredentialUnavailableError → 422 esplicito
         from app.shared.crypto import CredentialUnavailableError
         if isinstance(e, CredentialUnavailableError):
             raise HTTPException(status_code=422, detail=str(e))
@@ -742,7 +733,7 @@ def test_api_connection(
     except HTTPException:
         raise
     except Exception as e:
-        # Bug #2 (2026-04-23): CredentialUnavailableError → 422 esplicito
+        # FIXME: #2 (2026-04-23): CredentialUnavailableError → 422 esplicito
         from app.shared.crypto import CredentialUnavailableError
         if isinstance(e, CredentialUnavailableError):
             raise HTTPException(status_code=422, detail=str(e))

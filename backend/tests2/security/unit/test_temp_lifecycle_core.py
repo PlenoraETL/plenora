@@ -1,29 +1,7 @@
-"""Core-level test per Refactor #4 Step C: temp file lifecycle.
+"""
+Core-level test per Refactor #4 Step C: temp file lifecycle.
 
 Verifica che i call site identificati nell'audit non leakino
-tempfile su path errore:
-
-1. `arricchisci/api_connector._rest_file` — `mkdtemp(prefix="plenora_exec_")`
-   senza cleanup nel finally pre-fix; ora `_cleanup_tmp` flag + cleanup
-   garantito su tutte le eccezioni del try block.
-
-2. `imdf/loader.extract_imdf_zip` — `mkdtemp(prefix="imdf_")` senza
-   cleanup se l'estrazione o l'indicizzazione (validazione "non sembra
-   IMDF") falliscono. Ora try/except che cleanup la tmp dir creata,
-   solo se `_we_own_tmp` (caller non ha passato dest_dir esplicito).
-
-Closed (BE-GO-READY-RESOURCE-ENGINE-023):
-- `artifacts/resolver._write_temp_blob` was deleted as dead code
-  (R-021.1 closure). The tempfile lifecycle for result-blob path
-  materialization now lives in
-  `app.core.resources.loaders.result_blob._materialize_to_temp_path`
-  with the `plenora-result-blob-` audit prefix; tests for that
-  contract live in
-  `tests2/shared/test_result_blob_loader_path_mode_contract.py`
-  and `test_result_blob_loader_temp_safety_guard.py`.
-
-Test core-level: chiamano direttamente le funzioni, niente HTTP,
-niente CurrentUser.
 """
 
 from pathlib import Path

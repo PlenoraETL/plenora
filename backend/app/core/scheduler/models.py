@@ -1,28 +1,7 @@
 """
 Modelli dati Pydantic per il modulo SCHEDULER.
 
-Architettura
-============
-
-Definisce i modelli di validazione per la schedulazione automatica delle pipeline:
-    - Configurazione schedule (ScheduleConfig) con cron expression
-    - Modalità esecuzione (cache/ricalcola)
-    - Destinazione opzionale (CARICA su database)
-    - Policy errori (retry, conflitti)
-    - Concorrenza (coda)
-    - Stato runtime e log esecuzioni
-
-Lo scheduler è un'entità separata dal progetto: punta a un project_id
-e legge le configurazioni di output (nome file, formato, GROUP BY)
-direttamente dal canvas del progetto salvato.
-
-Un progetto può avere più schedule (es. "ogni ora append" + "ogni notte full refresh").
-Tutti i tipi di progetto sono schedulabili: ESTRAI, MANIPOLA, ARRICCHISCI.
-L'orchestrator riesegue automaticamente tutta la catena a monte.
-
-Storage: data/schedules/{id}.json
-Log: data/logs/YYYY-MM-DD/sched_{id}_{HHMMSS}.json
-Engine: Celery Beat + RedBeat (Redis)
+Keeps this module's responsibility explicit and isolated from adjacent code.
 """
 
 from pydantic import BaseModel, Field, model_validator

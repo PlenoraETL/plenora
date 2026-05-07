@@ -2,22 +2,6 @@
 validator.py — Pre-publish validator per bundle IMDF → Feature Service ArcGIS
 
 Esegue un controllo read-only (senza side effect su ArcGIS) prima della
-pubblicazione vera. Ritorna un report strutturato che il frontend mostra
-in un modal dedicato, cosi' l'utente sa cosa verra' modificato e puo'
-decidere se procedere.
-
-Cosa controlla v1:
- 1. Bundle: esiste su disco, layer presenti, conteggi feature, match key
-    column presente + NULL count + duplicati
- 2. FS: esiste (via /sharing/rest/search dell'owner corrente)
- 3. Se FS esiste: per ogni layer bundle fa match by name nel FS e confronta
-    lo schema (nome campo → tipo). Produce `schema_compat` ok/mismatch.
- 4. Mode-specific impact:
-    - replace: delta = fs_count totale (sara' droppato e ricreato)
-    - append:  delta = +bundle_count (nessun controllo duplicati)
-    - upsert:  query live `OBJECTID WHERE match_col IN (values)` per
-               ciascun layer → conta quante feature esistenti verranno
-               cancellate (will_delete)
 """
 
 from pathlib import Path

@@ -1,27 +1,7 @@
 """
 Policy Engine per lo Scheduler PLENORA-ETL.
 
-Architettura
-============
-Gestisce le decisioni automatiche durante l'esecuzione schedulata:
-
-1. RETRY con backoff esponenziale:
-   - Dopo un fallimento, calcola il tempo di attesa prima del retry
-   - Default: 3 tentativi con attese di 1min, 5min, 15min
-   - Dopo l'ultimo tentativo → segnala RETRY_EXHAUSTED
-
-2. CONFLICT RESOLUTION per CARICA:
-   - In modalità APPEND/UPSERT possono verificarsi conflitti
-   - Policy preconfigurata dall'utente nel wizard (nessuno a decidere runtime)
-   - skip: inserisci solo righe senza conflitti
-   - force: sovrascrivi le righe in conflitto
-   - abort: interrompi e segnala errore
-
-3. VALUTAZIONE RISULTATO:
-   - Dato l'esito della pipeline, determina lo stato finale
-   - success → completed
-   - partial (righe skipped) → partial
-   - errore → failed (con eventuale retry)
+Keeps this module's responsibility explicit and isolated from adjacent code.
 """
 
 from typing import Optional, Tuple, Literal

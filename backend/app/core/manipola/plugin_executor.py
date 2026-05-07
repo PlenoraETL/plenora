@@ -1,42 +1,7 @@
 """
 Sistema plugin per trasformazioni MANIPOLA.
 
-Architettura
-============
-Questo modulo implementa un sistema di caricamento dinamico delle trasformazioni
-basato su un registry JSON. Permette di aggiungere nuove trasformazioni senza
-modificare il codice del core, semplicemente:
-1. Scrivendo la funzione Python in transforms/base.py o transforms/spatial.py
-2. Aggiungendo l'entry nel transforms_registry.json
-
-Il registry JSON definisce per ogni trasformazione:
-- Metadati: nome, icona, descrizione, categoria
-- Percorso funzione: "modulo.nome_funzione" (es. "base.op_join" → app.core.manipola.transforms.base.op_join)
-- Parametri: tipo, default, validazione, dipendenze condizionali (depends_on)
-- Tipo input: single/multi per supportare join e operazioni multi-tabella
-
-Componenti:
-- PluginExecutor: classe principale con caricamento dinamico e esecuzione
-- get_executor(): singleton globale per accesso rapido
-- reload_executor(): ricarica registry a caldo (sviluppo)
-- PluginExecutorCompatibility: layer di compatibilità col vecchio sistema
-
-Ciclo di vita:
-1. __init__: carica il registry JSON e importa dinamicamente le funzioni Python
-2. execute(): riceve transform_id, lista DataFrame di input, nodo con config
-3. _prepara_kwargs(): mappa la config del nodo → parametri funzione (gestisce depends_on, default, conversione tipi)
-4. Invoca la funzione Python con i kwargs preparati
-
-Conversione tipi parametri:
-- number: float se contiene '.', altrimenti int
-- boolean: true/1/yes/si → True
-- columns/string_list: split su virgola se stringa
-
-Uso:
-    from app.core.manipola.plugin_executor import get_executor
-
-    executor = get_executor()
-    result_df = executor.execute('geo_buffer', [input_df], node)
+Keeps transformation behavior isolated from orchestration callers.
 """
 
 import json

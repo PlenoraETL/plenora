@@ -1,3 +1,9 @@
+"""
+Tests the layout behavior.
+
+Locks backend contracts and regression boundaries for the current architecture.
+"""
+
 import pytest
 
 

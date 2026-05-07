@@ -1,13 +1,7 @@
-"""Core-level contract test per Refactor #2 invariante C.
+"""
+Core-level contract test per Refactor #2 invariante C.
 
 Group isolation nello scheduler: uno schedule non puo' eseguire un
-progetto di un altro gruppo. Pre-Refactor #2 il check era fail-OPEN
-sottile (`if a and b and a != b`): mancanza di group_id su uno dei
-due lati saltava silenziosamente l'isolation.
-
-Questi test girano DIRETTAMENTE su `ExecutionManager.execute()` —
-nessun TestClient HTTP, nessun CurrentUser. Verificano che il check
-core sia fail-closed indipendentemente dal layer HTTP.
 """
 
 from datetime import datetime, timezone

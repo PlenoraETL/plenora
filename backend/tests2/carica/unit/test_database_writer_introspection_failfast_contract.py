@@ -1,16 +1,7 @@
-"""S2 — introspection fail-fast su DatabaseWriter.
+"""
+S2 — introspection fail-fast su DatabaseWriter.
 
 Pre-fix: le 4 funzioni `table_exists`, `get_existing_columns`,
-`get_schemas`, `get_tables` catturavano qualunque eccezione e
-ritornavano `False` / `[]`. Questo confonde "non trovato" con
-"non verificabile" (permessi, rete, query DDL fallita).
-
-Post-fix (questo contract): le 4 funzioni propagano l'eccezione.
-`validate()` — unico callsite in-file che usa introspection — la
-converte in `(False, <motivo reale>)` preservando il proprio
-contratto `Tuple[bool, str]`.
-
-Rif. inventory 2.4 / approvato 5.1 S2.
 """
 
 from __future__ import annotations

@@ -1,29 +1,7 @@
-"""Contract test BE-GO-READY-BOOTSTRAP-ENGINE-013-DEPENDENCY-GRAPH-LOCK.
+"""
+Contract test BE-GO-READY-BOOTSTRAP-ENGINE-013-DEPENDENCY-GRAPH-LOCK.
 
 Locks the bootstrap dependency graph WITHOUT introducing a DI
-container. Two complementary surfaces are pinned here:
-
-1. **Source-bound graph**: AST/regex check that
-   `app/bootstrap.py` invokes the four canonical steps in the
-   single canonical order, and that `app/main.py` calls
-   `_bootstrap()` BEFORE any router import. Drift = test fail.
-
-2. **Behavioural completion flag**:
-   `app.bootstrap.is_bootstrapped()` is False before bootstrap
-   runs and True after a successful run. Failure halfway through
-   leaves the flag False (no "partial complete"). Teardown flips
-   it back to False so a hot-reload / test harness can re-bootstrap.
-
-Boundary contract preserved by these tests:
-- `bootstrap() -> None` (no signature change);
-- idempotent (the existing `test_bootstrap_contract.py` already
-  pins this; here we only add the flag-transition test);
-- exception types still propagate unchanged from each step.
-
-The flag is a single boolean (`_BOOT_COMPLETE`) read via
-`is_bootstrapped()`. It is intentionally NOT a registry, NOT a
-DI container, NOT a state machine: it answers exactly "has the
-four-step boundary been crossed at least once in this process?".
 """
 
 from __future__ import annotations

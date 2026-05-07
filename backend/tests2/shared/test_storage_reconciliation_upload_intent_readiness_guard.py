@@ -1,30 +1,7 @@
-"""Contract + visibility guard for the upload_intent lifecycle.
+"""
+Contract + visibility guard for the upload_intent lifecycle.
 
 BE-GO-READY-STORAGE-ENGINE-023-UPLOAD-INTENT-READINESS-GUARD.
-
-Locks three things that the audit (sec. 23 of
-`.agent-temp/BE_STORAGE_ENGINE_AUDIT.md`) names as load-bearing:
-
-  1. **Non-outbox docstring lock**: `record_upload_intent`'s
-     docstring MUST contain the explicit "NOT a transactional
-     outbox" callout + the disabled-state failure-mode list. The
-     pattern has heuristic closure semantics, NOT outbox
-     semantics; future contributors must not silently re-claim
-     it as an outbox.
-  2. **Per-operation visibility helper**: `count_pending_by_operation`
-     exposes a `dict[str, int]` keyed on operation. Best-effort
-     (returns `{}` on DB error). Locks the SQL contract
-     (state='pending' filter, GROUP BY operation).
-  3. **Readiness check extension**: `check_reconciliation_backlog`
-     now (a) embeds the per-operation breakdown in its detail
-     string and (b) honors the opt-in
-     `STORAGE_RECONCILE_BACKLOG_UPLOAD_INTENT_503_THRESHOLD`
-     setting (default 0 = disabled).
-
-These tests are SOURCE-BOUND for the docstring lock + behavioral
-for the runtime helpers. The check_reconciliation_backlog tests
-patch the new boundary explicitly to avoid coupling to the
-existing 015-readiness-check tests.
 """
 
 from __future__ import annotations

@@ -1,55 +1,7 @@
-"""migrate_env_to_ssm.py — migra secret dai .env a AWS SSM Parameter Store.
+"""
+migrate_env_to_ssm.py — migra secret dai .env a AWS SSM Parameter Store.
 
 Scope
------
-Complementare a `scripts/load_secrets.py`: questo script SCRIVE su SSM,
-l'altro LEGGE al boot dei task systemd. Un workflow end-to-end:
-
-    1. operatore compila backend/.env con i valori corretti
-    2. esegue `python scripts/migrate_env_to_ssm.py --env-file backend/.env`
-    3. verifica su console AWS che i SecureString siano stati creati
-    4. rimuove i secret da .env (o rinomina .env -> .env.bootstrap)
-    5. systemd `plenora-backup.service` e `plenora-backup-test.service`
-       partono con `ExecStart=python load_secrets.py <target>`, fetchano
-       da SSM, eseguono il target con os.environ popolato
-
-Secret migrati (whitelist, hardcoded): `DATABASE_URL`,
-`PLENORA_ENCRYPTION_KEY` (alias `URBY_ENCRYPTION_KEY` accettato in
-**input-only**: il valore viene comunque scritto su SSM sotto il nome
-canonico `PLENORA_ENCRYPTION_KEY`. Il runtime non legge piu' l'alias
-dal 2026-04-23, D4 chiuso commit `1005018`), `JWT_SECRET_KEY`.
-Variabili di configurazione non-sensibili (DB_SCHEMA, DB_POOL_MIN/MAX,
-UVICORN_WORKERS, ecc.) NON vengono migrate: vivono nei systemd unit
-EnvironmentFile o nel `data/config.json`.
-
-Idempotenza
------------
-- Se la param SSM non esiste        -> CREATE (PutParameter con Overwrite=False).
-- Se la param esiste col valore OK  -> SKIP (log: already_in_sync).
-- Se la param esiste con valore DIF -> WARN + SKIP; l'operatore deve passare
-  `--force` per sovrascrivere. Questo evita rotazioni accidentali (una
-  rotazione JWT invalida tutti i token in vigore, un cambio
-  PLENORA_ENCRYPTION_KEY rende illeggibili i valori crittati a riposo).
-- `--dry-run` stampa il piano senza chiamare AWS.
-
-Sicurezza operativa
--------------------
-- Tutti i parametri sono `SecureString` con `KeyId="alias/aws/ssm"`
-  (KMS account-default). Per KMS key custom, impostare
-  `SSM_KMS_KEY_ID=<alias|arn>` in env prima di eseguire.
-- Lo script NON logga i valori: solo i nomi e un hash dei primi 8 char
-  per auditabilita' cross-run.
-- Credenziali AWS: chain standard boto3 (AWS_PROFILE, IAM role, env).
-  Richiede: `ssm:GetParameter`, `ssm:PutParameter`, opzionale
-  `ssm:AddTagsToResource`.
-
-Exit codes
-----------
-    0 success (tutti i secret migrati o gia' in sync)
-    1 errore generico (credenziali AWS, rete)
-    2 argomenti invalidi
-    3 almeno un secret in drift e --force non passato (operatore deve
-      decidere se rotare)
 """
 
 from __future__ import annotations

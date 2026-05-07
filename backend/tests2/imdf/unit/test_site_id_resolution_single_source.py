@@ -1,14 +1,7 @@
-"""Contract test D3 commit 3 — site_id single-source (loader autoritativo).
+"""
+Contract test D3 commit 3 — site_id single-source (loader autoritativo).
 
 Invariant architetturale (d3_imdf_boundaries.md §3.1 + §4.1 + R3 + R4):
-- `loader._build_bundle_index` e' l'UNICO autoritativo per `site_id`.
-- `persist.persist_imdf_bundle_to_disk` scrive `bundle.site_id` in
-  `plenora_metadata.json` senza rideriva.
-- Router (`get_bundle_metadata` + `list_bundles`) legge SOLO da
-  `meta["site_id"]`. Nessuna scansione dir.
-- Bundle legacy/malformati con meta assente o senza site_id -> response
-  `site_id=None`, FE gestisce.
-- `ImdfBundle.site_id` mai None (R4): stringa vuota = euristica fallita.
 """
 from __future__ import annotations
 

@@ -2,16 +2,6 @@
 Logica di parallelizzazione e conditional execution per api_enrich nodes.
 
 Questo modulo contiene le funzioni helper utilizzate da:
-- api_connector.py (execute_enrichment, sync)
-- enrichment_task.py (Celery task, async)
-- executor.py (preview, sync)
-
-Due feature:
-1. execute_if: skip condizionale di un nodo in base a una colonna del DataFrame
-2. parallel groups: raggruppamento di nodi api_enrich indipendenti per
-   esecuzione concorrente con ThreadPoolExecutor
-
-Usato internamente — non esposto come API.
 """
 import re
 from typing import Any, Dict, List, Optional, Set, Tuple

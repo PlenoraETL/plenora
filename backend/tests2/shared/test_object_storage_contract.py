@@ -1,49 +1,7 @@
-"""Contract parity matrix — Protocol `ObjectStorage` cross-provider (A1-B3).
+"""
+Contract parity matrix — Protocol `ObjectStorage` cross-provider (A1-B3).
 
 Verifica che `AwsS3ObjectStorage` e `MinioObjectStorage` implementino il
-Protocol `ObjectStorage` (ADR-0007) in modo comportamentalmente equivalente.
-Dual-path:
-
-1. **Baseline moto** (in-process, sempre runnabile quando `moto` e' installato).
-   moto 5.x intercetta boto3 a livello modulo. Di default intercetta SOLO le
-   richieste a endpoint AWS reali: un client con `endpoint_url=http://...
-   :9000` (MinIO) sfuggirebbe il mock e tenterebbe HTTP vero. Per testare
-   `MinioObjectStorage` in-process serve esplicitamente dire a moto quali
-   endpoint custom intercettare, via env var **`MOTO_S3_CUSTOM_ENDPOINTS`**
-   (API pubblica moto: https://docs.getmoto.org/en/latest/docs/services/
-   patching_other_services.html). Il fixture `provider` setta questa env
-   prima di entrare in `mock_aws()`.
-
-2. **Opt-in MinIO reale** (env-gated `MINIO_E2E_ENDPOINT_URL` + credenziali).
-   Valida server-specific: path-style addressing, empty region, multipart
-   effettivo, SSE assente di default. Skippa se env non settata.
-
-Scenari contract (design `a1_storage_policy.md §6.2`):
-  C1 upload + download roundtrip small (byte-exact)
-  C3 list_objects con prefix (set semantic, out-of-prefix non appare)
-  C4 delete idempotente (key inesistente -> no error)
-  C5 overwrite (upload su key esistente sostituisce)
-
-Scenari ESCLUSI dal baseline A1-B3 (decisione 2026-04-23, scope ridotto
-ma pulito):
-  - C2 upload_bytes multipart >8MB -- escluso dal baseline moto per
-    incompatibilita' nota boto3 >=1.40 + moto 5.x: flexible-checksum
-    header abilitato di default sui multipart upload causa
-    `FlexibleChecksumError` alla download via moto. Non e' bug del
-    codice nostro ne' del Protocol: e' interop boto3/moto su multipart.
-    C2 resta VALIDABILE solo contro server reale via opt-in
-    MINIO_E2E_ENDPOINT_URL (moto fuori dal path); quando attivato,
-    valida l'implementazione multipart lato server. Senza workaround
-    fragili (no env var disable-checksum, no downgrade payload sotto
-    soglia) per non compromettere la matrice pulita.
-  - C6 content_type default "application/octet-stream" -- escluso
-    perche' NON e' un contract cross-provider: S3, moto e MinIO server
-    ritornano tutti `binary/octet-stream` come default quando il client
-    non specifica ContentType. Il valore `application/octet-stream`
-    nella docstring di `get_object_stream` e' il fallback in-code (usato
-    solo se il server non include ContentType, caso raro), non una
-    garanzia del Protocol. Allineare test o docstring richiede cambio
-    runtime e/o ratifica separata -- fuori scope A1-B3.
 """
 from __future__ import annotations
 

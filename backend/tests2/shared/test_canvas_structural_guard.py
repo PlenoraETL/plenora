@@ -1,20 +1,7 @@
-"""Structural boundary guard for CanvasNode and CanvasGraph.
+"""
+Structural boundary guard for CanvasNode and CanvasGraph.
 
 BE-GO-READY-ARCH-060-W1-CANVASGRAPH-STRUCTURAL-GUARD.
-
-Prevents canvas_node.py and canvas_graph.py from acquiring business-specific
-node semantics. They are structural-only modules: graph topology, typed field
-access, edge lookup, result node.
-
-Allowed structural vocabulary: id, type, data, get_field, raw, edges, result,
-from_nodes_edges, raw_map, typed_map.
-
-Forbidden business concepts (as substrings of definition-site identifiers):
-  file_source_id, api_id, arcgis, join, crs, transform, load_, validate_publish.
-
-The guard scans function/method names, class names, and parameter names in the
-AST - it does NOT flag attribute accesses like `", ".join(x)` (Python built-in)
-or string-literal keys passed to `get_field()` (those are caller-side semantics).
 """
 
 from __future__ import annotations

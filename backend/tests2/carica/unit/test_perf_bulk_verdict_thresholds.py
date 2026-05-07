@@ -1,9 +1,7 @@
-"""Test soglie Batch 3.12 — `backend/scripts/perf_bulk_verdict.py`.
+"""
+Test soglie Batch 3.12 — `backend/scripts/perf_bulk_verdict.py`.
 
 Copre la logica pura di applicazione delle soglie §9.2 (MySQL LOAD DATA
-decommission) e §9.3 (PG COPY keep-confirmed / regression-alert) senza
-dipendenza DB. Le soglie sono copiate verbatim da kickoff.md; questi
-test congelano la loro semantica per evitare drift.
 """
 
 from __future__ import annotations

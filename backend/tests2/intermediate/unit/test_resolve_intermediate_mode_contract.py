@@ -1,27 +1,7 @@
-"""Contract test R-25 PR-B1 — resolve_intermediate_mode.
+"""
+Contract test R-25 PR-B1 — resolve_intermediate_mode.
 
 `resolve_intermediate_mode(default_mode, override_mode=None)` e' una pure
-function aggiunta in `app.core.intermediate.policy` per consentire un
-override per-call della mode di persistenza globale (PR-B2 sul path
-estrai-final).
-
-Invarianti che questo modulo deve preservare:
-
-  1. override_mode is None -> ritorna default_mode (bit-compat).
-  2. override_mode == default_mode -> ritorna default_mode (idempotenza).
-  3. override_mode in {metadata_only, preview_only, full_pg, full_artifact}
-     diverso dal default -> ritorna override_mode.
-  4. Override invalido (tipo non-str, stringa vuota, valore sconosciuto,
-     case mismatch) -> raise IntermediateSettingsError. **Mai** fallback
-     silenzioso al default.
-  5. Override in PLANNED_PERSISTENCE_MODES (oggi vuoto) -> raise.
-     Verificato via monkeypatch del frozenset PLANNED.
-  6. Capability runtime NON e' verificata (es. full_artifact senza
-     object storage non solleva qui): la fn valida SOLO l'enum.
-  7. default_mode invalido NON e' validato dalla fn: caller responsability
-     (gia' coperto da validate_intermediate_settings a startup).
-
-LOC: ~150. Zero DB, zero Celery, zero fixture pesanti.
 """
 
 from __future__ import annotations

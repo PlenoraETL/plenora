@@ -2,33 +2,6 @@
 MFA TOTP (RFC 6238) — enrollment, verify, disable.
 
 Policy
-------
-- Opt-in stretto: nessuna enforcement globale, solo gli utenti che chiamano
-  /enroll attivano MFA. Il login standard e' invariato se MFA non e' attiva.
-- Two-step enrollment:
-    1. /enroll crea un secret con enabled=False (pendente).
-    2. /verify con codice TOTP corretto setta enabled=True.
-  Se l'utente abbandona senza /verify, un successivo /enroll sovrascrive
-  il secret pendente. Questo evita righe "zombie" di enrollment non
-  confermati che si accumulano.
-- Disable richiede codice TOTP valido (proof-of-possession).
-
-Storage
--------
-Tabella `plenora.user_mfa` (vedi migration 2026-04-21_add_user_mfa.sql).
-Secret cifrato con Fernet via `app.shared.crypto`. La chain della chiave
-legge solo `PLENORA_ENCRYPTION_KEY` (D4 chiuso 2026-04-23). encrypt() e'
-idempotente.
-
-Trade-off noto: mfa_required leak nel login
--------------------------------------------
-Il login ritorna 403 `mfa_required` quando password e' corretta ma MFA
-assente dal body. Differisce da 401 per password errata. Un attaccante con
-password valida impara "MFA attiva per questo account". E' un leak
-accettato in quasi tutti i sistemi MFA via API: l'alternativa (401 generico
-sempre) romperebbe l'UX del client MFA-aware. Rate limit login gia' in
-vigore (LOGIN_MAX_ATTEMPTS + LOGIN_LOCKOUT_SECONDS). Documentato in ADR-0018
-(`backend/docs/architecture/decisions/0018-2026-04-30-mfa-required-disclosure-tradeoff.md`).
 """
 from __future__ import annotations
 

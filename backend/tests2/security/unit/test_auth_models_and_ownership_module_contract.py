@@ -1,18 +1,7 @@
-"""Smoke contract — STRUCT-005 Seam C + B': estrazione models + ownership.
+"""
+Smoke contract — STRUCT-005 Seam C + B': estrazione models + ownership.
 
 Verifica due invarianti minime del refactor:
-
-  1. I nuovi moduli `app.core.auth.models` e `app.core.auth.ownership`
-     espongono i simboli attesi (13 BaseModel + 6 helper).
-
-  2. `app.core.auth.auth` re-esporta gli stessi oggetti (identita'
-     bit-per-bit). Cosi' i test che fanno
-     `from app.core.auth.auth import CurrentUser, assert_group_access, ...`
-     o `auth_mod.X` continuano a comportarsi come prima.
-
-La copertura funzionale (auth/login/ownership/group access) e' gia'
-garantita dai test pre-esistenti nelle suite `security`, `auth`,
-`projects`, `scheduler`, `connections`, `datasources`, ecc.
 """
 
 from __future__ import annotations

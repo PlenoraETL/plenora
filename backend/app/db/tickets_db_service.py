@@ -1,12 +1,7 @@
-"""DB service layer — tickets + comments + attachments.
+"""
+DB service layer — tickets + comments + attachments.
 
 Tabelle in `plenora.*`:
-  - tickets
-  - ticket_comments (FK cascade on delete)
-  - ticket_attachments (FK cascade on delete, riusa file_sources)
-
-Le funzioni qui sono CRUD puri: nessuna logica RBAC, nessun vincolo
-di transizione di stato. Quella vive in `app/core/tickets/service.py`.
 """
 
 from __future__ import annotations

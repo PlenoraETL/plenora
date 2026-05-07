@@ -1,41 +1,7 @@
 """
 Processore di variabili template per PLENORA-ETL.
 
-Architettura
-============
-Processore per la risoluzione di variabili dinamiche nei nodi StaticValues.
-
-Risolve variabili dinamiche nei valori dei nodi StaticValues del canvas.
-Le variabili usano la sintassi {{NOME}} o {{NOME±offsetUnità}}.
-
-Variabili supportate:
-    {{NOW}}           → Data/ora corrente (YYYY-MM-DD HH:MM)
-    {{NOW+2h}}        → Ora corrente + 2 ore
-    {{NOW-30m}}       → Ora corrente - 30 minuti
-    {{NOW-1d}}        → Ieri stessa ora
-    {{TODAY}}         → Oggi alle 00:00
-    {{YESTERDAY}}     → Ieri alle 00:00
-    {{TOMORROW}}      → Domani alle 00:00
-    {{DATE}}          → Solo data (YYYY-MM-DD)
-    {{TIME}}          → Solo ora (HH:MM)
-    {{TIMESTAMP}}     → Unix timestamp in millisecondi
-    {{YEAR}}          → Anno corrente (4 cifre)
-    {{MONTH}}         → Mese corrente (01-12)
-    {{DAY}}           → Giorno corrente (01-31)
-
-Unità di offset: s (secondi), m (minuti), h (ore), d (giorni).
-
-Uso:
-    from app.utils.template_variables import process_template_variables, process_static_fields
-
-    # Singola stringa
-    risultato = process_template_variables("reftime:>={{NOW-2h}}")
-    # → "reftime:>=2026-02-02 09:30"
-
-    # Lista di campi dal nodo StaticValues
-    campi = [{'name': 'q', 'value': 'reftime:>={{NOW-2h}}'}]
-    valori = process_static_fields(campi)
-    # → {'q': 'reftime:>=2026-02-02 09:30'}
+Keeps this module's responsibility explicit and isolated from adjacent code.
 """
 
 import re

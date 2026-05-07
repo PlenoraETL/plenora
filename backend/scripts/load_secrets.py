@@ -1,35 +1,7 @@
-"""load_secrets.py — wrapper exec che popola os.environ da secrets backend.
+"""
+load_secrets.py — wrapper exec che popola os.environ da secrets backend.
 
 Chiude C1-residuo: i systemd unit del backup/test-restore non dipendono
-piu' da `backend/.env` su disco. I secret (DATABASE_URL) vivono in un
-backend cloud-agnostic (AWS SSM oggi, potenzialmente Azure Key Vault /
-GCP Secret Manager domani via CLOUD_PROVIDER env); questo wrapper li
-fetcha al task start, li scrive in `os.environ`, poi `os.execv` il
-target script.
-
-Pattern: `python3 load_secrets.py /path/to/target.py [args...]`
-
-Il backend cloud e' scelto dalla factory in `cloud_backends.py`
-(default: AWS SSM con prefix `/plenora/prod/`). Per migrare cloud:
-aggiungi una classe in cloud_backends.py, setta CLOUD_PROVIDER=azure
-(o gcp), nessun change qui.
-
-Flusso:
-  1. `get_secrets_backend().get_secrets(PREFIX)` — ritorna dict
-     {key: value} decifrato
-  2. Popola os.environ (setdefault: env pre-esistente NON viene
-     sovrascritto — utile in dev)
-  3. `os.execv /usr/bin/python3 <target> <args>` — sostituisce il
-     processo. systemd Type=oneshot vede lo stesso PID.
-
-Usato da:
-  - plenora-backup.service (ExecStart)
-  - plenora-backup-test.service (ExecStart)
-
-Exit codes:
-    (quelli del target script dopo execv)
-    1 errore backend (network, permessi, ecc.)
-    2 argomenti invalidi
 """
 
 from __future__ import annotations

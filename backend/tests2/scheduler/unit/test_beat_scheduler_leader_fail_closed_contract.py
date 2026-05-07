@@ -1,18 +1,7 @@
-"""Leader election fail-closed di default quando Redis e' unavailable (C3 follow-up).
+"""
+Leader election fail-closed di default quando Redis e' unavailable (C3 follow-up).
 
 Contratto
----------
-Il default cambia da fail-open (io-sono-leader su Redis down) a
-fail-closed (standby su Redis down), per evitare che due beat durante
-un flap Redis diventino entrambi leader e riaprano il doppio enqueue.
-
-Flag `SCHEDULE_BEAT_LEADER_FAIL_OPEN` (default False) permette il
-vecchio behavior per deployment single-instance dove nessun altro
-beat gira mai (single host, systemd unit singolo).
-
-Il flag viene letto a ogni chiamata di _try_become_leader (non
-cache-ato a init) cosi' puo' essere cambiato runtime via env var
-senza restart — utile per incident response.
 """
 
 from unittest.mock import MagicMock, patch

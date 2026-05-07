@@ -1,28 +1,7 @@
-"""Contract test RB.4.B (2026-04-27) — get_project annotation cross-tenant.
+"""
+Contract test RB.4.B (2026-04-27) — get_project annotation cross-tenant.
 
 BUG.md #8 layer B:
-    Canvas storici esistenti (creati prima di RB.4.A) possono contenere
-    `file_source_id` o `source_project_id` di gruppi non visibili
-    all'utente che apre il progetto. Il save futuro e' bloccato da RB.4.A,
-    ma i canvas gia' persistiti restano "sporchi".
-
-Fix RB.4.B:
-    `GET /projects/{id}` ritorna il canvas as-is dal DB (no mutation),
-    ma annota i nodi `file_source` / `project_source` con riferimenti
-    non visibili al gruppo del progetto:
-        node.data.access_denied = True
-        node.data.access_denied_reason = "..."
-        node.data.inaccessible_resource_type = "file_source" | "project_source"
-
-    Il frontend (RB.4.C) usa il flag per disabilitare run/preview e
-    mostrare un warning. Backend resta autorita': RB.4.A blocca save,
-    runtime fail-closed (`_assert_file_source_group_access`) resta intatto.
-
-Test scope:
-    - canvas con ref non visibile -> response annotata, NO save
-    - canvas pulito -> nessuna annotazione (regression)
-    - superadmin -> nessuna annotazione (vede tutto)
-    - canvas persistito intatto durante GET (no update_canvas chiamato)
 """
 
 from __future__ import annotations
@@ -285,7 +264,7 @@ def test_get_project_skips_visibility_check_when_no_cross_tenant_refs():
 
 # RB.7.B (2026-04-27): annotation cross-tenant per ArcGIS connections
 #
-# BUG.md #7: post rebrand 2026-04-18 alcuni canvas storici contenevano
+# FIXME(BUG.md #7): post rebrand 2026-04-18 alcuni canvas storici contenevano
 # `arcgis_connection_id` / `imdf_arcgis_connection_id` ora rinominati o
 # non visibili. RB.7.A previene i save futuri; RB.7.B annota i canvas
 # gia' persistiti per disabilitare run/preview lato UI prima del 404 a

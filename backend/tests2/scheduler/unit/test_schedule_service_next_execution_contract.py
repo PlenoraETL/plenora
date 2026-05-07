@@ -1,19 +1,7 @@
-"""Caratterizzazione di ScheduleService._calculate_next_execution.
+"""
+Caratterizzazione di ScheduleService._calculate_next_execution.
 
 Scopo: cristallizzare il comportamento ATTUALE del calcolo
-"prossima esecuzione" prima di aggiungere catchup dei missed runs
-(C3 punto 3). Dopo il fix il comportamento cambiera' (per gli schedule
-con flag catchup=True, il metodo o un nuovo helper dovranno considerare
-last_run invece di now). I test qui documentano il baseline.
-
-Nota importante
----------------
-Questo metodo calcola il prossimo run sempre a partire da `now`, NON
-fa catchup. Il test `test_does_not_perform_catchup_for_missed_windows`
-vincola esplicitamente questo comportamento: quando implementeremo il
-catchup (opt-in per schedule) il nuovo helper andra' in un path
-separato, NON dentro `_calculate_next_execution`, o questo test andra'
-aggiornato insieme.
 """
 
 from datetime import datetime, timezone

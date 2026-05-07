@@ -2,7 +2,6 @@
 Utility condivise per i router FastAPI.
 
 Funzioni helper che eliminano pattern ripetuti nella gestione
-dell'inizializzazione lazy dei moduli.
 """
 
 from app.shared import error_codes

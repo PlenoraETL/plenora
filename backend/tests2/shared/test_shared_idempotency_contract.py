@@ -1,12 +1,7 @@
-"""Modulo condiviso di idempotency check (C4 round 3).
+"""
+Modulo condiviso di idempotency check (C4 round 3).
 
 Generalizzazione di `app/core/carica/idempotency.py` in
-`app/shared/idempotency.py` per riuso tra i vari task
-(carica, enrichment, e futuri).
-
-Semantica invariata rispetto al modulo carica:
-- `completed` → True (idempotency hit, skip)
-- `failed` / `running` / missing / DB error → False
 """
 
 from unittest.mock import patch

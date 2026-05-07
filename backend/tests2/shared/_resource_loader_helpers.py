@@ -1,20 +1,7 @@
-"""Small test helpers for `ResultBlobLoader` contract tests.
+"""
+Small test helpers for `ResultBlobLoader` contract tests.
 
 BE-GO-READY-TEST-INFRA-003-RESOURCE-TEST-SLIMMING.
-
-Four small helpers shared by the resource-loader contract suites
-under `backend/tests2/shared/test_result_blob_loader_*.py`. All
-helpers preserve the original assertion patterns: they only
-remove repetitive ResourceRef construction + the standard
-fake-callable + cleanup boilerplate.
-
-Anti-framework: this module is intentionally tiny. It exposes
-four functions, no fixtures, no classes, no auto-discovery. A
-test that needs a different shape (e.g. a row that injects a
-specific format hint) builds its callable inline as before.
-
-Leading underscore in the module name keeps pytest from
-collecting it as a test module.
 """
 
 from __future__ import annotations

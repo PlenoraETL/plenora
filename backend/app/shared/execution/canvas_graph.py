@@ -1,36 +1,7 @@
-"""CanvasGraph - parsed intake object for canvas node/edge graphs.
+"""
+CanvasGraph - parsed intake object for canvas node/edge graphs.
 
 BE-GO-READY-ARCH-058-W3-CANVASGRAPH-INTAKE-ARRICCHISCI.
-
-Consolidates the two parallel local dicts that execution loops
-previously built at entry: a raw ``Dict[str, Dict]`` for legacy
-callers and a ``Dict[str, CanvasNode]`` for typed field access.
-
-``CanvasGraph.from_nodes_edges(nodes, edges)`` builds both from a
-single pass; the graph is then used for all lookups within the same
-call frame instead of re-wrapping nodes on every iteration.
-
-Boundary
-========
-Leaf contract module. Must NOT import:
-
-- ``fastapi`` / ``starlette`` (no HTTP);
-- ``app.db.*`` / ``psycopg2`` / ``redis`` (no I/O);
-- ``pandas`` / ``geopandas`` / ``polars`` (no DataFrame);
-- ``app.core.*`` (consumed by core, not vice-versa).
-
-Go-ready mapping
-================
-::
-
-    type CanvasGraph struct {
-        RawMap  map[string]map[string]any
-        Nodes   map[string]CanvasNode
-        Edges   []map[string]any
-    }
-    func (g *CanvasGraph) Raw(nodeID string) map[string]any
-    func (g *CanvasGraph) Get(nodeID string) *CanvasNode
-    func (g *CanvasGraph) ResultNode() *CanvasNode
 """
 
 from __future__ import annotations

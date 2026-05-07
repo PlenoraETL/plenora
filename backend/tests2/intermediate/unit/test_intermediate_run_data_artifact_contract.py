@@ -1,24 +1,7 @@
-"""Contract test Batch API preview da artifact (2026-04-28).
+"""
+Contract test Batch API preview da artifact (2026-04-28).
 
 Verifica che `GET /api/runs/{run_id}/nodes/{node_id}/data` supporti i
-quattro casi:
-
-1. legacy / full_pg / preview_only con `node_rows` -> path esistente
-   (sanitizzazione NaN/Inf gia' implementata in Bug #23).
-2. metadata_only -> 200 con `rows=[]` + message operativo.
-3. full_artifact + status=complete -> legge data.parquet da runtime
-   object storage e ritorna preview limitata.
-4. full_artifact pending/failed/missing -> 200 con `rows=[]` + message
-   operativo (non 500).
-
-Aggiuntive:
-- limit rispettato sul Parquet
-- NaN/Inf sanitizzati anche dal preview-da-artifact
-- object storage disabled + full_artifact -> message chiaro
-- legacy node_rows path continua a funzionare (regression)
-- campi additivi presenti in response: persistence_mode,
-  persisted_rows_count, preview_truncated, artifact_uri,
-  artifact_status, artifact_format
 """
 
 from __future__ import annotations
@@ -96,7 +79,7 @@ def test_legacy_full_pg_node_rows_path_unchanged(superadmin_user):
     ), patch(
         "app.core.intermediate.router.idb.get_node_meta",
         return_value=_node_meta(
-            persistence_mode=None,  # legacy NULL -> trattato come full_pg
+            persistence_mode=None,  # NOTE: legacy NULL -> trattato come full_pg
             row_count=2,
             col_schema={"id": "int", "v": "str"},
         ),

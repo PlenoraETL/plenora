@@ -1,12 +1,7 @@
-"""Contract test — validazione input `search` su /api/logs.
+"""
+Contract test — validazione input `search` su /api/logs.
 
 Reperto: il parametro `search` veniva iniettato in `msg LIKE '%...%'`
-senza limite di lunghezza. Stringhe lunghissime trasformano il LIKE in
-un pattern scan costoso (no trigram/fulltext index) — superficie DoS.
-
-Fix: `Query(None, max_length=100)`. FastAPI/Pydantic rifiuta con 422
-prima di toccare il DB. Gli escape per metacaratteri LIKE (% _ \\)
-gia' presenti restano il secondo strato di difesa.
 """
 
 from __future__ import annotations

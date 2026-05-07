@@ -1,34 +1,7 @@
-"""Contract test MFA TOTP — enroll / verify / disable + login integration.
+"""
+Contract test MFA TOTP — enroll / verify / disable + login integration.
 
 Scope:
-  Fissa il contratto di `app/core/auth/mfa.py` e dei 4 endpoint in
-  `auth.py` (+ modifica del /login):
-
-    1. Enrollment two-step: /mfa/enroll crea riga enabled=FALSE,
-       /mfa/verify attiva enabled=TRUE.
-    2. Re-enrollment (stesso user, nuovo /enroll) sovrascrive il
-       secret, resetta enabled=FALSE e enrolled_at=NULL.
-    3. verify_code requires riga presente + codice TOTP valido.
-       Codici non numerici / vuoti → False senza crash.
-    4. disable richiede codice TOTP valido (proof-of-possession):
-       non basta essere autenticati. Rimuove la riga.
-    5. /login senza MFA attiva: comportamento invariato (nessun
-       impatto per utenti non-MFA, constraint #2 del batch).
-    6. /login con MFA attiva: codice mancante → 403 mfa_required,
-       codice errato → 401 mfa_invalid, codice ok → JWT.
-
-Organizzazione:
-
-  A) Static / AST — leggono file SQL e parsano i moduli Python con ast
-     per verificare: presenza endpoint, campo mfa_code in LoginRequest,
-     schema migration. Zero import di app.* (nessun DATABASE_URL).
-
-  B) pyotp smoke — verifica che pyotp.TOTP.verify() abbia la semantica
-     che mfa.py assume (window tolerance, step 30s, SHA-1 default).
-     Zero DB.
-
-  C) Integration — richiede DATABASE_URL + migration user_mfa applicata.
-     Skip pulito con reason se env non configurato.
 """
 
 from __future__ import annotations

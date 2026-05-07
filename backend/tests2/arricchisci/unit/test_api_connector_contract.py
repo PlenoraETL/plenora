@@ -1,3 +1,9 @@
+"""
+Tests the api connector behavior.
+
+Locks backend contracts and regression boundaries for the current architecture.
+"""
+
 import pytest
 
 from app.core.arricchisci._api_connection_helpers import _nd

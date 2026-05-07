@@ -1,58 +1,7 @@
-"""Architectural guard for storage create/delete side-effect callsites.
+"""
+Architectural guard for storage create/delete side-effect callsites.
 
 BE-GO-READY-STORAGE-ENGINE-021-RECONCILIATION-OUTBOX-AUDIT-FIRST-GUARD.
-
-Goal
-====
-Prevent new untracked storage side-effects from slipping in. Every
-file under `backend/app/` that calls `<storage>.upload(...)`,
-`<storage>.upload_bytes(...)` or `<storage>.delete(...)` on the
-canonical `ObjectStorage` Protocol must be in this guard's
-classification map. A new callsite in a new file fails the test
-until the developer:
-  - adds the file to `_CALLSITE_CLASSIFICATION` with an explicit
-    classification (`tracked` / `safe_no_persistent_artifact` /
-    `intentionally_excluded`); OR
-  - moves the call behind the canonical
-    `app.shared.storage_compensation.compensating_delete` /
-    `app.shared.storage_reconciliation.record_pending` boundaries
-    (in which case the file moves from a `MISSING` state to
-    `tracked` once the dev declares it).
-
-This guard does NOT replace the runtime contract enforced by
-`storage_reconciliation.py` + `storage_compensation.py`. It just
-prevents new orphans from being silently introduced without an
-explicit classification decision.
-
-Out of scope (locked elsewhere)
-================================
-- Replacing the subsystem with a broker / saga / outbox framework
-  (explicitly out of brief).
-
-Closed by later streams
-=======================
-- BE-GO-READY-STORAGE-ENGINE-008-UPLOAD-INTENT-PATTERN closed the
-  upload_intent W2 race for `file_storage_dispatch.py`
-  (record_upload_intent + reconciler upload-intent branch with
-  `is_storage_key_referenced` check). The dispatch callsite is now
-  `tracked`.
-
-Classification taxonomy
-=======================
-- `tracked` - the callsite is paired with `record_pending` +
-  `compensating_delete` (or equivalent reconciliation log entry)
-  in the same transactional scope.
-- `safe_no_persistent_artifact` - the upload/delete is
-  self-tracking (e.g. `log_archive` post-upload verify before
-  source DELETE).
-- `intentionally_excluded` - the artifact is governed by a
-  domain-specific lifecycle (S3 lifecycle rules + dedicated
-  delete endpoint, paired-DB-row tracker like
-  `intermediate.runs.artifact_uri`+`artifact_status`, or
-  eseguibili task-bound eager cleanup). Reason MUST be present.
-- `missing` - known orphan candidate. The closure path is named in
-  the file's entry. NEW files MUST NOT be classified `missing`
-  without a paired residual in the audit report.
 """
 
 from __future__ import annotations

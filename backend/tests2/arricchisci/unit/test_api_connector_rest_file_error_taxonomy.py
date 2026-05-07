@@ -1,17 +1,7 @@
-"""Contract test F5 primo batch (2026-04-24) — `_execute_rest_file` error taxonomy.
+"""
+Contract test F5 primo batch (2026-04-24) — `_execute_rest_file` error taxonomy.
 
 Blinda: tutti i return di errore di `ApiConnectionService._execute_rest_file`
-portano un campo `error_kind` ∈ {file_source_not_found, file_source_forbidden,
-remote_processor_error, internal} + `user_error: bool`, non solo il messaggio
-opaco unico `"Errore interno nel processore file remoto"`.
-
-Motivazione storica: il caso reale osservato 2026-04-23 su
-`test_imdf_20260413_034050_bee2e47a` / `api_enrich_1776085234269` aveva
-un `file_source_id` referenziato nel canvas ma non esistente nel DB.
-Il backend catturava via except Exception generico e propagava
-"Errore interno nel processore file remoto" — indistinguibile da un
-vero errore upstream IMDF. Dopo F5 primo batch, l'error_kind
-`file_source_not_found` rende la diagnosi immediata.
 """
 
 from __future__ import annotations

@@ -1,28 +1,7 @@
-"""Contract test RB.#11 (2026-04-28) — TypeInferrer date detection.
+"""
+Contract test RB.#11 (2026-04-28) — TypeInferrer date detection.
 
 BUG.md #11:
-    `pd.to_datetime(series.dropna().head(10))` senza `format=...` in
-    `app/services/file_service.py:451` (`TypeInferrer._infer_from_values`)
-    causava in pandas 3.x:
-      - `UserWarning: Could not infer format ...` ad ogni upload con date
-      - fallback dateutil ambiguo (mm/dd vs dd/mm)
-      - falsi positivi `'date'` su stringhe semi-numeriche tipo `"42-3-1"`
-
-Fix RB.#11:
-    Cascata di formati espliciti + soglia 80% sul sample. Helper
-    `_looks_like_date_column(series)` testabile. Solo type detection
-    (non modifica i dati). Italiano-first: `dd/mm/yyyy` deterministico,
-    no `%m/%d/%Y` US (eviterebbe inversione su utenza IT).
-
-Test scope (8 test):
-    1. ISO date `"2025-03-15"` -> 'date'
-    2. ISO datetime `"2025-03-15T10:30:00"` -> 'date'
-    3. IT dd/mm/yyyy `"15/03/2025"` -> 'date'
-    4. IT dd-mm-yyyy `"15-03-2025"` -> 'date'
-    5. US ambigua `"03/15/2025"` (day=15 invalido in IT) -> 'str'
-    6. Pseudo-numerica `"42-3-1"` -> 'str'
-    7. Mix sotto soglia (3 date + 7 garbage su 10) -> 'str'
-    8. Nessun UserWarning emesso durante l'invocazione
 """
 
 from __future__ import annotations

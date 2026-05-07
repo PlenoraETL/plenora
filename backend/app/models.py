@@ -2,9 +2,6 @@
 app/models.py — Shim di backward compatibility.
 
 Tutti i modelli sono definiti in app/shared/models.py (fonte unica di verità).
-Questo file ri-esporta tutto per mantenere compatibilità con gli import esistenti.
-
-NON aggiungere modelli qui — usare app/shared/models.py.
 """
 
 from app.shared.models import *  # noqa: F401, F403

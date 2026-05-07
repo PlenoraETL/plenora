@@ -1,15 +1,7 @@
-"""Contract test — ScheduleLogService usa SOLO DB (`plenora.schedule_logs`)
+"""
+Contract test — ScheduleLogService usa SOLO DB (`plenora.schedule_logs`)
+
 come storage (FS-B3 post-migration).
-
-Blinda il contratto "zero FS": write/read/delete passano per
-`pg_connection`, niente `data/scheduler_logs/YYYY-MM-DD/*.json`.
-
-Test cover:
-  - write_log → INSERT con i campi corretti
-  - get_log / get_logs / get_latest_log → SELECT col WHERE atteso
-  - delete_logs_before / delete_schedule_logs → DELETE with args
-  - Paginazione + status_filter
-  - Nessuna dipendenza da filesystem
 """
 
 from __future__ import annotations
