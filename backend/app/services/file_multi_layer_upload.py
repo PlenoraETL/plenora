@@ -14,6 +14,7 @@ from typing import Any, BinaryIO, Callable, Dict, List, Optional, Tuple
 
 from app.db.config.file_sources import FileSourceRow
 from app.services.file_storage_dispatch import BlobDispatchResult
+from app.services.file_upload import mkdtemp_writable
 
 
 def create_multi_layer_from_upload(
@@ -104,7 +105,7 @@ def create_multi_layer_from_upload(
 
     try:
         if format_type == 'zip':
-            zip_tmp_dir = Path(tempfile.mkdtemp(dir=temp_dir))
+            zip_tmp_dir = mkdtemp_writable(dir=temp_dir)
             try:
                 with zipfile.ZipFile(tmp_path, 'r') as z:
                     safe_extractall(z, zip_tmp_dir)

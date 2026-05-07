@@ -506,6 +506,7 @@ class FileSourceService:
         ``_assert_visible`` invocato da ``_get_blob_from_db``).
         """
         from app.config import settings
+        from app.services.file_upload import mkdtemp_writable
         from app.shared.resources.file_cleanup import rmtree_safe
         from app.utils.zip_safe import safe_extractall
         import app.db.db_service as db
@@ -541,7 +542,7 @@ class FileSourceService:
         # failure or zip valid but no .shp/.gdb inside): without it
         # every malformed shapefile would leak a tempdir per worker
         if fmt in ("shp", "gdb"):
-            tmp_dir = Path(tempfile.mkdtemp(dir=settings.TEMP_DIR))
+            tmp_dir = mkdtemp_writable(dir=settings.TEMP_DIR)
             try:
                 with zipfile.ZipFile(io.BytesIO(blob), "r") as zip_archive:
                     safe_extractall(zip_archive, tmp_dir)

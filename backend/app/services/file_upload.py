@@ -7,11 +7,30 @@ Keeps this module's responsibility explicit and isolated from adjacent code.
 from __future__ import annotations
 
 import tempfile
+import os
+import sys
 import zipfile
 from pathlib import Path
 from typing import Any, BinaryIO, Callable, List, Optional, Tuple
 
 from app.services.file_storage_dispatch import BlobDispatchResult
+
+
+def mkdtemp_writable(*, dir: str | Path) -> Path:
+    """Create an operation-owned temp dir that remains writable on Windows."""
+    if sys.platform != "win32":
+        return Path(tempfile.mkdtemp(dir=dir))
+
+    parent = Path(dir)
+    parent.mkdir(parents=True, exist_ok=True)
+    for name in tempfile._get_candidate_names():
+        path = parent / name
+        try:
+            os.mkdir(path, 0o777)
+        except FileExistsError:
+            continue
+        return path
+    raise FileExistsError(f"No usable temporary directory name in {parent}")
 
 
 def create_from_upload(
@@ -95,7 +114,7 @@ def create_from_upload(
 
     try:
         if format_type == 'zip':
-            zip_tmp_dir = Path(tempfile.mkdtemp(dir=temp_dir))
+            zip_tmp_dir = mkdtemp_writable(dir=temp_dir)
             try:
                 with zipfile.ZipFile(tmp_path, 'r') as z:
                     safe_extractall(z, zip_tmp_dir)
