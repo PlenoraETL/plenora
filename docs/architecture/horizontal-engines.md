@@ -1,288 +1,184 @@
-# Horizontal engines map
+# Horizontal Engines
 
-`BE-GO-READY-DOCS-001-CODEMAP-ARCHITECTURE-REFRESH`.
-
-Concise navigation map for the six horizontal engine boundaries
-the backend is converging onto. Companion to
-[`overview.md`](overview.md) (full architecture) and
-[`invariants.md`](invariants.md) (binding rules); this page is
-the single-screen index that points at each boundary's canonical
-import paths AND the imports that should NOT come back.
-
-The horizontal classification is binding for new BE work
-(`.agent-temp/BE_RULES.md` "Horizontal Engine Alignment"). New
-code must strengthen the relevant boundary, not duplicate
-vertical logic.
+This is the active backend boundary map. It is intentionally shorter than
+the historical inventory documents and should be kept current as the codebase
+is horizontalized.
 
 ---
 
-## 1. Auth / Ownership / Disclosure
+## 1. Auth / Security Engine
 
-`AUTH_SECURITY_ENGINE`.
+Canonical surfaces:
 
-Canonical entry points:
+- `app/core/auth/middleware.py`
+- `app/core/auth/dependencies.py`
+- `app/shared/contracts/auth.py`
+- `app/shared/jwt_token.py`
+- `app/shared/password_hashing.py`
 
-- JWT middleware: `backend/app/core/auth/middleware.py`.
-- Role guards: `require_admin`, `require_user_or_above`,
-  `require_not_esecutore`, `require_*_owner` in
-  `backend/app/core/auth/dependencies.py`.
-- Ownership helpers: `backend/app/shared/ownership.py`.
-- Disclosure policy: ADR-0022
-  (`docs/architecture/decisions/0022-2026-05-04-auth-disclosure-policy.md`).
-- MFA required: ADR-0018.
-- JWT blacklist: ADR-0009 (Redis fail-open read / fail-loud write).
-- Async user re-check: ADR-0005.
+Rules:
 
-Tenant binding:
-
-- `expected_group_id` is mandatory at every cross-tenant
-  boundary; see Resource Engine sec. 2 for the type-level
-  enforcement.
-- `is_superadmin=True` is privileged; see
-  `tests2/shared/test_resource_superadmin_bypass_guardrails.py`
-  for the source-bound allowlist.
-
-## 2. Resource Engine + bounded reader + preview parser
-
-`STORAGE_ARTIFACT_ENGINE`.
-
-Canonical package: `backend/app/core/resources/`.
-
-Public surface:
-
-- `ResourceRef` / `Resource` / `ResourceLoader` /
-  `ResourceRegistry` (frozen dataclasses + Protocols in
-  `types.py`);
-- `default_registry()` / `build_default_registry()` in
-  `registry.py`;
-- one loader today: `ResultBlobLoader`
-  (`loaders/result_blob.py`).
-
-Bounded-read helper (the part with real consumers today):
-
-- `backend/app/core/resources/bounded_reader.py:read_stream_bounded(...)`.
-- Stage cap: `RESOURCE_MAX_BYTES` (default 200 MB post
-  BE-GO-READY-MEMORY-ENGINE-005; `<= 0` disables). Per-loader
-  caps may be tighter (e.g. `ARTIFACT_PREVIEW_MAX_BYTES` 25 MB).
-- Used in production by:
-  `app/db/results_db_service.py`,
-  `app/core/resources/loaders/result_blob.py`,
-  `app/core/resources/loaders/file_source_blob.py`,
-  `app/core/intermediate/artifact_reader.py`.
-
-Preview parser:
-
-- `app/core/intermediate/artifact_reader.py:load_preview_from_artifact`
-  reads `data.parquet` via `read_stream_bounded` with the
-  preview-specific cap; surfaces `MemoryLimitExceededError` to
-  the FastAPI 413 handler.
-
-Pilot exit criteria:
-
-- `BE_RESOURCE_ENGINE_AUDIT.md` sec. 17. KEEP/KILL gate locked by
-  `tests2/shared/test_resource_engine_pilot_exit_criteria_lock.py`.
-
-## 3. Storage / reconciliation
-
-`STORAGE_ARTIFACT_ENGINE`.
-
-Canonical entry points (see invariants sec. 1.7):
-
-- `app/core/*/result_store.py`  --  per-module result dispatch;
-- `app/services/file_service.py`  --  file source dispatch (FS-4
-  pattern);
-- `app/db/results_db_service.py`  --  reader / S3 cleanup;
-- `app/shared/cloud_backends.py`  --  provider factories
-  (AWS / MinIO; Azure / GCP out of scope per ADR-0015).
-
-Object storage policy: `STORAGE_POLICY = db | hybrid |
-object_storage`, validated fail-fast by
-`validate_storage_config()` at boot (ADR A1).
-
-Backup / log archive:
-
-- `LogArchiveWriter` (`app/services/log_archive.py`) with
-  archive-before-purge sequence; see ADR-0014 + invariants sec. 1.4.
-- `plenora-backup.timer` + weekly `plenora-backup-test.timer`
-  (systemd); see `docs/ops/backup-restore.md`.
-
-Reconciliation backlog: surfaced via the `/ready` check
-`reconciliation_backlog`.
-
-## 4. Connections / External Providers
-
-`CONNECTION_ENGINE`.
-
-External providers are remote read/write systems accessed via typed
-client adapters. They are NOT domain modules; they are infrastructure
-that domain modules consume.
-
-| Provider | Canonical client | Consumer(s) | Mode |
-|---|---|---|---|
-| **ArcGIS REST** | `app/core/features/arcgis_client.py:ArcGISClient` | Features (connection CRUD + browse), Estrai (read source), Carica (write sink), IMDF (publish adapter — see below) | read + write |
-| User DBs (PostgreSQL/MySQL/…) | `app/db/query_executor.py` | Estrai / Arricchisci | read |
-| External REST APIs | — (per-connection session) | Arricchisci (enricher + generator) | read + write |
-| Object Storage (S3/MinIO) | `app/shared/cloud_backends.py` | Resource Engine, file service, IMDF bundle storage | read + write |
-
-**ArcGIS boundary (ADR-0023):**
-
-`app/core/features/arcgis_client.py:ArcGISClient` is the canonical
-ArcGIS REST client: token lifecycle, retry/backoff, pagination, Esri
-type mapping. New ArcGIS communication should prefer this or a shared
-protocol derived from it.
-
-`app/core/imdf/arcgis_uploader.py` + `arcgis/` subpackage is the
-**IMDF publish adapter** (`KEEP_CUSTOM`): IMDF-specific 5-layer
-publication sequence, service lifecycle, OBJECTID batch resolution.
-This adapter may maintain its own ArcGIS REST session. It must NOT
-import from `app.core.features.*`. Locked by
-`tests2/shared/test_arcgis_provider_boundary_guard.py`.
-
-## 4b. DB config facade strangler + canonical `app/db/config/*`
-
-`CONNECTION_ENGINE` / `DEPLOYMENT_RUNTIME_ENGINE`.
-
-Canonical modules (the strangler target):
-
-- `backend/app/db/config/api_connections.py`
-- `backend/app/db/config/comparison_keys.py`
-- `backend/app/db/config/connections.py`
-- `backend/app/db/config/datasources.py`
-- `backend/app/db/config/file_sources.py`
-- `backend/app/db/config/projects.py`
-- `backend/app/db/config/schedules.py`
-- `backend/app/db/config/users.py`
-
-Facade being retired:
-
-- `backend/app/db/config_db_service.py` (compatibility
-  re-exports). Migration plan: see `BE_CODEBASE_AUDIT.md`
-  C-DB-1 (death map + low-risk migrations).
-- New imports outside the documented allowlist are blocked by
-  the strangler test (when added).
-
-Other DB seams:
-
-- `app/db/db_service.py`  --  stable facade for the catalog
-  PostgreSQL surface (see invariants sec. 1.3).
-- `app/db/pg_connection.py`  --  internal pool / `transaction()`
-  context manager.
-- `app/db/query_executor.py`  --  user-DB queries with row caps.
-
-## 5. Health / readiness
-
-`OBSERVABILITY_ENGINE` / `DEPLOYMENT_RUNTIME_ENGINE`.
-
-Canonical surface: `backend/app/observability/health.py`.
-
-`/health` (HTTP 200 always reachable):
-
-- `postgres`, `redis` checks.
-
-`/ready` (HTTP 200 when all 8 checks pass; 503 otherwise):
-
-- `postgres`, `redis`, `pool_headroom`, `migrations_aligned`,
-  `object_storage`, `reconciliation_backlog`,
-  `beat_heartbeat` (opt-in), `bootstrap_complete`
-  (fail-CLOSED).
-
-Cost boundedness: every check is bounded by an explicit
-timeout (Redis `socket_connect_timeout=2`) or capability skip
-(object storage). Locked by
-`tests2/shared/test_readiness_cost_boundedness_lock.py`.
-
-Boot gates that must pass before `/ready` reports green:
-
-1. `Settings.validate_startup`;
-2. `validate_storage_config`;
-3. `init_all_dbs` + `apply_pending_migrations`;
-4. `_repair_psycopg2_ssl_env`.
-
-## 6. Install smoke path
-
-`DEPLOYMENT_RUNTIME_ENGINE`.
-
-Canonical operator pages:
-
-- `docs/ops/install-non-docker.md`  --  full reference (single
-  source of truth, sections 0-14).
-- `docs/ops/install-marco-dry-run.md`  --  one-page copy/paste
-  pack (`BE-GO-READY-INSTALLATION-024`); sec. 5 is the
-  canonical 8-item smoke harness
-  (`BE-GO-READY-INSTALL-007`).
-- `docs/ops/install-docker.md`  --  Docker target shape
-  (NOT IMPLEMENTED today).
-
-Canonical script: `scripts/install.sh` (`--check` preflight +
-guided non-interactive install). Idempotent merge of
-`backend/.env`. Cleanroom CI verifier:
-`.github/workflows/ci-cleanroom.yml`.
-
-Memory caps surfaced at smoke time (see install-marco-dry-run
-sec. 5.2): `LOAD_FILE_MAX_BYTES`, `WORKER_RSS_MAX_BYTES`,
-`RESOURCE_MAX_BYTES`, `ARTIFACT_PREVIEW_MAX_BYTES`,
-`CROSS_JOIN_MAX_OUTPUT_ROWS`, `MULTI_JOIN_MAX_OUTPUT_ROWS`.
-Caps `<= 0` disable the corresponding guard.
+- Do not add new imports from the retired auth facade.
+- Disclosure policy and auth error codes are governed by ADR-0022.
+- Tenant/group binding must remain explicit at cross-tenant boundaries.
 
 ---
 
-## Do not import
+## 2. Connections Engine
 
-These are the canonical anti-patterns that have caused real
-regressions. Each is locked by a source-bound test; new code
-must avoid them by construction.
+Canonical surfaces:
 
-- **Do not depend on `app.core.auth.auth` as a re-export
-  surface.** The canonical auth helpers live in
-  `app/core/auth/dependencies.py` /
-  `app/core/auth/middleware.py`. Re-export shims under
-  `app.core.auth.auth` were retired; new imports of
-  `from app.core.auth.auth import ...` must NOT come back.
-  Breakage path: AUTH-ENGINE re-export removal regression.
+- `app/shared/connections/*`
+- `app/core/features/arcgis_client.py`
+- `app/core/features/arcgis_connection_adapter.py`
+- `app/core/datasources/*`
+- `app/db/query_executor.py`
 
-- **Do not import from `app.db.config_db_service` outside the
-  documented allowlist.** The facade is being strangled in
-  favor of `app.db.config.*` canonical modules. Adding a new
-  caller perpetuates the facade and blocks the death map. If
-  a symbol is missing from `app.db.config.*`, file a
-  migration in `BE_CODEBASE_AUDIT.md` C-DB-1, do not add a
-  new facade caller.
+Current ArcGIS shape:
 
-- **Do not materialize an unbounded stream into memory.** The
-  pattern `b"".join(stream["body"])` and
-  `list(stream["body"])` is forbidden for any iterator that
-  is not pre-validated as small (a single SQL row + cap
-  check). Use
-  `app.core.resources.bounded_reader.read_stream_bounded(...,
-  max_bytes=RESOURCE_MAX_BYTES, stage="...")` with a typed
-  cap. Oversize must surface `MemoryLimitExceededError`,
-  never a partial bytes object.
+- `ArcGISConnectionInfo` lives in `app/shared/connections/arcgis_connection.py`.
+- `ArcGISProviderProtocol` lives in `app/shared/connections/arcgis_provider.py`.
+- IMDF uses the adapter seam instead of depending directly on `FeaturesService`.
+- The adapter still lives in `app/core/features` until connection lookup is
+  moved to a neutral repository boundary.
 
-- **Do not introduce new `mode="path"` Resource Engine
-  callsites without inventory.** Path mode is fallback for
-  unavoidable legacy parsers. Every new path-mode caller must
-  appear in the inventory in `BE_RESOURCE_ENGINE_AUDIT.md`
-  with a classification (unavoidable parser / easy bytes /
-  streaming candidate / dead-compat). The default
-  is bytes-first; locked by
-  `tests2/shared/test_temp_usage_bytes_first_policy.py`.
+Rules:
+
+- ArcGIS is an external read/write provider, not an IMDF subdomain.
+- Shared connection contracts must not import concrete clients or DB code.
+- New provider semantics belong in `connections`, not in canvas node models.
 
 ---
 
-## See also
+## 3. Execution Engine
 
-- [`overview.md`](overview.md)  --  full architecture (sec. 1-sec. 10).
-- [`invariants.md`](invariants.md)  --  binding rules (sec. 1 core
-  paths, sec. 2 fallback allowlist, sec. 3 feature flags, sec. 4 uniformity).
-- [`decisions/`](decisions/)  --  ADRs.
-- [`../development/code-map.md`](../development/code-map.md)  --
-  per-vertical-module code map ("Contratti da non rompere"
-  section).
-- [`../ops/install-marco-dry-run.md`](../ops/install-marco-dry-run.md)
-   --  operator smoke harness sec. 5.
-- `.agent-temp/BE_RESOURCE_ENGINE_AUDIT.md`  --  Resource Engine
-  pilot exit criteria sec. 17.
-- `.agent-temp/BE_INSTALLATION_AUDIT.md`  --  install
-  sequence + memory caps audit.
-- `.agent-temp/BE_CODEBASE_AUDIT.md`  --  `config_db_service`
-  facade death map (C-DB-1).
+Canonical surfaces:
+
+- `app/shared/execution/canvas_node.py`
+- `app/shared/execution/canvas_graph.py`
+- `app/shared/execution/graph.py`
+- `app/shared/execution/executor_protocol.py`
+- `app/shared/execution/payloads.py`
+- `app/core/orchestrator/*`
+
+Current contracts:
+
+- `CanvasNode` and `CanvasGraph` are structural-only wrappers around canvas
+  input. They may expose `id`, `type`, `data`, `get_field`, raw lookup,
+  edges, and minimal result lookup.
+- `kahn_topological_order` and `GraphCycleError` live in
+  `app/shared/execution/graph.py`.
+- `ExecutionResult` is the typed result boundary.
+- `ArtifactPayload` lives in `app/shared/execution/payloads.py`.
+
+Rules:
+
+- Do not add node-type business behavior to `CanvasNode` or `CanvasGraph`.
+- Do not put DataFrames, bytes, or streams in `ExecutionResult.payload`.
+- Do not create a generic `BaseGraphExecutor` until duplication proves it is
+  needed.
+
+---
+
+## 4. Transformation Engine
+
+Canonical surfaces:
+
+- `app/core/manipola/*`
+- `app/core/estrai/*`
+- `app/core/arricchisci/*`
+- transformation-specific tests under `backend/tests2`
+
+Current direction:
+
+- Manipola and Arricchisci are being moved toward shared structural graph
+  intake without merging their business semantics.
+- Shared metadata should travel with loaded resources instead of being
+  reconstructed repeatedly from canvas dictionaries.
+
+Rules:
+
+- Keep transformation behavior in the owning engine.
+- Use shared structural contracts only for structure, not business execution.
+- Avoid reintroducing global mutable execution context.
+
+---
+
+## 5. Resource / Storage Engine
+
+Canonical surfaces:
+
+- `app/core/resources/*`
+- `app/core/artifacts/*`
+- `app/shared/resources/metadata.py`
+- `app/shared/cloud_backends.py`
+- `app/shared/storage_reconciliation.py`
+
+Current contracts:
+
+- Resource loading is bounded by explicit byte limits.
+- `LoadedResource` pairs loaded data with `ResourceMetadata`.
+- Object storage is governed by `STORAGE_POLICY`.
+
+Rules:
+
+- No unbounded `b"".join(stream)` over external or object-storage streams.
+- Path materialization is fallback behavior and must be inventoried.
+- Resource loaders must not become vertical domain services.
+
+---
+
+## 6. Persistence / DB Engine
+
+Canonical surfaces:
+
+- `app/db/pg_connection.py`
+- `app/db/config/*`
+- `app/db/results_db_service.py`
+- `app/db/query_executor.py`
+
+Rules:
+
+- Prefer direct domain repositories over broad facade imports.
+- Do not re-expand retired DB facades.
+- Keep SQL and connection handling out of shared leaf contracts.
+
+---
+
+## 7. Observability / Install Engine
+
+Canonical surfaces:
+
+- `app/observability/health.py`
+- `scripts/install.sh`
+- `scripts/docker-validate.sh`
+- `backend/Dockerfile`
+- `docker-compose.yml`
+- `docs/ops/*`
+
+Current state:
+
+- Non-Docker single-machine installation is the most detailed runbook.
+- Docker scaffold exists for backend, worker, beat, Postgres, and Redis.
+- Frontend Docker image is still a known gap until explicitly added and
+  validated.
+- First-PC Linux validation is still required before calling the install path
+  stable.
+
+Rules:
+
+- Prefer automated checks over long manual checklists.
+- Keep `/health` cheap and `/ready` bounded.
+- Do not claim Docker production readiness until a real Linux-PC validation
+  report exists.
+
+---
+
+## Canonical References
+
+- [Macro components](macro-components.md)
+- [Architecture overview](overview.md)
+- [Invariants](invariants.md)
+- [ADR registry](decisions/README.md)
+- [Clean install, non-Docker](../ops/install-non-docker.md)
+- [Clean install, Docker](../ops/install-docker.md)

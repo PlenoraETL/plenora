@@ -3,7 +3,7 @@
 Procedure operative essenziali per il sistema di backup Postgres -> S3.
 Pensato per l'operatore di turno: comandi diretti, niente teoria.
 
-> **Incidente in corso?** → [DR runbook](../docs/ops/backup-restore.md)
+> **Incidente in corso?** See [DR runbook](../../docs/ops/backup-restore.md)
 > (triage scenari, restore full/selettivo, cambio bucket, escalation AWS).
 > Questo doc copre operazioni di routine; il DR runbook si attiva quando
 > qualcosa e' andato storto.

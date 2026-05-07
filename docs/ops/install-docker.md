@@ -1,18 +1,14 @@
-# Clean install -- Docker (FIRST SCAFFOLD)
+# Clean install -- Docker scaffold
 
-> **Status: FIRST SCAFFOLD.** As of this commit Plenora-ETL ships
-> a `backend/Dockerfile`, a top-level `docker-compose.yml`, a
-> `.dockerignore`, and `.env.docker.example`
-> (`BE-GO-READY-INSTALL-011`). The scaffold is **executable**
-> (`docker compose config`, `docker compose build`,
-> `docker compose up -d`) but **NOT YET VALIDATED end-to-end on
-> a real Linux PC**. There is no Helm chart, no Kubernetes
-> manifest, and no frontend image yet.
+> **Status: backend Docker scaffold, not full product Docker yet.**
+> Plenora-ETL ships a backend Dockerfile, top-level compose file,
+> `.dockerignore`, and `.env.docker.example`. The compose scaffold covers
+> Postgres, Redis, backend, worker, and beat. It is guarded by source tests
+> and validation scripts, but still requires real Linux-PC validation before
+> being called stable.
 >
-> The single-machine path
-> ([install-non-docker.md](install-non-docker.md)) remains the
-> go-ready first-PC test path. Use the Docker scaffold to test
-> the scaffold itself, not as the Linux PC validation gate.
+> Known gap: frontend Docker is not complete yet. A full 1.0 install must
+> validate both backend services and frontend delivery.
 
 ---
 
@@ -44,10 +40,8 @@ target-shape items (see "Target shape" below).
 | `.dockerignore` | Excludes `.git`, `.env*`, venvs, pytest temps, node_modules, frontend `dist/`, agent state. |
 | `.env.docker.example` | Template for `.env.docker` (gitignored). Shows the canonical `ENVIRONMENT` / `DB_SCHEMA` / `STORAGE_POLICY` / `BACKUP_BUCKET` plus six commented memory caps. Secrets must be generated before first up. |
 
-The scaffold does NOT add a CI lane to validate it. The
-existing `ci-cleanroom.yml` continues to validate the
-single-machine boot path; a Docker-side CI lane is a separate
-follow-up stream.
+The scaffold is still below production install status until a real Linux-PC
+validation report exists.
 
 ---
 
@@ -206,17 +200,16 @@ rm -f .env.docker        # DESTRUCTIVE: removes generated secrets
 
 ---
 
-## Validation pack for the Linux PC test (FIRST SCAFFOLD, NOT YET VALIDATED)
+## Validation Pack For The Linux PC Test
 
 `BE-GO-READY-INSTALL-012-DOCKER-LINUX-VALIDATION-PACK`.
 
-> **Status: FIRST SCAFFOLD, NOT YET VALIDATED.** This pack
+> **Status: backend scaffold awaiting real-PC validation.** This pack
 > packages the Step 1-7 commands above into a single contiguous
-> copy/paste sequence with the **exact** expected output for
-> each command. Until Marco runs it on his Linux PC and pastes
-> the outputs back, every line below is a hypothesis. The
-> wrapper script `scripts/docker-validate.sh` (also dry-run
-> friendly via `--dry-run`) is the convenience runner; the raw
+> copy/paste sequence with the exact expected output for each command.
+> Until Marco runs it on his Linux PC and pastes the outputs back, every
+> line below is a hypothesis. The wrapper script `scripts/docker-validate.sh`
+> (also dry-run friendly via `--dry-run`) is the convenience runner; the raw
 > commands below are the contract.
 
 ### What Marco runs
@@ -476,11 +469,10 @@ A path is "validated" only when ALL of the following hold:
    inside the worker container -- closes
    `INSTALL-015-DOCKER-CI`.
 
-Until all three land, the FIRST SCAFFOLD / NOT YET VALIDATED
-markers in this doc and in
-`install-marco-dry-run.md` MUST stay. A doc PR that flips the
-markers without citing the three artifacts above is a
-regression of the honesty contract.
+Until all three land, this doc and `install-marco-dry-run.md` must keep
+the backend-scaffold / not-yet-full-product status. A doc PR that flips
+the status without citing the three artifacts above is a regression of
+the honesty contract.
 
 If `docker compose build backend` fails on a real PC, the
 most likely root cause is `libgdal-dev` major mismatch

@@ -234,7 +234,7 @@ dal worker re-check (`recheck_user_authorized`,
 Tra submit task e pickup worker puo' passare tempo: se admin revoca
 permessi nel frattempo, il task **non procede**. Helper centralizzato
 `recheck_user_authorized` re-verifica al pickup
-([N9 fix 2026-04-17](../backend/tests2/security/unit/test_n9_async_permission_revoked_contract.py)).
+([N9 fix 2026-04-17](../../backend/tests2/security/unit/test_n9_async_permission_revoked_contract.py)).
 
 ### Audit
 

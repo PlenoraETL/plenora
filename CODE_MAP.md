@@ -1,11 +1,6 @@
-# Code Map — URBY-ETL
+# Code Map
 
-Il contenuto pieno vive in
-[`docs/development/code-map.md`](docs/development/code-map.md).
+The canonical code map lives in
+[docs/development/code-map.md](docs/development/code-map.md).
 
-Questo stub root resta per chi conosce il path storico e per i tool
-che possono cercarlo a quel path.
-
----
-
-→ [docs/development/code-map.md](docs/development/code-map.md)
+This root file remains for the historical path and lightweight tooling.

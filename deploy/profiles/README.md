@@ -94,7 +94,7 @@ sporco o branch fuori `ALLOWED_BRANCHES` -> `exit 1` come in modalita'
 reale. Questo significa che il dry-run e' anche il modo sicuro per
 testare i guard del nuovo `deploy.sh` senza rischiare side-effect
 remoti (vedi
-[`incident_note_step0_unintended_restart.md`](../../../orchestrate/phase_0_consolidation/incident_note_step0_unintended_restart.md)
+[`incident_note_step0_unintended_restart.md`](../../docs/audits/orchestrate/phase_0_consolidation/incident_note_step0_unintended_restart.md)
 per il razionale).
 
 **Regola operativa**: qualunque modifica futura a `deploy.sh` deve
