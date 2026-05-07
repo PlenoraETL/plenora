@@ -1,144 +1,20 @@
-.......F................................................................ [  6%]
+........................................................................ [  6%]
 ........................................................................ [ 12%]
 ........................................................................ [ 18%]
 ........................................................................ [ 24%]
-............................................................F........... [ 30%]
+........................................................................ [ 30%]
 ........................................................................ [ 36%]
-..F........................FF........................................... [ 42%]
-............................................F........................... [ 48%]
+........................................................................ [ 42%]
+........................................................................ [ 48%]
 .........................................................sssss.......... [ 54%]
-............................sssssss.........FF.......................... [ 60%]
+............................sssssss..................................... [ 60%]
 ........................................................................ [ 66%]
 ........................................................................ [ 72%]
 ........................................................................ [ 78%]
 ........................................................................ [ 84%]
 ........................................................................ [ 90%]
-.......FF..FF........................................................... [ 96%]
+........................................................................ [ 96%]
 ......................................                                   [100%]
-=================================== FAILURES ===================================
-______ test_load_source_project_preserves_cross_tenant_detail_in_message _______
-tests2/security/unit/test_api_connector_source_loading_core.py:165: in test_load_source_project_preserves_cross_tenant_detail_in_message
-    assert "Cross-tenant" in msg
-E   assert 'Cross-tenant' in "Accesso negato: progetto sorgente 'proj-99': Progetto proj-99 non trovato"
------------------------------ Captured stdout call -----------------------------
-[31m11:29:25 | ERROR | app.core.artifacts.source_loader | [SECURITY] project_source proj-99 non risolvibile per group=grp-mine: Progetto proj-99 non trovato[0m
-_____ test_auth_reexports_remaining_ownership_helpers_with_object_identity _____
-tests2/security/unit/test_auth_models_and_ownership_module_contract.py:136: in test_auth_reexports_remaining_ownership_helpers_with_object_identity
-    assert getattr(auth_mod, name) is getattr(ownership, name), (
-           ^^^^^^^^^^^^^^^^^^^^^^^
-E   AttributeError: module 'app.core.auth.auth' has no attribute '_check_ownership'
-____________ test_visible_project_ids_strict_filters_by_owner_group ____________
-tests2/security/unit/test_c11_contract.py:626: in test_visible_project_ids_strict_filters_by_owner_group
-    assert result == {"p_a"}
-E   AssertionError: assert set() == {'p_a'}
-E     
-E     Extra items in the right set:
-E     'p_a'
-E     Use -v to get more diff
-________ test_connections_delete_cascade_filters_cross_tenant_for_admin ________
-tests2/security/unit/test_cascade_409_cross_tenant_no_leak.py:157: in test_connections_delete_cascade_filters_cross_tenant_for_admin
-    assert resp.status_code == 409
-E   assert 204 == 409
-E    +  where 204 = <Response [204 No Content]>.status_code
-_____________ test_connections_delete_cascade_superadmin_sees_all ______________
-tests2/security/unit/test_cascade_409_cross_tenant_no_leak.py:171: in test_connections_delete_cascade_superadmin_sees_all
-    assert resp.status_code == 409
-E   assert 204 == 409
-E    +  where 204 = <Response [204 No Content]>.status_code
-____________ test_groups_router_uses_lazy_proxies_for_dependencies _____________
-tests2/security/unit/test_groups_router_extraction_contract.py:214: in test_groups_router_uses_lazy_proxies_for_dependencies
-    assert "from app.core.auth.auth import get_current_user" in src
-E   assert 'from app.core.auth.auth import get_current_user' in '"""\nAuth groups admin CRUD router — typed boundary.\n\n"""\n\nfrom __future__ import annotations\n\nfrom fastapi imp...sage="Errore interno del server",\n        )\n\n    return {"deleted": True, "group_id": group_id, "report": report}\n'
-______ test_apply_pending_migrations_creates_schema_before_tracking_table ______
-tests2/security/unit/test_migrations_runner_contract.py:217: in test_apply_pending_migrations_creates_schema_before_tracking_table
-    assert calls[0] == "ensure_schema", (
-           ^^^^^^^^
-E   IndexError: list index out of range
-_________ test_apply_pending_migrations_tracking_table_uses_schema_env _________
-tests2/security/unit/test_migrations_runner_contract.py:245: in test_apply_pending_migrations_tracking_table_uses_schema_env
-    stmt = cur.execute.call_args.args[0]
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^
-E   AttributeError: 'NoneType' object has no attribute 'args'
-______________ test_load_project_blocks_cross_tenant_via_resolver ______________
-app/core/artifacts/source_loader.py:245: in _load_project
-    materialized = self._resolver.materialize_latest(
-app/core/artifacts/resolver.py:127: in materialize_latest
-    raise ArtifactResolutionError(
-E   app.core.artifacts.types.ArtifactResolutionError: Progetto proj-1 non trovato
-
-The above exception was the direct cause of the following exception:
-tests2/security/unit/test_source_loader_core.py:89: in test_load_project_blocks_cross_tenant_via_resolver
-    loader.load(ref, expected_group_id="grp-mine")
-app/core/artifacts/source_loader.py:99: in load
-    return self._load_project(
-app/core/artifacts/source_loader.py:258: in _load_project
-    raise SourceLoadingError(str(e)) from e
-E   app.core.artifacts.types.SourceLoadingError: Progetto proj-1 non trovato
-
-During handling of the above exception, another exception occurred:
-tests2/security/unit/test_source_loader_core.py:88: in test_load_project_blocks_cross_tenant_via_resolver
-    with pytest.raises(SourceLoadingError, match="Cross-tenant"):
-E   AssertionError: Regex pattern did not match.
-E     Expected regex: 'Cross-tenant'
-E     Actual message: 'Progetto proj-1 non trovato'
------------------------------ Captured stdout call -----------------------------
-[31m11:29:34 | ERROR | app.core.artifacts.source_loader | [SECURITY] project_source proj-1 non risolvibile per group=grp-mine: Progetto proj-1 non trovato[0m
-_____________ test_load_project_returns_none_when_no_latest_result _____________
-app/core/artifacts/source_loader.py:245: in _load_project
-    materialized = self._resolver.materialize_latest(
-app/core/artifacts/resolver.py:127: in materialize_latest
-    raise ArtifactResolutionError(
-E   app.core.artifacts.types.ArtifactResolutionError: Progetto proj-1 non trovato
-
-The above exception was the direct cause of the following exception:
-tests2/security/unit/test_source_loader_core.py:103: in test_load_project_returns_none_when_no_latest_result
-    result = loader.load(ref, expected_group_id="grp-mine")
-             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-app/core/artifacts/source_loader.py:99: in load
-    return self._load_project(
-app/core/artifacts/source_loader.py:258: in _load_project
-    raise SourceLoadingError(str(e)) from e
-E   app.core.artifacts.types.SourceLoadingError: Progetto proj-1 non trovato
------------------------------ Captured stdout call -----------------------------
-[31m11:29:34 | ERROR | app.core.artifacts.source_loader | [SECURITY] project_source proj-1 non risolvibile per group=grp-mine: Progetto proj-1 non trovato[0m
-__________ test_resolve_project_path_blocks_cross_tenant_via_resolver __________
-app/core/artifacts/source_loader.py:218: in resolve_project_path
-    materialized = self._resolver.materialize_latest(
-app/core/artifacts/resolver.py:127: in materialize_latest
-    raise ArtifactResolutionError(
-E   app.core.artifacts.types.ArtifactResolutionError: Progetto proj-1 non trovato
-
-The above exception was the direct cause of the following exception:
-tests2/security/unit/test_source_loader_core.py:147: in test_resolve_project_path_blocks_cross_tenant_via_resolver
-    loader.resolve_project_path(ref, expected_group_id="grp-mine")
-app/core/artifacts/source_loader.py:229: in resolve_project_path
-    raise SourceLoadingError(str(e)) from e
-E   app.core.artifacts.types.SourceLoadingError: Progetto proj-1 non trovato
-
-During handling of the above exception, another exception occurred:
-tests2/security/unit/test_source_loader_core.py:146: in test_resolve_project_path_blocks_cross_tenant_via_resolver
-    with pytest.raises(SourceLoadingError, match="Cross-tenant"):
-E   AssertionError: Regex pattern did not match.
-E     Expected regex: 'Cross-tenant'
-E     Actual message: 'Progetto proj-1 non trovato'
------------------------------ Captured stdout call -----------------------------
-[31m11:29:34 | ERROR | app.core.artifacts.source_loader | [SECURITY] resolve_project_path: proj-1 non risolvibile per group=grp-mine: Progetto proj-1 non trovato[0m
-_________ test_resolve_project_path_returns_none_when_no_latest_result _________
-app/core/artifacts/source_loader.py:218: in resolve_project_path
-    materialized = self._resolver.materialize_latest(
-app/core/artifacts/resolver.py:127: in materialize_latest
-    raise ArtifactResolutionError(
-E   app.core.artifacts.types.ArtifactResolutionError: Progetto proj-1 non trovato
-
-The above exception was the direct cause of the following exception:
-tests2/security/unit/test_source_loader_core.py:160: in test_resolve_project_path_returns_none_when_no_latest_result
-    result = loader.resolve_project_path(ref, expected_group_id="grp-mine")
-             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-app/core/artifacts/source_loader.py:229: in resolve_project_path
-    raise SourceLoadingError(str(e)) from e
-E   app.core.artifacts.types.SourceLoadingError: Progetto proj-1 non trovato
------------------------------ Captured stdout call -----------------------------
-[31m11:29:34 | ERROR | app.core.artifacts.source_loader | [SECURITY] resolve_project_path: proj-1 non risolvibile per group=grp-mine: Progetto proj-1 non trovato[0m
 =============================== warnings summary ===============================
 security/unit/test_jwt_logout_blacklist.py: 11 warnings
 security/unit/test_jwt_token_module_contract.py: 2 warnings
@@ -151,16 +27,3 @@ security/unit/test_jwt_token_module_contract.py: 2 warnings
     decoded = self.decode_complete(
 
 -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
-=========================== short test summary info ============================
-FAILED tests2/security/unit/test_api_connector_source_loading_core.py::test_load_source_project_preserves_cross_tenant_detail_in_message
-FAILED tests2/security/unit/test_auth_models_and_ownership_module_contract.py::test_auth_reexports_remaining_ownership_helpers_with_object_identity
-FAILED tests2/security/unit/test_c11_contract.py::test_visible_project_ids_strict_filters_by_owner_group
-FAILED tests2/security/unit/test_cascade_409_cross_tenant_no_leak.py::test_connections_delete_cascade_filters_cross_tenant_for_admin
-FAILED tests2/security/unit/test_cascade_409_cross_tenant_no_leak.py::test_connections_delete_cascade_superadmin_sees_all
-FAILED tests2/security/unit/test_groups_router_extraction_contract.py::test_groups_router_uses_lazy_proxies_for_dependencies
-FAILED tests2/security/unit/test_migrations_runner_contract.py::test_apply_pending_migrations_creates_schema_before_tracking_table
-FAILED tests2/security/unit/test_migrations_runner_contract.py::test_apply_pending_migrations_tracking_table_uses_schema_env
-FAILED tests2/security/unit/test_source_loader_core.py::test_load_project_blocks_cross_tenant_via_resolver
-FAILED tests2/security/unit/test_source_loader_core.py::test_load_project_returns_none_when_no_latest_result
-FAILED tests2/security/unit/test_source_loader_core.py::test_resolve_project_path_blocks_cross_tenant_via_resolver
-FAILED tests2/security/unit/test_source_loader_core.py::test_resolve_project_path_returns_none_when_no_latest_result

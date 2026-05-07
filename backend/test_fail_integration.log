@@ -1,1036 +1,378 @@
-EsEsEsEsEEEE.E.EEEEEEEEEEEEsEssssEEEEEEEEEEEEE                           [100%]
-==================================== ERRORS ====================================
-_ ERROR at setup of test_api_connection_test_calls_fake_api_and_preserves_record _
-/usr/local/lib/python3.11/site-packages/pytest_asyncio/plugin.py:728: in pytest_fixture_setup
-    return (yield)
-            ^^^^^
-tests2/integration/conftest.py:81: in integration_backend_server
-    wait_for_http_ready(f"{url}/", timeout_s=30.0, process=proc)
-tests2/functional/harness/processes.py:129: in wait_for_http_ready
-    raise RuntimeError(
-E   RuntimeError: Service not ready at http://127.0.0.1:42407/: <urlopen error [Errno 111] Connection refused>
-E   --- child process [integration-backend] exited with code 1 ---
-E   
-E   ❌ PLENORA-ETL — Configurazione non valida, avvio interrotto:
-E   
-E     1. Redis non raggiungibile su redis://127.0.0.1:6379/0. Avvia il servizio Redis configurato in CELERY_BROKER_URL prima di avviare l'app.
-E   --- end output ---
-____ ERROR at teardown of test_authenticate_returns_token_via_generateToken ____
-/usr/local/lib/python3.11/site-packages/redis/connection.py:1003: in connect_check_health
-    sock = self._connect()
-           ^^^^^^^^^^^^^^^
-/usr/local/lib/python3.11/site-packages/redis/connection.py:1515: in _connect
-    raise err
-/usr/local/lib/python3.11/site-packages/redis/connection.py:1499: in _connect
-    sock.connect(socket_address)
-E   ConnectionRefusedError: [Errno 111] Connection refused
+.ssss................sFssssFFF......F...                                 [100%]
+=================================== FAILURES ===================================
+__________ test_postgres_direct_carica_task_writes_destination_table ___________
+tests2/integration/test_postgres_carica_roundtrip.py:138: in test_postgres_direct_carica_task_writes_destination_table
+    assert carica_status["status"] == "success"
+E   AssertionError: assert 'failure' == 'success'
+E     
+E     - success
+E     + failure
+--------------------------- Captured stdout teardown ---------------------------
+[36m13:03:52 | INFO  | config_db_service.delete_group_cascade | Cascade delete gruppo it_grp_5d8b168901 completato: {'schedules': 0, 'api_connections': 0, 'datasources': 0, 'file_sources': 1, 'connections': 0, 'projects': 0, 'users': 1, 'results': 0, 'intermediate_runs': 0, 'log_runs': 1}[0m
 
-During handling of the above exception, another exception occurred:
-tests2/integration/conftest.py:151: in _integration_flush_redis_per_test
-    flush_redis_db(broker_url)
-tests2/functional/harness/celery.py:89: in flush_redis_db
-    client.flushdb()
-/usr/local/lib/python3.11/site-packages/redis/commands/core.py:974: in flushdb
-    return self.execute_command("FLUSHDB", *args, **kwargs)
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-/usr/local/lib/python3.11/site-packages/redis/client.py:716: in execute_command
-    return self._execute_command(*args, **options)
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-/usr/local/lib/python3.11/site-packages/redis/client.py:722: in _execute_command
-    conn = self.connection or pool.get_connection()
-                              ^^^^^^^^^^^^^^^^^^^^^
-/usr/local/lib/python3.11/site-packages/redis/utils.py:236: in wrapper
-    return func(*args, **kwargs)
-           ^^^^^^^^^^^^^^^^^^^^^
-/usr/local/lib/python3.11/site-packages/redis/connection.py:3041: in get_connection
-    connection.connect()
-/usr/local/lib/python3.11/site-packages/redis/connection.py:976: in connect
-    self.retry.call_with_retry(
-/usr/local/lib/python3.11/site-packages/redis/retry.py:132: in call_with_retry
-    raise error
-/usr/local/lib/python3.11/site-packages/redis/retry.py:120: in call_with_retry
-    return do()
-           ^^^^
-/usr/local/lib/python3.11/site-packages/redis/connection.py:977: in <lambda>
-    lambda: self.connect_check_health(
-/usr/local/lib/python3.11/site-packages/redis/connection.py:1025: in connect_check_health
-    raise e
-E   redis.exceptions.ConnectionError: Error 111 connecting to 127.0.0.1:6379. Connection refused.
------------------------------ Captured stdout call -----------------------------
-[36m11:30:49 | INFO  | app.db.pg_connection | PG pool inizializzato: 2-12 conn (per-process), schema=plenora, idle_in_trans_timeout=300000ms, aggregato stimato ~24 conn (2 proc × 12) [uvicorn=1 + celery=0 + beat=1][0m
-_ ERROR at teardown of test_list_services_via_bearer_header_works_against_arcgis_online _
-/usr/local/lib/python3.11/site-packages/redis/connection.py:1003: in connect_check_health
-    sock = self._connect()
-           ^^^^^^^^^^^^^^^
-/usr/local/lib/python3.11/site-packages/redis/connection.py:1515: in _connect
-    raise err
-/usr/local/lib/python3.11/site-packages/redis/connection.py:1499: in _connect
-    sock.connect(socket_address)
-E   ConnectionRefusedError: [Errno 111] Connection refused
+===== captured output: celery-worker =====
+/usr/local/lib/python3.11/site-packages/celery/platforms.py:841: SecurityWarning: You're running the worker with superuser privileges: this is
+absolutely not recommended!
 
-During handling of the above exception, another exception occurred:
-tests2/integration/conftest.py:151: in _integration_flush_redis_per_test
-    flush_redis_db(broker_url)
-tests2/functional/harness/celery.py:89: in flush_redis_db
-    client.flushdb()
-/usr/local/lib/python3.11/site-packages/redis/commands/core.py:974: in flushdb
-    return self.execute_command("FLUSHDB", *args, **kwargs)
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-/usr/local/lib/python3.11/site-packages/redis/client.py:716: in execute_command
-    return self._execute_command(*args, **options)
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-/usr/local/lib/python3.11/site-packages/redis/client.py:722: in _execute_command
-    conn = self.connection or pool.get_connection()
-                              ^^^^^^^^^^^^^^^^^^^^^
-/usr/local/lib/python3.11/site-packages/redis/utils.py:236: in wrapper
-    return func(*args, **kwargs)
-           ^^^^^^^^^^^^^^^^^^^^^
-/usr/local/lib/python3.11/site-packages/redis/connection.py:3041: in get_connection
-    connection.connect()
-/usr/local/lib/python3.11/site-packages/redis/connection.py:976: in connect
-    self.retry.call_with_retry(
-/usr/local/lib/python3.11/site-packages/redis/retry.py:132: in call_with_retry
-    raise error
-/usr/local/lib/python3.11/site-packages/redis/retry.py:120: in call_with_retry
-    return do()
-           ^^^^
-/usr/local/lib/python3.11/site-packages/redis/connection.py:977: in <lambda>
-    lambda: self.connect_check_health(
-/usr/local/lib/python3.11/site-packages/redis/connection.py:1025: in connect_check_health
-    raise e
-E   redis.exceptions.ConnectionError: Error 111 connecting to 127.0.0.1:6379. Connection refused.
-_________ ERROR at teardown of test_list_layers_if_any_service_exists __________
-/usr/local/lib/python3.11/site-packages/redis/connection.py:1003: in connect_check_health
-    sock = self._connect()
-           ^^^^^^^^^^^^^^^
-/usr/local/lib/python3.11/site-packages/redis/connection.py:1515: in _connect
-    raise err
-/usr/local/lib/python3.11/site-packages/redis/connection.py:1499: in _connect
-    sock.connect(socket_address)
-E   ConnectionRefusedError: [Errno 111] Connection refused
+Please specify a different user using the --uid option.
 
-During handling of the above exception, another exception occurred:
-tests2/integration/conftest.py:151: in _integration_flush_redis_per_test
-    flush_redis_db(broker_url)
-tests2/functional/harness/celery.py:89: in flush_redis_db
-    client.flushdb()
-/usr/local/lib/python3.11/site-packages/redis/commands/core.py:974: in flushdb
-    return self.execute_command("FLUSHDB", *args, **kwargs)
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-/usr/local/lib/python3.11/site-packages/redis/client.py:716: in execute_command
-    return self._execute_command(*args, **options)
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-/usr/local/lib/python3.11/site-packages/redis/client.py:722: in _execute_command
-    conn = self.connection or pool.get_connection()
-                              ^^^^^^^^^^^^^^^^^^^^^
-/usr/local/lib/python3.11/site-packages/redis/utils.py:236: in wrapper
-    return func(*args, **kwargs)
-           ^^^^^^^^^^^^^^^^^^^^^
-/usr/local/lib/python3.11/site-packages/redis/connection.py:3041: in get_connection
-    connection.connect()
-/usr/local/lib/python3.11/site-packages/redis/connection.py:976: in connect
-    self.retry.call_with_retry(
-/usr/local/lib/python3.11/site-packages/redis/retry.py:132: in call_with_retry
-    raise error
-/usr/local/lib/python3.11/site-packages/redis/retry.py:120: in call_with_retry
-    return do()
-           ^^^^
-/usr/local/lib/python3.11/site-packages/redis/connection.py:977: in <lambda>
-    lambda: self.connect_check_health(
-/usr/local/lib/python3.11/site-packages/redis/connection.py:1025: in connect_check_health
-    raise e
-E   redis.exceptions.ConnectionError: Error 111 connecting to 127.0.0.1:6379. Connection refused.
-_____ ERROR at teardown of test_query_features_with_tiny_limit_via_bearer ______
-/usr/local/lib/python3.11/site-packages/redis/connection.py:1003: in connect_check_health
-    sock = self._connect()
-           ^^^^^^^^^^^^^^^
-/usr/local/lib/python3.11/site-packages/redis/connection.py:1515: in _connect
-    raise err
-/usr/local/lib/python3.11/site-packages/redis/connection.py:1499: in _connect
-    sock.connect(socket_address)
-E   ConnectionRefusedError: [Errno 111] Connection refused
+User information: uid=0 euid=0 gid=0 egid=0
 
-During handling of the above exception, another exception occurred:
-tests2/integration/conftest.py:151: in _integration_flush_redis_per_test
-    flush_redis_db(broker_url)
-tests2/functional/harness/celery.py:89: in flush_redis_db
-    client.flushdb()
-/usr/local/lib/python3.11/site-packages/redis/commands/core.py:974: in flushdb
-    return self.execute_command("FLUSHDB", *args, **kwargs)
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-/usr/local/lib/python3.11/site-packages/redis/client.py:716: in execute_command
-    return self._execute_command(*args, **options)
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-/usr/local/lib/python3.11/site-packages/redis/client.py:722: in _execute_command
-    conn = self.connection or pool.get_connection()
-                              ^^^^^^^^^^^^^^^^^^^^^
-/usr/local/lib/python3.11/site-packages/redis/utils.py:236: in wrapper
-    return func(*args, **kwargs)
-           ^^^^^^^^^^^^^^^^^^^^^
-/usr/local/lib/python3.11/site-packages/redis/connection.py:3041: in get_connection
-    connection.connect()
-/usr/local/lib/python3.11/site-packages/redis/connection.py:976: in connect
-    self.retry.call_with_retry(
-/usr/local/lib/python3.11/site-packages/redis/retry.py:132: in call_with_retry
-    raise error
-/usr/local/lib/python3.11/site-packages/redis/retry.py:120: in call_with_retry
-    return do()
-           ^^^^
-/usr/local/lib/python3.11/site-packages/redis/connection.py:977: in <lambda>
-    lambda: self.connect_check_health(
-/usr/local/lib/python3.11/site-packages/redis/connection.py:1025: in connect_check_health
-    raise e
-E   redis.exceptions.ConnectionError: Error 111 connecting to 127.0.0.1:6379. Connection refused.
-_ ERROR at setup of test_arricchisci_execute_from_seeded_file_source_returns_downloadable_result _
-/usr/local/lib/python3.11/site-packages/redis/connection.py:1003: in connect_check_health
-    sock = self._connect()
-           ^^^^^^^^^^^^^^^
-/usr/local/lib/python3.11/site-packages/redis/connection.py:1515: in _connect
-    raise err
-/usr/local/lib/python3.11/site-packages/redis/connection.py:1499: in _connect
-    sock.connect(socket_address)
-E   ConnectionRefusedError: [Errno 111] Connection refused
+  warnings.warn(SecurityWarning(ROOT_DISCOURAGED.format(
+[36m13:03:49 | INFO  | app.config | Redis già attivo su plenora-test-redis:6379[0m
+[36m13:03:49 | INFO  | app.db.pg_connection | PG pool inizializzato: 2-12 conn (per-process), schema=plenora, idle_in_trans_timeout=300000ms, aggregato stimato ~24 conn (2 proc × 12) [uvicorn=1 + celery=0 + beat=1][0m
+[36m13:03:49 | INFO  | app.db.pg_connection | PostgreSQL DB inizializzato: 37 tabelle in schema 'plenora'[0m
+[36m13:03:49 | INFO  | app.core.intermediate.db | Intermediate DB: PostgreSQL (tabelle già presenti)[0m
+[36m13:03:49 | INFO  | app.db.migrations_runner | [MIGRATIONS] Schema garantito: plenora[0m
+[36m13:03:49 | INFO  | app.db.migrations_runner | [MIGRATIONS] Nessuna migration pending[0m
+[36m13:03:49 | INFO  | app.config | Redis già attivo su plenora-test-redis:6379[0m
+[36m13:03:49 | INFO  | app.db.pg_connection | PostgreSQL DB inizializzato: 37 tabelle in schema 'plenora'[0m
+[36m13:03:49 | INFO  | app.core.intermediate.db | Intermediate DB: PostgreSQL (tabelle già presenti)[0m
+[36m13:03:49 | INFO  | app.db.migrations_runner | [MIGRATIONS] Schema garantito: plenora[0m
+[36m13:03:49 | INFO  | app.db.migrations_runner | [MIGRATIONS] Nessuna migration pending[0m
+ 
+ -------------- celery@a47b1b0894a2 v5.6.3 (recovery)
+--- ***** ----- 
+-- ******* ---- Linux-7.0.3-1-cachyos-x86_64-with-glibc2.36 2026-05-07 13:03:49
+- *** --- * --- 
+- ** ---------- [config]
+- ** ---------- .> app:         dataflow_tasks:0x7fd372eb1450
+- ** ---------- .> transport:   redis://plenora-test-redis:6379/0
+- ** ---------- .> results:     redis://plenora-test-redis:6379/0
+- *** --- * --- .> concurrency: 32 (solo)
+-- ******* ---- .> task events: OFF (enable -E to monitor tasks in this worker)
+--- ***** ----- 
+ -------------- [queues]
+                .> celery           exchange=celery(direct) key=celery
+                
 
-During handling of the above exception, another exception occurred:
-/usr/local/lib/python3.11/site-packages/pytest_asyncio/plugin.py:728: in pytest_fixture_setup
-    return (yield)
-            ^^^^^
-tests2/integration/conftest.py:124: in integration_celery_worker
-    flush_redis_db(broker_url)
-tests2/functional/harness/celery.py:89: in flush_redis_db
-    client.flushdb()
-/usr/local/lib/python3.11/site-packages/redis/commands/core.py:974: in flushdb
-    return self.execute_command("FLUSHDB", *args, **kwargs)
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-/usr/local/lib/python3.11/site-packages/redis/client.py:716: in execute_command
-    return self._execute_command(*args, **options)
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-/usr/local/lib/python3.11/site-packages/redis/client.py:722: in _execute_command
-    conn = self.connection or pool.get_connection()
-                              ^^^^^^^^^^^^^^^^^^^^^
-/usr/local/lib/python3.11/site-packages/redis/utils.py:236: in wrapper
-    return func(*args, **kwargs)
-           ^^^^^^^^^^^^^^^^^^^^^
-/usr/local/lib/python3.11/site-packages/redis/connection.py:3041: in get_connection
-    connection.connect()
-/usr/local/lib/python3.11/site-packages/redis/connection.py:976: in connect
-    self.retry.call_with_retry(
-/usr/local/lib/python3.11/site-packages/redis/retry.py:132: in call_with_retry
-    raise error
-/usr/local/lib/python3.11/site-packages/redis/retry.py:120: in call_with_retry
-    return do()
-           ^^^^
-/usr/local/lib/python3.11/site-packages/redis/connection.py:977: in <lambda>
-    lambda: self.connect_check_health(
-/usr/local/lib/python3.11/site-packages/redis/connection.py:1025: in connect_check_health
-    raise e
-E   redis.exceptions.ConnectionError: Error 111 connecting to 127.0.0.1:6379. Connection refused.
-________________ ERROR at setup of test_login_and_me_roundtrip _________________
-/usr/local/lib/python3.11/site-packages/pytest_asyncio/plugin.py:728: in pytest_fixture_setup
-    return (yield)
-            ^^^^^
-tests2/integration/conftest.py:81: in integration_backend_server
-    wait_for_http_ready(f"{url}/", timeout_s=30.0, process=proc)
-tests2/functional/harness/processes.py:129: in wait_for_http_ready
-    raise RuntimeError(
-E   RuntimeError: Service not ready at http://127.0.0.1:60465/: <urlopen error [Errno 111] Connection refused>
-E   --- child process [integration-backend] exited with code 1 ---
-E   
-E   ❌ PLENORA-ETL — Configurazione non valida, avvio interrotto:
-E   
-E     1. Redis non raggiungibile su redis://127.0.0.1:6379/0. Avvia il servizio Redis configurato in CELERY_BROKER_URL prima di avviare l'app.
-E   --- end output ---
-______ ERROR at setup of test_create_api_connection_persists_to_postgres _______
-tests2/integration/conftest.py:81: in integration_backend_server
-    wait_for_http_ready(f"{url}/", timeout_s=30.0, process=proc)
-tests2/functional/harness/processes.py:129: in wait_for_http_ready
-    raise RuntimeError(
-E   RuntimeError: Service not ready at http://127.0.0.1:60465/: <urlopen error [Errno 111] Connection refused>
-E   --- child process [integration-backend] exited with code 1 ---
-E   
-E   ❌ PLENORA-ETL — Configurazione non valida, avvio interrotto:
-E   
-E     1. Redis non raggiungibile su redis://127.0.0.1:6379/0. Avvia il servizio Redis configurato in CELERY_BROKER_URL prima di avviare l'app.
-E   --- end output ---
-_ ERROR at teardown of test_put_canvas_injects_computed_columns_into_result_node _
-/usr/local/lib/python3.11/site-packages/redis/connection.py:1003: in connect_check_health
-    sock = self._connect()
-           ^^^^^^^^^^^^^^^
-/usr/local/lib/python3.11/site-packages/redis/connection.py:1515: in _connect
-    raise err
-/usr/local/lib/python3.11/site-packages/redis/connection.py:1499: in _connect
-    sock.connect(socket_address)
-E   ConnectionRefusedError: [Errno 111] Connection refused
+[36m13:03:50 | INFO  | workers.carica_task | [req=73b25d66] Task CARICA 67975d4c-78cf-4831-a52c-1d18924043d0 avviato per progetto Integration_Postgres_CARICA_20260507_130350_60216899 (run_id=cd6e131f-8b9a-4c3a-8cf6-c9e8240ae9fd)[0m
+[2026-05-07 13:03:51,196: WARNING/MainProcess] [36m13:03:51 | INFO  | app.core.orchestrator.service | [req=73b25d66] Esecuzione pipeline progetto: Integration_Postgres_CARICA_20260507_130350_60216899[0m
+[2026-05-07 13:03:51,198: WARNING/MainProcess] [36m13:03:51 | INFO  | app.core.arricchisci.executor | [req=73b25d66] Esecuzione ARRICCHISCI: Integration_Postgres_CARICA_20260507_130350_60216899[0m
+[2026-05-07 13:03:51,198: WARNING/MainProcess] [36m13:03:51 | INFO  | app.core.arricchisci.canvas_orchestrator | [req=73b25d66] Ordine esecuzione: ['fs-1', 'result-1', 'carica-1'][0m
+[2026-05-07 13:03:51,199: WARNING/MainProcess] [36m13:03:51 | INFO  | app.core.arricchisci.canvas_orchestrator | [req=73b25d66] Gruppi di esecuzione: [('single', 1), ('single', 1), ('single', 1)][0m
+[2026-05-07 13:03:51,204: WARNING/MainProcess] [36m13:03:51 | INFO  | app.core.resources.loaders.file_source_blob | [req=73b25d66] [PERF] get_file_source_blob op=fetch_blob backend=db_legacy file_source_id=it_fs_c97b228011 size_bytes=33 duration_ms=0.3[0m
+[2026-05-07 13:03:51,208: WARNING/MainProcess] [36m13:03:51 | INFO  | app.services.file_service | [req=73b25d66] Caricato: 2 righe, 2 colonne[0m
+[2026-05-07 13:03:51,237: WARNING/MainProcess] [36m13:03:51 | INFO  | app.core.arricchisci.api_connector | [req=73b25d66] [PERF] load_file_source op=load_total file_source_id=it_fs_c97b228011 rows=2 cols=2 duration_ms=38.2[0m
+[2026-05-07 13:03:51,249: WARNING/MainProcess] [36m13:03:51 | INFO  | app.core.resources.loaders.result_blob | [req=73b25d66] [PERF] get_result_data op=fetch_blob backend=db_legacy result_id=c36127fc-61ba-4dc1-8f9d-de07f8098eb5 size_bytes=30 duration_ms=0.3[0m
+[2026-05-07 13:03:51,249: WARNING/MainProcess] [33m13:03:51 | WARNING | app.utils.dataframe | [req=73b25d66] Formato  non riconosciuto, tentativo come CSV[0m
+[2026-05-07 13:03:51,254: WARNING/MainProcess] [36m13:03:51 | INFO  | app.utils.dataframe | [req=73b25d66] [PERF] load_dataframe op=parse fmt=<none> file=plenora-result-blob-pb3mdn6i file_size=30 rows=2 cols=2 duration_ms=5.0[0m
+[2026-05-07 13:03:51,254: WARNING/MainProcess] [36m13:03:51 | INFO  | app.utils.dataframe | [req=73b25d66] Caricato plenora-result-blob-pb3mdn6i: 2 righe, 2 colonne[0m
+[36m13:03:51 | INFO  | workers.carica_task | [req=73b25d66] DataFrame caricato: 2 righe, 2 colonne[0m
+[2026-05-07 13:03:51,267: WARNING/MainProcess] [36m13:03:51 | INFO  | app.core.carica.executor | [req=73b25d66] Avvio CARICA: Integration_Postgres_CARICA_20260507_130350_60216899[0m
+[2026-05-07 13:03:51,268: WARNING/MainProcess] [33m13:03:51 | WARNING | app.shared.crypto | [req=73b25d66] [PLENORA-ETL] Nessuna chiave di cifratura trovata nelle env var: uso la chiave di sviluppo di default. NON usare in produzione.[0m
+[2026-05-07 13:03:51,297: WARNING/MainProcess] [33m13:03:51 | ERROR | app.core.carica.executor | [req=73b25d66] [GESTITO] Validazione fallita: Connessione al database fallita: (psycopg2.OperationalError) connection to server at "127.0.0.1", port 5432 failed: Connection refused
+	Is the server running on that host and accepting TCP/IP connections?
 
-During handling of the above exception, another exception occurred:
-tests2/integration/conftest.py:151: in _integration_flush_redis_per_test
-    flush_redis_db(broker_url)
-tests2/functional/harness/celery.py:89: in flush_redis_db
-    client.flushdb()
-/usr/local/lib/python3.11/site-packages/redis/commands/core.py:974: in flushdb
-    return self.execute_command("FLUSHDB", *args, **kwargs)
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-/usr/local/lib/python3.11/site-packages/redis/client.py:716: in execute_command
-    return self._execute_command(*args, **options)
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-/usr/local/lib/python3.11/site-packages/redis/client.py:722: in _execute_command
-    conn = self.connection or pool.get_connection()
-                              ^^^^^^^^^^^^^^^^^^^^^
-/usr/local/lib/python3.11/site-packages/redis/utils.py:236: in wrapper
-    return func(*args, **kwargs)
-           ^^^^^^^^^^^^^^^^^^^^^
-/usr/local/lib/python3.11/site-packages/redis/connection.py:3041: in get_connection
-    connection.connect()
-/usr/local/lib/python3.11/site-packages/redis/connection.py:976: in connect
-    self.retry.call_with_retry(
-/usr/local/lib/python3.11/site-packages/redis/retry.py:132: in call_with_retry
-    raise error
-/usr/local/lib/python3.11/site-packages/redis/retry.py:120: in call_with_retry
-    return do()
-           ^^^^
-/usr/local/lib/python3.11/site-packages/redis/connection.py:977: in <lambda>
-    lambda: self.connect_check_health(
-/usr/local/lib/python3.11/site-packages/redis/connection.py:1025: in connect_check_health
-    raise e
-E   redis.exceptions.ConnectionError: Error 111 connecting to 127.0.0.1:6379. Connection refused.
-____ ERROR at teardown of test_put_canvas_preserves_user_alias_on_recompute ____
-/usr/local/lib/python3.11/site-packages/redis/connection.py:1003: in connect_check_health
-    sock = self._connect()
-           ^^^^^^^^^^^^^^^
-/usr/local/lib/python3.11/site-packages/redis/connection.py:1515: in _connect
-    raise err
-/usr/local/lib/python3.11/site-packages/redis/connection.py:1499: in _connect
-    sock.connect(socket_address)
-E   ConnectionRefusedError: [Errno 111] Connection refused
+(Background on this error at: https://sqlalche.me/e/20/e3q8)[0m
+[36m13:03:51 | INFO  | workers.carica_task | [req=73b25d66] Task CARICA DB 67975d4c-78cf-4831-a52c-1d18924043d0 completato: validation_error[0m
 
-During handling of the above exception, another exception occurred:
-tests2/integration/conftest.py:151: in _integration_flush_redis_per_test
-    flush_redis_db(broker_url)
-tests2/functional/harness/celery.py:89: in flush_redis_db
-    client.flushdb()
-/usr/local/lib/python3.11/site-packages/redis/commands/core.py:974: in flushdb
-    return self.execute_command("FLUSHDB", *args, **kwargs)
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-/usr/local/lib/python3.11/site-packages/redis/client.py:716: in execute_command
-    return self._execute_command(*args, **options)
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-/usr/local/lib/python3.11/site-packages/redis/client.py:722: in _execute_command
-    conn = self.connection or pool.get_connection()
-                              ^^^^^^^^^^^^^^^^^^^^^
-/usr/local/lib/python3.11/site-packages/redis/utils.py:236: in wrapper
-    return func(*args, **kwargs)
-           ^^^^^^^^^^^^^^^^^^^^^
-/usr/local/lib/python3.11/site-packages/redis/connection.py:3041: in get_connection
-    connection.connect()
-/usr/local/lib/python3.11/site-packages/redis/connection.py:976: in connect
-    self.retry.call_with_retry(
-/usr/local/lib/python3.11/site-packages/redis/retry.py:132: in call_with_retry
-    raise error
-/usr/local/lib/python3.11/site-packages/redis/retry.py:120: in call_with_retry
-    return do()
-           ^^^^
-/usr/local/lib/python3.11/site-packages/redis/connection.py:977: in <lambda>
-    lambda: self.connect_check_health(
-/usr/local/lib/python3.11/site-packages/redis/connection.py:1025: in connect_check_health
-    raise e
-E   redis.exceptions.ConnectionError: Error 111 connecting to 127.0.0.1:6379. Connection refused.
-____ ERROR at setup of test_get_api_connection_response_has_expected_shape _____
-/usr/local/lib/python3.11/site-packages/pytest_asyncio/plugin.py:728: in pytest_fixture_setup
-    return (yield)
-            ^^^^^
-tests2/integration/conftest.py:81: in integration_backend_server
-    wait_for_http_ready(f"{url}/", timeout_s=30.0, process=proc)
-tests2/functional/harness/processes.py:129: in wait_for_http_ready
-    raise RuntimeError(
-E   RuntimeError: Service not ready at http://127.0.0.1:54873/: <urlopen error [Errno 111] Connection refused>
-E   --- child process [integration-backend] exited with code 1 ---
-E   
-E   ❌ PLENORA-ETL — Configurazione non valida, avvio interrotto:
-E   
-E     1. Redis non raggiungibile su redis://127.0.0.1:6379/0. Avvia il servizio Redis configurato in CELERY_BROKER_URL prima di avviare l'app.
-E   --- end output ---
-________ ERROR at setup of test_get_project_response_has_expected_shape ________
-tests2/integration/conftest.py:81: in integration_backend_server
-    wait_for_http_ready(f"{url}/", timeout_s=30.0, process=proc)
-tests2/functional/harness/processes.py:129: in wait_for_http_ready
-    raise RuntimeError(
-E   RuntimeError: Service not ready at http://127.0.0.1:54873/: <urlopen error [Errno 111] Connection refused>
-E   --- child process [integration-backend] exited with code 1 ---
-E   
-E   ❌ PLENORA-ETL — Configurazione non valida, avvio interrotto:
-E   
-E     1. Redis non raggiungibile su redis://127.0.0.1:6379/0. Avvia il servizio Redis configurato in CELERY_BROKER_URL prima di avviare l'app.
-E   --- end output ---
-______ ERROR at setup of test_get_task_status_response_has_expected_shape ______
-/usr/local/lib/python3.11/site-packages/redis/connection.py:1003: in connect_check_health
-    sock = self._connect()
-           ^^^^^^^^^^^^^^^
-/usr/local/lib/python3.11/site-packages/redis/connection.py:1515: in _connect
-    raise err
-/usr/local/lib/python3.11/site-packages/redis/connection.py:1499: in _connect
-    sock.connect(socket_address)
-E   ConnectionRefusedError: [Errno 111] Connection refused
+===== end captured output: celery-worker =====
 
-During handling of the above exception, another exception occurred:
-/usr/local/lib/python3.11/site-packages/pytest_asyncio/plugin.py:728: in pytest_fixture_setup
-    return (yield)
-            ^^^^^
-tests2/integration/conftest.py:124: in integration_celery_worker
-    flush_redis_db(broker_url)
-tests2/functional/harness/celery.py:89: in flush_redis_db
-    client.flushdb()
-/usr/local/lib/python3.11/site-packages/redis/commands/core.py:974: in flushdb
-    return self.execute_command("FLUSHDB", *args, **kwargs)
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-/usr/local/lib/python3.11/site-packages/redis/client.py:716: in execute_command
-    return self._execute_command(*args, **options)
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-/usr/local/lib/python3.11/site-packages/redis/client.py:722: in _execute_command
-    conn = self.connection or pool.get_connection()
-                              ^^^^^^^^^^^^^^^^^^^^^
-/usr/local/lib/python3.11/site-packages/redis/utils.py:236: in wrapper
-    return func(*args, **kwargs)
-           ^^^^^^^^^^^^^^^^^^^^^
-/usr/local/lib/python3.11/site-packages/redis/connection.py:3041: in get_connection
-    connection.connect()
-/usr/local/lib/python3.11/site-packages/redis/connection.py:976: in connect
-    self.retry.call_with_retry(
-/usr/local/lib/python3.11/site-packages/redis/retry.py:132: in call_with_retry
-    raise error
-/usr/local/lib/python3.11/site-packages/redis/retry.py:120: in call_with_retry
-    return do()
-           ^^^^
-/usr/local/lib/python3.11/site-packages/redis/connection.py:977: in <lambda>
-    lambda: self.connect_check_health(
-/usr/local/lib/python3.11/site-packages/redis/connection.py:1025: in connect_check_health
-    raise e
-E   redis.exceptions.ConnectionError: Error 111 connecting to 127.0.0.1:6379. Connection refused.
-_______ ERROR at setup of test_schedule_runs_response_has_expected_shape _______
-/usr/local/lib/python3.11/site-packages/redis/connection.py:1003: in connect_check_health
-    sock = self._connect()
-           ^^^^^^^^^^^^^^^
-/usr/local/lib/python3.11/site-packages/redis/connection.py:1515: in _connect
-    raise err
-/usr/local/lib/python3.11/site-packages/redis/connection.py:1499: in _connect
-    sock.connect(socket_address)
-E   ConnectionRefusedError: [Errno 111] Connection refused
 
-During handling of the above exception, another exception occurred:
-tests2/integration/conftest.py:124: in integration_celery_worker
-    flush_redis_db(broker_url)
-tests2/functional/harness/celery.py:89: in flush_redis_db
-    client.flushdb()
-/usr/local/lib/python3.11/site-packages/redis/commands/core.py:974: in flushdb
-    return self.execute_command("FLUSHDB", *args, **kwargs)
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-/usr/local/lib/python3.11/site-packages/redis/client.py:716: in execute_command
-    return self._execute_command(*args, **options)
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-/usr/local/lib/python3.11/site-packages/redis/client.py:722: in _execute_command
-    conn = self.connection or pool.get_connection()
-                              ^^^^^^^^^^^^^^^^^^^^^
-/usr/local/lib/python3.11/site-packages/redis/utils.py:236: in wrapper
-    return func(*args, **kwargs)
-           ^^^^^^^^^^^^^^^^^^^^^
-/usr/local/lib/python3.11/site-packages/redis/connection.py:3041: in get_connection
-    connection.connect()
-/usr/local/lib/python3.11/site-packages/redis/connection.py:976: in connect
-    self.retry.call_with_retry(
-/usr/local/lib/python3.11/site-packages/redis/retry.py:132: in call_with_retry
-    raise error
-/usr/local/lib/python3.11/site-packages/redis/retry.py:120: in call_with_retry
-    return do()
-           ^^^^
-/usr/local/lib/python3.11/site-packages/redis/connection.py:977: in <lambda>
-    lambda: self.connect_check_health(
-/usr/local/lib/python3.11/site-packages/redis/connection.py:1025: in connect_check_health
-    raise e
-E   redis.exceptions.ConnectionError: Error 111 connecting to 127.0.0.1:6379. Connection refused.
-_______ ERROR at setup of test_get_schedule_response_has_expected_shape ________
-tests2/integration/conftest.py:81: in integration_backend_server
-    wait_for_http_ready(f"{url}/", timeout_s=30.0, process=proc)
-tests2/functional/harness/processes.py:129: in wait_for_http_ready
-    raise RuntimeError(
-E   RuntimeError: Service not ready at http://127.0.0.1:54873/: <urlopen error [Errno 111] Connection refused>
-E   --- child process [integration-backend] exited with code 1 ---
-E   
-E   ❌ PLENORA-ETL — Configurazione non valida, avvio interrotto:
-E   
-E     1. Redis non raggiungibile su redis://127.0.0.1:6379/0. Avvia il servizio Redis configurato in CELERY_BROKER_URL prima di avviare l'app.
-E   --- end output ---
-____________ ERROR at setup of test_logout_revokes_token_end_to_end ____________
-/usr/local/lib/python3.11/site-packages/pytest_asyncio/plugin.py:728: in pytest_fixture_setup
-    return (yield)
-            ^^^^^
-tests2/integration/conftest.py:81: in integration_backend_server
-    wait_for_http_ready(f"{url}/", timeout_s=30.0, process=proc)
-tests2/functional/harness/processes.py:129: in wait_for_http_ready
-    raise RuntimeError(
-E   RuntimeError: Service not ready at http://127.0.0.1:41373/: <urlopen error [Errno 111] Connection refused>
-E   --- child process [integration-backend] exited with code 1 ---
-E   
-E   ❌ PLENORA-ETL — Configurazione non valida, avvio interrotto:
-E   
-E     1. Redis non raggiungibile su redis://127.0.0.1:6379/0. Avvia il servizio Redis configurato in CELERY_BROKER_URL prima di avviare l'app.
-E   --- end output ---
-____ ERROR at setup of test_new_login_after_logout_issues_independent_token ____
-tests2/integration/conftest.py:81: in integration_backend_server
-    wait_for_http_ready(f"{url}/", timeout_s=30.0, process=proc)
-tests2/functional/harness/processes.py:129: in wait_for_http_ready
-    raise RuntimeError(
-E   RuntimeError: Service not ready at http://127.0.0.1:41373/: <urlopen error [Errno 111] Connection refused>
-E   --- child process [integration-backend] exited with code 1 ---
-E   
-E   ❌ PLENORA-ETL — Configurazione non valida, avvio interrotto:
-E   
-E     1. Redis non raggiungibile su redis://127.0.0.1:6379/0. Avvia il servizio Redis configurato in CELERY_BROKER_URL prima di avviare l'app.
-E   --- end output ---
-___________ ERROR at setup of test_logout_without_bearer_returns_401 ___________
-tests2/integration/conftest.py:81: in integration_backend_server
-    wait_for_http_ready(f"{url}/", timeout_s=30.0, process=proc)
-tests2/functional/harness/processes.py:129: in wait_for_http_ready
-    raise RuntimeError(
-E   RuntimeError: Service not ready at http://127.0.0.1:41373/: <urlopen error [Errno 111] Connection refused>
-E   --- child process [integration-backend] exited with code 1 ---
-E   
-E   ❌ PLENORA-ETL — Configurazione non valida, avvio interrotto:
-E   
-E     1. Redis non raggiungibile su redis://127.0.0.1:6379/0. Avvia il servizio Redis configurato in CELERY_BROKER_URL prima di avviare l'app.
-E   --- end output ---
-_____ ERROR at setup of test_rate_limit_triggers_after_max_attempts_per_ip _____
-/usr/local/lib/python3.11/site-packages/pytest_asyncio/plugin.py:728: in pytest_fixture_setup
-    return (yield)
-            ^^^^^
-tests2/integration/conftest.py:81: in integration_backend_server
-    wait_for_http_ready(f"{url}/", timeout_s=30.0, process=proc)
-tests2/functional/harness/processes.py:129: in wait_for_http_ready
-    raise RuntimeError(
-E   RuntimeError: Service not ready at http://127.0.0.1:59397/: <urlopen error [Errno 111] Connection refused>
-E   --- child process [integration-backend] exited with code 1 ---
-E   
-E   ❌ PLENORA-ETL — Configurazione non valida, avvio interrotto:
-E   
-E     1. Redis non raggiungibile su redis://127.0.0.1:6379/0. Avvia il servizio Redis configurato in CELERY_BROKER_URL prima di avviare l'app.
-E   --- end output ---
-_________ ERROR at setup of test_rate_limit_isolated_per_forwarded_ip __________
-tests2/integration/conftest.py:81: in integration_backend_server
-    wait_for_http_ready(f"{url}/", timeout_s=30.0, process=proc)
-tests2/functional/harness/processes.py:129: in wait_for_http_ready
-    raise RuntimeError(
-E   RuntimeError: Service not ready at http://127.0.0.1:59397/: <urlopen error [Errno 111] Connection refused>
-E   --- child process [integration-backend] exited with code 1 ---
-E   
-E   ❌ PLENORA-ETL — Configurazione non valida, avvio interrotto:
-E   
-E     1. Redis non raggiungibile su redis://127.0.0.1:6379/0. Avvia il servizio Redis configurato in CELERY_BROKER_URL prima di avviare l'app.
-E   --- end output ---
-______ ERROR at setup of test_manipola_filter_execute_download_roundtrip _______
-/usr/local/lib/python3.11/site-packages/redis/connection.py:1003: in connect_check_health
-    sock = self._connect()
-           ^^^^^^^^^^^^^^^
-/usr/local/lib/python3.11/site-packages/redis/connection.py:1515: in _connect
-    raise err
-/usr/local/lib/python3.11/site-packages/redis/connection.py:1499: in _connect
-    sock.connect(socket_address)
-E   ConnectionRefusedError: [Errno 111] Connection refused
+===== captured output: integration-backend =====
+[36m13:03:49 | INFO  | app.config | Redis già attivo su plenora-test-redis:6379[0m
+[36m13:03:49 | INFO  | app.db.pg_connection | PG pool inizializzato: 2-12 conn (per-process), schema=plenora, idle_in_trans_timeout=300000ms, aggregato stimato ~24 conn (2 proc × 12) [uvicorn=1 + celery=0 + beat=1][0m
+[36m13:03:49 | INFO  | app.db.pg_connection | PostgreSQL DB inizializzato: 37 tabelle in schema 'plenora'[0m
+[36m13:03:49 | INFO  | app.core.intermediate.db | Intermediate DB: PostgreSQL (tabelle già presenti)[0m
+[36m13:03:49 | INFO  | app.db.migrations_runner | [MIGRATIONS] Schema garantito: plenora[0m
+[36m13:03:49 | INFO  | app.db.migrations_runner | [MIGRATIONS] Nessuna migration pending[0m
+/usr/local/lib/python3.11/site-packages/jwt/api_jwt.py:147: InsecureKeyLengthWarning: The HMAC key is 29 bytes long, which is below the minimum recommended length of 32 bytes for SHA256. See RFC 7518 Section 3.2.
+  return self._jws.encode(
+[36m13:03:50 | INFO  | app.core.auth.auth | [req=ab97ba4e] Login: it_usernm_cc1e8193ac (gruppo: it_grp_5d8b168901)[0m
+/usr/local/lib/python3.11/site-packages/jwt/api_jwt.py:365: InsecureKeyLengthWarning: The HMAC key is 29 bytes long, which is below the minimum recommended length of 32 bytes for SHA256. See RFC 7518 Section 3.2.
+  decoded = self.decode_complete(
+[33m13:03:50 | WARNING | app.shared.crypto | [req=4403c613] [PLENORA-ETL] Nessuna chiave di cifratura trovata nelle env var: uso la chiave di sviluppo di default. NON usare in produzione.[0m
+[36m13:03:50 | INFO  | app.services.connection_service | [req=4403c613] Connessione creata: Integration_Postgres_Connectio_20260507_130350_7f3c4420[0m
+[36m13:03:50 | INFO  | app.services.project_service | [req=ec74cc35] Progetto creato: Integration_Postgres_CARICA_20260507_130350_60216899 (created_by=it_user_37aef9d833)[0m
+[36m13:03:50 | INFO  | app.services.task_service | [req=73b25d66] Creato task carica: 67975d4c-78cf-4831-a52c-1d18924043d0 per progetto Integration_Postgres_CARICA_20260507_130350_60216899[0m
+[36m13:03:52 | INFO  | app.services.project_service | [req=a67d1867] Cleanup results: 1 blob eliminati per progetto Integration_Postgres_CARICA_20260507_130350_60216899[0m
+[36m13:03:52 | INFO  | app.services.project_service | [req=a67d1867] Progetto eliminato: Integration_Postgres_CARICA_20260507_130350_60216899[0m
 
-During handling of the above exception, another exception occurred:
-/usr/local/lib/python3.11/site-packages/pytest_asyncio/plugin.py:728: in pytest_fixture_setup
-    return (yield)
-            ^^^^^
-tests2/integration/conftest.py:124: in integration_celery_worker
-    flush_redis_db(broker_url)
-tests2/functional/harness/celery.py:89: in flush_redis_db
-    client.flushdb()
-/usr/local/lib/python3.11/site-packages/redis/commands/core.py:974: in flushdb
-    return self.execute_command("FLUSHDB", *args, **kwargs)
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-/usr/local/lib/python3.11/site-packages/redis/client.py:716: in execute_command
-    return self._execute_command(*args, **options)
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-/usr/local/lib/python3.11/site-packages/redis/client.py:722: in _execute_command
-    conn = self.connection or pool.get_connection()
-                              ^^^^^^^^^^^^^^^^^^^^^
-/usr/local/lib/python3.11/site-packages/redis/utils.py:236: in wrapper
-    return func(*args, **kwargs)
-           ^^^^^^^^^^^^^^^^^^^^^
-/usr/local/lib/python3.11/site-packages/redis/connection.py:3041: in get_connection
-    connection.connect()
-/usr/local/lib/python3.11/site-packages/redis/connection.py:976: in connect
-    self.retry.call_with_retry(
-/usr/local/lib/python3.11/site-packages/redis/retry.py:132: in call_with_retry
-    raise error
-/usr/local/lib/python3.11/site-packages/redis/retry.py:120: in call_with_retry
-    return do()
-           ^^^^
-/usr/local/lib/python3.11/site-packages/redis/connection.py:977: in <lambda>
-    lambda: self.connect_check_health(
-/usr/local/lib/python3.11/site-packages/redis/connection.py:1025: in connect_check_health
-    raise e
-E   redis.exceptions.ConnectionError: Error 111 connecting to 127.0.0.1:6379. Connection refused.
-_ ERROR at setup of test_postgres_direct_carica_task_writes_destination_table __
-/usr/local/lib/python3.11/site-packages/redis/connection.py:1003: in connect_check_health
-    sock = self._connect()
-           ^^^^^^^^^^^^^^^
-/usr/local/lib/python3.11/site-packages/redis/connection.py:1515: in _connect
-    raise err
-/usr/local/lib/python3.11/site-packages/redis/connection.py:1499: in _connect
-    sock.connect(socket_address)
-E   ConnectionRefusedError: [Errno 111] Connection refused
+===== end captured output: integration-backend =====
 
-During handling of the above exception, another exception occurred:
-/usr/local/lib/python3.11/site-packages/pytest_asyncio/plugin.py:728: in pytest_fixture_setup
-    return (yield)
-            ^^^^^
-tests2/integration/conftest.py:124: in integration_celery_worker
-    flush_redis_db(broker_url)
-tests2/functional/harness/celery.py:89: in flush_redis_db
-    client.flushdb()
-/usr/local/lib/python3.11/site-packages/redis/commands/core.py:974: in flushdb
-    return self.execute_command("FLUSHDB", *args, **kwargs)
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-/usr/local/lib/python3.11/site-packages/redis/client.py:716: in execute_command
-    return self._execute_command(*args, **options)
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-/usr/local/lib/python3.11/site-packages/redis/client.py:722: in _execute_command
-    conn = self.connection or pool.get_connection()
-                              ^^^^^^^^^^^^^^^^^^^^^
-/usr/local/lib/python3.11/site-packages/redis/utils.py:236: in wrapper
-    return func(*args, **kwargs)
-           ^^^^^^^^^^^^^^^^^^^^^
-/usr/local/lib/python3.11/site-packages/redis/connection.py:3041: in get_connection
-    connection.connect()
-/usr/local/lib/python3.11/site-packages/redis/connection.py:976: in connect
-    self.retry.call_with_retry(
-/usr/local/lib/python3.11/site-packages/redis/retry.py:132: in call_with_retry
-    raise error
-/usr/local/lib/python3.11/site-packages/redis/retry.py:120: in call_with_retry
-    return do()
-           ^^^^
-/usr/local/lib/python3.11/site-packages/redis/connection.py:977: in <lambda>
-    lambda: self.connect_check_health(
-/usr/local/lib/python3.11/site-packages/redis/connection.py:1025: in connect_check_health
-    raise e
-E   redis.exceptions.ConnectionError: Error 111 connecting to 127.0.0.1:6379. Connection refused.
-_ ERROR at setup of test_postgres_connection_tables_and_estrai_preview_roundtrip _
-/usr/local/lib/python3.11/site-packages/redis/connection.py:1003: in connect_check_health
-    sock = self._connect()
-           ^^^^^^^^^^^^^^^
-/usr/local/lib/python3.11/site-packages/redis/connection.py:1515: in _connect
-    raise err
-/usr/local/lib/python3.11/site-packages/redis/connection.py:1499: in _connect
-    sock.connect(socket_address)
-E   ConnectionRefusedError: [Errno 111] Connection refused
+_________ test_postgres_connection_tables_and_estrai_preview_roundtrip _________
+tests2/integration/test_postgres_connection_and_estrai_preview.py:90: in test_postgres_connection_tables_and_estrai_preview_roundtrip
+    with seeded_postgres_ext_table() as seeded:
+/usr/local/lib/python3.11/contextlib.py:137: in __enter__
+    return next(self.gen)
+           ^^^^^^^^^^^^^^
+tests2/integration/harness/postgres_ext.py:45: in seeded_postgres_ext_table
+    with postgres_ext_conn() as conn:
+/usr/local/lib/python3.11/contextlib.py:137: in __enter__
+    return next(self.gen)
+           ^^^^^^^^^^^^^^
+tests2/integration/harness/postgres_ext.py:23: in postgres_ext_conn
+    conn = psycopg2.connect(
+/usr/local/lib/python3.11/site-packages/psycopg2/__init__.py:122: in connect
+    conn = _connect(dsn, connection_factory=connection_factory, **kwasync)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   psycopg2.OperationalError: connection to server at "127.0.0.1", port 5432 failed: Connection refused
+E   	Is the server running on that host and accepting TCP/IP connections?
+--------------------------- Captured stdout teardown ---------------------------
+[36m13:03:54 | INFO  | config_db_service.delete_group_cascade | Cascade delete gruppo it_grp_654f2c5c00 completato: {'schedules': 0, 'api_connections': 0, 'datasources': 0, 'file_sources': 0, 'connections': 0, 'projects': 0, 'users': 1, 'results': 0, 'intermediate_runs': 0, 'log_runs': 0}[0m
 
-During handling of the above exception, another exception occurred:
-/usr/local/lib/python3.11/site-packages/pytest_asyncio/plugin.py:728: in pytest_fixture_setup
-    return (yield)
-            ^^^^^
-tests2/integration/conftest.py:124: in integration_celery_worker
-    flush_redis_db(broker_url)
-tests2/functional/harness/celery.py:89: in flush_redis_db
-    client.flushdb()
-/usr/local/lib/python3.11/site-packages/redis/commands/core.py:974: in flushdb
-    return self.execute_command("FLUSHDB", *args, **kwargs)
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-/usr/local/lib/python3.11/site-packages/redis/client.py:716: in execute_command
-    return self._execute_command(*args, **options)
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-/usr/local/lib/python3.11/site-packages/redis/client.py:722: in _execute_command
-    conn = self.connection or pool.get_connection()
-                              ^^^^^^^^^^^^^^^^^^^^^
-/usr/local/lib/python3.11/site-packages/redis/utils.py:236: in wrapper
-    return func(*args, **kwargs)
-           ^^^^^^^^^^^^^^^^^^^^^
-/usr/local/lib/python3.11/site-packages/redis/connection.py:3041: in get_connection
-    connection.connect()
-/usr/local/lib/python3.11/site-packages/redis/connection.py:976: in connect
-    self.retry.call_with_retry(
-/usr/local/lib/python3.11/site-packages/redis/retry.py:132: in call_with_retry
-    raise error
-/usr/local/lib/python3.11/site-packages/redis/retry.py:120: in call_with_retry
-    return do()
-           ^^^^
-/usr/local/lib/python3.11/site-packages/redis/connection.py:977: in <lambda>
-    lambda: self.connect_check_health(
-/usr/local/lib/python3.11/site-packages/redis/connection.py:1025: in connect_check_health
-    raise e
-E   redis.exceptions.ConnectionError: Error 111 connecting to 127.0.0.1:6379. Connection refused.
-_ ERROR at setup of test_postgres_execute_returns_downloadable_project_result __
-/usr/local/lib/python3.11/site-packages/redis/connection.py:1003: in connect_check_health
-    sock = self._connect()
-           ^^^^^^^^^^^^^^^
-/usr/local/lib/python3.11/site-packages/redis/connection.py:1515: in _connect
-    raise err
-/usr/local/lib/python3.11/site-packages/redis/connection.py:1499: in _connect
-    sock.connect(socket_address)
-E   ConnectionRefusedError: [Errno 111] Connection refused
+===== captured output: celery-worker =====
+/usr/local/lib/python3.11/site-packages/celery/platforms.py:841: SecurityWarning: You're running the worker with superuser privileges: this is
+absolutely not recommended!
 
-During handling of the above exception, another exception occurred:
-/usr/local/lib/python3.11/site-packages/pytest_asyncio/plugin.py:728: in pytest_fixture_setup
-    return (yield)
-            ^^^^^
-tests2/integration/conftest.py:124: in integration_celery_worker
-    flush_redis_db(broker_url)
-tests2/functional/harness/celery.py:89: in flush_redis_db
-    client.flushdb()
-/usr/local/lib/python3.11/site-packages/redis/commands/core.py:974: in flushdb
-    return self.execute_command("FLUSHDB", *args, **kwargs)
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-/usr/local/lib/python3.11/site-packages/redis/client.py:716: in execute_command
-    return self._execute_command(*args, **options)
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-/usr/local/lib/python3.11/site-packages/redis/client.py:722: in _execute_command
-    conn = self.connection or pool.get_connection()
-                              ^^^^^^^^^^^^^^^^^^^^^
-/usr/local/lib/python3.11/site-packages/redis/utils.py:236: in wrapper
-    return func(*args, **kwargs)
-           ^^^^^^^^^^^^^^^^^^^^^
-/usr/local/lib/python3.11/site-packages/redis/connection.py:3041: in get_connection
-    connection.connect()
-/usr/local/lib/python3.11/site-packages/redis/connection.py:976: in connect
-    self.retry.call_with_retry(
-/usr/local/lib/python3.11/site-packages/redis/retry.py:132: in call_with_retry
-    raise error
-/usr/local/lib/python3.11/site-packages/redis/retry.py:120: in call_with_retry
-    return do()
-           ^^^^
-/usr/local/lib/python3.11/site-packages/redis/connection.py:977: in <lambda>
-    lambda: self.connect_check_health(
-/usr/local/lib/python3.11/site-packages/redis/connection.py:1025: in connect_check_health
-    raise e
-E   redis.exceptions.ConnectionError: Error 111 connecting to 127.0.0.1:6379. Connection refused.
-_ ERROR at setup of test_postgres_execute_pipeline_spawns_and_completes_carica_task _
-/usr/local/lib/python3.11/site-packages/redis/connection.py:1003: in connect_check_health
-    sock = self._connect()
-           ^^^^^^^^^^^^^^^
-/usr/local/lib/python3.11/site-packages/redis/connection.py:1515: in _connect
-    raise err
-/usr/local/lib/python3.11/site-packages/redis/connection.py:1499: in _connect
-    sock.connect(socket_address)
-E   ConnectionRefusedError: [Errno 111] Connection refused
+Please specify a different user using the --uid option.
 
-During handling of the above exception, another exception occurred:
-/usr/local/lib/python3.11/site-packages/pytest_asyncio/plugin.py:728: in pytest_fixture_setup
-    return (yield)
-            ^^^^^
-tests2/integration/conftest.py:124: in integration_celery_worker
-    flush_redis_db(broker_url)
-tests2/functional/harness/celery.py:89: in flush_redis_db
-    client.flushdb()
-/usr/local/lib/python3.11/site-packages/redis/commands/core.py:974: in flushdb
-    return self.execute_command("FLUSHDB", *args, **kwargs)
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-/usr/local/lib/python3.11/site-packages/redis/client.py:716: in execute_command
-    return self._execute_command(*args, **options)
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-/usr/local/lib/python3.11/site-packages/redis/client.py:722: in _execute_command
-    conn = self.connection or pool.get_connection()
-                              ^^^^^^^^^^^^^^^^^^^^^
-/usr/local/lib/python3.11/site-packages/redis/utils.py:236: in wrapper
-    return func(*args, **kwargs)
-           ^^^^^^^^^^^^^^^^^^^^^
-/usr/local/lib/python3.11/site-packages/redis/connection.py:3041: in get_connection
-    connection.connect()
-/usr/local/lib/python3.11/site-packages/redis/connection.py:976: in connect
-    self.retry.call_with_retry(
-/usr/local/lib/python3.11/site-packages/redis/retry.py:132: in call_with_retry
-    raise error
-/usr/local/lib/python3.11/site-packages/redis/retry.py:120: in call_with_retry
-    return do()
-           ^^^^
-/usr/local/lib/python3.11/site-packages/redis/connection.py:977: in <lambda>
-    lambda: self.connect_check_health(
-/usr/local/lib/python3.11/site-packages/redis/connection.py:1025: in connect_check_health
-    raise e
-E   redis.exceptions.ConnectionError: Error 111 connecting to 127.0.0.1:6379. Connection refused.
-_________ ERROR at setup of test_concurrent_writes_preserve_both_keys __________
-/usr/local/lib/python3.11/site-packages/pytest_asyncio/plugin.py:728: in pytest_fixture_setup
-    return (yield)
-            ^^^^^
-tests2/integration/conftest.py:81: in integration_backend_server
-    wait_for_http_ready(f"{url}/", timeout_s=30.0, process=proc)
-tests2/functional/harness/processes.py:129: in wait_for_http_ready
-    raise RuntimeError(
-E   RuntimeError: Service not ready at http://127.0.0.1:56131/: <urlopen error [Errno 111] Connection refused>
-E   --- child process [integration-backend] exited with code 1 ---
-E   
-E   ❌ PLENORA-ETL — Configurazione non valida, avvio interrotto:
-E   
-E     1. Redis non raggiungibile su redis://127.0.0.1:6379/0. Avvia il servizio Redis configurato in CELERY_BROKER_URL prima di avviare l'app.
-E   --- end output ---
-__ ERROR at setup of test_concurrent_same_key_writes_last_wins_no_corruption ___
-tests2/integration/conftest.py:81: in integration_backend_server
-    wait_for_http_ready(f"{url}/", timeout_s=30.0, process=proc)
-tests2/functional/harness/processes.py:129: in wait_for_http_ready
-    raise RuntimeError(
-E   RuntimeError: Service not ready at http://127.0.0.1:56131/: <urlopen error [Errno 111] Connection refused>
-E   --- child process [integration-backend] exited with code 1 ---
-E   
-E   ❌ PLENORA-ETL — Configurazione non valida, avvio interrotto:
-E   
-E     1. Redis non raggiungibile su redis://127.0.0.1:6379/0. Avvia il servizio Redis configurato in CELERY_BROKER_URL prima di avviare l'app.
-E   --- end output ---
-____ ERROR at setup of test_atomic_update_on_missing_project_returns_false _____
-tests2/integration/conftest.py:81: in integration_backend_server
-    wait_for_http_ready(f"{url}/", timeout_s=30.0, process=proc)
-tests2/functional/harness/processes.py:129: in wait_for_http_ready
-    raise RuntimeError(
-E   RuntimeError: Service not ready at http://127.0.0.1:56131/: <urlopen error [Errno 111] Connection refused>
-E   --- child process [integration-backend] exited with code 1 ---
-E   
-E   ❌ PLENORA-ETL — Configurazione non valida, avvio interrotto:
-E   
-E     1. Redis non raggiungibile su redis://127.0.0.1:6379/0. Avvia il servizio Redis configurato in CELERY_BROKER_URL prima di avviare l'app.
-E   --- end output ---
-_________ ERROR at setup of test_project_create_with_canvas_roundtrip __________
-/usr/local/lib/python3.11/site-packages/pytest_asyncio/plugin.py:728: in pytest_fixture_setup
-    return (yield)
-            ^^^^^
-tests2/integration/conftest.py:81: in integration_backend_server
-    wait_for_http_ready(f"{url}/", timeout_s=30.0, process=proc)
-tests2/functional/harness/processes.py:129: in wait_for_http_ready
-    raise RuntimeError(
-E   RuntimeError: Service not ready at http://127.0.0.1:59899/: <urlopen error [Errno 111] Connection refused>
-E   --- child process [integration-backend] exited with code 1 ---
-E   
-E   ❌ PLENORA-ETL — Configurazione non valida, avvio interrotto:
-E   
-E     1. Redis non raggiungibile su redis://127.0.0.1:6379/0. Avvia il servizio Redis configurato in CELERY_BROKER_URL prima di avviare l'app.
-E   --- end output ---
-____________ ERROR at setup of test_project_canvas_update_roundtrip ____________
-tests2/integration/conftest.py:81: in integration_backend_server
-    wait_for_http_ready(f"{url}/", timeout_s=30.0, process=proc)
-tests2/functional/harness/processes.py:129: in wait_for_http_ready
-    raise RuntimeError(
-E   RuntimeError: Service not ready at http://127.0.0.1:59899/: <urlopen error [Errno 111] Connection refused>
-E   --- child process [integration-backend] exited with code 1 ---
-E   
-E   ❌ PLENORA-ETL — Configurazione non valida, avvio interrotto:
-E   
-E     1. Redis non raggiungibile su redis://127.0.0.1:6379/0. Avvia il servizio Redis configurato in CELERY_BROKER_URL prima di avviare l'app.
-E   --- end output ---
-_ ERROR at setup of test_scheduler_manual_run_lists_and_downloads_archived_output _
-/usr/local/lib/python3.11/site-packages/redis/connection.py:1003: in connect_check_health
-    sock = self._connect()
-           ^^^^^^^^^^^^^^^
-/usr/local/lib/python3.11/site-packages/redis/connection.py:1515: in _connect
-    raise err
-/usr/local/lib/python3.11/site-packages/redis/connection.py:1499: in _connect
-    sock.connect(socket_address)
-E   ConnectionRefusedError: [Errno 111] Connection refused
+User information: uid=0 euid=0 gid=0 egid=0
 
-During handling of the above exception, another exception occurred:
-/usr/local/lib/python3.11/site-packages/pytest_asyncio/plugin.py:728: in pytest_fixture_setup
-    return (yield)
-            ^^^^^
-tests2/integration/conftest.py:124: in integration_celery_worker
-    flush_redis_db(broker_url)
-tests2/functional/harness/celery.py:89: in flush_redis_db
-    client.flushdb()
-/usr/local/lib/python3.11/site-packages/redis/commands/core.py:974: in flushdb
-    return self.execute_command("FLUSHDB", *args, **kwargs)
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-/usr/local/lib/python3.11/site-packages/redis/client.py:716: in execute_command
-    return self._execute_command(*args, **options)
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-/usr/local/lib/python3.11/site-packages/redis/client.py:722: in _execute_command
-    conn = self.connection or pool.get_connection()
-                              ^^^^^^^^^^^^^^^^^^^^^
-/usr/local/lib/python3.11/site-packages/redis/utils.py:236: in wrapper
-    return func(*args, **kwargs)
-           ^^^^^^^^^^^^^^^^^^^^^
-/usr/local/lib/python3.11/site-packages/redis/connection.py:3041: in get_connection
-    connection.connect()
-/usr/local/lib/python3.11/site-packages/redis/connection.py:976: in connect
-    self.retry.call_with_retry(
-/usr/local/lib/python3.11/site-packages/redis/retry.py:132: in call_with_retry
-    raise error
-/usr/local/lib/python3.11/site-packages/redis/retry.py:120: in call_with_retry
-    return do()
-           ^^^^
-/usr/local/lib/python3.11/site-packages/redis/connection.py:977: in <lambda>
-    lambda: self.connect_check_health(
-/usr/local/lib/python3.11/site-packages/redis/connection.py:1025: in connect_check_health
-    raise e
-E   redis.exceptions.ConnectionError: Error 111 connecting to 127.0.0.1:6379. Connection refused.
-_______________ ERROR at setup of test_unknown_task_returns_404 ________________
-/usr/local/lib/python3.11/site-packages/pytest_asyncio/plugin.py:728: in pytest_fixture_setup
-    return (yield)
-            ^^^^^
-tests2/integration/conftest.py:81: in integration_backend_server
-    wait_for_http_ready(f"{url}/", timeout_s=30.0, process=proc)
-tests2/functional/harness/processes.py:129: in wait_for_http_ready
-    raise RuntimeError(
-E   RuntimeError: Service not ready at http://127.0.0.1:55143/: <urlopen error [Errno 111] Connection refused>
-E   --- child process [integration-backend] exited with code 1 ---
-E   
-E   ❌ PLENORA-ETL — Configurazione non valida, avvio interrotto:
-E   
-E     1. Redis non raggiungibile su redis://127.0.0.1:6379/0. Avvia il servizio Redis configurato in CELERY_BROKER_URL prima di avviare l'app.
-E   --- end output ---
-________ ERROR at setup of test_task_status_progresses_with_real_worker ________
-/usr/local/lib/python3.11/site-packages/redis/connection.py:1003: in connect_check_health
-    sock = self._connect()
-           ^^^^^^^^^^^^^^^
-/usr/local/lib/python3.11/site-packages/redis/connection.py:1515: in _connect
-    raise err
-/usr/local/lib/python3.11/site-packages/redis/connection.py:1499: in _connect
-    sock.connect(socket_address)
-E   ConnectionRefusedError: [Errno 111] Connection refused
+  warnings.warn(SecurityWarning(ROOT_DISCOURAGED.format(
+[36m13:03:54 | INFO  | app.config | Redis già attivo su plenora-test-redis:6379[0m
+[36m13:03:54 | INFO  | app.db.pg_connection | PG pool inizializzato: 2-12 conn (per-process), schema=plenora, idle_in_trans_timeout=300000ms, aggregato stimato ~24 conn (2 proc × 12) [uvicorn=1 + celery=0 + beat=1][0m
+[36m13:03:54 | INFO  | app.db.pg_connection | PostgreSQL DB inizializzato: 37 tabelle in schema 'plenora'[0m
+[36m13:03:54 | INFO  | app.core.intermediate.db | Intermediate DB: PostgreSQL (tabelle già presenti)[0m
+[36m13:03:54 | INFO  | app.db.migrations_runner | [MIGRATIONS] Schema garantito: plenora[0m
+[36m13:03:54 | INFO  | app.db.migrations_runner | [MIGRATIONS] Nessuna migration pending[0m
+[36m13:03:54 | INFO  | app.config | Redis già attivo su plenora-test-redis:6379[0m
+[36m13:03:54 | INFO  | app.db.pg_connection | PostgreSQL DB inizializzato: 37 tabelle in schema 'plenora'[0m
+[36m13:03:54 | INFO  | app.core.intermediate.db | Intermediate DB: PostgreSQL (tabelle già presenti)[0m
+[36m13:03:54 | INFO  | app.db.migrations_runner | [MIGRATIONS] Schema garantito: plenora[0m
+[36m13:03:54 | INFO  | app.db.migrations_runner | [MIGRATIONS] Nessuna migration pending[0m
+ 
+ -------------- celery@a47b1b0894a2 v5.6.3 (recovery)
+--- ***** ----- 
+-- ******* ---- Linux-7.0.3-1-cachyos-x86_64-with-glibc2.36 2026-05-07 13:03:54
+- *** --- * --- 
+- ** ---------- [config]
+- ** ---------- .> app:         dataflow_tasks:0x7f014aa3cad0
+- ** ---------- .> transport:   redis://plenora-test-redis:6379/0
+- ** ---------- .> results:     redis://plenora-test-redis:6379/0
+- *** --- * --- .> concurrency: 32 (solo)
+-- ******* ---- .> task events: OFF (enable -E to monitor tasks in this worker)
+--- ***** ----- 
+ -------------- [queues]
+                .> celery           exchange=celery(direct) key=celery
+                
 
-During handling of the above exception, another exception occurred:
-/usr/local/lib/python3.11/site-packages/pytest_asyncio/plugin.py:728: in pytest_fixture_setup
-    return (yield)
-            ^^^^^
-tests2/integration/conftest.py:124: in integration_celery_worker
-    flush_redis_db(broker_url)
-tests2/functional/harness/celery.py:89: in flush_redis_db
-    client.flushdb()
-/usr/local/lib/python3.11/site-packages/redis/commands/core.py:974: in flushdb
-    return self.execute_command("FLUSHDB", *args, **kwargs)
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-/usr/local/lib/python3.11/site-packages/redis/client.py:716: in execute_command
-    return self._execute_command(*args, **options)
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-/usr/local/lib/python3.11/site-packages/redis/client.py:722: in _execute_command
-    conn = self.connection or pool.get_connection()
-                              ^^^^^^^^^^^^^^^^^^^^^
-/usr/local/lib/python3.11/site-packages/redis/utils.py:236: in wrapper
-    return func(*args, **kwargs)
-           ^^^^^^^^^^^^^^^^^^^^^
-/usr/local/lib/python3.11/site-packages/redis/connection.py:3041: in get_connection
-    connection.connect()
-/usr/local/lib/python3.11/site-packages/redis/connection.py:976: in connect
-    self.retry.call_with_retry(
-/usr/local/lib/python3.11/site-packages/redis/retry.py:132: in call_with_retry
-    raise error
-/usr/local/lib/python3.11/site-packages/redis/retry.py:120: in call_with_retry
-    return do()
-           ^^^^
-/usr/local/lib/python3.11/site-packages/redis/connection.py:977: in <lambda>
-    lambda: self.connect_check_health(
-/usr/local/lib/python3.11/site-packages/redis/connection.py:1025: in connect_check_health
-    raise e
-E   redis.exceptions.ConnectionError: Error 111 connecting to 127.0.0.1:6379. Connection refused.
-_ ERROR at setup of test_execute_endpoint_creates_real_task_and_reaches_terminal_state _
-/usr/local/lib/python3.11/site-packages/redis/connection.py:1003: in connect_check_health
-    sock = self._connect()
-           ^^^^^^^^^^^^^^^
-/usr/local/lib/python3.11/site-packages/redis/connection.py:1515: in _connect
-    raise err
-/usr/local/lib/python3.11/site-packages/redis/connection.py:1499: in _connect
-    sock.connect(socket_address)
-E   ConnectionRefusedError: [Errno 111] Connection refused
 
-During handling of the above exception, another exception occurred:
-tests2/integration/conftest.py:124: in integration_celery_worker
-    flush_redis_db(broker_url)
-tests2/functional/harness/celery.py:89: in flush_redis_db
-    client.flushdb()
-/usr/local/lib/python3.11/site-packages/redis/commands/core.py:974: in flushdb
-    return self.execute_command("FLUSHDB", *args, **kwargs)
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-/usr/local/lib/python3.11/site-packages/redis/client.py:716: in execute_command
-    return self._execute_command(*args, **options)
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-/usr/local/lib/python3.11/site-packages/redis/client.py:722: in _execute_command
-    conn = self.connection or pool.get_connection()
-                              ^^^^^^^^^^^^^^^^^^^^^
-/usr/local/lib/python3.11/site-packages/redis/utils.py:236: in wrapper
-    return func(*args, **kwargs)
-           ^^^^^^^^^^^^^^^^^^^^^
-/usr/local/lib/python3.11/site-packages/redis/connection.py:3041: in get_connection
-    connection.connect()
-/usr/local/lib/python3.11/site-packages/redis/connection.py:976: in connect
-    self.retry.call_with_retry(
-/usr/local/lib/python3.11/site-packages/redis/retry.py:132: in call_with_retry
-    raise error
-/usr/local/lib/python3.11/site-packages/redis/retry.py:120: in call_with_retry
-    return do()
-           ^^^^
-/usr/local/lib/python3.11/site-packages/redis/connection.py:977: in <lambda>
-    lambda: self.connect_check_health(
-/usr/local/lib/python3.11/site-packages/redis/connection.py:1025: in connect_check_health
-    raise e
-E   redis.exceptions.ConnectionError: Error 111 connecting to 127.0.0.1:6379. Connection refused.
-_ ERROR at setup of test_download_task_result_reads_blob_from_real_task_execution _
-/usr/local/lib/python3.11/site-packages/redis/connection.py:1003: in connect_check_health
-    sock = self._connect()
-           ^^^^^^^^^^^^^^^
-/usr/local/lib/python3.11/site-packages/redis/connection.py:1515: in _connect
-    raise err
-/usr/local/lib/python3.11/site-packages/redis/connection.py:1499: in _connect
-    sock.connect(socket_address)
-E   ConnectionRefusedError: [Errno 111] Connection refused
+===== end captured output: celery-worker =====
 
-During handling of the above exception, another exception occurred:
-/usr/local/lib/python3.11/site-packages/pytest_asyncio/plugin.py:728: in pytest_fixture_setup
-    return (yield)
-            ^^^^^
-tests2/integration/conftest.py:124: in integration_celery_worker
-    flush_redis_db(broker_url)
-tests2/functional/harness/celery.py:89: in flush_redis_db
-    client.flushdb()
-/usr/local/lib/python3.11/site-packages/redis/commands/core.py:974: in flushdb
-    return self.execute_command("FLUSHDB", *args, **kwargs)
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-/usr/local/lib/python3.11/site-packages/redis/client.py:716: in execute_command
-    return self._execute_command(*args, **options)
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-/usr/local/lib/python3.11/site-packages/redis/client.py:722: in _execute_command
-    conn = self.connection or pool.get_connection()
-                              ^^^^^^^^^^^^^^^^^^^^^
-/usr/local/lib/python3.11/site-packages/redis/utils.py:236: in wrapper
-    return func(*args, **kwargs)
-           ^^^^^^^^^^^^^^^^^^^^^
-/usr/local/lib/python3.11/site-packages/redis/connection.py:3041: in get_connection
-    connection.connect()
-/usr/local/lib/python3.11/site-packages/redis/connection.py:976: in connect
-    self.retry.call_with_retry(
-/usr/local/lib/python3.11/site-packages/redis/retry.py:132: in call_with_retry
-    raise error
-/usr/local/lib/python3.11/site-packages/redis/retry.py:120: in call_with_retry
-    return do()
-           ^^^^
-/usr/local/lib/python3.11/site-packages/redis/connection.py:977: in <lambda>
-    lambda: self.connect_check_health(
-/usr/local/lib/python3.11/site-packages/redis/connection.py:1025: in connect_check_health
-    raise e
-E   redis.exceptions.ConnectionError: Error 111 connecting to 127.0.0.1:6379. Connection refused.
+
+===== captured output: integration-backend =====
+[36m13:03:54 | INFO  | app.config | Redis già attivo su plenora-test-redis:6379[0m
+[36m13:03:54 | INFO  | app.db.pg_connection | PG pool inizializzato: 2-12 conn (per-process), schema=plenora, idle_in_trans_timeout=300000ms, aggregato stimato ~24 conn (2 proc × 12) [uvicorn=1 + celery=0 + beat=1][0m
+[36m13:03:54 | INFO  | app.db.pg_connection | PostgreSQL DB inizializzato: 37 tabelle in schema 'plenora'[0m
+[36m13:03:54 | INFO  | app.core.intermediate.db | Intermediate DB: PostgreSQL (tabelle già presenti)[0m
+[36m13:03:54 | INFO  | app.db.migrations_runner | [MIGRATIONS] Schema garantito: plenora[0m
+[36m13:03:54 | INFO  | app.db.migrations_runner | [MIGRATIONS] Nessuna migration pending[0m
+/usr/local/lib/python3.11/site-packages/jwt/api_jwt.py:147: InsecureKeyLengthWarning: The HMAC key is 29 bytes long, which is below the minimum recommended length of 32 bytes for SHA256. See RFC 7518 Section 3.2.
+  return self._jws.encode(
+[36m13:03:54 | INFO  | app.core.auth.auth | [req=d9099180] Login: it_usernm_8b124b3023 (gruppo: it_grp_654f2c5c00)[0m
+/usr/local/lib/python3.11/site-packages/jwt/api_jwt.py:365: InsecureKeyLengthWarning: The HMAC key is 29 bytes long, which is below the minimum recommended length of 32 bytes for SHA256. See RFC 7518 Section 3.2.
+  decoded = self.decode_complete(
+[33m13:03:54 | WARNING | app.shared.crypto | [req=b69a6000] [PLENORA-ETL] Nessuna chiave di cifratura trovata nelle env var: uso la chiave di sviluppo di default. NON usare in produzione.[0m
+[36m13:03:54 | INFO  | app.services.connection_service | [req=b69a6000] Connessione creata: Integration_Postgres_Connectio_20260507_130354_57647a97[0m
+
+===== end captured output: integration-backend =====
+
+__________ test_postgres_execute_returns_downloadable_project_result ___________
+tests2/integration/test_postgres_execute_download_roundtrip.py:28: in test_postgres_execute_returns_downloadable_project_result
+    with seeded_postgres_ext_table() as seeded:
+/usr/local/lib/python3.11/contextlib.py:137: in __enter__
+    return next(self.gen)
+           ^^^^^^^^^^^^^^
+tests2/integration/harness/postgres_ext.py:45: in seeded_postgres_ext_table
+    with postgres_ext_conn() as conn:
+/usr/local/lib/python3.11/contextlib.py:137: in __enter__
+    return next(self.gen)
+           ^^^^^^^^^^^^^^
+tests2/integration/harness/postgres_ext.py:23: in postgres_ext_conn
+    conn = psycopg2.connect(
+/usr/local/lib/python3.11/site-packages/psycopg2/__init__.py:122: in connect
+    conn = _connect(dsn, connection_factory=connection_factory, **kwasync)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   psycopg2.OperationalError: connection to server at "127.0.0.1", port 5432 failed: Connection refused
+E   	Is the server running on that host and accepting TCP/IP connections?
+--------------------------- Captured stdout teardown ---------------------------
+[36m13:03:56 | INFO  | config_db_service.delete_group_cascade | Cascade delete gruppo it_grp_6afa907096 completato: {'schedules': 0, 'api_connections': 0, 'datasources': 0, 'file_sources': 0, 'connections': 0, 'projects': 0, 'users': 1, 'results': 0, 'intermediate_runs': 0, 'log_runs': 0}[0m
+
+===== captured output: celery-worker =====
+/usr/local/lib/python3.11/site-packages/celery/platforms.py:841: SecurityWarning: You're running the worker with superuser privileges: this is
+absolutely not recommended!
+
+Please specify a different user using the --uid option.
+
+User information: uid=0 euid=0 gid=0 egid=0
+
+  warnings.warn(SecurityWarning(ROOT_DISCOURAGED.format(
+[36m13:03:55 | INFO  | app.config | Redis già attivo su plenora-test-redis:6379[0m
+[36m13:03:55 | INFO  | app.db.pg_connection | PG pool inizializzato: 2-12 conn (per-process), schema=plenora, idle_in_trans_timeout=300000ms, aggregato stimato ~24 conn (2 proc × 12) [uvicorn=1 + celery=0 + beat=1][0m
+[36m13:03:55 | INFO  | app.db.pg_connection | PostgreSQL DB inizializzato: 37 tabelle in schema 'plenora'[0m
+[36m13:03:55 | INFO  | app.core.intermediate.db | Intermediate DB: PostgreSQL (tabelle già presenti)[0m
+[36m13:03:55 | INFO  | app.db.migrations_runner | [MIGRATIONS] Schema garantito: plenora[0m
+[36m13:03:55 | INFO  | app.db.migrations_runner | [MIGRATIONS] Nessuna migration pending[0m
+[36m13:03:55 | INFO  | app.config | Redis già attivo su plenora-test-redis:6379[0m
+[36m13:03:55 | INFO  | app.db.pg_connection | PostgreSQL DB inizializzato: 37 tabelle in schema 'plenora'[0m
+[36m13:03:55 | INFO  | app.core.intermediate.db | Intermediate DB: PostgreSQL (tabelle già presenti)[0m
+[36m13:03:55 | INFO  | app.db.migrations_runner | [MIGRATIONS] Schema garantito: plenora[0m
+[36m13:03:55 | INFO  | app.db.migrations_runner | [MIGRATIONS] Nessuna migration pending[0m
+ 
+ -------------- celery@a47b1b0894a2 v5.6.3 (recovery)
+--- ***** ----- 
+-- ******* ---- Linux-7.0.3-1-cachyos-x86_64-with-glibc2.36 2026-05-07 13:03:55
+- *** --- * --- 
+- ** ---------- [config]
+- ** ---------- .> app:         dataflow_tasks:0x7fcf92dad2d0
+- ** ---------- .> transport:   redis://plenora-test-redis:6379/0
+- ** ---------- .> results:     redis://plenora-test-redis:6379/0
+- *** --- * --- .> concurrency: 32 (solo)
+-- ******* ---- .> task events: OFF (enable -E to monitor tasks in this worker)
+--- ***** ----- 
+ -------------- [queues]
+                .> celery           exchange=celery(direct) key=celery
+                
+
+
+===== end captured output: celery-worker =====
+
+
+===== captured output: integration-backend =====
+[36m13:03:55 | INFO  | app.config | Redis già attivo su plenora-test-redis:6379[0m
+[36m13:03:55 | INFO  | app.db.pg_connection | PG pool inizializzato: 2-12 conn (per-process), schema=plenora, idle_in_trans_timeout=300000ms, aggregato stimato ~24 conn (2 proc × 12) [uvicorn=1 + celery=0 + beat=1][0m
+[36m13:03:55 | INFO  | app.db.pg_connection | PostgreSQL DB inizializzato: 37 tabelle in schema 'plenora'[0m
+[36m13:03:55 | INFO  | app.core.intermediate.db | Intermediate DB: PostgreSQL (tabelle già presenti)[0m
+[36m13:03:55 | INFO  | app.db.migrations_runner | [MIGRATIONS] Schema garantito: plenora[0m
+[36m13:03:55 | INFO  | app.db.migrations_runner | [MIGRATIONS] Nessuna migration pending[0m
+/usr/local/lib/python3.11/site-packages/jwt/api_jwt.py:147: InsecureKeyLengthWarning: The HMAC key is 29 bytes long, which is below the minimum recommended length of 32 bytes for SHA256. See RFC 7518 Section 3.2.
+  return self._jws.encode(
+[36m13:03:56 | INFO  | app.core.auth.auth | [req=4eef49f8] Login: it_usernm_832032152f (gruppo: it_grp_6afa907096)[0m
+/usr/local/lib/python3.11/site-packages/jwt/api_jwt.py:365: InsecureKeyLengthWarning: The HMAC key is 29 bytes long, which is below the minimum recommended length of 32 bytes for SHA256. See RFC 7518 Section 3.2.
+  decoded = self.decode_complete(
+[33m13:03:56 | WARNING | app.shared.crypto | [req=9f3a9947] [PLENORA-ETL] Nessuna chiave di cifratura trovata nelle env var: uso la chiave di sviluppo di default. NON usare in produzione.[0m
+[36m13:03:56 | INFO  | app.services.connection_service | [req=9f3a9947] Connessione creata: Integration_Postgres_Connectio_20260507_130356_132786f0[0m
+
+===== end captured output: integration-backend =====
+
+_______ test_postgres_execute_pipeline_spawns_and_completes_carica_task ________
+tests2/integration/test_postgres_pipeline_carica_chain.py:82: in test_postgres_execute_pipeline_spawns_and_completes_carica_task
+    assert carica_status["status"] == "success"
+E   AssertionError: assert 'failure' == 'success'
+E     
+E     - success
+E     + failure
+--------------------------- Captured stdout teardown ---------------------------
+[36m13:04:00 | INFO  | config_db_service.delete_group_cascade | Cascade delete gruppo it_grp_16ecd8137f completato: {'schedules': 0, 'api_connections': 0, 'datasources': 0, 'file_sources': 1, 'connections': 0, 'projects': 0, 'users': 1, 'results': 0, 'intermediate_runs': 0, 'log_runs': 2}[0m
+
+===== captured output: celery-worker =====
+/usr/local/lib/python3.11/site-packages/celery/platforms.py:841: SecurityWarning: You're running the worker with superuser privileges: this is
+absolutely not recommended!
+
+Please specify a different user using the --uid option.
+
+User information: uid=0 euid=0 gid=0 egid=0
+
+  warnings.warn(SecurityWarning(ROOT_DISCOURAGED.format(
+[36m13:03:57 | INFO  | app.config | Redis già attivo su plenora-test-redis:6379[0m
+[36m13:03:57 | INFO  | app.db.pg_connection | PG pool inizializzato: 2-12 conn (per-process), schema=plenora, idle_in_trans_timeout=300000ms, aggregato stimato ~24 conn (2 proc × 12) [uvicorn=1 + celery=0 + beat=1][0m
+[36m13:03:57 | INFO  | app.db.pg_connection | PostgreSQL DB inizializzato: 37 tabelle in schema 'plenora'[0m
+[36m13:03:57 | INFO  | app.core.intermediate.db | Intermediate DB: PostgreSQL (tabelle già presenti)[0m
+[36m13:03:57 | INFO  | app.db.migrations_runner | [MIGRATIONS] Schema garantito: plenora[0m
+[36m13:03:57 | INFO  | app.db.migrations_runner | [MIGRATIONS] Nessuna migration pending[0m
+[36m13:03:57 | INFO  | app.config | Redis già attivo su plenora-test-redis:6379[0m
+[36m13:03:57 | INFO  | app.db.pg_connection | PostgreSQL DB inizializzato: 37 tabelle in schema 'plenora'[0m
+[36m13:03:57 | INFO  | app.core.intermediate.db | Intermediate DB: PostgreSQL (tabelle già presenti)[0m
+[36m13:03:57 | INFO  | app.db.migrations_runner | [MIGRATIONS] Schema garantito: plenora[0m
+[36m13:03:57 | INFO  | app.db.migrations_runner | [MIGRATIONS] Nessuna migration pending[0m
+ 
+ -------------- celery@a47b1b0894a2 v5.6.3 (recovery)
+--- ***** ----- 
+-- ******* ---- Linux-7.0.3-1-cachyos-x86_64-with-glibc2.36 2026-05-07 13:03:57
+- *** --- * --- 
+- ** ---------- [config]
+- ** ---------- .> app:         dataflow_tasks:0x7fe2e9a10dd0
+- ** ---------- .> transport:   redis://plenora-test-redis:6379/0
+- ** ---------- .> results:     redis://plenora-test-redis:6379/0
+- *** --- * --- .> concurrency: 32 (solo)
+-- ******* ---- .> task events: OFF (enable -E to monitor tasks in this worker)
+--- ***** ----- 
+ -------------- [queues]
+                .> celery           exchange=celery(direct) key=celery
+                
+
+[36m13:03:58 | INFO  | workers.pipeline_task | [req=0975edca] Task PIPELINE cfefdedf-ab9c-4a4c-bb21-4baebf0b3252 avviato per progetto Integration_Postgres_Pipeline__20260507_130358_3a0420df[0m
+[2026-05-07 13:03:59,038: WARNING/MainProcess] [36m13:03:59 | INFO  | app.core.orchestrator.service | [req=0975edca] Esecuzione pipeline progetto: Integration_Postgres_Pipeline__20260507_130358_3a0420df[0m
+[2026-05-07 13:03:59,040: WARNING/MainProcess] [36m13:03:59 | INFO  | app.core.arricchisci.executor | [req=0975edca] Esecuzione ARRICCHISCI: Integration_Postgres_Pipeline__20260507_130358_3a0420df[0m
+[2026-05-07 13:03:59,040: WARNING/MainProcess] [36m13:03:59 | INFO  | app.core.arricchisci.canvas_orchestrator | [req=0975edca] Ordine esecuzione: ['fs-1', 'result-1', 'carica-1'][0m
+[2026-05-07 13:03:59,040: WARNING/MainProcess] [36m13:03:59 | INFO  | app.core.arricchisci.canvas_orchestrator | [req=0975edca] Gruppi di esecuzione: [('single', 1), ('single', 1), ('single', 1)][0m
+[2026-05-07 13:03:59,045: WARNING/MainProcess] [36m13:03:59 | INFO  | app.core.resources.loaders.file_source_blob | [req=0975edca] [PERF] get_file_source_blob op=fetch_blob backend=db_legacy file_source_id=it_fs_c3a287ce82 size_bytes=33 duration_ms=0.1[0m
+[2026-05-07 13:03:59,048: WARNING/MainProcess] [36m13:03:59 | INFO  | app.services.file_service | [req=0975edca] Caricato: 2 righe, 2 colonne[0m
+[2026-05-07 13:03:59,071: WARNING/MainProcess] [36m13:03:59 | INFO  | app.core.arricchisci.api_connector | [req=0975edca] [PERF] load_file_source op=load_total file_source_id=it_fs_c3a287ce82 rows=2 cols=2 duration_ms=30.5[0m
+[2026-05-07 13:03:59,082: WARNING/MainProcess] [36m13:03:59 | INFO  | app.core.orchestrator.service | [req=0975edca] Trovati 1 nodi CARICA, avvio task[0m
+[2026-05-07 13:03:59,083: WARNING/MainProcess] [36m13:03:59 | INFO  | app.core.orchestrator.service | [req=0975edca] Nodo carica-1 — connection_id: 'Integration_Postgres_Connectio_20260507_130358_38d37b8b', dest_type: 'None', table: 'it_pipe_carica_ecd8137f', data_keys: ['batch_size', 'table_name', 'write_mode', 'schema_name', 'connection_id', 'geometry_srid', 'match_columns', 'update_columns', 'column_mappings', 'conflict_policy', 'geometry_column', 'if_table_exists', 'transaction_mode', 'create_spatial_index'][0m
+[2026-05-07 13:03:59,084: WARNING/MainProcess] [36m13:03:59 | INFO  | app.services.task_service | [req=0975edca] Creato task carica: 96595e0c-851e-467f-91db-ce95895a3825 per progetto Integration_Postgres_Pipeline__20260507_130358_3a0420df[0m
+[2026-05-07 13:03:59,084: WARNING/MainProcess] [36m13:03:59 | INFO  | app.core.orchestrator.service | [req=0975edca] Task CARICA avviato: 96595e0c-851e-467f-91db-ce95895a3825 (nodo: carica-1)[0m
+[36m13:03:59 | INFO  | workers.pipeline_task | [req=0975edca] Task PIPELINE cfefdedf-ab9c-4a4c-bb21-4baebf0b3252 completato per Integration_Postgres_Pipeline__20260507_130358_3a0420df[0m
+[2026-05-07 13:03:59,091: WARNING/MainProcess] [36m13:03:59 | INFO  | app.core.intermediate.writer | [req=0975edca] Run chiusa: b1bec3d2-c7d8-4131-93f3-5596e2bae451 status=completed nodes=0 rows_in=0 rows_out=0[0m
+[36m13:03:59 | INFO  | workers.carica_task | [req=0975edca] Task CARICA 96595e0c-851e-467f-91db-ce95895a3825 avviato per progetto Integration_Postgres_Pipeline__20260507_130358_3a0420df (run_id=0d5b4984-287d-4ac0-a343-68c6ce6243c9)[0m
+[2026-05-07 13:03:59,096: WARNING/MainProcess] [36m13:03:59 | INFO  | app.core.resources.loaders.result_blob | [req=0975edca] [PERF] get_result_data op=fetch_blob backend=db_legacy result_id=36fbdf4d-63e9-484f-bb66-7328e128f405 size_bytes=30 duration_ms=0.1[0m
+[2026-05-07 13:03:59,097: WARNING/MainProcess] [33m13:03:59 | WARNING | app.utils.dataframe | [req=0975edca] Formato  non riconosciuto, tentativo come CSV[0m
+[2026-05-07 13:03:59,100: WARNING/MainProcess] [36m13:03:59 | INFO  | app.utils.dataframe | [req=0975edca] [PERF] load_dataframe op=parse fmt=<none> file=plenora-result-blob-8e9odtkp file_size=30 rows=2 cols=2 duration_ms=3.3[0m
+[2026-05-07 13:03:59,100: WARNING/MainProcess] [36m13:03:59 | INFO  | app.utils.dataframe | [req=0975edca] Caricato plenora-result-blob-8e9odtkp: 2 righe, 2 colonne[0m
+[36m13:03:59 | INFO  | workers.carica_task | [req=0975edca] Caricamento output dal DB per Integration_Postgres_Pipeline__20260507_130358_3a0420df[0m
+[36m13:03:59 | INFO  | workers.carica_task | [req=0975edca] DataFrame caricato: 2 righe, 2 colonne[0m
+[2026-05-07 13:03:59,105: WARNING/MainProcess] [36m13:03:59 | INFO  | app.core.carica.executor | [req=0975edca] Avvio CARICA: Integration_Postgres_Pipeline__20260507_130358_3a0420df[0m
+[2026-05-07 13:03:59,106: WARNING/MainProcess] [33m13:03:59 | WARNING | app.shared.crypto | [req=0975edca] [PLENORA-ETL] Nessuna chiave di cifratura trovata nelle env var: uso la chiave di sviluppo di default. NON usare in produzione.[0m
+[2026-05-07 13:03:59,124: WARNING/MainProcess] [33m13:03:59 | ERROR | app.core.carica.executor | [req=0975edca] [GESTITO] Validazione fallita: Connessione al database fallita: (psycopg2.OperationalError) connection to server at "127.0.0.1", port 5432 failed: Connection refused
+	Is the server running on that host and accepting TCP/IP connections?
+
+(Background on this error at: https://sqlalche.me/e/20/e3q8)[0m
+[36m13:03:59 | INFO  | workers.carica_task | [req=0975edca] Task CARICA DB 96595e0c-851e-467f-91db-ce95895a3825 completato: validation_error[0m
+
+===== end captured output: celery-worker =====
+
+
+===== captured output: integration-backend =====
+[36m13:03:57 | INFO  | app.config | Redis già attivo su plenora-test-redis:6379[0m
+[36m13:03:57 | INFO  | app.db.pg_connection | PG pool inizializzato: 2-12 conn (per-process), schema=plenora, idle_in_trans_timeout=300000ms, aggregato stimato ~24 conn (2 proc × 12) [uvicorn=1 + celery=0 + beat=1][0m
+[36m13:03:57 | INFO  | app.db.pg_connection | PostgreSQL DB inizializzato: 37 tabelle in schema 'plenora'[0m
+[36m13:03:57 | INFO  | app.core.intermediate.db | Intermediate DB: PostgreSQL (tabelle già presenti)[0m
+[36m13:03:57 | INFO  | app.db.migrations_runner | [MIGRATIONS] Schema garantito: plenora[0m
+[36m13:03:57 | INFO  | app.db.migrations_runner | [MIGRATIONS] Nessuna migration pending[0m
+/usr/local/lib/python3.11/site-packages/jwt/api_jwt.py:147: InsecureKeyLengthWarning: The HMAC key is 29 bytes long, which is below the minimum recommended length of 32 bytes for SHA256. See RFC 7518 Section 3.2.
+  return self._jws.encode(
+[36m13:03:58 | INFO  | app.core.auth.auth | [req=d1927545] Login: it_usernm_87f837620e (gruppo: it_grp_16ecd8137f)[0m
+/usr/local/lib/python3.11/site-packages/jwt/api_jwt.py:365: InsecureKeyLengthWarning: The HMAC key is 29 bytes long, which is below the minimum recommended length of 32 bytes for SHA256. See RFC 7518 Section 3.2.
+  decoded = self.decode_complete(
+[33m13:03:58 | WARNING | app.shared.crypto | [req=5760e785] [PLENORA-ETL] Nessuna chiave di cifratura trovata nelle env var: uso la chiave di sviluppo di default. NON usare in produzione.[0m
+[36m13:03:58 | INFO  | app.services.connection_service | [req=5760e785] Connessione creata: Integration_Postgres_Connectio_20260507_130358_38d37b8b[0m
+[36m13:03:58 | INFO  | app.services.project_service | [req=4fa31129] Progetto creato: Integration_Postgres_Pipeline__20260507_130358_3a0420df (created_by=it_user_3b4413b704)[0m
+[36m13:03:58 | INFO  | app.services.task_service | [req=0975edca] Creato task execute: cfefdedf-ab9c-4a4c-bb21-4baebf0b3252 per progetto Integration_Postgres_Pipeline__20260507_130358_3a0420df[0m
+[36m13:04:00 | INFO  | app.core.intermediate.db | [req=c1e3148f] delete_all_runs_for_canvas: canvas=Integration_Postgres_Pipeline__20260507_130358_3a0420df -> 1 run eliminate[0m
+[36m13:04:00 | INFO  | app.services.project_service | [req=c1e3148f] Cleanup intermediate: 1 run eliminate per progetto Integration_Postgres_Pipeline__20260507_130358_3a0420df[0m
+[36m13:04:00 | INFO  | app.services.project_service | [req=c1e3148f] Cleanup results: 1 blob eliminati per progetto Integration_Postgres_Pipeline__20260507_130358_3a0420df[0m
+[36m13:04:00 | INFO  | app.services.project_service | [req=c1e3148f] Progetto eliminato: Integration_Postgres_Pipeline__20260507_130358_3a0420df[0m
+
+===== end captured output: integration-backend =====
+
+________________________ test_unknown_task_returns_404 _________________________
+tests2/integration/test_task_api_async_contract.py:16: in test_unknown_task_returns_404
+    assert "Task" in body["detail"]
+E   AssertionError: assert 'Task' in {'details': {}, 'error': 'task_not_found', 'message': 'Task not-a-real-task-id non trovato'}
+--------------------------- Captured stdout teardown ---------------------------
+[36m13:04:11 | INFO  | config_db_service.delete_group_cascade | Cascade delete gruppo it_grp_b840d8d6ef completato: {'schedules': 0, 'api_connections': 0, 'datasources': 0, 'file_sources': 0, 'connections': 0, 'projects': 0, 'users': 1, 'results': 0, 'intermediate_runs': 0, 'log_runs': 0}[0m
+
+===== captured output: integration-backend =====
+[36m13:04:10 | INFO  | app.config | Redis già attivo su plenora-test-redis:6379[0m
+[36m13:04:10 | INFO  | app.db.pg_connection | PG pool inizializzato: 2-12 conn (per-process), schema=plenora, idle_in_trans_timeout=300000ms, aggregato stimato ~24 conn (2 proc × 12) [uvicorn=1 + celery=0 + beat=1][0m
+[36m13:04:10 | INFO  | app.db.pg_connection | PostgreSQL DB inizializzato: 37 tabelle in schema 'plenora'[0m
+[36m13:04:10 | INFO  | app.core.intermediate.db | Intermediate DB: PostgreSQL (tabelle già presenti)[0m
+[36m13:04:10 | INFO  | app.db.migrations_runner | [MIGRATIONS] Schema garantito: plenora[0m
+[36m13:04:10 | INFO  | app.db.migrations_runner | [MIGRATIONS] Nessuna migration pending[0m
+/usr/local/lib/python3.11/site-packages/jwt/api_jwt.py:147: InsecureKeyLengthWarning: The HMAC key is 29 bytes long, which is below the minimum recommended length of 32 bytes for SHA256. See RFC 7518 Section 3.2.
+  return self._jws.encode(
+[36m13:04:10 | INFO  | app.core.auth.auth | [req=071b3c74] Login: it_usernm_d34935c4d3 (gruppo: it_grp_b840d8d6ef)[0m
+/usr/local/lib/python3.11/site-packages/jwt/api_jwt.py:365: InsecureKeyLengthWarning: The HMAC key is 29 bytes long, which is below the minimum recommended length of 32 bytes for SHA256. See RFC 7518 Section 3.2.
+  decoded = self.decode_complete(
+
+===== end captured output: integration-backend =====
+
 =========================== short test summary info ============================
-ERROR tests2/integration/test_api_connection_external_roundtrip.py::test_api_connection_test_calls_fake_api_and_preserves_record
-ERROR tests2/integration/test_arcgis_online_bearer_smoke.py::test_authenticate_returns_token_via_generateToken
-ERROR tests2/integration/test_arcgis_online_bearer_smoke.py::test_list_services_via_bearer_header_works_against_arcgis_online
-ERROR tests2/integration/test_arcgis_online_bearer_smoke.py::test_list_layers_if_any_service_exists
-ERROR tests2/integration/test_arcgis_online_bearer_smoke.py::test_query_features_with_tiny_limit_via_bearer
-ERROR tests2/integration/test_arricchisci_file_source_execute_roundtrip.py::test_arricchisci_execute_from_seeded_file_source_returns_downloadable_result
-ERROR tests2/integration/test_auth_login_db_roundtrip.py::test_login_and_me_roundtrip
-ERROR tests2/integration/test_auth_login_db_roundtrip.py::test_create_api_connection_persists_to_postgres
-ERROR tests2/integration/test_canvas_result_columns_roundtrip.py::test_put_canvas_injects_computed_columns_into_result_node
-ERROR tests2/integration/test_canvas_result_columns_roundtrip.py::test_put_canvas_preserves_user_alias_on_recompute
-ERROR tests2/integration/test_http_response_shape_contract.py::test_get_api_connection_response_has_expected_shape
-ERROR tests2/integration/test_http_response_shape_contract.py::test_get_project_response_has_expected_shape
-ERROR tests2/integration/test_http_response_shape_contract.py::test_get_task_status_response_has_expected_shape
-ERROR tests2/integration/test_http_response_shape_contract.py::test_schedule_runs_response_has_expected_shape
-ERROR tests2/integration/test_http_response_shape_contract.py::test_get_schedule_response_has_expected_shape
-ERROR tests2/integration/test_jwt_logout_blacklist_integration.py::test_logout_revokes_token_end_to_end
-ERROR tests2/integration/test_jwt_logout_blacklist_integration.py::test_new_login_after_logout_issues_independent_token
-ERROR tests2/integration/test_jwt_logout_blacklist_integration.py::test_logout_without_bearer_returns_401
-ERROR tests2/integration/test_login_rate_limit_integration.py::test_rate_limit_triggers_after_max_attempts_per_ip
-ERROR tests2/integration/test_login_rate_limit_integration.py::test_rate_limit_isolated_per_forwarded_ip
-ERROR tests2/integration/test_manipola_formula_roundtrip.py::test_manipola_filter_execute_download_roundtrip
-ERROR tests2/integration/test_postgres_carica_roundtrip.py::test_postgres_direct_carica_task_writes_destination_table
-ERROR tests2/integration/test_postgres_connection_and_estrai_preview.py::test_postgres_connection_tables_and_estrai_preview_roundtrip
-ERROR tests2/integration/test_postgres_execute_download_roundtrip.py::test_postgres_execute_returns_downloadable_project_result
-ERROR tests2/integration/test_postgres_pipeline_carica_chain.py::test_postgres_execute_pipeline_spawns_and_completes_carica_task
-ERROR tests2/integration/test_project_columns_metadata_atomic_integration.py::test_concurrent_writes_preserve_both_keys
-ERROR tests2/integration/test_project_columns_metadata_atomic_integration.py::test_concurrent_same_key_writes_last_wins_no_corruption
-ERROR tests2/integration/test_project_columns_metadata_atomic_integration.py::test_atomic_update_on_missing_project_returns_false
-ERROR tests2/integration/test_projects_canvas_roundtrip.py::test_project_create_with_canvas_roundtrip
-ERROR tests2/integration/test_projects_canvas_roundtrip.py::test_project_canvas_update_roundtrip
-ERROR tests2/integration/test_scheduler_manual_run_roundtrip.py::test_scheduler_manual_run_lists_and_downloads_archived_output
-ERROR tests2/integration/test_task_api_async_contract.py::test_unknown_task_returns_404
-ERROR tests2/integration/test_task_api_async_contract.py::test_task_status_progresses_with_real_worker
-ERROR tests2/integration/test_task_api_async_contract.py::test_execute_endpoint_creates_real_task_and_reaches_terminal_state
-ERROR tests2/integration/test_task_download_result_contract.py::test_download_task_result_reads_blob_from_real_task_execution
+FAILED tests2/integration/test_postgres_carica_roundtrip.py::test_postgres_direct_carica_task_writes_destination_table
+FAILED tests2/integration/test_postgres_connection_and_estrai_preview.py::test_postgres_connection_tables_and_estrai_preview_roundtrip
+FAILED tests2/integration/test_postgres_execute_download_roundtrip.py::test_postgres_execute_returns_downloadable_project_result
+FAILED tests2/integration/test_postgres_pipeline_carica_chain.py::test_postgres_execute_pipeline_spawns_and_completes_carica_task
+FAILED tests2/integration/test_task_api_async_contract.py::test_unknown_task_returns_404

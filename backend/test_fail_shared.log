@@ -1,4 +1,4 @@
-......s....s............................................................ [  4%]
+......s....s..............................F.....F.F..................... [  4%]
 ........................................................................ [  8%]
 ...........................................................FFFFFF....... [ 12%]
 ......FFFF......FFFFFF.................................................. [ 16%]
@@ -113,6 +113,27 @@ tests2/shared/test_storage_upload_intent_debt_doc_guard.py:40: in audit_text
            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 E   FileNotFoundError: [Errno 2] No such file or directory: '/workspace/.agent-temp/BE_STORAGE_ENGINE_AUDIT.md'
 =================================== FAILURES ===================================
+________________ test_materialize_latest_enforces_group_binding ________________
+/app/tests2/shared/test_artifact_resolver.py:513: in test_materialize_latest_enforces_group_binding
+    ???
+app/core/artifacts/resolver.py:128: in materialize_latest
+    else _get_project(ref.project_id, group_id=expected_group_id)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   TypeError: test_materialize_latest_enforces_group_binding.<locals>.<lambda>() got an unexpected keyword argument 'group_id'
+______________ test_materialize_latest_passes_when_group_matches _______________
+/app/tests2/shared/test_artifact_resolver.py:691: in test_materialize_latest_passes_when_group_matches
+    ???
+app/core/artifacts/resolver.py:128: in materialize_latest
+    else _get_project(ref.project_id, group_id=expected_group_id)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   TypeError: test_materialize_latest_passes_when_group_matches.<locals>.<lambda>() got an unexpected keyword argument 'group_id'
+__________ test_materialize_latest_non_superadmin_blocks_cross_tenant __________
+/app/tests2/shared/test_artifact_resolver.py:777: in test_materialize_latest_non_superadmin_blocks_cross_tenant
+    ???
+app/core/artifacts/resolver.py:128: in materialize_latest
+    else _get_project(ref.project_id, group_id=expected_group_id)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   TypeError: test_materialize_latest_non_superadmin_blocks_cross_tenant.<locals>.<lambda>() got an unexpected keyword argument 'group_id'
 _______________________ test_design_section_12_7_exists ________________________
 tests2/shared/test_celery_beat_tick_smoke_design_guard.py:67: in test_design_section_12_7_exists
     assert _DESIGN_SECTION_HEADER in doc_text, (
@@ -173,8 +194,8 @@ tests2/shared/test_cleanroom_celery_drift_doc_guard.py:69: in test_drift_section
     assert "sanity check, NOT equivalence" in drift_section or \
 E   AssertionError: Section 12.8 must explicitly state the cleanroom smoke is a 'sanity check, not equivalence'. Without this wording the section is ambiguous about whether a green CI = green prod.
 E   assert ('sanity check, NOT equivalence' in '' or 'sanity check, not equivalence' in '')
-E    +  where '' = <built-in method lower of str object at 0x7f945ed0e960>()
-E    +    where <built-in method lower of str object at 0x7f945ed0e960> = ''.lower
+E    +  where '' = <built-in method lower of str object at 0x7f6325b42960>()
+E    +    where <built-in method lower of str object at 0x7f6325b42960> = ''.lower
 _______________ test_drift_section_lists_high_impact_drift_rows ________________
 tests2/shared/test_cleanroom_celery_drift_doc_guard.py:111: in test_drift_section_lists_high_impact_drift_rows
     assert needle in drift_section, message
@@ -230,8 +251,8 @@ tests2/shared/test_horizontal_engines_map_doc_guard.py:48: in test_doc_has_canon
     assert doc_text.startswith("# Horizontal engines map\n"), (
 E   AssertionError: horizontal-engines.md must start with the canonical title '# Horizontal engines map'. Renaming silently breaks the cross-link from the README.
 E   assert False
-E    +  where False = <built-in method startswith of str object at 0x55be0b082560>('# Horizontal engines map\n')
-E    +    where <built-in method startswith of str object at 0x55be0b082560> = '# Horizontal Engines\n\nThis is the active backend boundary map. It is intentionally shorter than\nthe historical inv...d)\n- [Clean install, non-Docker](../ops/install-non-docker.md)\n- [Clean install, Docker](../ops/install-docker.md)\n'.startswith
+E    +  where False = <built-in method startswith of str object at 0x55b42af66260>('# Horizontal engines map\n')
+E    +    where <built-in method startswith of str object at 0x55b42af66260> = '# Horizontal Engines\n\nThis is the active backend boundary map. It is intentionally shorter than\nthe historical inv...d)\n- [Clean install, non-Docker](../ops/install-non-docker.md)\n- [Clean install, Docker](../ops/install-docker.md)\n'.startswith
 _________________ test_doc_has_six_canonical_sections_in_order _________________
 tests2/shared/test_horizontal_engines_map_doc_guard.py:75: in test_doc_has_six_canonical_sections_in_order
     assert idx != -1, (
@@ -365,8 +386,8 @@ tests2/shared/test_install_marco_dry_run_doc_guard.py:45: in test_dry_run_doc_ha
     assert doc_text.startswith(expected), (
 E   AssertionError: docs/ops/install-marco-dry-run.md must start with the canonical title "# Marco's first-PC clean-install dry-run pack\n". Renaming silently breaks the cross-link in install-non-docker.md section 13.4.
 E   assert False
-E    +  where False = <built-in method startswith of str object at 0x55be0b37a550>("# Marco's first-PC clean-install dry-run pack\n")
-E    +    where <built-in method startswith of str object at 0x55be0b37a550> = "# First PC Validation Pack\n\nThis is the operator copy/paste pack for Marco's first clean Linux PC test.\n\nUse it a...stop\n```\n\nDestructive, only for disposable test state:\n\n```bash\ndocker compose down -v\nrm -f .env.docker\n```\n".startswith
+E    +  where False = <built-in method startswith of str object at 0x55b42b1e0890>("# Marco's first-PC clean-install dry-run pack\n")
+E    +    where <built-in method startswith of str object at 0x55b42b1e0890> = "# First PC Validation Pack\n\nThis is the operator copy/paste pack for Marco's first clean Linux PC test.\n\nUse it a...stop\n```\n\nDestructive, only for disposable test state:\n\n```bash\ndocker compose down -v\nrm -f .env.docker\n```\n".startswith
 _____________________ test_dry_run_doc_keeps_docker_honest _____________________
 tests2/shared/test_install_marco_dry_run_doc_guard.py:60: in test_dry_run_doc_keeps_docker_honest
     assert "Docker status (honest, NOT the go-ready path)" in doc_text, (
@@ -432,8 +453,8 @@ tests2/shared/test_install_native_deps_verify_doc_guard.py:159: in test_section_
     assert (
 E   AssertionError: section 3 must explicitly note that `libmagic` is NOT verified because `filetype` is pure-Python. Without the explicit note, a future contributor may add a libmagic verification and create a fake runtime dep.
 E   assert ('libmagic' in '')
-E    +  where '' = <built-in method lower of str object at 0x7f945ed0e960>()
-E    +    where <built-in method lower of str object at 0x7f945ed0e960> = ''.lower
+E    +  where '' = <built-in method lower of str object at 0x7f6325b42960>()
+E    +    where <built-in method lower of str object at 0x7f6325b42960> = ''.lower
 ____________________ test_section_3_includes_service_probes ____________________
 tests2/shared/test_install_native_deps_verify_doc_guard.py:185: in test_section_3_includes_service_probes
     assert needle in native_deps_section, message
@@ -454,8 +475,8 @@ tests2/shared/test_install_native_deps_verify_doc_guard.py:262: in test_install_
     assert (
 E   AssertionError: install-non-docker.md must contain the precautionary-not-required note for libmagic1 with filetype identified as the pure-Python alternative actually in use.
 E   assert ('precautionary' in '# clean install, non-docker\n\nthis is the canonical single-machine install path for plenora.\n\ntarget: fresh ubuntu...ails before `/health`;\n- `/ready` returns 503;\n- `cleanroom.ping` times out;\n- frontend cannot reach the backend.\n')
-E    +  where '# clean install, non-docker\n\nthis is the canonical single-machine install path for plenora.\n\ntarget: fresh ubuntu...ails before `/health`;\n- `/ready` returns 503;\n- `cleanroom.ping` times out;\n- frontend cannot reach the backend.\n' = <built-in method lower of str object at 0x55be0b36d7d0>()
-E    +    where <built-in method lower of str object at 0x55be0b36d7d0> = '# Clean Install, Non-Docker\n\nThis is the canonical single-machine install path for Plenora.\n\nTarget: fresh Ubuntu...ails before `/health`;\n- `/ready` returns 503;\n- `cleanroom.ping` times out;\n- frontend cannot reach the backend.\n'.lower
+E    +  where '# clean install, non-docker\n\nthis is the canonical single-machine install path for plenora.\n\ntarget: fresh ubuntu...ails before `/health`;\n- `/ready` returns 503;\n- `cleanroom.ping` times out;\n- frontend cannot reach the backend.\n' = <built-in method lower of str object at 0x55b42b1eac80>()
+E    +    where <built-in method lower of str object at 0x55b42b1eac80> = '# Clean Install, Non-Docker\n\nThis is the canonical single-machine install path for Plenora.\n\nTarget: fresh Ubuntu...ails before `/health`;\n- `/ready` returns 503;\n- `cleanroom.ping` times out;\n- frontend cannot reach the backend.\n'.lower
 _________________________ test_harness_section_exists __________________________
 tests2/shared/test_install_smoke_harness_doc_guard.py:53: in test_harness_section_exists
     assert harness_section, (
@@ -530,6 +551,9 @@ tests2/shared/test_resource_engine_pilot_exit_criteria_lock.py:141: in test_audi
            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 E   FileNotFoundError: [Errno 2] No such file or directory: '/workspace/.agent-temp/BE_RESOURCE_ENGINE_AUDIT.md'
 =========================== short test summary info ============================
+FAILED tests2/shared/test_artifact_resolver.py::test_materialize_latest_enforces_group_binding
+FAILED tests2/shared/test_artifact_resolver.py::test_materialize_latest_passes_when_group_matches
+FAILED tests2/shared/test_artifact_resolver.py::test_materialize_latest_non_superadmin_blocks_cross_tenant
 FAILED tests2/shared/test_celery_beat_tick_smoke_design_guard.py::test_design_section_12_7_exists
 FAILED tests2/shared/test_celery_beat_tick_smoke_design_guard.py::test_design_section_names_canonical_primitive
 FAILED tests2/shared/test_celery_beat_tick_smoke_design_guard.py::test_design_section_calls_out_in_process_heartbeat_finding
