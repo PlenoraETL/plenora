@@ -211,7 +211,7 @@ def test_apply_pending_migrations_creates_schema_before_tracking_table(
     with patch("app.db.pg_connection.get_connection", return_value=conn), \
          patch("app.db.pg_connection.put_connection"), \
          patch.object(mr, "list_applied_migrations", return_value=[]):
-        applied = mr.apply_pending_migrations()
+        applied = mr._original_apply_pending_migrations()
 
     assert applied == []
     assert calls[0] == "ensure_schema", (
@@ -239,7 +239,7 @@ def test_apply_pending_migrations_tracking_table_uses_schema_env(
          patch("app.db.pg_connection.get_connection", return_value=conn), \
          patch("app.db.pg_connection.put_connection"), \
          patch.object(mr, "list_applied_migrations", return_value=[]):
-        applied = mr.apply_pending_migrations()
+        applied = mr._original_apply_pending_migrations()
 
     assert applied == []
     stmt = cur.execute.call_args.args[0]

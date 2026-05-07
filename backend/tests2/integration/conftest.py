@@ -13,6 +13,7 @@ from app.db.config_db_service import create_group, create_user, delete_group_cas
 
 from tests2.functional.harness.celery import spawn_celery_worker
 from tests2.functional.harness.celery import flush_redis_db
+from tests2.functional.harness.env import configure_redis_urls
 from tests2.functional.harness.http import http_json_response
 from tests2.functional.harness.ports import find_free_port
 from tests2.functional.harness.processes import (
@@ -24,6 +25,62 @@ from tests2.integration.harness.db import make_it_id, pg_execute, pg_fetchone
 
 
 INTEGRATION_ROOT = Path(__file__).resolve().parent
+
+_BACKEND_STACK_FIXTURES = frozenset({
+    "integration_backend_server",
+    "integration_celery_worker",
+    "integration_fake_api_server",
+    "integration_user_seed",
+    "integration_auth_headers",
+})
+
+_TIER1_INSTALL_VALIDATION_FILES = frozenset({
+    "test_api_connection_external_roundtrip.py",
+    "test_auth_login_db_roundtrip.py",
+    "test_http_response_shape_contract.py",
+    "test_jwt_logout_blacklist_integration.py",
+    "test_login_rate_limit_integration.py",
+    "test_projects_canvas_roundtrip.py",
+    "test_task_api_async_contract.py",
+})
+
+_DEVELOPER_NIGHTLY_FILES = frozenset({
+    "test_arricchisci_file_source_execute_roundtrip.py",
+    "test_canvas_result_columns_roundtrip.py",
+    "test_manipola_formula_roundtrip.py",
+    "test_project_columns_metadata_atomic_integration.py",
+    "test_project_source_cross_tenant_contract.py",
+    "test_project_source_latest_artifact_roundtrip.py",
+    "test_project_source_missing_latest_contract.py",
+    "test_replace_atomic.py",
+    "test_rollback_regression_write_modes.py",
+    "test_scheduler_failure_contract.py",
+    "test_scheduler_manual_run_roundtrip.py",
+    "test_task_download_result_contract.py",
+})
+
+_OPTIONAL_PROVIDER_PREFIX_MARKERS = (
+    ("test_arcgis_", ("requires_arcgis", "requires_external_network")),
+    ("test_mariadb_", ("requires_mariadb",)),
+    ("test_mssql_", ("requires_mssql",)),
+    ("test_mysql_", ("requires_mysql",)),
+    ("test_oracle_", ("requires_oracle",)),
+    ("test_sqlserver_", ("requires_mssql",)),
+)
+
+_POSTGRES_PROVIDER_FILES = frozenset({
+    "test_pg_reconciliation_smoke.py",
+    "test_postgres_carica_roundtrip.py",
+    "test_postgres_carica_stage_swap.py",
+    "test_postgres_connection_and_estrai_preview.py",
+    "test_postgres_execute_download_roundtrip.py",
+    "test_postgres_pipeline_carica_chain.py",
+})
+
+_MIXED_OPTIONAL_PROVIDER_MARKERS = {
+    "test_replace_atomic.py": ("requires_oracle", "requires_postgres"),
+    "test_rollback_regression_write_modes.py": ("requires_oracle", "requires_postgres"),
+}
 
 
 @pytest.fixture(scope="module")
@@ -50,8 +107,7 @@ def integration_env(tmp_path_factory) -> dict:
     # eseguire pytest.
     # DB_SCHEMA resta poppato per usare il default 'plenora'.
     env.pop("DB_SCHEMA", None)
-    env["CELERY_BROKER_URL"] = "redis://127.0.0.1:6379/0"
-    env["CELERY_RESULT_BACKEND"] = "redis://127.0.0.1:6379/1"
+    configure_redis_urls(env)
     env["DATA_DIR"] = str(data_dir)
     return env
 
@@ -140,8 +196,13 @@ def integration_celery_worker(integration_env):
 
 
 @pytest.fixture(autouse=True)
-def _integration_flush_redis_per_test(integration_env):
-    """Isolamento per test anche con worker/backend module-scoped."""
+def _integration_flush_redis_per_test(request):
+    """Isolamento Redis solo per test che usano il backend/worker live."""
+    if not (_BACKEND_STACK_FIXTURES & set(request.fixturenames)):
+        yield
+        return
+
+    integration_env = request.getfixturevalue("integration_env")
     broker_url = integration_env.get("CELERY_BROKER_URL")
     result_backend = integration_env.get("CELERY_RESULT_BACKEND")
     try:
@@ -225,5 +286,41 @@ _HTTP_FIXTURES = frozenset({
 
 def pytest_collection_modifyitems(config, items):
     for item in items:
-        if _HTTP_FIXTURES & set(item.fixturenames):
+        fixturenames = set(item.fixturenames)
+        filename = Path(str(item.fspath)).name
+
+        if _HTTP_FIXTURES & fixturenames:
             item.add_marker(pytest.mark.requires_backend_http_service)
+
+        if _BACKEND_STACK_FIXTURES & fixturenames:
+            item.add_marker(pytest.mark.requires_postgres)
+            item.add_marker(pytest.mark.requires_redis)
+
+        if "integration_celery_worker" in fixturenames:
+            item.add_marker(pytest.mark.requires_celery)
+
+        if filename in _TIER1_INSTALL_VALIDATION_FILES:
+            item.add_marker(pytest.mark.install_validation)
+        else:
+            item.add_marker(pytest.mark.developer_nightly)
+
+        if filename in _DEVELOPER_NIGHTLY_FILES:
+            item.add_marker(pytest.mark.developer_nightly)
+
+        if filename in _POSTGRES_PROVIDER_FILES:
+            item.add_marker(pytest.mark.requires_postgres)
+            item.add_marker(pytest.mark.developer_nightly)
+
+        if filename in _MIXED_OPTIONAL_PROVIDER_MARKERS:
+            item.add_marker(pytest.mark.optional_provider)
+            item.add_marker(pytest.mark.developer_nightly)
+            for marker_name in _MIXED_OPTIONAL_PROVIDER_MARKERS[filename]:
+                item.add_marker(getattr(pytest.mark, marker_name))
+
+        for prefix, marker_names in _OPTIONAL_PROVIDER_PREFIX_MARKERS:
+            if filename.startswith(prefix):
+                item.add_marker(pytest.mark.optional_provider)
+                item.add_marker(pytest.mark.developer_nightly)
+                for marker_name in marker_names:
+                    item.add_marker(getattr(pytest.mark, marker_name))
+                break

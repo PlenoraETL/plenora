@@ -15,6 +15,7 @@ from tests2.functional.harness.auth import (
 )
 from tests2.functional.harness.celery import spawn_celery_worker
 from tests2.functional.harness.celery import flush_redis_db
+from tests2.functional.harness.env import configure_redis_urls
 from tests2.functional.harness.ports import find_free_port
 from tests2.functional.harness.processes import (
     spawn_process,
@@ -36,8 +37,7 @@ def functional_env(tmp_path) -> dict:
     env.setdefault("ENVIRONMENT", "development")
     env["JWT_SECRET_KEY"] = "tests2-functional-jwt-secret"
     env["DATA_DIR"] = str(data_dir)
-    env["CELERY_BROKER_URL"] = "redis://127.0.0.1:6379/0"
-    env["CELERY_RESULT_BACKEND"] = "redis://127.0.0.1:6379/1"
+    configure_redis_urls(env)
     # Opt-in SSRF loopback: i test funzionali lanciano un fake HTTP
     # server su 127.0.0.1 e poi fanno chiamare il backend reale verso
     # quell'URL. Senza questa opt-in, `validate_external_url` blocca
@@ -133,8 +133,19 @@ def celery_worker(functional_env):
 
 
 @pytest.fixture(autouse=True)
-def _functional_flush_redis_per_test(functional_env):
+def _functional_flush_redis_per_test(request):
     """Isolamento per test anche con worker/backend module-scoped."""
+    redis_fixtures = {
+        "backend_server",
+        "celery_worker",
+        "auth_token",
+        "auth_headers",
+    }
+    if not (redis_fixtures & set(request.fixturenames)):
+        yield
+        return
+
+    functional_env = request.getfixturevalue("functional_env")
     broker_url = functional_env.get("CELERY_BROKER_URL")
     result_backend = functional_env.get("CELERY_RESULT_BACKEND")
     try:

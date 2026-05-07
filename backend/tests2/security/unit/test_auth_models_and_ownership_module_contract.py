@@ -74,17 +74,16 @@ _OWNERSHIP_HELPERS = (
 # `compute_can_edit`, `assert_can_modify`).
 # BE-GO-READY-AUTH-ENGINE-020: chiude R-019.1 — IMDF migrato
 # al leaf, anche `assert_resource_visible` rimosso dal facade.
-# Resta SOLO `_check_ownership` (uso interno dai 3
-# `require_*_owner` wrapper, non e' superficie pubblica).
-_FACADE_REEXPORTED_OWNERSHIP_HELPERS = (
-    "_check_ownership",
-)
+# AUTH-ENGINE-022: anche `_check_ownership` non e' piu' re-exportato dal
+# facade; le dependency owner vivono in `owner_dependencies`.
+_FACADE_REEXPORTED_OWNERSHIP_HELPERS = ()
 _FACADE_NO_LONGER_REEXPORTED = (
     "_extract_group_and_id",
     "assert_group_access",
     "compute_can_edit",
     "assert_can_modify",
     "assert_resource_visible",
+    "_check_ownership",
 )
 
 
@@ -123,11 +122,8 @@ def test_auth_reexports_models_with_object_identity():
 
 def test_auth_reexports_remaining_ownership_helpers_with_object_identity():
     """Identity contract per gli helper ownership ANCORA re-esportati
-    dal facade dopo BE-GO-READY-AUTH-ENGINE-019-OWNERSHIP-REEXPORT-REMOVAL.
-
-    Solo `_check_ownership` (uso interno dai 3 `require_*_owner`)
-    resta sul facade. Per quel nome, identita' garantita:
-    `auth_mod.X is ownership.X`.
+    dal facade. Oggi il set e' vuoto: il test resta come lock per
+    impedire re-export accidentali futuri senza aggiornare il contratto.
     """
     from app.core.auth import auth as auth_mod
     from app.core.auth import ownership

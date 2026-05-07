@@ -30,12 +30,20 @@ def test_extract_imdf_zip_cleans_up_on_zip_error(tmp_path):
     bad_zip = tmp_path / "bad.zip"
     bad_zip.write_bytes(b"not a zip file at all")
 
-    # Conto le subdir di TEMP_DIR prima del test (filtrate per prefix)
     import tempfile as _tf
-    temp_root = Path(_tf.gettempdir())
+    temp_root = tmp_path / "temp-root"
+    temp_root.mkdir()
+
+    def _mkdtemp(prefix: str = "") -> str:
+        path = temp_root / f"{prefix}owned_zip_error"
+        path.mkdir()
+        return str(path)
+
+    # Isola il test dal temp globale di Windows: il contratto resta
+    # "extract_imdf_zip pulisce la tempdir che crea".
     before = {d.name for d in temp_root.iterdir() if d.name.startswith("imdf_")}
 
-    with pytest.raises(Exception):
+    with patch.object(_tf, "mkdtemp", side_effect=_mkdtemp), pytest.raises(Exception):
         extract_imdf_zip(bad_zip)
 
     after = {d.name for d in temp_root.iterdir() if d.name.startswith("imdf_")}
@@ -56,10 +64,19 @@ def test_extract_imdf_zip_cleans_up_on_invalid_imdf_content(tmp_path):
         zf.writestr("readme.txt", "this is not imdf")
 
     import tempfile as _tf
-    temp_root = Path(_tf.gettempdir())
+    temp_root = tmp_path / "temp-root"
+    temp_root.mkdir()
+
+    def _mkdtemp(prefix: str = "") -> str:
+        path = temp_root / f"{prefix}owned_invalid_content"
+        path.mkdir()
+        return str(path)
+
     before = {d.name for d in temp_root.iterdir() if d.name.startswith("imdf_")}
 
-    with pytest.raises(ValueError, match="non sembra un IMDF"):
+    with patch.object(_tf, "mkdtemp", side_effect=_mkdtemp), pytest.raises(
+        ValueError, match="non sembra un IMDF"
+    ):
         extract_imdf_zip(not_imdf_zip)
 
     after = {d.name for d in temp_root.iterdir() if d.name.startswith("imdf_")}

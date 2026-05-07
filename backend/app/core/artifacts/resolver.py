@@ -122,16 +122,14 @@ class ArtifactResolver:
         from app.db.results_db_service import get_latest_result as _get_latest_result
 
         if expected_group_id is not None:
-            project = _get_project(ref.project_id)
+            project = (
+                _get_project(ref.project_id)
+                if is_superadmin
+                else _get_project(ref.project_id, group_id=expected_group_id)
+            )
             if not project:
                 raise ArtifactResolutionError(
                     f"Progetto {ref.project_id} non trovato"
-                )
-            actual_group = project.get("group_id")
-            if not is_superadmin and actual_group != expected_group_id:
-                raise ArtifactResolutionError(
-                    f"Cross-tenant: progetto {ref.project_id} appartiene a "
-                    f"group={actual_group}, atteso group={expected_group_id}"
                 )
 
         row = _get_latest_result(ref.project_id)

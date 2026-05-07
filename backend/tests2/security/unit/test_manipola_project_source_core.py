@@ -77,8 +77,7 @@ def test_load_project_sources_blocks_cross_tenant_via_resolver():
     executor = _make_executor()
     dataframes = {}
 
-    with patch("app.db.config.projects.get_project",
-               return_value={"id": "proj-99", "group_id": "grp-2"}):
+    with patch("app.db.config.projects.get_project", return_value=None):
         result = executor._carica_sorgenti_progetto(
             _canvas_with_project_source("proj-99"), dataframes,
             force_recalculate=False,

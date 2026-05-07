@@ -121,13 +121,13 @@ def test_load_source_project_blocks_cross_tenant_via_loader():
     BE-GO-READY-TRANSFORMATION-ENGINE-029: migrato a ctx esplicito.
     Stale singleton prova che la cross-tenant block usa
     `ctx.group_id`, non il singleton legacy."""
-    import app.db.db_service as db_service
+    import app.db.config.projects as projects_db
+    import app.db.results_db_service as results_db
 
     svc = _make_service_no_singleton()
     svc._current_group_id = "stale-grp-LEAK"
-    with patch.object(db_service, "get_project",
-                      return_value={"id": "proj-99", "group_id": "grp-other"}), \
-         patch.object(db_service, "get_latest_result", return_value=None):
+    with patch.object(projects_db, "get_project", return_value=None), \
+         patch.object(results_db, "get_latest_result", return_value=None):
         with pytest.raises(ValueError, match="Accesso negato: progetto sorgente 'proj-99'"):
             svc._load_source_project(
                 {"source_project_id": "proj-99"},
@@ -135,23 +135,23 @@ def test_load_source_project_blocks_cross_tenant_via_loader():
             )
 
 
-def test_load_source_project_preserves_cross_tenant_detail_in_message():
+def test_load_source_project_does_not_leak_cross_tenant_detail_in_message():
     """Pre-fix il wrapper mappava OGNI SourceLoadingError a
     'appartiene a un gruppo diverso' anche quando in realta' era
-    'progetto inesistente' o 'errore DB'. Ora il messaggio del
-    loader viene preservato dopo il prefisso storico.
+    'progetto inesistente' o 'errore DB'. Ora il resolver usa lookup
+    tenant-scoped: cross-tenant e progetto assente hanno lo stesso
+    dettaglio non-enumerabile.
 
     BE-GO-READY-TRANSFORMATION-ENGINE-029: migrato a ctx esplicito.
-    Stale singleton prova che il dettaglio cross-tenant (`grp-other`
-    vs `grp-mine`) e' calcolato sul `ctx.group_id`, non sul
+    Stale singleton prova che il check usa `ctx.group_id`, non il
     singleton legacy."""
-    import app.db.db_service as db_service
+    import app.db.config.projects as projects_db
+    import app.db.results_db_service as results_db
 
     svc = _make_service_no_singleton()
     svc._current_group_id = "stale-grp-LEAK"
-    with patch.object(db_service, "get_project",
-                      return_value={"id": "proj-99", "group_id": "grp-other"}), \
-         patch.object(db_service, "get_latest_result", return_value=None):
+    with patch.object(projects_db, "get_project", return_value=None), \
+         patch.object(results_db, "get_latest_result", return_value=None):
         with pytest.raises(ValueError) as exc_info:
             svc._load_source_project(
                 {"source_project_id": "proj-99"},
@@ -161,9 +161,10 @@ def test_load_source_project_preserves_cross_tenant_detail_in_message():
     msg = str(exc_info.value)
     # Prefisso storico per back-compat
     assert "Accesso negato: progetto sorgente 'proj-99'" in msg
-    # Dettaglio preservato dal SourceLoadingError originale
-    assert "Cross-tenant" in msg
-    assert "grp-other" in msg
+    # Dettaglio anti-enumeration: niente reveal del gruppo reale.
+    assert "non trovato" in msg
+    assert "Cross-tenant" not in msg
+    assert "grp-other" not in msg
 
 
 def test_load_source_project_distinguishes_project_not_found_from_cross_tenant():
@@ -172,11 +173,11 @@ def test_load_source_project_distinguishes_project_not_found_from_cross_tenant()
 
     BE-GO-READY-TRANSFORMATION-ENGINE-029: migrato a ctx esplicito.
     Stale singleton presente come decoy."""
-    import app.db.db_service as db_service
+    import app.db.config.projects as projects_db
 
     svc = _make_service_no_singleton()
     svc._current_group_id = "stale-grp-LEAK"
-    with patch.object(db_service, "get_project", return_value=None):
+    with patch.object(projects_db, "get_project", return_value=None):
         with pytest.raises(ValueError) as exc_info:
             svc._load_source_project(
                 {"source_project_id": "proj-ghost"},
@@ -240,7 +241,8 @@ def test_resolve_file_source_path_blocks_cross_tenant_project_source():
     BE-GO-READY-TRANSFORMATION-ENGINE-029: migrato a ctx esplicito.
     Stale singleton prova che il check cross-tenant usa
     `ctx.group_id`, non il singleton legacy."""
-    import app.db.db_service as db_service
+    import app.db.config.projects as projects_db
+    import app.db.results_db_service as results_db
 
     svc = _make_service_no_singleton()
     svc._current_group_id = "stale-grp-LEAK"
@@ -250,9 +252,8 @@ def test_resolve_file_source_path_blocks_cross_tenant_project_source():
     ]
     edges = [{"source": "src-1", "target": "tgt-1"}]
 
-    with patch.object(db_service, "get_project",
-                      return_value={"id": "proj-other", "group_id": "grp-other"}), \
-         patch.object(db_service, "get_latest_result", return_value=None):
+    with patch.object(projects_db, "get_project", return_value=None), \
+         patch.object(results_db, "get_latest_result", return_value=None):
         with pytest.raises(ValueError, match="Accesso negato: progetto sorgente 'proj-other'"):
             svc._resolve_file_source_path(
                 nodes, edges, "tgt-1",

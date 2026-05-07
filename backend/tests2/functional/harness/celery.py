@@ -76,6 +76,7 @@ def flush_redis_db(redis_url: str) -> None:
     parsed = urlparse(redis_url)
     db = int((parsed.path or "/0").lstrip("/") or "0")
     import redis
+    from redis.exceptions import RedisError
 
     client = redis.Redis(
         host=parsed.hostname or "127.0.0.1",
@@ -86,4 +87,13 @@ def flush_redis_db(redis_url: str) -> None:
         socket_timeout=5,
         decode_responses=False,
     )
-    client.flushdb()
+    try:
+        client.flushdb()
+    except RedisError as exc:
+        raise RuntimeError(
+            "Redis test dependency is not reachable at "
+            f"{redis_url!r}. For host-run tests, publish Redis and set "
+            "CELERY_BROKER_URL/REDIS_URL to redis://127.0.0.1:6379/0; "
+            "inside containers, set it to the service hostname, e.g. "
+            "redis://redis:6379/0."
+        ) from exc

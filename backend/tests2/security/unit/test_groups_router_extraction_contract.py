@@ -211,6 +211,13 @@ def test_groups_router_uses_lazy_proxies_for_dependencies():
     assert "def require_superadmin(" in src
     # Lazy: l'import deve essere dentro la funzione (cerco la
     # sequenza "def <name>(...):\n    ... from app.core.auth.auth import").
-    assert "from app.core.auth.auth import get_current_user" in src
-    assert "from app.core.auth.auth import require_admin as _require_admin" in src
-    assert "from app.core.auth.auth import require_superadmin as _require_superadmin" in src
+    assert "from app.core.auth.dependencies import get_current_user" in src
+    assert (
+        "from app.core.auth.dependencies import require_admin as _require_admin"
+        in src
+    )
+    assert (
+        "from app.core.auth.dependencies import "
+        "require_superadmin as _require_superadmin"
+        in src
+    )

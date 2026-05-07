@@ -135,10 +135,11 @@ def connections_client(monkeypatch):
     monkeypatch.setattr(
         conn_router_module, "assert_can_modify", lambda *a, **kw: None,
     )
-    # Mock _db.fetchall che il router chiama internamente per il cascade.
-    import app.db.db_service as db_service
+    # Mock canonical projects DAL used by the router for cascade checks.
+    import app.db.config.projects as projects_db
     monkeypatch.setattr(
-        db_service, "fetchall", lambda *a, **kw: _two_groups_rows(),
+        projects_db, "list_projects_using_connection",
+        lambda connection_id: _two_groups_rows(),
     )
 
     def _build(user: CurrentUser) -> TestClient:
