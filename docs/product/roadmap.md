@@ -1,6 +1,7 @@
-# Roadmap — URBY-ETL
+# Roadmap
 
-Residui audit aperti e direzioni future. Status as of **2026-05-02**.
+Residui audit aperti e direzioni future. Status reviewed:
+**2026-05-07**.
 
 For the shorter operational list of what is still open across FE, BE and
 tests, see [Residual Register](residual-register.md).
