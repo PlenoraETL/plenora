@@ -138,10 +138,11 @@ if [ "$DRY_RUN" -eq 0 ] && ! docker compose version >/dev/null 2>&1; then
     exit 2
 fi
 
-# Pre-flight 4: .env.docker exists. The validation pack consumes
-# the secrets file Step 2 of install-docker.md creates; this script
-# NEVER produces or overwrites it (a regenerate path would silently
-# rotate the encryption / JWT keys and break running deployments).
+# Pre-flight 4: .env.docker exists and has required secrets. The
+# validation pack consumes the secrets file Step 2 of install-docker.md
+# creates; this script NEVER produces or overwrites it (a regenerate
+# path would silently rotate the encryption / JWT keys and break
+# running deployments).
 if [ "$DRY_RUN" -eq 0 ] && [ ! -f ".env.docker" ]; then
     echo "ERROR: .env.docker not found." >&2
     echo "       Run Step 2 of docs/ops/install-docker.md first:" >&2
@@ -149,6 +150,45 @@ if [ "$DRY_RUN" -eq 0 ] && [ ! -f ".env.docker" ]; then
     echo "         # then add PLENORA_ENCRYPTION_KEY and JWT_SECRET_KEY" >&2
     echo "         chmod 600 .env.docker" >&2
     exit 2
+fi
+
+env_docker_value() {
+    local key="$1"
+    awk -F= -v key="$key" '
+        /^[[:space:]]*#/ { next }
+        {
+            k = $1
+            gsub(/^[[:space:]]+|[[:space:]]+$/, "", k)
+            if (k == key) {
+                sub(/^[^=]*=/, "")
+                gsub(/^[[:space:]]+|[[:space:]]+$/, "")
+                quote = sprintf("%c", 39)
+                if ((substr($0, 1, 1) == "\"" && substr($0, length($0), 1) == "\"") ||
+                    (substr($0, 1, 1) == quote && substr($0, length($0), 1) == quote)) {
+                    $0 = substr($0, 2, length($0) - 2)
+                    gsub(/^[[:space:]]+|[[:space:]]+$/, "")
+                }
+                print
+                exit
+            }
+        }
+    ' ".env.docker"
+}
+
+if [ "$DRY_RUN" -eq 0 ]; then
+    missing_env_keys=""
+    for required_key in PLENORA_ENCRYPTION_KEY JWT_SECRET_KEY; do
+        if [ -z "$(env_docker_value "$required_key")" ]; then
+            missing_env_keys="${missing_env_keys} ${required_key}"
+        fi
+    done
+    if [ -n "$missing_env_keys" ]; then
+        echo "ERROR: .env.docker is missing required non-empty secret key(s):${missing_env_keys}" >&2
+        echo "       Fill them using docs/ops/install-docker.md Step 2, then rerun:" >&2
+        echo "         bash scripts/docker-validate.sh" >&2
+        echo "       Secret values were not printed." >&2
+        exit 2
+    fi
 fi
 
 run_step() {

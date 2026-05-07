@@ -287,7 +287,9 @@ _HTTP_FIXTURES = frozenset({
 def pytest_collection_modifyitems(config, items):
     for item in items:
         fixturenames = set(item.fixturenames)
-        filename = Path(str(item.fspath)).name
+        item_path = Path(str(item.fspath)).resolve()
+        is_integration_file = item_path.is_relative_to(INTEGRATION_ROOT)
+        filename = item_path.name
 
         if _HTTP_FIXTURES & fixturenames:
             item.add_marker(pytest.mark.requires_backend_http_service)
@@ -298,6 +300,9 @@ def pytest_collection_modifyitems(config, items):
 
         if "integration_celery_worker" in fixturenames:
             item.add_marker(pytest.mark.requires_celery)
+
+        if not is_integration_file:
+            continue
 
         if filename in _TIER1_INSTALL_VALIDATION_FILES:
             item.add_marker(pytest.mark.install_validation)

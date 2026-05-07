@@ -1,7 +1,11 @@
-# Non-secret provider profile for integration tests.
-# Secrets stay in environment variables named by password_env.
+# Default non-secret provider profile for optional integration tests.
+# Keep enabled=false in the shared file: disabled providers are skipped.
+# Set enabled=true only in provider_config.local.toml when the provider is
+# expected to be reachable; enabled-but-unreachable providers must fail.
+# Passwords stay in environment variables named by password_env.
 
 [mysql]
+# Override enabled=true locally to require this provider in test runs.
 enabled = false
 host = "127.0.0.1"
 port = 3306
@@ -10,6 +14,7 @@ username = "dataflow"
 password_env = "PLENORA_TEST_MYSQL_PASSWORD"
 
 [mariadb]
+# Override enabled=true locally to require this provider in test runs.
 enabled = false
 host = "127.0.0.1"
 port = 3307
@@ -18,6 +23,7 @@ username = "dataflow"
 password_env = "PLENORA_TEST_MARIADB_PASSWORD"
 
 [oracle]
+# Override enabled=true locally to require this provider in test runs.
 enabled = false
 host = "127.0.0.1"
 port = 1521
@@ -27,6 +33,7 @@ username = "dataflow"
 password_env = "PLENORA_TEST_ORACLE_PASSWORD"
 
 [sqlserver]
+# Override enabled=true locally to require this provider in test runs.
 enabled = false
 host = "127.0.0.1"
 port = 1433
