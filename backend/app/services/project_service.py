@@ -9,7 +9,6 @@ from datetime import datetime, timezone
 from typing import List, Optional
 
 from app.utils.logger import get_logger
-from pathlib import Path
 from app.config import settings
 from app.models import (
     ProjectMetadata,
@@ -22,6 +21,11 @@ from app.db.config import groups as _groups
 from app.db.config import projects as project_db
 from app.db import pg_connection
 from app.db import results_db_service as results_db
+from app.services.project_domain import build_project_id, resolve_project_group_id
+from app.services.project_repository import (
+    DbProjectCanvasKeyRepository,
+    ProjectCanvasKeyRepository,
+)
 
 logger = get_logger(__name__)
 
@@ -36,13 +40,17 @@ class ProjectService:
 
     DEFAULT_GROUP = settings.DEFAULT_GROUP  # configurabile in .env
 
+    def __init__(
+        self,
+        project_repository: Optional[ProjectCanvasKeyRepository] = None,
+    ) -> None:
+        self._project_repository = (
+            project_repository or DbProjectCanvasKeyRepository()
+        )
+
     def _generate_project_id(self, name: str) -> str:
         """Genera ID univoco leggibile: {nome_safe}_{timestamp}_{uuid8}."""
-        timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
-        short_uuid = str(uuid.uuid4())[:8]
-        safe_name = "".join(c for c in name if c.isalnum() or c in (" ", "_")).strip()
-        safe_name = safe_name.replace(" ", "_")[:30]
-        return f"{safe_name}_{timestamp}_{short_uuid}"
+        return build_project_id(name, datetime.now(timezone.utc), str(uuid.uuid4()))
 
     def _ensure_default_group(self):
         """Crea il gruppo default se non esiste (migrazione da filesystem)."""
@@ -61,16 +69,40 @@ class ProjectService:
             description=row.get("description", ""),
             project_type=row.get("project_type", "estrai"),
             default_connection_id=row.get("connection_id"),
-            group_id=row.get("group_id") or settings.DEFAULT_GROUP,
+            group_id=resolve_project_group_id(
+                row.get("group_id"), settings.DEFAULT_GROUP
+            ),
             created_at=row.get("created_at"),
             updated_at=row.get("updated_at"),
         )
 
-    def create_project(self, project_data: ProjectCreate, group_id: str = None,
-                       created_by: str = None) -> ProjectMetadata:
+    def _project_row_to_metadata(
+        self,
+        row: project_db.ProjectRow,
+    ) -> ProjectMetadata:
+        """Converte ProjectRow in ProjectMetadata."""
+        return ProjectMetadata(
+            id=row.id,
+            name=row.name,
+            description="",
+            project_type=row.project_type,
+            default_connection_id=row.connection_id,
+            group_id=resolve_project_group_id(
+                row.group_id, settings.DEFAULT_GROUP
+            ),
+            created_at=row.created_at,
+            updated_at=row.updated_at,
+        )
+
+    def create_project(
+        self,
+        project_data: ProjectCreate,
+        group_id: Optional[str] = None,
+        created_by: Optional[str] = None,
+    ) -> ProjectMetadata:
         """Crea nuovo progetto nel DB."""
         self._ensure_default_group()
-        group_id = group_id or self.DEFAULT_GROUP
+        group_id = resolve_project_group_id(group_id, self.DEFAULT_GROUP)
         project_id = self._generate_project_id(project_data.name)
 
         row = project_db.create_project(
@@ -92,8 +124,9 @@ class ProjectService:
         """
         self._ensure_default_group()
         rows = project_db.list_projects(group_id)  # NB: list_projects deve supportare None
-        projects = [self._row_to_metadata(r) for r in rows if r]
-        return ProjectList(projects=[p for p in projects if p])
+        return ProjectList(
+            projects=[self._project_row_to_metadata(row) for row in rows]
+        )
 
     def get_project_metadata(self, project_id: str, group_id: str = None) -> Optional[ProjectMetadata]:
         """Carica metadati progetto.
@@ -504,19 +537,24 @@ class ProjectService:
         Tutti i call-site (estrai/manipola/arricchisci/enrichment_task)
         passano dall'helper condiviso — niente try/except locali.
         """
-        from app.db.config.projects import update_project_canvas_key_atomic
-        return update_project_canvas_key_atomic(
+        return self._project_repository.update_canvas_key(
             project_id, "columns_metadata", columns_metadata
         )
 
     # RISULTATI (file output pipeline
 
-    def save_result(self, project_id: str, filename: str, fmt: str,
-                    data: bytes, rows_count: int = None,
-                    group_id: str = None) -> str:
+    def save_result(
+        self,
+        project_id: str,
+        filename: str,
+        fmt: str,
+        data: bytes,
+        rows_count: Optional[int] = None,
+        group_id: Optional[str] = None,
+    ) -> str:
         """Salva file risultato come blob nel DB. Ritorna result_id."""
         result_id = str(uuid.uuid4())
-        group_id = group_id or self.DEFAULT_GROUP
+        group_id = resolve_project_group_id(group_id, self.DEFAULT_GROUP)
         results_db.save_result(
             result_id=result_id,
             project_id=project_id,

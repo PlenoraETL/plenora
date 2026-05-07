@@ -42,12 +42,9 @@ _ALLOWED_ROOT_MODULES: frozenset[str] = frozenset(
         "storage_compensation",    # object-storage failure compensation helpers
         "storage_dispatch",        # storage backend routing
         "storage_reconciliation",  # stale-blob reconciliation helpers
-        "task_scoped_blob_store",  # per-task ephemeral blob store
-        "column_types",           # column type enum / classification
         "columns_metadata",       # column-level metadata helpers
         "models",                 # shared Pydantic base models
         "clock",                       # wall-clock abstraction for testability
-        "external_artifact_processor", # cross-domain artifact post-processing helpers
         "idempotency",                 # idempotency key helpers
     }
 )
@@ -76,12 +73,9 @@ _ROOT_MODULE_CLASSIFICATIONS: dict[str, str] = {
     "storage_compensation": "MOVE_TO_RESOURCES_CANDIDATE",
     "storage_dispatch": "MOVE_TO_RESOURCES_CANDIDATE",
     "storage_reconciliation": "HEAVY_ROOT_UTILITY",
-    "task_scoped_blob_store": "MOVE_TO_RESOURCES_CANDIDATE",
-    "column_types": "MOVE_TO_RESOURCES_CANDIDATE",
     "columns_metadata": "MOVE_TO_RESOURCES_CANDIDATE",
     "models": "HEAVY_ROOT_UTILITY",
     "clock": "KEEP_ROOT_CROSS_CUTTING",
-    "external_artifact_processor": "MOVE_TO_RESOURCES_CANDIDATE",
     "idempotency": "MOVE_TO_EXECUTION_CANDIDATE",
 }
 

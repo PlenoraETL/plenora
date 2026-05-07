@@ -12,7 +12,7 @@ from typing import get_type_hints
 
 import pytest
 
-from app.shared.task_scoped_blob_store import (
+from app.shared.resources.task_scoped_blob_store import (
     TaskBlobSaveResult,
     TaskScopedBlobStore,
 )
@@ -113,7 +113,9 @@ def test_protocol_rejects_incomplete_impl():
 def test_module_has_no_heavy_imports():
     """Pure module: niente pandas/geopandas/requests/boto3/cloud_backends/
     config/I-O/env reads."""
-    src = (_BACKEND_APP / "shared" / "task_scoped_blob_store.py").read_text(encoding="utf-8")
+    src = (
+        _BACKEND_APP / "shared" / "resources" / "task_scoped_blob_store.py"
+    ).read_text(encoding="utf-8")
     forbidden = [
         "import pandas",
         "from pandas",
@@ -137,7 +139,7 @@ def test_module_has_no_heavy_imports():
 def test_module_only_has_dataclass_and_protocol():
     """Verifica statica: il modulo espone solo `TaskBlobSaveResult` +
     `TaskScopedBlobStore` (no funzioni runtime, no logica)."""
-    import app.shared.task_scoped_blob_store as mod
+    import app.shared.resources.task_scoped_blob_store as mod
     public = [n for n in dir(mod) if not n.startswith("_")]
     # Filter built-ins / standard lib
     public = [n for n in public if n not in ("annotations", "Protocol", "List",

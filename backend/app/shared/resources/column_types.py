@@ -8,8 +8,6 @@ from __future__ import annotations
 
 from typing import Any, Dict, Iterable, List, Mapping, Optional
 
-import pandas as pd
-
 
 # Vocabolario canonico + alias
 
@@ -98,7 +96,7 @@ def canvas_type_to_pandas_dtype(canvas_type: Optional[str]) -> str:
     return "object"
 
 
-def pandas_series_to_canvas_type(series: "pd.Series") -> str:
+def pandas_series_to_canvas_type(series: Any) -> str:
     """pandas Series -> canonical canvas-type.
 
     Dispatch basato su `series.dtype` + euristica N11 per recuperare int
@@ -132,11 +130,15 @@ def pandas_series_to_canvas_type(series: "pd.Series") -> str:
         sample = series.dropna().head(20)
         if len(sample) == 0:
             return "str"
-        try:
-            pd.to_numeric(sample)
+        all_numeric = True
+        for value in sample:
+            try:
+                float(value)
+            except (TypeError, ValueError):
+                all_numeric = False
+                break
+        if all_numeric:
             return "real"
-        except (ValueError, TypeError):
-            pass
         return "str"
     return "str"
 

@@ -199,14 +199,12 @@ def test_canvas_null_treated_as_empty_dict(mock_pg_conn):
     assert final_canvas == {"columns_metadata": [{"name": "x", "type": "str"}]}
 
 
-# project_service.update_project_columns_metadata delega alla versione atomica
+# project_service.update_project_columns_metadata delegates through the narrow
+# project repository boundary.
 
 
 def test_project_service_delegates_to_atomic_helper(monkeypatch):
-    """BE-GO-READY-DB-ENGINE-007: project_service now imports
-    `update_project_canvas_key_atomic` from the projects leaf
-    directly (lazy), so the patch target is the leaf module
-    rather than the `config_db_service` facade."""
+    """Default repository adapter delegates to the projects DB leaf."""
     from app.services.project_service import ProjectService
     from app.db.config import projects as projects_leaf
 
@@ -228,6 +226,27 @@ def test_project_service_delegates_to_atomic_helper(monkeypatch):
     assert captured["project_id"] == "proj-42"
     assert captured["key"] == "columns_metadata"
     assert captured["value"] == meta
+
+
+def test_project_service_accepts_project_repository_protocol():
+    from app.services.project_service import ProjectService
+
+    class FakeProjectRepository:
+        def __init__(self):
+            self.calls = []
+
+        def update_canvas_key(self, project_id: str, key: str, value: object) -> bool:
+            self.calls.append((project_id, key, value))
+            return True
+
+    repo = FakeProjectRepository()
+    meta = [{"name": "c1", "type": "int"}]
+
+    svc = ProjectService(project_repository=repo)
+    result = svc.update_project_columns_metadata("proj-42", meta)
+
+    assert result is True
+    assert repo.calls == [("proj-42", "columns_metadata", meta)]
 
 
 def test_project_service_propagates_atomic_exception(monkeypatch):

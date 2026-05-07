@@ -222,7 +222,7 @@ def test_enricher_bridge_reads_from_columns_metadata():
 
 # 4. Format stability — tipi canvas ammessi
 # I tipi canvas sono una enum informale esposta da
-# `app.shared.column_types.normalize_canvas_type` (delega del mapper).
+# `app.shared.resources.column_types.normalize_canvas_type` (delega del mapper).
 # Qualsiasi refactor che tocca il vocabolario deve preservare i tipi base.
 
 

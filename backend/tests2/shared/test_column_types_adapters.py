@@ -10,7 +10,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from app.shared.column_types import (
+from app.shared.resources.column_types import (
     CANONICAL_BASE_TYPES,
     TYPE_ALIASES,
     canvas_type_to_pandas_dtype,

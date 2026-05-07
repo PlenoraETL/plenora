@@ -202,14 +202,14 @@ async def auto_mapping(request: AutoMappingRequest, current_user: CurrentUser = 
     """
     try:
         import pandas as pd
-        from app.shared.column_types import (
+        from app.shared.resources.column_types import (
             canvas_type_to_pandas_dtype,
             metadata_to_dict,
         )
 
         # Ricostruisci un DataFrame vuoto con le colonne sorgente
         # per il mapping servono solo i nomi e i tipi). La dispatch
-        # canvas-type -> pandas dtype vive in app.shared.column_types
+        # canvas-type -> pandas dtype vive in app.shared.resources.column_types
         # fonte unica: alias, geometry, fallback object
         columns_data = {
             col_info.get("name", ""): pd.Series(

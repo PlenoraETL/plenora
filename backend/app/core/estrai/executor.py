@@ -9,7 +9,7 @@ import re
 import pandas as pd
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, Any, List, Optional, Tuple
+from typing import Dict, Any, List, Mapping, Optional, Sequence, Tuple
 
 from app.models import CanvasState, Node
 from app.utils.logger import get_logger, append_step
@@ -182,6 +182,84 @@ def _build_preview_resource(
         group_id=group_id,
     )
     return EstraiPreviewResource(dataframe=df, metadata=metadata)
+
+
+def _infer_dataframe_column_type(series: pd.Series) -> str:
+    dtype = str(series.dtype)
+    if 'int' in dtype:
+        return 'int'
+    if 'float' in dtype:
+        return 'real'
+    if 'bool' in dtype:
+        return 'bool'
+    if 'datetime' in dtype:
+        return 'date'
+    return 'str'
+
+
+def _lookup_canvas_column_type(
+    column_name: str,
+    original_column_name: str,
+    canvas_type_map: Mapping[str, str],
+) -> Optional[str]:
+    if column_name in canvas_type_map:
+        return canvas_type_map[column_name]
+    if original_column_name in canvas_type_map:
+        return canvas_type_map[original_column_name]
+
+    canvas_type_map_lower = {k.lower(): v for k, v in canvas_type_map.items()}
+    lowered_column = column_name.lower()
+    if lowered_column in canvas_type_map_lower:
+        return canvas_type_map_lower[lowered_column]
+
+    lowered_original = original_column_name.lower()
+    if lowered_original in canvas_type_map_lower:
+        return canvas_type_map_lower[lowered_original]
+
+    return None
+
+
+def _build_db_preview_resource_from_cursor_schema(
+    df: pd.DataFrame,
+    cursor_columns: Sequence[str],
+    canvas_type_map: Mapping[str, str],
+    *,
+    row_count: int,
+    project_id: str,
+) -> EstraiPreviewResource:
+    """
+    Build preview metadata from the DB boundary first.
+
+    `cursor_columns` comes from the DB cursor description exposed by
+    QueryExecutor.execute_raw. The DataFrame is used only as a fallback for
+    unresolved scalar types because current DB adapters do not expose portable
+    cursor type codes through this Estrai boundary.
+    """
+    original_columns = [str(column) for column in cursor_columns]
+    metadata_column_names, _ = _dedup_column_names(original_columns)
+    if len(metadata_column_names) != len(df.columns):
+        metadata_column_names = [str(column) for column in df.columns]
+        original_columns = metadata_column_names
+
+    columns_info: List[Dict[str, str]] = []
+    for index, column_name in enumerate(metadata_column_names):
+        original_column_name = original_columns[index]
+        column_type = _lookup_canvas_column_type(
+            column_name,
+            original_column_name,
+            canvas_type_map,
+        )
+        if column_type is None:
+            column_type = _infer_dataframe_column_type(df.iloc[:, index])
+        columns_info.append({'name': column_name, 'type': column_type})
+
+    return _build_preview_resource(
+        df,
+        columns_info,
+        source_kind="db",
+        row_count=row_count,
+        project_id=project_id,
+    )
 
 
 class EstraiExecutor:
@@ -456,11 +534,10 @@ class EstraiExecutor:
             df, dedup_warnings = _dedup_dataframe_columns_for_serialization(df)
 
             canvas_type_map = self._build_canvas_type_map(canvas)
-            columns_info = self._costruisci_colonne_con_tipi_canvas(df, canvas_type_map)
-            preview_resource = _build_preview_resource(
+            preview_resource = _build_db_preview_resource_from_cursor_schema(
                 df,
-                columns_info,
-                source_kind="db",
+                columns,
+                canvas_type_map,
                 row_count=total_count,
                 project_id=project_id,
             )

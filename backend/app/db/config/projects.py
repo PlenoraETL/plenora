@@ -5,12 +5,45 @@ This module owns the 6 pure-DAL CRUD operations on `projects`
 """
 
 import json
-from typing import Dict, Iterable, List, Optional, Set
+from dataclasses import dataclass
+from datetime import datetime
+from typing import Dict, Iterable, List, Mapping, Optional, Set, cast
 
 from app.db.pg_connection import fetchone, fetchall, execute, transaction
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
+
+
+@dataclass(frozen=True)
+class ProjectRow:
+    """Read model for the project list row shape."""
+
+    id: str
+    group_id: Optional[str]
+    name: str
+    project_type: str
+    connection_id: Optional[str]
+    created_at: Optional[datetime | str]
+    updated_at: Optional[datetime | str]
+    created_by: Optional[str]
+
+    @classmethod
+    def from_mapping(cls, row: Mapping[str, object]) -> "ProjectRow":
+        return cls(
+            id=cast(str, row["id"]),
+            group_id=cast(Optional[str], row.get("group_id")),
+            name=cast(str, row["name"]),
+            project_type=cast(str, row["project_type"]),
+            connection_id=cast(Optional[str], row.get("connection_id")),
+            created_at=cast(Optional[datetime | str], row.get("created_at")),
+            updated_at=cast(Optional[datetime | str], row.get("updated_at")),
+            created_by=cast(Optional[str], row.get("created_by")),
+        )
+
+
+def _project_rows(rows: Iterable[Mapping[str, object]]) -> List[ProjectRow]:
+    return [ProjectRow.from_mapping(row) for row in rows]
 
 
 def get_project(project_id: str, group_id: str = None) -> Optional[Dict]:
@@ -35,25 +68,36 @@ def get_project(project_id: str, group_id: str = None) -> Optional[Dict]:
     return row
 
 
-def list_projects(group_id: Optional[str] = None, project_type: str = None) -> List[Dict]:
+def list_projects(
+    group_id: Optional[str] = None,
+    project_type: Optional[str] = None,
+) -> List[ProjectRow]:
     """Lista progetti. group_id=None → no filter (usato dal superadmin)."""
     if group_id is None:
         if project_type:
-            return fetchall(
-                "SELECT id, group_id, name, project_type, connection_id, created_at, updated_at, created_by FROM projects WHERE project_type = ? ORDER BY updated_at DESC",
-                (project_type,)
+            return _project_rows(
+                fetchall(
+                    "SELECT id, group_id, name, project_type, connection_id, created_at, updated_at, created_by FROM projects WHERE project_type = ? ORDER BY updated_at DESC",
+                    (project_type,)
+                )
             )
-        return fetchall(
-            "SELECT id, group_id, name, project_type, connection_id, created_at, updated_at, created_by FROM projects ORDER BY updated_at DESC"
+        return _project_rows(
+            fetchall(
+                "SELECT id, group_id, name, project_type, connection_id, created_at, updated_at, created_by FROM projects ORDER BY updated_at DESC"
+            )
         )
     if project_type:
-        return fetchall(
-            "SELECT id, group_id, name, project_type, connection_id, created_at, updated_at, created_by FROM projects WHERE group_id = ? AND project_type = ? ORDER BY updated_at DESC",
-            (group_id, project_type)
+        return _project_rows(
+            fetchall(
+                "SELECT id, group_id, name, project_type, connection_id, created_at, updated_at, created_by FROM projects WHERE group_id = ? AND project_type = ? ORDER BY updated_at DESC",
+                (group_id, project_type)
+            )
         )
-    return fetchall(
-        "SELECT id, group_id, name, project_type, connection_id, created_at, updated_at, created_by FROM projects WHERE group_id = ? ORDER BY updated_at DESC",
-        (group_id,)
+    return _project_rows(
+        fetchall(
+            "SELECT id, group_id, name, project_type, connection_id, created_at, updated_at, created_by FROM projects WHERE group_id = ? ORDER BY updated_at DESC",
+            (group_id,)
+        )
     )
 
 

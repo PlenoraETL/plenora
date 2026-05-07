@@ -21,7 +21,7 @@ class ColumnMeta:
     ``int``, ``real``, ``str``, ``bool``, ``date``,
     ``geometry``, ``geometry:subtype``, ``geometry:subtype:EPSG``.
 
-    Normalisation helpers live in ``app.shared.column_types``;
+    Normalisation helpers live in ``app.shared.resources.column_types``;
     this class stores the raw value as received to avoid a
     cross-module dependency at construction time.
     """
@@ -139,7 +139,7 @@ class ResourceMetadata:
     def column_type_map(self) -> dict[str, str]:
         """``{name: type}`` dict for O(1) type lookup.
 
-        Mirrors the output of ``app.shared.column_types.metadata_to_dict``
+        Mirrors the output of ``app.shared.resources.column_types.metadata_to_dict``
         so callers can use either interchangeably during migration.
         """
         return {col.name: col.type for col in self.columns}

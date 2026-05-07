@@ -14,6 +14,7 @@ import pytest
 from app.core.estrai.executor import (
     EstraiExecutor,
     EstraiPreviewResource,
+    _build_db_preview_resource_from_cursor_schema,
     _build_preview_resource,
     _dedup_column_names,
     _dedup_dataframe_columns_for_serialization,
@@ -158,6 +159,41 @@ def test_build_preview_resource_pairs_dataframe_with_resource_metadata():
     assert resource.metadata.geometry_column == "shape"
     assert resource.metadata.crs_epsg == 4326
     assert resource.metadata.to_columns_list() == columns_info
+
+
+def test_build_db_preview_resource_uses_cursor_columns_before_dataframe_names():
+    df = pd.DataFrame({"wrong_id": [1], "wrong_amount": [12.5]})
+
+    resource = _build_db_preview_resource_from_cursor_schema(
+        df,
+        ["ID", "amount"],
+        {"id": "int"},
+        row_count=1,
+        project_id="proj-1",
+    )
+
+    assert resource.dataframe is df
+    assert resource.metadata.to_columns_list() == [
+        {"name": "ID", "type": "int"},
+        {"name": "amount", "type": "real"},
+    ]
+
+
+def test_build_db_preview_resource_dedups_cursor_columns_positionally():
+    df = pd.DataFrame([[1, 99]], columns=["id", "id_2"])
+
+    resource = _build_db_preview_resource_from_cursor_schema(
+        df,
+        ["id", "id"],
+        {"id": "int"},
+        row_count=1,
+        project_id="proj-1",
+    )
+
+    assert resource.metadata.to_columns_list() == [
+        {"name": "id", "type": "int"},
+        {"name": "id_2", "type": "int"},
+    ]
 
 
 def test_preview_database_keeps_public_response_shape_without_metadata_key():

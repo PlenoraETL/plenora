@@ -12,7 +12,7 @@ from typing import get_type_hints
 
 import pytest
 
-from app.shared.external_artifact_processor import (
+from app.shared.resources.external_artifact_processor import (
     ArtifactResult,
     ArtifactSource,
     ExternalArtifactProcessor,
@@ -163,7 +163,9 @@ def test_protocol_rejects_incomplete_impl():
 def test_module_has_no_heavy_imports():
     """Il modulo shared deve restare protocol/dataclass-only: niente
     requests/httpx/pandas/config/I-O/env reads."""
-    src = (_BACKEND_APP / "shared" / "external_artifact_processor.py").read_text(
+    src = (
+        _BACKEND_APP / "shared" / "resources" / "external_artifact_processor.py"
+    ).read_text(
         encoding="utf-8",
     )
     forbidden = [
@@ -221,7 +223,7 @@ def test_no_runtime_wiring_between_protocol_and_mixin():
     aggiornare il piano."""
     from app.core.arricchisci import api_connection_rest_file as mod
     src = Path(mod.__file__).read_text(encoding="utf-8")
-    assert "from app.shared.external_artifact_processor" not in src, (
+    assert "from app.shared.resources.external_artifact_processor" not in src, (
         "BE-REST-001A e' audit-only. Wiring del Protocol nel mixin "
         "richiede REST-002 (extraction completa con test isolati)."
     )
