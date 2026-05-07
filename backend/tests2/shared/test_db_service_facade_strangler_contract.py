@@ -70,7 +70,6 @@ _FACADE_FILE = "app/db/db_service.py"
 #   - Cluster-CRUD callers via `db.get_*` / `db.list_*` /
 #     `db.save_*` / `db.delete_*`:
 #       `app/core/admin_system_status/service.py`,
-#       `app/core/arricchisci/api_connection_rest_file.py`,
 #       `app/core/arricchisci/execution_context.py`,
 #       `app/core/artifacts/resolver.py`,
 #       `app/core/carica/executor.py`,
@@ -115,11 +114,14 @@ _FACADE_FILE = "app/db/db_service.py"
 #   - `app/core/datasources/service.py` migrated datasource CRUD/config
 #     lookup to `app.db.config.datasources`. Direct list queries were
 #     already on `app.db.pg_connection`.
+#
+# Removed by Batch 080 Worker 4:
+#   - `app/core/arricchisci/api_connection_rest_file.py` migrated
+#     file-source blob lookups to `app.db.config.file_sources`.
 _DB_SERVICE_PROD_ALLOWLIST: frozenset[str] = frozenset({
     # Bootstrap orchestrator — `init_all_dbs` lives on the facade.
     "app/bootstrap.py",
     # Arricchisci: test-monkeypatch surface (noqa: F401 preserved).
-    "app/core/arricchisci/api_connection_rest_file.py",
     "app/core/arricchisci/api_connector.py",
     "app/core/arricchisci/canvas_orchestrator.py",
     # Auth sharing surface: generic shareable-resource lookup via raw SQL.

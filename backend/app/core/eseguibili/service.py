@@ -36,7 +36,7 @@ def create_from_project(
         ValueError: se il progetto non esiste o non è di tipo arricchisci,
                     o se l'utente non ha accesso al gruppo.
     """
-    from app.db.config.projects import get_project
+    from app.core.projects.db import get_project
 
     proj = get_project(source_project_id)
     if not proj:
@@ -227,7 +227,7 @@ def execute(
     import io
     from app.utils.dataframe import load_dataframe_from_file
     from app.core.files.service import file_source_service
-    from app.services.task_service import task_service
+    from app.core.orchestrator.task_service import task_service
     from app.config import settings
 
     # 1. Carica DataFrame originale

@@ -19,7 +19,7 @@ from app.utils.logger import get_logger
 from app.shared import error_codes
 from app.shared.error_envelope import raise_typed_http
 from app.shared.models import ExecuteRequest
-from app.services.task_service import TaskType
+from app.core.orchestrator.task_service import TaskType
 from app.utils.router_utils import require_service
 from app.shared.audit_action import audit_action
 from app.core.auth.dependencies import get_current_user, require_not_esecutore
@@ -77,7 +77,7 @@ def _assert_task_group(task_id: str, current_user: CurrentUser) -> None:
     Se il progetto non esiste più (cancellato), solo admin/superadmin possono
     operare sul task.
     """
-    from app.services.task_service import task_service
+    from app.core.orchestrator.task_service import task_service
     # intent: boundary broad→404 / outcome: fail-closed user-facing + breadcrumb
     # diagnostico server-side (DB/Redis transient distinguibile in log, non in UX
     try:
@@ -195,7 +195,7 @@ def execute_project_pipeline(
         )
 
     try:
-        from app.services.task_service import task_service
+        from app.core.orchestrator.task_service import task_service
         force_recalculate = request.force_recalculate if request else False
         task_info = task_service.create_pipeline_task(
             project_id=project_id,
@@ -227,7 +227,7 @@ def preview_project(
     require_service(_orchestrator, "OrchestratorService")
     _assert_project_group(project_id, current_user)
     try:
-        from app.services.task_service import task_service
+        from app.core.orchestrator.task_service import task_service
         task_info = task_service.create_preview_task(
             project_id=project_id,
             limit=limit,
@@ -374,7 +374,7 @@ def create_task(
     utente autenticato puo' accodare task su progetti di altri tenant
     conoscendone l'id (cross-tenant data exfil).
     """
-    from app.services.task_service import task_service
+    from app.core.orchestrator.task_service import task_service
     from app.shared.authz_helpers import (
         assert_project_access, assert_canvas_resources_access,
     )
@@ -436,7 +436,7 @@ def get_task_status(
     SECURITY: verifica ownership via project_id del task.
     """
     _assert_task_group(task_id, current_user)
-    from app.services.task_service import task_service
+    from app.core.orchestrator.task_service import task_service
 
     def _sanitize(value: object) -> object:
         """Converte ricorsivamente tipi non-JSON-serializable in tipi Python nativi."""
@@ -510,7 +510,7 @@ def cancel_task(
     SECURITY: verifica ownership via project_id del task.
     """
     _assert_task_group(task_id, current_user)
-    from app.services.task_service import task_service
+    from app.core.orchestrator.task_service import task_service
     
     try:
         success = task_service.cancel_task(task_id)
@@ -569,7 +569,7 @@ def cleanup_task_completely(
         non e' integrale — altrimenti il claim GDPR "rimuovere ogni traccia"
         resta silenziosamente violato.
     """
-    from app.services.task_service import task_service
+    from app.core.orchestrator.task_service import task_service
     import app.db.results_db_service as _results_db
 
     # 1. Estrai project_id + result_id dal task (se presenti
@@ -719,7 +719,7 @@ def download_task_result(
     time_started = time.perf_counter()
 
     _assert_task_group(task_id, current_user)
-    from app.services.task_service import task_service
+    from app.core.orchestrator.task_service import task_service
 
     try:
         task_info = task_service.get_task_status(task_id)

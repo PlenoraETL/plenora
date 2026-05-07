@@ -825,7 +825,7 @@ def execute_enrichment_async(
             detail="intermediate_mode override richiede ruolo superadmin",
         )
 
-    from app.services.task_service import task_service
+    from app.core.orchestrator.task_service import task_service
 
     # Valori di default se body non fornito
     if request is None:

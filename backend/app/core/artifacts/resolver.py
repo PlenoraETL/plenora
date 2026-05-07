@@ -118,7 +118,7 @@ class ArtifactResolver:
         - altri fault -> wrap in ``ArtifactResolutionError(lettura
           latest blob ... fallita)`` con ``[GESTITO]`` log + chain.
         """
-        from app.db.config.projects import get_project as _get_project
+        from app.core.projects.db import get_project as _get_project
         from app.db.results_db_service import get_latest_result as _get_latest_result
 
         if expected_group_id is not None:

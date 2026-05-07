@@ -83,7 +83,7 @@ class DebugPayloadBuilder:
         Legge metadata e canvas dal DB config (PG) e costruisce il contesto pipeline.
         """
         try:
-            from app.db.config.projects import get_project
+            from app.core.projects.db import get_project
 
             metadata = get_project(project_id) or {}
             canvas_raw = (metadata.get("canvas") or {}) if metadata else {}
@@ -174,7 +174,7 @@ class DebugPayloadBuilder:
             return {}
 
         try:
-            from app.db.config.projects import get_project
+            from app.core.projects.db import get_project
 
             project_raw = get_project(project_id) or {}
             canvas_raw = project_raw.get("canvas") or {}

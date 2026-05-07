@@ -1,7 +1,7 @@
 """
 Architecture ledger for remaining legacy import containers.
 
-Batch 079 Worker 6: keep `app.services`, `app.db.db_service`, and
+Batch 080 Worker 6: keep `app.services`, `app.db.db_service`, and
 `app.db.config` production import debt measurable by domain. These
 baselines are intentionally exact: new import edges fail, and removed
 edges fail until the baseline is trimmed.
@@ -56,12 +56,7 @@ _LEGACY_IMPORT_BASELINES: dict[str, dict[str, frozenset[str]]] = {
             "app/services/file_upload.py -> app.services.file_storage_dispatch",
         }),
         "tasks_orchestration": frozenset({
-            "app/core/arricchisci/router.py -> app.services.task_service",
-            "app/core/eseguibili/service.py -> app.services.task_service",
-            "app/core/orchestrator/router.py -> app.services.task_service",
-            "app/core/orchestrator/service.py -> app.services.task_service",
             "workers/beat_scheduler.py -> app.services.log_archive",
-            "workers/tasks/enrichment_task.py -> app.services.task_service",
         }),
         "auth_datasources_other": frozenset(),
     },
@@ -69,9 +64,7 @@ _LEGACY_IMPORT_BASELINES: dict[str, dict[str, frozenset[str]]] = {
         "projects": frozenset({
             "app/core/arricchisci/canvas_orchestrator.py -> app.db.db_service",
         }),
-        "connections": frozenset({
-            "app/core/arricchisci/api_connection_rest_file.py -> app.db.db_service",
-        }),
+        "connections": frozenset(),
         "files_storage": frozenset(),
         "tasks_orchestration": frozenset({
             "workers/beat_scheduler.py -> app.db.db_service",
@@ -86,13 +79,10 @@ _LEGACY_IMPORT_BASELINES: dict[str, dict[str, frozenset[str]]] = {
     },
     "app.db.config": {
         "projects": frozenset({
-            "app/core/arricchisci/api_connection_source_loading.py -> app.db.config.projects",
             "app/core/arricchisci/execution_context.py -> app.db.config.projects",
-            "app/core/artifacts/resolver.py -> app.db.config.projects",
             "app/core/auth/owner_dependencies.py -> app.db.config.projects",
             "app/core/connections/router.py -> app.db.config.projects",
             "app/core/datasources/router.py -> app.db.config.projects",
-            "app/core/eseguibili/service.py -> app.db.config.projects",
             "app/core/imdf/router.py -> app.db.config.projects",
             "app/core/intermediate/db.py -> app.db.config.projects",
             "app/core/manipola/executor.py -> app.db.config.projects",
@@ -103,13 +93,13 @@ _LEGACY_IMPORT_BASELINES: dict[str, dict[str, frozenset[str]]] = {
             "app/core/projects/service.py -> app.db.config.projects",
             "app/db/config_db_service.py -> app.db.config.projects",
             "app/services/schema_inference.py -> app.db.config.projects",
-            "app/utils/debug_payload_builder.py -> app.db.config.projects",
             "app/utils/result_store.py -> app.db.config.projects",
             "workers/tasks/pipeline_task.py -> app.db.config.projects",
         }),
         "connections": frozenset({
             "app/core/arricchisci/api_connection_management.py -> app.db.config.api_connections",
-            "app/core/connections/service.py -> app.db.config.connections",
+            "app/core/arricchisci/api_connection_rest_file.py -> app.db.config.file_sources",
+            "app/core/connections/db.py -> app.db.config.connections",
             "app/db/config_db_service.py -> app.db.config.api_connections",
             "app/db/config_db_service.py -> app.db.config.connections",
         }),
@@ -251,7 +241,7 @@ def test_legacy_container_import_ledger_by_domain(prefix: str):
 
 
 def test_legacy_container_import_ledger_current_counts_are_locked():
-    """Exact count snapshot for Batch 079 residual reporting."""
+    """Exact count snapshot for Batch 080 residual reporting."""
     counts = {
         prefix: {
             domain: len(edges)

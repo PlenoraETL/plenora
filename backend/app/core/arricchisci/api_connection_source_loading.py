@@ -118,11 +118,8 @@ class ApiConnectionSourceLoadingMixin:
         l'esecuzione del pipeline di un altro tenant verrebbe triggerata
         prima del block.
         """
-        # imported from canonical leaf
-        # `app.db.config.projects` (lazy to avoid surfacing `pg_connection`
-        # at module import time — `validate_resource_visible` is the only
-        # cross-tenant guard before any DB read
-        from app.db.config.projects import get_project as _get_project
+        # Lazy to avoid surfacing `pg_connection` at module import time.
+        from app.core.projects.db import get_project as _get_project
         src_proj = _get_project(source_project_id)
         if not src_proj or src_proj.get("group_id") != executing_group_id:
             logger.error(

@@ -10,7 +10,7 @@ import psycopg2
 import pytest
 
 import app.config as config_mod
-import app.db.db_service as db_service_mod
+import app.db.config.file_sources as file_sources_db
 import app.shared.sharing as sharing_mod
 from app.core.arricchisci.execution_context import ArricchisciExecutionContext
 from app.shared.exceptions import FileSourceResolutionError
@@ -71,7 +71,7 @@ def test_returns_none_on_missing_metadata(api_service, monkeypatch, tmp_path):
     rispetto al pre-fix.
     """
     _bypass_security(monkeypatch, api_service, tmp_path)
-    monkeypatch.setattr(db_service_mod, "get_file_source", lambda *a, **kw: None)
+    monkeypatch.setattr(file_sources_db, "get_file_source", lambda *a, **kw: None)
 
     result = api_service._resolve_file_source_id_path("fs-absent", ctx=_TEST_CTX)
 
@@ -95,7 +95,7 @@ def test_returns_none_on_empty_blob(api_service, monkeypatch, tmp_path):
             return {"original_filename": "input.xlsx", "metadata": {}}
         return {"data": None}
 
-    monkeypatch.setattr(db_service_mod, "get_file_source", _get)
+    monkeypatch.setattr(file_sources_db, "get_file_source", _get)
 
     result = api_service._resolve_file_source_id_path("fs-empty", ctx=_TEST_CTX)
 
@@ -115,7 +115,7 @@ def test_raises_on_metadata_lookup_db_error(api_service, monkeypatch, tmp_path):
     def _boom(fs_id, include_data=False):
         raise original
 
-    monkeypatch.setattr(db_service_mod, "get_file_source", _boom)
+    monkeypatch.setattr(file_sources_db, "get_file_source", _boom)
 
     with pytest.raises(FileSourceResolutionError) as exc_info:
         api_service._resolve_file_source_id_path("fs-1", ctx=_TEST_CTX)
@@ -143,7 +143,7 @@ def test_raises_on_blob_lookup_db_error(api_service, monkeypatch, tmp_path):
             return {"original_filename": "input.xlsx", "metadata": {}}
         raise original
 
-    monkeypatch.setattr(db_service_mod, "get_file_source", _get)
+    monkeypatch.setattr(file_sources_db, "get_file_source", _get)
 
     with pytest.raises(FileSourceResolutionError) as exc_info:
         api_service._resolve_file_source_id_path("fs-1", ctx=_TEST_CTX)
@@ -171,7 +171,7 @@ def test_raises_on_filesystem_materialization_error(
             return {"original_filename": "input.xlsx", "metadata": {}}
         return {"data": b"payload"}
 
-    monkeypatch.setattr(db_service_mod, "get_file_source", _get)
+    monkeypatch.setattr(file_sources_db, "get_file_source", _get)
 
     original = PermissionError("filesystem read-only")
 

@@ -192,7 +192,7 @@ def test_resolve_file_source_id_path_ctx_wins_over_stale_singleton(api_service, 
     winner-grp-B, e mock del DB blob per evitare I/O reale."""
     import app.config as config_mod
     import app.shared.sharing as sharing_mod
-    import app.db.db_service as db_service
+    import app.db.config.file_sources as file_sources_db
 
     # Stato legacy stale.
     api_service._current_group_id = "stale-grp-A"
@@ -205,7 +205,7 @@ def test_resolve_file_source_id_path_ctx_wins_over_stale_singleton(api_service, 
 
     # Mock del DB blob lookup.
     monkeypatch.setattr(
-        db_service,
+        file_sources_db,
         "get_file_source",
         lambda fs_id, include_data=False: {
             "original_filename": "input.bin",
@@ -334,7 +334,7 @@ def test_resolve_file_source_id_path_requires_visibility_before_materializing_bl
     # BE-GO-READY-TRANSFORMATION-ENGINE-022: typed ctx Phase 2.
     import app.config as config_mod
     import app.shared.sharing as sharing_mod
-    import app.db.db_service as db_service
+    import app.db.config.file_sources as file_sources_db
 
     monkeypatch.setattr(
         config_mod,
@@ -342,7 +342,9 @@ def test_resolve_file_source_id_path_requires_visibility_before_materializing_bl
         type("S", (), {"get_file_source_dir": lambda self, file_source_id: tmp_path / file_source_id})(),
     )
     monkeypatch.setattr(sharing_mod, "is_resource_visible", lambda *args, **kwargs: False)
-    monkeypatch.setattr(db_service, "get_file_source", lambda *args, **kwargs: {"data": b"abc"})
+    monkeypatch.setattr(
+        file_sources_db, "get_file_source", lambda *args, **kwargs: {"data": b"abc"}
+    )
 
     with pytest.raises(ValueError, match="Accesso negato"):
         api_service._resolve_file_source_id_path("fs-1", ctx=_ctx())
@@ -364,15 +366,14 @@ def test_load_source_project_force_recalculate_blocks_cross_tenant_before_recomp
     sollevare ValueError PRIMA che execute_pipeline venga invocato.
     """
     # BE-GO-READY-TRANSFORMATION-ENGINE-022: typed ctx Phase 2.
-    # BE-GO-READY-DB-ENGINE-005: production code now does
-    # `from app.db.config.projects import get_project as _get_project`
-    # at the lazy-import boundary. Patch the canonical leaf so the
-    # bind picks up the fake.
-    import app.db.config.projects as _projects_leaf
+    # Production code now imports the project-domain DB bridge at the
+    # lazy boundary. Patch the canonical bridge so the bind picks up
+    # the fake.
+    import app.core.projects.db as _projects_db
 
     # source_project_id appartiene al tenant B, non a grp-A
     monkeypatch.setattr(
-        _projects_leaf,
+        _projects_db,
         "get_project",
         lambda project_id, group_id=None: {
             "id": project_id,
@@ -412,10 +413,10 @@ def test_load_source_project_force_recalculate_blocks_unknown_project(
     fallthrough che possa diventare un probe per l'enumeration dei
     project_id cross-tenant."""
     # BE-GO-READY-TRANSFORMATION-ENGINE-022: typed ctx Phase 2.
-    # BE-GO-READY-DB-ENGINE-005: patch the canonical leaf (see
-    # the cross-tenant test above for rationale).
-    import app.db.config.projects as _projects_leaf
-    monkeypatch.setattr(_projects_leaf, "get_project", lambda *args, **kwargs: None)
+    # Patch the canonical project-domain DB bridge (see the
+    # cross-tenant test above for rationale).
+    import app.core.projects.db as _projects_db
+    monkeypatch.setattr(_projects_db, "get_project", lambda *args, **kwargs: None)
 
     with pytest.raises(ValueError, match="Accesso negato"):
         api_service._load_source_project(
@@ -432,10 +433,10 @@ def test_load_source_project_force_recalculate_allows_same_tenant(
     e procedere al recompute. Se il pre-check fosse troppo stretto,
     questo test lo catturerebbe."""
     # BE-GO-READY-TRANSFORMATION-ENGINE-022: typed ctx Phase 2.
-    # BE-GO-READY-DB-ENGINE-005: patch the canonical leaf.
-    import app.db.config.projects as _projects_leaf
+    # Patch the canonical project-domain DB bridge.
+    import app.core.projects.db as _projects_db
     monkeypatch.setattr(
-        _projects_leaf,
+        _projects_db,
         "get_project",
         lambda project_id, group_id=None: {
             "id": project_id,

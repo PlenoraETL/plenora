@@ -1371,7 +1371,7 @@ def _trigger_carica_if_present(project_id: str, canvas: Dict, output_format: str
         project_id=project_id
     )
 
-    from app.services.task_service import task_service
+    from app.core.orchestrator.task_service import task_service
     from app.core.projects.service import ProjectService
     try:
         metadata = ProjectService().get_project_metadata(project_id)

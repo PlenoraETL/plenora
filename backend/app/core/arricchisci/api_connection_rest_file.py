@@ -13,7 +13,7 @@ from typing import Any, Dict, List, Optional
 import pandas as pd
 import psycopg2
 
-import app.db.db_service as db_svc
+import app.db.config.file_sources as file_sources_db
 from app.config import settings
 from app.core.arricchisci._api_connection_helpers import _nd
 from app.core.arricchisci.execution_context import (
@@ -795,7 +795,9 @@ class ApiConnectionRestFileMixin:
         # con chain preservata. `return None` resta solo sui rami
         # dati legittimi (metadata assente / blob vuoto
         try:
-            row_meta = db_svc.get_file_source(file_source_id, include_data=False)
+            row_meta = file_sources_db.get_file_source(
+                file_source_id, include_data=False
+            )
         except psycopg2.Error as e:
             raise FileSourceResolutionError(
                 file_source_id=file_source_id,
@@ -823,7 +825,9 @@ class ApiConnectionRestFileMixin:
 
         # Cache miss: estrai blob da DB e scrivi atomico
         try:
-            row_full = db_svc.get_file_source(file_source_id, include_data=True)
+            row_full = file_sources_db.get_file_source(
+                file_source_id, include_data=True
+            )
         except psycopg2.Error as e:
             raise FileSourceResolutionError(
                 file_source_id=file_source_id,

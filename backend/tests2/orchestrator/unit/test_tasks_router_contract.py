@@ -14,6 +14,13 @@ import pytest
 pytestmark = [pytest.mark.unit, pytest.mark.orchestrator, pytest.mark.contract, pytest.mark.regression]
 
 
+def test_task_service_compat_wrapper_preserves_canonical_singleton():
+    from app.core.orchestrator.task_service import task_service as canonical_task_service
+    from app.services.task_service import task_service as compat_task_service
+
+    assert compat_task_service is canonical_task_service
+
+
 def test_cleanup_task_deletes_only_task_result_and_task_logs(client, tmp_path):
     project_id = "proj-1"
     task_id = "task-1"

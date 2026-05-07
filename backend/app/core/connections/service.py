@@ -6,14 +6,10 @@ from datetime import datetime, timezone
 from typing import Optional
 
 from app.config import settings
+from app.core.connections import db as connection_db
 from app.shared.crypto import CredentialUnavailableError, is_encrypted
 from app.shared.crypto import decrypt as _decrypt_password
 from app.shared.crypto import encrypt as _encrypt_password
-from app.db.config.connections import create_connection as db_create_connection
-from app.db.config.connections import delete_connection as db_delete_connection
-from app.db.config.connections import get_connection_config
-from app.db.config.connections import update_connection as db_update_connection
-from app.db.pg_connection import fetchall as db_fetchall
 from app.core.connections.models import (
     DatabaseConnection,
     ConnectionCreate,
@@ -127,7 +123,7 @@ class ConnectionService:
         group_id = group_id or self.DEFAULT_GROUP
         connection_id = self._generate_connection_id(data.name)
         extra = {"description": getattr(data, "description", "")}
-        db_create_connection(
+        connection_db.create_connection(
             conn_id=connection_id,
             group_id=group_id,
             name=data.name,
@@ -142,21 +138,13 @@ class ConnectionService:
             created_by=created_by,
         )
         logger.info(f"Connessione creata: {connection_id}", op="create_connection")
-        row = get_connection_config(connection_id)
+        row = connection_db.get_connection_config(connection_id)
         return self._row_to_connection(row)
 
     def list_connections(self, group_id: str = None) -> ConnectionList:
         # group_id=None → no filter (usato da superadmin e dalla path allowed_groups
         # Fix N+1: fetch tutte le righe complete in una query, no loop di get_connection_config
-        if group_id is None:
-            rows = db_fetchall(
-                "SELECT * FROM connections ORDER BY name"
-            )
-        else:
-            rows = db_fetchall(
-                "SELECT * FROM connections WHERE group_id = %s ORDER BY name",
-                (group_id,)
-            )
+        rows = connection_db.list_connection_configs(group_id)
         connections = []
         for full_row in rows:
             conn = self._row_to_connection(full_row, mask_password=True)
@@ -165,11 +153,11 @@ class ConnectionService:
         return ConnectionList(connections=connections)
 
     def get_connection(self, connection_id: str) -> Optional[DatabaseConnection]:
-        row = get_connection_config(connection_id)
+        row = connection_db.get_connection_config(connection_id)
         return self._row_to_connection(row, mask_password=False)
 
     def update_connection(self, connection_id: str, data: ConnectionUpdate) -> Optional[DatabaseConnection]:
-        row = get_connection_config(connection_id)
+        row = connection_db.get_connection_config(connection_id)
         if not row:
             return None
         update_fields = data.model_dump(exclude_unset=True)
@@ -195,17 +183,17 @@ class ConnectionService:
             extra["description"] = update_fields["description"]
             db_fields["extra"] = extra
         if db_fields:
-            db_update_connection(connection_id, **db_fields)
-        return self._row_to_connection(get_connection_config(connection_id))
+            connection_db.update_connection(connection_id, **db_fields)
+        return self._row_to_connection(connection_db.get_connection_config(connection_id))
 
     def delete_connection(self, connection_id: str) -> bool:
-        if not get_connection_config(connection_id):
+        if not connection_db.get_connection_config(connection_id):
             return False
-        db_delete_connection(connection_id)
+        connection_db.delete_connection(connection_id)
         return True
 
     def connection_exists(self, connection_id: str) -> bool:
-        return get_connection_config(connection_id) is not None
+        return connection_db.get_connection_config(connection_id) is not None
 
     def test_connection(self, connection_id: str) -> ConnectionTestResult:
         connection = self.get_connection(connection_id)

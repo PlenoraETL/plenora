@@ -207,7 +207,7 @@ class OrchestratorService:
         logger.info(f"Trovati {len(carica_nodes)} nodi CARICA, avvio task", op="carica", project_id=project_id)
 
         try:
-            from app.services.task_service import task_service
+            from app.core.orchestrator.task_service import task_service
             tasks = []
             # Campi di identità del nodo che NON devono essere sovrascritti dal
             # merge con `data{}`. Se l'utente, per errore o malizia, mette
