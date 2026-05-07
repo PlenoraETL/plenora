@@ -1,8 +1,11 @@
 # Architecture Decision Records (ADR)
 
-**Scope**: registro formale delle decisioni architetturali del backend URBY-ETL, in formato Nygard.
+**Scope**: registro formale delle decisioni architetturali del backend Plenora,
+in formato Nygard.
 
-**Rationale**: ISO 27001 A.18.2 e prassi di auditing compliance richiedono un registro esplicito delle decisioni con rationale + alternative valutate. Prima di Fase 1 queste decisioni vivevano in commenti sparsi, commit message e documenti trasversali (`VALUTAZIONE_URBY_ETL.md`, `invariants.md`). Questo registro le consolida.
+**Rationale**: le decisioni architetturali devono avere rationale, alternative
+valutate e conseguenze esplicite. Questo registro evita che il motivo delle
+scelte viva in commenti sparsi, commit message o documenti temporanei.
 
 **Relazione con `../invariants.md`**: gli ADR **citano** le invarianti applicabili, non le duplicano. Un'invariante dichiara il **principio vincolante** (es. "write DB passa per `DestinationWriter`"); l'ADR spiega **perche'** quel principio e' stato scelto e quali alternative sono state rifiutate. Un cambio di invariante richiede PR dedicata `[invariants]`; un nuovo ADR si aggiunge in append-only.
 
@@ -57,6 +60,12 @@ Non cancellare mai un ADR: il registro e' append-only. Un errore in un ADR si re
 
 ## Indice
 
+### Current Direction
+
+- [ADR-0023](0023-2026-05-06-arcgis-external-provider-boundary.md) - ArcGIS classified as external read/write provider (CONNECTION_ENGINE), not IMDF subdomain; IMDF is publish consumer.
+- [ADR-0024](0024-2026-05-07-self-documenting-runtime-code.md) - Self-documenting runtime code policy: import locality, type hints, weak-name guardrails, and comment policy after cleanup.
+
+
 ### Security / Crypto
 - [ADR-0001](0001-2026-04-17-eval-whitelist-over-asteval.md) — Validazione formula utente via whitelist AST anziche' libreria `asteval`
 - [ADR-0002](0002-2026-04-21-safe-number-identifier-vs-bindparam.md) — f-string SQL via `_safe_number` / `_safe_identifier` vs SQLAlchemy `bindparam`
@@ -84,11 +93,14 @@ Non cancellare mai un ADR: il registro e' append-only. Un errore in un ADR si re
 ### External providers / macro-component boundaries
 - [ADR-0023](0023-2026-05-06-arcgis-external-provider-boundary.md) — ArcGIS classified as external read/write provider (CONNECTION_ENGINE), not IMDF subdomain; IMDF is publish consumer; import guard in `tests2/shared/test_arcgis_provider_boundary_guard.py`
 
+### Runtime code quality
+- [ADR-0024](0024-2026-05-07-self-documenting-runtime-code.md) - Self-documenting runtime code policy: import locality, type hints, weak-name guardrails, and comment policy after cleanup.
+
 ## Workflow
 
 1. **Scrivi l'ADR** con naming convention sopra
 2. **Aggiorna l'indice** in questa README
 3. **Cita riferimenti** concreti (source file:linea, commit hash, invariants)
-4. **Commit atomico** con prefisso `[stream-acn] adr-NNNN: <slug>` (per lo stream Fase 1; successivamente `[adr-NNNN]`)
+4. **Commit atomico** con prefisso `[adr-NNNN] <slug>`
 
 Un ADR non deve essere auto-celebrativo. Le alternative valutate devono essere onestamente raccontate, con il motivo reale del rifiuto (costo, complessita', maturita' libreria, lock-in, ecc.).

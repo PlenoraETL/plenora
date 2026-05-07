@@ -54,6 +54,10 @@ Every change should answer these questions:
 - Keep Python imports at module top by default. Local imports are allowed only
   for real circular imports, optional/heavy dependencies, or bootstrap/runtime
   boundaries, and should carry a short `NOTE:` when the reason is not obvious.
+- New or touched Python functions should add parameter and return annotations
+  unless the function is a trivial framework hook with a fixed external shape.
+- Avoid weak runtime names such as `df2`, `tmp`, `val`, `res`, `obj`, `x`, `y`,
+  and `z` outside tiny, obvious scopes.
 
 ## Code Comments
 
