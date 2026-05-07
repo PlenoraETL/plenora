@@ -139,16 +139,39 @@ def check_redis() -> CheckOutcome:
 
 
 def check_migrations_aligned() -> CheckOutcome:
-    """C8-nit: /ready rigoroso include check "migrations allineate".
+    """Readiness check for deterministic migration alignment.
+
     Confronta files in migrations/ con righe in schema_migrations.
-    503 se ci sono pending (deploy a meta' / file committato ma non
-    ancora applicato dal runner)."""
+    503 se la DB e' empty/pending/misaligned. Questo rende visibili
+    sia il primo bootstrap non ancora completato sia deploy a meta'
+    o tracking rows non piu' corrispondenti ai file su disco.
+    """
     try:
-        from app.db.migrations_runner import list_pending_migrations
-        pending = list_pending_migrations()
-        if pending:
-            return False, f"{len(pending)} pending: {', '.join(pending[:3])}"
-        return True, "aligned"
+        from app.db.migrations_runner import get_migration_status
+        status = get_migration_status()
+        if status.state == "migrated":
+            return True, "aligned"
+        if status.state == "empty":
+            return (
+                False,
+                "empty database: "
+                f"{len(status.pending_migrations)} pending: "
+                f"{', '.join(status.pending_migrations[:3])}",
+            )
+        if status.state == "pending":
+            return (
+                False,
+                f"{len(status.pending_migrations)} pending: "
+                f"{', '.join(status.pending_migrations[:3])}",
+            )
+        if status.state == "misaligned":
+            return (
+                False,
+                "misaligned: "
+                f"{len(status.unknown_applied_migrations)} unknown applied: "
+                f"{', '.join(status.unknown_applied_migrations[:3])}",
+            )
+        return False, f"unknown migration state: {status.state}"
     except Exception as e:
         # Non falliamo /ready per un problema di introspection stessa —
         # un check PG/Redis a monte ha gia' validato la raggiungibilita'

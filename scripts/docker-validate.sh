@@ -228,6 +228,54 @@ run_step() {
     fi
 }
 
+run_ready_step() {
+    local n="4b"
+    local desc="GET /ready"
+    local url="http://127.0.0.1:5004/ready"
+    local body_file
+    local rc
+    local http_status
+
+    echo
+    echo "=============================================================="
+    echo "STEP $n: $desc"
+    echo "    \$ curl -fsS $url"
+    echo "=============================================================="
+
+    if [ "$DRY_RUN" -eq 1 ]; then
+        echo "(dry-run: not executing)"
+        return 0
+    fi
+
+    body_file="$(mktemp)"
+    http_status="$(curl -sS -o "$body_file" -w "%{http_code}" "$url")"
+    rc=$?
+
+    if [ $rc -eq 0 ] && [ "$http_status" -ge 200 ] && [ "$http_status" -lt 300 ]; then
+        cat "$body_file"
+        rm -f "$body_file"
+        return 0
+    fi
+
+    echo
+    echo "STEP $n FAILED: /ready returned HTTP ${http_status:-000} (curl exit $rc)." >&2
+    if [ -s "$body_file" ]; then
+        echo "Response body from /ready:" >&2
+        cat "$body_file" >&2
+        echo >&2
+    else
+        echo "No /ready response body was received." >&2
+    fi
+    rm -f "$body_file"
+    echo "Readiness is the dependency gate. Inspect the failed check details above, then paste:" >&2
+    echo "  - docker compose ps" >&2
+    echo "  - docker compose logs --tail 200 backend" >&2
+    echo "  - docker compose logs --tail 200 postgres redis" >&2
+    echo "  - docker compose exec -T backend python -c \"from app.observability.health import gather_readiness; print(gather_readiness().body)\"" >&2
+    echo "Common blockers: Postgres/Redis connectivity, pending or failed migrations, object storage policy/config, bootstrap not complete." >&2
+    exit 1
+}
+
 run_schema_postcondition() {
     local n="4c"
     local desc="Postgres schema + migrations postcondition"
@@ -368,8 +416,10 @@ run_step 4a "GET /health" -- \
 # is readable. The curl JSON body has no trailing newline.
 [ "$DRY_RUN" -eq 0 ] && echo
 
-run_step 4b "GET /ready" -- \
-    curl -fsS http://127.0.0.1:5004/ready
+# Source-bound guard marker: run_step 4b "GET /ready".
+# Implemented through run_ready_step so readiness failures can print
+# the response body and dependency-focused paste guidance.
+run_ready_step
 
 [ "$DRY_RUN" -eq 0 ] && echo
 

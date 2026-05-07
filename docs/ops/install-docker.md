@@ -76,7 +76,10 @@ Expected output checklist:
 3. **`docker compose up -d --wait backend`**
    Expected: Postgres, Redis, and backend become healthy enough for API probes.
 4. **`curl -fsS http://127.0.0.1:5004/health`**
-   Expected: HTTP 200 and backend dependency checks are green.
+   Expected: HTTP 200 from the backend liveness surface.
+   Then run **`curl -fsS http://127.0.0.1:5004/ready`**.
+   Expected: HTTP 200 from the readiness surface; dependency gates and
+   migration readiness are green.
 5. **`docker compose up -d worker beat`**
    Expected: worker and beat containers stay running.
 6. **`cleanroom.ping`**
@@ -130,10 +133,18 @@ docker compose ps
 If `/ready` fails:
 
 ```bash
+curl -sS http://127.0.0.1:5004/ready
+docker compose ps
 docker compose logs --tail 200 backend
+docker compose logs --tail 200 postgres redis
 docker compose logs --tail 200 worker
 docker compose logs --tail 200 beat
+docker compose exec -T backend python -c "from app.observability.health import gather_readiness; print(gather_readiness().body)"
 ```
+
+Use the `/ready` response body first: it names the failing readiness check.
+Common blockers are Postgres/Redis connectivity, pending or failed migrations,
+object storage policy/config, and incomplete backend bootstrap.
 
 ## 6. Worker Round-Trip
 

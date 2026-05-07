@@ -5,6 +5,7 @@ Keeps this module's responsibility explicit and isolated from adjacent code.
 """
 
 import uuid
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import List, Optional
 
@@ -28,6 +29,18 @@ from app.services.project_repository import (
 )
 
 logger = get_logger(__name__)
+
+
+@dataclass(frozen=True)
+class RawProjectCanvas:
+    """Raw persisted canvas value for recovery/debug reads.
+
+    `canvas` is intentionally unvalidated: callers use this only after the
+    strict CanvasState path rejects persisted data.
+    """
+
+    project_id: str
+    canvas: object
 
 
 class ProjectService:
@@ -214,6 +227,33 @@ class ProjectService:
                 reason=f"schema non valido ({reason_str})",
                 original_error=e,
             )
+
+    def get_project_raw_canvas(
+        self,
+        project_id: str,
+        group_id: Optional[str] = None,
+    ) -> Optional[RawProjectCanvas]:
+        """Read the persisted canvas without JSON/schema validation.
+
+        This is the recovery boundary for corrupted canvases. Normal project
+        reads must continue to use `get_project_canvas`, which fails loud on
+        malformed JSON or invalid CanvasState shape. When `group_id` is
+        provided the DB read is tenant-filtered, so service callers cannot
+        accidentally bypass project ownership checks.
+        """
+        if group_id:
+            row = pg_connection.fetchone(
+                "SELECT id, canvas FROM projects WHERE id = ? AND group_id = ?",
+                (project_id, group_id),
+            )
+        else:
+            row = pg_connection.fetchone(
+                "SELECT id, canvas FROM projects WHERE id = ?",
+                (project_id,),
+            )
+        if not row:
+            return None
+        return RawProjectCanvas(project_id=str(row["id"]), canvas=row.get("canvas"))
 
     def get_project(self, project_id: str, group_id: str = None) -> Optional[dict]:
         """Carica progetto completo (metadata + canvas).

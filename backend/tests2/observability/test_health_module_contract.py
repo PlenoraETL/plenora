@@ -297,9 +297,18 @@ def test_check_pool_headroom_does_not_import_private_pool_symbols():
 
 
 def test_check_migrations_aligned_ok_when_no_pending():
+    from app.db.migrations_runner import MigrationStatus
+
     with patch(
-        "app.db.migrations_runner.list_pending_migrations",
-        return_value=[],
+        "app.db.migrations_runner.get_migration_status",
+        return_value=MigrationStatus(
+            state="migrated",
+            migration_files=["a.sql"],
+            applied_migrations=["a.sql"],
+            pending_migrations=[],
+            unknown_applied_migrations=[],
+            tracking_table_present=True,
+        ),
     ):
         from app.observability.health import check_migrations_aligned
 
@@ -309,9 +318,18 @@ def test_check_migrations_aligned_ok_when_no_pending():
 
 
 def test_check_migrations_aligned_failed_with_pending_list():
+    from app.db.migrations_runner import MigrationStatus
+
     with patch(
-        "app.db.migrations_runner.list_pending_migrations",
-        return_value=["2026-05-01_a.sql", "2026-05-02_b.sql"],
+        "app.db.migrations_runner.get_migration_status",
+        return_value=MigrationStatus(
+            state="pending",
+            migration_files=["2026-05-01_a.sql", "2026-05-02_b.sql"],
+            applied_migrations=[],
+            pending_migrations=["2026-05-01_a.sql", "2026-05-02_b.sql"],
+            unknown_applied_migrations=[],
+            tracking_table_present=True,
+        ),
     ):
         from app.observability.health import check_migrations_aligned
 
@@ -326,7 +344,7 @@ def test_check_migrations_aligned_fail_open_on_exception():
         raise RuntimeError("introspection bug")
 
     with patch(
-        "app.db.migrations_runner.list_pending_migrations", _raise
+        "app.db.migrations_runner.get_migration_status", _raise
     ):
         from app.observability.health import check_migrations_aligned
 

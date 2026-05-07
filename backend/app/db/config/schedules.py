@@ -5,32 +5,104 @@ Keeps config-table persistence isolated behind a narrow database module.
 """
 
 import json
-from typing import Dict, List, Optional
+from dataclasses import dataclass
+from datetime import datetime
+from typing import Dict, Iterable, List, Mapping, Optional, cast
 
 from app.db.pg_connection import fetchone, fetchall, execute
 
 
-def get_schedule(schedule_id: str) -> Optional[Dict]:
+@dataclass(frozen=True)
+class ScheduleRow:
+    """Read model for the schedules table row shape."""
+
+    id: str
+    group_id: str
+    project_id: str
+    name: str
+    cron_expression: str
+    is_enabled: bool
+    config: object
+    created_at: Optional[datetime | str]
+    updated_at: Optional[datetime | str]
+    created_by: Optional[str]
+
+    @classmethod
+    def from_mapping(cls, row: Mapping[str, object]) -> "ScheduleRow":
+        return cls(
+            id=cast(str, row["id"]),
+            group_id=cast(str, row["group_id"]),
+            project_id=cast(str, row["project_id"]),
+            name=cast(str, row["name"]),
+            cron_expression=cast(str, row["cron_expression"]),
+            is_enabled=bool(row["is_enabled"]),
+            config=row.get("config"),
+            created_at=cast(Optional[datetime | str], row.get("created_at")),
+            updated_at=cast(Optional[datetime | str], row.get("updated_at")),
+            created_by=cast(Optional[str], row.get("created_by")),
+        )
+
+    def to_legacy_dict(self) -> Dict[str, object]:
+        """Compatibility shape for callers not migrated to ScheduleRow."""
+        return {
+            "id": self.id,
+            "group_id": self.group_id,
+            "project_id": self.project_id,
+            "name": self.name,
+            "cron_expression": self.cron_expression,
+            "is_enabled": self.is_enabled,
+            "config": self.config,
+            "created_at": self.created_at,
+            "updated_at": self.updated_at,
+            "created_by": self.created_by,
+        }
+
+
+def _decode_schedule_config(row: Dict[str, object]) -> None:
+    if isinstance(row.get("config"), str):
+        row["config"] = json.loads(cast(str, row["config"]))
+
+
+def _schedule_rows(rows: Iterable[Mapping[str, object]]) -> List[ScheduleRow]:
+    return [ScheduleRow.from_mapping(row) for row in rows]
+
+
+def get_schedule_row(schedule_id: str) -> Optional[ScheduleRow]:
     row = fetchone("SELECT * FROM schedules WHERE id = ?", (schedule_id,))
-    if row and row.get("config"):
-        row["config"] = json.loads(row["config"])
-    return row
+    if row:
+        _decode_schedule_config(row)
+    return ScheduleRow.from_mapping(row) if row else None
 
 
-def list_schedules(group_id: str) -> List[Dict]:
+def list_schedule_rows(group_id: str) -> List[ScheduleRow]:
     rows = fetchall(
         "SELECT * FROM schedules WHERE group_id = ? ORDER BY created_at DESC",
         (group_id,)
     )
     for r in rows:
-        if r.get("config"):
-            r["config"] = json.loads(r["config"])
-    return rows
+        _decode_schedule_config(r)
+    return _schedule_rows(rows)
 
 
-def save_schedule(schedule_id: str, group_id: str, project_id: str, name: str,
-                  cron_expression: str, is_enabled: bool = True, config: dict = None,
-                  created_by: str = None) -> Dict:
+def get_schedule(schedule_id: str) -> Optional[Dict[str, object]]:
+    row = get_schedule_row(schedule_id)
+    return row.to_legacy_dict() if row else None
+
+
+def list_schedules(group_id: str) -> List[Dict[str, object]]:
+    return [row.to_legacy_dict() for row in list_schedule_rows(group_id)]
+
+
+def save_schedule(
+    schedule_id: str,
+    group_id: str,
+    project_id: str,
+    name: str,
+    cron_expression: str,
+    is_enabled: bool = True,
+    config: Optional[Dict[str, object]] = None,
+    created_by: Optional[str] = None,
+) -> Dict[str, object]:
     from datetime import datetime, timezone
     now = datetime.now(timezone.utc).isoformat()
     execute(
@@ -44,7 +116,10 @@ def save_schedule(schedule_id: str, group_id: str, project_id: str, name: str,
     return get_schedule(schedule_id)
 
 
-def update_schedule(schedule_id: str, **fields) -> Optional[Dict]:
+def update_schedule(
+    schedule_id: str,
+    **fields: object,
+) -> Optional[Dict[str, object]]:
     from datetime import datetime, timezone
     from app.db.config_db_service import _safe_set_clause
     if "config" in fields and isinstance(fields["config"], dict):

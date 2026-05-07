@@ -362,6 +362,41 @@ def get_project(
     }
 
 
+@router.get("/{project_id}/canvas/raw")
+def get_project_raw_canvas(
+    project_id: str,
+    current_user: CurrentUser = Depends(require_not_esecutore),
+) -> dict[str, Any]:
+    """Read persisted canvas without CanvasState validation.
+
+    Recovery-only endpoint for projects whose normal GET fails with
+    CanvasCorruptedError. It remains read-only and keeps the same project
+    group access gate as `get_project`.
+    """
+    metadata = _project_service.get_project_metadata(project_id)
+    assert_group_access(metadata, current_user, f"Progetto '{project_id}'")
+
+    raw_canvas = _project_service.get_project_raw_canvas(
+        project_id,
+        group_id=None if current_user.role == "superadmin" else current_user.group_id,
+    )
+    if raw_canvas is None:
+        raise HTTPException(
+            status_code=404,
+            detail={
+                "error": error_codes.PROJECT_NOT_FOUND,
+                "message": f"Progetto '{project_id}' non trovato",
+            },
+        )
+
+    return {
+        "project_id": raw_canvas.project_id,
+        "canvas": raw_canvas.canvas,
+        "raw": True,
+        "validated": False,
+    }
+
+
 @router.delete("/{project_id}", status_code=204)
 @audit_action(action="project.delete", target_param="project_id")
 def delete_project(

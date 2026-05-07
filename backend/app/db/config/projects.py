@@ -42,11 +42,64 @@ class ProjectRow:
         )
 
 
+@dataclass(frozen=True)
+class ProjectDetailRow:
+    """Read model for the full project row shape."""
+
+    id: str
+    group_id: Optional[str]
+    name: str
+    project_type: str
+    canvas: object
+    connection_id: Optional[str]
+    created_at: Optional[datetime | str]
+    updated_at: Optional[datetime | str]
+    created_by: Optional[str]
+    description: Optional[str] = None
+    retention_n: Optional[int] = None
+
+    @classmethod
+    def from_mapping(cls, row: Mapping[str, object]) -> "ProjectDetailRow":
+        return cls(
+            id=cast(str, row["id"]),
+            group_id=cast(Optional[str], row.get("group_id")),
+            name=cast(str, row["name"]),
+            project_type=cast(str, row["project_type"]),
+            canvas=row.get("canvas"),
+            connection_id=cast(Optional[str], row.get("connection_id")),
+            created_at=cast(Optional[datetime | str], row.get("created_at")),
+            updated_at=cast(Optional[datetime | str], row.get("updated_at")),
+            created_by=cast(Optional[str], row.get("created_by")),
+            description=cast(Optional[str], row.get("description")),
+            retention_n=cast(Optional[int], row.get("retention_n")),
+        )
+
+    def to_legacy_dict(self) -> Dict[str, object]:
+        """Compatibility shape for callers not migrated to ProjectDetailRow."""
+        row: Dict[str, object] = {
+            "id": self.id,
+            "group_id": self.group_id,
+            "name": self.name,
+            "project_type": self.project_type,
+            "canvas": self.canvas,
+            "connection_id": self.connection_id,
+            "created_at": self.created_at,
+            "updated_at": self.updated_at,
+            "created_by": self.created_by,
+            "description": self.description,
+            "retention_n": self.retention_n,
+        }
+        return row
+
+
 def _project_rows(rows: Iterable[Mapping[str, object]]) -> List[ProjectRow]:
     return [ProjectRow.from_mapping(row) for row in rows]
 
 
-def get_project(project_id: str, group_id: str = None) -> Optional[Dict]:
+def get_project_row(
+    project_id: str,
+    group_id: Optional[str] = None,
+) -> Optional[ProjectDetailRow]:
     if group_id:
         row = fetchone(
             "SELECT * FROM projects WHERE id = ? AND group_id = ?",
@@ -65,7 +118,15 @@ def get_project(project_id: str, group_id: str = None) -> Optional[Dict]:
                 f"Fallback a canvas vuoto."
             )
             row["canvas"] = {"nodes": [], "edges": []}
-    return row
+    return ProjectDetailRow.from_mapping(row) if row else None
+
+
+def get_project(
+    project_id: str,
+    group_id: Optional[str] = None,
+) -> Optional[Dict[str, object]]:
+    row = get_project_row(project_id, group_id=group_id)
+    return row.to_legacy_dict() if row else None
 
 
 def list_projects(

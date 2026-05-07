@@ -48,6 +48,71 @@ def test_project_list_db_leaf_returns_immutable_project_rows(monkeypatch):
         rows[0].name = "changed"
 
 
+def test_project_detail_db_leaf_returns_immutable_project_row(monkeypatch):
+    from app.db.config import projects as project_db
+
+    now = datetime(2026, 5, 7, 10, 0, tzinfo=timezone.utc)
+    monkeypatch.setattr(
+        project_db,
+        "fetchone",
+        lambda *args, **kwargs: {
+            "id": "p1",
+            "group_id": "grp-1",
+            "name": "Project One",
+            "project_type": "estrai",
+            "canvas": '{"nodes": [], "edges": []}',
+            "connection_id": "conn-1",
+            "created_at": now,
+            "updated_at": now,
+            "created_by": "user-1",
+            "retention_n": 3,
+        },
+    )
+
+    row = project_db.get_project_row("p1", group_id="grp-1")
+
+    assert row == project_db.ProjectDetailRow(
+        id="p1",
+        group_id="grp-1",
+        name="Project One",
+        project_type="estrai",
+        canvas={"nodes": [], "edges": []},
+        connection_id="conn-1",
+        created_at=now,
+        updated_at=now,
+        created_by="user-1",
+        retention_n=3,
+    )
+    with pytest.raises(FrozenInstanceError):
+        row.name = "changed"
+
+
+def test_get_project_keeps_legacy_dict_wrapper(monkeypatch):
+    from app.db.config import projects as project_db
+
+    monkeypatch.setattr(
+        project_db,
+        "get_project_row",
+        lambda *args, **kwargs: project_db.ProjectDetailRow(
+            id="p1",
+            group_id="grp-1",
+            name="Project One",
+            project_type="estrai",
+            canvas={"nodes": [], "edges": []},
+            connection_id=None,
+            created_at=None,
+            updated_at=None,
+            created_by=None,
+        ),
+    )
+
+    row = project_db.get_project("p1")
+
+    assert isinstance(row, dict)
+    assert row["id"] == "p1"
+    assert row["canvas"] == {"nodes": [], "edges": []}
+
+
 def test_project_service_list_projects_uses_typed_project_rows(monkeypatch):
     from app.db.config import projects as project_db
     from app.services.project_service import ProjectService

@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import os
 import re
+from dataclasses import dataclass
 from pathlib import Path
 from typing import List, Optional
 
@@ -26,6 +27,24 @@ MIGRATIONS_DIR = _BACKEND_ROOT / "migrations"
 # input utente, ma applichiamo comunque whitelist + psycopg2 identifier
 # quoting per non string-formattare mai identifier SQL
 _SCHEMA_NAME_PATTERN = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+_PG_UNDEFINED_TABLE = "42P01"
+_PG_INVALID_SCHEMA = "3F000"
+
+
+@dataclass(frozen=True)
+class MigrationStatus:
+    """Deterministic view of migration alignment for bootstrap/readiness."""
+
+    state: str
+    migration_files: List[str]
+    applied_migrations: List[str]
+    pending_migrations: List[str]
+    unknown_applied_migrations: List[str]
+    tracking_table_present: bool
+
+    @property
+    def aligned(self) -> bool:
+        return self.state == "migrated"
 
 
 def _resolved_schema() -> str:
@@ -108,6 +127,12 @@ def _create_tracking_table_statement(schema: Optional[str] = None):
     ).format(_schema_migrations_table(schema))
 
 
+def _is_missing_tracking_table_error(exc: Exception) -> bool:
+    """Return True for clean-install pre-tracking-table SQL errors."""
+    pgcode = getattr(exc, "pgcode", None)
+    return pgcode in {_PG_UNDEFINED_TABLE, _PG_INVALID_SCHEMA}
+
+
 def list_migration_files() -> List[str]:
     """Ritorna i nomi file `.sql` in MIGRATIONS_DIR, ordinati lessicograficamente."""
     if not MIGRATIONS_DIR.is_dir():
@@ -118,8 +143,13 @@ def list_migration_files() -> List[str]:
     )
 
 
-def list_applied_migrations() -> List[str]:
-    """Legge le migration gia' applicate da `<DB_SCHEMA>.schema_migrations`."""
+def _read_applied_migrations() -> tuple[List[str], bool]:
+    """Read applied migrations and whether tracking exists.
+
+    Missing schema/table is the deterministic empty-DB bootstrap state.
+    Other DB errors are propagated so callers do not silently collapse
+    introspection failures into "nothing applied".
+    """
     # Import locale per evitare side-effect al load del modulo
     from app.db.pg_connection import get_connection, put_connection
     from psycopg2 import sql as _sql
@@ -139,15 +169,24 @@ def list_applied_migrations() -> List[str]:
             conn.rollback()
         except Exception:
             pass
-        # Se la tabella non esiste ancora (primo bootstrap), ritorna
-        # Il runner la creera' subito dopo
+        if not _is_missing_tracking_table_error(e):
+            raise
+        # Se la tabella/schema non esiste ancora (primo bootstrap),
+        # ritorna un empty state esplicito. Il runner creera' schema
+        # e tracking table prima di applicare le migration.
         logger.warning(
             f"schema_migrations non leggibile (primo bootstrap?): {e}"
         )
-        return []
+        return [], False
     finally:
         put_connection(conn)
-    return [r["filename"] for r in rows]
+    return [r["filename"] for r in rows], True
+
+
+def list_applied_migrations() -> List[str]:
+    """Legge le migration gia' applicate da `<DB_SCHEMA>.schema_migrations`."""
+    applied, _tracking_table_present = _read_applied_migrations()
+    return applied
 
 
 def list_pending_migrations() -> List[str]:
@@ -155,6 +194,40 @@ def list_pending_migrations() -> List[str]:
     files = set(list_migration_files())
     applied = set(list_applied_migrations())
     return sorted(files - applied)
+
+
+def get_migration_status() -> MigrationStatus:
+    """Return empty/pending/misaligned/migrated migration state.
+
+    State meanings:
+      - ``empty``: tracking table/schema does not exist yet or has no
+        rows while migration files exist;
+      - ``pending``: at least one migration file is not recorded;
+      - ``misaligned``: tracking contains rows for files no longer on disk;
+      - ``migrated``: all files are recorded and no unknown rows exist.
+    """
+    files = list_migration_files()
+    applied, tracking_table_present = _read_applied_migrations()
+    file_set = set(files)
+    applied_set = set(applied)
+    pending = sorted(file_set - applied_set)
+    unknown_applied = sorted(applied_set - file_set)
+
+    if unknown_applied:
+        state = "misaligned"
+    elif pending:
+        state = "empty" if not tracking_table_present or not applied else "pending"
+    else:
+        state = "migrated"
+
+    return MigrationStatus(
+        state=state,
+        migration_files=files,
+        applied_migrations=applied,
+        pending_migrations=pending,
+        unknown_applied_migrations=unknown_applied,
+        tracking_table_present=tracking_table_present,
+    )
 
 
 def apply_pending_migrations() -> List[str]:
