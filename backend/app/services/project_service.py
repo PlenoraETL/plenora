@@ -17,9 +17,11 @@ from app.models import (
     ProjectList,
     CanvasState,
 )
-import app.db.db_service as db
 
 from app.db.config import groups as _groups
+from app.db.config import projects as project_db
+from app.db import pg_connection
+from app.db import results_db_service as results_db
 
 logger = get_logger(__name__)
 
@@ -28,7 +30,7 @@ class ProjectService:
     """
     Servizio CRUD per progetti PLENORA-ETL.
 
-    Usa PostgreSQL come storage tramite db_service.
+    Usa PostgreSQL come storage tramite le leaf DB dedicate.
     group_id viene passato esplicitamente — in futuro verrà dal JWT.
     """
 
@@ -71,7 +73,7 @@ class ProjectService:
         group_id = group_id or self.DEFAULT_GROUP
         project_id = self._generate_project_id(project_data.name)
 
-        row = db.create_project(
+        row = project_db.create_project(
             project_id=project_id,
             group_id=group_id,
             name=project_data.name,
@@ -89,7 +91,7 @@ class ProjectService:
         - group_id="X" → solo progetti del gruppo X
         """
         self._ensure_default_group()
-        rows = db.list_projects(group_id)  # NB: il db.list_projects deve supportare None
+        rows = project_db.list_projects(group_id)  # NB: list_projects deve supportare None
         projects = [self._row_to_metadata(r) for r in rows if r]
         return ProjectList(projects=[p for p in projects if p])
 
@@ -100,7 +102,7 @@ class ProjectService:
           spetta al chiamante (es. assert_group_access nel router).
         - group_id="X" → solo se appartiene al gruppo X.
         """
-        row = db.get_project(project_id, group_id=group_id)
+        row = project_db.get_project(project_id, group_id=group_id)
         return self._row_to_metadata(row)
 
     def get_project_canvas(self, project_id: str) -> Optional[CanvasState]:
@@ -121,7 +123,7 @@ class ProjectService:
         """
         from app.shared.exceptions import CanvasCorruptedError
 
-        row = db.get_project(project_id)
+        row = project_db.get_project(project_id)
         if not row:
             return None
 
@@ -187,7 +189,7 @@ class ProjectService:
           spetta al chiamante.
         - group_id="X" → solo se appartiene al gruppo X.
         """
-        row = db.get_project(project_id, group_id=group_id)
+        row = project_db.get_project(project_id, group_id=group_id)
         if not row:
             return None
         metadata = self._row_to_metadata(row)
@@ -206,13 +208,13 @@ class ProjectService:
                 le dipendenze transitive degli altri progetti formano un
                 ciclo (C3 fix 5). Il router traduce in HTTP 400.
         """
-        row = db.get_project(project_id)
+        row = project_db.get_project(project_id)
         if not row:
             return False
 
         self._assert_no_lineage_cycle(project_id, canvas)
 
-        db.update_project(project_id, canvas=canvas.model_dump())
+        project_db.update_project(project_id, canvas=canvas.model_dump())
         return True
 
     def _assert_no_lineage_cycle(self, project_id: str, canvas: CanvasState) -> None:
@@ -235,7 +237,7 @@ class ProjectService:
         def get_sources(pid: str):
             if pid == project_id:
                 return new_sources
-            row = db.get_project(pid)
+            row = project_db.get_project(pid)
             if not row:
                 return []
             canvas_dict = row.get("canvas") or {}
@@ -271,14 +273,14 @@ class ProjectService:
         """
         # Recupera la riga del progetto per leggerne il group_id se non passato
         if group_id is None:
-            row = db.get_project(project_id)
+            row = project_db.get_project(project_id)
             if not row:
                 return []
             group_id = row.get("group_id")
 
         # Fix N+1: fetch tutti i candidates con canvas in una sola query
         # invece di list + N get_project
-        rows = db.fetchall(
+        rows = pg_connection.fetchall(
             "SELECT id, name, project_type, canvas FROM projects "
             "WHERE group_id = %s AND project_type IN ('manipola', 'arricchisci')",
             (group_id,)
@@ -327,7 +329,7 @@ class ProjectService:
         Solleva ProjectHasDependenciesError se esistono eseguibili pubblicati
         a partire da questo progetto: vanno eliminati prima.
         """
-        row = db.get_project(project_id, group_id=group_id)
+        row = project_db.get_project(project_id, group_id=group_id)
         if not row:
             return False
 
@@ -452,20 +454,20 @@ class ProjectService:
                 derived_failed=derived_failures,
             )
 
-        db.delete_project(project_id, group_id=group_id)
+        project_db.delete_project(project_id, group_id=group_id)
         logger.info(f"Progetto eliminato: {project_id}", op="delete_project")
         return True
 
     def project_exists(self, project_id: str) -> bool:
         """Verifica se il progetto esiste."""
-        return db.get_project(project_id) is not None
+        return project_db.get_project(project_id) is not None
 
     def get_project_columns_metadata(self, project_id: str) -> list:
         """Recupera i metadati delle colonne dal canvas del progetto (DB).
 
         Sono salvati come `canvas["columns_metadata"]` da update_project_columns_metadata.
         """
-        row = db.get_project(project_id)
+        row = project_db.get_project(project_id)
         if not row:
             return []
         canvas = row.get("canvas", {})
@@ -515,7 +517,7 @@ class ProjectService:
         """Salva file risultato come blob nel DB. Ritorna result_id."""
         result_id = str(uuid.uuid4())
         group_id = group_id or self.DEFAULT_GROUP
-        db.save_result(
+        results_db.save_result(
             result_id=result_id,
             project_id=project_id,
             group_id=group_id,
@@ -529,12 +531,12 @@ class ProjectService:
 
     def get_latest_result(self, project_id: str) -> Optional[dict]:
         """Recupera il risultato più recente (senza blob)."""
-        return db.get_latest_result(project_id)
+        return results_db.get_latest_result(project_id)
 
     def get_result_data(self, result_id: str) -> Optional[bytes]:
         """Recupera il blob del risultato per download."""
-        return db.get_result_data(result_id)
+        return results_db.get_result_data(result_id)
 
     def list_results(self, project_id: str) -> List[dict]:
         """Lista risultati del progetto (senza blob)."""
-        return db.list_results(project_id)
+        return results_db.list_results(project_id)

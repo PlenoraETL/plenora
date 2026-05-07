@@ -5,6 +5,9 @@ BE-GO-READY-ARCH-057-W3: validates the from_executor_dict / to_dict
 """
 from __future__ import annotations
 
+import ast
+from pathlib import Path
+
 import pytest
 from unittest.mock import MagicMock
 
@@ -12,6 +15,13 @@ from app.shared.execution.executor_protocol import ExecutionResult, ArtifactPayl
 
 
 pytestmark = [pytest.mark.unit, pytest.mark.contract]
+
+
+_BACKEND_ROOT = Path(__file__).resolve().parents[3]
+_EXECUTION_RESULT_INTERNAL_FILES = (
+    _BACKEND_ROOT / "app" / "core" / "orchestrator" / "service.py",
+    _BACKEND_ROOT / "app" / "core" / "artifacts" / "types.py",
+)
 
 
 # from_executor_dict - happy path (success)
@@ -214,6 +224,30 @@ def test_pipeline_artifact_consumes_execution_result_without_to_dict(monkeypatch
     assert artifact.message == "ok"
     assert artifact.result_id == "res-native"
     assert artifact["rows_count"] == 3
+
+
+def test_internal_execution_result_path_has_no_to_dict_callsite():
+    """Source-bound guard: internal orchestration path stays native."""
+    offenders: list[str] = []
+
+    for path in _EXECUTION_RESULT_INTERNAL_FILES:
+        source = path.read_text(encoding="utf-8")
+        tree = ast.parse(source, filename=str(path))
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Call):
+                continue
+            if not isinstance(node.func, ast.Attribute):
+                continue
+            if node.func.attr != "to_dict":
+                continue
+            rel = path.relative_to(_BACKEND_ROOT).as_posix()
+            offenders.append(f"{rel}:{node.lineno}")
+
+    assert offenders == [], (
+        "ExecutionResult must stay native inside orchestrator/artifact internals; "
+        "serialize only at task/API edges. Offenders: "
+        + ", ".join(offenders)
+    )
 
 
 def test_orchestrator_execute_pipeline_error_key_preserved():

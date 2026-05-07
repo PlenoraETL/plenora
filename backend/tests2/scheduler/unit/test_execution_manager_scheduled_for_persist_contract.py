@@ -102,7 +102,7 @@ def _patches():
     """Patch context comuni per arrivare al success path di execute()."""
     return (
         patch(
-            "app.db.db_service.get_schedule",
+            "app.db.config.schedules.get_schedule",
             return_value={"id": "sch-1", "group_id": "grp-A"},
         ),
         patch("app.services.project_service.ProjectService"),

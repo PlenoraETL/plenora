@@ -149,11 +149,8 @@ def delete_connection(
     # progetti che la usano restano dipendenze legittime, ma admin del
     # gruppo proprietario non deve vederne i nomi). Superadmin: nessun
     # filtro
-    from app.db.pg_connection import fetchall as _fetchall
-    using_projects = _fetchall(
-        "SELECT id, name, project_type, group_id FROM projects WHERE connection_id = ?",
-        (connection_id,)
-    )
+    from app.db.config.projects import list_projects_using_connection
+    using_projects = list_projects_using_connection(connection_id)
     if using_projects:
         is_super = current_user.role == "superadmin"
         if is_super:

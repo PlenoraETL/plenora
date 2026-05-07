@@ -60,8 +60,8 @@ def test_execute_carica_uses_result_id_artifact_before_output_path(schedule_conf
 
     with patch("app.utils.dataframe.load_dataframe_from_file", return_value=df) as mock_load, \
          patch("app.core.carica.executor.CaricaExecutor") as mock_executor, \
-         patch("app.db.db_service.get_result", return_value={"id": "res-1", "project_id": "proj-1", "format": "csv"}), \
-         patch("app.db.db_service.get_result_data", return_value=b"id\n1\n2\n"):
+         patch("app.db.results_db_service.get_result", return_value={"id": "res-1", "project_id": "proj-1", "group_id": "grp-1", "format": "csv"}), \
+         patch("app.db.pg_connection.fetchone", return_value={"data": b"id\n1\n2\n", "storage_key": None, "project_id": "proj-1"}):
         mock_executor.return_value.execute.return_value = _make_write_result()
         result = manager._execute_carica(
             schedule_config,
@@ -99,7 +99,7 @@ def test_execute_blocks_cross_group_isolation(schedule_config):
     hard fail con status='failed', niente esecuzione downstream."""
     manager = _make_manager_for_isolation_test(schedule_config)
 
-    with patch("app.db.db_service.get_schedule", return_value={"id": "s-1", "group_id": "grp-A"}), \
+    with patch("app.db.config.schedules.get_schedule", return_value={"id": "s-1", "group_id": "grp-A"}), \
          patch("app.services.project_service.ProjectService") as project_service_cls:
         project_service_cls.return_value.get_project_metadata.return_value = _project_meta("grp-B")
         result = manager.execute("s-1")
@@ -116,7 +116,7 @@ def test_execute_blocks_schedule_without_group_id(schedule_config):
     pre-Refactor #2 a causa dello short-circuit del check)."""
     manager = _make_manager_for_isolation_test(schedule_config)
 
-    with patch("app.db.db_service.get_schedule", return_value={"id": "s-1", "group_id": None}), \
+    with patch("app.db.config.schedules.get_schedule", return_value={"id": "s-1", "group_id": None}), \
          patch("app.services.project_service.ProjectService") as project_service_cls:
         project_service_cls.return_value.get_project_metadata.return_value = _project_meta("grp-B")
         result = manager.execute("s-1")
@@ -132,7 +132,7 @@ def test_execute_blocks_project_without_group_id(schedule_config):
     Era fail-OPEN pre-Refactor #2."""
     manager = _make_manager_for_isolation_test(schedule_config)
 
-    with patch("app.db.db_service.get_schedule", return_value={"id": "s-1", "group_id": "grp-A"}), \
+    with patch("app.db.config.schedules.get_schedule", return_value={"id": "s-1", "group_id": "grp-A"}), \
          patch("app.services.project_service.ProjectService") as project_service_cls:
         project_service_cls.return_value.get_project_metadata.return_value = _project_meta("")
         result = manager.execute("s-1")
@@ -151,7 +151,7 @@ def test_execute_passes_group_isolation_when_groups_match(schedule_config):
     # cosi' evitiamo di mockare l'intera pipeline downstream.
     manager.concurrency.try_acquire.return_value = "queued"
 
-    with patch("app.db.db_service.get_schedule", return_value={"id": "s-1", "group_id": "grp-A"}), \
+    with patch("app.db.config.schedules.get_schedule", return_value={"id": "s-1", "group_id": "grp-A"}), \
          patch("app.services.project_service.ProjectService") as project_service_cls:
         project_service_cls.return_value.get_project_metadata.return_value = _project_meta("grp-A")
         result = manager.execute("s-1")

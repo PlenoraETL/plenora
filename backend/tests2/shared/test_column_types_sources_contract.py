@@ -32,7 +32,7 @@ def test_columns_metadata_is_list_of_name_type_dicts(monkeypatch):
         "nodes": [], "edges": [],
     }
     fake_row = {"id": "p1", "canvas": fake_canvas}
-    monkeypatch.setattr(ps_mod.db, "get_project", lambda pid: fake_row)
+    monkeypatch.setattr(ps_mod.project_db, "get_project", lambda pid: fake_row)
 
     result = ProjectService().get_project_columns_metadata("p1")
     assert isinstance(result, list)
@@ -48,7 +48,7 @@ def test_columns_metadata_empty_when_missing(monkeypatch):
     from app.services import project_service as ps_mod
 
     monkeypatch.setattr(
-        ps_mod.db, "get_project",
+        ps_mod.project_db, "get_project",
         lambda pid: {"id": "p1", "canvas": {"nodes": [], "edges": []}}
     )
     assert ProjectService().get_project_columns_metadata("p1") == []
@@ -65,7 +65,7 @@ def test_columns_metadata_handles_canvas_as_json_string(monkeypatch):
         "nodes": [], "edges": [],
     })
     monkeypatch.setattr(
-        ps_mod.db, "get_project",
+        ps_mod.project_db, "get_project",
         lambda pid: {"id": "p1", "canvas": canvas_str}
     )
     result = ProjectService().get_project_columns_metadata("p1")

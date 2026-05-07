@@ -25,6 +25,8 @@ from app.shared.audit_action import audit_action
 from app.core.auth.dependencies import get_current_user, require_not_esecutore
 from app.shared.contracts.auth import CurrentUser
 from app.core.auth.ownership import assert_group_access
+from app.shared.execution.canvas_graph import CanvasGraph
+from app.shared.execution.canvas_types_enricher import enrich_canvas_types_from_metadata
 
 # ── Content-Type per formato file ─────────────────────────────────────────
 _MIME_TYPES = {
@@ -383,10 +385,9 @@ def create_task(
     # che referenziano file_source/project_source di altri tenant
     # Validare qui significa che il task Celery riceve un canvas gia'
     # verificato lato HTTP
+    canvas_graph = CanvasGraph.from_canvas(request.canvas)
     assert_canvas_resources_access(
-        request.canvas if isinstance(request.canvas, dict) else (
-            request.canvas.model_dump() if hasattr(request.canvas, "model_dump") else {}
-        ),
+        {"nodes": canvas_graph.raw_nodes, "edges": canvas_graph.edges},
         current_user,
     )
 
@@ -403,7 +404,6 @@ def create_task(
             if not request.carica_node_data:
                 raise HTTPException(status_code=400, detail="carica_node_data è obbligatorio per task CARICA")
             # N11: arricchisci canvas_types da project columns_metadata
-            from app.shared.execution.canvas_types_enricher import enrich_canvas_types_from_metadata
             enrich_canvas_types_from_metadata(request.carica_node_data, request.project_id)
             task_info = task_service.create_carica_task(
                 project_id=request.project_id,

@@ -82,7 +82,7 @@ from app.core.scheduler.models import (
     ScheduleConflictPolicy,
     ScheduleRuntime,
 )
-import app.db.db_service as db
+from app.db.config import schedules as db
 
 logger = get_logger(__name__)
 
@@ -90,7 +90,7 @@ logger = get_logger(__name__)
 class ScheduleService:
     """
     Servizio CRUD per schedule PLENORA-ETL.
-    Storage su PostgreSQL tramite db_service.
+    Storage su PostgreSQL tramite il leaf DB schedule.
     RedBeat rimosso — il beat scheduler custom legge dal DB.
     """
 
@@ -401,14 +401,14 @@ class ScheduleService:
         Fix N+1: era un loop con project_exists per ogni schedule. Ora fa una
         sola query per avere tutti i project_id esistenti.
         """
-        import app.db.db_service as _db
+        from app.db.pg_connection import fetchall
 
         orphaned = []
         schedule_list = self.list_schedules()
 
         # Fetch tutti gli ID progetto esistenti in un set
         existing_project_ids = {
-            row["id"] for row in _db.fetchall("SELECT id FROM projects")
+            row["id"] for row in fetchall("SELECT id FROM projects")
         }
 
         for schedule in schedule_list.schedules:

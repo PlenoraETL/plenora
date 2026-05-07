@@ -233,10 +233,10 @@ class ExecutionManager:
         # per sempre (orphan run che sporca la dashboard e inquina il
         # check di task bloccate
         from app.services.project_service import ProjectService
-        import app.db.db_service as _db
+        from app.db.config.schedules import get_schedule
         project_service = ProjectService()
 
-        schedule_row = _db.get_schedule(schedule_id)
+        schedule_row = get_schedule(schedule_id)
         schedule_group_id = schedule_row.get("group_id") if schedule_row else None
 
         project_meta = project_service.get_project_metadata(project_id)
@@ -884,7 +884,7 @@ class ExecutionManager:
             # intent: boundary CARICA scheduler / outcome: fail-closed sanitizzato
             return {
                 "success": False,
-                "error": error_codes.CARICA_SCHEDULER_FAILED,
+                "error": "carica_scheduler_failed",
                 "message": "Errore esecuzione CARICA scheduler (consulta log)",
             }
     
@@ -1044,7 +1044,7 @@ class ExecutionManager:
             return {
                 "success": False,
                 "status": "failed",
-                "error": error_codes.SCHEDULE_EXECUTION_FATAL,
+                "error": "schedule_execution_fatal",
                 "message": error_message,
                 "log_file": log_path
             }

@@ -19,11 +19,11 @@ pytestmark = [pytest.mark.unit, pytest.mark.contract]
 
 @pytest.fixture
 def service_with_fake_db(monkeypatch):
-    """Istanzia ProjectService con db.get_project patchato.
+    """Istanzia ProjectService con projects leaf get_project patchato.
 
     Il fake restituisce `_canvas_fixture` (var dict) cosi' ogni test
     setta il valore di canvas e chiama get_project_canvas."""
-    import app.db.db_service as real_db
+    from app.db.config import projects as project_db
     from app.services.project_service import ProjectService
 
     state = {"canvas": None, "project_exists": True}
@@ -39,7 +39,7 @@ def service_with_fake_db(monkeypatch):
             "project_type": "manipola",
         }
 
-    monkeypatch.setattr(real_db, "get_project", fake_get_project)
+    monkeypatch.setattr(project_db, "get_project", fake_get_project)
     return ProjectService(), state
 
 

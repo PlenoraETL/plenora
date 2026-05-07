@@ -163,6 +163,19 @@ def list_project_ids_for_group(group_id: str) -> Set[str]:
     return {r["id"] for r in rows}
 
 
+def list_projects_using_connection(connection_id: str) -> List[Dict]:
+    """Projects that directly reference a database connection."""
+    return fetchall(
+        "SELECT id, name, project_type, group_id FROM projects WHERE connection_id = ?",
+        (connection_id,),
+    )
+
+
+def list_projects_with_canvas_for_datasource_check() -> List[Dict]:
+    """Project rows needed by datasource cascade checks."""
+    return fetchall("SELECT id, name, project_type, canvas, group_id FROM projects")
+
+
 # ATOMIC CANVAS-KEY UPDATE
 # Moved verbatim from `app.db.config_db_service` (the 7th projects-cluster
 # function the original scope-split kept in the compatibility module). Production callers

@@ -79,7 +79,7 @@ def _patch_cascade(
             db_del_patch = {"return_value": True}
 
         with patch(
-            "app.services.project_service.db.get_project",
+            "app.services.project_service.project_db.get_project",
             return_value=_mock_project_row()
         ), patch(
             "app.core.eseguibili.db.list_eseguibili_by_source",
@@ -100,7 +100,7 @@ def _patch_cascade(
             "app.db.config.comparison_keys.delete_comparison_keys",
             **ck_patch
         ), patch(
-            "app.services.project_service.db.delete_project",
+            "app.services.project_service.project_db.delete_project",
             **db_del_patch
         ) as mock_db_delete:
             yield mock_db_delete

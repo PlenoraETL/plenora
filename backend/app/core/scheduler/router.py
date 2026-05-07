@@ -15,7 +15,6 @@ from app.core.auth.dependencies import (
 from app.core.auth.owner_dependencies import require_schedule_owner
 from app.shared.contracts.auth import CurrentUser, group_filter
 from app.core.auth.ownership import assert_group_access
-import app.db.db_service as db
 from app.shared import error_codes
 from app.shared.error_envelope import raise_typed_http
 from app.shared.audit_action import audit_action
@@ -44,7 +43,7 @@ async def beat_healthcheck(current_user: CurrentUser = Depends(require_not_esecu
     """
     try:
         from datetime import datetime, timezone
-        import app.db.db_service as db
+        from app.db import pg_connection as db
 
         row = db.fetchone("SELECT ts FROM beat_heartbeat WHERE id = 'beat'")
 
@@ -174,9 +173,10 @@ async def create_schedule(data: ScheduleCreate, current_user: CurrentUser = Depe
 async def get_schedule(schedule_id: str, current_user: CurrentUser = Depends(require_not_esecutore)):
     """Dettaglio di uno schedule specifico."""
     from app.core.scheduler.schedule_service import ScheduleService
+    from app.db.config.schedules import get_schedule as get_schedule_row
     try:
         service = ScheduleService()
-        row = db.get_schedule(schedule_id)
+        row = get_schedule_row(schedule_id)
         if not row:
             raise HTTPException(
                 status_code=404,
@@ -404,8 +404,8 @@ async def download_schedule_output(
             )
 
         # SECURITY: verifica che lo schedule appartenga al gruppo dell'utente
-        import app.db.db_service as _db
-        _sched_row = _db.get_schedule(schedule_id)
+        from app.db.config.schedules import get_schedule as _get_schedule_row
+        _sched_row = _get_schedule_row(schedule_id)
         if _sched_row:
             assert_group_access(_sched_row, current_user, f"Schedule '{schedule_id}'")
 
@@ -494,8 +494,8 @@ async def list_schedule_runs(schedule_id: str, current_user: CurrentUser = Depen
             )
 
         # SECURITY: group isolation check
-        import app.db.db_service as _db
-        _sched_row = _db.get_schedule(schedule_id)
+        from app.db.config.schedules import get_schedule as _get_schedule_row
+        _sched_row = _get_schedule_row(schedule_id)
         if _sched_row:
             assert_group_access(_sched_row, current_user, f"Schedule '{schedule_id}'")
 

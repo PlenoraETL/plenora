@@ -89,14 +89,9 @@ _FACADE_FILE = "app/db/db_service.py"
 #       `app/core/files/router.py`,
 #       `app/core/imdf/router.py`,
 #       `app/core/orchestrator/router.py`,
-#       `app/core/scheduler/concurrency_manager.py`,
-#       `app/core/scheduler/execution_manager.py`,
-#       `app/core/scheduler/router.py`,
-#       `app/core/scheduler/schedule_service.py`,
 #       `app/core/tickets/router.py`,
 #       `app/services/connection_service.py`,
 #       `app/services/orphan_cleanup_service.py`,
-#       `app/services/project_service.py`,
 #       `app/services/schema_inference.py`,
 #       `app/shared/authz_helpers.py`,
 #       `app/utils/result_store.py`.
@@ -108,6 +103,12 @@ _FACADE_FILE = "app/db/db_service.py"
 #     pg_connection's canonical home (`db_service` re-exports
 #     them transitively). Zero monkeypatch coupling on
 #     `eseguibili.db.db.<name>`. Allowlist row removed.
+#
+# Removed by BE-ARCH-069-W1:
+#   - `app/services/project_service.py` migrated project CRUD/canvas
+#     paths to `app.db.config.projects`, its raw dependent-project
+#     lookup to `app.db.pg_connection`, and result helpers to
+#     `app.db.results_db_service`. Allowlist row removed.
 _DB_SERVICE_PROD_ALLOWLIST: frozenset[str] = frozenset({
     # Bootstrap orchestrator — `init_all_dbs` lives on the facade.
     "app/bootstrap.py",
@@ -120,15 +121,9 @@ _DB_SERVICE_PROD_ALLOWLIST: frozenset[str] = frozenset({
     "app/core/auth/shares_router.py",
     # Datasources service — many cluster-specific calls; deferred.
     "app/core/datasources/service.py",
-    # Scheduler cluster — complex orchestration; deferred.
-    "app/core/scheduler/concurrency_manager.py",
-    "app/core/scheduler/execution_manager.py",
-    "app/core/scheduler/router.py",
-    "app/core/scheduler/schedule_service.py",
     # Services with many mixed usages; deferred.
     "app/services/connection_service.py",
     "app/services/file_service.py",
-    "app/services/project_service.py",
     "app/utils/result_store.py",
     # Worker cluster — deferred.
     "workers/beat_scheduler.py",
@@ -143,6 +138,10 @@ _DB_SERVICE_PROD_ALLOWLIST: frozenset[str] = frozenset({
     #   app/core/files/router.py                  → app.db.config.file_sources.get_file_source
     #   app/core/imdf/router.py                   → app.db.config.projects.get_project
     #   app/core/orchestrator/router.py           → dead import deleted
+    #   app/core/scheduler/concurrency_manager.py → app.db.pg_connection
+    #   app/core/scheduler/execution_manager.py   → app.db.config.schedules.get_schedule
+    #   app/core/scheduler/router.py              → app.db.config.schedules / app.db.pg_connection
+    #   app/core/scheduler/schedule_service.py    → app.db.config.schedules / app.db.pg_connection
     #   app/core/tickets/router.py                → app.db.config.file_sources.get_file_source
     #   app/services/orphan_cleanup_service.py    → app.db.pg_connection.fetchall
     #   app/shared/authz_helpers.py               → app.db.config.file_sources.get_file_source

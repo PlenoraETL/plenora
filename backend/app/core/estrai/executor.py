@@ -7,6 +7,7 @@ Keeps this module's responsibility explicit and isolated from adjacent code.
 import time as _time
 import re
 import pandas as pd
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, Any, List, Optional, Tuple
 
@@ -15,6 +16,7 @@ from app.utils.logger import get_logger, append_step
 from app.utils.dataframe import load_dataframe_from_file, sanitize_for_json
 from app.utils.geo import extract_srid_from_column_type
 from app.shared.crypto import CredentialUnavailableError
+from app.shared.resources.metadata import ResourceMetadata, SourceKind
 
 try:
     from sqlalchemy.exc import DataError as SqlAlchemyDataError
@@ -24,6 +26,12 @@ except ImportError:
     SqlAlchemyProgrammingError = None
 
 logger = get_logger(__name__)
+
+
+@dataclass(frozen=True)
+class EstraiPreviewResource:
+    dataframe: pd.DataFrame
+    metadata: ResourceMetadata
 
 
 def _traduci_errore_sql(message: str) -> str:
@@ -155,6 +163,25 @@ def _dedup_dataframe_columns_for_serialization(
         op="preview",
     )
     return df_renamed, warnings_list
+
+
+def _build_preview_resource(
+    df: pd.DataFrame,
+    columns_info: List[Dict[str, str]],
+    *,
+    source_kind: SourceKind,
+    row_count: int,
+    project_id: str,
+    group_id: Optional[str] = None,
+) -> EstraiPreviewResource:
+    metadata = ResourceMetadata.from_columns_list(
+        columns_info,
+        source_kind=source_kind,
+        row_count=row_count,
+        project_id=project_id,
+        group_id=group_id,
+    )
+    return EstraiPreviewResource(dataframe=df, metadata=metadata)
 
 
 class EstraiExecutor:
@@ -430,12 +457,19 @@ class EstraiExecutor:
 
             canvas_type_map = self._build_canvas_type_map(canvas)
             columns_info = self._costruisci_colonne_con_tipi_canvas(df, canvas_type_map)
+            preview_resource = _build_preview_resource(
+                df,
+                columns_info,
+                source_kind="db",
+                row_count=total_count,
+                project_id=project_id,
+            )
 
-            rows_json = sanitize_for_json(df.to_dict(orient='records'))
+            rows_json = sanitize_for_json(preview_resource.dataframe.to_dict(orient='records'))
 
             response: Dict[str, Any] = {
                 "success": True,
-                "columns": columns_info,
+                "columns": preview_resource.metadata.to_columns_list(),
                 "rows": rows_json,
                 "total_count": total_count,
                 "preview_count": len(rows_json),

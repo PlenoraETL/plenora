@@ -52,6 +52,50 @@ _ALLOWED_ROOT_MODULES: frozenset[str] = frozenset(
     }
 )
 
+_ROOT_MODULE_CLASSIFICATIONS: dict[str, str] = {
+    "api_utils": "MOVE_TO_CONNECTIONS_CANDIDATE",
+    "async_http": "MOVE_TO_CONNECTIONS_CANDIDATE",
+    "request_utils": "KEEP_ROOT_CROSS_CUTTING",
+    "async_user_recheck": "MOVE_TO_SECURITY_PACKAGE_LATER",
+    "error_codes": "KEEP_ROOT_CROSS_CUTTING",
+    "error_envelope": "KEEP_ROOT_CROSS_CUTTING",
+    "error_sanitizer": "KEEP_ROOT_CROSS_CUTTING",
+    "exceptions": "KEEP_ROOT_CROSS_CUTTING",
+    "audit_action": "MOVE_TO_SECURITY_PACKAGE_LATER",
+    "authz_helpers": "MOVE_TO_SECURITY_PACKAGE_LATER",
+    "crypto": "MOVE_TO_SECURITY_PACKAGE_LATER",
+    "jwt_token": "MOVE_TO_SECURITY_PACKAGE_LATER",
+    "login_rate_limiter": "MOVE_TO_SECURITY_PACKAGE_LATER",
+    "password_hashing": "MOVE_TO_SECURITY_PACKAGE_LATER",
+    "sharing": "MOVE_TO_SECURITY_PACKAGE_LATER",
+    "token_blacklist": "MOVE_TO_SECURITY_PACKAGE_LATER",
+    "upload_guards": "MOVE_TO_SECURITY_PACKAGE_LATER",
+    "cloud_backends": "HEAVY_ROOT_UTILITY",
+    "file_helpers": "HEAVY_ROOT_UTILITY",
+    "memory_guard": "MOVE_TO_EXECUTION_CANDIDATE",
+    "storage_compensation": "MOVE_TO_RESOURCES_CANDIDATE",
+    "storage_dispatch": "MOVE_TO_RESOURCES_CANDIDATE",
+    "storage_reconciliation": "HEAVY_ROOT_UTILITY",
+    "task_scoped_blob_store": "MOVE_TO_RESOURCES_CANDIDATE",
+    "column_types": "MOVE_TO_RESOURCES_CANDIDATE",
+    "columns_metadata": "MOVE_TO_RESOURCES_CANDIDATE",
+    "models": "HEAVY_ROOT_UTILITY",
+    "clock": "KEEP_ROOT_CROSS_CUTTING",
+    "external_artifact_processor": "MOVE_TO_RESOURCES_CANDIDATE",
+    "idempotency": "MOVE_TO_EXECUTION_CANDIDATE",
+}
+
+_CLASSIFICATION_BUCKETS: frozenset[str] = frozenset(
+    {
+        "KEEP_ROOT_CROSS_CUTTING",
+        "MOVE_TO_RESOURCES_CANDIDATE",
+        "MOVE_TO_EXECUTION_CANDIDATE",
+        "MOVE_TO_CONNECTIONS_CANDIDATE",
+        "MOVE_TO_SECURITY_PACKAGE_LATER",
+        "HEAVY_ROOT_UTILITY",
+    }
+)
+
 # Subpackages - not checked here; they have their own boundary tests.
 _KNOWN_SUBPACKAGES: frozenset[str] = frozenset(
     {"execution", "connections", "resources", "contracts"}
@@ -99,6 +143,15 @@ def test_allowlist_has_no_phantom_entries() -> None:
         f"Allowlist references modules that no longer exist: {sorted(phantom)}\n"
         "Remove stale entries from _ALLOWED_ROOT_MODULES in "
         "tests2/shared/test_shared_root_level_allowlist.py"
+    )
+
+
+def test_allowed_root_modules_have_classification() -> None:
+    """Keep root module migration intent explicit and machine-readable."""
+    assert set(_ROOT_MODULE_CLASSIFICATIONS) == set(_ALLOWED_ROOT_MODULES)
+    unknown_buckets = set(_ROOT_MODULE_CLASSIFICATIONS.values()) - _CLASSIFICATION_BUCKETS
+    assert not unknown_buckets, (
+        f"Unknown shared root classification bucket(s): {sorted(unknown_buckets)}"
     )
 
 

@@ -10,7 +10,7 @@ from typing import Literal
 import psycopg2
 import psycopg2.errors
 
-import app.db.db_service as db
+from app.db import pg_connection as db
 from app.config import settings
 from app.utils.logger import get_logger
 

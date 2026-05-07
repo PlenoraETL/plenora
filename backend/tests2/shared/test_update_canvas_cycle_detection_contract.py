@@ -29,8 +29,8 @@ def _canvas_with_sources(source_project_ids):
     return CanvasState(nodes=nodes, edges=[])
 
 
-def _fake_db_with(canvases):
-    """Mock di app.db.db_service per get_project/update_project.
+def _fake_project_db_with(canvases):
+    """Mock di app.db.config.projects per get_project/update_project.
 
     canvases: dict {project_id: canvas_dict_or_None}. None = progetto
     esistente ma senza canvas.
@@ -59,7 +59,7 @@ def test_update_canvas_accepts_canvas_without_project_sources():
     canvas = CanvasState(nodes=[], edges=[])
     canvases = {"A": None}
 
-    with patch("app.services.project_service.db", _fake_db_with(canvases)):
+    with patch("app.services.project_service.project_db", _fake_project_db_with(canvases)):
         svc = ProjectService()
         assert svc.update_canvas("A", canvas) is True
 
@@ -74,7 +74,7 @@ def test_update_canvas_accepts_linear_chain_without_cycle():
     }
     new_canvas_A = _canvas_with_sources(["B"])
 
-    with patch("app.services.project_service.db", _fake_db_with(canvases)):
+    with patch("app.services.project_service.project_db", _fake_project_db_with(canvases)):
         svc = ProjectService()
         result = svc.update_canvas("A", new_canvas_A)
         assert result is True
@@ -88,7 +88,7 @@ def test_update_canvas_rejects_self_reference():
     canvases = {"A": None}
     new_canvas_A = _canvas_with_sources(["A"])
 
-    with patch("app.services.project_service.db", _fake_db_with(canvases)):
+    with patch("app.services.project_service.project_db", _fake_project_db_with(canvases)):
         svc = ProjectService()
         with pytest.raises(ProjectLineageCycleError) as exc:
             svc.update_canvas("A", new_canvas_A)
@@ -105,7 +105,7 @@ def test_update_canvas_rejects_a_to_b_to_a_cycle():
     }
     new_canvas_A = _canvas_with_sources(["B"])
 
-    with patch("app.services.project_service.db", _fake_db_with(canvases)):
+    with patch("app.services.project_service.project_db", _fake_project_db_with(canvases)):
         svc = ProjectService()
         with pytest.raises(ProjectLineageCycleError) as exc:
             svc.update_canvas("A", new_canvas_A)
@@ -120,7 +120,7 @@ def test_cycle_error_message_is_readable():
     canvases = {"A": None}
     new_canvas_A = _canvas_with_sources(["A"])
 
-    with patch("app.services.project_service.db", _fake_db_with(canvases)):
+    with patch("app.services.project_service.project_db", _fake_project_db_with(canvases)):
         svc = ProjectService()
         with pytest.raises(ProjectLineageCycleError) as exc:
             svc.update_canvas("A", new_canvas_A)
@@ -137,7 +137,7 @@ def test_update_canvas_returns_false_for_missing_project():
     canvases = {}  # A non esiste
     canvas = CanvasState(nodes=[], edges=[])
 
-    with patch("app.services.project_service.db", _fake_db_with(canvases)):
+    with patch("app.services.project_service.project_db", _fake_project_db_with(canvases)):
         svc = ProjectService()
         assert svc.update_canvas("A", canvas) is False
 
@@ -155,7 +155,7 @@ def test_cycle_detection_ignores_unreachable_projects():
     }
     new_canvas_A = _canvas_with_sources(["B"])
 
-    with patch("app.services.project_service.db", _fake_db_with(canvases)):
+    with patch("app.services.project_service.project_db", _fake_project_db_with(canvases)):
         svc = ProjectService()
         result = svc.update_canvas("A", new_canvas_A)
         assert result is True

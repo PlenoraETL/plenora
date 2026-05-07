@@ -43,7 +43,8 @@ _PROJ_SVC_LOGGER = "app.services.project_service"
 def test_find_dependent_projects_skips_malformed_json_canvas(monkeypatch):
     """Canvas JSON string malformato per un candidato → skip con warning,
     gli altri candidati vengono comunque scansionati."""
-    import app.db.db_service as real_db
+    from app.db.config import projects as project_db
+    from app.db import pg_connection
     from app.services.project_service import ProjectService
 
     # Candidato 1: canvas malformato (JSON garbage)
@@ -63,8 +64,8 @@ def test_find_dependent_projects_skips_malformed_json_canvas(monkeypatch):
             "canvas": '{"nodes": [{"type": "project_source", "data": {"source_project_id": "target-proj"}}]}',
         },
     ]
-    monkeypatch.setattr(real_db, "fetchall", lambda *a, **kw: rows)
-    monkeypatch.setattr(real_db, "get_project", lambda pid, group_id=None: {"group_id": "grp-1"})
+    monkeypatch.setattr(pg_connection, "fetchall", lambda *a, **kw: rows)
+    monkeypatch.setattr(project_db, "get_project", lambda pid, group_id=None: {"group_id": "grp-1"})
 
     svc = ProjectService()
     handler, target_logger = _attach_handler(_PROJ_SVC_LOGGER)
@@ -91,14 +92,15 @@ def test_find_dependent_projects_propagates_non_parse_exceptions(monkeypatch):
     """Se db.fetchall o un errore strutturale inatteso (es. RuntimeError)
     si verifica durante l'iterazione, deve propagare fail-loud (non essere
     mascherato come 'canvas corrotto')."""
-    import app.db.db_service as real_db
+    from app.db.config import projects as project_db
+    from app.db import pg_connection
     from app.services.project_service import ProjectService
 
     def fake_fetchall(*args, **kwargs):
         raise RuntimeError("connection pool exhausted")
 
-    monkeypatch.setattr(real_db, "fetchall", fake_fetchall)
-    monkeypatch.setattr(real_db, "get_project", lambda pid, group_id=None: {"group_id": "grp-1"})
+    monkeypatch.setattr(pg_connection, "fetchall", fake_fetchall)
+    monkeypatch.setattr(project_db, "get_project", lambda pid, group_id=None: {"group_id": "grp-1"})
 
     svc = ProjectService()
     with pytest.raises(RuntimeError, match="pool exhausted"):
@@ -108,7 +110,8 @@ def test_find_dependent_projects_propagates_non_parse_exceptions(monkeypatch):
 def test_find_dependent_projects_narrow_catches_typeerror_in_json_loads(monkeypatch):
     """json.loads(None) / json.loads(int) solleva TypeError: il narrow
     difensivo lo cattura come canvas non parsabile."""
-    import app.db.db_service as real_db
+    from app.db.config import projects as project_db
+    from app.db import pg_connection
     from app.services.project_service import ProjectService
 
     # Simulazione impossibile via DB reale, ma difendiamo comunque la signature.
@@ -121,8 +124,8 @@ def test_find_dependent_projects_narrow_catches_typeerror_in_json_loads(monkeypa
             "canvas": "valid-looking-string",
         },
     ]
-    monkeypatch.setattr(real_db, "fetchall", lambda *a, **kw: rows)
-    monkeypatch.setattr(real_db, "get_project", lambda pid, group_id=None: {"group_id": "grp-1"})
+    monkeypatch.setattr(pg_connection, "fetchall", lambda *a, **kw: rows)
+    monkeypatch.setattr(project_db, "get_project", lambda pid, group_id=None: {"group_id": "grp-1"})
 
     svc = ProjectService()
     handler, target_logger = _attach_handler(_PROJ_SVC_LOGGER)
@@ -146,7 +149,7 @@ def test_assert_no_lineage_cycle_skips_malformed_canvas_in_sources(monkeypatch):
     """Il cycle check scorre i canvas dei progetti coinvolti — se un canvas
     nella chain e' JSON malformato, il get_sources interno deve ritornare
     [] per quel pid (con warning) senza mascherare errori inattesi."""
-    import app.db.db_service as real_db
+    from app.db.config import projects as project_db
     from app.services.project_service import ProjectService
     from app.models import CanvasState
 
@@ -155,7 +158,7 @@ def test_assert_no_lineage_cycle_skips_malformed_canvas_in_sources(monkeypatch):
             return {"id": pid, "canvas": "{malformed-json"}
         return {"id": pid, "canvas": {}}
 
-    monkeypatch.setattr(real_db, "get_project", fake_get_project)
+    monkeypatch.setattr(project_db, "get_project", fake_get_project)
 
     svc = ProjectService()
     # Canvas nuovo del progetto corrente senza cycle
@@ -178,7 +181,7 @@ def test_assert_no_lineage_cycle_skips_malformed_canvas_in_sources(monkeypatch):
 def test_assert_no_lineage_cycle_propagates_non_parse_exceptions(monkeypatch):
     """Se db.get_project solleva RuntimeError durante il cycle check,
     l'eccezione propaga fail-loud."""
-    import app.db.db_service as real_db
+    from app.db.config import projects as project_db
     from app.services.project_service import ProjectService
     from app.models import CanvasState
 
@@ -194,7 +197,7 @@ def test_assert_no_lineage_cycle_propagates_non_parse_exceptions(monkeypatch):
             raise RuntimeError("DB transient blip")
         return {"id": pid, "canvas": {}}
 
-    monkeypatch.setattr(real_db, "get_project", fake_get_project)
+    monkeypatch.setattr(project_db, "get_project", fake_get_project)
 
     svc = ProjectService()
     with pytest.raises(RuntimeError, match="transient blip"):
