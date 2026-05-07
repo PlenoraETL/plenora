@@ -18,9 +18,9 @@ from app.core.arricchisci._api_connection_helpers import (
     _decrypt_auth_in_config,
     _encrypt_auth_in_config,
 )
+import app.db.config.api_connections as db_svc
 from app.utils.logger import get_logger
 from app.utils.template_variables import process_static_fields
-import app.db.db_service as db_svc
 
 # Stesso logger name di `api_connector.py` (`__name__` valuta a
 # `"app.core.arricchisci.api_connector"`). Singleton stdlib per nome →

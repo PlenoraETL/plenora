@@ -1,19 +1,8 @@
-"""Pure project-domain policies used by ProjectService."""
+"""KEEP_COMPAT wrapper for project-domain policies.
 
-from __future__ import annotations
+Canonical implementation lives in `app.core.projects.domain`.
+"""
 
-from datetime import datetime
-from typing import Optional
+from app.core.projects.domain import build_project_id, resolve_project_group_id
 
-
-def build_project_id(name: str, generated_at: datetime, unique_token: str) -> str:
-    """Return the legacy readable project id for a project name."""
-    timestamp = generated_at.strftime("%Y%m%d_%H%M%S")
-    safe_name = "".join(c for c in name if c.isalnum() or c in (" ", "_")).strip()
-    safe_name = safe_name.replace(" ", "_")[:30]
-    return f"{safe_name}_{timestamp}_{unique_token[:8]}"
-
-
-def resolve_project_group_id(group_id: Optional[str], default_group: str) -> str:
-    """Return the caller group when present, otherwise the configured default."""
-    return group_id or default_group
+__all__ = ["build_project_id", "resolve_project_group_id"]

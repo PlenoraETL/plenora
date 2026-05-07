@@ -57,7 +57,7 @@ def _assert_project_group(project_id: str, current_user: CurrentUser) -> None:
     project_id. Solleva 404 se il progetto non esiste, 403 se appartiene
     a un altro gruppo. Superadmin bypass (assert_group_access lo gestisce).
     """
-    from app.services.project_service import ProjectService
+    from app.core.projects.service import ProjectService
     meta = ProjectService().get_project_metadata(project_id)
     if not meta:
         raise HTTPException(
@@ -111,7 +111,7 @@ def _assert_task_group(task_id: str, current_user: CurrentUser) -> None:
             )
         return
 
-    from app.services.project_service import ProjectService
+    from app.core.projects.service import ProjectService
     meta = ProjectService().get_project_metadata(project_id)
     if meta:
         assert_group_access(meta, current_user, f"Task '{task_id}'")
@@ -594,7 +594,7 @@ def cleanup_task_completely(
     # intent: boundary tenant-check / outcome: fail-open solo per progetto-gia-eliminato
     # breadcrumb: DB transient vs progetto genuinamente mancante distinguibile in log
     try:
-        from app.services.project_service import ProjectService
+        from app.core.projects.service import ProjectService
         _meta = ProjectService().get_project_metadata(project_id)
     except Exception as e:
         logger.warning(

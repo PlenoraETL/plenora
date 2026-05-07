@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from typing import Any, Dict
 
-from app.services.project_service import ProjectService
+from app.core.projects.service import ProjectService
 
 
 def enrich_canvas_types_from_metadata(

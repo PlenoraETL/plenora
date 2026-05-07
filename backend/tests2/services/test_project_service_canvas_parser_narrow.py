@@ -34,7 +34,7 @@ def _attach_handler(logger_name: str):
     return handler, target
 
 
-_PROJ_SVC_LOGGER = "app.services.project_service"
+_PROJ_SVC_LOGGER = "app.core.projects.service"
 
 
 # F6.7 — _find_dependent_projects narrow
@@ -45,7 +45,7 @@ def test_find_dependent_projects_skips_malformed_json_canvas(monkeypatch):
     gli altri candidati vengono comunque scansionati."""
     from app.db.config import projects as project_db
     from app.db import pg_connection
-    from app.services.project_service import ProjectService
+    from app.core.projects.service import ProjectService
 
     # Candidato 1: canvas malformato (JSON garbage)
     # Candidato 2: canvas valido con project_source che referenzia project_id
@@ -94,7 +94,7 @@ def test_find_dependent_projects_propagates_non_parse_exceptions(monkeypatch):
     mascherato come 'canvas corrotto')."""
     from app.db.config import projects as project_db
     from app.db import pg_connection
-    from app.services.project_service import ProjectService
+    from app.core.projects.service import ProjectService
 
     def fake_fetchall(*args, **kwargs):
         raise RuntimeError("connection pool exhausted")
@@ -112,7 +112,7 @@ def test_find_dependent_projects_narrow_catches_typeerror_in_json_loads(monkeypa
     difensivo lo cattura come canvas non parsabile."""
     from app.db.config import projects as project_db
     from app.db import pg_connection
-    from app.services.project_service import ProjectService
+    from app.core.projects.service import ProjectService
 
     # Simulazione impossibile via DB reale, ma difendiamo comunque la signature.
     # Forziamo json.loads a sollevare TypeError per il candidato malformato.
@@ -150,7 +150,7 @@ def test_assert_no_lineage_cycle_skips_malformed_canvas_in_sources(monkeypatch):
     nella chain e' JSON malformato, il get_sources interno deve ritornare
     [] per quel pid (con warning) senza mascherare errori inattesi."""
     from app.db.config import projects as project_db
-    from app.services.project_service import ProjectService
+    from app.core.projects.service import ProjectService
     from app.models import CanvasState
 
     def fake_get_project(pid, group_id=None):
@@ -182,7 +182,7 @@ def test_assert_no_lineage_cycle_propagates_non_parse_exceptions(monkeypatch):
     """Se db.get_project solleva RuntimeError durante il cycle check,
     l'eccezione propaga fail-loud."""
     from app.db.config import projects as project_db
-    from app.services.project_service import ProjectService
+    from app.core.projects.service import ProjectService
     from app.models import CanvasState
 
     # Il current-proj ha un project_source che forza get_sources a visitare other-proj

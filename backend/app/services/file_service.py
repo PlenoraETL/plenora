@@ -508,7 +508,7 @@ class FileSourceService:
         from app.services.file_upload import mkdtemp_writable
         from app.shared.resources.file_cleanup import rmtree_safe
         from app.utils.zip_safe import safe_extractall
-        import app.db.db_service as db
+        import app.db.config.file_sources as db
 
         # Metadata fetch (no blob): we need ``format`` +
         # ``original_filename`` to choose extension / separation mode
@@ -584,7 +584,7 @@ class FileSourceService:
     def get_file_source(self, file_id: str) -> Optional[FileSource]:
         """Ottieni file source specifico dal DB."""
         try:
-            import app.db.db_service as db
+            import app.db.config.file_sources as db
             row = db.get_file_source(file_id, include_data=False)
             if not row:
                 return None
@@ -605,7 +605,7 @@ class FileSourceService:
     def delete_file_source(self, file_id: str) -> bool:
         """Elimina file source dal DB."""
         try:
-            import app.db.db_service as db
+            import app.db.config.file_sources as db
             if not db.get_file_source(file_id):
                 return False
             db.delete_file_source(file_id)
@@ -622,7 +622,7 @@ class FileSourceService:
         - group_id="X" → solo file del gruppo X
         """
         try:
-            import app.db.db_service as db
+            import app.db.config.file_sources as db
             # NB: NON applicare DEFAULT_GROUP come fallback. Se group_id è None
             # significa "no filter" (superadmin); altrimenti il superadmin vedrebbe
             # solo i file del gruppo default invece di tutti
@@ -672,7 +672,7 @@ class FileSourceService:
         from app.config import settings
         from app.shared.resources.file_cleanup import rmtree_safe
         from app.utils.zip_safe import safe_extractall, ZipSlipError
-        import app.db.db_service as db
+        import app.db.config.file_sources as db
         return _impl(
             file_content, filename, name, description,
             layer, sheet, selected_columns, srid, group_id,
@@ -712,7 +712,7 @@ class FileSourceService:
         """
         from app.services.file_raw_upload import create_raw_from_upload as _impl
         from app.config import settings
-        import app.db.db_service as db
+        import app.db.config.file_sources as db
         return _impl(
             file_content, filename, name, description, group_id,
             generate_file_id=self._generate_file_id,
@@ -755,7 +755,7 @@ class FileSourceService:
         from app.config import settings
         from app.shared.resources.file_cleanup import rmtree_safe
         from app.utils.zip_safe import safe_extractall, ZipSlipError
-        import app.db.db_service as db
+        import app.db.config.file_sources as db
 
         # BE-HARDEN-001C E3: callback `delete_blob` per cleanup compensativo
         # del shared storage_key se la transazione Lazy
@@ -824,7 +824,7 @@ class FileSourceService:
 
     def update_file_source(self, file_id: str, data: Any) -> Optional[FileSource]:
         """Aggiorna file source nel DB."""
-        import app.db.db_service as db
+        import app.db.config.file_sources as db
         file_source = self.get_file_source(file_id)
         if not file_source:
             return None

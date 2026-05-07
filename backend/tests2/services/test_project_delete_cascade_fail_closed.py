@@ -79,13 +79,13 @@ def _patch_cascade(
             db_del_patch = {"return_value": True}
 
         with patch(
-            "app.services.project_service.project_db.get_project",
+            "app.core.projects.service.project_db.get_project",
             return_value=_mock_project_row()
         ), patch(
             "app.core.eseguibili.db.list_eseguibili_by_source",
             return_value=[]
         ), patch(
-            "app.services.project_service.ProjectService._find_dependent_projects",
+            "app.core.projects.service.ProjectService._find_dependent_projects",
             return_value=[]
         ), patch(
             "app.core.scheduler.schedule_service.ScheduleService",
@@ -100,7 +100,7 @@ def _patch_cascade(
             "app.db.config.comparison_keys.delete_comparison_keys",
             **ck_patch
         ), patch(
-            "app.services.project_service.project_db.delete_project",
+            "app.core.projects.service.project_db.delete_project",
             **db_del_patch
         ) as mock_db_delete:
             yield mock_db_delete
@@ -114,7 +114,7 @@ def _patch_cascade(
 def test_delete_project_happy_path_returns_true_and_deletes_config():
     """Baseline: tutti i 4 step cleanup ok → db.delete_project chiamato
     → return True. Nessun RuntimeError sollevato."""
-    from app.services.project_service import ProjectService
+    from app.core.projects.service import ProjectService
 
     with _patch_cascade() as mock_db_delete:
         svc = ProjectService()
@@ -131,7 +131,7 @@ def test_delete_project_fail_closed_when_intermediate_runs_delete_fails():
     """Step 2 (intermediate_runs) solleva → ProjectCleanupPartialError propaga,
     db.delete_project NON chiamato (config row preservata), attributi
     tipizzati contengono 'intermediate_runs'."""
-    from app.services.project_service import ProjectService
+    from app.core.projects.service import ProjectService
     from app.shared.exceptions import ProjectCleanupPartialError
 
     with _patch_cascade(
@@ -152,7 +152,7 @@ def test_delete_project_fail_closed_when_intermediate_runs_delete_fails():
 def test_delete_project_fail_closed_when_results_blob_delete_fails():
     """Step 3 (results_blobs) solleva → ProjectCleanupPartialError, db.delete_project
     NON chiamato, attributi contengono 'results_blobs'."""
-    from app.services.project_service import ProjectService
+    from app.core.projects.service import ProjectService
     from app.shared.exceptions import ProjectCleanupPartialError
 
     with _patch_cascade(
@@ -170,7 +170,7 @@ def test_delete_project_fail_closed_when_results_blob_delete_fails():
 def test_delete_project_fail_closed_with_multiple_critical():
     """Step 2 e 3 entrambi falliscono → ProjectCleanupPartialError con entrambi
     nel `critical_failed`, ordine d'esecuzione preservato."""
-    from app.services.project_service import ProjectService
+    from app.core.projects.service import ProjectService
     from app.shared.exceptions import ProjectCleanupPartialError
 
     with _patch_cascade(
@@ -193,10 +193,10 @@ def test_delete_project_fail_closed_with_multiple_critical():
 def test_delete_project_best_effort_when_schedule_orphan_fails():
     """Step 1 (schedules_orphan) solleva → NON raise, step 2-5 comunque
     eseguiti, db.delete_project chiamato, return True. Warning con exc_info."""
-    from app.services.project_service import ProjectService
+    from app.core.projects.service import ProjectService
 
     with patch(
-        "app.services.project_service.logger"
+        "app.core.projects.service.logger"
     ) as mock_logger, _patch_cascade(
         schedules_side_effect=RuntimeError("scheduler DB connection reset")
     ) as mock_db_delete:
@@ -217,10 +217,10 @@ def test_delete_project_best_effort_when_schedule_orphan_fails():
 def test_delete_project_best_effort_when_comparison_keys_fails():
     """Step 4 (comparison_keys) solleva → NON raise, step 5 eseguito,
     return True. Warning con exc_info."""
-    from app.services.project_service import ProjectService
+    from app.core.projects.service import ProjectService
 
     with patch(
-        "app.services.project_service.logger"
+        "app.core.projects.service.logger"
     ) as mock_logger, _patch_cascade(
         comparison_keys_side_effect=RuntimeError("config DB lock")
     ) as mock_db_delete:
@@ -243,7 +243,7 @@ def test_delete_project_best_effort_when_comparison_keys_fails():
 def test_delete_project_mixed_failure_critical_wins():
     """Step 1 derived + step 3 critical falliscono → ProjectCleanupPartialError
     (critical prevale); attributi contengono sia critical che derived."""
-    from app.services.project_service import ProjectService
+    from app.core.projects.service import ProjectService
     from app.shared.exceptions import ProjectCleanupPartialError
 
     with _patch_cascade(
@@ -268,7 +268,7 @@ def test_delete_project_mixed_failure_critical_wins():
 def test_delete_project_invariant_config_preserved_on_critical_fail():
     """Invariante fail-closed esplicita: su QUALSIASI fallimento critical,
     db.delete_project NON deve essere chiamato. Test con solo intermediate down."""
-    from app.services.project_service import ProjectService
+    from app.core.projects.service import ProjectService
     from app.shared.exceptions import ProjectCleanupPartialError
 
     with _patch_cascade(

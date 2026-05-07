@@ -45,12 +45,6 @@ _FACADE_FILE = "app/db/db_service.py"
 #       dedicated `app.db.bootstrap_init` module if/when the
 #       facade is finally retired.
 #
-#   - Heavy file-service consumers (1 file, ~8 lazy imports):
-#       `app/services/file_service.py`. Mostly raw-SQL via
-#       `db.fetchone`/`fetchall`/`execute` and result/log
-#       persistence. Migration is the canonical "next big chunk"
-#       for the BE-GO-READY-DB-ENGINE-012 sweep.
-#
 #   - Beat / worker tasks (3 files):
 #       `workers/beat_scheduler.py` (7 lazy imports),
 #       `workers/tasks/schedule_task.py`,
@@ -76,7 +70,6 @@ _FACADE_FILE = "app/db/db_service.py"
 #   - Cluster-CRUD callers via `db.get_*` / `db.list_*` /
 #     `db.save_*` / `db.delete_*`:
 #       `app/core/admin_system_status/service.py`,
-#       `app/core/arricchisci/api_connection_management.py`,
 #       `app/core/arricchisci/api_connection_rest_file.py`,
 #       `app/core/arricchisci/execution_context.py`,
 #       `app/core/artifacts/resolver.py`,
@@ -90,7 +83,6 @@ _FACADE_FILE = "app/db/db_service.py"
 #       `app/core/imdf/router.py`,
 #       `app/core/orchestrator/router.py`,
 #       `app/core/tickets/router.py`,
-#       `app/services/connection_service.py`,
 #       `app/services/orphan_cleanup_service.py`,
 #       `app/services/schema_inference.py`,
 #       `app/shared/authz_helpers.py`,
@@ -109,11 +101,19 @@ _FACADE_FILE = "app/db/db_service.py"
 #     paths to `app.db.config.projects`, its raw dependent-project
 #     lookup to `app.db.pg_connection`, and result helpers to
 #     `app.db.results_db_service`. Allowlist row removed.
+#
+# Removed by concurrent Batch 078 file-service cut:
+#   - `app/services/file_service.py` no longer imports the facade.
+#
+# Removed by Batch 078 Worker 4:
+#   - `app/core/arricchisci/api_connection_management.py` migrated
+#     API-connection CRUD to `app.db.config.api_connections`.
+#   - `app/services/connection_service.py` migrated connection CRUD
+#     to `app.db.config.connections`.
 _DB_SERVICE_PROD_ALLOWLIST: frozenset[str] = frozenset({
     # Bootstrap orchestrator — `init_all_dbs` lives on the facade.
     "app/bootstrap.py",
     # Arricchisci: test-monkeypatch surface (noqa: F401 preserved).
-    "app/core/arricchisci/api_connection_management.py",
     "app/core/arricchisci/api_connection_rest_file.py",
     "app/core/arricchisci/api_connector.py",
     "app/core/arricchisci/canvas_orchestrator.py",
@@ -122,8 +122,6 @@ _DB_SERVICE_PROD_ALLOWLIST: frozenset[str] = frozenset({
     # Datasources service — many cluster-specific calls; deferred.
     "app/core/datasources/service.py",
     # Services with many mixed usages; deferred.
-    "app/services/connection_service.py",
-    "app/services/file_service.py",
     "app/utils/result_store.py",
     # Worker cluster — deferred.
     "workers/beat_scheduler.py",

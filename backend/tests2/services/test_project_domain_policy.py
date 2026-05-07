@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 
 import pytest
 
-from app.services.project_domain import build_project_id, resolve_project_group_id
+from app.core.projects.domain import build_project_id, resolve_project_group_id
 
 
 pytestmark = [pytest.mark.unit, pytest.mark.contract]

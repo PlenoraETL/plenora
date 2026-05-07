@@ -12,7 +12,7 @@ from fastapi.testclient import TestClient
 from app.core.auth.dependencies import require_not_esecutore
 from app.core.projects import router as projects_router_module
 from app.core.projects.router import router as projects_router
-from app.services.project_service import ProjectService, RawProjectCanvas
+from app.core.projects.service import ProjectService, RawProjectCanvas
 from app.shared.contracts.auth import CurrentUser
 from app.shared.exceptions import CanvasCorruptedError
 
@@ -51,7 +51,7 @@ def test_service_raw_canvas_read_keeps_group_filter() -> None:
     malformed_canvas = '{"nodes": ['
 
     with patch(
-        "app.services.project_service.pg_connection.fetchone",
+        "app.core.projects.service.pg_connection.fetchone",
         return_value={"id": "p-corrupt", "canvas": malformed_canvas},
     ) as fetchone:
         raw = svc.get_project_raw_canvas("p-corrupt", group_id="grp-1")

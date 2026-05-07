@@ -284,7 +284,7 @@ def list_projects_with_canvas_for_datasource_check() -> List[Dict]:
 # ATOMIC CANVAS-KEY UPDATE
 # Moved verbatim from `app.db.config_db_service` (the 7th projects-cluster
 # function the original scope-split kept in the compatibility module). Production callers
-# now import from this leaf directly (`app.services.project_service`); the
+# now import from this leaf directly (`app.core.projects.service`); the
 # compatibility module keeps a compatibility export for back-compat with the 8 dedicated test files
 # that still patch via `cfg_db.<name>` for non-production-path scenarios
 

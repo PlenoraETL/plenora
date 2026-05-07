@@ -42,13 +42,13 @@ def stub_storage(monkeypatch):
 
 @pytest.fixture
 def mock_db(monkeypatch):
-    """Fake in-memory per `app.db.db_service.save_file_source`.
+    """Fake in-memory per `app.db.config.file_sources.save_file_source`.
 
-    Il service chiama anche altri db_service.* (es. list/get): qui ci
+    Il service chiama anche altri file_sources DAL helper (es. list/get): qui ci
     interessa solo catturare gli argomenti del save, il resto lo
     stubbiamo minimale per non rompere il path.
     """
-    import app.db.db_service as real_db
+    import app.db.config.file_sources as real_db
 
     store: dict[str, dict] = {}
 

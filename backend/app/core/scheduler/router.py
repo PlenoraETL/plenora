@@ -123,7 +123,7 @@ async def create_schedule(data: ScheduleCreate, current_user: CurrentUser = Depe
     Verifica che il progetto esista e ne legge nome e tipo.
     """
     from app.core.scheduler.schedule_service import ScheduleService
-    from app.services.project_service import ProjectService
+    from app.core.projects.service import ProjectService
     
     try:
         project_service = ProjectService()

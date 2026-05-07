@@ -11,6 +11,7 @@ from .models import (
     ConnectionList,
     ConnectionTestResult,
 )
+from .service import ConnectionService, _sanitize_mssql_error
 
 __all__ = [
     "DatabaseConnection",
@@ -18,4 +19,6 @@ __all__ = [
     "ConnectionUpdate",
     "ConnectionList",
     "ConnectionTestResult",
+    "ConnectionService",
+    "_sanitize_mssql_error",
 ]

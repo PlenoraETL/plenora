@@ -57,7 +57,7 @@ def test_create_raw_from_upload_blocks_executable(payload, name, monkeypatch):
     """Anche se il router e' bypassato, il service rifiuta payload exec."""
     svc = _make_service()
     # Non vogliamo che la chiamata raggiunga mai il DB
-    import app.db.db_service as db
+    import app.db.config.file_sources as db
     save_mock = MagicMock()
     monkeypatch.setattr(db, "save_file_source", save_mock)
 
@@ -76,7 +76,7 @@ def test_create_raw_from_upload_blocks_executable(payload, name, monkeypatch):
 def test_create_raw_from_upload_accepts_legitimate_binary(monkeypatch):
     """PNG legittimo passa il MIME check e raggiunge il DB."""
     svc = _make_service()
-    import app.db.db_service as db
+    import app.db.config.file_sources as db
     save_mock = MagicMock()
     monkeypatch.setattr(db, "save_file_source", save_mock)
     # get_file_source viene chiamato dopo save per il return
@@ -104,7 +104,7 @@ def test_create_raw_from_upload_accepts_legitimate_binary(monkeypatch):
 
 def test_create_multi_layer_from_upload_blocks_executable(monkeypatch):
     svc = _make_service()
-    import app.db.db_service as db
+    import app.db.config.file_sources as db
     save_mock = MagicMock()
     monkeypatch.setattr(db, "save_file_source", save_mock)
 

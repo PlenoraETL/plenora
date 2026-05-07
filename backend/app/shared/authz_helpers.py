@@ -11,7 +11,7 @@ from app.core.auth.ownership import (
     assert_group_access,
     assert_resource_visible,
 )
-from app.services.project_service import ProjectService
+from app.core.projects.service import ProjectService
 from app.db.config.file_sources import get_file_source as _get_file_source
 
 

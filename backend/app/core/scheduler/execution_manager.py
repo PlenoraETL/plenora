@@ -67,7 +67,7 @@ class ExecutionManager:
         Importato lazy per evitare circular imports e perché i servizi
         richiedono settings già inizializzati.
         """
-        from app.services.project_service import ProjectService
+        from app.core.projects.service import ProjectService
         from app.db.query_executor import QueryExecutor
         from app.core.estrai.query_generator import QueryGenerator
         from app.core.orchestrator.service import OrchestratorService
@@ -232,7 +232,7 @@ class ExecutionManager:
         # `return` senza `close_run` lascia il record in stato 'running'
         # per sempre (orphan run che sporca la dashboard e inquina il
         # check di task bloccate
-        from app.services.project_service import ProjectService
+        from app.core.projects.service import ProjectService
         from app.db.config.schedules import get_schedule
         project_service = ProjectService()
 

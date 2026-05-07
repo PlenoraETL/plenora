@@ -151,7 +151,7 @@ class ApiConnectionSourceLoadingMixin:
         logger.info(f"Riesecuzione progetto upstream: {source_project_id}")
         try:
             from app.core.orchestrator.service import OrchestratorService
-            from app.services.project_service import ProjectService
+            from app.core.projects.service import ProjectService
             from app.services.connection_service import ConnectionService
             from app.core.estrai.query_generator import QueryGenerator
             from app.db.query_executor import QueryExecutor

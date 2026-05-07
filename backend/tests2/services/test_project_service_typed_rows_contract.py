@@ -115,7 +115,7 @@ def test_get_project_keeps_legacy_dict_wrapper(monkeypatch):
 
 def test_project_service_list_projects_uses_typed_project_rows(monkeypatch):
     from app.db.config import projects as project_db
-    from app.services.project_service import ProjectService
+    from app.core.projects.service import ProjectService
 
     now = datetime(2026, 5, 7, 10, 0, tzinfo=timezone.utc)
     monkeypatch.setattr(ProjectService, "_ensure_default_group", lambda self: None)

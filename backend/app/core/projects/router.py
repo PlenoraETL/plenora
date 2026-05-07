@@ -187,7 +187,7 @@ def _visible_project_ids_strict(
         return ids
     if not owner_group_id:
         return set()
-    from app.db.config.projects import list_owned_project_ids
+    from app.core.projects.db import list_owned_project_ids
     return list_owned_project_ids(ids, owner_group_id=owner_group_id)
 
 
