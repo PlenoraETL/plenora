@@ -10,9 +10,8 @@ ReactFlow-based pipeline canvas.
 > validation, and documentation cleanup before a stable 1.0 freeze.
 
 > Brand note: `Plenora-ETL` is the canonical product and repository name.
-> Older documentation may still mention `URBY-ETL`; those references are
-> historical and are being cleaned up. Canonical environment names use
-> `PLENORA_*`.
+> Historical audit/ADR material may mention older names, but live runtime
+> configuration uses `PLENORA_*`.
 
 ---
 
@@ -59,7 +58,7 @@ Extended setup:
 
 All canonical documentation lives under [docs/](docs/).
 
-- Product: [overview](docs/product/overview.md), [roadmap](docs/product/roadmap.md)
+- Product: [overview](docs/product/overview.md), [release 1.0 readiness](docs/product/release-1.0.md), [roadmap](docs/product/roadmap.md)
 - Architecture: [overview](docs/architecture/overview.md), [macro components](docs/architecture/macro-components.md), [horizontal engines](docs/architecture/horizontal-engines.md), [ADRs](docs/architecture/decisions/)
 - Development: [onboarding](docs/development/onboarding.md), [backend](docs/development/backend.md), [frontend](docs/development/frontend.md), [contributing](docs/development/contributing.md), [code map](docs/development/code-map.md)
 - Ops: [install non-Docker](docs/ops/install-non-docker.md), [install Docker](docs/ops/install-docker.md), [runbook](docs/ops/runbook.md), [backup/restore](docs/ops/backup-restore.md), [incident response](docs/ops/incident_response.md)

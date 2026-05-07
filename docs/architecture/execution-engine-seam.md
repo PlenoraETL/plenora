@@ -1,195 +1,145 @@
 # Execution Engine Seam
 
-`BE-GO-READY-ARCH-055-W2-EXECUTION-ENGINE-DUPLICATION-SEAM`.
+Status reviewed: 2026-05-07.
 
-Migration map toward a shared canvas execution engine. Produced in
-Batch 055 Worker 2 (2026-05-06).
+This page describes the boundary between the shared execution layer and the
+domain-specific engines that still execute Plenora canvases.
 
-Companion to [`horizontal-engines.md`](horizontal-engines.md) (engine
-boundary index) and [`macro-components.md`](macro-components.md).
+It is a live architecture guide, not a historical batch report.
 
----
+## Current Shape
 
-## 1. Current vertical responsibilities
+The shared execution package now owns structural contracts:
 
-### Manipola (`app.core.manipola.executor.ManipolaExecutor`)
+- `app.shared.execution.canvas_node.CanvasNode`
+- `app.shared.execution.canvas_graph.CanvasGraph`
+- `app.shared.execution.context.CanvasExecutionContext`
+- `app.shared.execution.graph.kahn_topological_order`
+- `app.shared.execution.graph.GraphCycleError`
+- `app.shared.execution.executor_protocol.CanvasExecutorProtocol`
+- `app.shared.execution.executor_protocol.ExecutionResult`
+- `app.shared.execution.payloads.ArtifactPayload`
 
-Responsible for the **dataframe transformation pipeline**:
+Domain engines still own business execution:
 
-1. Security context initialisation: DB lookup → `group_id` (explicit,
-   no singleton).
-2. Source loading (3 chains, all ctx-strict post TE-007/008):
-   - `project_source` — cross-tenant check via `ArtifactResolver`,
-     recursive upstream re-execution via `orchestrator_callback`.
-   - `file_source` — via `SourceLoader` (extracted to
-     `manipola/source_loading.py`).
-   - `staticValues` — pure in-memory template expansion.
-3. Topological sort of transform/multi_join nodes → shared
-   `app.shared.graph.kahn_topological_order` (on_cycle=`'raise'`).
-4. Node execution loop: sequential, linear through sorted nodes.
-5. Multi-join with pre-merge OOM guard (`MemoryLimitExceededError`).
-6. Intermediate checkpoint snapshots (`record_checkpoint_snapshot` +
-   `record_final_snapshot`).
-7. GROUP BY aggregation on result node.
-8. Result persistence via `save_pipeline_result`.
-9. Columns metadata sync via `save_columns_metadata_with_retry`.
-10. Step tracking via `append_step`.
+- `app.core.manipola`: dataframe transforms, joins, aggregations, spatial
+  operations, result persistence.
+- `app.core.arricchisci`: REST/API enrichment, file-mode enrichment,
+  per-row retry/rate-limit/dedup behavior.
+- `app.core.estrai`: SQL/ArcGIS source extraction.
+- `app.core.carica`: destination writes and publishing.
+- `app.core.imdf`: IMDF bundle validation and publish orchestration.
 
-### Arricchisci (`app.core.arricchisci.executor.EnrichExecutor` +
-`canvas_orchestrator.execute_canvas_enrichment` +
-`api_connector.ApiConnectionService` mixins)
+## Boundary Rule
 
-Responsible for the **row-by-row HTTP enrichment pipeline**:
+Shared execution code may know about:
 
-1. Security context initialisation: DB lookup → typed frozen
-   `ArricchisciExecutionContext` (project_id, group_id, preview_limit).
-2. Source loading (3 chains, all ctx-strict post TE-019/030B):
-   - `project_source` — cross-tenant check via `SourceLoader`,
-     recursive upstream re-execution via standalone `OrchestratorService`.
-   - `file_source` — via `SourceLoader` (mixin
-     `ApiConnectionSourceLoadingMixin`).
-   - `staticValues` — pure in-memory template expansion.
-3. Topological sort of canvas nodes → shared
-   `app.shared.graph.kahn_topological_order` (on_cycle=`'truncate'`).
-4. Node execution: parallel group computation (`compute_parallel_groups`)
-   + sequential/parallel dispatch per step type.
-5. Per-row HTTP enrichment with retry, rate limiting, deduplication.
-6. Intermediate checkpoint snapshots (`_write_intermediate_snapshot` →
-   `record_checkpoint_snapshot`).
-7. File-mode result path (`save_result_blob`) + DataFrame result path
-   (`save_pipeline_result`).
-8. Columns metadata sync via `save_columns_metadata_with_retry`.
-9. Step tracking via `append_step`.
+- canvas structure;
+- nodes and edges;
+- graph ordering;
+- run context;
+- bounded result contracts.
 
----
+Shared execution code must not know about:
 
-## 2. Duplication map
+- Pandas/GeoPandas transform semantics;
+- SQL dialect generation;
+- HTTP enrichment behavior;
+- ArcGIS concrete clients;
+- database repositories;
+- object-storage clients.
 
-| Capability | Manipola | Arricchisci | Status |
-|---|---|---|---|
-| Topological sort (Kahn) | `kahn_topological_order` | `kahn_topological_order` | ✅ Already shared via `app.shared.graph` |
-| Source loading — `file_source` | `load_file_sources` (extracted) | `_load_file_source` mixin | ⚠️ Same logic, separate impls |
-| Source loading — `staticValues` | `_carica_sorgenti_statiche` | `_load_static_values` mixin | ⚠️ Same logic, separate impls |
-| Source loading — `project_source` | `_carica_sorgenti_progetto` | `_load_source_project` mixin | ⚠️ Same ArtifactResolver path, different recompute orchestration |
-| Execution context (group_id) | `_init_security_context` → `str` | `build_execution_context` → `ArricchisciExecutionContext` | ⚠️ Identical DB lookup, different typed output |
-| Intermediate snapshots | `record_checkpoint_snapshot` + `record_final_snapshot` | `_write_intermediate_snapshot` → `record_checkpoint_snapshot` | ✅ Shared via `app.core.intermediate.snapshot` |
-| Result saving — DataFrame | `save_pipeline_result` | `save_pipeline_result` | ✅ Same function |
-| Result saving — file | not applicable | `save_result_blob` | KEEP_CUSTOM (file-mode enrichment) |
-| Columns metadata sync | `save_columns_metadata_with_retry` | `save_columns_metadata_with_retry` | ✅ Shared via `app.shared.columns_metadata` |
-| Step tracking | `append_step` | `append_step` | ✅ Shared via `app.utils.logger` |
-| Memory caps | `MemoryLimitExceededError` (multi-join + cross-join) | None | KEEP_CUSTOM (different threat model: row-by-row HTTP) |
-| Parallel execution | None (linear) | `compute_parallel_groups` + thread pool | KEEP_CUSTOM (enricher-specific) |
-| Node accessor pattern | `_nf` (Pydantic node attrs) | `_nd` (dict node) | ⚠️ `app.shared.canvas_node.CanvasNode` exists but not yet widely adopted |
-| Error return shape | `{"success": False, "message": str}` | `{"success": False, "error": str, "user_error": bool}` | ⚠️ Divergent; unification is a next-step item |
-| Executor protocol (execute/preview) | `ManipolaExecutor` | `EnrichExecutor` | ✅ **First seam added** — `app.shared.executor_protocol.CanvasExecutorProtocol` |
+## What Has Already Moved
 
----
+| Capability | Current home | Notes |
+|---|---|---|
+| Topological sort | `app.shared.execution.graph` | Used by Manipola and Arricchisci. |
+| Canvas node access | `app.shared.execution.canvas_node` | Replaces repeated dict pinching patterns. |
+| Canvas graph structure | `app.shared.execution.canvas_graph` | Boundary object for graph-level access. |
+| Execution context base | `app.shared.execution.context` | Arricchisci keeps a compatibility subclass. |
+| Executor protocol | `app.shared.execution.executor_protocol` | Orchestrator dispatch can depend on the protocol. |
+| Result contract | `ExecutionResult` | Guards payloads against DataFrames, bytes, and streams. |
+| Artifact payload | `ArtifactPayload` | First typed payload for result references. |
 
-## 3. What is already shared
+## What Must Stay Domain-Specific
 
-- `app.shared.graph.kahn_topological_order` — topo sort (Batch 053).
-- `app.shared.exceptions.*` — typed error hierarchy.
-- `app.shared.columns_metadata.save_columns_metadata_with_retry` — columns sync.
-- `app.shared.canvas_node.CanvasNode` — typed node accessor (added W3, Batch 055).
-- `app.core.intermediate.snapshot` — checkpoint + final snapshot.
-- `app.core.artifacts.SourceLoader` — cross-tenant file/project loading.
-- `app.utils.result_store.save_pipeline_result` — DataFrame → blob.
-- `app.utils.logger.append_step` — step tracking.
-- **`app.shared.executor_protocol.CanvasExecutorProtocol`** — ← **this batch**.
-
----
-
-## 4. Target horizontal execution engine responsibilities
-
-The target `TRANSFORMATION_ENGINE` boundary (per `BE_RULES.md`) owns:
-
-- **Execution context**: one typed immutable object per pipeline run
-  carrying `project_id`, `group_id`, `preview_limit`. Currently only
-  Arricchisci has the typed form (`ArricchisciExecutionContext`).
-- **Source loading dispatcher**: single entry point for the 3 source
-  types (project_source, file_source, staticValues) with an explicit
-  `ExecutionContext` input. Currently duplicated across both engines.
-- **Node execution contract**: Protocol + typed result.
-- **Executor dispatch table**: `OrchestratorService` selects among
-  `{estrai, manipola, arricchisci}` by module_type string. A typed
-  dispatch table backed by `CanvasExecutorProtocol` removes the
-  if-elif chain and makes the dispatch explicit.
-
-The engine intentionally does **not** own:
-- transformation math (SQL, joins, geo, HTTP enrichment) — stays
-  domain-specific in each vertical;
-- parallel HTTP enrichment scheduling — KEEP_CUSTOM in Arricchisci;
-- cross-join / multi-join OOM cardinality estimation — KEEP_CUSTOM in
-  Manipola transforms;
-- file-mode result path (`save_result_blob`) — KEEP_CUSTOM in
-  Arricchisci.
-
----
-
-## 5. What must stay domain-specific
-
-| Domain | Reason |
+| Domain behavior | Why it stays out of shared execution |
 |---|---|
-| Manipola transform math (joins, filters, group-by, geo) | Pure Pandas/GeoPandas; no shared abstraction needed |
-| Arricchisci HTTP enrichment (retry, rate limit, dedup, OAuth) | External I/O specifics; generalising would create a God HTTP Client |
-| Manipola multi-join OOM guard (`MemoryLimitExceededError`) | Cartesian-product risk is join-specific; enrichment is row-by-row |
-| Arricchisci parallel group scheduling | Specific to concurrent API call fan-out |
-| Estrai SQL generation / ArcGIS REST path | Completely different data plane |
+| Manipola join/filter/group-by/spatial math | Transformation semantics, not graph structure. |
+| Manipola OOM/cardinality guards | Specific to dataframe and join risks. |
+| Arricchisci HTTP retry/rate-limit/dedup | External API behavior, not generic execution. |
+| Arricchisci file processor mode | Enrichment-specific result mode. |
+| EstrAi SQL generation | Dialect and source-specific data plane. |
+| Carica destination writer | Persistence/write semantics. |
+| IMDF validation rules | Product/domain format behavior. |
 
----
+## Remaining Seams
 
-## 6. Safe extraction order — next 3 steps
+| Seam | Current state | Direction |
+|---|---|---|
+| Source loading | Manipola and Arricchisci still have separate source-loading flows. | Move toward a resource-aware dispatcher only if it stays small and context-explicit. |
+| Metadata travel | Manipola now consumes `LoadedResource.metadata` in parts, but legacy reconstruction still exists. | Loader should produce metadata once; executors should consume it. |
+| Result return type | Some paths still convert typed results back to dictionaries. | Let orchestrator and callers consume `ExecutionResult` natively. |
+| Canvas parsing | Some loops still instantiate node wrappers near use sites. | Parse once at the boundary into `CanvasGraph` where practical. |
+| Payload typing | `ArtifactPayload` exists; other payloads may still be generic. | Add typed payloads only for stable recurring shapes. |
 
-### Step 1 — Shared `ExecutionContext` type (risk: LOW)
+## Anti-Goals
 
-Extract `ArricchisciExecutionContext` into `app.shared.execution_context`
-as a generic `CanvasExecutionContext`. Rename the Arricchisci class as
-a KEEP_COMPAT alias. Migrate `ManipolaExecutor._init_security_context`
-to build and return a `CanvasExecutionContext` instead of a bare `str`.
+- Do not merge Manipola and Arricchisci into a generic mega-engine just
+  because both traverse graphs.
+- Do not put transformation logic into `CanvasNode`.
+- Do not create a `BaseGraphExecutor` before duplication is proven and
+  measurable.
+- Do not use shared execution as a place to hide compatibility facades.
+- Do not allow `ExecutionResult.payload` to carry large data.
 
-- Files: `app.shared.execution_context` (new), `arricchisci/execution_context.py`
-  (alias), `manipola/executor.py` (return typed ctx).
-- Risk: LOW. Pure refactor; `group_id` access becomes `ctx.group_id`.
-  Existing strangler-contract tests catch regressions.
-- Prerequisite: none.
+## Extraction Order
 
-### Step 2 — Shared source-loading dispatcher (risk: MEDIUM)
+1. **Typed result propagation**
+   Keep converting executor dictionaries at the boundary for compatibility,
+   but move internal orchestrator paths toward native `ExecutionResult`.
 
-Extract the 3 source loaders (`project_source`, `file_source`,
-`staticValues`) from both engines into a shared
-`app.shared.source_loader_dispatch.load_canvas_sources(canvas,
-dataframes, ctx)` function. Both engines call it.
+2. **CanvasGraph intake**
+   Convert raw canvas dictionaries once at execution/preview entry points
+   where the call path is stable.
 
-- Files: `app.shared.source_loader_dispatch` (new), `manipola/executor.py`
-  (thin delegators), `arricchisci/api_connection_source_loading.py` (thin
-  delegators).
-- Risk: MEDIUM. Arricchisci has a file-mode passthrough branch
-  (`_is_file_source_for_file_processor`) that must stay in the
-  orchestrator, not the dispatcher. Requires careful boundary
-  separation.
-- Prerequisite: Step 1 (shared `CanvasExecutionContext`).
+3. **Metadata travel**
+   Finish moving source metadata production into loaders and stop rebuilding
+   metadata from legacy column dictionaries in executors.
 
-### Step 3 — Typed OrchestratorService dispatch table (risk: LOW)
+4. **Source loading convergence**
+   Consolidate only the parts that are actually common: source references,
+   context checks, metadata envelopes, and bounded loading. Keep recompute and
+   enrichment-specific branches in their domains.
 
-Replace the `if/elif module_type` chains in `OrchestratorService.
-execute_pipeline` and `execute_preview` with a typed dict keyed by
-module type and valued by `CanvasExecutorProtocol`. Add `isinstance`
-guard at service init time.
+5. **Payload typing**
+   Add small typed payloads for recurring output shapes. Avoid a single
+   catch-all payload object.
 
-- Files: `orchestrator/service.py`.
-- Risk: LOW. Pure structural refactor; no runtime behavior change.
-  The Protocol is already in place from Batch 055.
-- Prerequisite: none (Protocol already exists).
+## Go-Ready Meaning Here
 
----
+This boundary is go-ready when a future Go implementation can express the
+same design as structs and interfaces:
+
+```text
+CanvasGraph
+CanvasNode
+CanvasExecutionContext
+CanvasExecutor
+ExecutionResult
+ArtifactPayload
+ResourceMetadata
+```
+
+No hidden context, no generic map payloads for large data, no domain behavior
+inside structural graph types.
 
 ## References
 
-- `backend/app/shared/executor_protocol.py` — first shared seam (this batch).
-- `backend/app/shared/graph.py` — shared topological sort.
-- `backend/app/shared/canvas_node.py` — typed node accessor.
-- `backend/app/core/arricchisci/execution_context.py` — typed Arricchisci ctx.
-- `backend/app/core/manipola/executor.py:199` — `_init_security_context`.
-- `backend/app/core/orchestrator/service.py` — executor dispatch (3 if-elif chains).
-- `docs/architecture/horizontal-engines.md` — engine boundary index.
-- `BE_RULES.md` — `TRANSFORMATION_ENGINE` alignment.
+- [Architecture overview](overview.md)
+- [Horizontal engines](horizontal-engines.md)
+- [Macro components](macro-components.md)
+- [Architecture invariants](invariants.md)
+- `backend/app/shared/execution/`
+- `backend/app/shared/resources/metadata.py`
+- `backend/app/core/orchestrator/service.py`

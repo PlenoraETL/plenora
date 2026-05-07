@@ -616,7 +616,7 @@ Responsabilita: governa encryption-at-rest (Fernet) per credenziali e segreti ap
 
 Keywords: `encrypt`, `decrypt`, `_get_fernet`, `is_encrypted`, `encrypt_dict_fields`, `CredentialUnavailableError`
 
-Intervento/confini: unico punto di encrypt/decrypt - non reimplementare crypto altrove. Env canonica unica: `PLENORA_ENCRYPTION_KEY`. Gli alias legacy `URBY_ENCRYPTION_KEY` e `CONN_ENCRYPT_KEY` non sono piu' supportati; non reintrodurre fallback runtime.
+Intervento/confini: unico punto di encrypt/decrypt - non reimplementare crypto altrove. Env canonica unica: `PLENORA_ENCRYPTION_KEY`. Gli alias storici non sono piu' supportati; non reintrodurre fallback runtime.
 
 ---
 

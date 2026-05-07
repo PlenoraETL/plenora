@@ -56,6 +56,7 @@ These are roadmap items, not current release blockers:
 - [Architecture overview](../architecture/overview.md)
 - [Macro components](../architecture/macro-components.md)
 - [Horizontal engines](../architecture/horizontal-engines.md)
+- [Release 1.0 readiness](release-1.0.md)
 - [Roadmap](roadmap.md)
 - [Backend setup](../development/backend.md)
 - [Frontend setup](../development/frontend.md)

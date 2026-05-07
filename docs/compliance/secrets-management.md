@@ -1,103 +1,101 @@
 # Secrets Management
 
-**Scope**: come URBY-ETL gestisce secret applicativi (credenziali, chiavi di cifratura, token).
-**Owner**: piattaforma backend.
-**Ultima revisione**: 2026-04-21.
+Scope: Plenora application secrets, their storage, and rotation rules.
 
-## Secret gestiti
+Status reviewed: 2026-05-07.
 
-| Secret | Uso | Dove vive ora | Dove andra' | Rotazione |
-|---|---|---|---|---|
-| `DATABASE_URL` | connection string PostgreSQL | `backend/.env` (file), systemd `EnvironmentFile` | AWS SSM `/plenora/prod/DATABASE_URL` (SecureString) | su compromissione o cambio password DB |
-| `PLENORA_ENCRYPTION_KEY` (alias legacy `URBY_ENCRYPTION_KEY`) | chiave derivata SHA-256 per Fernet AES-128-CBC, cifra at-rest password DB / token API / secret OAuth / credenziali SharePoint/FTP/SFTP | `backend/.env` | AWS SSM `/plenora/prod/PLENORA_ENCRYPTION_KEY` (SecureString) | **mai a caldo**: rotare significa re-cifrare tutti i record (`connections.password`, `api_connections.config`, `datasources.config`, `user_mfa.secret_encrypted`); richiede script di re-encryption coordinato con downtime. |
-| `JWT_SECRET_KEY` | firma JWT HS256 degli access token (vedi `app/core/auth/auth.py:235` `create_access_token`) | `backend/.env` | AWS SSM `/plenora/prod/JWT_SECRET_KEY` (SecureString) | su incidente: la rotazione invalida TUTTI i token attivi → logout forzato di tutti gli utenti. Playbook: `docs/ops/jwt-incident-response.md`. |
+## Canonical Secrets
 
-## Secret NON presenti
+| Secret | Purpose | Required | Rotation |
+|---|---|---|---|
+| `DATABASE_URL` | PostgreSQL connection string. | Yes | Rotate on DB credential change or compromise. |
+| `PLENORA_ENCRYPTION_KEY` | Fernet key for encrypted application credentials and MFA secrets. | Yes | Not hot-rotatable; requires coordinated re-encryption and downtime. |
+| `JWT_SECRET_KEY` | HS256 JWT signing key. | Yes | Rotating invalidates all active JWTs. |
+| `CELERY_BROKER_URL` | Redis/Celery broker URL. | Yes | Rotate with Redis credentials/topology. |
+| `CELERY_RESULT_BACKEND` | Celery result backend URL. | Yes | Usually same Redis instance as broker. |
 
-Per chiarezza: certe decisioni hanno evitato di creare secret applicativi.
+Legacy names must not be reintroduced as runtime fallbacks. Historical docs
+may mention old aliases; current runtime configuration uses `PLENORA_*`.
 
-- **Redis auth**: il broker Celery/blacklist JWT gira in VPC privato con security-group allowlist, non ha password configurata a livello protocollo. Se in futuro esposto, aggiungere `REDIS_PASSWORD` a questa tabella.
-- **SMTP credentials**: non inviamo email; nessun worker SMTP e' configurato.
-- **S3 credentials**: credenziali AWS risolte tramite IAM role (EC2 instance profile in prod, `AWS_PROFILE` locale in dev). Nessun access key hardcoded o in env. Vedi `app/shared/cloud_backends.py:112` `AwsSsmSecretsBackend.__init__`.
+## Storage
 
-## Architettura di storage
+Development:
 
-### Stato attuale (file-based)
-1. `backend/.env` presente sulla macchina di deploy, `chmod 0600`, owner dell'unit systemd.
-2. systemd unit `plenora-backend.service` carica `EnvironmentFile=/home/ubuntu/plenora-etl/backend/.env`.
-3. L'app legge `os.getenv(...)` al boot.
+- local `backend/.env`;
+- file must be gitignored;
+- use `chmod 600` on Unix-like hosts.
 
-Limite: il file `.env` e' presente in clear sul filesystem; l'accesso e' limitato ai permessi, ma una compromissione root sul nodo espone tutti i secret simultaneamente.
+Production target:
 
-### Stato target (SSM-based)
-1. I secret vivono in AWS SSM Parameter Store come `SecureString` sotto prefix `/plenora/prod/`. KMS key: `alias/aws/ssm` (default account) oppure CMK dedicata (override via `SSM_KMS_KEY_ID`).
-2. systemd unit usano `ExecStart=python backend/scripts/load_secrets.py <target.py>`. Il wrapper:
-   - fetcha i param da SSM con `ssm:GetParametersByPath` + `WithDecryption=True`
-   - popola `os.environ` con `setdefault` (env esistente vince, utile in dev)
-   - `os.execv` del target → stesso PID, `Type=oneshot` pulito
-   - codice: `backend/scripts/load_secrets.py`
-3. L'app legge `os.getenv(...)` identico al caso precedente (zero cambio applicativo).
+- cloud secret manager or AWS SSM Parameter Store;
+- systemd/container runtime injects environment variables;
+- application reads secrets at startup.
 
-Vantaggi del target:
-- nessun secret in clear sul nodo
-- audit centralizzato (CloudTrail logga ogni `GetParameter`)
-- rotazione gestita lato AWS senza toccare il file system
-- IAM policy granulare per principal (backup task vs backend app possono avere scope diversi)
+## Rotation Rules
 
-### Script di migrazione
+### `JWT_SECRET_KEY`
 
-`backend/scripts/migrate_env_to_ssm.py` migra i secret dal `.env` a SSM.
+Impact: all active sessions become invalid.
 
-- **Idempotente**: read-before-write. Se la param esiste con lo stesso valore → SKIP (`already_in_sync`). Se esiste con valore diverso → WARN + SKIP, richiede `--force` esplicito (evita rotazioni accidentali).
-- **Whitelist**: solo i 3 secret sopra, hardcoded in `SECRET_ENV_SPECS`. Variabili di configurazione (DB_SCHEMA, DB_POOL_MIN/MAX, UVICORN_WORKERS, ecc.) NON vengono migrate.
-- **No logging del valore**: solo fingerprint SHA-256 primi 8 char (`fp=9ae6be55`) per audit cross-run senza esporre il secret.
-- **Dry-run**: `--dry-run` stampa il piano (read incluso, nessuna write).
-- **Permessi AWS richiesti**: `ssm:GetParameter`, `ssm:PutParameter`. La KMS key deve permettere `kms:Encrypt` al principal che esegue lo script.
+Process:
 
-Uso:
+1. Generate a new value.
+2. Update the secret store.
+3. Restart backend, worker, and beat where needed.
+4. Inform users that re-login is required.
+5. Review auth logs for the triggering incident.
 
-```bash
-# dry-run
-python backend/scripts/migrate_env_to_ssm.py --env-file backend/.env --dry-run
+See [JWT incident response](../ops/jwt-incident-response.md).
 
-# migrazione iniziale (CREATE)
-python backend/scripts/migrate_env_to_ssm.py --env-file backend/.env
+### `DATABASE_URL`
 
-# rotazione JWT_SECRET_KEY (il .env ha il nuovo valore)
-python backend/scripts/migrate_env_to_ssm.py --env-file backend/.env --force
-```
+Impact: database connectivity interruption during restart.
 
-## Procedure
+Process:
 
-### Onboarding nuovo deploy
-1. Creare `.env` locale con i 3 secret valorizzati.
-2. `python scripts/migrate_env_to_ssm.py --env-file .env --dry-run` → verificare piano.
-3. `python scripts/migrate_env_to_ssm.py --env-file .env` → CREATE.
-4. Cancellare o rinominare `.env` sul nodo (tenere solo gli EnvironmentFile con param non-secret).
-5. Configurare systemd unit con `load_secrets.py` wrapper.
+1. Create or rotate the DB password.
+2. Update the secret store.
+3. Verify `psql "$DATABASE_URL" -c "SELECT 1"`.
+4. Restart services.
+5. Confirm `/ready`.
 
-### Rotazione `JWT_SECRET_KEY`
-Vedi `docs/ops/jwt-incident-response.md`. In sintesi: (a) aggiornare valore in `.env` locale; (b) `migrate_env_to_ssm.py --force`; (c) restart `plenora-backend.service`; (d) comunicare agli utenti il logout forzato.
+### `PLENORA_ENCRYPTION_KEY`
 
-### Rotazione `PLENORA_ENCRYPTION_KEY`
-**Non supportata a caldo**. Richiede uno script one-shot di re-encryption su tutti i record cifrati (`connections.password`, `api_connections.config.auth.*`, `datasources.config.auth.*`, `user_mfa.secret_encrypted`). Pianificare con downtime. Rotazione non automatica by design: la chain di crypto e' documentata in `app/shared/crypto.py:18-31`.
+Impact: encrypted records become unreadable if rotated without migration.
 
-### Incidente (sospetta compromissione)
-1. Rotare `JWT_SECRET_KEY` immediatamente (procedura sopra).
-2. Ruotare `DATABASE_URL` (password PG): coordinare con DBA, update in SSM con `--force`, restart backend + Celery + beat.
-3. Se compromissione include nodo: rotare anche `PLENORA_ENCRYPTION_KEY` con script dedicato (downtime richiesto).
-4. Revisione CloudTrail log `ssm:GetParameter` negli ultimi 30 giorni per identificare accessi non autorizzati.
+This key is not hot-rotatable. A valid rotation requires:
 
-## Audit & logging
+- maintenance window;
+- old key and new key available to a one-shot migration;
+- re-encryption of all encrypted DB fields;
+- backup before migration;
+- verification after migration;
+- service restart with the new key only.
 
-- Accessi a SSM: CloudTrail `ssm:GetParameter` / `ssm:PutParameter` (retention standard: 90gg).
-- Accessi applicativi ai secret: l'app legge `os.getenv()` al boot, non ri-legge a runtime. Un log applicativo `logger.info("Secret loaded")` non e' presente di proposito (evitare fingerprint-by-timing su scheduled task).
-- Hash dei valori SSM: tenuti nei log di `migrate_env_to_ssm.py` (stdout, catturato dai deploy log) per verifica cross-run. Non reversibile.
+Do not rotate this key as a normal incident reflex unless the compromise
+requires it.
 
-## Riferimenti
-- Source: `backend/app/shared/crypto.py` (chain chiave, Fernet)
-- Source: `backend/app/shared/cloud_backends.py:46` `SecretsBackend` Protocol + AwsSsm implementation
-- Source: `backend/scripts/load_secrets.py` (wrapper systemd)
-- Source: `backend/scripts/migrate_env_to_ssm.py` (migration tool)
-- Ops: `docs/ops/jwt-incident-response.md` (playbook rotazione JWT)
-- ADR: `docs/architecture/decisions/0003-*.md` (Fernet crypto at-rest), `docs/architecture/decisions/0004-*.md` (JWT HS256 + TTL 8h), `docs/architecture/decisions/0009-*.md` (blacklist Redis)
+## Logging Rules
+
+- Never log secret values.
+- Never log full connection strings.
+- Fingerprints are allowed only when non-reversible and short.
+- Startup logs may say a required secret is missing, but not print the value.
+
+## Release Requirements
+
+Before 1.0:
+
+- all required secrets documented in install docs;
+- no committed `.env`;
+- no runtime dependency on old alias names;
+- incident path for JWT rotation tested or reviewed;
+- encryption-key rotation limitation explicitly accepted.
+
+## References
+
+- [Non-Docker install](../ops/install-non-docker.md)
+- [Docker install](../ops/install-docker.md)
+- [JWT incident response](../ops/jwt-incident-response.md)
+- [ADR-0003 Fernet crypto at rest](../architecture/decisions/0003-2026-04-21-fernet-crypto-at-rest.md)
+- [ADR-0004 JWT HS256](../architecture/decisions/0004-2026-04-21-jwt-hs256-ttl-8h-no-refresh.md)
