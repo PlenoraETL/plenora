@@ -87,6 +87,21 @@ before being used in an external audit.
 The audit tree is read-only history. If an old audit still contains useful
 truth, promote that truth into a canonical doc or a new ADR.
 
+## Inventory Policy
+
+The repository intentionally still contains many Markdown files, but they
+fall into distinct classes:
+
+- root convention files for GitHub entry points;
+- canonical product, architecture, development, operations, and compliance
+  docs under `docs/`;
+- ADRs, which are append-only;
+- historical audits, which are read-only evidence;
+- local README files next to backend, deploy, script, and test packages.
+
+Unlinked roadmap notes or stale audit leftovers should be deleted or moved
+under `docs/audits/`, not left beside canonical documentation.
+
 ## Documentation Rules
 
 - Do not add new root-level documentation unless it is a GitHub convention
