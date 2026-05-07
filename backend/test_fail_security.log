@@ -5,10 +5,10 @@
 ............................................................F........... [ 30%]
 ........................................................................ [ 36%]
 ..F........................FF........................................... [ 42%]
-....................F.......................F......FF.......F...FF.FFFFF [ 48%]
-FF.F.FFFFFFF.............................................sssss.......... [ 54%]
-............................sssssss.........FF.....................F.... [ 60%]
-......................F................................................. [ 66%]
+............................................F........................... [ 48%]
+.........................................................sssss.......... [ 54%]
+............................sssssss.........FF.......................... [ 60%]
+........................................................................ [ 66%]
 ........................................................................ [ 72%]
 ........................................................................ [ 78%]
 ........................................................................ [ 84%]
@@ -21,7 +21,7 @@ tests2/security/unit/test_api_connector_source_loading_core.py:165: in test_load
     assert "Cross-tenant" in msg
 E   assert 'Cross-tenant' in "Accesso negato: progetto sorgente 'proj-99': Progetto proj-99 non trovato"
 ----------------------------- Captured stdout call -----------------------------
-[31m09:52:41 | ERROR | app.core.artifacts.source_loader | [SECURITY] project_source proj-99 non risolvibile per group=grp-mine: Progetto proj-99 non trovato[0m
+[31m11:29:25 | ERROR | app.core.artifacts.source_loader | [SECURITY] project_source proj-99 non risolvibile per group=grp-mine: Progetto proj-99 non trovato[0m
 _____ test_auth_reexports_remaining_ownership_helpers_with_object_identity _____
 tests2/security/unit/test_auth_models_and_ownership_module_contract.py:136: in test_auth_reexports_remaining_ownership_helpers_with_object_identity
     assert getattr(auth_mod, name) is getattr(ownership, name), (
@@ -45,130 +45,10 @@ tests2/security/unit/test_cascade_409_cross_tenant_no_leak.py:171: in test_conne
     assert resp.status_code == 409
 E   assert 204 == 409
 E    +  where 204 = <Response [204 No Content]>.status_code
-_ test_create_raw_from_upload_blocks_executable[#!/bin/bash\nrm -rf /\n-script] _
-tests2/security/unit/test_file_service_mime_defense_in_depth.py:64: in test_create_raw_from_upload_blocks_executable
-    with pytest.raises(ValueError, match="eseguibile|firma|MZ|ELF"):
-E   Failed: DID NOT RAISE <class 'ValueError'>
 ____________ test_groups_router_uses_lazy_proxies_for_dependencies _____________
 tests2/security/unit/test_groups_router_extraction_contract.py:214: in test_groups_router_uses_lazy_proxies_for_dependencies
     assert "from app.core.auth.auth import get_current_user" in src
 E   assert 'from app.core.auth.auth import get_current_user' in '"""\nAuth groups admin CRUD router — typed boundary.\n\n"""\n\nfrom __future__ import annotations\n\nfrom fastapi imp...sage="Errore interno del server",\n        )\n\n    return {"deleted": True, "group_id": group_id, "report": report}\n'
-____________________ test_delete_bundle_blocks_cross_group _____________________
-tests2/security/unit/test_imdf_bundles_management_contract.py:170: in test_delete_bundle_blocks_cross_group
-    assert exc.value.status_code == 403
-E   assert 404 == 403
-E    +  where 404 = HTTPException(status_code=404, detail={'error': 'project_not_found', 'message': "Progetto 'proj-1' del bundle non trovato"}).status_code
-E    +    where HTTPException(status_code=404, detail={'error': 'project_not_found', 'message': "Progetto 'proj-1' del bundle non trovato"}) = <ExceptionInfo HTTPException(status_code=404, detail={'error': 'project_not_found', 'message': "Progetto 'proj-1' del bundle non trovato"}) tblen=4>.value
-______ test_list_bundles_raises_500_when_visible_project_ids_lookup_fails ______
-tests2/security/unit/test_imdf_list_bundles_fail_closed_contract.py:38: in test_list_bundles_raises_500_when_visible_project_ids_lookup_fails
-    assert response.status_code == 500
-E   assert 200 == 500
-E    +  where 200 = <Response [200 OK]>.status_code
------------------------------ Captured stdout call -----------------------------
-[33m09:52:45 | WARNING | app.core.imdf.router | list_bundles: S3 lookup fallito (mostro solo cache locale): OBJECT_STORAGE_BUCKET non configurato (e nessun fallback PLENORA_ARTIFACT_BUCKET / BACKUP_BUCKET disponibile). Configurare OBJECT_STORAGE_BUCKET in env.[0m
-___________ test_assert_bundle_group_access_requires_visible_project ___________
-tests2/security/unit/test_imdf_security_contract.py:76: in test_assert_bundle_group_access_requires_visible_project
-    assert exc.value.status_code == 403
-E   assert 404 == 403
-E    +  where 404 = HTTPException(status_code=404, detail={'error': 'project_not_found', 'message': "Progetto 'proj-1' del bundle non trovato"}).status_code
-E    +    where HTTPException(status_code=404, detail={'error': 'project_not_found', 'message': "Progetto 'proj-1' del bundle non trovato"}) = <ExceptionInfo HTTPException(status_code=404, detail={'error': 'project_not_found', 'message': "Progetto 'proj-1' del bundle non trovato"}) tblen=2>.value
-___________ test_validate_publish_folder_matches_existing_no_warning ___________
-tests2/security/unit/test_imdf_validate_publish_folder_contract.py:168: in test_validate_publish_folder_matches_existing_no_warning
-    assert report["fs_exists"] is True
-E   assert False is True
-_____________ test_validate_publish_folder_mismatch_emits_warning ______________
-tests2/security/unit/test_imdf_validate_publish_folder_contract.py:191: in test_validate_publish_folder_mismatch_emits_warning
-    assert "FOLDER_MISMATCH" in codes, (
-E   AssertionError: Atteso FOLDER_MISMATCH in top_issues, trovato: ['CONNECTION_NOT_FOUND']
-E   assert 'FOLDER_MISMATCH' in ['CONNECTION_NOT_FOUND']
-________ test_validate_publish_folder_id_mismatch_uses_title_in_message ________
-tests2/security/unit/test_imdf_validate_publish_folder_contract.py:260: in test_validate_publish_folder_id_mismatch_uses_title_in_message
-    assert len(mm) == 1, f"Atteso 1 FOLDER_MISMATCH, trovato: {report['top_issues']}"
-E   AssertionError: Atteso 1 FOLDER_MISMATCH, trovato: [{'severity': 'error', 'code': 'CONNECTION_NOT_FOUND', 'message': "Connessione ArcGIS 'conn-1' non trovata"}]
-E   assert 0 == 1
-E    +  where 0 = len([])
-____________ test_validate_publish_folder_mismatch_replace_still_ok ____________
-tests2/security/unit/test_imdf_validate_publish_folder_contract.py:285: in test_validate_publish_folder_mismatch_replace_still_ok
-    assert report["summary"]["errors"] == 0
-E   assert 1 == 0
-_________ test_string_truncation_warning_when_bundle_exceeds_fs_length _________
-tests2/security/unit/test_imdf_validate_publish_robustness_contract.py:122: in test_string_truncation_warning_when_bundle_exceeds_fs_length
-    layer = _layer(report)
-            ^^^^^^^^^^^^^^
-tests2/security/unit/test_imdf_validate_publish_robustness_contract.py:99: in _layer
-    return next(l for l in report["layers"] if l["name"] == name)
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-E   StopIteration
-_________________ test_string_truncation_no_warning_when_fits __________________
-tests2/security/unit/test_imdf_validate_publish_robustness_contract.py:143: in test_string_truncation_no_warning_when_fits
-    layer = _layer(report)
-            ^^^^^^^^^^^^^^
-tests2/security/unit/test_imdf_validate_publish_robustness_contract.py:99: in _layer
-    return next(l for l in report["layers"] if l["name"] == name)
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-E   StopIteration
-__________________ test_null_on_non_nullable_error_in_append ___________________
-tests2/security/unit/test_imdf_validate_publish_robustness_contract.py:166: in test_null_on_non_nullable_error_in_append
-    layer = _layer(report)
-            ^^^^^^^^^^^^^^
-tests2/security/unit/test_imdf_validate_publish_robustness_contract.py:99: in _layer
-    return next(l for l in report["layers"] if l["name"] == name)
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-E   StopIteration
-_________________ test_null_on_non_nullable_warning_in_replace _________________
-tests2/security/unit/test_imdf_validate_publish_robustness_contract.py:193: in test_null_on_non_nullable_warning_in_replace
-    layer = _layer(report)
-            ^^^^^^^^^^^^^^
-tests2/security/unit/test_imdf_validate_publish_robustness_contract.py:99: in _layer
-    return next(l for l in report["layers"] if l["name"] == name)
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-E   StopIteration
-__________________________ test_crs_mismatch_warning ___________________________
-tests2/security/unit/test_imdf_validate_publish_robustness_contract.py:214: in test_crs_mismatch_warning
-    assert "CRS_MISMATCH" in codes
-E   AssertionError: assert 'CRS_MISMATCH' in ['CONNECTION_NOT_FOUND']
-___________ test_missing_capabilities_error_on_append_without_create ___________
-tests2/security/unit/test_imdf_validate_publish_robustness_contract.py:249: in test_missing_capabilities_error_on_append_without_create
-    assert "MISSING_CAPABILITIES" in codes
-E   AssertionError: assert 'MISSING_CAPABILITIES' in ['CONNECTION_NOT_FOUND']
-_____________ test_field_name_case_insensitive_no_false_positives ______________
-tests2/security/unit/test_imdf_validate_publish_robustness_contract.py:288: in test_field_name_case_insensitive_no_false_positives
-    layer = _layer(report)
-            ^^^^^^^^^^^^^^
-tests2/security/unit/test_imdf_validate_publish_robustness_contract.py:99: in _layer
-    return next(l for l in report["layers"] if l["name"] == name)
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-E   StopIteration
-_______________ test_shape_double_underscore_fields_not_reported _______________
-tests2/security/unit/test_imdf_validate_publish_schema_contract.py:169: in test_shape_double_underscore_fields_not_reported
-    layer = next(l for l in report["layers"] if l["name"] == "Locale")
-            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-E   StopIteration
-_____________________ test_objectid_not_reported_in_schema _____________________
-tests2/security/unit/test_imdf_validate_publish_schema_contract.py:188: in test_objectid_not_reported_in_schema
-    layer = next(l for l in report["layers"] if l["name"] == "Locale")
-            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-E   StopIteration
-_______________ test_type_mismatch_other_non_match_col_silenced ________________
-tests2/security/unit/test_imdf_validate_publish_schema_contract.py:207: in test_type_mismatch_other_non_match_col_silenced
-    layer = next(l for l in report["layers"] if l["name"] == "Locale")
-            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-E   StopIteration
-_________________ test_append_detects_duplicate_business_keys __________________
-tests2/security/unit/test_imdf_validate_publish_schema_contract.py:307: in test_append_detects_duplicate_business_keys
-    layer = next(l for l in report["layers"] if l["name"] == "Locale")
-            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-E   StopIteration
-_____________________ test_append_no_duplicates_no_warning _____________________
-tests2/security/unit/test_imdf_validate_publish_schema_contract.py:395: in test_append_no_duplicates_no_warning
-    layer = next(l for l in report["layers"] if l["name"] == "Locale")
-            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-E   StopIteration
-______________ test_type_mismatch_other_on_match_col_still_error _______________
-tests2/security/unit/test_imdf_validate_publish_schema_contract.py:413: in test_type_mismatch_other_on_match_col_still_error
-    layer = next(l for l in report["layers"] if l["name"] == "Locale")
-            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-E   StopIteration
 ______ test_apply_pending_migrations_creates_schema_before_tracking_table ______
 tests2/security/unit/test_migrations_runner_contract.py:217: in test_apply_pending_migrations_creates_schema_before_tracking_table
     assert calls[0] == "ensure_schema", (
@@ -179,14 +59,6 @@ tests2/security/unit/test_migrations_runner_contract.py:245: in test_apply_pendi
     stmt = cur.execute.call_args.args[0]
            ^^^^^^^^^^^^^^^^^^^^^^^^^^
 E   AttributeError: 'NoneType' object has no attribute 'args'
-_________________________ test_shebang_script_blocked __________________________
-tests2/security/unit/test_mime_validator_contract.py:182: in test_shebang_script_blocked
-    with pytest.raises(MimeMismatchError, match="eseguibile|firma"):
-E   Failed: DID NOT RAISE <class 'app.utils.mime_validator.MimeMismatchError'>
-________ test_no_executable_blocks_executables[#!/bin/bash\necho pwn\n] ________
-tests2/security/unit/test_mime_validator_contract.py:356: in test_no_executable_blocks_executables
-    with pytest.raises(MimeMismatchError, match="eseguibile|firma"):
-E   Failed: DID NOT RAISE <class 'app.utils.mime_validator.MimeMismatchError'>
 ______________ test_load_project_blocks_cross_tenant_via_resolver ______________
 app/core/artifacts/source_loader.py:245: in _load_project
     materialized = self._resolver.materialize_latest(
@@ -210,7 +82,7 @@ E   AssertionError: Regex pattern did not match.
 E     Expected regex: 'Cross-tenant'
 E     Actual message: 'Progetto proj-1 non trovato'
 ----------------------------- Captured stdout call -----------------------------
-[31m09:52:49 | ERROR | app.core.artifacts.source_loader | [SECURITY] project_source proj-1 non risolvibile per group=grp-mine: Progetto proj-1 non trovato[0m
+[31m11:29:34 | ERROR | app.core.artifacts.source_loader | [SECURITY] project_source proj-1 non risolvibile per group=grp-mine: Progetto proj-1 non trovato[0m
 _____________ test_load_project_returns_none_when_no_latest_result _____________
 app/core/artifacts/source_loader.py:245: in _load_project
     materialized = self._resolver.materialize_latest(
@@ -228,7 +100,7 @@ app/core/artifacts/source_loader.py:258: in _load_project
     raise SourceLoadingError(str(e)) from e
 E   app.core.artifacts.types.SourceLoadingError: Progetto proj-1 non trovato
 ----------------------------- Captured stdout call -----------------------------
-[31m09:52:49 | ERROR | app.core.artifacts.source_loader | [SECURITY] project_source proj-1 non risolvibile per group=grp-mine: Progetto proj-1 non trovato[0m
+[31m11:29:34 | ERROR | app.core.artifacts.source_loader | [SECURITY] project_source proj-1 non risolvibile per group=grp-mine: Progetto proj-1 non trovato[0m
 __________ test_resolve_project_path_blocks_cross_tenant_via_resolver __________
 app/core/artifacts/source_loader.py:218: in resolve_project_path
     materialized = self._resolver.materialize_latest(
@@ -250,7 +122,7 @@ E   AssertionError: Regex pattern did not match.
 E     Expected regex: 'Cross-tenant'
 E     Actual message: 'Progetto proj-1 non trovato'
 ----------------------------- Captured stdout call -----------------------------
-[31m09:52:49 | ERROR | app.core.artifacts.source_loader | [SECURITY] resolve_project_path: proj-1 non risolvibile per group=grp-mine: Progetto proj-1 non trovato[0m
+[31m11:29:34 | ERROR | app.core.artifacts.source_loader | [SECURITY] resolve_project_path: proj-1 non risolvibile per group=grp-mine: Progetto proj-1 non trovato[0m
 _________ test_resolve_project_path_returns_none_when_no_latest_result _________
 app/core/artifacts/source_loader.py:218: in resolve_project_path
     materialized = self._resolver.materialize_latest(
@@ -266,7 +138,7 @@ app/core/artifacts/source_loader.py:229: in resolve_project_path
     raise SourceLoadingError(str(e)) from e
 E   app.core.artifacts.types.SourceLoadingError: Progetto proj-1 non trovato
 ----------------------------- Captured stdout call -----------------------------
-[31m09:52:49 | ERROR | app.core.artifacts.source_loader | [SECURITY] resolve_project_path: proj-1 non risolvibile per group=grp-mine: Progetto proj-1 non trovato[0m
+[31m11:29:34 | ERROR | app.core.artifacts.source_loader | [SECURITY] resolve_project_path: proj-1 non risolvibile per group=grp-mine: Progetto proj-1 non trovato[0m
 =============================== warnings summary ===============================
 security/unit/test_jwt_logout_blacklist.py: 11 warnings
 security/unit/test_jwt_token_module_contract.py: 2 warnings
@@ -285,32 +157,9 @@ FAILED tests2/security/unit/test_auth_models_and_ownership_module_contract.py::t
 FAILED tests2/security/unit/test_c11_contract.py::test_visible_project_ids_strict_filters_by_owner_group
 FAILED tests2/security/unit/test_cascade_409_cross_tenant_no_leak.py::test_connections_delete_cascade_filters_cross_tenant_for_admin
 FAILED tests2/security/unit/test_cascade_409_cross_tenant_no_leak.py::test_connections_delete_cascade_superadmin_sees_all
-FAILED tests2/security/unit/test_file_service_mime_defense_in_depth.py::test_create_raw_from_upload_blocks_executable[#!/bin/bash\nrm -rf /\n-script]
 FAILED tests2/security/unit/test_groups_router_extraction_contract.py::test_groups_router_uses_lazy_proxies_for_dependencies
-FAILED tests2/security/unit/test_imdf_bundles_management_contract.py::test_delete_bundle_blocks_cross_group
-FAILED tests2/security/unit/test_imdf_list_bundles_fail_closed_contract.py::test_list_bundles_raises_500_when_visible_project_ids_lookup_fails
-FAILED tests2/security/unit/test_imdf_security_contract.py::test_assert_bundle_group_access_requires_visible_project
-FAILED tests2/security/unit/test_imdf_validate_publish_folder_contract.py::test_validate_publish_folder_matches_existing_no_warning
-FAILED tests2/security/unit/test_imdf_validate_publish_folder_contract.py::test_validate_publish_folder_mismatch_emits_warning
-FAILED tests2/security/unit/test_imdf_validate_publish_folder_contract.py::test_validate_publish_folder_id_mismatch_uses_title_in_message
-FAILED tests2/security/unit/test_imdf_validate_publish_folder_contract.py::test_validate_publish_folder_mismatch_replace_still_ok
-FAILED tests2/security/unit/test_imdf_validate_publish_robustness_contract.py::test_string_truncation_warning_when_bundle_exceeds_fs_length
-FAILED tests2/security/unit/test_imdf_validate_publish_robustness_contract.py::test_string_truncation_no_warning_when_fits
-FAILED tests2/security/unit/test_imdf_validate_publish_robustness_contract.py::test_null_on_non_nullable_error_in_append
-FAILED tests2/security/unit/test_imdf_validate_publish_robustness_contract.py::test_null_on_non_nullable_warning_in_replace
-FAILED tests2/security/unit/test_imdf_validate_publish_robustness_contract.py::test_crs_mismatch_warning
-FAILED tests2/security/unit/test_imdf_validate_publish_robustness_contract.py::test_missing_capabilities_error_on_append_without_create
-FAILED tests2/security/unit/test_imdf_validate_publish_robustness_contract.py::test_field_name_case_insensitive_no_false_positives
-FAILED tests2/security/unit/test_imdf_validate_publish_schema_contract.py::test_shape_double_underscore_fields_not_reported
-FAILED tests2/security/unit/test_imdf_validate_publish_schema_contract.py::test_objectid_not_reported_in_schema
-FAILED tests2/security/unit/test_imdf_validate_publish_schema_contract.py::test_type_mismatch_other_non_match_col_silenced
-FAILED tests2/security/unit/test_imdf_validate_publish_schema_contract.py::test_append_detects_duplicate_business_keys
-FAILED tests2/security/unit/test_imdf_validate_publish_schema_contract.py::test_append_no_duplicates_no_warning
-FAILED tests2/security/unit/test_imdf_validate_publish_schema_contract.py::test_type_mismatch_other_on_match_col_still_error
 FAILED tests2/security/unit/test_migrations_runner_contract.py::test_apply_pending_migrations_creates_schema_before_tracking_table
 FAILED tests2/security/unit/test_migrations_runner_contract.py::test_apply_pending_migrations_tracking_table_uses_schema_env
-FAILED tests2/security/unit/test_mime_validator_contract.py::test_shebang_script_blocked
-FAILED tests2/security/unit/test_mime_validator_contract.py::test_no_executable_blocks_executables[#!/bin/bash\necho pwn\n]
 FAILED tests2/security/unit/test_source_loader_core.py::test_load_project_blocks_cross_tenant_via_resolver
 FAILED tests2/security/unit/test_source_loader_core.py::test_load_project_returns_none_when_no_latest_result
 FAILED tests2/security/unit/test_source_loader_core.py::test_resolve_project_path_blocks_cross_tenant_via_resolver
