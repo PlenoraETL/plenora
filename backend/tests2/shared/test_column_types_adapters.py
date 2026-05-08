@@ -16,6 +16,7 @@ from app.shared.resources.column_types import (
     canvas_type_to_pandas_dtype,
     dict_to_metadata,
     is_canonical_type,
+    lookup_canvas_column_type,
     metadata_to_dict,
     normalize_canvas_type,
     pandas_series_to_canvas_type,
@@ -216,6 +217,28 @@ def test_canvas_type_to_pandas_dtype_is_instantiable():
         dtype = canvas_type_to_pandas_dtype(canvas)
         # Non deve esplodere
         pd.Series([], dtype=dtype)
+
+
+# lookup_canvas_column_type
+
+
+def test_lookup_canvas_column_type_prefers_exact_match():
+    mapping = {"Name": "str", "NAME": "int"}
+    assert lookup_canvas_column_type("Name", mapping) == "str"
+
+
+def test_lookup_canvas_column_type_falls_back_to_case_insensitive_match():
+    mapping = {"TOTAL_PRICE": "real"}
+    assert lookup_canvas_column_type("total_price", mapping) == "real"
+
+
+def test_lookup_canvas_column_type_checks_alternate_names_before_case_fold():
+    mapping = {"total_price": "real", "TOTAL_PRICE": "str"}
+    assert lookup_canvas_column_type("deduped_total_price", mapping, "TOTAL_PRICE") == "str"
+
+
+def test_lookup_canvas_column_type_returns_none_for_unknown_column():
+    assert lookup_canvas_column_type("missing", {"id": "int"}) is None
 
 
 # pandas_series_to_canvas_type (fase C — include N11 heuristic)

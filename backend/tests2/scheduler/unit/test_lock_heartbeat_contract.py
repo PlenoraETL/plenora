@@ -7,6 +7,7 @@ Scope: blinda l'API pubblica della class estratta in
 from __future__ import annotations
 
 import threading
+from pathlib import Path
 from unittest.mock import MagicMock
 
 import pytest
@@ -15,6 +16,18 @@ from app.shared.clock import FakeClock
 
 
 pytestmark = [pytest.mark.unit, pytest.mark.scheduler, pytest.mark.contract]
+
+
+def test_private_lock_heartbeat_shim_is_removed():
+    """The scheduler lock runtime lives in scheduler_lock.py."""
+    legacy_path = (
+        Path(__file__).resolve().parents[3]
+        / "app"
+        / "core"
+        / "scheduler"
+        / "_lock_heartbeat.py"
+    )
+    assert not legacy_path.exists()
 
 
 @pytest.fixture
@@ -39,7 +52,7 @@ def _tick(fc: FakeClock, interval: float) -> None:
 
 def test_start_spawns_daemon_thread(fake_concurrency):
     """start() crea un thread daemon nominato per lo schedule_id."""
-    from app.core.scheduler._lock_heartbeat import LockHeartbeat
+    from app.core.scheduler.scheduler_lock import LockHeartbeat
 
     hb = LockHeartbeat(
         concurrency=fake_concurrency,
@@ -60,7 +73,7 @@ def test_start_spawns_daemon_thread(fake_concurrency):
 def test_get_state_dict_returns_live_reference(fake_concurrency):
     """get_state_dict() ritorna la reference interna mutabile, non
     una copia. Mutazioni del thread loop sono visibili al chiamante."""
-    from app.core.scheduler._lock_heartbeat import LockHeartbeat
+    from app.core.scheduler.scheduler_lock import LockHeartbeat
 
     hb = LockHeartbeat(
         concurrency=fake_concurrency,
@@ -80,7 +93,7 @@ def test_get_state_dict_returns_live_reference(fake_concurrency):
 
 def test_stop_is_idempotent(fake_concurrency):
     """stop() chiamato 2 volte non solleva."""
-    from app.core.scheduler._lock_heartbeat import LockHeartbeat
+    from app.core.scheduler.scheduler_lock import LockHeartbeat
 
     hb = LockHeartbeat(
         concurrency=fake_concurrency,
@@ -99,7 +112,7 @@ def test_lock_lost_flag_true_when_refresh_false_and_reacquire_fails(
 ):
     """Pattern critico C3: refresh_lock False + try_acquire != 'acquired'
     -> state['lock_lost'] = True via mutazione thread loop."""
-    from app.core.scheduler._lock_heartbeat import LockHeartbeat
+    from app.core.scheduler.scheduler_lock import LockHeartbeat
 
     fake_concurrency.refresh_lock = MagicMock(return_value=False)
     fake_concurrency.try_acquire = MagicMock(return_value="failed")
@@ -131,7 +144,7 @@ def test_lock_lost_flag_true_when_refresh_false_and_reacquire_fails(
 
 def test_lock_lost_flag_remains_false_when_refresh_ok(fake_concurrency):
     """Happy path: refresh_lock sempre True -> lock_lost resta False."""
-    from app.core.scheduler._lock_heartbeat import LockHeartbeat
+    from app.core.scheduler.scheduler_lock import LockHeartbeat
 
     fake_concurrency.refresh_lock = MagicMock(return_value=True)
 
@@ -160,7 +173,7 @@ def test_refresh_exception_does_not_propagate_or_set_lock_lost(
 ):
     """Transient blip: refresh_lock solleva -> loop continua, no
     state['lock_lost']=True (e' una situazione retry-safe)."""
-    from app.core.scheduler._lock_heartbeat import LockHeartbeat
+    from app.core.scheduler.scheduler_lock import LockHeartbeat
 
     fake_concurrency.refresh_lock = MagicMock(
         side_effect=RuntimeError("transient DB blip")
@@ -199,7 +212,7 @@ def test_state_dict_includes_external_hb_key_when_wrapper_injects_it():
     Questo test blinda il behavior accoppiato (NON un bug, e' design
     documentato): se la shape pulita di `_state` cambia in futuro, il
     wrapper compat va aggiornato di conseguenza."""
-    from app.core.scheduler._lock_heartbeat import LockHeartbeat
+    from app.core.scheduler.scheduler_lock import LockHeartbeat
     from app.core.scheduler.execution_manager import ExecutionManager
 
     cm = MagicMock()

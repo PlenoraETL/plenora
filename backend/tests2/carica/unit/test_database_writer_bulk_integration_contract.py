@@ -127,13 +127,15 @@ def test_stage_swap_callsite_still_passes_target_table_to_execute_batch():
     """Keep stage/swap callsites explicit while the signature remains compat."""
     import ast
     import inspect
+    import textwrap
 
     from app.core.carica.database_writer import DatabaseWriter
+    from app.core.carica.writer_oracle_redef import execute_oracle_redefinition
 
     methods = {
         "_replace_atomic": DatabaseWriter._replace_atomic,
         "_truncate_insert_stage_swap": DatabaseWriter._truncate_insert_stage_swap,
-        "_truncate_insert_oracle_redef": DatabaseWriter._truncate_insert_oracle_redef,
+        "execute_oracle_redefinition": execute_oracle_redefinition,
     }
 
     missing: list[str] = []
@@ -143,7 +145,9 @@ def test_stage_swap_callsite_still_passes_target_table_to_execute_batch():
         except (OSError, TypeError) as e:
             pytest.fail(f"inspect.getsource({method.__qualname__}) failed: {e}")
 
-        tree = ast.parse("class _S:\n" + method_src)
+        tree = ast.parse(
+            "class _S:\n" + textwrap.indent(textwrap.dedent(method_src), "    ")
+        )
         has_target = False
         for node in ast.walk(tree):
             if not isinstance(node, ast.Call):

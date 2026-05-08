@@ -13,6 +13,7 @@ from typing import List
 import pytest
 
 from app.core.carica.database_writer import DatabaseWriter
+from app.core.carica.writer_oracle_redef import execute_oracle_redefinition
 
 
 pytestmark = [pytest.mark.unit, pytest.mark.carica, pytest.mark.contract]
@@ -233,7 +234,7 @@ def test_cleanup_guards_use_warning_not_debug_on_orphan_leftover():
             "[REPLACE ATOMIC] cleanup difensivo orfani stg/bak fallito",
             "[REPLACE ATOMIC] cleanup shadow post-INSERT fail fallito",
         ],
-        DatabaseWriter._truncate_insert_oracle_redef: [
+        execute_oracle_redefinition: [
             "[ORACLE REDEF] cleanup difensivo interim orfana fallito",
             "[ORACLE REDEF] cleanup interim post-START_REDEF fail fallito",
             "[ORACLE REDEF] drop interim post-ABORT fallito",

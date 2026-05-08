@@ -11,10 +11,20 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from app.db.query_streaming import execute_streaming_to_file
 from app.db.query_executor import QueryExecutor
 
 
 pytestmark = [pytest.mark.unit, pytest.mark.estrai, pytest.mark.contract, pytest.mark.regression]
+
+
+def test_query_executor_delegates_streaming_mechanics_to_query_streaming_module():
+    source = Path("backend/app/db/query_executor.py").read_text(encoding="utf-8")
+
+    assert "from app.db.query_streaming import execute_streaming_to_file" in source
+    assert "csv.writer" not in source
+    assert "ParquetWriter" not in source
+    assert "pyarrow" not in source
 
 
 class _FakeResult:
@@ -29,7 +39,7 @@ class _FakeResult:
         return []
 
 
-def _make_executor_with_result(fake_result):
+def _make_factory_with_result(fake_result):
     fake_conn = MagicMock()
     fake_conn.execute.return_value = fake_result
 
@@ -43,6 +53,11 @@ def _make_executor_with_result(fake_result):
     factory = MagicMock()
     factory.create_engine.return_value = fake_engine
 
+    return factory
+
+
+def _make_executor_with_result(fake_result):
+    factory = _make_factory_with_result(fake_result)
     return QueryExecutor(engine_factory=factory, logger=MagicMock())
 
 
@@ -59,12 +74,13 @@ def test_execute_streaming_to_file_writes_csv_chunks(tmp_path, monkeypatch):
             [],
         ],
     )
-    executor = _make_executor_with_result(fake_result)
+    factory = _make_factory_with_result(fake_result)
     conn = MagicMock()
     conn.type = "postgres"
 
     out = tmp_path / "out.csv"
-    row_count, columns = executor._execute_streaming_to_file(
+    row_count, columns = execute_streaming_to_file(
+        engine_factory=factory,
         connection=conn,
         sql="SELECT id, name FROM t",
         params=None,

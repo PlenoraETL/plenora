@@ -32,6 +32,8 @@ from app.core.arricchisci._rate_limiter import RateLimiter as _RateLimiter
 from app.shared.api_utils import (
     prepare_headers as _shared_prepare_headers,
     get_cached_oauth2_token as _shared_get_cached_oauth2_token,
+)
+from app.shared.log_sanitization import (
     sanitize_for_log,
     sanitize_url_for_log,
 )
@@ -43,6 +45,7 @@ from app.core.arricchisci.enrichment_template_params import (
 from app.core.arricchisci.enrichment_response_processing import (
     EnrichmentResponseProcessingMixin,
 )
+from app.core.arricchisci.response_type_detector import ResponseTypeDetector
 
 from app.core.arricchisci.enrichment_batch_mode import (
     EnrichmentBatchModeMixin,
@@ -155,6 +158,7 @@ class EnrichmentExecutor(
 
         # Tipi colonna rilevati durante auto-flatten (usato per aggiornare schema_fields
         self.detected_column_types: Dict[str, str] = {}
+        self._response_type_detector_collaborator = ResponseTypeDetector(self.detected_column_types)
         
         # Rate limiter
         self._rate_limiter = _RateLimiter(self.options.rate_limit)

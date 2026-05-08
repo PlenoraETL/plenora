@@ -96,6 +96,30 @@ def canvas_type_to_pandas_dtype(canvas_type: Optional[str]) -> str:
     return "object"
 
 
+def lookup_canvas_column_type(
+    column_name: str,
+    canvas_type_map: Mapping[str, str],
+    *alternate_names: str,
+) -> Optional[str]:
+    """Return the canvas type for a column name using exact then case-insensitive lookup.
+
+    `alternate_names` covers boundaries where a DB/driver returns a normalized
+    output name while canvas metadata still uses the original cursor name.
+    """
+    candidate_names = (column_name, *alternate_names)
+    for name in candidate_names:
+        if name in canvas_type_map:
+            return canvas_type_map[name]
+
+    canvas_type_map_lower = {k.lower(): v for k, v in canvas_type_map.items()}
+    for name in candidate_names:
+        lowered = name.lower()
+        if lowered in canvas_type_map_lower:
+            return canvas_type_map_lower[lowered]
+
+    return None
+
+
 def pandas_series_to_canvas_type(series: Any) -> str:
     """pandas Series -> canonical canvas-type.
 

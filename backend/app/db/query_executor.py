@@ -14,6 +14,7 @@ import pandas as pd
 from sqlalchemy import create_engine, text
 from sqlalchemy.engine import Engine
 
+from app.db.query_streaming import execute_streaming_to_file
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -551,7 +552,6 @@ class QueryExecutor:
                     type(e).__name__,
                     e,
                 )
-
             # Oracle: aumenta limite cursori aperti per funzioni SDO_UTIL/SDO_GEOM
             if connection.type == "oracle":
                 try:
@@ -610,117 +610,15 @@ class QueryExecutor:
         output_path: "Path",
         output_format: str,
     ) -> Tuple[int, List[str]]:
-        """Esegue la query e scrive l'output su file in streaming
-        senza materializzare l'intero result set in memoria.
-
-        Supporta CSV e Parquet. Per CSV scrive riga-per-riga via
-        csv.writer. Per Parquet usa pyarrow.parquet.ParquetWriter
-        con scrittura per RecordBatch (chunk da 10k).
-
-        Return: (righe_totali, nomi_colonne).
-
-        C11: prima del fix il chunking era cosmetico (fetchmany ma
-        accumulo in list + DataFrame intero). Ora il peak memory e'
-        proporzionale al chunk (10k righe), non al result set.
-        """
-        import csv as _csv
-        from pathlib import Path as _Path
-        output_path = _Path(output_path)
-
-        engine = self._engine_factory.create_engine(connection)
-        from app.config import settings as _s
-        _max_rows = int(getattr(_s, "ESTRAI_MAX_ROWS", 5_000_000) or 0)
-        CHUNK_SIZE = 10_000
-        total_rows = 0
-
-        with engine.connect() as conn:
-            # Stesso setup timeout di execute_raw (duplicato qui per
-            # mantenere boundary chiari; factor-out sarebbe refactor fuori
-            # scope C11
-            try:
-                timeout_s = _s.DB_QUERY_TIMEOUT
-                timeout_ms = int(timeout_s) * 1000
-                if connection.type in ("postgres", "postgresql"):
-                    conn.execute(text("SET statement_timeout = :t"), {"t": timeout_ms})
-                elif connection.type == "mysql":
-                    conn.execute(text("SET SESSION max_execution_time = :t"), {"t": timeout_ms})
-                elif connection.type == "oracle":
-                    raw = conn.connection.dbapi_connection
-                    if hasattr(raw, "callTimeout"):
-                        raw.callTimeout = timeout_ms
-            except Exception as e:
-                # Non bloccante — il timeout di default di Celery fa da fallback
-                logger.debug(
-                    "set timeout di sessione fallito (db=%s), uso fallback Celery: %s: %s",
-                    connection.type,
-                    type(e).__name__,
-                    e,
-                )
-
-            if connection.type == "oracle":
-                try:
-                    conn.execute(text("ALTER SESSION SET OPEN_CURSORS = 32767"))
-                except Exception as e:
-                    # Prosegui con il default se non ha i permessi
-                    logger.debug(
-                        "ALTER SESSION OPEN_CURSORS fallito (probabili permessi), uso default: %s: %s",
-                        type(e).__name__,
-                        e,
-                    )
-
-            result = conn.execute(text(sql), params or {})
-            columns = [desc[0] for desc in result.cursor.description]
-            if connection.type == "oracle":
-                columns = [c.lower() for c in columns]
-
-            if output_format == "csv":
-                with open(output_path, "w", newline="", encoding="utf-8") as fp:
-                    writer = _csv.writer(fp)
-                    writer.writerow(columns)
-                    while True:
-                        chunk = result.fetchmany(CHUNK_SIZE)
-                        if not chunk:
-                            break
-                        writer.writerows(chunk)
-                        total_rows += len(chunk)
-                        if _max_rows > 0 and total_rows > _max_rows:
-                            raise ValueError(
-                                f"Query ha ritornato piu' di {_max_rows:,} "
-                                f"righe (streaming). Aggiungi WHERE/LIMIT "
-                                f"o alza ESTRAI_MAX_ROWS."
-                            )
-
-            elif output_format == "parquet":
-                import pyarrow as _pa
-                import pyarrow.parquet as _pq
-                pq_writer = None
-                try:
-                    while True:
-                        chunk = result.fetchmany(CHUNK_SIZE)
-                        if not chunk:
-                            break
-                        df_chunk = pd.DataFrame(chunk, columns=columns)
-                        table = _pa.Table.from_pandas(df_chunk, preserve_index=False)
-                        if pq_writer is None:
-                            pq_writer = _pq.ParquetWriter(output_path, table.schema)
-                        pq_writer.write_table(table)
-                        total_rows += len(chunk)
-                        if _max_rows > 0 and total_rows > _max_rows:
-                            raise ValueError(
-                                f"Query ha ritornato piu' di {_max_rows:,} "
-                                f"righe (streaming). Aggiungi WHERE/LIMIT "
-                                f"o alza ESTRAI_MAX_ROWS."
-                            )
-                finally:
-                    if pq_writer is not None:
-                        pq_writer.close()
-            else:
-                raise ValueError(
-                    f"_execute_streaming_to_file: formato non supportato "
-                    f"per streaming: {output_format}. Use csv o parquet."
-                )
-
-        return total_rows, columns
+        """Compatibility delegate for CSV/Parquet streaming extraction."""
+        return execute_streaming_to_file(
+            engine_factory=self._engine_factory,
+            connection=connection,
+            sql=sql,
+            params=params,
+            output_path=Path(output_path),
+            output_format=output_format,
+        )
 
     # ESECUZIONE COMPLETA (con salvataggio file
 

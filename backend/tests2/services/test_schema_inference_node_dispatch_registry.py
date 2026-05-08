@@ -17,6 +17,12 @@ pytestmark = [pytest.mark.unit, pytest.mark.contract]
 
 _BACKEND_ROOT = Path(__file__).resolve().parent.parent.parent
 _SCHEMA_INFER_PY = _BACKEND_ROOT / "app" / "core" / "projects" / "schema_inference.py"
+_PROJECT_CONTEXT_LOADER_PY = (
+    _BACKEND_ROOT / "app" / "core" / "projects" / "project_context_loader.py"
+)
+_OLD_PROJECT_CONTEXT_PY = (
+    _BACKEND_ROOT / "app" / "core" / "projects" / "schema_inference_project_context.py"
+)
 _NODE_REGISTRY_BLOCK_RE = re.compile(
     r"#\s*NODE-DISPATCH-REGISTRY:start\s*\n(.*?)#\s*NODE-DISPATCH-REGISTRY:end",
     re.DOTALL,
@@ -111,15 +117,54 @@ def test_schema_inference_does_not_import_projects_db_directly():
     tree = ast.parse(_SCHEMA_INFER_PY.read_text(encoding="utf-8"))
     violations: list[str] = []
     for node in ast.walk(tree):
-        if isinstance(node, ast.ImportFrom) and node.module == "app.core.projects.db":
-            violations.append("from app.core.projects.db import ...")
+        if isinstance(node, ast.ImportFrom):
+            if node.module == "app.core.projects.db":
+                violations.append("from app.core.projects.db import ...")
+            if node.module and re.fullmatch(r"app\.core\.[^.]+\.db", node.module):
+                violations.append(f"from {node.module} import ...")
         if isinstance(node, ast.Import):
-            if any(alias.name == "app.core.projects.db" for alias in node.names):
-                violations.append("import app.core.projects.db")
+            for alias in node.names:
+                if alias.name == "app.core.projects.db":
+                    violations.append("import app.core.projects.db")
+                if re.fullmatch(r"app\.core\.[^.]+\.db", alias.name):
+                    violations.append(f"import {alias.name}")
 
     assert violations == [], (
-        "schema_inference must use schema_inference_project_context instead "
-        f"of importing projects.db directly: {violations}"
+        "schema_inference must use project_context_loader as its explicit "
+        f"persistence boundary instead of importing db modules: {violations}"
+    )
+
+
+def test_project_context_loader_is_the_only_schema_inference_db_boundary():
+    assert _PROJECT_CONTEXT_LOADER_PY.exists()
+    assert not _OLD_PROJECT_CONTEXT_PY.exists()
+
+    infer_tree = ast.parse(_SCHEMA_INFER_PY.read_text(encoding="utf-8"))
+    loader_tree = ast.parse(_PROJECT_CONTEXT_LOADER_PY.read_text(encoding="utf-8"))
+
+    infer_imports = [
+        node.module
+        for node in ast.walk(infer_tree)
+        if isinstance(node, ast.ImportFrom) and node.module
+    ]
+    assert "app.core.projects.project_context_loader" in infer_imports
+    assert "app.core.projects.schema_inference_project_context" not in infer_imports
+
+    db_imports: list[str] = []
+    for node in ast.walk(loader_tree):
+        if isinstance(node, ast.ImportFrom) and node.module:
+            if re.fullmatch(r"app\.core\.[^.]+\.db", node.module):
+                db_imports.append(node.module)
+        if isinstance(node, ast.Import):
+            db_imports.extend(
+                alias.name
+                for alias in node.names
+                if re.fullmatch(r"app\.core\.[^.]+\.db", alias.name)
+            )
+
+    assert db_imports == [], (
+        "project_context_loader may depend on the project-owned db package, "
+        f"but not direct cross-domain db modules: {db_imports}"
     )
 
 

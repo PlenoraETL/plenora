@@ -4,16 +4,12 @@ Execution Manager per lo Scheduler PLENORA-ETL.
 Keeps this module's responsibility explicit and isolated from adjacent code.
 """
 
-import random
-import threading
 import time
 import uuid as _uuid
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, Any, Optional
 
-import psycopg2
-import psycopg2.errors
 from app.config import settings
 from app.shared import error_codes
 from app.utils.logger import get_logger, open_run, close_run, set_run_context, append_step
@@ -92,14 +88,14 @@ class ExecutionManager:
             features_service=features_service,
         )
     
-    # HEARTBEAT LOCK (C3 fix 4
+    # HEARTBEAT LOCK (C3 fix 4)
 
     def _start_lock_heartbeat(self, schedule_id: str, interval: float = None, clock=None) -> Dict[str, Any]:
         """Lancia un thread daemon che rinfresca periodicamente il lock
         scheduler fino a `_stop_lock_heartbeat`.
 
-        PR-#36 (REFACTOR-EXEC-MGR c1): la logica del thread e' stata
-        estratta in `LockHeartbeat` (`app.core.scheduler._lock_heartbeat`).
+        La logica del thread vive in `LockHeartbeat`
+        (`app.core.scheduler.scheduler_lock`).
         Questo metodo resta come thin wrapper compat: l'API pubblica
         verso `execute` e' invariata 1:1. Il dict ritornato espone le
         stesse chiavi (`stop_event`, `thread`, `lock_lost`) + chiave
@@ -130,7 +126,7 @@ class ExecutionManager:
             loop (il dict e' la stessa reference dello state interno
             di `LockHeartbeat`, non una copia).
         """
-        from app.core.scheduler._lock_heartbeat import LockHeartbeat
+        from app.core.scheduler.scheduler_lock import LockHeartbeat
 
         if interval is None:
             interval = float(settings.SCHEDULE_LOCK_HEARTBEAT_INTERVAL_SECONDS)
@@ -614,67 +610,9 @@ class ExecutionManager:
                 self._stop_lock_heartbeat(heartbeat_state)
             except Exception as hb_err:
                 logger.warning(f"[GESTITO] Errore stop heartbeat {schedule_id}: {hb_err}")
-            # Rilascia sempre il lock — retry wrapper classified su classi
-            # transient PG. Budget bounded: N=3 tentativi AND T=10s totali
-            # prima condizione vince). Backoff esponenziale con jitter ±20%
-            # per evitare thundering-herd se N worker colliderebbero sullo
-            # stesso schedule_id
-            # Classi narrow: psycopg2.OperationalError (pool exhausted /
-            # connection reset) + psycopg2.errors.DeadlockDetected. Altri
-            # errori (non-transient) catturati dall'outer guard e loggati
-            # CRITICO] ma NON propagati — il finally deve sempre completare
-            # altrimenti Celery marca il task FAILED-with-exception invece
-            # di FAILED-with-result -> retry automatico duplicato dello
-            # stesso tick
-            # intent: retry wrapper transient only / outcome: retryable
-            # bounded + terminal fail-closed loggato
-            try:
-                _MAX_RETRIES = 3
-                _BACKOFF_BASE_S = 0.5
-                _BACKOFF_MAX_S = 5.0
-                _BUDGET_TOTAL_S = 10.0
-                release_success = False
-                last_transient_err: Optional[BaseException] = None
-                retry_start = time.monotonic()
-                for attempt in range(_MAX_RETRIES):
-                    try:
-                        self.concurrency.release(schedule_id)
-                        release_success = True
-                        break
-                    except (
-                        psycopg2.OperationalError,
-                        psycopg2.errors.DeadlockDetected,
-                    ) as transient_err:
-                        last_transient_err = transient_err
-                        elapsed = time.monotonic() - retry_start
-                        # Budget esaurito: esci senza ulteriore sleep
-                        if attempt >= _MAX_RETRIES - 1 or elapsed >= _BUDGET_TOTAL_S:
-                            break
-                        # Backoff esponenziale cap a _BACKOFF_MAX_S, jitter ±20%
-                        backoff = min(
-                            _BACKOFF_BASE_S * (2 ** attempt),
-                            _BACKOFF_MAX_S,
-                        )
-                        jitter_factor = random.uniform(0.8, 1.2)
-                        logger.warning(
-                            f"[GESTITO] release lock {schedule_id} transient "
-                            f"(tentativo {attempt + 1}/{_MAX_RETRIES}): {transient_err}"
-                        )
-                        time.sleep(backoff * jitter_factor)
-                if not release_success:
-                    logger.error(
-                        f"[CRITICO] Lock {schedule_id} non rilasciato dopo "
-                        f"{_MAX_RETRIES} tentativi transient. Scadra' per TTL.",
-                        exc_info=last_transient_err,
-                    )
-            except Exception as release_err:
-                # Non-transient (bug logico, classe non-PG): il finally non
-                # deve propagare, altrimenti Celery retry duplicato
-                logger.error(
-                    f"[CRITICO] Lock {schedule_id} non rilasciato — errore "
-                    f"non-transient: {release_err}. Scadra' per TTL.",
-                    exc_info=True,
-                )
+            # Rilascia sempre il lock con retry bounded su transient PG.
+            from app.core.scheduler.scheduler_release import release_lock_with_retry
+            release_lock_with_retry(self.concurrency, schedule_id)
             # Chiudi le connessioni PG thread-local del worker Celery
             # senza questa pulizia ogni esecuzione lascia conn aperte nel
             # thread.local del worker e dopo molte run le connessioni PG

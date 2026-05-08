@@ -89,7 +89,7 @@ from app.config import settings
 
 # SANIFICAZIONE LOG (difesa in profondità contro leak credenziali
 # Anche se i call site dovrebbero sanificare a monte (vedi
-# app/shared/api_utils.sanitize_for_log / sanitize_url_for_log), il logger
+# app/shared/log_sanitization.sanitize_for_log / sanitize_url_for_log), il logger
 # applica un secondo passaggio sui campi di output per intercettare casi come
 # `requests.HTTPError` la cui __str__ contiene "for url: https://.../?token=XYZ"
 

@@ -17,6 +17,14 @@ from app.utils.dataframe import load_dataframe_from_file, sanitize_for_json
 from app.utils.geo import extract_srid_from_column_type
 from app.shared.crypto import CredentialUnavailableError
 from app.shared.resources.metadata import ResourceMetadata, SourceKind
+from app.core.estrai.sql_errors import (
+    is_user_error_message as _is_user_error_message,
+    translate_sql_error as _traduci_errore_sql,
+)
+from app.shared.resources.column_types import (
+    lookup_canvas_column_type,
+    pandas_series_to_canvas_type,
+)
 
 try:
     from sqlalchemy.exc import DataError as SqlAlchemyDataError
@@ -71,67 +79,6 @@ class ArcGISFeatureReaderProtocol(Protocol):
         geom_column: str = "geometry",
     ) -> MutableMapping[str, object]:
         ...
-
-
-def _traduci_errore_sql(message: str) -> str:
-    """
-    Traduce messaggi di errore SQL tecnici in messaggi comprensibili per l'utente.
-    Mantiene il messaggio originale tra parentesi per il debug.
-    """
-    _TRANSLATIONS = [
-        ("Invalid column name",     "Colonna non trovata nel database"),
-        ("Invalid object name",     "Tabella non trovata nel database"),
-        ("Ambiguous column name",   "Nome colonna ambiguo — presente in più tabelle"),
-        ("Conversion failed",       "Errore di conversione del tipo di dato"),
-        ("division by zero",        "Divisione per zero nella query"),
-        ("Cannot insert duplicate", "Violazione chiave univoca — valore duplicato"),
-        ("Timeout expired",         "Timeout query superato"),
-        ("Login failed",            "Errore di autenticazione al database"),
-        ("Cannot open database",    "Impossibile aprire il database"),
-        ("String or binary data would be truncated", "Valore troppo lungo per la colonna"),
-        ("column name or number of supplied values", "Numero di colonne non corrisponde"),
-        # Errori funzione — più specifici, devono stare PRIMA di "does not exist"
-        ("operator does not exist", "Tipi incompatibili nel JOIN — le colonne collegate devono avere lo stesso tipo di dato"),
-        ("undefinedfunction",       "Funzione SQL non applicabile al tipo della colonna — controlla le opzioni di JOIN o i campi calcolati"),
-        ("no function matches",     "Funzione SQL non applicabile al tipo della colonna — controlla le opzioni di JOIN o i campi calcolati"),
-        ("undefinedcolumn",         "Colonna non trovata nel database — controlla i campi selezionati o gli alias"),
-        # Errori tipo dato — più specifici, devono stare PRIMA di "syntax error"
-        ("invalid input syntax for type", "Valore del filtro incompatibile con il tipo della colonna — controlla i filtri applicati"),
-        ("invalid input syntax",    "Valore non valido per il tipo di dato atteso — controlla i filtri applicati"),
-        ("syntax error",            "Errore di sintassi SQL"),
-        ("does not exist",          "Oggetto non trovato nel database"),
-        ("permission denied",       "Permesso negato sul database"),
-    ]
-    msg_lower = message.lower()
-    for pattern, friendly in _TRANSLATIONS:
-        if pattern.lower() in msg_lower:
-            return f"{friendly}. Dettaglio tecnico: {message[:300]}"
-    return message
-
-
-_USER_ERROR_PATTERNS = (
-    "invalid input syntax",
-    "undefinedfunction",
-    "undefinedcolumn",
-    "no function matches",
-    "operator does not exist",
-    "ambiguous column name",
-    "column name or number of supplied values",
-    "conversion failed",
-    "division by zero",
-    "string or binary data would be truncated",
-    "syntax error",
-)
-
-
-def _is_user_error_message(message: str) -> bool:
-    """
-    Ritorna True se il messaggio corrisponde a un errore causato dall'utente
-    (configurazione query sbagliata), non da un crash infrastrutturale.
-    Usato per abbassare il livello di log da ERROR a WARNING.
-    """
-    msg_lower = message.lower()
-    return any(p in msg_lower for p in _USER_ERROR_PATTERNS)
 
 
 def _dedup_column_names(columns: List[str]) -> Tuple[List[str], List[Tuple[str, str]]]:
@@ -224,38 +171,7 @@ def _build_preview_resource(
 
 
 def _infer_dataframe_column_type(series: pd.Series) -> str:
-    dtype = str(series.dtype)
-    if 'int' in dtype:
-        return 'int'
-    if 'float' in dtype:
-        return 'real'
-    if 'bool' in dtype:
-        return 'bool'
-    if 'datetime' in dtype:
-        return 'date'
-    return 'str'
-
-
-def _lookup_canvas_column_type(
-    column_name: str,
-    original_column_name: str,
-    canvas_type_map: Mapping[str, str],
-) -> Optional[str]:
-    if column_name in canvas_type_map:
-        return canvas_type_map[column_name]
-    if original_column_name in canvas_type_map:
-        return canvas_type_map[original_column_name]
-
-    canvas_type_map_lower = {k.lower(): v for k, v in canvas_type_map.items()}
-    lowered_column = column_name.lower()
-    if lowered_column in canvas_type_map_lower:
-        return canvas_type_map_lower[lowered_column]
-
-    lowered_original = original_column_name.lower()
-    if lowered_original in canvas_type_map_lower:
-        return canvas_type_map_lower[lowered_original]
-
-    return None
+    return pandas_series_to_canvas_type(series)
 
 
 def _build_db_preview_resource_from_cursor_schema(
@@ -283,10 +199,10 @@ def _build_db_preview_resource_from_cursor_schema(
     columns_info: List[Dict[str, str]] = []
     for index, column_name in enumerate(metadata_column_names):
         original_column_name = original_columns[index]
-        column_type = _lookup_canvas_column_type(
+        column_type = lookup_canvas_column_type(
             column_name,
-            original_column_name,
             canvas_type_map,
+            original_column_name,
         )
         if column_type is None:
             column_type = _infer_dataframe_column_type(df.iloc[:, index])
@@ -769,16 +685,11 @@ class EstraiExecutor:
         from app.shared.columns_metadata import save_columns_metadata_with_retry
 
         canvas_type_map = self._build_canvas_type_map(canvas)
-        canvas_type_map_lower = {k.lower(): v for k, v in canvas_type_map.items()}
 
         col_names = res.get("columns", [])
         columns_metadata = []
         for col in col_names:
-            col_type = (
-                canvas_type_map.get(col)
-                or canvas_type_map_lower.get(col.lower())
-                or 'str'
-            )
+            col_type = lookup_canvas_column_type(col, canvas_type_map) or 'str'
             columns_metadata.append({"name": col, "type": col_type})
 
         save_columns_metadata_with_retry(
@@ -928,25 +839,10 @@ class EstraiExecutor:
         3. Fallback: inferenza dal dtype del DataFrame
         """
         columns = []
-        canvas_type_map_lower = {k.lower(): v for k, v in canvas_type_map.items()}
-
         for col in df.columns:
-            if col in canvas_type_map:
-                col_type = canvas_type_map[col]
-            elif col.lower() in canvas_type_map_lower:
-                col_type = canvas_type_map_lower[col.lower()]
-            else:
-                dtype = str(df[col].dtype)
-                if 'int' in dtype:
-                    col_type = 'int'
-                elif 'float' in dtype:
-                    col_type = 'real'
-                elif 'bool' in dtype:
-                    col_type = 'bool'
-                elif 'datetime' in dtype:
-                    col_type = 'date'
-                else:
-                    col_type = 'str'
+            col_type = lookup_canvas_column_type(col, canvas_type_map)
+            if col_type is None:
+                col_type = pandas_series_to_canvas_type(df[col])
 
             columns.append({'name': col, 'type': col_type})
 

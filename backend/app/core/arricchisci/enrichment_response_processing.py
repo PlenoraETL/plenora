@@ -15,6 +15,7 @@ from app.shared.json_path import (
     extract_json_value as _shared_extract_json_value,
     geojson_to_wkt as _shared_geojson_to_wkt,
 )
+from app.core.arricchisci.response_type_detector import ResponseTypeDetector
 from app.utils.logger import get_logger
 
 # Stesso logger name di `enrichment_service.py` (`__name__` valuta a
@@ -38,6 +39,15 @@ class EnrichmentResponseProcessingMixin:
     transformation. Pure data transformation in-memory. Zero
     transaction, zero DB I/O.
     """
+
+    @property
+    def _response_type_detector(self) -> ResponseTypeDetector:
+        detector = getattr(self, "_response_type_detector_collaborator", None)
+        detected_types = self.detected_column_types
+        if detector is None or detector.detected_column_types is not detected_types:
+            detector = ResponseTypeDetector(detected_types)
+            self._response_type_detector_collaborator = detector
+        return detector
 
     def _extract_output(self, data: Any) -> List[Dict]:
         """Estrae campi output dalla response. Restituisce SEMPRE una lista di dict.
@@ -175,7 +185,7 @@ class EnrichmentResponseProcessingMixin:
                     row["geometry"] = _geojson_to_wkt(geom)
                     # Rileva tipo geometria
                     geom_type = geom.get("type", "").lower()
-                    self._detect_geometry_type("geometry", geom_type)
+                    self._response_type_detector.detect_geometry_type("geometry", geom_type)
                 if "id" in feature:
                     row.setdefault("id", feature["id"])
                 rows.append(row)
@@ -184,7 +194,7 @@ class EnrichmentResponseProcessingMixin:
                 first_props = features[0].get("properties") or {}
                 for k, v in first_props.items():
                     if k not in self.detected_column_types:
-                        self.detected_column_types[k] = self._infer_scalar_type(v)
+                        self.detected_column_types[k] = self._response_type_detector.infer_scalar_type(v)
                 if "id" in features[0]:
                     self.detected_column_types.setdefault("id", "int")
             return rows if rows else [{}]
@@ -192,63 +202,34 @@ class EnrichmentResponseProcessingMixin:
         # Lista di dict -> 1 riga per elemento
         if isinstance(data, list):
             if data and isinstance(data[0], dict):
-                rows = [self._flatten_dict(item) for item in data]
+                rows = [self._response_type_detector.flatten_dict(item) for item in data]
                 # Rileva tipi dal primo elemento
                 for k, v in data[0].items():
-                    self.detected_column_types[k] = self._infer_scalar_type(v)
+                    self.detected_column_types[k] = self._response_type_detector.infer_scalar_type(v)
                 return rows
             return [{"_response": json.dumps(data, ensure_ascii=False)}]
 
         # Dict generico -> 1 riga, primo livello come colonne
         if isinstance(data, dict):
             for k, v in data.items():
-                self.detected_column_types[k] = self._infer_scalar_type(v)
-            return [self._flatten_dict(data)]
+                self.detected_column_types[k] = self._response_type_detector.infer_scalar_type(v)
+            return [self._response_type_detector.flatten_dict(data)]
 
         return [{"_response": str(data)}]
 
     def _detect_geometry_type(self, col_name: str, geom_type: str) -> None:
         """Mappa tipo GeoJSON -> tipo sistema (geometry:point, geometry:polygon, ecc.)"""
-        geo_map = {
-            "point": "geometry:point",
-            "multipoint": "geometry:multipoint",
-            "linestring": "geometry:line",
-            "multilinestring": "geometry:line",
-            "polygon": "geometry:polygon",
-            "multipolygon": "geometry:multipolygon",
-            "geometrycollection": "geometry",
-        }
-        self.detected_column_types[col_name] = geo_map.get(geom_type, "geometry")
+        self._response_type_detector.detect_geometry_type(col_name, geom_type)
 
     def _infer_scalar_type(self, value: Any) -> str:
         """Inferisce tipo colonna da un valore scalare."""
-        if isinstance(value, bool):
-            return "bool"
-        if isinstance(value, int):
-            return "int"
-        if isinstance(value, float):
-            return "real"
-        if isinstance(value, dict) and value.get("type") in (
-            "Point", "MultiPoint", "LineString", "MultiLineString",
-            "Polygon", "MultiPolygon", "GeometryCollection"
-        ):
-            self._detect_geometry_type("_tmp", value.get("type", "").lower())
-            return self.detected_column_types.pop("_tmp", "geometry")
-        return "str"
+        return self._response_type_detector.infer_scalar_type(value)
 
     def _flatten_dict(self, data: Dict) -> Dict:
         """Appiattisce un dict: valori scalari diretti, dict/list -> JSON string.
         Fix: interi floats (es 114367654.0) vengono convertiti a int.
         """
-        result = {}
-        for key, value in data.items():
-            if isinstance(value, float) and value == int(value):
-                result[key] = int(value)
-            elif isinstance(value, (dict, list)):
-                result[key] = json.dumps(value, ensure_ascii=False)
-            else:
-                result[key] = value
-        return result
+        return self._response_type_detector.flatten_dict(data)
 
     def _apply_result(self, df: pd.DataFrame, idx: int, result: Dict) -> None:
         """Applica risultato API a una riga del DataFrame."""

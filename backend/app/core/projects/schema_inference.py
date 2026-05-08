@@ -9,7 +9,7 @@ import re
 from pathlib import Path
 from typing import Callable, Dict, List, Optional, Any, Tuple
 from dataclasses import dataclass
-from app.core.projects.schema_inference_project_context import (
+from app.core.projects.project_context_loader import (
     load_project_source_schema_context,
 )
 from app.utils.logger import get_logger

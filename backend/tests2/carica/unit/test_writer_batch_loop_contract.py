@@ -371,10 +371,28 @@ def test_callsites_use_run_batched_inserts():
     replace = _read(
         _BACKEND_ROOT / "app" / "core" / "carica" / "writer_replace_strategies.py"
     )
+    oracle_redef = _read(
+        _BACKEND_ROOT / "app" / "core" / "carica" / "writer_oracle_redef.py"
+    )
     # 2 calls in tx_exec (atomic + per_batch).
     assert tx_exec.count("run_batched_inserts(") >= 2
-    # 4 calls in replace_strategies (atomic / stage_swap / replace_atomic / oracle_redef).
-    assert replace.count("run_batched_inserts(") >= 4
+    # 3 generic replace calls remain in replace_strategies.
+    assert replace.count("run_batched_inserts(") >= 3
+    # Oracle redefinition owns its batch loop in the dedicated module.
+    assert oracle_redef.count("run_batched_inserts(") >= 1
+
+
+def test_oracle_redefinition_sql_lives_in_dedicated_module():
+    replace = _read(
+        _BACKEND_ROOT / "app" / "core" / "carica" / "writer_replace_strategies.py"
+    )
+    oracle_redef = _read(
+        _BACKEND_ROOT / "app" / "core" / "carica" / "writer_oracle_redef.py"
+    )
+
+    assert "DBMS_REDEFINITION" not in replace
+    assert "def execute_oracle_redefinition(" in oracle_redef
+    assert "DBMS_REDEFINITION" in oracle_redef
 
 
 # 6. target_table forwarding (verified through callback closure)

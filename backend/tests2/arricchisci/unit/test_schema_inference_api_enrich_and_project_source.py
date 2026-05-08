@@ -215,7 +215,7 @@ def test_infer_project_source_schema_prefers_result_node_columns_over_metadata(
         ],
     }
 
-    from app.core.projects.schema_inference_project_context import (
+    from app.core.projects.project_context_loader import (
         ProjectSourceSchemaContext,
     )
     monkeypatch.setattr(
@@ -255,7 +255,7 @@ def test_infer_project_source_schema_fallback_to_columns_metadata_when_result_em
         ],
     }
 
-    from app.core.projects.schema_inference_project_context import (
+    from app.core.projects.project_context_loader import (
         ProjectSourceSchemaContext,
     )
     monkeypatch.setattr(
@@ -299,7 +299,7 @@ def test_infer_project_source_schema_does_not_rename_columns_via_alias(
         "columns_metadata": [],
     }
 
-    from app.core.projects.schema_inference_project_context import (
+    from app.core.projects.project_context_loader import (
         ProjectSourceSchemaContext,
     )
     monkeypatch.setattr(
@@ -347,7 +347,7 @@ def test_infer_project_source_schema_does_not_filter_by_intrinsic_visible_flag(
         "columns_metadata": [],
     }
 
-    from app.core.projects.schema_inference_project_context import (
+    from app.core.projects.project_context_loader import (
         ProjectSourceSchemaContext,
     )
     monkeypatch.setattr(

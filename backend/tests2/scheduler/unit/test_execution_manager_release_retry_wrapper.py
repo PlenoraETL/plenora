@@ -7,6 +7,7 @@ Audit Batch 7 Â§3.3 [ALTA] pseudo-retry cieco su `concurrency.release` in
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
@@ -17,6 +18,9 @@ from app.core.scheduler.execution_manager import ExecutionManager
 
 
 pytestmark = [pytest.mark.unit, pytest.mark.scheduler, pytest.mark.contract]
+
+
+BACKEND_ROOT = Path(__file__).resolve().parents[3]
 
 
 # â”€â”€â”€ Helpers (pattern identico a test_execution_manager_orphan_and_release_contract.py) â”€
@@ -63,7 +67,7 @@ def _run_execute_with_patches(manager, schedule_id, monkeypatch):
     """Wrapper comune per invocare manager.execute con patch standard
     (sleep no-op, project metadata, open_run/close_run mocks)."""
     monkeypatch.setattr(
-        "app.core.scheduler.execution_manager.time.sleep",
+        "app.core.scheduler.scheduler_release.time.sleep",
         lambda _seconds: None,
     )
     with patch(
@@ -100,7 +104,7 @@ def test_release_retry_budget_n3_on_all_transient(schedule_config, monkeypatch):
     )
 
     with patch(
-        "app.core.scheduler.execution_manager.logger"
+        "app.core.scheduler.scheduler_release.logger"
     ) as mock_logger:
         result = _run_execute_with_patches(manager, "s-budget", monkeypatch)
 
@@ -131,7 +135,7 @@ def test_release_retry_exits_early_on_success(schedule_config, monkeypatch):
     )
 
     with patch(
-        "app.core.scheduler.execution_manager.logger"
+        "app.core.scheduler.scheduler_release.logger"
     ) as mock_logger:
         _run_execute_with_patches(manager, "s-early", monkeypatch)
 
@@ -157,7 +161,7 @@ def test_release_retry_non_transient_does_not_retry(schedule_config, monkeypatch
     )
 
     with patch(
-        "app.core.scheduler.execution_manager.logger"
+        "app.core.scheduler.scheduler_release.logger"
     ) as mock_logger:
         result = _run_execute_with_patches(manager, "s-nontransient", monkeypatch)
 
@@ -191,7 +195,7 @@ def test_release_retry_backoff_exponential_with_jitter(schedule_config, monkeypa
     # Cattura le durate sleep invece di bloccare
     sleep_calls: list[float] = []
     monkeypatch.setattr(
-        "app.core.scheduler.execution_manager.time.sleep",
+        "app.core.scheduler.scheduler_release.time.sleep",
         lambda s: sleep_calls.append(s),
     )
 
@@ -236,11 +240,11 @@ def test_release_retry_budget_total_10s_interrupts(schedule_config, monkeypatch)
     # simulano elapsed crescente. Elapsed > 10s al 2Â° check per far break.
     monotonic_seq = iter([0.0, 1.0, 15.0, 15.0, 15.0, 15.0])
     monkeypatch.setattr(
-        "app.core.scheduler.execution_manager.time.monotonic",
+        "app.core.scheduler.scheduler_release.time.monotonic",
         lambda: next(monotonic_seq),
     )
     monkeypatch.setattr(
-        "app.core.scheduler.execution_manager.time.sleep",
+        "app.core.scheduler.scheduler_release.time.sleep",
         lambda _: None,
     )
 
@@ -276,7 +280,7 @@ def test_release_retry_log_warning_per_attempt(schedule_config, monkeypatch):
     )
 
     with patch(
-        "app.core.scheduler.execution_manager.logger"
+        "app.core.scheduler.scheduler_release.logger"
     ) as mock_logger:
         _run_execute_with_patches(manager, "s-attempts", monkeypatch)
 
@@ -294,3 +298,21 @@ def test_release_retry_log_warning_per_attempt(schedule_config, monkeypatch):
     # Verifica pattern (tentativo X/3) in almeno uno dei warning
     assert any("1/3" in str(c) for c in transient_warnings)
     assert any("2/3" in str(c) for c in transient_warnings)
+
+
+def test_release_retry_mechanics_live_outside_execution_manager():
+    execution_src = (
+        BACKEND_ROOT / "app" / "core" / "scheduler" / "execution_manager.py"
+    ).read_text(encoding="utf-8")
+    release_src = (
+        BACKEND_ROOT / "app" / "core" / "scheduler" / "scheduler_release.py"
+    ).read_text(encoding="utf-8")
+
+    assert "psycopg2.OperationalError" not in execution_src
+    assert "random.uniform" not in execution_src
+    assert "time.sleep(backoff" not in execution_src
+    assert "release_lock_with_retry(self.concurrency, schedule_id)" in execution_src
+
+    assert "psycopg2.OperationalError" in release_src
+    assert "random.uniform" in release_src
+    assert "time.sleep" in release_src

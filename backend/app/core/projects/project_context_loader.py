@@ -1,4 +1,4 @@
-"""Project-owned data boundary for schema inference."""
+"""Project-owned context loaders for schema inference."""
 
 from __future__ import annotations
 
@@ -21,12 +21,11 @@ def load_project_source_schema_context(
 ) -> Optional[ProjectSourceSchemaContext]:
     """Load the source project's persisted canvas for schema inference.
 
-    This boundary uses the typed project row API instead of the legacy
-    `get_project` dict wrapper. Schema inference only needs the canvas, not a
-    serialized project detail payload.
+    This is the explicit DB boundary for project_source schema inference.
+    The inference service only needs canvas data, not a serialized project
+    detail payload or direct access to the projects repository.
     """
     row = project_db.get_project_row(project_id)
     if row is None:
         return None
     return ProjectSourceSchemaContext(project_id=row.id, canvas=row.canvas or {})
-

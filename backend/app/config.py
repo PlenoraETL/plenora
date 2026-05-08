@@ -832,22 +832,9 @@ class Settings:
 
 
     def print_config(self):
-        print("=" * 60)
-        print("⚙️  CONFIGURAZIONE PLENORA-ETL")
-        print("=" * 60)
-        print("\n📂 DIRECTORY")
-        print(f"  DATA_DIR:            {self.DATA_DIR}")
-        print(f"  LOGS_DIR:            {self.LOGS_DIR}")
-        print(f"  CONNECTIONS_DIR:     {self.CONNECTIONS_DIR}")
-        print(f"  RESULTS_DIR:         {self.RESULTS_DIR}")
-        print("\n⏱️  TIMEOUT")
-        print(f"  DB_QUERY_TIMEOUT:    {self.DB_QUERY_TIMEOUT}s")
-        print(f"  API_TIMEOUT:         {self.API_TIMEOUT}s")
-        print(f"  CELERY_TASK_TIMEOUT: {self.CELERY_TASK_TIMEOUT}s")
-        print("\n🗄️  CELERY (Redis)")
-        print(f"  BROKER_URL:          {self.CELERY_BROKER_URL}")
-        print(f"  RESULT_BACKEND:      {self.CELERY_RESULT_BACKEND}")
-        print("=" * 60)
+        from app.config_display import print_config
+
+        print_config(self)
 
 
 # Singleton

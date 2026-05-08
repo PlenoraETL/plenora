@@ -98,8 +98,8 @@ def test_lock_heartbeat_emits_error_log_when_lock_definitively_lost():
     result resta senza audit trail server-side.
 
     Cattura tramite `_ListHandler` agganciato al logger reale di
-    `app.core.scheduler._lock_heartbeat` (pattern B2.0 PR-#34)."""
-    target_logger = logging.getLogger("app.core.scheduler._lock_heartbeat")
+    `app.core.scheduler.scheduler_lock`."""
+    target_logger = logging.getLogger("app.core.scheduler.scheduler_lock")
     handler = _ListHandler()
     target_logger.addHandler(handler)
 
