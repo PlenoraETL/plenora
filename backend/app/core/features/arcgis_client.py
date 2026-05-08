@@ -111,8 +111,11 @@ class DefaultHttpClient:
         return get_shared_session().post(url, data=data, timeout=timeout, headers=headers)
 
 
-# MAPPING TIPI/CONVERSIONI ESRI - KEEP_COMPAT re-exports.
-# Canonical imports live under app.shared.connections.
+# MAPPING TIPI/CONVERSIONI ESRI - KEEP_COMPAT_WITH_REMOVAL_CONDITION.
+# Canonical imports live under app.shared.connections. These aliases remain
+# only while public contract tests assert backward compatibility for legacy
+# imports from app.core.features.arcgis_client. Remove after one release with
+# no production imports and after updating those public compatibility tests.
 
 from app.shared.connections.esri_json import EsriJsonConverter  # noqa: F401
 from app.shared.connections.esri_types import EsriTypeMapper  # noqa: F401
@@ -2975,12 +2978,3 @@ class ArcGISClient:
             )
             return True, f"item {service_item_id} cancellato"
         return False, str(delete_result.get("message") or delete_result)
-
-
-# FACTORY FUNCTION
-
-def create_client(http_client: HttpClientProtocol = None) -> ArcGISClient:
-    """KEEP_COMPAT: delegate to the neutral ArcGIS provider factory."""
-    from app.core.connections.arcgis_provider_factory import create_arcgis_provider
-
-    return create_arcgis_provider(http_client=http_client)

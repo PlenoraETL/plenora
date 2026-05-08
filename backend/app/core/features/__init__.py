@@ -5,11 +5,8 @@ Fornisce lettura/scrittura bidirezionale verso ArcGIS Server, Enterprise e Onlin
 """
 
 from app.core.features.features_service import FeaturesService, create_features_service
-from app.core.features.arcgis_client import ArcGISClient, create_client  # KEEP_COMPAT legacy re-export
 
 __all__ = [
     "FeaturesService",
     "create_features_service",
-    "ArcGISClient",
-    "create_client",
 ]

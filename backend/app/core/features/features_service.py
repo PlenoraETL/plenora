@@ -24,15 +24,13 @@ from app.core.features.models import (
     ArcGISList,
     ArcGISTestResult,
 )
-from app.core.features.arcgis_client import (
-    ArcGISClient,
-    ArcGISConnectionInfo,
-)
 from app.core.connections.arcgis_provider_factory import create_arcgis_provider
 from app.core.features.arcgis_feature_operations import ArcGISFeatureOperations
 from app.core.features.arcgis_writer_boundary import (
     ArcGISColumnMappingsInput,
 )
+from app.shared.connections.arcgis_connection import ArcGISConnectionInfo
+from app.shared.connections.arcgis_provider import ArcGISProviderProtocol
 
 logger = get_logger(__name__)
 
@@ -231,7 +229,7 @@ class FeaturesService:
     adattati per il protocollo REST di ArcGIS.
     
     Dependency Injection:
-    - client: ArcGISClient (mockabile per test)
+    - client: ArcGISProviderProtocol (mockabile per test)
     - save_function: salvataggio DataFrame (mockabile per test)
     - arcgis_dir: directory storage connessioni
     - results_dir: directory output risultati
@@ -239,7 +237,7 @@ class FeaturesService:
     
     def __init__(
         self,
-        client: ArcGISClient = None,
+        client: ArcGISProviderProtocol = None,
         save_function: SaveFunctionProtocol = None,
         arcgis_dir: Path = None,
         results_dir: Path = None,
@@ -966,7 +964,7 @@ class FeaturesService:
 # FACTORY FUNCTION
 
 def create_features_service(
-    client: ArcGISClient = None,
+    client: ArcGISProviderProtocol = None,
     save_function: SaveFunctionProtocol = None,
     arcgis_dir: Path = None,
     results_dir: Path = None,

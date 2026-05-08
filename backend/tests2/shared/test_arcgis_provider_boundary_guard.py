@@ -6,16 +6,21 @@ from the Features connection-management domain (app.core.features.*).
 
 from __future__ import annotations
 
-import ast
 from pathlib import Path
 
 import pytest
 
-pytestmark = [pytest.mark.unit, pytest.mark.shared]
+from tests2.shared.esri_boundary_helpers import (
+    BACKEND_DIR as _BACKEND_DIR,
+    IMDF_DIR as _IMDF_DIR,
+    SHARED_CONNECTIONS_DIR as _SHARED_CONNECTIONS_DIR,
+    imported_names_in_file as _imported_names_in_file,
+    imports_in_file as _imports_in_file,
+    python_files_under,
+    scan_arcgis_rest_mechanics as _scan_arcgis_rest_mechanics,
+)
 
-_IMDF_DIR = Path(__file__).parents[2] / "app" / "core" / "imdf"
-_SHARED_CONNECTIONS_DIR = Path(__file__).parents[2] / "app" / "shared" / "connections"
-_BACKEND_DIR = Path(__file__).parents[2]
+pytestmark = [pytest.mark.unit, pytest.mark.shared]
 
 _FORBIDDEN_PREFIXES = ("app.core.features",)
 _SHARED_CONNECTIONS_FORBIDDEN_PREFIXES = ("app.core", "app.db", "workers")
@@ -39,9 +44,9 @@ _ARCGIS_REST_MECHANICS_ALLOWED_FILES = {
 _LEGACY_ARCGIS_ADAPTER_MODULE = ".".join(
     ("app.core.features", "arcgis_connection_adapter")
 )
-_LEGACY_ARCGIS_ADAPTER_ALLOWED_FILES = {
-    _BACKEND_DIR / "app" / "core" / "features" / "arcgis_connection_adapter.py",
-}
+_LEGACY_ARCGIS_ADAPTER_PATH = (
+    _BACKEND_DIR / "app" / "core" / "features" / "arcgis_connection_adapter.py"
+)
 _PRODUCTION_ARCGIS_FACTORY_IMPORT_ROOTS = (
     _BACKEND_DIR / "app",
     _BACKEND_DIR / "workers",
@@ -54,10 +59,40 @@ _LEGACY_ESRI_CONVERSION_IMPORTS = {
     ("app.core.features.arcgis_client", "EsriJsonConverter"),
     ("app.core.features.arcgis_client", "EsriTypeMapper"),
 }
-_LEGACY_CREATE_CLIENT_IMPORT_ALLOWLIST = {
+_CONCRETE_ARCGIS_CLIENT_IMPORT = ("app.core.features.arcgis_client", "ArcGISClient")
+_CONCRETE_ARCGIS_CLIENT_ALLOWED_FILES = {
+    _BACKEND_DIR / "app" / "core" / "connections" / "arcgis_client.py",
+    _BACKEND_DIR / "app" / "core" / "connections" / "arcgis_provider_factory.py",
+}
+_LEGACY_CREATE_CLIENT_IMPORT_ALLOWLIST: dict[Path, str] = {}
+_LEGACY_FEATURES_PACKAGE_IMPORTS = {
+    ("app.core.features", "ArcGISClient"),
+    ("app.core.features", "create_client"),
+}
+_CONCRETE_ARCGIS_CLIENT_IMPORTS = {
+    ("app.core.features", "ArcGISClient"),
+    ("app.core.features.arcgis_client", "ArcGISClient"),
+    ("app.core.connections.arcgis_client", "ArcGISClient"),
+}
+_CONCRETE_ARCGIS_CLIENT_IMPORT_ALLOWLIST = {
     (
-        _BACKEND_DIR / "app" / "core" / "features" / "__init__.py"
-    ): "KEEP_COMPAT: package-level legacy re-export for existing importers.",
+        _BACKEND_DIR / "app" / "core" / "connections" / "arcgis_client.py"
+    ): (
+        "KEEP_COMPAT_WITH_REMOVAL_CONDITION: canonical neutral concrete-client "
+        "alias until the implementation body can move without breaking legacy "
+        "app.core.features.arcgis_client monkeypatch paths."
+    ),
+    (
+        _BACKEND_DIR / "app" / "core" / "connections" / "arcgis_provider_factory.py"
+    ): (
+        "KEEP_COMPAT_WITH_REMOVAL_CONDITION: factory is the only production "
+        "composition root allowed to instantiate the concrete provider; remove "
+        "when provider construction is dependency-injected."
+    ),
+}
+_IMDF_UPLOADER_COMPAT_IMPORT = "app.core.imdf.arcgis_uploader"
+_IMDF_UPLOADER_COMPAT_ALLOWED_FILES = {
+    _BACKEND_DIR / "app" / "core" / "imdf" / "validator.py",
 }
 
 # Known violations - TODO: fix these per macro-components.md section 2.3.
@@ -78,110 +113,11 @@ def _shared_connections_python_files() -> list[Path]:
 
 
 def _arcgis_rest_mechanics_python_files() -> list[Path]:
-    files: list[Path] = []
-    for root in _ARCGIS_REST_MECHANICS_ROOTS:
-        files.extend(root.rglob("*.py"))
-    return sorted(files)
+    return python_files_under(*_ARCGIS_REST_MECHANICS_ROOTS)
 
 
 def _production_arcgis_factory_import_python_files() -> list[Path]:
-    files: list[Path] = []
-    for root in _PRODUCTION_ARCGIS_FACTORY_IMPORT_ROOTS:
-        files.extend(root.rglob("*.py"))
-    return sorted(files)
-
-
-def _imports_in_file(path: Path) -> list[str]:
-    try:
-        tree = ast.parse(path.read_text(encoding="utf-8"))
-    except SyntaxError:
-        return []
-    modules: list[str] = []
-    for node in ast.walk(tree):
-        if isinstance(node, ast.ImportFrom) and node.module:
-            modules.append(node.module)
-        elif isinstance(node, ast.Import):
-            for alias in node.names:
-                modules.append(alias.name)
-    return modules
-
-
-def _imported_names_in_file(path: Path) -> list[tuple[str, str, int]]:
-    try:
-        tree = ast.parse(path.read_text(encoding="utf-8"))
-    except SyntaxError:
-        return []
-    imported_names: list[tuple[str, str, int]] = []
-    for node in ast.walk(tree):
-        if isinstance(node, ast.ImportFrom) and node.module:
-            for alias in node.names:
-                imported_names.append((node.module, alias.name, node.lineno))
-    return imported_names
-
-
-def _scan_arcgis_rest_mechanics(path: Path) -> list[tuple[int, str]]:
-    try:
-        tree = ast.parse(path.read_text(encoding="utf-8"))
-    except SyntaxError as exc:
-        return [(exc.lineno or 0, f"syntax error: {exc}")]
-
-    violations: list[tuple[int, str]] = []
-    parents: dict[ast.AST, ast.AST] = {}
-    for parent in ast.walk(tree):
-        for child in ast.iter_child_nodes(parent):
-            parents[child] = parent
-
-    def is_dict_key(node: ast.AST) -> bool:
-        parent = parents.get(node)
-        return isinstance(parent, ast.Dict) and node in parent.keys
-
-    def scan_node(node: ast.AST) -> None:
-        if isinstance(node, ast.Attribute) and node.attr == "_http":
-            violations.append((node.lineno, "._http"))
-        elif isinstance(node, ast.Name) and node.id == "_request_with_token":
-            violations.append((node.lineno, "_request_with_token"))
-        elif isinstance(node, ast.Constant) and isinstance(node.value, str):
-            for pattern in _ARCGIS_REST_MECHANICS_PATTERNS:
-                if pattern == "._http":
-                    continue
-                if pattern in ("/sharing/rest", "/rest/admin") and pattern in node.value:
-                    violations.append((node.lineno, pattern))
-                elif pattern in {"createFolder", "permanentDelete", "updateDefinition"} and (
-                    node.value == pattern
-                    or f"/{pattern}" in node.value
-                    or (is_dict_key(node) and pattern in node.value)
-                ):
-                    violations.append((node.lineno, pattern))
-
-        for child in ast.iter_child_nodes(node):
-            scan_node(child)
-
-    def scan_body(body: list[ast.stmt]) -> None:
-        statements = body
-        if (
-            statements
-            and isinstance(statements[0], ast.Expr)
-            and isinstance(statements[0].value, ast.Constant)
-            and isinstance(statements[0].value.value, str)
-        ):
-            statements = statements[1:]
-        for statement in statements:
-            if isinstance(statement, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
-                if isinstance(statement, ast.ClassDef):
-                    for part in [*statement.bases, *statement.keywords, *statement.decorator_list]:
-                        scan_node(part)
-                else:
-                    parts: list[ast.AST] = [statement.args, *statement.decorator_list]
-                    if statement.returns is not None:
-                        parts.append(statement.returns)
-                    for part in parts:
-                        scan_node(part)
-                scan_body(statement.body)
-            else:
-                scan_node(statement)
-
-    scan_body(tree.body)
-    return violations
+    return python_files_under(*_PRODUCTION_ARCGIS_FACTORY_IMPORT_ROOTS)
 
 
 @pytest.mark.parametrize("src_file", _shared_connections_python_files(), ids=lambda p: p.name)
@@ -222,21 +158,28 @@ def test_direct_arcgis_rest_mechanics_stay_inside_provider_client(src_file: Path
     )
 
 
+def test_legacy_arcgis_connection_adapter_is_removed() -> None:
+    """The neutral resolver is the canonical ArcGIS connection entry point."""
+    assert not _LEGACY_ARCGIS_ADAPTER_PATH.exists(), (
+        "app.core.features.arcgis_connection_adapter was removed after all "
+        "production/test consumers migrated to "
+        "app.core.connections.arcgis_connection_resolver. Do not recreate a "
+        "Features-owned adapter; new code must use the neutral resolver."
+    )
+
+
 @pytest.mark.parametrize(
     "src_file",
     _arcgis_rest_mechanics_python_files(),
     ids=lambda p: p.relative_to(_BACKEND_DIR).as_posix(),
 )
-def test_legacy_arcgis_connection_adapter_is_only_the_wrapper(src_file: Path) -> None:
-    """The neutral resolver is the canonical ArcGIS connection entry point."""
-    if src_file in _LEGACY_ARCGIS_ADAPTER_ALLOWED_FILES:
-        return
-
+def test_legacy_arcgis_connection_adapter_imports_are_forbidden(src_file: Path) -> None:
+    """The removed compatibility adapter must not gain new importers."""
     imports = _imports_in_file(src_file)
 
     assert _LEGACY_ARCGIS_ADAPTER_MODULE not in imports, (
         f"{src_file.relative_to(_BACKEND_DIR).as_posix()}: legacy ArcGIS "
-        "connection adapter imported outside its compatibility wrapper. "
+        "connection adapter import detected after adapter removal. "
         "Import app.core.connections.arcgis_connection_resolver instead."
     )
 
@@ -249,6 +192,28 @@ def test_legacy_create_client_import_allowlist_reasons_are_explicit() -> None:
             "create_client import allowlist entries require an explicit "
             "KEEP_COMPAT reason."
         )
+
+
+def test_concrete_arcgis_client_import_allowlist_reasons_are_explicit() -> None:
+    """Concrete provider imports must carry a removal condition."""
+    for path, reason in _CONCRETE_ARCGIS_CLIENT_IMPORT_ALLOWLIST.items():
+        assert reason.startswith("KEEP_COMPAT_WITH_REMOVAL_CONDITION:"), (
+            f"{path.relative_to(_BACKEND_DIR).as_posix()}: concrete "
+            "ArcGISClient import allowlist entries require an explicit "
+            "KEEP_COMPAT_WITH_REMOVAL_CONDITION reason."
+        )
+
+
+def test_features_package_does_not_reexport_legacy_arcgis_factory() -> None:
+    """Package-level ESRI factory/client re-exports had zero consumers."""
+    init_path = _BACKEND_DIR / "app" / "core" / "features" / "__init__.py"
+    names = {(module, name) for module, name, _line in _imported_names_in_file(init_path)}
+
+    assert not (names & _LEGACY_FEATURES_PACKAGE_IMPORTS)
+    namespace: dict[str, object] = {}
+    exec(init_path.read_text(encoding="utf-8"), namespace)
+    assert "create_client" not in namespace["__all__"]
+    assert "ArcGISClient" not in namespace["__all__"]
 
 
 @pytest.mark.parametrize(
@@ -289,6 +254,58 @@ def test_production_imports_neutral_arcgis_provider_factory(src_file: Path) -> N
     _production_arcgis_factory_import_python_files(),
     ids=lambda p: p.relative_to(_BACKEND_DIR).as_posix(),
 )
+def test_production_code_does_not_import_concrete_arcgis_client(src_file: Path) -> None:
+    """Production code should depend on the provider protocol/factory boundary."""
+    if src_file in _CONCRETE_ARCGIS_CLIENT_ALLOWED_FILES:
+        return
+
+    violations = [
+        (module, name, line)
+        for module, name, line in _imported_names_in_file(src_file)
+        if (module, name) == _CONCRETE_ARCGIS_CLIENT_IMPORT
+    ]
+
+    assert not violations, (
+        f"{src_file.relative_to(_BACKEND_DIR).as_posix()}: production modules "
+        "must not import the concrete ArcGISClient. Inject "
+        "app.shared.connections.arcgis_provider protocols and construct through "
+        "app.core.connections.arcgis_provider_factory. "
+        f"Violations: {violations}."
+    )
+
+
+@pytest.mark.parametrize(
+    "src_file",
+    _production_arcgis_factory_import_python_files(),
+    ids=lambda p: p.relative_to(_BACKEND_DIR).as_posix(),
+)
+def test_production_uses_arcgis_factory_or_protocol_not_concrete_client(
+    src_file: Path,
+) -> None:
+    """Production modules must not import the concrete client directly."""
+    if src_file in _CONCRETE_ARCGIS_CLIENT_IMPORT_ALLOWLIST:
+        return
+
+    violations = [
+        (module, name, line)
+        for module, name, line in _imported_names_in_file(src_file)
+        if (module, name) in _CONCRETE_ARCGIS_CLIENT_IMPORTS
+    ]
+
+    assert not violations, (
+        f"{src_file.relative_to(_BACKEND_DIR).as_posix()}: production modules "
+        "must use create_arcgis_provider or ArcGISProviderProtocol instead of "
+        f"importing the concrete ArcGISClient. Violations: {violations}. "
+        "If this is a required compatibility or composition-root import, add "
+        "a narrow allowlist entry with KEEP_COMPAT_WITH_REMOVAL_CONDITION."
+    )
+
+
+@pytest.mark.parametrize(
+    "src_file",
+    _production_arcgis_factory_import_python_files(),
+    ids=lambda p: p.relative_to(_BACKEND_DIR).as_posix(),
+)
 def test_production_imports_esri_conversion_from_shared(src_file: Path) -> None:
     """ESRI type/JSON conversion canonical imports live under shared connections."""
     violations = [
@@ -303,6 +320,32 @@ def test_production_imports_esri_conversion_from_shared(src_file: Path) -> None:
         "app.shared.connections, not app.core.features.arcgis_client. "
         f"Violations: {violations}. arcgis_client keeps these only as "
         "KEEP_COMPAT re-exports."
+    )
+
+
+@pytest.mark.parametrize(
+    "src_file",
+    _production_arcgis_factory_import_python_files(),
+    ids=lambda p: p.relative_to(_BACKEND_DIR).as_posix(),
+)
+def test_new_production_code_does_not_import_imdf_uploader_compat_helpers(
+    src_file: Path,
+) -> None:
+    """IMDF uploader helper facade is retained only for validator compatibility."""
+    if src_file in _IMDF_UPLOADER_COMPAT_ALLOWED_FILES:
+        return
+
+    violations = [
+        (module, name, line)
+        for module, name, line in _imported_names_in_file(src_file)
+        if module == _IMDF_UPLOADER_COMPAT_IMPORT and name.startswith("_")
+    ]
+
+    assert not violations, (
+        f"{src_file.relative_to(_BACKEND_DIR).as_posix()}: production modules "
+        "must not add new private-helper imports from app.core.imdf.arcgis_uploader. "
+        "Import the child module under app.core.imdf.arcgis instead. "
+        f"Violations: {violations}."
     )
 
 
@@ -421,10 +464,21 @@ def test_arcgis_connection_resolver_uses_neutral_provider_factory():
 
 def test_arcgis_provider_factory_is_neutral_canonical_import():
     """New provider construction belongs under app.core.connections."""
+    from app.core.connections.arcgis_client import ArcGISClient
     from app.core.connections.arcgis_provider_factory import create_arcgis_provider
     from app.shared.connections.arcgis_provider import ArcGISProviderProtocol
 
-    assert isinstance(create_arcgis_provider(), ArcGISProviderProtocol)
+    provider = create_arcgis_provider()
+    assert isinstance(provider, ArcGISProviderProtocol)
+    assert isinstance(provider, ArcGISClient)
+
+
+def test_arcgis_client_canonical_neutral_import_path():
+    """The concrete client has a neutral canonical path with feature compat."""
+    from app.core.connections.arcgis_client import ArcGISClient as FromConnections
+    from app.core.features.arcgis_client import ArcGISClient as FromFeatures
+
+    assert FromConnections is FromFeatures
 
 
 def test_arcgis_client_satisfies_provider_protocol():

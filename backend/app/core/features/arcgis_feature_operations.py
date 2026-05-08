@@ -7,7 +7,7 @@ FeaturesService public surface.
 
 from __future__ import annotations
 
-from typing import List, Optional, Protocol, Tuple
+from typing import List, Optional, Tuple
 
 import pandas as pd
 
@@ -16,106 +16,16 @@ from app.core.features.arcgis_writer_boundary import (
     normalize_arcgis_column_mappings,
 )
 from app.shared.connections.arcgis_connection import ArcGISConnectionInfo
+from app.shared.connections.arcgis_provider import ArcGISProviderProtocol
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
 
 
-class ArcGISFeatureProvider(Protocol):
-    """Provider methods required by feature read/write orchestration."""
-
-    def test_connection(self, conn_info: ArcGISConnectionInfo) -> dict: ...
-
-    def list_services(self, conn_info: ArcGISConnectionInfo) -> List[dict]: ...
-
-    def list_folders(self, conn_info: ArcGISConnectionInfo) -> List[dict]: ...
-
-    def is_arcgis_online(self, conn_info: ArcGISConnectionInfo) -> bool: ...
-
-    def search_services_online(
-        self,
-        conn_info: ArcGISConnectionInfo,
-        query: str = "",
-        scope: str = "user",
-    ) -> List[dict]: ...
-
-    def list_layers(
-        self,
-        conn_info: ArcGISConnectionInfo,
-        service_url: str,
-    ) -> List[dict]: ...
-
-    def get_layer_schema(
-        self,
-        conn_info: ArcGISConnectionInfo,
-        layer_url: str,
-    ) -> dict: ...
-
-    def query_features(
-        self,
-        conn_info: ArcGISConnectionInfo,
-        layer_url: str,
-        where: str = "1=1",
-        out_fields: str = "*",
-        return_geometry: bool = True,
-        max_features: int = None,
-        out_sr: int = None,
-    ) -> Tuple[List[tuple], List[str]]: ...
-
-    def delete_features(
-        self,
-        conn_info: ArcGISConnectionInfo,
-        layer_url: str,
-        object_ids: Optional[List[int]] = None,
-        where: Optional[str] = None,
-    ) -> dict: ...
-
-    def create_service(
-        self,
-        conn_info: ArcGISConnectionInfo,
-        service_name: str,
-        layer_name: str,
-        df: pd.DataFrame,
-        geometry_column: str = "geometry",
-        folder_id: str = "",
-    ) -> dict: ...
-
-    def dataframe_to_esri_features(
-        self,
-        df: pd.DataFrame,
-        geometry_column: str,
-        operation: str,
-    ) -> List[dict]: ...
-
-    def add_features(
-        self,
-        conn_info: ArcGISConnectionInfo,
-        layer_url: str,
-        features: List[dict],
-        batch_size: Optional[int] = None,
-    ) -> dict: ...
-
-    def update_features(
-        self,
-        conn_info: ArcGISConnectionInfo,
-        layer_url: str,
-        features: List[dict],
-        batch_size: Optional[int] = None,
-    ) -> dict: ...
-
-    def query_oid_by_key(
-        self,
-        conn_info: ArcGISConnectionInfo,
-        layer_url: str,
-        match_col: str,
-        values: List[object],
-    ) -> Tuple[dict[str, int], List[str]]: ...
-
-
 class ArcGISFeatureOperations:
     """Coordinates provider read/write/create-service calls for feature data."""
 
-    def __init__(self, client: ArcGISFeatureProvider) -> None:
+    def __init__(self, client: ArcGISProviderProtocol) -> None:
         self._client = client
 
     def test_connection(self, conn_info: ArcGISConnectionInfo) -> dict:

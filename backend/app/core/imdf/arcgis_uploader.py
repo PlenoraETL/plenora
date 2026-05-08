@@ -357,6 +357,11 @@ from .arcgis.sql_helpers import (  # noqa: F401 (compatibility export
     _query_oid_by_key,
 )
 
+# KEEP_COMPAT_WITH_REMOVAL_CONDITION: these private-helper facade exports stay
+# only while validator.py and existing public/monkeypatch contracts still import
+# helpers from app.core.imdf.arcgis_uploader. Remove when validator imports the
+# child modules directly and contract tests no longer patch the uploader facade.
+#
 # B4.2 boundary: cluster SERVICE_DISCOVERY (6 helper di
 # folder/Feature Service discovery sul portal ArcGIS) spostato in
 # `app.core.imdf.arcgis.service_discovery`. compatibility export per preservare

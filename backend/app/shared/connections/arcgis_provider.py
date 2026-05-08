@@ -23,6 +23,10 @@ OidLookupResult = Tuple[Dict[str, int], List[str]]
 class ArcGISDiscoveryProviderProtocol(Protocol):
     """Feature Service catalog discovery capability."""
 
+    def test_connection(self, conn: ArcGISConnectionInfo) -> dict:
+        """Validate authentication and basic Feature Service catalog access."""
+        ...
+
     def list_services(
         self,
         conn: ArcGISConnectionInfo,
@@ -75,6 +79,15 @@ class ArcGISDiscoveryProviderProtocol(Protocol):
         service_url: str,
     ) -> List[dict]:
         """List layers/tables of a Feature Service URL."""
+        ...
+
+    def search_services_online(
+        self,
+        conn: ArcGISConnectionInfo,
+        query: str = "",
+        scope: str = "user",
+    ) -> List[dict]:
+        """Search ArcGIS Online Feature Service items in a provider-owned way."""
         ...
 
 
@@ -132,6 +145,16 @@ class ArcGISReadProviderProtocol(Protocol):
 @runtime_checkable
 class ArcGISWriteProviderProtocol(Protocol):
     """Feature Service feature mutation capability."""
+
+    def dataframe_to_esri_features(
+        self,
+        df: object,
+        geometry_column: str = "geometry",
+        srid: int = 4326,
+        operation: str = "add",
+    ) -> List[dict]:
+        """Convert tabular rows to ESRI JSON feature payloads."""
+        ...
 
     def add_features(
         self,

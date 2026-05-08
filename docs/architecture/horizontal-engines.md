@@ -30,7 +30,7 @@ Canonical surfaces:
 
 - `app/shared/connections/*`
 - `app/core/features/arcgis_client.py`
-- `app/core/features/arcgis_connection_adapter.py`
+- `app/core/connections/arcgis_connection_resolver.py`
 - `app/core/datasources/*`
 - `app/db/query_executor.py`
 
@@ -38,9 +38,8 @@ Current ArcGIS shape:
 
 - `ArcGISConnectionInfo` lives in `app/shared/connections/arcgis_connection.py`.
 - `ArcGISProviderProtocol` lives in `app/shared/connections/arcgis_provider.py`.
-- IMDF uses the adapter seam instead of depending directly on `FeaturesService`.
-- The adapter still lives in `app/core/features` until connection lookup is
-  moved to a neutral repository boundary.
+- IMDF uses the neutral connection resolver instead of depending directly on
+  `FeaturesService` or a Features-owned adapter.
 
 Rules:
 
