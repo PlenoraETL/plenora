@@ -51,9 +51,9 @@ def test_assert_visible_raises_on_group_mismatch_without_share(svc):
     """Tenant B tenta accesso a file di tenant A senza share attivo."""
     with patch.object(svc, "get_file_source", return_value=_file_source(group_id="A")):
         with patch(
-            "app.shared.sharing.is_resource_visible", return_value=False
+            "app.core.auth.visibility.is_resource_visible", return_value=False
         ), patch(
-            "app.shared.sharing.is_shareable", return_value=True
+            "app.core.auth.visibility.is_shareable", return_value=True
         ):
             with pytest.raises(PermissionError, match="non accessibile al gruppo 'B'"):
                 svc._assert_visible("f1", "B")
@@ -63,9 +63,9 @@ def test_assert_visible_allows_explicit_share(svc):
     """File condiviso con tenant B (via *_shares) → accesso OK."""
     with patch.object(svc, "get_file_source", return_value=_file_source(group_id="A")):
         with patch(
-            "app.shared.sharing.is_resource_visible", return_value=True
+            "app.core.auth.visibility.is_resource_visible", return_value=True
         ), patch(
-            "app.shared.sharing.is_shareable", return_value=True
+            "app.core.auth.visibility.is_shareable", return_value=True
         ):
             # Non solleva
             svc._assert_visible("f1", "B")
@@ -102,10 +102,10 @@ def test_assert_visible_fails_closed_on_sharing_exception(svc):
     corrotto), NON passiamo — FAIL-CLOSED per default."""
     with patch.object(svc, "get_file_source", return_value=_file_source(group_id="A")):
         with patch(
-            "app.shared.sharing.is_resource_visible",
+            "app.core.auth.visibility.is_resource_visible",
             side_effect=RuntimeError("share table corrupt"),
         ), patch(
-            "app.shared.sharing.is_shareable", return_value=True
+            "app.core.auth.visibility.is_shareable", return_value=True
         ):
             with pytest.raises(PermissionError):
                 svc._assert_visible("f1", "B")
@@ -120,9 +120,9 @@ def test_load_dataframe_requires_expected_group_id(svc):
     fs = _file_source(group_id="A")
     with patch.object(svc, "get_file_source", return_value=fs):
         with patch(
-            "app.shared.sharing.is_resource_visible", return_value=False
+            "app.core.auth.visibility.is_resource_visible", return_value=False
         ), patch(
-            "app.shared.sharing.is_shareable", return_value=True
+            "app.core.auth.visibility.is_shareable", return_value=True
         ):
             with pytest.raises(PermissionError):
                 svc.load_dataframe("f1", expected_group_id="B")

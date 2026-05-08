@@ -125,7 +125,7 @@ async def create_connection(data: ArcGISCreate, current_user: CurrentUser = Depe
 async def list_connections(current_user: CurrentUser = Depends(require_not_esecutore)):
     """Lista connessioni ArcGIS visibili: owned dal gruppo + condivise via allowed_groups.
     Ogni record include `can_edit` calcolato per l'utente corrente."""
-    from app.shared.sharing import visible_resource_ids
+    from app.core.auth.visibility import visible_resource_ids
 
     try:
         is_super = current_user.role == "superadmin"

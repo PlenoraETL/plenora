@@ -71,13 +71,22 @@ _LEDGER: tuple[SharedUtilsBusinessLogicEntry, ...] = (
         ),
     ),
     SharedUtilsBusinessLogicEntry(
-        path="app/shared/sharing.py",
+        path="app/core/auth/visibility.py",
         symbol="visible_resource_ids",
+        status="DONE",
+        owner="AUTH_SECURITY_ENGINE",
+        removal_condition=(
+            "Auth visibility policy owns visible-resource checks for shareable resources."
+        ),
+    ),
+    SharedUtilsBusinessLogicEntry(
+        path="app/shared/sharing.py",
+        symbol="module",
         status="KEEP_COMPAT_WITH_REMOVAL_CONDITION",
         owner="AUTH_SECURITY_ENGINE",
         removal_condition=(
-            "Move after resource visibility repositories are split by domain and "
-            "auth router callers consume typed visibility contracts."
+            "Remove after legacy sharing CRUD endpoints move off app.shared.sharing "
+            "and external compatibility imports switch to app.core.auth.visibility."
         ),
     ),
 )
@@ -101,3 +110,38 @@ def test_c2_shared_utils_business_logic_entries_have_removal_conditions() -> Non
 def test_c2_shared_utils_business_logic_ledger_points_at_existing_files() -> None:
     for entry in _LEDGER:
         assert (_BACKEND_ROOT / entry.path).exists(), entry.path
+
+
+def test_visibility_policy_runtime_imports_are_auth_owned() -> None:
+    offenders: list[str] = []
+    for path in (_BACKEND_ROOT / "app").rglob("*.py"):
+        if path.parts[-3:] == ("app", "shared", "sharing.py"):
+            continue
+        text = path.read_text(encoding="utf-8")
+        if "app.shared.sharing" not in text:
+            continue
+        for symbol in (
+            "is_resource_visible",
+            "is_shareable",
+            "visible_resource_ids",
+        ):
+            if symbol in text:
+                offenders.append(str(path.relative_to(_BACKEND_ROOT)))
+                break
+
+    assert offenders == []
+
+
+def test_shared_sharing_runtime_imports_are_limited_to_crud_router() -> None:
+    offenders: list[str] = []
+    allowed = {"app/core/auth/shares_router.py"}
+    for path in (_BACKEND_ROOT / "app").rglob("*.py"):
+        if path.parts[-3:] == ("app", "shared", "sharing.py"):
+            continue
+        text = path.read_text(encoding="utf-8")
+        if "app.shared.sharing" in text:
+            rel = path.relative_to(_BACKEND_ROOT).as_posix()
+            if rel not in allowed:
+                offenders.append(rel)
+
+    assert offenders == []

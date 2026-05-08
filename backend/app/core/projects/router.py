@@ -263,7 +263,7 @@ def _annotate_inaccessible_canvas_refs(
     if not file_source_ids and not project_ids and not arcgis_connection_ids:
         return  # fast-path: zero DB hit
 
-    from app.shared.sharing import visible_resource_ids
+    from app.core.auth.visibility import visible_resource_ids
     visible_fs = (
         visible_resource_ids("file_sources", owner_group_id, is_superadmin=False)
         if file_source_ids
@@ -597,7 +597,7 @@ def update_project_canvas(
     # non viene rimosso
     refs = _collect_canvas_resource_refs(canvas)
     if refs["file_sources"] or refs["projects"] or refs["arcgis_connections"]:
-        from app.shared.sharing import visible_resource_ids
+        from app.core.auth.visibility import visible_resource_ids
         # `metadata` puo' essere ProjectMetadata pydantic (prod) o dict
         # test): coerente con assert_group_access che gia' supporta entrambi
         owner_group_id = (

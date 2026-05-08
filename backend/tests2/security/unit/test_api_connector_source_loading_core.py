@@ -305,7 +305,7 @@ def test_load_file_source_preserves_geodataframe():
     gdf.columns = ["id"]
     gdf.__getitem__ = lambda self, key: pd.Series([1])
 
-    with patch("app.shared.sharing.is_resource_visible", return_value=True), \
+    with patch("app.core.auth.visibility.is_resource_visible", return_value=True), \
          patch("app.core.files.service.file_source_service") as svc_fs, \
          patch("app.utils.dataframe.filter_visible_columns",
                side_effect=lambda d, _cols: d):
@@ -343,7 +343,7 @@ def test_load_file_source_falls_back_to_df_when_no_gdf():
     svc._current_group_id = "stale-grp-LEAK"
     df = pd.DataFrame({"id": [1, 2]})
 
-    with patch("app.shared.sharing.is_resource_visible", return_value=True), \
+    with patch("app.core.auth.visibility.is_resource_visible", return_value=True), \
          patch("app.core.files.service.file_source_service") as svc_fs, \
          patch("app.utils.dataframe.filter_visible_columns",
                side_effect=lambda d, _cols: d):
@@ -367,7 +367,7 @@ def test_load_file_source_blocks_cross_tenant_via_loader():
     svc = _make_service_no_singleton()
     svc._current_group_id = "stale-grp-LEAK"
 
-    with patch("app.shared.sharing.is_resource_visible", return_value=False), \
+    with patch("app.core.auth.visibility.is_resource_visible", return_value=False), \
          patch("app.core.files.service.file_source_service") as svc_fs:
         with pytest.raises(ValueError, match="non appartiene al tuo gruppo"):
             svc._load_file_source(

@@ -1,212 +1,34 @@
-"""
-PLENORA-ETL — Helper allowed_groups (cross-group sharing)
-
-Centralizza la logica per le risorse "shareable":
-"""
+"""Compatibility surface plus CRUD helpers for cross-group sharing rows."""
 
 from __future__ import annotations
 
-from typing import Iterable, Optional, TypedDict, cast
+from typing import Iterable
 
-from app.db.pg_connection import (
-    fetchone as _pg_fetchone,
-    fetchall as _pg_fetchall,
-    execute as _pg_execute,
-    get_connection as _pg_get_conn,
-    put_connection as _pg_put_conn,
+from app.core.auth.visibility import (
+    MAGIC_ALL,
+    ShareableResourceOwner,
+    _SHAREABLE,
+    _validate_table,
+    build_visible_where_clause,
+    fk_column_for,
+    is_resource_visible,
+    is_shareable,
+    load_shareable_resource_owner,
+    share_table_for,
+    visible_resource_ids,
 )
+from app.db.pg_connection import get_connection as _pg_get_conn
+from app.db.pg_connection import put_connection as _pg_put_conn
 
-
-# COSTANTI
-
-MAGIC_ALL = "*"
-
-# Mapping resource_table -> (share_table, fk_column
-_SHAREABLE: dict[str, tuple[str, str]] = {
-    "connections":        ("connection_shares",         "connection_id"),
-    "datasources":        ("datasource_shares",         "datasource_id"),
-    "eseguibili":         ("eseguibile_shares",         "eseguibile_id"),
-    "api_connections":    ("api_connection_shares",     "api_connection_id"),
-    "arcgis_connections": ("arcgis_connection_shares",  "arcgis_connection_id"),
-    "file_sources":       ("file_source_shares",        "file_source_id"),
-}
-
-
-class ShareableResourceOwner(TypedDict):
-    id: str
-    group_id: str | None
-
-
-# UTILS
 
 def _conn():
     """Ritorna una connessione dal pool PostgreSQL."""
     return _pg_get_conn()
 
 
-def _validate_table(resource_table: str) -> tuple[str, str]:
-    if resource_table not in _SHAREABLE:
-        raise ValueError(
-            f"Tabella '{resource_table}' non è shareable. "
-            f"Validi: {list(_SHAREABLE)}"
-        )
-    return _SHAREABLE[resource_table]
-
-
-def share_table_for(resource_table: str) -> str:
-    """Ritorna il nome della join table per la risorsa."""
-    return _validate_table(resource_table)[0]
-
-
-def fk_column_for(resource_table: str) -> str:
-    """Ritorna il nome della colonna FK nella join table."""
-    return _validate_table(resource_table)[1]
-
-
-def is_shareable(resource_table: str) -> bool:
-    return resource_table in _SHAREABLE
-
-
-# QUERY DI VISIBILITÀ
-
-def load_shareable_resource_owner(
-    resource_table: str,
-    resource_id: str,
-) -> ShareableResourceOwner | None:
-    """Load the owner group row for a shareable resource."""
-    _validate_table(resource_table)
-    row = _pg_fetchone(
-        f"SELECT id, group_id FROM {resource_table} WHERE id = ?",
-        (resource_id,),
-    )
-    return cast(ShareableResourceOwner, dict(row)) if row else None
-
-
-def build_visible_where_clause(
-    resource_table: str,
-    resource_alias: str = "r",
-) -> tuple[str, list]:
-    """
-    Costruisce un frammento WHERE per filtrare le risorse visibili a un gruppo.
-
-    Uso tipico:
-        clause, params = build_visible_where_clause('connections', 'c')
-        sql = f"SELECT * FROM connections c WHERE {clause}"
-        cursor.execute(sql, [user_group_id, user_group_id, *params])
-
-    NOTA: la clausola contiene 2 placeholder `?` per `user_group_id`,
-    il chiamante deve passare il group_id 2 volte all'inizio.
-
-    Per superadmin (no filtro): non chiamare questa funzione, fai una query
-    senza WHERE su group_id.
-    """
-    share_table, fk = _validate_table(resource_table)
-    clause = (
-        f"({resource_alias}.group_id = %s "
-        f"OR EXISTS (SELECT 1 FROM {share_table} s "
-        f"WHERE s.{fk} = {resource_alias}.id "
-        f"AND (s.group_id = %s OR s.group_id = '{MAGIC_ALL}')))"
-    )
-    return clause, []
-
-
-def visible_resource_ids(
-    resource_table: str,
-    user_group_id: str,
-    is_superadmin: bool = False,
-) -> set[str]:
-    """
-    Ritorna l'insieme di tutti gli id della tabella visibili al gruppo X.
-
-    Visibili = di proprietà del gruppo + condivisi (puntualmente o globalmente).
-    Per superadmin: ritorna TUTTI gli id (nessun filtro).
-
-    Pensato per controlli di ownership rapidi:
-        if resource_id not in visible_resource_ids(...):
-            raise 403
-    """
-    share_table, fk = _validate_table(resource_table)
-    conn = _conn()
-    try:
-        with conn.cursor() as cur:
-            if is_superadmin:
-                cur.execute(f"SELECT id FROM {resource_table}")
-                return {row["id"] for row in cur.fetchall()}
-
-            cur.execute(
-                f"""
-                SELECT id FROM {resource_table} WHERE group_id = %s
-                UNION
-                SELECT {fk} FROM {share_table}
-                WHERE group_id = %s OR group_id = %s
-                """,
-                (user_group_id, user_group_id, MAGIC_ALL),
-            )
-            return {row["id"] for row in cur.fetchall()}
-    except Exception:
-        try:
-            conn.rollback()
-        except Exception:
-            pass
-        raise
-    finally:
-        _pg_put_conn(conn)
-
-
-def is_resource_visible(
-    resource_table: str,
-    resource_id: str,
-    user_group_id: str,
-    is_superadmin: bool = False,
-    resource_owner_group_id: Optional[str] = None,
-) -> bool:
-    """
-    True se la risorsa è visibile al gruppo dell'utente (owned o shared).
-
-    Se hai già caricato il record e conosci il suo group_id, passalo come
-    `resource_owner_group_id` per evitare una query sulla tabella sorgente.
-    """
-    if is_superadmin:
-        return True
-
-    share_table, fk = _validate_table(resource_table)
-    conn = _conn()
-    try:
-        with conn.cursor() as cur:
-            # Owner check (se non già fornito
-            if resource_owner_group_id is None:
-                cur.execute(
-                    f"SELECT group_id FROM {resource_table} WHERE id = %s",
-                    (resource_id,),
-                )
-                row = cur.fetchone()
-                if not row:
-                    return False
-                resource_owner_group_id = row["group_id"]
-
-            if resource_owner_group_id == user_group_id:
-                return True
-
-            # Share check
-            cur.execute(
-                f"""
-                SELECT 1 FROM {share_table}
-                WHERE {fk} = %s
-                  AND (group_id = %s OR group_id = %s)
-                LIMIT 1
-                """,
-                (resource_id, user_group_id, MAGIC_ALL),
-            )
-            return cur.fetchone() is not None
-    finally:
-        _pg_put_conn(conn)
-
-
-# CRUD SU RIGHE DI SHARING
-
 def list_resource_shares(resource_table: str, resource_id: str) -> list[str]:
     """
-    Ritorna i group_id con cui la risorsa è condivisa.
+    Ritorna i group_id con cui la risorsa e' condivisa.
     Include "*" se condivisa globalmente.
     """
     share_table, fk = _validate_table(resource_table)
@@ -227,7 +49,7 @@ def add_resource_share(
 ) -> bool:
     """
     Aggiunge una riga di sharing. Idempotente (INSERT OR IGNORE).
-    Ritorna True se la riga è stata aggiunta, False se già presente.
+    Ritorna True se la riga e' stata aggiunta, False se gia' presente.
     """
     share_table, fk = _validate_table(resource_table)
     conn = _conn()
@@ -275,8 +97,7 @@ def set_resource_shares(
     Pattern delete-then-insert in transazione.
 
     Pass `["*"]` per condivisione globale.
-    Pass `[]` per rimuovere tutte le condivisioni (la risorsa resta visibile
-    solo al suo gruppo proprietario).
+    Pass `[]` per rimuovere tutte le condivisioni.
     """
     share_table, fk = _validate_table(resource_table)
     conn = _conn()

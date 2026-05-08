@@ -9,17 +9,18 @@ from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
 
 from app.core.auth.dependencies import require_superadmin
-from app.shared.contracts.auth import CurrentUser
-from app.shared.audit_action import audit_action
-from app.shared.sharing import (
+from app.core.auth.visibility import (
     _SHAREABLE,
     ShareableResourceOwner,
     load_shareable_resource_owner,
+)
+from app.shared.contracts.auth import CurrentUser
+from app.shared.audit_action import audit_action
+from app.shared.sharing import (
     list_resource_shares,
     set_resource_shares,
     add_resource_share,
     remove_resource_share,
-    MAGIC_ALL,
 )
 
 router = APIRouter(prefix="/shares", tags=["shares"])

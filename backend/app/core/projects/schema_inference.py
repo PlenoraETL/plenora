@@ -31,6 +31,14 @@ class ColumnSchema:
         }
 
 
+@dataclass(frozen=True)
+class _NodeSchemaContext:
+    node: Any
+    nodes_by_id: dict
+    edges_by_target: dict
+    project_id: str
+
+
 class SchemaInferenceService:
     """
     Servizio per inferire lo schema delle colonne attraverso il grafo dei nodi.
@@ -126,18 +134,21 @@ class SchemaInferenceService:
         if node.id in self._schema_cache:
             return self._schema_cache[node.id]
         
-        
         schema: List[ColumnSchema] = []
-        
-        if node.type == "source":
-            schema = self._infer_source_schema(node)
-        
+
+        context = _NodeSchemaContext(
+            node=node,
+            nodes_by_id=nodes_by_id,
+            edges_by_target=edges_by_target,
+            project_id=project_id,
+        )
+        node_type_handler = self._build_node_type_handlers().get(node.type)
+        if node_type_handler is not None:
+            schema = node_type_handler(context)
+
         elif node.type == "project_source":
             schema = self._infer_project_source_schema(node)
-        
-        elif node.type == "file_source":
-            schema = self._infer_file_source_schema(node)
-        
+
         elif node.type == "transform":
             # Recupera schemi degli input
             input_schemas = self._get_input_schemas(
@@ -150,18 +161,53 @@ class SchemaInferenceService:
                 node.id, nodes_by_id, edges_by_target, project_id
             )
             schema = self._infer_api_enrich_schema(node, input_schemas)
-        
-        elif node.type == "result":
-            # Passthrough: stesso schema dell'input
-            input_schemas = self._get_input_schemas(
-                node.id, nodes_by_id, edges_by_target, project_id
-            )
-            if input_schemas:
-                schema = input_schemas[0]  # Prende il primo (e unico) input
-        
+
         # Cache result
         self._schema_cache[node.id] = schema
         return schema
+
+    def _build_node_type_handlers(
+        self,
+    ) -> Dict[str, Callable[[_NodeSchemaContext], List[ColumnSchema]]]:
+        """Registry node.type -> schema handler.
+
+        This is the first incremental split from `_infer_node_schema`'s
+        historical if/elif dispatch. Keep the registry small until each node
+        type has parity tests around its behavior.
+        """
+        return {
+            # NODE-DISPATCH-REGISTRY:start
+            "source": self._infer_source_node_schema,
+            "file_source": self._infer_file_source_node_schema,
+            "result": self._infer_result_node_schema,
+            # NODE-DISPATCH-REGISTRY:end
+        }
+
+    def _infer_source_node_schema(
+        self,
+        context: _NodeSchemaContext,
+    ) -> List[ColumnSchema]:
+        return self._infer_source_schema(context.node)
+
+    def _infer_file_source_node_schema(
+        self,
+        context: _NodeSchemaContext,
+    ) -> List[ColumnSchema]:
+        return self._infer_file_source_schema(context.node)
+
+    def _infer_result_node_schema(
+        self,
+        context: _NodeSchemaContext,
+    ) -> List[ColumnSchema]:
+        input_schemas = self._get_input_schemas(
+            context.node.id,
+            context.nodes_by_id,
+            context.edges_by_target,
+            context.project_id,
+        )
+        if input_schemas:
+            return input_schemas[0]
+        return []
     
     def _infer_source_schema(self, node) -> List[ColumnSchema]:
         """

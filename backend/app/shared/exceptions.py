@@ -173,7 +173,7 @@ class ProjectCleanupPartialError(Exception):
 
     Step derivati (falliscono → tolerati, non bloccano):
       - `schedules_orphan`: `ScheduleService.mark_as_orphan`
-      - `comparison_keys`: `app.db.config.comparison_keys.delete_comparison_keys`
+      - `comparison_keys`: `app.core.projects.db.delete_comparison_keys`
 
     Attributi:
         project_id: id del progetto per cui la cascade e' fallita.

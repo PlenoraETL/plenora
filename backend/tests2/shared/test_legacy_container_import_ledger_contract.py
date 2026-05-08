@@ -64,18 +64,11 @@ _LEGACY_IMPORT_BASELINES: dict[str, dict[str, frozenset[str]]] = {
         "auth_datasources_other": frozenset(),
     },
     "app.db.config": {
-        "projects": frozenset({
-            "app/core/projects/service.py -> app.db.config.comparison_keys",
-        }),
-        "connections": frozenset({
-            "app/core/arricchisci/api_connection_management.py -> app.db.config.api_connections",
-            "app/db/config_db_service.py -> app.db.config.api_connections",
-        }),
+        "projects": frozenset(),
+        "connections": frozenset(),
         "files_storage": frozenset(),
         "tasks_orchestration": frozenset(),
-        "auth_datasources_other": frozenset({
-            "app/db/config_db_service.py -> app.db.config.comparison_keys",
-        }),
+        "auth_datasources_other": frozenset(),
     },
 }
 
@@ -92,6 +85,8 @@ _ALLOWED_LEDGER_STATUSES = frozenset(
 _PROJECT_CONFIG_IMPORT_BLOCKERS: dict[str, str] = {}
 _DELETED_CONFIG_LEAVES = frozenset(
     {
+        "comparison_keys.py",
+        "api_connections.py",
         "connections.py",
         "datasources.py",
         "file_sources.py",

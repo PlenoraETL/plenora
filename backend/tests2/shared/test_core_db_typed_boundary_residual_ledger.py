@@ -112,6 +112,18 @@ _LEDGER: tuple[BoundaryEntry, ...] = (
         "project persistence compat leaf removed after tests migrated to app.core.projects.db",
     ),
     BoundaryEntry(
+        "app/core/projects/db.py",
+        "delete_comparison_keys",
+        "DONE",
+        "project-owned persistence boundary cleans comparison-key rows for project delete cascade",
+    ),
+    BoundaryEntry(
+        "app/db/config/comparison_keys.py",
+        "module",
+        "REMOVED",
+        "comparison-key SQL moved to app.core.projects.db and config leaf removed",
+    ),
+    BoundaryEntry(
         "app/core/results/db.py",
         "ResultMetadataRow",
         "DONE",
@@ -236,6 +248,24 @@ _LEDGER: tuple[BoundaryEntry, ...] = (
         "module",
         "REMOVED",
         "connection persistence config leaf removed after config_db_service exports moved to app.core.connections.db",
+    ),
+    BoundaryEntry(
+        "app/core/arricchisci/db.py",
+        "ApiConnectionRow",
+        "DONE",
+        "API connection DB rows are immutable arricchisci-owned dataclasses",
+    ),
+    BoundaryEntry(
+        "app/core/arricchisci/db.py",
+        "ApiConnectionRow.to_legacy_dict",
+        "KEEP_PUBLIC_COMPAT",
+        "legacy API connection dict conversion stays explicit while router/service callers preserve public shapes",
+    ),
+    BoundaryEntry(
+        "app/db/config/api_connections.py",
+        "module",
+        "REMOVED",
+        "API connection persistence config leaf removed after config_db_service exports moved to app.core.arricchisci.db",
     ),
     BoundaryEntry(
         "app/core/datasources/db.py",

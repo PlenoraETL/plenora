@@ -23,7 +23,7 @@ from app.utils.router_utils import require_service
 from app.shared import error_codes
 from app.shared.error_envelope import raise_typed_http
 from app.shared.audit_action import audit_action
-from app.shared.sharing import visible_resource_ids
+from app.core.auth.visibility import visible_resource_ids
 from .models import (
     DatabaseConnection,
     ConnectionCreate,

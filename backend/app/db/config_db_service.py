@@ -61,7 +61,7 @@ from app.core.projects.db import (  # noqa: F401,E402
 
 # COMPARISON KEYS (per confronto L3 su intermediate.db
 
-from app.db.config.comparison_keys import delete_comparison_keys  # noqa: F401,E402
+from app.core.projects.db import delete_comparison_keys  # noqa: F401,E402
 
 
 # CONNECTIONS
@@ -102,7 +102,7 @@ from app.core.datasources.db import (  # noqa: F401,E402
 
 # API CONNECTIONS
 
-from app.db.config.api_connections import (  # noqa: F401,E402
+from app.core.arricchisci.db import (  # noqa: F401,E402
     get_api_connection,
     list_api_connections,
     save_api_connection,

@@ -18,7 +18,7 @@ from app.core.arricchisci._api_connection_helpers import (
     _decrypt_auth_in_config,
     _encrypt_auth_in_config,
 )
-import app.db.config.api_connections as db_svc
+import app.core.arricchisci.db as db_svc
 from app.utils.logger import get_logger
 from app.utils.template_variables import process_static_fields
 
@@ -57,16 +57,7 @@ class ApiConnectionManagementMixin:
 
         group_id=None → no filter (used by superadmin and by allowed_groups path).
         """
-        if group_id is None:
-            from app.db.pg_connection import fetchall as _fetchall
-            rows = _fetchall(
-                "SELECT * FROM api_connections ORDER BY created_at DESC"
-            )
-            for row in rows:
-                if row.get("config") and isinstance(row["config"], str):
-                    row["config"] = json.loads(row["config"])
-        else:
-            rows = db_svc.list_api_connections(group_id)
+        rows = db_svc.list_api_connections(group_id)
         connections = []
         for row in rows:
             config = row.get('config') or {}
@@ -98,14 +89,7 @@ class ApiConnectionManagementMixin:
         Fix N+1: era un loop di get_api_connection(id, include_token=True).
         Ora fa UNA sola query e decifra inline. Ritorna dict id -> config.
         """
-        from app.db.pg_connection import fetchall as _fetchall
-        if group_id is None:
-            rows = _fetchall("SELECT * FROM api_connections")
-        else:
-            rows = _fetchall(
-                "SELECT * FROM api_connections WHERE group_id = %s",
-                (group_id,)
-            )
+        rows = db_svc.list_api_connections(group_id)
         result = {}
         for row in rows:
             api_id = row.get("id")

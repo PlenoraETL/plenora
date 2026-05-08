@@ -5,20 +5,26 @@ Canonical implementation: app.core.orchestrator.task_service.
 
 from app.core.orchestrator.task_service import (
     ActiveTaskInfo,
+    CeleryLaunchResult,
+    CeleryLaunchTask,
     TaskInfo,
     TaskResultPayload,
     TaskService,
     TaskStatus,
+    TaskSubmitRequest,
     TaskType,
     task_service,
 )
 
 __all__ = [
     "ActiveTaskInfo",
+    "CeleryLaunchResult",
+    "CeleryLaunchTask",
     "TaskInfo",
     "TaskResultPayload",
     "TaskService",
     "TaskStatus",
+    "TaskSubmitRequest",
     "TaskType",
     "task_service",
 ]

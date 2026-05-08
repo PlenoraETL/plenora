@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Dict, Mapping, Optional, List, TypeAlias
+from typing import Dict, Mapping, Optional, List, Protocol, TypeAlias
 from datetime import datetime, timezone
 from enum import Enum
 from dataclasses import dataclass
@@ -34,6 +34,32 @@ class TaskType(str, Enum):
     CARICA = "carica"
     EXECUTE = "execute"
     PREVIEW = "preview"
+
+
+@dataclass(frozen=True)
+class CeleryLaunchResult:
+    """Minimal Celery async result contract used by the submit boundary."""
+
+    id: str
+
+
+class CeleryLaunchTask(Protocol):
+    """Minimal Celery task contract for launching work."""
+
+    def delay(self, **kwargs: JsonValue) -> CeleryLaunchResult:
+        ...
+
+
+@dataclass(frozen=True)
+class TaskSubmitRequest:
+    """Typed request for launching a Celery task from the orchestrator."""
+
+    celery_task: CeleryLaunchTask
+    task_type: TaskType
+    project_id: str
+    kwargs: dict[str, JsonValue]
+    queued_message: str
+    log_label: str
 
 
 @dataclass(frozen=True)
@@ -193,6 +219,29 @@ class TaskService:
 
     def __init__(self):
         self.app = celery_app
+
+    def submit_task(self, request: TaskSubmitRequest) -> TaskInfo:
+        """Launch a Celery task and record the pending task metadata."""
+
+        result = request.celery_task.delay(**request.kwargs)
+
+        logger.info(
+            f"Creato task {request.log_label}: {result.id} "
+            f"per progetto {request.project_id}"
+        )
+
+        self._task_project_cache[result.id] = request.project_id
+        self._prune_cache()
+
+        return TaskInfo(
+            task_id=result.id,
+            task_type=request.task_type,
+            project_id=request.project_id,
+            status=TaskStatus.PENDING,
+            progress=0,
+            message=request.queued_message,
+            created_at=datetime.now(timezone.utc).isoformat(),
+        )
     
     # CREAZIONE TASK
     
@@ -229,32 +278,24 @@ class TaskService:
         """
         from workers.tasks.enrichment_task import execute_enrichment_task
 
-        # Avvia task asincrono
-        result = execute_enrichment_task.delay(
-            project_id=project_id,
-            canvas=canvas,
-            output_format=output_format,
-            force_recalculate=force_recalculate,
-            cleanup_file_source_ids=cleanup_file_source_ids,
-            is_eseguibile=is_eseguibile,
-            user_id=user_id,
-            intermediate_mode_override=intermediate_mode_override,
-        )
-
-        logger.info(f"Creato task enrichment: {result.id} per progetto {project_id}")
-
-        # Cache per risolvere project_id durante PENDING (prima che il worker scriva metadata
-        self._task_project_cache[result.id] = project_id
-        self._prune_cache()
-
-        return TaskInfo(
-            task_id=result.id,
-            task_type=TaskType.ENRICHMENT,
-            project_id=project_id,
-            status=TaskStatus.PENDING,
-            progress=0,
-            message="Task in coda...",
-            created_at=datetime.now(timezone.utc).isoformat()
+        return self.submit_task(
+            TaskSubmitRequest(
+                celery_task=execute_enrichment_task,
+                task_type=TaskType.ENRICHMENT,
+                project_id=project_id,
+                kwargs={
+                    "project_id": project_id,
+                    "canvas": canvas,
+                    "output_format": output_format,
+                    "force_recalculate": force_recalculate,
+                    "cleanup_file_source_ids": cleanup_file_source_ids,
+                    "is_eseguibile": is_eseguibile,
+                    "user_id": user_id,
+                    "intermediate_mode_override": intermediate_mode_override,
+                },
+                queued_message="Task in coda...",
+                log_label="enrichment",
+            )
         )
     
     def create_carica_task(
@@ -283,29 +324,23 @@ class TaskService:
         """
         from workers.tasks.carica_task import execute_carica_task
         
-        # Avvia task asincrono
-        result = execute_carica_task.delay(
-            project_id=project_id,
-            canvas=canvas,
-            carica_node_data=carica_node_data,
-            output_format=output_format,
-            force_recalculate=force_recalculate,
-            triggered_by=triggered_by,
-            user_id=user_id,
-        )
-        
-        logger.info(f"Creato task carica: {result.id} per progetto {project_id}")
-        self._task_project_cache[result.id] = project_id
-        self._prune_cache()
-
-        return TaskInfo(
-            task_id=result.id,
-            task_type=TaskType.CARICA,
-            project_id=project_id,
-            status=TaskStatus.PENDING,
-            progress=0,
-            message="Task CARICA in coda...",
-            created_at=datetime.now(timezone.utc).isoformat()
+        return self.submit_task(
+            TaskSubmitRequest(
+                celery_task=execute_carica_task,
+                task_type=TaskType.CARICA,
+                project_id=project_id,
+                kwargs={
+                    "project_id": project_id,
+                    "canvas": canvas,
+                    "carica_node_data": carica_node_data,
+                    "output_format": output_format,
+                    "force_recalculate": force_recalculate,
+                    "triggered_by": triggered_by,
+                    "user_id": user_id,
+                },
+                queued_message="Task CARICA in coda...",
+                log_label="carica",
+            )
         )
     
     # RECUPERA STATO E PROGRESSO
@@ -329,24 +364,21 @@ class TaskService:
         (superadmin-only) e' al boundary HTTP, non qui.
         """
         from workers.tasks.pipeline_task import execute_pipeline_task
-        result = execute_pipeline_task.delay(
-            project_id=project_id,
-            force_recalculate=force_recalculate,
-            triggered_by=triggered_by,
-            user_id=user_id,
-            intermediate_mode_override=intermediate_mode_override,
-        )
-        logger.info(f"Creato task execute: {result.id} per progetto {project_id}")
-        self._task_project_cache[result.id] = project_id
-        self._prune_cache()
-        return TaskInfo(
-            task_id=result.id,
-            task_type=TaskType.EXECUTE,
-            project_id=project_id,
-            status=TaskStatus.PENDING,
-            progress=0,
-            message="Pipeline in coda...",
-            created_at=datetime.now(timezone.utc).isoformat(),
+        return self.submit_task(
+            TaskSubmitRequest(
+                celery_task=execute_pipeline_task,
+                task_type=TaskType.EXECUTE,
+                project_id=project_id,
+                kwargs={
+                    "project_id": project_id,
+                    "force_recalculate": force_recalculate,
+                    "triggered_by": triggered_by,
+                    "user_id": user_id,
+                    "intermediate_mode_override": intermediate_mode_override,
+                },
+                queued_message="Pipeline in coda...",
+                log_label="execute",
+            )
         )
 
     def create_preview_task(
@@ -357,22 +389,19 @@ class TaskService:
     ) -> TaskInfo:
         """Crea e avvia un task di preview pipeline."""
         from workers.tasks.pipeline_task import preview_pipeline_task
-        result = preview_pipeline_task.delay(
-            project_id=project_id,
-            limit=limit,
-            user_id=user_id,
-        )
-        logger.info(f"Creato task preview: {result.id} per progetto {project_id}")
-        self._task_project_cache[result.id] = project_id
-        self._prune_cache()
-        return TaskInfo(
-            task_id=result.id,
-            task_type=TaskType.PREVIEW,
-            project_id=project_id,
-            status=TaskStatus.PENDING,
-            progress=0,
-            message="Preview in coda...",
-            created_at=datetime.now(timezone.utc).isoformat(),
+        return self.submit_task(
+            TaskSubmitRequest(
+                celery_task=preview_pipeline_task,
+                task_type=TaskType.PREVIEW,
+                project_id=project_id,
+                kwargs={
+                    "project_id": project_id,
+                    "limit": limit,
+                    "user_id": user_id,
+                },
+                queued_message="Preview in coda...",
+                log_label="preview",
+            )
         )
 
     def get_task_status(self, task_id: str) -> TaskInfo:

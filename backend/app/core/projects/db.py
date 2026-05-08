@@ -24,6 +24,7 @@ __all__ = [
     "ProjectRow",
     "create_project",
     "create_project_row",
+    "delete_comparison_keys",
     "delete_project",
     "get_project",
     "get_project_retention_n",
@@ -78,6 +79,17 @@ def _optional_int(row: Mapping[str, object], key: str) -> int | None:
     if isinstance(value, bool) or not isinstance(value, int):
         raise ValueError(f"Malformed project DB row: {key} must be an int or null")
     return value
+
+
+def delete_comparison_keys(canvas_id: str, node_id: str | None = None) -> None:
+    """Delete comparison-key config rows owned by a project canvas."""
+    if node_id:
+        execute(
+            "DELETE FROM comparison_keys WHERE canvas_id = ? AND node_id = ?",
+            (canvas_id, node_id),
+        )
+    else:
+        execute("DELETE FROM comparison_keys WHERE canvas_id = ?", (canvas_id,))
 
 
 @dataclass(frozen=True)

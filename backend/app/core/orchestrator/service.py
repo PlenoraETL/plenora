@@ -235,7 +235,7 @@ class OrchestratorService:
                 enrich_canvas_types_from_metadata(
                     carica_node_data,
                     project_id,
-                    project_service.get_project_columns_metadata,
+                    self.project_service.get_project_columns_metadata,
                 )
                 logger.info(
                     f"Nodo {carica_node.id} — connection_id: '{carica_node_data.get('connection_id', 'MANCANTE')}', "

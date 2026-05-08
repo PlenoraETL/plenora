@@ -91,7 +91,7 @@ def test_get_project_annotates_inaccessible_file_source_node():
         return set()
 
     with patch("app.core.projects.router._project_service", fake_svc), patch(
-        "app.shared.sharing.visible_resource_ids", side_effect=_fake_visible
+        "app.core.auth.visibility.visible_resource_ids", side_effect=_fake_visible
     ):
         resp = get_project("p1", _User())
 
@@ -137,7 +137,7 @@ def test_get_project_annotates_inaccessible_project_source_node():
         return {pid for pid in (project_ids or ()) if pid in visible}
 
     with patch("app.core.projects.router._project_service", fake_svc), patch(
-        "app.shared.sharing.visible_resource_ids", side_effect=_fake_visible
+        "app.core.auth.visibility.visible_resource_ids", side_effect=_fake_visible
     ), patch(
         "app.core.projects.router._visible_project_ids_strict",
         side_effect=_fake_strict,
@@ -169,7 +169,7 @@ def test_get_project_does_not_annotate_clean_canvas():
         return set()
 
     with patch("app.core.projects.router._project_service", fake_svc), patch(
-        "app.shared.sharing.visible_resource_ids", side_effect=_fake_visible
+        "app.core.auth.visibility.visible_resource_ids", side_effect=_fake_visible
     ):
         resp = get_project("p1", _User())
 
@@ -194,7 +194,7 @@ def test_get_project_does_not_annotate_for_superadmin():
     visible_spy = MagicMock(return_value=set())
 
     with patch("app.core.projects.router._project_service", fake_svc), patch(
-        "app.shared.sharing.visible_resource_ids", visible_spy
+        "app.core.auth.visibility.visible_resource_ids", visible_spy
     ):
         resp = get_project("p1", _Super())
 
@@ -221,7 +221,7 @@ def test_get_project_does_not_persist_canvas_during_get():
         return set()
 
     with patch("app.core.projects.router._project_service", fake_svc), patch(
-        "app.shared.sharing.visible_resource_ids", side_effect=_fake_visible
+        "app.core.auth.visibility.visible_resource_ids", side_effect=_fake_visible
     ):
         get_project("p1", _User())
 
@@ -254,7 +254,7 @@ def test_get_project_skips_visibility_check_when_no_cross_tenant_refs():
     visible_spy = MagicMock(return_value=set())
 
     with patch("app.core.projects.router._project_service", fake_svc), patch(
-        "app.shared.sharing.visible_resource_ids", visible_spy
+        "app.core.auth.visibility.visible_resource_ids", visible_spy
     ):
         resp = get_project("p1", _User())
 
@@ -321,7 +321,7 @@ def test_get_project_annotates_inaccessible_arcgis_connection_on_carica_arcgis_n
         return set()
 
     with patch("app.core.projects.router._project_service", fake_svc), patch(
-        "app.shared.sharing.visible_resource_ids", side_effect=_fake_visible
+        "app.core.auth.visibility.visible_resource_ids", side_effect=_fake_visible
     ):
         resp = get_project("p1", _User())
 
@@ -351,7 +351,7 @@ def test_get_project_annotates_inaccessible_arcgis_connection_on_imdf_publisher_
         return set()
 
     with patch("app.core.projects.router._project_service", fake_svc), patch(
-        "app.shared.sharing.visible_resource_ids", side_effect=_fake_visible
+        "app.core.auth.visibility.visible_resource_ids", side_effect=_fake_visible
     ):
         resp = get_project("p1", _User())
 
@@ -389,7 +389,7 @@ def test_get_project_does_not_annotate_arcgis_connection_when_visible():
         return set()
 
     with patch("app.core.projects.router._project_service", fake_svc), patch(
-        "app.shared.sharing.visible_resource_ids", side_effect=_fake_visible
+        "app.core.auth.visibility.visible_resource_ids", side_effect=_fake_visible
     ):
         resp = get_project("p1", _User())
 
@@ -411,7 +411,7 @@ def test_get_project_does_not_annotate_arcgis_connection_for_superadmin():
     visible_spy = MagicMock(return_value=set())
 
     with patch("app.core.projects.router._project_service", fake_svc), patch(
-        "app.shared.sharing.visible_resource_ids", visible_spy
+        "app.core.auth.visibility.visible_resource_ids", visible_spy
     ):
         resp = get_project("p1", _Super())
 
@@ -437,7 +437,7 @@ def test_get_project_does_not_persist_canvas_during_arcgis_annotation():
         return set()
 
     with patch("app.core.projects.router._project_service", fake_svc), patch(
-        "app.shared.sharing.visible_resource_ids", side_effect=_fake_visible
+        "app.core.auth.visibility.visible_resource_ids", side_effect=_fake_visible
     ):
         get_project("p1", _User())
 

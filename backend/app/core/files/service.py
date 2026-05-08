@@ -233,7 +233,7 @@ class FileSourceService:
         """Fail-closed: verifica che `expected_group_id` abbia visibilita'
         sul file_id (owned o shared), altrimenti solleva PermissionError.
 
-        Visibilita' calcolata via `app.shared.sharing.is_resource_visible`
+        Visibilita' calcolata via `app.core.auth.visibility.is_resource_visible`
         — stesso predicato usato da `assert_resource_visible` del layer
         auth (coerente col router).
 
@@ -280,7 +280,7 @@ class FileSourceService:
 
         # Shared via *_shares?
         try:
-            from app.shared.sharing import is_resource_visible, is_shareable
+            from app.core.auth.visibility import is_resource_visible, is_shareable
             if is_shareable("file_sources") and is_resource_visible(
                 "file_sources",
                 file_id,

@@ -7,10 +7,12 @@ import pytest
 
 from app.core.orchestrator.task_service import (
     ActiveTaskInfo,
+    CeleryLaunchResult,
     TaskInfo,
     TaskResultPayload,
     TaskService,
     TaskStatus,
+    TaskSubmitRequest,
     TaskType,
 )
 from app.core.orchestrator.router import _task_info_to_dict, _task_result_to_dict
@@ -222,3 +224,155 @@ def test_get_task_result_returns_typed_payload():
     assert isinstance(result, TaskResultPayload)
     assert result.project_id == "project-1"
     assert _task_result_to_dict(result) == celery_result
+
+
+def test_submit_task_launches_celery_and_returns_pending_task_info():
+    captured_kwargs = {}
+
+    class FakeCeleryTask:
+        def delay(self, **kwargs):
+            captured_kwargs.update(kwargs)
+            return CeleryLaunchResult(id="task-submit-1")
+
+    service = TaskService()
+    task_info = service.submit_task(
+        TaskSubmitRequest(
+            celery_task=FakeCeleryTask(),
+            task_type=TaskType.EXECUTE,
+            project_id="project-1",
+            kwargs={
+                "project_id": "project-1",
+                "force_recalculate": False,
+                "user_id": "user-1",
+            },
+            queued_message="Pipeline in coda...",
+            log_label="execute",
+        )
+    )
+
+    assert task_info.task_id == "task-submit-1"
+    assert task_info.task_type is TaskType.EXECUTE
+    assert task_info.project_id == "project-1"
+    assert task_info.status is TaskStatus.PENDING
+    assert task_info.message == "Pipeline in coda..."
+    assert captured_kwargs == {
+        "project_id": "project-1",
+        "force_recalculate": False,
+        "user_id": "user-1",
+    }
+    assert service._task_project_cache["task-submit-1"] == "project-1"
+
+
+@pytest.mark.parametrize(
+    ("method_name", "call_kwargs", "expected_task_type", "expected_message", "expected_kwargs"),
+    [
+        (
+            "create_pipeline_task",
+            {
+                "project_id": "project-1",
+                "force_recalculate": True,
+                "triggered_by": "manual",
+                "user_id": "user-1",
+                "intermediate_mode_override": "save",
+            },
+            TaskType.EXECUTE,
+            "Pipeline in coda...",
+            {
+                "project_id": "project-1",
+                "force_recalculate": True,
+                "triggered_by": "manual",
+                "user_id": "user-1",
+                "intermediate_mode_override": "save",
+            },
+        ),
+        (
+            "create_preview_task",
+            {"project_id": "project-1", "limit": 25, "user_id": "user-1"},
+            TaskType.PREVIEW,
+            "Preview in coda...",
+            {"project_id": "project-1", "limit": 25, "user_id": "user-1"},
+        ),
+        (
+            "create_carica_task",
+            {
+                "project_id": "project-1",
+                "canvas": {"nodes": [], "edges": []},
+                "carica_node_data": {"id": "carica-1"},
+                "output_format": "geojson",
+                "force_recalculate": True,
+                "triggered_by": "cron",
+                "user_id": "user-1",
+            },
+            TaskType.CARICA,
+            "Task CARICA in coda...",
+            {
+                "project_id": "project-1",
+                "canvas": {"nodes": [], "edges": []},
+                "carica_node_data": {"id": "carica-1"},
+                "output_format": "geojson",
+                "force_recalculate": True,
+                "triggered_by": "cron",
+                "user_id": "user-1",
+            },
+        ),
+        (
+            "create_enrichment_task",
+            {
+                "project_id": "project-1",
+                "canvas": {"nodes": [], "edges": []},
+                "output_format": "csv",
+                "force_recalculate": True,
+                "cleanup_file_source_ids": ["file-1"],
+                "is_eseguibile": True,
+                "user_id": "user-1",
+                "intermediate_mode_override": "save",
+            },
+            TaskType.ENRICHMENT,
+            "Task in coda...",
+            {
+                "project_id": "project-1",
+                "canvas": {"nodes": [], "edges": []},
+                "output_format": "csv",
+                "force_recalculate": True,
+                "cleanup_file_source_ids": ["file-1"],
+                "is_eseguibile": True,
+                "user_id": "user-1",
+                "intermediate_mode_override": "save",
+            },
+        ),
+    ],
+)
+def test_create_task_wrappers_delegate_to_generic_submit(
+    monkeypatch,
+    method_name,
+    call_kwargs,
+    expected_task_type,
+    expected_message,
+    expected_kwargs,
+):
+    service = TaskService()
+    captured_requests = []
+
+    def fake_submit_task(request):
+        captured_requests.append(request)
+        return TaskInfo(
+            task_id="task-1",
+            task_type=request.task_type,
+            project_id=request.project_id,
+            status=TaskStatus.PENDING,
+            message=request.queued_message,
+        )
+
+    monkeypatch.setattr(service, "submit_task", fake_submit_task)
+
+    task_info = getattr(service, method_name)(**call_kwargs)
+
+    assert len(captured_requests) == 1
+    request = captured_requests[0]
+    assert request.task_type is expected_task_type
+    assert request.project_id == "project-1"
+    assert request.kwargs == expected_kwargs
+    assert request.queued_message == expected_message
+    assert hasattr(request.celery_task, "delay")
+    assert task_info.task_type is expected_task_type
+    assert task_info.status is TaskStatus.PENDING

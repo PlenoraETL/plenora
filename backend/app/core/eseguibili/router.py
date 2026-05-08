@@ -25,7 +25,7 @@ from app.core.auth.ownership import (
 from app.config import settings
 from app.utils.logger import get_logger
 from app.shared.audit_action import audit_action
-from app.shared.sharing import visible_resource_ids
+from app.core.auth.visibility import visible_resource_ids
 from app.shared.error_sanitizer import sanitize_http_detail
 from app.shared.upload_guards import enforce_upload_size_limit
 from app.shared import error_codes

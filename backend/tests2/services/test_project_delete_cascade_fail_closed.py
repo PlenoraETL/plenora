@@ -10,6 +10,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from app.core.projects.db import ProjectDetailRow
+
 
 pytestmark = [pytest.mark.unit, pytest.mark.contract]
 
@@ -19,13 +21,17 @@ pytestmark = [pytest.mark.unit, pytest.mark.contract]
 
 def _mock_project_row():
     """Row tipica restituita da db.get_project."""
-    return {
-        "id": "p-target",
-        "name": "Progetto Target",
-        "project_type": "manipola",
-        "group_id": "grp-1",
-        "canvas": {},
-    }
+    return ProjectDetailRow(
+        id="p-target",
+        name="Progetto Target",
+        project_type="manipola",
+        group_id="grp-1",
+        canvas={},
+        connection_id=None,
+        created_at=None,
+        updated_at=None,
+        created_by=None,
+    )
 
 
 def _patch_cascade(
@@ -79,7 +85,7 @@ def _patch_cascade(
             db_del_patch = {"return_value": True}
 
         with patch(
-            "app.core.projects.service.project_db.get_project",
+            "app.core.projects.service.project_db.get_project_row",
             return_value=_mock_project_row()
         ), patch(
             "app.core.eseguibili.db.list_eseguibili_by_source",
@@ -97,7 +103,7 @@ def _patch_cascade(
             "app.core.results.cleanup.delete_results_for_project",
             **results_patch
         ), patch(
-            "app.db.config.comparison_keys.delete_comparison_keys",
+            "app.core.projects.db.delete_comparison_keys",
             **ck_patch
         ), patch(
             "app.core.projects.service.project_db.delete_project",

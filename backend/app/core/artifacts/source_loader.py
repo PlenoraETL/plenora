@@ -128,7 +128,7 @@ class SourceLoader:
         # Visibility check (owned/shared/superadmin) eseguito qui dentro
         # prima di qualsiasi accesso al blob: il contratto del loader e'
         # fail-closed senza delegare al caller
-        from app.shared.sharing import is_resource_visible
+        from app.core.auth.visibility import is_resource_visible
 
         try:
             visible = is_resource_visible(

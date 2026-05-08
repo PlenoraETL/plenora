@@ -430,7 +430,7 @@ def list_api_connections(category: str = None, connection_type: str = None, curr
     """Lista API connections visibili: owned dal gruppo + condivise via allowed_groups.
     Ogni record include `can_edit` calcolato per l'utente corrente."""
     try:
-        from app.shared.sharing import visible_resource_ids
+        from app.core.auth.visibility import visible_resource_ids
 
         is_super = current_user.role == "superadmin"
         all_conns = _api_connection_service.list_api_connections(

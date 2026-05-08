@@ -180,7 +180,7 @@ def assert_resource_visible(
 
     # Shared via *_shares?
     if resource_id:
-        from app.shared.sharing import is_resource_visible, is_shareable
+        from app.core.auth.visibility import is_resource_visible, is_shareable
         if is_shareable(table_name) and is_resource_visible(
             table_name,
             resource_id,

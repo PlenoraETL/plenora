@@ -110,7 +110,7 @@ from app.core.auth.ownership import (
     assert_resource_visible,
     compute_can_edit,
 )
-from app.shared.sharing import visible_resource_ids
+from app.core.auth.visibility import visible_resource_ids
 from app.shared.resources.path_policy import assert_path_within as _core_assert
 from .models import (
     FileSource,

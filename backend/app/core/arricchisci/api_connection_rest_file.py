@@ -732,7 +732,7 @@ class ApiConnectionRestFileMixin:
                 "Contesto di sicurezza non determinabile per file_source"
             )
         try:
-            from app.shared.sharing import is_resource_visible
+            from app.core.auth.visibility import is_resource_visible
             if not is_resource_visible(
                 "file_sources", file_source_id, current_group_id,
                 is_superadmin=False,

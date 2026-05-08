@@ -40,7 +40,7 @@ from app.core.datasources.interface import (
     DataSourcePermissionError,
 )
 from app.core.datasources.service import DataSourceService
-from app.shared.sharing import visible_resource_ids
+from app.core.auth.visibility import visible_resource_ids
 
 logger = get_logger(__name__)
 

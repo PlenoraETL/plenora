@@ -212,7 +212,7 @@ def test_canvas_put_rejects_file_source_not_visible_to_owner_group():
         return set()
 
     with patch("app.core.projects.router._project_service", fake_svc), patch(
-        "app.shared.sharing.visible_resource_ids", side_effect=_fake_visible
+        "app.core.auth.visibility.visible_resource_ids", side_effect=_fake_visible
     ):
         with pytest.raises(HTTPException) as excinfo:
             update_project_canvas("p1", body, _RB4User())
@@ -260,7 +260,7 @@ def test_canvas_put_rejects_source_project_not_visible_to_owner_group():
         return {pid for pid in (project_ids or ()) if pid == "project_safe_for_g1"}
 
     with patch("app.core.projects.router._project_service", fake_svc), patch(
-        "app.shared.sharing.visible_resource_ids", side_effect=_fake_visible
+        "app.core.auth.visibility.visible_resource_ids", side_effect=_fake_visible
     ), patch(
         "app.core.projects.router._visible_project_ids_strict",
         side_effect=_fake_strict,
@@ -313,7 +313,7 @@ def test_canvas_put_accepts_when_all_refs_visible_to_owner_group():
         return {pid for pid in (project_ids or ()) if pid in visible}
 
     with patch("app.core.projects.router._project_service", fake_svc), patch(
-        "app.shared.sharing.visible_resource_ids", side_effect=_fake_visible
+        "app.core.auth.visibility.visible_resource_ids", side_effect=_fake_visible
     ), patch(
         "app.core.projects.router._visible_project_ids_strict",
         side_effect=_fake_strict,
@@ -342,7 +342,7 @@ def test_canvas_put_skips_visibility_check_when_no_cross_tenant_refs():
     visible_spy = MagicMock(return_value=set())
 
     with patch("app.core.projects.router._project_service", fake_svc), patch(
-        "app.shared.sharing.visible_resource_ids", visible_spy
+        "app.core.auth.visibility.visible_resource_ids", visible_spy
     ):
         resp = update_project_canvas("p1", body, _RB4User())
 
@@ -384,7 +384,7 @@ def test_canvas_put_superadmin_can_save_any_ref():
         group_id = "g1"
 
     with patch("app.core.projects.router._project_service", fake_svc), patch(
-        "app.shared.sharing.visible_resource_ids", side_effect=_fake_visible
+        "app.core.auth.visibility.visible_resource_ids", side_effect=_fake_visible
     ):
         resp = update_project_canvas("p1", body, _Super())
 
@@ -433,7 +433,7 @@ def test_canvas_put_rejects_arcgis_connection_not_visible_to_owner_group():
         return set()
 
     with patch("app.core.projects.router._project_service", fake_svc), patch(
-        "app.shared.sharing.visible_resource_ids", side_effect=_fake_visible
+        "app.core.auth.visibility.visible_resource_ids", side_effect=_fake_visible
     ):
         with pytest.raises(HTTPException) as excinfo:
             update_project_canvas("p1", body, _RB4User())
@@ -473,7 +473,7 @@ def test_canvas_put_rejects_imdf_arcgis_connection_not_visible_to_owner_group():
         return set()
 
     with patch("app.core.projects.router._project_service", fake_svc), patch(
-        "app.shared.sharing.visible_resource_ids", side_effect=_fake_visible
+        "app.core.auth.visibility.visible_resource_ids", side_effect=_fake_visible
     ):
         with pytest.raises(HTTPException) as excinfo:
             update_project_canvas("p1", body, _RB4User())
@@ -519,7 +519,7 @@ def test_canvas_put_accepts_when_arcgis_connection_is_visible():
         return set()
 
     with patch("app.core.projects.router._project_service", fake_svc), patch(
-        "app.shared.sharing.visible_resource_ids", side_effect=_fake_visible
+        "app.core.auth.visibility.visible_resource_ids", side_effect=_fake_visible
     ):
         resp = update_project_canvas("p1", body, _RB4User())
 
@@ -558,7 +558,7 @@ def test_canvas_put_collects_arcgis_connection_id_from_node_data_dict():
         return set()
 
     with patch("app.core.projects.router._project_service", fake_svc), patch(
-        "app.shared.sharing.visible_resource_ids", side_effect=_fake_visible
+        "app.core.auth.visibility.visible_resource_ids", side_effect=_fake_visible
     ):
         with pytest.raises(HTTPException) as excinfo:
             update_project_canvas("p1", body, _RB4User())
