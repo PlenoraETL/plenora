@@ -60,7 +60,7 @@ def _patched_settings(policy_value):
 
 
 def test_dispatch_db_policy_always_returns_bytea(fake_logger, fake_storage):
-    from app.services.file_storage_dispatch import dispatch_blob_storage
+    from app.core.files.storage_dispatch import dispatch_blob_storage
 
     raw = b"x" * 2048
     with _patched_settings("db"), \
@@ -74,7 +74,7 @@ def test_dispatch_db_policy_always_returns_bytea(fake_logger, fake_storage):
 
 def test_dispatch_db_policy_does_not_log(fake_logger):
     """Path BYTEA: nessun log info/error (silenzioso)."""
-    from app.services.file_storage_dispatch import dispatch_blob_storage
+    from app.core.files.storage_dispatch import dispatch_blob_storage
 
     with _patched_settings("db"):
         dispatch_blob_storage("file_x", b"data", "f.csv", logger=fake_logger)
@@ -89,7 +89,7 @@ def test_dispatch_db_policy_does_not_log(fake_logger):
 def test_dispatch_object_storage_policy_uploads_and_returns_storage_key(
     fake_logger, fake_storage,
 ):
-    from app.services.file_storage_dispatch import dispatch_blob_storage
+    from app.core.files.storage_dispatch import dispatch_blob_storage
 
     raw = b"y" * 100
     with _patched_settings("object_storage"), \
@@ -107,7 +107,7 @@ def test_dispatch_object_storage_policy_reraises_upload_exception(
     fake_logger, fake_storage,
 ):
     """Orphan guard: upload exception rilanciata, no row DB nel caller."""
-    from app.services.file_storage_dispatch import dispatch_blob_storage
+    from app.core.files.storage_dispatch import dispatch_blob_storage
 
     fake_storage.upload_bytes.side_effect = RuntimeError("S3 down")
     with _patched_settings("object_storage"), \
@@ -125,7 +125,7 @@ def test_dispatch_object_storage_policy_reraises_upload_exception(
 def test_dispatch_hybrid_policy_below_threshold_uses_bytea(
     fake_logger, fake_storage, monkeypatch,
 ):
-    from app.services.file_storage_dispatch import dispatch_blob_storage
+    from app.core.files.storage_dispatch import dispatch_blob_storage
 
     monkeypatch.setenv("FILE_SOURCE_S3_THRESHOLD_BYTES", str(1024))
     raw = b"x" * 512  # sotto soglia (1024)
@@ -143,7 +143,7 @@ def test_dispatch_hybrid_policy_below_threshold_uses_bytea(
 def test_dispatch_hybrid_policy_at_or_above_threshold_uses_object_storage(
     fake_logger, fake_storage, monkeypatch,
 ):
-    from app.services.file_storage_dispatch import dispatch_blob_storage
+    from app.core.files.storage_dispatch import dispatch_blob_storage
 
     monkeypatch.setenv("FILE_SOURCE_S3_THRESHOLD_BYTES", str(1024))
     raw = b"y" * 2048  # sopra soglia (1024)
@@ -162,7 +162,7 @@ def test_dispatch_hybrid_policy_at_exact_threshold_uses_object_storage(
     fake_logger, fake_storage, monkeypatch,
 ):
     """Boundary: size == threshold -> object storage (>= confronto)."""
-    from app.services.file_storage_dispatch import dispatch_blob_storage
+    from app.core.files.storage_dispatch import dispatch_blob_storage
 
     monkeypatch.setenv("FILE_SOURCE_S3_THRESHOLD_BYTES", str(1024))
     raw = b"z" * 1024  # esattamente la soglia
@@ -185,7 +185,7 @@ def test_dispatch_falls_back_to_hybrid_when_settings_returns_none(
     default), cosi' il codice deve cadere sul `or 'hybrid'` e poi
     valutare la threshold.
     """
-    from app.services.file_storage_dispatch import dispatch_blob_storage
+    from app.core.files.storage_dispatch import dispatch_blob_storage
 
     monkeypatch.setenv("FILE_SOURCE_S3_THRESHOLD_BYTES", str(1024))
     raw = b"x" * 512  # sotto soglia: se il fallback 'hybrid' funziona -> BYTEA
@@ -204,7 +204,7 @@ def test_dispatch_explicit_hybrid_policy_under_threshold_uses_bytea(
 ):
     """STORAGE_POLICY='hybrid' esplicito (no fallback) - smoke gemello del
     test sopra per separare le due semantiche (None vs 'hybrid' explicit)."""
-    from app.services.file_storage_dispatch import dispatch_blob_storage
+    from app.core.files.storage_dispatch import dispatch_blob_storage
 
     monkeypatch.setenv("FILE_SOURCE_S3_THRESHOLD_BYTES", str(1024))
     raw = b"x" * 512
@@ -223,7 +223,7 @@ def test_dispatch_explicit_hybrid_policy_under_threshold_uses_bytea(
 def test_dispatch_uses_injected_logger_not_global(fake_storage):
     """Il logger e' parametro: due call con due logger distinti devono
     loggare ciascuno sul proprio."""
-    from app.services.file_storage_dispatch import dispatch_blob_storage
+    from app.core.files.storage_dispatch import dispatch_blob_storage
 
     log_a = MagicMock()
     log_b = MagicMock()
@@ -242,14 +242,16 @@ def test_dispatch_uses_injected_logger_not_global(fake_storage):
     assert "file_b" in log_b.info.call_args[0][0]
 
 
-# 5. Backward-compat: il wrapper FileSourceService._dispatch_blob_storage
-#    delega correttamente alla funzione modulo.
+# 5. Il facade FileSourceService._dispatch_blob_storage delega alla
+#    funzione modulo.
 
 
-def test_file_service_wrapper_delegates_to_module_function(fake_logger, fake_storage):
-    """`FileSourceService._dispatch_blob_storage` resta come thin wrapper:
+def test_file_source_service_dispatch_facade_delegates_to_module_function(
+    fake_logger, fake_storage,
+):
+    """`FileSourceService._dispatch_blob_storage` resta un facade sottile:
     riceve self._logger, lo passa alla funzione modulo, ritorna il dict."""
-    from app.services.file_service import FileSourceService
+    from app.core.files.service import FileSourceService
 
     svc = FileSourceService.__new__(FileSourceService)
     svc._logger = fake_logger
@@ -272,7 +274,7 @@ def test_dispatch_uses_storage_key_id_when_provided(fake_logger, fake_storage):
     """Object storage path: se `storage_key_id` e' fornito, sostituisce
     `file_id` come segmento path. Permette al multi-layer upload di
     condividere 1 blob fisico tra N FileSource logici."""
-    from app.services.file_storage_dispatch import dispatch_blob_storage
+    from app.core.files.storage_dispatch import dispatch_blob_storage
 
     raw = b"shared blob bytes" * 10
     with _patched_settings("object_storage"), \
@@ -292,20 +294,19 @@ def test_dispatch_uses_storage_key_id_when_provided(fake_logger, fake_storage):
 def test_dispatch_storage_key_id_none_falls_back_to_file_id(
     fake_logger, fake_storage,
 ):
-    """Backward-compat single-file: storage_key_id=None (default) -> il path
-    resta `file-sources/{file_id}/{filename}` come pre-E1."""
-    from app.services.file_storage_dispatch import dispatch_blob_storage
+    """Single-file path: storage_key_id=None usa `file_id` nel path."""
+    from app.core.files.storage_dispatch import dispatch_blob_storage
 
     raw = b"single file bytes"
     with _patched_settings("object_storage"), \
          patch("app.shared.cloud_backends.get_runtime_object_storage",
                return_value=fake_storage):
         out = dispatch_blob_storage(
-            "file_legacy", raw, "single.csv",
+            "file_single", raw, "single.csv",
             logger=fake_logger,
             storage_key_id=None,
         )
 
-    expected_key = "file-sources/file_legacy/single.csv"
+    expected_key = "file-sources/file_single/single.csv"
     assert out["storage_key"] == expected_key
     fake_storage.upload_bytes.assert_called_once_with(raw, expected_key)

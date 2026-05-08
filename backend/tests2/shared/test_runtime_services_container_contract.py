@@ -60,7 +60,7 @@ def test_runtime_services_has_nine_canonical_fields():
 
 
 def test_runtime_services_is_frozen():
-    """Reassignment must surface as an error — the container is the
+    """Reassignment must surface as an error â€” the container is the
     source of truth, not a mutable scratch space."""
     from app.runtime import RuntimeServices
 
@@ -83,7 +83,7 @@ def test_runtime_services_is_frozen():
         instance.datasource_service = object()  # type: ignore[misc]
 
 
-# 2. Factory dependency order — locked behavioural test
+# 2. Factory dependency order â€” locked behavioural test
 
 
 def test_build_runtime_services_constructs_in_canonical_order():
@@ -156,8 +156,8 @@ def test_build_runtime_services_constructs_in_canonical_order():
     datasource_sentinel = MagicMock(name="DataSourceService_singleton")
 
     with (
-        patch("app.services.project_service.ProjectService", _ProjectService),
-        patch("app.services.connection_service.ConnectionService", _ConnectionService),
+        patch("app.core.projects.service.ProjectService", _ProjectService),
+        patch("app.core.connections.service.ConnectionService", _ConnectionService),
         patch("app.core.estrai.database_inspector.DatabaseInspector", _DatabaseInspector),
         patch("app.core.estrai.query_generator.QueryGenerator", _QueryGenerator),
         patch("app.db.query_executor.QueryExecutor", _QueryExecutor),
@@ -207,10 +207,10 @@ def test_build_runtime_services_constructs_in_canonical_order():
     assert result.features_service is features_instance
     assert result.orchestrator is orchestrator_instance
     # IDENTITY INVARIANT (016): the container does NOT construct a
-    # second ApiConnectionService — it must consume the canonical
+    # second ApiConnectionService â€” it must consume the canonical
     # `api_connector.api_connection_service` singleton.
     assert result.api_connection_service is api_conn_sentinel
-    # IDENTITY INVARIANT (017): same for DataSourceService — the
+    # IDENTITY INVARIANT (017): same for DataSourceService â€” the
     # container must consume the canonical singleton, not construct
     # a duplicate.
     assert result.datasource_service is datasource_sentinel
@@ -264,7 +264,7 @@ def test_main_py_consumes_runtime_services_factory():
     assert "build_runtime_services(" in src
 
     # Module-globals are still defined (monkeypatch surface), but
-    # they MUST be derived from the container — not constructed
+    # they MUST be derived from the container â€” not constructed
     # inline. Reject the previous inline form.
     forbidden_inline = (
         "project_service = ProjectService()",
@@ -318,7 +318,7 @@ def test_main_py_rebinds_globals_from_runtime_container():
         )
 
 
-# 4. Bootstrap completion semantics — locked
+# 4. Bootstrap completion semantics â€” locked
 
 
 def test_bootstrap_completion_flag_exists_and_is_initially_false():
@@ -411,12 +411,12 @@ def test_runtime_services_module_does_not_import_fastapi_or_starlette():
             )
 
 
-# 6. BE-GO-READY-BOOTSTRAP-ENGINE-016 — api_connection_service slice
+# 6. BE-GO-READY-BOOTSTRAP-ENGINE-016 â€” api_connection_service slice
 
 
 def test_runtime_container_owns_api_connection_service_field():
     """The 8th field exists, is typed, and references the canonical
-    arricchisci singleton — NOT a fresh construction."""
+    arricchisci singleton â€” NOT a fresh construction."""
     import app.core.arricchisci.api_connector as api_connector_mod
     from app.runtime import RuntimeServices, build_runtime_services
     from types import SimpleNamespace
@@ -437,7 +437,7 @@ def test_runtime_container_owns_api_connection_service_field():
 
 def test_main_py_no_longer_imports_api_connection_service_directly():
     """Source-bound: `app/main.py` must NOT import
-    `api_connection_service` directly from `api_connector` — the
+    `api_connection_service` directly from `api_connector` â€” the
     canonical path is now the container.
 
     The arricchisci singleton stays in `api_connector.py` (test
@@ -478,7 +478,7 @@ def test_api_connector_module_still_exposes_singleton_for_patch_surface():
 
 def test_factory_does_not_reconstruct_api_connection_service():
     """The factory MUST NOT call `ApiConnectionService()` on its own
-    — it must consume the canonical singleton via import. A second
+    â€” it must consume the canonical singleton via import. A second
     construction would produce a divergent instance, breaking every
     `patch("...api_connection_service.<method>", ...)` test.
     """
@@ -508,12 +508,12 @@ def test_factory_does_not_reconstruct_api_connection_service():
     )
 
 
-# 7. BE-GO-READY-BOOTSTRAP-ENGINE-017 — datasource_service slice
+# 7. BE-GO-READY-BOOTSTRAP-ENGINE-017 â€” datasource_service slice
 
 
 def test_runtime_container_owns_datasource_service_field():
     """The 9th field exists, is typed, and references the canonical
-    datasources singleton — NOT a fresh construction."""
+    datasources singleton â€” NOT a fresh construction."""
     import app.core.datasources.service as ds_service_mod
     from app.runtime import RuntimeServices, build_runtime_services
     from types import SimpleNamespace
@@ -534,7 +534,7 @@ def test_runtime_container_owns_datasource_service_field():
 
 def test_main_py_no_longer_imports_datasource_service_directly():
     """Source-bound: `app/main.py` must NOT import `datasource_service`
-    directly from `app.core.datasources.service` — the canonical path
+    directly from `app.core.datasources.service` â€” the canonical path
     is now the container.
 
     The singleton stays in `service.py:440` (canonical attribute
@@ -572,7 +572,7 @@ def test_datasources_service_module_still_exposes_singleton_for_patch_surface():
 
 
 def test_factory_does_not_reconstruct_datasource_service():
-    """The factory MUST NOT call `DataSourceService()` on its own —
+    """The factory MUST NOT call `DataSourceService()` on its own â€”
     it must consume the canonical singleton via import. A second
     construction would produce a divergent instance, breaking the
     identity invariant.

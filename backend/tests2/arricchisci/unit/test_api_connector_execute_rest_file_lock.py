@@ -12,7 +12,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 import requests
 
-from app.shared.exceptions import FileSourceResolutionError
+from app.core.files.exceptions import FileSourceResolutionError
 
 
 pytestmark = [

@@ -115,7 +115,7 @@ def test_missing_project_returns_none(service_with_fake_db):
 
 
 def test_corrupted_json_string_raises(service_with_fake_db):
-    from app.shared.exceptions import CanvasCorruptedError
+    from app.core.projects.exceptions import CanvasCorruptedError
 
     svc, state = service_with_fake_db
     state["canvas"] = '{"nodes": [invalid json'
@@ -132,7 +132,7 @@ def test_corrupted_json_string_raises(service_with_fake_db):
 
 
 def test_canvas_wrong_type_list_raises(service_with_fake_db):
-    from app.shared.exceptions import CanvasCorruptedError
+    from app.core.projects.exceptions import CanvasCorruptedError
 
     svc, state = service_with_fake_db
     state["canvas"] = ["not", "a", "dict"]
@@ -146,7 +146,7 @@ def test_canvas_wrong_type_list_raises(service_with_fake_db):
 
 
 def test_canvas_wrong_type_int_raises(service_with_fake_db):
-    from app.shared.exceptions import CanvasCorruptedError
+    from app.core.projects.exceptions import CanvasCorruptedError
 
     svc, state = service_with_fake_db
     state["canvas"] = 42
@@ -161,7 +161,7 @@ def test_canvas_wrong_type_int_raises(service_with_fake_db):
 def test_canvas_json_string_decoded_to_list_raises(service_with_fake_db):
     """Edge case: canvas e' una stringa JSON che dopo parse diventa lista.
     Deve essere detectato come tipo inatteso, non come JSON malformato."""
-    from app.shared.exceptions import CanvasCorruptedError
+    from app.core.projects.exceptions import CanvasCorruptedError
 
     svc, state = service_with_fake_db
     state["canvas"] = '["foo", "bar"]'
@@ -175,7 +175,7 @@ def test_canvas_json_string_decoded_to_list_raises(service_with_fake_db):
 def test_canvas_invalid_pydantic_schema_raises(service_with_fake_db):
     """Canvas con struttura dict ma campi non rispettano lo schema
     Pydantic di CanvasState (es. `nodes` non e' una lista ma un dict)."""
-    from app.shared.exceptions import CanvasCorruptedError
+    from app.core.projects.exceptions import CanvasCorruptedError
 
     svc, state = service_with_fake_db
     # nodes dovrebbe essere List[Node], passiamo un dict → Pydantic ValidationError
@@ -192,7 +192,7 @@ def test_canvas_invalid_pydantic_schema_raises(service_with_fake_db):
 
 def test_canvas_invalid_node_structure_raises(service_with_fake_db):
     """Canvas con nodi che non rispettano lo schema Node → corruzione."""
-    from app.shared.exceptions import CanvasCorruptedError
+    from app.core.projects.exceptions import CanvasCorruptedError
 
     svc, state = service_with_fake_db
     # Node richiede almeno id e type: passiamo dict senza chiavi richieste
@@ -213,7 +213,7 @@ def test_canvas_invalid_node_structure_raises(service_with_fake_db):
 def test_corrupted_error_str_includes_project_id(service_with_fake_db):
     """L'__str__ dell'eccezione e' usato in logging. Deve contenere
     project_id e reason, non altro."""
-    from app.shared.exceptions import CanvasCorruptedError
+    from app.core.projects.exceptions import CanvasCorruptedError
 
     svc, state = service_with_fake_db
     state["canvas"] = '{"broken'
@@ -233,7 +233,7 @@ def test_corrupted_canvas_never_returns_empty_silently(service_with_fake_db):
     """Regressione diretta del reperto: pre-fix, questi input restituivano
     un CanvasState() vuoto senza sollevare. Post-fix, tutti devono
     sollevare CanvasCorruptedError."""
-    from app.shared.exceptions import CanvasCorruptedError
+    from app.core.projects.exceptions import CanvasCorruptedError
     from app.models import CanvasState
 
     svc, state = service_with_fake_db

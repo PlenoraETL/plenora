@@ -4,11 +4,12 @@ Integrazione detect_project_lineage_cycle con ProjectService.update_canvas.
 Contratto:
 """
 
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import pytest
 
-from app.services.project_lineage import ProjectLineageCycleError
+from app.core.projects.lineage import ProjectLineageCycleError
 from app.core.projects.service import ProjectService
 from app.shared.models import CanvasState, Node, Edge
 
@@ -30,24 +31,27 @@ def _canvas_with_sources(source_project_ids):
 
 
 def _fake_project_db_with(canvases):
-    """Mock di app.core.projects.db per get_project/update_project.
+    """Mock di app.core.projects.db per get_project_row/update_project_row.
 
     canvases: dict {project_id: canvas_dict_or_None}. None = progetto
     esistente ma senza canvas.
     """
     module = MagicMock()
 
-    def get_project(pid):
+    def get_project_row(pid, group_id=None):
         if pid not in canvases:
             return None
-        return {"id": pid, "group_id": "grp-1", "canvas": canvases[pid]}
+        return SimpleNamespace(id=pid, group_id="grp-1", canvas=canvases[pid])
 
-    def update_project(pid, **kwargs):
+    def update_project_row(pid, **kwargs):
         if "canvas" in kwargs:
             canvases[pid] = kwargs["canvas"]
+        if pid not in canvases:
+            return None
+        return SimpleNamespace(id=pid, group_id="grp-1", canvas=canvases[pid])
 
-    module.get_project.side_effect = get_project
-    module.update_project.side_effect = update_project
+    module.get_project_row.side_effect = get_project_row
+    module.update_project_row.side_effect = update_project_row
     return module
 
 

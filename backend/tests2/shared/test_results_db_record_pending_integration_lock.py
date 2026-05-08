@@ -16,7 +16,6 @@ pytestmark = [pytest.mark.unit, pytest.mark.shared, pytest.mark.contract]
 
 _BACKEND_ROOT = Path(__file__).resolve().parent.parent.parent
 _RESULTS_CLEANUP = _BACKEND_ROOT / "app" / "core" / "results" / "cleanup.py"
-_RESULTS_DB_SERVICE = _BACKEND_ROOT / "app" / "db" / "results_db_service.py"
 _STORAGE_RECONCILIATION = (
     _BACKEND_ROOT / "app" / "shared" / "storage_reconciliation.py"
 )
@@ -198,14 +197,11 @@ def test_delete_result_paths_wire_compensating_delete_and_mark_outcomes():
 # 6. Boundary surface preserved
 
 
-def test_results_db_service_reexports_cleanup_delete_surface():
-    source = _read_source(_RESULTS_DB_SERVICE)
+def test_results_cleanup_owns_delete_surface():
+    source = _read_source(_RESULTS_CLEANUP)
 
-    assert "from app.core.results.cleanup import (" in source
-    assert "delete_result," in source
-    assert "delete_results_for_project," in source
-    assert "def delete_result(" not in source
-    assert "def delete_results_for_project(" not in source
+    assert "def delete_result(" in source
+    assert "def delete_results_for_project(" in source
 
 
 def test_storage_reconciliation_exposes_record_pending_surface():

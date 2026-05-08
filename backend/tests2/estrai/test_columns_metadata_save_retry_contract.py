@@ -130,7 +130,7 @@ def test_save_raises_after_all_retries_exhausted(executor_with_mocks):
     # 4 tentativi → 4 eccezioni uguali
     project_service.update_project_columns_metadata.side_effect = [err, err, err, err]
 
-    from app.shared.exceptions import ColumnsMetadataSaveError
+    from app.core.projects.exceptions import ColumnsMetadataSaveError
     with pytest.raises(ColumnsMetadataSaveError) as exc_info:
         executor._salva_tipi_colonne_da_canvas("proj-retry-fail", canvas, res)
 
@@ -158,7 +158,7 @@ def test_value_error_raises_immediately_no_retry(executor_with_mocks):
         "Canvas corrotto per progetto X"
     )
 
-    from app.shared.exceptions import ColumnsMetadataSaveError
+    from app.core.projects.exceptions import ColumnsMetadataSaveError
     with pytest.raises(ColumnsMetadataSaveError) as exc_info:
         executor._salva_tipi_colonne_da_canvas("proj-x", canvas, res)
 
@@ -178,7 +178,7 @@ def test_type_error_raises_immediately_no_retry(executor_with_mocks):
         "unexpected kwarg"
     )
 
-    from app.shared.exceptions import ColumnsMetadataSaveError
+    from app.core.projects.exceptions import ColumnsMetadataSaveError
     with pytest.raises(ColumnsMetadataSaveError):
         executor._salva_tipi_colonne_da_canvas("proj-y", canvas, res)
 
@@ -194,7 +194,7 @@ def test_attribute_error_raises_immediately_no_retry(executor_with_mocks):
         "missing method"
     )
 
-    from app.shared.exceptions import ColumnsMetadataSaveError
+    from app.core.projects.exceptions import ColumnsMetadataSaveError
     with pytest.raises(ColumnsMetadataSaveError):
         executor._salva_tipi_colonne_da_canvas("proj-z", canvas, res)
 
@@ -213,7 +213,7 @@ def test_error_message_is_explicit_about_recovery(executor_with_mocks):
     project_service.update_project_columns_metadata.side_effect = \
         psycopg2.OperationalError("broken")
 
-    from app.shared.exceptions import ColumnsMetadataSaveError
+    from app.core.projects.exceptions import ColumnsMetadataSaveError
     with pytest.raises(ColumnsMetadataSaveError) as exc_info:
         executor._salva_tipi_colonne_da_canvas("my-project", canvas, res)
 
@@ -264,7 +264,7 @@ def test_backoff_applied_between_retries(executor_with_mocks, monkeypatch):
     import app.shared.columns_metadata as _cm_helper
     monkeypatch.setattr(_cm_helper._time, "sleep", lambda s: sleep_calls.append(s))
 
-    from app.shared.exceptions import ColumnsMetadataSaveError
+    from app.core.projects.exceptions import ColumnsMetadataSaveError
     with pytest.raises(ColumnsMetadataSaveError):
         executor._salva_tipi_colonne_da_canvas("p1", canvas, res)
 
@@ -295,7 +295,7 @@ def test_fullstack_transient_db_error_triggers_retry(monkeypatch):
     """Service reale + DB layer mockato: OperationalError al 1° tentativo,
     OK al 2°. Verifica retry + salvataggio res dopo recovery."""
     from app.core.estrai.executor import EstraiExecutor
-    from app.services.project_service import ProjectService
+    from app.core.projects.service import ProjectService
     from app.core.projects import db as projects_leaf
     import psycopg2
 
@@ -343,8 +343,8 @@ def test_fullstack_transient_db_error_all_fail_raises_explicit(monkeypatch):
     risulterebbe SUCCESS con metadata stale.
     """
     from app.core.estrai.executor import EstraiExecutor
-    from app.services.project_service import ProjectService
-    from app.shared.exceptions import ColumnsMetadataSaveError
+    from app.core.projects.service import ProjectService
+    from app.core.projects.exceptions import ColumnsMetadataSaveError
     from app.core.projects import db as projects_leaf
     import psycopg2
 
@@ -388,8 +388,8 @@ def test_fullstack_project_deleted_during_run_raises(monkeypatch):
     `update_project_canvas_key_atomic` ritorna False → l'executor deve
     sollevare `ColumnsMetadataSaveError`, NON scrivere res."""
     from app.core.estrai.executor import EstraiExecutor
-    from app.services.project_service import ProjectService
-    from app.shared.exceptions import ColumnsMetadataSaveError
+    from app.core.projects.service import ProjectService
+    from app.core.projects.exceptions import ColumnsMetadataSaveError
     from app.core.projects import db as projects_leaf
 
     monkeypatch.setattr(
@@ -423,8 +423,8 @@ def test_fullstack_non_transient_error_no_retry(monkeypatch):
     """Service reale + DB layer mockato: ValueError (canvas corrotto) →
     raise al 1° tentativo senza retry."""
     from app.core.estrai.executor import EstraiExecutor
-    from app.services.project_service import ProjectService
-    from app.shared.exceptions import ColumnsMetadataSaveError
+    from app.core.projects.service import ProjectService
+    from app.core.projects.exceptions import ColumnsMetadataSaveError
     from app.core.projects import db as projects_leaf
 
     call_count = {"n": 0}

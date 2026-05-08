@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import pytest
 
-from app.services.schema_inference import (
+from app.core.projects.schema_inference import (
     ColumnSchema,
     SchemaInferenceService,
 )

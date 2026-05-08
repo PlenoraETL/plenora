@@ -28,6 +28,7 @@ from app.core.arricchisci.models import (
     BatchConfig, BatchInputFormat
 )
 from app.utils.logger import get_logger
+from app.core.arricchisci._rate_limiter import RateLimiter as _RateLimiter
 from app.shared.api_utils import (
     geojson_to_wkt as _shared_geojson_to_wkt,
     extract_json_value as _shared_extract_json_value,
@@ -37,15 +38,6 @@ from app.shared.api_utils import (
     sanitize_for_log,
     sanitize_url_for_log,
 )
-
-# B3-A.1 boundary: `RateLimiter` (token bucket thread-safe
-# in-memory) spostato in `app.core.arricchisci._rate_limiter`
-# `EnrichmentExecutor.__init__` continua a usare
-# `RateLimiter(self.options.rate_limit)` via l'import sotto; le 4
-# callsite `self._rate_limiter.acquire` sono invariate (instance
-# attribute). Re-import per preservare retrocompat di eventuali
-# consumer storici di `RateLimiter` da `enrichment_service` direct
-from app.core.arricchisci._rate_limiter import RateLimiter  # noqa: F401 (compatibility export
 
 from app.core.arricchisci.enrichment_template_params import (
     EnrichmentTemplateParamsMixin,
@@ -168,7 +160,7 @@ class EnrichmentExecutor(
         self.detected_column_types: Dict[str, str] = {}
         
         # Rate limiter
-        self._rate_limiter = RateLimiter(self.options.rate_limit)
+        self._rate_limiter = _RateLimiter(self.options.rate_limit)
         
         batch_data = api_config.get("batch", {})
         self.batch_config = BatchConfig.from_dict(batch_data)

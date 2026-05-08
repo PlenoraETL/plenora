@@ -1,5 +1,5 @@
 """
-Contract test — fonti di tipo colonna nel canvas.
+Contract test â€” fonti di tipo colonna nel canvas.
 
 I "tipi canvas delle colonne" vivono in 3 viste parallele dentro lo
 """
@@ -15,12 +15,12 @@ import pytest
 pytestmark = [pytest.mark.unit, pytest.mark.shared, pytest.mark.contract]
 
 
-# 1. Format contract — ogni vista ha struttura attesa
+# 1. Format contract â€” ogni vista ha struttura attesa
 
 
 def test_columns_metadata_is_list_of_name_type_dicts(monkeypatch):
     """ProjectService.get_project_columns_metadata ritorna list[{name,type}]."""
-    from app.services.project_service import ProjectService
+    from app.core.projects.service import ProjectService
     from app.core.projects import db as project_db
 
     fake_canvas = {
@@ -54,7 +54,7 @@ def test_columns_metadata_is_list_of_name_type_dicts(monkeypatch):
 
 def test_columns_metadata_empty_when_missing(monkeypatch):
     """Progetto senza columns_metadata -> lista vuota (non None, non error)."""
-    from app.services.project_service import ProjectService
+    from app.core.projects.service import ProjectService
     from app.core.projects import db as project_db
 
     fake_row = project_db.ProjectDetailRow(
@@ -78,7 +78,7 @@ def test_columns_metadata_empty_when_missing(monkeypatch):
 def test_columns_metadata_handles_canvas_as_json_string(monkeypatch):
     """Backward compat: canvas serializzato come stringa JSON -> deserializza."""
     import json
-    from app.services.project_service import ProjectService
+    from app.core.projects.service import ProjectService
     from app.core.projects import db as project_db
 
     canvas_str = json.dumps({
@@ -104,7 +104,7 @@ def test_columns_metadata_handles_canvas_as_json_string(monkeypatch):
     assert result == [{"name": "x", "type": "real"}]
 
 
-# 2. Update contract — write/read idempotente
+# 2. Update contract â€” write/read idempotente
 
 
 def test_update_columns_metadata_writes_to_canvas(monkeypatch):
@@ -115,7 +115,7 @@ def test_update_columns_metadata_writes_to_canvas(monkeypatch):
     (SELECT FOR UPDATE + merge + UPDATE) invece che da `update_project`
     su payload intero. L'invariante osservabile e' la stessa: la chiave
     "columns_metadata" dentro il canvas JSON."""
-    from app.services.project_service import ProjectService
+    from app.core.projects.service import ProjectService
     from app.core.projects import db as project_db
 
     captured_calls = []
@@ -146,9 +146,9 @@ def test_update_columns_metadata_preserves_other_canvas_fields(monkeypatch):
     sul singolo key del canvas JSON (testato end-to-end in
     tests2/integration/test_project_columns_metadata_atomic_integration.py).
     Qui verifichiamo solo che il service non invii mai chiavi diverse da
-    "columns_metadata" — scenari dove una regressione ri-serializza il
+    "columns_metadata" â€” scenari dove una regressione ri-serializza il
     canvas intero e droppa nodi/edge."""
-    from app.services.project_service import ProjectService
+    from app.core.projects.service import ProjectService
     from app.core.projects import db as project_db
 
     captured_calls = []
@@ -166,7 +166,7 @@ def test_update_columns_metadata_preserves_other_canvas_fields(monkeypatch):
     assert captured_calls[0]["value"] == new_meta
 
 
-# 3. Consumer inventory — sentinel sui punti che leggono i tipi
+# 3. Consumer inventory â€” sentinel sui punti che leggono i tipi
 # Se un refactor sposta la sorgente di verita', dobbiamo aggiornare
 # questi consumer. I test fungono da sentinel: grep AST-based che
 # assicura che i pattern noti continuino a esistere nel codebase.
@@ -250,7 +250,7 @@ def test_enricher_bridge_reads_from_columns_metadata():
     )
 
 
-# 4. Format stability — tipi canvas ammessi
+# 4. Format stability â€” tipi canvas ammessi
 # I tipi canvas sono una enum informale esposta da
 # `app.shared.resources.column_types.normalize_canvas_type` (delega del mapper).
 # Qualsiasi refactor che tocca il vocabolario deve preservare i tipi base.

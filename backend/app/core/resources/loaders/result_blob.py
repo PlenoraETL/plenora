@@ -10,7 +10,7 @@ import tempfile
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Mapping, Optional, Tuple
+from typing import Any, Mapping, Optional, Tuple
 
 from app.core.resources.exceptions import MemoryLimitExceededError
 
@@ -50,9 +50,8 @@ from app.core.resources.loaders._shared import (
 # the loader-local
 # ``_resolve_max_bytes`` compat alias was removed. The canonical
 # entry point is ``resolve_resource_max_bytes`` from
-# ``app.core.resources.resource_caps`` (already imported above
-# Tests and the legacy ``app.db.results_db_service`` shim now call
-# the helper directly
+# ``app.core.resources.resource_caps`` (already imported above).
+# Tests and canonical result-blob readers call the helper directly.
 
 
 # Internal helpers — log key abbreviation + SQL row fetch
@@ -65,23 +64,15 @@ class ResultBlobLookupRow:
     storage_key: Optional[str]
     project_id: Optional[str]
     data_size: Optional[int]
-    data: Optional[bytes | memoryview]
+    data: Any
 
     @classmethod
     def from_mapping(cls, row: Mapping[str, object]) -> "ResultBlobLookupRow":
-        data = row.get("data")
-        if isinstance(data, bytearray):
-            data = bytes(data)
-        elif data is not None and not isinstance(data, (bytes, memoryview)):
-            raise TypeError(
-                "ResultBlobLookupRow.data must be bytes, memoryview, "
-                f"bytearray or None; got {type(data).__name__}"
-            )
         return cls(
             storage_key=_optional_str(row.get("storage_key")),
             project_id=_optional_str(row.get("project_id")),
             data_size=_optional_int(row.get("data_size")),
-            data=data,
+            data=row.get("data"),
         )
 
 
@@ -214,9 +205,8 @@ def _dispatch_by_id(
     one of ``"object_storage"``, ``"db_legacy"``, or ``"none"`` (no
     row).
 
-    This is the canonical de-duplicated dispatch. Both the
-    Protocol-compliant ``ResultBlobLoader.load`` and the
-    back-compat shim in ``results_db_service.get_result_data``
+    This is the canonical de-duplicated dispatch. Both
+    ``ResultBlobLoader.load`` and ``app.core.results.blob.get_result_data``
     funnel through here.
 
     ``project_id_filter`` (RESOURCE-ENGINE-007) is row-metadata
@@ -280,8 +270,15 @@ def _dispatch_by_id(
         )
 
     data = row.data
+    if isinstance(data, bytearray):
+        data = bytes(data)
     if isinstance(data, memoryview):
         data = bytes(data)
+    elif data is not None and not isinstance(data, bytes):
+        raise TypeError(
+            "ResultBlobLookupRow.data must be bytes, memoryview, "
+            f"bytearray or None; got {type(data).__name__}"
+        )
     duration_ms = round((time.monotonic() - _t0) * 1000, 1)
     size = len(data) if data else 0
     logger.info(

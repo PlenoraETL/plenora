@@ -33,7 +33,7 @@ def test_enrichment_task_save_error_propagates_to_celery(monkeypatch):
     dal helper → Celery marca FAILED."""
     from unittest.mock import MagicMock
     import app.shared.columns_metadata as _cm
-    from app.shared.exceptions import ColumnsMetadataSaveError
+    from app.core.projects.exceptions import ColumnsMetadataSaveError
 
     monkeypatch.setattr(_cm, "_BACKOFF_SEC", (0.01, 0.01, 0.01))
 

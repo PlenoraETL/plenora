@@ -12,7 +12,7 @@ from unittest.mock import patch, MagicMock
 
 import pytest
 
-from app.shared.exceptions import MemoryLimitExceededError
+from app.core.resources.exceptions import MemoryLimitExceededError
 from app.shared import error_codes
 
 pytestmark = [pytest.mark.unit, pytest.mark.contract]

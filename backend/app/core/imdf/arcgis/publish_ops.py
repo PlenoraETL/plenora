@@ -32,11 +32,7 @@ def _add_layer_to_service(
 
     1. preservare il dict shape `{success, feature_count, errors}`
        atteso dai caller IMDF (`upload_imdf_layers`);
-    2. preservare il compatibility export
-       `from app.core.imdf.arcgis_uploader import _add_layer_to_service`;
-    3. mantenere il path di monkeypatch usato dai test contract
-       (`tests2/imdf/unit/test_add_layer_to_service_contract.py`
-       chiama questa funzione e mocka i collaboratori del client).
+    2. mantenere temporaneamente i consumer legacy fuori dal dominio IMDF.
 
     Guardrail: keep this as delegation plus legacy result conversion only.
     """

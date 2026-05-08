@@ -15,7 +15,7 @@ from fastapi.testclient import TestClient
 
 from app.shared import error_codes
 from app.shared.error_envelope import build_error_response
-from app.shared.exceptions import MemoryLimitExceededError
+from app.core.resources.exceptions import MemoryLimitExceededError
 
 
 pytestmark = [pytest.mark.unit, pytest.mark.contract]
@@ -39,7 +39,7 @@ def test_exception_module_does_not_import_fastapi():
     """Exception module deve restare puro (no FastAPI/starlette).
     Garantisce che worker Celery / CLI possano importare ed alzare
     `MemoryLimitExceededError` senza pull-in del web stack."""
-    import app.shared.exceptions as exc_mod
+    import app.core.resources.exceptions as exc_mod
 
     src_path = Path(exc_mod.__file__)
     src = src_path.read_text(encoding="utf-8")

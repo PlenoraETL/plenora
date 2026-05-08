@@ -23,7 +23,6 @@ _TYPES_PY = _RESOURCES_PKG / "types.py"
 _REGISTRY_PY = _RESOURCES_PKG / "registry.py"
 _RESULT_BLOB_PY = _RESOURCES_PKG / "loaders" / "result_blob.py"
 _SHARED_LOADER_PY = _RESOURCES_PKG / "loaders" / "_shared.py"
-_RESULTS_DB_PY = _BACKEND_ROOT / "app" / "db" / "results_db_service.py"
 
 
 # Group A — type-level contract
@@ -199,14 +198,14 @@ def test_loader_pkg_does_not_pull_pandas_at_import_time():
 def test_storage_key_dispatch_lives_in_exactly_one_module():
     """After the pilot, the BYTEA-vs-S3 dispatch for result_blob
     lives in `app/core/resources/loaders/result_blob.py` only.
-    `app/db/results_db_service.py::get_result_data` is a thin
-    back-compat shim and MUST NOT carry its own dispatch.
+    The deleted results DB facade MUST NOT return with its own dispatch.
 
     Lock signal: the pre-pilot `get_result_data` body contained
     the literal `'_s3_download_bytes(storage_key)'` followed later
     by `'data = row.get("data")'` — the inline dispatch. The shim
     must NOT contain those tokens any longer."""
-    text = _RESULTS_DB_PY.read_text(encoding="utf-8")
+    assert not (_BACKEND_ROOT / "app" / "db" / "results_db_service.py").exists()
+    return
     code_only = _python_code_only(text)
 
     # The post-pilot shim delegates to the loader. The dispatch
@@ -221,8 +220,7 @@ def test_storage_key_dispatch_lives_in_exactly_one_module():
     )
     offenders = [t for t in forbidden_in_shim if t in code_only]
     assert not offenders, (
-        "results_db_service.py::get_result_data must remain a thin "
-        "shim over `ResultBlobLoader._dispatch_by_id`. Dispatch tokens "
+        "Deleted results DB facade dispatch tokens "
         f"reappeared: {offenders}. Either the migration regressed or a "
         "new inline dispatch was added; consolidate via the loader."
     )

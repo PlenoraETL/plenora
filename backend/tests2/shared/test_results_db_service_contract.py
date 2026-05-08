@@ -8,7 +8,7 @@ import logging
 
 import pytest
 
-from app.db import results_db_service
+from app.core.results import blob as results_blob
 
 
 pytestmark = [pytest.mark.unit, pytest.mark.contract, pytest.mark.regression]
@@ -55,7 +55,7 @@ def test_get_result_data_converts_memoryview_to_bytes(monkeypatch):
         lambda sql, params=(): {"data": memoryview(b"abc"), "storage_key": None},
     )
 
-    data = results_db_service.get_result_data("res-1")
+    data = results_blob.get_result_data("res-1")
 
     assert data == b"abc"
 
@@ -77,7 +77,7 @@ def test_get_result_data_uses_group_filter_when_provided(monkeypatch):
 
     monkeypatch.setattr(pg_conn, "fetchone", _fetchone)
 
-    results_db_service.get_result_data("res-1", group_id="grp-1")
+    results_blob.get_result_data("res-1", group_id="grp-1")
 
     assert "group_id = ?" in seen["sql"]
     # 013: the BYTEA SQL preflight prepends `max_bytes` as the
@@ -111,7 +111,7 @@ def test_get_result_data_logs_backend_db_legacy_for_bytea_row(monkeypatch):
 
     mod_logger, capturer = _attach_logger()
     try:
-        data = results_db_service.get_result_data("res-legacy")
+        data = results_blob.get_result_data("res-legacy")
     finally:
         mod_logger.removeHandler(capturer)
 
@@ -153,7 +153,7 @@ def test_get_result_data_logs_backend_object_storage_when_storage_key_set(
 
     mod_logger, capturer = _attach_logger()
     try:
-        data = results_db_service.get_result_data("res-obj")
+        data = results_blob.get_result_data("res-obj")
     finally:
         mod_logger.removeHandler(capturer)
 

@@ -9,7 +9,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from app.services.schema_inference import ColumnSchema, SchemaInferenceService
+from app.core.projects.schema_inference import ColumnSchema, SchemaInferenceService
 
 
 pytestmark = [pytest.mark.unit, pytest.mark.contract]

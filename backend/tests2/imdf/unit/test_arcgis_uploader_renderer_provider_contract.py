@@ -37,13 +37,11 @@ def test_upload_imdf_layers_uses_provider_layer_renderer(monkeypatch: pytest.Mon
         lambda connection_id: (conn, client),
     )
     monkeypatch.setattr(
-        arcgis_uploader,
-        "_delete_existing_service",
+        "app.core.imdf.arcgis.service_lifecycle._delete_existing_service",
         lambda client, conn, fs_name, folder_id: (0, 0),
     )
     monkeypatch.setattr(
-        arcgis_uploader,
-        "_is_service_name_available",
+        "app.core.imdf.arcgis.service_discovery._is_service_name_available",
         lambda client, conn, fs_name: (True, None),
     )
 

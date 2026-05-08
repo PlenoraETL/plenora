@@ -1,5 +1,5 @@
 """
-Contract test BE-IMDF-006A — `_add_layer_to_service` request/result shape lock.
+Contract test BE-IMDF-006B — `ArcGISClient.add_layer_to_service` shape lock.
 
 Lock the current behavior of
 """
@@ -12,9 +12,6 @@ from unittest.mock import MagicMock
 
 import pytest
 
-# Pre-import per evitare side-effect import-time durante i test
-import app.core.imdf.arcgis.publish_ops as publish_ops_mod
-from app.core.imdf.arcgis.publish_ops import _add_layer_to_service
 from app.core.features.arcgis_client import ArcGISClient
 
 
@@ -36,12 +33,10 @@ def fake_client():
     livello instance (instance attr shadowa class attr/staticmethod).
 
     BE-IMDF-006B: post-promote di `_add_layer_to_service` a metodo
-    pubblico `ArcGISClient.add_layer_to_service`. Il wrapper IMDF
-    `_add_layer_to_service(client, ...)` delega a
-    `client.add_layer_to_service(...).to_compat_dict()`. Per testare
-    il body bit-per-bit (request shape, fields schema, extent,
-    failure paths) serve un client reale (non MagicMock) cosi' il
-    metodo `add_layer_to_service` esegue il body.
+    pubblico `ArcGISClient.add_layer_to_service`. Per testare il body
+    bit-per-bit (request shape, fields schema, extent, failure paths)
+    serve un client reale (non MagicMock) cosi' il metodo pubblico
+    esegue il body.
 
     Tutti i collaboratori (`_http.post`, `authenticate`, helper
     staticmethods, `dataframe_to_esri_features`, `add_features`)
@@ -108,21 +103,18 @@ def _layer_def_from_post(client) -> dict:
 # 1. Happy path + result shape
 
 
-def test_happy_path_returns_keep_compat_dict(fake_client, fake_conn):
+def test_happy_path_returns_typed_result(fake_client, fake_conn):
     gdf = _make_polygon_gdf(rows=3)
 
-    result = _add_layer_to_service(
-        fake_client, fake_conn,
+    result = fake_client.add_layer_to_service(
+        fake_conn,
         service_url="https://arc.test/server/rest/services/MyFs/FeatureServer",
         gdf=gdf, layer_name="Layer1", layer_id=1,
     )
 
-    # KEEP_COMPAT shape (BE-IMDF-006A doc):
-    # `{success: bool, feature_count: int, errors: list[str]}`
-    assert set(result.keys()) == {"success", "feature_count", "errors"}
-    assert result["success"] is True
-    assert result["feature_count"] == 5
-    assert result["errors"] == []
+    assert result.success is True
+    assert result.feature_count == 5
+    assert result.errors == ()
     fake_client._http.post.assert_called_once()
     fake_client.add_features.assert_called_once()
 
@@ -131,8 +123,8 @@ def test_happy_path_calls_collaborators_in_order(fake_client, fake_conn):
     """Verifica che addToDefinition vada PRIMA di add_features."""
     gdf = _make_polygon_gdf(rows=2)
 
-    _add_layer_to_service(
-        fake_client, fake_conn,
+    fake_client.add_layer_to_service(
+        fake_conn,
         service_url="https://arc.test/server/rest/services/MyFs/FeatureServer",
         gdf=gdf, layer_name="Layer1", layer_id=1,
     )
@@ -148,8 +140,8 @@ def test_happy_path_calls_collaborators_in_order(fake_client, fake_conn):
 def test_request_url_uses_admin_addtodefinition(fake_client, fake_conn):
     gdf = _make_polygon_gdf()
 
-    _add_layer_to_service(
-        fake_client, fake_conn,
+    fake_client.add_layer_to_service(
+        fake_conn,
         service_url="https://arc.test/server/rest/services/MyFs/FeatureServer",
         gdf=gdf, layer_name="L", layer_id=2,
     )
@@ -163,8 +155,8 @@ def test_request_url_uses_admin_addtodefinition(fake_client, fake_conn):
 def test_request_body_has_required_form_fields(fake_client, fake_conn):
     gdf = _make_polygon_gdf()
 
-    _add_layer_to_service(
-        fake_client, fake_conn,
+    fake_client.add_layer_to_service(
+        fake_conn,
         service_url="https://arc.test/server/rest/services/X/FeatureServer",
         gdf=gdf, layer_name="L", layer_id=0,
     )
@@ -181,8 +173,8 @@ def test_request_body_includes_token_when_authenticated(fake_client, fake_conn):
     fake_client.authenticate.return_value = "tok-XYZ"
     gdf = _make_polygon_gdf()
 
-    _add_layer_to_service(
-        fake_client, fake_conn,
+    fake_client.add_layer_to_service(
+        fake_conn,
         service_url="https://arc.test/server/rest/services/X/FeatureServer",
         gdf=gdf, layer_name="L", layer_id=0,
     )
@@ -197,8 +189,8 @@ def test_request_body_omits_token_when_not_authenticated(
     fake_client.authenticate.return_value = auth_return
     gdf = _make_polygon_gdf()
 
-    _add_layer_to_service(
-        fake_client, fake_conn,
+    fake_client.add_layer_to_service(
+        fake_conn,
         service_url="https://arc.test/server/rest/services/X/FeatureServer",
         gdf=gdf, layer_name="L", layer_id=0,
     )
@@ -209,8 +201,8 @@ def test_request_body_omits_token_when_not_authenticated(
 def test_request_headers_have_referer(fake_client, fake_conn):
     gdf = _make_polygon_gdf()
 
-    _add_layer_to_service(
-        fake_client, fake_conn,
+    fake_client.add_layer_to_service(
+        fake_conn,
         service_url="https://arc.test/server/rest/services/X/FeatureServer",
         gdf=gdf, layer_name="L", layer_id=0,
     )
@@ -221,8 +213,8 @@ def test_request_headers_have_referer(fake_client, fake_conn):
 def test_request_timeout_60s(fake_client, fake_conn):
     gdf = _make_polygon_gdf()
 
-    _add_layer_to_service(
-        fake_client, fake_conn,
+    fake_client.add_layer_to_service(
+        fake_conn,
         service_url="https://arc.test/server/rest/services/X/FeatureServer",
         gdf=gdf, layer_name="L", layer_id=0,
     )
@@ -235,8 +227,8 @@ def test_request_timeout_60s(fake_client, fake_conn):
 def test_layer_def_top_level_shape(fake_client, fake_conn):
     gdf = _make_polygon_gdf()
 
-    _add_layer_to_service(
-        fake_client, fake_conn,
+    fake_client.add_layer_to_service(
+        fake_conn,
         service_url="https://arc.test/server/rest/services/X/FeatureServer",
         gdf=gdf, layer_name="MyLayer", layer_id=3,
     )
@@ -255,8 +247,8 @@ def test_layer_def_top_level_shape(fake_client, fake_conn):
 def test_first_field_is_oid(fake_client, fake_conn):
     gdf = _make_polygon_gdf()
 
-    _add_layer_to_service(
-        fake_client, fake_conn,
+    fake_client.add_layer_to_service(
+        fake_conn,
         service_url="https://arc.test/server/rest/services/X/FeatureServer",
         gdf=gdf, layer_name="L", layer_id=0,
     )
@@ -274,8 +266,8 @@ def test_subsequent_fields_built_via_python_type_helper(fake_client, fake_conn):
     `client._python_type_to_esri_field(col, dtype)`."""
     gdf = _make_polygon_gdf()
 
-    _add_layer_to_service(
-        fake_client, fake_conn,
+    fake_client.add_layer_to_service(
+        fake_conn,
         service_url="https://arc.test/server/rest/services/X/FeatureServer",
         gdf=gdf, layer_name="L", layer_id=0,
     )
@@ -303,8 +295,8 @@ def test_excludes_geometry_and_oid_columns(fake_client, fake_conn):
         crs="EPSG:4326",
     )
 
-    _add_layer_to_service(
-        fake_client, fake_conn,
+    fake_client.add_layer_to_service(
+        fake_conn,
         service_url="https://arc.test/server/rest/services/X/FeatureServer",
         gdf=gdf, layer_name="L", layer_id=0,
     )
@@ -321,8 +313,8 @@ def test_geometry_type_via_client_helper(fake_client, fake_conn):
     fake_client._esri_geometry_type.return_value = "esriGeometryPolygon"
     gdf = _make_polygon_gdf(rows=4)
 
-    _add_layer_to_service(
-        fake_client, fake_conn,
+    fake_client.add_layer_to_service(
+        fake_conn,
         service_url="https://arc.test/server/rest/services/X/FeatureServer",
         gdf=gdf, layer_name="L", layer_id=0,
     )
@@ -342,8 +334,8 @@ def test_extent_filled_from_bounds_when_valid(fake_client, fake_conn):
     # Polygons sono [(i, 0), (i+1, 0), (i+1, 1), (i, 1)] per i in 0..2
     # → xmin=0, ymin=0, xmax=3, ymax=1
 
-    _add_layer_to_service(
-        fake_client, fake_conn,
+    fake_client.add_layer_to_service(
+        fake_conn,
         service_url="https://arc.test/server/rest/services/X/FeatureServer",
         gdf=gdf, layer_name="L", layer_id=0,
     )
@@ -375,8 +367,8 @@ def test_extent_defaults_to_world_when_no_geometry():
 
     fake_conn = SimpleNamespace(server_url="https://arc.test", username="u")
 
-    _add_layer_to_service(
-        fake_client, fake_conn,
+    fake_client.add_layer_to_service(
+        fake_conn,
         service_url="https://arc.test/server/rest/services/X/FeatureServer",
         gdf=plain_df, layer_name="L", layer_id=0,
     )
@@ -392,8 +384,8 @@ def test_srid_overridden_from_gdf_crs(fake_client, fake_conn):
     `gdf.crs.to_epsg()`."""
     gdf = _make_polygon_gdf(crs_epsg=3857)  # Web Mercator
 
-    _add_layer_to_service(
-        fake_client, fake_conn,
+    fake_client.add_layer_to_service(
+        fake_conn,
         service_url="https://arc.test/server/rest/services/X/FeatureServer",
         gdf=gdf, layer_name="L", layer_id=0,
         srid=4326,  # caller-passed
@@ -409,8 +401,8 @@ def test_drawing_info_via_client_helper(fake_client, fake_conn):
     }
     gdf = _make_polygon_gdf()
 
-    _add_layer_to_service(
-        fake_client, fake_conn,
+    fake_client.add_layer_to_service(
+        fake_conn,
         service_url="https://arc.test/server/rest/services/X/FeatureServer",
         gdf=gdf, layer_name="L", layer_id=0,
     )
@@ -433,15 +425,15 @@ def test_addtodefinition_failure_returns_failed_result(fake_client, fake_conn):
     })
     gdf = _make_polygon_gdf()
 
-    result = _add_layer_to_service(
-        fake_client, fake_conn,
+    result = fake_client.add_layer_to_service(
+        fake_conn,
         service_url="https://arc.test/server/rest/services/X/FeatureServer",
         gdf=gdf, layer_name="L", layer_id=0,
     )
-    assert result["success"] is False
-    assert result["feature_count"] == 0
-    assert len(result["errors"]) == 1
-    assert "addToDefinition fallito" in result["errors"][0]
+    assert result.success is False
+    assert result.feature_count == 0
+    assert len(result.errors) == 1
+    assert "addToDefinition fallito" in result.errors[0]
     fake_client.add_features.assert_not_called()
 
 
@@ -454,14 +446,14 @@ def test_add_features_zero_added_returns_not_success(fake_client, fake_conn):
     }
     gdf = _make_polygon_gdf()
 
-    result = _add_layer_to_service(
-        fake_client, fake_conn,
+    result = fake_client.add_layer_to_service(
+        fake_conn,
         service_url="https://arc.test/server/rest/services/X/FeatureServer",
         gdf=gdf, layer_name="L", layer_id=0,
     )
-    assert result["success"] is False
-    assert result["feature_count"] == 0
-    assert result["errors"] == ["err1", "err2"]
+    assert result.success is False
+    assert result.feature_count == 0
+    assert result.errors == ("err1", "err2")
 
 
 def test_add_features_partial_success_returns_success(fake_client, fake_conn):
@@ -473,14 +465,14 @@ def test_add_features_partial_success_returns_success(fake_client, fake_conn):
     }
     gdf = _make_polygon_gdf(rows=3)
 
-    result = _add_layer_to_service(
-        fake_client, fake_conn,
+    result = fake_client.add_layer_to_service(
+        fake_conn,
         service_url="https://arc.test/server/rest/services/X/FeatureServer",
         gdf=gdf, layer_name="L", layer_id=0,
     )
-    assert result["success"] is True
-    assert result["feature_count"] == 2
-    assert result["errors"] == ["row 3 rejected"]
+    assert result.success is True
+    assert result.feature_count == 2
+    assert result.errors == ("row 3 rejected",)
 
 
 # 5. Features payload boundary
@@ -494,8 +486,8 @@ def test_dataframe_to_esri_features_called_with_expected_args(
     operation="create_service"."""
     gdf = _make_polygon_gdf(crs_epsg=4326)
 
-    _add_layer_to_service(
-        fake_client, fake_conn,
+    fake_client.add_layer_to_service(
+        fake_conn,
         service_url="https://arc.test/server/rest/services/X/FeatureServer",
         gdf=gdf, layer_name="L", layer_id=0,
     )
@@ -511,8 +503,8 @@ def test_add_features_called_on_layer_url(fake_client, fake_conn):
     `service_url + "/" + layer_id`."""
     gdf = _make_polygon_gdf()
 
-    _add_layer_to_service(
-        fake_client, fake_conn,
+    fake_client.add_layer_to_service(
+        fake_conn,
         service_url="https://arc.test/server/rest/services/X/FeatureServer",
         gdf=gdf, layer_name="L", layer_id=7,
     )
@@ -521,28 +513,18 @@ def test_add_features_called_on_layer_url(fake_client, fake_conn):
     assert call.args[1] == "https://arc.test/server/rest/services/X/FeatureServer/7"
 
 
-# 6. KEEP_COMPAT result shape sentinel
+# 6. Typed result shape sentinel
 
 
-def test_result_keys_keep_compat_sentinel(fake_client, fake_conn):
-    """Sentinel: il dict opaco `{success, feature_count, errors}` e'
-    il contratto KEEP_COMPAT. Future BE-IMDF-006B promote lo
-    sostituira' con `dataclass AddLayerResult` ma il dict resta lato
-    caller IMDF (`upload_imdf_layers`).
-
-    Se questo test rompe e' segnale di:
-    - aggiungere chiavi al dict → confermare in IMDF-006B come campi
-      del dataclass + alias dict;
-    - rimuovere chiavi → breaking change verso `upload_imdf_layers`.
-    """
+def test_result_shape_is_typed_add_layer_result(fake_client, fake_conn):
+    """Sentinel: the canonical provider API returns a typed result object."""
     gdf = _make_polygon_gdf()
 
-    result = _add_layer_to_service(
-        fake_client, fake_conn,
+    result = fake_client.add_layer_to_service(
+        fake_conn,
         service_url="https://arc.test/server/rest/services/X/FeatureServer",
         gdf=gdf, layer_name="L", layer_id=0,
     )
-    assert set(result.keys()) == {"success", "feature_count", "errors"}
-    assert isinstance(result["success"], bool)
-    assert isinstance(result["feature_count"], int)
-    assert isinstance(result["errors"], list)
+    assert isinstance(result.success, bool)
+    assert isinstance(result.feature_count, int)
+    assert isinstance(result.errors, tuple)

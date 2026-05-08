@@ -39,12 +39,20 @@ def _api_row(
     )
 
 
-def _fail_legacy_wrapper(*args, **kwargs):
-    raise AssertionError("service must consume ApiConnectionRow typed helpers")
-
-
 def test_api_connection_db_legacy_row_serializer_symbol_removed() -> None:
     assert not hasattr(api_db, "_api_connection_row_to_legacy_dict")
+
+
+def test_api_connection_db_legacy_dict_wrappers_removed() -> None:
+    removed = {
+        "_api_connection_compat_payload",
+        "get_api_connection",
+        "list_api_connections",
+        "save_api_connection",
+        "create_api_connection",
+        "update_api_connection",
+    }
+    assert not (removed & set(vars(api_db)))
 
 
 def test_api_connection_management_has_no_legacy_db_wrapper_call_sites() -> None:
@@ -125,8 +133,6 @@ def test_api_connection_db_update_hydrates_typed_row(monkeypatch) -> None:
 
 def test_api_connection_service_reads_use_typed_rows(monkeypatch, api_service) -> None:
     row = _api_row()
-    monkeypatch.setattr(api_db, "get_api_connection", _fail_legacy_wrapper)
-    monkeypatch.setattr(api_db, "list_api_connections", _fail_legacy_wrapper)
     monkeypatch.setattr(
         api_db,
         "get_api_connection_row",
@@ -151,8 +157,6 @@ def test_api_connection_service_create_uses_typed_save_row(
 ) -> None:
     captured: dict[str, object] = {}
 
-    monkeypatch.setattr(api_db, "save_api_connection", _fail_legacy_wrapper)
-    monkeypatch.setattr(api_db, "get_api_connection", _fail_legacy_wrapper)
     monkeypatch.setattr(management, "_encrypt_auth_in_config", lambda config: config)
 
     def _save_api_connection_row(**kwargs) -> api_db.ApiConnectionRow:
@@ -187,8 +191,6 @@ def test_api_connection_service_update_uses_typed_update_row(
     captured: dict[str, object] = {}
     existing = _api_row(config={"name": "Old API", "auth": {"token": "old-secret"}})
 
-    monkeypatch.setattr(api_db, "get_api_connection", _fail_legacy_wrapper)
-    monkeypatch.setattr(api_db, "update_api_connection", _fail_legacy_wrapper)
     monkeypatch.setattr(api_db, "get_api_connection_row", lambda api_id: existing)
     monkeypatch.setattr(management, "_decrypt_auth_in_config", lambda config, **_: config)
     monkeypatch.setattr(management, "_encrypt_auth_in_config", lambda config: config)
@@ -221,7 +223,6 @@ def test_api_connection_service_delete_checks_typed_row(
 ) -> None:
     deleted: list[str] = []
 
-    monkeypatch.setattr(api_db, "get_api_connection", _fail_legacy_wrapper)
     monkeypatch.setattr(api_db, "get_api_connection_row", lambda api_id: _api_row())
     monkeypatch.setattr(
         api_db,

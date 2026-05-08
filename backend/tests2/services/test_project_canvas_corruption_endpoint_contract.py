@@ -25,7 +25,7 @@ def app_with_handler(monkeypatch):
     """FastAPI con global exception handler per CanvasCorruptedError
     + router projects parzialmente mockato."""
     from app.core.projects import router as projects_router_mod
-    from app.shared.exceptions import CanvasCorruptedError
+    from app.core.projects.exceptions import CanvasCorruptedError
     from app.core.auth import auth as auth_mod
 
     # Bypass auth: require_not_esecutore → sempre autorizza un user fittizio

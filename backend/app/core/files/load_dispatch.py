@@ -1,8 +1,7 @@
 """
 Parser dispatch for file sources.
 
-The implementation is owned by `app.core.files`; legacy service imports keep
-their public patch surface through `app.services.file_load_dispatch`.
+The implementation is owned by `app.core.files`.
 """
 
 from __future__ import annotations

@@ -17,7 +17,7 @@ from app.shared.contracts.auth import CurrentUser
 from app.core.auth.auth import require_admin
 from app.core.arricchisci import router as arric_router_module
 from app.core.arricchisci.router import api_connections_router
-from app.shared.exceptions import CanvasCorruptedError
+from app.core.projects.exceptions import CanvasCorruptedError
 
 
 pytestmark = [

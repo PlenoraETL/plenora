@@ -11,7 +11,7 @@ import pytest
 
 from app.core.arricchisci import execution_context as execution_context_mod
 from app.core.arricchisci import canvas_orchestrator as canvas_orchestrator_mod
-from app.shared.exceptions import ExecutionContextError
+from app.core.arricchisci.exceptions import ExecutionContextError
 
 
 pytestmark = [

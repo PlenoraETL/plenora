@@ -1,5 +1,5 @@
 """
-Smoke contract - STRUCT-001 Seam B: estrazione Protocols + Defaults file_service.
+Smoke contract - STRUCT-001 Seam B: Protocols + Defaults del dominio files.
 
 Verifica le invarianti minime del refactor:
 """
@@ -21,11 +21,11 @@ _DEFAULTS = ("NullLogger", "DefaultTimeProvider", "DefaultFileSystem", "DefaultD
 _ALL = _PROTOCOLS + _DEFAULTS
 
 
-# 1. Esposizione + identity re-export
+# 1. Esposizione + identity dal core service
 
 
 def test_file_service_deps_module_exposes_eight_symbols():
-    from app.services import file_service_deps as deps
+    from app.core.files import service_deps as deps
 
     for name in _ALL:
         sym = getattr(deps, name, None)
@@ -34,13 +34,13 @@ def test_file_service_deps_module_exposes_eight_symbols():
         )
 
 
-def test_file_service_reexports_deps_with_object_identity():
-    """file_service.py re-esporta gli STESSI oggetti di file_service_deps.
-    Identity preservata: monkeypatch su `file_service.X` modifica
-    l'attributo del modulo file_service ma file_service_deps.X resta
-    la classe sorgente (pattern Seam A R-01)."""
-    from app.services import file_service as fs_mod
-    from app.services import file_service_deps as deps
+def test_core_file_service_uses_deps_objects_by_identity():
+    """app.core.files.service espone gli STESSI oggetti di service_deps.
+    Identity preservata: monkeypatch su `app.core.files.service.X`
+    modifica l'attributo del modulo service ma service_deps.X resta la
+    classe sorgente."""
+    from app.core.files import service as fs_mod
+    from app.core.files import service_deps as deps
 
     for name in _ALL:
         assert getattr(fs_mod, name) is getattr(deps, name), (
@@ -53,7 +53,7 @@ def test_file_service_reexports_deps_with_object_identity():
 
 
 def test_default_time_provider_now_is_utc_aware():
-    from app.services.file_service_deps import DefaultTimeProvider
+    from app.core.files.service_deps import DefaultTimeProvider
 
     now = DefaultTimeProvider().now()
     assert isinstance(now, datetime)
@@ -62,7 +62,7 @@ def test_default_time_provider_now_is_utc_aware():
 
 
 def test_default_time_provider_generate_uuid_is_32_hex():
-    from app.services.file_service_deps import DefaultTimeProvider
+    from app.core.files.service_deps import DefaultTimeProvider
 
     out = DefaultTimeProvider().generate_uuid()
     assert isinstance(out, str)
@@ -74,7 +74,7 @@ def test_default_time_provider_generate_uuid_is_32_hex():
 
 
 def test_null_logger_is_no_op_on_all_levels():
-    from app.services.file_service_deps import NullLogger
+    from app.core.files.service_deps import NullLogger
 
     log = NullLogger()
     # Nessuno deve sollevare; ritorno implicito None.
@@ -88,7 +88,7 @@ def test_null_logger_is_no_op_on_all_levels():
 
 
 def test_default_file_system_smoke_mkdir_write_read(tmp_path: Path):
-    from app.services.file_service_deps import DefaultFileSystem
+    from app.core.files.service_deps import DefaultFileSystem
 
     fs = DefaultFileSystem()
     sub = tmp_path / "sub"
@@ -108,7 +108,7 @@ def test_default_file_system_smoke_mkdir_write_read(tmp_path: Path):
 
 
 def test_default_file_system_unlink_and_rmtree(tmp_path: Path):
-    from app.services.file_service_deps import DefaultFileSystem
+    from app.core.files.service_deps import DefaultFileSystem
 
     fs = DefaultFileSystem()
     f = tmp_path / "x.txt"
@@ -128,7 +128,7 @@ def test_default_file_system_unlink_and_rmtree(tmp_path: Path):
 
 
 def test_default_data_loader_load_csv_round_trip(tmp_path: Path):
-    from app.services.file_service_deps import DefaultDataLoader
+    from app.core.files.service_deps import DefaultDataLoader
 
     loader = DefaultDataLoader()
     csv_path = tmp_path / "mini.csv"
@@ -144,7 +144,7 @@ def test_default_data_loader_load_csv_round_trip(tmp_path: Path):
 def test_default_data_loader_save_load_csv_round_trip_via_pandas(tmp_path: Path):
     """Save -> Load garantisce che i delimitatori scelti dal save_csv
     sono compatibili col detect_sep del load_csv (sniff csv)."""
-    from app.services.file_service_deps import DefaultDataLoader
+    from app.core.files.service_deps import DefaultDataLoader
 
     loader = DefaultDataLoader()
     src = pd.DataFrame({"a": [1, 2, 3], "b": ["x", "y", "z"]})

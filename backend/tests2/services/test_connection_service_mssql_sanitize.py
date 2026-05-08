@@ -1,5 +1,5 @@
 """
-Contract test F5-B3 (2026-04-24) — `_test_mssql` sanitize str(e) SDK leak.
+Contract test F5-B3 (2026-04-24) â€” `_test_mssql` sanitize str(e) SDK leak.
 
 Blinda: il path MS SQL di `ConnectionService._test_mssql` non espone mai
 """
@@ -19,7 +19,7 @@ if "pyodbc" not in sys.modules:
     fake_pyodbc.connect = lambda *args, **kwargs: None
     sys.modules["pyodbc"] = fake_pyodbc
 
-from app.services.connection_service import (  # noqa: E402
+from app.core.connections.service import (  # noqa: E402
     ConnectionService,
     _sanitize_mssql_error,
 )
@@ -34,7 +34,7 @@ class _PyodbcLikeError(Exception):
 
 
 def test_sanitize_mssql_error_maps_sqlstate_28000_to_auth_fail():
-    """SQLSTATE [28000] = Login failed → messaggio auth canonico."""
+    """SQLSTATE [28000] = Login failed â†’ messaggio auth canonico."""
     e = _PyodbcLikeError(
         "[28000] [Microsoft][ODBC Driver 17 for SQL Server]"
         "Login failed for user 'admin@SECRET_HOST'"
@@ -48,7 +48,7 @@ def test_sanitize_mssql_error_maps_sqlstate_28000_to_auth_fail():
 
 
 def test_sanitize_mssql_error_maps_sqlstate_08001_to_connection_refused():
-    """SQLSTATE [08001] o 'Cannot open server' → host irraggiungibile."""
+    """SQLSTATE [08001] o 'Cannot open server' â†’ host irraggiungibile."""
     e = _PyodbcLikeError(
         "[08001] [Microsoft][ODBC Driver 18]"
         "Cannot open server 'internal-db.corp.example:1433'"
@@ -60,7 +60,7 @@ def test_sanitize_mssql_error_maps_sqlstate_08001_to_connection_refused():
 
 
 def test_sanitize_mssql_error_maps_sqlstate_08004_to_timeout():
-    """SQLSTATE [08004] o 'Login timeout expired' → timeout."""
+    """SQLSTATE [08004] o 'Login timeout expired' â†’ timeout."""
     e = _PyodbcLikeError("[08004] Login timeout expired after 5s with SECRET_HOST")
     msg = _sanitize_mssql_error(e)
     assert msg == "Timeout connessione MS SQL"
@@ -68,7 +68,7 @@ def test_sanitize_mssql_error_maps_sqlstate_08004_to_timeout():
 
 
 def test_sanitize_mssql_error_maps_tls_keywords_to_tls_error():
-    """Keyword TLS/SSL/handshake → messaggio protocollo TLS dedicato."""
+    """Keyword TLS/SSL/handshake â†’ messaggio protocollo TLS dedicato."""
     e = _PyodbcLikeError(
         "SSL Provider: The certificate chain was issued by an untrusted authority "
         "(certificate CN=SECRET_INTERNAL_CN)"
@@ -79,7 +79,7 @@ def test_sanitize_mssql_error_maps_tls_keywords_to_tls_error():
 
 
 def test_sanitize_mssql_error_generic_exception_returns_canonical_fallback():
-    """Eccezione senza pattern noto → messaggio canonico fallback."""
+    """Eccezione senza pattern noto â†’ messaggio canonico fallback."""
     e = RuntimeError("qualche errore davvero inatteso con TOKEN_XYZ_LEAK")
     msg = _sanitize_mssql_error(e)
     # Un match su 'token' non e' previsto, cade in fallback
@@ -141,7 +141,7 @@ def test_test_mssql_does_not_leak_raw_sqlstate_in_message_or_details():
 def test_test_mssql_aggregated_message_cites_sanitized_first_error():
     """Flusso "tutti i driver falliti": il message aggregato cita
     `errors[0]` come "primo errore", e quel valore DEVE essere sanitized.
-    Regressione: prima del fix, errors[0] conteneva pyodbc raw → il
+    Regressione: prima del fix, errors[0] conteneva pyodbc raw â†’ il
     fan-out propagava il leak nel message utente."""
     service = ConnectionService()
 
@@ -161,7 +161,7 @@ def test_test_mssql_aggregated_message_cites_sanitized_first_error():
         result = service._test_mssql(_make_mssql_conn())
 
     assert result.success is False
-    # Il message cita "Primo errore: ..." → DEVE essere sanitized
+    # Il message cita "Primo errore: ..." â†’ DEVE essere sanitized
     assert "SECRET_INTERNAL_HOST" not in result.message, (
         f"leak nel message aggregato (primo errore propagato): {result.message!r}"
     )
@@ -174,7 +174,7 @@ def test_test_mssql_aggregated_message_cites_sanitized_first_error():
 def test_test_mssql_log_preserves_technical_detail(monkeypatch):
     """Mentre il messaggio utente e' sanitizzato, logger.warning server-side
     riceve il dettaglio raw per troubleshooting (type(e).__name__ + str(e))."""
-    from app.services import connection_service as cs_module
+    from app.core.connections import service as cs_module
 
     captured_warnings = []
     original_warning = cs_module.logger.warning

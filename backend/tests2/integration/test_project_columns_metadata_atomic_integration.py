@@ -1,5 +1,5 @@
 """
-Integration test — update_project_canvas_key_atomic vs. concorrenza reale.
+Integration test â€” update_project_canvas_key_atomic vs. concorrenza reale.
 
 Scenario: due writer concorrenti sullo stesso progetto.
 """
@@ -19,23 +19,24 @@ pytestmark = [pytest.mark.integration]
 
 def _get_canvas_raw(project_id: str) -> dict:
     """Legge il canvas direttamente dal DB e lo ritorna come dict."""
-    import app.db.config_db_service as cfg_db
-    row = cfg_db.get_project(project_id)
+    from app.core.projects import db as project_db
+
+    row = project_db.get_project_row(project_id)
     assert row is not None, f"Progetto {project_id} non trovato"
-    canvas = row.get("canvas")
+    canvas = row.canvas
     if isinstance(canvas, str):
         canvas = json.loads(canvas)
     return canvas or {}
 
 
 def _create_test_project(group_id: str) -> str:
-    import app.db.config_db_service as cfg_db
-    from app.services.project_service import ProjectService
+    from app.core.projects import db as project_db
+    from app.core.projects.service import ProjectService
 
     svc = ProjectService()
     # Lazy: creiamo direttamente via DB per evitare dipendenze sull'API
     project_id = f"atomic-test-{int(time.time() * 1000)}"
-    cfg_db.create_project(
+    project_db.create_project_row(
         project_id=project_id,
         group_id=group_id,
         name="atomic concurrent test",
@@ -50,13 +51,13 @@ def test_concurrent_writes_preserve_both_keys(integration_user_seed):
     """Due thread scrivono chiavi canvas diverse in parallelo.
     Post-fix: entrambe le chiavi sono presenti nel canvas finale.
     """
-    import app.db.config_db_service as cfg_db
+    from app.core.projects import db as project_db
 
     group_id = integration_user_seed["group_id"]
     project_id = _create_test_project(group_id)
 
     # Setup: canvas iniziale con nodes/edges preesistenti
-    cfg_db.update_project(project_id, canvas={
+    project_db.update_project_row(project_id, canvas={
         "nodes": [{"id": "n1", "type": "source"}],
         "edges": [],
     })
@@ -73,7 +74,7 @@ def test_concurrent_writes_preserve_both_keys(integration_user_seed):
         try:
             start_barrier.wait()
             for _ in range(20):
-                cfg_db.update_project_canvas_key_atomic(
+                project_db.update_project_canvas_key_atomic(
                     project_id, "columns_metadata", writer_a_value
                 )
         except Exception as e:
@@ -83,7 +84,7 @@ def test_concurrent_writes_preserve_both_keys(integration_user_seed):
         try:
             start_barrier.wait()
             for _ in range(20):
-                cfg_db.update_project_canvas_key_atomic(
+                project_db.update_project_canvas_key_atomic(
                     project_id, "custom_marker", writer_b_value
                 )
         except Exception as e:
@@ -97,7 +98,7 @@ def test_concurrent_writes_preserve_both_keys(integration_user_seed):
     try:
         assert not errors, f"Writer concorrenti hanno sollevato: {errors}"
         assert not t1.is_alive() and not t2.is_alive(), (
-            "Un writer e' rimasto bloccato — deadlock?"
+            "Un writer e' rimasto bloccato â€” deadlock?"
         )
 
         # ASSERT CRUCIALE: entrambe le key sono nel canvas finale.
@@ -106,11 +107,11 @@ def test_concurrent_writes_preserve_both_keys(integration_user_seed):
         # lost update.
         final = _get_canvas_raw(project_id)
         assert final.get("columns_metadata") == writer_a_value, (
-            f"columns_metadata di Writer A perso — lost update.\n"
+            f"columns_metadata di Writer A perso â€” lost update.\n"
             f"Canvas finale: {list(final.keys())}"
         )
         assert final.get("custom_marker") == writer_b_value, (
-            f"custom_marker di Writer B perso — lost update.\n"
+            f"custom_marker di Writer B perso â€” lost update.\n"
             f"Canvas finale: {list(final.keys())}"
         )
         # Anche i campi pre-esistenti (nodes) devono restare
@@ -118,19 +119,19 @@ def test_concurrent_writes_preserve_both_keys(integration_user_seed):
             f"nodes cancellati durante il merge atomico: {final.get('nodes')!r}"
         )
     finally:
-        cfg_db.delete_project(project_id)
+        project_db.delete_project(project_id)
 
 
 def test_concurrent_same_key_writes_last_wins_no_corruption(integration_user_seed):
     """N thread scrivono la STESSA key con valori diversi. Nessuno
     deve crashare; il valore finale deve essere uno di quelli scritti
     (ultimo a committare), mai un ibrido o corrotto."""
-    import app.db.config_db_service as cfg_db
+    from app.core.projects import db as project_db
 
     group_id = integration_user_seed["group_id"]
     project_id = _create_test_project(group_id)
 
-    cfg_db.update_project(project_id, canvas={"nodes": [], "edges": []})
+    project_db.update_project_row(project_id, canvas={"nodes": [], "edges": []})
 
     N_THREADS = 8
     WRITES_PER_THREAD = 10
@@ -140,7 +141,7 @@ def test_concurrent_same_key_writes_last_wins_no_corruption(integration_user_see
         for i in range(WRITES_PER_THREAD):
             val = [{"name": f"t{thread_id}_col_{i}", "type": "str"}]
             valid_values.add(json.dumps(val, sort_keys=True))
-            cfg_db.update_project_canvas_key_atomic(
+            project_db.update_project_canvas_key_atomic(
                 project_id, "columns_metadata", val
             )
 
@@ -164,14 +165,15 @@ def test_concurrent_same_key_writes_last_wins_no_corruption(integration_user_see
             f"scritti: {final_cm!r}. Suggerisce corruption/merge parziale."
         )
     finally:
-        cfg_db.delete_project(project_id)
+        project_db.delete_project(project_id)
 
 
 def test_atomic_update_on_missing_project_returns_false(integration_user_seed):
-    """Smoke: progetto inesistente → False, non solleva."""
-    import app.db.config_db_service as cfg_db
+    """Smoke: progetto inesistente â†’ False, non solleva."""
+    from app.core.projects import db as project_db
+
     _ = integration_user_seed  # assicura DB up
-    result = cfg_db.update_project_canvas_key_atomic(
+    result = project_db.update_project_canvas_key_atomic(
         "projet-ghost-never-existed", "columns_metadata", []
     )
     assert result is False

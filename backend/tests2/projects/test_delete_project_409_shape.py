@@ -16,7 +16,7 @@ from app.shared.contracts.auth import CurrentUser
 from app.core.auth.auth import require_project_owner
 from app.core.projects import router as projects_router_module
 from app.core.projects.router import router as projects_router
-from app.shared.exceptions import ProjectHasDependenciesError
+from app.core.projects.exceptions import ProjectHasDependenciesError
 
 
 pytestmark = [pytest.mark.unit, pytest.mark.contract, pytest.mark.regression]

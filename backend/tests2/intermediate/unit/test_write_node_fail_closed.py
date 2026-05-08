@@ -10,7 +10,7 @@ from unittest.mock import patch
 
 import pytest
 
-from app.shared.exceptions import IntermediateWriteError
+from app.core.intermediate.exceptions import IntermediateWriteError
 
 
 pytestmark = [pytest.mark.unit, pytest.mark.contract, pytest.mark.regression]

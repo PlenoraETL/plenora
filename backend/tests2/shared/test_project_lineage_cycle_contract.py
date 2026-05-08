@@ -8,7 +8,7 @@ from typing import Dict, List, Optional
 
 import pytest
 
-from app.services.project_lineage import (
+from app.core.projects.lineage import (
     detect_project_lineage_cycle,
     ProjectLineageCycleError,
 )

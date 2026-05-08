@@ -1,8 +1,6 @@
 """Protocols + default implementations for ``FileSourceService`` DI.
 
 Canonical STORAGE_ARTIFACT_ENGINE boundary for the file service dependencies.
-Legacy imports remain available through ``app.services.file_service_deps`` as a
-``KEEP_COMPAT`` wrapper.
 """
 
 from __future__ import annotations

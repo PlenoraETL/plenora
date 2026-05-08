@@ -87,12 +87,10 @@ def _production_modules() -> Iterable[Path]:
         if not root.exists():
             continue
         for path in _iter_py(root):
-            if path == _APP_ROOT / "shared" / "exceptions.py":
-                continue
             yield path
 
 
-def _shared_exception_domain_imports(path: Path) -> Set[str]:
+def _shared_exception_imports(path: Path) -> Set[str]:
     hits: Set[str] = set()
     module_aliases: Set[str] = set()
     full_module_aliases: Set[Tuple[str, ...]] = set()
@@ -101,6 +99,7 @@ def _shared_exception_domain_imports(path: Path) -> Set[str]:
             for alias in node.names:
                 if alias.name != "app.shared.exceptions":
                     continue
+                hits.add(alias.asname or alias.name)
                 if alias.asname:
                     module_aliases.add(alias.asname)
                 else:
@@ -112,14 +111,14 @@ def _shared_exception_domain_imports(path: Path) -> Set[str]:
         if node.module == "app.shared":
             for alias in node.names:
                 if alias.name == "exceptions":
+                    hits.add(alias.asname or alias.name)
                     module_aliases.add(alias.asname or alias.name)
             continue
 
         if node.module != "app.shared.exceptions":
             continue
         for alias in node.names:
-            if alias.name in _DOMAIN_EXCEPTION_NAMES:
-                hits.add(alias.name)
+            hits.add(alias.name)
 
     for node in ast.walk(_parse(path)):
         if not isinstance(node, ast.Attribute):
@@ -154,6 +153,8 @@ def test_domain_exception_modules_exist():
 
 def test_domain_exceptions_not_defined_in_shared_exceptions():
     shared = _APP_ROOT / "shared" / "exceptions.py"
+    if not shared.exists():
+        return
     hits = _class_defs(shared) & _DOMAIN_EXCEPTION_NAMES
     assert hits == set(), (
         "Domain exceptions must live in their `core.<domain>.exceptions` "
@@ -174,42 +175,19 @@ def test_domain_exceptions_not_defined_in_db_modules():
     )
 
 
-def test_production_uses_domain_exception_modules_not_shared_compat():
-    """Shared exception aliases are retained for tests and legacy importers.
-
-    Runtime code must import moved project/auth/intermediate exceptions from
-    the owning domain modules so `app.shared.exceptions` can keep shrinking.
-    """
+def test_production_imports_no_shared_exceptions_module():
+    """Runtime code must import exceptions from the owning domain modules."""
     hits: Set[Tuple[str, str]] = set()
     for path in _production_modules():
-        for name in _shared_exception_domain_imports(path):
+        for name in _shared_exception_imports(path):
             hits.add((_rel(path), name))
 
     assert hits == set(), (
-        "Production code must import moved domain exceptions from "
-        "`app.core.<domain>.exceptions`, not `app.shared.exceptions`: "
+        "Production code must not import `app.shared.exceptions`; use "
+        "`app.core.<domain>.exceptions` instead: "
         f"{sorted(hits)}"
     )
 
 
-def test_legacy_shared_imports_alias_canonical_domain_exceptions():
-    from app.core.arricchisci.exceptions import ExecutionContextError
-    from app.core.files.exceptions import FileSourceResolutionError
-    from app.core.intermediate.exceptions import IntermediateWriteError
-    from app.core.projects.exceptions import (
-        CanvasCorruptedError,
-        ColumnsMetadataSaveError,
-        ProjectCleanupPartialError,
-        ProjectHasDependenciesError,
-    )
-    from app.core.resources.exceptions import MemoryLimitExceededError
-    from app.shared import exceptions as shared_exceptions
-
-    assert shared_exceptions.CanvasCorruptedError is CanvasCorruptedError
-    assert shared_exceptions.ColumnsMetadataSaveError is ColumnsMetadataSaveError
-    assert shared_exceptions.ExecutionContextError is ExecutionContextError
-    assert shared_exceptions.FileSourceResolutionError is FileSourceResolutionError
-    assert shared_exceptions.ProjectCleanupPartialError is ProjectCleanupPartialError
-    assert shared_exceptions.ProjectHasDependenciesError is ProjectHasDependenciesError
-    assert shared_exceptions.IntermediateWriteError is IntermediateWriteError
-    assert shared_exceptions.MemoryLimitExceededError is MemoryLimitExceededError
+def test_shared_exceptions_tombstone_deleted():
+    assert not (_APP_ROOT / "shared" / "exceptions.py").exists()

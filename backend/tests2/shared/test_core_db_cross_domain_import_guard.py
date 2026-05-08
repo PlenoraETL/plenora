@@ -72,7 +72,7 @@ _REMOVED_CROSS_DOMAIN_DB_EDGES: tuple[RemovedCrossDomainDbEdge, ...] = (
 
 
 def _domain_db_files() -> list[Path]:
-    return sorted(path for path in _CORE_ROOT.glob("*/db.py") if path.is_file())
+    return sorted(path for path in _CORE_ROOT.glob("*/*db.py") if path.is_file())
 
 
 def _domain_for_db_file(path: Path) -> str:
@@ -87,7 +87,11 @@ def _edge_key(
 
 def _module_domain(module: str) -> str | None:
     parts = module.split(".")
-    if len(parts) == 4 and parts[:2] == ["app", "core"] and parts[3] == "db":
+    if (
+        len(parts) == 4
+        and parts[:2] == ["app", "core"]
+        and (parts[3] == "db" or parts[3].endswith("_db"))
+    ):
         return parts[2]
     return None
 
@@ -101,6 +105,14 @@ def _iter_cross_domain_db_edges(path: Path) -> list[CrossDomainDbEdge]:
     for node in ast.walk(tree):
         if isinstance(node, ast.ImportFrom) and node.module:
             imported_domain = _module_domain(node.module)
+            if (
+                imported_domain is None
+                and node.module.startswith("app.core.")
+                and len(node.module.split(".")) == 3
+                and len(node.names) == 1
+                and (node.names[0].name == "db" or node.names[0].name.endswith("_db"))
+            ):
+                imported_domain = node.module.split(".")[2]
             if imported_domain is None or imported_domain == src_domain:
                 continue
             for alias in node.names:

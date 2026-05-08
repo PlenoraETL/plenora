@@ -22,7 +22,7 @@ pytestmark = [
 
 
 def test_extract_imdf_zip_cleans_up_on_zip_error(tmp_path):
-    """Zip corrotto/illeggibile dopo mkdtemp → tmp dir non deve restare
+    """Zip corrotto/illeggibile dopo mkdtemp â†’ tmp dir non deve restare
     sul disco. Pre-fix l'eccezione di safe_extractall lasciava la dir
     creata in TEMP."""
     from app.core.imdf.loader import extract_imdf_zip
@@ -55,7 +55,7 @@ def test_extract_imdf_zip_cleans_up_on_zip_error(tmp_path):
 
 def test_extract_imdf_zip_cleans_up_on_invalid_imdf_content(tmp_path):
     """Zip valido ma contenuto non IMDF (manca .gdb e manifest.json)
-    → ValueError dopo l'estrazione, tmp dir deve essere pulita."""
+    â†’ ValueError dopo l'estrazione, tmp dir deve essere pulita."""
     import zipfile
     from app.core.imdf.loader import extract_imdf_zip
 
@@ -102,7 +102,7 @@ def test_extract_imdf_zip_does_not_cleanup_caller_provided_dest(tmp_path):
     with pytest.raises(Exception):
         extract_imdf_zip(bad_zip, dest_dir=caller_dest)
 
-    # caller_dest deve esistere ancora — non l'abbiamo cleanata
+    # caller_dest deve esistere ancora â€” non l'abbiamo cleanata
     assert caller_dest.exists()
     assert (caller_dest / "marker.txt").exists()
 
@@ -120,7 +120,7 @@ def test_temp_file_for_cleans_up_tmp_dir_when_zip_extraction_fails(tmp_path):
     garantito su entrambi i path errore (exception + nessun shp/gdb
     trovato)."""
     import tempfile as _tf
-    from app.services.file_service import FileSourceService
+    from app.core.files.service import FileSourceService
     from app.config import settings
 
     svc = FileSourceService.__new__(FileSourceService)
@@ -137,9 +137,9 @@ def test_temp_file_for_cleans_up_tmp_dir_when_zip_extraction_fails(tmp_path):
     before = {d.name for d in temp_root.iterdir() if d.is_dir()}
 
     # N1: _temp_file_for ora chiama _assert_visible. Bypass con sentinel
-    # superadmin per isolare il test sul lifecycle temp — il guard
+    # superadmin per isolare il test sul lifecycle temp â€” il guard
     # cross-tenant e' testato altrove.
-    from app.services.file_service import FileSourceService
+    from app.core.files.service import FileSourceService
     with patch.object(svc, "_get_blob_from_db", return_value=fake_blob), \
          patch("app.core.files.db.get_file_source", return_value=fake_meta), \
          patch.object(svc, "_assert_visible", return_value=None):
@@ -158,13 +158,13 @@ def test_temp_file_for_cleans_up_tmp_dir_when_zip_extraction_fails(tmp_path):
 
 
 def test_temp_file_for_cleans_up_tmp_dir_when_no_shp_inside_valid_zip(tmp_path):
-    """Caso edge: zip valido ma senza .shp/.gdb dentro → return None
+    """Caso edge: zip valido ma senza .shp/.gdb dentro â†’ return None
     e cleanup. Pre-fix: il fall-through al `return None` lasciava la
     tmp_dir creata."""
     import tempfile as _tf
     import zipfile as _zipfile
     import io
-    from app.services.file_service import FileSourceService
+    from app.core.files.service import FileSourceService
     from app.config import settings
 
     svc = FileSourceService.__new__(FileSourceService)
@@ -183,7 +183,7 @@ def test_temp_file_for_cleans_up_tmp_dir_when_no_shp_inside_valid_zip(tmp_path):
     before = {d.name for d in temp_root.iterdir() if d.is_dir()}
 
     # N1: stesso bypass del test sopra
-    from app.services.file_service import FileSourceService
+    from app.core.files.service import FileSourceService
     with patch.object(svc, "_get_blob_from_db", return_value=fake_blob), \
          patch("app.core.files.db.get_file_source", return_value=fake_meta), \
          patch.object(svc, "_assert_visible", return_value=None):
@@ -203,7 +203,7 @@ def test_temp_file_for_cleans_up_tmp_dir_when_no_shp_inside_valid_zip(tmp_path):
 
 def test_rest_file_cleans_up_tmp_dir_on_http_error_path():
     """Pre-fix: errore HTTP / response vuota / download_timed_out
-    ritornavano dict di errore senza cleanup tmp_exec_dir → leak.
+    ritornavano dict di errore senza cleanup tmp_exec_dir â†’ leak.
     Ora cleanup garantito da finally + _cleanup_tmp flag.
 
     Il test verifica end-to-end che NON resti una plenora_exec_* in TEMP

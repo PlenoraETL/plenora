@@ -27,7 +27,7 @@ def _project_meta(group_id: str):
 def _make_orchestrator_result(rows: int = 10, output: str = "/tmp/run.csv"):
     """Risultato orchestrator success path. `output_path` valorizzato
     cosi' il branch di materializzazione blob (`if not output_file`)
-    in `execute()` viene saltato — non ci serve qui."""
+    in `execute()` viene saltato â€” non ci serve qui."""
     res = MagicMock()
     res.success = True
     res.rows_count = rows
@@ -105,7 +105,7 @@ def _patches():
             "app.core.scheduler.db.get_schedule",
             return_value={"id": "sch-1", "group_id": "grp-A"},
         ),
-        patch("app.services.project_service.ProjectService"),
+        patch("app.core.projects.service.ProjectService"),
         patch("app.core.scheduler.execution_manager.open_run"),
         patch("app.core.scheduler.execution_manager.set_run_context"),
         patch("app.core.scheduler.execution_manager.close_run"),
@@ -144,12 +144,12 @@ def test_execute_persists_scheduled_for_in_schedule_info_and_execution_info(
     execution_info = kw.get("execution_info") or {}
 
     assert schedule_info.get("scheduled_for") == _SCHEDULED_FOR, (
-        "scheduled_for non e' nel schedule_info del log entry — il "
+        "scheduled_for non e' nel schedule_info del log entry â€” il "
         "lineage del catchup tick e' perso. "
         f"schedule_info={schedule_info!r}"
     )
     assert execution_info.get("scheduled_for") == _SCHEDULED_FOR, (
-        "scheduled_for non e' nel execution_info del log entry — il "
+        "scheduled_for non e' nel execution_info del log entry â€” il "
         "lineage del catchup tick e' perso. "
         f"execution_info={execution_info!r}"
     )
@@ -161,7 +161,7 @@ def test_execute_propagates_scheduled_for_to_carica_kwarg(schedule_config):
     `schedule-{id}-{scheduled_for}-carica`) e' deterministica sul tick.
 
     Senza questo, il retry dello stesso tick non riusa la stessa chiave
-    e il guard idempotency e' no-op → possibile duplicazione su
+    e il guard idempotency e' no-op â†’ possibile duplicazione su
     `write_mode=append`.
     """
     manager = _make_manager_for_success_path(schedule_config)
@@ -180,9 +180,9 @@ def test_execute_propagates_scheduled_for_to_carica_kwarg(schedule_config):
     manager._execute_carica.assert_called_once()
     call = manager._execute_carica.call_args
     # `execute()` chiama `_execute_carica(config, result, scheduled_for=...)`
-    # — kwarg esplicito.
+    # â€” kwarg esplicito.
     assert call.kwargs.get("scheduled_for") == _SCHEDULED_FOR, (
-        "scheduled_for non e' propagato al _execute_carica kwarg → "
+        "scheduled_for non e' propagato al _execute_carica kwarg â†’ "
         "la chiave idempotency CARICA (N15) non e' stabile sul tick. "
         f"call.kwargs={call.kwargs!r}"
     )

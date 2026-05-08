@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import BinaryIO, Optional
 
 
-_logger_module = logging.getLogger("app.services.file_preview_temp")
+_logger_module = logging.getLogger(__name__)
 
 
 def _rmtree_safe(path, _retries: int = 3) -> None:

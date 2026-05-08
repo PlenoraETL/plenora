@@ -68,7 +68,7 @@ def test_exact_limit_body_succeeds():
 
 def test_max_bytes_zero_accepts_empty_body_only():
     from app.core.resources.bounded_reader import read_stream_bounded
-    from app.shared.exceptions import MemoryLimitExceededError
+    from app.core.resources.exceptions import MemoryLimitExceededError
 
     # Empty body with cap 0 → b"" (success).
     out = read_stream_bounded(iter([]), max_bytes=0, label="zero")
@@ -84,7 +84,7 @@ def test_max_bytes_zero_accepts_empty_body_only():
 
 def test_over_limit_raises_memory_limit_exceeded():
     from app.core.resources.bounded_reader import read_stream_bounded
-    from app.shared.exceptions import MemoryLimitExceededError
+    from app.core.resources.exceptions import MemoryLimitExceededError
 
     chunks = [b"a" * 5, b"b" * 5, b"c" * 5]
     with pytest.raises(MemoryLimitExceededError) as exc:
@@ -102,7 +102,7 @@ def test_over_limit_does_not_consume_remaining_iterator():
     """Memory bound: when the cap fires, the iterator must NOT
     be fully drained. The remaining chunks stay un-yielded."""
     from app.core.resources.bounded_reader import read_stream_bounded
-    from app.shared.exceptions import MemoryLimitExceededError
+    from app.core.resources.exceptions import MemoryLimitExceededError
 
     yielded: List[int] = []
 
@@ -132,7 +132,7 @@ def test_first_chunk_alone_exceeds_limit_raises_immediately():
     FIRST iteration, not after some accumulation. observed_bytes
     must equal `0 + len(chunk)`."""
     from app.core.resources.bounded_reader import read_stream_bounded
-    from app.shared.exceptions import MemoryLimitExceededError
+    from app.core.resources.exceptions import MemoryLimitExceededError
 
     yielded: List[int] = []
 

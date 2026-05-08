@@ -275,7 +275,7 @@ def test_dispatcher_falls_back_to_passthrough_for_unknown_ops():
     una doppia copertura (warning logger + schema preservato) senza
     dipendere da entry registry."""
     from types import SimpleNamespace
-    from app.services.schema_inference import (
+    from app.core.projects.schema_inference import (
         ColumnSchema,
         SchemaInferenceService,
     )
@@ -300,7 +300,7 @@ def test_dispatcher_falls_back_for_unknown_phantom_op():
     """Op completamente sconosciuta (non nel registry, non nel
     dispatcher) deve comunque fare passthrough invece di crashare."""
     from types import SimpleNamespace
-    from app.services.schema_inference import (
+    from app.core.projects.schema_inference import (
         ColumnSchema,
         SchemaInferenceService,
     )
@@ -325,7 +325,7 @@ def test_dispatcher_falls_back_for_unknown_phantom_op():
 
 from types import SimpleNamespace  # noqa: E402
 
-from app.services.schema_inference import (  # noqa: E402
+from app.core.projects.schema_inference import (  # noqa: E402
     ColumnSchema,
     SchemaInferenceService,
 )

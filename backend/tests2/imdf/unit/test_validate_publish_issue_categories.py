@@ -16,7 +16,7 @@ import pytest
 # Pre-import che il validator e i collaborator usano a runtime, cosi'
 # eventuali side-effect di import sono noti prima dei monkeypatch.
 import app.core.imdf.loader  # noqa: F401
-import app.core.imdf.arcgis_uploader  # noqa: F401
+import app.core.imdf.arcgis.service_discovery  # noqa: F401
 import app.core.features.features_service  # noqa: F401
 import app.core.features.arcgis_client  # noqa: F401
 import app.core.imdf.validator as validator_mod
@@ -94,19 +94,19 @@ def patch_collaborators(monkeypatch):
         lambda gdb_path, **_kw: knobs.bundle_layers,
     )
 
-    # arcgis_uploader helpers (private, lazy-imported by validator)
+    # ArcGIS discovery helpers (private, lazy-imported by validator)
     monkeypatch.setattr(
-        "app.core.imdf.arcgis_uploader._find_existing_service",
+        "app.core.imdf.arcgis.service_discovery._find_existing_service",
         lambda client, conn, fs_name: (
             knobs.fs_url, knobs.fs_item_id, knobs.fs_folder,
         ),
     )
     monkeypatch.setattr(
-        "app.core.imdf.arcgis_uploader._is_service_name_available",
+        "app.core.imdf.arcgis.service_discovery._is_service_name_available",
         lambda client, conn, fs_name: (knobs.service_available, None),
     )
     monkeypatch.setattr(
-        "app.core.imdf.arcgis_uploader._list_user_folders",
+        "app.core.imdf.arcgis.service_discovery._list_user_folders",
         lambda client, conn: knobs.user_folders,
     )
 

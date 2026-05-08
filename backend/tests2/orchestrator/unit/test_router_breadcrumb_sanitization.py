@@ -1,7 +1,7 @@
 """
-[phase-2-err][batch9] C2 — breadcrumb + detail fisso in orchestrator/router.
+[phase-2-err][batch9] C2 â€” breadcrumb + detail fisso in orchestrator/router.
 
-Audit Batch 9 §3.2 S4/S5/S8/S9 — fix F6.1-F6.5:
+Audit Batch 9 Â§3.2 S4/S5/S8/S9 â€” fix F6.1-F6.5:
 """
 
 from __future__ import annotations
@@ -15,7 +15,7 @@ import pytest
 pytestmark = [pytest.mark.unit, pytest.mark.orchestrator, pytest.mark.contract]
 
 
-# F6.2 — get_task_status endpoint detail fisso (no task_id leak in response)
+# F6.2 â€” get_task_status endpoint detail fisso (no task_id leak in response)
 
 
 def test_get_task_status_detail_fixed_on_broad_exception(client):
@@ -28,8 +28,8 @@ def test_get_task_status_detail_fixed_on_broad_exception(client):
     with patch(
         "app.core.orchestrator.router._assert_task_group"
     ), patch(
-        "app.services.task_service.task_service.get_task_status",
-        side_effect=RuntimeError("DB pool exhausted — internal details")
+        "app.core.orchestrator.task_service.task_service.get_task_status",
+        side_effect=RuntimeError("DB pool exhausted â€” internal details")
     ):
         response = client.get(f"/api/tasks/{canary_task_id}")
 
@@ -45,7 +45,7 @@ def test_get_task_status_detail_fixed_on_broad_exception(client):
     assert canary_task_id not in str(detail)
 
 
-# F6.1 — _assert_task_group breadcrumb su lookup fail
+# F6.1 â€” _assert_task_group breadcrumb su lookup fail
 
 
 def test_assert_task_group_logs_breadcrumb_on_lookup_fail(client):
@@ -55,7 +55,7 @@ def test_assert_task_group_logs_breadcrumb_on_lookup_fail(client):
     with patch(
         "app.core.orchestrator.router.logger"
     ) as mock_logger, patch(
-        "app.services.task_service.task_service.get_task_status",
+        "app.core.orchestrator.task_service.task_service.get_task_status",
         side_effect=RuntimeError("redis connection reset")
     ):
         # Qualsiasi endpoint che passi attraverso _assert_task_group va bene.
@@ -81,7 +81,7 @@ def test_assert_task_group_logs_breadcrumb_on_lookup_fail(client):
     assert response.status_code == 404
 
 
-# F6.3 — full-cleanup tenant check breadcrumb su ProjectService lookup
+# F6.3 â€” full-cleanup tenant check breadcrumb su ProjectService lookup
 
 
 def test_full_cleanup_tenant_check_breadcrumb_on_project_lookup_fail(client, tmp_path):
@@ -99,10 +99,10 @@ def test_full_cleanup_tenant_check_breadcrumb_on_project_lookup_fail(client, tmp
     with patch(
         "app.core.orchestrator.router.logger"
     ) as mock_logger, patch(
-        "app.services.task_service.task_service.get_task_status",
+        "app.core.orchestrator.task_service.task_service.get_task_status",
         return_value=task_info
     ), patch(
-        "app.services.project_service.ProjectService.get_project_metadata",
+        "app.core.projects.service.ProjectService.get_project_metadata",
         side_effect=RuntimeError("config DB lock wait timeout")
     ), patch(
         "app.core.orchestrator.router.settings",

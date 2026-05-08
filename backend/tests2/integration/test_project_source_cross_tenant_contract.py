@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 from app.core.auth.auth import hash_password
-from app.db.config_db_service import create_group, create_user, delete_group_cascade
+from app.core.auth.db import create_group, create_user
+from app.core.auth.group_cleanup import delete_group_cascade
 
 from tests2.functional.harness.http import http_json_response, poll_json_until
 from tests2.integration.harness.db import make_it_id

@@ -40,6 +40,7 @@ _ARCGIS_REST_MECHANICS_ROOTS = (
 )
 _ARCGIS_REST_MECHANICS_ALLOWED_FILES = {
     _BACKEND_DIR / "app" / "core" / "features" / "arcgis_client.py",
+    _BACKEND_DIR / "app" / "core" / "features" / "arcgis_rest_write.py",
 }
 _LEGACY_ARCGIS_ADAPTER_MODULE = ".".join(
     ("app.core.features", "arcgis_connection_adapter")
@@ -91,9 +92,7 @@ _CONCRETE_ARCGIS_CLIENT_IMPORT_ALLOWLIST = {
     ),
 }
 _IMDF_UPLOADER_COMPAT_IMPORT = "app.core.imdf.arcgis_uploader"
-_IMDF_UPLOADER_COMPAT_ALLOWED_FILES = {
-    _BACKEND_DIR / "app" / "core" / "imdf" / "validator.py",
-}
+_IMDF_UPLOADER_COMPAT_ALLOWED_FILES: set[Path] = set()
 
 # Known violations - TODO: fix these per macro-components.md section 2.3.
 # Each entry is (filename -> exact imported modules). The guard is strict
@@ -331,7 +330,7 @@ def test_production_imports_esri_conversion_from_shared(src_file: Path) -> None:
 def test_new_production_code_does_not_import_imdf_uploader_compat_helpers(
     src_file: Path,
 ) -> None:
-    """IMDF uploader helper facade is retained only for validator compatibility."""
+    """IMDF uploader private-helper facade exports were retired."""
     if src_file in _IMDF_UPLOADER_COMPAT_ALLOWED_FILES:
         return
 

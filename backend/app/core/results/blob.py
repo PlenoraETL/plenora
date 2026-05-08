@@ -1,9 +1,8 @@
 """Canonical result blob read boundary.
 
-Result metadata SQL lives in :mod:`app.core.results.db`; delete/cleanup
-compatibility remains in :mod:`app.db.results_db_service` for now. Blob reads
-delegate directly to the Resource Engine dispatch so production callers do not
-depend on the legacy DB service shim.
+Result metadata SQL lives in :mod:`app.core.results.db`; delete/cleanup lives
+in :mod:`app.core.results.cleanup`. Blob reads delegate directly to the
+Resource Engine dispatch.
 """
 
 from __future__ import annotations

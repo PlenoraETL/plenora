@@ -52,7 +52,7 @@ def collaborators(fake_logger):
 
 
 def test_happy_path_db_storage_calls_dispatch_and_db_save(collaborators):
-    from app.services.file_raw_upload import create_raw_from_upload
+    from app.core.files.raw_upload import create_raw_from_upload
 
     raw = b"hello"
     out = create_raw_from_upload(
@@ -101,7 +101,7 @@ def test_happy_path_db_storage_calls_dispatch_and_db_save(collaborators):
 
 
 def test_happy_path_object_storage_returns_storage_key(collaborators):
-    from app.services.file_raw_upload import create_raw_from_upload
+    from app.core.files.raw_upload import create_raw_from_upload
 
     collaborators["dispatch_blob_storage"].return_value = {
         "data": None,
@@ -127,7 +127,7 @@ def test_happy_path_object_storage_returns_storage_key(collaborators):
 def test_mime_block_raises_value_error_and_logs_warning(collaborators):
     """MIME validator solleva MimeMismatchError -> ValueError propagato +
     logger.warning + dispatch/db_save NON chiamati."""
-    from app.services.file_raw_upload import create_raw_from_upload
+    from app.core.files.raw_upload import create_raw_from_upload
     from app.utils.mime_validator import MimeMismatchError
 
     collaborators["mime_validate"].side_effect = MimeMismatchError(
@@ -160,7 +160,7 @@ def test_mime_block_raises_value_error_and_logs_warning(collaborators):
 def test_dispatch_exception_propagates_and_db_save_not_called(collaborators):
     """Orphan guard: se dispatch_blob_storage solleva (es. S3 down),
     db_save_file_source NON viene chiamato (no row DB orfana)."""
-    from app.services.file_raw_upload import create_raw_from_upload
+    from app.core.files.raw_upload import create_raw_from_upload
 
     collaborators["dispatch_blob_storage"].side_effect = RuntimeError("S3 down")
 
@@ -181,7 +181,7 @@ def test_dispatch_exception_propagates_and_db_save_not_called(collaborators):
 
 
 def test_db_save_exception_propagates(collaborators):
-    from app.services.file_raw_upload import create_raw_from_upload
+    from app.core.files.raw_upload import create_raw_from_upload
 
     collaborators["db_save_file_source"].side_effect = RuntimeError("DB write fail")
 
@@ -201,7 +201,7 @@ def test_db_save_exception_propagates(collaborators):
 
 def test_default_group_used_when_group_id_is_none(collaborators):
     """group_id=None -> default_group usato sia nel DTO sia nel DB save."""
-    from app.services.file_raw_upload import create_raw_from_upload
+    from app.core.files.raw_upload import create_raw_from_upload
 
     create_raw_from_upload(
         io.BytesIO(b"data"), "x.dxf", "Doc",
@@ -232,7 +232,7 @@ def test_default_group_used_when_group_id_is_none(collaborators):
 def test_file_extension_lowercased_or_bin_fallback(
     collaborators, filename, expected_fmt,
 ):
-    from app.services.file_raw_upload import create_raw_from_upload
+    from app.core.files.raw_upload import create_raw_from_upload
 
     create_raw_from_upload(
         io.BytesIO(b"d"), filename, "X", group_id="g1",
@@ -245,14 +245,14 @@ def test_file_extension_lowercased_or_bin_fallback(
     assert build_kwargs["format"] == expected_fmt
 
 
-# 8. Wrapper FileSourceService.create_raw_from_upload delega
+# 8. FileSourceService.create_raw_from_upload resta un facade core sottile
 
 
-def test_file_service_wrapper_delegates_to_module():
-    """`FileSourceService.create_raw_from_upload` thin wrapper:
-    invoca file_raw_upload.create_raw_from_upload con tutti i
-    collaborator del service (8 kwargs)."""
-    from app.services.file_service import FileSourceService
+def test_file_source_service_create_raw_from_upload_delegates_to_core_module():
+    """`FileSourceService.create_raw_from_upload` invoca
+    app.core.files.raw_upload.create_raw_from_upload con i collaborator
+    del service."""
+    from app.core.files.service import FileSourceService
 
     svc = FileSourceService.__new__(FileSourceService)
     svc._generate_file_id = MagicMock(return_value="file_x")
@@ -265,7 +265,7 @@ def test_file_service_wrapper_delegates_to_module():
 
     fake_dto = MagicMock()
     with patch(
-        "app.services.file_raw_upload.create_raw_from_upload",
+        "app.core.files.raw_upload.create_raw_from_upload",
         return_value=fake_dto,
     ) as mock_impl:
         out = svc.create_raw_from_upload(

@@ -83,11 +83,15 @@ def validate_publish(
     """
     from app.config import settings
     from app.core.connections.arcgis_connection_resolver import resolve_arcgis_connection
+    from app.core.imdf.arcgis.service_discovery import (
+        _find_existing_service,
+        _is_service_name_available,
+        _list_user_folders,
+    )
+    from app.core.imdf.arcgis.sql_helpers import _chunked, _quote_sql_value
     from app.core.imdf.loader import load_imdf_layers
     from app.core.imdf.arcgis_uploader import (
         DEFAULT_MATCH_COLUMNS, LAYER_ORDER, PUBLISH_MODES,
-        _find_existing_service, _quote_sql_value, _chunked,
-        _is_service_name_available, _list_user_folders,
     )
 
     effective_match = {**DEFAULT_MATCH_COLUMNS, **(match_columns or {})}

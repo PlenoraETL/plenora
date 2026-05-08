@@ -50,7 +50,7 @@ def test_cleanup_orphans_status_clean_when_all_deletes_succeed():
         "app.core.results.orphan_cleanup.delete_results_for_project",
         return_value=3
     ), patch(
-        "app.core.intermediate.db.delete_all_runs_for_canvas",
+        "app.core.intermediate.cleanup.delete_runs_for_canvas",
         return_value=2
     ):
         report = cleanup_orphans(dry_run=False)
@@ -241,17 +241,10 @@ def test_cleanup_orphans_report_backward_compat_keys_present():
     assert "status" in report
 
 
-def test_orphan_cleanup_service_is_compat_wrapper():
-    """Legacy service import remains a thin wrapper over the result owner."""
+def test_orphan_cleanup_service_canonical_exports_are_stable():
+    """Result-owned orphan cleanup keeps the public functions tests use."""
     from app.core.results import orphan_cleanup
-    from app.services import orphan_cleanup_service
 
-    assert orphan_cleanup_service.cleanup_orphans is orphan_cleanup.cleanup_orphans
-    assert (
-        orphan_cleanup_service.find_orphan_result_project_ids
-        is orphan_cleanup.find_orphan_result_project_ids
-    )
-    assert (
-        orphan_cleanup_service.find_orphan_run_canvas_ids
-        is orphan_cleanup.find_orphan_run_canvas_ids
-    )
+    assert callable(orphan_cleanup.cleanup_orphans)
+    assert callable(orphan_cleanup.find_orphan_result_project_ids)
+    assert callable(orphan_cleanup.find_orphan_run_canvas_ids)

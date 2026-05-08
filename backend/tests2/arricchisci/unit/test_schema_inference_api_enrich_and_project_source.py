@@ -18,7 +18,7 @@ pytestmark = [pytest.mark.unit, pytest.mark.contract]
 
 
 def _svc():
-    from app.services.schema_inference import SchemaInferenceService
+    from app.core.projects.schema_inference import SchemaInferenceService
     return SchemaInferenceService(project_service=MagicMock())
 
 
@@ -43,7 +43,7 @@ def _node(node_id: str, ntype: str, **data):
 
 
 def test_infer_api_enrich_schema_reads_output_mapping_canonical_column_key():
-    from app.services.schema_inference import ColumnSchema
+    from app.core.projects.schema_inference import ColumnSchema
 
     svc = _svc()
     base_input = [
@@ -77,7 +77,7 @@ def test_infer_api_enrich_schema_reads_output_mapping_canonical_column_key():
 
 
 def test_infer_api_enrich_schema_tolerates_target_column_and_name_fallbacks():
-    from app.services.schema_inference import ColumnSchema
+    from app.core.projects.schema_inference import ColumnSchema
 
     svc = _svc()
     base_input = [ColumnSchema(name="id", type="int", source_node="src")]

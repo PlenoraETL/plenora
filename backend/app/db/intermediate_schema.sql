@@ -16,7 +16,7 @@
 -- `init_db()` NON carica questo file. Le PRAGMA SQLite sotto
 -- sono no-op su PostgreSQL.
 --
--- Riferimento: `app/services/orphan_cleanup_service.py:78` cita
+-- Riferimento: `app/core/results/orphan_cleanup.py` cita
 -- questo file come reference per il modello di FK non-enforced
 -- pre-migrazione.
 -- ============================================================

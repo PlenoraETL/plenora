@@ -86,7 +86,7 @@ def test_assert_project_access_rejects_missing_project_id(current_user):
 def test_assert_project_visible_uses_visibility_check(monkeypatch, current_user):
     seen = {}
 
-    import app.services.project_service as project_service
+    import app.core.projects.service as project_service
     import app.shared.authz_helpers as authz
 
     monkeypatch.setattr(project_service.ProjectService, "get_project_metadata", lambda self, project_id: {"id": project_id, "group_id": "grp-1"})

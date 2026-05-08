@@ -1,8 +1,7 @@
 """Canonical file-source service boundary.
 
 Implementation for file-source CRUD, upload orchestration, blob reads, and
-preview delegation. Legacy imports remain available through
-``app.services.file_service`` as a ``KEEP_COMPAT`` wrapper.
+preview delegation.
 """
 
 import json
@@ -20,7 +19,7 @@ from typing import Any, BinaryIO, Dict, List, Optional, Tuple
 import pandas as pd
 
 from app.core.files.storage_dispatch import BlobDispatchResult
-from app.core.files.service_deps import (  # noqa: F401 (compatibility export pubblico
+from app.core.files.service_deps import (  # noqa: F401 (public domain export)
     LoggerProtocol,
     FileSystemProtocol,
     DataLoaderProtocol,
@@ -30,7 +29,7 @@ from app.core.files.service_deps import (  # noqa: F401 (compatibility export pu
     DefaultFileSystem,
     DefaultDataLoader,
 )
-from app.shared.file_helpers import (  # noqa: F401 (compatibility export pubblico
+from app.shared.file_helpers import (  # noqa: F401 (public domain export)
     FormatDetector,
     TypeInferrer,
     FileIdGenerator,
@@ -131,11 +130,9 @@ if not _USE_APP_MODELS:
 # STRUCT-001 Seam B: i 4 Protocols (Logger/FileSystem/DataLoader/TimeProvider
 # e le 4 Default impls (NullLogger/DefaultTimeProvider/DefaultFileSystem/
 # DefaultDataLoader) vivono in `app.core.files.service_deps`
-# compatibility export per backward-compat coi test che importano direttamente
-# test_file_service_filesystem_contract usa DefaultFileSystem
-# test_n1_file_service_cross_tenant_contract usa DefaultTimeProvider) e
-# per `FileSourceService.__init__` che continua a istanziare i Default
-# come fallback (`self._fs = filesystem or DefaultFileSystem`
+# Export pubblico del dominio files: test e caller istanziano il service con
+# queste dipendenze esplicite, e `FileSourceService.__init__` le usa come
+# fallback (`self._fs = filesystem or DefaultFileSystem`).
 
 # Classe FileService: CRUD completo per file source con DI
 # Gestisce il ciclo di vita dei file caricati dall'utente come sorgenti dati
@@ -143,14 +140,12 @@ if not _USE_APP_MODELS:
 # data loader, logger, time) è iniettabile con un mock nei test
 
 
-# STRUCT-001 Seam D-C: la logica vive in `app.shared.resources.file_cleanup.rmtree_safe`
-# Wrapper compat per i call site interni che usano `_rmtree_safe(path)` senza
-# passare logger esplicito. La funzione condivisa accetta `logger=None` e usa
-# il logger del modulo come fallback (best-effort silenzioso); qui passiamo
-# `_logger` del modulo file_service per preservare il naming dei log
+# STRUCT-001 Seam D-C: la logica vive in `app.shared.resources.file_cleanup.rmtree_safe`.
+# Questo adapter mantiene i call site interni semplici (`_rmtree_safe(path)`)
+# iniettando il logger del modulo files.
 
 def _rmtree_safe(path: Path | str, _retries: int = 3) -> None:
-    """Wrapper compat: delega a `app.shared.resources.file_cleanup.rmtree_safe`."""
+    """Delegate to `app.shared.resources.file_cleanup.rmtree_safe`."""
     from app.shared.resources.file_cleanup import rmtree_safe
     rmtree_safe(path, retries=_retries, logger=_logger)
 
@@ -319,7 +314,7 @@ class FileSourceService:
         layer: str = None,
         sheet: str = None
     ) -> Tuple[pd.DataFrame, Optional[Any]]:
-        """Wrapper compat: delega a `load_dispatch.load_by_format`.
+        """Delegate to `load_dispatch.load_by_format`.
 
         STRUCT-001 Seam D-B: la logica vive in
         `app.core.files.load_dispatch.load_by_format` come funzione
@@ -347,7 +342,7 @@ class FileSourceService:
     def _dispatch_blob_storage(
         self, file_id: str, raw_data: bytes, filename: str, **kwargs: Any,
     ) -> BlobDispatchResult:
-        """Wrapper compat: delega a `storage_dispatch.dispatch_blob_storage`.
+        """Delegate to `storage_dispatch.dispatch_blob_storage`.
 
         BE-HARDEN-001C E1: `**kwargs` pass-through propaga eventuali
         parametri opzionali (es. `storage_key_id` per shared blob in
@@ -490,8 +485,7 @@ class FileSourceService:
         ``FileSourceBlobLoader`` since RESOURCE-ENGINE-020). The
         SHP/GDB ZIP separation + single-file tempfile materialization
         live INLINE here -- the previously-shared
-        ``app.services.file_blob_materialization.temp_file_for``
-        wrapper has been deleted, eliminating the legacy duplicate
+        retired temp-file helper has been deleted, eliminating the duplicate
         read path that bypassed the engine's tenant-binding
         contract via callback injection.
 
@@ -662,7 +656,7 @@ class FileSourceService:
         srid: int = None,
         group_id: str = None,
     ) -> FileSource:
-        """Wrapper compat: delega a `upload.create_from_upload`.
+        """Delegate to `upload.create_from_upload`.
 
         STRUCT-001 Seam D-F: la logica vive in
         `app.core.files.upload.create_from_upload` con collaborator
@@ -703,7 +697,7 @@ class FileSourceService:
         description: str = "",
         group_id: str = None,
     ) -> FileSource:
-        """Wrapper compat: delegates to `raw_upload.create_raw_from_upload`.
+        """Delegate to `raw_upload.create_raw_from_upload`.
 
         STRUCT-001 Seam D-E: the logic lives in
         `app.core.files.raw_upload.create_raw_from_upload` with explicit
@@ -739,7 +733,7 @@ class FileSourceService:
         srid: int = None,
         group_id: str = None,
     ) -> List["FileSource"]:
-        """Wrapper compat: delega a `multi_layer_upload.create_multi_layer_from_upload`.
+        """Delegate to `multi_layer_upload.create_multi_layer_from_upload`.
 
         STRUCT-001 Seam D-G: la logica vive in
         `app.core.files.multi_layer_upload.create_multi_layer_from_upload`
@@ -805,7 +799,7 @@ class FileSourceService:
         self, file_id: str, layer: str = None, sheet: str = None,
         expected_group_id: str = None,
     ) -> Tuple[pd.DataFrame, Optional[Any]]:
-        """Wrapper compat: delega a `source_read.load_dataframe`.
+        """Delegate to `source_read.load_dataframe`.
 
         N1 resta fail-closed: il modulo estratto riceve `_assert_visible`
         come collaborator esplicito.
@@ -874,7 +868,7 @@ class FileSourceService:
     def get_layers_info(
         self, file_id: str, expected_group_id: str = None,
     ) -> Dict[str, Any]:
-        """Wrapper compat: delega a `source_read.get_layers_info`.
+        """Delegate to `source_read.get_layers_info`.
 
         N1: `expected_group_id` obbligatorio per fail-closed check.
         """
@@ -893,7 +887,7 @@ class FileSourceService:
     def get_preview(
         self, file_id: str, limit: int = 100, expected_group_id: str = None,
     ) -> Dict[str, Any]:
-        """Wrapper compat: delega a `source_read.get_preview`.
+        """Delegate to `source_read.get_preview`.
 
         N1: `expected_group_id` obbligatorio per fail-closed check.
         """
@@ -912,7 +906,7 @@ class FileSourceService:
         )
 
     def preview_file_temp(self, file_content: BinaryIO, filename: str, layer: str = None, sheet: str = None) -> dict:
-        """Wrapper compat: delega a `preview_temp.preview_file_temp`.
+        """Delegate to `preview_temp.preview_file_temp`.
 
         STRUCT-001 Seam D-A: la logica vive in
         `app.core.files.preview_temp.preview_file_temp` come

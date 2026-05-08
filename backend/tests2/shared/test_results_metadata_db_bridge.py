@@ -242,10 +242,8 @@ def test_core_results_metadata_rows_are_not_dict_accessed_after_hydration() -> N
     assert offenders == []
 
 
-def test_results_db_service_retains_metadata_compat_exports():
-    import app.db.results_db_service as legacy_results_db
-
-    assert legacy_results_db.save_result is results_db.save_result
-    assert legacy_results_db.get_result is results_db.get_result
-    assert legacy_results_db.get_latest_result is results_db.get_latest_result
-    assert legacy_results_db.list_results is results_db.list_results
+def test_result_metadata_exports_live_only_at_canonical_boundary():
+    assert results_db.save_result.__module__ == "app.core.results.db"
+    assert results_db.get_result.__module__ == "app.core.results.db"
+    assert results_db.get_latest_result.__module__ == "app.core.results.db"
+    assert results_db.list_results.__module__ == "app.core.results.db"

@@ -1,17 +1,11 @@
-"""
-Domain-owned API connection persistence for arricchisci.
-
-Typed row helpers are the primary service boundary. The dict-returning helpers
-below are compatibility wrappers for legacy facade imports.
-"""
+"""Domain-owned API connection persistence for arricchisci."""
 
 from __future__ import annotations
 
 import json
-import uuid
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from app.db.pg_connection import execute, fetchall, fetchone
 
@@ -45,17 +39,6 @@ def _row_from_record(record: dict[str, Any]) -> ApiConnectionRow:
         updated_at=record.get("updated_at"),
         created_by=record.get("created_by"),
     )
-
-
-def _api_connection_compat_payload(row: ApiConnectionRow) -> dict[str, Any]:
-    return {
-        "id": row.id,
-        "group_id": row.group_id,
-        "config": row.config,
-        "created_at": row.created_at,
-        "updated_at": row.updated_at,
-        "created_by": row.created_by,
-    }
 
 
 def get_api_connection_row(
@@ -102,53 +85,6 @@ def save_api_connection_row(
     if row is None:
         raise RuntimeError(f"API connection '{api_id}' was not persisted")
     return row
-
-
-def get_api_connection(api_id: str, group_id: str | None = None) -> Optional[Dict]:
-    """KEEP_PUBLIC_COMPAT: legacy dict wrapper around typed API connection reads."""
-    row = get_api_connection_row(api_id, group_id)
-    return _api_connection_compat_payload(row) if row is not None else None
-
-
-def list_api_connections(group_id: str | None = None) -> List[Dict]:
-    """KEEP_PUBLIC_COMPAT: legacy dict wrapper around typed API connection lists."""
-    return [
-        _api_connection_compat_payload(row)
-        for row in list_api_connection_rows(group_id)
-    ]
-
-
-def save_api_connection(
-    api_id: str,
-    group_id: str,
-    config: dict,
-    created_by: str | None = None,
-) -> Dict:
-    """KEEP_PUBLIC_COMPAT: legacy dict wrapper around typed API connection saves."""
-    row = save_api_connection_row(
-        api_id=api_id,
-        group_id=group_id,
-        config=config,
-        created_by=created_by,
-    )
-    return _api_connection_compat_payload(row)
-
-
-def create_api_connection(
-    group_id: str,
-    config: dict,
-    created_by: str | None = None,
-) -> Dict:
-    api_id = config.get("id")
-    if not api_id:
-        api_id = f"api_{uuid.uuid4().hex[:12]}"
-        config["id"] = api_id
-    return save_api_connection(api_id, group_id, config, created_by=created_by)
-
-
-def update_api_connection(api_id: str, config: dict) -> None:
-    """KEEP_PUBLIC_COMPAT: legacy update helper preserving the old None return."""
-    update_api_connection_row(api_id, config)
 
 
 def update_api_connection_row(api_id: str, config: dict[str, Any]) -> ApiConnectionRow | None:

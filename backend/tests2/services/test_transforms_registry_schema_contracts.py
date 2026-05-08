@@ -163,7 +163,7 @@ def test_schema_handler_exists_for_each_contracted_transform():
     """Per ogni transform contracted, il `SchemaInferenceService`
     deve esporre un handler dedicato (`_schema_<op>`). Lock
     cross-component contro drift handler vs registry."""
-    from app.services.schema_inference import SchemaInferenceService
+    from app.core.projects.schema_inference import SchemaInferenceService
 
     service = SchemaInferenceService(project_service=None)
     handlers = service._build_transform_handlers(edges_by_target={})

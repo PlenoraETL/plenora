@@ -80,11 +80,18 @@ def test_all_prefixes_matches_declared_constants():
     assert declared == set(storage_layout.ALL_PREFIXES)
 
 
-# Call site usage — i moduli storage usano gli alias dichiarati qui
+# Call site usage: storage modules use the canonical constants declared here.
 
 def test_file_storage_dispatch_uses_shared_prefix():
-    from app.core.files import storage_dispatch
-    assert storage_dispatch._OBJECT_STORAGE_PREFIX == storage_layout.FILE_SOURCES_PREFIX
+    from pathlib import Path
+
+    backend_root = Path(__file__).resolve().parent.parent.parent
+    source = (
+        backend_root / "app" / "core" / "files" / "storage_dispatch.py"
+    ).read_text(encoding="utf-8")
+
+    assert "from app.shared.resources.storage_layout import FILE_SOURCES_PREFIX" in source
+    assert "_OBJECT_STORAGE_PREFIX" not in source
 
 
 def test_imdf_storage_uses_shared_prefix():

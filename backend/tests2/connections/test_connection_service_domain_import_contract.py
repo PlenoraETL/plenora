@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import ast
-import importlib
 from pathlib import Path
 
 import pytest
@@ -21,11 +20,8 @@ def test_connection_service_canonical_import_path_is_domain_owned() -> None:
     assert ConnectionService.__module__ == "app.core.connections.service"
 
 
-def test_legacy_connection_service_path_is_keep_compat_alias() -> None:
-    canonical = importlib.import_module("app.core.connections.service")
-    legacy = importlib.import_module("app.services.connection_service")
-
-    assert legacy is canonical
+def test_legacy_connection_service_path_is_removed() -> None:
+    assert not (_BACKEND_ROOT / "app" / "services" / "connection_service.py").exists()
 
 
 def test_connection_service_uses_domain_db_bridge_not_legacy_config_leaf() -> None:

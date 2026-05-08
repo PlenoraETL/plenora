@@ -59,7 +59,7 @@ def patched_settings_temp_dir(tmp_path, monkeypatch):
 def test_preview_csv_returns_columns_and_row_count(
     fake_logger, fake_fs, real_helpers, patched_settings_temp_dir,
 ):
-    from app.services.file_preview_temp import preview_file_temp
+    from app.core.files.preview_temp import preview_file_temp
 
     FormatDetector, ColumnInfoBuilder = real_helpers
     loader = MagicMock()
@@ -92,7 +92,7 @@ def test_preview_blocks_executable_mime_with_value_error(
     fake_logger, fake_fs, real_helpers, patched_settings_temp_dir,
 ):
     """Payload PE (Windows .exe magic 'MZ') -> bloccato dal validator."""
-    from app.services.file_preview_temp import preview_file_temp
+    from app.core.files.preview_temp import preview_file_temp
 
     FormatDetector, ColumnInfoBuilder = real_helpers
     loader = MagicMock()
@@ -122,7 +122,7 @@ def test_preview_blocks_executable_mime_with_value_error(
 def test_preview_unknown_format_raises_value_error(
     fake_logger, fake_fs, real_helpers, patched_settings_temp_dir,
 ):
-    from app.services.file_preview_temp import preview_file_temp
+    from app.core.files.preview_temp import preview_file_temp
 
     FormatDetector, ColumnInfoBuilder = real_helpers
     loader = MagicMock()
@@ -145,7 +145,7 @@ def test_preview_cleans_up_tmp_file_on_success(
     fake_logger, fake_fs, real_helpers, patched_settings_temp_dir,
 ):
     """Dopo una preview success, la tmp dir non deve contenere file residui."""
-    from app.services.file_preview_temp import preview_file_temp
+    from app.core.files.preview_temp import preview_file_temp
 
     FormatDetector, ColumnInfoBuilder = real_helpers
     loader = MagicMock()
@@ -167,7 +167,7 @@ def test_preview_cleans_up_tmp_file_on_parser_exception(
     fake_logger, fake_fs, real_helpers, patched_settings_temp_dir,
 ):
     """Se il parser solleva, il tmp file deve comunque essere ripulito (finally)."""
-    from app.services.file_preview_temp import preview_file_temp
+    from app.core.files.preview_temp import preview_file_temp
 
     FormatDetector, ColumnInfoBuilder = real_helpers
     loader = MagicMock()
@@ -186,16 +186,16 @@ def test_preview_cleans_up_tmp_file_on_parser_exception(
     assert post == pre, f"tmp file leak su exception: {post - pre}"
 
 
-# 5. Wrapper FileSourceService.preview_file_temp delega correttamente
+# 5. FileSourceService.preview_file_temp resta un facade core sottile
 
 
-def test_file_service_wrapper_delegates_with_service_collaborators(
+def test_file_source_service_preview_delegates_with_service_collaborators(
     patched_settings_temp_dir,
 ):
-    """`FileSourceService.preview_file_temp` resta thin wrapper:
+    """`FileSourceService.preview_file_temp` delega al modulo core:
     passa self._fs/self._loader/self._format_detector/self._column_builder/
     self._logger alla funzione modulo."""
-    from app.services.file_service import FileSourceService
+    from app.core.files.service import FileSourceService
 
     svc = FileSourceService.__new__(FileSourceService)
     svc._fs = MagicMock()
@@ -218,10 +218,10 @@ def test_file_service_wrapper_delegates_with_service_collaborators(
 def test_load_by_format_unsupported_raises(fake_logger, tmp_path):
     """load_by_format con format non riconosciuto -> ValueError esplicito.
 
-    Post Seam D-B: la funzione vive in `app.services.file_load_dispatch`
+    Post Seam D-B: la funzione vive in `app.core.files.load_dispatch`
     (modulo condiviso tra FileSourceService e file_preview_temp).
     """
-    from app.services.file_load_dispatch import load_by_format
+    from app.core.files.load_dispatch import load_by_format
 
     loader = MagicMock()
     with pytest.raises(ValueError, match="Formato 'foo' non supportato"):
@@ -236,7 +236,7 @@ def test_preview_gpkg_multi_layer_without_selection_returns_layers(
 ):
     """Multi-layer GPKG senza `layer`: ritorna `layers` list, NON carica
     geospatial (early return prima di _load_by_format)."""
-    from app.services.file_preview_temp import preview_file_temp
+    from app.core.files.preview_temp import preview_file_temp
 
     FormatDetector, ColumnInfoBuilder = real_helpers
     loader = MagicMock()
@@ -269,7 +269,7 @@ def test_preview_xlsx_multi_sheet_without_selection_returns_sheets(
 ):
     """Multi-sheet XLSX senza `sheet`: ritorna `sheets` list, NON carica
     excel (early return prima di _load_by_format)."""
-    from app.services.file_preview_temp import preview_file_temp
+    from app.core.files.preview_temp import preview_file_temp
 
     FormatDetector, ColumnInfoBuilder = real_helpers
     loader = MagicMock()
@@ -303,7 +303,7 @@ def test_preview_zip_unwrap_dispatches_to_inner_gpkg_format(
     """ZIP che wrappa un .gpkg: extract_zip + iterdir riconosce l'estensione,
     format passa da 'zip' a 'gpkg', list_layers e' chiamato sul path inner.
     Esercitato il branch ZIP unwrap senza dover wrappare uno zip reale."""
-    from app.services.file_preview_temp import preview_file_temp
+    from app.core.files.preview_temp import preview_file_temp
 
     FormatDetector, ColumnInfoBuilder = real_helpers
 

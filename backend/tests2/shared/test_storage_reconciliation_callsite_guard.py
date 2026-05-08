@@ -48,7 +48,7 @@ Classification = Literal[
 _CALLSITE_CLASSIFICATION: dict[str, tuple[Classification, str]] = {
     #
     # Note: the consumer files that go through the canonical
-    # `compensating_delete` wrapper (results_db_service, file_sources,
+    # `compensating_delete` wrapper (results cleanup, file_sources,
     # intermediate/db, file_service) do NOT contain raw `storage.upload(...)`
     # or `storage.delete(...)` calls - they delegate to the helper. The
     # scanner therefore does not flag them, and they are not listed
@@ -59,7 +59,7 @@ _CALLSITE_CLASSIFICATION: dict[str, tuple[Classification, str]] = {
         "save_result_blob and save_result_blob_from_bytes "
         "(upload-then-DB-save). Compensating delete on DB save "
         "failure via _cleanup_uploaded_result_blob. The DB-side "
-        "deletes go through results_db_service which records "
+        "deletes go through the results cleanup boundary which records "
         "pending entries pre-commit.",
     ),
 
@@ -277,8 +277,8 @@ def test_classification_includes_known_tracked_upload_callsites():
     """Sanity: `app/utils/result_store.py` is the only file that
     issues raw `storage.upload(...)` calls behind the
     record_pending + compensating_delete contract. Removing it is
-    a regression. The other tracked files (results_db_service,
-    file_sources, intermediate/db, file_service) consume the
+    a regression. The other tracked result/file DB consumers
+    consume the
     canonical `compensating_delete` helper (no raw storage call,
     not in scope of this scanner)."""
     p = "app/utils/result_store.py"

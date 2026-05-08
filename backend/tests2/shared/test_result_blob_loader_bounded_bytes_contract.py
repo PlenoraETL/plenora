@@ -105,7 +105,7 @@ def test_read_bounded_stream_aborts_iteration_on_oversize():
     """The iterator MUST be aborted on cap-exceeding chunk; no
     further chunks read. Verified by a tracking iterator that
     records every yield."""
-    from app.shared.exceptions import MemoryLimitExceededError
+    from app.core.resources.exceptions import MemoryLimitExceededError
     from app.core.resources.bounded_reader import read_stream_bounded
 
     yielded: list[bytes] = []
@@ -199,7 +199,7 @@ def test_object_storage_oversize_raises_without_consuming_full_iterator(
     -- the OOM had already happened by the time any size check
     could run.
     """
-    from app.shared.exceptions import MemoryLimitExceededError
+    from app.core.resources.exceptions import MemoryLimitExceededError
     from app.core.resources.loaders import result_blob as loader_mod
 
     # Cap = 100 bytes; emit two 60-byte chunks then a "huge" chunk
@@ -267,7 +267,7 @@ def test_object_storage_oversize_does_not_swallow_to_none(monkeypatch):
     coerced to ``None``. Post-010 the cap signal MUST NOT be
     coerced -- callers learn about the size cap, not a
     "blob unavailable" decoy."""
-    from app.shared.exceptions import MemoryLimitExceededError
+    from app.core.resources.exceptions import MemoryLimitExceededError
     from app.core.resources.loaders import result_blob as loader_mod
 
     monkeypatch.setenv("RESOURCE_MAX_BYTES", "10")
@@ -312,7 +312,7 @@ def test_bytea_oversize_raises_at_dispatch(monkeypatch):
     ``data=None`` (mirroring the SQL CASE result) and
     ``data_size=100`` (mirroring the ``length(data)`` projection).
     """
-    from app.shared.exceptions import MemoryLimitExceededError
+    from app.core.resources.exceptions import MemoryLimitExceededError
     from app.core.resources.loaders import result_blob as loader_mod
 
     monkeypatch.setenv("RESOURCE_MAX_BYTES", "50")
@@ -344,7 +344,7 @@ def test_bytea_preflight_does_not_touch_data_field(monkeypatch):
     would crash any ``len()`` call) MUST still raise cleanly,
     proving the loader never reads ``data`` on the oversize path.
     """
-    from app.shared.exceptions import MemoryLimitExceededError
+    from app.core.resources.exceptions import MemoryLimitExceededError
     from app.core.resources.loaders import result_blob as loader_mod
 
     class _ExplodingSentinel:
@@ -450,7 +450,7 @@ def test_path_mode_oversize_does_not_create_tempfile(monkeypatch, tmp_path):
     """``mode='path'`` shares the same dispatch as ``mode='bytes'``,
     so the cap fires BEFORE ``_materialize_to_temp_path`` is
     invoked. No partial / zero-byte tempfile leaks on oversize."""
-    from app.shared.exceptions import MemoryLimitExceededError
+    from app.core.resources.exceptions import MemoryLimitExceededError
     from app.core.resources.loaders import result_blob as loader_mod
 
     monkeypatch.setenv("RESOURCE_MAX_BYTES", "10")

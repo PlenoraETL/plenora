@@ -106,7 +106,7 @@ def test_build_context_raises_execution_context_error_on_db_error(monkeypatch):
     chain preservata. Stesso contract del legacy
     `init_execution_context`."""
     from app.core.arricchisci import execution_context as ec_mod  # noqa: F401
-    from app.shared.exceptions import ExecutionContextError
+    from app.core.arricchisci.exceptions import ExecutionContextError
 
     original = psycopg2.OperationalError("pool exhausted")
 

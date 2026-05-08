@@ -294,7 +294,7 @@ def test_materialize_run_propagates_loader_oversize_unchanged(
     pins that distinction."""
     import app.core.results.db as _rdb
     import app.core.artifacts.resolver as resolver_mod
-    from app.shared.exceptions import MemoryLimitExceededError
+    from app.core.resources.exceptions import MemoryLimitExceededError
 
     monkeypatch.setattr(
         _rdb,
@@ -856,7 +856,7 @@ def test_materialize_latest_propagates_loader_oversize_unchanged(
     as `None`; the registry migration must NOT regress to that."""
     import app.core.results.db as _rdb
     import app.core.artifacts.resolver as resolver_mod
-    from app.shared.exceptions import MemoryLimitExceededError
+    from app.core.resources.exceptions import MemoryLimitExceededError
 
     monkeypatch.setattr(
         _rdb,

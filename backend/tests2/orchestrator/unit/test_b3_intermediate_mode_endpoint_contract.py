@@ -1,5 +1,5 @@
 """
-Contract test R-25 PR-B3 — endpoint dual-auth intermediate_mode.
+Contract test R-25 PR-B3 â€” endpoint dual-auth intermediate_mode.
 
 Endpoint coperti:
 """
@@ -72,7 +72,7 @@ class TestOrchestratorExecuteEndpoint:
         client = _build_orchestrator_client(role="admin")
 
         with patch("app.core.orchestrator.router._assert_project_group"), \
-             patch("app.services.task_service.task_service.create_pipeline_task") as create_task:
+             patch("app.core.orchestrator.task_service.task_service.create_pipeline_task") as create_task:
             mock_task_info = MagicMock()
             mock_task_info.to_dict.return_value = {
                 "task_id": "t-1", "status": "pending",
@@ -92,7 +92,7 @@ class TestOrchestratorExecuteEndpoint:
         client = _build_orchestrator_client(role="superadmin")
 
         with patch("app.core.orchestrator.router._assert_project_group"), \
-             patch("app.services.task_service.task_service.create_pipeline_task") as create_task:
+             patch("app.core.orchestrator.task_service.task_service.create_pipeline_task") as create_task:
             mock_task_info = MagicMock()
             mock_task_info.to_dict.return_value = {
                 "task_id": "t-1", "status": "pending",
@@ -113,7 +113,7 @@ class TestOrchestratorExecuteEndpoint:
         client = _build_orchestrator_client(role=role)
 
         with patch("app.core.orchestrator.router._assert_project_group"), \
-             patch("app.services.task_service.task_service.create_pipeline_task") as create_task:
+             patch("app.core.orchestrator.task_service.task_service.create_pipeline_task") as create_task:
             response = client.post(
                 "/api/projects/proj-1/execute?intermediate_mode=full_pg",
             )
@@ -128,7 +128,7 @@ class TestOrchestratorExecuteEndpoint:
         client = _build_orchestrator_client(role="superadmin")
 
         with patch("app.core.orchestrator.router._assert_project_group"), \
-             patch("app.services.task_service.task_service.create_pipeline_task") as create_task:
+             patch("app.core.orchestrator.task_service.task_service.create_pipeline_task") as create_task:
             response = client.post(
                 "/api/projects/proj-1/execute?intermediate_mode=NOT_A_MODE",
             )
@@ -150,7 +150,7 @@ class TestOrchestratorExecuteEndpoint:
         client = _build_orchestrator_client(role="admin")
 
         with patch("app.core.orchestrator.router._assert_project_group"), \
-             patch("app.services.task_service.task_service.create_pipeline_task"):
+             patch("app.core.orchestrator.task_service.task_service.create_pipeline_task"):
             response = client.post(
                 "/api/projects/proj-1/execute?intermediate_mode=NOT_A_MODE",
             )
@@ -167,7 +167,7 @@ class TestOrchestratorExecuteEndpoint:
         client = _build_orchestrator_client(role="superadmin")
 
         with patch("app.core.orchestrator.router._assert_project_group"), \
-             patch("app.services.task_service.task_service.create_pipeline_task") as create_task:
+             patch("app.core.orchestrator.task_service.task_service.create_pipeline_task") as create_task:
             mock_task_info = MagicMock()
             mock_task_info.to_dict.return_value = {
                 "task_id": "t-1", "status": "pending",
@@ -192,7 +192,7 @@ class TestArricchisciEnrichAsyncEndpoint:
         client = _build_arricchisci_client(role="admin")
 
         with patch("app.core.arricchisci.router._check_project_ownership"), \
-             patch("app.services.task_service.task_service.create_enrichment_task") as create_task:
+             patch("app.core.orchestrator.task_service.task_service.create_enrichment_task") as create_task:
             mock_task_info = MagicMock()
             mock_task_info.task_id = "t-1"
             mock_task_info.status = MagicMock()
@@ -209,7 +209,7 @@ class TestArricchisciEnrichAsyncEndpoint:
         client = _build_arricchisci_client(role="superadmin")
 
         with patch("app.core.arricchisci.router._check_project_ownership"), \
-             patch("app.services.task_service.task_service.create_enrichment_task") as create_task:
+             patch("app.core.orchestrator.task_service.task_service.create_enrichment_task") as create_task:
             mock_task_info = MagicMock()
             mock_task_info.task_id = "t-1"
             mock_task_info.status = MagicMock()
@@ -228,7 +228,7 @@ class TestArricchisciEnrichAsyncEndpoint:
         client = _build_arricchisci_client(role="admin")
 
         with patch("app.core.arricchisci.router._check_project_ownership"), \
-             patch("app.services.task_service.task_service.create_enrichment_task") as create_task:
+             patch("app.core.orchestrator.task_service.task_service.create_enrichment_task") as create_task:
             response = client.post(
                 "/api/projects/proj-1/enrich-async?intermediate_mode=full_pg",
             )
@@ -241,7 +241,7 @@ class TestArricchisciEnrichAsyncEndpoint:
         client = _build_arricchisci_client(role="superadmin")
 
         with patch("app.core.arricchisci.router._check_project_ownership"), \
-             patch("app.services.task_service.task_service.create_enrichment_task") as create_task:
+             patch("app.core.orchestrator.task_service.task_service.create_enrichment_task") as create_task:
             response = client.post(
                 "/api/projects/proj-1/enrich-async?intermediate_mode=NOT_A_MODE",
             )

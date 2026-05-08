@@ -1,5 +1,5 @@
 """
-Contract test R-25 PR-B2.b — propagation manipola + arricchisci.
+Contract test R-25 PR-B2.b â€” propagation manipola + arricchisci.
 
 Estende il contract di PR-B2 (estrai-final) ai 3 call-site rimasti:
 """
@@ -237,7 +237,7 @@ class TestCeleryTasksSignatures:
 class TestTaskServiceSignatures:
     def test_create_pipeline_task_signature(self):
         import inspect
-        from app.services.task_service import TaskService
+        from app.core.orchestrator.task_service import TaskService
 
         sig = inspect.signature(TaskService.create_pipeline_task)
         assert "intermediate_mode_override" in sig.parameters
@@ -245,7 +245,7 @@ class TestTaskServiceSignatures:
 
     def test_create_enrichment_task_signature(self):
         import inspect
-        from app.services.task_service import TaskService
+        from app.core.orchestrator.task_service import TaskService
 
         sig = inspect.signature(TaskService.create_enrichment_task)
         assert "intermediate_mode_override" in sig.parameters

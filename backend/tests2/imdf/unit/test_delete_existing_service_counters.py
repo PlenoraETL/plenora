@@ -11,7 +11,7 @@ from unittest.mock import patch
 
 import pytest
 
-from app.core.imdf.arcgis_uploader import _delete_existing_service
+from app.core.imdf.arcgis.service_lifecycle import _delete_existing_service
 
 
 pytestmark = [pytest.mark.unit, pytest.mark.imdf, pytest.mark.contract]

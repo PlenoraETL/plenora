@@ -1,5 +1,5 @@
 """
-[phase-2-err][batch9] C1 — sanitize str(e) in _execute_carica_if_present.
+[phase-2-err][batch9] C1 â€” sanitize str(e) in _execute_carica_if_present.
 
 Fix S3 / F1 dell'audit Batch 9: il boundary `OrchestratorService._execute_carica_if_present`
 """
@@ -52,7 +52,7 @@ def _make_orchestrator_with_carica_node():
 
 
 def test_carica_launch_failure_returns_sanitized_error_string():
-    """Quando create_carica_task solleva → artifact["carica"]["error"] e'
+    """Quando create_carica_task solleva â†’ artifact["carica"]["error"] e'
     il token canonico 'carica_launch_failed', NON str(e)."""
     svc = _make_orchestrator_with_carica_node()
 
@@ -61,7 +61,7 @@ def test_carica_launch_failure_returns_sanitized_error_string():
     )
 
     with patch(
-        "app.services.task_service.task_service.submit_task",
+        "app.core.orchestrator.task_service.task_service.submit_task",
         side_effect=sensitive_exc,
     ), patch(
         "app.shared.execution.canvas_types_enricher.enrich_canvas_types_from_metadata"
@@ -83,7 +83,7 @@ def test_carica_launch_failure_does_not_leak_exception_args():
     exc = ValueError(leak_marker)
 
     with patch(
-        "app.services.task_service.task_service.submit_task",
+        "app.core.orchestrator.task_service.task_service.submit_task",
         side_effect=exc,
     ), patch(
         "app.shared.execution.canvas_types_enricher.enrich_canvas_types_from_metadata"
@@ -105,7 +105,7 @@ def test_carica_launch_failure_logs_exception_with_exc_info():
     exc = RuntimeError("tecnicamente-dettagliato-solo-log")
 
     with patch(
-        "app.services.task_service.task_service.submit_task",
+        "app.core.orchestrator.task_service.task_service.submit_task",
         side_effect=exc,
     ), patch(
         "app.shared.execution.canvas_types_enricher.enrich_canvas_types_from_metadata"
@@ -132,7 +132,7 @@ def test_carica_launch_failure_logs_exception_with_exc_info():
 
 def test_carica_launch_success_unchanged_contract():
     """Sanity: se create_carica_task ha successo, il dict CARICA continua
-    ad avere la shape legacy `{tasks: [...], message: ...}` — il fix non
+    ad avere la shape legacy `{tasks: [...], message: ...}` â€” il fix non
     tocca il path success."""
     svc = _make_orchestrator_with_carica_node()
 
@@ -140,7 +140,7 @@ def test_carica_launch_success_unchanged_contract():
     fake_task_info.task_id = "ct-xyz"
 
     with patch(
-        "app.services.task_service.task_service.submit_task",
+        "app.core.orchestrator.task_service.task_service.submit_task",
         return_value=fake_task_info,
     ), patch(
         "app.shared.execution.canvas_types_enricher.enrich_canvas_types_from_metadata"

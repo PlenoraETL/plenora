@@ -12,7 +12,7 @@ import app.utils.logger  # noqa: F401
 import app.core.features.features_service  # noqa: F401
 import app.core.features.arcgis_client  # noqa: F401
 import app.core.imdf.loader  # noqa: F401
-import app.core.imdf.arcgis_uploader  # noqa: F401
+import app.core.imdf.arcgis.service_discovery  # noqa: F401
 import app.core.imdf.validator  # noqa: F401
 
 pytestmark = [pytest.mark.unit, pytest.mark.contract, pytest.mark.regression]
@@ -82,7 +82,7 @@ def stub_externals_with_fs_schema(monkeypatch):
     schema-compat."""
     import app.core.imdf.loader as loader_mod
     import app.core.connections.arcgis_connection_resolver as adapter_mod
-    import app.core.imdf.arcgis_uploader as uploader_mod
+    import app.core.imdf.arcgis.service_discovery as service_discovery_mod
 
     # Bundle con un layer 'Locale' che ha alcuni campi
     fake_gdf = _FakeGDFWithCols({
@@ -127,22 +127,22 @@ def stub_externals_with_fs_schema(monkeypatch):
     )
 
     monkeypatch.setattr(
-        uploader_mod, "_find_existing_service",
+        service_discovery_mod, "_find_existing_service",
         lambda *args, **kwargs: (
             "https://example.com/services/MyFS/FeatureServer", "item-1", None,
         ),
     )
     monkeypatch.setattr(
-        uploader_mod, "_is_service_name_available",
+        service_discovery_mod, "_is_service_name_available",
         lambda client, conn, fs_name: (True, None),
     )
     monkeypatch.setattr(
-        uploader_mod, "_list_user_folders",
+        service_discovery_mod, "_list_user_folders",
         lambda client, conn: [],
         raising=False,
     )
 
-    return uploader_mod
+    return service_discovery_mod
 
 
 def _layer_issue_codes(report, layer_name="Locale"):
@@ -227,7 +227,7 @@ def test_append_detects_duplicate_business_keys(fake_bundle, monkeypatch):
     duplicate. Il validator deve emettere un warning quantitativo."""
     import app.core.imdf.loader as loader_mod
     import app.core.connections.arcgis_connection_resolver as adapter_mod
-    import app.core.imdf.arcgis_uploader as uploader_mod
+    import app.core.imdf.arcgis.service_discovery as service_discovery_mod
 
     # Bundle con colonna UNIT_ID (default match_col per 'Locale') e 3 valori
     class _UnitIdSeries:
@@ -281,15 +281,15 @@ def test_append_detects_duplicate_business_keys(fake_bundle, monkeypatch):
         lambda client, conn, layer_url, where: 2,  # Simula 2 chiavi esistenti
     )
     monkeypatch.setattr(
-        uploader_mod, "_find_existing_service",
+        service_discovery_mod, "_find_existing_service",
         lambda *args, **kwargs: ("https://example.com/svc", "item-1", None),
     )
     monkeypatch.setattr(
-        uploader_mod, "_is_service_name_available",
+        service_discovery_mod, "_is_service_name_available",
         lambda c, co, fn: (True, None),
     )
     monkeypatch.setattr(
-        uploader_mod, "_list_user_folders",
+        service_discovery_mod, "_list_user_folders",
         lambda c, co: [], raising=False,
     )
 
@@ -322,7 +322,7 @@ def test_append_no_duplicates_no_warning(fake_bundle, monkeypatch):
     append non deve emettere warning duplicati."""
     import app.core.imdf.loader as loader_mod
     import app.core.connections.arcgis_connection_resolver as adapter_mod
-    import app.core.imdf.arcgis_uploader as uploader_mod
+    import app.core.imdf.arcgis.service_discovery as service_discovery_mod
 
     class _UnitIdSeries:
         def __init__(self, values):
@@ -369,15 +369,15 @@ def test_append_no_duplicates_no_warning(fake_bundle, monkeypatch):
         lambda client, conn, layer_url, where: 0,
     )
     monkeypatch.setattr(
-        uploader_mod, "_find_existing_service",
+        service_discovery_mod, "_find_existing_service",
         lambda *args, **kwargs: ("https://example.com/svc", "item-1", None),
     )
     monkeypatch.setattr(
-        uploader_mod, "_is_service_name_available",
+        service_discovery_mod, "_is_service_name_available",
         lambda c, co, fn: (True, None),
     )
     monkeypatch.setattr(
-        uploader_mod, "_list_user_folders",
+        service_discovery_mod, "_list_user_folders",
         lambda c, co: [], raising=False,
     )
 

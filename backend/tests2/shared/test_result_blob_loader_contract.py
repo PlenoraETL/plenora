@@ -276,7 +276,7 @@ def test_load_returns_size_bytes_zero_when_object_storage_disabled():
     assert out.size_bytes == 0
 
 
-# Result blob read boundary + back-compat shim delegation
+# Result blob read boundary delegation
 
 
 def test_results_blob_boundary_with_group_id_filters_sql():
@@ -298,14 +298,14 @@ def test_results_blob_boundary_with_group_id_filters_sql():
     assert captured["params"] == (expected_cap, "r1", "g1")
 
 
-def test_back_compat_shim_with_group_id_filters_sql():
+def test_result_blob_boundary_with_group_id_filters_sql_against_core_path():
     """get_result_data(result_id, group_id) -> dispatch with
     group_id_filter -> SQL filters on (id, group_id).
 
     013 note: max_bytes leads the params tuple (CASE preflight
     placeholder); WHERE-clause params follow.
     """
-    from app.db import results_db_service
+    from app.core.results import blob as results_blob
     from app.core.resources.resource_caps import resolve_resource_max_bytes
 
     captured, fake = fake_fetchone(
@@ -313,7 +313,7 @@ def test_back_compat_shim_with_group_id_filters_sql():
     )
 
     with patch("app.db.pg_connection.fetchone", fake):
-        out = results_db_service.get_result_data("r1", group_id="g1")
+        out = results_blob.get_result_data("r1", group_id="g1")
 
     assert out == b"x"
     assert "AND group_id = ?" in captured["sql"]
@@ -321,11 +321,11 @@ def test_back_compat_shim_with_group_id_filters_sql():
     assert captured["params"] == (expected_cap, "r1", "g1")
 
 
-def test_back_compat_shim_without_group_id_skips_filter():
+def test_result_blob_boundary_without_group_id_skips_filter():
     """get_result_data(result_id) -> dispatch with
     group_id_filter=None -> SQL does NOT filter on group_id
     (legacy fail-open path preserved)."""
-    from app.db import results_db_service
+    from app.core.results import blob as results_blob
     from app.core.resources.resource_caps import resolve_resource_max_bytes
 
     captured, fake = fake_fetchone(
@@ -333,7 +333,7 @@ def test_back_compat_shim_without_group_id_skips_filter():
     )
 
     with patch("app.db.pg_connection.fetchone", fake):
-        out = results_db_service.get_result_data("r1")
+        out = results_blob.get_result_data("r1")
 
     assert out == b"y"
     assert "AND group_id" not in captured["sql"]
@@ -341,10 +341,10 @@ def test_back_compat_shim_without_group_id_skips_filter():
     assert captured["params"] == (expected_cap, "r1")
 
 
-def test_back_compat_shim_dispatches_to_object_storage():
+def test_result_blob_boundary_dispatches_to_object_storage():
     """get_result_data over a row with storage_key set goes through
     the loader's object-storage path (single dispatch)."""
-    from app.db import results_db_service
+    from app.core.results import blob as results_blob
 
     download_calls = []
     _, fake_fetch = fake_fetchone(
@@ -360,38 +360,35 @@ def test_back_compat_shim_dispatches_to_object_storage():
              "app.core.resources.loaders.result_blob._download_object_storage",
              _fake_download,
          ):
-        out = results_db_service.get_result_data("r1")
+        out = results_blob.get_result_data("r1")
 
     assert out == b"s3-data"
     assert download_calls == ["results/p/r.bin"]
 
 
-def test_back_compat_shim_returns_none_when_row_missing():
+def test_result_blob_boundary_returns_none_when_row_missing():
     """get_result_data(missing) -> None (legacy contract; the
     fail-closed FileNotFoundError lives only on the new
     ResourceRef path)."""
-    from app.db import results_db_service
+    from app.core.results import blob as results_blob
 
     _, fake = fake_fetchone(row=None)
 
     with patch("app.db.pg_connection.fetchone", fake):
-        out = results_db_service.get_result_data("missing")
+        out = results_blob.get_result_data("missing")
 
     assert out is None
 
 
-def test_legacy_s3_download_bytes_still_works():
-    """The legacy `_s3_download_bytes(storage_key)` symbol must
-    keep returning bytes. It is now a thin wrapper over the
-    loader's `_download_object_storage`; the public surface is
-    preserved for any external caller still using it."""
-    from app.db import results_db_service
+def test_result_blob_loader_object_storage_download_still_works():
+    """The canonical object-storage loader returns bytes."""
+    from app.core.resources.loaders import result_blob
 
-    def _fake_download(storage_key):
+    def _fake_download(storage_key, **_):
         return b"ok"
 
     with patch(
-        "app.core.resources.loaders.result_blob._download_object_storage",
+        "app.core.resources.loaders.result_blob._download_object_storage_impl",
         _fake_download,
     ):
-        assert results_db_service._s3_download_bytes("results/x/y") == b"ok"
+        assert result_blob._download_object_storage("results/x/y") == b"ok"

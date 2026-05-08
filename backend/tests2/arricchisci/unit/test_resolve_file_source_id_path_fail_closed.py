@@ -13,7 +13,7 @@ import app.config as config_mod
 import app.core.files.db as file_sources_db
 import app.core.auth.visibility as sharing_mod
 from app.core.arricchisci.execution_context import ArricchisciExecutionContext
-from app.shared.exceptions import FileSourceResolutionError
+from app.core.files.exceptions import FileSourceResolutionError
 
 
 # BE-GO-READY-ORCHESTRATION-ENGINE-010: il fallback singleton

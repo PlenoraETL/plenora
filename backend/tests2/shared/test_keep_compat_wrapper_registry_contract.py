@@ -1,4 +1,4 @@
-"""Registry contract for active KEEP_COMPAT wrappers.
+"""Registry contract for active KEEP_COMPAT wrappers and deleted tombstones.
 
 Wrappers are allowed while callers migrate, but each one needs an
 explicit owner, canonical target, and removal condition so the
@@ -46,146 +46,6 @@ class KeepCompatWrapper:
 
 
 _KEEP_COMPAT_WRAPPERS: tuple[KeepCompatWrapper, ...] = (
-    KeepCompatWrapper(
-        rel_path="app/services/connection_service.py",
-        wrapper="module",
-        owner="CONNECTION_ENGINE",
-        canonical_target="app.core.connections.service",
-        removal_condition=(
-            "after legacy connection-service tests import "
-            "app.core.connections.service directly"
-        ),
-    ),
-    KeepCompatWrapper(
-        rel_path="app/services/file_service.py",
-        wrapper="module",
-        owner="STORAGE_ARTIFACT_ENGINE",
-        canonical_target="app.core.files.service",
-        removal_condition=(
-            "after legacy file-service tests import app.core.files.service "
-            "directly and patch canonical file boundaries"
-        ),
-    ),
-    KeepCompatWrapper(
-        rel_path="app/services/file_load_dispatch.py",
-        wrapper="module",
-        owner="STORAGE_ARTIFACT_ENGINE",
-        canonical_target="app.core.files.load_dispatch",
-        removal_condition=(
-            "after file parser dispatch tests import "
-            "app.core.files.load_dispatch directly"
-        ),
-    ),
-    KeepCompatWrapper(
-        rel_path="app/services/file_service_deps.py",
-        wrapper="module",
-        owner="STORAGE_ARTIFACT_ENGINE",
-        canonical_target="app.core.files.service_deps",
-        removal_condition=(
-            "after file dependency tests import "
-            "app.core.files.service_deps directly"
-        ),
-    ),
-    KeepCompatWrapper(
-        rel_path="app/services/file_storage_dispatch.py",
-        wrapper="module",
-        owner="STORAGE_ARTIFACT_ENGINE",
-        canonical_target="app.core.files.storage_dispatch",
-        removal_condition=(
-            "after storage dispatch tests import "
-            "app.core.files.storage_dispatch directly"
-        ),
-    ),
-    KeepCompatWrapper(
-        rel_path="app/services/file_upload.py",
-        wrapper="module",
-        owner="STORAGE_ARTIFACT_ENGINE",
-        canonical_target="app.core.files.upload",
-        removal_condition=(
-            "after single-file upload tests import app.core.files.upload "
-            "directly and patch canonical upload helpers"
-        ),
-    ),
-    KeepCompatWrapper(
-        rel_path="app/services/file_source_read.py",
-        wrapper="module",
-        owner="STORAGE_ARTIFACT_ENGINE",
-        canonical_target="app.core.files.source_read",
-        removal_condition=(
-            "after file-source read tests import "
-            "app.core.files.source_read directly"
-        ),
-    ),
-    KeepCompatWrapper(
-        rel_path="app/services/file_preview_temp.py",
-        wrapper="module",
-        owner="STORAGE_ARTIFACT_ENGINE",
-        canonical_target="app.core.files.preview_temp",
-        removal_condition=(
-            "after preview-temp tests import app.core.files.preview_temp "
-            "directly and patch canonical preview helpers"
-        ),
-    ),
-    KeepCompatWrapper(
-        rel_path="app/services/file_raw_upload.py",
-        wrapper="module",
-        owner="STORAGE_ARTIFACT_ENGINE",
-        canonical_target="app.core.files.raw_upload",
-        removal_condition=(
-            "after raw upload tests import app.core.files.raw_upload "
-            "directly and patch canonical upload helpers"
-        ),
-    ),
-    KeepCompatWrapper(
-        rel_path="app/services/file_multi_layer_upload.py",
-        wrapper="module",
-        owner="STORAGE_ARTIFACT_ENGINE",
-        canonical_target="app.core.files.multi_layer_upload",
-        removal_condition=(
-            "after multi-layer upload tests import "
-            "app.core.files.multi_layer_upload directly"
-        ),
-    ),
-    KeepCompatWrapper(
-        rel_path="app/services/project_service.py",
-        wrapper="module",
-        owner="VERSIONING_SNAPSHOT_ENGINE",
-        canonical_target="app.core.projects.service",
-        removal_condition=(
-            "after project-service tests and router patch points import "
-            "app.core.projects.service directly"
-        ),
-    ),
-    KeepCompatWrapper(
-        rel_path="app/services/project_lineage.py",
-        wrapper="module",
-        owner="VERSIONING_SNAPSHOT_ENGINE",
-        canonical_target="app.core.projects.lineage",
-        removal_condition=(
-            "after lineage-cycle tests import app.core.projects.lineage "
-            "directly"
-        ),
-    ),
-    KeepCompatWrapper(
-        rel_path="app/services/schema_inference.py",
-        wrapper="module",
-        owner="VERSIONING_SNAPSHOT_ENGINE",
-        canonical_target="app.core.projects.schema_inference",
-        removal_condition=(
-            "after schema-inference tests import "
-            "app.core.projects.schema_inference directly"
-        ),
-    ),
-    KeepCompatWrapper(
-        rel_path="app/services/task_service.py",
-        wrapper="module",
-        owner="ORCHESTRATION_ENGINE",
-        canonical_target="app.core.orchestrator.task_service",
-        removal_condition=(
-            "after task router and async-permission tests import "
-            "app.core.orchestrator.task_service directly"
-        ),
-    ),
     KeepCompatWrapper(
         rel_path="app/core/arricchisci/api_connector.py",
         wrapper="ApiConnectionService.execute_enrichment",
@@ -240,23 +100,27 @@ _KEEP_COMPAT_WRAPPERS: tuple[KeepCompatWrapper, ...] = (
 _REMOVED_ZERO_CONSUMER_WRAPPERS: frozenset[str] = frozenset(
     {
         "app/services/log_archive.py",
+        "app/services/file_load_dispatch.py",
+        "app/services/file_multi_layer_upload.py",
+        "app/services/file_preview_temp.py",
+        "app/services/file_raw_upload.py",
+        "app/services/file_service.py",
+        "app/services/file_service_deps.py",
+        "app/services/file_source_read.py",
+        "app/services/file_storage_dispatch.py",
+        "app/services/file_upload.py",
+        "app/services/connection_service.py",
+        "app/services/orphan_cleanup_service.py",
         "app/services/project_domain.py",
+        "app/services/project_lineage.py",
         "app/services/project_repository.py",
+        "app/services/project_service.py",
+        "app/services/schema_inference.py",
+        "app/services/task_service.py",
     }
 )
 
-_MODULE_COMPAT_ALIASES: tuple[tuple[str, str], ...] = (
-    ("app.services.connection_service", "app.core.connections.service"),
-    ("app.services.file_load_dispatch", "app.core.files.load_dispatch"),
-    ("app.services.file_storage_dispatch", "app.core.files.storage_dispatch"),
-    ("app.services.file_upload", "app.core.files.upload"),
-    ("app.services.file_raw_upload", "app.core.files.raw_upload"),
-    ("app.services.file_multi_layer_upload", "app.core.files.multi_layer_upload"),
-    ("app.services.file_preview_temp", "app.core.files.preview_temp"),
-    ("app.services.file_source_read", "app.core.files.source_read"),
-    ("app.services.file_service", "app.core.files.service"),
-    ("app.services.project_service", "app.core.projects.service"),
-)
+_MODULE_COMPAT_ALIASES: tuple[tuple[str, str], ...] = ()
 
 
 def _source(rel_path: str) -> str:
@@ -271,9 +135,12 @@ def _module_docstring(rel_path: str) -> str:
     return ast.get_docstring(_parse(rel_path)) or ""
 
 
-def _legacy_service_wrappers() -> set[str]:
+def _active_service_compat_wrappers() -> set[str]:
     wrappers: set[str] = set()
-    for path in (_APP_ROOT / "services").glob("*.py"):
+    services_root = _APP_ROOT / "services"
+    if not services_root.exists():
+        return wrappers
+    for path in services_root.glob("*.py"):
         if path.name == "__init__.py":
             continue
         rel_path = path.relative_to(_BACKEND_ROOT).as_posix()
@@ -287,7 +154,7 @@ def _module_name(rel_path: str) -> str:
 
 
 def _imported_compat_modules(path: Path, removed_modules: set[str]) -> set[str]:
-    tree = ast.parse(path.read_text(encoding="utf-8"))
+    tree = ast.parse(path.read_text(encoding="utf-8-sig"))
     hits: set[str] = set()
     for node in ast.walk(tree):
         if isinstance(node, ast.ImportFrom) and node.module in removed_modules:
@@ -298,7 +165,7 @@ def _imported_compat_modules(path: Path, removed_modules: set[str]) -> set[str]:
 
 
 def _references_module(path: Path, module_name: str) -> bool:
-    tree = ast.parse(path.read_text(encoding="utf-8"))
+    tree = ast.parse(path.read_text(encoding="utf-8-sig"))
     parent, leaf = module_name.rsplit(".", 1)
     for node in ast.walk(tree):
         if isinstance(node, ast.Import):
@@ -375,17 +242,18 @@ def test_keep_compat_wrapper_sources_point_to_canonical_target(
     )
 
 
-def test_app_services_keep_compat_wrappers_are_registered():
+def test_app_services_compat_wrappers_stay_tombstoned_or_registered():
     registered = {
         wrapper.rel_path
         for wrapper in _KEEP_COMPAT_WRAPPERS
         if wrapper.rel_path.startswith("app/services/")
     }
-    active = _legacy_service_wrappers()
+    active = _active_service_compat_wrappers()
 
     assert active == registered, (
-        "`app.services` KEEP_COMPAT wrappers must be listed in "
-        "`_KEEP_COMPAT_WRAPPERS` with owner and canonical target.\n"
+        "`app.services` compatibility wrappers are tombstoned. Any "
+        "reintroduced wrapper must be explicitly registered with owner, "
+        "canonical target, and removal condition.\n"
         f"Unregistered: {sorted(active - registered)}\n"
         f"Stale registry rows: {sorted(registered - active)}"
     )
@@ -402,8 +270,8 @@ def test_app_services_keep_compat_wrappers_have_live_test_or_runtime_consumers()
             stale_wrappers[wrapper.rel_path] = consumers
 
     assert not stale_wrappers, (
-        "`app.services` KEEP_COMPAT wrappers without test/runtime consumers "
-        "must be deleted and moved to `_REMOVED_ZERO_CONSUMER_WRAPPERS`.\n"
+        "`app.services` compatibility wrappers without test/runtime "
+        "consumers must stay deleted and listed as tombstones.\n"
         f"Stale wrappers: {sorted(stale_wrappers)}"
     )
 
@@ -416,7 +284,7 @@ def test_removed_zero_consumer_wrappers_stay_removed():
 
     for rel_path in _REMOVED_ZERO_CONSUMER_WRAPPERS:
         assert not (_BACKEND_ROOT / rel_path).exists(), (
-            f"{rel_path} was removed as a zero-consumer compatibility wrapper."
+            f"{rel_path} is a tombstoned zero-consumer compatibility wrapper."
         )
 
     offenders: dict[str, list[str]] = {}

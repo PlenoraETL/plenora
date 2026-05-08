@@ -26,7 +26,6 @@ _ALLOWED_ROOT_MODULES: frozenset[str] = frozenset(
         "error_codes",        # shared error code registry
         "error_envelope",     # standard error response envelope
         "error_sanitizer",    # strip sensitive data from error messages
-        "exceptions",         # shared exception hierarchy
         "audit_action",       # audit log action registry
         "authz_helpers",      # authorization predicate helpers
         "crypto",             # cryptographic primitives (fernet, hashing)
@@ -57,7 +56,6 @@ _ROOT_MODULE_CLASSIFICATIONS: dict[str, str] = {
     "error_codes": "KEEP_ROOT_CROSS_CUTTING",
     "error_envelope": "KEEP_ROOT_CROSS_CUTTING",
     "error_sanitizer": "KEEP_ROOT_CROSS_CUTTING",
-    "exceptions": "KEEP_ROOT_CROSS_CUTTING",
     "audit_action": "MOVE_TO_SECURITY_PACKAGE_LATER",
     "authz_helpers": "MOVE_TO_SECURITY_PACKAGE_LATER",
     "crypto": "MOVE_TO_SECURITY_PACKAGE_LATER",

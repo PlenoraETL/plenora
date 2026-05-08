@@ -16,7 +16,7 @@ pytestmark = [pytest.mark.unit, pytest.mark.orchestrator, pytest.mark.contract, 
 
 def test_task_service_compat_wrapper_preserves_canonical_singleton():
     from app.core.orchestrator.task_service import task_service as canonical_task_service
-    from app.services.task_service import task_service as compat_task_service
+    from app.core.orchestrator.task_service import task_service as compat_task_service
 
     assert compat_task_service is canonical_task_service
 
@@ -40,8 +40,8 @@ def test_cleanup_task_deletes_only_task_result_and_task_logs(client, tmp_path):
         return SimpleNamespace(rowcount=1)
 
     with patch("app.core.orchestrator.router.settings", new=SimpleNamespace(RESULTS_DIR=tmp_path)), \
-         patch("app.services.task_service.task_service.get_task_status", return_value=task_info), \
-         patch("app.services.project_service.ProjectService.get_project_metadata", return_value={"id": project_id, "group_id": "grp-1"}), \
+         patch("app.core.orchestrator.task_service.task_service.get_task_status", return_value=task_info), \
+         patch("app.core.projects.service.ProjectService.get_project_metadata", return_value={"id": project_id, "group_id": "grp-1"}), \
          patch("app.core.results.cleanup.delete_result", return_value=True) as delete_result, \
          patch("app.db.pg_connection.execute", side_effect=_record_sql), \
          patch("celery.result.AsyncResult", return_value=SimpleNamespace(forget=lambda: None)):
@@ -62,7 +62,7 @@ def test_download_task_result_returns_gone_when_payload_has_no_result_id(client)
     )
 
     with patch("app.core.orchestrator.router._assert_task_group"), \
-         patch("app.services.task_service.task_service.get_task_status", return_value=task_info):
+         patch("app.core.orchestrator.task_service.task_service.get_task_status", return_value=task_info):
         response = client.get("/api/tasks/task-1/download")
 
     assert response.status_code == 410

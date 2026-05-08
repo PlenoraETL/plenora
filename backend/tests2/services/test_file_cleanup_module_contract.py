@@ -123,13 +123,13 @@ def test_rmtree_safe_uses_module_logger_when_no_logger_passed(tmp_path):
     rmtree_safe(target, logger=None)
 
 
-# 6. Wrapper compat (file_service + file_preview_temp) delegano alla shared
+# 6. I facade core usano la primitive shared di cleanup
 
 
-def test_file_service_wrapper_delegates_to_shared_rmtree_safe(tmp_path):
-    """`file_service._rmtree_safe(path)` deve invocare la shared
-    `rmtree_safe` con `_logger` del modulo file_service."""
-    from app.services import file_service as fs_mod
+def test_core_file_service_cleanup_delegates_to_shared_rmtree_safe(tmp_path):
+    """`app.core.files.service._rmtree_safe(path)` deve invocare la shared
+    `rmtree_safe` con `_logger` del modulo core."""
+    from app.core.files import service as fs_mod
 
     target = tmp_path / "y.txt"
     target.write_text("z")
@@ -144,10 +144,10 @@ def test_file_service_wrapper_delegates_to_shared_rmtree_safe(tmp_path):
     assert kwargs["logger"] is fs_mod._logger
 
 
-def test_file_preview_temp_wrapper_delegates_to_shared_rmtree_safe(tmp_path):
-    """`file_preview_temp._rmtree_safe(path)` deve invocare la shared
+def test_preview_temp_cleanup_delegates_to_shared_rmtree_safe(tmp_path):
+    """`app.core.files.preview_temp._rmtree_safe(path)` deve invocare la shared
     `rmtree_safe` con `_logger_module` del modulo preview."""
-    from app.services import file_preview_temp as fp_mod
+    from app.core.files import preview_temp as fp_mod
 
     target = tmp_path / "y.txt"
     target.write_text("z")

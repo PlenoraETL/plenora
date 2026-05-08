@@ -1,5 +1,5 @@
 """
-Contract test — defense-in-depth MIME nei service entry-point.
+Contract test â€” defense-in-depth MIME nei service entry-point.
 
 Difesa secondaria: i 3 metodi di FileSourceService che ricevono blob
 """
@@ -41,7 +41,7 @@ def _shebang() -> bytes:
 
 def _make_service():
     """FileSourceService con dependencies leggere (NullLogger, etc.)."""
-    from app.services.file_service import FileSourceService
+    from app.core.files.service import FileSourceService
     return FileSourceService()
 
 
@@ -122,7 +122,7 @@ def test_create_multi_layer_from_upload_blocks_executable(monkeypatch):
 
 def test_create_multi_layer_requires_layers_config_first(monkeypatch):
     """Verifica che il MIME check non venga prima di altri preconditi
-    fondamentali — es. layers_config vuoto deve restare il primo errore
+    fondamentali â€” es. layers_config vuoto deve restare il primo errore
     visibile (caller deve sapere che la firma e' sbagliata, non il body)."""
     svc = _make_service()
     with pytest.raises(ValueError, match="layers_config|MIME|eseguibile"):

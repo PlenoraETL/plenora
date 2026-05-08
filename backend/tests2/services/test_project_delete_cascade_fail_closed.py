@@ -138,7 +138,7 @@ def test_delete_project_fail_closed_when_intermediate_runs_delete_fails():
     db.delete_project NON chiamato (config row preservata), attributi
     tipizzati contengono 'intermediate_runs'."""
     from app.core.projects.service import ProjectService
-    from app.shared.exceptions import ProjectCleanupPartialError
+    from app.core.projects.exceptions import ProjectCleanupPartialError
 
     with _patch_cascade(
         intermediate_side_effect=RuntimeError("intermediate DB lock timeout")
@@ -159,7 +159,7 @@ def test_delete_project_fail_closed_when_results_blob_delete_fails():
     """Step 3 (results_blobs) solleva → ProjectCleanupPartialError, db.delete_project
     NON chiamato, attributi contengono 'results_blobs'."""
     from app.core.projects.service import ProjectService
-    from app.shared.exceptions import ProjectCleanupPartialError
+    from app.core.projects.exceptions import ProjectCleanupPartialError
 
     with _patch_cascade(
         results_side_effect=RuntimeError("S3 timeout on blob delete")
@@ -177,7 +177,7 @@ def test_delete_project_fail_closed_with_multiple_critical():
     """Step 2 e 3 entrambi falliscono → ProjectCleanupPartialError con entrambi
     nel `critical_failed`, ordine d'esecuzione preservato."""
     from app.core.projects.service import ProjectService
-    from app.shared.exceptions import ProjectCleanupPartialError
+    from app.core.projects.exceptions import ProjectCleanupPartialError
 
     with _patch_cascade(
         intermediate_side_effect=RuntimeError("intermediate down"),
@@ -250,7 +250,7 @@ def test_delete_project_mixed_failure_critical_wins():
     """Step 1 derived + step 3 critical falliscono → ProjectCleanupPartialError
     (critical prevale); attributi contengono sia critical che derived."""
     from app.core.projects.service import ProjectService
-    from app.shared.exceptions import ProjectCleanupPartialError
+    from app.core.projects.exceptions import ProjectCleanupPartialError
 
     with _patch_cascade(
         schedules_side_effect=RuntimeError("scheduler blip"),
@@ -275,7 +275,7 @@ def test_delete_project_invariant_config_preserved_on_critical_fail():
     """Invariante fail-closed esplicita: su QUALSIASI fallimento critical,
     db.delete_project NON deve essere chiamato. Test con solo intermediate down."""
     from app.core.projects.service import ProjectService
-    from app.shared.exceptions import ProjectCleanupPartialError
+    from app.core.projects.exceptions import ProjectCleanupPartialError
 
     with _patch_cascade(
         intermediate_side_effect=RuntimeError("boom"),

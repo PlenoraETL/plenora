@@ -68,7 +68,7 @@ def collaborators(fake_logger, tmp_path):
 
 
 def test_happy_path_csv_calls_parse_dispatch_db_save_and_cleanup(collaborators):
-    from app.services.file_upload import create_from_upload
+    from app.core.files.upload import create_from_upload
 
     out = create_from_upload(
         io.BytesIO(b"id\n1\n2\n3\n"), "data.csv", "MyData",
@@ -101,7 +101,7 @@ def test_happy_path_csv_calls_parse_dispatch_db_save_and_cleanup(collaborators):
 
 
 def test_happy_path_gpkg_single_layer_autopicks_and_detects_crs(collaborators):
-    from app.services.file_upload import create_from_upload
+    from app.core.files.upload import create_from_upload
 
     collaborators["detect_format"].return_value = "gpkg"
     collaborators["list_layers"].return_value = ["only_layer"]
@@ -131,7 +131,7 @@ def test_happy_path_gpkg_single_layer_autopicks_and_detects_crs(collaborators):
 
 def test_geo_crs_fallback_to_authority_when_no_epsg(collaborators):
     """Se gdf.crs.to_epsg() ritorna None, fallback a to_authority()."""
-    from app.services.file_upload import create_from_upload
+    from app.core.files.upload import create_from_upload
 
     collaborators["detect_format"].return_value = "geojson"
     fake_gdf = MagicMock()
@@ -156,7 +156,7 @@ def test_geo_crs_fallback_to_authority_when_no_epsg(collaborators):
 def test_mime_block_short_circuits_before_parse_dispatch_db(collaborators):
     """mime_validate solleva MimeMismatchError -> ValueError, no side effect
     persistente (parse/dispatch/db_save NON chiamati). Cleanup temp ESEGUITO."""
-    from app.services.file_upload import create_from_upload
+    from app.core.files.upload import create_from_upload
     from app.utils.mime_validator import MimeMismatchError
 
     mime = MagicMock(side_effect=MimeMismatchError("executable detected"))
@@ -190,7 +190,7 @@ def test_parse_failure_continues_with_empty_columns_and_saves_to_db(collaborator
     """load_by_format solleva -> logger.warning, columns=[], row_count=0,
     MA dispatch e db_save SONO comunque chiamati (preservato byte-per-byte).
     Cleanup temp esegue."""
-    from app.services.file_upload import create_from_upload
+    from app.core.files.upload import create_from_upload
 
     collaborators["load_by_format"].side_effect = RuntimeError("parser exploded")
 
@@ -224,7 +224,7 @@ def test_parse_failure_continues_with_empty_columns_and_saves_to_db(collaborator
 def test_dispatch_failure_propagates_no_db_save(collaborators):
     """Orphan guard: dispatch_blob_storage solleva -> exception propaga,
     db_save_file_source NON chiamato, cleanup temp eseguito."""
-    from app.services.file_upload import create_from_upload
+    from app.core.files.upload import create_from_upload
 
     collaborators["dispatch_blob_storage"].side_effect = RuntimeError("S3 down")
 
@@ -247,7 +247,7 @@ def test_dispatch_failure_propagates_no_db_save(collaborators):
 
 
 def test_db_save_failure_propagates_with_cleanup(collaborators):
-    from app.services.file_upload import create_from_upload
+    from app.core.files.upload import create_from_upload
 
     collaborators["db_save_file_source"].side_effect = RuntimeError("DB write fail")
 
@@ -268,7 +268,7 @@ def test_db_save_failure_propagates_with_cleanup(collaborators):
 
 
 def test_default_group_used_when_group_id_is_none(collaborators):
-    from app.services.file_upload import create_from_upload
+    from app.core.files.upload import create_from_upload
 
     create_from_upload(
         io.BytesIO(b"data"), "data.csv", "X",
@@ -283,13 +283,13 @@ def test_default_group_used_when_group_id_is_none(collaborators):
     assert db_kwargs["group_id"] == "default_grp"
 
 
-# 8. Wrapper FileSourceService.create_from_upload delega
+# 8. FileSourceService.create_from_upload resta un facade core sottile
 
 
-def test_file_service_wrapper_delegates_to_module():
-    """`FileSourceService.create_from_upload` thin wrapper: invoca
-    file_upload.create_from_upload con i 17 collaborator del service."""
-    from app.services.file_service import FileSourceService
+def test_file_source_service_create_from_upload_delegates_to_core_module():
+    """`FileSourceService.create_from_upload` invoca
+    app.core.files.upload.create_from_upload con i collaborator del service."""
+    from app.core.files.service import FileSourceService
 
     svc = FileSourceService.__new__(FileSourceService)
     svc._generate_file_id = MagicMock(return_value="file_x")
@@ -308,7 +308,7 @@ def test_file_service_wrapper_delegates_to_module():
 
     fake_dto = MagicMock()
     with patch(
-        "app.services.file_upload.create_from_upload",
+        "app.core.files.upload.create_from_upload",
         return_value=fake_dto,
     ) as mock_impl:
         out = svc.create_from_upload(

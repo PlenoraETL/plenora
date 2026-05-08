@@ -20,7 +20,6 @@ from unittest.mock import MagicMock
 import pytest
 
 from app.core.results import cleanup as results_cleanup
-from app.db import results_db_service
 from app.shared.storage_reconciliation import ReconciliationEntryRef
 
 
@@ -461,9 +460,9 @@ def test_delete_results_for_project_per_key_failure_isolates_others(
     assert "compensating_delete_outcome=failed" in mark_failed_calls[0][1]
 
 
-def test_results_db_service_retains_cleanup_compat_exports():
-    assert results_db_service.delete_result is results_cleanup.delete_result
+def test_result_cleanup_exports_live_only_at_canonical_boundary():
+    assert results_cleanup.delete_result.__module__ == "app.core.results.cleanup"
     assert (
-        results_db_service.delete_results_for_project
-        is results_cleanup.delete_results_for_project
+        results_cleanup.delete_results_for_project.__module__
+        == "app.core.results.cleanup"
     )

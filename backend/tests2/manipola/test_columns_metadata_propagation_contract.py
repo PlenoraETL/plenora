@@ -20,7 +20,7 @@ def test_manipola_propagates_save_error(monkeypatch):
     import app.shared.columns_metadata as _cm
     monkeypatch.setattr(_cm, "_BACKOFF_SEC", (0.01, 0.01, 0.01))
 
-    from app.shared.exceptions import ColumnsMetadataSaveError
+    from app.core.projects.exceptions import ColumnsMetadataSaveError
 
     # Patch dell'helper: lo stub solleva direttamente. Evitiamo di
     # montare il full executor manipola (troppe dipendenze) e

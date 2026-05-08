@@ -193,9 +193,7 @@ class FileSourceBlobLoader:
     consumers that need a filesystem path use
     ``FileSourceService._temp_file_for`` which fetches the bytes
     via this loader and owns its SHP/GDB ZIP-separation lifecycle
-    inline (post the legacy
-    ``app.services.file_blob_materialization`` helper module was
-    retired).
+    inline after the old helper module was retired.
 
     Tenant binding (mirror of ``ResultBlobLoader``):
       - ``is_superadmin=False`` -> SQL ``WHERE group_id = ?``

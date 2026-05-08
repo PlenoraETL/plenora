@@ -187,7 +187,7 @@ def envelope_app() -> FastAPI:
     """
     from starlette.exceptions import HTTPException as StarletteHTTPException
 
-    from app.shared.exceptions import CanvasCorruptedError
+    from app.core.projects.exceptions import CanvasCorruptedError
 
     app = FastAPI()
 

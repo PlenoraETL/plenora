@@ -87,36 +87,14 @@ def test_project_detail_db_leaf_returns_immutable_project_row(monkeypatch):
         row.name = "changed"
 
 
-def test_config_facade_get_project_keeps_legacy_dict_wrapper(monkeypatch):
+def test_project_db_leaf_does_not_expose_legacy_get_project_wrapper():
     from app.core.projects import db as project_db
-    from app.db import config_db_service as cfg_db
 
-    monkeypatch.setattr(
-        cfg_db,
-        "get_project_row",
-        lambda *args, **kwargs: project_db.ProjectDetailRow(
-            id="p1",
-            group_id="grp-1",
-            name="Project One",
-            project_type="estrai",
-            canvas={"nodes": [], "edges": []},
-            connection_id=None,
-            created_at=None,
-            updated_at=None,
-            created_by=None,
-        ),
-    )
-
-    row = cfg_db.get_project("p1")
-
-    assert isinstance(row, dict)
-    assert row["id"] == "p1"
-    assert row["canvas"] == {"nodes": [], "edges": []}
+    assert not hasattr(project_db, "get_project")
 
 
-def test_project_create_db_leaf_returns_typed_row_and_legacy_wrapper(monkeypatch):
+def test_project_create_db_leaf_returns_typed_row(monkeypatch):
     from app.core.projects import db as project_db
-    from app.db import config_db_service as cfg_db
 
     now = datetime(2026, 5, 7, 10, 0, tzinfo=timezone.utc)
     executed: list[tuple[str, tuple[object, ...]]] = []
@@ -153,39 +131,11 @@ def test_project_create_db_leaf_returns_typed_row_and_legacy_wrapper(monkeypatch
     assert isinstance(typed_row, project_db.ProjectDetailRow)
     assert typed_row.id == "p1"
     assert executed
-
-    monkeypatch.setattr(
-        cfg_db,
-        "create_project_row",
-        lambda **kwargs: project_db.ProjectDetailRow(
-            id=kwargs["project_id"],
-            group_id=kwargs["group_id"],
-            name=kwargs["name"],
-            project_type=kwargs["project_type"],
-            canvas={"nodes": [], "edges": []},
-            connection_id=kwargs["connection_id"],
-            created_at=now,
-            updated_at=now,
-            created_by=kwargs["created_by"],
-        ),
-    )
-
-    legacy_row = cfg_db.create_project(
-        project_id="p1",
-        group_id="grp-1",
-        name="Project One",
-        project_type="estrai",
-        connection_id="conn-1",
-        created_by="user-1",
-    )
-
-    assert isinstance(legacy_row, dict)
-    assert legacy_row["id"] == "p1"
+    assert not hasattr(project_db, "create_project")
 
 
-def test_project_update_db_leaf_returns_typed_row_and_legacy_wrapper(monkeypatch):
+def test_project_update_db_leaf_returns_typed_row(monkeypatch):
     from app.core.projects import db as project_db
-    from app.db import config_db_service as cfg_db
 
     now = datetime(2026, 5, 7, 10, 0, tzinfo=timezone.utc)
     executed: list[tuple[str, tuple[object, ...]]] = []
@@ -217,29 +167,7 @@ def test_project_update_db_leaf_returns_typed_row_and_legacy_wrapper(monkeypatch
     assert isinstance(typed_row, project_db.ProjectDetailRow)
     assert typed_row.id == "p1"
     assert executed
-
-    monkeypatch.setattr(
-        cfg_db,
-        "update_project_row",
-        lambda project_id, **fields: project_db.ProjectDetailRow(
-            id=project_id,
-            group_id="grp-1",
-            name="Project One",
-            project_type="estrai",
-            canvas=fields["canvas"],
-            connection_id=None,
-            created_at=now,
-            updated_at=now,
-            created_by=None,
-        ),
-    )
-
-    legacy_row = cfg_db.update_project(
-        "p1", canvas={"nodes": [], "edges": []}
-    )
-
-    assert isinstance(legacy_row, dict)
-    assert legacy_row["id"] == "p1"
+    assert not hasattr(project_db, "update_project")
 
 
 def test_project_dependency_db_leaf_returns_typed_rows_without_legacy_wrapper(monkeypatch):

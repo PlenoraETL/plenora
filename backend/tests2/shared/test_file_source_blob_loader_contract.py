@@ -213,7 +213,7 @@ def test_oversized_bytea_raises_memory_limit_exceeded(monkeypatch):
     ``data``; the loader MUST raise ``MemoryLimitExceededError``
     rather than return ``None`` (oversize is a typed signal, not
     a connectivity error)."""
-    from app.shared.exceptions import MemoryLimitExceededError
+    from app.core.resources.exceptions import MemoryLimitExceededError
     from app.core.resources.loaders.file_source_blob import (
         FileSourceBlobLoader,
     )
@@ -277,7 +277,7 @@ def test_storage_key_oversize_raises_memory_limit_exceeded(monkeypatch):
     """Object-storage download oversize must surface
     ``MemoryLimitExceededError`` (NOT a fail-soft None) so the
     caller can decide whether to surface a 413 or downgrade."""
-    from app.shared.exceptions import MemoryLimitExceededError
+    from app.core.resources.exceptions import MemoryLimitExceededError
     from app.core.resources.loaders.file_source_blob import (
         FileSourceBlobLoader,
     )

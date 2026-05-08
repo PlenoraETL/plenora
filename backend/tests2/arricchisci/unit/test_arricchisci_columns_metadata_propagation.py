@@ -29,7 +29,7 @@ def test_arricchisci_save_error_propagates(monkeypatch):
     ColumnsMetadataSaveError e il caller NON deve swalloware."""
     from unittest.mock import MagicMock
     import app.shared.columns_metadata as _cm
-    from app.shared.exceptions import ColumnsMetadataSaveError
+    from app.core.projects.exceptions import ColumnsMetadataSaveError
 
     monkeypatch.setattr(_cm, "_BACKOFF_SEC", (0.01, 0.01, 0.01))
 

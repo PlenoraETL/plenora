@@ -1,5 +1,5 @@
 """
-Contract test N9 — re-check permessi user in pipeline_task.
+Contract test N9 â€” re-check permessi user in pipeline_task.
 
 Pre-fix scenario:
 """
@@ -18,7 +18,7 @@ import pytest
 pytestmark = [pytest.mark.unit, pytest.mark.security, pytest.mark.contract]
 
 
-# Helpers — bytecode probe (refactor-resilient)
+# Helpers â€” bytecode probe (refactor-resilient)
 
 def _underlying(callable_or_task):
     """Estrae la funzione Python sottostante da un task Celery wrappato.
@@ -37,7 +37,7 @@ def _references_name(callable_or_task, name: str) -> bool:
     objects in `co_consts` (closures, comprehensions). Pattern preso da
     PR #37 (`test_enrichment_task_tenant_binding_lock.py`): refactor-
     resilient ai rename di variabili locali, alle riformattazioni e
-    all'aggiunta di commenti, ma sensibile al rename del callee — che
+    all'aggiunta di commenti, ma sensibile al rename del callee â€” che
     e' esattamente l'invariant da blindare.
     """
     code = _underlying(callable_or_task).__code__
@@ -103,7 +103,7 @@ def test_execute_pipeline_task_references_recheck_helper():
 
 def test_create_pipeline_task_accepts_user_id():
     """task_service.create_pipeline_task deve accettare e forward user_id."""
-    from app.services.task_service import TaskService
+    from app.core.orchestrator.task_service import TaskService
 
     sig = inspect.signature(TaskService.create_pipeline_task)
     assert "user_id" in sig.parameters, (
@@ -120,7 +120,7 @@ def test_create_pipeline_task_forwards_user_id_to_delay(monkeypatch):
     spy su `.delay` -> osservazione diretta del kwarg arrivato.
     """
     from workers.tasks import pipeline_task as pt
-    from app.services.task_service import task_service
+    from app.core.orchestrator.task_service import task_service
 
     captured = {}
 
@@ -176,7 +176,7 @@ def test_execute_endpoint_passes_current_user_id(monkeypatch):
         lambda *a, **kw: None,
     )
     monkeypatch.setattr(
-        "app.services.task_service.task_service.create_pipeline_task",
+        "app.core.orchestrator.task_service.task_service.create_pipeline_task",
         spy_create_pipeline_task,
     )
 
@@ -364,7 +364,7 @@ def test_open_run_writes_user_id_in_insert_sql(monkeypatch):
     )
 
 
-# 4. Scope completo N9 — preview, carica, enrichment (+ helper condiviso)
+# 4. Scope completo N9 â€” preview, carica, enrichment (+ helper condiviso)
 
 
 def test_shared_recheck_helper_exists_and_has_correct_contract():
@@ -404,8 +404,8 @@ def test_shared_recheck_returns_permission_revoked_on_disabled_user(monkeypatch)
     # `app.db.config.users` AT MODULE LOAD: il symbol `get_user` e' bound nel namespace
     # del modulo helper, non riferito ogni volta all'origine. Patchare
     # l'origine lascia invariato il
-    # symbol bound qui → la chiamata reale a `pg_connection.fetchone` parte
-    # → access violation se DB non raggiungibile (vedi review #8 Batch B).
+    # symbol bound qui â†’ la chiamata reale a `pg_connection.fetchone` parte
+    # â†’ access violation se DB non raggiungibile (vedi review #8 Batch B).
     # Pattern simmetrico a `test_n11_canvas_types_propagation_contract.py`
     # (review #7).
     monkeypatch.setattr("app.shared.async_user_recheck.get_user", fake_get_user)
@@ -427,7 +427,7 @@ def test_other_tasks_accept_user_id_kwarg(task_attr, task_module):
     task = getattr(mod, task_attr)
     sig = inspect.signature(task)
     assert "user_id" in sig.parameters, (
-        f"{task_attr} non accetta user_id kwarg — N9 scope incompleto."
+        f"{task_attr} non accetta user_id kwarg â€” N9 scope incompleto."
     )
     assert sig.parameters["user_id"].default is None
 
@@ -447,7 +447,7 @@ def test_other_tasks_reference_shared_recheck_helper(task_attr, task_module):
     mod = importlib.import_module(task_module)
     task = getattr(mod, task_attr)
     assert _references_name(task, "recheck_user_authorized"), (
-        f"{task_attr} non referenzia recheck_user_authorized — rischio drift "
+        f"{task_attr} non referenzia recheck_user_authorized â€” rischio drift "
         f"di logica re-check tra i worker."
     )
 
@@ -466,12 +466,12 @@ def test_other_services_forward_user_id_to_delay(
     Replacement R-04 di `inspect.getsource(method) + "user_id" in src`:
     spy su `.delay` per ogni task. Verifica anche signature.
     """
-    from app.services.task_service import TaskService, task_service
+    from app.core.orchestrator.task_service import TaskService, task_service
 
     method = getattr(TaskService, service_method)
     sig = inspect.signature(method)
     assert "user_id" in sig.parameters, (
-        f"TaskService.{service_method} non accetta user_id — il router "
+        f"TaskService.{service_method} non accetta user_id â€” il router "
         f"non puo' propagare l'identita' al worker."
     )
 
@@ -559,7 +559,7 @@ def test_intermediate_create_run_accepts_user_id():
 
     sig = inspect.signature(create_run)
     assert "user_id" in sig.parameters, (
-        "intermediate.db.create_run non accetta user_id — allineamento "
+        "intermediate.db.create_run non accetta user_id â€” allineamento "
         "con log_runs incompleto."
     )
     assert sig.parameters["user_id"].default is None
@@ -618,7 +618,7 @@ def test_tasks_reference_intermediate_create_run(task_name, task_module):
     mod = importlib.import_module(task_module)
     task = getattr(mod, task_name)
     assert _references_name(task, "create_run"), (
-        f"{task_name} non referenzia intermediate.db.create_run — "
+        f"{task_name} non referenzia intermediate.db.create_run â€” "
         "allineamento incompleto (log_runs ha user_id, intermediate.runs no)."
     )
 

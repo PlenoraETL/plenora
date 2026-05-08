@@ -1,7 +1,7 @@
 """
-Contract test A1 — dispatch policy-aware in FileSourceService.
+Contract test A1 â€” dispatch policy-aware in FileSourceService.
 
-Copre §6.3 del design A1: `_dispatch_blob_storage` deve ramificare sulla
+Copre Â§6.3 del design A1: `_dispatch_blob_storage` deve ramificare sulla
 """
 
 from __future__ import annotations
@@ -90,7 +90,7 @@ def _clean_policy_env(monkeypatch):
 
 def test_db_policy_small_payload_stays_in_bytea(mock_db, stub_storage, monkeypatch):
     """policy=db + payload minuscolo -> DB BYTEA, nessun upload."""
-    from app.services.file_service import FileSourceService
+    from app.core.files.service import FileSourceService
 
     monkeypatch.setenv("STORAGE_POLICY", "db")
 
@@ -112,7 +112,7 @@ def test_db_policy_small_payload_stays_in_bytea(mock_db, stub_storage, monkeypat
 def test_db_policy_ignores_threshold(mock_db, stub_storage, monkeypatch):
     """policy=db + threshold basso: ignora la soglia, va comunque in DB.
     Dimostra che la policy vince sul threshold (il contrario di hybrid)."""
-    from app.services.file_service import FileSourceService
+    from app.core.files.service import FileSourceService
 
     monkeypatch.setenv("STORAGE_POLICY", "db")
     monkeypatch.setenv("FILE_SOURCE_S3_THRESHOLD_BYTES", "100")
@@ -138,7 +138,7 @@ def test_db_policy_ignores_threshold(mock_db, stub_storage, monkeypatch):
 def test_object_storage_policy_small_payload_uploads(mock_db, stub_storage, monkeypatch):
     """policy=object_storage + payload piccolo -> upload comunque,
     niente BYTEA. Dimostra che la policy vince sulla soglia."""
-    from app.services.file_service import FileSourceService
+    from app.core.files.service import FileSourceService
 
     monkeypatch.setenv("STORAGE_POLICY", "object_storage")
     monkeypatch.setenv("FILE_SOURCE_S3_THRESHOLD_BYTES", str(10 * 1024 * 1024))
@@ -164,7 +164,7 @@ def test_object_storage_policy_small_payload_uploads(mock_db, stub_storage, monk
 def test_object_storage_policy_upload_failure_no_db_row(mock_db, monkeypatch):
     """policy=object_storage + upload exc -> nessuna row DB (orphan guard).
     Stesso contratto del ramo hybrid: fail loud, niente DB row orfana."""
-    from app.services.file_service import FileSourceService
+    from app.core.files.service import FileSourceService
     from app.shared import cloud_backends
 
     monkeypatch.setenv("STORAGE_POLICY", "object_storage")
@@ -192,7 +192,7 @@ def test_hybrid_below_threshold_stays_in_db(mock_db, stub_storage, monkeypatch):
     """hybrid + sotto soglia -> DB BYTEA (comportamento attuale default).
     Duplicato testuale con test_file_service_db_contract ma vive qui per
     tenere il contratto policy-aware leggibile in un singolo file."""
-    from app.services.file_service import FileSourceService
+    from app.core.files.service import FileSourceService
 
     monkeypatch.setenv("STORAGE_POLICY", "hybrid")
     monkeypatch.setenv("FILE_SOURCE_S3_THRESHOLD_BYTES", str(10 * 1024))
@@ -215,7 +215,7 @@ def test_hybrid_below_threshold_stays_in_db(mock_db, stub_storage, monkeypatch):
 def test_hybrid_above_threshold_uploads(mock_db, stub_storage, monkeypatch):
     """hybrid + sopra soglia -> upload object storage (comportamento
     attuale default)."""
-    from app.services.file_service import FileSourceService
+    from app.core.files.service import FileSourceService
 
     monkeypatch.setenv("STORAGE_POLICY", "hybrid")
     monkeypatch.setenv("FILE_SOURCE_S3_THRESHOLD_BYTES", "100")

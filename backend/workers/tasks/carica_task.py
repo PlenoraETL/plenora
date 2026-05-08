@@ -270,8 +270,7 @@ def execute_carica_task(
         }
     finally:
         # FIX: chiudi le connessioni PostgreSQL thread-local del worker Celery
-        # Storia: la migrazione SQLite -> PostgreSQL (vedi
-        # `app/db/config_db_service.py` docstring) ha mantenuto lo stesso
+        # Storia: la migrazione SQLite -> PostgreSQL ha mantenuto lo stesso
         # pattern thread-local, quindi il cleanup resta necessario. Senza
         # questa pulizia, ogni esecuzione lascia 2 connessioni aperte
         # config DB + intermediate DB) nel thread.local, che vengono

@@ -389,8 +389,7 @@ def execute_pipeline_task(
 
         # Chiudi connessione PostgreSQL del thread Celery: senza questo
         # ogni task lascia aperto un handle che si accumula nel pool
-        # Pattern ereditato dalla migrazione SQLite -> PG, vedi
-        # `app/db/config_db_service.py` docstring
+        # Pattern ereditato dalla migrazione SQLite -> PG.
         try:
             from app.core.intermediate.cleanup import close_worker_connection
             close_worker_connection()

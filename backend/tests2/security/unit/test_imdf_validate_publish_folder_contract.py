@@ -73,7 +73,7 @@ def stub_externals(monkeypatch):
     _is_service_name_available."""
     import app.core.imdf.loader as loader_mod
     import app.core.connections.arcgis_connection_resolver as adapter_mod
-    import app.core.imdf.arcgis_uploader as uploader_mod
+    import app.core.imdf.arcgis.service_discovery as service_discovery_mod
 
     # Layer finti (solo Locale per avere un layer presente)
     monkeypatch.setattr(
@@ -97,15 +97,15 @@ def stub_externals(monkeypatch):
 
     # Default: nessun service esistente (override nei test che servono)
     monkeypatch.setattr(
-        uploader_mod, "_find_existing_service",
+        service_discovery_mod, "_find_existing_service",
         lambda *args, **kwargs: (None, None, None),
     )
     monkeypatch.setattr(
-        uploader_mod, "_is_service_name_available",
+        service_discovery_mod, "_is_service_name_available",
         lambda client, conn, fs_name: (True, None),
     )
 
-    return {"uploader": uploader_mod}
+    return {"service_discovery": service_discovery_mod}
 
 
 # ── 3. Baseline: senza folder ───────────────────────────────────────────
@@ -142,11 +142,11 @@ def test_validate_publish_folder_no_existing_fs_no_mismatch(fake_bundle, stub_ex
 
 # ── 5. Folder matches ownerFolder esistente → no warning ────────────────
 def test_validate_publish_folder_matches_existing_no_warning(fake_bundle, stub_externals, monkeypatch):
-    import app.core.imdf.arcgis_uploader as uploader_mod
+    import app.core.imdf.arcgis.service_discovery as service_discovery_mod
 
     # FS esistente con ownerFolder == "MyFolder"
     monkeypatch.setattr(
-        uploader_mod, "_find_existing_service",
+        service_discovery_mod, "_find_existing_service",
         lambda *args, **kwargs: ("https://example.com/services/MyFS/FeatureServer", "item-1", "MyFolder"),
     )
 
@@ -165,11 +165,11 @@ def test_validate_publish_folder_matches_existing_no_warning(fake_bundle, stub_e
 
 # ── 6. Folder mismatches → warning FOLDER_MISMATCH ──────────────────────
 def test_validate_publish_folder_mismatch_emits_warning(fake_bundle, stub_externals, monkeypatch):
-    import app.core.imdf.arcgis_uploader as uploader_mod
+    import app.core.imdf.arcgis.service_discovery as service_discovery_mod
 
     # FS esistente nella folder "OtherFolder", utente chiede "MyFolder"
     monkeypatch.setattr(
-        uploader_mod, "_find_existing_service",
+        service_discovery_mod, "_find_existing_service",
         lambda *args, **kwargs: ("https://example.com/services/MyFS/FeatureServer", "item-1", "OtherFolder"),
     )
 
@@ -198,15 +198,15 @@ def test_validate_publish_folder_id_resolves_to_title_no_warning(fake_bundle, st
     l'ID → title via _list_user_folders prima di confrontare. Se la folder
     con ID='hash-abc' ha title='MyFolder' e l'utente ha scelto 'MyFolder',
     NON deve esserci warning."""
-    import app.core.imdf.arcgis_uploader as uploader_mod
+    import app.core.imdf.arcgis.service_discovery as service_discovery_mod
 
     monkeypatch.setattr(
-        uploader_mod, "_find_existing_service",
+        service_discovery_mod, "_find_existing_service",
         lambda *args, **kwargs: ("https://example.com/services/MyFS/FeatureServer", "item-1", "hash-abc"),
     )
     # _list_user_folders ritorna la lista con id/title
     monkeypatch.setattr(
-        uploader_mod, "_list_user_folders",
+        service_discovery_mod, "_list_user_folders",
         lambda client, conn: [{"id": "hash-abc", "title": "MyFolder"}],
         raising=False,
     )
@@ -228,14 +228,14 @@ def test_validate_publish_folder_id_resolves_to_title_no_warning(fake_bundle, st
 def test_validate_publish_folder_id_mismatch_uses_title_in_message(fake_bundle, stub_externals, monkeypatch):
     """Quando il mismatch è reale, il messaggio di warning deve mostrare
     il title risolto, non l'ID hash."""
-    import app.core.imdf.arcgis_uploader as uploader_mod
+    import app.core.imdf.arcgis.service_discovery as service_discovery_mod
 
     monkeypatch.setattr(
-        uploader_mod, "_find_existing_service",
+        service_discovery_mod, "_find_existing_service",
         lambda *args, **kwargs: ("https://example.com/services/MyFS/FeatureServer", "item-1", "hash-abc"),
     )
     monkeypatch.setattr(
-        uploader_mod, "_list_user_folders",
+        service_discovery_mod, "_list_user_folders",
         lambda client, conn: [
             {"id": "hash-abc", "title": "RealOwnerFolder"},
             {"id": "hash-xyz", "title": "UserSelected"},
@@ -261,10 +261,10 @@ def test_validate_publish_folder_id_mismatch_uses_title_in_message(fake_bundle, 
 # ── 9. Folder mismatch NON deve rompere replace ok ──────────────────────
 def test_validate_publish_folder_mismatch_replace_still_ok(fake_bundle, stub_externals, monkeypatch):
     """Anche con folder diverso, replace resta 'ok' (è un warning, non error)."""
-    import app.core.imdf.arcgis_uploader as uploader_mod
+    import app.core.imdf.arcgis.service_discovery as service_discovery_mod
 
     monkeypatch.setattr(
-        uploader_mod, "_find_existing_service",
+        service_discovery_mod, "_find_existing_service",
         lambda *args, **kwargs: ("https://example.com/services/MyFS/FeatureServer", "item-1", "OtherFolder"),
     )
 

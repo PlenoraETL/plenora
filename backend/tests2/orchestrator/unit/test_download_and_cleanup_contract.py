@@ -1,5 +1,5 @@
 """
-Contract test — download endpoint + cleanup + task result payload shape.
+Contract test â€” download endpoint + cleanup + task result payload shape.
 
 Post-refactor multi-host (R1 + in-memory): verifica che i path di
 """
@@ -19,7 +19,7 @@ pytestmark = [pytest.mark.unit, pytest.mark.contract]
 
 
 def test_tasks_download_eseguibile_streams_from_storage_and_cleans_up():
-    """Fast-path: find_keys ritorna 1 key → StreamingResponse + background
+    """Fast-path: find_keys ritorna 1 key â†’ StreamingResponse + background
     cleanup registrato."""
     from fastapi import BackgroundTasks
     from app.core.orchestrator.router import download_task_result
@@ -32,7 +32,7 @@ def test_tasks_download_eseguibile_streams_from_storage_and_cleans_up():
     fake_user = MagicMock(user_id="u1", role="superadmin", group_id="g1")
 
     with patch("app.core.orchestrator.router._assert_task_group", return_value=None), \
-         patch("app.services.task_service.task_service.get_task_status",
+         patch("app.core.orchestrator.task_service.task_service.get_task_status",
                return_value=fake_task_info), \
          patch("app.core.eseguibili.storage.find_keys",
                return_value=["eseguibili-outputs/t1/out.csv"]) as mock_find, \
@@ -89,7 +89,7 @@ def test_tasks_download_falls_back_to_db_blob_if_no_s3_key():
     from app.core.results.db import ResultMetadataRow
 
     with patch("app.core.orchestrator.router._assert_task_group", return_value=None), \
-         patch("app.services.task_service.task_service.get_task_status",
+         patch("app.core.orchestrator.task_service.task_service.get_task_status",
                return_value=fake_task_info), \
          patch("app.core.eseguibili.storage.find_keys", return_value=[]), \
          patch("app.core.results.db.get_result_row",
@@ -106,7 +106,7 @@ def test_tasks_download_falls_back_to_db_blob_if_no_s3_key():
                 current_user=fake_user,
             )
             # Se arriva qui il fallback DB blob ha trovato il result
-            # Non serve check specifico — il non-404 e' gia' conferma
+            # Non serve check specifico â€” il non-404 e' gia' conferma
             assert response is not None
         except Exception as e:
             # Se il fallback richiede altro mocking, verifichiamo almeno
@@ -244,7 +244,7 @@ def test_save_pipeline_result_dict_shape(monkeypatch):
 
 
 def test_save_pipeline_result_rejects_unknown_format():
-    """Formato non supportato → ValueError dalla serializzazione."""
+    """Formato non supportato â†’ ValueError dalla serializzazione."""
     from app.utils.result_store import save_pipeline_result
 
     df = pd.DataFrame({"a": [1]})

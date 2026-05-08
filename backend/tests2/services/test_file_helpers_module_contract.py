@@ -1,5 +1,5 @@
 """
-Smoke contract - STRUCT-001 Seam A: estrazione helper pure file_service.
+Smoke contract - STRUCT-001 Seam A: helper pure per il dominio files.
 
 Verifica le invarianti minime del refactor:
 """
@@ -13,7 +13,7 @@ import pytest
 pytestmark = [pytest.mark.unit, pytest.mark.contract]
 
 
-# 1. Esposizione simboli + identity re-export
+# 1. Esposizione simboli + identity dal core service
 
 
 def test_file_helpers_module_exposes_four_helpers():
@@ -26,12 +26,12 @@ def test_file_helpers_module_exposes_four_helpers():
         )
 
 
-def test_file_service_reexports_helpers_with_object_identity():
-    """file_service.py re-esporta gli STESSI oggetti di file_helpers (non
-    copie), cosi' codice esistente che monkeypatcha o fa isinstance via
-    `from app.services.file_service import FileIdGenerator` continua a
+def test_core_file_service_uses_shared_helper_objects_by_identity():
+    """app.core.files.service espone gli STESSI oggetti di file_helpers,
+    cosi' codice che monkeypatcha o fa isinstance via
+    `from app.core.files.service import FileIdGenerator` continua a
     comportarsi identicamente."""
-    from app.services import file_service as fs_mod
+    from app.core.files import service as fs_mod
     from app.shared import file_helpers as fh
 
     assert fs_mod.FormatDetector is fh.FormatDetector

@@ -8,6 +8,11 @@ from __future__ import annotations
 
 from typing import Dict, Optional
 
+from app.core.imdf.arcgis import (
+    publish_ops as _publish_ops,
+    service_discovery as _service_discovery,
+    service_lifecycle as _service_lifecycle,
+)
 from app.utils.logger import get_logger
 
 
@@ -133,7 +138,9 @@ def upload_imdf_layers(
     folder_id = ""
     if folder_name:
         try:
-            folder_id = _ensure_folder(client, conn, folder_name) or ""
+            folder_id = (
+                _service_discovery._ensure_folder(client, conn, folder_name) or ""
+            )
             result["folder_id"] = folder_id
             logger.info(f"Folder '{folder_name}' -> id={folder_id or '(root)'}")
         except Exception as e:
@@ -148,7 +155,9 @@ def upload_imdf_layers(
     if mode in ("append", "upsert"):
         _emit("find_service", step, total_steps,
               f"Ricerca FS esistente '{fs_name}'...")
-        existing_url, existing_item_id, _existing_folder = _find_existing_service(client, conn, fs_name, folder_id)
+        existing_url, existing_item_id, _existing_folder = (
+            _service_discovery._find_existing_service(client, conn, fs_name, folder_id)
+        )
         if not existing_url:
             result["errors"].append(
                 f"Modalita' '{mode}' richiede un FS esistente '{fs_name}' "
@@ -160,7 +169,7 @@ def upload_imdf_layers(
         result["service_item_id"] = existing_item_id
         step += 1
 
-        return _publish_mode_existing(
+        return _publish_ops._publish_mode_existing(
             client=client, conn=conn, service_url=existing_url,
             item_id=existing_item_id, folder_id=folder_id,
             layers=layers, layers_present=layers_present_preview,
@@ -173,7 +182,9 @@ def upload_imdf_layers(
     _emit("cleanup", step, total_steps, f"Verifica FS esistente '{fs_name}'...")
     del_attempted, del_succeeded = 0, 0
     try:
-        del_attempted, del_succeeded = _delete_existing_service(client, conn, fs_name, folder_id)
+        del_attempted, del_succeeded = _service_lifecycle._delete_existing_service(
+            client, conn, fs_name, folder_id
+        )
         if del_succeeded > 0:
             logger.info(
                 f"Feature Service '{fs_name}': {del_succeeded}/{del_attempted} item cancellati"
@@ -191,7 +202,9 @@ def upload_imdf_layers(
     # potrebbe essere ancora riservato sul hosted server
     full_delete = del_attempted > 0 and del_attempted == del_succeeded
     if not full_delete:
-        available, _err = _is_service_name_available(client, conn, fs_name)
+        available, _err = _service_discovery._is_service_name_available(
+            client, conn, fs_name
+        )
         if not available:
             # Tentativo automatico di cleanup zombie: l'item esiste sul
             # hosted server ma non e' nell'enumerazione utente. Proviamo a
@@ -202,14 +215,18 @@ def upload_imdf_layers(
                 f"replace '{fs_name}': nome riservato non visibile, tentativo "
                 f"cleanup zombie via hosted admin fallback"
             )
-            cleaned, cleanup_msg = _try_cleanup_zombie_service(client, conn, fs_name)
+            cleaned, cleanup_msg = _service_lifecycle._try_cleanup_zombie_service(
+                client, conn, fs_name
+            )
             if cleaned:
                 _emit("cleanup", step, total_steps, f"Zombie '{fs_name}' rimosso, procedo...")
                 logger.info(f"zombie cleanup success: {cleanup_msg}")
             else:
                 # Re-check disponibilita' per sicurezza (il cleanup puo'
                 # avere effetti anche se la risposta non era chiara
-                available2, _ = _is_service_name_available(client, conn, fs_name)
+                available2, _ = _service_discovery._is_service_name_available(
+                    client, conn, fs_name
+                )
                 if not available2:
                     result["errors"].append(
                         f"Nome Feature Service '{fs_name}' gia' riservato nell'organizzazione "
@@ -277,23 +294,22 @@ def upload_imdf_layers(
         _emit("add_layer", step, total_steps,
               f"Layer {idx}/{len(layers_present)-1}: upload '{name}' ({len(gdf)} feat)...")
         try:
-            layer_result = _add_layer_to_service(
-                client=client,
-                conn=conn,
-                service_url=service_url,
-                gdf=gdf,
-                layer_name=name,
-                layer_id=idx,
-                srid=target_srid,
+            layer_result = client.add_layer_to_service(
+                conn,
+                service_url,
+                gdf,
+                name,
+                idx,
+                target_srid,
             )
             result["layers"].append({
                 "id": idx,
                 "name": name,
                 "url": f"{service_url}/{idx}",
-                "feature_count": layer_result.get("feature_count", 0),
-                "errors": layer_result.get("errors", []),
+                "feature_count": layer_result.feature_count,
+                "errors": list(layer_result.errors),
             })
-            logger.info(f"Layer {idx} ({name}) creato: {layer_result.get('feature_count')} features")
+            logger.info(f"Layer {idx} ({name}) creato: {layer_result.feature_count} features")
             step += 1
         except Exception as e:
             logger.error(f"Errore aggiunta layer {name}: {e}", exc_info=True)
@@ -343,72 +359,3 @@ def upload_imdf_layers(
         f"renderers_applied={result['renderers_applied']}"
     )
     return result
-
-
-# HELPER PRIVATI
-
-
-# APPEND / UPSERT su FS esistente
-
-
-from .arcgis.sql_helpers import (  # noqa: F401 (compatibility export
-    _quote_sql_value,
-    _chunked,
-    _query_oid_by_key,
-)
-
-# KEEP_COMPAT_WITH_REMOVAL_CONDITION: these private-helper facade exports stay
-# only while validator.py and existing public/monkeypatch contracts still import
-# helpers from app.core.imdf.arcgis_uploader. Remove when validator imports the
-# child modules directly and contract tests no longer patch the uploader facade.
-#
-# B4.2 boundary: cluster SERVICE_DISCOVERY (6 helper di
-# folder/Feature Service discovery sul portal ArcGIS) spostato in
-# `app.core.imdf.arcgis.service_discovery`. compatibility export per preservare
-# i path pubblici esistenti + il contract monkeypatch dei test
-# `from app.core.imdf.arcgis_uploader import _list_user_folders`
-# `_ensure_folder`, `_is_service_name_available`
-# `_enumerate_all_user_items`, `_search_user_items`
-# `_find_existing_service` continua a funzionare
-# `validator.py:130` lazy-import di `_find_existing_service` +
-# `_is_service_name_available` + `_list_user_folders` continua a
-# funzionare (lazy import legge l'attributo del modulo compatibility module
-# al call time, dopo eventuali monkeypatch
-# `monkeypatch.setattr(uploader_mod, "<helper>", fake)` nei 3 test
-# contract `tests2/security/unit/test_imdf_validate_publish_*.py`
-# continua a propagare
-# * Path A — validator lazy import: legge l'attributo correntemente
-# bindato sul compatibility module dopo il rebind. ✓
-# * Path B — `upload_imdf_layers` interno (uploader.py): name
-# lookup nello scope di uploader, che re-exporta i 6 simboli
-# come attributi. Rebind dell'attributo del compatibility module visto dal
-# chiamante locale. ✓
-# Path C — chiamate intra-cluster (`_ensure_folder` →
-# `_list_user_folders`, `_find_existing_service` → `_search_user_items`
-# `_search_user_items` → `_enumerate_all_user_items`) avvengono
-# all'interno di `service_discovery.py`: name lookup nello scope
-# del modulo figlio, NON sul compatibility module. Trade-off documentato
-# esplicitamente nella docstring di `service_discovery.py` —
-# nessun test contract attuale dipende da questo path
-# `_search_user_items` chiamato anche da `_delete_existing_service`
-# lifecycle, resta in uploader): name lookup in uploader → compatibility module
-# compatibility export → patch propagation safe
-# analisi semantica monkeypatch dettagliata
-from .arcgis.service_discovery import (  # noqa: F401 (compatibility export
-    _list_user_folders,
-    _ensure_folder,
-    _is_service_name_available,
-    _enumerate_all_user_items,
-    _search_user_items,
-    _find_existing_service,
-)
-
-from .arcgis.service_lifecycle import (  # noqa: F401 (compatibility export
-    _try_cleanup_zombie_service,
-    _delete_existing_service,
-)
-
-from .arcgis.publish_ops import (  # noqa: F401 (compatibility export
-    _add_layer_to_service,
-    _publish_mode_existing,
-)

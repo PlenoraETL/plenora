@@ -9,7 +9,7 @@ from collections.abc import Callable
 import pytest
 
 from app.core.imdf import arcgis_uploader
-from app.core.imdf.arcgis import publish_ops, service_discovery, sql_helpers
+from app.core.imdf.arcgis import service_discovery, sql_helpers
 
 
 pytestmark = [pytest.mark.unit, pytest.mark.contract]
@@ -46,11 +46,6 @@ def _body_shape(fn: Callable[..., object]) -> tuple[str, ...]:
             ("Expr", "Try"),
         ),
         (sql_helpers._query_oid_by_key, {"query_oid_by_key"}, ("Expr", "Return")),
-        (
-            publish_ops._add_layer_to_service,
-            {"add_layer_to_service", "to_compat_dict"},
-            ("Expr", "Return"),
-        ),
     ],
 )
 def test_imdf_arcgis_keep_compat_wrappers_do_not_grow_provider_logic(
@@ -71,3 +66,34 @@ def test_imdf_renderer_path_uses_provider_layer_renderer_directly() -> None:
 
     assert "client.update_layer_renderer" in source
     assert "client.update_renderer" not in source
+
+
+def test_imdf_uploader_uses_provider_add_layer_directly() -> None:
+    source = inspect.getsource(arcgis_uploader.upload_imdf_layers)
+
+    assert "client.add_layer_to_service" in source
+    assert "_publish_ops._add_layer_to_service" not in source
+
+
+def test_imdf_uploader_private_helper_facade_stays_tombstoned() -> None:
+    removed_facade_exports = {
+        "_quote_sql_value",
+        "_chunked",
+        "_query_oid_by_key",
+        "_list_user_folders",
+        "_ensure_folder",
+        "_is_service_name_available",
+        "_enumerate_all_user_items",
+        "_search_user_items",
+        "_find_existing_service",
+        "_try_cleanup_zombie_service",
+        "_delete_existing_service",
+        "_add_layer_to_service",
+        "_publish_mode_existing",
+    }
+
+    leaked = sorted(
+        name for name in removed_facade_exports if hasattr(arcgis_uploader, name)
+    )
+
+    assert leaked == []

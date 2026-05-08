@@ -8,9 +8,8 @@
 -- Questo file documenta la struttura tabellare originaria del
 -- "results.db" SQLite pre-migrazione PostgreSQL. Le tabelle
 -- effettive su PostgreSQL sono create dalle migrations in
--- `backend/migrations/`. Il `db_service` facade (vedi
--- `app/db/results_db_service.py` docstring) instrada le query
--- al pool PG.
+-- `backend/migrations/`. Le query runtime passano dai boundary
+-- `app.core.results.*` al pool PG.
 --
 -- `init_db()` NON carica questo file. Le PRAGMA SQLite sotto
 -- sono no-op su PostgreSQL e restano solo come testimonianza

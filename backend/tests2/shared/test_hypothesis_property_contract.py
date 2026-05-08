@@ -14,7 +14,7 @@ from hypothesis import settings
 from hypothesis import strategies as st
 
 import app.core.imdf.router as imdf_router
-from app.core.imdf.arcgis_uploader import _quote_sql_value
+from app.core.imdf.arcgis.sql_helpers import _quote_sql_value
 from app.core.imdf.router import _safe_bundle_dir
 from app.core.imdf.validator import _coarse_type_from_dtype, _coarse_type_from_esri
 

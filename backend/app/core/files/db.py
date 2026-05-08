@@ -76,18 +76,28 @@ def _validate_row(row: Dict[str, Any], *, context: str) -> None:
 
 def get_file_source(file_id: str, include_data: bool = False, group_id: str = None) -> Optional[Dict]:
     """Recupera file source. group_id=None → no filter (backward compat)."""
-    gid_clause = " AND group_id = ?" if group_id else ""
-    gid_params = (group_id,) if group_id else ()
     if include_data:
+        if group_id:
+            row = fetchone(
+                "SELECT * FROM file_sources WHERE id = ? AND group_id = ?",
+                (file_id, group_id),
+            )
+        else:
+            row = fetchone(
+                "SELECT * FROM file_sources WHERE id = ?",
+                (file_id,),
+            )
+    elif group_id:
         row = fetchone(
-            f"SELECT * FROM file_sources WHERE id = ?{gid_clause}",
-            (file_id,) + gid_params
+            "SELECT id, group_id, name, original_filename, format, size_bytes, metadata, created_at, created_by "
+            "FROM file_sources WHERE id = ? AND group_id = ?",
+            (file_id, group_id),
         )
     else:
         row = fetchone(
-            f"SELECT id, group_id, name, original_filename, format, size_bytes, metadata, created_at, created_by "
-            f"FROM file_sources WHERE id = ?{gid_clause}",
-            (file_id,) + gid_params
+            "SELECT id, group_id, name, original_filename, format, size_bytes, metadata, created_at, created_by "
+            "FROM file_sources WHERE id = ?",
+            (file_id,),
         )
     if row and row.get("metadata"):
         row["metadata"] = json.loads(row["metadata"])

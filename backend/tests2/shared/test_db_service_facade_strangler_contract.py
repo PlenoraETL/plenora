@@ -121,8 +121,8 @@ def test_no_new_db_service_imports_outside_allowlist():
     new = sorted(found - _DB_SERVICE_PROD_ALLOWLIST)
     assert not new, (
         "New imports of `app.db.db_service` detected. Migrate to the "
-        "canonical `app.db.config.<cluster>` / `app.db.results_db_service` / "
-        "`app.db.pg_connection` module.\nNew importers:\n  - "
+        "domain-owned `app.core.<domain>.db` boundary or DB infrastructure "
+        "such as `app.db.pg_connection`.\nNew importers:\n  - "
         + "\n  - ".join(new)
     )
 

@@ -9,7 +9,8 @@ from pathlib import Path
 import pytest
 
 from app.core.auth.auth import hash_password
-from app.db.config_db_service import create_group, create_user, delete_group_cascade
+from app.core.auth.db import create_group, create_user
+from app.core.auth.group_cleanup import delete_group_cascade
 
 from tests2.functional.harness.celery import spawn_celery_worker
 from tests2.functional.harness.celery import flush_redis_db

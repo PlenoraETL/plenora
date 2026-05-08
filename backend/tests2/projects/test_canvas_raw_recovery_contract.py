@@ -14,7 +14,7 @@ from app.core.projects import router as projects_router_module
 from app.core.projects.router import router as projects_router
 from app.core.projects.service import ProjectService, RawProjectCanvas
 from app.shared.contracts.auth import CurrentUser
-from app.shared.exceptions import CanvasCorruptedError
+from app.core.projects.exceptions import CanvasCorruptedError
 
 
 pytestmark = [pytest.mark.unit, pytest.mark.contract, pytest.mark.security]

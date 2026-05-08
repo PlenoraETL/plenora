@@ -13,11 +13,13 @@ import pandas as pd
 import pytest
 
 
-def test_legacy_file_source_read_import_aliases_canonical_module():
-    import app.core.files.source_read as canonical
-    import app.services.file_source_read as legacy
-
-    assert legacy is canonical
+def test_removed_app_services_file_source_read_tombstone():
+    assert not (
+        Path(__file__).resolve().parents[2]
+        / "app"
+        / "services"
+        / "file_source_read.py"
+    ).exists()
 
 
 def _plain(value):
@@ -198,8 +200,8 @@ def test_get_preview_normalizes_numpy_and_nan_values():
     assert plain["rows"] == [{"city": "Rome", "score": 7, "ok": True}]
 
 
-def test_file_source_service_load_dataframe_wrapper_delegates(tmp_path):
-    from app.services.file_service import FileSourceService
+def test_file_source_service_load_dataframe_facade_delegates(tmp_path):
+    from app.core.files.service import FileSourceService
 
     svc = FileSourceService.__new__(FileSourceService)
     svc._assert_visible = MagicMock()
@@ -225,8 +227,8 @@ def test_file_source_service_load_dataframe_wrapper_delegates(tmp_path):
     )
 
 
-def test_file_source_service_get_preview_wrapper_delegates():
-    from app.services.file_service import FileSourceService
+def test_file_source_service_get_preview_facade_delegates():
+    from app.core.files.service import FileSourceService
 
     svc = FileSourceService.__new__(FileSourceService)
     svc._assert_visible = MagicMock()

@@ -1,7 +1,7 @@
 """
-[phase-2-err][batch9] C4 — full-cleanup aggregato failures / 207 Multi-Status.
+[phase-2-err][batch9] C4 â€” full-cleanup aggregato failures / 207 Multi-Status.
 
-Audit Batch 9 §3.1 S2 / fix F2: l'endpoint DELETE /api/tasks/{id}/full-cleanup
+Audit Batch 9 Â§3.1 S2 / fix F2: l'endpoint DELETE /api/tasks/{id}/full-cleanup
 """
 
 from __future__ import annotations
@@ -84,10 +84,10 @@ def _patched_cleanup(
         "app.core.orchestrator.router.settings",
         new=SimpleNamespace(RESULTS_DIR=tmp_path)
     ), patch(
-        "app.services.task_service.task_service.get_task_status",
+        "app.core.orchestrator.task_service.task_service.get_task_status",
         return_value=task_info
     ), patch(
-        "app.services.project_service.ProjectService.get_project_metadata",
+        "app.core.projects.service.ProjectService.get_project_metadata",
         return_value={"id": "p1", "group_id": "grp-1"}
     ), patch(
         "app.core.results.cleanup.delete_result", **dr_patch
@@ -105,7 +105,7 @@ def _patched_cleanup(
 
 
 def test_full_cleanup_returns_204_when_all_steps_succeed(client, tmp_path):
-    """Baseline: tutti gli step ok → 204 No Content, body vuoto.
+    """Baseline: tutti gli step ok â†’ 204 No Content, body vuoto.
     Questo e' il path di traffico maggioritario e deve restare invariato."""
     response = _patched_cleanup(
         client, "task-ok", tmp_path=tmp_path,
@@ -116,7 +116,7 @@ def test_full_cleanup_returns_204_when_all_steps_succeed(client, tmp_path):
     assert response.content == b""
 
 
-# PARTIAL PATH — singoli step che falliscono (207 Multi-Status)
+# PARTIAL PATH â€” singoli step che falliscono (207 Multi-Status)
 
 
 def test_full_cleanup_returns_207_when_delete_result_fails(client, tmp_path):
@@ -164,11 +164,11 @@ def test_full_cleanup_returns_207_when_celery_forget_fails(client, tmp_path):
     assert body["failed_steps"] == ["celery_forget"]
 
 
-# PARTIAL PATH — multipli step falliscono, ordine d'esecuzione preservato
+# PARTIAL PATH â€” multipli step falliscono, ordine d'esecuzione preservato
 
 
 def test_full_cleanup_returns_207_with_multiple_failures(client, tmp_path):
-    """Step 3 (delete_result) e step 6 (celery_forget) falliscono →
+    """Step 3 (delete_result) e step 6 (celery_forget) falliscono â†’
     failed_steps=[delete_result, celery_forget] nell'ordine d'esecuzione.
     Step 4/5 (unlink/pg_exec) continuano a essere tentati e succedono."""
     response = _patched_cleanup(
@@ -183,8 +183,8 @@ def test_full_cleanup_returns_207_with_multiple_failures(client, tmp_path):
 
 
 def test_full_cleanup_returns_207_all_four_steps_fail(client, tmp_path):
-    """Tutti e 4 gli step cleanup falliscono → failed_steps contiene tutti
-    i 4 nomi nell'ordine d'esecuzione. L'endpoint NON solleva — aggrega."""
+    """Tutti e 4 gli step cleanup falliscono â†’ failed_steps contiene tutti
+    i 4 nomi nell'ordine d'esecuzione. L'endpoint NON solleva â€” aggrega."""
     response = _patched_cleanup(
         client, "task-fail-all", tmp_path=tmp_path,
         delete_result_side_effect=RuntimeError("dr"),
@@ -208,7 +208,7 @@ def test_full_cleanup_returns_207_all_four_steps_fail(client, tmp_path):
 
 
 def test_full_cleanup_preserves_404_when_no_project_id(client, tmp_path):
-    """task_info con project_id=None → 404 invariato, niente 207.
+    """task_info con project_id=None â†’ 404 invariato, niente 207.
     I pre-check NON entrano in failed_steps."""
     task_info = SimpleNamespace(project_id=None, result={})
 
@@ -216,7 +216,7 @@ def test_full_cleanup_preserves_404_when_no_project_id(client, tmp_path):
         "app.core.orchestrator.router.settings",
         new=SimpleNamespace(RESULTS_DIR=tmp_path)
     ), patch(
-        "app.services.task_service.task_service.get_task_status",
+        "app.core.orchestrator.task_service.task_service.get_task_status",
         return_value=task_info
     ):
         response = client.delete("/api/tasks/task-noproj/full-cleanup")

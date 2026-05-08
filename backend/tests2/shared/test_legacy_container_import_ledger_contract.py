@@ -1,14 +1,8 @@
-"""
-Architecture ledger for legacy import containers.
+"""Architecture guard for legacy import containers.
 
-Batch 081 Worker 6: keep `app.services` and `app.db.config`
-production import debt measurable by domain. Batch 084 Worker 1
-tombstoned `app.db.db_service`: it remains in this ledger only as a
-forbidden zero-baseline container. Batch 087 Worker 3 added explicit
-zero-baseline rows for the closed `app.db.config_db_service` facade and
-the retained `app.db.results_db_service` compatibility tombstone. These
-baselines are intentionally exact: new import edges fail, and removed
-edges fail until the baseline is trimmed.
+Deleted compatibility containers are tombstones: any production import is a
+regression. Retained containers stay in the ratcheting ledger only while they
+represent an explicit, measurable boundary.
 """
 
 from __future__ import annotations
@@ -34,35 +28,16 @@ _DOMAINS = (
 )
 
 
+_TOMBSTONED_IMPORT_PREFIXES = frozenset(
+    {
+        "app.services",
+        "app.db.db_service",
+        "app.db.config_db_service",
+        "app.db.results_db_service",
+    }
+)
+
 _LEGACY_IMPORT_BASELINES: dict[str, dict[str, frozenset[str]]] = {
-    "app.services": {
-        "projects": frozenset(),
-        "connections": frozenset(),
-        "files_storage": frozenset(),
-        "tasks_orchestration": frozenset(),
-        "auth_datasources_other": frozenset(),
-    },
-    "app.db.db_service": {
-        "projects": frozenset(),
-        "connections": frozenset(),
-        "files_storage": frozenset(),
-        "tasks_orchestration": frozenset(),
-        "auth_datasources_other": frozenset(),
-    },
-    "app.db.config_db_service": {
-        "projects": frozenset(),
-        "connections": frozenset(),
-        "files_storage": frozenset(),
-        "tasks_orchestration": frozenset(),
-        "auth_datasources_other": frozenset(),
-    },
-    "app.db.results_db_service": {
-        "projects": frozenset(),
-        "connections": frozenset(),
-        "files_storage": frozenset(),
-        "tasks_orchestration": frozenset(),
-        "auth_datasources_other": frozenset(),
-    },
     "app.db.config": {
         "projects": frozenset(),
         "connections": frozenset(),
@@ -172,13 +147,7 @@ def _scan_legacy_imports(prefix: str) -> dict[str, set[str]]:
 
 @pytest.mark.parametrize("prefix", tuple(_LEGACY_IMPORT_BASELINES))
 def test_legacy_container_import_ledger_by_domain(prefix: str):
-    """Ratcheting ledger for legacy production import containers.
-
-    Existing import edges remain listed to make the debt measurable.
-    For tombstoned containers such as `app.db.db_service`, any edge is
-    forbidden debt. Removed edges also fail so the baseline gets
-    trimmed and the count ratchets downward.
-    """
+    """Ratcheting ledger for retained or tombstoned import containers."""
     expected = _LEGACY_IMPORT_BASELINES[prefix]
     found = _scan_legacy_imports(prefix)
 
@@ -193,8 +162,9 @@ def test_legacy_container_import_ledger_by_domain(prefix: str):
             missing[domain] = sorted(expected_edges - found_edges)
 
     assert not extra, (
-        f"New production imports from `{prefix}` detected. Migrate to a "
-        "domain-owned module or update the ledger with an explicit residual.\n"
+        f"New production imports from `{prefix}` detected. "
+        "Tombstoned containers must stay unused; retained containers need a "
+        "domain-owned migration plan before any residual is ledgered.\n"
         f"New edges by domain: {extra}"
     )
     assert not missing, (
@@ -204,7 +174,7 @@ def test_legacy_container_import_ledger_by_domain(prefix: str):
 
 
 def test_legacy_container_import_ledger_current_counts_are_locked():
-    """Exact count snapshot for Batch 081 residual reporting."""
+    """Exact count snapshot for the current import-boundary ratchet."""
     counts = {
         prefix: {
             domain: len(edges)
@@ -220,6 +190,15 @@ def test_legacy_container_import_ledger_current_counts_are_locked():
         for prefix, domains in _LEGACY_IMPORT_BASELINES.items()
     }
     assert counts == expected_counts
+
+
+@pytest.mark.parametrize("prefix", sorted(_TOMBSTONED_IMPORT_PREFIXES))
+def test_tombstoned_legacy_containers_have_zero_runtime_edges(prefix: str):
+    found = _scan_legacy_imports(prefix)
+    assert all(not edges for edges in found.values()), (
+        f"`{prefix}` is a tombstoned compatibility container. "
+        f"Runtime imports must stay at zero: {found}"
+    )
 
 
 def test_project_config_leaf_production_imports_are_explicit_blockers():

@@ -11,11 +11,6 @@ from typing import Any, Optional, TypedDict
 from app.shared.resources.storage_layout import FILE_SOURCES_PREFIX
 
 
-# Alias kept for compatibility with existing storage-layout contract tests and
-# legacy service wrapper exports.
-_OBJECT_STORAGE_PREFIX = FILE_SOURCES_PREFIX
-
-
 class BlobDispatchResult(TypedDict):
     """Typed kwargs returned by `dispatch_blob_storage`.
 
@@ -63,7 +58,7 @@ def dispatch_blob_storage(
         return {"data": raw_data, "storage_key": None, "size_bytes": size}
 
     key_id = storage_key_id if storage_key_id is not None else file_id
-    storage_key = f"{_OBJECT_STORAGE_PREFIX}/{key_id}/{filename}"
+    storage_key = f"{FILE_SOURCES_PREFIX}/{key_id}/{filename}"
 
     intent_id: Optional[str] = None
     try:

@@ -1,5 +1,5 @@
 """
-Contract test — update_project_columns_metadata e' atomico (FOR UPDATE).
+Contract test â€” update_project_columns_metadata e' atomico (FOR UPDATE).
 
 Reperto coperto: il vecchio `update_project_columns_metadata` faceva
 """
@@ -15,7 +15,7 @@ import pytest
 pytestmark = [pytest.mark.unit, pytest.mark.contract]
 
 
-# Fixture — mock della pg transaction()
+# Fixture â€” mock della pg transaction()
 
 
 @pytest.fixture
@@ -74,7 +74,7 @@ def mock_pg_conn(monkeypatch):
     return {"executed": executed, "state": state}
 
 
-# SEQUENCE — SELECT FOR UPDATE deve precedere UPDATE, entrambi in transaction
+# SEQUENCE â€” SELECT FOR UPDATE deve precedere UPDATE, entrambi in transaction
 
 
 def test_select_for_update_precedes_update(mock_pg_conn):
@@ -105,7 +105,7 @@ def test_select_for_update_precedes_update(mock_pg_conn):
     assert new_canvas["edges"] == []
 
 
-# MERGE — scrivere una key non deve cancellare le altre
+# MERGE â€” scrivere una key non deve cancellare le altre
 
 
 def test_writing_columns_metadata_preserves_nodes_and_edges(mock_pg_conn):
@@ -132,7 +132,7 @@ def test_writing_columns_metadata_preserves_nodes_and_edges(mock_pg_conn):
     assert final_canvas["retention_n"] == 5
 
 
-# PROJECT NOT FOUND — False, no crash
+# PROJECT NOT FOUND â€” False, no crash
 
 
 def test_project_not_found_returns_false(mock_pg_conn):
@@ -143,13 +143,13 @@ def test_project_not_found_returns_false(mock_pg_conn):
         "p-ghost", "columns_metadata", []
     )
     assert result is False
-    # Nessuna UPDATE eseguita — solo il SELECT
+    # Nessuna UPDATE eseguita â€” solo il SELECT
     executed = mock_pg_conn["executed"]
     assert len(executed) == 1
     assert "select" in executed[0][0].lower()
 
 
-# CANVAS CORROTTO — raise, no silent overwrite
+# CANVAS CORROTTO â€” raise, no silent overwrite
 
 
 def test_corrupted_canvas_raises_instead_of_overwriting(mock_pg_conn):
@@ -175,7 +175,7 @@ def test_corrupted_canvas_raises_instead_of_overwriting(mock_pg_conn):
 
 def test_canvas_unexpected_type_raises(mock_pg_conn):
     from app.core.projects import db as project_db
-    # Un tipo DB inatteso (numero grezzo) → raise
+    # Un tipo DB inatteso (numero grezzo) â†’ raise
     mock_pg_conn["state"]["canvas_in_db"] = 42
 
     with pytest.raises(ValueError, match="Unexpected canvas type"):
@@ -204,7 +204,7 @@ def test_canvas_null_treated_as_empty_dict(mock_pg_conn):
 
 def test_project_service_delegates_to_atomic_helper(monkeypatch):
     """Default repository adapter delegates to the project-domain DB boundary."""
-    from app.services.project_service import ProjectService
+    from app.core.projects.service import ProjectService
     from app.core.projects import db as project_db
 
     captured = {}
@@ -228,7 +228,7 @@ def test_project_service_delegates_to_atomic_helper(monkeypatch):
 
 
 def test_project_service_accepts_project_repository_protocol():
-    from app.services.project_service import ProjectService
+    from app.core.projects.service import ProjectService
 
     class FakeProjectRepository:
         def __init__(self):
@@ -253,7 +253,7 @@ def test_project_service_propagates_atomic_exception(monkeypatch):
     il service deve PROPAGARE al caller, non ingoiare con `return False`.
 
     Regressione diretta del baco: pre-fix, `update_project_columns_metadata`
-    aveva un try/except Exception → ritornava False. L'executor ESTRAI
+    aveva un try/except Exception â†’ ritornava False. L'executor ESTRAI
     non vedeva l'eccezione, il retry su transient non partiva, nessun
     `ColumnsMetadataSaveError` veniva mai sollevato, e `res` risultava
     scritto come se fosse successo (falso positivo).
@@ -261,7 +261,7 @@ def test_project_service_propagates_atomic_exception(monkeypatch):
     Post-fix il service propaga: i caller (ESTRAI executor con retry,
     oppure altri caller con try/except locale) decidono cosa fare.
     """
-    from app.services.project_service import ProjectService
+    from app.core.projects.service import ProjectService
     from app.core.projects import db as project_db
 
     def raising_atomic(*args, **kwargs):
@@ -276,9 +276,9 @@ def test_project_service_propagates_atomic_exception(monkeypatch):
 
 
 def test_project_service_propagates_transient_db_error(monkeypatch):
-    """OperationalError (transient) propagato al caller → il retry
+    """OperationalError (transient) propagato al caller â†’ il retry
     dell'executor ESTRAI puo' agire. Pre-fix veniva ingoiato."""
-    from app.services.project_service import ProjectService
+    from app.core.projects.service import ProjectService
     from app.core.projects import db as project_db
     import psycopg2
 
@@ -296,7 +296,7 @@ def test_project_service_returns_false_when_project_missing(monkeypatch):
     """Unico caso in cui il service ritorna False (non solleva):
     la funzione atomica ha ritornato False (progetto inesistente).
     Questo NON e' un errore, e' un segnale pulito al caller."""
-    from app.services.project_service import ProjectService
+    from app.core.projects.service import ProjectService
     from app.core.projects import db as project_db
 
     monkeypatch.setattr(
@@ -310,7 +310,7 @@ def test_project_service_returns_false_when_project_missing(monkeypatch):
 
 
 def test_project_service_returns_true_on_success(monkeypatch):
-    from app.services.project_service import ProjectService
+    from app.core.projects.service import ProjectService
     from app.core.projects import db as project_db
 
     monkeypatch.setattr(

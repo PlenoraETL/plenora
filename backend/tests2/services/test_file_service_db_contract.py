@@ -1,5 +1,5 @@
 """
-Contract test — FileSourceService usa SOLO DB come storage (FS-B1).
+Contract test â€” FileSourceService usa SOLO DB come storage (FS-B1).
 
 Blinda il contratto post-migration "nessun FS persistente per file_sources":
 """
@@ -26,7 +26,7 @@ def _install_fake_db(monkeypatch):
     """Patcha le funzioni di `app.core.files.db` con fake in-memory.
 
     Preferisce `monkeypatch.setattr` sul modulo reale (gia' importato)
-    invece di sostituire il modulo in `sys.modules` — il service importa
+    invece di sostituire il modulo in `sys.modules` â€” il service importa
     il leaf file-source DAL, quindi patchare quel modulo segue il boundary
     di produzione.
 
@@ -86,7 +86,7 @@ def test_upload_persists_bytes_in_db(monkeypatch):
     """create_raw_from_upload salva il blob in DB. Verifica che la call
     a save_file_source arrivi col blob intatto.
     """
-    from app.services.file_service import FileSourceService
+    from app.core.files.service import FileSourceService
 
     store = _install_fake_db(monkeypatch)
 
@@ -113,7 +113,7 @@ def test_upload_persists_bytes_in_db(monkeypatch):
 
 def test_get_file_source_reads_from_db(monkeypatch):
     """get_file_source() legge dal DB via file_sources DAL, non dal filesystem."""
-    from app.services.file_service import FileSourceService
+    from app.core.files.service import FileSourceService
 
     store = _install_fake_db(monkeypatch)
 
@@ -159,7 +159,7 @@ def test_update_file_source_fallback_uses_settings_default_group(monkeypatch):
     `group_id` dalla row letta per il fallback, cosi' il codice deve
     usare il default group configurato invece di sollevare NameError.
     """
-    from app.services.file_service import FileSourceService
+    from app.core.files.service import FileSourceService
     from app.config import settings
 
     store = _install_fake_db(monkeypatch)
@@ -205,7 +205,7 @@ def test_update_file_source_fallback_uses_settings_default_group(monkeypatch):
         out = dict(row)
         if not include_data:
             out.pop("data", None)
-            # Simula una legacy/partial row senza group_id per esercitare
+            # Simula una partial row senza group_id per esercitare
             # il fallback a settings.DEFAULT_GROUP.
             out.pop("group_id", None)
         return out
@@ -254,7 +254,7 @@ def test_no_temp_dir_leak_on_upload(monkeypatch):
     l'estrazione in tempdir). Tutte le dir create devono essere
     rimosse alla fine del create_from_upload.
     """
-    from app.services.file_service import FileSourceService
+    from app.core.files.service import FileSourceService
 
     _install_fake_db(monkeypatch)
 
@@ -306,7 +306,7 @@ def test_service_can_be_instantiated_with_mocks():
     LoggerProtocol, TimeProviderProtocol) e' usabile: costruire il service
     con tutti mock non crasha e espone l'API pubblica.
     """
-    from app.services.file_service import (
+    from app.core.files.service import (
         FileSourceService,
         FileSystemProtocol,
         DataLoaderProtocol,
@@ -335,9 +335,9 @@ def test_service_can_be_instantiated_with_mocks():
 
 def test_service_no_longer_exposes_files_dir_fs_attrs():
     """Post-FS-B1: attributi `_files_dir` / `FILES_DIR` rimossi. Consumer
-    legacy che tentano di leggerli devono fallire esplicitamente.
+    obsoleti che tentano di leggerli devono fallire esplicitamente.
     """
-    from app.services.file_service import FileSourceService
+    from app.core.files.service import FileSourceService
     svc = FileSourceService()
     assert not hasattr(svc, "_files_dir")
     assert not hasattr(svc, "FILES_DIR")
@@ -345,7 +345,7 @@ def test_service_no_longer_exposes_files_dir_fs_attrs():
 
 def test_service_init_no_longer_accepts_files_dir():
     """Post-FS-B1: parametro `files_dir` rimosso dall'`__init__`."""
-    from app.services.file_service import FileSourceService
+    from app.core.files.service import FileSourceService
 
     with pytest.raises(TypeError):
         FileSourceService(files_dir=Path("/tmp/dead"))
@@ -353,7 +353,7 @@ def test_service_init_no_longer_accepts_files_dir():
 
 def test_factory_no_longer_accepts_files_dir():
     """La factory `create_file_service` non accetta piu' `files_dir`."""
-    from app.services.file_service import create_file_service
+    from app.core.files.service import create_file_service
 
     with pytest.raises(TypeError):
         create_file_service(files_dir=Path("/tmp/dead"))
@@ -364,12 +364,12 @@ def test_factory_no_longer_accepts_files_dir():
 
 def test_dispatch_below_threshold_keeps_data_in_db(monkeypatch):
     """File < threshold: `data` popolato, `storage_key=None`."""
-    from app.services.file_service import FileSourceService
+    from app.core.files.service import FileSourceService
 
     store = _install_fake_db(monkeypatch)
     # Post-A1: il dispatch threshold-based e' contratto di STORAGE_POLICY=hybrid.
     monkeypatch.setenv("STORAGE_POLICY", "hybrid")
-    # Threshold 10 MB — test payload 1KB ci va sotto.
+    # Threshold 10 MB â€” test payload 1KB ci va sotto.
     monkeypatch.setenv("FILE_SOURCE_S3_THRESHOLD_BYTES", str(10 * 1024 * 1024))
 
     svc = FileSourceService()
@@ -391,12 +391,12 @@ def test_dispatch_above_threshold_uploads_s3_and_nulls_data(monkeypatch):
     """File >= threshold: upload via cloud_backends, row ha `storage_key`
     valorizzato e `data=None`. Blob NON nel DB.
     """
-    from app.services.file_service import FileSourceService
+    from app.core.files.service import FileSourceService
 
     store = _install_fake_db(monkeypatch)
     # Post-A1: il dispatch threshold-based e' contratto di STORAGE_POLICY=hybrid.
     monkeypatch.setenv("STORAGE_POLICY", "hybrid")
-    # Threshold 100 byte — test payload 1KB supera.
+    # Threshold 100 byte â€” test payload 1KB supera.
     monkeypatch.setenv("FILE_SOURCE_S3_THRESHOLD_BYTES", "100")
 
     uploaded: dict[str, bytes] = {}
@@ -432,7 +432,7 @@ def test_upload_failure_does_not_create_db_row(monkeypatch):
     viene chiamato. Safe-by-default: meglio un upload fallito visibile
     che una row DB orfana che punta a S3 vuoto.
     """
-    from app.services.file_service import FileSourceService
+    from app.core.files.service import FileSourceService
 
     store = _install_fake_db(monkeypatch)
     # Post-A1: il dispatch threshold-based e' contratto di STORAGE_POLICY=hybrid.
@@ -450,7 +450,7 @@ def test_upload_failure_does_not_create_db_row(monkeypatch):
     svc = FileSourceService()
     payload = b"y" * 1024
 
-    # create deve propagare l'exception — il caller decide la UX (es. 500 API)
+    # create deve propagare l'exception â€” il caller decide la UX (es. 500 API)
     with pytest.raises(RuntimeError, match="S3 simulata down"):
         svc.create_raw_from_upload(
             file_content=io.BytesIO(payload),
@@ -472,12 +472,12 @@ def test_read_blob_from_s3_downloads_and_cleans_temp(monkeypatch, tmp_path):
     file creato.
 
     BE-GO-READY-RESOURCE-ENGINE-006 (R-005.1 closure): il branch S3
-    e' bytes-first puro post-batch — niente piu' tempfile roundtrip
+    e' bytes-first puro post-batch â€” niente piu' tempfile roundtrip
     (`download(key, tmp_path)` + `read_bytes()` + `unlink`). Il test
     verifica anche che NESSUN tempfile venga creato durante la
     chiamata.
     """
-    from app.services.file_service import FileSourceService
+    from app.core.files.service import FileSourceService
 
     _install_fake_db(monkeypatch)
     import app.core.files.db as real_db
@@ -560,7 +560,7 @@ def test_read_blob_from_s3_downloads_and_cleans_temp(monkeypatch, tmp_path):
     # Post-RESOURCE-ENGINE-006: zero tempfile creati nel branch S3.
     assert not created_temps, (
         f"Regressione R-005.1: il branch storage_key ha creato "
-        f"tempfile ({created_temps}) — il path e' bytes-first via "
+        f"tempfile ({created_temps}) â€” il path e' bytes-first via "
         f"get_object_stream."
     )
 
@@ -571,11 +571,11 @@ def test_read_blob_from_s3_cleanup_temp_on_download_exception(monkeypatch):
     try/except esterno del metodo) e ZERO tempfile e' stato creato.
 
     BE-GO-READY-RESOURCE-ENGINE-006 (R-005.1): il path e' bytes-first
-    puro — niente tempfile da pulire neanche su exception path. Il
+    puro â€” niente tempfile da pulire neanche su exception path. Il
     test e' rinforzato come regression guard contro re-introduzione
     del download-then-read tempfile pattern.
     """
-    from app.services.file_service import FileSourceService
+    from app.core.files.service import FileSourceService
 
     _install_fake_db(monkeypatch)
     import app.core.files.db as real_db
@@ -641,5 +641,5 @@ def test_read_blob_from_s3_cleanup_temp_on_download_exception(monkeypatch):
     # temp creato fosse poi unlink-ato; post-batch zero tempfile esiste.
     assert not created_temps, (
         f"Regressione R-005.1: tempfile creato sull'exception path "
-        f"({created_temps}) — il branch storage_key e' bytes-first."
+        f"({created_temps}) â€” il branch storage_key e' bytes-first."
     )

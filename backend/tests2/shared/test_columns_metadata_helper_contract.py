@@ -80,7 +80,7 @@ def test_helper_retries_on_timeout_error(fast_backoff, mock_logger):
 
 def test_helper_raises_after_all_retries(fast_backoff, mock_logger):
     import psycopg2
-    from app.shared.exceptions import ColumnsMetadataSaveError
+    from app.core.projects.exceptions import ColumnsMetadataSaveError
     err = psycopg2.OperationalError("persistent")
     ps = MagicMock()
     ps.update_project_columns_metadata.side_effect = [err, err, err, err]
@@ -102,7 +102,7 @@ def test_helper_raises_after_all_retries(fast_backoff, mock_logger):
     KeyError("no such col"),
 ])
 def test_helper_non_transient_raises_immediately(fast_backoff, mock_logger, exc):
-    from app.shared.exceptions import ColumnsMetadataSaveError
+    from app.core.projects.exceptions import ColumnsMetadataSaveError
     ps = MagicMock()
     ps.update_project_columns_metadata.side_effect = exc
     with pytest.raises(ColumnsMetadataSaveError) as ei:
@@ -116,7 +116,7 @@ def test_helper_non_transient_raises_immediately(fast_backoff, mock_logger, exc)
 
 
 def test_helper_service_returns_false_raises_no_retry(fast_backoff, mock_logger):
-    from app.shared.exceptions import ColumnsMetadataSaveError
+    from app.core.projects.exceptions import ColumnsMetadataSaveError
     ps = MagicMock()
     ps.update_project_columns_metadata.return_value = False
     with pytest.raises(ColumnsMetadataSaveError) as ei:
@@ -141,7 +141,7 @@ def test_all_backoff_values_used_on_full_failure(fast_backoff, mock_logger, monk
     monkeypatch.setattr(_cm._time, "sleep", lambda s: sleeps.append(s))
 
     import psycopg2
-    from app.shared.exceptions import ColumnsMetadataSaveError
+    from app.core.projects.exceptions import ColumnsMetadataSaveError
     err = psycopg2.OperationalError("x")
     ps = MagicMock()
     ps.update_project_columns_metadata.side_effect = [err] * 4

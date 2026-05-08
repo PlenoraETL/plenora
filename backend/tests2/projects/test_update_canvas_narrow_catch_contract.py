@@ -17,7 +17,7 @@ from app.shared.contracts.auth import CurrentUser
 from app.core.auth.auth import require_user_or_above
 from app.core.projects import router as projects_router_module
 from app.core.projects.router import router as projects_router
-from app.services.project_lineage import ProjectLineageCycleError
+from app.core.projects.lineage import ProjectLineageCycleError
 
 
 pytestmark = [pytest.mark.unit, pytest.mark.contract, pytest.mark.regression]

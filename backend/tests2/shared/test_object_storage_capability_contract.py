@@ -178,13 +178,13 @@ def test_backup_factory_returns_backup_bucket(monkeypatch):
 # C. Runtime callsite guards
 
 
-def test_results_db_service_s3_download_returns_none_when_disabled():
-    """Capability off -> _s3_download_bytes ritorna None senza tentare
+def test_result_blob_object_storage_download_returns_none_when_disabled():
+    """Capability off -> object-storage download ritorna None senza tentare
     upload/get_object_storage."""
-    from app.db import results_db_service
+    from app.core.resources.loaders.result_blob import _download_object_storage
 
     with _patch_capability(False, "s3"):
-        out = results_db_service._s3_download_bytes("results/foo/bar.bin")
+        out = _download_object_storage("results/foo/bar.bin")
     assert out is None
 
 
