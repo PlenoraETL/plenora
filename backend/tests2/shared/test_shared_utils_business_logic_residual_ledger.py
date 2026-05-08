@@ -51,16 +51,6 @@ _LEDGER: tuple[SharedUtilsBusinessLogicEntry, ...] = (
         ),
     ),
     SharedUtilsBusinessLogicEntry(
-        path="app/utils/template_variables.py",
-        symbol="process_static_fields",
-        status="KEEP_COMPAT_WITH_REMOVAL_CONDITION",
-        owner="TRANSFORMATION_ENGINE",
-        removal_condition=(
-            "Move after Arricchisci, Manipola, and artifacts source-loader agree on "
-            "one typed static-parameter contract."
-        ),
-    ),
-    SharedUtilsBusinessLogicEntry(
         path="app/utils/geo.py",
         symbol="get_utm_crs_for_geometry",
         status="KEEP_COMPAT_WITH_REMOVAL_CONDITION",
@@ -119,6 +109,21 @@ def test_c2_shared_utils_business_logic_entries_have_removal_conditions() -> Non
 def test_c2_shared_utils_business_logic_ledger_points_at_existing_files() -> None:
     for entry in _LEDGER:
         assert (_BACKEND_ROOT / entry.path).exists(), entry.path
+
+
+def test_static_parameter_processing_is_not_template_variables_business_logic() -> None:
+    template_variables = _BACKEND_ROOT / "app" / "utils" / "template_variables.py"
+    text = template_variables.read_text(encoding="utf-8")
+
+    assert "def process_static_fields" not in text
+
+    offenders: list[str] = []
+    for path in (_BACKEND_ROOT / "app").rglob("*.py"):
+        module_text = path.read_text(encoding="utf-8")
+        if "app.utils.template_variables import process_static_fields" in module_text:
+            offenders.append(path.relative_to(_BACKEND_ROOT).as_posix())
+
+    assert offenders == []
 
 
 def test_visibility_policy_runtime_imports_are_auth_owned() -> None:

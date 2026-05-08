@@ -1,5 +1,6 @@
 """Typed task service contract tests."""
 
+import inspect
 from types import SimpleNamespace
 from typing import get_type_hints
 from unittest.mock import patch
@@ -280,6 +281,16 @@ def test_submit_task_launches_celery_and_returns_pending_task_info():
     assert service._task_project_cache["task-submit-1"] == "project-1"
 
 
+def test_task_service_create_methods_stay_lifecycle_only():
+    create_methods = {
+        name
+        for name, member in inspect.getmembers(TaskService, inspect.isfunction)
+        if name.startswith("create_") and name.endswith("_task")
+    }
+
+    assert create_methods == {"create_pipeline_task", "create_preview_task"}
+
+
 def test_preview_router_builds_typed_submit_request_directly(monkeypatch):
     from app.core.orchestrator import router as router_mod
     from app.core.orchestrator.task_service import task_service
@@ -362,54 +373,6 @@ def test_preview_router_builds_typed_submit_request_directly(monkeypatch):
             "Preview in coda...",
             {"project_id": "project-1", "limit": 25, "user_id": "user-1"},
         ),
-        (
-            "create_carica_task",
-            {
-                "project_id": "project-1",
-                "canvas": {"nodes": [], "edges": []},
-                "carica_node_data": {"id": "carica-1"},
-                "output_format": "geojson",
-                "force_recalculate": True,
-                "triggered_by": "cron",
-                "user_id": "user-1",
-            },
-            TaskType.CARICA,
-            "Task CARICA in coda...",
-            {
-                "project_id": "project-1",
-                "canvas": {"nodes": [], "edges": []},
-                "carica_node_data": {"id": "carica-1"},
-                "output_format": "geojson",
-                "force_recalculate": True,
-                "triggered_by": "cron",
-                "user_id": "user-1",
-            },
-        ),
-        (
-            "create_enrichment_task",
-            {
-                "project_id": "project-1",
-                "canvas": {"nodes": [], "edges": []},
-                "output_format": "csv",
-                "force_recalculate": True,
-                "cleanup_file_source_ids": ["file-1"],
-                "is_eseguibile": True,
-                "user_id": "user-1",
-                "intermediate_mode_override": "save",
-            },
-            TaskType.ENRICHMENT,
-            "Task in coda...",
-            {
-                "project_id": "project-1",
-                "canvas": {"nodes": [], "edges": []},
-                "output_format": "csv",
-                "force_recalculate": True,
-                "cleanup_file_source_ids": ["file-1"],
-                "is_eseguibile": True,
-                "user_id": "user-1",
-                "intermediate_mode_override": "save",
-            },
-        ),
     ],
 )
 def test_create_task_wrappers_delegate_to_generic_submit(
@@ -448,8 +411,11 @@ def test_create_task_wrappers_delegate_to_generic_submit(
     assert task_info.status is TaskStatus.PENDING
 
 
-def test_create_enrichment_and_carica_use_domain_submit_payloads(monkeypatch):
-    service = TaskService()
+def test_create_task_router_builds_enrichment_submit_payload(monkeypatch):
+    from app.core.orchestrator import router as router_mod
+    from app.core.orchestrator.task_service import task_service
+    from workers.tasks.enrichment_task import execute_enrichment_task
+
     captured_requests = []
 
     def fake_submit_task(request):
@@ -462,29 +428,94 @@ def test_create_enrichment_and_carica_use_domain_submit_payloads(monkeypatch):
             message=request.queued_message,
         )
 
-    monkeypatch.setattr(service, "submit_task", fake_submit_task)
+    def fail_legacy_wrapper(**kwargs):
+        raise AssertionError("router used create_enrichment_task wrapper")
 
-    service.create_enrichment_task(
-        project_id="project-1",
-        canvas={"nodes": [], "edges": []},
-        output_format="csv",
-        force_recalculate=True,
-        cleanup_file_source_ids=["file-1"],
-        is_eseguibile=True,
-        user_id="user-1",
-        intermediate_mode_override="full_artifact",
-    )
-    service.create_carica_task(
-        project_id="project-1",
-        canvas={"nodes": [], "edges": []},
-        carica_node_data={"id": "carica-1"},
-        output_format="geojson",
-        force_recalculate=True,
-        triggered_by="cron",
-        user_id="user-1",
+    monkeypatch.setattr("app.shared.authz_helpers.assert_project_access", lambda *a, **kw: None)
+    monkeypatch.setattr("app.shared.authz_helpers.assert_canvas_resources_access", lambda *a, **kw: None)
+    monkeypatch.setattr(task_service, "create_enrichment_task", fail_legacy_wrapper)
+    monkeypatch.setattr(task_service, "submit_task", fake_submit_task)
+
+    response = router_mod.create_task(
+        router_mod.CreateTaskRequest(
+            task_type=TaskType.ENRICHMENT,
+            project_id="project-1",
+            canvas={"nodes": [], "edges": []},
+            output_format="csv",
+            force_recalculate=True,
+        ),
+        current_user=SimpleNamespace(user_id="user-1"),
     )
 
-    assert isinstance(captured_requests[0].payload, EnrichmentTaskPayload)
-    assert captured_requests[0].payload.to_task_kwargs()["intermediate_mode_override"] == "full_artifact"
-    assert isinstance(captured_requests[1].payload, CaricaTaskPayload)
-    assert captured_requests[1].payload.to_task_kwargs()["carica_node_data"] == {"id": "carica-1"}
+    assert response.task_id == "task-1"
+    assert len(captured_requests) == 1
+    request = captured_requests[0]
+    assert request.celery_task is execute_enrichment_task
+    assert request.task_type is TaskType.ENRICHMENT
+    assert isinstance(request.payload, EnrichmentTaskPayload)
+    assert request.payload.to_task_kwargs() == {
+        "project_id": "project-1",
+        "canvas": {"nodes": [], "edges": []},
+        "output_format": "csv",
+        "force_recalculate": True,
+        "cleanup_file_source_ids": None,
+        "is_eseguibile": False,
+        "user_id": "user-1",
+        "intermediate_mode_override": None,
+    }
+
+
+def test_create_task_router_builds_carica_submit_payload(monkeypatch):
+    from app.core.orchestrator import router as router_mod
+    from app.core.orchestrator.task_service import task_service
+    from workers.tasks.carica_task import execute_carica_task
+
+    captured_requests = []
+
+    def fake_submit_task(request):
+        captured_requests.append(request)
+        return TaskInfo(
+            task_id="task-1",
+            task_type=request.task_type,
+            project_id=request.project_id,
+            status=TaskStatus.PENDING,
+            message=request.queued_message,
+        )
+
+    def fail_legacy_wrapper(**kwargs):
+        raise AssertionError("router used create_carica_task wrapper")
+
+    monkeypatch.setattr("app.shared.authz_helpers.assert_project_access", lambda *a, **kw: None)
+    monkeypatch.setattr("app.shared.authz_helpers.assert_canvas_resources_access", lambda *a, **kw: None)
+    monkeypatch.setattr(router_mod, "enrich_canvas_types_from_metadata", lambda *a, **kw: None)
+    monkeypatch.setattr(task_service, "create_carica_task", fail_legacy_wrapper)
+    monkeypatch.setattr(task_service, "submit_task", fake_submit_task)
+
+    response = router_mod.create_task(
+        router_mod.CreateTaskRequest(
+            task_type=TaskType.CARICA,
+            project_id="project-1",
+            canvas={"nodes": [], "edges": []},
+            carica_node_data={"id": "carica-1", "dest_type": "pg"},
+            output_format="geojson",
+            force_recalculate=True,
+            triggered_by="cron",
+        ),
+        current_user=SimpleNamespace(user_id="user-1"),
+    )
+
+    assert response.task_id == "task-1"
+    assert len(captured_requests) == 1
+    request = captured_requests[0]
+    assert request.celery_task is execute_carica_task
+    assert request.task_type is TaskType.CARICA
+    assert isinstance(request.payload, CaricaTaskPayload)
+    assert request.payload.to_task_kwargs() == {
+        "project_id": "project-1",
+        "canvas": {"nodes": [], "edges": []},
+        "carica_node_data": {"id": "carica-1", "dest_type": "pg"},
+        "output_format": "geojson",
+        "force_recalculate": True,
+        "triggered_by": "cron",
+        "user_id": "user-1",
+    }

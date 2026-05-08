@@ -61,7 +61,7 @@ def test_carica_launch_failure_returns_sanitized_error_string():
     )
 
     with patch(
-        "app.services.task_service.task_service.create_carica_task",
+        "app.services.task_service.task_service.submit_task",
         side_effect=sensitive_exc,
     ), patch(
         "app.shared.execution.canvas_types_enricher.enrich_canvas_types_from_metadata"
@@ -83,7 +83,7 @@ def test_carica_launch_failure_does_not_leak_exception_args():
     exc = ValueError(leak_marker)
 
     with patch(
-        "app.services.task_service.task_service.create_carica_task",
+        "app.services.task_service.task_service.submit_task",
         side_effect=exc,
     ), patch(
         "app.shared.execution.canvas_types_enricher.enrich_canvas_types_from_metadata"
@@ -105,7 +105,7 @@ def test_carica_launch_failure_logs_exception_with_exc_info():
     exc = RuntimeError("tecnicamente-dettagliato-solo-log")
 
     with patch(
-        "app.services.task_service.task_service.create_carica_task",
+        "app.services.task_service.task_service.submit_task",
         side_effect=exc,
     ), patch(
         "app.shared.execution.canvas_types_enricher.enrich_canvas_types_from_metadata"
@@ -140,7 +140,7 @@ def test_carica_launch_success_unchanged_contract():
     fake_task_info.task_id = "ct-xyz"
 
     with patch(
-        "app.services.task_service.task_service.create_carica_task",
+        "app.services.task_service.task_service.submit_task",
         return_value=fake_task_info,
     ), patch(
         "app.shared.execution.canvas_types_enricher.enrich_canvas_types_from_metadata"

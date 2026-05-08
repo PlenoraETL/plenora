@@ -52,17 +52,12 @@ def test_load_upstream_data_does_not_fallback_to_latest_project_result_after_fai
     )
 
     # `_load_upstream_data` con `force_recalculate=False` fa pre-cache
-    # check via `app.core.projects.db.get_project(...)`.
-    # Senza patch, il project DB leaf chiama `pg_connection.fetchone`
-    # reale -> rischio access violation Windows quando DB non e' opt-in
-    # (vedi review #5 Step 3 P1-05). L'import e' lazy dentro la funzione,
-    # quindi il symbol viene risolto al call time: patchare l'origine
-    # `app.core.projects.db.get_project` e' sufficiente. Restituiamo None
-    # per simulare "progetto non trovato in pre-cache" -> il flow procede
-    # come previsto dal test (fail-closed su _project_group_id, execute
-    # via orchestrator stub).
+    # check tramite runtime context typed. Restituiamo None per simulare
+    # "progetto non trovato in pre-cache" -> il flow procede come previsto
+    # dal test (fail-closed su _project_group_id, execute via orchestrator
+    # stub).
     with patch("app.utils.result_store.get_result_as_tempfile", return_value=None), \
-         patch("app.core.projects.db.get_project", return_value=None), \
+         patch("app.core.projects.runtime_context.get_project_runtime_context", return_value=None), \
          patch("app.core.projects.service.ProjectService", return_value=object()), \
          patch("app.core.connections.service.ConnectionService", return_value=object()), \
          patch("app.core.estrai.query_generator.QueryGenerator", return_value=object()), \

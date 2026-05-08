@@ -5,7 +5,7 @@ Keeps the historical app.core.intermediate.db import surface while run and
 node snapshot persistence move into smaller boundaries.
 """
 
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 from psycopg2.extras import execute_values
 
@@ -67,30 +67,43 @@ DEFAULT_RUNS_RETENTION = _retention.DEFAULT_RUNS_RETENTION
 
 def create_run(run_id: str, canvas_id: str, group_id: str,
                total_nodes: int = 0,
-               user_id: Optional[str] = None) -> Dict:
+               user_id: Optional[str] = None) -> Optional[Dict]:
     """Compatibility facade for run creation."""
-    return _runs_db.create_run(
-        run_id,
-        canvas_id,
-        group_id,
-        total_nodes=total_nodes,
-        user_id=user_id,
-        execute_func=execute,
-        get_run_func=get_run,
+    return _run_row_to_dict(
+        _runs_db.create_run(
+            run_id,
+            canvas_id,
+            group_id,
+            total_nodes=total_nodes,
+            user_id=user_id,
+            execute_func=execute,
+            get_run_func=get_run,
+        )
     )
 
 
 def get_run(run_id: str) -> Optional[Dict]:
-    return _runs_db.get_run(run_id, fetchone_func=fetchone)
+    return _run_row_to_dict(_runs_db.get_run(run_id, fetchone_func=fetchone))
 
 
 def list_runs(canvas_id: str, group_id: str, limit: int = 50) -> List[Dict]:
-    return _runs_db.list_runs(
-        canvas_id,
-        group_id,
-        limit=limit,
-        fetchall_func=fetchall,
-    )
+    return [
+        _run_row_to_dict(row)
+        for row in _runs_db.list_runs(
+            canvas_id,
+            group_id,
+            limit=limit,
+            fetchall_func=fetchall,
+        )
+    ]
+
+
+def _run_row_to_dict(row: Any) -> Optional[Dict]:
+    if row is None:
+        return None
+    if isinstance(row, _runs_db.RunRow):
+        return row.as_dict()
+    return row
 
 
 def update_run(run_id: str, **fields) -> None:

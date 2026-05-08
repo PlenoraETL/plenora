@@ -54,7 +54,7 @@ class SourceLoader:
       qui dentro (non dal caller); se non visibile solleva
       `SourceLoadingError`. Poi `file_source_service.load_dataframe`
       e preferenza al GeoDataFrame quando presente per preservare il CRS.
-    - **static**: `process_static_fields` su lista di campi raw, ritorna
+    - **static**: static-parameter contract su lista di campi raw, ritorna
       `pd.DataFrame([...])` di una riga.
     """
 
@@ -112,7 +112,7 @@ class SourceLoader:
         if not fields:
             return pd.DataFrame([{}])
 
-        from app.utils.template_variables import process_static_fields
+        from app.core.artifacts.static_parameters import process_static_fields
         processed = process_static_fields(list(fields))
         return pd.DataFrame([processed])
 

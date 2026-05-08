@@ -354,63 +354,45 @@ def test_check_migrations_aligned_fail_open_on_exception():
     assert "check skipped" in detail
 
 
-# 7. gather_liveness — 200/503 + 2 checks
+# 7. gather_liveness - process-only /health
 
 
-def test_gather_liveness_returns_200_when_pg_and_redis_ok():
+def test_gather_liveness_returns_process_only_200():
     import app.observability.health as h
 
+    payload = h.gather_liveness()
+
+    assert payload.status_code == 200
+    assert payload.body["status"] == "ok"
+    assert payload.body["checks"] == {
+        "process": {"ok": True, "detail": "alive"},
+    }
+
+
+def test_gather_liveness_does_not_call_dependency_checks():
+    """A transient PG/Redis lag must not make /health fail and restart
+    the app. Deep dependency probes belong to /ready."""
+    import app.observability.health as h
+
+    def _explode():
+        raise AssertionError("dependency probe called from /health")
+
     with (
-        patch.object(h, "check_postgres", return_value=(True, "ok")),
-        patch.object(h, "check_redis", return_value=(True, "ok")),
+        patch.object(h, "check_postgres", side_effect=_explode),
+        patch.object(h, "check_redis", side_effect=_explode),
     ):
         payload = h.gather_liveness()
 
     assert payload.status_code == 200
     assert payload.body["status"] == "ok"
-    assert payload.body["checks"]["postgres"] == {"ok": True, "detail": "ok"}
-    assert payload.body["checks"]["redis"] == {"ok": True, "detail": "ok"}
 
 
-def test_gather_liveness_returns_503_when_pg_fails():
+def test_gather_liveness_only_process_check_in_body():
     import app.observability.health as h
 
-    with (
-        patch.object(h, "check_postgres", return_value=(False, "RuntimeError: x")),
-        patch.object(h, "check_redis", return_value=(True, "ok")),
-    ):
-        payload = h.gather_liveness()
+    payload = h.gather_liveness()
 
-    assert payload.status_code == 503
-    assert payload.body["status"] == "unhealthy"
-    assert payload.body["checks"]["postgres"]["ok"] is False
-    assert payload.body["checks"]["redis"]["ok"] is True
-
-
-def test_gather_liveness_returns_503_when_redis_fails():
-    import app.observability.health as h
-
-    with (
-        patch.object(h, "check_postgres", return_value=(True, "ok")),
-        patch.object(h, "check_redis", return_value=(False, "ConnectionError: x")),
-    ):
-        payload = h.gather_liveness()
-
-    assert payload.status_code == 503
-    assert payload.body["status"] == "unhealthy"
-
-
-def test_gather_liveness_only_2_checks_in_body():
-    import app.observability.health as h
-
-    with (
-        patch.object(h, "check_postgres", return_value=(True, "ok")),
-        patch.object(h, "check_redis", return_value=(True, "ok")),
-    ):
-        payload = h.gather_liveness()
-
-    # Liveness shape: solo postgres + redis, NO pool_headroom / migrations.
-    assert set(payload.body["checks"].keys()) == {"postgres", "redis"}
+    assert set(payload.body["checks"].keys()) == {"process"}
 
 
 # 8. gather_readiness — 200/503 + 5 checks (BE-GO-READY-BOOTSTRAP-ENGINE-011)
@@ -667,20 +649,15 @@ def test_gather_readiness_includes_bootstrap_complete_key():
 
 def test_gather_liveness_does_not_include_bootstrap_complete():
     """Liveness MUST NOT include the bootstrap_complete check.
-    Liveness is "process responds" (PG SELECT 1 + Redis PING);
-    bootstrap completion is a readiness concern. A k8s liveness
-    probe failure kills the pod — we must NEVER kill a pod that
-    is just bootstrapping slowly."""
+    Liveness is "process responds"; bootstrap completion is a
+    readiness concern. A k8s liveness probe failure kills the pod -
+    we must NEVER kill a pod that is just bootstrapping slowly."""
     import app.observability.health as h
 
-    with (
-        patch.object(h, "check_postgres", return_value=(True, "ok")),
-        patch.object(h, "check_redis", return_value=(True, "ok")),
-    ):
-        payload = h.gather_liveness()
+    payload = h.gather_liveness()
 
     assert "bootstrap_complete" not in payload.body["checks"]
-    assert set(payload.body["checks"].keys()) == {"postgres", "redis"}
+    assert set(payload.body["checks"].keys()) == {"process"}
 
 
 # 8.5 check_object_storage — capability-aware + boto3 not imported here

@@ -48,20 +48,30 @@ Expected Celery output: `pong`.
 
 Run only after the non-Docker path has produced useful output.
 
+Docker status: FIRST SCAFFOLD, NOT YET VALIDATED end-to-end on a real
+Linux PC. This is not the go-ready first-PC path; use it to capture the
+Docker validation transcript after the non-Docker checks.
+
 ```bash
 cd ~/plenora
 cp .env.docker.example .env.docker
 python3 -c "from cryptography.fernet import Fernet; print('PLENORA_ENCRYPTION_KEY=' + Fernet.generate_key().decode())" >> .env.docker
 python3 -c "import secrets; print('JWT_SECRET_KEY=' + secrets.token_urlsafe(48))" >> .env.docker
 chmod 600 .env.docker
+bash scripts/docker-validate.sh --dry-run
 docker compose config
-docker compose build backend
+docker compose build backend frontend
 docker compose up -d postgres redis
 docker compose up -d --wait backend
-docker compose up -d worker beat
 curl -fsS http://127.0.0.1:5004/health
 curl -fsS http://127.0.0.1:5004/ready
-docker compose exec worker python -c "from workers.celery_app import celery_app; print(celery_app.send_task('cleanroom.ping').get(timeout=30))"
+docker compose exec -T postgres psql -U plenora -d plenora -tAc "SELECT EXISTS (SELECT 1 FROM information_schema.schemata WHERE schema_name = 'plenora');"
+docker compose exec -T postgres psql -U plenora -d plenora -tAc "SELECT to_regclass('plenora.schema_migrations') IS NOT NULL;"
+docker compose exec -T postgres psql -U plenora -d plenora -tAc "SELECT count(*) FROM plenora.schema_migrations;"
+docker compose up -d worker beat
+docker compose up -d --wait frontend
+curl -fsS http://127.0.0.1:3000/
+docker compose exec -T worker python -c "from workers.celery_app import celery_app; print(celery_app.send_task('cleanroom.ping').get(timeout=30))"
 docker compose ps
 ```
 

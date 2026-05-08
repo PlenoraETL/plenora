@@ -207,7 +207,14 @@ class OrchestratorService:
         logger.info(f"Trovati {len(carica_nodes)} nodi CARICA, avvio task", op="carica", project_id=project_id)
 
         try:
-            from app.core.orchestrator.task_service import task_service
+            from app.core.orchestrator.task_service import (
+                CaricaTaskPayload,
+                TaskSubmitRequest,
+                TaskType,
+                task_service,
+            )
+            from workers.tasks.carica_task import execute_carica_task
+
             tasks = []
             # Campi di identità del nodo che NON devono essere sovrascritti dal
             # merge con `data{}`. Se l'utente, per errore o malizia, mette
@@ -244,13 +251,22 @@ class OrchestratorService:
                     f"data_keys: {list(nested_data.keys()) if nested_data else 'VUOTO'}",
                     op="carica", project_id=project_id
                 )
-                task_info = task_service.create_carica_task(
-                    project_id=project_id,
-                    canvas=canvas.model_dump(),
-                    carica_node_data=carica_node_data,
-                    output_format="geojson",
-                    force_recalculate=False,
-                    triggered_by="pipeline"
+                task_info = task_service.submit_task(
+                    TaskSubmitRequest(
+                        celery_task=execute_carica_task,
+                        task_type=TaskType.CARICA,
+                        project_id=project_id,
+                        payload=CaricaTaskPayload(
+                            project_id=project_id,
+                            canvas=canvas.model_dump(),
+                            carica_node_data=carica_node_data,
+                            output_format="geojson",
+                            force_recalculate=False,
+                            triggered_by="pipeline",
+                        ),
+                        queued_message="Task CARICA in coda...",
+                        log_label="carica",
+                    )
                 )
                 logger.info(f"Task CARICA avviato: {task_info.task_id} (nodo: {carica_node.id})", op="carica", project_id=project_id)
                 tasks.append({"task_id": task_info.task_id, "node_id": carica_node.id})

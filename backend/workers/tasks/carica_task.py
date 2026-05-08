@@ -631,10 +631,12 @@ def _load_upstream_data(
         # dal layer HTTP a monte ma comunque verificato qui
         if not force_recalculate:
             try:
-                from app.core.projects import db as _projects_db
-                _proj_row = _projects_db.get_project(project_id)
+                from app.core.projects.runtime_context import (
+                    get_project_runtime_context,
+                )
+                _project_context = get_project_runtime_context(project_id)
                 _project_group_id = (
-                    _proj_row.get("group_id") if _proj_row else None
+                    _project_context.group_id if _project_context else None
                 )
             except Exception as _ge:
                 logger.warning(

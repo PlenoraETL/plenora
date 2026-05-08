@@ -14,6 +14,7 @@ import pytest
 
 from app.core.artifacts.types import PipelineArtifact
 from app.core.manipola.executor import ManipolaExecutor
+from app.core.projects.execution_context import ProjectExecutionContext
 
 
 pytestmark = [pytest.mark.unit, pytest.mark.contract]
@@ -35,6 +36,14 @@ def _canvas(nodes, edges=None):
 
 
 _EXECUTOR_GROUP_ID = "g1"
+
+
+_UPSTREAM_CONTEXT = ProjectExecutionContext(
+    project_id="source",
+    group_id=_EXECUTOR_GROUP_ID,
+    project_type="estrai",
+    retention_n=None,
+)
 
 
 def _executor_with_callback(callback) -> ManipolaExecutor:
@@ -79,9 +88,8 @@ def test_upstream_failure_does_not_leak_source_project_id():
          patch("app.core.intermediate.db.create_run"), \
          patch("app.core.intermediate.writer.close_run"), \
          patch("app.utils.logger.close_run"), \
-         patch("app.core.projects.db.get_project", return_value={
-             "id": source_pid, "group_id": "g1", "project_type": "estrai",
-         }):
+         patch("app.core.manipola.executor.get_upstream_run_context",
+               return_value=_UPSTREAM_CONTEXT):
         result = executor._carica_sorgenti_progetto(
             canvas, dataframes, force_recalculate=True,
             group_id=_EXECUTOR_GROUP_ID,
@@ -117,9 +125,8 @@ def test_upstream_failure_result_is_wrappable_without_pid_mismatch():
          patch("app.core.intermediate.db.create_run"), \
          patch("app.core.intermediate.writer.close_run"), \
          patch("app.utils.logger.close_run"), \
-         patch("app.core.projects.db.get_project", return_value={
-             "id": source_pid, "group_id": "g1", "project_type": "estrai",
-         }):
+         patch("app.core.manipola.executor.get_upstream_run_context",
+               return_value=_UPSTREAM_CONTEXT):
         result = executor._carica_sorgenti_progetto(
             canvas, dataframes, force_recalculate=True,
             group_id=_EXECUTOR_GROUP_ID,
@@ -160,9 +167,8 @@ def test_upstream_failure_message_includes_source_project_id():
          patch("app.core.intermediate.db.create_run"), \
          patch("app.core.intermediate.writer.close_run"), \
          patch("app.utils.logger.close_run"), \
-         patch("app.core.projects.db.get_project", return_value={
-             "id": source_pid, "group_id": "g1", "project_type": "estrai",
-         }):
+         patch("app.core.manipola.executor.get_upstream_run_context",
+               return_value=_UPSTREAM_CONTEXT):
         result = executor._carica_sorgenti_progetto(
             canvas, dataframes, force_recalculate=True,
             group_id=_EXECUTOR_GROUP_ID,
@@ -217,9 +223,8 @@ def test_upstream_success_path_unchanged():
          patch("app.core.intermediate.db.create_run"), \
          patch("app.core.intermediate.writer.close_run"), \
          patch("app.utils.logger.close_run"), \
-         patch("app.core.projects.db.get_project", return_value={
-             "id": source_pid, "group_id": "g1", "project_type": "estrai",
-         }), patch(
+         patch("app.core.manipola.executor.get_upstream_run_context",
+               return_value=_UPSTREAM_CONTEXT), patch(
              "app.core.artifacts.ArtifactResolver"
          ) as MockResolver, patch(
              "app.core.manipola.executor.load_dataframe_from_file",

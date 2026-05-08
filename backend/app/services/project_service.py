@@ -3,6 +3,10 @@
 Canonical implementation lives in `app.core.projects.service`.
 """
 
-from app.core.projects.service import ProjectService, RawProjectCanvas
+from __future__ import annotations
 
-__all__ = ["ProjectService", "RawProjectCanvas"]
+import sys as _sys
+
+from app.core.projects import service as _canonical
+
+_sys.modules[__name__] = _canonical

@@ -14,11 +14,18 @@ pytestmark = [pytest.mark.unit, pytest.mark.shared, pytest.mark.contract]
 
 _BACKEND_ROOT = Path(__file__).resolve().parent.parent.parent
 _APP_ROOT = _BACKEND_ROOT / "app"
+_PRODUCTION_ROOTS = (
+    _APP_ROOT,
+    _BACKEND_ROOT / "workers",
+)
 
 _CANONICAL_EXCEPTION_MODULES = {
+    "app/core/arricchisci/exceptions.py",
+    "app/core/files/exceptions.py",
     "app/core/projects/exceptions.py",
     "app/core/auth/exceptions.py",
     "app/core/intermediate/exceptions.py",
+    "app/core/resources/exceptions.py",
 }
 
 _DOMAIN_EXCEPTION_NAMES = {
@@ -26,8 +33,12 @@ _DOMAIN_EXCEPTION_NAMES = {
     "AuthDomainError",
     "AuthResourceNotFoundError",
     "CanvasCorruptedError",
+    "ColumnsMetadataSaveError",
+    "ExecutionContextError",
+    "FileSourceResolutionError",
     "IntermediateSettingsError",
     "IntermediateWriteError",
+    "MemoryLimitExceededError",
     "ProjectCleanupPartialError",
     "ProjectHasDependenciesError",
     "ProjectLineageCycleError",
@@ -55,7 +66,14 @@ def _class_defs(path: Path) -> Set[str]:
 
 
 def _db_modules_for_domains() -> Iterable[Path]:
-    for domain in ("projects", "auth", "intermediate"):
+    for domain in (
+        "arricchisci",
+        "auth",
+        "files",
+        "intermediate",
+        "projects",
+        "resources",
+    ):
         domain_root = _APP_ROOT / "core" / domain
         for path in _iter_py(domain_root):
             if path.name == "exceptions.py":
@@ -65,10 +83,13 @@ def _db_modules_for_domains() -> Iterable[Path]:
 
 
 def _production_modules() -> Iterable[Path]:
-    for path in _iter_py(_APP_ROOT):
-        if path == _APP_ROOT / "shared" / "exceptions.py":
+    for root in _PRODUCTION_ROOTS:
+        if not root.exists():
             continue
-        yield path
+        for path in _iter_py(root):
+            if path == _APP_ROOT / "shared" / "exceptions.py":
+                continue
+            yield path
 
 
 def _shared_exception_domain_imports(path: Path) -> Set[str]:
@@ -135,8 +156,8 @@ def test_domain_exceptions_not_defined_in_shared_exceptions():
     shared = _APP_ROOT / "shared" / "exceptions.py"
     hits = _class_defs(shared) & _DOMAIN_EXCEPTION_NAMES
     assert hits == set(), (
-        "Project/auth/intermediate domain exceptions must live in their "
-        f"`core.<domain>.exceptions` module, not shared: {sorted(hits)}"
+        "Domain exceptions must live in their `core.<domain>.exceptions` "
+        f"module, not shared: {sorted(hits)}"
     )
 
 
@@ -172,15 +193,23 @@ def test_production_uses_domain_exception_modules_not_shared_compat():
 
 
 def test_legacy_shared_imports_alias_canonical_domain_exceptions():
+    from app.core.arricchisci.exceptions import ExecutionContextError
+    from app.core.files.exceptions import FileSourceResolutionError
     from app.core.intermediate.exceptions import IntermediateWriteError
     from app.core.projects.exceptions import (
         CanvasCorruptedError,
+        ColumnsMetadataSaveError,
         ProjectCleanupPartialError,
         ProjectHasDependenciesError,
     )
+    from app.core.resources.exceptions import MemoryLimitExceededError
     from app.shared import exceptions as shared_exceptions
 
     assert shared_exceptions.CanvasCorruptedError is CanvasCorruptedError
+    assert shared_exceptions.ColumnsMetadataSaveError is ColumnsMetadataSaveError
+    assert shared_exceptions.ExecutionContextError is ExecutionContextError
+    assert shared_exceptions.FileSourceResolutionError is FileSourceResolutionError
     assert shared_exceptions.ProjectCleanupPartialError is ProjectCleanupPartialError
     assert shared_exceptions.ProjectHasDependenciesError is ProjectHasDependenciesError
     assert shared_exceptions.IntermediateWriteError is IntermediateWriteError
+    assert shared_exceptions.MemoryLimitExceededError is MemoryLimitExceededError

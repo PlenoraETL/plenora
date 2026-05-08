@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import ast
 from dataclasses import FrozenInstanceError
+from pathlib import Path
 
 import pytest
 
@@ -10,6 +12,13 @@ from app.core.results import db as results_db
 
 
 pytestmark = [pytest.mark.unit, pytest.mark.contract]
+
+_BACKEND_ROOT = Path(__file__).resolve().parent.parent.parent
+_RESULTS_CORE_TYPED_ROW_PATHS = (
+    _BACKEND_ROOT / "app" / "core" / "results" / "db.py",
+    _BACKEND_ROOT / "app" / "core" / "results" / "store.py",
+    _BACKEND_ROOT / "app" / "core" / "results" / "retention.py",
+)
 
 
 def test_result_metadata_sql_lives_in_core_results_db(monkeypatch):
@@ -132,6 +141,7 @@ def test_result_metadata_row_is_typed_read_only_boundary(monkeypatch):
     assert row.group_id == "grp-1"
     assert row.storage_key == "results/proj-1/res-1.bin"
     assert not hasattr(row, "to_legacy_dict")
+    assert not hasattr(row, "get")
     assert results_db.get_result("res-1") == {
         "id": "res-1",
         "project_id": "proj-1",
@@ -146,6 +156,90 @@ def test_result_metadata_row_is_typed_read_only_boundary(monkeypatch):
 
     with pytest.raises(FrozenInstanceError):
         row.id = "mutated"
+    with pytest.raises(TypeError):
+        row["id"]  # type: ignore[index]
+
+
+def test_results_metadata_legacy_serialization_is_explicit_boundary() -> None:
+    row = results_db.ResultMetadataRow(
+        id="res-1",
+        project_id="proj-1",
+        group_id="grp-1",
+        filename="out.csv",
+        format="csv",
+        size_bytes=12,
+        rows_count=2,
+        created_at="2026-05-08T10:00:00+00:00",
+        storage_key="results/proj-1/res-1.bin",
+    )
+
+    assert results_db._serialize_result_metadata_row(row) == {
+        "id": "res-1",
+        "project_id": "proj-1",
+        "group_id": "grp-1",
+        "filename": "out.csv",
+        "format": "csv",
+        "size_bytes": 12,
+        "rows_count": 2,
+        "created_at": "2026-05-08T10:00:00+00:00",
+        "storage_key": "results/proj-1/res-1.bin",
+    }
+
+
+def test_core_results_metadata_rows_are_not_dict_accessed_after_hydration() -> None:
+    """Once result metadata is typed, core results code must use attributes."""
+    offenders: list[str] = []
+
+    class Visitor(ast.NodeVisitor):
+        def __init__(self, rel: str) -> None:
+            self.rel = rel
+            self.scope: list[str] = []
+
+        def visit_ClassDef(self, node: ast.ClassDef) -> None:
+            self.scope.append(node.name)
+            self.generic_visit(node)
+            self.scope.pop()
+
+        def visit_FunctionDef(self, node: ast.FunctionDef) -> None:
+            self.scope.append(node.name)
+            self.generic_visit(node)
+            self.scope.pop()
+
+        def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef) -> None:
+            self.scope.append(node.name)
+            self.generic_visit(node)
+            self.scope.pop()
+
+        def _in_hydration_boundary(self) -> bool:
+            return self.scope == ["ResultMetadataRow", "from_mapping"]
+
+        def _flag_row_access(self, node: ast.AST, kind: str) -> None:
+            if self._in_hydration_boundary():
+                return
+            scope = ".".join(self.scope) or "<module>"
+            offenders.append(f"{self.rel}:{node.lineno}:{scope}:{kind}")
+
+        def visit_Subscript(self, node: ast.Subscript) -> None:
+            if isinstance(node.value, ast.Name) and node.value.id == "row":
+                self._flag_row_access(node, "row[...]")
+            self.generic_visit(node)
+
+        def visit_Call(self, node: ast.Call) -> None:
+            if (
+                isinstance(node.func, ast.Attribute)
+                and node.func.attr == "get"
+                and isinstance(node.func.value, ast.Name)
+                and node.func.value.id == "row"
+            ):
+                self._flag_row_access(node, "row.get(...)")
+            self.generic_visit(node)
+
+    for path in _RESULTS_CORE_TYPED_ROW_PATHS:
+        rel = path.relative_to(_BACKEND_ROOT).as_posix()
+        source = path.read_text(encoding="utf-8")
+        Visitor(rel).visit(ast.parse(source))
+
+    assert offenders == []
 
 
 def test_results_db_service_retains_metadata_compat_exports():

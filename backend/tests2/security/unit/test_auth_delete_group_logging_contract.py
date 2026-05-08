@@ -258,6 +258,17 @@ def test_group_cleanup_registry_composes_domain_owned_handlers():
     assert "DELETE FROM log_runs WHERE group_id" not in registry_src
 
 
+def test_group_cleanup_registry_does_not_unpack_project_cleanup_report():
+    registry_src = _CLEANUP_REGISTRY_PATH.read_text(encoding="utf-8")
+
+    assert "_cleanup_projects" not in registry_src
+    assert "project_report.projects" not in registry_src
+    assert "project_report.results" not in registry_src
+    assert "project_report.intermediate_runs" not in registry_src
+    assert "GROUP_PROJECT_CLEANUP_REPORT_KEYS" in registry_src
+    assert "delete_projects_for_group_report" in registry_src
+
+
 def test_group_cleanup_registry_execute_calls_do_not_use_dynamic_sql():
     sources = {
         "group_cleanup.py": _GROUP_CLEANUP_PATH.read_text(encoding="utf-8"),

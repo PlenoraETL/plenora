@@ -92,7 +92,6 @@ _BURN_DOWN_TARGETS: tuple[BurnDownTarget, ...] = (
             "app/shared/sharing.py": 1,
             "app/utils/geo.py": 1,
             "app/utils/response_parser.py": 1,
-            "app/utils/template_variables.py": 1,
         },
         removed_ceilings={},
     ),

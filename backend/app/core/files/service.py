@@ -421,7 +421,7 @@ class FileSourceService:
         from app.core.resources.file_source_blob_access import (
             load_file_source_blob_bytes,
         )
-        from app.shared.exceptions import MemoryLimitExceededError
+        from app.core.resources.exceptions import MemoryLimitExceededError
 
         # `_assert_visible` re-raises PermissionError to the caller
         # kept identical to pre-020 behavior). After it returns

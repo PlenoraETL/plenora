@@ -77,7 +77,12 @@ def test_load_project_sources_blocks_cross_tenant_via_resolver():
     executor = _make_executor()
     dataframes = {}
 
-    with patch("app.core.projects.db.get_project", return_value=None):
+    from app.core.artifacts import ArtifactResolutionError
+
+    with patch(
+        "app.core.artifacts.ArtifactResolver.materialize_latest",
+        side_effect=ArtifactResolutionError("project denied"),
+    ):
         result = executor._carica_sorgenti_progetto(
             _canvas_with_project_source("proj-99"), dataframes,
             force_recalculate=False,
@@ -101,7 +106,12 @@ def test_load_project_sources_fail_closed_when_source_project_missing():
     executor = _make_executor()
     dataframes = {}
 
-    with patch("app.core.projects.db.get_project", return_value=None):
+    from app.core.artifacts import ArtifactResolutionError
+
+    with patch(
+        "app.core.artifacts.ArtifactResolver.materialize_latest",
+        side_effect=ArtifactResolutionError("project denied"),
+    ):
         result = executor._carica_sorgenti_progetto(
             _canvas_with_project_source("proj-ghost"), dataframes,
             force_recalculate=False,
@@ -319,7 +329,10 @@ def test_load_project_sources_fail_closed_when_check_raises_unexpectedly():
     def _boom(*_a, **_k):
         raise RuntimeError("DB esplode")
 
-    with patch("app.core.projects.db.get_project", side_effect=_boom):
+    with patch(
+        "app.core.artifacts.ArtifactResolver.materialize_latest",
+        side_effect=_boom,
+    ):
         # Qualsiasi RuntimeError dal resolver risale al caller; manipola
         # NON lo deve degradare a warning. Il test verifica
         # che NON arriviamo a un return success-style: o fail-closed o

@@ -215,9 +215,12 @@ def test_infer_project_source_schema_prefers_result_node_columns_over_metadata(
         ],
     }
 
+    from app.core.projects.schema_inference_project_context import (
+        ProjectSourceSchemaContext,
+    )
     monkeypatch.setattr(
-        "app.core.projects.db.get_project",
-        lambda pid: {"canvas": fake_canvas},
+        "app.core.projects.schema_inference.load_project_source_schema_context",
+        lambda pid: ProjectSourceSchemaContext(project_id=pid, canvas=fake_canvas),
     )
     ps_node = _node("ps1", "project_source", source_project_id="src-proj-1")
     schema = svc._infer_project_source_schema(ps_node)
@@ -252,9 +255,12 @@ def test_infer_project_source_schema_fallback_to_columns_metadata_when_result_em
         ],
     }
 
+    from app.core.projects.schema_inference_project_context import (
+        ProjectSourceSchemaContext,
+    )
     monkeypatch.setattr(
-        "app.core.projects.db.get_project",
-        lambda pid: {"canvas": fake_canvas},
+        "app.core.projects.schema_inference.load_project_source_schema_context",
+        lambda pid: ProjectSourceSchemaContext(project_id=pid, canvas=fake_canvas),
     )
     ps_node = _node("ps1", "project_source", source_project_id="src-proj-1")
     schema = svc._infer_project_source_schema(ps_node)
@@ -293,9 +299,12 @@ def test_infer_project_source_schema_does_not_rename_columns_via_alias(
         "columns_metadata": [],
     }
 
+    from app.core.projects.schema_inference_project_context import (
+        ProjectSourceSchemaContext,
+    )
     monkeypatch.setattr(
-        "app.core.projects.db.get_project",
-        lambda pid: {"canvas": fake_canvas},
+        "app.core.projects.schema_inference.load_project_source_schema_context",
+        lambda pid: ProjectSourceSchemaContext(project_id=pid, canvas=fake_canvas),
     )
     ps_node = _node("ps1", "project_source", source_project_id="src-proj-1")
     schema = svc._infer_project_source_schema(ps_node)
@@ -338,9 +347,12 @@ def test_infer_project_source_schema_does_not_filter_by_intrinsic_visible_flag(
         "columns_metadata": [],
     }
 
+    from app.core.projects.schema_inference_project_context import (
+        ProjectSourceSchemaContext,
+    )
     monkeypatch.setattr(
-        "app.core.projects.db.get_project",
-        lambda pid: {"canvas": fake_canvas},
+        "app.core.projects.schema_inference.load_project_source_schema_context",
+        lambda pid: ProjectSourceSchemaContext(project_id=pid, canvas=fake_canvas),
     )
     # Consumer node senza filtro proprio (node.columns vuoto): tutte
     # le colonne del source devono passare.

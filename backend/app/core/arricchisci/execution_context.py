@@ -11,7 +11,7 @@ from typing import Optional
 import psycopg2
 
 from app.core.arricchisci.project_access import load_project_access_context
-from app.shared.exceptions import ExecutionContextError
+from app.core.arricchisci.exceptions import ExecutionContextError
 from app.shared.execution.context import CanvasExecutionContext
 
 

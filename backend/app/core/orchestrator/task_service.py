@@ -305,6 +305,18 @@ class TaskService:
     def __init__(self):
         self.app = celery_app
 
+    def __getattr__(self, name: str):
+        """Compatibility for legacy callers while the class API stays generic."""
+        if name == "create_enrichment_task":
+            return lambda *args, **kwargs: _create_enrichment_task_compat(
+                self, *args, **kwargs
+            )
+        if name == "create_carica_task":
+            return lambda *args, **kwargs: _create_carica_task_compat(
+                self, *args, **kwargs
+            )
+        raise AttributeError(name)
+
     def submit_task(self, request: TaskSubmitRequest) -> TaskInfo:
         """Launch a Celery task and record the pending task metadata."""
 
@@ -330,103 +342,6 @@ class TaskService:
     
     # CREAZIONE TASK
     
-    def create_enrichment_task(
-        self,
-        project_id: str,
-        canvas: Dict,
-        output_format: str = "csv",
-        force_recalculate: bool = False,
-        cleanup_file_source_ids: Optional[List[str]] = None,
-        is_eseguibile: bool = False,
-        user_id: Optional[str] = None,
-        intermediate_mode_override: Optional[str] = None,
-    ) -> TaskInfo:
-        """
-        Crea e avvia un task di enrichment.
-
-        Args:
-            project_id: ID del progetto
-            canvas: Canvas con nodi e edges
-            output_format: Formato output
-            force_recalculate: Se True, riesegue anche se esiste cache
-            cleanup_file_source_ids: Opzionale — lista di file source temporanei
-                da eliminare al termine del task (usato dagli eseguibili per
-                rimuovere i file caricati dall'utente dopo l'esecuzione).
-            is_eseguibile: True se il task gira per un "eseguibile" pubblicato
-                (record della tabella `eseguibili`). In questo caso il task
-                salta qualsiasi scrittura su DB (runs/log_runs/results/node_rows/
-                columns_metadata) e persiste l'output su disco in
-                ESEGUIBILI_OUTPUTS_DIR/{task_id}/.
-
-        Returns:
-            TaskInfo con task_id
-        """
-        from workers.tasks.enrichment_task import execute_enrichment_task
-
-        return self.submit_task(
-            TaskSubmitRequest(
-                celery_task=execute_enrichment_task,
-                task_type=TaskType.ENRICHMENT,
-                project_id=project_id,
-                payload=EnrichmentTaskPayload(
-                    project_id=project_id,
-                    canvas=canvas,
-                    output_format=output_format,
-                    force_recalculate=force_recalculate,
-                    cleanup_file_source_ids=cleanup_file_source_ids,
-                    is_eseguibile=is_eseguibile,
-                    user_id=user_id,
-                    intermediate_mode_override=intermediate_mode_override,
-                ),
-                queued_message="Task in coda...",
-                log_label="enrichment",
-            )
-        )
-    
-    def create_carica_task(
-        self,
-        project_id: str,
-        canvas: Dict,
-        carica_node_data: Dict,
-        output_format: str = "geojson",
-        force_recalculate: bool = False,
-        triggered_by: str = "manual",
-        user_id: Optional[str] = None,
-    ) -> TaskInfo:
-        """
-        Crea e avvia un task di caricamento su database.
-        
-        Args:
-            project_id: ID del progetto
-            canvas: Canvas con nodi e edges
-            carica_node_data: Configurazione del nodo CARICA
-            output_format: Formato output del nodo Result upstream
-            force_recalculate: Se True, riesegue pipeline upstream
-            triggered_by: "manual" o "cron"
-            
-        Returns:
-            TaskInfo con task_id
-        """
-        from workers.tasks.carica_task import execute_carica_task
-        
-        return self.submit_task(
-            TaskSubmitRequest(
-                celery_task=execute_carica_task,
-                task_type=TaskType.CARICA,
-                project_id=project_id,
-                payload=CaricaTaskPayload(
-                    project_id=project_id,
-                    canvas=canvas,
-                    carica_node_data=carica_node_data,
-                    output_format=output_format,
-                    force_recalculate=force_recalculate,
-                    triggered_by=triggered_by,
-                    user_id=user_id,
-                ),
-                queued_message="Task CARICA in coda...",
-                log_label="carica",
-            )
-        )
     
     # RECUPERA STATO E PROGRESSO
     
@@ -678,6 +593,72 @@ class TaskService:
         """
         logger.info(f"Cleanup manuale risultati task più vecchi di {max_age_hours}h")
         return 0  # Redis gestisce scadenza automatica via CELERY_RESULT_EXPIRES
+
+
+def _create_enrichment_task_compat(
+    service: TaskService,
+    project_id: str,
+    canvas: Dict,
+    output_format: str = "csv",
+    force_recalculate: bool = False,
+    cleanup_file_source_ids: Optional[List[str]] = None,
+    is_eseguibile: bool = False,
+    user_id: Optional[str] = None,
+    intermediate_mode_override: Optional[str] = None,
+) -> TaskInfo:
+    from workers.tasks.enrichment_task import execute_enrichment_task
+
+    return service.submit_task(
+        TaskSubmitRequest(
+            celery_task=execute_enrichment_task,
+            task_type=TaskType.ENRICHMENT,
+            project_id=project_id,
+            payload=EnrichmentTaskPayload(
+                project_id=project_id,
+                canvas=canvas,
+                output_format=output_format,
+                force_recalculate=force_recalculate,
+                cleanup_file_source_ids=cleanup_file_source_ids,
+                is_eseguibile=is_eseguibile,
+                user_id=user_id,
+                intermediate_mode_override=intermediate_mode_override,
+            ),
+            queued_message="Task in coda...",
+            log_label="enrichment",
+        )
+    )
+
+
+def _create_carica_task_compat(
+    service: TaskService,
+    project_id: str,
+    canvas: Dict,
+    carica_node_data: Dict,
+    output_format: str = "geojson",
+    force_recalculate: bool = False,
+    triggered_by: str = "manual",
+    user_id: Optional[str] = None,
+) -> TaskInfo:
+    from workers.tasks.carica_task import execute_carica_task
+
+    return service.submit_task(
+        TaskSubmitRequest(
+            celery_task=execute_carica_task,
+            task_type=TaskType.CARICA,
+            project_id=project_id,
+            payload=CaricaTaskPayload(
+                project_id=project_id,
+                canvas=canvas,
+                carica_node_data=carica_node_data,
+                output_format=output_format,
+                force_recalculate=force_recalculate,
+                triggered_by=triggered_by,
+                user_id=user_id,
+            ),
+            queued_message="Task CARICA in coda...",
+            log_label="carica",
+        )
+    )
 
 
 # Singleton

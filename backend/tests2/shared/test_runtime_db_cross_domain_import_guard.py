@@ -89,13 +89,6 @@ class RemovedRuntimeDbImport:
 
 _ALLOWED_RUNTIME_DB_IMPORTS: tuple[AllowedRuntimeDbImport, ...] = (
     AllowedRuntimeDbImport(
-        "app/core/arricchisci/api_connection_rest_file.py",
-        "app.core.files.db",
-        "<module>",
-        "MEDIUM",
-        "KEEP_COMPAT_WITH_REMOVAL_CONDITION: remove after file-source reads are exposed through an arricchisci/file-source boundary service instead of the raw files DB leaf",
-    ),
-    AllowedRuntimeDbImport(
         "app/core/imdf/project_access.py",
         "app.core.projects",
         "db",
@@ -110,13 +103,6 @@ _ALLOWED_RUNTIME_DB_IMPORTS: tuple[AllowedRuntimeDbImport, ...] = (
         "KEEP_COMPAT_WITH_REMOVAL_CONDITION: remove after upstream run lifecycle creation is routed through an intermediate run service used by Manipola",
     ),
     AllowedRuntimeDbImport(
-        "workers/tasks/carica_task.py",
-        "app.core.projects",
-        "db",
-        "HIGH",
-        "KEEP_COMPAT_WITH_REMOVAL_CONDITION: remove after CARICA REST/ArcGIS task ownership checks consume a project runtime-context service instead of the raw projects DB leaf",
-    ),
-    AllowedRuntimeDbImport(
         "workers/tasks/pipeline_task.py",
         "app.core.intermediate",
         "db",
@@ -125,6 +111,12 @@ _ALLOWED_RUNTIME_DB_IMPORTS: tuple[AllowedRuntimeDbImport, ...] = (
     ),
 )
 _REMOVED_RUNTIME_DB_IMPORTS: tuple[RemovedRuntimeDbImport, ...] = (
+    RemovedRuntimeDbImport(
+        "app/core/arricchisci/api_connection_rest_file.py",
+        "app.core.files.db",
+        "<module>",
+        "REMOVED: REST-file file_source path materialization now consumes the files-owned source_loading boundary",
+    ),
     RemovedRuntimeDbImport(
         "app/core/auth/owner_dependencies.py",
         "app.core.files.db",
@@ -148,6 +140,12 @@ _REMOVED_RUNTIME_DB_IMPORTS: tuple[RemovedRuntimeDbImport, ...] = (
         "app.core.projects.db",
         "get_project",
         "REMOVED: result store group resolution now consumes project runtime-context group resolution",
+    ),
+    RemovedRuntimeDbImport(
+        "workers/tasks/carica_task.py",
+        "app.core.projects",
+        "db",
+        "REMOVED: CARICA upstream pre-cache now consumes project runtime-context group resolution",
     ),
 )
 

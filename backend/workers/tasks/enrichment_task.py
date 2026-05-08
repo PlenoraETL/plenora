@@ -1381,8 +1381,14 @@ def _trigger_carica_if_present(project_id: str, canvas: Dict, output_format: str
         project_id=project_id
     )
 
-    from app.core.orchestrator.task_service import task_service
+    from app.core.orchestrator.task_service import (
+        CaricaTaskPayload,
+        TaskSubmitRequest,
+        TaskType,
+        task_service,
+    )
     from app.core.projects.service import ProjectService
+    from workers.tasks.carica_task import execute_carica_task
     try:
         metadata = ProjectService().get_project_metadata(project_id)
         group_id = getattr(metadata, 'group_id', None) if metadata else None
@@ -1398,12 +1404,21 @@ def _trigger_carica_if_present(project_id: str, canvas: Dict, output_format: str
             nested_data = node_dict.get("data") or {}
             carica_node_data = {**node_dict, **nested_data}
 
-            task_info = task_service.create_carica_task(
-                project_id=project_id,
-                canvas=canvas,
-                carica_node_data=carica_node_data,
-                output_format=output_format,
-                triggered_by="manual",
+            task_info = task_service.submit_task(
+                TaskSubmitRequest(
+                    celery_task=execute_carica_task,
+                    task_type=TaskType.CARICA,
+                    project_id=project_id,
+                    payload=CaricaTaskPayload(
+                        project_id=project_id,
+                        canvas=canvas,
+                        carica_node_data=carica_node_data,
+                        output_format=output_format,
+                        triggered_by="manual",
+                    ),
+                    queued_message="Task CARICA in coda...",
+                    log_label="carica",
+                )
             )
             logger.info(
                 f"Task CARICA avviato: {task_info.task_id} (nodo: {carica_node.get('id')})",

@@ -4,6 +4,8 @@ This is the canonical Docker validation path for Plenora.
 
 ## Status
 
+BE-GO-READY-INSTALL-011-FIRST-DOCKER-SCAFFOLD
+
 Docker scaffold exists for backend services plus the frontend static image.
 Full product Docker readiness is not closed until the full stack is validated
 on a real Linux host.
@@ -20,7 +22,8 @@ Current compose scope:
 Known gap:
 
 - full-stack Docker has not been validated on a real Linux host yet;
-- Docker compose CI is wired for config/build, but not for the full
+- Docker compose CI is wired for `docker compose config` and
+  `docker compose build backend frontend`, but not for the full
   runtime smoke sequence.
 
 ## Files
@@ -40,9 +43,11 @@ Known gap:
 Docker validation is green only when:
 
 - `docker compose config` succeeds;
-- backend image builds;
+- backend and frontend images build;
 - Postgres and Redis become healthy;
 - backend `/health` and `/ready` are green;
+- the direct Postgres postcondition confirms schema `plenora`,
+  table `plenora.schema_migrations`, and at least one applied migration row;
 - worker completes `cleanroom.ping`;
 - beat starts and stays alive;
 - frontend image builds and serves the SPA shell;
@@ -87,6 +92,11 @@ Expected output checklist:
    Then run **`curl -fsS http://127.0.0.1:5004/ready`**.
    Expected: HTTP 200 from the readiness surface; dependency gates and
    migration readiness are green.
+   Then run the read-only Postgres postcondition checks:
+   `information_schema.schemata` has schema `plenora`,
+   `to_regclass('plenora.schema_migrations') IS NOT NULL`, and
+   `SELECT count(*) FROM plenora.schema_migrations` returns a positive
+   row count.
 5. **`docker compose up -d worker beat`**
    Expected: worker and beat containers stay running.
 6. **`docker compose up -d --wait frontend`**
@@ -139,6 +149,9 @@ docker compose up -d --wait frontend
 ```bash
 curl -fsS http://127.0.0.1:5004/health
 curl -fsS http://127.0.0.1:5004/ready
+docker compose exec -T postgres psql -U plenora -d plenora -tAc "SELECT EXISTS (SELECT 1 FROM information_schema.schemata WHERE schema_name = 'plenora');"
+docker compose exec -T postgres psql -U plenora -d plenora -tAc "SELECT to_regclass('plenora.schema_migrations') IS NOT NULL;"
+docker compose exec -T postgres psql -U plenora -d plenora -tAc "SELECT count(*) FROM plenora.schema_migrations;"
 curl -fsS http://127.0.0.1:3000/
 docker compose ps
 ```
@@ -162,7 +175,7 @@ object storage policy/config, and incomplete backend bootstrap.
 ## 6. Worker Round-Trip
 
 ```bash
-docker compose exec worker python -c "from workers.celery_app import celery_app; print(celery_app.send_task('cleanroom.ping').get(timeout=30))"
+docker compose exec -T worker python -c "from workers.celery_app import celery_app; print(celery_app.send_task('cleanroom.ping').get(timeout=30))"
 ```
 
 Expected: `pong`.
@@ -170,7 +183,7 @@ Expected: `pong`.
 ## 7. Memory Caps
 
 ```bash
-docker compose exec backend python -c "
+docker compose exec -T backend python -c "
 from app.config import settings
 for k in ('LOAD_FILE_MAX_BYTES','WORKER_RSS_MAX_BYTES','RESOURCE_MAX_BYTES','ARTIFACT_PREVIEW_MAX_BYTES','CROSS_JOIN_MAX_OUTPUT_ROWS','MULTI_JOIN_MAX_OUTPUT_ROWS'):
     print(f'{k}={settings.get(k)}')
@@ -214,7 +227,20 @@ FRONTEND_VITE_API_URL=http://localhost:5004 docker compose build frontend
 
 If `FRONTEND_VITE_API_URL` is omitted, compose uses
 `http://localhost:5004`, matching the backend port published by this scaffold.
-The value is baked into the browser bundle at build time.
+Compose passes that value to the frontend Docker build as the Vite build arg
+`VITE_API_URL`; `frontend/Dockerfile` exports it as `ENV VITE_API_URL`, and
+`frontend/src/api/config.js` reads `import.meta.env.VITE_API_URL`.
+
+The value is baked into the browser bundle at build time. It must be a URL the
+operator's browser can reach, not a compose-internal hostname. For the local
+single-host validation pack, `http://localhost:5004` is correct because the
+backend publishes `5004:5004`. For a remote Linux host, rebuild the frontend
+with the externally reachable backend origin, for example:
+
+```bash
+FRONTEND_VITE_API_URL=http://<linux-host-ip-or-dns>:5004 docker compose build frontend
+docker compose up -d --wait frontend
+```
 
 ## 11. Known scaffold limitations
 
@@ -227,9 +253,10 @@ What ships today vs what does NOT:
 | Backend image | Ships. |
 | Frontend image | Ships. |
 | Compose frontend service | Ships. |
-| Docker compose CI lane | Ships for config/build. |
+| Docker compose CI lane | Ships for config/build of backend and frontend images only. |
 | Real Linux host validation report | Not complete yet. |
 
 When can the Docker path be called "validated"? When the validation pack,
 including frontend build and static delivery checks, is green on a real Linux
-host and a Docker compose CI lane exists.
+host. The current CI lane is necessary coverage for compose config/build, but
+it is not a replacement for the real-host runtime validation report.

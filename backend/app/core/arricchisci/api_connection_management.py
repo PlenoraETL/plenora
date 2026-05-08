@@ -21,7 +21,7 @@ from app.core.arricchisci._api_connection_helpers import (
 )
 import app.core.arricchisci.db as db_svc
 from app.utils.logger import get_logger
-from app.utils.template_variables import process_static_fields
+from app.core.artifacts.static_parameters import process_static_fields
 
 # Stesso logger name di `api_connector.py` (`__name__` valuta a
 # `"app.core.arricchisci.api_connector"`). Singleton stdlib per nome →

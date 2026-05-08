@@ -11,15 +11,15 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 import pandas as pd
-import psycopg2
 
-import app.core.files.db as file_sources_db
-from app.config import settings
+from app.core.files.source_loading import resolve_file_source_id_path
+# File-source path materialization lives in the files domain boundary.
+# This mixin owns ctx extraction and REST-file orchestration.
 from app.core.arricchisci._api_connection_helpers import _nd
 from app.core.arricchisci.execution_context import (
     ArricchisciExecutionContext,
 )
-from app.shared.exceptions import FileSourceResolutionError
+from app.core.files.exceptions import FileSourceResolutionError
 from app.utils.logger import get_logger
 
 
@@ -724,36 +724,9 @@ class ApiConnectionRestFileMixin:
             ValueError con 403-like message se cross-tenant.
         """
         current_group_id = _extract_file_source_group_id(self, ctx)
-        if not current_group_id:
-            # Se non conosciamo il gruppo corrente meglio rifiutare che
-            # rischiare un leak (schedule/task context mancante e' gia' un
-            # segnale sospetto di per se'
-            raise ValueError(
-                "Contesto di sicurezza non determinabile per file_source"
-            )
-        try:
-            from app.core.auth.visibility import is_resource_visible
-            if not is_resource_visible(
-                "file_sources", file_source_id, current_group_id,
-                is_superadmin=False,
-            ):
-                logger.error(
-                    f"[SECURITY] Cross-tenant access blocked: file_source "
-                    f"{file_source_id} non visibile al gruppo {current_group_id}",
-                )
-                raise ValueError(
-                    f"Accesso negato: il file sorgente '{file_source_id}' "
-                    f"non appartiene al tuo gruppo"
-                )
-        except ValueError:
-            raise
-        except Exception as _sec_err:
-            logger.warning(
-                f"Cross-tenant check file_source fallito: {_sec_err}"
-            )
-            raise ValueError(
-                f"Errore verifica accesso file_source '{file_source_id}'"
-            ) from _sec_err
+        from app.core.files.source_loading import assert_file_source_group_access
+
+        assert_file_source_group_access(file_source_id, current_group_id)
 
     def _resolve_file_source_id_path(
         self,
@@ -781,93 +754,11 @@ class ApiConnectionRestFileMixin:
 
         Restituisce None se il file_source non esiste o e' vuoto.
         """
-        if not file_source_id:
-            return None
-
-        self._assert_file_source_group_access(file_source_id, ctx=ctx)
-
-        import os as _os
-        from app.config import settings
-
-        # Fix-A: il broad `except Exception -> warning + return None`
-        # outer e' eliminato. Errori tecnici (DB / FS) sono ora
-        # classificati e sollevati come `FileSourceResolutionError`
-        # con chain preservata. `return None` resta solo sui rami
-        # dati legittimi (metadata assente / blob vuoto
-        try:
-            row_meta = file_sources_db.get_file_source(
-                file_source_id, include_data=False
-            )
-        except psycopg2.Error as e:
-            raise FileSourceResolutionError(
-                file_source_id=file_source_id,
-                cause="lookup",
-                reason="errore lettura metadata file_source dal DB",
-                original_error=e,
-            ) from e
-
-        if not row_meta:
-            return None
-        expected_name = (
-            row_meta.get("original_filename")
-            or (row_meta.get("metadata") or {}).get("original_filename")
-            or "input.bin"
+        current_group_id = _extract_file_source_group_id(self, ctx)
+        return resolve_file_source_id_path(
+            file_source_id,
+            expected_group_id=current_group_id,
         )
-
-        source_dir = settings.get_file_source_dir(file_source_id)
-
-        # Cache hit: se il file gia' materializzato esiste con il
-        # nome atteso, riuso (evita I/O ripetuto tra task che usano
-        # lo stesso file_source nello stesso nodo
-        target = source_dir / expected_name
-        if target.is_file():
-            return str(target.resolve())
-
-        # Cache miss: estrai blob da DB e scrivi atomico
-        try:
-            row_full = file_sources_db.get_file_source(
-                file_source_id, include_data=True
-            )
-        except psycopg2.Error as e:
-            raise FileSourceResolutionError(
-                file_source_id=file_source_id,
-                cause="lookup",
-                reason="errore lettura blob file_source dal DB",
-                original_error=e,
-            ) from e
-
-        if not row_full or not row_full.get("data"):
-            return None
-        raw = row_full["data"]
-
-        try:
-            source_dir.mkdir(parents=True, exist_ok=True)
-            out_path = source_dir / expected_name
-            tmp_path = source_dir / f".{expected_name}.{_os.getpid()}.tmp"
-            try:
-                tmp_path.write_bytes(raw if isinstance(raw, bytes) else bytes(raw))
-                _os.replace(str(tmp_path), str(out_path))
-            finally:
-                if tmp_path.exists():
-                    try:
-                        tmp_path.unlink()
-                    except Exception as _tmp_err:
-                        logger.debug(
-                            f"_resolve_file_source_id_path: unlink tmp_path "
-                            f"best-effort fallito: {_tmp_err}"
-                        )
-        except OSError as e:
-            raise FileSourceResolutionError(
-                file_source_id=file_source_id,
-                cause="materialization",
-                reason="scrittura cache file_source su filesystem fallita",
-                original_error=e,
-            ) from e
-
-        logger.debug(
-            f"file_source {file_source_id}: blob materializzato in cache -> {out_path}"
-        )
-        return str(out_path.resolve())
 
     def _resolve_file_source_path(
         self,

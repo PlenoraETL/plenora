@@ -82,30 +82,77 @@ def _build_middleware_app():
     return app
 
 
-def test_health_returns_200_when_postgres_and_redis_are_ok(main_client):
+def test_health_returns_200_when_process_responds(main_client):
     response = main_client.get("/health")
 
     assert response.status_code == 200
     body = response.json()
     assert body["status"] == "ok"
-    assert body["checks"]["postgres"]["ok"] is True
-    assert body["checks"]["redis"]["ok"] is True
+    assert body["checks"] == {
+        "process": {"ok": True, "detail": "alive"},
+    }
 
 
-def test_health_returns_503_when_redis_fails():
+def test_health_stays_200_when_redis_fails():
+    import app.main as main_mod
+    import app.observability.health as health_mod
+
+    with (
+        patch.object(
+            health_mod,
+            "check_redis",
+            return_value=(False, "ConnectionError: boom"),
+        ),
+    ):
+        client = TestClient(main_mod.app)
+        response = client.get("/health")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "ok"
+    assert list(body["checks"].keys()) == ["process"]
+
+
+def test_ready_returns_503_when_redis_fails():
     import app.main as main_mod
     import app.observability.health as health_mod
 
     with (
         patch.object(health_mod, "check_postgres", return_value=(True, "ok")),
-        patch.object(health_mod, "check_redis", return_value=(False, "ConnectionError: boom")),
+        patch.object(
+            health_mod,
+            "check_redis",
+            return_value=(False, "ConnectionError: boom"),
+        ),
+        patch.object(health_mod, "check_pool_headroom", return_value=(True, "ok")),
+        patch.object(
+            health_mod,
+            "check_migrations_aligned",
+            return_value=(True, "aligned"),
+        ),
+        patch.object(health_mod, "check_object_storage", return_value=(True, "ok")),
+        patch.object(
+            health_mod,
+            "check_reconciliation_backlog",
+            return_value=(True, "pending=0 lost=0"),
+        ),
+        patch.object(
+            health_mod,
+            "check_beat_heartbeat",
+            return_value=(True, "skipped: disabled (threshold=0)"),
+        ),
+        patch.object(
+            health_mod,
+            "check_bootstrap_complete",
+            return_value=(True, "ok"),
+        ),
     ):
         client = TestClient(main_mod.app)
-        response = client.get("/health")
+        response = client.get("/ready")
 
     assert response.status_code == 503
     body = response.json()
-    assert body["status"] == "unhealthy"
+    assert body["status"] == "not_ready"
     assert body["checks"]["redis"]["ok"] is False
 
 

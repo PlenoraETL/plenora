@@ -18,7 +18,7 @@ from app.core.resources.bounded_reader import read_stream_bounded
 from app.core.resources.preview_caps import (
     resolve_artifact_preview_max_bytes,
 )
-from app.shared.exceptions import MemoryLimitExceededError
+from app.core.resources.exceptions import MemoryLimitExceededError
 
 logger = logging.getLogger(__name__)
 

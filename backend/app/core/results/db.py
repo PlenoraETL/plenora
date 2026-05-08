@@ -5,11 +5,24 @@ Blob reads live in ``app.core.results.blob.get_result_data``.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from collections.abc import Iterable, Mapping
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Mapping, Optional
+from typing import Optional
 
 from app.db.pg_connection import execute, fetchall, fetchone
+
+__all__ = [
+    "ResultMetadataRow",
+    "get_latest_result",
+    "get_latest_result_row",
+    "get_result",
+    "get_result_row",
+    "list_result_rows",
+    "list_results",
+    "save_result",
+    "save_result_row",
+]
 
 
 @dataclass(frozen=True)
@@ -29,7 +42,7 @@ class ResultMetadataRow:
     rows_count: Optional[int] = None
     created_at: object = None
     storage_key: Optional[str] = None
-    _selected_keys: tuple[str, ...] = ()
+    _selected_keys: tuple[str, ...] = field(default=(), repr=False, compare=False)
 
     @classmethod
     def from_mapping(cls, row: Mapping[str, object]) -> "ResultMetadataRow":
@@ -68,7 +81,8 @@ def _optional_int(value: object, *, field_name: str = "integer field") -> Option
         ) from exc
 
 
-def _metadata_compat_payload(row: ResultMetadataRow) -> dict[str, object]:
+def _serialize_result_metadata_row(row: ResultMetadataRow) -> dict[str, object]:
+    """Serialize typed result metadata for legacy public dict wrappers."""
     values: dict[str, object] = {
         "id": row.id,
         "project_id": row.project_id,
@@ -82,6 +96,12 @@ def _metadata_compat_payload(row: ResultMetadataRow) -> dict[str, object]:
     }
     selected_keys = row._selected_keys or tuple(values)
     return {key: values[key] for key in selected_keys if key in values}
+
+
+def _result_metadata_rows(
+    rows: Iterable[Mapping[str, object]],
+) -> list[ResultMetadataRow]:
+    return [ResultMetadataRow.from_mapping(row) for row in rows]
 
 
 def save_result(
@@ -111,7 +131,7 @@ def save_result(
     )
     if row is None:
         return None
-    return _metadata_compat_payload(row)
+    return _serialize_result_metadata_row(row)
 
 
 def save_result_row(
@@ -177,7 +197,7 @@ def get_result(result_id: str) -> Optional[dict[str, object]]:
     row = get_result_row(result_id)
     if row is None:
         return None
-    return _metadata_compat_payload(row)
+    return _serialize_result_metadata_row(row)
 
 
 def get_latest_result_row(
@@ -210,7 +230,7 @@ def get_latest_result(
     row = get_latest_result_row(project_id, group_id=group_id)
     if row is None:
         return None
-    return _metadata_compat_payload(row)
+    return _serialize_result_metadata_row(row)
 
 
 def list_result_rows(project_id: str) -> list[ResultMetadataRow]:
@@ -220,9 +240,9 @@ def list_result_rows(project_id: str) -> list[ResultMetadataRow]:
         "FROM results WHERE project_id = ? ORDER BY created_at DESC",
         (project_id,),
     )
-    return [ResultMetadataRow.from_mapping(row) for row in rows]
+    return _result_metadata_rows(rows)
 
 
 def list_results(project_id: str) -> list[dict[str, object]]:
     """Return result metadata rows for a project as legacy dicts."""
-    return [_metadata_compat_payload(row) for row in list_result_rows(project_id)]
+    return [_serialize_result_metadata_row(row) for row in list_result_rows(project_id)]

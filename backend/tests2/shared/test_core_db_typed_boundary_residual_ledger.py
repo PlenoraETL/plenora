@@ -99,9 +99,9 @@ _LEDGER: tuple[BoundaryEntry, ...] = (
     ),
     BoundaryEntry(
         "app/core/results/db.py",
-        "_metadata_compat_payload",
+        "_serialize_result_metadata_row",
         "KEEP_PUBLIC_COMPAT",
-        "legacy result metadata dict conversion stays in a private helper for public compatibility wrappers",
+        "legacy result metadata serialization stays in an explicit private helper for public compatibility wrappers",
     ),
     BoundaryEntry(
         "app/core/results/db.py",

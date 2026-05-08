@@ -43,7 +43,7 @@ def check_worker_rss(
         return
 
     if rss > cap_bytes:
-        from app.shared.exceptions import MemoryLimitExceededError
+        from app.core.resources.exceptions import MemoryLimitExceededError
         raise MemoryLimitExceededError(
             observed_bytes=rss,
             limit_bytes=cap_bytes,

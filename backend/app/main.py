@@ -24,7 +24,7 @@ from app.shared.error_envelope import (
     normalize_http_exception_detail,
 )
 from app.core.projects.exceptions import CanvasCorruptedError
-from app.shared.exceptions import MemoryLimitExceededError
+from app.core.resources.exceptions import MemoryLimitExceededError
 
 # Bootstrap esplicito: valida config, storage e DB prima di creare l'app.
 # Vedi `app/bootstrap.py` per il contratto completo.
@@ -409,10 +409,11 @@ from app.observability.health import gather_liveness, gather_readiness
 
 @app.get("/health")
 def health():
-    """Liveness check con dipendenze critiche PG e Redis.
+    """Lightweight liveness check.
 
-    Ritorna 200 se entrambe le dipendenze critiche rispondono, 503
-    altrimenti. Pensato per load balancer / K8s readinessProbe.
+    Ritorna 200 se il processo FastAPI risponde. Le dipendenze
+    critiche sono verificate da /ready per evitare restart su lag
+    transitorio di PG/Redis.
     """
     payload = gather_liveness()
     return JSONResponse(content=payload.body, status_code=payload.status_code)
@@ -421,7 +422,7 @@ def health():
 @app.get("/ready")
 def ready():
     """Readiness check rigoroso. Include:
-    - /health checks (PG + Redis)
+    - deep PG SELECT 1 e Redis PING bounded
     - headroom sul pool PG (non saturo)
     - migrations allineate al codice committato
 

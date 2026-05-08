@@ -149,19 +149,6 @@ class SchemaInferenceService:
         if node_type_handler is not None:
             schema = node_type_handler(context)
 
-        elif node.type == "transform":
-            # Recupera schemi degli input
-            input_schemas = self._get_input_schemas(
-                node.id, nodes_by_id, edges_by_target, project_id
-            )
-            schema = self._infer_transform_schema(node, input_schemas, edges_by_target)
-        
-        elif node.type == "api_enrich":
-            input_schemas = self._get_input_schemas(
-                node.id, nodes_by_id, edges_by_target, project_id
-            )
-            schema = self._infer_api_enrich_schema(node, input_schemas)
-
         # Cache result
         self._schema_cache[node.id] = schema
         return schema
@@ -171,15 +158,17 @@ class SchemaInferenceService:
     ) -> Dict[str, Callable[[_NodeSchemaContext], List[ColumnSchema]]]:
         """Registry node.type -> schema handler.
 
-        This is the first incremental split from `_infer_node_schema`'s
-        historical if/elif dispatch. Keep the registry small until each node
-        type has parity tests around its behavior.
+        All node.type-specific inference is registered here. Keep
+        `_infer_node_schema` as a registry lookup so new node types do not
+        grow central branches.
         """
         return {
             # NODE-DISPATCH-REGISTRY:start
             "source": self._infer_source_node_schema,
             "file_source": self._infer_file_source_node_schema,
             "project_source": self._infer_project_source_node_schema,
+            "transform": self._infer_transform_node_schema,
+            "api_enrich": self._infer_api_enrich_node_schema,
             "result": self._infer_result_node_schema,
             # NODE-DISPATCH-REGISTRY:end
         }
@@ -201,6 +190,34 @@ class SchemaInferenceService:
         context: _NodeSchemaContext,
     ) -> List[ColumnSchema]:
         return self._infer_project_source_schema(context.node)
+
+    def _infer_transform_node_schema(
+        self,
+        context: _NodeSchemaContext,
+    ) -> List[ColumnSchema]:
+        input_schemas = self._get_input_schemas(
+            context.node.id,
+            context.nodes_by_id,
+            context.edges_by_target,
+            context.project_id,
+        )
+        return self._infer_transform_schema(
+            context.node,
+            input_schemas,
+            context.edges_by_target,
+        )
+
+    def _infer_api_enrich_node_schema(
+        self,
+        context: _NodeSchemaContext,
+    ) -> List[ColumnSchema]:
+        input_schemas = self._get_input_schemas(
+            context.node.id,
+            context.nodes_by_id,
+            context.edges_by_target,
+            context.project_id,
+        )
+        return self._infer_api_enrich_schema(context.node, input_schemas)
 
     def _infer_result_node_schema(
         self,

@@ -3,6 +3,8 @@
 Batch 105 Wave 2: these modules are compatibility-only export surfaces.
 They may stay while broad tests and legacy harnesses still import them, but
 production runtime code must not grow new imports or new facade-owned exports.
+Each retained facade also carries an owner and a concrete removal condition so
+the zero-production import container stays temporary.
 """
 
 from __future__ import annotations
@@ -28,6 +30,7 @@ class FacadeExport:
     facade_name: str
     canonical_module: str
     canonical_name: str | None = None
+    identity_reexport: bool = True
 
     @property
     def rel_path(self) -> str:
@@ -36,6 +39,13 @@ class FacadeExport:
     @property
     def resolved_canonical_name(self) -> str:
         return self.canonical_name or self.facade_name
+
+
+@dataclass(frozen=True)
+class FacadeCompatMetadata:
+    facade_module: str
+    owner: str
+    removal_condition: str
 
 
 _CONFIG_EXPORTS: tuple[FacadeExport, ...] = (
@@ -76,15 +86,29 @@ _CONFIG_EXPORTS: tuple[FacadeExport, ...] = (
         "app.db.config_db_service", "update_user_password", "app.core.auth.db"
     ),
     FacadeExport("app.db.config_db_service", "delete_user", "app.core.auth.db"),
-    FacadeExport("app.db.config_db_service", "get_project", "app.core.projects.db"),
+    FacadeExport(
+        "app.db.config_db_service",
+        "get_project",
+        "app.core.projects.db",
+        "get_project_row",
+        identity_reexport=False,
+    ),
     FacadeExport(
         "app.db.config_db_service", "list_projects", "app.core.projects.db"
     ),
     FacadeExport(
-        "app.db.config_db_service", "create_project", "app.core.projects.db"
+        "app.db.config_db_service",
+        "create_project",
+        "app.core.projects.db",
+        "create_project_row",
+        identity_reexport=False,
     ),
     FacadeExport(
-        "app.db.config_db_service", "update_project", "app.core.projects.db"
+        "app.db.config_db_service",
+        "update_project",
+        "app.core.projects.db",
+        "update_project_row",
+        identity_reexport=False,
     ),
     FacadeExport(
         "app.db.config_db_service", "delete_project", "app.core.projects.db"
@@ -227,8 +251,28 @@ _RESULTS_EXPORTS: tuple[FacadeExport, ...] = (
 
 _FACADE_EXPORTS = _CONFIG_EXPORTS + _RESULTS_EXPORTS
 _FACADE_MODULES = frozenset(export.facade_module for export in _FACADE_EXPORTS)
+_FACADE_COMPAT_METADATA: tuple[FacadeCompatMetadata, ...] = (
+    FacadeCompatMetadata(
+        facade_module="app.db.config_db_service",
+        owner="DB_BOUNDARY_ENGINE",
+        removal_condition=(
+            "after functional and integration harnesses import the canonical "
+            "domain DB modules directly"
+        ),
+    ),
+    FacadeCompatMetadata(
+        facade_module="app.db.results_db_service",
+        owner="STORAGE_ARTIFACT_ENGINE",
+        removal_condition=(
+            "after result blob and metadata tests import app.core.results.* "
+            "boundaries directly"
+        ),
+    ),
+)
 _FACADE_ALLOWED_FUNCTIONS = {
-    "app.db.config_db_service": frozenset({"init_db"}),
+    "app.db.config_db_service": frozenset(
+        {"init_db", "_project_detail_compat_payload"}
+    ),
     "app.db.results_db_service": frozenset(
         {"init_db", "get_result_data", "_s3_download_bytes"}
     ),
@@ -261,6 +305,11 @@ def _source_declared_app_exports(facade_module: str) -> set[str]:
             exported.add(node.name)
 
     return exported
+
+
+def _module_source(facade_module: str) -> str:
+    path = _BACKEND_ROOT / facade_module.replace(".", "/")
+    return path.with_suffix(".py").read_text(encoding="utf-8-sig")
 
 
 def _imports_facade(tree: ast.AST, facade_module: str) -> bool:
@@ -297,8 +346,25 @@ def test_app_db_compat_facades_have_explicit_export_registries():
         )
 
 
+def test_app_db_compat_facades_have_owner_and_removal_condition():
+    by_module = {
+        metadata.facade_module: metadata
+        for metadata in _FACADE_COMPAT_METADATA
+    }
+
+    assert set(by_module) == _FACADE_MODULES
+    for metadata in _FACADE_COMPAT_METADATA:
+        source = _module_source(metadata.facade_module)
+        assert metadata.owner
+        assert "after" in metadata.removal_condition.lower()
+        assert "KEEP_COMPAT_WITH_REMOVAL_CONDITION" in source
+        assert f"Owner: {metadata.owner}" in source
+
+
 @pytest.mark.parametrize("export", _FACADE_EXPORTS)
 def test_app_db_compat_facade_exports_are_identity_reexports(export: FacadeExport):
+    if not export.identity_reexport:
+        pytest.skip("facade-owned compatibility wrapper over typed canonical row API")
     if export.canonical_module == "app.db.pg_connection":
         pytest.skip("pg_connection test stubs mutate module attributes after import")
 

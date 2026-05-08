@@ -9,7 +9,7 @@ from __future__ import annotations
 import time as _time
 from typing import Any, List, Optional
 
-from app.shared.exceptions import ColumnsMetadataSaveError
+from app.core.projects.exceptions import ColumnsMetadataSaveError
 
 
 # Costanti retry/backoff

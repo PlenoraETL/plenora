@@ -10,6 +10,7 @@ on:
       - "frontend/**"
       - "docker-compose.yml"
       - "scripts/docker-validate.sh"
+      - "scripts/docker-api-smoke.sh"
   push:
     branches:
       - main
@@ -21,6 +22,7 @@ on:
       - "frontend/**"
       - "docker-compose.yml"
       - "scripts/docker-validate.sh"
+      - "scripts/docker-api-smoke.sh"
 
 concurrency:
   group: docker-compose-${{ github.ref }}
@@ -28,7 +30,7 @@ concurrency:
 
 jobs:
   compose:
-    name: Compose config and image build
+    name: Compose config, build, and backend smoke
     runs-on: ubuntu-latest
     timeout-minutes: 45
 
@@ -66,3 +68,26 @@ jobs:
       - run: docker compose config
 
       - run: docker compose build backend frontend
+
+      - name: Start compose dependencies
+        run: docker compose up -d postgres redis
+
+      - name: Start backend
+        run: docker compose up -d backend
+
+      - name: Poll backend health and readiness
+        env:
+          PLENORA_ACCEPTANCE_TIMEOUT_SECONDS: "120"
+          PLENORA_ACCEPTANCE_POLL_INTERVAL_SECONDS: "2"
+          PLENORA_ACCEPTANCE_CURL_MAX_TIME_SECONDS: "5"
+        run: bash scripts/docker-api-smoke.sh --infrastructure-only
+
+      - name: Dump compose diagnostics on failure
+        if: failure()
+        run: |
+          docker compose ps || true
+          docker compose logs --tail 200 postgres redis backend || true
+
+      - name: Stop compose services
+        if: always()
+        run: docker compose stop || true

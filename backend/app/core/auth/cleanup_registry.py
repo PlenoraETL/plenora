@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import time
-from collections.abc import Callable, MutableMapping, Sequence
+from collections.abc import Callable, Mapping, MutableMapping, Sequence
 from dataclasses import dataclass
 from typing import Protocol
 
@@ -13,8 +13,8 @@ from app.core.connections.cleanup import delete_connections_for_group
 from app.core.datasources.cleanup import delete_datasources_for_group
 from app.core.files.cleanup import delete_file_sources_for_group
 from app.core.projects.cleanup import (
-    delete_intermediate_runs_for_group_project,
-    delete_projects_for_group,
+    GROUP_PROJECT_CLEANUP_REPORT_KEYS,
+    delete_projects_for_group_report,
 )
 from app.core.scheduler.cleanup import (
     delete_log_runs_for_group,
@@ -81,15 +81,30 @@ def _delete_domain_owned(
     )
 
 
-def _cleanup_projects(
-    group_id: str,
-    report: MutableMapping[str, int],
-    log: CleanupLogger,
-) -> None:
-    project_report = delete_projects_for_group(group_id, log)
-    report["projects"] = project_report.projects
-    report["results"] += project_report.results
-    report["intermediate_runs"] += project_report.intermediate_runs
+def _delete_reported_domain_owned(
+    name: str,
+    report_keys: tuple[str, ...],
+    cleanup: Callable[[str, CleanupLogger], Mapping[str, int]],
+) -> GroupCleanupHandler:
+    def _cleanup(
+        group_id: str,
+        report: MutableMapping[str, int],
+        log: CleanupLogger,
+    ) -> None:
+        try:
+            cleanup_report = cleanup(group_id, log)
+        except Exception as exc:
+            log.warning(f"Cascade delete {name} fallito: {exc}")
+            return
+
+        for report_key in report_keys:
+            report[report_key] = cleanup_report.get(report_key, 0)
+
+    return GroupCleanupHandler(
+        name=name,
+        report_keys=report_keys,
+        cleanup=_cleanup,
+    )
 
 
 GROUP_CLEANUP_HANDLERS: tuple[GroupCleanupHandler, ...] = (
@@ -118,14 +133,23 @@ GROUP_CLEANUP_HANDLERS: tuple[GroupCleanupHandler, ...] = (
         "connections",
         delete_connections_for_group,
     ),
-    GroupCleanupHandler(
+    _delete_reported_domain_owned(
         name="delete_projects",
-        report_keys=("projects", "results", "intermediate_runs"),
-        cleanup=_cleanup_projects,
+        report_keys=GROUP_PROJECT_CLEANUP_REPORT_KEYS,
+        cleanup=delete_projects_for_group_report,
     ),
     _delete_domain_owned("delete_users", "users", delete_users_for_group),
     _delete_domain_owned("delete_log_runs", "log_runs", delete_log_runs_for_group),
 )
+
+
+def delete_intermediate_runs_for_group_project(project_id: str) -> int:
+    """Backward-compatible export for older auth cleanup imports."""
+    from app.core.projects.cleanup import (
+        delete_intermediate_runs_for_group_project as delete_project_runs,
+    )
+
+    return delete_project_runs(project_id)
 
 
 def build_empty_group_cleanup_report() -> dict[str, int]:

@@ -1,5 +1,5 @@
 """
-Source-bound guards for the Docker API smoke runner skeleton.
+Source-bound guards for the Docker API smoke runner.
 
 BE-CLEANROOM-072-W4-DOCKER-API-SMOKE-SKELETON.
 """
@@ -56,6 +56,23 @@ def test_docker_api_smoke_script_checks_health_and_ready_only_for_now():
     )
 
 
+def test_docker_api_smoke_script_polls_with_bounded_timeouts():
+    text = _SCRIPT.read_text(encoding="utf-8")
+    for marker in (
+        "PLENORA_ACCEPTANCE_TIMEOUT_SECONDS",
+        "PLENORA_ACCEPTANCE_POLL_INTERVAL_SECONDS",
+        "PLENORA_ACCEPTANCE_CURL_MAX_TIME_SECONDS",
+        'curl -sS --max-time "$CURL_MAX_TIME_SECONDS"',
+        "Polling GET ${url} for up to ${TIMEOUT_SECONDS}s",
+        "did not return 2xx",
+    ):
+        assert marker in text, (
+            f"scripts/docker-api-smoke.sh must keep bounded polling marker "
+            f"{marker!r}. Docker CI should tolerate normal backend boot time "
+            "without becoming an unbounded or flaky probe."
+        )
+
+
 def test_docker_api_smoke_script_has_infrastructure_only_success_mode():
     text = _SCRIPT.read_text(encoding="utf-8")
     assert "--infrastructure-only" in text, (
@@ -67,6 +84,21 @@ def test_docker_api_smoke_script_has_infrastructure_only_success_mode():
         "scripts/docker-api-smoke.sh must print a narrow success message "
         "that names infrastructure-only scope."
     )
+
+
+def test_docker_api_smoke_script_documents_login_logout_skip_reason():
+    text = _SCRIPT.read_text(encoding="utf-8")
+    for marker in (
+        "Skipping login/logout smoke",
+        "compose does not seed deterministic user credentials",
+        "Creating a user here would mutate application data",
+        "POST /api/auth/logout",
+    ):
+        assert marker in text, (
+            f"scripts/docker-api-smoke.sh must document skipped login/logout "
+            f"reason marker {marker!r}. Full auth smoke should only be added "
+            "after Docker compose has deterministic credentials/bootstrap."
+        )
 
 
 def test_docker_api_smoke_script_does_not_fake_full_acceptance_success():

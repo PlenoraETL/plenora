@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from typing import Iterable
 
-from app.shared.exceptions import MemoryLimitExceededError
+from app.core.resources.exceptions import MemoryLimitExceededError
 
 
 __all__ = ["read_stream_bounded"]

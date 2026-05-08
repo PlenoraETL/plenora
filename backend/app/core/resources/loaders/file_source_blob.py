@@ -8,7 +8,7 @@ from __future__ import annotations
 import time
 from typing import Optional, Tuple
 
-from app.shared.exceptions import MemoryLimitExceededError
+from app.core.resources.exceptions import MemoryLimitExceededError
 
 from app.core.resources.resource_caps import resolve_resource_max_bytes
 from app.core.resources.types import (

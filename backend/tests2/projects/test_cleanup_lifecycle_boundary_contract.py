@@ -50,6 +50,72 @@ def test_project_cleanup_boundary_delegates_comparison_keys(monkeypatch) -> None
     assert calls == ["project-1"]
 
 
+def test_project_cleanup_report_preserves_public_group_keys() -> None:
+    from app.core.projects import cleanup
+
+    assert cleanup.GROUP_PROJECT_CLEANUP_REPORT_KEYS == (
+        "projects",
+        "results",
+        "intermediate_runs",
+    )
+    assert cleanup.GroupProjectCleanupReport(
+        projects=1,
+        results=2,
+        intermediate_runs=3,
+    ).as_report() == {
+        "projects": 1,
+        "results": 2,
+        "intermediate_runs": 3,
+    }
+
+
+def test_project_group_cleanup_delegates_fanout_to_domain_boundaries(
+    monkeypatch,
+) -> None:
+    from app.core.projects import cleanup
+
+    calls: list[tuple[str, tuple[str, ...]]] = []
+
+    monkeypatch.setattr(
+        cleanup.project_db,
+        "list_project_ids_for_group",
+        lambda _group_id: {"project-b", "project-a"},
+    )
+
+    def _delete_results(project_ids, _log, *, delete_project_func=None):
+        calls.append(("results", tuple(project_ids)))
+        assert delete_project_func is cleanup.delete_results_for_project
+        return 5
+
+    def _delete_runs(project_ids, _log, *, delete_canvas_func=None):
+        calls.append(("intermediate", tuple(project_ids)))
+        assert delete_canvas_func is cleanup.delete_intermediate_runs_for_group_project
+        return 7
+
+    monkeypatch.setattr(cleanup, "delete_results_for_projects", _delete_results)
+    monkeypatch.setattr(cleanup, "delete_runs_for_canvases", _delete_runs)
+    monkeypatch.setattr(
+        cleanup,
+        "delete_project_records_for_group",
+        lambda _group_id, project_ids, _log: len(project_ids),
+    )
+
+    report = cleanup.delete_projects_for_group(
+        "group-1",
+        type("Log", (), {"warning": lambda *_args, **_kwargs: None})(),
+    )
+
+    assert calls == [
+        ("results", ("project-a", "project-b")),
+        ("intermediate", ("project-a", "project-b")),
+    ]
+    assert report.as_report() == {
+        "projects": 2,
+        "results": 5,
+        "intermediate_runs": 7,
+    }
+
+
 def test_orphan_cleanup_uses_named_lifecycle_boundaries() -> None:
     path = BACKEND_ROOT / "app" / "core" / "results" / "orphan_cleanup.py"
     src = path.read_text(encoding="utf-8")

@@ -5,6 +5,10 @@ Contiene: results (output pipeline). Execution-log ownership lives in
 app.core.orchestrator.execution_logs.
 """
 
+# KEEP_COMPAT_WITH_REMOVAL_CONDITION: remove after result blob and metadata
+# tests import app.core.results.* boundaries directly.
+# Owner: STORAGE_ARTIFACT_ENGINE
+
 from typing import Optional
 
 from app.core.results.cleanup import (

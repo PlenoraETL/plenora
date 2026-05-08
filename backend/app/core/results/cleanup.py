@@ -1,10 +1,19 @@
 """Canonical lifecycle boundary for result cleanup operations."""
 
+from __future__ import annotations
+
+from collections.abc import Callable, Iterable
+from typing import Protocol
+
 from app.db.pg_connection import fetchall, transaction
 from app.utils.logger import get_logger
 
 
 logger = get_logger(__name__)
+
+
+class CleanupLogger(Protocol):
+    def warning(self, msg: str, *args, **kwargs) -> None: ...
 
 
 def list_project_ids_with_results() -> list[str]:
@@ -193,3 +202,22 @@ def delete_results_for_project(project_id: str) -> int:
                 )
 
     return deleted_count
+
+
+def delete_results_for_projects(
+    project_ids: Iterable[str],
+    log: CleanupLogger,
+    *,
+    delete_project_func: Callable[[str], int] | None = None,
+) -> int:
+    """Delete result rows for several projects and return the total count."""
+    delete_project = delete_project_func or delete_results_for_project
+    results = 0
+
+    for project_id in project_ids:
+        try:
+            results += delete_project(project_id)
+        except Exception as exc:
+            log.warning(f"Cascade delete results progetto {project_id}: {exc}")
+
+    return results

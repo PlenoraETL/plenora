@@ -57,6 +57,23 @@ def _parse_node_dispatch_registry() -> set[str]:
     return set(_NODE_REGISTRY_KEY_RE.findall(match.group(1)))
 
 
+def _infer_node_schema_function() -> ast.FunctionDef:
+    tree = ast.parse(_SCHEMA_INFER_PY.read_text(encoding="utf-8"))
+    for node in ast.walk(tree):
+        if isinstance(node, ast.FunctionDef) and node.name == "_infer_node_schema":
+            return node
+    raise AssertionError("_infer_node_schema function missing")
+
+
+def _is_node_type_attribute(node: ast.AST) -> bool:
+    return (
+        isinstance(node, ast.Attribute)
+        and node.attr == "type"
+        and isinstance(node.value, ast.Name)
+        and node.value.id == "node"
+    )
+
+
 def _pairs(schema: list[ColumnSchema]) -> list[tuple[str, str, bool]]:
     return [(col.name, col.type, col.is_calculated) for col in schema]
 
@@ -66,8 +83,28 @@ def test_node_dispatch_registry_contains_incrementally_migrated_types():
         "source",
         "file_source",
         "project_source",
+        "transform",
+        "api_enrich",
         "result",
     }
+
+
+def test_infer_node_schema_has_no_central_node_type_branches():
+    """New node.type inference must be registered, not added centrally."""
+    function = _infer_node_schema_function()
+    violations: list[int] = []
+
+    for node in ast.walk(function):
+        if not isinstance(node, ast.Compare):
+            continue
+        operands = [node.left, *node.comparators]
+        if any(_is_node_type_attribute(operand) for operand in operands):
+            violations.append(node.lineno)
+
+    assert violations == [], (
+        "Add node.type schema handlers to _build_node_type_handlers instead "
+        f"of branching centrally in _infer_node_schema. Lines: {violations}"
+    )
 
 
 def test_schema_inference_does_not_import_projects_db_directly():
@@ -200,3 +237,64 @@ def test_result_node_registry_handler_preserves_passthrough_behavior():
 
     assert _pairs(via_registry) == _pairs(input_schema)
     assert [col.source_node for col in via_registry] == [source.id, source.id]
+
+
+def test_transform_node_registry_handler_preserves_transform_dispatch():
+    service = SchemaInferenceService(project_service=None)
+    source = _node("src1", "source", columns=[_col("a", "int"), _col("b", "str")])
+    transform = _node(
+        "tr1",
+        "transform",
+        transform_op="rename",
+        config={"columns": {"a": "renamed_a"}},
+    )
+    edge = SimpleNamespace(source="src1", target="tr1")
+
+    via_registry = service._infer_node_schema(
+        node=transform,
+        nodes_by_id={source.id: source, transform.id: transform},
+        edges_by_target={"tr1": [edge]},
+        project_id="project-1",
+    )
+    direct = service._infer_transform_schema(
+        transform,
+        [service._infer_source_schema(source)],
+        {"tr1": [edge]},
+    )
+
+    assert _pairs(via_registry) == _pairs(direct)
+    assert [col.source_node for col in via_registry] == [transform.id, transform.id]
+
+
+def test_api_enrich_node_registry_handler_preserves_api_schema():
+    service = SchemaInferenceService(project_service=None)
+    source = _node("src1", "source", columns=[_col("id", "int")])
+    api_node = _node(
+        "api1",
+        "api_enrich",
+        data={
+            "output_mapping": [
+                {"column": "score", "type": "real"},
+                {"target_column": "status"},
+            ],
+        },
+    )
+    edge = SimpleNamespace(source="src1", target="api1")
+
+    via_registry = service._infer_node_schema(
+        node=api_node,
+        nodes_by_id={source.id: source, api_node.id: api_node},
+        edges_by_target={"api1": [edge]},
+        project_id="project-1",
+    )
+    direct = service._infer_api_enrich_schema(
+        api_node,
+        [service._infer_source_schema(source)],
+    )
+
+    assert _pairs(via_registry) == _pairs(direct)
+    assert [col.source_node for col in via_registry] == [
+        api_node.id,
+        api_node.id,
+        api_node.id,
+    ]

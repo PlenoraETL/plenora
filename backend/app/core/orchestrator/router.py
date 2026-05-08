@@ -20,6 +20,8 @@ from app.shared import error_codes
 from app.shared.error_envelope import raise_typed_http
 from app.shared.models import ExecuteRequest
 from app.core.orchestrator.task_service import (
+    CaricaTaskPayload,
+    EnrichmentTaskPayload,
     TaskInfo,
     PreviewTaskPayload,
     TaskResultPayload,
@@ -495,12 +497,23 @@ def create_task(
 
     try:
         if request.task_type == TaskType.ENRICHMENT:
-            task_info = task_service.create_enrichment_task(
-                project_id=request.project_id,
-                canvas=request.canvas,
-                output_format=request.output_format,
-                force_recalculate=request.force_recalculate,
-                user_id=current_user.user_id,  # N9
+            from workers.tasks.enrichment_task import execute_enrichment_task
+
+            task_info = task_service.submit_task(
+                TaskSubmitRequest(
+                    celery_task=execute_enrichment_task,
+                    task_type=TaskType.ENRICHMENT,
+                    project_id=request.project_id,
+                    payload=EnrichmentTaskPayload(
+                        project_id=request.project_id,
+                        canvas=request.canvas,
+                        output_format=request.output_format,
+                        force_recalculate=request.force_recalculate,
+                        user_id=current_user.user_id,  # N9
+                    ),
+                    queued_message="Task in coda...",
+                    log_label="enrichment",
+                )
             )
         elif request.task_type == TaskType.CARICA:
             if not request.carica_node_data:
@@ -514,14 +527,25 @@ def create_task(
                 request.project_id,
                 ProjectService().get_project_columns_metadata,
             )
-            task_info = task_service.create_carica_task(
-                project_id=request.project_id,
-                canvas=request.canvas,
-                carica_node_data=request.carica_node_data,
-                output_format=request.output_format,
-                force_recalculate=request.force_recalculate,
-                triggered_by=request.triggered_by,
-                user_id=current_user.user_id,  # N9
+            from workers.tasks.carica_task import execute_carica_task
+
+            task_info = task_service.submit_task(
+                TaskSubmitRequest(
+                    celery_task=execute_carica_task,
+                    task_type=TaskType.CARICA,
+                    project_id=request.project_id,
+                    payload=CaricaTaskPayload(
+                        project_id=request.project_id,
+                        canvas=request.canvas,
+                        carica_node_data=request.carica_node_data,
+                        output_format=request.output_format,
+                        force_recalculate=request.force_recalculate,
+                        triggered_by=request.triggered_by,
+                        user_id=current_user.user_id,  # N9
+                    ),
+                    queued_message="Task CARICA in coda...",
+                    log_label="carica",
+                )
             )
         else:
             raise HTTPException(status_code=400, detail=f"Tipo task '{request.task_type}' non supportato")

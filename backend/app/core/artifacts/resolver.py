@@ -20,7 +20,7 @@ from app.core.artifacts.types import (
     RunBlob,
 )
 from app.core.resources import ResourceRef, default_registry
-from app.shared.exceptions import MemoryLimitExceededError
+from app.core.resources.exceptions import MemoryLimitExceededError
 
 logger = get_logger(__name__)
 

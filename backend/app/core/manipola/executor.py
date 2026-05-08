@@ -27,7 +27,6 @@ from app.utils.dataframe import (
     sanitize_for_json, find_latest_output_file,
 )
 from app.utils.geo import detect_geometry_column
-from app.utils.template_variables import process_static_fields
 from .plugin_executor import get_executor
 from .source_loading import load_file_sources, load_project_source_artifact
 
@@ -748,8 +747,8 @@ class ManipolaExecutor:
     ) -> Optional[Dict[str, Any]]:
         """Carica DataFrame dai nodi StaticValues via SourceLoader.
 
-        Wrapper sottile sopra `SourceLoader._load_static`. Il template
-        processing (`process_static_fields`) vive nel loader unico;
+        Wrapper sottile sopra `SourceLoader._load_static`. Il processing
+        dei parametri statici vive nel loader unico;
         qui resta solo l'iterazione sui nodi del canvas.
 
          (ctx-strict cut): lo
@@ -959,7 +958,7 @@ class ManipolaExecutor:
         # casi degenere (l'utente passa un DataFrame gia' troppo grande
         # come base del multi-join
         if _multi_cap > 0 and len(result) > _multi_cap:
-            from app.shared.exceptions import MemoryLimitExceededError
+            from app.core.resources.exceptions import MemoryLimitExceededError
             logger.warning(
                 f"Multi-join base input ({len(result)} righe) supera il cap "
                 f"configurato di {_multi_cap} righe — guard attivato pre-loop."
@@ -993,7 +992,7 @@ class ManipolaExecutor:
                     result, df_copy, join_keys, join_type
                 )
                 if _estimated_rows is not None and _estimated_rows > _multi_cap:
-                    from app.shared.exceptions import MemoryLimitExceededError
+                    from app.core.resources.exceptions import MemoryLimitExceededError
                     logger.warning(
                         f"Multi-join step #{idx}: output stimato "
                         f"{_estimated_rows} righe sopra il cap {_multi_cap} "
@@ -1021,7 +1020,7 @@ class ManipolaExecutor:
             # l'inflazione effettiva (incluso il caso di non-unique
             # keys) prevenendo la propagazione N-step
             if _multi_cap > 0 and len(result) > _multi_cap:
-                from app.shared.exceptions import MemoryLimitExceededError
+                from app.core.resources.exceptions import MemoryLimitExceededError
                 logger.warning(
                     f"Multi-join post-step #{idx}: output cumulato "
                     f"{len(result)} righe supera il cap {_multi_cap} — "

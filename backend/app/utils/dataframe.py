@@ -73,7 +73,7 @@ def load_dataframe_from_file(
         _preflight_size = -1
     if _preflight_size >= 0:
         from app.config import settings as _settings
-        from app.shared.exceptions import MemoryLimitExceededError
+        from app.core.resources.exceptions import MemoryLimitExceededError
         _cap = int(_settings.get("LOAD_FILE_MAX_BYTES", 200 * 1024 * 1024))
         if _cap > 0 and _preflight_size > _cap:
             raise MemoryLimitExceededError(

@@ -6,7 +6,6 @@ Keeps this module's responsibility explicit and isolated from adjacent code.
 
 import re
 from datetime import datetime, timedelta, timezone
-from typing import List, Dict, Any
 
 from app.utils.logger import get_logger
 
@@ -167,56 +166,6 @@ def process_template_variables(text: str, reference_date: datetime = None) -> st
             return match.group(0)
 
     return re.sub(TEMPLATE_REGEX, _sostituisci, text)
-
-
-def process_static_fields(
-    fields: List[Dict[str, Any]],
-    reference_date: datetime = None
-) -> Dict[str, Any]:
-    """
-    Processa una lista di campi statici risolvendo le variabili template.
-
-    Usato dal nodo StaticValues del canvas per generare i valori finali
-    dei parametri prima dell'invio alle API o dell'inserimento nelle query.
-
-    Esempio:
-        >>> fields = [{'name': 'q', 'value': 'reftime:>={{NOW-2h}}'}]
-        >>> process_static_fields(fields)
-        {'q': 'reftime:>=2026-02-02 09:30'}
-
-    Args:
-        fields: Lista di campi [{'name': str, 'value': str}, ...].
-        reference_date: Data di riferimento per le variabili.
-
-    Returns:
-        Dizionario {nome_campo: valore_con_variabili_risolte}.
-    """
-    risultato = {}
-
-    for campo in fields:
-        nome = campo.get("name")
-        valore = campo.get("value", "")
-        field_type = campo.get("field_type", "string")  # string | integer | float | boolean
-
-        if not nome:
-            continue
-
-        processed = process_template_variables(valore, reference_date)
-
-        # Cast al tipo esplicito definito dall'utente nel nodo
-        try:
-            if field_type == "integer":
-                processed = int(float(processed)) if processed not in (None, "") else None
-            elif field_type == "float":
-                processed = float(processed) if processed not in (None, "") else None
-            elif field_type == "boolean":
-                processed = processed.lower() in ("true", "1", "si", "yes") if isinstance(processed, str) else bool(processed)
-        except (ValueError, TypeError) as e:
-            logger.debug("Cast tipo %r fallito per campo %r, mantenuto come stringa: %s", field_type, nome, e)
-
-        risultato[nome] = processed
-
-    return risultato
 
 
 # CATALOGO VARIABILI (per documentazione e autocomplete frontend

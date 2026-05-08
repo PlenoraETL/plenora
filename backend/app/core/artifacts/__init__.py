@@ -16,6 +16,10 @@ from app.core.artifacts.types import (
 )
 from app.core.artifacts.resolver import ArtifactResolver
 from app.core.artifacts.source_loader import SourceLoader
+from app.core.artifacts.static_parameters import (
+    StaticParameterField,
+    process_static_fields,
+)
 
 __all__ = [
     "ArtifactResolutionError",
@@ -28,4 +32,6 @@ __all__ = [
     "SourceLoader",
     "SourceLoadingError",
     "SourceRef",
+    "StaticParameterField",
+    "process_static_fields",
 ]

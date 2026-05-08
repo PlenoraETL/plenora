@@ -213,7 +213,7 @@ def test_save_pipeline_result_dict_shape(monkeypatch):
     """save_pipeline_result ritorna sempre {result_id, output_filename}."""
     from app.utils.result_store import save_pipeline_result
     import app.utils.result_store as result_store
-    import app.core.projects.db as projects_db
+    import app.core.results.store as results_store
     import app.core.results.db as results_db
     from types import SimpleNamespace
 
@@ -221,8 +221,8 @@ def test_save_pipeline_result_dict_shape(monkeypatch):
     saved_calls = []
     monkeypatch.setattr(result_store, "uuid",
                         SimpleNamespace(uuid4=lambda: "res-xyz"))
-    monkeypatch.setattr(projects_db, "get_project",
-                        lambda pid: {"id": pid, "group_id": "grp"})
+    monkeypatch.setattr(results_store, "resolve_group_id_for_result",
+                        lambda project_id, group_id=None: "grp")
     monkeypatch.setattr(results_db, "save_result_row",
                         lambda **kw: saved_calls.append(kw))
     monkeypatch.setattr(result_store, "_apply_results_retention",
@@ -260,7 +260,7 @@ def test_save_pipeline_result_fs_only_fallback_to_filesystem(monkeypatch, tmp_pa
     Deve comunque ritornare la stessa shape dict."""
     from app.utils.result_store import save_pipeline_result
     import app.utils.result_store as result_store
-    import app.core.projects.db as projects_db
+    import app.core.results.store as results_store
     import app.core.results.db as results_db
     from types import SimpleNamespace
 
@@ -277,8 +277,8 @@ def test_save_pipeline_result_fs_only_fallback_to_filesystem(monkeypatch, tmp_pa
     saved_calls = []
     monkeypatch.setattr(result_store, "uuid",
                         SimpleNamespace(uuid4=lambda: "res-fs"))
-    monkeypatch.setattr(projects_db, "get_project",
-                        lambda pid: {"id": pid, "group_id": "grp"})
+    monkeypatch.setattr(results_store, "resolve_group_id_for_result",
+                        lambda project_id, group_id=None: "grp")
     monkeypatch.setattr(results_db, "save_result_row",
                         lambda **kw: saved_calls.append(kw))
     monkeypatch.setattr(result_store, "_apply_results_retention",

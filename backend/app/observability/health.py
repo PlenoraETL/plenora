@@ -51,7 +51,7 @@ def check_postgres() -> CheckOutcome:
     applicato a livello di statement via `SET LOCAL statement_timeout`.
     Senza questo bound, una PG che accetta la connessione TCP ma stalla
     nell'esecuzione (lock, backend esauriti, query plan stuck) farebbe
-    bloccare /health e /ready oltre il timeout di rete del kernel.
+    bloccare /ready oltre il timeout di rete del kernel.
 
     Il `SET LOCAL` ha scope sulla transaction in corso e viene
     automaticamente revocato quando la transazione termina (commit o
@@ -60,7 +60,7 @@ def check_postgres() -> CheckOutcome:
 
     Timeout letto da `READINESS_PG_TIMEOUT_SECONDS` (default 2). Cap
     <= 0 ricade sul fallback hardcoded di 2s (non disabilitabile:
-    /health senza bound sarebbe un footgun ops, stessa policy di
+    /ready senza bound sarebbe un footgun ops, stessa policy di
     `READINESS_REDIS_TIMEOUT_SECONDS`).
 
     Return (ok, detail). Fail-CLOSED su exception: PG e' dipendenza
@@ -110,12 +110,12 @@ def check_redis() -> CheckOutcome:
     applicato sia al TCP handshake (`socket_connect_timeout`) sia
     all'operazione PING (`socket_timeout`). Senza socket_timeout
     una Redis che accetta la connessione ma stalla bloccherebbe
-    /health/ready oltre il connect_timeout (worst-case TCP keepalive
+    /ready oltre il connect_timeout (worst-case TCP keepalive
     finch* il kernel non droppa la socket).
 
     Timeout letto da `READINESS_REDIS_TIMEOUT_SECONDS` (default 2);
     un valore <= 0 ricade sul fallback hardcoded 2 (non
-    disabilitabile: /health senza bound sarebbe un footgun ops).
+    disabilitabile: /ready senza bound sarebbe un footgun ops).
     """
     try:
         import redis
@@ -231,7 +231,7 @@ def check_object_storage() -> CheckOutcome:
 
     Esposto in `gather_readiness` come quinto check `object_storage`.
     NON e' integrato in `gather_liveness` per scelta: /health resta
-    "load balancer-friendly" e non deve dipendere da provider di
+    process-only e non deve dipendere da provider di
     storage cloud (latenza variabile, regional outages,
     credentials).
     """
@@ -323,7 +323,7 @@ def check_reconciliation_backlog() -> CheckOutcome:
 
     Esposto in `gather_readiness` come 6° check
     `reconciliation_backlog`. NON e' integrato in `gather_liveness`:
-    /health resta load-balancer-friendly e non deve dipendere dal
+    /health resta process-only e non deve dipendere dal
     DB-side state della reconciliation.
     """
     try:
@@ -430,7 +430,7 @@ def check_beat_heartbeat() -> CheckOutcome:
     deve far fallire /ready se il segnale stesso e' degradato.
 
     Esposto in `gather_readiness` come 8° check `beat_heartbeat`.
-    NON in `gather_liveness`: /health resta load-balancer-friendly
+    NON in `gather_liveness`: /health resta process-only
     e non deve dipendere dallo stato del beat scheduler.
     """
     try:
@@ -557,33 +557,24 @@ def check_bootstrap_complete() -> CheckOutcome:
 
 
 def gather_liveness() -> HealthPayload:
-    """Compose /health body. Liveness = PG SELECT 1 + Redis PING.
+    """Compose /health body. Liveness = process responds.
 
-    Status: 200 se entrambi rispondono, 503 altrimenti. Body shape:
-    `{"status": "ok"|"unhealthy", "checks": {"postgres": {...}, "redis": {...}}}`.
+    Status: always 200 when the FastAPI process can serve the
+    request. Dependency lag belongs to /ready, because a liveness
+    failure can restart the app while a readiness failure only removes
+    it from load balancing.
     """
-    checks: dict = {}
-    status_code = 200
-
-    pg_ok, pg_detail = check_postgres()
-    checks["postgres"] = {"ok": pg_ok, "detail": pg_detail}
-    if not pg_ok:
-        status_code = 503
-
-    redis_ok, redis_detail = check_redis()
-    checks["redis"] = {"ok": redis_ok, "detail": redis_detail}
-    if not redis_ok:
-        status_code = 503
-
     body = {
-        "status": "ok" if status_code == 200 else "unhealthy",
-        "checks": checks,
+        "status": "ok",
+        "checks": {
+            "process": {"ok": True, "detail": "alive"},
+        },
     }
-    return HealthPayload(status_code=status_code, body=body)
+    return HealthPayload(status_code=200, body=body)
 
 
 def gather_readiness() -> HealthPayload:
-    """Compose /ready body. Readiness = liveness + pool_headroom +
+    """Compose /ready body. Readiness = dependency probes + pool_headroom +
     migrations_aligned + object_storage + reconciliation_backlog +
     beat_heartbeat + bootstrap_complete.
 
@@ -600,9 +591,9 @@ def gather_readiness() -> HealthPayload:
     Default opt-in disabled (`READINESS_BEAT_HEARTBEAT_MAX_AGE_SECONDS=0`)
     cosi' dev/test senza beat scheduler attivo NON triggerano 503.
 
-    Liveness (`gather_liveness`) NON include nessuno di questi 6
-    check addizionali — preserva la separazione load-balancer
-    (latenza bounded) vs readiness rigorosa.
+    Liveness (`gather_liveness`) NON include questi check: /health
+    resta process-only, mentre /ready espone i deep dependency probes
+    bounded (PG SELECT 1 + Redis PING) e i diagnostic checks.
     """
     checks: dict = {}
     status_code = 200

@@ -4,6 +4,10 @@ Config DB Service — accesso a PostgreSQL (ex SQLite config.db).
 Contiene: groups, users, projects, connections, file_sources,
 """
 
+# KEEP_COMPAT_WITH_REMOVAL_CONDITION: remove after functional and integration
+# harnesses import the canonical domain DB modules directly.
+# Owner: DB_BOUNDARY_ENGINE
+
 from app.utils.logger import get_logger
 
 # Importa tutto da pg_connection (rimpiazza sqlite3 thread-local
@@ -52,9 +56,9 @@ from app.core.projects.db import (  # noqa: F401,E402
     list_projects,
     delete_project,
     get_project_retention_n,
-    get_project_row,
-    create_project_row,
-    update_project_row,
+    get_project_row as _get_project_row,
+    create_project_row as _create_project_row,
+    update_project_row as _update_project_row,
     update_project_canvas_key_atomic,
 )
 
@@ -77,7 +81,7 @@ def _project_detail_compat_payload(row):
 
 def get_project(project_id, group_id=None):
     """Legacy config facade wrapper around typed project-domain reads."""
-    row = get_project_row(project_id, group_id=group_id)
+    row = _get_project_row(project_id, group_id=group_id)
     return _project_detail_compat_payload(row) if row else None
 
 
@@ -90,7 +94,7 @@ def create_project(
     created_by=None,
 ):
     """Legacy config facade wrapper around typed project-domain creation."""
-    row = create_project_row(
+    row = _create_project_row(
         project_id=project_id,
         group_id=group_id,
         name=name,
@@ -103,7 +107,7 @@ def create_project(
 
 def update_project(project_id, **fields):
     """Legacy config facade wrapper around typed project-domain updates."""
-    row = update_project_row(project_id, **fields)
+    row = _update_project_row(project_id, **fields)
     return _project_detail_compat_payload(row) if row else None
 
 

@@ -8,7 +8,7 @@ from __future__ import annotations
 import time
 from typing import Optional
 
-from app.shared.exceptions import MemoryLimitExceededError
+from app.core.resources.exceptions import MemoryLimitExceededError
 from app.core.resources.bounded_reader import read_stream_bounded
 from app.core.resources.resource_caps import resolve_resource_max_bytes
 
