@@ -50,6 +50,91 @@ class CeleryLaunchTask(Protocol):
         ...
 
 
+class TaskLaunchPayload(Protocol):
+    """Typed payload contract for arguments passed through the submit seam."""
+
+    def to_task_kwargs(self) -> dict[str, JsonValue]:
+        ...
+
+
+@dataclass(frozen=True)
+class EnrichmentTaskPayload:
+    project_id: str
+    canvas: dict[str, JsonValue]
+    output_format: str = "csv"
+    force_recalculate: bool = False
+    cleanup_file_source_ids: Optional[list[str]] = None
+    is_eseguibile: bool = False
+    user_id: Optional[str] = None
+    intermediate_mode_override: Optional[str] = None
+
+    def to_task_kwargs(self) -> dict[str, JsonValue]:
+        return {
+            "project_id": self.project_id,
+            "canvas": self.canvas,
+            "output_format": self.output_format,
+            "force_recalculate": self.force_recalculate,
+            "cleanup_file_source_ids": self.cleanup_file_source_ids,
+            "is_eseguibile": self.is_eseguibile,
+            "user_id": self.user_id,
+            "intermediate_mode_override": self.intermediate_mode_override,
+        }
+
+
+@dataclass(frozen=True)
+class CaricaTaskPayload:
+    project_id: str
+    canvas: dict[str, JsonValue]
+    carica_node_data: dict[str, JsonValue]
+    output_format: str = "geojson"
+    force_recalculate: bool = False
+    triggered_by: str = "manual"
+    user_id: Optional[str] = None
+
+    def to_task_kwargs(self) -> dict[str, JsonValue]:
+        return {
+            "project_id": self.project_id,
+            "canvas": self.canvas,
+            "carica_node_data": self.carica_node_data,
+            "output_format": self.output_format,
+            "force_recalculate": self.force_recalculate,
+            "triggered_by": self.triggered_by,
+            "user_id": self.user_id,
+        }
+
+
+@dataclass(frozen=True)
+class PipelineTaskPayload:
+    project_id: str
+    force_recalculate: bool = False
+    triggered_by: str = "manual"
+    user_id: Optional[str] = None
+    intermediate_mode_override: Optional[str] = None
+
+    def to_task_kwargs(self) -> dict[str, JsonValue]:
+        return {
+            "project_id": self.project_id,
+            "force_recalculate": self.force_recalculate,
+            "triggered_by": self.triggered_by,
+            "user_id": self.user_id,
+            "intermediate_mode_override": self.intermediate_mode_override,
+        }
+
+
+@dataclass(frozen=True)
+class PreviewTaskPayload:
+    project_id: str
+    limit: int = 100
+    user_id: Optional[str] = None
+
+    def to_task_kwargs(self) -> dict[str, JsonValue]:
+        return {
+            "project_id": self.project_id,
+            "limit": self.limit,
+            "user_id": self.user_id,
+        }
+
+
 @dataclass(frozen=True)
 class TaskSubmitRequest:
     """Typed request for launching a Celery task from the orchestrator."""
@@ -57,7 +142,7 @@ class TaskSubmitRequest:
     celery_task: CeleryLaunchTask
     task_type: TaskType
     project_id: str
-    kwargs: dict[str, JsonValue]
+    payload: TaskLaunchPayload
     queued_message: str
     log_label: str
 
@@ -160,7 +245,7 @@ class TaskInfo:
     status: TaskStatus
     progress: int = 0
     message: str = ""
-    result: Optional[TaskResultPayload | dict[str, JsonValue]] = None
+    result: Optional[TaskResultPayload] = None
     error: Optional[str] = None
     created_at: Optional[str] = None
     started_at: Optional[str] = None
@@ -223,7 +308,7 @@ class TaskService:
     def submit_task(self, request: TaskSubmitRequest) -> TaskInfo:
         """Launch a Celery task and record the pending task metadata."""
 
-        result = request.celery_task.delay(**request.kwargs)
+        result = request.celery_task.delay(**request.payload.to_task_kwargs())
 
         logger.info(
             f"Creato task {request.log_label}: {result.id} "
@@ -283,16 +368,16 @@ class TaskService:
                 celery_task=execute_enrichment_task,
                 task_type=TaskType.ENRICHMENT,
                 project_id=project_id,
-                kwargs={
-                    "project_id": project_id,
-                    "canvas": canvas,
-                    "output_format": output_format,
-                    "force_recalculate": force_recalculate,
-                    "cleanup_file_source_ids": cleanup_file_source_ids,
-                    "is_eseguibile": is_eseguibile,
-                    "user_id": user_id,
-                    "intermediate_mode_override": intermediate_mode_override,
-                },
+                payload=EnrichmentTaskPayload(
+                    project_id=project_id,
+                    canvas=canvas,
+                    output_format=output_format,
+                    force_recalculate=force_recalculate,
+                    cleanup_file_source_ids=cleanup_file_source_ids,
+                    is_eseguibile=is_eseguibile,
+                    user_id=user_id,
+                    intermediate_mode_override=intermediate_mode_override,
+                ),
                 queued_message="Task in coda...",
                 log_label="enrichment",
             )
@@ -329,15 +414,15 @@ class TaskService:
                 celery_task=execute_carica_task,
                 task_type=TaskType.CARICA,
                 project_id=project_id,
-                kwargs={
-                    "project_id": project_id,
-                    "canvas": canvas,
-                    "carica_node_data": carica_node_data,
-                    "output_format": output_format,
-                    "force_recalculate": force_recalculate,
-                    "triggered_by": triggered_by,
-                    "user_id": user_id,
-                },
+                payload=CaricaTaskPayload(
+                    project_id=project_id,
+                    canvas=canvas,
+                    carica_node_data=carica_node_data,
+                    output_format=output_format,
+                    force_recalculate=force_recalculate,
+                    triggered_by=triggered_by,
+                    user_id=user_id,
+                ),
                 queued_message="Task CARICA in coda...",
                 log_label="carica",
             )
@@ -369,13 +454,13 @@ class TaskService:
                 celery_task=execute_pipeline_task,
                 task_type=TaskType.EXECUTE,
                 project_id=project_id,
-                kwargs={
-                    "project_id": project_id,
-                    "force_recalculate": force_recalculate,
-                    "triggered_by": triggered_by,
-                    "user_id": user_id,
-                    "intermediate_mode_override": intermediate_mode_override,
-                },
+                payload=PipelineTaskPayload(
+                    project_id=project_id,
+                    force_recalculate=force_recalculate,
+                    triggered_by=triggered_by,
+                    user_id=user_id,
+                    intermediate_mode_override=intermediate_mode_override,
+                ),
                 queued_message="Pipeline in coda...",
                 log_label="execute",
             )
@@ -394,11 +479,11 @@ class TaskService:
                 celery_task=preview_pipeline_task,
                 task_type=TaskType.PREVIEW,
                 project_id=project_id,
-                kwargs={
-                    "project_id": project_id,
-                    "limit": limit,
-                    "user_id": user_id,
-                },
+                payload=PreviewTaskPayload(
+                    project_id=project_id,
+                    limit=limit,
+                    user_id=user_id,
+                ),
                 queued_message="Preview in coda...",
                 log_label="preview",
             )

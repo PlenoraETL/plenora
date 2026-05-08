@@ -9,6 +9,9 @@ import re
 from pathlib import Path
 from typing import Callable, Dict, List, Optional, Any, Tuple
 from dataclasses import dataclass
+from app.core.projects.schema_inference_project_context import (
+    load_project_source_schema_context,
+)
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -146,9 +149,6 @@ class SchemaInferenceService:
         if node_type_handler is not None:
             schema = node_type_handler(context)
 
-        elif node.type == "project_source":
-            schema = self._infer_project_source_schema(node)
-
         elif node.type == "transform":
             # Recupera schemi degli input
             input_schemas = self._get_input_schemas(
@@ -179,6 +179,7 @@ class SchemaInferenceService:
             # NODE-DISPATCH-REGISTRY:start
             "source": self._infer_source_node_schema,
             "file_source": self._infer_file_source_node_schema,
+            "project_source": self._infer_project_source_node_schema,
             "result": self._infer_result_node_schema,
             # NODE-DISPATCH-REGISTRY:end
         }
@@ -194,6 +195,12 @@ class SchemaInferenceService:
         context: _NodeSchemaContext,
     ) -> List[ColumnSchema]:
         return self._infer_file_source_schema(context.node)
+
+    def _infer_project_source_node_schema(
+        self,
+        context: _NodeSchemaContext,
+    ) -> List[ColumnSchema]:
+        return self._infer_project_source_schema(context.node)
 
     def _infer_result_node_schema(
         self,
@@ -255,20 +262,17 @@ class SchemaInferenceService:
             logger.warning(f"Nodo {node.id} senza source_project_id")
             return []
         
-        # Carica metadata dal DB (canvas.columns_metadata
-        from app.core.projects.db import get_project as _get_project
-        row = _get_project(source_project_id)
-        if not row:
+        source_context = load_project_source_schema_context(source_project_id)
+        if not source_context:
             logger.warning(f"Metadata non trovato per progetto {source_project_id}")
             return []
 
         try:
-            canvas = row.get("canvas", {})
+            canvas = source_context.canvas
             if isinstance(canvas, str):
-                import json as _json
                 try:
-                    canvas = _json.loads(canvas)
-                except _json.JSONDecodeError as _e:
+                    canvas = json.loads(canvas)
+                except json.JSONDecodeError as _e:
                     logger.warning(
                         f"Canvas corrotto per project_source {source_project_id}: {_e}. "
                         f"Schema vuoto."

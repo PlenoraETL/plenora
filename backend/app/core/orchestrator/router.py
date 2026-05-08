@@ -21,6 +21,7 @@ from app.shared.error_envelope import raise_typed_http
 from app.shared.models import ExecuteRequest
 from app.core.orchestrator.task_service import (
     TaskInfo,
+    PreviewTaskPayload,
     TaskResultPayload,
     TaskSubmitRequest,
     TaskType,
@@ -323,11 +324,11 @@ def preview_project(
                 celery_task=preview_pipeline_task,
                 task_type=TaskType.PREVIEW,
                 project_id=project_id,
-                kwargs={
-                    "project_id": project_id,
-                    "limit": limit,
-                    "user_id": current_user.user_id,  # N9
-                },
+                payload=PreviewTaskPayload(
+                    project_id=project_id,
+                    limit=limit,
+                    user_id=current_user.user_id,  # N9
+                ),
                 queued_message="Preview in coda...",
                 log_label="preview",
             )

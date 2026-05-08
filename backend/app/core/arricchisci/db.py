@@ -25,16 +25,6 @@ class ApiConnectionRow:
     updated_at: str | None = None
     created_by: str | None = None
 
-    def to_legacy_dict(self) -> dict[str, Any]:
-        return {
-            "id": self.id,
-            "group_id": self.group_id,
-            "config": self.config,
-            "created_at": self.created_at,
-            "updated_at": self.updated_at,
-            "created_by": self.created_by,
-        }
-
 
 def _decode_config(raw_config: Any) -> dict[str, Any]:
     if raw_config is None:
@@ -55,6 +45,17 @@ def _row_from_record(record: dict[str, Any]) -> ApiConnectionRow:
         updated_at=record.get("updated_at"),
         created_by=record.get("created_by"),
     )
+
+
+def _api_connection_row_to_legacy_dict(row: ApiConnectionRow) -> dict[str, Any]:
+    return {
+        "id": row.id,
+        "group_id": row.group_id,
+        "config": row.config,
+        "created_at": row.created_at,
+        "updated_at": row.updated_at,
+        "created_by": row.created_by,
+    }
 
 
 def get_api_connection_row(
@@ -105,11 +106,14 @@ def save_api_connection_row(
 
 def get_api_connection(api_id: str, group_id: str | None = None) -> Optional[Dict]:
     row = get_api_connection_row(api_id, group_id)
-    return row.to_legacy_dict() if row is not None else None
+    return _api_connection_row_to_legacy_dict(row) if row is not None else None
 
 
 def list_api_connections(group_id: str | None = None) -> List[Dict]:
-    return [row.to_legacy_dict() for row in list_api_connection_rows(group_id)]
+    return [
+        _api_connection_row_to_legacy_dict(row)
+        for row in list_api_connection_rows(group_id)
+    ]
 
 
 def save_api_connection(
@@ -118,12 +122,13 @@ def save_api_connection(
     config: dict,
     created_by: str | None = None,
 ) -> Dict:
-    return save_api_connection_row(
+    row = save_api_connection_row(
         api_id=api_id,
         group_id=group_id,
         config=config,
         created_by=created_by,
-    ).to_legacy_dict()
+    )
+    return _api_connection_row_to_legacy_dict(row)
 
 
 def create_api_connection(

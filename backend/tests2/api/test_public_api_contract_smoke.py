@@ -351,11 +351,11 @@ def test_projects_public_shape_survives_typed_service_models(
     }
 
 
-def test_results_public_legacy_shape_survives_typed_row_bridge() -> None:
-    from app.core.results.db import ResultMetadataRow
+def test_results_public_legacy_shape_survives_typed_row_bridge(monkeypatch) -> None:
+    from app.core.results import db as results_db
 
-    row = ResultMetadataRow.from_mapping(
-        {
+    def _fetchone(sql: str, params: tuple[object, ...]) -> dict[str, object]:
+        return {
             "id": "res-1",
             "project_id": "proj-1",
             "group_id": "grp-1",
@@ -366,9 +366,13 @@ def test_results_public_legacy_shape_survives_typed_row_bridge() -> None:
             "created_at": "2026-05-08T00:00:00Z",
             "storage_key": "results/proj-1/res-1.bin",
         }
-    )
 
-    assert row.to_legacy_dict() == {
+    monkeypatch.setattr(results_db, "fetchone", _fetchone)
+
+    row = results_db.get_result_row("res-1")
+    assert row is not None
+    assert not hasattr(row, "to_legacy_dict")
+    assert results_db.get_result("res-1") == {
         "id": "res-1",
         "project_id": "proj-1",
         "group_id": "grp-1",

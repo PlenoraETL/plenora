@@ -46,20 +46,6 @@ class ResultMetadataRow:
             _selected_keys=tuple(row.keys()),
         )
 
-    def to_legacy_dict(self) -> dict[str, object]:
-        values: dict[str, object] = {
-            "id": self.id,
-            "project_id": self.project_id,
-            "group_id": self.group_id,
-            "filename": self.filename,
-            "format": self.format,
-            "size_bytes": self.size_bytes,
-            "rows_count": self.rows_count,
-            "created_at": self.created_at,
-            "storage_key": self.storage_key,
-        }
-        return {key: values[key] for key in self._selected_keys if key in values}
-
 
 def _optional_str(value: object) -> Optional[str]:
     if value is None:
@@ -80,6 +66,22 @@ def _optional_int(value: object, *, field_name: str = "integer field") -> Option
         raise ValueError(
             f"Malformed result DB row: {field_name} must be an int or null"
         ) from exc
+
+
+def _metadata_compat_payload(row: ResultMetadataRow) -> dict[str, object]:
+    values: dict[str, object] = {
+        "id": row.id,
+        "project_id": row.project_id,
+        "group_id": row.group_id,
+        "filename": row.filename,
+        "format": row.format,
+        "size_bytes": row.size_bytes,
+        "rows_count": row.rows_count,
+        "created_at": row.created_at,
+        "storage_key": row.storage_key,
+    }
+    selected_keys = row._selected_keys or tuple(values)
+    return {key: values[key] for key in selected_keys if key in values}
 
 
 def save_result(
@@ -109,7 +111,7 @@ def save_result(
     )
     if row is None:
         return None
-    return row.to_legacy_dict()
+    return _metadata_compat_payload(row)
 
 
 def save_result_row(
@@ -175,7 +177,7 @@ def get_result(result_id: str) -> Optional[dict[str, object]]:
     row = get_result_row(result_id)
     if row is None:
         return None
-    return row.to_legacy_dict()
+    return _metadata_compat_payload(row)
 
 
 def get_latest_result_row(
@@ -208,7 +210,7 @@ def get_latest_result(
     row = get_latest_result_row(project_id, group_id=group_id)
     if row is None:
         return None
-    return row.to_legacy_dict()
+    return _metadata_compat_payload(row)
 
 
 def list_result_rows(project_id: str) -> list[ResultMetadataRow]:
@@ -223,4 +225,4 @@ def list_result_rows(project_id: str) -> list[ResultMetadataRow]:
 
 def list_results(project_id: str) -> list[dict[str, object]]:
     """Return result metadata rows for a project as legacy dicts."""
-    return [row.to_legacy_dict() for row in list_result_rows(project_id)]
+    return [_metadata_compat_payload(row) for row in list_result_rows(project_id)]

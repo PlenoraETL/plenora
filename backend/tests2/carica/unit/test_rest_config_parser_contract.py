@@ -105,3 +105,67 @@ def test_carica_rest_config_parser_redacts_secret_header_metadata() -> None:
     assert parsed.sink_config.headers[0].value == "Bearer secret-token"
     assert "secret-token" not in repr(parsed.redacted_headers)
     assert "api-secret" not in repr(parsed.redacted_headers)
+
+
+def test_carica_rest_config_parser_rejects_header_injection() -> None:
+    with pytest.raises(ValueError, match="header value cannot contain newlines"):
+        parse_carica_rest_config(
+            {
+                "rest_config": {
+                    "url": "https://api.example.test/features",
+                    "headers": {"Authorization": "Bearer token\r\nX-Evil: yes"},
+                }
+            }
+        )
+
+
+def test_carica_rest_config_parser_rejects_invalid_body_mapping_shape() -> None:
+    with pytest.raises(ValueError, match="body_mapping.fields must be a list"):
+        parse_carica_rest_config(
+            {
+                "rest_config": {
+                    "url": "https://api.example.test/features",
+                    "body_mapping": {"fields": {"source": "id", "target": "id"}},
+                }
+            }
+        )
+
+    with pytest.raises(ValueError, match="default must be a scalar"):
+        parse_carica_rest_config(
+            {
+                "rest_config": {
+                    "url": "https://api.example.test/features",
+                    "body_mapping": {
+                        "fields": [
+                            {
+                                "source": "id",
+                                "target": "id",
+                                "default": {"nested": "not-supported"},
+                            }
+                        ]
+                    },
+                }
+            }
+        )
+
+
+def test_carica_rest_config_parser_rejects_invalid_success_statuses() -> None:
+    with pytest.raises(ValueError, match="success_statuses cannot be empty"):
+        parse_carica_rest_config(
+            {
+                "rest_config": {
+                    "url": "https://api.example.test/features",
+                    "success_statuses": [],
+                }
+            }
+        )
+
+    with pytest.raises(ValueError, match="success status must be a valid HTTP status"):
+        parse_carica_rest_config(
+            {
+                "rest_config": {
+                    "url": "https://api.example.test/features",
+                    "success_statuses": [99],
+                }
+            }
+        )

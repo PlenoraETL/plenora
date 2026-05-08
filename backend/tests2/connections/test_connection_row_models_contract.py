@@ -17,7 +17,7 @@ from app.shared.crypto import encrypt
 pytestmark = [pytest.mark.unit, pytest.mark.contract]
 
 
-def test_connection_db_bridge_returns_typed_row_and_legacy_conversion(monkeypatch) -> None:
+def test_connection_db_bridge_returns_typed_row(monkeypatch) -> None:
     def _fetchone(sql: str, params: tuple[object, ...]) -> dict[str, object]:
         assert "FROM connections" in sql
         assert params == ("conn-1", "grp-1")
@@ -45,7 +45,11 @@ def test_connection_db_bridge_returns_typed_row_and_legacy_conversion(monkeypatc
     assert isinstance(row, connection_db.ConnectionConfigRow)
     assert row.port == 5432
     assert row.extra == {"description": "primary"}
-    assert row.to_legacy_dict()["db_type"] == "postgres"
+    assert row.db_type == "postgres"
+
+
+def test_connection_config_row_does_not_own_legacy_dict_serialization() -> None:
+    assert not hasattr(connection_db.ConnectionConfigRow, "to_legacy_dict")
 
 
 def test_connection_db_create_hydrates_typed_row_without_legacy_dict_return(

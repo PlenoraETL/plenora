@@ -8,6 +8,8 @@ import pandas as pd
 from app.core.carica.rest_write_boundary import execute_carica_rest_write
 from app.core.features.rest_sink import (
     RestSinkBatchMode,
+    RestSinkBodyField,
+    RestSinkBodyMapping,
     RestSinkConfig,
     RestSinkHeader,
     RestSinkHttpResponse,
@@ -191,3 +193,101 @@ def test_carica_rest_boundary_uses_per_record_mode() -> None:
     assert result["rows_written"] == 2
     assert [request.json for request in client.requests] == [{"id": 1}, {"id": 2}]
     assert {request.method for request in client.requests} == {"PATCH"}
+
+
+def test_carica_rest_boundary_redacts_secret_from_transport_exception() -> None:
+    secret = "Bearer secret-token"
+    df = pd.DataFrame([{"id": 1}])
+    client = FakeHttpClient(error=TimeoutError("timeout for Bearer secret-token"))
+    config = RestSinkConfig(
+        url="https://api.example.test/features",
+        headers=(RestSinkHeader("Authorization", secret, secret=True),),
+    )
+
+    result = execute_carica_rest_write(
+        df=df,
+        config=config,
+        http_client=client,
+    ).to_task_result()
+
+    assert result["status"] == "write_error"
+    assert result["success"] is False
+    assert result["rows_written"] == 0
+    assert result["rows_failed"] == 1
+    assert "secret-token" not in repr(result)
+    assert "Bearer secret-token" not in repr(result)
+    assert "***REDACTED***" in result["error_message"]
+
+
+def test_carica_rest_boundary_required_body_mapping_failure_sends_no_request() -> None:
+    df = pd.DataFrame([{"id": 1, "name": "Alpha"}])
+    client = FakeHttpClient()
+    config = RestSinkConfig(
+        url="https://api.example.test/features",
+        body_mapping=RestSinkBodyMapping(
+            fields=(
+                RestSinkBodyField(
+                    source="external_id",
+                    target="external_id",
+                    required=True,
+                ),
+            ),
+            include_unmapped=False,
+        ),
+    )
+
+    result = execute_carica_rest_write(
+        df=df,
+        config=config,
+        http_client=client,
+    ).to_task_result()
+
+    assert result["status"] == "write_error"
+    assert result["success"] is False
+    assert result["rows_written"] == 0
+    assert result["rows_failed"] == 1
+    assert result["error_message"] == "REST sink missing required field: external_id"
+    assert result["batches"] == [
+        {
+            "success": False,
+            "status_code": None,
+            "sent_count": 0,
+            "error": "REST sink missing required field: external_id",
+        }
+    ]
+    assert client.requests == []
+
+
+def test_carica_rest_boundary_rate_limit_failure_keeps_successful_batches() -> None:
+    df = pd.DataFrame([{"id": 1}, {"id": 2}, {"id": 3}])
+    client = FakeHttpClient(
+        responses=[
+            RestSinkHttpResponse(status_code=201),
+            RestSinkHttpResponse(status_code=429, text="<html>too many requests</html>"),
+        ]
+    )
+    config = RestSinkConfig(
+        url="https://api.example.test/features",
+        batch_mode=RestSinkBatchMode.BATCH,
+        batch_size=2,
+    )
+
+    result = execute_carica_rest_write(
+        df=df,
+        config=config,
+        http_client=client,
+    ).to_task_result()
+
+    assert result["status"] == "partial"
+    assert result["success"] is False
+    assert result["rows_written"] == 2
+    assert result["rows_failed"] == 1
+    assert result["error_message"] == (
+        "REST sink request failed with status 429: <html>too many requests</html>"
+    )
+    assert result["batches"][1] == {
+        "success": False,
+        "status_code": 429,
+        "sent_count": 0,
+        "error": "REST sink request failed with status 429: <html>too many requests</html>",
+    }

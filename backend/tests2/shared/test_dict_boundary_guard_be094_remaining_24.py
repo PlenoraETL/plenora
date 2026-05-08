@@ -36,10 +36,10 @@ class BroadDictReturn(NamedTuple):
     annotation: str
 
 
-# Count report: 17 remaining broad dict-return residuals across the selected
+# Count report: 21 remaining broad dict-return residuals across the selected
 # BE094 core/db boundary modules. Future batches should remove entries here
 # as they replace compatibility dict wrappers with typed contracts.
-EXPECTED_BROAD_DICT_RETURN_RESIDUALS_BE094_REMAINING_17: frozenset[
+EXPECTED_BROAD_DICT_RETURN_RESIDUALS_BE094_REMAINING_21: frozenset[
     BroadDictReturn
 ] = frozenset(
     {
@@ -85,7 +85,7 @@ EXPECTED_BROAD_DICT_RETURN_RESIDUALS_BE094_REMAINING_17: frozenset[
         ),
         BroadDictReturn(
             "app/core/results/db.py",
-            "ResultMetadataRow.to_legacy_dict",
+            "_metadata_compat_payload",
             "dict[str, object]",
         ),
         BroadDictReturn(
@@ -124,9 +124,29 @@ EXPECTED_BROAD_DICT_RETURN_RESIDUALS_BE094_REMAINING_17: frozenset[
             "Dict[str, str]",
         ),
         BroadDictReturn(
-            "app/core/connections/db.py",
-            "ConnectionConfigRow.to_legacy_dict",
-            "dict[str, object]",
+            "app/core/orchestrator/task_service.py",
+            "TaskLaunchPayload.to_task_kwargs",
+            "dict[str, JsonValue]",
+        ),
+        BroadDictReturn(
+            "app/core/orchestrator/task_service.py",
+            "EnrichmentTaskPayload.to_task_kwargs",
+            "dict[str, JsonValue]",
+        ),
+        BroadDictReturn(
+            "app/core/orchestrator/task_service.py",
+            "CaricaTaskPayload.to_task_kwargs",
+            "dict[str, JsonValue]",
+        ),
+        BroadDictReturn(
+            "app/core/orchestrator/task_service.py",
+            "PipelineTaskPayload.to_task_kwargs",
+            "dict[str, JsonValue]",
+        ),
+        BroadDictReturn(
+            "app/core/orchestrator/task_service.py",
+            "PreviewTaskPayload.to_task_kwargs",
+            "dict[str, JsonValue]",
         ),
     }
 )
@@ -138,11 +158,12 @@ BROAD_DICT_RETURN_CLASSIFICATIONS_BE094: dict[BroadDictReturn, str] = {
         if residual.qualname.endswith(("to_legacy_dict", "to_dict"))
         else "KEEP_COMPAT_WITH_REMOVAL_CONDITION"
     )
-    for residual in EXPECTED_BROAD_DICT_RETURN_RESIDUALS_BE094_REMAINING_17
+    for residual in EXPECTED_BROAD_DICT_RETURN_RESIDUALS_BE094_REMAINING_21
 }
 
 TYPED_ZERO_COUNT_MODULES_BE094_DONE: frozenset[str] = frozenset(
     {
+        "app/core/connections/db.py",
         "app/core/connections/service.py",
         "app/core/connections/arcgis_connection_resolver.py",
     }
@@ -215,15 +236,15 @@ def _scan_broad_dict_returns(paths: Iterable[str]) -> frozenset[BroadDictReturn]
     return frozenset(hits)
 
 
-def test_be094_selected_boundary_broad_dict_returns_match_remaining_17() -> None:
+def test_be094_selected_boundary_broad_dict_returns_match_remaining_21() -> None:
     """Ratchet selected core/db boundary broad-dict returns.
 
     Extra entries mean new broad dict returns crossed one of the selected
     service/repository boundaries. Missing entries mean a future batch removed
-    residuals and should lower the ``REMAINING_17`` baseline.
+    residuals and should lower the ``REMAINING_21`` baseline.
     """
     found = _scan_broad_dict_returns(_TARGET_BOUNDARY_MODULES_BE094)
-    expected = EXPECTED_BROAD_DICT_RETURN_RESIDUALS_BE094_REMAINING_17
+    expected = EXPECTED_BROAD_DICT_RETURN_RESIDUALS_BE094_REMAINING_21
 
     extra = sorted(found - expected)
     missing = sorted(expected - found)
@@ -235,8 +256,8 @@ def test_be094_selected_boundary_broad_dict_returns_match_remaining_17() -> None
     )
     assert not missing, (
         "Broad dict return residuals were removed from selected BE094 "
-        f"boundary modules: {missing}. Ratchet the count below 17 by "
-        "updating EXPECTED_BROAD_DICT_RETURN_RESIDUALS_BE094_REMAINING_17."
+        f"boundary modules: {missing}. Ratchet the count below 21 by "
+        "updating EXPECTED_BROAD_DICT_RETURN_RESIDUALS_BE094_REMAINING_21."
     )
 
 

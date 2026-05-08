@@ -65,19 +65,6 @@ class DataSourceRow:
             created_by=_optional_str(row.get("created_by"), field_name="created_by"),
         )
 
-    def to_legacy_dict(self) -> dict[str, object]:
-        """KEEP_PUBLIC_COMPAT: dict shape for existing service internals/tests."""
-        return {
-            "id": self.id,
-            "group_id": self.group_id,
-            "name": self.name,
-            "ds_type": self.ds_type,
-            "config": dict(self.config),
-            "created_at": self.created_at,
-            "updated_at": self.updated_at,
-            "created_by": self.created_by,
-        }
-
 
 def _optional_datasource_row(row: Mapping[str, object] | None) -> Optional[DataSourceRow]:
     return DataSourceRow.from_mapping(row) if row else None

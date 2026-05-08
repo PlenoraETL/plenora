@@ -30,15 +30,6 @@ _ALLOWED_STATUSES = frozenset(
 )
 _EXPECTED_TO_LEGACY_DICT_CALL_SITES = frozenset(
     {
-        ("app/core/arricchisci/db.py", "get_api_connection"),
-        ("app/core/arricchisci/db.py", "list_api_connections"),
-        ("app/core/arricchisci/db.py", "save_api_connection"),
-        ("app/core/datasources/service.py", "DataSourceService._get_full_config"),
-        ("app/core/datasources/service.py", "DataSourceService.list_datasources"),
-        ("app/core/results/db.py", "get_latest_result"),
-        ("app/core/results/db.py", "get_result"),
-        ("app/core/results/db.py", "list_results"),
-        ("app/core/results/db.py", "save_result"),
     }
 )
 
@@ -144,9 +135,9 @@ _LEDGER: tuple[BoundaryEntry, ...] = (
     ),
     BoundaryEntry(
         "app/core/results/db.py",
-        "ResultMetadataRow.to_legacy_dict",
+        "_metadata_compat_payload",
         "KEEP_PUBLIC_COMPAT",
-        "legacy result metadata dict conversion stays explicit until result routers/services consume typed row serializers",
+        "legacy result metadata dict conversion stays in a private helper for public compatibility wrappers",
     ),
     BoundaryEntry(
         "app/core/results/db.py",
@@ -223,8 +214,8 @@ _LEDGER: tuple[BoundaryEntry, ...] = (
     BoundaryEntry(
         "app/core/connections/db.py",
         "ConnectionConfigRow.to_legacy_dict",
-        "KEEP_PUBLIC_COMPAT",
-        "public dict conversion stays explicit for external callers that still need it",
+        "REMOVED",
+        "connection row serialization was removed after connection service callers consumed typed rows",
     ),
     BoundaryEntry(
         "app/core/connections/db.py",
@@ -283,8 +274,8 @@ _LEDGER: tuple[BoundaryEntry, ...] = (
     BoundaryEntry(
         "app/core/arricchisci/db.py",
         "ApiConnectionRow.to_legacy_dict",
-        "KEEP_PUBLIC_COMPAT",
-        "legacy API connection dict conversion stays explicit while router/service callers preserve public shapes",
+        "REMOVED",
+        "legacy API connection dict conversion moved to private DB compatibility serializers",
     ),
     BoundaryEntry(
         "app/db/config/api_connections.py",
@@ -301,8 +292,8 @@ _LEDGER: tuple[BoundaryEntry, ...] = (
     BoundaryEntry(
         "app/core/datasources/db.py",
         "DataSourceRow.to_legacy_dict",
-        "KEEP_PUBLIC_COMPAT",
-        "public datasource compatibility conversion stays explicit while service internals still consume dict shape",
+        "REMOVED",
+        "datasource service now consumes typed DataSourceRow fields directly",
     ),
     BoundaryEntry(
         "app/core/datasources/db.py",
@@ -375,6 +366,60 @@ _LEDGER: tuple[BoundaryEntry, ...] = (
         "TaskResultPayload",
         "DONE",
         "Celery result metadata uses explicit typed fields instead of a broad payload mapping",
+    ),
+    BoundaryEntry(
+        "app/core/orchestrator/task_service.py",
+        "EnrichmentTaskPayload",
+        "DONE",
+        "enrichment launch arguments are grouped in a frozen typed payload before Celery submission",
+    ),
+    BoundaryEntry(
+        "app/core/orchestrator/task_service.py",
+        "CaricaTaskPayload",
+        "DONE",
+        "Carica launch arguments are grouped in a frozen typed payload before Celery submission",
+    ),
+    BoundaryEntry(
+        "app/core/orchestrator/task_service.py",
+        "PipelineTaskPayload",
+        "DONE",
+        "pipeline launch arguments are grouped in a frozen typed payload before Celery submission",
+    ),
+    BoundaryEntry(
+        "app/core/orchestrator/task_service.py",
+        "PreviewTaskPayload",
+        "DONE",
+        "preview launch arguments are grouped in a frozen typed payload before Celery submission",
+    ),
+    BoundaryEntry(
+        "app/core/orchestrator/task_service.py",
+        "TaskLaunchPayload.to_task_kwargs",
+        "KEEP_COMPAT_WITH_REMOVAL_CONDITION",
+        "remove after Celery task launch accepts typed payload objects without kwargs expansion",
+    ),
+    BoundaryEntry(
+        "app/core/orchestrator/task_service.py",
+        "EnrichmentTaskPayload.to_task_kwargs",
+        "KEEP_COMPAT_WITH_REMOVAL_CONDITION",
+        "remove after Celery enrichment launch accepts typed payload objects without kwargs expansion",
+    ),
+    BoundaryEntry(
+        "app/core/orchestrator/task_service.py",
+        "CaricaTaskPayload.to_task_kwargs",
+        "KEEP_COMPAT_WITH_REMOVAL_CONDITION",
+        "remove after Celery Carica launch accepts typed payload objects without kwargs expansion",
+    ),
+    BoundaryEntry(
+        "app/core/orchestrator/task_service.py",
+        "PipelineTaskPayload.to_task_kwargs",
+        "KEEP_COMPAT_WITH_REMOVAL_CONDITION",
+        "remove after Celery pipeline launch accepts typed payload objects without kwargs expansion",
+    ),
+    BoundaryEntry(
+        "app/core/orchestrator/task_service.py",
+        "PreviewTaskPayload.to_task_kwargs",
+        "KEEP_COMPAT_WITH_REMOVAL_CONDITION",
+        "remove after Celery preview launch accepts typed payload objects without kwargs expansion",
     ),
     BoundaryEntry(
         "app/core/orchestrator/task_service.py",

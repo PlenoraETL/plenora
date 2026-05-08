@@ -87,26 +87,6 @@ class ConnectionConfigRow:
             created_by=_optional_str(row.get("created_by"), field_name="created_by"),
         )
 
-    def to_legacy_dict(self) -> dict[str, object]:
-        """KEEP_PUBLIC_COMPAT: dict shape for callers not yet typed."""
-        return {
-            "id": self.id,
-            "group_id": self.group_id,
-            "name": self.name,
-            "db_type": self.db_type,
-            "host": self.host,
-            "port": self.port,
-            "database": self.database,
-            "db_schema": self.db_schema,
-            "username": self.username,
-            "password": self.password,
-            "extra": dict(self.extra or {}),
-            "created_at": self.created_at,
-            "updated_at": self.updated_at,
-            "created_by": self.created_by,
-        }
-
-
 @dataclass(frozen=True)
 class ArcGISConnectionRow:
     """Typed ArcGIS connection row used by provider resolution."""

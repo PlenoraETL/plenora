@@ -29,6 +29,7 @@ from app.core.auth.dependencies import (
 from app.core.auth.owner_dependencies import require_project_owner
 from app.shared.contracts.auth import CurrentUser, group_filter
 from app.core.auth.ownership import assert_group_access
+from app.core.projects.usage import list_owned_project_ids
 from .models import ProjectCreate
 
 class ProjectCreateWithCanvas(ProjectCreate):
@@ -199,7 +200,6 @@ def _visible_project_ids_strict(
         return ids
     if not owner_group_id:
         return set()
-    from app.core.projects.db import list_owned_project_ids
     return list_owned_project_ids(ids, owner_group_id=owner_group_id)
 
 

@@ -5,6 +5,8 @@ Viene invocato alla chiusura di una run in failure.
 """
 
 from typing import Optional
+
+from app.core.projects import debug_context
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -83,14 +85,12 @@ class DebugPayloadBuilder:
         Legge metadata e canvas dal DB config (PG) e costruisce il contesto pipeline.
         """
         try:
-            from app.core.projects.db import get_project
+            context = debug_context.load_project_debug_context(project_id)
+            canvas_raw = context.canvas if context else {}
 
-            metadata = get_project(project_id) or {}
-            canvas_raw = (metadata.get("canvas") or {}) if metadata else {}
-
-            project_name = metadata.get("name", project_id)
-            module = metadata.get("project_type", "")
-            triggered_by = metadata.get("triggered_by", "manual")
+            project_name = context.project_name if context else project_id
+            module = context.project_type if context else ""
+            triggered_by = context.triggered_by if context else "manual"
 
             canvas_summary = self._summarize_canvas(canvas_raw)
 
@@ -174,10 +174,8 @@ class DebugPayloadBuilder:
             return {}
 
         try:
-            from app.core.projects.db import get_project
-
-            project_raw = get_project(project_id) or {}
-            canvas_raw = project_raw.get("canvas") or {}
+            context = debug_context.load_project_debug_context(project_id)
+            canvas_raw = context.canvas if context else {}
             if not canvas_raw:
                 return {}
 

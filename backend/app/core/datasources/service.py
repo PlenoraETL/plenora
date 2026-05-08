@@ -55,12 +55,17 @@ class DataSourceService:
         rows = datasource_db.list_datasources(group_id)
         result = []
         for row in rows:
-            config = self._row_to_config(row.to_legacy_dict())
+            config = self._row_to_config(row)
             if config:
                 result.append(self._to_model(config, redact=True))
         return DataSourceList(datasources=result)
 
-    def _row_to_config(self, row: dict[str, object]) -> Optional[dict[str, object]]:
+    def _row_to_config(
+        self,
+        row: datasource_db.DataSourceRow,
+        *,
+        strict: bool = False,
+    ) -> Optional[dict[str, object]]:
         """Estrae il config dict da una row già fetchata (no re-query).
 
         Equivalente in-memory di _get_full_config ma senza re-fetch dal DB.
@@ -68,20 +73,14 @@ class DataSourceService:
         """
         if not row:
             return None
-        config = row.get("config") or {}
-        if isinstance(config, str):
-            try:
-                config = json.loads(config)
-            except json.JSONDecodeError as e:
-                logger.warning(f"Config corrotta per datasource {row.get('id')}: {e}")
-                return None
+        config = dict(row.config or {})
         if not isinstance(config, dict):
             return None
         # Decifra campi sensibili at-rest
-        _decrypt_dict_fields(config, _SENSITIVE_FIELDS)
+        _decrypt_dict_fields(config, _SENSITIVE_FIELDS, strict=strict)
         # Inietta group_id e created_by dal record DB (stesso logic di _get_full_config
-        config["group_id"] = row.get("group_id", "")
-        config["created_by"] = row.get("created_by")
+        config["group_id"] = row.group_id
+        config["created_by"] = row.created_by
         return config
 
     def get_datasource(self, ds_id: str) -> Optional[DataSource]:
@@ -412,28 +411,12 @@ class DataSourceService:
         row = datasource_db.get_datasource(ds_id)
         if not row:
             return None
-        legacy_row = row.to_legacy_dict()
-        config = legacy_row.get("config") or {}
-        if isinstance(config, str):
-            try:
-                config = json.loads(config)
-            except json.JSONDecodeError as e:
-                logger.warning(
-                    f"Config corrotta per datasource {ds_id}: {e}. "
-                    f"Datasource trattata come non trovata."
-                )
-                return None
-        if not isinstance(config, dict):
+        config = self._row_to_config(row, strict=strict)
+        if config is None:
             logger.warning(
                 f"Config con tipo inatteso per datasource {ds_id}: "
-                f"{type(config).__name__}. Datasource trattata come non trovata."
+                f"{type(row.config).__name__}. Datasource trattata come non trovata."
             )
-            return None
-        # Decifra at-rest i campi sensibili (strict propagato
-        _decrypt_dict_fields(config, _SENSITIVE_FIELDS, strict=strict)
-        # Inietta group_id e created_by dal record DB nel config dict
-        config["group_id"] = legacy_row.get("group_id", "")
-        config["created_by"] = legacy_row.get("created_by")
         return config
 
     def _get_backend(self, ds_id: str) -> DataSourceInterface:

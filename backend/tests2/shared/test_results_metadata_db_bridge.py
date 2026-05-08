@@ -131,7 +131,18 @@ def test_result_metadata_row_is_typed_read_only_boundary(monkeypatch):
     assert row.project_id == "proj-1"
     assert row.group_id == "grp-1"
     assert row.storage_key == "results/proj-1/res-1.bin"
-    assert row.to_legacy_dict() == results_db.get_result("res-1")
+    assert not hasattr(row, "to_legacy_dict")
+    assert results_db.get_result("res-1") == {
+        "id": "res-1",
+        "project_id": "proj-1",
+        "group_id": "grp-1",
+        "filename": "out.csv",
+        "format": "csv",
+        "size_bytes": 12,
+        "rows_count": 2,
+        "created_at": "2026-05-08T10:00:00+00:00",
+        "storage_key": "results/proj-1/res-1.bin",
+    }
 
     with pytest.raises(FrozenInstanceError):
         row.id = "mutated"

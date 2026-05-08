@@ -6,7 +6,25 @@ while exposing router-friendly payloads at application edges.
 
 from __future__ import annotations
 
+from collections.abc import Iterable
+
 from app.core.projects import db as project_db
+
+
+def list_owned_project_ids(
+    project_ids: Iterable[str] | None,
+    *,
+    owner_group_id: str | None,
+) -> set[str]:
+    """Return project ids owned by the given group.
+
+    This is the project-domain boundary used by routers that need to validate
+    project references without reaching into the persistence bridge directly.
+    """
+    return project_db.list_owned_project_ids(
+        project_ids,
+        owner_group_id=owner_group_id,
+    )
 
 
 def list_projects_using_connection(connection_id: str) -> list[dict[str, object]]:

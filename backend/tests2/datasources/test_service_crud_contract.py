@@ -75,6 +75,12 @@ def test_datasource_service_uses_domain_db_not_config_leaf() -> None:
     assert "app.core.datasources" in imported_modules
 
 
+def test_datasource_row_has_no_legacy_dict_serializer() -> None:
+    from app.core.datasources import db as datasource_db
+
+    assert not hasattr(datasource_db.DataSourceRow, "to_legacy_dict")
+
+
 def test_list_datasources_filters_by_group_id_uses_where_clause(monkeypatch):
     """Blinda §4.1 tenant isolation: con ``group_id`` non-None la query SQL
     include ``WHERE group_id = %s`` e i params passano l'id del tenant.

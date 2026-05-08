@@ -1,8 +1,10 @@
-"""Runtime modules must not import raw cross-domain core DB leaves.
+"""Runtime modules must not import raw core DB leaves.
 
 This is intentionally scoped to the Wave 2 cleaned/runtime surfaces. It is
 not a whole-repo guard: the goal is to prevent backsliding in selected modules
 while residual runtime call sites are made explicit with removal conditions.
+Same-domain raw DB imports are only checked for explicitly named cleaned
+surfaces where a boundary already exists or is being introduced.
 """
 
 from __future__ import annotations
@@ -24,6 +26,11 @@ _CORE_ROOT = _APP_ROOT / "core"
 _TARGET_FILES: tuple[str, ...] = (
     "app/core/artifacts/resolver.py",
     "app/core/manipola/executor.py",
+    "app/core/orchestrator/task_service.py",
+    "app/core/projects/router.py",
+    "app/core/projects/schema_inference.py",
+    "app/services/task_service.py",
+    "app/utils/debug_payload_builder.py",
     "app/utils/result_store.py",
     "workers/tasks/pipeline_task.py",
     "workers/tasks/carica_task.py",
@@ -41,6 +48,12 @@ _ALLOWED_SEVERITIES = frozenset({"HIGH", "MEDIUM", "LOW"})
 _ALLOWED_REASON_PREFIXES = (
     "KEEP_COMPAT_WITH_REMOVAL_CONDITION:",
     "BLOCKER:",
+)
+_SAME_DOMAIN_RAW_DB_TARGET_FILES = frozenset(
+    {
+        "app/core/projects/router.py",
+        "app/core/projects/schema_inference.py",
+    }
 )
 
 
@@ -144,13 +157,16 @@ def _iter_raw_cross_domain_db_imports(path: Path) -> list[RuntimeDbImport]:
     tree = ast.parse(path.read_text(encoding="utf-8-sig"))
     rel_path = _rel(path)
     src_domain = _src_domain(path)
+    include_same_domain_raw_db = rel_path in _SAME_DOMAIN_RAW_DB_TARGET_FILES
     edges: list[RuntimeDbImport] = []
 
     for node in ast.walk(tree):
         if isinstance(node, ast.ImportFrom) and node.module:
             for alias in node.names:
                 imported_domain = _db_import_domain(node.module, alias.name)
-                if imported_domain is None or imported_domain == src_domain:
+                if imported_domain is None:
+                    continue
+                if imported_domain == src_domain and not include_same_domain_raw_db:
                     continue
                 edges.append(
                     RuntimeDbImport(
@@ -165,7 +181,9 @@ def _iter_raw_cross_domain_db_imports(path: Path) -> list[RuntimeDbImport]:
         elif isinstance(node, ast.Import):
             for alias in node.names:
                 imported_domain = _db_import_domain(alias.name)
-                if imported_domain is None or imported_domain == src_domain:
+                if imported_domain is None:
+                    continue
+                if imported_domain == src_domain and not include_same_domain_raw_db:
                     continue
                 edges.append(
                     RuntimeDbImport(
@@ -234,6 +252,11 @@ def test_runtime_db_import_allowlist_has_severity_and_removal_condition() -> Non
 def test_cleaned_runtime_surfaces_stay_raw_db_import_free() -> None:
     raw_db_free_files = (
         "app/core/artifacts/resolver.py",
+        "app/core/orchestrator/task_service.py",
+        "app/core/projects/router.py",
+        "app/core/projects/schema_inference.py",
+        "app/services/task_service.py",
+        "app/utils/debug_payload_builder.py",
         "app/utils/result_store.py",
     )
     offenders = {

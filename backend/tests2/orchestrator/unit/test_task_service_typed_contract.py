@@ -1,13 +1,18 @@
 """Typed task service contract tests."""
 
 from types import SimpleNamespace
+from typing import get_type_hints
 from unittest.mock import patch
 
 import pytest
 
 from app.core.orchestrator.task_service import (
     ActiveTaskInfo,
+    CaricaTaskPayload,
     CeleryLaunchResult,
+    EnrichmentTaskPayload,
+    PipelineTaskPayload,
+    PreviewTaskPayload,
     TaskInfo,
     TaskResultPayload,
     TaskService,
@@ -96,16 +101,26 @@ def test_task_result_payload_keeps_malformed_fields_non_fatal_and_typed():
     assert _task_result_to_dict(payload)["error"] == "boom"
 
 
-def test_task_info_does_not_normalize_result_in_post_init():
+def test_task_info_result_contract_is_typed_payload():
+    payload = TaskResultPayload.from_celery_meta({"project_id": "project-1"})
+
     task_info = TaskInfo(
         task_id="task-1",
         task_type=TaskType.EXECUTE,
         project_id="project-1",
         status=TaskStatus.SUCCESS,
-        result={"project_id": "project-1"},
+        result=payload,
     )
 
-    assert isinstance(task_info.result, dict)
+    assert isinstance(task_info.result, TaskResultPayload)
+    assert task_info.result.project_id == "project-1"
+
+
+def test_task_info_result_annotation_does_not_regress_to_broad_dict():
+    result_annotation = get_type_hints(TaskInfo)["result"]
+
+    assert "dict" not in str(result_annotation)
+    assert "TaskResultPayload" in str(result_annotation)
 
 
 def test_router_serializes_typed_task_result_payload_at_edge():
@@ -240,11 +255,11 @@ def test_submit_task_launches_celery_and_returns_pending_task_info():
             celery_task=FakeCeleryTask(),
             task_type=TaskType.EXECUTE,
             project_id="project-1",
-            kwargs={
-                "project_id": "project-1",
-                "force_recalculate": False,
-                "user_id": "user-1",
-            },
+            payload=PipelineTaskPayload(
+                project_id="project-1",
+                force_recalculate=False,
+                user_id="user-1",
+            ),
             queued_message="Pipeline in coda...",
             log_label="execute",
         )
@@ -258,7 +273,9 @@ def test_submit_task_launches_celery_and_returns_pending_task_info():
     assert captured_kwargs == {
         "project_id": "project-1",
         "force_recalculate": False,
+        "triggered_by": "manual",
         "user_id": "user-1",
+        "intermediate_mode_override": None,
     }
     assert service._task_project_cache["task-submit-1"] == "project-1"
 
@@ -306,7 +323,8 @@ def test_preview_router_builds_typed_submit_request_directly(monkeypatch):
     assert request.celery_task is preview_pipeline_task
     assert request.task_type is TaskType.PREVIEW
     assert request.project_id == "project-1"
-    assert request.kwargs == {
+    assert isinstance(request.payload, PreviewTaskPayload)
+    assert request.payload.to_task_kwargs() == {
         "project_id": "project-1",
         "limit": 42,
         "user_id": "user-1",
@@ -423,8 +441,50 @@ def test_create_task_wrappers_delegate_to_generic_submit(
     request = captured_requests[0]
     assert request.task_type is expected_task_type
     assert request.project_id == "project-1"
-    assert request.kwargs == expected_kwargs
+    assert request.payload.to_task_kwargs() == expected_kwargs
     assert request.queued_message == expected_message
     assert hasattr(request.celery_task, "delay")
     assert task_info.task_type is expected_task_type
     assert task_info.status is TaskStatus.PENDING
+
+
+def test_create_enrichment_and_carica_use_domain_submit_payloads(monkeypatch):
+    service = TaskService()
+    captured_requests = []
+
+    def fake_submit_task(request):
+        captured_requests.append(request)
+        return TaskInfo(
+            task_id="task-1",
+            task_type=request.task_type,
+            project_id=request.project_id,
+            status=TaskStatus.PENDING,
+            message=request.queued_message,
+        )
+
+    monkeypatch.setattr(service, "submit_task", fake_submit_task)
+
+    service.create_enrichment_task(
+        project_id="project-1",
+        canvas={"nodes": [], "edges": []},
+        output_format="csv",
+        force_recalculate=True,
+        cleanup_file_source_ids=["file-1"],
+        is_eseguibile=True,
+        user_id="user-1",
+        intermediate_mode_override="full_artifact",
+    )
+    service.create_carica_task(
+        project_id="project-1",
+        canvas={"nodes": [], "edges": []},
+        carica_node_data={"id": "carica-1"},
+        output_format="geojson",
+        force_recalculate=True,
+        triggered_by="cron",
+        user_id="user-1",
+    )
+
+    assert isinstance(captured_requests[0].payload, EnrichmentTaskPayload)
+    assert captured_requests[0].payload.to_task_kwargs()["intermediate_mode_override"] == "full_artifact"
+    assert isinstance(captured_requests[1].payload, CaricaTaskPayload)
+    assert captured_requests[1].payload.to_task_kwargs()["carica_node_data"] == {"id": "carica-1"}
