@@ -35,9 +35,8 @@ def _list_user_folders(
     risolvere ownerFolder (id) → title prima di confrontare con la
     selezione utente.
 
-    Guardrail: keep provider access limited to `client.list_folders`.
-    Additional ArcGIS discovery logic belongs in the provider boundary;
-    IMDF-only filtering may stay in `_is_imdf_user_folder`.
+    Guardrail: delegate discovery to `client.list_folders`; only IMDF folder
+    filtering belongs here.
     """
     try:
         folders = client.list_folders(conn) or []
@@ -69,12 +68,8 @@ def _is_service_name_available(
 ) -> Tuple[bool, Optional[str]]:
     """Controlla presso il portal se il nome servizio e' disponibile.
 
-    KEEP_COMPAT: wrapper IMDF legacy delegato al boundary generico
-    `ArcGISClient.is_service_name_available`.
-
-    Guardrail: keep this as fail-open compatibility around
-    `client.is_service_name_available`; new availability logic belongs in
-    the provider.
+    KEEP_COMPAT: fail-open IMDF wrapper around
+    `client.is_service_name_available`.
 
     Returns:
         (available, error_message):
@@ -98,9 +93,8 @@ def _enumerate_all_user_items(
 
     Ritorna lista di item {id, title, type, name, url, ownerFolder, ...}.
 
-    KEEP_COMPAT: wrapper IMDF legacy delegato al boundary generico
-    `ArcGISClient.list_user_items`. IMDF mantiene sopra questo boundary solo
-    la policy di filtro/matching Feature Service.
+    KEEP_COMPAT: IMDF wrapper over `client.list_user_items`; only
+    Feature Service matching policy stays here.
     """
     try:
         return client.list_user_items(conn) or []

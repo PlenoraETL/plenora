@@ -26,21 +26,19 @@ def _add_layer_to_service(
 ) -> Dict[str, object]:
     """Aggiunge un layer a un Feature Service esistente.
 
-    BE-IMDF-006B: implementazione promossa a
-    `ArcGISClient.add_layer_to_service` (returna `AddLayerResult`
-    tipato). Questo modulo-level symbol resta come thin wrapper
-    `KEEP_COMPAT` per:
+    BE-IMDF-006B: implementation promoted to the provider
+    `add_layer_to_service` method. This module-level symbol remains as a
+    thin `KEEP_COMPAT` wrapper to:
 
     1. preservare il dict shape `{success, feature_count, errors}`
        atteso dai caller IMDF (`upload_imdf_layers`);
-    2. preservare il compatibility module compatibility export
+    2. preservare il compatibility export
        `from app.core.imdf.arcgis_uploader import _add_layer_to_service`;
     3. mantenere il path di monkeypatch usato dai test contract
        (`tests2/imdf/unit/test_add_layer_to_service_contract.py`
        chiama questa funzione e mocka i collaboratori del client).
 
     Guardrail: keep this as delegation plus legacy result conversion only.
-    New Feature Service write logic belongs in the provider method.
     """
     return client.add_layer_to_service(
         conn, service_url, gdf, layer_name, layer_id, srid,

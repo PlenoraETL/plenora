@@ -36,6 +36,29 @@ _ARCGIS_REST_MECHANICS_ROOTS = (
 _ARCGIS_REST_MECHANICS_ALLOWED_FILES = {
     _BACKEND_DIR / "app" / "core" / "features" / "arcgis_client.py",
 }
+_LEGACY_ARCGIS_ADAPTER_MODULE = ".".join(
+    ("app.core.features", "arcgis_connection_adapter")
+)
+_LEGACY_ARCGIS_ADAPTER_ALLOWED_FILES = {
+    _BACKEND_DIR / "app" / "core" / "features" / "arcgis_connection_adapter.py",
+}
+_PRODUCTION_ARCGIS_FACTORY_IMPORT_ROOTS = (
+    _BACKEND_DIR / "app",
+    _BACKEND_DIR / "workers",
+)
+_LEGACY_CREATE_CLIENT_IMPORTS = {
+    ("app.core.features", "create_client"),
+    ("app.core.features.arcgis_client", "create_client"),
+}
+_LEGACY_ESRI_CONVERSION_IMPORTS = {
+    ("app.core.features.arcgis_client", "EsriJsonConverter"),
+    ("app.core.features.arcgis_client", "EsriTypeMapper"),
+}
+_LEGACY_CREATE_CLIENT_IMPORT_ALLOWLIST = {
+    (
+        _BACKEND_DIR / "app" / "core" / "features" / "__init__.py"
+    ): "KEEP_COMPAT: package-level legacy re-export for existing importers.",
+}
 
 # Known violations - TODO: fix these per macro-components.md section 2.3.
 # Each entry is (filename -> exact imported modules). The guard is strict
@@ -61,6 +84,13 @@ def _arcgis_rest_mechanics_python_files() -> list[Path]:
     return sorted(files)
 
 
+def _production_arcgis_factory_import_python_files() -> list[Path]:
+    files: list[Path] = []
+    for root in _PRODUCTION_ARCGIS_FACTORY_IMPORT_ROOTS:
+        files.extend(root.rglob("*.py"))
+    return sorted(files)
+
+
 def _imports_in_file(path: Path) -> list[str]:
     try:
         tree = ast.parse(path.read_text(encoding="utf-8"))
@@ -74,6 +104,19 @@ def _imports_in_file(path: Path) -> list[str]:
             for alias in node.names:
                 modules.append(alias.name)
     return modules
+
+
+def _imported_names_in_file(path: Path) -> list[tuple[str, str, int]]:
+    try:
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+    except SyntaxError:
+        return []
+    imported_names: list[tuple[str, str, int]] = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom) and node.module:
+            for alias in node.names:
+                imported_names.append((node.module, alias.name, node.lineno))
+    return imported_names
 
 
 def _scan_arcgis_rest_mechanics(path: Path) -> list[tuple[int, str]]:
@@ -179,6 +222,90 @@ def test_direct_arcgis_rest_mechanics_stay_inside_provider_client(src_file: Path
     )
 
 
+@pytest.mark.parametrize(
+    "src_file",
+    _arcgis_rest_mechanics_python_files(),
+    ids=lambda p: p.relative_to(_BACKEND_DIR).as_posix(),
+)
+def test_legacy_arcgis_connection_adapter_is_only_the_wrapper(src_file: Path) -> None:
+    """The neutral resolver is the canonical ArcGIS connection entry point."""
+    if src_file in _LEGACY_ARCGIS_ADAPTER_ALLOWED_FILES:
+        return
+
+    imports = _imports_in_file(src_file)
+
+    assert _LEGACY_ARCGIS_ADAPTER_MODULE not in imports, (
+        f"{src_file.relative_to(_BACKEND_DIR).as_posix()}: legacy ArcGIS "
+        "connection adapter imported outside its compatibility wrapper. "
+        "Import app.core.connections.arcgis_connection_resolver instead."
+    )
+
+
+def test_legacy_create_client_import_allowlist_reasons_are_explicit() -> None:
+    """Allowlisted legacy factory imports must document why they remain."""
+    for path, reason in _LEGACY_CREATE_CLIENT_IMPORT_ALLOWLIST.items():
+        assert reason.startswith("KEEP_COMPAT:"), (
+            f"{path.relative_to(_BACKEND_DIR).as_posix()}: legacy "
+            "create_client import allowlist entries require an explicit "
+            "KEEP_COMPAT reason."
+        )
+
+
+@pytest.mark.parametrize(
+    "src_file",
+    _production_arcgis_factory_import_python_files(),
+    ids=lambda p: p.relative_to(_BACKEND_DIR).as_posix(),
+)
+def test_production_imports_neutral_arcgis_provider_factory(src_file: Path) -> None:
+    """Production modules must not import the legacy concrete-client factory.
+
+    This scans only import statements via AST, so comments and docstrings that
+    mention ``create_client`` do not produce noisy failures. Direct concrete
+    ``ArcGISClient`` imports are still allowed for legacy code and tests that
+    exercise the concrete client.
+    """
+    if src_file in _LEGACY_CREATE_CLIENT_IMPORT_ALLOWLIST:
+        return
+
+    violations = [
+        (module, name, line)
+        for module, name, line in _imported_names_in_file(src_file)
+        if (module, name) in _LEGACY_CREATE_CLIENT_IMPORTS
+    ]
+
+    assert not violations, (
+        f"{src_file.relative_to(_BACKEND_DIR).as_posix()}: production modules "
+        "must import the canonical ArcGIS provider factory from "
+        "app.core.connections.arcgis_provider_factory, not create_client from "
+        "app.core.features.arcgis_client. "
+        f"Violations: {violations}. "
+        "If this is a required legacy compatibility re-export, add a narrow "
+        "allowlist entry with a KEEP_COMPAT reason."
+    )
+
+
+@pytest.mark.parametrize(
+    "src_file",
+    _production_arcgis_factory_import_python_files(),
+    ids=lambda p: p.relative_to(_BACKEND_DIR).as_posix(),
+)
+def test_production_imports_esri_conversion_from_shared(src_file: Path) -> None:
+    """ESRI type/JSON conversion canonical imports live under shared connections."""
+    violations = [
+        (module, name, line)
+        for module, name, line in _imported_names_in_file(src_file)
+        if (module, name) in _LEGACY_ESRI_CONVERSION_IMPORTS
+    ]
+
+    assert not violations, (
+        f"{src_file.relative_to(_BACKEND_DIR).as_posix()}: production modules "
+        "must import EsriJsonConverter/EsriTypeMapper from "
+        "app.shared.connections, not app.core.features.arcgis_client. "
+        f"Violations: {violations}. arcgis_client keeps these only as "
+        "KEEP_COMPAT re-exports."
+    )
+
+
 @pytest.mark.parametrize("src_file", _imdf_python_files(), ids=lambda p: p.name)
 def test_imdf_does_not_import_from_features_domain(src_file: Path) -> None:
     """IMDF modules must not import from app.core.features.* (ADR-0023).
@@ -255,6 +382,49 @@ def test_arcgis_connection_info_backward_compat_via_arcgis_client():
         "app.shared.connections.arcgis_connection.ArcGISConnectionInfo. "
         "The re-export in arcgis_client.py is missing or points to a copy."
     )
+
+
+def test_esri_conversion_canonical_imports_from_shared_connections():
+    """Provider-neutral ESRI conversion helpers are canonical in shared."""
+    from app.shared.connections.esri_json import EsriJsonConverter
+    from app.shared.connections.esri_types import EsriTypeMapper
+
+    assert callable(EsriJsonConverter.features_to_rows)
+    assert callable(EsriTypeMapper.map_field_type)
+
+
+def test_esri_conversion_backward_compat_via_arcgis_client():
+    """arcgis_client.py keeps KEEP_COMPAT re-exports for legacy importers."""
+    from app.core.features.arcgis_client import EsriJsonConverter as JsonFromClient
+    from app.core.features.arcgis_client import EsriTypeMapper as TypeFromClient
+    from app.shared.connections.esri_json import EsriJsonConverter as JsonFromShared
+    from app.shared.connections.esri_types import EsriTypeMapper as TypeFromShared
+
+    assert JsonFromClient is JsonFromShared
+    assert TypeFromClient is TypeFromShared
+
+
+def test_arcgis_connection_resolver_uses_neutral_provider_factory():
+    """Resolver must not import the legacy feature-owned provider factory."""
+    resolver_path = (
+        _BACKEND_DIR / "app" / "core" / "connections" / "arcgis_connection_resolver.py"
+    )
+
+    imports = _imports_in_file(resolver_path)
+
+    assert "app.core.features.arcgis_client" not in imports, (
+        "arcgis_connection_resolver must not import provider factory from "
+        "app.core.features.arcgis_client. Use the neutral connection factory."
+    )
+    assert "app.core.connections.arcgis_provider_factory" in imports
+
+
+def test_arcgis_provider_factory_is_neutral_canonical_import():
+    """New provider construction belongs under app.core.connections."""
+    from app.core.connections.arcgis_provider_factory import create_arcgis_provider
+    from app.shared.connections.arcgis_provider import ArcGISProviderProtocol
+
+    assert isinstance(create_arcgis_provider(), ArcGISProviderProtocol)
 
 
 def test_arcgis_client_satisfies_provider_protocol():

@@ -11,7 +11,7 @@ from typing import Any, List, Tuple
 
 import pytest
 
-from app.core.features.arcgis_client import EsriTypeMapper
+from app.shared.connections.esri_types import EsriTypeMapper
 
 
 pytestmark = [pytest.mark.unit, pytest.mark.contract]
@@ -238,6 +238,14 @@ def test_validator_symbols_remain_module_level():
     from app.core.imdf import validator
     assert callable(validator._coarse_type_from_esri)
     assert callable(validator._coarse_type_from_dtype)
+
+
+def test_esri_type_mapper_backward_compat_via_arcgis_client():
+    """arcgis_client.py keeps a KEEP_COMPAT re-export for legacy imports."""
+    from app.core.features.arcgis_client import EsriTypeMapper as FromClient
+    from app.shared.connections.esri_types import EsriTypeMapper as FromShared
+
+    assert FromClient is FromShared
 
 
 # 6. Source-bound: il validator delega senza re-implementare il match

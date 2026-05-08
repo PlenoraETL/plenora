@@ -37,10 +37,6 @@ def test_upload_imdf_layers_uses_provider_layer_renderer(monkeypatch: pytest.Mon
         lambda connection_id: (conn, client),
     )
     monkeypatch.setattr(
-        "app.core.features.arcgis_connection_adapter.resolve_arcgis_connection",
-        lambda connection_id: (conn, client),
-    )
-    monkeypatch.setattr(
         arcgis_uploader,
         "_delete_existing_service",
         lambda client, conn, fs_name, folder_id: (0, 0),

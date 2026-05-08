@@ -58,9 +58,7 @@ def _query_oid_by_key(
 
     Returns (oid_by_key, errors).
 
-    KEEP_COMPAT: thin IMDF wrapper over
-    `ArcGISClient.query_oid_by_key` for legacy IMDF publish call sites.
-    Do not add provider/REST logic here; extend the canonical provider
-    method instead.
+    KEEP_COMPAT: thin IMDF wrapper for legacy publish call sites. New
+    ArcGIS mechanics belong in the canonical provider method.
     """
     return client.query_oid_by_key(conn, layer_url, match_col, values)

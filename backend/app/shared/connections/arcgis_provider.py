@@ -33,6 +33,10 @@ class ArcGISDiscoveryProviderProtocol(Protocol):
         """List Feature Services available to the connection."""
         ...
 
+    def is_arcgis_online(self, conn: ArcGISConnectionInfo) -> bool:
+        """Return whether the connection targets ArcGIS Online."""
+        ...
+
     def list_folders(self, conn: ArcGISConnectionInfo) -> List[dict]:
         """List folders available to the connection."""
         ...

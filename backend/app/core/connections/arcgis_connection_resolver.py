@@ -11,7 +11,7 @@ from __future__ import annotations
 from typing import Optional, Tuple
 
 import app.db.pg_connection as db
-from app.core.features.arcgis_client import create_client
+from app.core.connections.arcgis_provider_factory import create_arcgis_provider
 from app.shared.connections.arcgis_connection import ArcGISConnectionInfo
 from app.shared.connections.arcgis_provider import ArcGISProviderProtocol
 from app.shared.crypto import decrypt as _decrypt
@@ -47,5 +47,5 @@ def resolve_arcgis_connection(
         return None
 
     conn_info = _row_to_connection_info(dict(row))
-    client: ArcGISProviderProtocol = create_client()
+    client: ArcGISProviderProtocol = create_arcgis_provider()
     return conn_info, client

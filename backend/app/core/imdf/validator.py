@@ -20,16 +20,12 @@ def _count_features_where_via_post(
     layer_url: str,
     where: str,
 ) -> int:
-    """POST /query diretto con `returnCountOnly=true`. Bypassa la pipeline
-    standard di `client.query_features` che fa GET (sensibile a URL length,
-    content-type negotiation proxy, ecc.) e al JSON decode.
+    """Count provider wrapper for pre-publish validation.
 
     Ritorna il count. Solleva `RuntimeError` su errore — il chiamante
     gestisce il fallback.
 
-    BE-IMDF-002: implementazione consolidata in
-    `app.core.features.arcgis_client.ArcGISClient.count_features_where`.
-    Questo modulo-level symbol resta come thin wrapper per:
+    KEEP_COMPAT: this module-level symbol remains as a thin wrapper for:
     1. preservare il path di monkeypatch usato dai test
        (`tests2/imdf/unit/test_validate_publish_issue_categories.py`
        patcha `validator_mod._count_features_where_via_post`);
@@ -42,7 +38,7 @@ def _count_features_where_via_post(
 # confronto schema. Esri usa nomi come esriFieldTypeString/Integer/Double
 # Il GeoDataFrame ha dtype numpy. Normalizziamo entrambi a un set ridotto
 # BE-IMDF-003: implementazione consolidata in
-# `app.core.features.arcgis_client.EsriTypeMapper.map_esri_field_to_schema_bucket`
+# `app.shared.connections.esri_types.EsriTypeMapper.map_esri_field_to_schema_bucket`
 # / `map_pandas_dtype_to_schema_bucket`. Questi due simboli modulo-level
 # restano come thin wrapper per preservare il path di monkeypatch dei
 # test (es. `tests2/imdf/unit/test_validate_publish_*` che possono

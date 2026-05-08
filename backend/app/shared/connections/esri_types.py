@@ -134,3 +134,6 @@ class EsriTypeMapper:
         if "geometry" in s:
             return "geometry"
         return "other"
+
+
+__all__ = ["EsriTypeMapper"]

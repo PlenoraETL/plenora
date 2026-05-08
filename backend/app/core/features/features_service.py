@@ -27,12 +27,11 @@ from app.core.features.models import (
 from app.core.features.arcgis_client import (
     ArcGISClient,
     ArcGISConnectionInfo,
-    EsriJsonConverter,
-    create_client,
 )
+from app.core.connections.arcgis_provider_factory import create_arcgis_provider
+from app.core.features.arcgis_feature_operations import ArcGISFeatureOperations
 from app.core.features.arcgis_writer_boundary import (
     ArcGISColumnMappingsInput,
-    normalize_arcgis_column_mappings,
 )
 
 logger = get_logger(__name__)
@@ -245,7 +244,8 @@ class FeaturesService:
         arcgis_dir: Path = None,
         results_dir: Path = None,
     ) -> None:
-        self._client = client or create_client()
+        self._client = client or create_arcgis_provider()
+        self._operations = ArcGISFeatureOperations(self._client)
         self._save = save_function or self._salvataggio_default
         self._arcgis_dir = arcgis_dir or settings.ARCGIS_CONNECTIONS_DIR
         self._results_dir = results_dir or Path(settings.RESULTS_DIR)
@@ -301,7 +301,7 @@ class FeaturesService:
             )
         
         conn_info = self._to_connection_info(connection)
-        result = self._client.test_connection(conn_info)
+        result = self._operations.test_connection(conn_info)
         
         return ArcGISTestResult(
             success=result["success"],
@@ -330,7 +330,7 @@ class FeaturesService:
             raise ValueError(f"Connessione '{connection_id}' non trovata")
         
         conn_info = self._to_connection_info(connection)
-        return self._client.list_services(conn_info)
+        return self._operations.list_services(conn_info)
     
     def list_folders(self, connection_id: str) -> List[dict]:
         """
@@ -343,7 +343,7 @@ class FeaturesService:
         if not connection:
             raise ValueError(f"Connessione '{connection_id}' non trovata")
         conn_info = self._to_connection_info(connection)
-        return self._client.list_folders(conn_info)
+        return self._operations.list_folders(conn_info)
 
     def search_services(self, connection_id: str, query: str = "", scope: str = "user") -> List[dict]:
         """
@@ -366,12 +366,7 @@ class FeaturesService:
         
         conn_info = self._to_connection_info(connection)
         
-        # Per Online usa la Search API
-        if self._client._is_arcgis_online(conn_info):
-            return self._client.search_services_online(conn_info, query=query, scope=scope)
-        
-        # Per Server/Enterprise, browse normale
-        return self._client.list_services(conn_info)
+        return self._operations.search_services(conn_info, query=query, scope=scope)
     
     def browse_layers(self, connection_id: str, service_url: str) -> List[dict]:
         """
@@ -391,7 +386,7 @@ class FeaturesService:
             raise ValueError(f"Connessione '{connection_id}' non trovata")
         
         conn_info = self._to_connection_info(connection)
-        return self._client.list_layers(conn_info, service_url)
+        return self._operations.list_layers(conn_info, service_url)
     
     def get_layer_schema(self, connection_id: str, layer_url: str) -> dict:
         """
@@ -412,7 +407,7 @@ class FeaturesService:
             raise ValueError(f"Connessione '{connection_id}' non trovata")
         
         conn_info = self._to_connection_info(connection)
-        return self._client.get_layer_schema(conn_info, layer_url)
+        return self._operations.get_layer_schema(conn_info, layer_url)
     
     # QUERY (lettura dati
     
@@ -450,8 +445,9 @@ class FeaturesService:
         
         conn_info = self._to_connection_info(connection)
         
-        return self._client.query_features(
-            conn_info, layer_url,
+        return self._operations.query_features(
+            conn_info,
+            layer_url,
             where=where,
             out_fields=out_fields,
             return_geometry=return_geometry,
@@ -608,30 +604,12 @@ class FeaturesService:
         Returns:
             Stringa CRS (es. "EPSG:32632"), fallback a "EPSG:4326"
         """
-        # Se l'utente ha specificato un output SR, usa quello
-        if out_sr:
-            return f"EPSG:{out_sr}"
-        
-        try:
-            connection = self.get_connection(connection_id)
-            if not connection:
-                return "EPSG:4326"
-            
-            conn_info = self._to_connection_info(connection)
-            schema = self._client.get_layer_schema(conn_info, layer_url)
-            
-            spatial_ref = schema.get("spatial_reference", {})
-            # ArcGIS usa "wkid" o "latestWkid"
-            wkid = spatial_ref.get("latestWkid") or spatial_ref.get("wkid")
-            
-            if wkid:
-                logger.info(f"CRS layer: EPSG:{wkid}")
-                return f"EPSG:{wkid}"
-            
-        except Exception as e:
-            logger.warning(f"Impossibile determinare CRS del layer: {e}")
-        
-        return "EPSG:4326"
+        connection = self.get_connection(connection_id)
+        if not connection:
+            return "EPSG:4326"
+
+        conn_info = self._to_connection_info(connection)
+        return self._operations.get_layer_crs(conn_info, layer_url, out_sr)
     
     @staticmethod
     def _salvataggio_default(
@@ -701,16 +679,12 @@ class FeaturesService:
         
         # DELETE legacy via OBJECTID/where non richiede file input.
         if operation == "delete" and not match_column:
-            result = self._client.delete_features(
-                conn_info, layer_url, 
-                object_ids=object_ids, where=where
+            return self._operations.delete_features(
+                conn_info,
+                layer_url,
+                object_ids=object_ids,
+                where=where,
             )
-            return {
-                "success": result["success"],
-                "message": f"Eliminati {result['deleted_count']} features",
-                "count": result["deleted_count"],
-                "errors": result.get("errors", []),
-            }
         
         # ADD / UPDATE / UPSERT / DELETE-by-match: leggi file e converti.
         if not input_path:
@@ -824,24 +798,15 @@ class FeaturesService:
         """Crea un nuovo Feature Service da un DataFrame (senza file intermedio)."""
         conn_info = self._resolve_write_connection(connection_id)
 
-        if source_srid and hasattr(df, 'set_crs') and (getattr(df, 'crs', None) is None):
-            df = df.set_crs(epsg=source_srid)
-            logger.info(f"CRS impostato da source_srid: EPSG:{source_srid}")
-
-        mapped = normalize_arcgis_column_mappings(column_mappings).apply(
-            df,
-            geometry_column=geometry_column,
-        )
-        df = mapped.df
-        geometry_column = mapped.geometry_column
-
-        return self._client.create_service(
+        return self._operations.create_service_from_df(
             conn_info,
             service_name=service_name,
             layer_name=layer_name,
             df=df,
             geometry_column=geometry_column,
+            source_srid=source_srid,
             folder_id=folder_id,
+            column_mappings=column_mappings,
         )
 
     def _resolve_write_connection(self, connection_id: str) -> ArcGISConnectionInfo:
@@ -862,129 +827,23 @@ class FeaturesService:
         match_column: str,
         column_mappings: ArcGISColumnMappingsInput,
     ) -> dict:
-        """Shared provider write path for file-backed and DataFrame-backed callers."""
-        if source_srid and hasattr(df, 'set_crs') and getattr(df, 'crs', None) is None:
-            df = df.set_crs(epsg=source_srid)
-            logger.info(f"CRS impostato da source_srid: EPSG:{source_srid}")
-
-        mapped = normalize_arcgis_column_mappings(column_mappings).apply(
-            df,
+        """KEEP_COMPAT: delegate shared write orchestration to provider operations."""
+        return self._operations.write_features_df_core(
+            conn_info=conn_info,
+            layer_url=layer_url,
+            operation=operation,
+            df=df,
             geometry_column=geometry_column,
-            required_match_column=match_column if operation in ("update", "upsert", "delete") else "",
+            source_srid=source_srid,
+            batch_size=batch_size,
+            match_column=match_column,
+            column_mappings=column_mappings,
         )
-        df = mapped.df
-        geometry_column = mapped.geometry_column
-
-        features = self._client.dataframe_to_esri_features(
-            df, geometry_column=geometry_column, operation=operation
-        )
-
-        if not features:
-            return {
-                "success": False,
-                "message": "Nessuna feature da caricare",
-                "count": 0,
-                "errors": [],
-            }
-
-        if operation == "add":
-            result = self._client.add_features(
-                conn_info, layer_url, features, batch_size=batch_size
-            )
-            return self._write_result("Aggiunte", result, "added_count", len(features))
-
-        if operation == "update":
-            if match_column:
-                features = self._resolve_objectids_for_update(
-                    conn_info, layer_url, features, match_column
-                )
-                if not features:
-                    return {
-                        "success": False,
-                        "message": f"Nessuna feature matchata per colonna '{match_column}'",
-                        "count": 0,
-                        "errors": [],
-                    }
-            result = self._client.update_features(
-                conn_info, layer_url, features, batch_size=batch_size
-            )
-            return self._write_result("Aggiornate", result, "updated_count", len(features))
-
-        if operation == "upsert":
-            if not match_column:
-                raise ValueError("Colonna match obbligatoria per upsert")
-            to_update, to_add = self._split_upsert_features(
-                conn_info, layer_url, features, match_column
-            )
-            total_updated = 0
-            total_added = 0
-            all_errors: list[dict] = []
-
-            if to_update:
-                res_upd = self._client.update_features(
-                    conn_info, layer_url, to_update, batch_size=batch_size
-                )
-                total_updated = res_upd.get("updated_count", 0)
-                all_errors.extend(res_upd.get("errors", []))
-
-            if to_add:
-                res_add = self._client.add_features(
-                    conn_info, layer_url, to_add, batch_size=batch_size
-                )
-                total_added = res_add.get("added_count", 0)
-                all_errors.extend(res_add.get("errors", []))
-
-            total = total_updated + total_added
-            return {
-                "success": total > 0,
-                "message": (
-                    f"Upsert: {total_updated} aggiornate, {total_added} "
-                    f"inserite su {len(features)} totali"
-                ),
-                "count": total,
-                "feature_count": total,
-                "updated": total_updated,
-                "added": total_added,
-                "errors": all_errors,
-            }
-
-        if operation == "delete":
-            if not match_column:
-                raise ValueError("Colonna match obbligatoria per delete")
-            oid_features = self._resolve_objectids_for_update(
-                conn_info, layer_url, features, match_column
-            )
-            if not oid_features:
-                return {
-                    "success": False,
-                    "message": f"Nessuna feature trovata per colonna '{match_column}'",
-                    "count": 0,
-                    "errors": [],
-                }
-            object_ids = [feature["attributes"]["OBJECTID"] for feature in oid_features]
-            result = self._client.delete_features(
-                conn_info, layer_url, object_ids=object_ids
-            )
-            return {
-                "success": result["success"],
-                "message": f"Eliminate {result['deleted_count']} features",
-                "count": result["deleted_count"],
-                "feature_count": result["deleted_count"],
-                "errors": result.get("errors", []),
-            }
-
-        raise ValueError(f"Operazione non supportata: {operation}")
 
     @staticmethod
     def _write_result(action: str, result: dict, count_key: str, total: int) -> dict:
-        count = result.get(count_key, 0)
-        return {
-            "success": result["success"],
-            "message": f"{action} {count} features su {total} totali",
-            "count": count,
-            "feature_count": count,
-            "errors": result.get("errors", []),
-        }
+        """KEEP_COMPAT: delegate provider write result shape."""
+        return ArcGISFeatureOperations.write_result(action, result, count_key, total)
 
     def _split_upsert_features(
         self,
@@ -993,43 +852,13 @@ class FeaturesService:
         features: List[dict],
         match_column: str,
     ) -> Tuple[List[dict], List[dict]]:
-        """
-        Separa features in (to_update, to_add) per operazione upsert.
-
-        - to_update: features con match nel layer (con OBJECTID assegnato)
-        - to_add: features senza match nel layer (nuove)
-        """
-        match_values = []
-        for feature in features:
-            match_value = feature.get("attributes", {}).get(match_column)
-            if match_value is not None:
-                match_values.append(match_value)
-
-        if not match_values:
-            return [], features
-
-        oid_map, query_errors = self._client.query_oid_by_key(
-            conn_info, layer_url, match_column, match_values
+        """KEEP_COMPAT: delegate upsert split to provider operations."""
+        return self._operations.split_upsert_features(
+            conn_info,
+            layer_url,
+            features,
+            match_column,
         )
-        for error in query_errors:
-            logger.error(f"Errore query OBJECTID per upsert: {error}")
-
-        to_update = []
-        to_add = []
-        for feature in features:
-            match_val = feature.get("attributes", {}).get(match_column)
-            oid = oid_map.get(str(match_val))
-            if oid is not None:
-                feature["attributes"]["OBJECTID"] = oid
-                to_update.append(feature)
-            else:
-                # Rimuovi OBJECTID se presente (per add
-                feature["attributes"].pop("OBJECTID", None)
-                feature["attributes"].pop("objectid", None)
-                to_add.append(feature)
-
-        logger.info(f"Upsert split: {len(to_update)} da aggiornare, {len(to_add)} da inserire")
-        return to_update, to_add
 
     def _resolve_objectids_for_update(
         self,
@@ -1048,41 +877,12 @@ class FeaturesService:
 
         Features senza match vengono scartate (log warning).
         """
-        # Raccogli valori match dal payload
-        match_values = []
-        for feature in features:
-            match_value = feature.get("attributes", {}).get(match_column)
-            if match_value is not None:
-                match_values.append(match_value)
-
-        if not match_values:
-            logger.warning(f"Nessun valore trovato per colonna match '{match_column}'")
-            return []
-
-        oid_map, query_errors = self._client.query_oid_by_key(
-            conn_info, layer_url, match_column, match_values
+        return self._operations.resolve_objectids_for_update(
+            conn_info,
+            layer_url,
+            features,
+            match_column,
         )
-        for error in query_errors:
-            logger.error(f"Errore query OBJECTID per match: {error}")
-
-        logger.info(f"Risolti {len(oid_map)} OBJECTID su {len(match_values)} valori match")
-
-        # Associa OBJECTID alle features
-        resolved = []
-        skipped = 0
-        for feature in features:
-            match_val = feature.get("attributes", {}).get(match_column)
-            oid = oid_map.get(str(match_val))
-            if oid is not None:
-                feature["attributes"]["OBJECTID"] = oid
-                resolved.append(feature)
-            else:
-                skipped += 1
-
-        if skipped:
-            logger.warning(f"Scartate {skipped} features senza match OBJECTID")
-
-        return resolved
 
     @staticmethod
     def _load_dataframe(file_path: str) -> pd.DataFrame:
