@@ -1,5 +1,5 @@
 """
-Contract test BE-CONFIG-001D — feature flags + tuning misc.
+Contract test BE-CONFIG-001D — tuning misc.
 
 Coperti:
 """
@@ -25,7 +25,6 @@ _BACKEND_APP = Path(__file__).resolve().parent.parent.parent / "app"
     "key, expected_type, expected_default",
     [
         ("MSSQL_FAST_EXECUTEMANY", str, "on"),
-        ("ENABLE_ASYNC_ENRICHMENT", bool, False),
         ("ENRICHMENT_POOL_SIZE", int, 50),
         ("TICKET_ATTACHMENT_MAX_BYTES", int, 10 * 1024 * 1024),
         ("DB_SCHEMA_WARN_GB", float, 1.0),
@@ -49,10 +48,6 @@ def test_default_present_and_typed(key, expected_type, expected_default):
     "key, env_value, expected_type, expected",
     [
         ("MSSQL_FAST_EXECUTEMANY", "off", str, "off"),
-        ("ENABLE_ASYNC_ENRICHMENT", "true", bool, True),
-        ("ENABLE_ASYNC_ENRICHMENT", "1", bool, True),
-        ("ENABLE_ASYNC_ENRICHMENT", "yes", bool, True),
-        ("ENABLE_ASYNC_ENRICHMENT", "false", bool, False),
         ("ENRICHMENT_POOL_SIZE", "42", int, 42),
         ("TICKET_ATTACHMENT_MAX_BYTES", "99", int, 99),
         ("DB_SCHEMA_WARN_GB", "2.5", float, 2.5),
@@ -74,27 +69,15 @@ def _read(path: Path) -> str:
     return path.read_text(encoding="utf-8")
 
 
-def test_query_executor_reads_mssql_fast_via_settings():
-    src = _read(_BACKEND_APP / "db" / "query_executor.py")
+def test_query_engine_factory_reads_mssql_fast_via_settings():
+    src = _read(_BACKEND_APP / "db" / "query_engines.py")
     assert "_settings.get(\"MSSQL_FAST_EXECUTEMANY\")" in src
     assert "_os.getenv(\"MSSQL_FAST_EXECUTEMANY" not in src
     assert "os.getenv(\"MSSQL_FAST_EXECUTEMANY" not in src
 
 
-def test_enrichment_service_reads_async_flag_via_settings():
-    src = _read(_BACKEND_APP / "core" / "arricchisci" / "enrichment_service.py")
-    assert "_settings.get(\"ENABLE_ASYNC_ENRICHMENT\")" in src
-    assert "os.environ.get(\"ENABLE_ASYNC_ENRICHMENT" not in src
-
-
 def test_async_http_reads_pool_size_via_settings():
     src = _read(_BACKEND_APP / "shared" / "async_http.py")
-    assert "_settings.get(\"ENRICHMENT_POOL_SIZE\")" in src
-    assert "os.environ.get(\"ENRICHMENT_POOL_SIZE" not in src
-
-
-def test_enrichment_execution_engines_reads_pool_size_via_settings():
-    src = _read(_BACKEND_APP / "core" / "arricchisci" / "enrichment_execution_engines.py")
     assert "_settings.get(\"ENRICHMENT_POOL_SIZE\")" in src
     assert "os.environ.get(\"ENRICHMENT_POOL_SIZE" not in src
 

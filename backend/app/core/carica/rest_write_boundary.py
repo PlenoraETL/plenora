@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, TypedDict
+from typing import TYPE_CHECKING
 
 from app.core.features.rest_sink import (
     RestFeatureSink,
@@ -23,11 +23,20 @@ if TYPE_CHECKING:
 logger = get_logger(__name__)
 
 
-class RestBatchSummary(TypedDict):
+@dataclass(frozen=True)
+class RestBatchSummary:
     success: bool
     status_code: int | None
     sent_count: int
     error: str
+
+    def to_task_result(self) -> dict[str, object]:
+        return {
+            "success": self.success,
+            "status_code": self.status_code,
+            "sent_count": self.sent_count,
+            "error": self.error,
+        }
 
 
 @dataclass(frozen=True)
@@ -52,7 +61,7 @@ class CaricaRestWriteOutcome:
             "rows_failed": self.rows_failed,
             "total_rows": self.total_rows,
             "message": self.message,
-            "batches": [dict(batch) for batch in self.batches],
+            "batches": [batch.to_task_result() for batch in self.batches],
         }
         if not self.success:
             result["error"] = self.error or "carica_rest_write_failed"
@@ -139,12 +148,12 @@ def _batch_summaries(
     batches: tuple[RestSinkBatchResult, ...],
 ) -> tuple[RestBatchSummary, ...]:
     return tuple(
-        {
-            "success": batch.success,
-            "status_code": batch.status_code,
-            "sent_count": batch.sent_count,
-            "error": batch.error,
-        }
+        RestBatchSummary(
+            success=batch.success,
+            status_code=batch.status_code,
+            sent_count=batch.sent_count,
+            error=batch.error,
+        )
         for batch in batches
     )
 

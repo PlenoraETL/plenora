@@ -134,13 +134,9 @@ class Settings:
         # caller fa il match insensitive. Default `"on"` = abilita
         # `fast_executemany` per pyodbc/MSSQL
         "MSSQL_FAST_EXECUTEMANY": "on",
-        # `ENABLE_ASYNC_ENRICHMENT` kill-switch routing async/sync
-        # enrichment. Default `False` (sync legacy); ops abilita in
-        # prod con `true`/`1`/`yes`
-        "ENABLE_ASYNC_ENRICHMENT": False,
         # OPERATIONAL_TUNING
-        # `ENRICHMENT_POOL_SIZE` semaforo concorrenza async + httpx
-        # pool size. Default 50, clamp [5, 200] applicato dai consumer
+        # `ENRICHMENT_POOL_SIZE` httpx async pool size. Default 50,
+        # clamp [5, 200] applicato dai consumer
         "ENRICHMENT_POOL_SIZE": 50,
         # `TICKET_ATTACHMENT_MAX_BYTES` cap upload attachments tickets
         # Default 10 MB. Sotto questa soglia il blob va in DB BYTEA

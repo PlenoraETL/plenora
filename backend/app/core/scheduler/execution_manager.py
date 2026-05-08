@@ -21,6 +21,7 @@ from app.core.scheduler.schedule_service import ScheduleService
 from app.core.scheduler.log_service import ScheduleLogService
 from app.core.scheduler.concurrency_manager import ConcurrencyManager
 from app.core.scheduler.policy_engine import PolicyEngine
+from app.core.scheduler.scheduler_preflight import pre_check_destination_connection
 
 
 class ExecutionManager:
@@ -637,28 +638,10 @@ class ExecutionManager:
         Verifica che il database di destinazione sia raggiungibile
         PRIMA di ricalcolare la pipeline.
         """
-        if not config.destination:
-            return True
-        
-        try:
-            connection_service = self._get_connection_service()
-            connection = connection_service.get_connection(config.destination.connection_id)
-            if not connection:
-                logger.error(f"[GESTITO] Connessione {config.destination.connection_id} non trovata")
-                return False
-            
-            # Test connessione
-            result = connection_service.test_connection(config.destination.connection_id)
-            if result and result.success:
-                logger.info(f"Pre-check OK: {config.destination.connection_id}")
-                return True
-            else:
-                logger.error(f"[GESTITO] Pre-check fallito: {config.destination.connection_id}")
-                return False
-                
-        except Exception as e:
-            logger.error(f"[CRASH] Errore pre-check: {e}", exc_info=True)
-            return False
+        return pre_check_destination_connection(
+            config,
+            self._get_connection_service(),
+        )
     
     # ESECUZIONE CARICA
     

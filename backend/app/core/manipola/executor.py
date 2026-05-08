@@ -196,25 +196,14 @@ class ManipolaExecutor:
         self,
         project_service: object,
         pipeline_dispatcher: Optional[PipelineDispatcherProtocol] = None,
-        *,
-        orchestrator_callback: Optional[PipelineDispatcherProtocol] = None,
     ) -> None:
         self.project_service = project_service
-        self.pipeline_dispatcher = pipeline_dispatcher or orchestrator_callback
-        # Compatibility attribute for older tests/callers. Runtime code uses
-        # ``pipeline_dispatcher`` so the recursive boundary has a named
-        # protocol instead of an anonymous callback.
-        self.orchestrator_callback = self.pipeline_dispatcher
+        self.pipeline_dispatcher = pipeline_dispatcher
         self.results_base_dir = settings.RESULTS_DIR
 
     def set_pipeline_dispatcher(self, dispatcher: PipelineDispatcherProtocol) -> None:
         """Set the dispatcher used for recursive upstream project execution."""
         self.pipeline_dispatcher = dispatcher
-        self.orchestrator_callback = dispatcher
-
-    def set_orchestrator_callback(self, callback: PipelineDispatcherProtocol) -> None:
-        """Compatibility alias for older callers."""
-        self.set_pipeline_dispatcher(callback)
 
     # ESECUZIONE COMPLETA
 

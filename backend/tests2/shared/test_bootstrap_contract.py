@@ -56,6 +56,11 @@ def _real_teardown():
     return bootstrap_module.teardown
 
 
+def _patch_settings(monkeypatch, fake_settings) -> None:
+    config_module = importlib.import_module("app.config")
+    monkeypatch.setattr(config_module, "settings", fake_settings)
+
+
 def test_bootstrap_invokes_four_steps_in_canonical_order(monkeypatch):
     """validate_startup → validate_storage_config → init_all_dbs →
     _repair_psycopg2_ssl_env. Drift = the comment-encoded contract
@@ -78,7 +83,7 @@ def test_bootstrap_invokes_four_steps_in_canonical_order(monkeypatch):
     fake_settings = type(
         "S", (), {"validate_startup": staticmethod(_record_settings_validate)}
     )
-    monkeypatch.setattr("app.config.settings", fake_settings)
+    _patch_settings(monkeypatch, fake_settings)
     monkeypatch.setattr(
         "app.shared.cloud_backends.validate_storage_config",
         _record_storage_validate,
@@ -103,8 +108,8 @@ def test_bootstrap_invokes_four_steps_in_canonical_order(monkeypatch):
 def test_bootstrap_signature_returns_none(monkeypatch):
     """Contract: `bootstrap() -> None`. No return value, no
     parameters. Caller must not depend on a return."""
-    monkeypatch.setattr(
-        "app.config.settings",
+    _patch_settings(
+        monkeypatch,
         type("S", (), {"validate_startup": staticmethod(lambda: None)}),
     )
     monkeypatch.setattr(
@@ -150,8 +155,8 @@ def test_ssl_env_cleanup_runs_after_init_all_dbs(monkeypatch):
             os.environ.pop(name, None)
         timeline.append("ssl_repair:exit")
 
-    monkeypatch.setattr(
-        "app.config.settings",
+    _patch_settings(
+        monkeypatch,
         type("S", (), {"validate_startup": staticmethod(lambda: None)}),
     )
     monkeypatch.setattr(
@@ -238,7 +243,7 @@ def test_bootstrap_is_idempotent(monkeypatch):
     fake_settings = type(
         "S", (), {"validate_startup": staticmethod(_bump("validate_startup"))}
     )
-    monkeypatch.setattr("app.config.settings", fake_settings)
+    _patch_settings(monkeypatch, fake_settings)
     monkeypatch.setattr(
         "app.shared.cloud_backends.validate_storage_config",
         _bump("validate_storage_config"),
@@ -273,8 +278,8 @@ def test_bootstrap_propagates_validate_startup_systemexit(monkeypatch):
     def _exit_one():
         raise SystemExit(1)
 
-    monkeypatch.setattr(
-        "app.config.settings",
+    _patch_settings(
+        monkeypatch,
         type("S", (), {"validate_startup": staticmethod(_exit_one)}),
     )
     # Following steps would raise too; we want to assert they don't
@@ -305,8 +310,8 @@ def test_bootstrap_propagates_storage_config_error(monkeypatch):
     def _bad_storage():
         raise StorageConfigError("bad combo")
 
-    monkeypatch.setattr(
-        "app.config.settings",
+    _patch_settings(
+        monkeypatch,
         type("S", (), {"validate_startup": staticmethod(lambda: None)}),
     )
     monkeypatch.setattr(
@@ -339,8 +344,8 @@ def test_bootstrap_propagates_init_all_dbs_error(monkeypatch):
     def _bad_init():
         raise _FakeDBError("connection refused")
 
-    monkeypatch.setattr(
-        "app.config.settings",
+    _patch_settings(
+        monkeypatch,
         type("S", (), {"validate_startup": staticmethod(lambda: None)}),
     )
     monkeypatch.setattr(

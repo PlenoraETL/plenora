@@ -146,19 +146,20 @@ def test_store_lock_is_a_threading_lock(fresh_store):
     rl._STORE.lock.release()
 
 
-# 5. KEEP_COMPAT alias in auth.py
+# 5. Facade strangler locks for auth.py
 
 
-def test_auth_module_aliases_point_to_extracted_store(fresh_store):
-    """`auth_mod._rate_lock` e `auth_mod._failed_attempts` devono
-    essere lo *stesso oggetto* del nuovo store, cosi' i test esistenti
-    che fanno `auth_mod._failed_attempts.clear()` svuotano realmente
-    il bucket usato dal fallback."""
+def test_auth_module_no_longer_exports_legacy_store_aliases(fresh_store):
+    """The legacy auth-facade store aliases were test-only coupling.
+    Tests and internals reset the canonical store directly via
+    `app.core.auth.rate_limit_fallback._STORE`."""
     from app.core.auth import auth as auth_mod
-    from app.core.auth import rate_limit_fallback as rl
 
-    assert auth_mod._rate_lock is rl._STORE.lock
-    assert auth_mod._failed_attempts is rl._STORE.failed_attempts
+    for name in ("_rate_lock", "_failed_attempts"):
+        assert not hasattr(auth_mod, name), (
+            f"app.core.auth.auth.{name} was removed from the facade. "
+            "Use app.core.auth.rate_limit_fallback._STORE instead."
+        )
 
 
 def test_auth_module_record_clear_aliases_are_module_functions():

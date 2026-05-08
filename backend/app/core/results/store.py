@@ -54,6 +54,36 @@ def save_result_row(
     )
 
 
+def save_result(
+    *,
+    result_id: str,
+    project_id: str,
+    group_id: str,
+    filename: str,
+    fmt: str,
+    data: Optional[bytes] = None,
+    rows_count: Optional[int] = None,
+    created_by: Optional[str] = None,
+    storage_key: Optional[str] = None,
+    size_bytes: Optional[int] = None,
+) -> Optional[dict[str, object]]:
+    """Persist result metadata through the results domain boundary."""
+    from app.core.results import db as results_db
+
+    return results_db.save_result(
+        result_id=result_id,
+        project_id=project_id,
+        group_id=group_id,
+        filename=filename,
+        fmt=fmt,
+        data=data,
+        rows_count=rows_count,
+        created_by=created_by,
+        storage_key=storage_key,
+        size_bytes=size_bytes,
+    )
+
+
 def list_result_rows(project_id: str) -> list[ResultMetadataRow]:
     """Return result metadata rows for a project, newest first."""
     from app.core.results import db as results_db
@@ -81,6 +111,13 @@ def get_latest_result(
     return results_db.get_latest_result(project_id, group_id=group_id)
 
 
+def list_results(project_id: str) -> list[dict[str, object]]:
+    """Return result metadata rows for a project as legacy dicts."""
+    from app.core.results import db as results_db
+
+    return results_db.list_results(project_id)
+
+
 def get_result_data(result_id: str, group_id: Optional[str] = None) -> Optional[bytes]:
     """Return result blob bytes for a result id."""
     from app.core.results.blob import get_result_data as _get_result_data
@@ -96,6 +133,8 @@ __all__ = [
     "get_latest_result_row",
     "get_result_data",
     "list_result_rows",
+    "list_results",
     "resolve_group_id_for_result",
+    "save_result",
     "save_result_row",
 ]

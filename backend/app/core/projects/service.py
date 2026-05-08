@@ -23,8 +23,7 @@ from app.shared.models import (
 from app.core.auth import db as _groups
 from app.core.projects import db as project_db
 from app.db import pg_connection
-from app.core.results import blob as results_blob
-from app.core.results import db as results_db
+from app.core.results import store as results_store
 from app.core.projects.domain import build_project_id, resolve_project_group_id
 from app.core.projects.exceptions import (
     CanvasCorruptedError,
@@ -627,7 +626,7 @@ class ProjectService:
         """Salva file risultato come blob nel DB. Ritorna result_id."""
         result_id = str(uuid.uuid4())
         group_id = resolve_project_group_id(group_id, self.DEFAULT_GROUP)
-        results_db.save_result(
+        results_store.save_result(
             result_id=result_id,
             project_id=project_id,
             group_id=group_id,
@@ -641,12 +640,12 @@ class ProjectService:
 
     def get_latest_result(self, project_id: str) -> Optional[dict]:
         """Recupera il risultato più recente (senza blob)."""
-        return results_db.get_latest_result(project_id)
+        return results_store.get_latest_result(project_id)
 
     def get_result_data(self, result_id: str) -> Optional[bytes]:
         """Recupera il blob del risultato per download."""
-        return results_blob.get_result_data(result_id)
+        return results_store.get_result_data(result_id)
 
     def list_results(self, project_id: str) -> List[dict]:
         """Lista risultati del progetto (senza blob)."""
-        return results_db.list_results(project_id)
+        return results_store.list_results(project_id)

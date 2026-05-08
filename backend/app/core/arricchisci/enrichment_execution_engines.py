@@ -1,12 +1,11 @@
 """
-Mixin EXECUTION_ENGINES — runtime engine cuore di `EnrichmentExecutor`:
+Mixin EXECUTION_ENGINES — runtime engine cuore di `EnrichmentExecutor`.
 
-3 path di esecuzione (parallel sync via ThreadPoolExecutor, parallel
+Path di esecuzione sync: parallelo via ThreadPoolExecutor e sequenziale.
 """
 
 from __future__ import annotations
 
-import os
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -25,9 +24,10 @@ logger = get_logger("app.core.arricchisci.enrichment_service")
 
 
 class EnrichmentExecutionEnginesMixin:
-    """Mixin per `EnrichmentExecutor`: 3 path runtime engine.
-    Cuore esecuzione alternativo scelto da `execute` dispatcher in
-    base a feature flag (parallel_workers, ENABLE_ASYNC_ENRICHMENT).
+    """Mixin per `EnrichmentExecutor`: runtime engine sync.
+
+    `execute` sceglie tra batch nativo, ThreadPoolExecutor e path
+    sequenziale in base alla configurazione del batch e a parallel_workers.
     """
 
     def _execute_parallel(
@@ -208,209 +208,6 @@ class EnrichmentExecutionEnginesMixin:
         if self._response_times:
             stats.avg_response_time_ms = sum(self._response_times) / len(self._response_times)
 
-        return result_df, stats, errors
-
-    async def _execute_parallel_async(
-        self,
-        df: pd.DataFrame
-    ) -> Tuple[pd.DataFrame, EnrichmentStats, List[RowError]]:
-        """Versione async di _execute_parallel.
-
-        Usa httpx.AsyncClient dal pool condiviso (app.shared.async_http) e un
-        asyncio.Semaphore per limitare la concorrenza a ENRICHMENT_POOL_SIZE (default 50).
-
-        Delega la chiamata HTTP effettiva al metodo sync _call_api_with_retry via
-        asyncio.to_thread: questo evita di dover riscrivere tutta la logica di parsing
-        risposta, output mapping, template substitution e auth. In pratica il guadagno
-        viene dal parallelismo (50 task concorrenti invece di ~5 con thread pool) mentre
-        la singola chiamata HTTP resta sync sotto. La Session pool di requests gia
-        garantisce il connection reuse, quindi l'overhead e minimo.
-
-        Nota: questa e la versione minima di Fase 2. Quando tutto sara stabile si potra
-        passare a chiamate httpx nativamente async per eliminare il to_thread wrapper.
-        """
-        import asyncio
-
-        result_df = df.copy()
-        stats = EnrichmentStats(total_rows=len(df))
-        errors: List[RowError] = []
-
-        # Prepara colonne output
-        for mapping in self.output_mapping:
-            col_name = mapping.get("column", mapping.get("path"))
-            if col_name not in result_df.columns:
-                result_df[col_name] = None
-
-        total_rows = len(df)
-        start_time = time.time()
-
-        # Deduplicazione: raggruppa per parametri unici (stessa logica di _execute_parallel
-        if self.options.enable_deduplication:
-            unique_groups = self._group_by_params(df)
-            logger.info(
-                f"Esecuzione async: {len(unique_groups)} combinazioni uniche "
-                f"su {total_rows} righe"
-            )
-        else:
-            unique_groups = {str(idx): [idx] for idx in df.index}
-
-        # Semaforo per limitare la concorrenza
-        # BE-CONFIG-001D: default tipato in
-        # `Settings.DEFAULTS["ENRICHMENT_POOL_SIZE"]=50`. Stesso clamp
-        # 5, 200] usato da `app.shared.async_http._get_pool_size`
-        from app.config import settings as _settings
-        pool_size = int(_settings.get("ENRICHMENT_POOL_SIZE"))
-        pool_size = max(5, min(pool_size, 200))
-        semaphore = asyncio.Semaphore(pool_size)
-        logger.info(f"[ASYNC] Semaforo concorrenza = {pool_size}")
-
-        processed_counter = [0]
-        counter_lock = asyncio.Lock()
-
-        async def _process_group(cache_key: str, row_indices: List) -> Optional[List[RowError]]:
-            """Processa un singolo gruppo di righe con parametri identici.
-
-            La chiamata API sync viene eseguita in un thread via asyncio.to_thread,
-            cosi non blocca l'event loop.
-
-            Ritorno: None su successo/skip, oppure List[RowError] con UN entry
-            per ogni riga del gruppo (parity con il path sync _execute_parallel,
-            che replica il RowError su tutti gli idx).
-            """
-            async with semaphore:
-                first_idx = row_indices[0]
-                row = df.loc[first_idx]
-                # Inizializza params prima del try: in caso di eccezione in
-                # _build_params, il blocco except riesce comunque a citarli
-                # anche vuoti) nel RowError
-                params: dict = {}
-
-                try:
-                    params = self._build_params(row)
-
-                    # Salta se parametri nulli bloccanti
-                    if self._has_null_params(params):
-                        if self.options.skip_null_params:
-                            stats.skipped += len(row_indices)
-                            return None
-
-                    # Cache lookup (deduplicazione tra task concorrenti
-                    api_result = None
-                    if self.options.enable_deduplication:
-                        cached = self._cache.get(cache_key)
-                        if cached and cached != "__in_flight__":
-                            api_result = cached
-                            stats.cached += len(row_indices)
-                            self._cache_hits += len(row_indices)
-
-                    # Se non cached: chiamata API (sync via to_thread
-                    if api_result is None:
-                        # Rate limiting: parity con _execute_parallel sync
-                        # RateLimiter.acquire puo' bloccare via time.sleep
-                        # esecuzione via to_thread evita di bloccare l'event loop
-                        await asyncio.to_thread(self._rate_limiter.acquire)
-
-                        api_result, err_obj = await asyncio.to_thread(
-                            self._call_api_with_retry, params, int(first_idx)
-                        )
-
-                        if err_obj is not None:
-                            stats.errors += len(row_indices)
-                            # Parity con sync: replica il RowError per ogni
-                            # riga del gruppo preservando http_status/retry_count
-                            return [
-                                RowError(
-                                    row_index=int(idx),
-                                    status=err_obj.status,
-                                    error_message=err_obj.error_message,
-                                    error_type=err_obj.error_type,
-                                    http_status=err_obj.http_status,
-                                    retry_count=err_obj.retry_count,
-                                    input_params=err_obj.input_params or params,
-                                )
-                                for idx in row_indices
-                            ]
-
-                        if self.options.enable_deduplication and api_result:
-                            with self._cache_lock:
-                                self._cache[cache_key] = api_result
-                                if len(self._cache) > self._CACHE_MAX_SIZE:
-                                    keys = list(self._cache.keys())[:self._CACHE_MAX_SIZE // 2]
-                                    for k in keys:
-                                        self._cache.pop(k, None)
-
-                    # Applica il risultato a tutte le righe del gruppo
-                    # stessa logica del path sync _execute_parallel
-                    if isinstance(api_result, list):
-                        first_row = api_result[0] if api_result else {}
-                    elif isinstance(api_result, dict):
-                        first_row = api_result
-                    else:
-                        first_row = {}
-
-                    for idx in row_indices:
-                        self._apply_result(result_df, idx, first_row)
-                    stats.success += len(row_indices)
-
-                    # Update progress
-                    async with counter_lock:
-                        processed_counter[0] += len(row_indices)
-                        if self.progress_callback and processed_counter[0] % 100 == 0:
-                            try:
-                                self.progress_callback(processed_counter[0], total_rows)
-                            except Exception as _cb_err:
-                                logger.debug(
-                                    f"[ASYNC] progress_callback fallita: {_cb_err}",
-                                    op="execute",
-                                )
-
-                    return None
-
-                except Exception as e:
-                    logger.error(f"[ASYNC] Errore gruppo {cache_key}: {e}", exc_info=True)
-                    stats.errors += len(row_indices)
-                    # Parity con sync: un RowError per riga del gruppo
-                    return [
-                        RowError(
-                            row_index=int(idx),
-                            status=RowStatus.ERROR,
-                            error_message=str(e),
-                            error_type="async_exception",
-                            input_params=params,
-                        )
-                        for idx in row_indices
-                    ]
-
-        # Lancia tutti i task in parallelo, gestiti dal semaforo
-        tasks = [
-            _process_group(ck, indices)
-            for ck, indices in unique_groups.items()
-        ]
-        # Chunk i risultati se troppi task (evita di mantenere troppe coroutine in RAM
-        CHUNK = 1000
-        for chunk_start in range(0, len(tasks), CHUNK):
-            chunk = tasks[chunk_start:chunk_start + CHUNK]
-            results = await asyncio.gather(*chunk, return_exceptions=True)
-            for r in results:
-                if isinstance(r, list):
-                    errors.extend(r)
-                elif isinstance(r, Exception):
-                    logger.error(f"[ASYNC] Exception in task: {r}")
-
-            # Check early stop su troppi errori
-            _max_err = self.options.stop_on_error_threshold
-            if _max_err > 0 and stats.errors >= _max_err and not self.options.continue_on_error:
-                logger.warning(f"[ASYNC] Soglia errori raggiunta ({stats.errors}/{_max_err}), interruzione")
-                break
-
-        stats.total_time_ms = (time.time() - start_time) * 1000
-        if self._response_times:
-            stats.avg_response_time_ms = sum(self._response_times) / len(self._response_times)
-
-        logger.info(
-            f"[ASYNC] Completato: {stats.success} ok, {stats.errors} err, "
-            f"{stats.cached} cached, {stats.skipped} skipped in {stats.total_time_ms/1000:.1f}s"
-        )
         return result_df, stats, errors
 
     def _execute_internal(

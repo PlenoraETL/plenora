@@ -44,13 +44,10 @@ logger = get_logger(__name__)
 # Le costanti LOGIN_MAX_ATTEMPTS / LOGIN_WINDOW_SECONDS / LOGIN_LOCKOUT_SECONDS
 # restano modulo-level e vengono lette al volo dai wrapper, cosi' i test
 # possono ancora monkeypatcharle (vedi tests2/security/unit/test_login_rate_limit_per_ip.py
-# KEEP_COMPAT: gli alias `_rate_lock`, `_failed_attempts`
 # `_check_rate_limit_in_memory`, `_record_failed_login_in_memory`
 # `_clear_failed_logins_in_memory` restano qui come thin pointer al
-# modulo estratto. Test esistenti che fanno
-# `auth_mod._failed_attempts.clear` / `with auth_mod._rate_lock:` /
-# `monkeypatch.setattr(auth_mod, "_check_rate_limit_in_memory", ...)`
-# continuano a funzionare invariati
+# modulo estratto. Lo store in-memory e' canonico in
+# `app.core.auth.rate_limit_fallback._STORE`.
 
 # `InMemoryRateLimitFallback` compatibility export removed (proven dead — zero
 # callsites in `backend/app`, `backend/workers`, `backend/tests2`
@@ -63,9 +60,6 @@ from app.core.auth.rate_limit_fallback import (
     record_failed_login_in_memory as _record_failed_login_in_memory,
     clear_failed_logins_in_memory as _clear_failed_logins_in_memory,
 )
-
-_rate_lock = _rate_limit_fallback_store.lock
-_failed_attempts = _rate_limit_fallback_store.failed_attempts
 
 # BE-CONFIG-001C: default tipati in `Settings.DEFAULTS` (10 / 60 / 300
 # Override env continua a funzionare via `Settings._converti_tipo_env`

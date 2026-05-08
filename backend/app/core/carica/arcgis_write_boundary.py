@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Optional, TypedDict, cast
+from typing import TYPE_CHECKING, Mapping, Optional
 
 from app.core.features.arcgis_writer_boundary import (
     ArcGISColumnMappingsInput,
@@ -18,17 +18,41 @@ if TYPE_CHECKING:
 logger = get_logger(__name__)
 
 
-class ArcGISFeatureWriteResult(TypedDict, total=False):
+@dataclass(frozen=True)
+class ArcGISFeatureWriteResult:
     """Typed subset returned by the existing ArcGIS feature writer contract."""
 
-    success: bool
-    feature_count: int
-    count: int
-    message: str
-    service_url: str
-    layer_url: str
-    item_id: str
-    errors: list[object]
+    success: bool = False
+    feature_count: int = 0
+    count: int = 0
+    message: str = ""
+    service_url: str = ""
+    layer_url: str = ""
+    item_id: str = ""
+    errors: tuple[object, ...] = ()
+    include_errors: bool = False
+
+    @classmethod
+    def from_mapping(
+        cls,
+        result: Mapping[str, object],
+    ) -> "ArcGISFeatureWriteResult":
+        errors = result.get("errors")
+        return cls(
+            success=result.get("success") is True,
+            feature_count=_int_result(result, "feature_count"),
+            count=_int_result(result, "count"),
+            message=_string_result(result, "message"),
+            service_url=_string_result(result, "service_url"),
+            layer_url=_string_result(result, "layer_url"),
+            item_id=_string_result(result, "item_id"),
+            errors=tuple(errors) if isinstance(errors, list) else (),
+            include_errors="errors" in result,
+        )
+
+    @property
+    def rows_written(self) -> int:
+        return self.feature_count or self.count
 
 
 @dataclass(frozen=True)
@@ -132,9 +156,17 @@ def execute_carica_arcgis_write(
 
     try:
         if request.operation == "create_service":
-            raw_result = _create_service(df=df, request=request, feature_writer=feature_writer)
+            raw_result = _create_service(
+                df=df,
+                request=request,
+                feature_writer=feature_writer,
+            )
         else:
-            raw_result = _write_existing_layer(df=df, request=request, feature_writer=feature_writer)
+            raw_result = _write_existing_layer(
+                df=df,
+                request=request,
+                feature_writer=feature_writer,
+            )
     except ValueError as exc:
         return _validation_error(str(exc), total_rows)
     except Exception as exc:
@@ -149,7 +181,7 @@ def execute_carica_arcgis_write(
             error_message="Errore scrittura ArcGIS (consulta log)",
         )
 
-    rows = _result_count(raw_result)
+    rows = raw_result.rows_written
     return CaricaArcGISWriteOutcome(
         status="completed",
         success=True,
@@ -157,13 +189,12 @@ def execute_carica_arcgis_write(
         rows_written=rows,
         total_rows=total_rows,
         columns_count=columns_count,
-        message=_string_result(raw_result, "message")
-        or f"Scrittura ArcGIS completata: {rows} features",
-        service_url=_string_result(raw_result, "service_url"),
-        layer_url=_string_result(raw_result, "layer_url"),
-        item_id=_string_result(raw_result, "item_id"),
-        errors=tuple(_list_result(raw_result, "errors")),
-        include_errors="errors" in raw_result,
+        message=raw_result.message or f"Scrittura ArcGIS completata: {rows} features",
+        service_url=raw_result.service_url,
+        layer_url=raw_result.layer_url,
+        item_id=raw_result.item_id,
+        errors=raw_result.errors,
+        include_errors=raw_result.include_errors,
     )
 
 
@@ -176,8 +207,7 @@ def _create_service(
     if not request.service_name:
         raise ValueError("Nome servizio ArcGIS non specificato")
 
-    return cast(
-        ArcGISFeatureWriteResult,
+    return ArcGISFeatureWriteResult.from_mapping(
         feature_writer.create_service_from_df(
             connection_id=request.connection_id,
             service_name=request.service_name,
@@ -200,8 +230,7 @@ def _write_existing_layer(
     if not request.layer_url:
         raise ValueError("URL layer ArcGIS non specificato")
 
-    return cast(
-        ArcGISFeatureWriteResult,
+    return ArcGISFeatureWriteResult.from_mapping(
         feature_writer.write_features_from_df(
             connection_id=request.connection_id,
             layer_url=request.layer_url,
@@ -227,16 +256,11 @@ def _validation_error(message: str, total_rows: int) -> CaricaArcGISWriteOutcome
     )
 
 
-def _result_count(result: ArcGISFeatureWriteResult) -> int:
-    value = result.get("feature_count", result.get("count", 0))
-    return value if isinstance(value, int) else 0
-
-
-def _string_result(result: ArcGISFeatureWriteResult, key: str) -> str:
+def _string_result(result: Mapping[str, object], key: str) -> str:
     value = result.get(key)
     return value if isinstance(value, str) else ""
 
 
-def _list_result(result: ArcGISFeatureWriteResult, key: str) -> list[object]:
+def _int_result(result: Mapping[str, object], key: str) -> int:
     value = result.get(key)
-    return value if isinstance(value, list) else []
+    return value if isinstance(value, int) else 0

@@ -269,13 +269,14 @@ def test_fallback_called_when_redis_pipeline_raises():
 
 def test_fallback_inmemory_matches_legacy_behaviour(rl_no_redis):
     """Wrapper auth.py + Redis disabilitato + store in-memory legacy:
-    saturare `_failed_attempts` produce 429 con la stessa formula di prima.
+    saturare lo store canonical produce 429 con la stessa formula di prima.
     """
     from app.core.auth import auth as auth_mod
+    from app.core.auth import rate_limit_fallback as fallback_rl
 
-    # Reset legacy store
-    with auth_mod._rate_lock:
-        auth_mod._failed_attempts.clear()
+    # Reset canonical fallback store
+    with fallback_rl._STORE.lock:
+        fallback_rl._STORE.failed_attempts.clear()
 
     # Patcha le costanti perche' il test sia veloce e prevedibile.
     with patch.object(auth_mod, "LOGIN_MAX_ATTEMPTS", 2), \

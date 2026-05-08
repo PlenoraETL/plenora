@@ -226,8 +226,7 @@ class ApiConnectionSourceLoadingMixin:
 
         Cross-tenant fail-closed delegato al loader (che a sua volta
         delega ad ArtifactResolver). Recompute upstream + fallback
-        filesystem restano qui perche' sono specifici di api_connector
-        (manipola usa orchestrator_callback).
+        filesystem restano qui perche' sono specifici di api_connector.
 
          `ctx` e' ora un
         keyword-only **required** parameter (no default). Tutti i 3

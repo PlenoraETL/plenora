@@ -17,6 +17,9 @@ pytestmark = [pytest.mark.unit, pytest.mark.contract]
 
 _BACKEND_ROOT = Path(__file__).resolve().parent.parent.parent
 _SCHEMA_INFER_PY = _BACKEND_ROOT / "app" / "core" / "projects" / "schema_inference.py"
+_SCHEMA_TRANSFORM_HANDLERS_PY = (
+    _BACKEND_ROOT / "app" / "core" / "projects" / "schema_transform_handlers.py"
+)
 _PROJECT_CONTEXT_LOADER_PY = (
     _BACKEND_ROOT / "app" / "core" / "projects" / "project_context_loader.py"
 )
@@ -71,6 +74,15 @@ def _infer_node_schema_function() -> ast.FunctionDef:
     raise AssertionError("_infer_node_schema function missing")
 
 
+def _function_names(path: Path) -> set[str]:
+    tree = ast.parse(path.read_text(encoding="utf-8"))
+    return {
+        node.name
+        for node in ast.walk(tree)
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+    }
+
+
 def _is_node_type_attribute(node: ast.AST) -> bool:
     return (
         isinstance(node, ast.Attribute)
@@ -111,6 +123,18 @@ def test_infer_node_schema_has_no_central_node_type_branches():
         "Add node.type schema handlers to _build_node_type_handlers instead "
         f"of branching centrally in _infer_node_schema. Lines: {violations}"
     )
+
+
+def test_schema_inference_delegates_transform_schema_handlers_to_module():
+    """Transform-specific `_schema_*` methods live in the handler module."""
+    service_functions = _function_names(_SCHEMA_INFER_PY)
+    handler_functions = _function_names(_SCHEMA_TRANSFORM_HANDLERS_PY)
+
+    assert not {
+        name for name in service_functions if name.startswith("_schema_")
+    }, "schema_inference.py must not own transform `_schema_*` handlers"
+    assert "_schema_join" in handler_functions
+    assert "_schema_passthrough" in handler_functions
 
 
 def test_schema_inference_does_not_import_projects_db_directly():

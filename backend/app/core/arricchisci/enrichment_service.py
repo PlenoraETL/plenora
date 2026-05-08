@@ -195,28 +195,7 @@ class EnrichmentExecutor(
                     completed_at=datetime.now(timezone.utc).isoformat()
                 )
 
-        # Feature flag: routing tra sync legacy e async nuovo path
-        # BE-CONFIG-001D: default tipato `bool` in
-        # `Settings.DEFAULTS["ENABLE_ASYNC_ENRICHMENT"]=False`. Override
-        # env via `Settings._converti_tipo_env` (coercion bool su
-        # `1/true/yes`
-        from app.config import settings as _settings
-        _async_enabled = bool(_settings.get("ENABLE_ASYNC_ENRICHMENT"))
-        _can_use_async = (
-            _async_enabled
-            and not self.batch_config.enabled  # usa path dedicato
-            and len(df) > 1  # async ha senso solo con piu di 1 riga
-        )
-
-        if _can_use_async:
-            logger.info(f"[ASYNC] Esecuzione enrichment async (pool via ENRICHMENT_POOL_SIZE)")
-            import asyncio
-            try:
-                result_df, stats, errors = asyncio.run(self._execute_parallel_async(df))
-            except Exception as e:
-                logger.error(f"[ASYNC] Errore nel path async, fallback a sync: {e}", exc_info=True)
-                result_df, stats, errors = self._execute_parallel(df)
-        elif self.batch_config.enabled:
+        if self.batch_config.enabled:
             result_df, stats, errors = self._execute_batch_native(df)
         elif self.options.parallel_workers > 1:
             result_df, stats, errors = self._execute_parallel(df)

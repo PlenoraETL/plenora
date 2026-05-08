@@ -108,9 +108,17 @@ def test_manipola_uses_typed_pipeline_dispatcher_boundary():
     contract, not on an undocumented callback callsite."""
     init_sig = inspect.signature(manipola_executor.ManipolaExecutor.__init__)
     assert "pipeline_dispatcher" in init_sig.parameters
+    assert "orchestrator_callback" not in init_sig.parameters
 
     dispatcher_annotation = init_sig.parameters["pipeline_dispatcher"].annotation
     assert "PipelineDispatcherProtocol" in str(dispatcher_annotation)
+
+    executor = manipola_executor.ManipolaExecutor(project_service=object())
+    assert not hasattr(executor, "orchestrator_callback")
+    assert not hasattr(
+        manipola_executor.ManipolaExecutor,
+        "set_orchestrator_callback",
+    )
 
     method = manipola_executor.ManipolaExecutor._carica_sorgenti_progetto
     assert "pipeline_dispatcher" in method.__code__.co_names

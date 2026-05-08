@@ -61,7 +61,7 @@ _BURN_DOWN_TARGETS: tuple[BurnDownTarget, ...] = (
             "app/core/admin_system_status": 3,
             "app/core/arricchisci": 1,
             "app/core/auth": 3,
-            "app/core/connections": 9,
+            "app/core/connections": 8,
             "app/core/datasources": 4,
             "app/core/eseguibili": 6,
             "app/core/features": 3,

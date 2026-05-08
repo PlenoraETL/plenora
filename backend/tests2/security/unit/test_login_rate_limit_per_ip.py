@@ -24,15 +24,16 @@ def client_with_auth_router(monkeypatch):
       - db.get_user_by_username → None (utente non esiste, trigger
         fallback con _DUMMY_PASSWORD_HASH)
       - verify_password → False (evita bcrypt ~200ms per request)
-    Reset di `_failed_attempts` per isolation tra test.
+    Reset dello store in-memory canonical per isolation tra test.
     """
     # Reset rate-limit state prima di ogni test
     from app.core.auth import auth as auth_mod
-    with auth_mod._rate_lock:
-        auth_mod._failed_attempts.clear()
+    from app.core.auth import rate_limit_fallback as fallback_rl
+    with fallback_rl._STORE.lock:
+        fallback_rl._STORE.failed_attempts.clear()
 
     # R-01: il limiter ora prova Redis prima del fallback in-memory.
-    # Questo test esercita il path in-memory (resetta `_failed_attempts`),
+    # Questo test esercita il path in-memory (resetta lo store fallback),
     # quindi forziamo Redis client a None cosi' il wrapper cade sempre
     # sul fallback indipendentemente da un Redis attivo sull'host di test.
     from app.shared import login_rate_limiter as _rl_mod
@@ -62,8 +63,8 @@ def client_with_auth_router(monkeypatch):
         yield tc
 
     # Cleanup dopo
-    with auth_mod._rate_lock:
-        auth_mod._failed_attempts.clear()
+    with fallback_rl._STORE.lock:
+        fallback_rl._STORE.failed_attempts.clear()
     _rl_mod._reset_client_for_tests()
 
 
@@ -124,9 +125,9 @@ def test_login_untrusted_peer_xff_ignored_shared_bucket(client_with_auth_router,
     NON contiene 127.0.0.1 (il TestClient).
     """
     # Reset state PER QUESTO test
-    from app.core.auth import auth as auth_mod
-    with auth_mod._rate_lock:
-        auth_mod._failed_attempts.clear()
+    from app.core.auth import rate_limit_fallback as fallback_rl
+    with fallback_rl._STORE.lock:
+        fallback_rl._STORE.failed_attempts.clear()
     # R-01: vedi sopra — forziamo il fallback in-memory.
     from app.shared import login_rate_limiter as _rl_mod
     _rl_mod._set_client_for_tests(None)

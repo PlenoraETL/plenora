@@ -18,7 +18,7 @@ def test_mssql_engine_default_enables_fast_executemany(monkeypatch):
     """Default (no env): fast_executemany=True passato a create_engine."""
     monkeypatch.delenv("MSSQL_FAST_EXECUTEMANY", raising=False)
 
-    from app.db.query_executor import DefaultEngineFactory
+    from app.db.query_engines import DefaultEngineFactory
 
     factory = DefaultEngineFactory()
 
@@ -36,7 +36,7 @@ def test_mssql_engine_default_enables_fast_executemany(monkeypatch):
         return eng
 
     with patch(
-        "app.db.query_executor.create_engine",
+        "app.db.query_engines.create_engine",
         side_effect=fake_create_engine,
     ):
         factory._crea_engine_mssql(
@@ -51,7 +51,7 @@ def test_mssql_engine_default_enables_fast_executemany(monkeypatch):
 def test_mssql_engine_env_off_disables_fast_executemany(monkeypatch, val):
     monkeypatch.setenv("MSSQL_FAST_EXECUTEMANY", val)
 
-    from app.db.query_executor import DefaultEngineFactory
+    from app.db.query_engines import DefaultEngineFactory
     factory = DefaultEngineFactory()
 
     captured = {}
@@ -66,7 +66,7 @@ def test_mssql_engine_env_off_disables_fast_executemany(monkeypatch, val):
         return eng
 
     with patch(
-        "app.db.query_executor.create_engine",
+        "app.db.query_engines.create_engine",
         side_effect=fake_create_engine,
     ):
         factory._crea_engine_mssql("mssql+pyodbc://...", {})
@@ -79,7 +79,7 @@ def test_mssql_driver_17_fallback_preserves_fast_executemany(monkeypatch):
     deve essere propagato anche al secondo create_engine."""
     monkeypatch.delenv("MSSQL_FAST_EXECUTEMANY", raising=False)
 
-    from app.db.query_executor import DefaultEngineFactory
+    from app.db.query_engines import DefaultEngineFactory
     factory = DefaultEngineFactory()
 
     calls = []
@@ -97,7 +97,7 @@ def test_mssql_driver_17_fallback_preserves_fast_executemany(monkeypatch):
         return eng
 
     with patch(
-        "app.db.query_executor.create_engine",
+        "app.db.query_engines.create_engine",
         side_effect=fake_create_engine,
     ):
         factory._crea_engine_mssql(
@@ -117,14 +117,14 @@ def test_non_driver18_error_not_caught(monkeypatch):
     """Errori che NON sono "Driver 18 mancante" devono propagare,
     non triggerare il fallback (regression guard)."""
     monkeypatch.delenv("MSSQL_FAST_EXECUTEMANY", raising=False)
-    from app.db.query_executor import DefaultEngineFactory
+    from app.db.query_engines import DefaultEngineFactory
     factory = DefaultEngineFactory()
 
     def fake_create_engine(url, **kwargs):
         raise RuntimeError("Login failed for user 'sa'")
 
     with patch(
-        "app.db.query_executor.create_engine", side_effect=fake_create_engine,
+        "app.db.query_engines.create_engine", side_effect=fake_create_engine,
     ):
         with pytest.raises(RuntimeError, match="Login failed"):
             factory._crea_engine_mssql(

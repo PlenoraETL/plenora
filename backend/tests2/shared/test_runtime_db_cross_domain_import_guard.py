@@ -147,6 +147,12 @@ _REMOVED_RUNTIME_DB_IMPORTS: tuple[RemovedRuntimeDbImport, ...] = (
         "db",
         "REMOVED: CARICA upstream pre-cache now consumes project runtime-context group resolution",
     ),
+    RemovedRuntimeDbImport(
+        "app/core/projects/service.py",
+        "app.core.results",
+        "db",
+        "REMOVED: project result helpers now consume the results-owned store boundary",
+    ),
 )
 
 
@@ -241,6 +247,18 @@ def _current_raw_cross_domain_db_imports() -> list[RuntimeDbImport]:
     return sorted(edges, key=lambda edge: (*_edge_key(edge), edge.line))
 
 
+def _removed_import_source_edges() -> list[RuntimeDbImport]:
+    paths = {
+        _BACKEND_ROOT / edge.src_path
+        for edge in _REMOVED_RUNTIME_DB_IMPORTS
+    }
+    edges: list[RuntimeDbImport] = []
+    for path in sorted(paths):
+        if path.is_file():
+            edges.extend(_iter_raw_cross_domain_db_imports(path))
+    return edges
+
+
 def test_selected_runtime_modules_do_not_add_raw_cross_domain_db_imports() -> None:
     allowed_by_key = {
         _edge_key(edge): edge for edge in _ALLOWED_RUNTIME_DB_IMPORTS
@@ -293,7 +311,11 @@ def test_runtime_db_import_allowlist_has_severity_and_removal_condition() -> Non
 
 def test_removed_runtime_db_import_tombstones_stay_absent() -> None:
     current_by_key = {
-        _edge_key(edge): edge for edge in _current_raw_cross_domain_db_imports()
+        _edge_key(edge): edge
+        for edge in (
+            _current_raw_cross_domain_db_imports()
+            + _removed_import_source_edges()
+        )
     }
     reintroduced = [
         edge

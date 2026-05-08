@@ -18,7 +18,9 @@ pytestmark = [pytest.mark.unit, pytest.mark.contract]
 
 
 _BACKEND_ROOT = Path(__file__).resolve().parent.parent.parent  # .../backend
-_SCHEMA_INFER_PY = _BACKEND_ROOT / "app" / "core" / "projects" / "schema_inference.py"
+_SCHEMA_TRANSFORM_HANDLERS_PY = (
+    _BACKEND_ROOT / "app" / "core" / "projects" / "schema_transform_handlers.py"
+)
 _REGISTRY_JSON = _BACKEND_ROOT / "app" / "core" / "manipola" / "transforms_registry.json"
 
 
@@ -27,7 +29,8 @@ _REGISTRY_JSON = _BACKEND_ROOT / "app" / "core" / "manipola" / "transforms_regis
 # Post BE-PHASE2-SCHEMA-INFER-008-FINAL: il dispatcher e' un map
 # lookup (`_build_transform_handlers`), non piu' un'if/elif chain.
 # Le entry sono delimitate dai marker sentinel
-# `# DISPATCH-REGISTRY:start` / `# DISPATCH-REGISTRY:end` nel sorgente.
+# `# DISPATCH-REGISTRY:start` / `# DISPATCH-REGISTRY:end` nel sorgente
+# del modulo che possiede gli handler transform.
 # Source-bound: parsing del file, non del modulo importato — un
 # futuro refactor del registry (es. decorator-based registration)
 # fa fallire il test e forza la review.
@@ -42,16 +45,16 @@ def _parse_dispatcher_branches() -> Set[str]:
     """Estrae i transform_op registrati nel registry dispatch.
 
     Cerca il blocco delimitato da `# DISPATCH-REGISTRY:start` /
-    `# DISPATCH-REGISTRY:end` in `schema_inference.py` ed estrae le
-    chiavi quotate (forma `"<id>": ...`). Lo scope ristretto al blocco
-    sentinel evita falsi positivi su altri dict literali nel file.
+    `# DISPATCH-REGISTRY:end` in `schema_transform_handlers.py` ed
+    estrae le chiavi quotate (forma `"<id>": ...`). Lo scope ristretto
+    al blocco sentinel evita falsi positivi su altri dict literali nel file.
     """
-    src = _SCHEMA_INFER_PY.read_text(encoding="utf-8")
+    src = _SCHEMA_TRANSFORM_HANDLERS_PY.read_text(encoding="utf-8")
     block_match = _REGISTRY_BLOCK_RE.search(src)
     if not block_match:
         raise AssertionError(
             "DISPATCH-REGISTRY sentinel non trovato in "
-            f"{_SCHEMA_INFER_PY}. Verifica i marker "
+            f"{_SCHEMA_TRANSFORM_HANDLERS_PY}. Verifica i marker "
             "`# DISPATCH-REGISTRY:start` / `# DISPATCH-REGISTRY:end` "
             "in `_build_transform_handlers`."
         )
@@ -170,7 +173,7 @@ PASSTHROUGH_OK_GAP: Set[str] = {
 
 
 def test_dispatcher_branches_match_expected_snapshot():
-    """Source-bound: l'if/elif chain reale in schema_inference.py
+    """Source-bound: il registry reale in schema_transform_handlers.py
     deve combaciare con il set atteso. Drift in piu' = transform
     nuova non documentata; drift in meno = branch persa nel refactor.
     """

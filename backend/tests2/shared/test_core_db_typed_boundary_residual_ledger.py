@@ -212,12 +212,6 @@ _LEDGER: tuple[BoundaryEntry, ...] = (
         "ArcGIS connection resolution returns typed ArcGISConnectionRow data",
     ),
     BoundaryEntry(
-        "app/core/connections/arcgis_client.py",
-        "ArcGISClient",
-        "KEEP_COMPAT_WITH_REMOVAL_CONDITION",
-        "remove after concrete-client tests and monkeypatch paths stop importing app.core.features.arcgis_client",
-    ),
-    BoundaryEntry(
         "app/core/connections/arcgis_provider_factory.py",
         "create_arcgis_provider",
         "DONE",

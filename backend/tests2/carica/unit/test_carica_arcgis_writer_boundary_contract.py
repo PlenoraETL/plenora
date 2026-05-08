@@ -1,16 +1,22 @@
 """Contracts for the CARICA ArcGIS writer boundary."""
 
+from dataclasses import FrozenInstanceError, is_dataclass
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import pandas as pd
 import pytest
 
+import app.core.carica.arcgis_write_boundary as arcgis_write_boundary
+import app.core.carica.rest_write_boundary as rest_write_boundary
 from app.core.carica.arcgis_write_boundary import (
+    ArcGISFeatureWriteResult,
     CaricaArcGISWriteOutcome,
     CaricaArcGISWriteRequest,
     execute_carica_arcgis_write,
 )
+from app.core.carica.rest_write_boundary import RestBatchSummary
 from app.core.features.arcgis_writer_boundary import ArcGISFeatureWriter
 from workers.tasks.carica_task import _execute_arcgis_write
 
@@ -21,6 +27,36 @@ pytestmark = [pytest.mark.unit, pytest.mark.carica, pytest.mark.contract]
 def test_arcgis_writer_protocol_exposes_dataframe_write_boundary() -> None:
     assert hasattr(ArcGISFeatureWriter, "create_service_from_df")
     assert hasattr(ArcGISFeatureWriter, "write_features_from_df")
+
+
+def test_write_boundaries_use_frozen_dataclass_result_contracts() -> None:
+    assert is_dataclass(RestBatchSummary)
+    assert is_dataclass(ArcGISFeatureWriteResult)
+
+    rest_summary = RestBatchSummary(
+        success=True,
+        status_code=201,
+        sent_count=1,
+        error="",
+    )
+    arcgis_result = ArcGISFeatureWriteResult.from_mapping(
+        {"feature_count": 1, "message": "done"}
+    )
+
+    with pytest.raises(FrozenInstanceError):
+        setattr(rest_summary, "sent_count", 2)
+    with pytest.raises(FrozenInstanceError):
+        setattr(arcgis_result, "message", "changed")
+
+
+def test_write_boundary_modules_do_not_keep_typeddict_contracts() -> None:
+    module_paths = (
+        Path(rest_write_boundary.__file__),
+        Path(arcgis_write_boundary.__file__),
+    )
+
+    for module_path in module_paths:
+        assert "TypedDict" not in module_path.read_text(encoding="utf-8")
 
 
 def test_carica_arcgis_boundary_delegates_existing_layer_write_to_feature_writer() -> None:

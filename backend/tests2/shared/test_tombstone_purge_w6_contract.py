@@ -40,7 +40,6 @@ _KNOWN_PLAIN_KEEP_COMPAT_MARKERS = frozenset(
         "app/core/arricchisci/canvas_orchestrator.py::classe come wrapper thin per KEEP_COMPAT.",
         "app/core/arricchisci/canvas_orchestrator.py::ctx. La firma con `svc` resta per KEEP_COMPAT con il",
         "app/core/arricchisci/execution_context.py::\"\"\"KEEP_COMPAT thin subclass of `CanvasExecutionContext`.",
-        "app/core/auth/auth.py::# KEEP_COMPAT: gli alias `_rate_lock`, `_failed_attempts`",
         "app/core/auth/auth.py::\"\"\"KEEP_COMPAT wrapper: legge le tre costanti monkeypatch-ate a",
         "app/core/auth/auth.py::from app.core.auth.owner_dependencies import (  # noqa: F401 (compatibility export KEEP_COMPAT)",
         "app/core/features/arcgis_client.py::`{success, feature_count, errors}` (KEEP_COMPAT per",

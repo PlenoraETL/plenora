@@ -150,3 +150,48 @@ def test_arcgis_client_satisfies_each_provider_capability_protocol() -> None:
     assert isinstance(client, ArcGISWriteProviderProtocol)
     assert isinstance(client, ArcGISServiceAdminProviderProtocol)
     assert isinstance(client, ArcGISProviderProtocol)
+
+
+def test_arcgis_service_discovery_cluster_stays_split_from_client() -> None:
+    import ast
+    from pathlib import Path
+
+    from app.core.features.arcgis_service_discovery import ArcGISServiceDiscoveryMixin
+
+    extracted_methods = {
+        "list_services",
+        "_is_arcgis_online",
+        "is_arcgis_online",
+        "_list_services_online",
+        "_list_user_content_page",
+        "_list_user_items_in_folder",
+        "_list_user_items_result",
+        "list_user_items",
+        "list_folders",
+        "_list_folders_online",
+        "_list_folders_server",
+        "_ensure_folder_result",
+        "ensure_folder",
+        "_service_name_availability_result",
+        "is_service_name_available",
+        "_search_items_result",
+        "search_items",
+        "search_services_online",
+        "_list_services_server",
+        "_get_rest_services_url",
+    }
+
+    client_path = Path(inspect.getsourcefile(ArcGISClient) or "")
+    tree = ast.parse(client_path.read_text(encoding="utf-8"))
+    client_class = next(
+        node
+        for node in tree.body
+        if isinstance(node, ast.ClassDef) and node.name == "ArcGISClient"
+    )
+    client_local_methods = {
+        node.name for node in client_class.body if isinstance(node, ast.FunctionDef)
+    }
+
+    assert issubclass(ArcGISClient, ArcGISServiceDiscoveryMixin)
+    assert not (client_local_methods & extracted_methods)
+    assert extracted_methods <= set(ArcGISServiceDiscoveryMixin.__dict__)
