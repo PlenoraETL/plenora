@@ -9,6 +9,7 @@ import pandas as pd
 import pytest
 
 from app.core.features.arcgis_feature_operations import ArcGISFeatureOperations
+from app.core.features.arcgis_feature_writer import ArcGISFeatureWriteService
 from app.core.features.features_service import FeaturesService
 from app.shared.connections.arcgis_connection import ArcGISConnectionInfo
 
@@ -56,7 +57,83 @@ def test_features_service_resolves_connection_and_delegates_service_browse() -> 
     assert conn_info.username == "owner"
 
 
-def test_arcgis_feature_operations_write_add_preserves_existing_result_shape() -> None:
+def test_features_service_resolves_connection_and_delegates_existing_layer_write_to_writer() -> None:
+    writer = SimpleNamespace(
+        write_features_df_core=MagicMock(
+            return_value={
+                "success": True,
+                "message": "Aggiunte 1 features su 1 totali",
+                "count": 1,
+                "feature_count": 1,
+                "errors": [],
+            }
+        ),
+    )
+    operations = SimpleNamespace(
+        write_features_df_core=MagicMock(
+            side_effect=AssertionError("read/discovery boundary must not handle writes")
+        ),
+    )
+    service = FeaturesService(client=SimpleNamespace())
+    service.get_connection = MagicMock(return_value=_connection_record())
+    service._writer = writer
+    service._operations = operations
+    df = pd.DataFrame([{"CITY": "Torino"}])
+
+    result = service.write_features_from_df(
+        connection_id="conn-1",
+        layer_url="https://example.test/FeatureServer/0",
+        operation="add",
+        df=df,
+        batch_size=100,
+    )
+
+    assert result["success"] is True
+    writer.write_features_df_core.assert_called_once()
+    operations.write_features_df_core.assert_not_called()
+    conn_info = writer.write_features_df_core.call_args.kwargs["conn_info"]
+    assert isinstance(conn_info, ArcGISConnectionInfo)
+    assert conn_info.username == "owner"
+
+
+def test_features_service_resolves_connection_and_delegates_service_create_to_writer() -> None:
+    writer = SimpleNamespace(
+        create_service_from_df=MagicMock(
+            return_value={
+                "success": True,
+                "service_url": "https://example.test/FeatureServer",
+                "layer_url": "https://example.test/FeatureServer/0",
+                "feature_count": 1,
+                "errors": [],
+            }
+        ),
+    )
+    operations = SimpleNamespace(
+        create_service_from_df=MagicMock(
+            side_effect=AssertionError("read/discovery boundary must not create services")
+        ),
+    )
+    service = FeaturesService(client=SimpleNamespace())
+    service.get_connection = MagicMock(return_value=_connection_record())
+    service._writer = writer
+    service._operations = operations
+
+    result = service.create_service_from_df(
+        connection_id="conn-1",
+        service_name="DestService",
+        layer_name="DestLayer",
+        df=pd.DataFrame([{"CITY": "Torino"}]),
+    )
+
+    assert result["success"] is True
+    writer.create_service_from_df.assert_called_once()
+    operations.create_service_from_df.assert_not_called()
+    conn_info = writer.create_service_from_df.call_args.args[0]
+    assert isinstance(conn_info, ArcGISConnectionInfo)
+    assert conn_info.username == "owner"
+
+
+def test_arcgis_feature_write_service_write_add_preserves_existing_result_shape() -> None:
     client = SimpleNamespace(
         dataframe_to_esri_features=MagicMock(
             return_value=[{"attributes": {"CITY": "Torino"}}]
@@ -65,9 +142,9 @@ def test_arcgis_feature_operations_write_add_preserves_existing_result_shape() -
             return_value={"success": True, "added_count": 1, "errors": []}
         ),
     )
-    operations = ArcGISFeatureOperations(client)
+    writer = ArcGISFeatureWriteService(client)
 
-    result = operations.write_features_df_core(
+    result = writer.write_features_df_core(
         conn_info=_conn_info(),
         layer_url="https://example.test/FeatureServer/0",
         operation="add",

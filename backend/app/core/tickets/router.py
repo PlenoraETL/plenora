@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import io
 import os
+from dataclasses import asdict
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -50,6 +51,18 @@ _ALLOWED_EXTENSIONS = {
 # comportamento invariato pre-001D
 from app.config import settings as _settings_cfg
 _MAX_ATTACHMENT_SIZE_BYTES = int(_settings_cfg.get("TICKET_ATTACHMENT_MAX_BYTES"))
+
+
+def _row_dict(row: object) -> Dict[str, Any]:
+    return asdict(row)
+
+
+def _ticket_details_dict(details: svc.TicketDetails) -> Dict[str, Any]:
+    return {
+        "ticket": _row_dict(details.ticket),
+        "comments": [_row_dict(comment) for comment in details.comments],
+        "attachments": [_row_dict(attachment) for attachment in details.attachments],
+    }
 
 
 def _require_not_esecutore(current_user: CurrentUser = Depends(get_current_user)) -> CurrentUser:
@@ -168,7 +181,7 @@ def create_ticket_endpoint(
     payload: TicketCreateRequest,
     current_user: CurrentUser = Depends(_require_not_esecutore),
 ) -> Dict[str, Any]:
-    return svc.create_ticket(
+    ticket = svc.create_ticket(
         kind=payload.kind,
         title=payload.title,
         description=payload.description,
@@ -178,6 +191,7 @@ def create_ticket_endpoint(
         target_group_id=payload.target_group_id,
         assignee=payload.assignee,
     )
+    return _row_dict(ticket)
 
 
 @router.get("")
@@ -201,7 +215,7 @@ def list_tickets_endpoint(
         mine=mine,
         limit=limit,
     )
-    return {"tickets": tickets}
+    return {"tickets": [_row_dict(ticket) for ticket in tickets]}
 
 
 @router.get("/{ticket_id}")
@@ -209,7 +223,7 @@ def get_ticket_endpoint(
     ticket_id: str,
     current_user: CurrentUser = Depends(_require_not_esecutore),
 ) -> Dict[str, Any]:
-    return svc.get_ticket_with_details(ticket_id, current_user)
+    return _ticket_details_dict(svc.get_ticket_with_details(ticket_id, current_user))
 
 
 @router.patch("/{ticket_id}")
@@ -218,7 +232,7 @@ def update_ticket_endpoint(
     payload: TicketUpdateRequest,
     current_user: CurrentUser = Depends(_require_not_esecutore),
 ) -> Dict[str, Any]:
-    return svc.update_ticket(
+    ticket = svc.update_ticket(
         ticket_id,
         actor=current_user,
         status=payload.status,
@@ -228,6 +242,7 @@ def update_ticket_endpoint(
         title=payload.title,
         description=payload.description,
     )
+    return _row_dict(ticket)
 
 
 # COMMENTS
@@ -239,7 +254,7 @@ def add_comment_endpoint(
     payload: CommentCreateRequest,
     current_user: CurrentUser = Depends(_require_not_esecutore),
 ) -> Dict[str, Any]:
-    return svc.add_comment(ticket_id, payload.body, current_user)
+    return _row_dict(svc.add_comment(ticket_id, payload.body, current_user))
 
 
 # ATTACHMENTS
@@ -301,7 +316,7 @@ async def upload_attachment_endpoint(
         filename=filename,
         name=f"ticket-{ticket_id[:8]}-{filename}",
         description=f"Allegato ticket {ticket_id}",
-        group_id=ticket["group_id"],
+        group_id=ticket.group_id,
     )
 
     # Link al ticket
@@ -316,7 +331,7 @@ async def upload_attachment_endpoint(
         op="ticket_attach",
     )
     return {
-        **attachment,
+        **_row_dict(attachment),
         "file_name": file_source.name,
         "original_filename": file_source.original_filename,
         "format": file_source.format,
@@ -341,10 +356,10 @@ def delete_ticket_endpoint(
     """
     result = svc.delete_ticket(ticket_id, current_user, hard=hard)
 
-    if result.get("hard") and result.get("orphaned_file_source_ids"):
+    if result.hard and result.orphaned_file_source_ids:
         from app.core.files.service import FileSourceService
         fs = FileSourceService()
-        for fs_id in result["orphaned_file_source_ids"]:
+        for fs_id in result.orphaned_file_source_ids:
             try:
                 fs.delete_file_source(fs_id)
             except Exception as e:
@@ -354,7 +369,7 @@ def delete_ticket_endpoint(
                 )
 
     logger.info(
-        f"Ticket {ticket_id} {'PURGED' if result.get('hard') else 'soft-deleted'} "
+        f"Ticket {ticket_id} {'PURGED' if result.hard else 'soft-deleted'} "
         f"by={current_user.username}",
         op="ticket_delete",
     )
@@ -379,20 +394,20 @@ def download_attachment_endpoint(
     """
     ticket = svc.check_access(tdb.get_ticket(ticket_id), current_user)
     attachment = tdb.get_attachment(attachment_id)
-    if not attachment or attachment["ticket_id"] != ticket_id:
+    if not attachment or attachment.ticket_id != ticket_id:
         raise HTTPException(404, "Allegato non trovato")
 
     from app.core.files.service import FileSourceService
     fs = FileSourceService()
     blob = fs.get_blob_bytes(
-        attachment["file_source_id"], expected_group_id=ticket["group_id"],
+        attachment.file_source_id, expected_group_id=ticket.group_id,
     )
     if blob is None:
         raise HTTPException(404, "Blob allegato non disponibile")
 
     # Recupera metadata del file_source per filename + format
     from app.db.config.file_sources import get_file_source as _get_file_source
-    fs_row = _get_file_source(attachment["file_source_id"], include_data=False)
+    fs_row = _get_file_source(attachment.file_source_id, include_data=False)
     if not fs_row:
         raise HTTPException(404, "File source non trovato")
 
@@ -423,11 +438,11 @@ def delete_attachment_endpoint(
     sui propri allegati."""
     ticket = svc.check_access(tdb.get_ticket(ticket_id), current_user)
     attachment = tdb.get_attachment(attachment_id)
-    if not attachment or attachment["ticket_id"] != ticket_id:
+    if not attachment or attachment.ticket_id != ticket_id:
         raise HTTPException(404, "Allegato non trovato")
 
     is_admin = current_user.role in ("admin", "superadmin")
-    is_uploader = attachment["uploaded_by"] == current_user.user_id
+    is_uploader = attachment.uploaded_by == current_user.user_id
     if not is_admin and not is_uploader:
         raise HTTPException(403, "Puoi rimuovere solo i tuoi allegati")
 
@@ -436,11 +451,11 @@ def delete_attachment_endpoint(
     # Best-effort: elimina anche il file_source sottostante (pulizia storage
     try:
         from app.core.files.service import FileSourceService
-        FileSourceService().delete_file_source(attachment["file_source_id"])
+        FileSourceService().delete_file_source(attachment.file_source_id)
     except Exception as e:
         logger.warning(
             f"Allegato {attachment_id} rimosso ma cleanup file_source "
-            f"{attachment['file_source_id']} fallito (orfano): {e}"
+            f"{attachment.file_source_id} fallito (orfano): {e}"
         )
 
     # F2-B3 (2026-04-24): DELETE risponde 204 No Content, body vuoto

@@ -15,6 +15,7 @@ from fastapi.testclient import TestClient
 
 from app.shared.contracts.auth import CurrentUser
 from app.core.tickets.router import _require_not_esecutore, router as tickets_router
+from app.db import tickets_db_service as tdb
 
 
 pytestmark = [pytest.mark.unit, pytest.mark.contract]
@@ -35,14 +36,34 @@ def _ticket(
     group_id: str = "g1",
     created_by: str = "u1",
     kind: str = "user_support",
-) -> dict:
-    return {
-        "id": ticket_id, "kind": kind, "title": "t",
-        "description": "", "severity": "medium", "status": "open",
-        "category": "other", "created_by": created_by, "assignee": None,
-        "group_id": group_id, "created_at": "2026-04-19T00:00:00Z",
-        "updated_at": "2026-04-19T00:00:00Z", "resolved_at": None,
+) -> tdb.TicketRow:
+    return tdb.TicketRow(
+        id=ticket_id,
+        kind=kind,
+        title="t",
+        description="",
+        severity="medium",
+        status="open",
+        category="other",
+        created_by=created_by,
+        assignee=None,
+        group_id=group_id,
+        created_at="2026-04-19T00:00:00Z",
+        updated_at="2026-04-19T00:00:00Z",
+        resolved_at=None,
+    )
+
+
+def _attachment(**overrides) -> tdb.AttachmentRow:
+    data = {
+        "id": "att-1",
+        "ticket_id": "t1",
+        "file_source_id": "fs-1",
+        "uploaded_by": "u1",
+        "uploaded_at": "2026-04-19T00:00:00Z",
     }
+    data.update(overrides)
+    return tdb.AttachmentRow(**data)
 
 
 def _make_client(current_user: CurrentUser) -> TestClient:
@@ -60,17 +81,9 @@ def mock_tdb(monkeypatch):
     m.list_attachments.return_value = []
     m.list_comments.return_value = []
     m.get_ticket.return_value = _ticket()
-    m.link_attachment.return_value = {
-        "id": "att-1", "ticket_id": "t1",
-        "file_source_id": "fs-1", "uploaded_by": "u1",
-        "uploaded_at": "2026-04-19T00:00:00Z",
-    }
+    m.link_attachment.return_value = _attachment()
     m.delete_attachment.return_value = True
-    m.get_attachment.return_value = {
-        "id": "att-1", "ticket_id": "t1",
-        "file_source_id": "fs-1", "uploaded_by": "u1",
-        "uploaded_at": "2026-04-19T00:00:00Z",
-    }
+    m.get_attachment.return_value = _attachment()
 
     import app.core.tickets.router as router_mod
     import app.core.tickets.service as svc_mod
@@ -287,10 +300,7 @@ def test_upload_rejects_binary_renamed_to_log(mock_tdb, mock_file_service):
 
 def test_delete_uploader_can_remove_own_attachment(mock_tdb, mock_file_service):
     """Creator dell'allegato puo' rimuoverlo (anche se non admin)."""
-    mock_tdb.get_attachment.return_value = {
-        "id": "att-1", "ticket_id": "t1", "file_source_id": "fs-1",
-        "uploaded_by": "u1", "uploaded_at": "x",
-    }
+    mock_tdb.get_attachment.return_value = _attachment(uploaded_at="x")
     mock_tdb.get_ticket.return_value = _ticket(created_by="u1", group_id="g1")
     client = _make_client(_user("user", user_id="u1", group_id="g1"))
     response = client.delete("/api/tickets/t1/attachments/att-1")
@@ -302,10 +312,7 @@ def test_delete_uploader_can_remove_own_attachment(mock_tdb, mock_file_service):
 
 def test_delete_admin_can_remove_others_attachment(mock_tdb, mock_file_service):
     """Admin del gruppo puo' rimuovere allegati di altri user."""
-    mock_tdb.get_attachment.return_value = {
-        "id": "att-1", "ticket_id": "t1", "file_source_id": "fs-1",
-        "uploaded_by": "u1", "uploaded_at": "x",
-    }
+    mock_tdb.get_attachment.return_value = _attachment(uploaded_at="x")
     mock_tdb.get_ticket.return_value = _ticket(created_by="u1", group_id="g1")
     client = _make_client(_user("admin", user_id="admin1", group_id="g1"))
     response = client.delete("/api/tickets/t1/attachments/att-1")
@@ -315,10 +322,7 @@ def test_delete_admin_can_remove_others_attachment(mock_tdb, mock_file_service):
 
 def test_delete_other_user_gets_403(mock_tdb, mock_file_service):
     """User non-uploader e non-admin → 403."""
-    mock_tdb.get_attachment.return_value = {
-        "id": "att-1", "ticket_id": "t1", "file_source_id": "fs-1",
-        "uploaded_by": "u1", "uploaded_at": "x",
-    }
+    mock_tdb.get_attachment.return_value = _attachment(uploaded_at="x")
     mock_tdb.get_ticket.return_value = _ticket(created_by="u1", group_id="g1")
     client = _make_client(_user("user", user_id="u2", group_id="g1"))
     response = client.delete("/api/tickets/t1/attachments/att-1")
@@ -329,10 +333,7 @@ def test_delete_other_user_gets_403(mock_tdb, mock_file_service):
 
 def test_delete_attachment_mismatched_ticket_returns_404(mock_tdb, mock_file_service):
     """attachment_id appartiene a ticket diverso → 404."""
-    mock_tdb.get_attachment.return_value = {
-        "id": "att-1", "ticket_id": "OTHER", "file_source_id": "fs-1",
-        "uploaded_by": "u1", "uploaded_at": "x",
-    }
+    mock_tdb.get_attachment.return_value = _attachment(ticket_id="OTHER", uploaded_at="x")
     mock_tdb.get_ticket.return_value = _ticket(created_by="u1", group_id="g1")
     client = _make_client(_user("user", user_id="u1", group_id="g1"))
     response = client.delete("/api/tickets/t1/attachments/att-1")
@@ -360,10 +361,7 @@ def mock_download_deps(mock_file_service, monkeypatch):
 
 
 def test_download_happy_path_returns_blob(mock_tdb, mock_download_deps):
-    mock_tdb.get_attachment.return_value = {
-        "id": "att-1", "ticket_id": "t1", "file_source_id": "fs-1",
-        "uploaded_by": "u1", "uploaded_at": "x",
-    }
+    mock_tdb.get_attachment.return_value = _attachment(uploaded_at="x")
     client = _make_client(_user("user"))
     response = client.get("/api/tickets/t1/attachments/att-1/download")
     assert response.status_code == 200
@@ -375,10 +373,7 @@ def test_download_happy_path_returns_blob(mock_tdb, mock_download_deps):
 
 
 def test_download_image_sets_content_type_and_inline(mock_tdb, mock_download_deps):
-    mock_tdb.get_attachment.return_value = {
-        "id": "att-1", "ticket_id": "t1", "file_source_id": "fs-1",
-        "uploaded_by": "u1", "uploaded_at": "x",
-    }
+    mock_tdb.get_attachment.return_value = _attachment(uploaded_at="x")
     client = _make_client(_user("user"))
     response = client.get("/api/tickets/t1/attachments/att-1/download")
     assert response.headers["content-type"].startswith("image/png")
@@ -398,10 +393,7 @@ def test_download_log_forces_attachment_disposition(
             "id": file_id, "original_filename": "errors.log", "format": "log",
         },
     )
-    mock_tdb.get_attachment.return_value = {
-        "id": "att-1", "ticket_id": "t1", "file_source_id": "fs-1",
-        "uploaded_by": "u1", "uploaded_at": "x",
-    }
+    mock_tdb.get_attachment.return_value = _attachment(uploaded_at="x")
     client = _make_client(_user("user"))
     response = client.get("/api/tickets/t1/attachments/att-1/download")
     assert response.status_code == 200
@@ -419,10 +411,7 @@ def test_download_attachment_not_found_returns_404(mock_tdb, mock_download_deps)
 
 def test_download_attachment_wrong_ticket_returns_404(mock_tdb, mock_download_deps):
     """Allegato appartiene a ticket diverso → 404 (no info leak)."""
-    mock_tdb.get_attachment.return_value = {
-        "id": "att-1", "ticket_id": "OTHER", "file_source_id": "fs-1",
-        "uploaded_by": "u1", "uploaded_at": "x",
-    }
+    mock_tdb.get_attachment.return_value = _attachment(ticket_id="OTHER", uploaded_at="x")
     client = _make_client(_user("user"))
     response = client.get("/api/tickets/t1/attachments/att-1/download")
     assert response.status_code == 404
@@ -441,10 +430,7 @@ def test_download_cross_tenant_gets_404(mock_tdb, mock_download_deps):
 def test_download_blob_unavailable_returns_404(mock_tdb, mock_file_service):
     """Se get_blob_bytes ritorna None (blob perso / S3 error) → 404."""
     mock_file_service.get_blob_bytes.return_value = None
-    mock_tdb.get_attachment.return_value = {
-        "id": "att-1", "ticket_id": "t1", "file_source_id": "fs-1",
-        "uploaded_by": "u1", "uploaded_at": "x",
-    }
+    mock_tdb.get_attachment.return_value = _attachment(uploaded_at="x")
     client = _make_client(_user("user"))
     response = client.get("/api/tickets/t1/attachments/att-1/download")
     assert response.status_code == 404
@@ -456,10 +442,7 @@ def test_download_blob_unavailable_returns_404(mock_tdb, mock_file_service):
 def test_delete_cleanup_failure_does_not_break_response(mock_tdb, mock_file_service):
     """Se delete_file_source solleva (S3 down ecc.), la response resta 200
     e la row del ticket_attachment e' gia' stata cancellata."""
-    mock_tdb.get_attachment.return_value = {
-        "id": "att-1", "ticket_id": "t1", "file_source_id": "fs-1",
-        "uploaded_by": "u1", "uploaded_at": "x",
-    }
+    mock_tdb.get_attachment.return_value = _attachment(uploaded_at="x")
     mock_tdb.get_ticket.return_value = _ticket(created_by="u1", group_id="g1")
     mock_file_service.delete_file_source.side_effect = RuntimeError("S3 down")
 

@@ -15,7 +15,11 @@ from typing import TYPE_CHECKING, Any, Dict, Optional
 
 from app.utils.logger import get_logger, open_run, close_run, set_run_context, append_step
 from app.config import settings
-from app.core.features.arcgis_writer_boundary import ArcGISFeatureWriter
+from app.core.carica.arcgis_write_boundary import (
+    CaricaArcGISWriteRequest,
+    create_default_arcgis_feature_writer,
+    execute_carica_arcgis_write,
+)
 
 from workers.celery_app import celery_app, BaseTaskWithRetry
 
@@ -24,18 +28,6 @@ logger = get_logger("workers.carica_task")
 
 if TYPE_CHECKING:
     import pandas as pd
-
-
-def _create_arcgis_feature_writer() -> ArcGISFeatureWriter:
-    """Build the generic ArcGIS feature writer used by CARICA.
-
-    KEEP_COMPAT: the concrete writer remains FeaturesService so runtime
-    behavior and public API shapes stay unchanged.
-    """
-    from app.core.features.features_service import FeaturesService
-    from app.utils.dataframe import save_dataframe
-
-    return FeaturesService(save_function=save_dataframe)
 
 
 @celery_app.task(
@@ -424,108 +416,48 @@ def _execute_arcgis_write(
     project_id: str,
     task_id: str,
 ) -> Dict[str, Any]:
-    """Esegue il caricamento su ArcGIS Feature Service."""
+    """Coordinate ArcGIS write progress while the domain owns provider writes."""
     _update_progress(task, 15, "Preparazione scrittura ArcGIS...")
 
-    connection_id = carica_node_data.get('arcgis_connection_id', '')
-    operation = carica_node_data.get('arcgis_operation', 'add')
-    geometry_column = carica_node_data.get('geometry_column', 'geometry')
-    source_srid = carica_node_data.get('source_srid')
-    batch_size = carica_node_data.get('batch_size')  # None = usa default WRITE_BATCH_SIZE=1000
-    column_mappings = carica_node_data.get("column_mappings", [])
-
-    if not connection_id:
-        return {
-            "status": "validation_error",
-            "success": False,
-            "error_message": "Nessuna connessione ArcGIS configurata",
-            "rows_written": 0,
-            "total_rows": len(df),
-        }
-
-    # Usa write_features_from_df che accetta DataFrame direttamente
-    # evitando il round-trip su file (il blob è già stato consumato da _load_upstream_data
-
-    feature_writer = _create_arcgis_feature_writer()
+    operation = carica_node_data.get("arcgis_operation", "add")
+    request = CaricaArcGISWriteRequest(
+        project_id=project_id,
+        connection_id=carica_node_data.get("arcgis_connection_id", ""),
+        operation=operation,
+        geometry_column=carica_node_data.get("geometry_column", "geometry"),
+        source_srid=carica_node_data.get("source_srid"),
+        batch_size=carica_node_data.get("batch_size"),
+        column_mappings=carica_node_data.get("column_mappings", []),
+        layer_url=carica_node_data.get("arcgis_layer_url", ""),
+        match_column=carica_node_data.get("arcgis_match_column", ""),
+        service_name=carica_node_data.get("arcgis_new_service_name", ""),
+        layer_name=carica_node_data.get("arcgis_new_layer_name", "Layer 0"),
+        folder_id=carica_node_data.get("arcgis_folder_id", ""),
+    )
 
     _update_progress(task, 25, f"Scrittura ArcGIS ({operation})...")
 
     try:
-        if operation == 'create_service':
-            service_name = carica_node_data.get('arcgis_new_service_name', '')
-            layer_name = carica_node_data.get('arcgis_new_layer_name', 'Layer 0')
-            folder_id = carica_node_data.get('arcgis_folder_id', '')
-
-            if not service_name:
-                return {
-                    "status": "validation_error",
-                    "success": False,
-                    "error_message": "Nome servizio ArcGIS non specificato",
-                    "rows_written": 0,
-                    "total_rows": len(df),
-                }
-
-            _update_progress(task, 30, f"Creazione servizio '{service_name}'...")
-
-            result = feature_writer.create_service_from_df(
-                connection_id=connection_id,
-                service_name=service_name,
-                layer_name=layer_name,
-                df=df,
-                geometry_column=geometry_column,
-                source_srid=source_srid,
-                folder_id=folder_id,
-                column_mappings=column_mappings,
-            )
-
+        if operation == "create_service":
+            _update_progress(task, 30, f"Creazione servizio '{request.service_name}'...")
         else:
-            # add, update, delete
-            layer_url = carica_node_data.get('arcgis_layer_url', '')
-            if not layer_url:
-                return {
-                    "status": "validation_error",
-                    "success": False,
-                    "error_message": "URL layer ArcGIS non specificato",
-                    "rows_written": 0,
-                    "total_rows": len(df),
-                }
-
-            match_column = carica_node_data.get('arcgis_match_column', '')
             _update_progress(task, 30, f"Scrittura features ({operation})...")
 
-            result = feature_writer.write_features_from_df(
-                connection_id=connection_id,
-                layer_url=layer_url,
-                operation=operation,
-                df=df,
-                geometry_column=geometry_column,
-                source_srid=source_srid,
-                batch_size=batch_size,
-                match_column=match_column,
-                column_mappings=column_mappings,
-            )
+        outcome = execute_carica_arcgis_write(
+            df=df,
+            request=request,
+            feature_writer=create_default_arcgis_feature_writer(),
+        )
+        result = outcome.to_task_result()
+        rows = outcome.rows_written
 
-        rows = result.get("feature_count", result.get("count", 0))
+        if not outcome.success:
+            _update_progress(task, -1, outcome.error_message or outcome.message)
+            return result
+
         _update_progress(task, 100, f"ArcGIS completato: {rows} features")
         logger.info(f"Task CARICA ArcGIS {task_id} completato: {rows} features")
-        return {
-            "status": "completed",
-            "success": True,
-            "project_id": project_id,
-            "rows_written": rows,
-            "rows_count": rows,
-            "total_rows": len(df),
-            "columns_count": len(df.columns),
-            "message": result.get("message", f"Scrittura ArcGIS completata: {rows} features"),
-            "service_url": result.get("service_url", ""),
-            "layer_url": result.get("layer_url", ""),
-            "item_id": result.get("item_id", ""),
-            "arcgis_result": {
-                key: result[key]
-                for key in ("service_url", "layer_url", "item_id", "errors")
-                if key in result
-            },
-        }
+        return result
 
     except Exception as e:
         # Canale admin log: preserva str(e) per postmortem

@@ -1,6 +1,8 @@
 """Canonical orchestrator boundary for asynchronous Celery task management."""
 
-from typing import Dict, Mapping, Optional, List
+from __future__ import annotations
+
+from typing import Dict, Mapping, Optional, List, TypeAlias
 from datetime import datetime, timezone
 from enum import Enum
 from dataclasses import dataclass
@@ -10,6 +12,9 @@ from app.config import settings
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
+
+JsonPrimitive: TypeAlias = str | int | float | bool | None
+JsonValue: TypeAlias = JsonPrimitive | list["JsonValue"] | dict[str, "JsonValue"]
 
 
 class TaskStatus(str, Enum):
@@ -32,32 +37,92 @@ class TaskType(str, Enum):
 
 
 @dataclass(frozen=True)
-class TaskResultPayload:
-    """Typed core contract for successful Celery task result metadata."""
+class TaskResultField:
+    """Single public Celery result field retained for API compatibility."""
 
-    payload: Mapping[str, object]
+    name: str
+    value: JsonValue
+
+
+@dataclass(frozen=True)
+class TaskResultPayload:
+    """Typed core contract for Celery task result metadata."""
+
+    success: Optional[bool] = None
+    project_id: str = ""
+    result_id: Optional[str] = None
+    output_file: Optional[str] = None
+    output_filename: Optional[str] = None
+    status: Optional[str] = None
+    message: Optional[str] = None
+    error: Optional[str] = None
+    error_message: Optional[str] = None
+    task_id: Optional[str] = None
+    run_id: Optional[str] = None
+    rows_count: Optional[int] = None
+    rows_written: Optional[int] = None
+    total_rows: Optional[int] = None
+    public_fields: tuple[TaskResultField, ...] = ()
 
     @classmethod
     def from_celery_meta(cls, meta: Mapping[str, object]) -> "TaskResultPayload":
-        return cls(payload=dict(meta))
+        return task_result_payload_from_celery_meta(meta)
 
-    @property
-    def project_id(self) -> str:
-        value = self.payload.get("project_id", "")
-        return str(value) if value is not None else ""
 
-    @property
-    def result_id(self) -> Optional[str]:
-        value = self.payload.get("result_id")
-        return str(value) if value is not None else None
+def _optional_str(value: object) -> Optional[str]:
+    return str(value) if value is not None else None
 
-    @property
-    def output_file(self) -> Optional[str]:
-        value = self.payload.get("output_file")
-        return str(value) if value is not None else None
 
-    def to_dict(self) -> Dict[str, object]:
-        return dict(self.payload)
+def _required_str(value: object) -> str:
+    return str(value) if value is not None else ""
+
+
+def _optional_bool(value: object) -> Optional[bool]:
+    return value if isinstance(value, bool) else None
+
+
+def _optional_int(value: object) -> Optional[int]:
+    if value is None or isinstance(value, bool):
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _to_json_value(value: object) -> JsonValue:
+    if value is None or isinstance(value, (str, int, float, bool)):
+        return value
+    if isinstance(value, Mapping):
+        return {str(key): _to_json_value(nested_value) for key, nested_value in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_to_json_value(nested_value) for nested_value in value]
+    return str(value)
+
+
+def task_result_payload_from_celery_meta(meta: Mapping[str, object]) -> TaskResultPayload:
+    """Normalize Celery result metadata at the Celery boundary."""
+
+    return TaskResultPayload(
+        success=_optional_bool(meta.get("success")),
+        project_id=_required_str(meta.get("project_id")),
+        result_id=_optional_str(meta.get("result_id")),
+        output_file=_optional_str(meta.get("output_file")),
+        output_filename=_optional_str(meta.get("output_filename")),
+        status=_optional_str(meta.get("status")),
+        message=_optional_str(meta.get("message")),
+        error=_optional_str(meta.get("error")),
+        error_message=_optional_str(meta.get("error_message")),
+        task_id=_optional_str(meta.get("task_id")),
+        run_id=_optional_str(meta.get("run_id")),
+        rows_count=_optional_int(meta.get("rows_count")),
+        rows_written=_optional_int(meta.get("rows_written")),
+        total_rows=_optional_int(meta.get("total_rows")),
+        public_fields=tuple(
+            TaskResultField(name=str(key), value=_to_json_value(value))
+            for key, value in meta.items()
+        ),
+    )
 
 
 @dataclass
@@ -69,31 +134,11 @@ class TaskInfo:
     status: TaskStatus
     progress: int = 0
     message: str = ""
-    result: Optional[TaskResultPayload] = None
+    result: Optional[TaskResultPayload | dict[str, JsonValue]] = None
     error: Optional[str] = None
     created_at: Optional[str] = None
     started_at: Optional[str] = None
     completed_at: Optional[str] = None
-
-    def __post_init__(self) -> None:
-        if isinstance(self.result, dict):
-            self.result = TaskResultPayload.from_celery_meta(self.result)
-    
-    def to_dict(self) -> Dict[str, object]:
-        """Converte in dizionario."""
-        return {
-            "task_id": self.task_id,
-            "task_type": self.task_type.value,
-            "project_id": self.project_id,
-            "status": self.status.value,
-            "progress": self.progress,
-            "message": self.message,
-            "result": self.result.to_dict() if self.result else None,
-            "error": self.error,
-            "created_at": self.created_at,
-            "started_at": self.started_at,
-            "completed_at": self.completed_at,
-        }
 
 
 @dataclass(frozen=True)

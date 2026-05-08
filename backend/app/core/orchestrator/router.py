@@ -19,7 +19,7 @@ from app.utils.logger import get_logger
 from app.shared import error_codes
 from app.shared.error_envelope import raise_typed_http
 from app.shared.models import ExecuteRequest
-from app.core.orchestrator.task_service import TaskResultPayload, TaskType
+from app.core.orchestrator.task_service import TaskInfo, TaskResultPayload, TaskType
 from app.utils.router_utils import require_service
 from app.shared.audit_action import audit_action
 from app.core.auth.dependencies import get_current_user, require_not_esecutore
@@ -55,10 +55,31 @@ def _task_result_to_dict(result: object) -> Dict[str, Any]:
     if result is None:
         return {}
     if isinstance(result, TaskResultPayload):
-        return result.to_dict()
+        return {field.name: field.value for field in result.public_fields}
     if isinstance(result, dict):
         return dict(result)
     return {}
+
+
+def _task_info_to_dict(task_info: TaskInfo) -> Dict[str, Any]:
+    """Serialize typed task info at the HTTP boundary."""
+    if not isinstance(task_info, TaskInfo):
+        legacy_to_dict = getattr(task_info, "to_dict", None)
+        if callable(legacy_to_dict):
+            return dict(legacy_to_dict())
+    return {
+        "task_id": task_info.task_id,
+        "task_type": task_info.task_type.value,
+        "project_id": task_info.project_id,
+        "status": task_info.status.value,
+        "progress": task_info.progress,
+        "message": task_info.message,
+        "result": _task_result_to_dict(task_info.result) if task_info.result else None,
+        "error": task_info.error,
+        "created_at": task_info.created_at,
+        "started_at": task_info.started_at,
+        "completed_at": task_info.completed_at,
+    }
 
 
 def _task_result_project_id(result: object) -> Optional[str]:
@@ -223,7 +244,7 @@ def execute_project_pipeline(
             user_id=current_user.user_id,  # N9: re-check permessi al pickup
             intermediate_mode_override=intermediate_mode,
         )
-        result = task_info.to_dict()
+        result = _task_info_to_dict(task_info)
         result["async"] = True  # segnala a useExecution di avviare il polling
         return result
     except Exception as e:
@@ -253,7 +274,7 @@ def preview_project(
             limit=limit,
             user_id=current_user.user_id,  # N9
         )
-        result = task_info.to_dict()
+        result = _task_info_to_dict(task_info)
         result["async"] = True
         return result
     except Exception as e:
@@ -439,7 +460,7 @@ def create_task(
         else:
             raise HTTPException(status_code=400, detail=f"Tipo task '{request.task_type}' non supportato")
 
-        return TaskStatusResponse(**task_info.to_dict())
+        return TaskStatusResponse(**_task_info_to_dict(task_info))
 
     except HTTPException:
         raise
@@ -492,7 +513,7 @@ def get_task_status(
 
     try:
         task_info = task_service.get_task_status(task_id)
-        result = task_info.to_dict()
+        result = _task_info_to_dict(task_info)
         result["progress"] = int(result.get("progress") or 0)
 
         if result.get("status") == "pending" and not result.get("created_at"):

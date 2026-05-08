@@ -8,8 +8,9 @@ from __future__ import annotations
 
 import json
 import uuid
+from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Mapping, Optional
 
 from app.db.pg_connection import (
     fetchone, fetchall, execute, transaction,
@@ -20,6 +21,130 @@ logger = get_logger(__name__)
 
 
 # TICKETS — CRUD
+
+
+@dataclass(frozen=True)
+class TicketRow:
+    id: str
+    kind: str
+    title: str
+    description: str
+    severity: str
+    status: str
+    category: str
+    created_by: str
+    group_id: str
+    created_at: str
+    updated_at: str
+    assignee: str | None = None
+    resolved_at: str | None = None
+    deleted_at: str | None = None
+
+    def __getitem__(self, key: str) -> object:
+        return getattr(self, key)
+
+    def get(self, key: str, default: object = None) -> object:
+        return getattr(self, key, default)
+
+
+@dataclass(frozen=True)
+class CommentRow:
+    id: str
+    ticket_id: str
+    author_id: str
+    body: str
+    created_at: str
+    author_username: str | None = None
+
+    def __getitem__(self, key: str) -> object:
+        return getattr(self, key)
+
+
+@dataclass(frozen=True)
+class AttachmentRow:
+    id: str
+    ticket_id: str
+    file_source_id: str
+    uploaded_by: str
+    uploaded_at: str
+    file_name: str | None = None
+    original_filename: str | None = None
+    format: str | None = None
+    size_bytes: int | None = None
+    uploaded_by_username: str | None = None
+
+    def __getitem__(self, key: str) -> object:
+        return getattr(self, key)
+
+
+def _required_str(row: Mapping[str, object], key: str) -> str:
+    value = row.get(key)
+    if not isinstance(value, str):
+        raise ValueError(f"Malformed ticket DB row: {key} must be a string")
+    return value
+
+
+def _optional_str(row: Mapping[str, object], key: str) -> str | None:
+    value = row.get(key)
+    if value is None:
+        return None
+    if not isinstance(value, str):
+        raise ValueError(f"Malformed ticket DB row: {key} must be a string or null")
+    return value
+
+
+def _optional_int(row: Mapping[str, object], key: str) -> int | None:
+    value = row.get(key)
+    if value is None:
+        return None
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise ValueError(f"Malformed ticket DB row: {key} must be an int or null")
+    return value
+
+
+def ticket_row_from_db(row: Mapping[str, object]) -> TicketRow:
+    return TicketRow(
+        id=_required_str(row, "id"),
+        kind=_required_str(row, "kind"),
+        title=_required_str(row, "title"),
+        description=_required_str(row, "description"),
+        severity=_required_str(row, "severity"),
+        status=_required_str(row, "status"),
+        category=_required_str(row, "category"),
+        created_by=_required_str(row, "created_by"),
+        group_id=_required_str(row, "group_id"),
+        created_at=_required_str(row, "created_at"),
+        updated_at=_required_str(row, "updated_at"),
+        assignee=_optional_str(row, "assignee"),
+        resolved_at=_optional_str(row, "resolved_at"),
+        deleted_at=_optional_str(row, "deleted_at"),
+    )
+
+
+def comment_row_from_db(row: Mapping[str, object]) -> CommentRow:
+    return CommentRow(
+        id=_required_str(row, "id"),
+        ticket_id=_required_str(row, "ticket_id"),
+        author_id=_required_str(row, "author_id"),
+        body=_required_str(row, "body"),
+        created_at=_required_str(row, "created_at"),
+        author_username=_optional_str(row, "author_username"),
+    )
+
+
+def attachment_row_from_db(row: Mapping[str, object]) -> AttachmentRow:
+    return AttachmentRow(
+        id=_required_str(row, "id"),
+        ticket_id=_required_str(row, "ticket_id"),
+        file_source_id=_required_str(row, "file_source_id"),
+        uploaded_by=_required_str(row, "uploaded_by"),
+        uploaded_at=_required_str(row, "uploaded_at"),
+        file_name=_optional_str(row, "file_name"),
+        original_filename=_optional_str(row, "original_filename"),
+        format=_optional_str(row, "format"),
+        size_bytes=_optional_int(row, "size_bytes"),
+        uploaded_by_username=_optional_str(row, "uploaded_by_username"),
+    )
 
 
 def create_ticket(
@@ -33,7 +158,7 @@ def create_ticket(
     group_id: str,
     status: str = "open",
     assignee: Optional[str] = None,
-) -> Dict[str, Any]:
+) -> TicketRow:
     """Crea nuovo ticket. Ritorna la row appena creata."""
     ticket_id = str(uuid.uuid4())
     now = datetime.now(timezone.utc).isoformat()
@@ -49,18 +174,20 @@ def create_ticket(
 
 def get_ticket(
     ticket_id: str, *, include_deleted: bool = False,
-) -> Optional[Dict[str, Any]]:
+) -> TicketRow | None:
     """Recupera ticket per id. None se non esiste o e' soft-deleted.
 
     `include_deleted=True`: bypass del filtro `deleted_at IS NULL`.
     Riservato a operazioni di audit / superadmin recovery.
     """
     if include_deleted:
-        return fetchone("SELECT * FROM tickets WHERE id = ?", (ticket_id,))
-    return fetchone(
-        "SELECT * FROM tickets WHERE id = ? AND deleted_at IS NULL",
-        (ticket_id,),
-    )
+        row = fetchone("SELECT * FROM tickets WHERE id = ?", (ticket_id,))
+    else:
+        row = fetchone(
+            "SELECT * FROM tickets WHERE id = ? AND deleted_at IS NULL",
+            (ticket_id,),
+        )
+    return ticket_row_from_db(row) if row else None
 
 
 def list_tickets(
@@ -72,7 +199,7 @@ def list_tickets(
     kind: Optional[str] = None,
     severity_in: Optional[List[str]] = None,
     limit: int = 500,
-) -> List[Dict[str, Any]]:
+) -> List[TicketRow]:
     """Lista ticket con filtri componibili.
 
     Filtri:
@@ -115,7 +242,7 @@ def list_tickets(
     where = f"WHERE {' AND '.join(clauses)}"
     sql = f"SELECT * FROM tickets {where} ORDER BY updated_at DESC LIMIT ?"
     params.append(int(limit))
-    return fetchall(sql, tuple(params))
+    return [ticket_row_from_db(row) for row in fetchall(sql, tuple(params))]
 
 
 def update_ticket(
@@ -127,7 +254,7 @@ def update_ticket(
     assignee: Optional[str] = "__UNSET__",
     title: Optional[str] = None,
     description: Optional[str] = None,
-) -> Optional[Dict[str, Any]]:
+) -> TicketRow | None:
     """Update parziale. Passare `assignee=None` per rimuovere l'assegnazione
     (differente da default sentinel `"__UNSET__"` che significa "non toccare").
     Auto-aggiorna `updated_at` e popola `resolved_at` quando si passa a
@@ -240,7 +367,7 @@ def counts_by_severity(
 # COMMENTS
 
 
-def add_comment(ticket_id: str, author_id: str, body: str) -> Dict[str, Any]:
+def add_comment(ticket_id: str, author_id: str, body: str) -> CommentRow:
     """Aggiunge un commento + tocca updated_at del ticket."""
     cid = str(uuid.uuid4())
     now = datetime.now(timezone.utc).isoformat()
@@ -255,23 +382,26 @@ def add_comment(ticket_id: str, author_id: str, body: str) -> Dict[str, Any]:
                 "UPDATE tickets SET updated_at = %s WHERE id = %s",
                 (now, ticket_id),
             )
-    return {
-        "id": cid,
-        "ticket_id": ticket_id,
-        "author_id": author_id,
-        "body": body,
-        "created_at": now,
-    }
-
-
-def list_comments(ticket_id: str) -> List[Dict[str, Any]]:
-    return fetchall(
-        "SELECT c.*, u.username AS author_username "
-        "FROM ticket_comments c "
-        "LEFT JOIN users u ON u.id = c.author_id "
-        "WHERE c.ticket_id = ? ORDER BY c.created_at ASC",
-        (ticket_id,),
+    return CommentRow(
+        id=cid,
+        ticket_id=ticket_id,
+        author_id=author_id,
+        body=body,
+        created_at=now,
     )
+
+
+def list_comments(ticket_id: str) -> List[CommentRow]:
+    return [
+        comment_row_from_db(row)
+        for row in fetchall(
+            "SELECT c.*, u.username AS author_username "
+            "FROM ticket_comments c "
+            "LEFT JOIN users u ON u.id = c.author_id "
+            "WHERE c.ticket_id = ? ORDER BY c.created_at ASC",
+            (ticket_id,),
+        )
+    ]
 
 
 # ATTACHMENTS
@@ -281,7 +411,7 @@ def link_attachment(
     ticket_id: str,
     file_source_id: str,
     uploaded_by: str,
-) -> Dict[str, Any]:
+) -> AttachmentRow:
     """Registra un file_source come allegato del ticket.
     Il file_source deve essere gia' stato creato prima (via file_service)."""
     aid = str(uuid.uuid4())
@@ -296,27 +426,30 @@ def link_attachment(
         "UPDATE tickets SET updated_at = ? WHERE id = ?",
         (now, ticket_id),
     )
-    return {
-        "id": aid,
-        "ticket_id": ticket_id,
-        "file_source_id": file_source_id,
-        "uploaded_by": uploaded_by,
-        "uploaded_at": now,
-    }
-
-
-def list_attachments(ticket_id: str) -> List[Dict[str, Any]]:
-    """Lista allegati del ticket join con file_sources per nome/size."""
-    return fetchall(
-        "SELECT a.id, a.ticket_id, a.file_source_id, a.uploaded_by, a.uploaded_at, "
-        "       fs.name AS file_name, fs.original_filename, fs.format, "
-        "       fs.size_bytes, u.username AS uploaded_by_username "
-        "FROM ticket_attachments a "
-        "JOIN file_sources fs ON fs.id = a.file_source_id "
-        "LEFT JOIN users u ON u.id = a.uploaded_by "
-        "WHERE a.ticket_id = ? ORDER BY a.uploaded_at ASC",
-        (ticket_id,),
+    return AttachmentRow(
+        id=aid,
+        ticket_id=ticket_id,
+        file_source_id=file_source_id,
+        uploaded_by=uploaded_by,
+        uploaded_at=now,
     )
+
+
+def list_attachments(ticket_id: str) -> List[AttachmentRow]:
+    """Lista allegati del ticket join con file_sources per nome/size."""
+    return [
+        attachment_row_from_db(row)
+        for row in fetchall(
+            "SELECT a.id, a.ticket_id, a.file_source_id, a.uploaded_by, a.uploaded_at, "
+            "       fs.name AS file_name, fs.original_filename, fs.format, "
+            "       fs.size_bytes, u.username AS uploaded_by_username "
+            "FROM ticket_attachments a "
+            "JOIN file_sources fs ON fs.id = a.file_source_id "
+            "LEFT JOIN users u ON u.id = a.uploaded_by "
+            "WHERE a.ticket_id = ? ORDER BY a.uploaded_at ASC",
+            (ticket_id,),
+        )
+    ]
 
 
 def delete_attachment(attachment_id: str) -> bool:
@@ -328,10 +461,11 @@ def delete_attachment(attachment_id: str) -> bool:
     return cur.rowcount > 0
 
 
-def get_attachment(attachment_id: str) -> Optional[Dict[str, Any]]:
-    return fetchone(
+def get_attachment(attachment_id: str) -> AttachmentRow | None:
+    row = fetchone(
         "SELECT * FROM ticket_attachments WHERE id = ?", (attachment_id,)
     )
+    return attachment_row_from_db(row) if row else None
 
 
 # DELETE TICKET (cascade su comments/attachments via FK ON DELETE CASCADE

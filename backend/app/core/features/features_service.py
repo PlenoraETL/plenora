@@ -26,6 +26,7 @@ from app.core.features.models import (
 )
 from app.core.connections.arcgis_provider_factory import create_arcgis_provider
 from app.core.features.arcgis_feature_operations import ArcGISFeatureOperations
+from app.core.features.arcgis_feature_writer import ArcGISFeatureWriteService
 from app.core.features.arcgis_writer_boundary import (
     ArcGISColumnMappingsInput,
 )
@@ -244,6 +245,7 @@ class FeaturesService:
     ) -> None:
         self._client = client or create_arcgis_provider()
         self._operations = ArcGISFeatureOperations(self._client)
+        self._writer = ArcGISFeatureWriteService(self._client)
         self._save = save_function or self._salvataggio_default
         self._arcgis_dir = arcgis_dir or settings.ARCGIS_CONNECTIONS_DIR
         self._results_dir = results_dir or Path(settings.RESULTS_DIR)
@@ -677,7 +679,7 @@ class FeaturesService:
         
         # DELETE legacy via OBJECTID/where non richiede file input.
         if operation == "delete" and not match_column:
-            return self._operations.delete_features(
+            return self._writer.delete_features(
                 conn_info,
                 layer_url,
                 object_ids=object_ids,
@@ -796,7 +798,7 @@ class FeaturesService:
         """Crea un nuovo Feature Service da un DataFrame (senza file intermedio)."""
         conn_info = self._resolve_write_connection(connection_id)
 
-        return self._operations.create_service_from_df(
+        return self._writer.create_service_from_df(
             conn_info,
             service_name=service_name,
             layer_name=layer_name,
@@ -825,8 +827,8 @@ class FeaturesService:
         match_column: str,
         column_mappings: ArcGISColumnMappingsInput,
     ) -> dict:
-        """KEEP_COMPAT: delegate shared write orchestration to provider operations."""
-        return self._operations.write_features_df_core(
+        """KEEP_PUBLIC_COMPAT: delegate shared write orchestration to write boundary."""
+        return self._writer.write_features_df_core(
             conn_info=conn_info,
             layer_url=layer_url,
             operation=operation,
@@ -840,8 +842,8 @@ class FeaturesService:
 
     @staticmethod
     def _write_result(action: str, result: dict, count_key: str, total: int) -> dict:
-        """KEEP_COMPAT: delegate provider write result shape."""
-        return ArcGISFeatureOperations.write_result(action, result, count_key, total)
+        """KEEP_PUBLIC_COMPAT: delegate provider write result shape."""
+        return ArcGISFeatureWriteService.write_result(action, result, count_key, total)
 
     def _split_upsert_features(
         self,
@@ -850,8 +852,8 @@ class FeaturesService:
         features: List[dict],
         match_column: str,
     ) -> Tuple[List[dict], List[dict]]:
-        """KEEP_COMPAT: delegate upsert split to provider operations."""
-        return self._operations.split_upsert_features(
+        """KEEP_PUBLIC_COMPAT: delegate upsert split to write boundary."""
+        return self._writer.split_upsert_features(
             conn_info,
             layer_url,
             features,
@@ -875,7 +877,7 @@ class FeaturesService:
 
         Features senza match vengono scartate (log warning).
         """
-        return self._operations.resolve_objectids_for_update(
+        return self._writer.resolve_objectids_for_update(
             conn_info,
             layer_url,
             features,

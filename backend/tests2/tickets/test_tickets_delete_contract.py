@@ -14,6 +14,7 @@ from fastapi.testclient import TestClient
 
 from app.shared.contracts.auth import CurrentUser
 from app.core.tickets.router import _require_not_esecutore, router as tickets_router
+from app.db import tickets_db_service as tdb
 
 
 pytestmark = [pytest.mark.unit, pytest.mark.contract]
@@ -26,15 +27,22 @@ def _user(role: str = "user", user_id: str = "u1", group_id: str = "g1") -> Curr
     )
 
 
-def _ticket(group_id: str = "g1", created_by: str = "u1") -> dict:
-    return {
-        "id": "t1", "kind": "user_support", "title": "t",
-        "description": "", "severity": "medium", "status": "open",
-        "category": "other", "created_by": created_by, "assignee": None,
-        "group_id": group_id, "created_at": "2026-04-19T00:00:00Z",
-        "updated_at": "2026-04-19T00:00:00Z", "resolved_at": None,
-        "deleted_at": None,
-    }
+def _ticket(group_id: str = "g1", created_by: str = "u1") -> tdb.TicketRow:
+    return tdb.TicketRow(
+        id="t1", kind="user_support", title="t",
+        description="", severity="medium", status="open",
+        category="other", created_by=created_by, assignee=None,
+        group_id=group_id, created_at="2026-04-19T00:00:00Z",
+        updated_at="2026-04-19T00:00:00Z", resolved_at=None,
+        deleted_at=None,
+    )
+
+
+def _attachment(file_source_id: str) -> tdb.AttachmentRow:
+    return tdb.AttachmentRow(
+        id=f"att-{file_source_id}", ticket_id="t1",
+        file_source_id=file_source_id, uploaded_by="u1", uploaded_at="x",
+    )
 
 
 def _make_client(current_user: CurrentUser) -> TestClient:
@@ -101,8 +109,8 @@ def test_superadmin_soft_deletes_cross_group(mock_tdb, mock_file_service):
 def test_soft_delete_does_not_cleanup_blob(mock_tdb, mock_file_service):
     """Soft delete preserva file_source per recovery — no cleanup S3."""
     mock_tdb.list_attachments.return_value = [
-        {"id": "att-1", "file_source_id": "fs-1"},
-        {"id": "att-2", "file_source_id": "fs-2"},
+        _attachment("fs-1"),
+        _attachment("fs-2"),
     ]
     client = _make_client(_user("admin", group_id="g1"))
     response = client.delete("/api/tickets/t1")
@@ -117,9 +125,9 @@ def test_superadmin_hard_deletes_with_cascade(mock_tdb, mock_file_service):
     """F2-B3: hard=True verificato via dispatch (body echo "hard: true"
     rimosso)."""
     mock_tdb.list_attachments.return_value = [
-        {"id": "att-1", "file_source_id": "fs-1"},
-        {"id": "att-2", "file_source_id": "fs-2"},
-        {"id": "att-3", "file_source_id": "fs-3"},
+        _attachment("fs-1"),
+        _attachment("fs-2"),
+        _attachment("fs-3"),
     ]
     client = _make_client(_user("superadmin", user_id="sa"))
     response = client.delete("/api/tickets/t1?hard=true")
@@ -144,8 +152,8 @@ def test_admin_cannot_hard_delete(mock_tdb, mock_file_service):
 
 def test_hard_delete_cleanup_failure_does_not_block(mock_tdb, mock_file_service):
     mock_tdb.list_attachments.return_value = [
-        {"id": "att-1", "file_source_id": "fs-1"},
-        {"id": "att-2", "file_source_id": "fs-2"},
+        _attachment("fs-1"),
+        _attachment("fs-2"),
     ]
     mock_file_service.delete_file_source.side_effect = [
         RuntimeError("S3 timeout"), True,

@@ -12,6 +12,7 @@ import pytest
 from fastapi import HTTPException
 
 from app.shared.contracts.auth import CurrentUser
+from app.db import tickets_db_service as tdb
 
 
 pytestmark = [pytest.mark.unit, pytest.mark.contract]
@@ -24,6 +25,38 @@ def _user(role: str, user_id: str = "u1", group_id: str = "g1") -> CurrentUser:
     )
 
 
+def _ticket(**overrides) -> tdb.TicketRow:
+    data = {
+        "id": "t1",
+        "kind": "user_support",
+        "title": "t",
+        "description": "",
+        "severity": "medium",
+        "status": "open",
+        "category": "other",
+        "created_by": "u1",
+        "assignee": None,
+        "group_id": "g1",
+        "created_at": "2026-04-18T00:00:00Z",
+        "updated_at": "2026-04-18T00:00:00Z",
+        "resolved_at": None,
+    }
+    data.update(overrides)
+    return tdb.TicketRow(**data)
+
+
+def _comment(**overrides) -> tdb.CommentRow:
+    data = {
+        "id": "c1",
+        "ticket_id": "t1",
+        "author_id": "me",
+        "body": "ciao",
+        "created_at": "2026-04-18T00:00:00Z",
+    }
+    data.update(overrides)
+    return tdb.CommentRow(**data)
+
+
 @pytest.fixture
 def mock_tdb(monkeypatch):
     """Mocka tickets_db_service. Ritorna il MagicMock cosi' il test
@@ -31,13 +64,7 @@ def mock_tdb(monkeypatch):
     import app.db.tickets_db_service as real_tdb
     m = MagicMock(spec=real_tdb)
     # Defaults sensati
-    m.create_ticket.return_value = {
-        "id": "t1", "kind": "user_support", "title": "t",
-        "description": "", "severity": "medium", "status": "open",
-        "category": "other", "created_by": "u1", "assignee": None,
-        "group_id": "g1", "created_at": "2026-04-18T00:00:00Z",
-        "updated_at": "2026-04-18T00:00:00Z", "resolved_at": None,
-    }
+    m.create_ticket.return_value = _ticket()
     m.get_ticket.return_value = m.create_ticket.return_value
     m.update_ticket.return_value = m.create_ticket.return_value
     m.list_tickets.return_value = []
@@ -206,10 +233,7 @@ def test_user_cannot_view_other_users_ticket(mock_tdb):
     from app.core.tickets import service as svc
     actor = _user("user", user_id="me")
     # ticket creato da qualcun altro
-    mock_tdb.get_ticket.return_value = {
-        "id": "t99", "kind": "user_support", "created_by": "other",
-        "group_id": "g1", "status": "open", "title": "x",
-    }
+    mock_tdb.get_ticket.return_value = _ticket(id="t99", created_by="other", title="x")
     with pytest.raises(HTTPException) as ei:
         svc.get_ticket_with_details("t99", actor)
     # 404 (non 403) per non leakare esistenza
@@ -219,10 +243,9 @@ def test_user_cannot_view_other_users_ticket(mock_tdb):
 def test_admin_cannot_view_other_group_ticket(mock_tdb):
     from app.core.tickets import service as svc
     actor = _user("admin", group_id="g1")
-    mock_tdb.get_ticket.return_value = {
-        "id": "t99", "kind": "user_support", "created_by": "other",
-        "group_id": "g2", "status": "open", "title": "x",
-    }
+    mock_tdb.get_ticket.return_value = _ticket(
+        id="t99", created_by="other", group_id="g2", title="x",
+    )
     with pytest.raises(HTTPException) as ei:
         svc.get_ticket_with_details("t99", actor)
     assert ei.value.status_code == 404
@@ -234,10 +257,7 @@ def test_admin_cannot_view_other_group_ticket(mock_tdb):
 def test_user_cannot_change_severity(mock_tdb):
     from app.core.tickets import service as svc
     actor = _user("user", user_id="me")
-    mock_tdb.get_ticket.return_value = {
-        "id": "t1", "kind": "user_support", "created_by": "me",
-        "group_id": "g1", "status": "open", "title": "x",
-    }
+    mock_tdb.get_ticket.return_value = _ticket(created_by="me", title="x")
     with pytest.raises(HTTPException) as ei:
         svc.update_ticket("t1", actor=actor, severity="critical")
     assert ei.value.status_code == 403
@@ -246,10 +266,7 @@ def test_user_cannot_change_severity(mock_tdb):
 def test_user_cannot_assign(mock_tdb):
     from app.core.tickets import service as svc
     actor = _user("user", user_id="me")
-    mock_tdb.get_ticket.return_value = {
-        "id": "t1", "kind": "user_support", "created_by": "me",
-        "group_id": "g1", "status": "open", "title": "x",
-    }
+    mock_tdb.get_ticket.return_value = _ticket(created_by="me", title="x")
     with pytest.raises(HTTPException) as ei:
         svc.update_ticket("t1", actor=actor, assignee="someone-else")
     assert ei.value.status_code == 403
@@ -258,10 +275,9 @@ def test_user_cannot_assign(mock_tdb):
 def test_user_can_reopen_own_resolved_ticket(mock_tdb):
     from app.core.tickets import service as svc
     actor = _user("user", user_id="me")
-    mock_tdb.get_ticket.return_value = {
-        "id": "t1", "kind": "user_support", "created_by": "me",
-        "group_id": "g1", "status": "resolved", "title": "x",
-    }
+    mock_tdb.get_ticket.return_value = _ticket(
+        created_by="me", status="resolved", title="x",
+    )
     svc.update_ticket("t1", actor=actor, status="reopened")
     mock_tdb.update_ticket.assert_called_once()
 
@@ -269,10 +285,9 @@ def test_user_can_reopen_own_resolved_ticket(mock_tdb):
 def test_user_cannot_reopen_other_ticket(mock_tdb):
     from app.core.tickets import service as svc
     actor = _user("user", user_id="me")
-    mock_tdb.get_ticket.return_value = {
-        "id": "t1", "kind": "user_support", "created_by": "other",
-        "group_id": "g1", "status": "resolved", "title": "x",
-    }
+    mock_tdb.get_ticket.return_value = _ticket(
+        created_by="other", status="resolved", title="x",
+    )
     with pytest.raises(HTTPException) as ei:
         svc.update_ticket("t1", actor=actor, status="reopened")
     # Non lo VEDE nemmeno → 404
@@ -283,10 +298,9 @@ def test_user_cannot_close_own_ticket(mock_tdb):
     """La chiusura definitiva e' operazione admin; l'utente puo' solo riaprire."""
     from app.core.tickets import service as svc
     actor = _user("user", user_id="me")
-    mock_tdb.get_ticket.return_value = {
-        "id": "t1", "kind": "user_support", "created_by": "me",
-        "group_id": "g1", "status": "resolved", "title": "x",
-    }
+    mock_tdb.get_ticket.return_value = _ticket(
+        created_by="me", status="resolved", title="x",
+    )
     with pytest.raises(HTTPException) as ei:
         svc.update_ticket("t1", actor=actor, status="closed")
     assert ei.value.status_code == 403
@@ -295,10 +309,7 @@ def test_user_cannot_close_own_ticket(mock_tdb):
 def test_admin_full_update_in_own_group(mock_tdb):
     from app.core.tickets import service as svc
     actor = _user("admin", group_id="g1")
-    mock_tdb.get_ticket.return_value = {
-        "id": "t1", "kind": "user_support", "created_by": "someone",
-        "group_id": "g1", "status": "open", "title": "x",
-    }
+    mock_tdb.get_ticket.return_value = _ticket(created_by="someone", title="x")
     svc.update_ticket(
         "t1", actor=actor,
         status="in_progress", severity="high", assignee="admin-user",
@@ -312,14 +323,8 @@ def test_admin_full_update_in_own_group(mock_tdb):
 def test_user_can_comment_on_own_ticket(mock_tdb):
     from app.core.tickets import service as svc
     actor = _user("user", user_id="me")
-    mock_tdb.get_ticket.return_value = {
-        "id": "t1", "kind": "user_support", "created_by": "me",
-        "group_id": "g1", "status": "open", "title": "x",
-    }
-    mock_tdb.add_comment.return_value = {
-        "id": "c1", "ticket_id": "t1", "author_id": "me",
-        "body": "ciao", "created_at": "2026-04-18T00:00:00Z",
-    }
+    mock_tdb.get_ticket.return_value = _ticket(created_by="me", title="x")
+    mock_tdb.add_comment.return_value = _comment()
     svc.add_comment("t1", "ciao", actor)
     mock_tdb.add_comment.assert_called_once_with("t1", "me", "ciao")
 
@@ -327,10 +332,7 @@ def test_user_can_comment_on_own_ticket(mock_tdb):
 def test_user_cannot_comment_on_others_ticket(mock_tdb):
     from app.core.tickets import service as svc
     actor = _user("user", user_id="me")
-    mock_tdb.get_ticket.return_value = {
-        "id": "t1", "kind": "user_support", "created_by": "other",
-        "group_id": "g1", "status": "open", "title": "x",
-    }
+    mock_tdb.get_ticket.return_value = _ticket(created_by="other", title="x")
     with pytest.raises(HTTPException) as ei:
         svc.add_comment("t1", "hack", actor)
     assert ei.value.status_code == 404
@@ -339,10 +341,7 @@ def test_user_cannot_comment_on_others_ticket(mock_tdb):
 def test_comment_empty_body_rejected(mock_tdb):
     from app.core.tickets import service as svc
     actor = _user("user", user_id="me")
-    mock_tdb.get_ticket.return_value = {
-        "id": "t1", "kind": "user_support", "created_by": "me",
-        "group_id": "g1", "status": "open", "title": "x",
-    }
+    mock_tdb.get_ticket.return_value = _ticket(created_by="me", title="x")
     with pytest.raises(HTTPException) as ei:
         svc.add_comment("t1", "   ", actor)
     assert ei.value.status_code == 400
@@ -357,11 +356,7 @@ def test_resolving_sets_resolved_at(mock_tdb):
     chiamato con status='resolved'."""
     from app.core.tickets import service as svc
     actor = _user("admin", group_id="g1")
-    mock_tdb.get_ticket.return_value = {
-        "id": "t1", "kind": "user_support", "created_by": "u1",
-        "group_id": "g1", "status": "in_progress", "title": "x",
-        "resolved_at": None,
-    }
+    mock_tdb.get_ticket.return_value = _ticket(status="in_progress", title="x")
     svc.update_ticket("t1", actor=actor, status="resolved")
     kwargs = mock_tdb.update_ticket.call_args.kwargs
     assert kwargs["status"] == "resolved"

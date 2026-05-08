@@ -6,6 +6,7 @@ Policy RBAC:
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Tuple
 
 from fastapi import HTTPException
@@ -16,6 +17,20 @@ from app.shared import error_codes
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
+
+
+@dataclass(frozen=True)
+class TicketDetails:
+    ticket: tdb.TicketRow
+    comments: List[tdb.CommentRow]
+    attachments: List[tdb.AttachmentRow]
+
+
+@dataclass(frozen=True)
+class DeleteTicketResult:
+    ok: bool
+    hard: bool
+    orphaned_file_source_ids: List[str]
 
 
 # ENUM APPLICATIVI (espandibili senza migration
@@ -56,12 +71,12 @@ class TicketNotifier:
     committata). Mai far fallire una write DB per una notifica persa.
     """
 
-    def on_ticket_created(self, ticket: Dict[str, Any], actor: CurrentUser) -> None:
+    def on_ticket_created(self, ticket: tdb.TicketRow, actor: CurrentUser) -> None:
         pass
 
     def on_status_changed(
         self,
-        ticket: Dict[str, Any],
+        ticket: tdb.TicketRow,
         old_status: str,
         new_status: str,
         actor: CurrentUser,
@@ -70,15 +85,15 @@ class TicketNotifier:
 
     def on_comment_added(
         self,
-        ticket: Dict[str, Any],
-        comment: Dict[str, Any],
+        ticket: tdb.TicketRow,
+        comment: tdb.CommentRow,
         actor: CurrentUser,
     ) -> None:
         pass
 
     def on_assignee_changed(
         self,
-        ticket: Dict[str, Any],
+        ticket: tdb.TicketRow,
         old_assignee: Optional[str],
         new_assignee: Optional[str],
         actor: CurrentUser,
@@ -145,26 +160,26 @@ def _is_admin(actor: CurrentUser) -> bool:
     return actor.role in _ROLES_ADMIN
 
 
-def _can_view(ticket: Dict[str, Any], actor: CurrentUser) -> bool:
+def _can_view(ticket: tdb.TicketRow, actor: CurrentUser) -> bool:
     """True se l'attore puo' vedere questo ticket."""
     if actor.role == "superadmin":
         return True
     if actor.role in _ROLES_ADMIN:
-        return ticket["group_id"] == actor.group_id
+        return ticket.group_id == actor.group_id
     # viewer/user: solo i propri
-    return ticket["created_by"] == actor.user_id
+    return ticket.created_by == actor.user_id
 
 
-def _can_edit_privileged_fields(ticket: Dict[str, Any], actor: CurrentUser) -> bool:
+def _can_edit_privileged_fields(ticket: tdb.TicketRow, actor: CurrentUser) -> bool:
     """True se l'attore puo' modificare status/assignee/severity/category."""
     if actor.role == "superadmin":
         return True
     if actor.role in _ROLES_ADMIN:
-        return ticket["group_id"] == actor.group_id
+        return ticket.group_id == actor.group_id
     return False
 
 
-def check_access(ticket: Optional[Dict[str, Any]], actor: CurrentUser) -> Dict[str, Any]:
+def check_access(ticket: tdb.TicketRow | None, actor: CurrentUser) -> tdb.TicketRow:
     """Raise 404 se ticket inesistente, 403 se non autorizzato, else ritorna ticket."""
     if not ticket:
         raise HTTPException(
@@ -201,7 +216,7 @@ def create_ticket(
     actor: CurrentUser,
     target_group_id: Optional[str] = None,
     assignee: Optional[str] = None,
-) -> Dict[str, Any]:
+) -> tdb.TicketRow:
     """Crea un ticket. target_group_id e' usato solo da superadmin per
     creare tech_debt cross-group; altrimenti viene forzato al group
     dell'attore."""
@@ -230,7 +245,7 @@ def create_ticket(
         assignee=assignee,
     )
     logger.info(
-        f"Ticket creato: {ticket['id']} kind={kind} severity={severity} "
+        f"Ticket creato: {ticket.id} kind={kind} severity={severity} "
         f"by={actor.username}",
         op="ticket_create",
     )
@@ -247,7 +262,7 @@ def list_tickets_for(
     assignee: Optional[str] = None,
     mine: bool = False,
     limit: int = 500,
-) -> List[Dict[str, Any]]:
+) -> List[tdb.TicketRow]:
     """Lista ticket filtrata secondo RBAC dell'attore."""
     if actor.role == "esecutore":
         raise HTTPException(403, "Gli utenti esecutore non hanno accesso ai ticket")
@@ -282,14 +297,14 @@ def list_tickets_for(
     )
 
 
-def get_ticket_with_details(ticket_id: str, actor: CurrentUser) -> Dict[str, Any]:
+def get_ticket_with_details(ticket_id: str, actor: CurrentUser) -> TicketDetails:
     """Dettaglio + commenti + allegati."""
     ticket = check_access(tdb.get_ticket(ticket_id), actor)
-    return {
-        "ticket": ticket,
-        "comments": tdb.list_comments(ticket_id),
-        "attachments": tdb.list_attachments(ticket_id),
-    }
+    return TicketDetails(
+        ticket=ticket,
+        comments=tdb.list_comments(ticket_id),
+        attachments=tdb.list_attachments(ticket_id),
+    )
 
 
 def update_ticket(
@@ -302,7 +317,7 @@ def update_ticket(
     assignee: Any = "__UNSET__",
     title: Optional[str] = None,
     description: Optional[str] = None,
-) -> Dict[str, Any]:
+) -> tdb.TicketRow:
     """Update con RBAC.
 
     Regole:
@@ -328,14 +343,14 @@ def update_ticket(
 
     # Transizione status: user puo' solo riaprire i PROPRI
     if status is not None and not is_privileged:
-        if ticket["created_by"] != actor.user_id:
+        if ticket.created_by != actor.user_id:
             raise HTTPException(403, "Non puoi cambiare lo status di un ticket altrui")
         if status != "reopened":
             raise HTTPException(403, "Come utente puoi solo riaprire un tuo ticket chiuso")
-        if ticket["status"] not in ("resolved", "closed"):
+        if ticket.status not in ("resolved", "closed"):
             raise HTTPException(
                 400,
-                f"Non puoi riaprire un ticket in stato '{ticket['status']}'",
+                f"Non puoi riaprire un ticket in stato '{ticket.status}'",
             )
 
     # Validazione enum se passati
@@ -351,8 +366,8 @@ def update_ticket(
         if len(title) > 200:
             raise HTTPException(400, "title troppo lungo")
 
-    old_status = ticket["status"]
-    old_assignee = ticket.get("assignee")
+    old_status = ticket.status
+    old_assignee = ticket.assignee
 
     updated = tdb.update_ticket(
         ticket_id,
@@ -363,6 +378,14 @@ def update_ticket(
         title=title,
         description=description,
     )
+    if updated is None:
+        raise HTTPException(
+            status_code=404,
+            detail={
+                "error": error_codes.TICKET_NOT_FOUND,
+                "message": "Ticket non trovato",
+            },
+        )
 
     # Notifiche
     if status is not None and status != old_status:
@@ -381,7 +404,7 @@ def update_ticket(
     return updated
 
 
-def add_comment(ticket_id: str, body: str, actor: CurrentUser) -> Dict[str, Any]:
+def add_comment(ticket_id: str, body: str, actor: CurrentUser) -> tdb.CommentRow:
     """Aggiunge un commento. Il creatore del ticket e admin/superadmin
     del gruppo possono sempre commentare; gli altri utenti no."""
     ticket = check_access(tdb.get_ticket(ticket_id), actor)
@@ -397,7 +420,7 @@ def add_comment(ticket_id: str, body: str, actor: CurrentUser) -> Dict[str, Any]
 
 def delete_ticket(
     ticket_id: str, actor: CurrentUser, *, hard: bool = False,
-) -> Dict[str, Any]:
+) -> DeleteTicketResult:
     """Cancellazione del ticket.
 
     Default `hard=False`: soft delete (set `deleted_at`). Audit trail
@@ -416,7 +439,7 @@ def delete_ticket(
             raise HTTPException(403, "Hard delete riservato a superadmin")
         # Snapshot file_source_id PRIMA del delete (cascade rimuove i link
         attachments = tdb.list_attachments(ticket_id)
-        file_source_ids = [a["file_source_id"] for a in attachments]
+        file_source_ids = [a.file_source_id for a in attachments]
         ok = tdb.delete_ticket(ticket_id)
         if not ok:
             raise HTTPException(
@@ -426,7 +449,11 @@ def delete_ticket(
                     "message": "Ticket non trovato",
                 },
             )
-        return {"ok": True, "hard": True, "orphaned_file_source_ids": file_source_ids}
+        return DeleteTicketResult(
+            ok=True,
+            hard=True,
+            orphaned_file_source_ids=file_source_ids,
+        )
 
     # Soft delete (default): nessun cleanup blob (gli allegati restano
     # accessibili per recovery/audit, file_source non orfanato
@@ -439,7 +466,7 @@ def delete_ticket(
                 "message": "Ticket non trovato",
             },
         )
-    return {"ok": True, "hard": False, "orphaned_file_source_ids": []}
+    return DeleteTicketResult(ok=True, hard=False, orphaned_file_source_ids=[])
 
 
 def _category_display() -> List[Dict[str, str]]:

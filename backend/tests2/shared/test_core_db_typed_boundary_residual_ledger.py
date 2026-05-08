@@ -185,9 +185,15 @@ _LEDGER: tuple[BoundaryEntry, ...] = (
     ),
     BoundaryEntry(
         "app/core/orchestrator/task_service.py",
+        "TaskResultField",
+        "DONE",
+        "Celery result metadata is preserved as typed JSON-compatible public fields",
+    ),
+    BoundaryEntry(
+        "app/core/orchestrator/task_service.py",
         "TaskResultPayload",
         "DONE",
-        "successful Celery result metadata is wrapped before crossing core code",
+        "Celery result metadata uses explicit typed fields instead of a broad payload mapping",
     ),
     BoundaryEntry(
         "app/core/orchestrator/task_service.py",
@@ -198,14 +204,44 @@ _LEDGER: tuple[BoundaryEntry, ...] = (
     BoundaryEntry(
         "app/core/orchestrator/task_service.py",
         "TaskInfo.to_dict",
-        "KEEP_PUBLIC_COMPAT",
-        "router/Celery serialization remains explicit at the edge",
+        "REMOVED",
+        "task info serialization is owned by app.core.orchestrator.router._task_info_to_dict",
     ),
     BoundaryEntry(
         "app/core/orchestrator/task_service.py",
         "get_task_result",
         "DONE",
         "completed-task Celery results are normalized into TaskResultPayload",
+    ),
+    BoundaryEntry(
+        "app/core/orchestrator/router.py",
+        "_task_info_to_dict",
+        "KEEP_PUBLIC_COMPAT",
+        "task status dict serialization is kept at the router/API boundary",
+    ),
+    BoundaryEntry(
+        "workers/tasks/carica_task.py",
+        "_execute_arcgis_write",
+        "KEEP_PUBLIC_COMPAT",
+        "Carica worker delegates ArcGIS writes to the domain boundary but still returns Celery result dict shape",
+    ),
+    BoundaryEntry(
+        "app/core/features/arcgis_feature_operations.py",
+        "ArcGISFeatureOperations",
+        "KEEP_COMPAT_WITH_REMOVAL_CONDITION",
+        "provider operation methods still return public ArcGIS dict shapes until response models cover writes/reads",
+    ),
+    BoundaryEntry(
+        "app/core/features/features_service.py",
+        "FeaturesService.write_features_from_df",
+        "KEEP_PUBLIC_COMPAT",
+        "public FeaturesService write seam delegates to ArcGISFeatureOperations and preserves API dict shape",
+    ),
+    BoundaryEntry(
+        "app/core/features/features_service.py",
+        "FeaturesService.create_service_from_df",
+        "KEEP_PUBLIC_COMPAT",
+        "public FeaturesService create-service seam delegates to ArcGISFeatureOperations and preserves API dict shape",
     ),
 )
 

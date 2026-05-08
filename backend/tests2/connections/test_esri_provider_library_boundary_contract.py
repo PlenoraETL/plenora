@@ -25,6 +25,7 @@ ARCGIS_CLIENT = APP_DIR / "core" / "features" / "arcgis_client.py"
 ARCGIS_FACTORY = APP_DIR / "core" / "connections" / "arcgis_provider_factory.py"
 ARCGIS_RESOLVER = APP_DIR / "core" / "connections" / "arcgis_connection_resolver.py"
 CARICA_TASK = WORKERS_DIR / "tasks" / "carica_task.py"
+CARICA_ARCGIS_BOUNDARY = APP_DIR / "core" / "carica" / "arcgis_write_boundary.py"
 
 NEUTRAL_FACTORY_MODULE = "app.core.connections.arcgis_provider_factory"
 NEUTRAL_RESOLVER_MODULE = "app.core.connections.arcgis_connection_resolver"
@@ -111,12 +112,12 @@ def test_imdf_uses_arcgis_provider_protocol_or_resolver_only(src_file: Path) -> 
 
 def test_carica_arcgis_path_uses_provider_writer_boundary() -> None:
     imports = set(imports_in_file(CARICA_TASK))
-    imported_names = set(imported_names_in_file(CARICA_TASK))
+    boundary_imported_names = set(imported_names_in_file(CARICA_ARCGIS_BOUNDARY))
 
     assert any(
         module == "app.core.features.arcgis_writer_boundary"
         and name == "ArcGISFeatureWriter"
-        for module, name, _line in imported_names
+        for module, name, _line in boundary_imported_names
     )
     assert "app.core.features.arcgis_client" not in imports
     assert NEUTRAL_FACTORY_MODULE not in imports

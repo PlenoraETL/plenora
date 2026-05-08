@@ -37,10 +37,10 @@ class BroadDictReturn(NamedTuple):
     annotation: str
 
 
-# Count report: 24 remaining broad dict-return residuals across the selected
+# Count report: 22 remaining broad dict-return residuals across the selected
 # BE094 core/db boundary modules. Future batches should remove entries here
 # as they replace compatibility dict wrappers with typed contracts.
-EXPECTED_BROAD_DICT_RETURN_RESIDUALS_BE094_REMAINING_24: frozenset[
+EXPECTED_BROAD_DICT_RETURN_RESIDUALS_BE094_REMAINING_22: frozenset[
     BroadDictReturn
 ] = frozenset(
     {
@@ -122,16 +122,6 @@ EXPECTED_BROAD_DICT_RETURN_RESIDUALS_BE094_REMAINING_24: frozenset[
         ),
         BroadDictReturn(
             "app/core/orchestrator/task_service.py",
-            "TaskResultPayload.to_dict",
-            "Dict[str, object]",
-        ),
-        BroadDictReturn(
-            "app/core/orchestrator/task_service.py",
-            "TaskInfo.to_dict",
-            "Dict[str, object]",
-        ),
-        BroadDictReturn(
-            "app/core/orchestrator/task_service.py",
             "ActiveTaskInfo.to_dict",
             "Dict[str, str]",
         ),
@@ -166,7 +156,7 @@ BROAD_DICT_RETURN_CLASSIFICATIONS_BE094: dict[BroadDictReturn, str] = {
         if residual.qualname.endswith(("to_legacy_dict", "to_dict"))
         else "KEEP_COMPAT_WITH_REMOVAL_CONDITION"
     )
-    for residual in EXPECTED_BROAD_DICT_RETURN_RESIDUALS_BE094_REMAINING_24
+    for residual in EXPECTED_BROAD_DICT_RETURN_RESIDUALS_BE094_REMAINING_22
 }
 
 TYPED_ZERO_COUNT_MODULES_BE094_DONE: frozenset[str] = frozenset(
@@ -243,15 +233,15 @@ def _scan_broad_dict_returns(paths: Iterable[str]) -> frozenset[BroadDictReturn]
     return frozenset(hits)
 
 
-def test_be094_selected_boundary_broad_dict_returns_match_remaining_24() -> None:
+def test_be094_selected_boundary_broad_dict_returns_match_remaining_22() -> None:
     """Ratchet selected core/db boundary broad-dict returns.
 
     Extra entries mean new broad dict returns crossed one of the selected
     service/repository boundaries. Missing entries mean a future batch removed
-    residuals and should lower the ``REMAINING_24`` baseline.
+    residuals and should lower the ``REMAINING_22`` baseline.
     """
     found = _scan_broad_dict_returns(_TARGET_BOUNDARY_MODULES_BE094)
-    expected = EXPECTED_BROAD_DICT_RETURN_RESIDUALS_BE094_REMAINING_24
+    expected = EXPECTED_BROAD_DICT_RETURN_RESIDUALS_BE094_REMAINING_22
 
     extra = sorted(found - expected)
     missing = sorted(expected - found)
@@ -263,8 +253,8 @@ def test_be094_selected_boundary_broad_dict_returns_match_remaining_24() -> None
     )
     assert not missing, (
         "Broad dict return residuals were removed from selected BE094 "
-        f"boundary modules: {missing}. Ratchet the count below 24 by "
-        "updating EXPECTED_BROAD_DICT_RETURN_RESIDUALS_BE094_REMAINING_24."
+        f"boundary modules: {missing}. Ratchet the count below 22 by "
+        "updating EXPECTED_BROAD_DICT_RETURN_RESIDUALS_BE094_REMAINING_22."
     )
 
 

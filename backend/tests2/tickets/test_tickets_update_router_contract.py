@@ -14,6 +14,7 @@ from fastapi.testclient import TestClient
 
 from app.shared.contracts.auth import CurrentUser
 from app.core.tickets.router import _require_not_esecutore, router as tickets_router
+from app.db import tickets_db_service as tdb
 
 
 pytestmark = [pytest.mark.unit, pytest.mark.contract]
@@ -26,14 +27,16 @@ def _user(role: str = "admin", user_id: str = "adm", group_id: str = "g1") -> Cu
     )
 
 
-def _ticket() -> dict:
-    return {
+def _ticket(**overrides) -> tdb.TicketRow:
+    data = {
         "id": "t1", "kind": "user_support", "title": "t",
         "description": "", "severity": "medium", "status": "open",
         "category": "other", "created_by": "u1", "assignee": None,
         "group_id": "g1", "created_at": "2026-04-19T00:00:00Z",
         "updated_at": "2026-04-19T00:00:00Z", "resolved_at": None,
     }
+    data.update(overrides)
+    return tdb.TicketRow(**data)
 
 
 def _make_client(current_user: CurrentUser) -> TestClient:
