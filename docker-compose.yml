@@ -7,12 +7,12 @@
 #   - backend    : FastAPI (uvicorn :5004) with /health and /ready
 #   - worker     : Celery worker (--pool=solo for determinism)
 #   - beat       : Celery beat with PlenoraBeatScheduler
+#   - frontend   : Vite production build served by nginx (:3000 -> :80)
 #
-# Frontend, MinIO, and the systemd backup unit are intentionally OUT
-# of this scaffold (target shape lives in docs/ops/install-docker.md
-# section "Target shape"). This compose intentionally provides the
-# minimum to exercise the smoke harness items 1-8 from
-# docs/ops/install-marco-dry-run.md section 5.
+# MinIO and the systemd backup unit are intentionally OUT of this
+# scaffold (target shape lives in docs/ops/install-docker.md section
+# "Target shape"). This compose intentionally provides the minimum to
+# exercise the smoke harness from docs/ops/install-marco-dry-run.md.
 #
 # Production caveat: STORAGE_POLICY=db means BYTEA-only blob path.
 # Real deployments should switch to object_storage; not in scope here.
@@ -129,6 +129,20 @@ services:
     # is safe (additional replicas go to standby) but unnecessary.
     entrypoint: ["python", "-m", "celery", "-A", "workers.celery_app", "beat"]
     command: ["-S", "workers.beat_scheduler.PlenoraBeatScheduler", "--loglevel=info"]
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+      args:
+        VITE_API_URL: ${FRONTEND_VITE_API_URL:-http://localhost:5004}
+    image: plenora-frontend:scaffold
+    ports:
+      - "3000:80"
+    depends_on:
+      backend:
+        condition: service_started
     restart: unless-stopped
 
 volumes:

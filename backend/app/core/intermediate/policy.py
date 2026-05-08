@@ -9,6 +9,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Optional
 
+from app.core.intermediate.exceptions import IntermediateSettingsError
+
 
 # Costanti / valori ammessi
 
@@ -189,17 +191,6 @@ def _read_settings() -> dict:
         "fingerprint_mode": settings.get("INTERMEDIATE_FINGERPRINT_MODE"),
         "fingerprint_sample_rows": settings.get("INTERMEDIATE_FINGERPRINT_SAMPLE_ROWS"),
     }
-
-
-# Validazione settings (fail-fast
-
-class IntermediateSettingsError(ValueError):
-    """Settings persistenza intermedi non valide.
-
-    Sottoclasse di `ValueError` per integrarsi con i test pattern e con
-    `validate_storage_config` esistente, ma identificabile via isinstance
-    quando serve distinguere la causa.
-    """
 
 
 def validate_intermediate_settings(values: Optional[dict] = None) -> None:

@@ -337,16 +337,16 @@ run_schema_postcondition() {
 }
 
 # ---------------------------------------------------------------------------
-# FE gap status report (BE-GO-READY-INSTALL-019-AUTOMATE-INSTALL-TRUTH-CHECKS)
+# Docker path status report (BE-GO-READY-INSTALL-019-AUTOMATE-INSTALL-TRUTH-CHECKS)
 # ---------------------------------------------------------------------------
-# Checks the three FE/CI artifacts that must exist before the Docker path
-# can be called validated. Non-blocking: emits WARN lines, does not exit.
+# Checks the Docker artifacts that must exist before the Docker path can
+# be called validated. Non-blocking: emits WARN lines, does not exit.
 # Run before any docker step so gaps are visible upfront.
 # Source of truth: tests2/shared/test_install_docker_fe_gap_guard.py.
-report_fe_gap_status() {
+report_docker_path_status() {
     echo ""
     echo "=============================================================="
-    echo "DOCKER PATH GAP REPORT (FIRST SCAFFOLD, NOT YET VALIDATED)"
+    echo "DOCKER PATH STATUS (FIRST SCAFFOLD, NOT YET VALIDATED)"
     echo "=============================================================="
     local gaps=0
 
@@ -386,22 +386,22 @@ report_fe_gap_status() {
 
     echo ""
     if [ "$gaps" -gt 0 ]; then
-        echo "  $gaps FE/CI gap(s) open. Backend-only scaffold until all three close."
+        echo "  $gaps Docker artifact gap(s) open. Do not claim validated Docker yet."
         echo "  See docs/ops/install-docker.md 'What ships today vs what does NOT'."
     else
-        echo "  All three FE/CI artifacts present. See install-docker.md to flip markers."
+        echo "  Frontend artifacts present; CI lane and real-host validation still gate the claim."
     fi
     echo "=============================================================="
     echo ""
 }
 
-report_fe_gap_status
+report_docker_path_status
 
 run_step 1 "config (no apply)" -- \
     docker compose config
 
-run_step 2 "build backend image" -- \
-    docker compose build backend
+run_step 2 "build backend + frontend images" -- \
+    docker compose build backend frontend
 
 run_step 3a "up postgres + redis" -- \
     docker compose up -d postgres redis
@@ -428,18 +428,24 @@ run_schema_postcondition
 run_step 5 "up worker + beat" -- \
     docker compose up -d worker beat
 
-run_step 6 "cleanroom.ping round-trip" -- \
+run_step 6a "up frontend (static nginx)" -- \
+    docker compose up -d --wait frontend
+
+run_step 6b "GET frontend SPA shell" -- \
+    curl -fsS http://127.0.0.1:3000/
+
+run_step 7 "cleanroom.ping round-trip" -- \
     docker compose exec -T worker python -c \
         "from workers.celery_app import celery_app; print(celery_app.send_task('cleanroom.ping').get(timeout=30))"
 
-run_step 7 "memory caps visibility" -- \
+run_step 8 "memory caps visibility" -- \
     docker compose exec -T backend python -c "
 from app.config import settings
 for k in ('LOAD_FILE_MAX_BYTES','WORKER_RSS_MAX_BYTES','RESOURCE_MAX_BYTES','ARTIFACT_PREVIEW_MAX_BYTES','CROSS_JOIN_MAX_OUTPUT_ROWS','MULTI_JOIN_MAX_OUTPUT_ROWS'):
     print(f'{k}={settings.get(k)}')
 "
 
-run_step 8 "non-destructive stop (preserves volumes)" -- \
+run_step 9 "non-destructive stop (preserves volumes)" -- \
     docker compose stop
 
 echo

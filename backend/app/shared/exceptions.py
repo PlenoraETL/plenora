@@ -4,6 +4,13 @@ Eccezioni custom condivise tra i moduli backend.
 
 from typing import List, Dict, Any, Literal, Optional
 
+from app.core.intermediate.exceptions import IntermediateWriteError
+from app.core.projects.exceptions import (
+    CanvasCorruptedError,
+    ProjectCleanupPartialError,
+    ProjectHasDependenciesError,
+)
+
 
 class ColumnsMetadataSaveError(Exception):
     """Sollevata quando il save di `columns_metadata` sul canvas fallisce
@@ -68,190 +75,6 @@ class ColumnsMetadataSaveError(Exception):
         )
 
 
-class CanvasCorruptedError(Exception):
-    """Sollevata quando il canvas di un progetto e' presente in DB ma non
-    interpretabile: JSON malformato, tipo inatteso, schema Pydantic
-    non valido.
-
-    Motivazione (reperto: silent-fallback a CanvasState vuoto):
-      Fino al fix, `get_project_canvas` ritornava un canvas vuoto in
-      caso di corruzione, loggando solo un warning. Conseguenze:
-        - L'utente apriva il progetto, vedeva canvas vuoto, lo salvava
-          sovrapposto al contenuto corrotto originale → perdita dati
-          definitiva.
-        - Il warning nel log era facilmente perso, nessun alert al caller.
-        - Impossibile distinguere "progetto nuovo senza canvas" da
-          "progetto con canvas corrotto".
-
-    Ora il servizio solleva esplicitamente. Il router traduce in
-    HTTP 500 con messaggio leggibile, cosi' l'utente sa che c'e' un
-    problema e puo' chiedere il ripristino da backup.
-
-    Attributi:
-        project_id: id del progetto col canvas corrotto
-        reason: descrizione umana del problema (JSON invalido, tipo,
-            schema). Safe da esporre in risposta HTTP: non contiene
-            dati utente sensibili.
-        original_error: eccezione sottostante (json.JSONDecodeError,
-            ValidationError, ecc.) per logging strutturato.
-    """
-
-    def __init__(
-        self,
-        project_id: str,
-        reason: str,
-        original_error: Optional[Exception] = None,
-    ):
-        self.project_id = project_id
-        self.reason = reason
-        self.original_error = original_error
-        super().__init__(
-            f"Canvas del progetto '{project_id}' corrotto: {reason}"
-        )
-
-
-class ProjectHasDependenciesError(Exception):
-    """Sollevata quando si tenta di eliminare un progetto che ha entità collegate
-    che impediscono la cancellazione.
-
-    Tipi di blocco supportati:
-      - eseguibili pubblicati a partire dal progetto
-      - altri progetti (manipola/arricchisci) che lo usano come sorgente
-
-    Attributi:
-        project_id: id del progetto che non può essere eliminato
-        eseguibili: lista di dict {id, name} degli eseguibili bloccanti
-        dependent_projects: lista di dict {id, name, project_type} dei progetti
-            che referenziano questo come sorgente
-    """
-
-    def __init__(
-        self,
-        project_id: str,
-        eseguibili: List[Dict[str, Any]] = None,
-        dependent_projects: List[Dict[str, Any]] = None,
-    ):
-        self.project_id = project_id
-        self.eseguibili = eseguibili or []
-        self.dependent_projects = dependent_projects or []
-        parts = []
-        if self.eseguibili:
-            parts.append(f"{len(self.eseguibili)} eseguibile/i")
-        if self.dependent_projects:
-            parts.append(f"{len(self.dependent_projects)} progetto/i dipendenti")
-        deps = " e ".join(parts) if parts else "dipendenze"
-        super().__init__(
-            f"Progetto '{project_id}' ha {deps} collegati: "
-            f"rimuoverli prima di cancellare il progetto."
-        )
-
-
-class ProjectCleanupPartialError(Exception):
-    """Sollevata quando la cascade cleanup in `delete_project` fallisce su
-    almeno uno step classificato come CRITICO (intermediate_runs o
-    results_blobs). La row `config.projects` NON viene rimossa: invariante
-    fail-closed "o progetto cancellato pulito, o ancora presente".
-
-    Contesto (reperto S1 , audit `error_handling_batch9_orchestrator_cleanup_audit.md`):
-      Pre-fix, `delete_project` aveva cascade a 5 step con 4 `except Exception:
-      warning + continue`; lo step 5 (config DELETE) veniva eseguito SEMPRE,
-      anche se intermediate runs / results blobs erano orfani cross-DB. La
-      row in `config.projects` spariva e il caller vedeva `{"status":
-      "deleted"}`: il claim "cancellato" era silenziosamente violato,
-      compensato solo dal job admin `orphan_cleanup_service`.
-
-      Fix C5 ha introdotto l'accumulo `critical_failures` e un gate pre-
-      step 5 che sollevava `RuntimeError` con messaggio strutturato.
-      Fix C6 (questo) promuove la segnalazione a classe tipizzata cosi'
-      che il caller `projects/router.py` possa catturarla via isinstance
-      e mappare a `HTTPException(500)` con shape JSON leggibile sia da
-      umano (FE toast) sia da tool (monitoring/alerting).
-
-    Step critici (falliscono → fail-closed):
-      - `intermediate_runs`: `app.core.intermediate.db.delete_all_runs_for_canvas`
-      - `results_blobs`: `app.core.results.cleanup.delete_results_for_project`
-
-    Step derivati (falliscono → tolerati, non bloccano):
-      - `schedules_orphan`: `ScheduleService.mark_as_orphan`
-      - `comparison_keys`: `app.core.projects.db.delete_comparison_keys`
-
-    Attributi:
-        project_id: id del progetto per cui la cascade e' fallita.
-        critical_failed: lista nomi canonici step critici falliti (non-vuota
-            per definizione: l'eccezione si solleva solo se almeno uno
-            critical ha fallito).
-        derived_failed: lista nomi canonici step derivati falliti, riportati
-            per diagnosticita'. Puo' essere vuota.
-    """
-
-    def __init__(
-        self,
-        project_id: str,
-        critical_failed: List[str],
-        derived_failed: Optional[List[str]] = None,
-    ):
-        self.project_id = project_id
-        self.critical_failed = list(critical_failed)
-        self.derived_failed = list(derived_failed or [])
-        super().__init__(
-            f"Cleanup parziale del progetto '{project_id}': "
-            f"step critici falliti {self.critical_failed}. "
-            f"Il progetto non e' stato cancellato."
-        )
-
-
-class IntermediateWriteError(Exception):
-    """Sollevata quando la scrittura intermediate di un nodo fallisce.
-
-    Contesto (reperto S2 , audit `error_handling_batch8_storage_provider_audit.md`):
-      `intermediate/writer.write_node` e' chiamato dagli executor
-      (estrai/manipola/arricchisci) a fine nodo per persistere righe e
-      metadata nella intermediate.db (PG plenora schema). Pre-fix un
-      fallimento ritornava silenziosamente `sha256(b"error").hexdigest`:
-      un hash sintatticamente valido (64 hex chars) ma semanticamente
-      fake. Indistinguibile da un hash reale a valle → `input_hash` e
-      `output_hash` del run potevano contenere marker "error" invisibile,
-      violando l'invariante di determinismo di dedup/replay.
-
-    Post-fix (questa eccezione):
-      - Il fake hash NON viene piu' ritornato.
-      - `write_node` solleva questa eccezione dopo aver tentato il fallback
-        `upsert_node_meta(status="error")` come resource guard.
-      - I caller attuali (query_executor, manipola/executor, arricchisci/
-        api_connector, enrichment_task) gia' wrappano `write_node` in
-        `try/except Exception: logger.warning + pass` perche' il contratto
-        di intermediate e' "best-effort non bloccante": l'eccezione viene
-        swallowed lato caller. Effetto macroscopico invariato, ma invariante
-        di determinismo preservato.
-      - Caller futuri che vogliono differenziare "intermediate non critico"
-        da "pipeline primaria fallita" possono fare `except
-        IntermediateWriteError` invece di `except Exception` broad.
-
-    Attributi:
-        run_id: id della run intermediate su cui il write ha fallito.
-        node_id: id del nodo che ha fallito la scrittura.
-        original_error: eccezione sottostante (tipicamente psycopg2.Error,
-            OSError, ecc.). Usata per logging strutturato + preservazione
-            chain traceback via `raise ... from original_error`. Non va
-            esposta via response API.
-    """
-
-    def __init__(
-        self,
-        run_id: str,
-        node_id: str,
-        original_error: Optional[Exception] = None,
-    ):
-        self.run_id = run_id
-        self.node_id = node_id
-        self.original_error = original_error
-        err_type = (
-            type(original_error).__name__ if original_error else "unknown"
-        )
-        super().__init__(
-            f"Intermediate write fallito per run={run_id} node={node_id} "
-            f"({err_type})"
-        )
 
 
 class ExecutionContextError(Exception):

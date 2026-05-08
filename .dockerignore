@@ -46,7 +46,9 @@ venv/
 .claude/
 .agent-temp/
 
-# Frontend build artifacts (frontend image is a separate concern)
+# Node / frontend build artifacts
+node_modules/
+**/node_modules/
 frontend/node_modules/
 frontend/dist/
 frontend/.vite/

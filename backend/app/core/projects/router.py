@@ -19,7 +19,7 @@ from app.shared.exceptions import (
     CanvasCorruptedError,
     ProjectCleanupPartialError,
 )
-from app.core.projects.lineage import ProjectLineageCycleError
+from app.core.projects.exceptions import ProjectLineageCycleError
 from app.core.auth.dependencies import (
     get_current_user,
     require_not_esecutore,
@@ -203,6 +203,11 @@ def _visible_project_ids_strict(
     return list_owned_project_ids(ids, owner_group_id=owner_group_id)
 
 
+def _metadata_group_id(metadata: Any) -> Optional[str]:
+    """Return the group id from typed project metadata."""
+    return getattr(metadata, "group_id", None)
+
+
 def _annotate_inaccessible_canvas_refs(
     canvas_dict: dict[str, Any],
     owner_group_id: Optional[str],
@@ -357,13 +362,9 @@ def get_project(
 
     canvas_dict = canvas.model_dump() if canvas else None
     if canvas_dict is not None:
-        owner_group_id = (
-            getattr(metadata, "group_id", None)
-            or (metadata.get("group_id") if isinstance(metadata, dict) else None)
-        )
         _annotate_inaccessible_canvas_refs(
             canvas_dict,
-            owner_group_id=owner_group_id,
+            owner_group_id=_metadata_group_id(metadata),
             is_superadmin=(current_user.role == "superadmin"),
         )
 
@@ -598,12 +599,7 @@ def update_project_canvas(
     refs = _collect_canvas_resource_refs(canvas)
     if refs["file_sources"] or refs["projects"] or refs["arcgis_connections"]:
         from app.core.auth.visibility import visible_resource_ids
-        # `metadata` puo' essere ProjectMetadata pydantic (prod) o dict
-        # test): coerente con assert_group_access che gia' supporta entrambi
-        owner_group_id = (
-            getattr(metadata, "group_id", None)
-            or (metadata.get("group_id") if isinstance(metadata, dict) else None)
-        )
+        owner_group_id = _metadata_group_id(metadata)
         is_super = current_user.role == "superadmin"
         invalid_file_sources: set = set()
         invalid_projects: set = set()

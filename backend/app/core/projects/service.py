@@ -364,7 +364,7 @@ class ProjectService:
 
         chain = detect_project_lineage_cycle(project_id, get_sources)
         if chain is not None:
-            from app.core.projects.lineage import ProjectLineageCycleError
+            from app.core.projects.exceptions import ProjectLineageCycleError
             raise ProjectLineageCycleError(chain)
 
     def _find_dependent_projects(self, project_id: str, group_id: str = None) -> List[dict]:

@@ -64,7 +64,7 @@ def test_validate_script_runs_eight_canonical_commands():
     text = _SCRIPT.read_text(encoding="utf-8")
     expected_commands = (
         "docker compose config",
-        "docker compose build backend",
+        "docker compose build backend frontend",
         "docker compose up -d postgres redis",
         "docker compose up -d --wait backend",
         "http://127.0.0.1:5004/health",
@@ -464,13 +464,15 @@ def test_install_docker_doc_lists_expected_outputs_for_each_step():
     # uses bold backtick'd commands.
     expected_markers = (
         "1. **`docker compose config`**",
-        "2. **`docker compose build backend`**",
+        "2. **`docker compose build backend frontend`**",
         "3. **`docker compose up -d --wait backend`**",
         "4. **`curl -fsS http://127.0.0.1:5004/health`**",
         "5. **`docker compose up -d worker beat`**",
-        "6. **`cleanroom.ping`**",
-        "7. **memory caps visibility**",
-        "8. **`docker compose stop`**",
+        "6. **`docker compose up -d --wait frontend`**",
+        "7. **`curl -fsS http://127.0.0.1:3000/`**",
+        "8. **`cleanroom.ping`**",
+        "9. **memory caps visibility**",
+        "10. **`docker compose stop`**",
     )
     for marker in expected_markers:
         assert marker in text, (
@@ -517,18 +519,18 @@ def test_install_docker_doc_documents_script_non_destructive_contract():
 # BE-GO-READY-INSTALL-019: FE gap warnings in script output
 
 
-def test_validate_script_defines_fe_gap_report_function():
-    """BE-GO-READY-INSTALL-019: `report_fe_gap_status` must be defined
-    in the script to make FE/CI gap truth visible to the operator at
+def test_validate_script_defines_docker_path_report_function():
+    """BE-GO-READY-INSTALL-019: `report_docker_path_status` must be defined
+    in the script to make Docker path truth visible to the operator at
     pack-start instead of requiring them to read the docs separately.
 
-    The three gaps it reports match exactly the three negative locks in
+    The artifacts it reports match the source locks in
     `test_install_docker_fe_gap_guard.py`."""
     text = _SCRIPT.read_text(encoding="utf-8")
-    assert "report_fe_gap_status() {" in text, (
-        "scripts/docker-validate.sh must define `report_fe_gap_status` "
-        "(BE-GO-READY-INSTALL-019). The function reports the three "
-        "FE/CI artifacts missing from the current scaffold so the "
+    assert "report_docker_path_status() {" in text, (
+        "scripts/docker-validate.sh must define `report_docker_path_status` "
+        "(BE-GO-READY-INSTALL-019). The function reports Docker "
+        "artifacts missing from the current scaffold so the "
         "operator sees the gaps upfront without reading the docs."
     )
 
@@ -570,17 +572,17 @@ def test_validate_script_ci_gap_check_looks_for_run_steps_not_comments():
     )
 
 
-def test_validate_script_calls_fe_gap_report_before_run_step_1():
-    """report_fe_gap_status must be CALLED before run_step 1 so the
-    operator sees the FE gap summary before the pack starts executing.
+def test_validate_script_calls_docker_path_report_before_run_step_1():
+    """report_docker_path_status must be CALLED before run_step 1 so the
+    operator sees the Docker path summary before the pack starts executing.
 
     A call that appears only after step 1 (or not at all) means the
     gaps are invisible until after the potentially long build begins."""
     text = _SCRIPT.read_text(encoding="utf-8")
-    call_pos = text.find("\nreport_fe_gap_status\n")
+    call_pos = text.find("\nreport_docker_path_status\n")
     step1_pos = text.find("run_step 1 ")
     assert call_pos != -1, (
-        "scripts/docker-validate.sh must invoke `report_fe_gap_status` "
+        "scripts/docker-validate.sh must invoke `report_docker_path_status` "
         "as a standalone call (not just define it) "
         "(BE-GO-READY-INSTALL-019)."
     )
@@ -589,7 +591,7 @@ def test_validate_script_calls_fe_gap_report_before_run_step_1():
         "(locked by test_validate_script_runs_eight_canonical_commands)."
     )
     assert call_pos < step1_pos, (
-        "report_fe_gap_status must be called BEFORE `run_step 1` "
-        "(BE-GO-READY-INSTALL-019). A late call means the FE gap "
+        "report_docker_path_status must be called BEFORE `run_step 1` "
+        "(BE-GO-READY-INSTALL-019). A late call means the Docker path "
         "summary appears only after the build has started."
     )

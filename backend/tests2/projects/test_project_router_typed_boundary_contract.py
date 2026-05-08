@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import inspect
 from datetime import datetime, timezone
 from types import SimpleNamespace
 from unittest.mock import MagicMock
@@ -80,3 +81,12 @@ def test_project_router_list_get_and_update_stay_off_legacy_get_project(
     assert detail["metadata"]["id"] == "proj-1"
     assert updated == {"status": "ok", "project_id": "proj-1"}
     service.get_project.assert_not_called()
+
+
+def test_project_router_uses_typed_metadata_attributes_only() -> None:
+    from app.core.projects import router as router_mod
+
+    source = inspect.getsource(router_mod)
+
+    assert 'isinstance(metadata, dict)' not in source
+    assert 'metadata.get("group_id")' not in source

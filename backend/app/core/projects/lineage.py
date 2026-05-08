@@ -6,18 +6,10 @@ C3 fix 5: due progetti Manipola possono referenziare l'uno l'altro.
 
 from typing import Callable, List, Optional
 
+from app.core.projects.exceptions import ProjectLineageCycleError
 
-class ProjectLineageCycleError(Exception):
-    """Sollevato quando un ciclo cross-project viene rilevato al save canvas."""
 
-    def __init__(self, chain: List[str]):
-        self.chain = chain
-        super().__init__(self._format(chain))
-
-    @staticmethod
-    def _format(chain: List[str]) -> str:
-        arrow = " → "
-        return f"Ciclo di dipendenza tra progetti: {arrow.join(chain)}"
+__all__ = ["ProjectLineageCycleError", "detect_project_lineage_cycle"]
 
 
 def detect_project_lineage_cycle(

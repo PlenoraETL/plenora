@@ -1,0 +1,86 @@
+"""Domain exceptions for projects."""
+
+from __future__ import annotations
+
+from typing import Any, Dict, List, Optional
+
+
+class ProjectLineageCycleError(Exception):
+    """Raised when a cross-project dependency cycle is detected."""
+
+    def __init__(self, chain: List[str]):
+        self.chain = chain
+        super().__init__(self._format(chain))
+
+    @staticmethod
+    def _format(chain: List[str]) -> str:
+        arrow = " → "
+        return f"Ciclo di dipendenza tra progetti: {arrow.join(chain)}"
+
+
+class CanvasCorruptedError(Exception):
+    """Raised when a persisted project canvas cannot be parsed safely."""
+
+    def __init__(
+        self,
+        project_id: str,
+        reason: str,
+        original_error: Optional[Exception] = None,
+    ):
+        self.project_id = project_id
+        self.reason = reason
+        self.original_error = original_error
+        super().__init__(
+            f"Canvas del progetto '{project_id}' corrotto: {reason}"
+        )
+
+
+class ProjectHasDependenciesError(Exception):
+    """Raised when a project cannot be deleted because dependents exist."""
+
+    def __init__(
+        self,
+        project_id: str,
+        eseguibili: List[Dict[str, Any]] = None,
+        dependent_projects: List[Dict[str, Any]] = None,
+    ):
+        self.project_id = project_id
+        self.eseguibili = eseguibili or []
+        self.dependent_projects = dependent_projects or []
+        parts = []
+        if self.eseguibili:
+            parts.append(f"{len(self.eseguibili)} eseguibile/i")
+        if self.dependent_projects:
+            parts.append(f"{len(self.dependent_projects)} progetto/i dipendenti")
+        deps = " e ".join(parts) if parts else "dipendenze"
+        super().__init__(
+            f"Progetto '{project_id}' ha {deps} collegati: "
+            f"rimuoverli prima di cancellare il progetto."
+        )
+
+
+class ProjectCleanupPartialError(Exception):
+    """Raised when critical project cascade cleanup steps fail."""
+
+    def __init__(
+        self,
+        project_id: str,
+        critical_failed: List[str],
+        derived_failed: Optional[List[str]] = None,
+    ):
+        self.project_id = project_id
+        self.critical_failed = list(critical_failed)
+        self.derived_failed = list(derived_failed or [])
+        super().__init__(
+            f"Cleanup parziale del progetto '{project_id}': "
+            f"step critici falliti {self.critical_failed}. "
+            f"Il progetto non e' stato cancellato."
+        )
+
+
+__all__ = [
+    "CanvasCorruptedError",
+    "ProjectCleanupPartialError",
+    "ProjectHasDependenciesError",
+    "ProjectLineageCycleError",
+]

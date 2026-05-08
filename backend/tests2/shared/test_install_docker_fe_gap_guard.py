@@ -85,35 +85,22 @@ def _ci_invokes_docker_compose() -> bool:
     return False
 
 
-# 1. Today's truth: backend scaffold yes; FE / full-stack / CI no
+# 1. Today's truth: backend scaffold yes; FE image + compose yes; CI no
 
 
-def test_no_frontend_dockerfile_today():
-    """Today's reality: there is no frontend Dockerfile. If a
-    future PR adds one, this test fails -- and that is the
-    signal to also flip the negative locks below + add a
-    `frontend` service to compose."""
-    assert not _frontend_dockerfile_exists(), (
-        "A `frontend/Dockerfile*` file now exists. Update "
-        "`docs/ops/install-docker.md` `What ships today vs what "
-        "does NOT` truth table accordingly, AND add a `frontend` "
-        "service to `docker-compose.yml`, AND open the CI lane "
-        "(`INSTALL-015-DOCKER-CI`) before flipping the FIRST "
-        "SCAFFOLD markers. This test is intentionally a "
-        "lock-against-half-migration."
+def test_frontend_dockerfile_exists_today():
+    """Today's reality: frontend static delivery has a Dockerfile."""
+    assert _frontend_dockerfile_exists(), (
+        "`frontend/Dockerfile*` must exist so the Docker scaffold "
+        "can build the Vite bundle and serve it from a container."
     )
 
 
-def test_compose_has_no_frontend_service_today():
-    """Today's reality: `docker-compose.yml` exposes 5 services
-    (postgres, redis, backend, worker, beat) and none of them is
-    a frontend container. If a future PR adds one, this test
-    fails -- the doc + the FE Dockerfile must move in lockstep."""
-    assert not _compose_has_frontend_service(), (
-        "`docker-compose.yml` now declares a frontend-shaped "
-        "service. Update the install-docker.md truth table AND "
-        "ensure `frontend/Dockerfile*` exists AND open the CI "
-        "lane before flipping the FIRST SCAFFOLD markers."
+def test_compose_has_frontend_service_today():
+    """Today's reality: compose includes a frontend static container."""
+    assert _compose_has_frontend_service(), (
+        "`docker-compose.yml` must declare a frontend-shaped "
+        "service in lockstep with `frontend/Dockerfile*`."
     )
 
 
@@ -165,8 +152,8 @@ def test_install_docker_doc_does_not_claim_full_stack_validation():
         assert needle not in text, (
             f"`docs/ops/install-docker.md` contains the "
             f"forbidden validation claim {needle!r}. While "
-            "`frontend/Dockerfile*` is missing OR no `frontend` "
-            "service is in compose OR no Docker CI lane exists, "
+            "the Docker CI lane or real Linux validation report "
+            "is missing, "
             "the doc MUST NOT claim the Docker path is validated."
         )
 

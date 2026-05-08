@@ -40,6 +40,9 @@ _BACKEND_ROOT = Path(__file__).resolve().parents[3]
 _GROUP_CLEANUP_PATH = (
     _BACKEND_ROOT / "app" / "core" / "auth" / "group_cleanup.py"
 )
+_CLEANUP_REGISTRY_PATH = (
+    _BACKEND_ROOT / "app" / "core" / "auth" / "cleanup_registry.py"
+)
 
 
 def _superadmin_user():
@@ -49,61 +52,227 @@ def _superadmin_user():
 
 
 def test_delete_group_cascade_delegates_intermediate_cleanup_boundary(monkeypatch):
-    """Group cascade must not be orchestrated from auth.db."""
-    from app.core.auth import group_cleanup
-
-    class _Cursor:
-        rowcount = 1
+    """Project cascade cleanup must use the intermediate cleanup boundary."""
+    from app.core.projects import cleanup as project_cleanup
 
     intermediate_calls: list[str] = []
 
-    def _execute(_sql, _params=()):
-        return _Cursor()
-
-    def _fetchall(sql, _params=()):
-        if "SELECT id FROM projects" in sql:
-            return [{"id": "project-1"}]
-        return []
-
-    monkeypatch.setattr(group_cleanup, "execute", _execute)
-    monkeypatch.setattr(group_cleanup, "fetchall", _fetchall)
-    monkeypatch.setattr(group_cleanup, "delete_results_for_project", lambda _pid: 2)
-    monkeypatch.setattr(group_cleanup.auth_db, "delete_group", lambda _gid: True)
     monkeypatch.setattr(
-        group_cleanup,
+        project_cleanup.project_db,
+        "list_project_ids_for_group",
+        lambda _gid: {"project-1"},
+    )
+    monkeypatch.setattr(project_cleanup, "delete_results_for_project", lambda _pid: 2)
+    monkeypatch.setattr(
+        project_cleanup,
         "delete_intermediate_runs_for_group_project",
         lambda project_id: intermediate_calls.append(project_id) or 3,
     )
+    monkeypatch.setattr(
+        project_cleanup,
+        "delete_comparison_keys_for_project",
+        lambda _pid: None,
+    )
+    monkeypatch.setattr(
+        project_cleanup.project_db,
+        "delete_project",
+        lambda _pid, group_id=None: True,
+    )
+
+    report = project_cleanup.delete_projects_for_group(
+        "group-1",
+        SimpleNamespace(warning=lambda *_args, **_kwargs: None),
+    )
+
+    assert intermediate_calls == ["project-1"]
+    assert report.intermediate_runs == 3
+
+
+def test_delete_group_cascade_delegates_registered_cleanup_handlers(monkeypatch):
+    from app.core.auth import cleanup_registry, group_cleanup
+
+    calls: list[tuple[str, str]] = []
+
+    def _handler(group_id, report, _log):
+        calls.append(("handler", group_id))
+        report["schedules"] = 7
+
+    monkeypatch.setattr(
+        cleanup_registry,
+        "GROUP_CLEANUP_HANDLERS",
+        (
+            cleanup_registry.GroupCleanupHandler(
+                name="test_handler",
+                report_keys=("schedules",),
+                cleanup=_handler,
+            ),
+        ),
+    )
+    monkeypatch.setattr(group_cleanup.auth_db, "delete_group", lambda _gid: True)
 
     report = group_cleanup.delete_group_cascade("group-1")
 
-    assert intermediate_calls == ["project-1"]
-    assert report["intermediate_runs"] == 3
+    assert calls == [("handler", "group-1")]
+    assert report["schedules"] == 7
+
+
+def test_group_cleanup_handlers_are_isolated_and_logged_in_order():
+    from app.core.auth import cleanup_registry
+
+    calls: list[str] = []
+    records: list[tuple[str, str, tuple[object, ...]]] = []
+
+    class _Log:
+        def info(self, msg, *args, **_kwargs):
+            records.append(("info", msg, args))
+
+        def warning(self, msg, *args, **_kwargs):
+            records.append(("warning", msg, args))
+
+    def _ok(name):
+        def _handler(_group_id, report, _log):
+            calls.append(name)
+            report[name] = len(calls)
+
+        return _handler
+
+    def _boom(_group_id, _report, _log):
+        calls.append("middle")
+        raise RuntimeError("middle failed")
+
+    handlers = (
+        cleanup_registry.GroupCleanupHandler(
+            name="first",
+            report_keys=("first",),
+            cleanup=_ok("first"),
+        ),
+        cleanup_registry.GroupCleanupHandler(
+            name="middle",
+            report_keys=("middle",),
+            cleanup=_boom,
+        ),
+        cleanup_registry.GroupCleanupHandler(
+            name="last",
+            report_keys=("last",),
+            cleanup=_ok("last"),
+        ),
+    )
+    report = {"first": 0, "middle": 0, "last": 0}
+
+    cleanup_registry.run_group_cleanup_handlers(
+        "group-1",
+        report,
+        _Log(),
+        handlers=handlers,
+    )
+
+    assert calls == ["first", "middle", "last"]
+    assert report == {"first": 1, "middle": 0, "last": 3}
+
+    warning_records = [record for record in records if record[0] == "warning"]
+    assert len(warning_records) == 1
+    assert "failed after %.2fms" in warning_records[0][1]
+    assert warning_records[0][2][0] == "middle"
+    assert isinstance(warning_records[0][2][1], float)
+    assert warning_records[0][2][2:4] == (2, 3)
+
+    info_records = [record for record in records if record[0] == "info"]
+    assert all("completed in %.2fms" in record[1] for record in info_records)
+    assert all(isinstance(record[2][1], float) for record in info_records)
+    completed_names = [record[2][0] for record in info_records]
+    assert completed_names == ["first", "last"]
+
+
+def test_delete_group_cascade_runs_handlers_before_final_auth_delete_failure(monkeypatch):
+    from app.core.auth import cleanup_registry, group_cleanup
+
+    calls: list[str] = []
+
+    def _handler(name):
+        def _cleanup(_group_id, _report, _log):
+            calls.append(name)
+
+        return _cleanup
+
+    monkeypatch.setattr(
+        cleanup_registry,
+        "GROUP_CLEANUP_HANDLERS",
+        (
+            cleanup_registry.GroupCleanupHandler(
+                name="first",
+                report_keys=(),
+                cleanup=_handler("first"),
+            ),
+            cleanup_registry.GroupCleanupHandler(
+                name="second",
+                report_keys=(),
+                cleanup=_handler("second"),
+            ),
+        ),
+    )
+
+    def _delete_group(_group_id):
+        calls.append("auth_delete")
+        raise RuntimeError("final delete failed")
+
+    monkeypatch.setattr(group_cleanup.auth_db, "delete_group", _delete_group)
+
+    with pytest.raises(RuntimeError, match="final delete failed"):
+        group_cleanup.delete_group_cascade("group-1")
+
+    assert calls == ["first", "second", "auth_delete"]
 
 
 def test_group_cleanup_imports_intermediate_cleanup_boundary_only():
-    src = _GROUP_CLEANUP_PATH.read_text(encoding="utf-8")
+    group_cleanup_src = _GROUP_CLEANUP_PATH.read_text(encoding="utf-8")
+    registry_src = _CLEANUP_REGISTRY_PATH.read_text(encoding="utf-8")
 
-    assert "app.core.intermediate.cleanup" in src
-    assert "app.core.intermediate.db" not in src
-    assert "delete_all_runs_for_canvas" not in src
+    assert "app.core.intermediate.cleanup" not in group_cleanup_src
+    assert "app.core.intermediate.cleanup" not in registry_src
+    assert "app.core.projects.cleanup" in registry_src
+    assert "app.core.results.cleanup" not in registry_src
+    assert "app.core.intermediate.db" not in registry_src
+    assert "delete_all_runs_for_canvas" not in registry_src
 
 
-def test_group_cleanup_execute_calls_do_not_use_f_string_sql():
-    tree = ast.parse(_GROUP_CLEANUP_PATH.read_text(encoding="utf-8"))
+def test_group_cleanup_registry_composes_domain_owned_handlers():
+    registry_src = _CLEANUP_REGISTRY_PATH.read_text(encoding="utf-8")
+
+    assert "app.core.scheduler.cleanup" in registry_src
+    assert "app.core.arricchisci.cleanup" in registry_src
+    assert "app.core.datasources.cleanup" in registry_src
+    assert "app.core.connections.cleanup" in registry_src
+    assert "DELETE FROM schedules WHERE group_id" not in registry_src
+    assert "DELETE FROM api_connections WHERE group_id" not in registry_src
+    assert "DELETE FROM datasources WHERE group_id" not in registry_src
+    assert "DELETE FROM connections WHERE group_id" not in registry_src
+
+
+def test_group_cleanup_registry_execute_calls_do_not_use_dynamic_sql():
+    sources = {
+        "group_cleanup.py": _GROUP_CLEANUP_PATH.read_text(encoding="utf-8"),
+        "cleanup_registry.py": _CLEANUP_REGISTRY_PATH.read_text(encoding="utf-8"),
+    }
 
     unsafe_calls = []
-    for node in ast.walk(tree):
-        if not isinstance(node, ast.Call):
-            continue
-        if not isinstance(node.func, ast.Name) or node.func.id != "execute":
-            continue
-        if node.args and isinstance(node.args[0], ast.JoinedStr):
-            unsafe_calls.append(node.lineno)
+    for filename, src in sources.items():
+        tree = ast.parse(src)
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Call):
+                continue
+            if not isinstance(node.func, ast.Name) or node.func.id != "execute":
+                continue
+            if not node.args:
+                continue
+            sql_arg = node.args[0]
+            if isinstance(sql_arg, ast.JoinedStr | ast.BinOp):
+                unsafe_calls.append(f"{filename}:{node.lineno}")
+            if isinstance(sql_arg, ast.Call):
+                unsafe_calls.append(f"{filename}:{node.lineno}")
 
     assert not unsafe_calls, (
-        "group_cleanup must use static SQL constants for execute() calls; "
-        f"f-string SQL found on lines {unsafe_calls}"
+        "group cleanup must use static SQL constants for execute() calls; "
+        f"dynamic SQL found at {unsafe_calls}"
     )
 
 

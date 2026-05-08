@@ -12,6 +12,15 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any, Mapping, Optional
 
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    StrictBool,
+    StrictInt,
+    StrictStr,
+    TypeAdapter,
+)
+
 from app.db.pg_connection import execute, fetchall, fetchone
 from app.db.sql_safety import safe_set_clause
 
@@ -49,68 +58,68 @@ class GroupSummaryRow:
     schedules: int = 0
 
 
+class _HydrationModel(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+
+class _UserRowHydration(_HydrationModel):
+    id: StrictStr
+    username: StrictStr
+    password_hash: StrictStr = ""
+    email: StrictStr | None = ""
+    group_id: StrictStr = ""
+    role: StrictStr = ""
+    is_active: StrictBool = True
+    created_at: StrictStr = ""
+    updated_at: StrictStr = ""
+
+
+class _GroupRowHydration(_HydrationModel):
+    id: StrictStr
+    name: StrictStr = ""
+    description: StrictStr | None = ""
+    created_at: StrictStr = ""
+    updated_at: StrictStr = ""
+
+
+class _GroupSummaryRowHydration(_HydrationModel):
+    projects: StrictInt = 0
+    users: StrictInt = 0
+    connections: StrictInt = 0
+    file_sources: StrictInt = 0
+    datasources: StrictInt = 0
+    api_connections: StrictInt = 0
+    schedules: StrictInt = 0
+
+
+_USER_ROW_ADAPTER = TypeAdapter(_UserRowHydration)
+_GROUP_ROW_ADAPTER = TypeAdapter(_GroupRowHydration)
+_GROUP_SUMMARY_ROW_ADAPTER = TypeAdapter(_GroupSummaryRowHydration)
+
+
 def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
-def _as_str(value: object, default: str = "") -> str:
-    if value is None:
-        return default
-    return str(value)
-
-
-def _as_bool(value: object, default: bool = True) -> bool:
-    if value is None:
-        return default
-    return bool(value)
-
-
-def _as_int(value: object, default: int = 0) -> int:
-    if value is None:
-        return default
-    return int(value)
-
-
 def hydrate_user_row(row: Mapping[str, Any] | None) -> UserRow | None:
-    if not row:
+    if row is None:
         return None
-    return UserRow(
-        id=_as_str(row.get("id")),
-        username=_as_str(row.get("username")),
-        password_hash=_as_str(row.get("password_hash")),
-        email=row.get("email") if row.get("email") is None else _as_str(row.get("email")),
-        group_id=_as_str(row.get("group_id")),
-        role=_as_str(row.get("role")),
-        is_active=_as_bool(row.get("is_active")),
-        created_at=_as_str(row.get("created_at")),
-        updated_at=_as_str(row.get("updated_at")),
-    )
+    parsed = _USER_ROW_ADAPTER.validate_python(dict(row))
+    return UserRow(**parsed.model_dump())
 
 
 def hydrate_group_row(row: Mapping[str, Any] | None) -> GroupRow | None:
-    if not row:
+    if row is None:
         return None
-    return GroupRow(
-        id=_as_str(row.get("id")),
-        name=_as_str(row.get("name")),
-        description=row.get("description") if row.get("description") is None else _as_str(row.get("description")),
-        created_at=_as_str(row.get("created_at")),
-        updated_at=_as_str(row.get("updated_at")),
-    )
+    parsed = _GROUP_ROW_ADAPTER.validate_python(dict(row))
+    return GroupRow(**parsed.model_dump())
 
 
 def hydrate_group_summary_row(row: Mapping[str, Any] | None) -> GroupSummaryRow:
     if not row:
         return GroupSummaryRow()
-    return GroupSummaryRow(
-        projects=_as_int(row.get("projects")),
-        users=_as_int(row.get("users")),
-        connections=_as_int(row.get("connections")),
-        file_sources=_as_int(row.get("file_sources")),
-        datasources=_as_int(row.get("datasources")),
-        api_connections=_as_int(row.get("api_connections")),
-        schedules=_as_int(row.get("schedules")),
-    )
+    parsed = _GROUP_SUMMARY_ROW_ADAPTER.validate_python(dict(row))
+    return GroupSummaryRow(**parsed.model_dump())
 
 
 def get_user(user_id: str) -> Optional[UserRow]:

@@ -11,6 +11,7 @@ from psycopg2.extras import execute_values
 
 from app.core.intermediate import runs_db as _runs_db
 from app.core.intermediate import node_snapshots_db as _node_snapshots_db
+from app.core.intermediate import retention as _retention
 from app.utils.logger import get_logger
 
 # Import from pg_connection (same pool used by config/results).
@@ -21,6 +22,27 @@ from app.db.pg_connection import (
 )
 
 logger = get_logger(__name__)
+
+__all__ = [
+    "DEFAULT_RUNS_RETENTION",
+    "apply_runs_retention",
+    "close_connection",
+    "create_run",
+    "delete_all_runs_for_canvas",
+    "get_node_meta",
+    "get_node_table_rows",
+    "get_run",
+    "init_db",
+    "insert_node_rows",
+    "list_node_meta",
+    "list_runs",
+    "pin_run",
+    "update_run",
+    "upsert_node_meta",
+    "upsert_node_meta_extended",
+    "write_node_atomic",
+    "write_node_snapshot_atomic",
+]
 
 
 def close_connection() -> None:
@@ -40,8 +62,7 @@ def init_db():
 
 # RUNS
 
-DEFAULT_RUNS_RETENTION = _runs_db.DEFAULT_RUNS_RETENTION
-_ALLOWED_RUN_UPDATE_FIELDS = _runs_db._ALLOWED_RUN_UPDATE_FIELDS
+DEFAULT_RUNS_RETENTION = _retention.DEFAULT_RUNS_RETENTION
 
 
 def create_run(run_id: str, canvas_id: str, group_id: str,
@@ -92,11 +113,7 @@ def pin_run(run_id: str, group_id: Optional[str], pinned: bool = True) -> bool:
 
 _to_jsonable = _node_snapshots_db._to_jsonable
 _from_jsonable_value = _node_snapshots_db._from_jsonable_value
-_make_special_float_sentinel = _node_snapshots_db._make_special_float_sentinel
 _SPECIAL_FLOAT_KEY = _node_snapshots_db._SPECIAL_FLOAT_KEY
-_SPECIAL_FLOAT_TAG_NAN = _node_snapshots_db._SPECIAL_FLOAT_TAG_NAN
-_SPECIAL_FLOAT_TAG_INF_POS = _node_snapshots_db._SPECIAL_FLOAT_TAG_INF_POS
-_SPECIAL_FLOAT_TAG_INF_NEG = _node_snapshots_db._SPECIAL_FLOAT_TAG_INF_NEG
 
 
 def _sync_node_snapshot_boundaries() -> None:
@@ -275,7 +292,7 @@ def apply_runs_retention(
     retention_n: int | None = None,
 ) -> None:
     """Compatibility facade for run retention."""
-    return _runs_db.apply_runs_retention(
+    return _retention.apply_runs_retention(
         canvas_id,
         group_id,
         retention_n=retention_n,
@@ -287,7 +304,7 @@ def apply_runs_retention(
 
 def _delete_run(run_id: str) -> None:
     """Compatibility facade for deleting one intermediate run."""
-    return _runs_db._delete_run(
+    return _retention._delete_run(
         run_id,
         fetchall_func=fetchall,
         transaction_func=transaction,
@@ -297,7 +314,7 @@ def _delete_run(run_id: str) -> None:
 
 def delete_all_runs_for_canvas(canvas_id: str) -> int:
     """Compatibility facade for deleting all runs of a canvas."""
-    return _runs_db.delete_all_runs_for_canvas(
+    return _retention.delete_all_runs_for_canvas(
         canvas_id,
         fetchall_func=fetchall,
         delete_run_func=_delete_run,

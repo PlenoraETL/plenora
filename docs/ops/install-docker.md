@@ -4,8 +4,9 @@ This is the canonical Docker validation path for Plenora.
 
 ## Status
 
-Backend Docker scaffold exists. Full product Docker readiness is not closed
-until frontend delivery is included and validated on a real Linux host.
+Docker scaffold exists for backend services plus the frontend static image.
+Full product Docker readiness is not closed until the full stack is validated
+on a real Linux host.
 
 Current compose scope:
 
@@ -13,17 +14,21 @@ Current compose scope:
 - Redis;
 - backend API;
 - Celery worker;
-- Celery beat.
+- Celery beat;
+- frontend static bundle served by nginx.
 
 Known gap:
 
-- frontend Docker/static delivery is not complete yet.
+- full-stack Docker has not been validated on a real Linux host yet;
+- Docker compose CI lane is not wired yet.
 
 ## Files
 
 | File | Purpose |
 |---|---|
 | `backend/Dockerfile` | Backend image used by API, worker, and beat. |
+| `frontend/Dockerfile` | Builds the Vite app and serves `dist/` from nginx. |
+| `frontend/nginx.conf` | Static asset and SPA fallback config for the frontend image. |
 | `docker-compose.yml` | Local compose stack. |
 | `.env.docker.example` | Template for `.env.docker`. |
 | `.dockerignore` | Excludes local state and secrets from build context. |
@@ -39,8 +44,9 @@ Docker validation is green only when:
 - backend `/health` and `/ready` are green;
 - worker completes `cleanroom.ping`;
 - beat starts and stays alive;
+- frontend image builds and serves the SPA shell;
 - logs show no startup error;
-- frontend delivery is validated separately or added to compose.
+- the full sequence is validated on a real Linux host.
 
 ## Validation pack for the Linux PC test
 
@@ -71,8 +77,8 @@ Expected output checklist:
 
 1. **`docker compose config`**
    Expected: compose resolves without missing env/file errors.
-2. **`docker compose build backend`**
-   Expected: backend image builds successfully.
+2. **`docker compose build backend frontend`**
+   Expected: backend and frontend images build successfully.
 3. **`docker compose up -d --wait backend`**
    Expected: Postgres, Redis, and backend become healthy enough for API probes.
 4. **`curl -fsS http://127.0.0.1:5004/health`**
@@ -82,11 +88,15 @@ Expected output checklist:
    migration readiness are green.
 5. **`docker compose up -d worker beat`**
    Expected: worker and beat containers stay running.
-6. **`cleanroom.ping`**
+6. **`docker compose up -d --wait frontend`**
+   Expected: frontend container becomes healthy.
+7. **`curl -fsS http://127.0.0.1:3000/`**
+   Expected: frontend SPA shell is served by nginx.
+8. **`cleanroom.ping`**
    Expected: Celery worker returns `pong`.
-7. **memory caps visibility**
+9. **memory caps visibility**
    Expected: runtime memory caps print from backend settings.
-8. **`docker compose stop`**
+10. **`docker compose stop`**
    Expected: stack stops without deleting volumes or `.env.docker`.
 
 ## 1. Prerequisites
@@ -116,10 +126,11 @@ docker compose config
 ## 4. Build And Start
 
 ```bash
-docker compose build backend
+docker compose build backend frontend
 docker compose up -d postgres redis
 docker compose up -d --wait backend
 docker compose up -d worker beat
+docker compose up -d --wait frontend
 ```
 
 ## 5. Health
@@ -127,6 +138,7 @@ docker compose up -d worker beat
 ```bash
 curl -fsS http://127.0.0.1:5004/health
 curl -fsS http://127.0.0.1:5004/ready
+curl -fsS http://127.0.0.1:3000/
 docker compose ps
 ```
 
@@ -191,11 +203,32 @@ bash scripts/docker-validate.sh
 The script must remain non-destructive. It must not remove volumes or
 overwrite `.env.docker`.
 
-## 10. Frontend Gap
+## 10. Frontend Static Delivery
 
-Until frontend delivery is added, Docker validation proves backend runtime
-health only. A 1.0 Docker claim requires one of:
+The frontend container compiles the Vite app with:
 
-- frontend service in compose;
-- documented static frontend build served by the backend/reverse proxy;
-- separate but validated frontend container tied to the same backend.
+```bash
+FRONTEND_VITE_API_URL=http://localhost:5004 docker compose build frontend
+```
+
+If `FRONTEND_VITE_API_URL` is omitted, compose uses
+`http://localhost:5004`, matching the backend port published by this scaffold.
+The value is baked into the browser bundle at build time.
+
+## 11. Known scaffold limitations
+
+BE-GO-READY-INSTALL-018-DOCKER-FE-GAP-AUDIT
+
+What ships today vs what does NOT:
+
+| Area | Status |
+|---|---|
+| Backend image | Ships. |
+| Frontend image | Ships. |
+| Compose frontend service | Ships. |
+| Docker compose CI lane | Not wired yet. |
+| Real Linux host validation report | Not complete yet. |
+
+When can the Docker path be called "validated"? When the validation pack,
+including frontend build and static delivery checks, is green on a real Linux
+host and a Docker compose CI lane exists.

@@ -255,7 +255,7 @@ def write_node(run_id: str, node_id: str, node_type: str,
                 f"{type(_cleanup_err).__name__}: {_cleanup_err}",
                 op="intermediate_write",
             )
-        from app.shared.exceptions import IntermediateWriteError
+        from app.core.intermediate.exceptions import IntermediateWriteError
         raise IntermediateWriteError(
             run_id=run_id, node_id=node_id, original_error=e,
         ) from e
