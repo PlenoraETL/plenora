@@ -242,10 +242,20 @@ def test_group_cleanup_registry_composes_domain_owned_handlers():
     assert "app.core.arricchisci.cleanup" in registry_src
     assert "app.core.datasources.cleanup" in registry_src
     assert "app.core.connections.cleanup" in registry_src
+    assert "app.core.files.cleanup" in registry_src
+    assert "app.core.auth.user_cleanup" in registry_src
+    assert "delete_file_sources_for_group" in registry_src
+    assert "delete_users_for_group" in registry_src
+    assert "delete_log_runs_for_group" in registry_src
+    assert "app.db.pg_connection" not in registry_src
+    assert "_delete_group_scoped" not in registry_src
     assert "DELETE FROM schedules WHERE group_id" not in registry_src
     assert "DELETE FROM api_connections WHERE group_id" not in registry_src
     assert "DELETE FROM datasources WHERE group_id" not in registry_src
     assert "DELETE FROM connections WHERE group_id" not in registry_src
+    assert "DELETE FROM file_sources WHERE group_id" not in registry_src
+    assert "DELETE FROM users WHERE group_id" not in registry_src
+    assert "DELETE FROM log_runs WHERE group_id" not in registry_src
 
 
 def test_group_cleanup_registry_execute_calls_do_not_use_dynamic_sql():

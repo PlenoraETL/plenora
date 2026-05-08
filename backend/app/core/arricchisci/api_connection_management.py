@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import uuid
+from copy import deepcopy
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
@@ -39,8 +40,7 @@ class ApiConnectionManagementMixin:
 
     def _mask_credentials(self, config: Dict) -> Dict:
         """Oscura token/password/client_secret nella risposta API."""
-        import copy
-        config = copy.deepcopy(config)
+        config = deepcopy(config)
         if 'auth' in config:
             if 'token' in config['auth']:
                 config['auth']['token'] = '***'
@@ -52,17 +52,34 @@ class ApiConnectionManagementMixin:
                 config['auth']['key_value'] = '***'
         return config
 
+    @staticmethod
+    def _config_from_api_connection_row(row: db_svc.ApiConnectionRow) -> Dict[str, Any]:
+        return deepcopy(row.config or {})
+
+    def _public_config_from_api_connection_row(
+        self,
+        row: db_svc.ApiConnectionRow,
+        *,
+        include_token: bool = False,
+        strict: bool = False,
+    ) -> Dict[str, Any]:
+        config = self._config_from_api_connection_row(row)
+        config["id"] = row.id or config.get("id")
+        config["group_id"] = row.group_id
+        config["created_by"] = row.created_by
+        if include_token:
+            return _decrypt_auth_in_config(config, strict=strict)
+        return self._mask_credentials(config)
+
     def list_api_connections(self, category: str = None, connection_type: str = None, group_id: str = None) -> List[Dict]:
         """Lista tutte le API connections dal DB.
 
         group_id=None → no filter (used by superadmin and by allowed_groups path).
         """
-        rows = db_svc.list_api_connections(group_id)
+        rows = db_svc.list_api_connection_rows(group_id)
         connections = []
         for row in rows:
-            config = row.get('config') or {}
-            if isinstance(config, str):
-                config = json.loads(config)
+            config = self._config_from_api_connection_row(row)
             if 'connection_type' not in config:
                 config['connection_type'] = 'manual'
             if config.get('category') == 'datasource':
@@ -73,9 +90,9 @@ class ApiConnectionManagementMixin:
                 continue
             # Inietta id, group_id, created_by dalle colonne DB dentro il dict
             # esposto (servono per ownership checks e can_edit nel router
-            config["id"] = row.get("id") or config.get("id")
-            config["group_id"] = row.get("group_id", "")
-            config["created_by"] = row.get("created_by")
+            config["id"] = row.id or config.get("id")
+            config["group_id"] = row.group_id
+            config["created_by"] = row.created_by
             connections.append(self._mask_credentials(config))
         connections.sort(
             key=lambda connection: connection.get('created_at', ''),
@@ -89,27 +106,18 @@ class ApiConnectionManagementMixin:
         Fix N+1: era un loop di get_api_connection(id, include_token=True).
         Ora fa UNA sola query e decifra inline. Ritorna dict id -> config.
         """
-        rows = db_svc.list_api_connections(group_id)
+        rows = db_svc.list_api_connection_rows(group_id)
         result = {}
         for row in rows:
-            api_id = row.get("id")
+            api_id = row.id
             if not api_id:
                 continue
-            config = row.get("config") or {}
-            if isinstance(config, str):
-                try:
-                    config = json.loads(config)
-                except json.JSONDecodeError:
-                    logger.warning(
-                        f"api_connection {api_id}: config JSON corrotto, "
-                        f"row skippata da list_api_connections_decrypted"
-                    )
-                    continue
+            config = self._config_from_api_connection_row(row)
             if not isinstance(config, dict):
                 continue
             config["id"] = api_id
-            config["group_id"] = row.get("group_id", "")
-            config["created_by"] = row.get("created_by")
+            config["group_id"] = row.group_id
+            config["created_by"] = row.created_by
             # Decifra credenziali at-rest
             config = _decrypt_auth_in_config(config)
             result[api_id] = config
@@ -129,22 +137,14 @@ class ApiConnectionManagementMixin:
         (Bug #2, 2026-04-23) per fallire esplicitamente invece di eseguire
         chiamate HTTP con auth invalida silenziosa.
         """
-        row = db_svc.get_api_connection(api_id)
+        row = db_svc.get_api_connection_row(api_id)
         if not row:
             return None
-        config = row.get('config') or {}
-        if isinstance(config, str):
-            config = json.loads(config)
-        # Inietta id, group_id, created_by dalle colonne DB (non sono nel config JSON
-        config["id"] = row.get("id") or config.get("id") or api_id
-        config["group_id"] = row.get("group_id", "")
-        config["created_by"] = row.get("created_by")
-        if include_token:
-            # Decifra i campi sensibili at-rest prima di restituirli al caller
-            config = _decrypt_auth_in_config(config, strict=strict)
-        else:
-            config = self._mask_credentials(config)
-        return config
+        return self._public_config_from_api_connection_row(
+            row,
+            include_token=include_token,
+            strict=strict,
+        )
 
     def create_api_connection(self, data: Dict) -> Dict:
         """Crea una nuova API connection nel DB."""
@@ -184,7 +184,7 @@ class ApiConnectionManagementMixin:
             config["response"] = data["response"]
         # Cifra i campi auth sensibili at-rest prima di salvare nel DB
         _encrypt_auth_in_config(config)
-        db_svc.save_api_connection(
+        row = db_svc.save_api_connection_row(
             api_id=api_id,
             group_id=data.get('group_id', settings.DEFAULT_GROUP),
             config=config,
@@ -192,7 +192,7 @@ class ApiConnectionManagementMixin:
         )
         logger.info(f"Creata API connection: {api_id}")
         # Restituisci la versione mascherata al client (mai esporre cifrato/chiaro al caller
-        return self.get_api_connection(api_id, include_token=False)
+        return self._public_config_from_api_connection_row(row, include_token=False)
 
     def update_api_connection(self, api_id: str, data: Dict) -> Optional[Dict]:
         """Aggiorna una API connection esistente nel DB.
@@ -203,12 +203,10 @@ class ApiConnectionManagementMixin:
              ignorati per non sovrascrivere i valori esistenti)
           3. Re-cifra auth → salva su DB
         """
-        row = db_svc.get_api_connection(api_id)
+        row = db_svc.get_api_connection_row(api_id)
         if not row:
             return None
-        config = row.get('config') or {}
-        if isinstance(config, str):
-            config = json.loads(config)
+        config = self._config_from_api_connection_row(row)
         # Decifra auth a partire dal record DB così il merge avviene su valori reali
         _decrypt_auth_in_config(config)
 
@@ -241,14 +239,16 @@ class ApiConnectionManagementMixin:
 
         # Re-cifra auth prima del save
         _encrypt_auth_in_config(config)
-        db_svc.update_api_connection(api_id, config=config)
+        updated_row = db_svc.update_api_connection_row(api_id, config=config)
         logger.info(f"Aggiornata API connection: {api_id}")
         # Restituisci la versione mascherata al client
-        return self.get_api_connection(api_id, include_token=False)
+        if updated_row is None:
+            return None
+        return self._public_config_from_api_connection_row(updated_row, include_token=False)
 
     def delete_api_connection(self, api_id: str) -> bool:
         """Elimina una API connection dal DB."""
-        if not db_svc.get_api_connection(api_id):
+        if not db_svc.get_api_connection_row(api_id):
             return False
         db_svc.delete_api_connection(api_id)
         logger.info(f"Eliminata API connection: {api_id}")

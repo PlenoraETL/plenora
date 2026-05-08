@@ -15,4 +15,10 @@ def delete_schedules_for_group(group_id: str) -> int:
     return _rowcount(cur)
 
 
-__all__ = ["delete_schedules_for_group"]
+def delete_log_runs_for_group(group_id: str) -> int:
+    """Delete scheduler run log rows owned by a group."""
+    cur = execute("DELETE FROM log_runs WHERE group_id = ?", (group_id,))
+    return _rowcount(cur)
+
+
+__all__ = ["delete_log_runs_for_group", "delete_schedules_for_group"]

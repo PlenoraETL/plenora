@@ -8,14 +8,18 @@ from dataclasses import dataclass
 from typing import Protocol
 
 from app.core.arricchisci.cleanup import delete_api_connections_for_group
+from app.core.auth.user_cleanup import delete_users_for_group
 from app.core.connections.cleanup import delete_connections_for_group
 from app.core.datasources.cleanup import delete_datasources_for_group
+from app.core.files.cleanup import delete_file_sources_for_group
 from app.core.projects.cleanup import (
     delete_intermediate_runs_for_group_project,
     delete_projects_for_group,
 )
-from app.core.scheduler.cleanup import delete_schedules_for_group
-from app.db.pg_connection import execute
+from app.core.scheduler.cleanup import (
+    delete_log_runs_for_group,
+    delete_schedules_for_group,
+)
 
 
 GROUP_CLEANUP_REPORT_KEYS: tuple[str, ...] = (
@@ -53,28 +57,6 @@ class GroupCleanupHandler:
         log: CleanupLogger,
     ) -> None:
         self.cleanup(group_id, report, log)
-
-
-def _rowcount(cursor, fallback: int = 0) -> int:
-    return cursor.rowcount if hasattr(cursor, "rowcount") else fallback
-
-
-def _delete_group_scoped(report_key: str, sql: str) -> GroupCleanupHandler:
-    def _cleanup(
-        group_id: str,
-        report: MutableMapping[str, int],
-        log: CleanupLogger,
-    ) -> None:
-        try:
-            report[report_key] = _rowcount(execute(sql, (group_id,)))
-        except Exception as exc:
-            log.warning(f"Cascade delete {report_key} fallito: {exc}")
-
-    return GroupCleanupHandler(
-        name=f"delete_{report_key}",
-        report_keys=(report_key,),
-        cleanup=_cleanup,
-    )
 
 
 def _delete_domain_owned(
@@ -126,9 +108,10 @@ GROUP_CLEANUP_HANDLERS: tuple[GroupCleanupHandler, ...] = (
         "datasources",
         delete_datasources_for_group,
     ),
-    _delete_group_scoped(
+    _delete_domain_owned(
+        "delete_file_sources",
         "file_sources",
-        "DELETE FROM file_sources WHERE group_id = ?",
+        delete_file_sources_for_group,
     ),
     _delete_domain_owned(
         "delete_connections",
@@ -140,8 +123,8 @@ GROUP_CLEANUP_HANDLERS: tuple[GroupCleanupHandler, ...] = (
         report_keys=("projects", "results", "intermediate_runs"),
         cleanup=_cleanup_projects,
     ),
-    _delete_group_scoped("users", "DELETE FROM users WHERE group_id = ?"),
-    _delete_group_scoped("log_runs", "DELETE FROM log_runs WHERE group_id = ?"),
+    _delete_domain_owned("delete_users", "users", delete_users_for_group),
+    _delete_domain_owned("delete_log_runs", "log_runs", delete_log_runs_for_group),
 )
 
 

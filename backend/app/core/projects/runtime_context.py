@@ -28,4 +28,33 @@ def get_project_runtime_context(project_id: str) -> ProjectRuntimeContext | None
     )
 
 
-__all__ = ["ProjectRuntimeContext", "get_project_runtime_context"]
+def resolve_project_runtime_group_id(
+    project_id: str,
+    *,
+    default_group: str,
+) -> str:
+    """Return the project's persisted group id, falling back to the default."""
+    context = get_project_runtime_context(project_id)
+    if context is None:
+        return default_group
+    return context.group_id or default_group
+
+
+def resolve_project_runtime_retention_n(
+    project_id: str,
+    *,
+    default: int,
+) -> int:
+    """Return the project's result retention policy, falling back to default."""
+    context = get_project_runtime_context(project_id)
+    if context is None or context.retention_n is None:
+        return default
+    return context.retention_n
+
+
+__all__ = [
+    "ProjectRuntimeContext",
+    "get_project_runtime_context",
+    "resolve_project_runtime_group_id",
+    "resolve_project_runtime_retention_n",
+]

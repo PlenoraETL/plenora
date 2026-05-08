@@ -2010,28 +2010,44 @@ def test_auth_engine_018_owner_deps_leaf_exports_all_three_callables():
         )
 
 
-def test_auth_engine_018_owner_deps_use_project_access_boundary():
-    """Project owner dependency must not reach into projects.db.get_project."""
+def test_auth_engine_018_owner_deps_use_domain_access_boundaries():
+    """Owner dependencies must ask domains, not raw DB leaves."""
     path = _APP / "core" / "auth" / "owner_dependencies.py"
     assert path.exists()
     text = path.read_text(encoding="utf-8")
     tree = ast.parse(text, filename=str(path))
 
     violations: list[str] = []
+    raw_db_leaves = {
+        "app.core.projects.db",
+        "app.core.scheduler.db",
+        "app.core.files.db",
+    }
     for node in ast.walk(tree):
-        if isinstance(node, ast.ImportFrom) and node.module == "app.core.projects.db":
-            names = {alias.name for alias in node.names}
-            if "get_project" in names:
-                violations.append("from app.core.projects.db import get_project")
+        if isinstance(node, ast.ImportFrom) and node.module in raw_db_leaves:
+            names = ", ".join(alias.name for alias in node.names)
+            violations.append(f"from {node.module} import {names}")
         elif isinstance(node, ast.Import):
-            if any(alias.name == "app.core.projects.db" for alias in node.names):
-                violations.append("import app.core.projects.db")
+            for alias in node.names:
+                if alias.name in raw_db_leaves:
+                    violations.append(f"import {alias.name}")
 
     assert not violations, (
-        "app.core.auth.owner_dependencies must use "
-        "app.core.projects.access_context for project owner lookups: "
+        "app.core.auth.owner_dependencies must use domain-owned "
+        "ownership/access helpers instead of raw DB leaves: "
         f"{violations}"
     )
+    imported_modules = {
+        node.module
+        for node in ast.walk(tree)
+        if isinstance(node, ast.ImportFrom) and node.module is not None
+    }
+    expected_boundaries = {
+        "app.core.projects.access_context",
+        "app.core.scheduler.ownership",
+        "app.core.files.ownership",
+    }
+    assert expected_boundaries <= imported_modules
 
 
 def test_auth_engine_018_facade_reexports_share_identity_with_leaf():

@@ -22,14 +22,14 @@ def get_project_execution_context(
     project_id: str,
 ) -> ProjectExecutionContext | None:
     """Return executor-facing project context, or None when absent."""
-    project = project_db.get_project(project_id)
-    if project is None:
+    row = project_db.get_project_row(project_id)
+    if row is None:
         return None
     return ProjectExecutionContext(
-        project_id=str(project.get("id") or project_id),
-        group_id=project.get("group_id"),
-        project_type=str(project.get("project_type") or "estrai"),
-        retention_n=project.get("retention_n"),
+        project_id=row.id or project_id,
+        group_id=row.group_id,
+        project_type=row.project_type or "estrai",
+        retention_n=row.retention_n,
     )
 
 

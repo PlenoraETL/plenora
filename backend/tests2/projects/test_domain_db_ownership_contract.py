@@ -2,12 +2,17 @@
 
 from __future__ import annotations
 
+import ast
 import inspect
+from pathlib import Path
 
 import pytest
 
 
 pytestmark = [pytest.mark.unit, pytest.mark.contract]
+
+BACKEND_ROOT = Path(__file__).resolve().parent.parent.parent
+PROJECTS_CORE_ROOT = BACKEND_ROOT / "app" / "core" / "projects"
 
 
 def test_projects_domain_db_owns_sql_and_exports_project_contract() -> None:
@@ -21,21 +26,16 @@ def test_projects_domain_db_owns_sql_and_exports_project_contract() -> None:
         "ProjectCanvasCheckRow",
         "ProjectRepository",
         "get_project_row",
-        "get_project",
         "list_projects",
-        "create_project",
         "create_project_row",
         "delete_comparison_keys",
-        "update_project",
         "update_project_row",
         "delete_project",
         "get_project_retention_n",
         "list_owned_project_ids",
         "list_project_ids_for_group",
         "list_project_dependency_rows_using_connection",
-        "list_projects_using_connection",
         "list_project_canvas_check_rows",
-        "list_projects_with_canvas_for_datasource_check",
         "update_project_canvas_key_atomic",
     }
 
@@ -46,6 +46,11 @@ def test_projects_domain_db_owns_sql_and_exports_project_contract() -> None:
     domain_src = inspect.getsource(domain_db)
     assert "SELECT * FROM projects" in domain_src
     assert "__getattr__" not in domain_src
+    assert "def get_project(" not in domain_src
+    assert "def create_project(" not in domain_src
+    assert "def update_project(" not in domain_src
+    assert "list_projects_using_connection" not in domain_src
+    assert "list_projects_with_canvas_for_datasource_check" not in domain_src
 
 
 def test_projects_router_uses_project_owned_usage_boundary() -> None:
@@ -59,3 +64,22 @@ def test_projects_router_uses_project_owned_usage_boundary() -> None:
     assert "list_owned_project_ids(" in helper_src
     legacy_import = "from app.db.config." + "projects import list_owned_project_ids"
     assert legacy_import not in router_src
+
+
+def test_project_core_does_not_call_legacy_project_dict_read() -> None:
+    offenders: list[str] = []
+
+    for path in sorted(PROJECTS_CORE_ROOT.glob("*.py")):
+        if path.name == "db.py":
+            continue
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Call):
+                continue
+            if (
+                isinstance(node.func, ast.Attribute)
+                and node.func.attr == "get_project"
+            ):
+                offenders.append(path.relative_to(BACKEND_ROOT).as_posix())
+
+    assert offenders == []

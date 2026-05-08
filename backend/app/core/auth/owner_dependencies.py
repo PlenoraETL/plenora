@@ -39,9 +39,13 @@ def require_schedule_owner(
     current_user: CurrentUser = Depends(get_current_user),
 ) -> CurrentUser:
     """Owner check su schedules per update, delete, toggle e run."""
-    from app.core.scheduler.db import get_schedule as _get_schedule
-    schedule = _get_schedule(schedule_id)
-    _check_ownership(schedule, "Schedule", current_user)
+    from app.core.scheduler.ownership import load_schedule_owner_context
+    schedule = load_schedule_owner_context(schedule_id)
+    _check_ownership(
+        schedule.ownership_resource() if schedule is not None else None,
+        "Schedule",
+        current_user,
+    )
     return current_user
 
 
@@ -50,7 +54,11 @@ def require_file_owner(
     current_user: CurrentUser = Depends(get_current_user),
 ) -> CurrentUser:
     """Owner check su file_sources per delete."""
-    from app.core.files.db import get_file_source as _get_file_source
-    file_source = _get_file_source(file_id)
-    _check_ownership(file_source, "File", current_user)
+    from app.core.files.ownership import load_file_owner_context
+    file_source = load_file_owner_context(file_id)
+    _check_ownership(
+        file_source.ownership_resource() if file_source is not None else None,
+        "File",
+        current_user,
+    )
     return current_user

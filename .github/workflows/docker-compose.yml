@@ -1,0 +1,68 @@
+name: Docker Compose
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/docker-compose.yml"
+      - ".dockerignore"
+      - ".env.docker.example"
+      - "backend/**"
+      - "frontend/**"
+      - "docker-compose.yml"
+      - "scripts/docker-validate.sh"
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/docker-compose.yml"
+      - ".dockerignore"
+      - ".env.docker.example"
+      - "backend/**"
+      - "frontend/**"
+      - "docker-compose.yml"
+      - "scripts/docker-validate.sh"
+
+concurrency:
+  group: docker-compose-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  compose:
+    name: Compose config and image build
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Prepare compose environment
+        run: |
+          cp .env.docker.example .env.docker
+          python - <<'PY'
+          from pathlib import Path
+
+          env = Path(".env.docker")
+          text = env.read_text(encoding="utf-8")
+          replacements = {
+              "PLENORA_ENCRYPTION_KEY=": "PLENORA_ENCRYPTION_KEY=ci-fernet-placeholder",
+              "JWT_SECRET_KEY=": "JWT_SECRET_KEY=ci-jwt-placeholder",
+          }
+          for prefix, value in replacements.items():
+              lines = []
+              replaced = False
+              for line in text.splitlines():
+                  if line.startswith(prefix):
+                      lines.append(value)
+                      replaced = True
+                  else:
+                      lines.append(line)
+              if not replaced:
+                  lines.append(value)
+              text = "\n".join(lines) + "\n"
+          env.write_text(text, encoding="utf-8")
+          PY
+
+      - run: docker compose config
+
+      - run: docker compose build backend frontend

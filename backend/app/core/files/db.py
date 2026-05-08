@@ -85,7 +85,7 @@ def get_file_source(file_id: str, include_data: bool = False, group_id: str = No
         )
     else:
         row = fetchone(
-            f"SELECT id, group_id, name, original_filename, format, size_bytes, metadata, created_at "
+            f"SELECT id, group_id, name, original_filename, format, size_bytes, metadata, created_at, created_by "
             f"FROM file_sources WHERE id = ?{gid_clause}",
             (file_id,) + gid_params
         )

@@ -25,10 +25,13 @@ _CORE_ROOT = _APP_ROOT / "core"
 
 _TARGET_FILES: tuple[str, ...] = (
     "app/core/artifacts/resolver.py",
+    "app/core/auth/owner_dependencies.py",
     "app/core/manipola/executor.py",
     "app/core/orchestrator/task_service.py",
     "app/core/projects/router.py",
     "app/core/projects/schema_inference.py",
+    "app/core/results/retention.py",
+    "app/core/results/store.py",
     "app/services/task_service.py",
     "app/utils/debug_payload_builder.py",
     "app/utils/result_store.py",
@@ -76,6 +79,14 @@ class AllowedRuntimeDbImport:
     reason: str
 
 
+@dataclass(frozen=True)
+class RemovedRuntimeDbImport:
+    src_path: str
+    imported_module: str
+    imported_name: str
+    reason: str
+
+
 _ALLOWED_RUNTIME_DB_IMPORTS: tuple[AllowedRuntimeDbImport, ...] = (
     AllowedRuntimeDbImport(
         "app/core/arricchisci/api_connection_rest_file.py",
@@ -113,6 +124,32 @@ _ALLOWED_RUNTIME_DB_IMPORTS: tuple[AllowedRuntimeDbImport, ...] = (
         "KEEP_COMPAT_WITH_REMOVAL_CONDITION: remove after pipeline task run lifecycle creation is routed through an intermediate run service",
     ),
 )
+_REMOVED_RUNTIME_DB_IMPORTS: tuple[RemovedRuntimeDbImport, ...] = (
+    RemovedRuntimeDbImport(
+        "app/core/auth/owner_dependencies.py",
+        "app.core.files.db",
+        "get_file_source",
+        "REMOVED: file ownership checks now consume the files-owned ownership context boundary",
+    ),
+    RemovedRuntimeDbImport(
+        "app/core/auth/owner_dependencies.py",
+        "app.core.scheduler.db",
+        "get_schedule",
+        "REMOVED: schedule ownership checks now consume the scheduler-owned ownership context boundary",
+    ),
+    RemovedRuntimeDbImport(
+        "app/core/results/retention.py",
+        "app.core.projects.db",
+        "get_project_retention_n",
+        "REMOVED: results retention now consumes project runtime-context retention resolution",
+    ),
+    RemovedRuntimeDbImport(
+        "app/core/results/store.py",
+        "app.core.projects.db",
+        "get_project",
+        "REMOVED: result store group resolution now consumes project runtime-context group resolution",
+    ),
+)
 
 
 def _rel(path: Path) -> str:
@@ -148,7 +185,7 @@ def _db_import_domain(module: str, imported_name: str | None = None) -> str | No
 
 
 def _edge_key(
-    edge: RuntimeDbImport | AllowedRuntimeDbImport,
+    edge: RuntimeDbImport | AllowedRuntimeDbImport | RemovedRuntimeDbImport,
 ) -> tuple[str, str, str]:
     return (edge.src_path, edge.imported_module, edge.imported_name)
 
@@ -236,6 +273,10 @@ def test_runtime_db_import_allowlist_has_severity_and_removal_condition() -> Non
     keys = [_edge_key(edge) for edge in _ALLOWED_RUNTIME_DB_IMPORTS]
     duplicates = sorted({key for key in keys if keys.count(key) > 1})
     assert not duplicates
+    assert not (
+        {_edge_key(edge) for edge in _ALLOWED_RUNTIME_DB_IMPORTS}
+        & {_edge_key(edge) for edge in _REMOVED_RUNTIME_DB_IMPORTS}
+    )
 
     for edge in _ALLOWED_RUNTIME_DB_IMPORTS:
         assert edge.severity in _ALLOWED_SEVERITIES, (
@@ -248,13 +289,35 @@ def test_runtime_db_import_allowlist_has_severity_and_removal_condition() -> Non
             "and state the removal path."
         )
 
+    for edge in _REMOVED_RUNTIME_DB_IMPORTS:
+        assert edge.reason.startswith("REMOVED:"), edge
+
+
+def test_removed_runtime_db_import_tombstones_stay_absent() -> None:
+    current_by_key = {
+        _edge_key(edge): edge for edge in _current_raw_cross_domain_db_imports()
+    }
+    reintroduced = [
+        edge
+        for edge in _REMOVED_RUNTIME_DB_IMPORTS
+        if _edge_key(edge) in current_by_key
+    ]
+
+    assert not reintroduced, (
+        "Removed runtime raw DB imports must stay tombstoned. Reintroduced "
+        f"imports: {reintroduced}"
+    )
+
 
 def test_cleaned_runtime_surfaces_stay_raw_db_import_free() -> None:
     raw_db_free_files = (
         "app/core/artifacts/resolver.py",
+        "app/core/auth/owner_dependencies.py",
         "app/core/orchestrator/task_service.py",
         "app/core/projects/router.py",
         "app/core/projects/schema_inference.py",
+        "app/core/results/retention.py",
+        "app/core/results/store.py",
         "app/services/task_service.py",
         "app/utils/debug_payload_builder.py",
         "app/utils/result_store.py",

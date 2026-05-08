@@ -27,7 +27,7 @@ from app.utils.router_utils import require_service
 from app.shared import error_codes
 from app.shared.error_envelope import raise_typed_http
 from app.shared.audit_action import audit_action
-from app.shared.exceptions import CanvasCorruptedError
+from app.core.projects.exceptions import CanvasCorruptedError
 from app.shared.resources.path_policy import assert_path_within
 from app.core.artifacts import (
     LatestProjectArtifactRef,

@@ -4,6 +4,7 @@ Tests the result store behavior.
 Locks backend contracts and regression boundaries for the current architecture.
 """
 
+import ast
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -98,7 +99,7 @@ def test_save_result_blob_keeps_temp_file_when_db_save_fails(monkeypatch, tmp_pa
 
 
 def test_apply_results_retention_uses_typed_result_rows(monkeypatch):
-    import app.core.projects.db as projects_db
+    import app.core.projects.runtime_context as project_runtime_context
     import app.core.results.cleanup as results_cleanup
     import app.core.results.db as results_db
     import app.core.results.retention as results_retention
@@ -111,7 +112,11 @@ def test_apply_results_retention_uses_typed_result_rows(monkeypatch):
         results_db.ResultMetadataRow(id="res-old"),
     ]
 
-    monkeypatch.setattr(projects_db, "get_project_retention_n", lambda pid: 2)
+    monkeypatch.setattr(
+        project_runtime_context,
+        "resolve_project_runtime_retention_n",
+        lambda pid, *, default: 2,
+    )
     monkeypatch.setattr(results_store, "list_result_rows", lambda pid: rows)
     monkeypatch.setattr(
         results_db,
@@ -144,12 +149,48 @@ def test_result_store_retention_wrapper_delegates_to_results_domain(monkeypatch)
 
 
 def test_result_store_uses_results_boundary_not_row_modules():
-    source = Path("backend/app/utils/result_store.py").read_text(encoding="utf-8")
+    backend_root = Path(__file__).resolve().parents[2]
+    source = (backend_root / "app" / "utils" / "result_store.py").read_text(
+        encoding="utf-8"
+    )
 
     assert "from app.core.results.db import" not in source
     assert "from app.core.results.blob import" not in source
     assert "from app.core.projects.db import" not in source
     assert "from app.core.results import store as results_store" in source
+
+
+def test_result_store_slice_has_no_row_owned_to_legacy_dict():
+    """Result-store dict compatibility belongs at explicit public edges."""
+    backend_root = Path(__file__).resolve().parents[2]
+    files = [
+        backend_root / "app" / "utils" / "result_store.py",
+        *sorted((backend_root / "app" / "core" / "results").glob("*.py")),
+    ]
+
+    class_methods: list[str] = []
+    call_sites: list[str] = []
+
+    for path in files:
+        rel = path.relative_to(backend_root).as_posix()
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        for node in ast.walk(tree):
+            if isinstance(node, ast.ClassDef):
+                for item in node.body:
+                    if (
+                        isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef))
+                        and item.name == "to_legacy_dict"
+                    ):
+                        class_methods.append(f"{rel}:{node.name}.{item.name}")
+            if (
+                isinstance(node, ast.Call)
+                and isinstance(node.func, ast.Attribute)
+                and node.func.attr == "to_legacy_dict"
+            ):
+                call_sites.append(f"{rel}:{node.lineno}")
+
+    assert class_methods == []
+    assert call_sites == []
 
 
 def test_save_pipeline_result_outcome_is_typed_internal_boundary(monkeypatch):

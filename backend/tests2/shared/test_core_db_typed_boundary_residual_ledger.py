@@ -69,51 +69,15 @@ _LEDGER: tuple[BoundaryEntry, ...] = (
     ),
     BoundaryEntry(
         "app/core/projects/db.py",
-        "get_project",
-        "KEEP_COMPAT_WITH_REMOVAL_CONDITION",
-        "remove after project API and worker callers consume get_project_row and serialize at their public edges",
-    ),
-    BoundaryEntry(
-        "app/core/projects/db.py",
         "create_project_row",
         "DONE",
         "project create post-write hydration returns ProjectDetailRow from the domain DB boundary",
     ),
     BoundaryEntry(
         "app/core/projects/db.py",
-        "create_project",
-        "KEEP_COMPAT_WITH_REMOVAL_CONDITION",
-        "remove after project create callers consume create_project_row and serialize at their public edges",
-    ),
-    BoundaryEntry(
-        "app/core/projects/db.py",
         "update_project_row",
         "DONE",
         "project update post-write hydration returns ProjectDetailRow from the domain DB boundary",
-    ),
-    BoundaryEntry(
-        "app/core/projects/db.py",
-        "update_project",
-        "KEEP_COMPAT_WITH_REMOVAL_CONDITION",
-        "remove after project update callers consume update_project_row and serialize at their public edges",
-    ),
-    BoundaryEntry(
-        "app/core/projects/db.py",
-        "list_projects_using_connection",
-        "KEEP_COMPAT_WITH_REMOVAL_CONDITION",
-        "remove after connection-delete checks consume list_project_dependency_rows_using_connection",
-    ),
-    BoundaryEntry(
-        "app/core/projects/db.py",
-        "list_projects_with_canvas_for_datasource_check",
-        "KEEP_COMPAT_WITH_REMOVAL_CONDITION",
-        "remove after datasource cascade checks consume list_project_canvas_check_rows",
-    ),
-    BoundaryEntry(
-        "app/db/config/projects.py",
-        "module",
-        "REMOVED",
-        "project persistence compat leaf removed after tests migrated to app.core.projects.db",
     ),
     BoundaryEntry(
         "app/core/projects/db.py",
@@ -269,13 +233,7 @@ _LEDGER: tuple[BoundaryEntry, ...] = (
         "app/core/arricchisci/db.py",
         "ApiConnectionRow",
         "DONE",
-        "API connection DB rows are immutable arricchisci-owned dataclasses",
-    ),
-    BoundaryEntry(
-        "app/core/arricchisci/db.py",
-        "ApiConnectionRow.to_legacy_dict",
-        "REMOVED",
-        "legacy API connection dict conversion moved to private DB compatibility serializers",
+        "API connection service reads and writes consume immutable arricchisci-owned dataclasses",
     ),
     BoundaryEntry(
         "app/db/config/api_connections.py",

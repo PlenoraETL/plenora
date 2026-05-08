@@ -25,6 +25,18 @@ from app.shared.connections.arcgis_provider_results import (
     RendererUpdateResult,
     ServiceNameAvailabilityResult,
 )
+from app.core.features.arcgis_rest_write import (
+    ArcGISAddToDefinitionRequest,
+    ArcGISApplyEditsRequest,
+    ArcGISCreateServiceRequest,
+    ArcGISDeleteFeaturesRequest,
+    ArcGISFeatureBatchWriteRequest,
+    ArcGISFeatureEditOperation,
+    ArcGISUpdateDefinitionRequest,
+    parse_apply_edits_result,
+    parse_delete_features_result,
+    parse_feature_edit_result,
+)
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -1697,7 +1709,13 @@ class ArcGISClient:
         Returns:
             {success, added_count, errors}
         """
-        return self._write_batch(conn, layer_url, "addFeatures", features, batch_size=batch_size)
+        return self._write_batch(
+            conn,
+            layer_url,
+            ArcGISFeatureEditOperation.ADD,
+            features,
+            batch_size=batch_size,
+        )
     
     def update_features(
         self,
@@ -1719,7 +1737,13 @@ class ArcGISClient:
         Returns:
             {success, updated_count, errors}
         """
-        return self._write_batch(conn, layer_url, "updateFeatures", features, batch_size=batch_size)
+        return self._write_batch(
+            conn,
+            layer_url,
+            ArcGISFeatureEditOperation.UPDATE,
+            features,
+            batch_size=batch_size,
+        )
     
     def delete_features(
         self,
@@ -1743,44 +1767,65 @@ class ArcGISClient:
             {success, deleted_count, errors}
         """
         referer_headers = {"Referer": conn.server_url}
-
-        data = {"f": "json"}
-
-        if object_ids:
-            data["objectIds"] = ",".join(str(oid) for oid in object_ids)
-        elif where:
-            data["where"] = where
-        else:
-            raise ValueError("Specificare object_ids o where per l'eliminazione")
+        request = ArcGISDeleteFeaturesRequest(
+            layer_url=layer_url,
+            object_ids=tuple(object_ids or ()),
+            where=where,
+        )
+        data = request.body()
 
         try:
             response = self._request_with_token(
-                "POST", f"{layer_url}/deleteFeatures", conn,
+                "POST", request.endpoint(), conn,
                 data=data, timeout=self.DEFAULT_TIMEOUT,
                 extra_headers=referer_headers,
             )
             result = response.json()
-            
-            if "error" in result:
-                return {
-                    "success": False,
-                    "deleted_count": 0,
-                    "errors": [result["error"]],
-                }
-            
-            delete_results = result.get("deleteResults", [])
-            successes = sum(1 for r in delete_results if r.get("success"))
-            errors = [r for r in delete_results if not r.get("success")]
-            
-            return {
-                "success": len(errors) == 0,
-                "deleted_count": successes,
-                "errors": errors,
-            }
+            return parse_delete_features_result(result).to_compat_dict()
             
         except requests.RequestException as e:
             return {
                 "success": False,
+                "deleted_count": 0,
+                "errors": [{"message": str(e)}],
+            }
+
+    def apply_edits(
+        self,
+        conn: ArcGISConnectionInfo,
+        layer_url: str,
+        adds: Optional[List[dict]] = None,
+        updates: Optional[List[dict]] = None,
+        deletes: Optional[List[int]] = None,
+        rollback_on_failure: bool = True,
+        use_global_ids: bool = False,
+    ) -> dict:
+        """Apply mixed layer edits through the ArcGIS ``applyEdits`` endpoint."""
+        referer_headers = {"Referer": conn.server_url}
+        request = ArcGISApplyEditsRequest(
+            layer_url=layer_url,
+            adds=tuple(adds or ()),
+            updates=tuple(updates or ()),
+            deletes=tuple(deletes or ()),
+            rollback_on_failure=rollback_on_failure,
+            use_global_ids=use_global_ids,
+        )
+
+        try:
+            response = self._request_with_token(
+                "POST",
+                request.endpoint(),
+                conn,
+                data=request.body(),
+                timeout=60,
+                extra_headers=referer_headers,
+            )
+            return parse_apply_edits_result(response.json()).to_compat_dict()
+        except requests.RequestException as e:
+            return {
+                "success": False,
+                "added_count": 0,
+                "updated_count": 0,
                 "deleted_count": 0,
                 "errors": [{"message": str(e)}],
             }
@@ -1789,7 +1834,7 @@ class ArcGISClient:
         self,
         conn: ArcGISConnectionInfo,
         layer_url: str,
-        operation: str,
+        operation: ArcGISFeatureEditOperation | str,
         features: List[dict],
         batch_size: int = None,
     ) -> dict:
@@ -1799,12 +1844,14 @@ class ArcGISClient:
         Args:
             conn: configurazione connessione
             layer_url: URL del layer
-            operation: "addFeatures" o "updateFeatures"
+            operation: ``ArcGISFeatureEditOperation.ADD`` or ``UPDATE``
             features: lista features
             
         Returns:
             {success, count, errors}
         """
+        operation = ArcGISFeatureEditOperation(operation)
+
         # C12: auth avviene dentro _request_with_token per-batch
         # Rimosso il `token = self.authenticate(conn)` pre-loop: non
         # serviva piu' (il helper gestisce token + refresh mid-batch
@@ -1817,22 +1864,26 @@ class ArcGISClient:
         _batch_size = batch_size if batch_size and batch_size > 0 else self.WRITE_BATCH_SIZE
         for i in range(0, len(features), _batch_size):
             batch = features[i:i + _batch_size]
-            
-            data = {
-                "features": json.dumps(batch),
-                "f": "json",
-            }
+            request = ArcGISFeatureBatchWriteRequest(
+                layer_url=layer_url,
+                operation=operation,
+                features=tuple(batch),
+            )
+            data = request.body()
 
             try:
                 batch_num = i // _batch_size + 1
-                logger.debug(f"Batch {batch_num}: invio {len(batch)} features a {layer_url}/{operation}")
+                logger.debug(
+                    f"Batch {batch_num}: invio {len(batch)} features a "
+                    f"{request.endpoint()}"
+                )
 
                 # C12: ogni _request_with_token → refresh token
                 # mid-su 498/499, backoff su 429
                 # Pre-fix il token era autenticato UNA volta fuori loop
                 # scadenza a meta' batch = tutto il resto falliva
                 response = self._request_with_token(
-                    "POST", f"{layer_url}/{operation}", conn,
+                    "POST", request.endpoint(), conn,
                     data=data, timeout=60,
                     extra_headers=referer_headers,
                 )
@@ -1844,17 +1895,9 @@ class ArcGISClient:
                     continue
                 
                 
-                if "error" in result:
-                    logger.error(f"[GESTITO] Batch {batch_num} errore: {result['error']}")
-                    all_errors.append(result["error"])
-                    continue
-                
-                # addResults o updateResults
-                result_key = "addResults" if operation == "addFeatures" else "updateResults"
-                results = result.get(result_key, [])
-                
-                successes = sum(1 for r in results if r.get("success"))
-                errors = [r for r in results if not r.get("success")]
+                batch_result = parse_feature_edit_result(operation, result)
+                successes = batch_result.count
+                errors = list(batch_result.errors)
                 
                 logger.debug(f"Batch {batch_num}: {successes} ok, {len(errors)} errori")
                 if errors:
@@ -1866,7 +1909,7 @@ class ArcGISClient:
             except requests.RequestException as e:
                 all_errors.append({"message": str(e)})
         
-        count_key = "added_count" if operation == "addFeatures" else "updated_count"
+        count_key = operation.count_key
         
         # Se non abbiamo scritto nulla ma avevamo features → considera fallimento
         total_attempted = len(features)
@@ -2184,20 +2227,19 @@ class ArcGISClient:
             "xssPreventionInfo": {"xssPreventionEnabled": True},
         }
         
-        create_data = {
-            "createParameters": json.dumps(create_params),
-            "outputType": "featureService",
-            "f": "json",
-        }
+        create_request = ArcGISCreateServiceRequest(
+            base_url=base_url,
+            username=username,
+            folder_id=folder_id,
+            create_parameters=create_params,
+        )
+        create_data = create_request.body()
 
         # Header Referer necessario per token client=referer
         referer_headers = {"Referer": conn.server_url}
 
         try:
-            if folder_id:
-                create_url = f"{base_url}/content/users/{username}/{folder_id}/createService"
-            else:
-                create_url = f"{base_url}/content/users/{username}/createService"
+            create_url = create_request.endpoint()
             logger.debug(f"createService URL: {create_url}")
             logger.debug(f"createService params: {json.dumps(create_params, indent=2)}")
             logger.debug(f"Token presente: {bool(token)}, lunghezza: {len(token) if token else 0}")
@@ -2338,14 +2380,15 @@ class ArcGISClient:
         logger.debug(f"addToDefinition: {len(fields)} campi: {field_names}")
         logger.debug(f"addToDefinition URL: {admin_url}/addToDefinition")
         
-        add_def_data = {
-            "addToDefinition": json.dumps(layer_def),
-            "f": "json",
-        }
+        add_def_request = ArcGISAddToDefinitionRequest(
+            admin_url=admin_url,
+            definition=layer_def,
+        )
+        add_def_data = add_def_request.body()
 
         try:
             response = self._request_with_token(
-                "POST", f"{admin_url}/addToDefinition", conn,
+                "POST", add_def_request.endpoint(), conn,
                 data=add_def_data,
                 timeout=60,
                 extra_headers=referer_headers,
@@ -2389,13 +2432,13 @@ class ArcGISClient:
                     "extent": extent,
                 }]
             }
-            update_data = {
-                "updateDefinition": json.dumps(update_def),
-                "f": "json",
-            }
+            update_request = ArcGISUpdateDefinitionRequest(
+                admin_url=admin_url,
+                definition=update_def,
+            )
             response = self._request_with_token(
-                "POST", f"{admin_url}/updateDefinition", conn,
-                data=update_data,
+                "POST", update_request.endpoint(), conn,
+                data=update_request.body(),
                 timeout=60,
                 extra_headers=referer_headers,
             )

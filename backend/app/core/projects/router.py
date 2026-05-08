@@ -14,12 +14,12 @@ from app.shared import error_codes
 from app.shared.error_envelope import raise_typed_http
 from app.shared.audit_action import audit_action
 from app.shared.models import CanvasState, Node, Edge
-from app.shared.exceptions import (
-    ProjectHasDependenciesError,
+from app.core.projects.exceptions import (
     CanvasCorruptedError,
     ProjectCleanupPartialError,
+    ProjectHasDependenciesError,
+    ProjectLineageCycleError,
 )
-from app.core.projects.exceptions import ProjectLineageCycleError
 from app.core.auth.dependencies import (
     get_current_user,
     require_not_esecutore,

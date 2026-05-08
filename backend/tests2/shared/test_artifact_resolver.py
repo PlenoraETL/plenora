@@ -100,6 +100,26 @@ def _result_row(
     )
 
 
+def _project_detail_row(
+    *,
+    id: str = "proj-1",
+    group_id: str | None = "grp-1",
+):
+    from app.core.projects.db import ProjectDetailRow
+
+    return ProjectDetailRow(
+        id=id,
+        group_id=group_id,
+        name="Project",
+        project_type="estrai",
+        canvas={"nodes": [], "edges": []},
+        connection_id=None,
+        created_at=None,
+        updated_at=None,
+        created_by=None,
+    )
+
+
 # materialize_run
 
 
@@ -497,7 +517,7 @@ def test_materialize_latest_enforces_group_binding(resolver, monkeypatch):
 
     monkeypatch.setattr(
         _projects_leaf,
-        "get_project",
+        "get_project_row",
         _tenant_scoped_project,
     )
     monkeypatch.setattr(_rdb, "get_latest_result_row", lambda pid: None)
@@ -642,11 +662,11 @@ def test_materialize_latest_passes_when_group_matches(resolver, monkeypatch):
     def _tenant_scoped_project(pid, group_id=None):
         assert pid == "proj-1"
         assert group_id == "grp-mine"
-        return {"id": pid, "group_id": "grp-mine"}
+        return _project_detail_row(id=pid, group_id="grp-mine")
 
     monkeypatch.setattr(
         _projects_leaf,
-        "get_project",
+        "get_project_row",
         _tenant_scoped_project,
     )
     monkeypatch.setattr(
@@ -693,8 +713,8 @@ def test_materialize_latest_superadmin_bypass_cross_tenant(resolver, monkeypatch
 
     monkeypatch.setattr(
         _projects_leaf,
-        "get_project",
-        lambda pid: {"id": pid, "group_id": "gruppo_ania"},
+        "get_project_row",
+        lambda pid: _project_detail_row(id=pid, group_id="gruppo_ania"),
     )
     monkeypatch.setattr(
         _rdb,
@@ -742,7 +762,7 @@ def test_materialize_latest_non_superadmin_blocks_cross_tenant(resolver, monkeyp
 
     monkeypatch.setattr(
         _projects_leaf,
-        "get_project",
+        "get_project_row",
         _tenant_scoped_project,
     )
     monkeypatch.setattr(_rdb, "get_latest_result_row", lambda pid: None)

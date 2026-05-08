@@ -10,8 +10,8 @@ def get_project_for_artifact(project_id: str, *, group_id: str | None = None) ->
     from app.core.projects import db as projects_db
 
     if group_id is None:
-        return projects_db.get_project(project_id)
-    return projects_db.get_project(project_id, group_id=group_id)
+        return projects_db.get_project_row(project_id)
+    return projects_db.get_project_row(project_id, group_id=group_id)
 
 
 def get_latest_result_row_for_artifact(project_id: str) -> Any:

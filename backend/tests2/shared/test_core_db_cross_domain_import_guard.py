@@ -40,7 +40,35 @@ class AllowedCrossDomainDbEdge:
     reason: str
 
 
+@dataclass(frozen=True)
+class RemovedCrossDomainDbEdge:
+    src_path: str
+    imported_module: str
+    imported_name: str
+    reason: str
+
+
 _ALLOWED_CROSS_DOMAIN_DB_EDGES: tuple[AllowedCrossDomainDbEdge, ...] = ()
+_REMOVED_CROSS_DOMAIN_DB_EDGES: tuple[RemovedCrossDomainDbEdge, ...] = (
+    RemovedCrossDomainDbEdge(
+        src_path="app/core/auth/db.py",
+        imported_module="app.core.intermediate.db",
+        imported_name="delete_all_runs_for_canvas",
+        reason=(
+            "REMOVED: auth group cleanup now delegates intermediate run "
+            "cleanup through the application cleanup registry boundary"
+        ),
+    ),
+    RemovedCrossDomainDbEdge(
+        src_path="app/core/intermediate/db.py",
+        imported_module="app.core.projects.db",
+        imported_name="get_project_retention_n",
+        reason=(
+            "REMOVED: intermediate retention no longer reads "
+            "project-owned retention policy from the projects DB leaf"
+        ),
+    ),
+)
 
 
 def _domain_db_files() -> list[Path]:
@@ -52,7 +80,7 @@ def _domain_for_db_file(path: Path) -> str:
 
 
 def _edge_key(
-    edge: CrossDomainDbEdge | AllowedCrossDomainDbEdge,
+    edge: CrossDomainDbEdge | AllowedCrossDomainDbEdge | RemovedCrossDomainDbEdge,
 ) -> tuple[str, str, str]:
     return (edge.src_path, edge.imported_module, edge.imported_name)
 
@@ -145,6 +173,11 @@ def test_core_domain_db_modules_do_not_import_other_domain_db_modules() -> None:
 
 
 def test_cross_domain_db_import_allowlist_has_explicit_severity_and_removal() -> None:
+    assert not (
+        {_edge_key(edge) for edge in _ALLOWED_CROSS_DOMAIN_DB_EDGES}
+        & {_edge_key(edge) for edge in _REMOVED_CROSS_DOMAIN_DB_EDGES}
+    )
+
     for edge in _ALLOWED_CROSS_DOMAIN_DB_EDGES:
         assert edge.severity in _ALLOWED_SEVERITIES, (
             f"{edge.src_path} -> {edge.imported_module}: invalid severity "
@@ -155,6 +188,25 @@ def test_cross_domain_db_import_allowlist_has_explicit_severity_and_removal() ->
             "start with KEEP_COMPAT_WITH_REMOVAL_CONDITION: or BLOCKER: and "
             "state the removal path."
         )
+
+    for edge in _REMOVED_CROSS_DOMAIN_DB_EDGES:
+        assert edge.reason.startswith("REMOVED:"), edge
+
+
+def test_removed_cross_domain_db_import_tombstones_stay_absent() -> None:
+    current_by_key = {
+        _edge_key(edge): edge for edge in _current_cross_domain_db_edges()
+    }
+    reintroduced = [
+        edge
+        for edge in _REMOVED_CROSS_DOMAIN_DB_EDGES
+        if _edge_key(edge) in current_by_key
+    ]
+
+    assert not reintroduced, (
+        "Removed DB-to-DB imports must stay tombstoned. Reintroduced imports: "
+        f"{reintroduced}"
+    )
 
 
 def test_auth_db_does_not_import_intermediate_db() -> None:

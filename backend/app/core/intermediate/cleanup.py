@@ -2,11 +2,8 @@
 
 from __future__ import annotations
 
-from app.core.intermediate.db import (
-    close_connection as _close_connection,
-    delete_all_runs_for_canvas,
-    fetchall,
-)
+from app.core.intermediate.retention import delete_all_runs_for_canvas
+from app.db.pg_connection import close_connection as _close_connection, fetchall
 
 
 def list_canvas_ids_with_runs() -> list[str]:

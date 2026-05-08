@@ -85,7 +85,7 @@ def _ci_invokes_docker_compose() -> bool:
     return False
 
 
-# 1. Today's truth: backend scaffold yes; FE image + compose yes; CI no
+# 1. Today's truth: backend scaffold yes; FE image + compose yes; CI yes
 
 
 def test_frontend_dockerfile_exists_today():
@@ -104,17 +104,14 @@ def test_compose_has_frontend_service_today():
     )
 
 
-def test_ci_does_not_invoke_docker_compose_today():
-    """Today's reality: zero workflows under `.github/workflows/`
-    invoke `docker compose` (only comments mention it). If a
-    future PR adds a `run: docker compose ...` step, this test
-    fails -- the install-docker.md `INSTALL-015-DOCKER-CI`
-    closure marker should be retired in the same PR."""
-    assert not _ci_invokes_docker_compose(), (
-        "A workflow under `.github/workflows/` now invokes "
-        "`docker compose`. Update `install-docker.md` to retire "
-        "the `INSTALL-015-DOCKER-CI` closure marker AND ensure "
-        "the truth table reflects the new state."
+def test_ci_invokes_docker_compose_today():
+    """Today's reality: a workflow under `.github/workflows/`
+    invokes `docker compose` from a run step. This is the source
+    lock that Docker CI is wired at least to config/build level."""
+    assert _ci_invokes_docker_compose(), (
+        "A workflow under `.github/workflows/` must invoke "
+        "`docker compose` from a `run:` step so the Docker "
+        "config/build lane stays wired."
     )
 
 

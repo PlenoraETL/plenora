@@ -18,13 +18,14 @@ def apply_results_retention(project_id: str) -> None:
     is not rolled back by cleanup of older rows.
     """
     try:
-        from app.core.projects.db import get_project_retention_n
+        from app.core.projects.runtime_context import resolve_project_runtime_retention_n
         from app.core.results import cleanup as results_cleanup
         from app.core.results import store as results_store
 
-        retention_n = get_project_retention_n(project_id)
-        if retention_n is None:
-            retention_n = DEFAULT_RESULTS_RETENTION
+        retention_n = resolve_project_runtime_retention_n(
+            project_id,
+            default=DEFAULT_RESULTS_RETENTION,
+        )
 
         all_results = results_store.list_result_rows(project_id)
         if len(all_results) <= retention_n:

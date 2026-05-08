@@ -20,7 +20,8 @@ Current compose scope:
 Known gap:
 
 - full-stack Docker has not been validated on a real Linux host yet;
-- Docker compose CI lane is not wired yet.
+- Docker compose CI is wired for config/build, but not for the full
+  runtime smoke sequence.
 
 ## Files
 
@@ -226,7 +227,7 @@ What ships today vs what does NOT:
 | Backend image | Ships. |
 | Frontend image | Ships. |
 | Compose frontend service | Ships. |
-| Docker compose CI lane | Not wired yet. |
+| Docker compose CI lane | Ships for config/build. |
 | Real Linux host validation report | Not complete yet. |
 
 When can the Docker path be called "validated"? When the validation pack,

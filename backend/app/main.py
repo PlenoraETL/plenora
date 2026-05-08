@@ -23,7 +23,8 @@ from app.shared.error_envelope import (
     build_error_response,
     normalize_http_exception_detail,
 )
-from app.shared.exceptions import CanvasCorruptedError, MemoryLimitExceededError
+from app.core.projects.exceptions import CanvasCorruptedError
+from app.shared.exceptions import MemoryLimitExceededError
 
 # Bootstrap esplicito: valida config, storage e DB prima di creare l'app.
 # Vedi `app/bootstrap.py` per il contratto completo.

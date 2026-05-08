@@ -64,6 +64,64 @@ def _db_modules_for_domains() -> Iterable[Path]:
                 yield path
 
 
+def _production_modules() -> Iterable[Path]:
+    for path in _iter_py(_APP_ROOT):
+        if path == _APP_ROOT / "shared" / "exceptions.py":
+            continue
+        yield path
+
+
+def _shared_exception_domain_imports(path: Path) -> Set[str]:
+    hits: Set[str] = set()
+    module_aliases: Set[str] = set()
+    full_module_aliases: Set[Tuple[str, ...]] = set()
+    for node in ast.walk(_parse(path)):
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                if alias.name != "app.shared.exceptions":
+                    continue
+                if alias.asname:
+                    module_aliases.add(alias.asname)
+                else:
+                    full_module_aliases.add(("app", "shared", "exceptions"))
+            continue
+
+        if not isinstance(node, ast.ImportFrom):
+            continue
+        if node.module == "app.shared":
+            for alias in node.names:
+                if alias.name == "exceptions":
+                    module_aliases.add(alias.asname or alias.name)
+            continue
+
+        if node.module != "app.shared.exceptions":
+            continue
+        for alias in node.names:
+            if alias.name in _DOMAIN_EXCEPTION_NAMES:
+                hits.add(alias.name)
+
+    for node in ast.walk(_parse(path)):
+        if not isinstance(node, ast.Attribute):
+            continue
+        if node.attr not in _DOMAIN_EXCEPTION_NAMES:
+            continue
+        chain = _attribute_chain(node.value)
+        if chain in full_module_aliases:
+            hits.add(node.attr)
+            continue
+        if len(chain) == 1 and chain[0] in module_aliases:
+            hits.add(node.attr)
+    return hits
+
+
+def _attribute_chain(node: ast.AST) -> Tuple[str, ...]:
+    if isinstance(node, ast.Name):
+        return (node.id,)
+    if isinstance(node, ast.Attribute):
+        return (*_attribute_chain(node.value), node.attr)
+    return ()
+
+
 def test_domain_exception_modules_exist():
     missing = [
         rel
@@ -91,6 +149,24 @@ def test_domain_exceptions_not_defined_in_db_modules():
     assert hits == set(), (
         "DB modules must import domain exceptions from "
         f"`core.<domain>.exceptions` instead of defining them ad hoc: "
+        f"{sorted(hits)}"
+    )
+
+
+def test_production_uses_domain_exception_modules_not_shared_compat():
+    """Shared exception aliases are retained for tests and legacy importers.
+
+    Runtime code must import moved project/auth/intermediate exceptions from
+    the owning domain modules so `app.shared.exceptions` can keep shrinking.
+    """
+    hits: Set[Tuple[str, str]] = set()
+    for path in _production_modules():
+        for name in _shared_exception_domain_imports(path):
+            hits.add((_rel(path), name))
+
+    assert hits == set(), (
+        "Production code must import moved domain exceptions from "
+        "`app.core.<domain>.exceptions`, not `app.shared.exceptions`: "
         f"{sorted(hits)}"
     )
 

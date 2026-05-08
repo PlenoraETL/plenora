@@ -27,11 +27,15 @@ class PipelineResultSave:
     result_id: str
     output_filename: str
 
-    def to_legacy_dict(self) -> Dict[str, str]:
-        return {
-            "result_id": self.result_id,
-            "output_filename": self.output_filename,
-        }
+
+def _pipeline_result_save_legacy_payload(
+    outcome: PipelineResultSave,
+) -> Dict[str, str]:
+    """Serialize the public save_pipeline_result compatibility payload."""
+    return {
+        "result_id": outcome.result_id,
+        "output_filename": outcome.output_filename,
+    }
 
 
 def get_temp_output_path(filename: str) -> Path:
@@ -473,7 +477,7 @@ def save_pipeline_result(
     crs: str = "EPSG:4326",
 ) -> Dict[str, str]:
     """Compatibility wrapper returning legacy dict result metadata."""
-    return save_pipeline_result_outcome(
+    outcome = save_pipeline_result_outcome(
         project_id=project_id,
         df=df,
         output_format=output_format,
@@ -482,7 +486,8 @@ def save_pipeline_result(
         group_id=group_id,
         geom_column=geom_column,
         crs=crs,
-    ).to_legacy_dict()
+    )
+    return _pipeline_result_save_legacy_payload(outcome)
 
 
 def save_pipeline_result_outcome(

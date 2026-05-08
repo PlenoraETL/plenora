@@ -90,3 +90,34 @@ def test_project_runtime_context_preserves_persisted_worker_fields(monkeypatch):
         project_type="arricchisci",
         retention_n=3,
     )
+
+
+def test_project_runtime_context_resolves_runtime_values_with_defaults(monkeypatch):
+    from app.core.projects import runtime_context
+
+    row = SimpleNamespace(
+        group_id="grp-1",
+        project_type="arricchisci",
+        retention_n=3,
+    )
+    monkeypatch.setattr("app.core.projects.db.get_project_row", lambda project_id: row)
+
+    assert runtime_context.resolve_project_runtime_group_id(
+        "proj_1",
+        default_group="default",
+    ) == "grp-1"
+    assert runtime_context.resolve_project_runtime_retention_n(
+        "proj_1",
+        default=10,
+    ) == 3
+
+    monkeypatch.setattr("app.core.projects.db.get_project_row", lambda project_id: None)
+
+    assert runtime_context.resolve_project_runtime_group_id(
+        "missing",
+        default_group="default",
+    ) == "default"
+    assert runtime_context.resolve_project_runtime_retention_n(
+        "missing",
+        default=10,
+    ) == 10

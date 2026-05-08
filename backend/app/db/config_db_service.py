@@ -49,14 +49,62 @@ from app.core.auth.db import (  # noqa: F401,E402
 # PROJECTS
 
 from app.core.projects.db import (  # noqa: F401,E402
-    get_project,
     list_projects,
-    create_project,
-    update_project,
     delete_project,
     get_project_retention_n,
+    get_project_row,
+    create_project_row,
+    update_project_row,
     update_project_canvas_key_atomic,
 )
+
+
+def _project_detail_compat_payload(row):
+    return {
+        "id": row.id,
+        "group_id": row.group_id,
+        "name": row.name,
+        "project_type": row.project_type,
+        "canvas": row.canvas,
+        "connection_id": row.connection_id,
+        "created_at": row.created_at,
+        "updated_at": row.updated_at,
+        "created_by": row.created_by,
+        "description": row.description,
+        "retention_n": row.retention_n,
+    }
+
+
+def get_project(project_id, group_id=None):
+    """Legacy config facade wrapper around typed project-domain reads."""
+    row = get_project_row(project_id, group_id=group_id)
+    return _project_detail_compat_payload(row) if row else None
+
+
+def create_project(
+    project_id,
+    group_id,
+    name,
+    project_type,
+    connection_id=None,
+    created_by=None,
+):
+    """Legacy config facade wrapper around typed project-domain creation."""
+    row = create_project_row(
+        project_id=project_id,
+        group_id=group_id,
+        name=name,
+        project_type=project_type,
+        connection_id=connection_id,
+        created_by=created_by,
+    )
+    return _project_detail_compat_payload(row)
+
+
+def update_project(project_id, **fields):
+    """Legacy config facade wrapper around typed project-domain updates."""
+    row = update_project_row(project_id, **fields)
+    return _project_detail_compat_payload(row) if row else None
 
 
 # COMPARISON KEYS (per confronto L3 su intermediate.db

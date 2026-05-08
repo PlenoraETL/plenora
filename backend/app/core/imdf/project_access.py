@@ -9,7 +9,7 @@ def get_project_for_bundle(project_id: str) -> Any:
     """Read project metadata needed to authorize an IMDF bundle."""
     from app.core.projects import db as projects_db
 
-    return projects_db.get_project(project_id)
+    return projects_db.get_project_row(project_id)
 
 
 def list_project_ids_visible_to_group(group_id: str) -> set[str]:

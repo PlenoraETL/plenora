@@ -24,6 +24,11 @@ from app.db import pg_connection
 from app.core.results import blob as results_blob
 from app.core.results import db as results_db
 from app.core.projects.domain import build_project_id, resolve_project_group_id
+from app.core.projects.exceptions import (
+    CanvasCorruptedError,
+    ProjectCleanupPartialError,
+    ProjectHasDependenciesError,
+)
 from app.core.projects.repository import (
     DbProjectCanvasKeyRepository,
     ProjectCanvasKeyRepository,
@@ -195,8 +200,6 @@ class ProjectService:
         il router traduce in 500 con messaggio esplicito e l'utente
         puo' chiedere il restore da backup.
         """
-        from app.shared.exceptions import CanvasCorruptedError
-
         row = project_db.get_project_row(project_id)
         if not row:
             return None
@@ -439,7 +442,6 @@ class ProjectService:
         # downstream che lo usano come sorgente. Si raccolgono entrambi e si
         # solleva un'unica eccezione per dare all'utente il quadro completo
         from app.core.eseguibili.db import list_eseguibili_by_source
-        from app.shared.exceptions import ProjectHasDependenciesError
         linked_eseguibili = list_eseguibili_by_source(project_id)
         dependent_projects = self._find_dependent_projects(
             project_id, group_id=row.group_id
@@ -549,7 +551,6 @@ class ProjectService:
                 f"Config row preservata, ritenta o escalation richiesta.",
                 op="delete_project",
             )
-            from app.shared.exceptions import ProjectCleanupPartialError
             raise ProjectCleanupPartialError(
                 project_id=project_id,
                 critical_failed=critical_failures,

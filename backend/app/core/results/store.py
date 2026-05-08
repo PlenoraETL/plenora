@@ -16,10 +16,12 @@ def resolve_group_id_for_result(
         return group_id
 
     from app.config import settings
-    from app.core.projects.db import get_project
+    from app.core.projects.runtime_context import resolve_project_runtime_group_id
 
-    project = get_project(project_id)
-    return (project.get("group_id") if project else None) or settings.DEFAULT_GROUP
+    return resolve_project_runtime_group_id(
+        project_id,
+        default_group=settings.DEFAULT_GROUP,
+    )
 
 
 def save_result_row(

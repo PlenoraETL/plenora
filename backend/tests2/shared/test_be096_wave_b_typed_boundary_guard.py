@@ -61,13 +61,9 @@ _EXPECTED_WAVE_B_BROAD_DICT_RETURNS: frozenset[BroadDictReturn] = frozenset(
         BroadDictReturn("app/core/projects/service.py", "ProjectService.get_latest_result", "Optional[dict]"),
         BroadDictReturn("app/core/projects/service.py", "ProjectService.list_results", "List[dict]"),
         BroadDictReturn("app/core/projects/db.py", "_detail_compat_payload", "dict[str, object]"),
-        BroadDictReturn("app/core/projects/db.py", "_dependency_compat_payload", "dict[str, object]"),
-        BroadDictReturn("app/core/projects/db.py", "_canvas_check_compat_payload", "dict[str, object]"),
         BroadDictReturn("app/core/projects/db.py", "get_project", "dict[str, object] | None"),
         BroadDictReturn("app/core/projects/db.py", "create_project", "dict[str, object]"),
         BroadDictReturn("app/core/projects/db.py", "update_project", "dict[str, object] | None"),
-        BroadDictReturn("app/core/projects/db.py", "list_projects_using_connection", "list[dict[str, object]]"),
-        BroadDictReturn("app/core/projects/db.py", "list_projects_with_canvas_for_datasource_check", "list[dict[str, object]]"),
     }
 )
 

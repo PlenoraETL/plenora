@@ -23,11 +23,9 @@ __all__ = [
     "ProjectDependencyRow",
     "ProjectRepository",
     "ProjectRow",
-    "create_project",
     "create_project_row",
     "delete_comparison_keys",
     "delete_project",
-    "get_project",
     "get_project_retention_n",
     "get_project_row",
     "list_project_canvas_check_rows",
@@ -35,9 +33,6 @@ __all__ = [
     "list_owned_project_ids",
     "list_project_ids_for_group",
     "list_projects",
-    "list_projects_using_connection",
-    "list_projects_with_canvas_for_datasource_check",
-    "update_project",
     "update_project_row",
     "update_project_canvas_key_atomic",
 ]
@@ -201,41 +196,6 @@ def _project_canvas_check_rows(
     rows: Iterable[Mapping[str, object]],
 ) -> list[ProjectCanvasCheckRow]:
     return [ProjectCanvasCheckRow.from_mapping(row) for row in rows]
-
-
-def _detail_compat_payload(row: ProjectDetailRow) -> dict[str, object]:
-    return {
-        "id": row.id,
-        "group_id": row.group_id,
-        "name": row.name,
-        "project_type": row.project_type,
-        "canvas": row.canvas,
-        "connection_id": row.connection_id,
-        "created_at": row.created_at,
-        "updated_at": row.updated_at,
-        "created_by": row.created_by,
-        "description": row.description,
-        "retention_n": row.retention_n,
-    }
-
-
-def _dependency_compat_payload(row: ProjectDependencyRow) -> dict[str, object]:
-    return {
-        "id": row.id,
-        "name": row.name,
-        "project_type": row.project_type,
-        "group_id": row.group_id,
-    }
-
-
-def _canvas_check_compat_payload(row: ProjectCanvasCheckRow) -> dict[str, object]:
-    return {
-        "id": row.id,
-        "name": row.name,
-        "project_type": row.project_type,
-        "canvas": row.canvas,
-        "group_id": row.group_id,
-    }
 
 
 class ProjectRepository:
@@ -476,15 +436,6 @@ def get_project_row(
     return project_repository.get_project_row(project_id, group_id=group_id)
 
 
-def get_project(
-    project_id: str,
-    group_id: str | None = None,
-) -> dict[str, object] | None:
-    """KEEP_PUBLIC_COMPAT: legacy dict wrapper around typed project reads."""
-    row = get_project_row(project_id, group_id=group_id)
-    return _detail_compat_payload(row) if row else None
-
-
 def list_projects(
     group_id: str | None = None,
     project_type: str | None = None,
@@ -510,37 +461,11 @@ def create_project_row(
     )
 
 
-def create_project(
-    project_id: str,
-    group_id: str,
-    name: str,
-    project_type: str,
-    connection_id: str | None = None,
-    created_by: str | None = None,
-) -> dict[str, object]:
-    """KEEP_PUBLIC_COMPAT: legacy dict wrapper around typed project creation."""
-    row = create_project_row(
-        project_id=project_id,
-        group_id=group_id,
-        name=name,
-        project_type=project_type,
-        connection_id=connection_id,
-        created_by=created_by,
-    )
-    return _detail_compat_payload(row)
-
-
 def update_project_row(
     project_id: str,
     **fields: object,
 ) -> ProjectDetailRow | None:
     return project_repository.update_project_row(project_id, **fields)
-
-
-def update_project(project_id: str, **fields: object) -> dict[str, object] | None:
-    """KEEP_PUBLIC_COMPAT: legacy dict wrapper around typed project updates."""
-    row = update_project_row(project_id, **fields)
-    return _detail_compat_payload(row) if row else None
 
 
 def delete_project(project_id: str, group_id: str | None = None) -> bool:
@@ -574,21 +499,8 @@ def list_project_dependency_rows_using_connection(
     )
 
 
-def list_projects_using_connection(connection_id: str) -> list[dict[str, object]]:
-    """KEEP_PUBLIC_COMPAT: legacy dict wrapper for connection delete checks."""
-    return [
-        _dependency_compat_payload(row)
-        for row in list_project_dependency_rows_using_connection(connection_id)
-    ]
-
-
 def list_project_canvas_check_rows() -> list[ProjectCanvasCheckRow]:
     return project_repository.list_project_canvas_check_rows()
-
-
-def list_projects_with_canvas_for_datasource_check() -> list[dict[str, object]]:
-    """KEEP_PUBLIC_COMPAT: legacy dict wrapper for datasource delete checks."""
-    return [_canvas_check_compat_payload(row) for row in list_project_canvas_check_rows()]
 
 
 def update_project_canvas_key_atomic(project_id: str, key: str, value: object) -> bool:
