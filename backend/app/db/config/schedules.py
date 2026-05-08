@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Dict, Iterable, List, Mapping, Optional, cast
 
-from .safe_set import safe_set_clause
+from app.db.sql_safety import safe_set_clause
 from app.db.pg_connection import fetchone, fetchall, execute
 
 

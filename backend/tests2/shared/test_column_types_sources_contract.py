@@ -21,7 +21,7 @@ pytestmark = [pytest.mark.unit, pytest.mark.shared, pytest.mark.contract]
 def test_columns_metadata_is_list_of_name_type_dicts(monkeypatch):
     """ProjectService.get_project_columns_metadata ritorna list[{name,type}]."""
     from app.services.project_service import ProjectService
-    from app.services import project_service as ps_mod
+    from app.core.projects import db as project_db
 
     fake_canvas = {
         "columns_metadata": [
@@ -31,8 +31,18 @@ def test_columns_metadata_is_list_of_name_type_dicts(monkeypatch):
         ],
         "nodes": [], "edges": [],
     }
-    fake_row = {"id": "p1", "canvas": fake_canvas}
-    monkeypatch.setattr(ps_mod.project_db, "get_project", lambda pid: fake_row)
+    fake_row = project_db.ProjectDetailRow(
+        id="p1",
+        group_id="g1",
+        name="P1",
+        project_type="estrai",
+        canvas=fake_canvas,
+        connection_id=None,
+        created_at=None,
+        updated_at=None,
+        created_by=None,
+    )
+    monkeypatch.setattr(project_db, "get_project_row", lambda pid: fake_row)
 
     result = ProjectService().get_project_columns_metadata("p1")
     assert isinstance(result, list)
@@ -45,11 +55,22 @@ def test_columns_metadata_is_list_of_name_type_dicts(monkeypatch):
 def test_columns_metadata_empty_when_missing(monkeypatch):
     """Progetto senza columns_metadata -> lista vuota (non None, non error)."""
     from app.services.project_service import ProjectService
-    from app.services import project_service as ps_mod
+    from app.core.projects import db as project_db
 
+    fake_row = project_db.ProjectDetailRow(
+        id="p1",
+        group_id="g1",
+        name="P1",
+        project_type="estrai",
+        canvas={"nodes": [], "edges": []},
+        connection_id=None,
+        created_at=None,
+        updated_at=None,
+        created_by=None,
+    )
     monkeypatch.setattr(
-        ps_mod.project_db, "get_project",
-        lambda pid: {"id": "p1", "canvas": {"nodes": [], "edges": []}}
+        project_db, "get_project_row",
+        lambda pid: fake_row,
     )
     assert ProjectService().get_project_columns_metadata("p1") == []
 
@@ -58,15 +79,26 @@ def test_columns_metadata_handles_canvas_as_json_string(monkeypatch):
     """Backward compat: canvas serializzato come stringa JSON -> deserializza."""
     import json
     from app.services.project_service import ProjectService
-    from app.services import project_service as ps_mod
+    from app.core.projects import db as project_db
 
     canvas_str = json.dumps({
         "columns_metadata": [{"name": "x", "type": "real"}],
         "nodes": [], "edges": [],
     })
+    fake_row = project_db.ProjectDetailRow(
+        id="p1",
+        group_id="g1",
+        name="P1",
+        project_type="estrai",
+        canvas=canvas_str,
+        connection_id=None,
+        created_at=None,
+        updated_at=None,
+        created_by=None,
+    )
     monkeypatch.setattr(
-        ps_mod.project_db, "get_project",
-        lambda pid: {"id": "p1", "canvas": canvas_str}
+        project_db, "get_project_row",
+        lambda pid: fake_row,
     )
     result = ProjectService().get_project_columns_metadata("p1")
     assert result == [{"name": "x", "type": "real"}]
@@ -84,9 +116,7 @@ def test_update_columns_metadata_writes_to_canvas(monkeypatch):
     su payload intero. L'invariante osservabile e' la stessa: la chiave
     "columns_metadata" dentro il canvas JSON."""
     from app.services.project_service import ProjectService
-    # BE-GO-READY-DB-ENGINE-007: patch on the projects leaf where
-    # the atomic helper now lives + where project_service imports it.
-    from app.db.config import projects as _projects_leaf
+    from app.core.projects import db as project_db
 
     captured_calls = []
 
@@ -94,7 +124,7 @@ def test_update_columns_metadata_writes_to_canvas(monkeypatch):
         captured_calls.append({"project_id": project_id, "key": key, "value": value})
         return True
 
-    monkeypatch.setattr(_projects_leaf, "update_project_canvas_key_atomic", fake_atomic)
+    monkeypatch.setattr(project_db, "update_project_canvas_key_atomic", fake_atomic)
 
     new_meta = [{"name": "id", "type": "int"}]
     ok = ProjectService().update_project_columns_metadata("p1", new_meta)
@@ -119,11 +149,11 @@ def test_update_columns_metadata_preserves_other_canvas_fields(monkeypatch):
     "columns_metadata" — scenari dove una regressione ri-serializza il
     canvas intero e droppa nodi/edge."""
     from app.services.project_service import ProjectService
-    from app.db.config import projects as _projects_leaf
+    from app.core.projects import db as project_db
 
     captured_calls = []
     monkeypatch.setattr(
-        _projects_leaf,
+        project_db,
         "update_project_canvas_key_atomic",
         lambda pid, key, value: captured_calls.append({"pid": pid, "key": key, "value": value}) or True,
     )
@@ -214,7 +244,7 @@ def test_enricher_bridge_reads_from_columns_metadata():
     """
     from app.shared.execution import canvas_types_enricher as enricher_mod
     assert _module_references_any(enricher_mod, [
-        "get_project_columns_metadata",
+        "metadata_to_dict",
     ]), (
         "Enricher bridge non legge columns_metadata - N11 contract rotto."
     )

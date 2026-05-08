@@ -296,7 +296,7 @@ def test_fullstack_transient_db_error_triggers_retry(monkeypatch):
     OK al 2°. Verifica retry + salvataggio res dopo recovery."""
     from app.core.estrai.executor import EstraiExecutor
     from app.services.project_service import ProjectService
-    from app.db.config import projects as projects_leaf
+    from app.core.projects import db as projects_leaf
     import psycopg2
 
     call_count = {"n": 0}
@@ -307,9 +307,9 @@ def test_fullstack_transient_db_error_triggers_retry(monkeypatch):
             raise psycopg2.OperationalError("pool exhausted (1/2)")
         return True
 
-    # BE-GO-READY-DB-ENGINE-007: project_service imports the
-    # atomic helper from `app.db.config.projects` directly; patch
-    # the leaf symbol to intercept the production retry path.
+    # ProjectService reaches the atomic helper through the domain-owned
+    # project DB module; patch that canonical symbol to intercept the
+    # production retry path.
     monkeypatch.setattr(projects_leaf, "update_project_canvas_key_atomic", flaky_atomic)
 
     # Accelera i backoff
@@ -345,7 +345,7 @@ def test_fullstack_transient_db_error_all_fail_raises_explicit(monkeypatch):
     from app.core.estrai.executor import EstraiExecutor
     from app.services.project_service import ProjectService
     from app.shared.exceptions import ColumnsMetadataSaveError
-    from app.db.config import projects as projects_leaf
+    from app.core.projects import db as projects_leaf
     import psycopg2
 
     def always_fail(project_id, key, value):
@@ -390,7 +390,7 @@ def test_fullstack_project_deleted_during_run_raises(monkeypatch):
     from app.core.estrai.executor import EstraiExecutor
     from app.services.project_service import ProjectService
     from app.shared.exceptions import ColumnsMetadataSaveError
-    from app.db.config import projects as projects_leaf
+    from app.core.projects import db as projects_leaf
 
     monkeypatch.setattr(
         projects_leaf, "update_project_canvas_key_atomic",
@@ -425,7 +425,7 @@ def test_fullstack_non_transient_error_no_retry(monkeypatch):
     from app.core.estrai.executor import EstraiExecutor
     from app.services.project_service import ProjectService
     from app.shared.exceptions import ColumnsMetadataSaveError
-    from app.db.config import projects as projects_leaf
+    from app.core.projects import db as projects_leaf
 
     call_count = {"n": 0}
 

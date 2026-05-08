@@ -30,7 +30,7 @@ def _canvas_with_sources(source_project_ids):
 
 
 def _fake_project_db_with(canvases):
-    """Mock di app.db.config.projects per get_project/update_project.
+    """Mock di app.core.projects.db per get_project/update_project.
 
     canvases: dict {project_id: canvas_dict_or_None}. None = progetto
     esistente ma senza canvas.

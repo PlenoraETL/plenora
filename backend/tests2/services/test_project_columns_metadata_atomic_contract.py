@@ -23,10 +23,9 @@ def mock_pg_conn(monkeypatch):
     """Sostituisce `transaction()` con un mock che registra l'ordine
     delle SQL eseguite sul cursor.
 
-    BE-GO-READY-DB-ENGINE-007: la funzione atomica vive ora nel leaf
-    `app.db.config.projects`, quindi patch `transaction` sul leaf
-    (non piu' sul facade `config_db_service`)."""
-    from app.db.config import projects as projects_leaf
+    BE Batch 098: la funzione atomica e' esercitata attraverso il boundary
+    project-domain `app.core.projects.db`."""
+    from app.core.projects import db as project_db
     from contextlib import contextmanager
 
     executed: list[tuple[str, tuple]] = []
@@ -70,7 +69,7 @@ def mock_pg_conn(monkeypatch):
     def fake_transaction():
         yield FakeConn()
 
-    monkeypatch.setattr(projects_leaf, "transaction", fake_transaction)
+    monkeypatch.setattr(project_db, "transaction", fake_transaction)
 
     return {"executed": executed, "state": state}
 
@@ -79,9 +78,9 @@ def mock_pg_conn(monkeypatch):
 
 
 def test_select_for_update_precedes_update(mock_pg_conn):
-    from app.db import config_db_service as cfg_db
+    from app.core.projects import db as project_db
 
-    result = cfg_db.update_project_canvas_key_atomic(
+    result = project_db.update_project_canvas_key_atomic(
         "p1", "columns_metadata", [{"name": "a", "type": "str"}]
     )
     assert result is True
@@ -110,7 +109,7 @@ def test_select_for_update_precedes_update(mock_pg_conn):
 
 
 def test_writing_columns_metadata_preserves_nodes_and_edges(mock_pg_conn):
-    from app.db import config_db_service as cfg_db
+    from app.core.projects import db as project_db
 
     mock_pg_conn["state"]["canvas_in_db"] = json.dumps({
         "nodes": [{"id": "n1", "type": "source"}, {"id": "n2"}],
@@ -118,7 +117,7 @@ def test_writing_columns_metadata_preserves_nodes_and_edges(mock_pg_conn):
         "retention_n": 5,
     })
 
-    cfg_db.update_project_canvas_key_atomic(
+    project_db.update_project_canvas_key_atomic(
         "p1", "columns_metadata", [{"name": "col1", "type": "int"}]
     )
 
@@ -137,10 +136,10 @@ def test_writing_columns_metadata_preserves_nodes_and_edges(mock_pg_conn):
 
 
 def test_project_not_found_returns_false(mock_pg_conn):
-    from app.db import config_db_service as cfg_db
+    from app.core.projects import db as project_db
     mock_pg_conn["state"]["project_exists"] = False
 
-    result = cfg_db.update_project_canvas_key_atomic(
+    result = project_db.update_project_canvas_key_atomic(
         "p-ghost", "columns_metadata", []
     )
     assert result is False
@@ -158,11 +157,11 @@ def test_corrupted_canvas_raises_instead_of_overwriting(mock_pg_conn):
     sollevare invece di sovrascriverlo. Allineato con la policy della
     sezione canvas corruption (reperto precedente): mai sovrascrivere
     silent i dati originali."""
-    from app.db import config_db_service as cfg_db
+    from app.core.projects import db as project_db
     mock_pg_conn["state"]["canvas_in_db"] = '{"broken json'
 
-    with pytest.raises(ValueError, match="Canvas corrotto"):
-        cfg_db.update_project_canvas_key_atomic(
+    with pytest.raises(ValueError, match="Corrupted canvas"):
+        project_db.update_project_canvas_key_atomic(
             "p1", "columns_metadata", []
         )
 
@@ -175,12 +174,12 @@ def test_corrupted_canvas_raises_instead_of_overwriting(mock_pg_conn):
 
 
 def test_canvas_unexpected_type_raises(mock_pg_conn):
-    from app.db import config_db_service as cfg_db
+    from app.core.projects import db as project_db
     # Un tipo DB inatteso (numero grezzo) → raise
     mock_pg_conn["state"]["canvas_in_db"] = 42
 
-    with pytest.raises(ValueError, match="tipo inatteso"):
-        cfg_db.update_project_canvas_key_atomic(
+    with pytest.raises(ValueError, match="Unexpected canvas type"):
+        project_db.update_project_canvas_key_atomic(
             "p1", "columns_metadata", []
         )
 
@@ -188,10 +187,10 @@ def test_canvas_unexpected_type_raises(mock_pg_conn):
 def test_canvas_null_treated_as_empty_dict(mock_pg_conn):
     """Canvas=NULL in DB: progetto appena creato con canvas non ancora
     salvato. La funzione deve trattarlo come dict vuoto e salvare la key."""
-    from app.db import config_db_service as cfg_db
+    from app.core.projects import db as project_db
     mock_pg_conn["state"]["canvas_in_db"] = None
 
-    result = cfg_db.update_project_canvas_key_atomic(
+    result = project_db.update_project_canvas_key_atomic(
         "p1", "columns_metadata", [{"name": "x", "type": "str"}]
     )
     assert result is True
@@ -204,9 +203,9 @@ def test_canvas_null_treated_as_empty_dict(mock_pg_conn):
 
 
 def test_project_service_delegates_to_atomic_helper(monkeypatch):
-    """Default repository adapter delegates to the projects DB leaf."""
+    """Default repository adapter delegates to the project-domain DB boundary."""
     from app.services.project_service import ProjectService
-    from app.db.config import projects as projects_leaf
+    from app.core.projects import db as project_db
 
     captured = {}
 
@@ -216,7 +215,7 @@ def test_project_service_delegates_to_atomic_helper(monkeypatch):
         captured["value"] = value
         return True
 
-    monkeypatch.setattr(projects_leaf, "update_project_canvas_key_atomic", fake_atomic)
+    monkeypatch.setattr(project_db, "update_project_canvas_key_atomic", fake_atomic)
 
     svc = ProjectService()
     meta = [{"name": "c1", "type": "int"}]
@@ -263,12 +262,12 @@ def test_project_service_propagates_atomic_exception(monkeypatch):
     oppure altri caller con try/except locale) decidono cosa fare.
     """
     from app.services.project_service import ProjectService
-    from app.db.config import projects as projects_leaf
+    from app.core.projects import db as project_db
 
     def raising_atomic(*args, **kwargs):
         raise ValueError("Canvas corrotto per progetto xyz")
 
-    monkeypatch.setattr(projects_leaf, "update_project_canvas_key_atomic", raising_atomic)
+    monkeypatch.setattr(project_db, "update_project_canvas_key_atomic", raising_atomic)
 
     svc = ProjectService()
     # DEVE propagare, NON tornare False silenziosamente
@@ -280,13 +279,13 @@ def test_project_service_propagates_transient_db_error(monkeypatch):
     """OperationalError (transient) propagato al caller → il retry
     dell'executor ESTRAI puo' agire. Pre-fix veniva ingoiato."""
     from app.services.project_service import ProjectService
-    from app.db.config import projects as projects_leaf
+    from app.core.projects import db as project_db
     import psycopg2
 
     def transient_fail(*args, **kwargs):
         raise psycopg2.OperationalError("pool exhausted")
 
-    monkeypatch.setattr(projects_leaf, "update_project_canvas_key_atomic", transient_fail)
+    monkeypatch.setattr(project_db, "update_project_canvas_key_atomic", transient_fail)
 
     svc = ProjectService()
     with pytest.raises(psycopg2.OperationalError):
@@ -298,10 +297,10 @@ def test_project_service_returns_false_when_project_missing(monkeypatch):
     la funzione atomica ha ritornato False (progetto inesistente).
     Questo NON e' un errore, e' un segnale pulito al caller."""
     from app.services.project_service import ProjectService
-    from app.db.config import projects as projects_leaf
+    from app.core.projects import db as project_db
 
     monkeypatch.setattr(
-        projects_leaf, "update_project_canvas_key_atomic",
+        project_db, "update_project_canvas_key_atomic",
         lambda *a, **kw: False,  # progetto non trovato
     )
 
@@ -312,10 +311,10 @@ def test_project_service_returns_false_when_project_missing(monkeypatch):
 
 def test_project_service_returns_true_on_success(monkeypatch):
     from app.services.project_service import ProjectService
-    from app.db.config import projects as projects_leaf
+    from app.core.projects import db as project_db
 
     monkeypatch.setattr(
-        projects_leaf, "update_project_canvas_key_atomic",
+        project_db, "update_project_canvas_key_atomic",
         lambda *a, **kw: True,
     )
 

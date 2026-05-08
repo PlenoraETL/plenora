@@ -10,7 +10,7 @@ pytestmark = [pytest.mark.unit, pytest.mark.contract]
 
 
 def test_project_list_db_leaf_returns_immutable_project_rows(monkeypatch):
-    from app.db.config import projects as project_db
+    from app.core.projects import db as project_db
 
     now = datetime(2026, 5, 7, 10, 0, tzinfo=timezone.utc)
     monkeypatch.setattr(
@@ -49,7 +49,7 @@ def test_project_list_db_leaf_returns_immutable_project_rows(monkeypatch):
 
 
 def test_project_detail_db_leaf_returns_immutable_project_row(monkeypatch):
-    from app.db.config import projects as project_db
+    from app.core.projects import db as project_db
 
     now = datetime(2026, 5, 7, 10, 0, tzinfo=timezone.utc)
     monkeypatch.setattr(
@@ -88,7 +88,7 @@ def test_project_detail_db_leaf_returns_immutable_project_row(monkeypatch):
 
 
 def test_get_project_keeps_legacy_dict_wrapper(monkeypatch):
-    from app.db.config import projects as project_db
+    from app.core.projects import db as project_db
 
     monkeypatch.setattr(
         project_db,
@@ -114,7 +114,7 @@ def test_get_project_keeps_legacy_dict_wrapper(monkeypatch):
 
 
 def test_project_create_db_leaf_returns_typed_row_and_legacy_wrapper(monkeypatch):
-    from app.db.config import projects as project_db
+    from app.core.projects import db as project_db
 
     now = datetime(2026, 5, 7, 10, 0, tzinfo=timezone.utc)
     executed: list[tuple[str, tuple[object, ...]]] = []
@@ -166,7 +166,7 @@ def test_project_create_db_leaf_returns_typed_row_and_legacy_wrapper(monkeypatch
 
 
 def test_project_update_db_leaf_returns_typed_row_and_legacy_wrapper(monkeypatch):
-    from app.db.config import projects as project_db
+    from app.core.projects import db as project_db
 
     now = datetime(2026, 5, 7, 10, 0, tzinfo=timezone.utc)
     executed: list[tuple[str, tuple[object, ...]]] = []
@@ -208,7 +208,7 @@ def test_project_update_db_leaf_returns_typed_row_and_legacy_wrapper(monkeypatch
 
 
 def test_project_dependency_db_leaf_returns_typed_rows_and_legacy_wrapper(monkeypatch):
-    from app.db.config import projects as project_db
+    from app.core.projects import db as project_db
 
     monkeypatch.setattr(
         project_db,
@@ -250,7 +250,7 @@ def test_project_dependency_db_leaf_returns_typed_rows_and_legacy_wrapper(monkey
 
 
 def test_project_canvas_check_db_leaf_returns_typed_rows_and_legacy_wrapper(monkeypatch):
-    from app.db.config import projects as project_db
+    from app.core.projects import db as project_db
 
     monkeypatch.setattr(
         project_db,
@@ -295,7 +295,7 @@ def test_project_canvas_check_db_leaf_returns_typed_rows_and_legacy_wrapper(monk
 
 
 def test_project_service_list_projects_uses_typed_project_rows(monkeypatch):
-    from app.db.config import projects as project_db
+    from app.core.projects import db as project_db
     from app.core.projects.service import ProjectService
 
     now = datetime(2026, 5, 7, 10, 0, tzinfo=timezone.utc)
@@ -315,15 +315,6 @@ def test_project_service_list_projects_uses_typed_project_rows(monkeypatch):
                 created_by="user-1",
             )
         ],
-    )
-
-    def fail_if_legacy_dict_converter_is_used(self, row):
-        raise AssertionError("list_projects must consume ProjectRow, not raw dict")
-
-    monkeypatch.setattr(
-        ProjectService,
-        "_row_to_metadata",
-        fail_if_legacy_dict_converter_is_used,
     )
 
     result = ProjectService().list_projects()
@@ -396,7 +387,7 @@ def test_project_service_create_project_uses_typed_post_write_row(monkeypatch):
 
 
 def test_project_service_metadata_uses_typed_project_detail_row(monkeypatch):
-    from app.db.config import projects as project_db
+    from app.core.projects import db as project_db
     from app.core.projects.service import ProjectService
 
     now = datetime(2026, 5, 7, 10, 0, tzinfo=timezone.utc)
@@ -440,7 +431,7 @@ def test_project_service_metadata_uses_typed_project_detail_row(monkeypatch):
 def test_project_service_get_project_converts_typed_row_at_public_compat_edge(
     monkeypatch,
 ):
-    from app.db.config import projects as project_db
+    from app.core.projects import db as project_db
     from app.core.projects.service import ProjectService
 
     monkeypatch.setattr(
@@ -500,6 +491,21 @@ def test_project_service_update_canvas_uses_typed_post_write_row(monkeypatch):
         ProjectService,
         "_assert_no_lineage_cycle",
         lambda self, project_id, canvas: None,
+    )
+    monkeypatch.setattr(
+        project_db,
+        "get_project_row",
+        lambda project_id, group_id=None: project_db.ProjectDetailRow(
+            id=project_id,
+            group_id="grp-1",
+            name="Project One",
+            project_type="estrai",
+            canvas={"nodes": [], "edges": []},
+            connection_id=None,
+            created_at=None,
+            updated_at=None,
+            created_by=None,
+        ),
     )
     monkeypatch.setattr(
         project_db,

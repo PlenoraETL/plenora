@@ -213,7 +213,7 @@ def test_save_pipeline_result_dict_shape(monkeypatch):
     """save_pipeline_result ritorna sempre {result_id, output_filename}."""
     from app.utils.result_store import save_pipeline_result
     import app.utils.result_store as result_store
-    import app.db.config.projects as projects_db
+    import app.core.projects.db as projects_db
     import app.core.results.db as results_db
     from types import SimpleNamespace
 
@@ -260,7 +260,7 @@ def test_save_pipeline_result_fs_only_fallback_to_filesystem(monkeypatch, tmp_pa
     Deve comunque ritornare la stessa shape dict."""
     from app.utils.result_store import save_pipeline_result
     import app.utils.result_store as result_store
-    import app.db.config.projects as projects_db
+    import app.core.projects.db as projects_db
     import app.core.results.db as results_db
     from types import SimpleNamespace
 

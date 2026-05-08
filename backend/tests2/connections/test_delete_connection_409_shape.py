@@ -58,7 +58,7 @@ def client(current_user: CurrentUser, monkeypatch) -> TestClient:
 
 def test_delete_connection_409_shape_has_canonical_dependencies_field(client, monkeypatch):
     # Il router delega al projects leaf per simulare la connessione in uso.
-    import app.db.config.projects as projects_db
+    import app.core.projects.db as projects_db
     monkeypatch.setattr(
         projects_db,
         "list_projects_using_connection",
@@ -96,7 +96,7 @@ def test_delete_connection_happy_path_returns_204(client, monkeypatch):
     Content con body vuoto. Pre-fix ritornava 200 + dict
     {"status": "deleted", "connection_id": X} (ridondante — ID gia' noto
     al client che ha chiamato DELETE)."""
-    import app.db.config.projects as projects_db
+    import app.core.projects.db as projects_db
     monkeypatch.setattr(projects_db, "list_projects_using_connection", lambda *a, **kw: [])
     client.app.state.mock_service.delete_connection.return_value = None
 

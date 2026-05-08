@@ -12,7 +12,7 @@ from dataclasses import dataclass
 from typing import Mapping, Optional
 
 from app.db.config.connections import delete_connection as _delete_connection
-from app.db.config.safe_set import safe_set_clause
+from app.db.sql_safety import safe_set_clause
 from app.db.pg_connection import execute, fetchall, fetchone
 
 

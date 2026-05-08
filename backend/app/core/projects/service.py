@@ -73,23 +73,6 @@ class ProjectService:
                 self.DEFAULT_GROUP, "Default", "Gruppo di default"
             )
 
-    def _row_to_metadata(self, row: dict) -> Optional[ProjectMetadata]:
-        """Converte riga DB in ProjectMetadata."""
-        if not row:
-            return None
-        return ProjectMetadata(
-            id=row["id"],
-            name=row["name"],
-            description=row.get("description", ""),
-            project_type=row.get("project_type", "estrai"),
-            default_connection_id=row.get("connection_id"),
-            group_id=resolve_project_group_id(
-                row.get("group_id"), settings.DEFAULT_GROUP
-            ),
-            created_at=row.get("created_at"),
-            updated_at=row.get("updated_at"),
-        )
-
     def _project_row_to_metadata(
         self,
         row: project_db.ProjectRow,
@@ -202,11 +185,11 @@ class ProjectService:
         """
         from app.shared.exceptions import CanvasCorruptedError
 
-        row = project_db.get_project(project_id)
+        row = project_db.get_project_row(project_id)
         if not row:
             return None
 
-        canvas_data = row.get("canvas")
+        canvas_data = row.canvas
 
         # Canvas mancante / vuoto → progetto nuovo, non corruzione
         if canvas_data is None or canvas_data == {} or canvas_data == "":
@@ -314,7 +297,7 @@ class ProjectService:
                 le dipendenze transitive degli altri progetti formano un
                 ciclo (C3 fix 5). Il router traduce in HTTP 400.
         """
-        row = project_db.get_project(project_id)
+        row = project_db.get_project_row(project_id)
         if not row:
             return False
 
@@ -345,10 +328,10 @@ class ProjectService:
         def get_sources(pid: str):
             if pid == project_id:
                 return new_sources
-            row = project_db.get_project(pid)
+            row = project_db.get_project_row(pid)
             if not row:
                 return []
-            canvas_dict = row.get("canvas") or {}
+            canvas_dict = row.canvas or {}
             if isinstance(canvas_dict, str):
                 import json
                 # intent: optional feature — canvas corrotto non blocca cycle check
@@ -381,25 +364,24 @@ class ProjectService:
         """
         # Recupera la riga del progetto per leggerne il group_id se non passato
         if group_id is None:
-            row = project_db.get_project(project_id)
+            row = project_db.get_project_row(project_id)
             if not row:
                 return []
-            group_id = row.get("group_id")
+            group_id = row.group_id
 
-        # Fix N+1: fetch tutti i candidates con canvas in una sola query
-        # invece di list + N get_project
-        rows = pg_connection.fetchall(
-            "SELECT id, name, project_type, canvas FROM projects "
-            "WHERE group_id = %s AND project_type IN ('manipola', 'arricchisci')",
-            (group_id,)
+        rows = (
+            row
+            for row in project_db.list_project_canvas_check_rows()
+            if row.group_id == group_id
+            and row.project_type in ("manipola", "arricchisci")
         )
 
         dependents = []
         for cand in rows:
-            cand_id = cand.get("id")
+            cand_id = cand.id
             if not cand_id or cand_id == project_id:
                 continue
-            canvas = cand.get("canvas") or {}
+            canvas = cand.canvas or {}
             if isinstance(canvas, str):
                 import json as _json
                 # intent: optional feature — canvas corrotto del candidato non blocca la
@@ -422,8 +404,8 @@ class ProjectService:
                 if src == project_id:
                     dependents.append({
                         "id": cand_id,
-                        "name": cand.get("name", cand_id),
-                        "project_type": cand.get("project_type", ""),
+                        "name": cand.name or cand_id,
+                        "project_type": cand.project_type or "",
                     })
                     break
         return dependents
@@ -437,7 +419,7 @@ class ProjectService:
         Solleva ProjectHasDependenciesError se esistono eseguibili pubblicati
         a partire da questo progetto: vanno eliminati prima.
         """
-        row = project_db.get_project(project_id, group_id=group_id)
+        row = project_db.get_project_row(project_id, group_id=group_id)
         if not row:
             return False
 
@@ -448,7 +430,7 @@ class ProjectService:
         from app.shared.exceptions import ProjectHasDependenciesError
         linked_eseguibili = list_eseguibili_by_source(project_id)
         dependent_projects = self._find_dependent_projects(
-            project_id, group_id=row.get("group_id")
+            project_id, group_id=row.group_id
         )
         if linked_eseguibili or dependent_projects:
             raise ProjectHasDependenciesError(
@@ -568,17 +550,17 @@ class ProjectService:
 
     def project_exists(self, project_id: str) -> bool:
         """Verifica se il progetto esiste."""
-        return project_db.get_project(project_id) is not None
+        return project_db.get_project_row(project_id) is not None
 
     def get_project_columns_metadata(self, project_id: str) -> list:
         """Recupera i metadati delle colonne dal canvas del progetto (DB).
 
         Sono salvati come `canvas["columns_metadata"]` da update_project_columns_metadata.
         """
-        row = project_db.get_project(project_id)
+        row = project_db.get_project_row(project_id)
         if not row:
             return []
-        canvas = row.get("canvas", {})
+        canvas = row.canvas or {}
         if isinstance(canvas, str):
             import json
             try:

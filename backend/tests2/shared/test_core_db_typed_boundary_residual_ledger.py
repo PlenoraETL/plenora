@@ -40,70 +40,76 @@ class BoundaryEntry:
 
 _LEDGER: tuple[BoundaryEntry, ...] = (
     BoundaryEntry(
-        "app/db/config/projects.py",
+        "app/core/projects/db.py",
         "ProjectRow",
         "DONE",
-        "project list DB rows are immutable dataclasses",
+        "project list DB rows are immutable domain-owned dataclasses",
     ),
     BoundaryEntry(
-        "app/db/config/projects.py",
+        "app/core/projects/db.py",
         "ProjectDetailRow",
         "DONE",
-        "project detail DB rows are immutable dataclasses",
+        "project detail DB rows are immutable domain-owned dataclasses",
     ),
     BoundaryEntry(
-        "app/db/config/projects.py",
+        "app/core/projects/db.py",
         "ProjectDependencyRow",
         "DONE",
-        "connection-delete dependency checks have typed rows",
+        "connection-delete dependency checks use domain-owned typed project rows",
     ),
     BoundaryEntry(
-        "app/db/config/projects.py",
+        "app/core/projects/db.py",
         "ProjectCanvasCheckRow",
         "DONE",
-        "datasource cascade checks have typed project rows",
+        "datasource cascade checks use domain-owned typed project rows",
     ),
     BoundaryEntry(
-        "app/db/config/projects.py",
+        "app/core/projects/db.py",
         "get_project",
-        "KEEP_PUBLIC_COMPAT",
-        "legacy API/test wrapper returns dict until callers migrate to get_project_row",
+        "KEEP_COMPAT_WITH_REMOVAL_CONDITION",
+        "remove after project API and worker callers consume get_project_row and serialize at their public edges",
     ),
     BoundaryEntry(
-        "app/db/config/projects.py",
+        "app/core/projects/db.py",
         "create_project_row",
         "DONE",
-        "project create post-write hydration returns ProjectDetailRow",
+        "project create post-write hydration returns ProjectDetailRow from the domain DB boundary",
     ),
     BoundaryEntry(
-        "app/db/config/projects.py",
+        "app/core/projects/db.py",
         "create_project",
-        "KEEP_PUBLIC_COMPAT",
-        "legacy project create wrapper delegates to create_project_row at public compatibility edge",
+        "KEEP_COMPAT_WITH_REMOVAL_CONDITION",
+        "remove after project create callers consume create_project_row and serialize at their public edges",
     ),
     BoundaryEntry(
-        "app/db/config/projects.py",
+        "app/core/projects/db.py",
         "update_project_row",
         "DONE",
-        "project update post-write hydration returns ProjectDetailRow",
+        "project update post-write hydration returns ProjectDetailRow from the domain DB boundary",
     ),
     BoundaryEntry(
-        "app/db/config/projects.py",
+        "app/core/projects/db.py",
         "update_project",
-        "KEEP_PUBLIC_COMPAT",
-        "legacy project update wrapper delegates to update_project_row at public compatibility edge",
+        "KEEP_COMPAT_WITH_REMOVAL_CONDITION",
+        "remove after project update callers consume update_project_row and serialize at their public edges",
     ),
     BoundaryEntry(
-        "app/db/config/projects.py",
+        "app/core/projects/db.py",
         "list_projects_using_connection",
-        "KEEP_PUBLIC_COMPAT",
-        "legacy dependency-check wrapper delegates to ProjectDependencyRow",
+        "KEEP_COMPAT_WITH_REMOVAL_CONDITION",
+        "remove after connection-delete checks consume list_project_dependency_rows_using_connection",
+    ),
+    BoundaryEntry(
+        "app/core/projects/db.py",
+        "list_projects_with_canvas_for_datasource_check",
+        "KEEP_COMPAT_WITH_REMOVAL_CONDITION",
+        "remove after datasource cascade checks consume list_project_canvas_check_rows",
     ),
     BoundaryEntry(
         "app/db/config/projects.py",
-        "list_projects_with_canvas_for_datasource_check",
-        "KEEP_PUBLIC_COMPAT",
-        "legacy datasource-check wrapper delegates to ProjectCanvasCheckRow",
+        "module",
+        "REMOVED",
+        "project persistence compat leaf removed after tests migrated to app.core.projects.db",
     ),
     BoundaryEntry(
         "app/core/results/db.py",
@@ -382,6 +388,10 @@ def _tree(rel_path: str) -> ast.Module:
     return ast.parse((_BACKEND_ROOT / rel_path).read_text(encoding="utf-8-sig"))
 
 
+def _rel(path: Path) -> str:
+    return path.relative_to(_BACKEND_ROOT).as_posix()
+
+
 def _classes(tree: ast.AST) -> set[str]:
     return {node.name for node in ast.walk(tree) if isinstance(node, ast.ClassDef)}
 
@@ -592,10 +602,10 @@ def test_done_row_contracts_are_present_and_frozen():
 def test_batch_094_public_dict_boundaries_are_classified():
     selected_paths = {
         "app/core/connections/db.py",
+        "app/core/projects/db.py",
         "app/core/orchestrator/task_service.py",
         "app/core/results/db.py",
         "app/db/config/connections.py",
-        "app/db/config/projects.py",
         "app/db/config/schedules.py",
     }
     classified = {
@@ -625,3 +635,38 @@ def test_batch_094_done_functions_no_longer_return_public_dicts():
         returns = _function_returns(_tree(entry.path))
         annotation = returns.get(entry.symbol, "")
         assert "Dict" not in annotation and "dict" not in annotation
+
+
+def test_project_core_domain_has_no_row_to_legacy_dict_crutch():
+    """Project row dict conversion may not move into the core domain.
+
+    Any remaining project dict compatibility belongs at API/public edges or in
+    the explicitly blocked legacy config leaf while Batch 098 is incomplete.
+    """
+    project_core_paths = sorted((_APP_ROOT / "core" / "projects").glob("*.py"))
+    found = {
+        (_rel(path), symbol)
+        for path in project_core_paths
+        for symbol in _defined_symbols(_tree(_rel(path)))
+        if symbol.endswith(".to_legacy_dict")
+    }
+    classified_blockers = {
+        (entry.path, entry.symbol)
+        for entry in _LEDGER
+        if entry.status == "BLOCKER"
+        and entry.path.startswith("app/core/projects/")
+        and entry.symbol.endswith(".to_legacy_dict")
+    }
+
+    assert found == classified_blockers
+
+
+def test_project_db_getattr_bridge_is_explicit_blocker_only():
+    project_core_paths = sorted((_APP_ROOT / "core" / "projects").glob("*.py"))
+    getattr_symbols = {
+        (_rel(path), "__getattr__")
+        for path in project_core_paths
+        if "__getattr__" in _defined_symbols(_tree(_rel(path)))
+    }
+
+    assert not getattr_symbols

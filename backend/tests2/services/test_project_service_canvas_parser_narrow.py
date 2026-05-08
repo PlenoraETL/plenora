@@ -7,6 +7,7 @@ Audit Batch 9 §3.2 S6 / fix F6.6-F6.7: due metodi di ProjectService
 from __future__ import annotations
 
 import logging
+from dataclasses import dataclass
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -37,35 +38,54 @@ def _attach_handler(logger_name: str):
 _PROJ_SVC_LOGGER = "app.core.projects.service"
 
 
+@dataclass(frozen=True)
+class _ProjectDetailStub:
+    id: str
+    canvas: object
+    group_id: str = "grp-1"
+
+
+@dataclass(frozen=True)
+class _ProjectCanvasCheckStub:
+    id: str
+    name: str
+    project_type: str
+    canvas: object
+    group_id: str = "grp-1"
+
+
 # F6.7 — _find_dependent_projects narrow
 
 
 def test_find_dependent_projects_skips_malformed_json_canvas(monkeypatch):
     """Canvas JSON string malformato per un candidato → skip con warning,
     gli altri candidati vengono comunque scansionati."""
-    from app.db.config import projects as project_db
-    from app.db import pg_connection
+    from app.core.projects import db as project_db
     from app.core.projects.service import ProjectService
 
     # Candidato 1: canvas malformato (JSON garbage)
     # Candidato 2: canvas valido con project_source che referenzia project_id
     target_pid = "target-proj"
     rows = [
-        {
-            "id": "cand-malformed",
-            "name": "Candidato con canvas rotto",
-            "project_type": "manipola",
-            "canvas": "{this-is-not-valid-json",
-        },
-        {
-            "id": "cand-valid",
-            "name": "Candidato con canvas ok",
-            "project_type": "arricchisci",
-            "canvas": '{"nodes": [{"type": "project_source", "data": {"source_project_id": "target-proj"}}]}',
-        },
+        _ProjectCanvasCheckStub(
+            id="cand-malformed",
+            name="Candidato con canvas rotto",
+            project_type="manipola",
+            canvas="{this-is-not-valid-json",
+        ),
+        _ProjectCanvasCheckStub(
+            id="cand-valid",
+            name="Candidato con canvas ok",
+            project_type="arricchisci",
+            canvas='{"nodes": [{"type": "project_source", "data": {"source_project_id": "target-proj"}}]}',
+        ),
     ]
-    monkeypatch.setattr(pg_connection, "fetchall", lambda *a, **kw: rows)
-    monkeypatch.setattr(project_db, "get_project", lambda pid, group_id=None: {"group_id": "grp-1"})
+    monkeypatch.setattr(project_db, "list_project_canvas_check_rows", lambda: rows)
+    monkeypatch.setattr(
+        project_db,
+        "get_project_row",
+        lambda pid, group_id=None: _ProjectDetailStub(id=pid, canvas={}),
+    )
 
     svc = ProjectService()
     handler, target_logger = _attach_handler(_PROJ_SVC_LOGGER)
@@ -89,18 +109,25 @@ def test_find_dependent_projects_skips_malformed_json_canvas(monkeypatch):
 
 
 def test_find_dependent_projects_propagates_non_parse_exceptions(monkeypatch):
-    """Se db.fetchall o un errore strutturale inatteso (es. RuntimeError)
-    si verifica durante l'iterazione, deve propagare fail-loud (non essere
-    mascherato come 'canvas corrotto')."""
-    from app.db.config import projects as project_db
-    from app.db import pg_connection
+    """Se il repository project-canvas check fallisce o un errore strutturale
+    inatteso si verifica durante l'iterazione, deve propagare fail-loud
+    (non essere mascherato come 'canvas corrotto')."""
+    from app.core.projects import db as project_db
     from app.core.projects.service import ProjectService
 
-    def fake_fetchall(*args, **kwargs):
+    def fake_list_project_canvas_check_rows():
         raise RuntimeError("connection pool exhausted")
 
-    monkeypatch.setattr(pg_connection, "fetchall", fake_fetchall)
-    monkeypatch.setattr(project_db, "get_project", lambda pid, group_id=None: {"group_id": "grp-1"})
+    monkeypatch.setattr(
+        project_db,
+        "list_project_canvas_check_rows",
+        fake_list_project_canvas_check_rows,
+    )
+    monkeypatch.setattr(
+        project_db,
+        "get_project_row",
+        lambda pid, group_id=None: _ProjectDetailStub(id=pid, canvas={}),
+    )
 
     svc = ProjectService()
     with pytest.raises(RuntimeError, match="pool exhausted"):
@@ -110,22 +137,25 @@ def test_find_dependent_projects_propagates_non_parse_exceptions(monkeypatch):
 def test_find_dependent_projects_narrow_catches_typeerror_in_json_loads(monkeypatch):
     """json.loads(None) / json.loads(int) solleva TypeError: il narrow
     difensivo lo cattura come canvas non parsabile."""
-    from app.db.config import projects as project_db
-    from app.db import pg_connection
+    from app.core.projects import db as project_db
     from app.core.projects.service import ProjectService
 
     # Simulazione impossibile via DB reale, ma difendiamo comunque la signature.
     # Forziamo json.loads a sollevare TypeError per il candidato malformato.
     rows = [
-        {
-            "id": "cand-with-weird-canvas",
-            "name": "x",
-            "project_type": "manipola",
-            "canvas": "valid-looking-string",
-        },
+        _ProjectCanvasCheckStub(
+            id="cand-with-weird-canvas",
+            name="x",
+            project_type="manipola",
+            canvas="valid-looking-string",
+        ),
     ]
-    monkeypatch.setattr(pg_connection, "fetchall", lambda *a, **kw: rows)
-    monkeypatch.setattr(project_db, "get_project", lambda pid, group_id=None: {"group_id": "grp-1"})
+    monkeypatch.setattr(project_db, "list_project_canvas_check_rows", lambda: rows)
+    monkeypatch.setattr(
+        project_db,
+        "get_project_row",
+        lambda pid, group_id=None: _ProjectDetailStub(id=pid, canvas={}),
+    )
 
     svc = ProjectService()
     handler, target_logger = _attach_handler(_PROJ_SVC_LOGGER)
@@ -149,16 +179,16 @@ def test_assert_no_lineage_cycle_skips_malformed_canvas_in_sources(monkeypatch):
     """Il cycle check scorre i canvas dei progetti coinvolti — se un canvas
     nella chain e' JSON malformato, il get_sources interno deve ritornare
     [] per quel pid (con warning) senza mascherare errori inattesi."""
-    from app.db.config import projects as project_db
+    from app.core.projects import db as project_db
     from app.core.projects.service import ProjectService
     from app.models import CanvasState
 
-    def fake_get_project(pid, group_id=None):
+    def fake_get_project_row(pid, group_id=None):
         if pid == "other-proj":
-            return {"id": pid, "canvas": "{malformed-json"}
-        return {"id": pid, "canvas": {}}
+            return _ProjectDetailStub(id=pid, canvas="{malformed-json")
+        return _ProjectDetailStub(id=pid, canvas={})
 
-    monkeypatch.setattr(project_db, "get_project", fake_get_project)
+    monkeypatch.setattr(project_db, "get_project_row", fake_get_project_row)
 
     svc = ProjectService()
     # Canvas nuovo del progetto corrente senza cycle
@@ -179,9 +209,9 @@ def test_assert_no_lineage_cycle_skips_malformed_canvas_in_sources(monkeypatch):
 
 
 def test_assert_no_lineage_cycle_propagates_non_parse_exceptions(monkeypatch):
-    """Se db.get_project solleva RuntimeError durante il cycle check,
+    """Se db.get_project_row solleva RuntimeError durante il cycle check,
     l'eccezione propaga fail-loud."""
-    from app.db.config import projects as project_db
+    from app.core.projects import db as project_db
     from app.core.projects.service import ProjectService
     from app.models import CanvasState
 
@@ -192,12 +222,12 @@ def test_assert_no_lineage_cycle_propagates_non_parse_exceptions(monkeypatch):
     source_node.source_project_id = "other-proj"
     new_canvas.nodes = [source_node]
 
-    def fake_get_project(pid, group_id=None):
+    def fake_get_project_row(pid, group_id=None):
         if pid == "other-proj":
             raise RuntimeError("DB transient blip")
-        return {"id": pid, "canvas": {}}
+        return _ProjectDetailStub(id=pid, canvas={})
 
-    monkeypatch.setattr(project_db, "get_project", fake_get_project)
+    monkeypatch.setattr(project_db, "get_project_row", fake_get_project_row)
 
     svc = ProjectService()
     with pytest.raises(RuntimeError, match="transient blip"):

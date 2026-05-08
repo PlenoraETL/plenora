@@ -149,7 +149,7 @@ def test_preview_passes_group_id_explicitly_to_source_loaders():
         return None
 
     with patch(
-        "app.db.config.projects.get_project",
+        "app.core.projects.db.get_project",
         return_value={"id": "proj-cur", "group_id": "grp-A"},
     ), patch.object(
         executor, "_carica_sorgenti_progetto",
@@ -207,7 +207,7 @@ def test_preview_builds_canvas_graph_once_at_intake_boundary():
         return None
 
     with patch(
-        "app.db.config.projects.get_project",
+        "app.core.projects.db.get_project",
         return_value={"id": "proj-cur", "group_id": "grp-A"},
     ), patch(
         "app.core.manipola.executor.CanvasGraph.from_canvas",

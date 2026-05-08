@@ -49,7 +49,7 @@ def test_save_pipeline_result_gpkg_no_file_in_data_dir_temp(monkeypatch, tmp_pat
     """Sentinel: DATA_DIR/temp/ resta vuota dopo save_pipeline_result(gpkg)."""
     from app.utils.result_store import save_pipeline_result
     import app.utils.result_store as result_store
-    import app.db.config.projects as projects_db
+    import app.core.projects.db as projects_db
     import app.core.results.db as results_db
 
     # Simula DATA_DIR su tmp_path per intercettare eventuali file residui
@@ -109,7 +109,7 @@ def test_save_pipeline_result_gpkg_uses_temporary_directory_prefix(monkeypatch, 
     con prefix urby_gpkg_shp_ (non DATA_DIR/temp/urby_<pid>_<hash>/)."""
     from app.utils.result_store import save_pipeline_result
     import app.utils.result_store as result_store
-    import app.db.config.projects as projects_db
+    import app.core.projects.db as projects_db
     import app.core.results.db as results_db
 
     # Settings DATA_DIR
@@ -155,7 +155,7 @@ def test_save_pipeline_result_gpkg_cleans_tmp_dir_on_upload_failure(monkeypatch,
     """Su upload failure, il context exit pulisce comunque la tmp_dir."""
     from app.utils.result_store import save_pipeline_result
     import app.utils.result_store as result_store
-    import app.db.config.projects as projects_db
+    import app.core.projects.db as projects_db
     import app.core.results.db as results_db
 
     class _FakeSettings:

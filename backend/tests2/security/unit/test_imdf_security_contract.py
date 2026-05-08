@@ -55,7 +55,7 @@ def test_assert_bundle_group_access_requires_visible_project(tmp_path, current_u
         encoding="utf-8",
     )
 
-    import app.db.config.projects as projects_repo
+    import app.core.projects.db as projects_repo
     # BE-GO-READY-AUTH-ENGINE-020: monkeypatch via consuming
     # router-module surface (mirrors connections/datasources/
     # eseguibili pattern). The IMDF router now imports

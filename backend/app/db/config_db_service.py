@@ -48,7 +48,7 @@ from app.db.config.users import (  # noqa: F401,E402
 
 # PROJECTS
 
-from app.db.config.projects import (  # noqa: F401,E402
+from app.core.projects.db import (  # noqa: F401,E402
     get_project,
     list_projects,
     create_project,

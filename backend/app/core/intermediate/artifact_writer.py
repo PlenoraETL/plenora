@@ -45,7 +45,7 @@ def _slug(value: str) -> str:
     ma applichiamo un trim difensivo: niente slash, spazi mappati a `_`.
 
     NB: il safe set degli ID e' gia' enforced upstream
-    (`app.db.config.projects.create_project`, ecc.). Qui non
+    (`app.core.projects.db.create_project`, ecc.). Qui non
     sostituiamo, per non rompere il roundtrip nel path. Solleviamo
     invece su valori palesemente invalidi (slash) per fail-fast.
     """

@@ -45,7 +45,7 @@ def _manipola_project_source_denied():
     canvas = build_canvas(build_node("project_source", source_project_id="proj-99", columns=[]))
     dataframes = {}
 
-    with patch("app.db.config.projects.get_project", return_value=None):
+    with patch("app.core.projects.db.get_project", return_value=None):
         result = executor._carica_sorgenti_progetto(
             canvas, dataframes, force_recalculate=False, group_id="grp-1",
         )
@@ -94,7 +94,7 @@ def _arricchisci_project_source_denied():
         project_id="p-1", group_id="grp-1", preview_limit=None,
     )
 
-    with patch("app.db.config.projects.get_project", return_value=None):
+    with patch("app.core.projects.db.get_project", return_value=None):
         with pytest.raises(ValueError, match="Accesso negato: progetto sorgente 'proj-99'"):
             service._load_source_project(node_data, ctx=ctx)
 

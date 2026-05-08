@@ -10,14 +10,9 @@ import pytest
 pytestmark = [pytest.mark.unit, pytest.mark.contract]
 
 
-def test_projects_domain_db_bridge_reexports_existing_sql_leaf() -> None:
-    """Project-domain persistence imports go through app.core.projects.db.
-
-    KEEP_COMPAT: the bridge delegates to app.db.config.projects for this pilot,
-    so SQL bodies and legacy patch targets remain in one place.
-    """
+def test_projects_domain_db_owns_sql_and_exports_project_contract() -> None:
+    """Project-domain persistence owns SQL and the public project contract."""
     from app.core.projects import db as domain_db
-    from app.db.config import projects as projects_leaf
 
     exported_names = {
         "ProjectRow",
@@ -43,19 +38,12 @@ def test_projects_domain_db_bridge_reexports_existing_sql_leaf() -> None:
     }
 
     assert set(domain_db.__all__) == exported_names
-    dynamic_wrapper_names = {
-        "get_project",
-        "get_project_row",
-        "create_project",
-        "create_project_row",
-        "update_project",
-        "update_project_row",
-    }
-    for name in exported_names - dynamic_wrapper_names:
-        assert getattr(domain_db, name) is getattr(projects_leaf, name)
-    for name in dynamic_wrapper_names:
+    for name in exported_names:
         assert callable(getattr(domain_db, name))
-        assert callable(getattr(projects_leaf, name))
+
+    domain_src = inspect.getsource(domain_db)
+    assert "SELECT * FROM projects" in domain_src
+    assert "__getattr__" not in domain_src
 
 
 def test_projects_router_imports_domain_db_bridge_not_db_leaf() -> None:
@@ -64,4 +52,5 @@ def test_projects_router_imports_domain_db_bridge_not_db_leaf() -> None:
     src = inspect.getsource(projects_router._visible_project_ids_strict)
 
     assert "from app.core.projects.db import list_owned_project_ids" in src
-    assert "from app.db.config.projects import list_owned_project_ids" not in src
+    legacy_import = "from app.db.config." + "projects import list_owned_project_ids"
+    assert legacy_import not in src

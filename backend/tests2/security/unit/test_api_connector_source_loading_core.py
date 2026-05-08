@@ -121,7 +121,7 @@ def test_load_source_project_blocks_cross_tenant_via_loader():
     BE-GO-READY-TRANSFORMATION-ENGINE-029: migrato a ctx esplicito.
     Stale singleton prova che la cross-tenant block usa
     `ctx.group_id`, non il singleton legacy."""
-    import app.db.config.projects as projects_db
+    import app.core.projects.db as projects_db
     from app.core.results import db as results_db
 
     svc = _make_service_no_singleton()
@@ -145,7 +145,7 @@ def test_load_source_project_does_not_leak_cross_tenant_detail_in_message():
     BE-GO-READY-TRANSFORMATION-ENGINE-029: migrato a ctx esplicito.
     Stale singleton prova che il check usa `ctx.group_id`, non il
     singleton legacy."""
-    import app.db.config.projects as projects_db
+    import app.core.projects.db as projects_db
     from app.core.results import db as results_db
 
     svc = _make_service_no_singleton()
@@ -173,7 +173,7 @@ def test_load_source_project_distinguishes_project_not_found_from_cross_tenant()
 
     BE-GO-READY-TRANSFORMATION-ENGINE-029: migrato a ctx esplicito.
     Stale singleton presente come decoy."""
-    import app.db.config.projects as projects_db
+    import app.core.projects.db as projects_db
 
     svc = _make_service_no_singleton()
     svc._current_group_id = "stale-grp-LEAK"
@@ -241,7 +241,7 @@ def test_resolve_file_source_path_blocks_cross_tenant_project_source():
     BE-GO-READY-TRANSFORMATION-ENGINE-029: migrato a ctx esplicito.
     Stale singleton prova che il check cross-tenant usa
     `ctx.group_id`, non il singleton legacy."""
-    import app.db.config.projects as projects_db
+    import app.core.projects.db as projects_db
     from app.core.results import db as results_db
 
     svc = _make_service_no_singleton()

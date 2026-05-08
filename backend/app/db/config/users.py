@@ -6,7 +6,7 @@ Keeps config-table persistence isolated behind a narrow database module.
 
 from typing import Dict, List, Optional
 
-from .safe_set import safe_set_clause
+from app.db.sql_safety import safe_set_clause
 from app.db.pg_connection import fetchone, fetchall, execute
 
 

@@ -168,10 +168,10 @@ def test_os_getenv_only_at_boundary_modules():
 # Migrazioni gia' chiuse (la baseline scende man mano):
 # - `app/core/projects/router.py` (BE-GO-READY-CONNECTION-ENGINE-003):
 #   project-id lookup migrato a
-#   `app.db.config.projects.list_owned_project_ids`.
+#   `app.core.projects.db.list_owned_project_ids`.
 # - `app/core/imdf/router.py` (BE-GO-READY-CONNECTION-ENGINE-003):
 #   project-id-by-group lookup migrato a
-#   `app.db.config.projects.list_project_ids_for_group`.
+#   `app.core.projects.db.list_project_ids_for_group`.
 # - `app/core/orchestrator/router.py` (BE-GO-READY-CONNECTION-ENGINE-006):
 #   single `DELETE log_runs` migrato a
 #   `app.db.log_runs_db_service.delete_log_run_by_run_id`.

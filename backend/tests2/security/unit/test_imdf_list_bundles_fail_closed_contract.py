@@ -32,7 +32,7 @@ def test_list_bundles_raises_500_when_visible_project_ids_lookup_fails(tmp_path)
     client = _build_client()
 
     with patch("app.core.imdf.router.settings", type("S", (), {"IMDF_BUNDLES_DIR": tmp_path})()), \
-         patch("app.db.config.projects.list_project_ids_for_group", side_effect=RuntimeError("db down")):
+         patch("app.core.projects.db.list_project_ids_for_group", side_effect=RuntimeError("db down")):
         response = client.get("/api/imdf/bundles")
 
     assert response.status_code == 500

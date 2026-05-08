@@ -1,5 +1,5 @@
 """
-Shared UPDATE SET-clause guard for config table leaves.
+Shared SQL safety helpers for database update construction.
 """
 
 from collections.abc import Mapping

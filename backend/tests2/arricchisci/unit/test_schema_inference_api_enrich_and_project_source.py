@@ -216,7 +216,7 @@ def test_infer_project_source_schema_prefers_result_node_columns_over_metadata(
     }
 
     monkeypatch.setattr(
-        "app.db.config.projects.get_project",
+        "app.core.projects.db.get_project",
         lambda pid: {"canvas": fake_canvas},
     )
     ps_node = _node("ps1", "project_source", source_project_id="src-proj-1")
@@ -253,7 +253,7 @@ def test_infer_project_source_schema_fallback_to_columns_metadata_when_result_em
     }
 
     monkeypatch.setattr(
-        "app.db.config.projects.get_project",
+        "app.core.projects.db.get_project",
         lambda pid: {"canvas": fake_canvas},
     )
     ps_node = _node("ps1", "project_source", source_project_id="src-proj-1")
@@ -294,7 +294,7 @@ def test_infer_project_source_schema_does_not_rename_columns_via_alias(
     }
 
     monkeypatch.setattr(
-        "app.db.config.projects.get_project",
+        "app.core.projects.db.get_project",
         lambda pid: {"canvas": fake_canvas},
     )
     ps_node = _node("ps1", "project_source", source_project_id="src-proj-1")
@@ -339,7 +339,7 @@ def test_infer_project_source_schema_does_not_filter_by_intrinsic_visible_flag(
     }
 
     monkeypatch.setattr(
-        "app.db.config.projects.get_project",
+        "app.core.projects.db.get_project",
         lambda pid: {"canvas": fake_canvas},
     )
     # Consumer node senza filtro proprio (node.columns vuoto): tutte

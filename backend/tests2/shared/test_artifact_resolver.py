@@ -488,7 +488,7 @@ def test_materialize_latest_writes_tempfile_with_format_suffix(
 
 def test_materialize_latest_enforces_group_binding(resolver, monkeypatch):
     import app.core.results.db as _rdb
-    import app.db.config.projects as _projects_leaf
+    import app.core.projects.db as _projects_leaf
 
     def _tenant_scoped_project(pid, group_id=None):
         assert pid == "proj-1"
@@ -636,7 +636,7 @@ def test_materialize_latest_passes_when_group_matches(resolver, monkeypatch):
     group check passes, the resolver delegates to the registry
     with ``is_superadmin=False`` and the latest-row's group_id."""
     import app.core.results.db as _rdb
-    import app.db.config.projects as _projects_leaf
+    import app.core.projects.db as _projects_leaf
     import app.core.artifacts.resolver as resolver_mod
 
     def _tenant_scoped_project(pid, group_id=None):
@@ -688,7 +688,7 @@ def test_materialize_latest_superadmin_bypass_cross_tenant(resolver, monkeypatch
     the loader's audit-bypass log entry mirrors the upstream
     project bypass."""
     import app.core.results.db as _rdb
-    import app.db.config.projects as _projects_leaf
+    import app.core.projects.db as _projects_leaf
     import app.core.artifacts.resolver as resolver_mod
 
     monkeypatch.setattr(
@@ -733,7 +733,7 @@ def test_materialize_latest_non_superadmin_blocks_cross_tenant(resolver, monkeyp
     cross-tenant deve scattare senza rivelare il tenant reale. Il
     default e' fail-closed."""
     import app.core.results.db as _rdb
-    import app.db.config.projects as _projects_leaf
+    import app.core.projects.db as _projects_leaf
 
     def _tenant_scoped_project(pid, group_id=None):
         assert pid == "proj-cross"

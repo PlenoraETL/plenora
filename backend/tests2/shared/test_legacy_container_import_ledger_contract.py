@@ -64,10 +64,8 @@ _LEGACY_IMPORT_BASELINES: dict[str, dict[str, frozenset[str]]] = {
     },
     "app.db.config": {
         "projects": frozenset({
-            "app/core/projects/db.py -> app.db.config.projects",
             "app/core/projects/service.py -> app.db.config.comparison_keys",
             "app/core/projects/service.py -> app.db.config.groups",
-            "app/db/config_db_service.py -> app.db.config.projects",
         }),
         "connections": frozenset({
             "app/core/arricchisci/api_connection_management.py -> app.db.config.api_connections",
@@ -108,6 +106,18 @@ _LEGACY_IMPORT_BASELINES: dict[str, dict[str, frozenset[str]]] = {
         }),
     },
 }
+
+_ALLOWED_LEDGER_STATUSES = frozenset(
+    {
+        "DONE",
+        "REMOVED",
+        "KEEP_PUBLIC_COMPAT",
+        "KEEP_COMPAT_WITH_REMOVAL_CONDITION",
+        "BLOCKER",
+    }
+)
+
+_PROJECT_CONFIG_IMPORT_BLOCKERS: dict[str, str] = {}
 
 
 def _rel(path: Path) -> str:
@@ -231,3 +241,19 @@ def test_legacy_container_import_ledger_current_counts_are_locked():
         for prefix, domains in _LEGACY_IMPORT_BASELINES.items()
     }
     assert counts == expected_counts
+
+
+def test_project_config_leaf_production_imports_are_explicit_blockers():
+    """Project persistence must not regain runtime imports of the legacy leaf.
+
+    This is intentionally project-only for BE Batch 098. Test-only imports of
+    the explicit compatibility module are outside this production runtime scan.
+    """
+    found = _scan_legacy_imports("app.db.config")["projects"]
+    project_leaf_edges = {
+        edge for edge in found if edge.endswith(" -> app.core.projects.db")
+    }
+
+    assert set(_PROJECT_CONFIG_IMPORT_BLOCKERS) == project_leaf_edges
+    assert set(_PROJECT_CONFIG_IMPORT_BLOCKERS.values()) <= _ALLOWED_LEDGER_STATUSES
+    assert not project_leaf_edges

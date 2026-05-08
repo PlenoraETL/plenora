@@ -28,21 +28,20 @@ _FACADE_LEAF = "config_db_service"
 # Paths are POSIX-style relative to the backend root.
 #
 # Entries:
-#   - BE Parallel Batch 085 Worker 1 removed the five config-leaf
-#     `_safe_set_clause` back-edges by moving the guard to
-#     `app.db.config.safe_set`.
+#   - BE Batch 098 Worker 4 removed the config-leaf safe-set helper
+#     by moving the guard to `app.db.sql_safety`.
 #   - `app/core/auth/auth.py`: removed by
 #     BE-GO-READY-AUTH-ENGINE-012. The three remaining `cfg_db.*`
 #     calls (`get_project` / `get_schedule` / `get_file_source`)
 #     in the `require_*_owner` FastAPI dependencies migrated to
 #     direct lazy imports of the matching leaves
-#     (`app.db.config.projects` / `schedules` / `file_sources`).
+#     (`app.core.projects.db` / `schedules` / `file_sources`).
 #     The `import app.db.config_db_service as cfg_db` module-edge
 #     import was deleted; auth.py is now facade-clean.
 #   - `app/services/project_service.py`: removed by
 #     BE-GO-READY-DB-ENGINE-007. The single remaining call
 #     (`update_project_canvas_key_atomic`) was migrated to the
-#     `app.db.config.projects` leaf (the function moved there
+#     `app.core.projects.db` leaf (the function moved there
 #     verbatim; the facade now re-exports it for back-compat
 #     with the dedicated test patch points).
 #   - Remaining entries: pending migration chunks listed in the death
@@ -54,7 +53,7 @@ _FACADE_LEAF = "config_db_service"
 #
 # Removed by BE-GO-READY-DB-ENGINE-004-FACADE-LOW-RISK-IMPORT-PURGE:
 # the following files no longer import the facade after migrating
-# their `cfg_db.get_project*` lookups to `app.db.config.projects`
+# their `cfg_db.get_project*` lookups to `app.core.projects.db`
 # (no monkeypatch coupling on `cfg_db.<name>` for these consumers,
 # so the migration is purely an import edit):
 #   - `app/utils/result_store.py` — used `cfg_db.get_project_retention_n`.
@@ -68,9 +67,9 @@ _FACADE_LEAF = "config_db_service"
 # `_cfg_db.fetchall(...)` raw-SQL calls to the canonical
 # `app.db.pg_connection.fetchall` (the same function the facade was
 # re-exporting), and `api_connection_source_loading.py` migrated its
-# `_cfg_db.get_project` lookup to the leaf `app.db.config.projects`:
+# `_cfg_db.get_project` lookup to the leaf `app.core.projects.db`:
 #   - `app/core/arricchisci/api_connection_source_loading.py` — 1×
-#     `_cfg_db.get_project` → `app.db.config.projects.get_project`.
+#     `_cfg_db.get_project` → `app.core.projects.db.get_project`.
 #   - `app/core/arricchisci/api_connection_management.py` — 3×
 #     `_cfg_db.fetchall` (api_connections) → `pg_connection.fetchall`.
 #   - `app/core/datasources/service.py` — 2× `_cfg_db.fetchall`
@@ -99,9 +98,9 @@ _FACADE_LEAF = "config_db_service"
 #   - `app/db/db_service.py` was physically deleted. The stale
 #     `config_db_service` re-export edge is gone and must not return.
 #
-# Removed by BE Parallel Batch 085:
+# Removed by BE Batch 098 Worker 4:
 #   - `app/db/config/{users,projects,schedules,connections,datasources}.py`
-#     now import `app.db.config.safe_set.safe_set_clause`, so the facade
+#     now import `app.db.sql_safety.safe_set_clause`, so the facade
 #     production import allowlist is intentionally empty.
 _FACADE_PROD_ALLOWLIST: frozenset[str] = frozenset()
 

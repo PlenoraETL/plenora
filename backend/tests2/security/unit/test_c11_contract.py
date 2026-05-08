@@ -618,7 +618,7 @@ def test_visible_project_ids_strict_filters_by_owner_group():
         assert params[-1] == "g1"
         return [{"id": "p_a"}]
 
-    with patch("app.db.config.projects.fetchall", side_effect=_fake_fetchall):
+    with patch("app.core.projects.db.fetchall", side_effect=_fake_fetchall):
         result = _visible_project_ids_strict(
             ["p_a", "p_b", "p_c"], "g1", is_superadmin=False,
         )
@@ -673,7 +673,7 @@ def test_canvas_put_with_project_source_does_not_raise_value_error_anymore():
         return [{"id": "some_project"}]
 
     with patch("app.core.projects.router._project_service", fake_svc), patch(
-        "app.db.config.projects.fetchall", side_effect=_fake_fetchall
+        "app.core.projects.db.fetchall", side_effect=_fake_fetchall
     ):
         # Non deve sollevare ValueError. Puo' sollevare HTTPException
         # (404 o altre validazioni a valle), ma non un errore generico.

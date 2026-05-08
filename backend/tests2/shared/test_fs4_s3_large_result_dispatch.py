@@ -54,7 +54,7 @@ def stub_storage(monkeypatch):
 @pytest.fixture
 def mock_db(monkeypatch):
     """DB mock che registra save_result_row calls."""
-    import app.db.config.projects as projects_db
+    import app.core.projects.db as projects_db
     from app.core.results import db as results_db
     import app.utils.result_store as result_store
 

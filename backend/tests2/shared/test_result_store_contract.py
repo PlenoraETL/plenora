@@ -30,7 +30,7 @@ def test_save_result_blob_removes_temp_file_only_after_success(monkeypatch, tmp_
 
     saved = {}
 
-    import app.db.config.projects as projects_db
+    import app.core.projects.db as projects_db
     import app.core.results.db as results_db
     import app.utils.result_store as result_store
 
@@ -72,7 +72,7 @@ def test_save_result_blob_keeps_temp_file_when_db_save_fails(monkeypatch, tmp_pa
     result_file = temp_dir / "result.csv"
     result_file.write_text("id\n1\n", encoding="utf-8")
 
-    import app.db.config.projects as projects_db
+    import app.core.projects.db as projects_db
     import app.core.results.db as results_db
     import app.utils.result_store as result_store
 
@@ -185,7 +185,7 @@ def test_save_pipeline_result_public_wrapper_is_explicit_legacy_dict(monkeypatch
 
 def _force_object_storage(monkeypatch, tmp_path):
     """Setup minimo per portare save_result_blob nel ramo object_storage."""
-    import app.db.config.projects as projects_db
+    import app.core.projects.db as projects_db
     import app.utils.result_store as result_store
     from types import SimpleNamespace
 
@@ -324,7 +324,7 @@ def _wire_object_storage_writer(monkeypatch, *, fake_storage, saved):
     "happy path" che vogliono verificare il routing object_storage.
     Forza policy=object_storage, mock di db.save_result con cattura kwargs,
     e installa un fake runtime object storage che registra gli upload."""
-    import app.db.config.projects as projects_db
+    import app.core.projects.db as projects_db
     import app.core.results.db as results_db
     import app.utils.result_store as result_store
 

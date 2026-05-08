@@ -35,7 +35,6 @@ _WAVE_B_TARGETS: tuple[str, ...] = (
     "app/core/admin_system_status/router.py",
     "app/core/results/db.py",
     "app/core/projects/service.py",
-    "app/db/config/projects.py",
     "app/core/projects/db.py",
     "app/core/connections/db.py",
     "app/core/connections/service.py",
@@ -65,14 +64,14 @@ _EXPECTED_WAVE_B_BROAD_DICT_RETURNS: frozenset[BroadDictReturn] = frozenset(
         BroadDictReturn("app/core/projects/service.py", "ProjectService._find_dependent_projects", "List[dict]"),
         BroadDictReturn("app/core/projects/service.py", "ProjectService.get_latest_result", "Optional[dict]"),
         BroadDictReturn("app/core/projects/service.py", "ProjectService.list_results", "List[dict]"),
-        BroadDictReturn("app/db/config/projects.py", "ProjectDetailRow.to_legacy_dict", "Dict[str, object]"),
-        BroadDictReturn("app/db/config/projects.py", "ProjectDependencyRow.to_legacy_dict", "Dict[str, object]"),
-        BroadDictReturn("app/db/config/projects.py", "ProjectCanvasCheckRow.to_legacy_dict", "Dict[str, object]"),
-        BroadDictReturn("app/db/config/projects.py", "get_project", "Optional[Dict[str, object]]"),
-        BroadDictReturn("app/db/config/projects.py", "create_project", "Dict"),
-        BroadDictReturn("app/db/config/projects.py", "update_project", "Optional[Dict]"),
-        BroadDictReturn("app/db/config/projects.py", "list_projects_using_connection", "List[Dict[str, object]]"),
-        BroadDictReturn("app/db/config/projects.py", "list_projects_with_canvas_for_datasource_check", "List[Dict[str, object]]"),
+        BroadDictReturn("app/core/projects/db.py", "_detail_compat_payload", "dict[str, object]"),
+        BroadDictReturn("app/core/projects/db.py", "_dependency_compat_payload", "dict[str, object]"),
+        BroadDictReturn("app/core/projects/db.py", "_canvas_check_compat_payload", "dict[str, object]"),
+        BroadDictReturn("app/core/projects/db.py", "get_project", "dict[str, object] | None"),
+        BroadDictReturn("app/core/projects/db.py", "create_project", "dict[str, object]"),
+        BroadDictReturn("app/core/projects/db.py", "update_project", "dict[str, object] | None"),
+        BroadDictReturn("app/core/projects/db.py", "list_projects_using_connection", "list[dict[str, object]]"),
+        BroadDictReturn("app/core/projects/db.py", "list_projects_with_canvas_for_datasource_check", "list[dict[str, object]]"),
         BroadDictReturn("app/core/connections/db.py", "ConnectionConfigRow.to_legacy_dict", "dict[str, object]"),
         BroadDictReturn("app/db/config/connections.py", "get_connection_config", "Optional[Dict]"),
         BroadDictReturn("app/db/config/connections.py", "list_connections", "List[Dict]"),
@@ -126,7 +125,6 @@ WAVE_B_BROAD_DICT_CLASSIFICATIONS.update(
 _DONE_ZERO_BROAD_DICT_MODULES: frozenset[str] = frozenset(
     {
         "app/core/admin_system_status/service.py",
-        "app/core/projects/db.py",
         "app/core/connections/service.py",
     }
 )
@@ -254,5 +252,5 @@ def test_connection_and_project_services_use_domain_db_bridges() -> None:
     assert "app.db.pg_connection" not in connection_imports
     assert "app.core.connections" in connection_imports
 
-    assert "app.db.config.projects" not in project_imports
+    assert "app.core.projects.db" not in project_imports
     assert "app.core.projects" in project_imports

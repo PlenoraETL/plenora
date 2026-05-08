@@ -25,7 +25,7 @@ pytestmark = [pytest.mark.unit, pytest.mark.shared, pytest.mark.contract]
 @pytest.fixture
 def mock_db(monkeypatch):
     """Mock db_service minimale per save_result_blob* flows."""
-    import app.db.config.projects as projects_db
+    import app.core.projects.db as projects_db
     import app.core.results.db as results_db
     import app.utils.result_store as result_store
 
@@ -69,7 +69,7 @@ def test_regression_path_based_save_preserves_bytes_exactly(mock_db, tmp_path):
 def test_regression_path_based_save_keeps_temp_on_db_error(monkeypatch, tmp_path):
     """Se il DB fallisce, il temp file NON deve essere cancellato (retry-friendly)."""
     from app.utils.result_store import save_result_blob, ResultSaveError
-    import app.db.config.projects as projects_db
+    import app.core.projects.db as projects_db
     import app.core.results.db as results_db
     import app.utils.result_store as result_store
 
@@ -205,7 +205,7 @@ def test_save_result_blob_from_bytes_no_artificial_hard_cap(monkeypatch):
 def test_get_result_as_bytes_returns_raw_blob(monkeypatch):
     """get_result_as_bytes: DB blob -> bytes direttamente, zero tempfile."""
     from app.utils import result_store
-    import app.db.config.projects as projects_db
+    import app.core.projects.db as projects_db
     import app.core.results.db as results_db
     import app.core.results.blob as result_blob
 
@@ -224,7 +224,7 @@ def test_get_result_as_bytes_returns_raw_blob(monkeypatch):
 
 def test_get_result_as_bytes_returns_none_when_missing(monkeypatch):
     from app.utils import result_store
-    import app.db.config.projects as projects_db
+    import app.core.projects.db as projects_db
     import app.core.results.db as results_db
     monkeypatch.setattr(results_db, "get_latest_result_row", lambda pid: None)
     assert result_store.get_result_as_bytes("missing") is None
@@ -276,7 +276,7 @@ def test_get_result_as_bytes_creates_no_files_on_disk(
 ):
     """Stesso sentinel per la direzione di lettura."""
     from app.utils import result_store
-    import app.db.config.projects as projects_db
+    import app.core.projects.db as projects_db
     import app.core.results.db as results_db
     import app.core.results.blob as result_blob
 

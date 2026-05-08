@@ -136,7 +136,7 @@ def connections_client(monkeypatch):
         conn_router_module, "assert_can_modify", lambda *a, **kw: None,
     )
     # Mock canonical projects DAL used by the router for cascade checks.
-    import app.db.config.projects as projects_db
+    import app.core.projects.db as projects_db
     monkeypatch.setattr(
         projects_db, "list_projects_using_connection",
         lambda connection_id: _two_groups_rows(),

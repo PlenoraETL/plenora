@@ -70,7 +70,7 @@ def stub_storage_factory(monkeypatch):
 
 @pytest.fixture
 def mock_db_save_ok(monkeypatch):
-    import app.db.config.projects as projects_db
+    import app.core.projects.db as projects_db
     import app.core.results.db as results_db
     import app.utils.result_store as result_store
 
@@ -91,7 +91,7 @@ def mock_db_save_ok(monkeypatch):
 def mock_db_save_fails(monkeypatch):
     """Configura `db.save_result` perche' sollevi RuntimeError simulando
     una row DB rifiutata (vincolo FK, connection, ecc.)."""
-    import app.db.config.projects as projects_db
+    import app.core.projects.db as projects_db
     import app.core.results.db as results_db
     import app.utils.result_store as result_store
 

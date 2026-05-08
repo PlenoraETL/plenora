@@ -1,7 +1,7 @@
 """
 Contract test BE-GO-READY-CONNECTION-ENGINE-003 — typed
 
-project-id lookup helpers in `app.db.config.projects`.
+project-id lookup helpers in `app.core.projects.db`.
 """
 
 from __future__ import annotations
@@ -19,7 +19,7 @@ pytestmark = [pytest.mark.unit, pytest.mark.shared, pytest.mark.contract]
 
 def _capture_fetchall(monkeypatch, *, response):
     """Spy on the `fetchall` name imported into
-    `app.db.config.projects`.
+    `app.core.projects.db`.
 
     The helpers under test do
     `from app.db.pg_connection import fetchall` at module-load time,
@@ -36,7 +36,7 @@ def _capture_fetchall(monkeypatch, *, response):
         calls.append((sql, tuple(params)))
         return list(response)
 
-    import app.db.config.projects as projects_dal
+    import app.core.projects.db as projects_dal
 
     monkeypatch.setattr(projects_dal, "fetchall", _fake_fetchall)
     return calls
@@ -46,7 +46,7 @@ def _capture_fetchall(monkeypatch, *, response):
 
 
 def test_list_owned_project_ids_short_circuits_on_empty_input(monkeypatch):
-    from app.db.config.projects import list_owned_project_ids
+    from app.core.projects.db import list_owned_project_ids
 
     calls = _capture_fetchall(monkeypatch, response=[{"id": "x"}])
     assert list_owned_project_ids([], owner_group_id="g1") == set()
@@ -57,7 +57,7 @@ def test_list_owned_project_ids_short_circuits_on_empty_input(monkeypatch):
 
 
 def test_list_owned_project_ids_short_circuits_on_falsy_owner_group(monkeypatch):
-    from app.db.config.projects import list_owned_project_ids
+    from app.core.projects.db import list_owned_project_ids
 
     calls = _capture_fetchall(monkeypatch, response=[{"id": "x"}])
     # The contract is fail-CLOSED on missing owner: caller (router)
@@ -69,7 +69,7 @@ def test_list_owned_project_ids_short_circuits_on_falsy_owner_group(monkeypatch)
 
 
 def test_list_owned_project_ids_returns_set_from_fetchall(monkeypatch):
-    from app.db.config.projects import list_owned_project_ids
+    from app.core.projects.db import list_owned_project_ids
 
     _capture_fetchall(
         monkeypatch,
@@ -81,7 +81,7 @@ def test_list_owned_project_ids_returns_set_from_fetchall(monkeypatch):
 
 
 def test_list_owned_project_ids_uses_single_batch_query(monkeypatch):
-    from app.db.config.projects import list_owned_project_ids
+    from app.core.projects.db import list_owned_project_ids
 
     calls = _capture_fetchall(monkeypatch, response=[])
     list_owned_project_ids({"p1", "p2", "p3"}, owner_group_id="g1")
@@ -102,7 +102,7 @@ def test_list_owned_project_ids_uses_single_batch_query(monkeypatch):
 
 
 def test_list_owned_project_ids_dedupes_input(monkeypatch):
-    from app.db.config.projects import list_owned_project_ids
+    from app.core.projects.db import list_owned_project_ids
 
     calls = _capture_fetchall(monkeypatch, response=[{"id": "p1"}])
     # Iterable with duplicates and a falsy entry should be deduped
@@ -120,7 +120,7 @@ def test_list_owned_project_ids_dedupes_input(monkeypatch):
 
 
 def test_list_project_ids_for_group_short_circuits_on_falsy_group(monkeypatch):
-    from app.db.config.projects import list_project_ids_for_group
+    from app.core.projects.db import list_project_ids_for_group
 
     calls = _capture_fetchall(monkeypatch, response=[{"id": "p1"}])
     assert list_project_ids_for_group("") == set()
@@ -130,7 +130,7 @@ def test_list_project_ids_for_group_short_circuits_on_falsy_group(monkeypatch):
 
 
 def test_list_project_ids_for_group_returns_set(monkeypatch):
-    from app.db.config.projects import list_project_ids_for_group
+    from app.core.projects.db import list_project_ids_for_group
 
     _capture_fetchall(
         monkeypatch,
@@ -142,7 +142,7 @@ def test_list_project_ids_for_group_returns_set(monkeypatch):
 
 
 def test_list_project_ids_for_group_uses_single_query(monkeypatch):
-    from app.db.config.projects import list_project_ids_for_group
+    from app.core.projects.db import list_project_ids_for_group
 
     calls = _capture_fetchall(monkeypatch, response=[])
     list_project_ids_for_group("g1")
@@ -153,7 +153,7 @@ def test_list_project_ids_for_group_uses_single_query(monkeypatch):
 
 
 def test_list_project_ids_for_group_returns_empty_set_for_unknown_group(monkeypatch):
-    from app.db.config.projects import list_project_ids_for_group
+    from app.core.projects.db import list_project_ids_for_group
 
     _capture_fetchall(monkeypatch, response=[])
     assert list_project_ids_for_group("g-nobody") == set()
