@@ -22,9 +22,10 @@ Current compose scope:
 Known gap:
 
 - full-stack Docker has not been validated on a real Linux host yet;
-- Docker compose CI is wired for `docker compose config` and
-  `docker compose build backend frontend`, but not for the full
-  runtime smoke sequence.
+- Docker compose CI is wired for `docker compose config`,
+  `docker compose build backend frontend`, backend readiness, and a real
+  API smoke flow: seeded login, `/auth/me`, project create/list/delete,
+  and logout.
 
 ## Files
 
@@ -46,6 +47,8 @@ Docker validation is green only when:
 - backend and frontend images build;
 - Postgres and Redis become healthy;
 - backend `/health` and `/ready` are green;
+- seeded API smoke succeeds: login, `/auth/me`, project create/list/delete,
+  and logout;
 - the direct Postgres postcondition confirms schema `plenora`,
   table `plenora.schema_migrations`, and at least one applied migration row;
 - worker completes `cleanroom.ping`;
@@ -253,10 +256,11 @@ What ships today vs what does NOT:
 | Backend image | Ships. |
 | Frontend image | Ships. |
 | Compose frontend service | Ships. |
-| Docker compose CI lane | Ships for config/build of backend and frontend images only. |
+| Docker compose CI lane | Ships for config/build plus seeded backend API smoke. |
 | Real Linux host validation report | Not complete yet. |
 
 When can the Docker path be called "validated"? When the validation pack,
 including frontend build and static delivery checks, is green on a real Linux
-host. The current CI lane is necessary coverage for compose config/build, but
-it is not a replacement for the real-host runtime validation report.
+host. The current CI lane is necessary coverage for compose config/build and
+backend API acceptance, but it is not a replacement for the real-host runtime
+validation report.

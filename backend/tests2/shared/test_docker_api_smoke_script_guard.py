@@ -42,13 +42,26 @@ def test_docker_api_smoke_script_locks_base_url_env_default():
     )
 
 
-def test_docker_api_smoke_script_checks_health_and_ready_only_for_now():
+def test_docker_api_smoke_script_checks_health_ready_and_full_flow():
     text = _SCRIPT.read_text(encoding="utf-8")
     for endpoint in ('run_get_check "/health"', 'run_get_check "/ready"'):
         assert endpoint in text, (
             f"scripts/docker-api-smoke.sh must include implemented safe "
             f"check {endpoint!r}. These checks require no unknown "
             "credentials and can run against an already booted backend."
+        )
+    for marker in (
+        'curl_json "POST" "/api/auth/login"',
+        'curl_json "GET" "/api/auth/me"',
+        'curl_json "POST" "/api/projects"',
+        'curl_json "GET" "/api/projects"',
+        'curl_json "DELETE" "/api/projects/${PROJECT_ID}"',
+        'curl_json "POST" "/api/auth/logout"',
+        "Full Docker API smoke passed.",
+    ):
+        assert marker in text, (
+            f"scripts/docker-api-smoke.sh must include real full-flow marker "
+            f"{marker!r}; health-only smoke is not release acceptance."
         )
     assert "docker compose up" not in _strip_shell_comments_and_heredocs(text), (
         "scripts/docker-api-smoke.sh must target an already running backend. "
@@ -86,55 +99,35 @@ def test_docker_api_smoke_script_has_infrastructure_only_success_mode():
     )
 
 
-def test_docker_api_smoke_script_documents_login_logout_skip_reason():
+def test_docker_api_smoke_script_requires_seeded_credentials():
     text = _SCRIPT.read_text(encoding="utf-8")
     for marker in (
-        "Skipping login/logout smoke",
-        "compose does not seed deterministic user credentials",
-        "Creating a user here would mutate application data",
-        "POST /api/auth/logout",
+        "PLENORA_SMOKE_USERNAME",
+        "PLENORA_SMOKE_PASSWORD",
+        "python -m app.core.auth.smoke_seed",
+        "require_full_flow_credentials",
     ):
         assert marker in text, (
-            f"scripts/docker-api-smoke.sh must document skipped login/logout "
-            f"reason marker {marker!r}. Full auth smoke should only be added "
-            "after Docker compose has deterministic credentials/bootstrap."
+            f"scripts/docker-api-smoke.sh must require deterministic seeded "
+            f"credentials marker {marker!r} before claiming full API smoke."
         )
 
 
-def test_docker_api_smoke_script_does_not_fake_full_acceptance_success():
+def test_docker_api_smoke_script_does_not_leave_full_acceptance_pending():
     text = _SCRIPT.read_text(encoding="utf-8")
-    assert "exit 3" in text, (
-        "Full scripts/docker-api-smoke.sh mode must exit with a distinct "
-        "pending-code until real auth/project/upload/execute checks exist."
-    )
-    assert "TODO: Docker API smoke full flow is intentionally pending." in text, (
-        "Full scripts/docker-api-smoke.sh mode must stop with a clear TODO "
-        "instead of silently reporting acceptance success."
-    )
-    pending_markers = (
-        "seed isolated admin/group",
-        "POST /api/auth/login",
-        "project create/list/delete",
-        "tiny CSV upload/list/delete",
-        "project execute/poll/download",
-    )
-    for marker in pending_markers:
-        assert marker in text, (
-            f"scripts/docker-api-smoke.sh pending stop must mention "
-            f"{marker!r} so the next worker knows what remains before "
-            "full Docker API acceptance can be claimed."
+    offenders = [
+        marker
+        for marker in (
+            "exit 3",
+            "intentionally pending",
+            "Skipping login/logout smoke",
+            "does not seed deterministic user credentials",
         )
-    fake_success_markers = (
-        "Full Docker API smoke passed",
-        "auth smoke passed",
-        "project smoke passed",
-        "upload smoke passed",
-        "execute smoke passed",
-    )
-    offenders = [marker for marker in fake_success_markers if marker in text]
+        if marker in text
+    ]
     assert not offenders, (
-        "scripts/docker-api-smoke.sh must not contain full-flow success "
-        f"messages before those checks are implemented. Offenders: {offenders}"
+        "scripts/docker-api-smoke.sh must not keep the old health-only "
+        f"acceptance placeholders. Offenders: {offenders}"
     )
 
 

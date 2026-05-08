@@ -804,147 +804,35 @@ class Settings:
 
 
     def _ensure_redis(self, errors: list, warnings: list) -> None:
-        """Verifica che Redis sia raggiungibile sul broker URL configurato.
+        """Compatibility shim; operational logic lives in startup_validation."""
+        from app.startup_validation import ensure_redis
 
-        Su dev Windows: fallback opportunistico con avvio via WSL
-        (convenienza dev locale). Su Linux/server/container o su
-        ambienti hardened (`production`/`prod`/`staging`/`stage`):
-        fail-fast con messaggio operativo che cita il broker URL
-        configurato. Nessun riferimento a WSL nel path server: WSL
-        e' un dettaglio del dev locale e non deve apparire nel log
-        di un servizio che gira sotto systemd o container.
-        """
-        import socket
-        from urllib.parse import urlparse
-
-        broker_url = self.get("CELERY_BROKER_URL", "redis://localhost:6379/0")
-        parsed = urlparse(broker_url)
-        host = parsed.hostname or "localhost"
-        port = parsed.port or 6379
-
-        def _redis_ping() -> bool:
-            try:
-                with socket.create_connection((host, port), timeout=2):
-                    return True
-            except OSError:
-                return False
-
-        if _redis_ping():
-            logger.info("Redis già attivo su %s:%s", host, port)
-            return
-
-        if self._wsl_redis_fallback_allowed():
-            self._ensure_redis_wsl_fallback(_redis_ping, errors, warnings)
-            return
-
-        errors.append(
-            f"Redis non raggiungibile su {broker_url}. "
-            "Avvia il servizio Redis configurato in CELERY_BROKER_URL "
-            "prima di avviare l'app."
-        )
+        ensure_redis(self, errors, warnings)
+        return
 
     @staticmethod
     def _wsl_redis_fallback_allowed() -> bool:
-        """True solo su dev Windows. Gating del fallback WSL.
+        """Compatibility shim; operational logic lives in startup_validation."""
+        from app.startup_validation import wsl_redis_fallback_allowed
 
-        Dev = `ENVIRONMENT` (fallback `ENV`) non in
-        `_DOTENV_DISABLED_ENVS` (production/prod/staging/stage).
-        Windows = `sys.platform` inizia con `win`.
-        """
-        import sys
-
-        env_name = os.getenv(
-            "ENVIRONMENT", os.getenv("ENV", "development")
-        ).lower()
-        is_dev = env_name not in _DOTENV_DISABLED_ENVS
-        is_windows = sys.platform.startswith("win")
-        return is_dev and is_windows
+        return wsl_redis_fallback_allowed()
 
     def _ensure_redis_wsl_fallback(
         self, redis_ping, errors: list, warnings: list
     ) -> None:
-        """Avvio opportunistico di Redis via WSL — solo dev Windows."""
-        import subprocess
-        import time
+        """Compatibility shim; operational logic lives in startup_validation."""
+        from app.startup_validation import ensure_redis_wsl_fallback
 
-        logger.info("Redis non raggiungibile — avvio via WSL (dev Windows)...")
-        try:
-            subprocess.Popen(
-                ["wsl", "redis-server", "--daemonize", "yes"],
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-            )
-            for _ in range(10):
-                time.sleep(0.5)
-                if redis_ping():
-                    logger.info("Redis avviato con successo via WSL")
-                    return
-            warnings.append("Redis avviato via WSL ma non risponde dopo 5s")
-        except FileNotFoundError:
-            errors.append(
-                "Redis non attivo e WSL non disponibile. "
-                "Avvia Redis manualmente: wsl redis-server --daemonize yes"
-            )
-        except Exception as e:
-            errors.append(f"Impossibile avviare Redis via WSL: {e}")
+        ensure_redis_wsl_fallback(redis_ping, errors, warnings)
 
 
     def validate_startup(self) -> None:
-        errors = []
-        warnings = []
+        """Compatibility shim; operational logic lives in startup_validation."""
+        from app.startup_validation import validate_startup
 
-        try:
-            data_dir = self.DATA_DIR
-            data_dir.mkdir(parents=True, exist_ok=True)
-            test_file = data_dir / ".write_test"
-            test_file.touch()
-            test_file.unlink()
-        except Exception as e:
-            errors.append(f"DATA_DIR '{self.get('DATA_DIR')}' non scrivibile: {e}")
+        validate_startup(self)
+        return
 
-        # Pulizia cartelle temp residue da sessioni precedenti
-        try:
-            import shutil, stat
-            def _on_error(func, fpath, exc_info):
-                try:
-                    os.chmod(fpath, stat.S_IWRITE)
-                    func(fpath)
-                except Exception as e:
-                    logger.debug("Cleanup temp: impossibile rimuovere %s: %s", fpath, e)
-            temp_dir = self.TEMP_DIR
-            if temp_dir.exists():
-                for entry in temp_dir.iterdir():
-                    if entry.is_dir():
-                        shutil.rmtree(entry, onerror=_on_error)
-                    else:
-                        try:
-                            entry.unlink()
-                        except Exception as e:
-                            logger.debug("Cleanup temp: impossibile rimuovere %s: %s", entry, e)
-        except Exception as e:
-            logger.debug("Pulizia cartelle temp fallita (non critico): %s", e)
-
-        try:
-            import shutil as _shutil
-            for legacy_dir in ["files", "results", "File", "Results"]:
-                legacy_path = self.DATA_DIR / legacy_dir
-                if legacy_path.exists() and legacy_path.is_dir():
-                    _shutil.rmtree(legacy_path, ignore_errors=True)
-        except Exception as e:
-            logger.debug("Rimozione cartelle legacy fallita (non critico): %s", e)
-
-        # ── Redis: verifica che sia attivo. Su dev Windows fallback WSL
-        # altrove fail-fast operativo con messaggio sul broker URL. ──
-        self._ensure_redis(errors, warnings)
-
-        for w in warnings:
-            print(f"[WARN] PLENORA-ETL: {w}")
-
-        if errors:
-            print("\n[ERROR] PLENORA-ETL - Configurazione non valida, avvio interrotto:\n")
-            for i, e in enumerate(errors, 1):
-                print(f"  {i}. {e}")
-            raise SystemExit(1)
 
 
     def print_config(self):

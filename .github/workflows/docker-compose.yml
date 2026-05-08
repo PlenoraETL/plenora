@@ -82,6 +82,22 @@ jobs:
           PLENORA_ACCEPTANCE_CURL_MAX_TIME_SECONDS: "5"
         run: bash scripts/docker-api-smoke.sh --infrastructure-only
 
+      - name: Seed Docker smoke identity
+        run: |
+          docker compose exec -T \
+            -e PLENORA_SMOKE_USERNAME=smoke-user \
+            -e PLENORA_SMOKE_PASSWORD=smoke-password-change-me \
+            backend python -m app.core.auth.smoke_seed
+
+      - name: Run full Docker API smoke
+        env:
+          PLENORA_ACCEPTANCE_TIMEOUT_SECONDS: "120"
+          PLENORA_ACCEPTANCE_POLL_INTERVAL_SECONDS: "2"
+          PLENORA_ACCEPTANCE_CURL_MAX_TIME_SECONDS: "5"
+          PLENORA_SMOKE_USERNAME: smoke-user
+          PLENORA_SMOKE_PASSWORD: smoke-password-change-me
+        run: bash scripts/docker-api-smoke.sh
+
       - name: Dump compose diagnostics on failure
         if: failure()
         run: |

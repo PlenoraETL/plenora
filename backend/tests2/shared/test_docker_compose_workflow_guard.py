@@ -49,6 +49,8 @@ def test_docker_compose_workflow_runs_backend_smoke_after_build():
             "docker compose up -d postgres redis",
             "docker compose up -d backend",
             "bash scripts/docker-api-smoke.sh --infrastructure-only",
+            "python -m app.core.auth.smoke_seed",
+            "Run full Docker API smoke",
         ),
     )
 
@@ -60,6 +62,8 @@ def test_docker_compose_workflow_uses_bounded_api_polling_script():
         "PLENORA_ACCEPTANCE_POLL_INTERVAL_SECONDS",
         "PLENORA_ACCEPTANCE_CURL_MAX_TIME_SECONDS",
         "scripts/docker-api-smoke.sh",
+        "PLENORA_SMOKE_USERNAME",
+        "PLENORA_SMOKE_PASSWORD",
     ):
         assert marker in text, (
             f"Docker Compose CI must keep bounded backend smoke marker "

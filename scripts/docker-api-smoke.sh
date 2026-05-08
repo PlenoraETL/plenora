@@ -3,38 +3,21 @@
 # Plenora-ETL Docker API smoke runner
 # =============================================================================
 #
-# BE-CLEANROOM-072-W4-DOCKER-API-SMOKE-SKELETON.
+# Targets an already running backend and performs bounded checks against the
+# real API surface. The full flow requires deterministic credentials seeded
+# inside the backend container with:
 #
-# Targets an already running backend and performs bounded, non-destructive
-# checks that do not need seeded credentials. This script is intentionally
-# separate from scripts/docker-validate.sh: docker-validate boots
-# infrastructure; this runner polls the user-facing API surface.
-#
-# Non-destructive contract:
-#   - never starts/stops/removes Docker resources;
-#   - never writes .env.docker;
-#   - never deletes projects/files/tasks;
-#   - never reports auth/project/upload/execute success until those flows are
-#     implemented against a real seed helper and real API responses.
-#
-# Login/logout skip reason:
-#   docker-compose.yml and .env.docker.example do not seed deterministic
-#   user credentials. This smoke therefore does not attempt login/logout;
-#   adding a user inside the runner would mutate application data and make
-#   the check order-dependent.
+#   PLENORA_SMOKE_PASSWORD=... python -m app.core.auth.smoke_seed
 #
 # Usage:
-#   bash scripts/docker-api-smoke.sh
 #   bash scripts/docker-api-smoke.sh --infrastructure-only
-#   PLENORA_ACCEPTANCE_BASE_URL=http://127.0.0.1:5004 \
-#   PLENORA_ACCEPTANCE_TIMEOUT_SECONDS=120 \
-#       bash scripts/docker-api-smoke.sh --infrastructure-only
+#   PLENORA_SMOKE_USERNAME=smoke-user \
+#   PLENORA_SMOKE_PASSWORD=smoke-password-change-me \
+#       bash scripts/docker-api-smoke.sh
 #
 # Exit codes:
-#   0 : implemented checks passed in --infrastructure-only mode.
+#   0 : implemented checks passed.
 #   2 : invocation error or failed implemented check.
-#   3 : infrastructure checks passed, but full API smoke is intentionally
-#       pending because auth seed/project/upload/execute are not implemented.
 # =============================================================================
 
 set -uo pipefail
@@ -45,6 +28,24 @@ BASE_URL="${BASE_URL%/}"
 TIMEOUT_SECONDS="${PLENORA_ACCEPTANCE_TIMEOUT_SECONDS:-90}"
 INTERVAL_SECONDS="${PLENORA_ACCEPTANCE_POLL_INTERVAL_SECONDS:-2}"
 CURL_MAX_TIME_SECONDS="${PLENORA_ACCEPTANCE_CURL_MAX_TIME_SECONDS:-5}"
+SMOKE_USERNAME="${PLENORA_SMOKE_USERNAME:-}"
+SMOKE_PASSWORD="${PLENORA_SMOKE_PASSWORD:-}"
+PROJECT_ID=""
+TOKEN=""
+TMP_FILES=""
+
+cleanup_tmp_files() {
+    if [ -n "$PROJECT_ID" ] && [ -n "$TOKEN" ]; then
+        curl -sS --max-time "$CURL_MAX_TIME_SECONDS" \
+            -X DELETE "${BASE_URL}/api/projects/${PROJECT_ID}" \
+            -H "Authorization: Bearer ${TOKEN}" \
+            >/dev/null 2>&1 || true
+    fi
+    for file in $TMP_FILES; do
+        rm -f "$file"
+    done
+}
+trap cleanup_tmp_files EXIT
 
 usage() {
     cat <<'USAGE'
@@ -64,22 +65,20 @@ Environment:
                               Poll interval. Defaults to 2.
   PLENORA_ACCEPTANCE_CURL_MAX_TIME_SECONDS
                               Per-request curl timeout. Defaults to 5.
+  PLENORA_SMOKE_USERNAME      Seeded smoke username. Required for full flow.
+  PLENORA_SMOKE_PASSWORD      Seeded smoke password. Required for full flow.
 
-Implemented today:
+Implemented full flow:
   GET /health
   GET /ready
+  POST /api/auth/login
+  GET /api/auth/me
+  POST /api/projects
+  GET /api/projects
+  DELETE /api/projects/{id}
+  POST /api/auth/logout
 
-Pending by design:
-  auth seed/login/logout, /auth/me, project create/list/delete, tiny CSV
-  upload/list, project execute/poll/download, and scheduler smoke.
-
-Login/logout skip reason:
-  compose does not seed deterministic user credentials; creating one here
-  would mutate application data and make this smoke order-dependent.
-
-Use --infrastructure-only when you only want the implemented /health and
-/ready checks to return success. Full mode exits 3 after those checks until a
-real Docker-native auth seed helper and API flow are implemented.
+Use --infrastructure-only when you only want /health and /ready.
 USAGE
 }
 
@@ -104,32 +103,28 @@ done
 
 if ! command -v curl >/dev/null 2>&1; then
     echo "ERROR: 'curl' binary not found on PATH." >&2
-    echo "       Install curl or run from an environment that provides it." >&2
     exit 2
 fi
 
-case "$TIMEOUT_SECONDS" in
-    ''|*[!0-9]*)
-        echo "ERROR: PLENORA_ACCEPTANCE_TIMEOUT_SECONDS must be a positive integer." >&2
-        exit 2
-        ;;
-esac
-case "$INTERVAL_SECONDS" in
-    ''|*[!0-9]*)
-        echo "ERROR: PLENORA_ACCEPTANCE_POLL_INTERVAL_SECONDS must be a positive integer." >&2
-        exit 2
-        ;;
-esac
-case "$CURL_MAX_TIME_SECONDS" in
-    ''|*[!0-9]*)
-        echo "ERROR: PLENORA_ACCEPTANCE_CURL_MAX_TIME_SECONDS must be a positive integer." >&2
-        exit 2
-        ;;
-esac
+if ! command -v python >/dev/null 2>&1; then
+    echo "ERROR: 'python' binary not found on PATH." >&2
+    exit 2
+fi
+
+case "$TIMEOUT_SECONDS" in ''|*[!0-9]*) echo "ERROR: PLENORA_ACCEPTANCE_TIMEOUT_SECONDS must be a positive integer." >&2; exit 2 ;; esac
+case "$INTERVAL_SECONDS" in ''|*[!0-9]*) echo "ERROR: PLENORA_ACCEPTANCE_POLL_INTERVAL_SECONDS must be a positive integer." >&2; exit 2 ;; esac
+case "$CURL_MAX_TIME_SECONDS" in ''|*[!0-9]*) echo "ERROR: PLENORA_ACCEPTANCE_CURL_MAX_TIME_SECONDS must be a positive integer." >&2; exit 2 ;; esac
 if [ "$TIMEOUT_SECONDS" -le 0 ] || [ "$INTERVAL_SECONDS" -le 0 ] || [ "$CURL_MAX_TIME_SECONDS" -le 0 ]; then
     echo "ERROR: smoke timeouts and intervals must be greater than zero." >&2
     exit 2
 fi
+
+new_tmp_file() {
+    local file
+    file="$(mktemp)"
+    TMP_FILES="${TMP_FILES} ${file}"
+    echo "$file"
+}
 
 run_get_check() {
     local path="$1"
@@ -141,14 +136,13 @@ run_get_check() {
 
     echo "Polling GET ${url} for up to ${TIMEOUT_SECONDS}s"
     deadline=$(( $(date +%s) + TIMEOUT_SECONDS ))
-    body_file="$(mktemp)"
+    body_file="$(new_tmp_file)"
 
     while [ "$(date +%s)" -le "$deadline" ]; do
         http_status="$(curl -sS --max-time "$CURL_MAX_TIME_SECONDS" -o "$body_file" -w "%{http_code}" "$url" 2>/dev/null)"
         curl_rc=$?
         if [ $curl_rc -eq 0 ] && [ "$http_status" -ge 200 ] && [ "$http_status" -lt 300 ]; then
             echo "${path} -> HTTP ${http_status}"
-            rm -f "$body_file"
             return 0
         fi
         sleep "$INTERVAL_SECONDS"
@@ -161,40 +155,156 @@ run_get_check() {
         cat "$body_file" >&2
         echo >&2
     fi
-    rm -f "$body_file"
-    echo "       Inspect backend logs and dependency health before retrying." >&2
     exit 2
 }
 
-document_login_logout_skip() {
-    echo "Skipping login/logout smoke: compose does not seed deterministic user credentials."
-    echo "Creating a user here would mutate application data, so CI only proves /health and /ready."
+json_get() {
+    local file="$1"
+    local path="$2"
+    python - "$file" "$path" <<'PY'
+import json
+import sys
+
+with open(sys.argv[1], encoding="utf-8") as fh:
+    data = json.load(fh)
+for part in sys.argv[2].split("."):
+    data = data[int(part)] if isinstance(data, list) else data[part]
+print(data)
+PY
+}
+
+curl_json() {
+    local method="$1"
+    local path="$2"
+    local body="$3"
+    local token="${4:-}"
+    local expected="$5"
+    local body_file
+    local status
+    local auth_args=()
+    local data_args=()
+
+    body_file="$(new_tmp_file)"
+    if [ -n "$token" ]; then
+        auth_args=(-H "Authorization: Bearer ${token}")
+    fi
+    if [ -n "$body" ]; then
+        data_args=(--data "$body")
+    fi
+
+    status="$(
+        curl -sS --max-time "$CURL_MAX_TIME_SECONDS" \
+            -o "$body_file" -w "%{http_code}" \
+            -X "$method" "${BASE_URL}${path}" \
+            -H "Content-Type: application/json" \
+            "${auth_args[@]}" \
+            "${data_args[@]}" \
+            2>/dev/null
+    )"
+    if [ "$status" != "$expected" ]; then
+        echo "ERROR: ${method} ${path} returned HTTP ${status}, expected ${expected}." >&2
+        if [ -s "$body_file" ]; then
+            echo "Response body:" >&2
+            cat "$body_file" >&2
+            echo >&2
+        fi
+        exit 2
+    fi
+    echo "$body_file"
+}
+
+require_full_flow_credentials() {
+    if [ -z "$SMOKE_USERNAME" ] || [ -z "$SMOKE_PASSWORD" ]; then
+        echo "ERROR: PLENORA_SMOKE_USERNAME and PLENORA_SMOKE_PASSWORD are required for full smoke." >&2
+        echo "       Seed them first with: python -m app.core.auth.smoke_seed" >&2
+        exit 2
+    fi
+}
+
+login_smoke_user() {
+    local body_file
+    body_file="$(
+        curl_json "POST" "/api/auth/login" \
+            "{\"username\":\"${SMOKE_USERNAME}\",\"password\":\"${SMOKE_PASSWORD}\"}" \
+            "" "200"
+    )"
+    TOKEN="$(json_get "$body_file" "access_token")"
+    if [ -z "$TOKEN" ]; then
+        echo "ERROR: login response did not include access_token." >&2
+        exit 2
+    fi
+    echo "Authenticated smoke user ${SMOKE_USERNAME}"
+}
+
+check_auth_me() {
+    curl_json "GET" "/api/auth/me" "" "$TOKEN" "200" >/dev/null
+    echo "Authenticated /api/auth/me passed"
+}
+
+create_smoke_project() {
+    local body_file
+    local project_name
+    project_name="docker-smoke-$(date +%s)"
+    body_file="$(
+        curl_json "POST" "/api/projects" \
+            "{\"name\":\"${project_name}\",\"description\":\"Docker API smoke\",\"project_type\":\"estrai\"}" \
+            "$TOKEN" "201"
+    )"
+    PROJECT_ID="$(json_get "$body_file" "metadata.id")"
+    if [ -z "$PROJECT_ID" ]; then
+        echo "ERROR: project create response did not include metadata.id." >&2
+        exit 2
+    fi
+    echo "Created smoke project ${PROJECT_ID}"
+}
+
+list_smoke_projects() {
+    local body_file
+    body_file="$(curl_json "GET" "/api/projects" "" "$TOKEN" "200")"
+    python - "$body_file" "$PROJECT_ID" <<'PY'
+import json
+import sys
+
+with open(sys.argv[1], encoding="utf-8") as fh:
+    payload = json.load(fh)
+project_id = sys.argv[2]
+projects = payload.get("projects", [])
+if not any(project.get("id") == project_id for project in projects):
+    raise SystemExit(f"project {project_id} not found in /api/projects response")
+PY
+    echo "Listed smoke project ${PROJECT_ID}"
+}
+
+delete_smoke_project() {
+    if [ -z "$PROJECT_ID" ]; then
+        return
+    fi
+    curl_json "DELETE" "/api/projects/${PROJECT_ID}" "" "$TOKEN" "204" >/dev/null
+    echo "Deleted smoke project ${PROJECT_ID}"
+    PROJECT_ID=""
+}
+
+logout_smoke_user() {
+    curl_json "POST" "/api/auth/logout" "{}" "$TOKEN" "200" >/dev/null
+    TOKEN=""
+    echo "Logged out smoke user"
 }
 
 echo "Docker API smoke target: ${BASE_URL}"
 run_get_check "/health"
 run_get_check "/ready"
-document_login_logout_skip
 
 if [ "$INFRASTRUCTURE_ONLY" -eq 1 ]; then
     echo "Infrastructure-only Docker API smoke checks passed."
     exit 0
 fi
 
-cat >&2 <<'PENDING'
-TODO: Docker API smoke full flow is intentionally pending.
+require_full_flow_credentials
+login_smoke_user
+check_auth_me
+create_smoke_project
+list_smoke_projects
+delete_smoke_project
+logout_smoke_user
 
-Implemented checks passed: /health and /ready.
-
-Not implemented yet:
-  - seed isolated admin/group inside the backend container;
-  - POST /api/auth/login, GET /api/auth/me, and POST /api/auth/logout;
-  - project create/list/delete;
-  - tiny CSV upload/list/delete;
-  - project execute/poll/download;
-  - optional scheduler manual-run smoke.
-
-This script does not fake acceptance success for those steps. Re-run with
---infrastructure-only to accept only the implemented infrastructure checks.
-PENDING
-exit 3
+echo "Full Docker API smoke passed."

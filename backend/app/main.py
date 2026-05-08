@@ -10,7 +10,6 @@ from contextlib import asynccontextmanager
 from fastapi import Depends, FastAPI
 from fastapi import Request
 from fastapi.exceptions import RequestValidationError
-from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
@@ -23,9 +22,6 @@ from app.shared.error_envelope import (
     build_error_response,
     normalize_http_exception_detail,
 )
-from app.core.projects.exceptions import CanvasCorruptedError
-from app.core.resources.exceptions import MemoryLimitExceededError
-
 # Bootstrap esplicito: valida config, storage e DB prima di creare l'app.
 # Vedi `app/bootstrap.py` per il contratto completo.
 from app.bootstrap import bootstrap as _bootstrap, teardown as _teardown
@@ -35,9 +31,9 @@ _bootstrap()
 from app.core.auth.auth import router as auth_router
 from app.core.auth.users_router import users_router
 from app.core.auth.groups_router import groups_router
-from app.core.auth.auth_middleware import JWTMiddleware
-from app.core.auth.request_id_middleware import RequestIdMiddleware
-from app.db.cleanup_middleware import DBConnectionCleanupMiddleware
+from app.core.projects.exceptions import CanvasCorruptedError
+from app.core.resources.exceptions import MemoryLimitExceededError
+from app.middleware_stack import install_middleware_stack
 
 logger = get_logger(__name__)
 
@@ -60,26 +56,7 @@ app = FastAPI(
     openapi_url=None if _is_prod else "/openapi.json",
 )
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=settings.CORS_ORIGINS_LIST,
-    allow_credentials=False,
-    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
-    # Accetta il correlation ID del frontend e lo riusa nei log server-side.
-    allow_headers=[
-        "Authorization", "Content-Type", "Accept", "X-Requested-With",
-        "X-Request-ID",
-    ],
-    # Espone filename dei download e correlation ID al client.
-    expose_headers=["Content-Disposition", "X-Request-ID"],
-)
-app.add_middleware(JWTMiddleware)
-# DB cleanup deve essere il middleware piu' esterno: FastAPI esegue in LIFO,
-# quindi le connessioni thread-local vengono chiuse dopo il request processing.
-app.add_middleware(DBConnectionCleanupMiddleware)
-# RequestIdMiddleware deve essere ultimo in registrazione per essere eseguito
-# per primo: setta il request_id prima che JWT/DB cleanup possano loggare.
-app.add_middleware(RequestIdMiddleware)
+install_middleware_stack(app, cors_origins=settings.CORS_ORIGINS_LIST)
 
 
 # Global exception handlers: garantiscono envelope uniforme e header CORS

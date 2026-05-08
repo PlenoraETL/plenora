@@ -117,9 +117,11 @@ def test_docker_validate_models_empty_db_boot_readiness_and_smoke_order():
             'run_step 4b "GET /ready"',
             "\nrun_schema_postcondition\n",
             'run_step 5 "up worker + beat"',
-            'run_step 6 "cleanroom.ping round-trip"',
-            'run_step 7 "memory caps visibility"',
-            'run_step 8 "non-destructive stop (preserves volumes)"',
+            'run_step 6a "up frontend (static nginx)"',
+            'run_step 6b "GET frontend SPA shell"',
+            'run_step 7 "cleanroom.ping round-trip"',
+            'run_step 8 "memory caps visibility"',
+            'run_step 9 "non-destructive stop (preserves volumes)"',
         ),
     )
 
@@ -142,10 +144,8 @@ def test_docker_validate_models_empty_db_boot_readiness_and_smoke_order():
     )
 
 
-def test_smoke_commands_are_bounded_and_do_not_claim_full_api_acceptance():
-    """The collectable simulation covers infrastructure and a smoke task
-    only; full auth/project/upload/execute acceptance remains a real
-    Docker/Linux follow-up."""
+def test_smoke_commands_are_bounded_and_include_full_api_acceptance():
+    """Install smoke remains bounded; Docker API smoke now covers auth/project."""
     install_text = _text(_INSTALL_SH)
     api_smoke_text = _text(_DOCKER_API_SMOKE_SH)
 
@@ -165,13 +165,16 @@ def test_smoke_commands_are_bounded_and_do_not_claim_full_api_acceptance():
         "--infrastructure-only",
         'run_get_check "/health"',
         'run_get_check "/ready"',
-        "exit 3",
-        "TODO: Docker API smoke full flow is intentionally pending.",
+        'curl_json "POST" "/api/auth/login"',
+        'curl_json "GET" "/api/auth/me"',
+        'curl_json "POST" "/api/projects"',
+        'curl_json "DELETE" "/api/projects/${PROJECT_ID}"',
+        'curl_json "POST" "/api/auth/logout"',
+        "Full Docker API smoke passed.",
     ):
         assert marker in api_smoke_text, (
             f"scripts/docker-api-smoke.sh must keep marker {marker!r} "
-            "so infrastructure-only success is not confused with full "
-            "API acceptance."
+            "so Docker acceptance proves a real authenticated API flow."
         )
 
 
