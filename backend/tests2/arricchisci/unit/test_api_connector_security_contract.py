@@ -4,6 +4,7 @@ Tests the api connector security behavior.
 Locks backend contracts and regression boundaries for the current architecture.
 """
 
+from types import SimpleNamespace
 from unittest.mock import patch
 
 import pytest
@@ -366,19 +367,10 @@ def test_load_source_project_force_recalculate_blocks_cross_tenant_before_recomp
     sollevare ValueError PRIMA che execute_pipeline venga invocato.
     """
     # BE-GO-READY-TRANSFORMATION-ENGINE-022: typed ctx Phase 2.
-    # Production code now imports the project-domain DB bridge at the
-    # lazy boundary. Patch the canonical bridge so the bind picks up
-    # the fake.
-    import app.core.projects.db as _projects_db
-
     # source_project_id appartiene al tenant B, non a grp-A
     monkeypatch.setattr(
-        _projects_db,
-        "get_project",
-        lambda project_id, group_id=None: {
-            "id": project_id,
-            "group_id": "grp-B",
-        },
+        "app.core.arricchisci.api_connection_source_loading.load_project_access_context",
+        lambda project_id: SimpleNamespace(project_id=project_id, group_id="grp-B"),
     )
 
     orchestrator_called = {"count": 0}
@@ -413,10 +405,10 @@ def test_load_source_project_force_recalculate_blocks_unknown_project(
     fallthrough che possa diventare un probe per l'enumeration dei
     project_id cross-tenant."""
     # BE-GO-READY-TRANSFORMATION-ENGINE-022: typed ctx Phase 2.
-    # Patch the canonical project-domain DB bridge (see the
-    # cross-tenant test above for rationale).
-    import app.core.projects.db as _projects_db
-    monkeypatch.setattr(_projects_db, "get_project", lambda *args, **kwargs: None)
+    monkeypatch.setattr(
+        "app.core.arricchisci.api_connection_source_loading.load_project_access_context",
+        lambda *args, **kwargs: None,
+    )
 
     with pytest.raises(ValueError, match="Accesso negato"):
         api_service._load_source_project(
@@ -433,15 +425,9 @@ def test_load_source_project_force_recalculate_allows_same_tenant(
     e procedere al recompute. Se il pre-check fosse troppo stretto,
     questo test lo catturerebbe."""
     # BE-GO-READY-TRANSFORMATION-ENGINE-022: typed ctx Phase 2.
-    # Patch the canonical project-domain DB bridge.
-    import app.core.projects.db as _projects_db
     monkeypatch.setattr(
-        _projects_db,
-        "get_project",
-        lambda project_id, group_id=None: {
-            "id": project_id,
-            "group_id": "grp-A",
-        },
+        "app.core.arricchisci.api_connection_source_loading.load_project_access_context",
+        lambda project_id: SimpleNamespace(project_id=project_id, group_id="grp-A"),
     )
 
     # Mock OrchestratorService.execute_pipeline: deve essere chiamato.

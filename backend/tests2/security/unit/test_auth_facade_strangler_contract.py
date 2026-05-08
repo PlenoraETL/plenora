@@ -2010,6 +2010,30 @@ def test_auth_engine_018_owner_deps_leaf_exports_all_three_callables():
         )
 
 
+def test_auth_engine_018_owner_deps_use_project_access_boundary():
+    """Project owner dependency must not reach into projects.db.get_project."""
+    path = _APP / "core" / "auth" / "owner_dependencies.py"
+    assert path.exists()
+    text = path.read_text(encoding="utf-8")
+    tree = ast.parse(text, filename=str(path))
+
+    violations: list[str] = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom) and node.module == "app.core.projects.db":
+            names = {alias.name for alias in node.names}
+            if "get_project" in names:
+                violations.append("from app.core.projects.db import get_project")
+        elif isinstance(node, ast.Import):
+            if any(alias.name == "app.core.projects.db" for alias in node.names):
+                violations.append("import app.core.projects.db")
+
+    assert not violations, (
+        "app.core.auth.owner_dependencies must use "
+        "app.core.projects.access_context for project owner lookups: "
+        f"{violations}"
+    )
+
+
 def test_auth_engine_018_facade_reexports_share_identity_with_leaf():
     """AUTH-ENGINE-018 contract: the facade re-export of each owner
     dependency callable MUST be the SAME Python object as the leaf

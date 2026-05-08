@@ -24,9 +24,13 @@ def require_project_owner(
     current_user: CurrentUser = Depends(get_current_user),
 ) -> CurrentUser:
     """Owner check su projects per update, delete, canvas e duplicate."""
-    from app.core.projects.db import get_project as _get_project
-    project = _get_project(project_id)
-    _check_ownership(project, "Progetto", current_user)
+    from app.core.projects.access_context import load_project_owner_context
+    project = load_project_owner_context(project_id)
+    _check_ownership(
+        project.ownership_resource() if project is not None else None,
+        "Progetto",
+        current_user,
+    )
     return current_user
 
 

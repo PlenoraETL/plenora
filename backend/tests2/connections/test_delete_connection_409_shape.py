@@ -57,10 +57,10 @@ def client(current_user: CurrentUser, monkeypatch) -> TestClient:
 
 
 def test_delete_connection_409_shape_has_canonical_dependencies_field(client, monkeypatch):
-    # Il router delega al projects leaf per simulare la connessione in uso.
-    import app.core.projects.db as projects_db
+    # Il router delega al projects usage boundary per simulare la connessione in uso.
+    import app.core.projects.usage as projects_usage
     monkeypatch.setattr(
-        projects_db,
+        projects_usage,
         "list_projects_using_connection",
         # PR-δ: la SELECT include `group_id` per consentire filtro
         # cross-tenant in fase di costruzione del 409 detail. Per non
@@ -96,8 +96,8 @@ def test_delete_connection_happy_path_returns_204(client, monkeypatch):
     Content con body vuoto. Pre-fix ritornava 200 + dict
     {"status": "deleted", "connection_id": X} (ridondante — ID gia' noto
     al client che ha chiamato DELETE)."""
-    import app.core.projects.db as projects_db
-    monkeypatch.setattr(projects_db, "list_projects_using_connection", lambda *a, **kw: [])
+    import app.core.projects.usage as projects_usage
+    monkeypatch.setattr(projects_usage, "list_projects_using_connection", lambda *a, **kw: [])
     client.app.state.mock_service.delete_connection.return_value = None
 
     response = client.delete("/api/connections/conn-1")

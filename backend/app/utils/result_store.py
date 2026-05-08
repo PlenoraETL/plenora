@@ -10,14 +10,14 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, Optional
 
+from app.core.results.retention import DEFAULT_RESULTS_RETENTION
 from app.shared.resources.storage_layout import RESULTS_PREFIX
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
 
-# Numero default di risultati da conservare per progetto
-# Sovrascrivibile per singolo progetto tramite projects.retention_n nelle config tables
-DEFAULT_RESULTS_RETENTION = 10
+# Numero default di risultati da conservare per progetto.
+# Compatibility export; implementation lives in app.core.results.retention.
 
 
 @dataclass(frozen=True)
@@ -45,44 +45,12 @@ def get_temp_output_path(filename: str) -> Path:
 def _apply_results_retention(project_id: str) -> None:
     """
     Applica la retention policy sui risultati del progetto.
-    Conserva gli N risultati più recenti, elimina i più vecchi.
+    Conserva gli N risultati piu' recenti, elimina i piu' vecchi.
     N viene letto da projects.retention_n nelle config tables, default DEFAULT_RESULTS_RETENTION.
     """
-    try:
-        from app.core.projects.db import get_project_retention_n
-        from app.core.results import cleanup as results_cleanup
-        from app.core.results import db as results_db
+    from app.core.results.retention import apply_results_retention
 
-        # Legge retention_n dal progetto (config tables
-        retention_n = get_project_retention_n(project_id)
-        if retention_n is None:
-            retention_n = DEFAULT_RESULTS_RETENTION
-
-        # Lista risultati ordinati dal piu' recente (results tables
-        all_results = results_db.list_result_rows(project_id)
-
-        if len(all_results) <= retention_n:
-            return  # Nulla da eliminare
-
-        # Elimina i risultati oltre retention_n (i più vecchi sono in fondo
-        to_delete = all_results[retention_n:]
-        for r in to_delete:
-            result_id = r.id
-            results_cleanup.delete_result(result_id)
-            logger.debug(
-                f"Retention: eliminato risultato {result_id} del progetto {project_id}",
-                op="retention"
-            )
-
-        logger.info(
-            f"Retention applicata su {project_id}: conservati {retention_n}, "
-            f"eliminati {len(to_delete)}",
-            op="retention"
-        )
-
-    except Exception as e:
-        # La retention non deve mai bloccare il salvataggio del risultato
-        logger.warning(f"Errore retention risultati ({project_id}): {e}", op="retention")
+    apply_results_retention(project_id)
 
 
 class ResultSaveError(Exception):
@@ -233,15 +201,13 @@ def save_result_blob(project_id: str, path: Path, fmt: str,
     """
     _saved = False
     try:
-        from app.core.projects.db import get_project
-        from app.core.results.db import save_result_row
-        from app.config import settings
+        from app.core.results import store as results_store
 
         # Risolvi group_id
-        resolved_group_id = group_id
-        if not resolved_group_id:
-            project = get_project(project_id)
-            resolved_group_id = (project.get("group_id") if project else None) or settings.DEFAULT_GROUP
+        resolved_group_id = results_store.resolve_group_id_for_result(
+            project_id,
+            group_id,
+        )
 
         result_id = str(uuid.uuid4())
 
@@ -257,7 +223,7 @@ def save_result_blob(project_id: str, path: Path, fmt: str,
             # DB blob path — hard cap guard (db sempre; hybrid ramo DB
             _enforce_db_hard_cap(file_size, ctx=f"save_result_blob/{policy}")
             blob = path.read_bytes()
-            save_result_row(
+            results_store.save_result_row(
                 result_id=result_id,
                 project_id=project_id,
                 group_id=resolved_group_id,
@@ -298,7 +264,7 @@ def save_result_blob(project_id: str, path: Path, fmt: str,
             # cosi' il caller riceve sempre la root cause (DB save) e
             # l'object storage non accumula orfani
             try:
-                save_result_row(
+                results_store.save_result_row(
                     result_id=result_id,
                     project_id=project_id,
                     group_id=resolved_group_id,
@@ -397,17 +363,15 @@ def save_result_blob_from_bytes(
     Raises: ResultSaveError se fallisce DB/S3 o size supera hard cap.
     """
     try:
-        from app.core.projects.db import get_project
-        from app.core.results.db import save_result_row
-        from app.config import settings
+        from app.core.results import store as results_store
 
         size = len(data)
 
         # Risolvi group_id
-        resolved_group_id = group_id
-        if not resolved_group_id:
-            project = get_project(project_id)
-            resolved_group_id = (project.get("group_id") if project else None) or settings.DEFAULT_GROUP
+        resolved_group_id = results_store.resolve_group_id_for_result(
+            project_id,
+            group_id,
+        )
 
         result_id = str(uuid.uuid4())
 
@@ -417,7 +381,7 @@ def save_result_blob_from_bytes(
         if not use_object_storage:
             # DB blob path — hard cap guard (db sempre; hybrid ramo DB
             _enforce_db_hard_cap(size, ctx=f"save_result_blob_from_bytes/{policy}")
-            save_result_row(
+            results_store.save_result_row(
                 result_id=result_id,
                 project_id=project_id,
                 group_id=resolved_group_id,
@@ -455,7 +419,7 @@ def save_result_blob_from_bytes(
             # rationale: compensating delete best-effort se la DB save
             # fallisce dopo upload riuscito
             try:
-                save_result_row(
+                results_store.save_result_row(
                     result_id=result_id,
                     project_id=project_id,
                     group_id=resolved_group_id,
@@ -646,14 +610,14 @@ def get_result_as_bytes(project_id: str) -> Optional[bytes]:
     (o se il download S3 fallisce — log warning in quel caso).
     """
     try:
-        from app.core.results.db import get_latest_result_row
-        from app.core.results.blob import get_result_data
-        row = get_latest_result_row(project_id)
+        from app.core.results import store as results_store
+
+        row = results_store.get_latest_result_row(project_id)
         if not row:
             return None
         if not row.id:
             return None
-        return get_result_data(row.id)
+        return results_store.get_result_data(row.id)
     except Exception as e:
         logger.warning(f"Errore lettura blob result ({project_id}): {e}")
         return None
@@ -667,17 +631,16 @@ def get_result_as_tempfile(project_id: str) -> Optional[Path]:
     Returns: Path del file temp, o None se non trovato
     """
     try:
-        from app.core.results.db import get_latest_result_row
-        from app.core.results.blob import get_result_data
+        from app.core.results import store as results_store
 
-        row = get_latest_result_row(project_id)
+        row = results_store.get_latest_result_row(project_id)
         if not row:
             return None
 
         if not row.id:
             return None
 
-        data = get_result_data(row.id)
+        data = results_store.get_result_data(row.id)
         if not data:
             return None
 
@@ -696,8 +659,9 @@ def get_result_as_tempfile(project_id: str) -> Optional[Path]:
 def get_result_info(project_id: str) -> Optional[dict]:
     """Ritorna metadata dell'ultimo risultato (senza blob)."""
     try:
-        from app.core.results.db import get_latest_result
-        return get_latest_result(project_id)
+        from app.core.results import store as results_store
+
+        return results_store.get_latest_result(project_id)
     except Exception as e:
         logger.warning("get_result_info fallito per %s: %s", project_id, e)
         return None

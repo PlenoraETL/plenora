@@ -58,17 +58,18 @@ def _build_orchestrator() -> Any:
 
 
 def _get_project_info(project_id: str) -> Dict[str, Any]:
-    """Legge metadata progetto da PostgreSQL.
-
-     import diretto del leaf
-    `app.core.projects.db.get_project`; il compatibility module
-    `config_db_service` non e' piu' un canale richiesto. Funzione
-    invariata behaviorally — ritorna `{}` su errore o se il
-    progetto non esiste.
-    """
+    """Legge metadata progetto tramite il boundary runtime del dominio projects."""
     try:
-        from app.core.projects.db import get_project
-        return get_project(project_id) or {}
+        from app.core.projects.runtime_context import get_project_runtime_context
+
+        context = get_project_runtime_context(project_id)
+        if context is None:
+            return {}
+        return {
+            "group_id": context.group_id,
+            "project_type": context.project_type,
+            "retention_n": context.retention_n,
+        }
     except Exception as e:
         logger.debug(f"project info lookup fallito: {type(e).__name__}: {e}")
         return {}
@@ -391,8 +392,8 @@ def execute_pipeline_task(
         # Pattern ereditato dalla migrazione SQLite -> PG, vedi
         # `app/db/config_db_service.py` docstring
         try:
-            from app.core.intermediate.db import close_connection
-            close_connection()
+            from app.core.intermediate.cleanup import close_worker_connection
+            close_worker_connection()
         except Exception as e:
             logger.debug(f"close_connection intermediate fallito post-crash: {type(e).__name__}: {e}")
 

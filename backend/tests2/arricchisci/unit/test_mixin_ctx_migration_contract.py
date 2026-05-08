@@ -705,6 +705,32 @@ def test_te030b_source_loading_callsites_use_strict_helper():
 # BE-GO-READY-TRANSFORMATION-ENGINE-032 — ctx required signatures
 
 
+def test_arricchisci_project_access_uses_local_boundary_not_projects_db_get_project():
+    """Batch 104 W5 guard: tenant binding uses arricchisci.project_access."""
+    owned = [
+        _BACKEND_ROOT / "app" / "core" / "arricchisci" / "execution_context.py",
+        _BACKEND_ROOT / "app" / "core" / "arricchisci" / "api_connection_source_loading.py",
+    ]
+    violations = []
+    for src_path in owned:
+        tree = ast.parse(src_path.read_text(encoding="utf-8"))
+        for node in ast.walk(tree):
+            if isinstance(node, ast.ImportFrom):
+                if node.module == "app.core.projects.db":
+                    names = {alias.name for alias in node.names}
+                    if "get_project" in names or "*" in names:
+                        violations.append((src_path.name, node.lineno))
+            elif isinstance(node, ast.Import):
+                for alias in node.names:
+                    if alias.name == "app.core.projects.db":
+                        violations.append((src_path.name, node.lineno))
+
+    assert not violations, (
+        "Direct project DB access found in arricchisci owned modules: "
+        f"{violations}. Use app.core.arricchisci.project_access instead."
+    )
+
+
 def _get_signature_from_mixin(method_name: str):
     """Helper: ottiene la signature di un metodo del mixin
     `ApiConnectionSourceLoadingMixin` evitando l'inheritance MRO

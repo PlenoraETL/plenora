@@ -1,0 +1,69 @@
+"""Typed project access context helpers."""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+from typing import Optional
+
+from app.core.projects import db as project_db
+
+
+@dataclass(frozen=True)
+class ProjectAccessContext:
+    project_id: str
+    group_id: Optional[str]
+
+
+@dataclass(frozen=True)
+class ProjectOwnerContext:
+    project_id: str
+    group_id: Optional[str]
+    created_by: Optional[str]
+
+    def ownership_resource(self) -> dict[str, object]:
+        return {
+            "id": self.project_id,
+            "group_id": self.group_id,
+            "created_by": self.created_by,
+        }
+
+
+@dataclass(frozen=True)
+class ProjectPublishContext:
+    project_id: str
+    group_id: Optional[str]
+    project_type: str
+    canvas: object
+
+
+def load_project_access_context(project_id: str) -> Optional[ProjectAccessContext]:
+    """Load the raw project tenant binding for access checks."""
+    row = project_db.get_project_row(project_id)
+    if row is None:
+        return None
+    return ProjectAccessContext(project_id=row.id, group_id=row.group_id)
+
+
+def load_project_owner_context(project_id: str) -> Optional[ProjectOwnerContext]:
+    """Load project ownership fields for auth owner dependencies."""
+    row = project_db.get_project_row(project_id)
+    if row is None:
+        return None
+    return ProjectOwnerContext(
+        project_id=row.id,
+        group_id=row.group_id,
+        created_by=row.created_by,
+    )
+
+
+def load_project_publish_context(project_id: str) -> Optional[ProjectPublishContext]:
+    """Load the project fields required to publish an eseguibile."""
+    row = project_db.get_project_row(project_id)
+    if row is None:
+        return None
+    return ProjectPublishContext(
+        project_id=row.id,
+        group_id=row.group_id,
+        project_type=row.project_type,
+        canvas=row.canvas,
+    )

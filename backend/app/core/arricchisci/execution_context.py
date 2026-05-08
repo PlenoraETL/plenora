@@ -10,7 +10,7 @@ from typing import Optional
 
 import psycopg2
 
-from app.core.projects.db import get_project as _get_project
+from app.core.arricchisci.project_access import load_project_access_context
 from app.shared.exceptions import ExecutionContextError
 from app.shared.execution.context import CanvasExecutionContext
 
@@ -47,7 +47,7 @@ def build_execution_context(
     impostati. Stesso contract del legacy
     `canvas_orchestrator.init_execution_context`.
 
-    Su progetto inesistente (`_proj_row is None`):
+    Su progetto inesistente (`project_ctx is None`):
     `group_id = None`, ramo dati legittimo. I mixin downstream
     fail-closed con messaggio "Contesto di sicurezza non
     determinabile (group_id mancante)".
@@ -70,14 +70,14 @@ def build_execution_context(
         `ArricchisciExecutionContext` immutabile.
     """
     try:
-        _proj_row = _get_project(project_id)
+        project_ctx = load_project_access_context(project_id)
     except psycopg2.Error as e:
         raise ExecutionContextError(
             project_id,
             reason="errore lettura progetto dal DB",
             original_error=e,
         ) from e
-    group_id = _proj_row.get("group_id") if _proj_row else None
+    group_id = project_ctx.group_id if project_ctx else None
     return ArricchisciExecutionContext(
         project_id=project_id,
         group_id=group_id,

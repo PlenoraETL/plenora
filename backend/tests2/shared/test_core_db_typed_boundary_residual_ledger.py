@@ -39,8 +39,6 @@ _EXPECTED_TO_LEGACY_DICT_CALL_SITES = frozenset(
         ("app/core/results/db.py", "get_result"),
         ("app/core/results/db.py", "list_results"),
         ("app/core/results/db.py", "save_result"),
-        ("app/core/scheduler/db.py", "get_schedule"),
-        ("app/core/scheduler/db.py", "list_schedules"),
     }
 )
 
@@ -189,8 +187,8 @@ _LEDGER: tuple[BoundaryEntry, ...] = (
     BoundaryEntry(
         "app/core/scheduler/db.py",
         "ScheduleRow.to_legacy_dict",
-        "KEEP_PUBLIC_COMPAT",
-        "legacy schedule dict conversion stays explicit until scheduler API callers serialize typed rows at their public edges",
+        "REMOVED",
+        "schedule row serialization moved to the scheduler DB public compatibility wrappers",
     ),
     BoundaryEntry(
         "app/core/scheduler/db.py",

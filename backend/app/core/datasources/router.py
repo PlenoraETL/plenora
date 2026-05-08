@@ -41,6 +41,7 @@ from app.core.datasources.interface import (
 )
 from app.core.datasources.service import DataSourceService
 from app.core.auth.visibility import visible_resource_ids
+from app.core.projects import usage as project_usage
 
 logger = get_logger(__name__)
 
@@ -237,11 +238,10 @@ def _find_projects_using_datasource(ds_id: str) -> List[Dict[str, str]]:
     dipendenze. Sollevamento intenzionale con built-in: sentinel interno
     al batch, non va esteso oltre questo scope.
     """
-    from app.core.projects.db import list_projects_with_canvas_for_datasource_check
     # PR-δ: includere group_id nella SELECT per consentire al caller di
     # filtrare le dipendenze visibili al chiamante (no leak nomi
     # cross-tenant nell'errore 409
-    rows = list_projects_with_canvas_for_datasource_check()
+    rows = project_usage.list_projects_with_canvas_for_datasource_check()
     using = []
     check_failures = 0
     for row in rows:

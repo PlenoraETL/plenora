@@ -24,6 +24,7 @@ from app.shared import error_codes
 from app.shared.error_envelope import raise_typed_http
 from app.shared.audit_action import audit_action
 from app.core.auth.visibility import visible_resource_ids
+from app.core.projects import usage as project_usage
 from .models import (
     DatabaseConnection,
     ConnectionCreate,
@@ -149,8 +150,7 @@ def delete_connection(
     # progetti che la usano restano dipendenze legittime, ma admin del
     # gruppo proprietario non deve vederne i nomi). Superadmin: nessun
     # filtro
-    from app.core.projects.db import list_projects_using_connection
-    using_projects = list_projects_using_connection(connection_id)
+    using_projects = project_usage.list_projects_using_connection(connection_id)
     if using_projects:
         is_super = current_user.role == "superadmin"
         if is_super:

@@ -133,9 +133,9 @@ def env(api_service):
                 "app.utils.dataframe.save_dataframe_to_bytes",
                 return_value=b"stub-bytes",
             ),
-            db_get_project=_p(
-                "app.core.arricchisci.execution_context._get_project",
-                return_value={"group_id": "grp-1"},
+            project_access_ctx=_p(
+                "app.core.arricchisci.execution_context.load_project_access_context",
+                return_value=SimpleNamespace(project_id="proj-1", group_id="grp-1"),
             ),
         )
         yield mocks
@@ -184,7 +184,10 @@ class TestExecuteEnrichmentBasics:
         assert "Accesso negato: gruppo X" in result["error"]
 
     def test_tenant_group_id_threads_through_execution_context(self, env):
-        env.db_get_project.return_value = {"group_id": "grp-xyz"}
+        env.project_access_ctx.return_value = SimpleNamespace(
+            project_id="proj-1",
+            group_id="grp-xyz",
+        )
 
         env.svc.execute_enrichment(
             "proj-1",

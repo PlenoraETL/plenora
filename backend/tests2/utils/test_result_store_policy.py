@@ -45,17 +45,16 @@ def stub_storage(monkeypatch):
 
 @pytest.fixture
 def mock_db(monkeypatch):
-    import app.core.projects.db as projects_db
-    import app.core.results.db as results_db
+    import app.core.results.store as results_store
     import app.utils.result_store as result_store
 
     saved: list[dict] = []
 
     monkeypatch.setattr(result_store, "uuid",
                         SimpleNamespace(uuid4=lambda: "res-pol"))
-    monkeypatch.setattr(projects_db, "get_project",
-                        lambda pid: {"id": pid, "group_id": "grp-1"})
-    monkeypatch.setattr(results_db, "save_result_row",
+    monkeypatch.setattr(results_store, "resolve_group_id_for_result",
+                        lambda pid, group_id=None: group_id or "grp-1")
+    monkeypatch.setattr(results_store, "save_result_row",
                         lambda **kw: saved.append(kw))
     monkeypatch.setattr(result_store, "_apply_results_retention",
                         lambda pid: None)

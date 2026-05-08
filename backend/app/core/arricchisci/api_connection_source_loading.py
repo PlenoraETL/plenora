@@ -15,6 +15,7 @@ from app.core.arricchisci._api_connection_helpers import _nd
 from app.core.arricchisci.execution_context import (
     ArricchisciExecutionContext,
 )
+from app.core.arricchisci.project_access import load_project_access_context
 from app.utils.dataframe import (
     filter_visible_columns,
     find_latest_output_file,
@@ -118,10 +119,8 @@ class ApiConnectionSourceLoadingMixin:
         l'esecuzione del pipeline di un altro tenant verrebbe triggerata
         prima del block.
         """
-        # Lazy to avoid surfacing `pg_connection` at module import time.
-        from app.core.projects.db import get_project as _get_project
-        src_proj = _get_project(source_project_id)
-        if not src_proj or src_proj.get("group_id") != executing_group_id:
+        src_project_ctx = load_project_access_context(source_project_id)
+        if not src_project_ctx or src_project_ctx.group_id != executing_group_id:
             logger.error(
                 f"[SECURITY] Cross-tenant recompute blocked: "
                 f"source_project_id={source_project_id} non appartiene a "

@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+import ast
+from pathlib import Path
+from types import SimpleNamespace
+
 import pytest
 
 from app.core.eseguibili import db as eseguibili_db
@@ -147,22 +151,22 @@ def test_router_serializes_summary_row_at_api_edge(monkeypatch) -> None:
 
 
 def test_create_from_project_returns_typed_eseguibile_row(monkeypatch) -> None:
-    from app.core.projects import db as projects_db
+    from app.core.projects import access_context
 
     created = eseguibili_db.eseguibile_row_from_db(_db_row())
 
     monkeypatch.setattr(
-        projects_db,
-        "get_project",
-        lambda project_id: {
-            "id": project_id,
-            "project_type": "arricchisci",
-            "group_id": "grp-1",
-            "canvas": {
+        access_context,
+        "load_project_publish_context",
+        lambda project_id: SimpleNamespace(
+            project_id=project_id,
+            project_type="arricchisci",
+            group_id="grp-1",
+            canvas={
                 "nodes": [{"id": "source", "type": "file_source"}],
                 "edges": [],
             },
-        },
+        ),
     )
     monkeypatch.setattr(
         eseguibili_service,
@@ -184,3 +188,24 @@ def test_create_from_project_returns_typed_eseguibile_row(monkeypatch) -> None:
 
     assert isinstance(result, eseguibili_db.EseguibileRow)
     assert result.id == "exec-1"
+
+
+def test_eseguibili_service_uses_project_access_boundary_not_projects_db_get_project() -> None:
+    path = Path(eseguibili_service.__file__)
+    tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+
+    violations: list[str] = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom) and node.module == "app.core.projects.db":
+            names = {alias.name for alias in node.names}
+            if "get_project" in names:
+                violations.append("from app.core.projects.db import get_project")
+        elif isinstance(node, ast.Import):
+            if any(alias.name == "app.core.projects.db" for alias in node.names):
+                violations.append("import app.core.projects.db")
+
+    assert not violations, (
+        "eseguibili.service must load project data through "
+        "app.core.projects.access_context, not direct projects.db.get_project: "
+        f"{violations}"
+    )

@@ -135,10 +135,10 @@ def connections_client(monkeypatch):
     monkeypatch.setattr(
         conn_router_module, "assert_can_modify", lambda *a, **kw: None,
     )
-    # Mock canonical projects DAL used by the router for cascade checks.
-    import app.core.projects.db as projects_db
+    # Mock canonical projects usage boundary used by the router for cascade checks.
+    import app.core.projects.usage as projects_usage
     monkeypatch.setattr(
-        projects_db, "list_projects_using_connection",
+        projects_usage, "list_projects_using_connection",
         lambda connection_id: _two_groups_rows(),
     )
 

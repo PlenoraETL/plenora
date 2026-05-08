@@ -682,8 +682,8 @@ class ExecutionManager:
             # dalla migrazione SQLite -> PostgreSQL (in SQLite il rischio era
             # SQLITE_BUSY / file descriptor exhaustion
             try:
-                from app.core.intermediate.db import close_connection as _close_idb
-                _close_idb()
+                from app.core.intermediate.cleanup import close_worker_connection
+                close_worker_connection()
             except Exception as e:
                 logger.debug(f"close_connection intermediate fallito: {type(e).__name__}: {e}")
             try:

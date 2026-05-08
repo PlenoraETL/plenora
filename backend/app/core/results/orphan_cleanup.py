@@ -4,8 +4,11 @@ from __future__ import annotations
 
 from typing import Literal, TypedDict
 
-import app.db.pg_connection as db
-from app.core.results.cleanup import delete_results_for_project
+from app.core.projects.cleanup import list_existing_project_ids
+from app.core.results.cleanup import (
+    delete_results_for_project,
+    list_project_ids_with_results,
+)
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -31,8 +34,7 @@ class OrphanCleanupReport(TypedDict):
 
 def _get_existing_project_ids() -> set[str]:
     """Set di tutti i project_id attualmente in config.projects."""
-    rows = db.fetchall("SELECT id FROM projects")
-    return {r["id"] for r in rows}
+    return list_existing_project_ids()
 
 
 def find_orphan_result_project_ids() -> list[str]:
@@ -42,20 +44,11 @@ def find_orphan_result_project_ids() -> list[str]:
     associate, viene riportato una sola volta).
     """
     existing = _get_existing_project_ids()
-    distinct_in_results = db.fetchall(
-        "SELECT DISTINCT project_id FROM results"
-    )
-    orphans: list[str] = []
-    for row in distinct_in_results:
-        if isinstance(row, dict):
-            pid = row.get("project_id")
-        elif row and len(row) > 0:
-            pid = row[0]
-        else:
-            continue
-        if pid and pid not in existing:
-            orphans.append(pid)
-    return orphans
+    return [
+        project_id
+        for project_id in list_project_ids_with_results()
+        if project_id not in existing
+    ]
 
 
 def find_orphan_run_canvas_ids() -> list[str]:
@@ -64,17 +57,14 @@ def find_orphan_run_canvas_ids() -> list[str]:
     `canvas_id` corrisponde a `project_id` per convenzione PLENORA-ETL
     (vedi commento in `intermediate_schema.sql`).
     """
-    from app.core.intermediate import db as idb
+    from app.core.intermediate.cleanup import list_canvas_ids_with_runs
+
     existing = _get_existing_project_ids()
-    distinct_in_runs = idb.fetchall(
-        "SELECT DISTINCT canvas_id FROM runs"
-    )
-    orphans: list[str] = []
-    for row in distinct_in_runs:
-        cid = row["canvas_id"] if isinstance(row, dict) else row[0]
-        if cid and cid not in existing:
-            orphans.append(cid)
-    return orphans
+    return [
+        canvas_id
+        for canvas_id in list_canvas_ids_with_runs()
+        if canvas_id not in existing
+    ]
 
 
 def cleanup_orphans(dry_run: bool = False) -> OrphanCleanupReport:

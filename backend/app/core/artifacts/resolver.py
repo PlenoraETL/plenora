@@ -11,6 +11,7 @@ from typing import Optional
 
 from app.utils.logger import get_logger
 
+from app.core.artifacts import db_boundary
 from app.core.artifacts.types import (
     ArtifactResolutionError,
     LatestProjectArtifactRef,
@@ -118,21 +119,21 @@ class ArtifactResolver:
         - altri fault -> wrap in ``ArtifactResolutionError(lettura
           latest blob ... fallita)`` con ``[GESTITO]`` log + chain.
         """
-        from app.core.projects.db import get_project as _get_project
-        from app.core.results.db import get_latest_result_row
-
         if expected_group_id is not None:
             project = (
-                _get_project(ref.project_id)
+                db_boundary.get_project_for_artifact(ref.project_id)
                 if is_superadmin
-                else _get_project(ref.project_id, group_id=expected_group_id)
+                else db_boundary.get_project_for_artifact(
+                    ref.project_id,
+                    group_id=expected_group_id,
+                )
             )
             if not project:
                 raise ArtifactResolutionError(
                     f"Progetto {ref.project_id} non trovato"
                 )
 
-        row = get_latest_result_row(ref.project_id)
+        row = db_boundary.get_latest_result_row_for_artifact(ref.project_id)
         if not row:
             return None
 
@@ -223,11 +224,9 @@ class ArtifactResolver:
           `mode="bytes"` (no tempfile) — il caller HTTP fa
           `StreamingResponse(blob.data)` direttamente.
         """
-        from app.core.results.db import get_result_row
-
         # intent: boundary / outcome: fail-closed (broad→domain con chain preservata
         try:
-            row = get_result_row(result_id)
+            row = db_boundary.get_result_row_for_artifact(result_id)
         except Exception as e:
             logger.error(
                 "[GESTITO] resolver lookup result_id '%s' fallito: %s",
@@ -333,8 +332,6 @@ class ArtifactResolver:
         Italian operator error string the rest of the system
         depends on).
         """
-        from app.core.results.db import get_result_row
-
         # ResourceRef + default_registry are top-level imports on
         # this module (see header). That makes the symbols
         # patchable for tests AND keeps a single canonical lookup
@@ -343,7 +340,7 @@ class ArtifactResolver:
 
         # intent: boundary / outcome: fail-closed (broad→domain con chain preservata
         try:
-            row = get_result_row(result_id)
+            row = db_boundary.get_result_row_for_artifact(result_id)
         except Exception as e:
             logger.error(
                 "[GESTITO] resolver lookup result_id '%s' fallito: %s",

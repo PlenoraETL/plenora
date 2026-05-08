@@ -36,13 +36,13 @@ def create_from_project(
         ValueError: se il progetto non esiste o non è di tipo arricchisci,
                     o se l'utente non ha accesso al gruppo.
     """
-    from app.core.projects.db import get_project
+    from app.core.projects.access_context import load_project_publish_context
 
-    proj = get_project(source_project_id)
+    proj = load_project_publish_context(source_project_id)
     if not proj:
         raise ValueError(f"Progetto '{source_project_id}' non trovato")
 
-    project_type = proj.get("project_type") or proj.get("type")
+    project_type = proj.project_type
     if project_type != "arricchisci":
         raise ValueError(
             f"Solo i progetti di tipo 'arricchisci' possono essere pubblicati come eseguibili "
@@ -50,14 +50,14 @@ def create_from_project(
         )
 
     # Verifica group_id — l'utente deve appartenere al gruppo del progetto
-    project_group = proj.get("group_id")
+    project_group = proj.group_id
     if project_group and project_group != group_id:
         raise ValueError(
             "Non puoi pubblicare come eseguibile un progetto di un altro gruppo"
         )
 
     # Clona canvas
-    canvas = proj.get("canvas")
+    canvas = proj.canvas
     if isinstance(canvas, str):
         canvas = json.loads(canvas)
     if not canvas or not canvas.get("nodes"):

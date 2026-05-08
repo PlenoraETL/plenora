@@ -70,17 +70,19 @@ def stub_storage_factory(monkeypatch):
 
 @pytest.fixture
 def mock_db_save_ok(monkeypatch):
-    import app.core.projects.db as projects_db
-    import app.core.results.db as results_db
+    import app.core.results.store as results_store
     import app.utils.result_store as result_store
 
     saved: list[dict] = []
     monkeypatch.setattr(
         result_store, "uuid", SimpleNamespace(uuid4=lambda: "res-orph")
     )
-    monkeypatch.setattr(projects_db, "get_project", lambda pid: {"id": pid, "group_id": "grp-1"}
+    monkeypatch.setattr(
+        results_store,
+        "resolve_group_id_for_result",
+        lambda pid, group_id=None: group_id or "grp-1",
     )
-    monkeypatch.setattr(results_db, "save_result_row", lambda **kw: saved.append(kw))
+    monkeypatch.setattr(results_store, "save_result_row", lambda **kw: saved.append(kw))
     monkeypatch.setattr(
         result_store, "_apply_results_retention", lambda pid: None
     )
@@ -91,20 +93,22 @@ def mock_db_save_ok(monkeypatch):
 def mock_db_save_fails(monkeypatch):
     """Configura `db.save_result` perche' sollevi RuntimeError simulando
     una row DB rifiutata (vincolo FK, connection, ecc.)."""
-    import app.core.projects.db as projects_db
-    import app.core.results.db as results_db
+    import app.core.results.store as results_store
     import app.utils.result_store as result_store
 
     monkeypatch.setattr(
         result_store, "uuid", SimpleNamespace(uuid4=lambda: "res-orph")
     )
-    monkeypatch.setattr(projects_db, "get_project", lambda pid: {"id": pid, "group_id": "grp-1"}
+    monkeypatch.setattr(
+        results_store,
+        "resolve_group_id_for_result",
+        lambda pid, group_id=None: group_id or "grp-1",
     )
 
     def _raise(**_kw):
         raise RuntimeError("DB save FK violation")
 
-    monkeypatch.setattr(results_db, "save_result_row", _raise)
+    monkeypatch.setattr(results_store, "save_result_row", _raise)
     monkeypatch.setattr(
         result_store, "_apply_results_retention", lambda pid: None
     )

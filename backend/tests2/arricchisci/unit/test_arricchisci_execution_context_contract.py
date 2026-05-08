@@ -7,6 +7,7 @@ execution context per arricchisci canvas execution.
 from __future__ import annotations
 
 from dataclasses import FrozenInstanceError, fields
+from types import SimpleNamespace
 
 import psycopg2
 import pytest
@@ -112,7 +113,10 @@ def test_build_context_raises_execution_context_error_on_db_error(monkeypatch):
     def _boom(_pid):
         raise original
 
-    monkeypatch.setattr("app.core.arricchisci.execution_context._get_project", _boom)
+    monkeypatch.setattr(
+        "app.core.arricchisci.execution_context.load_project_access_context",
+        _boom,
+    )
 
     with pytest.raises(ExecutionContextError) as exc_info:
         ec_mod.build_execution_context("proj-1", preview_limit=None)
@@ -128,8 +132,8 @@ def test_build_context_happy_path(monkeypatch):
     from app.core.arricchisci import execution_context as ec_mod
 
     monkeypatch.setattr(
-        "app.core.arricchisci.execution_context._get_project",
-        lambda pid: {"id": pid, "group_id": "grp-A", "name": "p1"},
+        "app.core.arricchisci.execution_context.load_project_access_context",
+        lambda pid: SimpleNamespace(project_id=pid, group_id="grp-A"),
     )
 
     ctx = ec_mod.build_execution_context("proj-1", preview_limit=42)
@@ -144,7 +148,10 @@ def test_build_context_missing_project_yields_none_group(monkeypatch):
     sicurezza non determinabile"."""
     from app.core.arricchisci import execution_context as ec_mod  # noqa: F401
 
-    monkeypatch.setattr("app.core.arricchisci.execution_context._get_project", lambda pid: None)
+    monkeypatch.setattr(
+        "app.core.arricchisci.execution_context.load_project_access_context",
+        lambda pid: None,
+    )
     ctx = ec_mod.build_execution_context("proj-unknown", preview_limit=None)
     assert ctx.group_id is None
     assert ctx.preview_limit is None
@@ -168,8 +175,8 @@ def test_init_execution_context_returns_typed_context(api_service, monkeypatch):
     )
 
     monkeypatch.setattr(
-        "app.core.arricchisci.execution_context._get_project",
-        lambda pid: {"id": pid, "group_id": "grp-Z", "name": "px"},
+        "app.core.arricchisci.execution_context.load_project_access_context",
+        lambda pid: SimpleNamespace(project_id=pid, group_id="grp-Z"),
     )
 
     ctx = co.init_execution_context(api_service, "proj-x", preview_limit=7)
@@ -198,8 +205,8 @@ def test_init_execution_context_does_not_write_singleton_state(
     from app.core.arricchisci import canvas_orchestrator as co
 
     monkeypatch.setattr(
-        "app.core.arricchisci.execution_context._get_project",
-        lambda pid: {"id": pid, "group_id": "grp-FRESH", "name": "p"},
+        "app.core.arricchisci.execution_context.load_project_access_context",
+        lambda pid: SimpleNamespace(project_id=pid, group_id="grp-FRESH"),
     )
 
     # Pre-set stale singleton state.

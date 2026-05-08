@@ -14,6 +14,10 @@ from typing import Dict, Any, List, Optional
 from app.models import CanvasState, Edge, Node
 from app.config import settings
 from app.core.projects.lineage import ProjectLineageCycleError
+from app.core.projects.execution_context import (
+    get_project_group_id,
+    get_upstream_run_context,
+)
 from app.shared.execution.canvas_graph import CanvasGraph
 from app.shared.execution.graph import kahn_topological_order
 from app.utils.logger import get_logger, append_step
@@ -217,9 +221,7 @@ class ManipolaExecutor:
         """
         resolved: Optional[str]
         try:
-            from app.core.projects.db import get_project as _get_project
-            _proj_row = _get_project(project_id)
-            resolved = _proj_row.get("group_id") if _proj_row else None
+            resolved = get_project_group_id(project_id)
         except Exception as e:
             logger.error(f"[GESTITO] Impossibile determinare group_id per {project_id}: {e}", exc_info=True)
             resolved = None
@@ -565,27 +567,24 @@ class ManipolaExecutor:
             try:
                 from app.utils.logger import open_run
                 from app.core.intermediate import db as idb
-                from app.core.projects.db import get_project as _get_project
-                from app.core.projects.retention import resolve_runs_retention_n
-                upstream_meta = _get_project(source_project_id) or {}
-                upstream_retention_n = upstream_meta.get("retention_n")
-                if upstream_retention_n is None:
-                    upstream_retention_n = resolve_runs_retention_n(
-                        source_project_id,
-                        default=idb.DEFAULT_RUNS_RETENTION,
-                    )
+                upstream_context = get_upstream_run_context(
+                    source_project_id,
+                    default_retention_n=idb.DEFAULT_RUNS_RETENTION,
+                )
+                upstream_group_id = upstream_context.group_id
                 open_run(
                     run_id=upstream_run_id,
                     project_id=source_project_id,
-                    group_id=upstream_meta.get("group_id", ""),
-                    module=upstream_meta.get("project_type", "estrai"),
+                    group_id=upstream_group_id,
+                    module=upstream_context.project_type,
                     triggered_by="cascade",
                 )
                 idb.create_run(
                     run_id=upstream_run_id,
                     canvas_id=source_project_id,
-                    group_id=upstream_meta.get("group_id", ""),
+                    group_id=upstream_group_id,
                 )
+                upstream_retention_n = upstream_context.retention_n
             except Exception as _oe:
                 logger.warning(f"Apertura run upstream {source_project_id} fallita (non bloccante): {_oe}")
                 upstream_run_id = None

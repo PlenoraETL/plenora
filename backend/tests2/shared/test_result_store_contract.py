@@ -30,8 +30,7 @@ def test_save_result_blob_removes_temp_file_only_after_success(monkeypatch, tmp_
 
     saved = {}
 
-    import app.core.projects.db as projects_db
-    import app.core.results.db as results_db
+    import app.core.results.store as results_store
     import app.utils.result_store as result_store
 
     monkeypatch.setattr(
@@ -39,10 +38,12 @@ def test_save_result_blob_removes_temp_file_only_after_success(monkeypatch, tmp_
         "uuid",
         SimpleNamespace(uuid4=lambda: "res-1"),
     )
-    monkeypatch.setattr(projects_db, "get_project",
-        lambda project_id: {"id": project_id, "group_id": "grp-1"},
+    monkeypatch.setattr(
+        results_store,
+        "resolve_group_id_for_result",
+        lambda project_id, group_id=None: group_id or "grp-1",
     )
-    monkeypatch.setattr(results_db, "save_result_row",
+    monkeypatch.setattr(results_store, "save_result_row",
         lambda **kwargs: saved.update(kwargs),
     )
     monkeypatch.setattr(
@@ -72,8 +73,7 @@ def test_save_result_blob_keeps_temp_file_when_db_save_fails(monkeypatch, tmp_pa
     result_file = temp_dir / "result.csv"
     result_file.write_text("id\n1\n", encoding="utf-8")
 
-    import app.core.projects.db as projects_db
-    import app.core.results.db as results_db
+    import app.core.results.store as results_store
     import app.utils.result_store as result_store
 
     monkeypatch.setattr(
@@ -81,10 +81,12 @@ def test_save_result_blob_keeps_temp_file_when_db_save_fails(monkeypatch, tmp_pa
         "uuid",
         SimpleNamespace(uuid4=lambda: "res-1"),
     )
-    monkeypatch.setattr(projects_db, "get_project",
-        lambda project_id: {"id": project_id, "group_id": "grp-1"},
+    monkeypatch.setattr(
+        results_store,
+        "resolve_group_id_for_result",
+        lambda project_id, group_id=None: group_id or "grp-1",
     )
-    monkeypatch.setattr(results_db, "save_result_row",
+    monkeypatch.setattr(results_store, "save_result_row",
         lambda **kwargs: (_ for _ in ()).throw(RuntimeError("db down")),
     )
 
@@ -99,7 +101,8 @@ def test_apply_results_retention_uses_typed_result_rows(monkeypatch):
     import app.core.projects.db as projects_db
     import app.core.results.cleanup as results_cleanup
     import app.core.results.db as results_db
-    import app.utils.result_store as result_store
+    import app.core.results.retention as results_retention
+    import app.core.results.store as results_store
 
     deleted: list[str] = []
     rows = [
@@ -109,7 +112,7 @@ def test_apply_results_retention_uses_typed_result_rows(monkeypatch):
     ]
 
     monkeypatch.setattr(projects_db, "get_project_retention_n", lambda pid: 2)
-    monkeypatch.setattr(results_db, "list_result_rows", lambda pid: rows)
+    monkeypatch.setattr(results_store, "list_result_rows", lambda pid: rows)
     monkeypatch.setattr(
         results_db,
         "list_results",
@@ -119,9 +122,34 @@ def test_apply_results_retention_uses_typed_result_rows(monkeypatch):
     )
     monkeypatch.setattr(results_cleanup, "delete_result", deleted.append)
 
-    result_store._apply_results_retention("proj-1")
+    results_retention.apply_results_retention("proj-1")
 
     assert deleted == ["res-old"]
+
+
+def test_result_store_retention_wrapper_delegates_to_results_domain(monkeypatch):
+    import app.core.results.retention as results_retention
+    import app.utils.result_store as result_store
+
+    called: list[str] = []
+    monkeypatch.setattr(
+        results_retention,
+        "apply_results_retention",
+        called.append,
+    )
+
+    result_store._apply_results_retention("proj-1")
+
+    assert called == ["proj-1"]
+
+
+def test_result_store_uses_results_boundary_not_row_modules():
+    source = Path("backend/app/utils/result_store.py").read_text(encoding="utf-8")
+
+    assert "from app.core.results.db import" not in source
+    assert "from app.core.results.blob import" not in source
+    assert "from app.core.projects.db import" not in source
+    assert "from app.core.results import store as results_store" in source
 
 
 def test_save_pipeline_result_outcome_is_typed_internal_boundary(monkeypatch):
@@ -185,7 +213,7 @@ def test_save_pipeline_result_public_wrapper_is_explicit_legacy_dict(monkeypatch
 
 def _force_object_storage(monkeypatch, tmp_path):
     """Setup minimo per portare save_result_blob nel ramo object_storage."""
-    import app.core.projects.db as projects_db
+    import app.core.results.store as results_store
     import app.utils.result_store as result_store
     from types import SimpleNamespace
 
@@ -194,8 +222,10 @@ def _force_object_storage(monkeypatch, tmp_path):
         "uuid",
         SimpleNamespace(uuid4=lambda: "res-rb2"),
     )
-    monkeypatch.setattr(projects_db, "get_project",
-        lambda project_id: {"id": project_id, "group_id": "grp-1"},
+    monkeypatch.setattr(
+        results_store,
+        "resolve_group_id_for_result",
+        lambda project_id, group_id=None: group_id or "grp-1",
     )
     # Forza policy=object_storage cosi' upload S3 e' obbligatorio.
     monkeypatch.setattr(result_store, "_storage_policy", lambda: "object_storage")
@@ -324,8 +354,7 @@ def _wire_object_storage_writer(monkeypatch, *, fake_storage, saved):
     "happy path" che vogliono verificare il routing object_storage.
     Forza policy=object_storage, mock di db.save_result con cattura kwargs,
     e installa un fake runtime object storage che registra gli upload."""
-    import app.core.projects.db as projects_db
-    import app.core.results.db as results_db
+    import app.core.results.store as results_store
     import app.utils.result_store as result_store
 
     monkeypatch.setattr(
@@ -333,10 +362,12 @@ def _wire_object_storage_writer(monkeypatch, *, fake_storage, saved):
         "uuid",
         SimpleNamespace(uuid4=lambda: "res-os-1"),
     )
-    monkeypatch.setattr(projects_db, "get_project",
-        lambda project_id: {"id": project_id, "group_id": "grp-1"},
+    monkeypatch.setattr(
+        results_store,
+        "resolve_group_id_for_result",
+        lambda project_id, group_id=None: group_id or "grp-1",
     )
-    monkeypatch.setattr(results_db, "save_result_row",
+    monkeypatch.setattr(results_store, "save_result_row",
         lambda **kwargs: saved.update(kwargs),
     )
     monkeypatch.setattr(result_store, "_apply_results_retention", lambda pid: None)

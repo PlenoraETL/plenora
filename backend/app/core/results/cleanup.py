@@ -7,6 +7,22 @@ from app.utils.logger import get_logger
 logger = get_logger(__name__)
 
 
+def list_project_ids_with_results() -> list[str]:
+    """Return distinct project IDs that currently have result rows."""
+    rows = fetchall("SELECT DISTINCT project_id FROM results")
+    project_ids: list[str] = []
+    for row in rows:
+        if isinstance(row, dict):
+            project_id = row.get("project_id")
+        elif row and len(row) > 0:
+            project_id = row[0]
+        else:
+            continue
+        if project_id:
+            project_ids.append(project_id)
+    return project_ids
+
+
 def delete_result(result_id: str) -> bool:
     """Elimina result. Se S3-backed, pulisce anche l'oggetto S3 (best-effort).
 

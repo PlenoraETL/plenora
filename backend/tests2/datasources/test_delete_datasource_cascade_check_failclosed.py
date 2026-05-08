@@ -62,10 +62,10 @@ def test_delete_datasource_all_canvases_broken_returns_500(client, monkeypatch):
     """Se TUTTE le rows hanno canvas non parsabile (JSON malformato),
     _find_projects_using_datasource solleva RuntimeError e delete_datasource
     traduce in 500. La delete non procede."""
-    import app.core.projects.db as projects_db
+    import app.core.projects.usage as projects_usage
     # 2 rows con JSON invalido: _json.loads fallisce per entrambe.
     monkeypatch.setattr(
-        projects_db,
+        projects_usage,
         "list_projects_with_canvas_for_datasource_check",
         lambda *args, **kwargs: [
             {"id": "proj-a", "name": "A", "project_type": "estrai", "canvas": "{not json"},
@@ -84,10 +84,10 @@ def test_delete_datasource_all_canvases_broken_returns_500(client, monkeypatch):
 def test_delete_datasource_partial_canvas_failure_proceeds(client, monkeypatch):
     """Una row con canvas corrotto + una row con canvas valido senza match:
     partial failure resta fail-open, la delete procede come happy path."""
-    import app.core.projects.db as projects_db
+    import app.core.projects.usage as projects_usage
     good_canvas = '{"nodes": [{"datasource_id": "other-ds", "id": "n-1"}]}'
     monkeypatch.setattr(
-        projects_db,
+        projects_usage,
         "list_projects_with_canvas_for_datasource_check",
         lambda *args, **kwargs: [
             {"id": "proj-broken", "name": "Broken", "project_type": "estrai", "canvas": "{corrupt"},

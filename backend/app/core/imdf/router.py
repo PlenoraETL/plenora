@@ -17,6 +17,7 @@ from app.shared import error_codes
 from app.shared.error_envelope import raise_typed_http
 from app.shared.audit_action import audit_action
 from app.shared.resources.path_policy import validate_imdf_task_id
+from app.core.imdf import project_access
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -127,8 +128,7 @@ def _assert_bundle_group_access(bundle_dir: Path, current_user: CurrentUser) -> 
         )
 
     try:
-        from app.core.projects.db import get_project as _get_project
-        project = _get_project(bundle_project_id)
+        project = project_access.get_project_for_bundle(bundle_project_id)
         if not project:
             raise HTTPException(
                 status_code=404,
@@ -459,8 +459,7 @@ def list_bundles(
     visible_project_ids: Optional[set] = None
     if current_user.role != "superadmin":
         try:
-            from app.core.projects.db import list_project_ids_for_group
-            visible_project_ids = list_project_ids_for_group(
+            visible_project_ids = project_access.list_project_ids_visible_to_group(
                 current_user.group_id,
             )
         except Exception as e:

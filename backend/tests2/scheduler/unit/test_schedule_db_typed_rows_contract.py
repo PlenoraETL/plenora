@@ -107,6 +107,12 @@ def test_get_schedule_keeps_legacy_dict_wrapper(monkeypatch):
     assert row["config"] == {"id": "schedule-1"}
 
 
+def test_schedule_row_does_not_own_legacy_dict_serialization():
+    from app.core.scheduler import db as schedule_db
+
+    assert not hasattr(schedule_db.ScheduleRow, "to_legacy_dict")
+
+
 def test_save_schedule_returns_typed_schedule_row(monkeypatch):
     from app.core.scheduler import db as schedule_db
 
