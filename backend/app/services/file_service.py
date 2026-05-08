@@ -5,5 +5,10 @@ for legacy imports and monkeypatch surfaces while production call-sites migrate
 to the core-owned boundary.
 """
 
-from app.core.files.service import *  # noqa: F401,F403
-from app.core.files.service import _logger, _rmtree_safe  # noqa: F401
+from __future__ import annotations
+
+import sys as _sys
+
+from app.core.files import service as _canonical
+
+_sys.modules[__name__] = _canonical

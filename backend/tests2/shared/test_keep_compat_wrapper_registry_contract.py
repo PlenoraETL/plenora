@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import ast
+import importlib
 import importlib.util
 from pathlib import Path
 
@@ -55,6 +56,18 @@ _KEEP_COMPAT_WRAPPERS: tuple[KeepCompatWrapper, ...] = (
         wrapper="module",
         owner="STORAGE_ARTIFACT_ENGINE",
         canonical_target="app.core.files.service",
+    ),
+    KeepCompatWrapper(
+        rel_path="app/services/file_load_dispatch.py",
+        wrapper="module",
+        owner="STORAGE_ARTIFACT_ENGINE",
+        canonical_target="app.core.files.load_dispatch",
+    ),
+    KeepCompatWrapper(
+        rel_path="app/services/file_service_deps.py",
+        wrapper="module",
+        owner="STORAGE_ARTIFACT_ENGINE",
+        canonical_target="app.core.files.service_deps",
     ),
     KeepCompatWrapper(
         rel_path="app/services/file_storage_dispatch.py",
@@ -169,6 +182,17 @@ _KEEP_COMPAT_WRAPPERS: tuple[KeepCompatWrapper, ...] = (
     ),
 )
 
+_FILE_COMPAT_ALIASES: tuple[tuple[str, str], ...] = (
+    ("app.services.file_load_dispatch", "app.core.files.load_dispatch"),
+    ("app.services.file_storage_dispatch", "app.core.files.storage_dispatch"),
+    ("app.services.file_upload", "app.core.files.upload"),
+    ("app.services.file_raw_upload", "app.core.files.raw_upload"),
+    ("app.services.file_multi_layer_upload", "app.core.files.multi_layer_upload"),
+    ("app.services.file_preview_temp", "app.core.files.preview_temp"),
+    ("app.services.file_source_read", "app.core.files.source_read"),
+    ("app.services.file_service", "app.core.files.service"),
+)
+
 
 def _source(rel_path: str) -> str:
     return (_BACKEND_ROOT / rel_path).read_text(encoding="utf-8")
@@ -238,3 +262,14 @@ def test_app_services_keep_compat_wrappers_are_registered():
         f"Unregistered: {sorted(active - registered)}\n"
         f"Stale registry rows: {sorted(registered - active)}"
     )
+
+
+@pytest.mark.parametrize(("legacy_module", "canonical_module"), _FILE_COMPAT_ALIASES)
+def test_file_compat_wrappers_alias_canonical_modules(
+    legacy_module: str,
+    canonical_module: str,
+):
+    legacy = importlib.import_module(legacy_module)
+    canonical = importlib.import_module(canonical_module)
+
+    assert legacy is canonical

@@ -79,7 +79,7 @@ def test_upstream_failure_does_not_leak_source_project_id():
          patch("app.core.intermediate.db.create_run"), \
          patch("app.core.intermediate.writer.close_run"), \
          patch("app.utils.logger.close_run"), \
-         patch("app.db.config_db_service.get_project", return_value={
+         patch("app.core.projects.db.get_project", return_value={
              "id": source_pid, "group_id": "g1", "project_type": "estrai",
          }):
         result = executor._carica_sorgenti_progetto(
@@ -117,7 +117,7 @@ def test_upstream_failure_result_is_wrappable_without_pid_mismatch():
          patch("app.core.intermediate.db.create_run"), \
          patch("app.core.intermediate.writer.close_run"), \
          patch("app.utils.logger.close_run"), \
-         patch("app.db.config_db_service.get_project", return_value={
+         patch("app.core.projects.db.get_project", return_value={
              "id": source_pid, "group_id": "g1", "project_type": "estrai",
          }):
         result = executor._carica_sorgenti_progetto(
@@ -160,7 +160,7 @@ def test_upstream_failure_message_includes_source_project_id():
          patch("app.core.intermediate.db.create_run"), \
          patch("app.core.intermediate.writer.close_run"), \
          patch("app.utils.logger.close_run"), \
-         patch("app.db.config_db_service.get_project", return_value={
+         patch("app.core.projects.db.get_project", return_value={
              "id": source_pid, "group_id": "g1", "project_type": "estrai",
          }):
         result = executor._carica_sorgenti_progetto(
@@ -217,7 +217,7 @@ def test_upstream_success_path_unchanged():
          patch("app.core.intermediate.db.create_run"), \
          patch("app.core.intermediate.writer.close_run"), \
          patch("app.utils.logger.close_run"), \
-         patch("app.db.config_db_service.get_project", return_value={
+         patch("app.core.projects.db.get_project", return_value={
              "id": source_pid, "group_id": "g1", "project_type": "estrai",
          }), patch(
              "app.core.artifacts.ArtifactResolver"

@@ -1,4 +1,4 @@
-"""Compatibility surface for file parser dispatch.
+"""KEEP_COMPAT wrapper for file parser dispatch.
 
 Canonical implementation: `app.core.files.load_dispatch`.
 """

@@ -4,9 +4,11 @@ Architecture ledger for legacy import containers.
 Batch 081 Worker 6: keep `app.services` and `app.db.config`
 production import debt measurable by domain. Batch 084 Worker 1
 tombstoned `app.db.db_service`: it remains in this ledger only as a
-forbidden zero-baseline container. These baselines are intentionally
-exact: new import edges fail, and removed edges fail until the baseline
-is trimmed.
+forbidden zero-baseline container. Batch 087 Worker 3 added explicit
+zero-baseline rows for the closed `app.db.config_db_service` facade and
+the retained `app.db.results_db_service` compatibility tombstone. These
+baselines are intentionally exact: new import edges fail, and removed
+edges fail until the baseline is trimmed.
 """
 
 from __future__ import annotations
@@ -35,13 +37,25 @@ _LEGACY_IMPORT_BASELINES: dict[str, dict[str, frozenset[str]]] = {
     "app.services": {
         "projects": frozenset(),
         "connections": frozenset(),
-        "files_storage": frozenset({
-            "app/core/files/service.py -> app.services.file_service_deps",
-        }),
+        "files_storage": frozenset(),
         "tasks_orchestration": frozenset(),
         "auth_datasources_other": frozenset(),
     },
     "app.db.db_service": {
+        "projects": frozenset(),
+        "connections": frozenset(),
+        "files_storage": frozenset(),
+        "tasks_orchestration": frozenset(),
+        "auth_datasources_other": frozenset(),
+    },
+    "app.db.config_db_service": {
+        "projects": frozenset(),
+        "connections": frozenset(),
+        "files_storage": frozenset(),
+        "tasks_orchestration": frozenset(),
+        "auth_datasources_other": frozenset(),
+    },
+    "app.db.results_db_service": {
         "projects": frozenset(),
         "connections": frozenset(),
         "files_storage": frozenset(),

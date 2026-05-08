@@ -20,7 +20,7 @@ from typing import Any, BinaryIO, Dict, List, Optional, Tuple
 import pandas as pd
 
 from app.core.files.storage_dispatch import BlobDispatchResult
-from app.services.file_service_deps import (  # noqa: F401 (compatibility export pubblico
+from app.core.files.service_deps import (  # noqa: F401 (compatibility export pubblico
     LoggerProtocol,
     FileSystemProtocol,
     DataLoaderProtocol,
@@ -130,7 +130,7 @@ if not _USE_APP_MODELS:
 
 # STRUCT-001 Seam B: i 4 Protocols (Logger/FileSystem/DataLoader/TimeProvider
 # e le 4 Default impls (NullLogger/DefaultTimeProvider/DefaultFileSystem/
-# DefaultDataLoader) vivono in `app.services.file_service_deps`
+# DefaultDataLoader) vivono in `app.core.files.service_deps`
 # compatibility export per backward-compat coi test che importano direttamente
 # test_file_service_filesystem_contract usa DefaultFileSystem
 # test_n1_file_service_cross_tenant_contract usa DefaultTimeProvider) e
