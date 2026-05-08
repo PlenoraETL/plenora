@@ -319,15 +319,15 @@ class FileSourceService:
         layer: str = None,
         sheet: str = None
     ) -> Tuple[pd.DataFrame, Optional[Any]]:
-        """Wrapper compat: delega a `file_load_dispatch.load_by_format`.
+        """Wrapper compat: delega a `load_dispatch.load_by_format`.
 
         STRUCT-001 Seam D-B: la logica vive in
-        `app.services.file_load_dispatch.load_by_format` come funzione
+        `app.core.files.load_dispatch.load_by_format` come funzione
         standalone con collaborator espliciti. I 3 call site interni
         (`self._load_by_format(...)` in upload methods + load_dataframe)
         restano invariati. Behavior byte-per-byte preservato.
         """
-        from app.services.file_load_dispatch import load_by_format
+        from app.core.files.load_dispatch import load_by_format
         return load_by_format(
             self._loader, file_path, format_type, layer, sheet,
             logger=self._logger,
@@ -703,15 +703,15 @@ class FileSourceService:
         description: str = "",
         group_id: str = None,
     ) -> FileSource:
-        """Wrapper compat: delega a `file_raw_upload.create_raw_from_upload`.
+        """Wrapper compat: delegates to `raw_upload.create_raw_from_upload`.
 
-        STRUCT-001 Seam D-E: la logica vive in
-        `app.services.file_raw_upload.create_raw_from_upload` con
-        collaborator espliciti. Behavior byte-per-byte preservato:
+        STRUCT-001 Seam D-E: the logic lives in
+        `app.core.files.raw_upload.create_raw_from_upload` with explicit
+        collaborators. Behavior preserved:
         MIME validation defense-in-depth + DTO build + dispatch policy +
         DB save + logger info. Orphan guard rispettato.
         """
-        from app.services.file_raw_upload import create_raw_from_upload as _impl
+        from app.core.files.raw_upload import create_raw_from_upload as _impl
         from app.config import settings
         import app.db.config.file_sources as db
         return _impl(
@@ -739,10 +739,10 @@ class FileSourceService:
         srid: int = None,
         group_id: str = None,
     ) -> List["FileSource"]:
-        """Wrapper compat: delega a `file_multi_layer_upload.create_multi_layer_from_upload`.
+        """Wrapper compat: delega a `multi_layer_upload.create_multi_layer_from_upload`.
 
         STRUCT-001 Seam D-G: la logica vive in
-        `app.services.file_multi_layer_upload.create_multi_layer_from_upload`
+        `app.core.files.multi_layer_upload.create_multi_layer_from_upload`
         con collaborator espliciti. Behavior byte-per-byte preservato:
         MIME defense-in-depth sempre attiva, ZIP unwrap solo `.gpkg`/`.gdb`,
         loop per-layer best-effort, atomico (E3 transactional
@@ -750,7 +750,7 @@ class FileSourceService:
         su rollback, cleanup asimmetrico (os.unlink per file + rmtree_safe
         per dir).
         """
-        from app.services.file_multi_layer_upload import (
+        from app.core.files.multi_layer_upload import (
             create_multi_layer_from_upload as _impl,
         )
         from app.config import settings
@@ -805,12 +805,12 @@ class FileSourceService:
         self, file_id: str, layer: str = None, sheet: str = None,
         expected_group_id: str = None,
     ) -> Tuple[pd.DataFrame, Optional[Any]]:
-        """Wrapper compat: delega a `file_source_read.load_dataframe`.
+        """Wrapper compat: delega a `source_read.load_dataframe`.
 
         N1 resta fail-closed: il modulo estratto riceve `_assert_visible`
         come collaborator esplicito.
         """
-        from app.services.file_source_read import load_dataframe
+        from app.core.files.source_read import load_dataframe
         return load_dataframe(
             file_id,
             layer=layer,
@@ -874,11 +874,11 @@ class FileSourceService:
     def get_layers_info(
         self, file_id: str, expected_group_id: str = None,
     ) -> Dict[str, Any]:
-        """Wrapper compat: delega a `file_source_read.get_layers_info`.
+        """Wrapper compat: delega a `source_read.get_layers_info`.
 
         N1: `expected_group_id` obbligatorio per fail-closed check.
         """
-        from app.services.file_source_read import get_layers_info
+        from app.core.files.source_read import get_layers_info
         return get_layers_info(
             file_id,
             expected_group_id=expected_group_id,
@@ -893,11 +893,11 @@ class FileSourceService:
     def get_preview(
         self, file_id: str, limit: int = 100, expected_group_id: str = None,
     ) -> Dict[str, Any]:
-        """Wrapper compat: delega a `file_source_read.get_preview`.
+        """Wrapper compat: delega a `source_read.get_preview`.
 
         N1: `expected_group_id` obbligatorio per fail-closed check.
         """
-        from app.services.file_source_read import get_preview
+        from app.core.files.source_read import get_preview
         return get_preview(
             file_id,
             limit=limit,
@@ -912,14 +912,14 @@ class FileSourceService:
         )
 
     def preview_file_temp(self, file_content: BinaryIO, filename: str, layer: str = None, sheet: str = None) -> dict:
-        """Wrapper compat: delega a `file_preview_temp.preview_file_temp`.
+        """Wrapper compat: delega a `preview_temp.preview_file_temp`.
 
         STRUCT-001 Seam D-A: la logica vive in
-        `app.services.file_preview_temp.preview_file_temp` come
+        `app.core.files.preview_temp.preview_file_temp` come
         funzione standalone portable (collaborator espliciti via kwargs,
         no DB, no auth). Qui passiamo i collaborator del service.
         """
-        from app.services.file_preview_temp import preview_file_temp as _preview
+        from app.core.files.preview_temp import preview_file_temp as _preview
         return _preview(
             file_content,
             filename,

@@ -6,3 +6,4 @@ to the core-owned boundary.
 """
 
 from app.core.files.service import *  # noqa: F401,F403
+from app.core.files.service import _logger, _rmtree_safe  # noqa: F401

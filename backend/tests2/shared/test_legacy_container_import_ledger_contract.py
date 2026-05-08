@@ -36,13 +36,7 @@ _LEGACY_IMPORT_BASELINES: dict[str, dict[str, frozenset[str]]] = {
         "projects": frozenset(),
         "connections": frozenset(),
         "files_storage": frozenset({
-            "app/core/files/service.py -> app.services.file_load_dispatch",
-            "app/core/files/service.py -> app.services.file_multi_layer_upload",
-            "app/core/files/service.py -> app.services.file_preview_temp",
-            "app/core/files/service.py -> app.services.file_raw_upload",
             "app/core/files/service.py -> app.services.file_service_deps",
-            "app/core/files/service.py -> app.services.file_source_read",
-            "app/services/file_preview_temp.py -> app.services.file_load_dispatch",
         }),
         "tasks_orchestration": frozenset(),
         "auth_datasources_other": frozenset(),
@@ -70,11 +64,11 @@ _LEGACY_IMPORT_BASELINES: dict[str, dict[str, frozenset[str]]] = {
         }),
         "files_storage": frozenset({
             "app/core/auth/owner_dependencies.py -> app.db.config.file_sources",
+            "app/core/files/multi_layer_upload.py -> app.db.config.file_sources",
             "app/core/files/router.py -> app.db.config.file_sources",
             "app/core/tickets/router.py -> app.db.config.file_sources",
             "app/core/files/service.py -> app.db.config.file_sources",
             "app/db/config_db_service.py -> app.db.config.file_sources",
-            "app/services/file_multi_layer_upload.py -> app.db.config.file_sources",
             "app/shared/authz_helpers.py -> app.db.config.file_sources",
         }),
         "tasks_orchestration": frozenset({

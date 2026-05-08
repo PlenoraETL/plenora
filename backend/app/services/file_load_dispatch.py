@@ -5,11 +5,8 @@ Canonical implementation: `app.core.files.load_dispatch`.
 
 from __future__ import annotations
 
-from app.core.files.load_dispatch import (
-    DataLoaderProtocol,
-    LoggerProtocol,
-    load_by_format,
-)
+import sys as _sys
 
+from app.core.files import load_dispatch as _canonical
 
-__all__ = ["DataLoaderProtocol", "LoggerProtocol", "load_by_format"]
+_sys.modules[__name__] = _canonical

@@ -13,6 +13,13 @@ import pandas as pd
 import pytest
 
 
+def test_legacy_file_source_read_import_aliases_canonical_module():
+    import app.core.files.source_read as canonical
+    import app.services.file_source_read as legacy
+
+    assert legacy is canonical
+
+
 def _plain(value):
     if hasattr(value, "model_dump"):
         return value.model_dump()
@@ -32,7 +39,7 @@ def _file_source(fmt="csv", *, layer=None, sheet=None, columns=None):
 
 
 def test_load_dataframe_uses_explicit_collaborators_and_cleans_temp(tmp_path):
-    from app.services.file_source_read import load_dataframe
+    from app.core.files.source_read import load_dataframe
 
     tmp_file = tmp_path / "source.csv"
     tmp_file.write_text("city\nRome\n", encoding="utf-8")
@@ -63,7 +70,7 @@ def test_load_dataframe_uses_explicit_collaborators_and_cleans_temp(tmp_path):
 
 
 def test_load_dataframe_prefers_explicit_layer_and_sheet(tmp_path):
-    from app.services.file_source_read import load_dataframe
+    from app.core.files.source_read import load_dataframe
 
     tmp_file = tmp_path / "source.xlsx"
     tmp_file.write_text("x", encoding="utf-8")
@@ -90,7 +97,7 @@ def test_load_dataframe_prefers_explicit_layer_and_sheet(tmp_path):
 
 
 def test_load_dataframe_raises_when_metadata_is_missing():
-    from app.services.file_source_read import load_dataframe
+    from app.core.files.source_read import load_dataframe
 
     with pytest.raises(ValueError, match="non trovato"):
         load_dataframe(
@@ -105,7 +112,7 @@ def test_load_dataframe_raises_when_metadata_is_missing():
 
 
 def test_get_layers_info_lists_geospatial_layers_and_cleans_temp(tmp_path):
-    from app.services.file_source_read import get_layers_info
+    from app.core.files.source_read import get_layers_info
 
     tmp_file = tmp_path / "source.gpkg"
     tmp_file.write_text("x", encoding="utf-8")
@@ -132,7 +139,7 @@ def test_get_layers_info_lists_geospatial_layers_and_cleans_temp(tmp_path):
 
 
 def test_get_layers_info_lists_excel_sheets(tmp_path):
-    from app.services.file_source_read import get_layers_info
+    from app.core.files.source_read import get_layers_info
 
     tmp_file = tmp_path / "source.xlsx"
     tmp_file.write_text("x", encoding="utf-8")
@@ -157,7 +164,7 @@ def test_get_layers_info_lists_excel_sheets(tmp_path):
 
 
 def test_get_preview_normalizes_numpy_and_nan_values():
-    from app.services.file_source_read import get_preview
+    from app.core.files.source_read import get_preview
 
     df = pd.DataFrame(
         {
@@ -201,7 +208,7 @@ def test_file_source_service_load_dataframe_wrapper_delegates(tmp_path):
     svc._load_by_format = MagicMock()
     svc._logger = MagicMock()
 
-    with patch("app.services.file_source_read.load_dataframe") as delegated:
+    with patch("app.core.files.source_read.load_dataframe") as delegated:
         delegated.return_value = (pd.DataFrame({"x": [1]}), None)
         svc.load_dataframe("file-1", layer="l", sheet="s", expected_group_id="grp-1")
 
@@ -225,7 +232,7 @@ def test_file_source_service_get_preview_wrapper_delegates():
     svc._assert_visible = MagicMock()
     svc.get_file_source = MagicMock()
 
-    with patch("app.services.file_source_read.get_preview") as delegated:
+    with patch("app.core.files.source_read.get_preview") as delegated:
         delegated.return_value = {"rows": []}
         result = svc.get_preview("file-1", limit=5, expected_group_id="grp-1")
 

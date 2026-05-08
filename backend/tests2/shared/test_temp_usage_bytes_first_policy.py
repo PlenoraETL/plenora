@@ -336,13 +336,13 @@ _TEMP_INVENTORY: dict[tuple[str, int], tuple[str, str]] = {
         "service now, fed by the Resource Engine `mode='bytes'` "
         "fetch via `self._get_blob_from_db`.",
     ),
-    ("app/services/file_multi_layer_upload.py", 97): (
+    ("app/core/files/multi_layer_upload.py", 97): (
         "STAGING_INGESTION",
         "Multi-layer file probe: writes HTTP-body chunks to disk "
         "then opens with fiona to enumerate layers (GDB/GPKG). "
         "fiona requires a path; bytes API not available.",
     ),
-    ("app/services/file_preview_temp.py", 96): (
+    ("app/core/files/preview_temp.py", 92): (
         "STAGING_INGESTION",
         "Preview render: writes uploaded body to a temp before "
         "format-aware preview reader picks it up (CSV / Excel / "
@@ -428,7 +428,7 @@ _TEMP_INVENTORY: dict[tuple[str, int], tuple[str, str]] = {
         "tempdirs. Current callers use it for SHP/GDB/GPKG multi-file "
         "artifacts whose sidecars require a directory path.",
     ),
-    ("app/services/file_preview_temp.py", 109): (
+    ("app/core/files/preview_temp.py", 105): (
         "DIR_MULTIFILE",
         "Preview-temp ZIP extraction: same multi-file pattern as "
         "the regular SHP/GDB upload paths.",
