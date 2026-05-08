@@ -114,7 +114,7 @@ def get_layers_info(
                 _cleanup_temp_path(tmp_path, cleanup_format, logger=logger)
 
     try:
-        from app.models import FileSourceLayersResponse
+        from app.core.files.models import FileSourceLayersResponse
 
         return FileSourceLayersResponse(
             file_id=file_id,
@@ -166,7 +166,7 @@ def get_preview(
                 row[key] = bool(value)
 
     try:
-        from app.models import FileSourcePreview
+        from app.core.files.models import FileSourcePreview
 
         return FileSourcePreview(
             file_id=file_id,

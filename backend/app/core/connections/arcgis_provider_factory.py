@@ -7,7 +7,7 @@ from typing import Optional, TYPE_CHECKING
 from app.shared.connections.arcgis_provider import ArcGISProviderProtocol
 
 if TYPE_CHECKING:
-    from app.core.connections.arcgis_client import HttpClientProtocol
+    from app.core.features.arcgis_client import HttpClientProtocol
 
 
 def create_arcgis_provider(
@@ -15,11 +15,10 @@ def create_arcgis_provider(
 ) -> ArcGISProviderProtocol:
     """Create the canonical ArcGIS provider instance.
 
-    The concrete provider is exposed through
-    ``app.core.connections.arcgis_client``. New connection-oriented code should
-    import this neutral factory instead of the feature module's legacy factory.
+    Connection-oriented code should import this neutral factory instead of
+    constructing the concrete feature provider directly.
     """
-    from app.core.connections.arcgis_client import ArcGISClient
+    from app.core.features.arcgis_client import ArcGISClient
 
     return ArcGISClient(http_client=http_client)
 

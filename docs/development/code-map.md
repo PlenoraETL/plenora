@@ -596,11 +596,11 @@ Responsabilita: governa ticketing interno con commenti, contatori e meta.
 | file | funzioni/classi chiave | cosa guardare |
 |---|---|---|
 | `router.py` | `_require_not_esecutore`, `TicketCreateRequest`, `TicketUpdateRequest`, `CommentCreateRequest`, `get_meta`, `get_counts`, `create_ticket_endpoint`, `list_tickets_endpoint`, `get_ticket_endpoint` | contratto API tickets |
-| `service.py` | `TicketNotifier`, `set_notifier`, `_fire_notification`, `_validate_create_input`, `_is_admin`, `_can_view`, `_can_edit_privileged_fields`, `check_access`, `create_ticket`, `list_tickets_for`, `get_ticket_with_details`, `update_ticket`, `add_comment`, `delete_ticket`, `_category_display` | CRUD ticket/commenti, ACL e notifiche |
+| `service.py` | `TicketNotifier`, `NoopTicketNotifier`, `set_notifier`, `_fire_notification`, `_validate_create_input`, `_is_admin`, `_can_view`, `_can_edit_privileged_fields`, `check_access`, `create_ticket`, `list_tickets_for`, `get_ticket_with_details`, `update_ticket`, `add_comment`, `delete_ticket`, `_category_display` | CRUD ticket/commenti, ACL e notifiche |
 
 Keywords: `TicketNotifier`, `create_ticket`, `list_tickets_for`, `get_ticket_with_details`, `update_ticket`, `add_comment`, `delete_ticket`, `check_access`
 
-Intervento/confini: tenere separato dalla pipeline runtime. Non usare i ticket come canale di stato per le run. Notifiche solo via `TicketNotifier` (registrato con `set_notifier`).
+Intervento/confini: tenere separato dalla pipeline runtime. Non usare i ticket come canale di stato per le run. Notifiche solo via `TicketNotifier` protocol (registrato con `set_notifier`, default `NoopTicketNotifier`).
 
 ---
 

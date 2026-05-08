@@ -22,6 +22,7 @@ pytestmark = [pytest.mark.unit, pytest.mark.contract]
 APP_DIR = BACKEND_DIR / "app"
 WORKERS_DIR = BACKEND_DIR / "workers"
 ARCGIS_CLIENT = APP_DIR / "core" / "features" / "arcgis_client.py"
+ARCGIS_REST_WRITE = APP_DIR / "core" / "features" / "arcgis_rest_write.py"
 ARCGIS_FACTORY = APP_DIR / "core" / "connections" / "arcgis_provider_factory.py"
 ARCGIS_RESOLVER = APP_DIR / "core" / "connections" / "arcgis_connection_resolver.py"
 CARICA_TASK = WORKERS_DIR / "tasks" / "carica_task.py"
@@ -74,7 +75,7 @@ def test_shared_connections_package_is_leaf_like(src_file: Path) -> None:
     ids=lambda p: p.relative_to(BACKEND_DIR).as_posix(),
 )
 def test_direct_arcgis_rest_is_confined_to_concrete_provider_client(src_file: Path) -> None:
-    if src_file == ARCGIS_CLIENT:
+    if src_file in {ARCGIS_CLIENT, ARCGIS_REST_WRITE}:
         return
 
     violations = scan_arcgis_rest_mechanics(src_file)

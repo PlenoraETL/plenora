@@ -370,7 +370,7 @@ def test_notifier_called_on_create(mock_tdb, monkeypatch):
 
     calls = []
 
-    class Spy(svc.TicketNotifier):
+    class Spy:
         def on_ticket_created(self, ticket, actor):
             calls.append(("created", ticket["id"], actor.username))
 
@@ -384,13 +384,13 @@ def test_notifier_called_on_create(mock_tdb, monkeypatch):
         assert len(calls) == 1
         assert calls[0][0] == "created"
     finally:
-        svc.set_notifier(svc.TicketNotifier())  # reset a no-op
+        svc.set_notifier(svc.NoopTicketNotifier())
 
 
 def test_notifier_exception_does_not_break_create(mock_tdb, monkeypatch):
     from app.core.tickets import service as svc
 
-    class Broken(svc.TicketNotifier):
+    class Broken:
         def on_ticket_created(self, ticket, actor):
             raise RuntimeError("smtp down")
 
@@ -404,4 +404,4 @@ def test_notifier_exception_does_not_break_create(mock_tdb, monkeypatch):
         )
         assert result["id"] == "t1"
     finally:
-        svc.set_notifier(svc.TicketNotifier())
+        svc.set_notifier(svc.NoopTicketNotifier())

@@ -89,7 +89,7 @@ def execute_carica_task(
     # C4 round 2: idempotency guard. Se run_id e' passato e gia'
     # completato, ritorna subito senza ri-eseguire (no duplicate writes
     if run_id is not None:
-        from app.core.carica.idempotency import is_already_completed
+        from app.shared.idempotency import is_already_completed
         if is_already_completed(run_id):
             logger.info(
                 f"[IDEMPOTENCY] Task CARICA {task_id}: run_id {run_id} "

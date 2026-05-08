@@ -11,7 +11,7 @@ from typing import Any, Dict, List
 
 import pandas as pd
 
-from app.shared.api_utils import (
+from app.shared.json_path import (
     extract_json_value as _shared_extract_json_value,
     geojson_to_wkt as _shared_geojson_to_wkt,
 )
@@ -29,7 +29,7 @@ logger = get_logger("app.core.arricchisci.enrichment_service")
 # evitare import circolare mixin → service → mixin. Behavior identico
 # il wrapper enrichment_service e' 1-line di delega
 def _geojson_to_wkt(geom: dict) -> str:
-    """Converte un dict geometry GeoJSON in WKT. Delegato a shared/api_utils."""
+    """Converte un dict geometry GeoJSON in WKT."""
     return _shared_geojson_to_wkt(geom)
 
 

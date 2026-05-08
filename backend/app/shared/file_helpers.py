@@ -20,10 +20,10 @@ import pandas as pd
 _logger = logging.getLogger(__name__)
 
 
-# ColumnInfo: model di app.models (Pydantic in produzione) oppure dataclass
-# fallback. Stesso pattern di file_service.py
+# ColumnInfo: modello condiviso canonico, con fallback dataclass per test
+# standalone che importano il modulo senza l'app completa.
 try:
-    from app.models import ColumnInfo  # noqa: F401
+    from app.shared.models import ColumnInfo  # noqa: F401
     _USE_APP_MODELS = True
 except ImportError:  # pragma: no cover
     _USE_APP_MODELS = False

@@ -178,12 +178,9 @@ class ApiConnectionService(
     # B3-B.7 cleanup: rimossi `_get_oauth2_client_credentials_token` e
     # `_get_oauth2_token` come dead code (prova forte: 0 self-call sites
     # in api_connector, 0 external refs in app/, 0 test patches, 0 direct
-    # imports, EnrichmentService class ha le sue proprie copie separate
-    # in `enrichment_service.py:424,428`). Erano shim 3-line verso
-    # `_shared_get_oauth2_token` / `_shared_get_oauth2_cc_token` di
-    # `app.shared.api_utils`, importati ma mai chiamati dal namespace
-    # `ApiConnectionService`. Vedi B3-B.3 mini-scan `_get_oauth2_*`
-    # dead-code candidate flag
+    # imports. EnrichmentExecutor mantiene helper propri, ma ora delegano
+    # direttamente a `app.shared.api_utils.get_cached_oauth2_token`.
+    # Vedi B3-B.3 mini-scan `_get_oauth2_*` dead-code candidate flag.
 
 
 # Usato da api/enrichment.py e main.py per accedere al servizio

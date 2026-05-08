@@ -280,7 +280,7 @@ def test_project_service_list_projects_uses_typed_project_rows(monkeypatch):
 def test_project_service_create_project_uses_typed_post_write_row(monkeypatch):
     from app.core.projects import db as project_db
     from app.core.projects.service import ProjectService
-    from app.models import ProjectCreate
+    from app.core.projects.models import ProjectCreate
 
     now = datetime(2026, 5, 7, 10, 0, tzinfo=timezone.utc)
     monkeypatch.setattr(ProjectService, "_ensure_default_group", lambda self: None)
@@ -464,7 +464,7 @@ def test_project_service_get_project_converts_typed_row_at_public_compat_edge(
 def test_project_service_update_canvas_uses_typed_post_write_row(monkeypatch):
     from app.core.projects import db as project_db
     from app.core.projects.service import ProjectService
-    from app.models import CanvasState
+    from app.shared.models import CanvasState
 
     monkeypatch.setattr(
         ProjectService,

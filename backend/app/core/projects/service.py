@@ -11,10 +11,12 @@ from typing import List, Optional
 
 from app.utils.logger import get_logger
 from app.config import settings
-from app.models import (
+from app.core.projects.models import (
     ProjectMetadata,
     ProjectCreate,
     ProjectList,
+)
+from app.shared.models import (
     CanvasState,
 )
 

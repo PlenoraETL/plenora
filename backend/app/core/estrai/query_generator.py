@@ -8,7 +8,7 @@ import re
 from app.utils.logger import get_logger
 from typing import List, Dict, Optional, Any, Tuple
 
-from app.models import Node, Edge
+from app.shared.models import Node, Edge
 from app.db.sql_functions import translate_calculated_column, get_translator
 from app.db.sql_translator import sql_translator
 

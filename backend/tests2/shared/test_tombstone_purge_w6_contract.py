@@ -24,6 +24,9 @@ _FORBIDDEN_PRODUCTION_IMPORT_PREFIXES = (
     "app.db.config_db_service",
     "app.db.results_db_service",
     "app.shared.exceptions",
+    "app.utils.response_parser",
+    "app.core.carica.idempotency",
+    "app.core.manipola.router",
 )
 
 # Current plain KEEP_COMPAT markers are active debt. This baseline is
@@ -50,7 +53,6 @@ _KNOWN_PLAIN_KEEP_COMPAT_MARKERS = frozenset(
         "app/core/imdf/arcgis/service_discovery.py::KEEP_COMPAT: fail-open IMDF wrapper around",
         "app/core/imdf/arcgis/sql_helpers.py::KEEP_COMPAT: thin IMDF wrapper for legacy publish call sites. New",
         "app/core/imdf/validator.py::KEEP_COMPAT: this module-level symbol remains as a thin wrapper for:",
-        "app/utils/response_parser.py::\"\"\"KEEP_COMPAT wrapper for Arricchisci response parsing.",
     }
 )
 

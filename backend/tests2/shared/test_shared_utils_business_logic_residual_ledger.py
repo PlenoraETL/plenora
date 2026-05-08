@@ -42,15 +42,6 @@ _LEDGER: tuple[SharedUtilsBusinessLogicEntry, ...] = (
         removal_condition="Arricchisci API-generator parser now has a domain-owned canonical module.",
     ),
     SharedUtilsBusinessLogicEntry(
-        path="app/utils/response_parser.py",
-        symbol="module",
-        status="KEEP_COMPAT_WITH_REMOVAL_CONDITION",
-        owner="TRANSFORMATION_ENGINE",
-        removal_condition=(
-            "Delete after external imports switch to app.core.arricchisci.response_parser."
-        ),
-    ),
-    SharedUtilsBusinessLogicEntry(
         path="app/utils/geo.py",
         symbol="get_utm_crs_for_geometry",
         status="KEEP_COMPAT_WITH_REMOVAL_CONDITION",

@@ -272,7 +272,7 @@ from app.core.connections.router import router as connections_router
 from app.core.projects.router import router as projects_router
 from app.core.files.router import router as files_router
 from app.core.estrai.router import functions_router
-from app.core.manipola.router import router as transforms_router
+from app.core.manipola.api.transforms_api import router as transforms_router
 from app.core.arricchisci.router import (
     enrichment_router, api_connections_router, templates_router,
     enrich_router,

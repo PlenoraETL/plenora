@@ -85,9 +85,5 @@ def test_response_parser_keeps_nested_api_mapping_behavior() -> None:
     ]
 
 
-def test_utils_response_parser_is_compat_alias_only() -> None:
-    from app.core.arricchisci import response_parser as canonical
-    from app.utils import response_parser as compat
-
-    assert compat.ResponseParser is canonical.ResponseParser
-    assert compat.get_preset_config is canonical.get_preset_config
+def test_utils_response_parser_compat_alias_is_removed() -> None:
+    assert not (_APP_ROOT / "utils" / "response_parser.py").exists()

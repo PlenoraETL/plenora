@@ -7,7 +7,7 @@ Keeps API enrichment behavior isolated from orchestration callers.
 import time as _time
 from typing import Dict, Any, Optional
 
-from app.models import CanvasState
+from app.shared.models import CanvasState
 from app.config import settings
 from app.utils.logger import get_logger, append_step
 from app.core.arricchisci.api_connector import api_connection_service

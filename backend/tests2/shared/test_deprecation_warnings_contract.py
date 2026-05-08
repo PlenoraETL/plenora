@@ -1,7 +1,7 @@
 """
-Contract test R-21/R-22/R-23 -- DeprecationWarning emit-once per legacy alias.
+Contract test R-21/R-22 -- DeprecationWarning emit-once per legacy alias.
 
-Verifies that the four legacy alias helpers in the codebase emit a
+Verifies that the remaining legacy alias helpers in the codebase emit a
 """
 
 from __future__ import annotations
@@ -43,30 +43,6 @@ def _invoke_urby_loopback() -> Any:
     return api_utils._warn_urby_loopback_alias_once()
 
 
-def _get_oauth2_token_helper() -> Any:
-    from app.shared import api_utils
-    return api_utils._warn_get_oauth2_token_deprecated_once
-
-
-def _invoke_oauth2_token() -> Any:
-    from app.shared import api_utils
-    with patch.object(api_utils, "get_cached_oauth2_token", return_value="tok-1"):
-        return api_utils.get_oauth2_token({"token_url": "https://x"})
-
-
-def _get_oauth2_cc_token_helper() -> Any:
-    from app.shared import api_utils
-    return api_utils._warn_get_oauth2_cc_token_deprecated_once
-
-
-def _invoke_oauth2_cc_token() -> Any:
-    from app.shared import api_utils
-    with patch.object(api_utils, "get_cached_oauth2_token", return_value="tok-cc"):
-        return api_utils.get_oauth2_client_credentials_token(
-            {"token_url": "https://x"},
-        )
-
-
 def _get_object_storage_helper() -> Any:
     from app.shared import cloud_backends
     return cloud_backends._warn_get_object_storage_deprecated_once
@@ -95,32 +71,6 @@ _ALIAS_CASES: tuple[_AliasCase, ...] = (
             "2026-Q4",
         ),
         expected_message_signature="URBY_ALLOW_LOOPBACK_OUTBOUND",
-    ),
-    _AliasCase(
-        rid="R-23",
-        label="get_oauth2_token_wrapper",
-        helper=_get_oauth2_token_helper,
-        invoke=_invoke_oauth2_token,
-        expected_in_message=(
-            "get_oauth2_token",
-            "get_cached_oauth2_token",
-            "2026-Q4",
-        ),
-        expected_message_signature="get_oauth2_token",
-    ),
-    _AliasCase(
-        rid="R-23",
-        label="get_oauth2_cc_token_wrapper",
-        helper=_get_oauth2_cc_token_helper,
-        invoke=_invoke_oauth2_cc_token,
-        expected_in_message=(
-            "get_oauth2_client_credentials_token",
-            "get_cached_oauth2_token",
-            "2026-Q4",
-        ),
-        # client_credentials is a unique substring across the four cases,
-        # so it is sufficient to disambiguate cache-once filtering below.
-        expected_message_signature="client_credentials",
     ),
     _AliasCase(
         rid="R-22",
@@ -160,9 +110,8 @@ def test_alias_emits_deprecation_warning_with_canonical_message(case: _AliasCase
             f"{case.rid} {case.label}: DeprecationWarning message must "
             f"contain {needle!r}. Got: {msg!r}"
         )
-    # The R-23 token wrappers also mention the migration target which we
-    # exercised above; the R-22 wrapper allows two equivalent migration
-    # targets (`get_runtime_object_storage` OR `get_backup_object_storage`).
+    # The R-22 wrapper allows two equivalent migration targets
+    # (`get_runtime_object_storage` OR `get_backup_object_storage`).
     if case.rid == "R-22":
         assert (
             "get_runtime_object_storage" in msg
@@ -204,10 +153,8 @@ def test_alias_emit_is_cached_once_per_process(case: _AliasCase):
 
 
 def test_each_alias_has_an_independent_cache():
-    """Triggering one alias must not silence the other three. This catches
+    """Triggering one alias must not silence another. This catches
     accidental shared `lru_cache` reuse across helpers."""
-    from app.shared import api_utils
-
     for case in _ALIAS_CASES:
         case.helper().cache_clear()
 
@@ -215,35 +162,50 @@ def test_each_alias_has_an_independent_cache():
     with pytest.warns(DeprecationWarning):
         _invoke_urby_loopback()
 
-    # The other three must still emit on their first invocation.
-    with patch.object(api_utils, "get_cached_oauth2_token", return_value="t"):
-        with pytest.warns(DeprecationWarning) as record:
-            api_utils.get_oauth2_token({"token_url": "https://x"})
-        assert "get_oauth2_token" in str(record[0].message)
+    # The object storage alias must still emit on its first invocation.
+    with pytest.warns(DeprecationWarning) as record:
+        _invoke_object_storage()
+    assert "get_object_storage" in str(record[0].message)
 
 
-# Cross-cutting: stacklevel propagation (R-23 representative)
-
-
-def test_get_oauth2_token_stacklevel_points_to_caller():
-    """`stacklevel=3` must make the warning point at the external caller of
-    `get_oauth2_token`, not at the internal `_warn_*_deprecated_once` helper.
-
-    Stack-level calibration:
-      caller -> get_oauth2_token -> _warn_helper -> warnings.warn
-                  level=1            level=2          level=3
-    `stacklevel=3` from `warnings.warn` therefore selects the caller.
-    """
+def test_oauth2_deprecated_wrappers_are_tombstoned():
+    """R-23 OAuth wrappers were removed after migrating internal callers."""
     from app.shared import api_utils
 
-    api_utils._warn_get_oauth2_token_deprecated_once.cache_clear()
-    with patch.object(api_utils, "get_cached_oauth2_token", return_value="t"):
-        with pytest.warns(DeprecationWarning) as record:
-            api_utils.get_oauth2_token({"token_url": "https://x"})
+    removed = (
+        "_warn_get_oauth2_token_deprecated_once",
+        "_warn_get_oauth2_cc_token_deprecated_once",
+        "get_oauth2_token",
+        "get_oauth2_client_credentials_token",
+    )
+    for name in removed:
+        assert not hasattr(api_utils, name), f"{name} must not be resurrected"
 
-    w = record[0]
-    if w.filename:
-        assert "api_utils.py" not in w.filename, (
-            f"stacklevel wrong: warning points at {w.filename}:{w.lineno}, "
-            "must point at the external caller."
+
+def test_prepare_headers_uses_canonical_cached_oauth2_token():
+    """OAuth auth headers must use the canonical cache helper directly."""
+    from app.shared import api_utils
+
+    calls: list[dict[str, Any]] = []
+
+    def _fake_cached(auth: dict[str, Any]) -> str:
+        calls.append(dict(auth))
+        return "tok-1"
+
+    with patch.object(api_utils, "get_cached_oauth2_token", side_effect=_fake_cached):
+        headers = api_utils.prepare_headers(
+            {
+                "type": "oauth2_client_credentials",
+                "token_url": "https://auth.example/token",
+                "client_id": "client-1",
+            }
         )
+
+    assert headers["Authorization"] == "Bearer tok-1"
+    assert calls == [
+        {
+            "type": "oauth2_client_credentials",
+            "token_url": "https://auth.example/token",
+            "client_id": "client-1",
+        }
+    ]

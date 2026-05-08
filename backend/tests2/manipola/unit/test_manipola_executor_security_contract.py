@@ -11,7 +11,7 @@ import pandas as pd
 import pytest
 
 from app.core.manipola.executor import ManipolaExecutor
-from app.models import CanvasState
+from app.shared.models import CanvasState
 from tests2.helpers.builders import build_canvas, build_node
 
 

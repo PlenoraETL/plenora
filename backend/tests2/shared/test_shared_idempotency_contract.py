@@ -1,9 +1,6 @@
-"""
-Modulo condiviso di idempotency check (C4 round 3).
+"""Modulo condiviso di idempotency check."""
 
-Generalizzazione di `app/core/carica/idempotency.py` in
-"""
-
+from pathlib import Path
 from unittest.mock import patch
 
 import pytest
@@ -66,14 +63,13 @@ def test_shared_returns_false_on_empty_run_id():
     assert is_already_completed(None) is False
 
 
-# Backward compat: app.core.carica.idempotency continua a funzionare
+def test_carica_idempotency_compat_shim_is_removed():
+    shim_path = (
+        Path(__file__).resolve().parents[2]
+        / "app"
+        / "core"
+        / "carica"
+        / "idempotency.py"
+    )
 
-
-def test_carica_idempotency_reexports_from_shared():
-    """app.core.carica.idempotency deve restare importabile (API stabile),
-    delegando all'implementazione condivisa."""
-    from app.core.carica.idempotency import is_already_completed as carica_fn
-    from app.shared.idempotency import is_already_completed as shared_fn
-
-    # Stessa funzione (riesportata) o wrapper che chiama quella
-    assert carica_fn is shared_fn or callable(carica_fn)
+    assert not shim_path.exists()

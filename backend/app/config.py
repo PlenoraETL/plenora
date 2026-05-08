@@ -134,10 +134,6 @@ class Settings:
         # caller fa il match insensitive. Default `"on"` = abilita
         # `fast_executemany` per pyodbc/MSSQL
         "MSSQL_FAST_EXECUTEMANY": "on",
-        # `CARICA_BULK_INSERT` accetta on|off|auto|true|false|
-        # Post 2026-04-23 e' funzionalmente no-op (entrambi i rami
-        # producono executemany), preservato come scaffolding op
-        "CARICA_BULK_INSERT": "auto",
         # `ENABLE_ASYNC_ENRICHMENT` kill-switch routing async/sync
         # enrichment. Default `False` (sync legacy); ops abilita in
         # prod con `true`/`1`/`yes`

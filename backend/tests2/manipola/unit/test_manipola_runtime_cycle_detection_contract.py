@@ -101,3 +101,17 @@ def test_executor_module_imports_project_lineage_symbols():
         "Manipola executor non importa nessun symbol di project_lineage: "
         "impossibile rilevare cicli a runtime."
     )
+
+
+def test_manipola_uses_typed_pipeline_dispatcher_boundary():
+    """Recursive upstream execution must depend on a named dispatcher
+    contract, not on an undocumented callback callsite."""
+    init_sig = inspect.signature(manipola_executor.ManipolaExecutor.__init__)
+    assert "pipeline_dispatcher" in init_sig.parameters
+
+    dispatcher_annotation = init_sig.parameters["pipeline_dispatcher"].annotation
+    assert "PipelineDispatcherProtocol" in str(dispatcher_annotation)
+
+    method = manipola_executor.ManipolaExecutor._carica_sorgenti_progetto
+    assert "pipeline_dispatcher" in method.__code__.co_names
+    assert "orchestrator_callback" not in method.__code__.co_names

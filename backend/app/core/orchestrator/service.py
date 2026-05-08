@@ -6,7 +6,7 @@ Keeps this module's responsibility explicit and isolated from adjacent code.
 
 from typing import Dict, Any, Optional
 
-from app.models import CanvasState
+from app.shared.models import CanvasState
 from app.core.projects.service import ProjectService
 from app.db.query_executor import QueryExecutor
 from app.core.estrai.query_generator import QueryGenerator
@@ -58,7 +58,7 @@ class OrchestratorService:
         
         self.manipola_executor = ManipolaExecutor(
             project_service=project_service,
-            orchestrator_callback=self.execute_pipeline  # Per esecuzione ricorsiva
+            pipeline_dispatcher=self.execute_pipeline,
         )
 
         self.enrich_executor = EnrichExecutor(

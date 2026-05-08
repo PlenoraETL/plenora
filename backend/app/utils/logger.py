@@ -243,14 +243,13 @@ _configured_loggers: set[str] = set()
 _db_handler: Optional["PostgresLogHandler"] = None
 
 # — Aggregator pre-condizione §9.2/§9.3
-# Insieme chiuso di logger che emettono telemetria strutturata bulk
-# bulk.fallback, bulk.success, stage_swap.dispatched). Solo i record
-# INFO di questi logger bypassano il filtro WARNING del PostgresLogHandler
-# default (via _bulk_telemetry_filter + _bulk_telemetry_db_handler
+# Insieme chiuso di logger che emettono telemetria strutturata
+# stage_swap.dispatched. Solo i record INFO di questi logger bypassano
+# il filtro WARNING del PostgresLogHandler default
+# (via _bulk_telemetry_filter + _bulk_telemetry_db_handler).
 # I record WARNING gia' passano via handler default, quindi il filtro
 # INFO-only evita duplicazione
 _BULK_TELEMETRY_LOGGERS: frozenset[str] = frozenset({
-    "app.core.carica.bulk_writers",
     "app.core.carica.writer",
 })
 

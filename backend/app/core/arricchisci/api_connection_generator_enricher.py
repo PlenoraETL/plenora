@@ -12,10 +12,8 @@ from typing import Any, Dict, List, Optional
 import pandas as pd
 import requests
 
-from app.shared.api_utils import (
-    extract_json_value as _shared_extract_json_value,
-    sanitize_for_log,
-)
+from app.shared.api_utils import sanitize_for_log
+from app.shared.json_path import extract_json_value as _shared_extract_json_value
 from app.utils.logger import get_logger
 from app.core.arricchisci.response_parser import ResponseParser, get_preset_config
 from app.core.artifacts.static_parameters import process_static_fields

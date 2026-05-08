@@ -6,7 +6,6 @@ Logica HTTP/API condivisa tra api_connector.py e enrichment_service.py.
 
 import base64
 import functools
-import json
 import time
 import threading
 from typing import Any, Dict, Optional
@@ -392,163 +391,6 @@ def sanitize_for_log(data: Any, auth: Optional[Dict[str, Any]] = None) -> Any:
     return _walk(data)
 
 
-def geojson_to_wkt(geom: dict) -> str:
-    """Converte un dict geometry GeoJSON in WKT usando shapely."""
-    try:
-        from shapely.geometry import shape
-        return shape(geom).wkt
-    except Exception:
-        # Fallback: JSON string (compatibile con _geometry_to_wkt di CARICA
-        return json.dumps(geom, ensure_ascii=False)
-
-
-_DOT_PLACEHOLDER = "\x01"  # Marker interno per proteggere i `.` dentro `[...]`
-                           # dalla successiva .split("."
-
-
-def _tokenize_path(path: str) -> list:
-    """Tokenizza un path `extract_json_value` proteggendo il contenuto delle
-    parentesi quadre dal successivo split sui punti.
-
-    Gestisce correttamente:
-      - `features[properties.origine=asc3_2021].properties.p1`
-        → ["features", "properties.origine=asc3_2021", "properties", "p1"]
-      - `features[0].attributes.X` → ["features", "0", "attributes", "X"]
-      - `list[*].field` → ["list", "*", "field"]
-
-    Il marker `_DOT_PLACEHOLDER` (U+0001) sostituisce i `.` dentro le parentesi
-    prima dello split, e viene ripristinato dopo.
-    """
-    out_chars = []
-    depth = 0
-    for ch in path:
-        if ch == "[":
-            depth += 1
-            out_chars.append(ch)
-        elif ch == "]":
-            depth -= 1
-            out_chars.append(ch)
-        elif ch == "." and depth > 0:
-            out_chars.append(_DOT_PLACEHOLDER)
-        else:
-            out_chars.append(ch)
-    protected = "".join(out_chars)
-    parts = protected.replace("]", "").replace("[", ".").split(".")
-    return [p.replace(_DOT_PLACEHOLDER, ".") for p in parts]
-
-
-def extract_json_value(data: Any, path: str) -> Any:
-    """
-    Estrae un valore da strutture JSON/dict usando dot notation annidata.
-
-    Sintassi path:
-      - "field.nested.value" → accesso annidato
-      - "array[0].field" → indice array
-      - "list[*].field" → wildcard: primo elemento
-      - "list[key=value].field" → filtro top-level
-      - "list[nested.key=value].field" → filtro con chiave annidata
-                                                       (es. features[properties.origine=asc3_2021])
-      - "" oppure None → ritorna data intero
-
-    **Filtri con chiavi annidate**: la chiave del filtro può essere un path dotted
-    (es. `properties.origine`) e viene risolta ricorsivamente su ogni elemento
-    della lista. Utile per GeoJSON FeatureCollection dove i discriminanti
-    stanno sotto `properties`.
-
-    **Chiavi dict con punti nel nome** (es. `"UniqueValue.Pixel Value"` tipico
-    di ArcGIS raster): il parser usa **longest-first greedy match** — quando
-    una parte non è presente nel dict corrente, prova a unirla con le successive
-    (dalla più lunga alla più corta) finché trova una chiave che esiste.
-
-    Le geometrie GeoJSON (dict con chiave "type" in Point/Polygon/...) vengono
-    automaticamente convertite in WKT per compatibilità con DataFrame.
-    """
-    if not path:
-        return data
-
-    parts = _tokenize_path(path)
-    current = data
-    i = 0
-    n = len(parts)
-
-    while i < n:
-        part = parts[i]
-        if not part:
-            i += 1
-            continue
-        if current is None:
-            return None
-
-        if part == "*":
-            # Wildcard: usa il primo elemento se lista, altrimenti None
-            if isinstance(current, list) and len(current) > 0:
-                current = current[0]
-            elif isinstance(current, list):
-                return None
-            i += 1
-        elif "=" in part:
-            # Filtro "key=value": primo elem della lista con elem[key]==value
-            # La chiave può essere un path annidato (es. "properties.origine"
-            # risolta ricorsivamente tramite extract_json_value
-            if not isinstance(current, list):
-                return None
-            key, _, expected = part.partition("=")
-            key = key.strip()
-            expected = expected.strip()
-            nested = "." in key
-            found = None
-            for item in current:
-                if not isinstance(item, dict):
-                    continue
-                val = extract_json_value(item, key) if nested else item.get(key)
-                if val is None:
-                    continue
-                if str(val) == expected:
-                    found = item
-                    break
-                # Fallback numerico: gestisce layerId=0 (int) vs expected="0" (str
-                try:
-                    if float(val) == float(expected):
-                        found = item
-                        break
-                except (ValueError, TypeError):
-                    pass
-            current = found
-            i += 1
-        elif part.isdigit():
-            idx = int(part)
-            if isinstance(current, list) and idx < len(current):
-                current = current[idx]
-            else:
-                return None
-            i += 1
-        elif isinstance(current, dict):
-            # Longest-first greedy match: prova a unire con le parti successive
-            # per gestire chiavi con punti nel nome (es. "Raster.Value"
-            # "UniqueValue.Pixel Value" tipiche dei layer raster ArcGIS
-            matched = False
-            for j in range(n, i, -1):
-                joined = ".".join(parts[i:j])
-                if joined in current:
-                    current = current[joined]
-                    i = j
-                    matched = True
-                    break
-            if not matched:
-                return None
-        else:
-            return None
-
-    # Converti geometry GeoJSON → WKT
-    if isinstance(current, dict) and current.get("type") in [
-        "Point", "Polygon", "MultiPolygon", "LineString",
-        "MultiLineString", "MultiPoint", "GeometryCollection",
-    ]:
-        return geojson_to_wkt(current)
-
-    return current
-
-
 def _fetch_oauth2_password_token(auth: Dict) -> Optional[Dict]:
     """Fetch diretto di un token password grant. Ritorna dict completo con expires_in.
 
@@ -627,91 +469,6 @@ def _fetch_oauth2_client_credentials_token(auth: Dict) -> Optional[Dict]:
     except Exception as e:
         logger.error(f"[CRASH] Errore OAuth2 client_credentials: {e}", exc_info=True)
         return None
-
-
-# Wrapper legacy: API pubbliche che ritornano solo la stringa del token
-# Usano get_cached_oauth2_token per beneficiare automaticamente del
-# lifecycle tracking e del refresh on-demand. Backward compatible
-
-@functools.lru_cache(maxsize=1)
-def _warn_get_oauth2_token_deprecated_once() -> None:
-    """Emit-once warning per ``get_oauth2_token`` (R-23, 2026-05-01).
-
-    Cache LRU per non spammare il logger ops in caller hot-path
-    (enrichment service usa il wrapper via alias). Per i test:
-    ``_warn_get_oauth2_token_deprecated_once.cache_clear``.
-    """
-    import warnings as _warnings
-    msg = (
-        "[DEPRECATED] api_utils.get_oauth2_token e' un wrapper legacy. "
-        "Migrare a api_utils.get_cached_oauth2_token con "
-        "auth['type']='oauth2_password'. "
-        "Removal target: 2026-Q4 (post-migrazione caller interni)."
-    )
-    logger.warning(msg)
-    _warnings.warn(msg, DeprecationWarning, stacklevel=3)
-
-
-def get_oauth2_token(auth: Dict) -> Optional[str]:
-    """Ottiene token OAuth2 password grant (via cache con expires_at).
-
-    Wrapper backward-compatible: usa internamente get_cached_oauth2_token
-    per riutilizzare il token se ancora valido.
-
-    .. deprecated::
-        Wrapper legacy. Nuovi caller devono usare ``get_cached_oauth2_token``
-        passando ``auth["type"] = "oauth2_password"``. Mantenuto per
-        backward-compat con caller interni (``api_utils.py`` stesso e
-        ``arricchisci.enrichment_service`` via alias ``_shared_get_oauth2_token``).
-
-        R-23 (2026-05-01): emette ``DeprecationWarning`` Python standard +
-        logger.warning una sola volta per processo. Removal target:
-        2026-Q4 (post-migrazione caller interni a
-        ``get_cached_oauth2_token``).
-    """
-    _warn_get_oauth2_token_deprecated_once()
-    auth_with_type = dict(auth)
-    auth_with_type.setdefault("type", "oauth2_password")
-    return get_cached_oauth2_token(auth_with_type)
-
-
-@functools.lru_cache(maxsize=1)
-def _warn_get_oauth2_cc_token_deprecated_once() -> None:
-    """Emit-once warning per ``get_oauth2_client_credentials_token``
-    (R-23, 2026-05-01). Cache LRU come simmetria di
-    ``_warn_get_oauth2_token_deprecated_once``.
-    """
-    import warnings as _warnings
-    msg = (
-        "[DEPRECATED] api_utils.get_oauth2_client_credentials_token e' un "
-        "wrapper legacy. Migrare a api_utils.get_cached_oauth2_token con "
-        "auth['type']='oauth2_client_credentials'. "
-        "Removal target: 2026-Q4 (post-migrazione caller interni)."
-    )
-    logger.warning(msg)
-    _warnings.warn(msg, DeprecationWarning, stacklevel=3)
-
-
-def get_oauth2_client_credentials_token(auth: Dict) -> Optional[str]:
-    """Ottiene token OAuth2 client_credentials grant (via cache).
-
-    Wrapper backward-compatible: usa internamente get_cached_oauth2_token.
-
-    .. deprecated::
-        Wrapper legacy. Nuovi caller devono usare ``get_cached_oauth2_token``
-        passando ``auth["type"] = "oauth2_client_credentials"``. Mantenuto per
-        backward-compat con caller interni (``api_utils.py`` stesso e
-        ``arricchisci.enrichment_service`` via alias
-        ``_shared_get_oauth2_cc_token``). Vedi ``get_oauth2_token`` per la
-        nota generale sulla migrazione.
-
-        R-23 (2026-05-01): emette ``DeprecationWarning`` + logger.warning
-        emit-once. Removal target: 2026-Q4.
-    """
-    _warn_get_oauth2_cc_token_deprecated_once()
-    auth_with_type = dict(auth)
-    auth_with_type.setdefault("type", "oauth2_client_credentials")
-    return get_cached_oauth2_token(auth_with_type)
 
 
 def get_arcgis_token(auth: Dict) -> Optional[str]:
@@ -866,12 +623,12 @@ def prepare_headers(auth: Dict, custom_headers: Dict = None) -> Dict:
             headers["Authorization"] = f"Bearer {token}"
 
     elif auth_type == "oauth2_password":
-        token = get_oauth2_token(auth)
+        token = get_cached_oauth2_token(auth)
         if token:
             headers["Authorization"] = f"Bearer {token}"
 
     elif auth_type == "oauth2_client_credentials":
-        token = get_oauth2_client_credentials_token(auth)
+        token = get_cached_oauth2_token(auth)
         if token:
             headers["Authorization"] = f"Bearer {token}"
 

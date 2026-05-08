@@ -11,7 +11,7 @@ import pandas as pd
 from pathlib import Path
 from typing import Dict, Any, List, Optional
 
-from app.models import CanvasState, Edge, Node
+from app.shared.models import CanvasState, Edge, Node
 from app.config import settings
 from app.core.projects.lineage import ProjectLineageCycleError
 from app.core.projects.execution_context import (
@@ -19,6 +19,7 @@ from app.core.projects.execution_context import (
     get_upstream_run_context,
 )
 from app.shared.execution.canvas_graph import CanvasGraph
+from app.shared.execution.executor_protocol import PipelineDispatcherProtocol
 from app.shared.execution.graph import kahn_topological_order
 from app.utils.logger import get_logger, append_step
 from app.utils.result_store import save_pipeline_result_outcome
@@ -88,7 +89,7 @@ def _estimate_merge_output_rows(
 # C3 round 3 fix 3: cycle detection runtime cross-project
 # Thread-local chain di project_id attualmente in esecuzione. Usata come
 # defense-in-depth contro cicli nei project_source: se _carica_sorgenti_progetto
-# sta per invocare orchestrator_callback su un progetto gia' presente nella
+# sta per invocare pipeline_dispatcher su un progetto gia' presente nella
 # chain, stiamo chiudendo un ciclo A→B→A → ProjectLineageCycleError con chain
 # readable
 # Why threading.local: ogni worker Celery gira i suoi task in thread/processo
@@ -191,14 +192,29 @@ def _applica_crs_da_colonne(
 class ManipolaExecutor:
     """Executor MANIPOLA: orchestra la pipeline di trasformazione dati."""
 
-    def __init__(self, project_service: object, orchestrator_callback: object = None) -> None:
+    def __init__(
+        self,
+        project_service: object,
+        pipeline_dispatcher: Optional[PipelineDispatcherProtocol] = None,
+        *,
+        orchestrator_callback: Optional[PipelineDispatcherProtocol] = None,
+    ) -> None:
         self.project_service = project_service
-        self.orchestrator_callback = orchestrator_callback
+        self.pipeline_dispatcher = pipeline_dispatcher or orchestrator_callback
+        # Compatibility attribute for older tests/callers. Runtime code uses
+        # ``pipeline_dispatcher`` so the recursive boundary has a named
+        # protocol instead of an anonymous callback.
+        self.orchestrator_callback = self.pipeline_dispatcher
         self.results_base_dir = settings.RESULTS_DIR
 
-    def set_orchestrator_callback(self, callback: object) -> None:
-        """Imposta callback per esecuzione ricorsiva progetti upstream."""
-        self.orchestrator_callback = callback
+    def set_pipeline_dispatcher(self, dispatcher: PipelineDispatcherProtocol) -> None:
+        """Set the dispatcher used for recursive upstream project execution."""
+        self.pipeline_dispatcher = dispatcher
+        self.orchestrator_callback = dispatcher
+
+    def set_orchestrator_callback(self, callback: PipelineDispatcherProtocol) -> None:
+        """Compatibility alias for older callers."""
+        self.set_pipeline_dispatcher(callback)
 
     # ESECUZIONE COMPLETA
 
@@ -253,7 +269,7 @@ class ManipolaExecutor:
 
         # C3 round 3 fix 3: push del project_id sulla chain di
         # esecuzione corrente. _carica_sorgenti_progetto verifica la
-        # chain prima di chiamare orchestrator_callback per rilevare
+        # chain prima di chiamare pipeline_dispatcher per rilevare
         # cicli A → B → A (defense-in-depth contro canvas legacy
         _push_to_execution_chain(project_id)
 
@@ -548,12 +564,12 @@ class ManipolaExecutor:
                     except Exception as e:
                         logger.warning(f"Errore cache: {e}, procedo con ricalcolo")
 
-            if not self.orchestrator_callback:
-                return {"success": False, "message": "Orchestrator callback non configurato"}
+            if not self.pipeline_dispatcher:
+                return {"success": False, "message": "Pipeline dispatcher non configurato"}
 
             # C3 round 3 fix 3: cycle detection PRIMA di riesegue upstream
             # Se source_project_id e' gia' nella chain di esecuzione, stiamo
-            # per chiudere un ciclo A→B→A invocando orchestrator_callback
+            # per chiudere un ciclo A→B→A invocando pipeline_dispatcher
             # ricorsivamente. Senza questo check, stack overflow garantito
             # su canvas legacy con dipendenze circolari che il check al save
             # di update_canvas non ha intercettato
@@ -589,13 +605,18 @@ class ManipolaExecutor:
                 upstream_run_id = None
                 upstream_retention_n = None
 
-            # `orchestrator_callback` e' `OrchestratorService.execute_pipeline`
-            # vedi orchestrator/service.py:83) che ritorna `PipelineArtifact`
+            # `pipeline_dispatcher` implementa PipelineDispatcherProtocol
+            # ed e' normalmente `OrchestratorService.execute_pipeline`.
+            # Ritorna `PipelineArtifact`
             # — dict-subclass con typed property. Usiamo le proprieta'
             # tipizzate (`upstream.success`/`upstream.message`/
             # `upstream.rows_count`/`upstream.output_path`) invece di `.get`
             # raw per coerenza con il modello artifact unificato
-            upstream = self.orchestrator_callback(source_project_id, force_recalculate=True, run_id=upstream_run_id)
+            upstream = self.pipeline_dispatcher(
+                source_project_id,
+                force_recalculate=True,
+                run_id=upstream_run_id,
+            )
 
             # Chiudi run upstream
             if upstream_run_id:

@@ -36,7 +36,7 @@ def pg_execute_mock(monkeypatch):
     monkeypatch.setattr(_pg_conn_module, "execute", mock)
     # Forza la configurazione del logger `app` (propagate=False + handler
     # attached) e del bulk telemetry handler (idempotent). Necessario
-    # perche' i logger bulk `bulk_writers`/`writer` sono child di `app`
+    # perche' il logger bulk `writer` e' child di `app`
     # e usano stdlib `logging.getLogger` direttamente.
     get_logger("app")
     # Reset dei ContextVar a stato pulito per ogni test (C8)
@@ -83,9 +83,8 @@ def test_whitelist_contains_expected_keys():
 
 
 def test_bulk_telemetry_logger_set_matches_runtime_emitters():
-    """I 2 logger noti emittenti di telemetria bulk."""
+    """Il logger runtime noto emittente di telemetria bulk."""
     assert _BULK_TELEMETRY_LOGGERS == frozenset({
-        "app.core.carica.bulk_writers",
         "app.core.carica.writer",
     })
 
@@ -95,7 +94,7 @@ def test_bulk_telemetry_logger_set_matches_runtime_emitters():
 
 def test_bulk_info_extras_are_serialized_into_details_jsonb(pg_execute_mock):
     _emit_bulk_info(
-        "app.core.carica.bulk_writers",
+        "app.core.carica.writer",
         "Bulk COPY completato: 500 righe",
         event="bulk.success",
         dialect="postgres",
@@ -126,7 +125,7 @@ def test_bulk_info_mysql_success_includes_protocol_and_dialect(pg_execute_mock):
     (es. un retrofit futuro o un test). Test mantenuto come regression
     guard del log handler, non del path bulk MySQL."""
     _emit_bulk_info(
-        "app.core.carica.bulk_writers",
+        "app.core.carica.writer",
         "Bulk LOAD DATA completato: 2000 righe",
         event="bulk.success",
         dialect="mysql",
@@ -167,7 +166,7 @@ def test_stage_swap_dispatched_info_is_serialized(pg_execute_mock):
 
 def test_bulk_warning_is_not_duplicated(pg_execute_mock):
     _emit_bulk_warning(
-        "app.core.carica.bulk_writers",
+        "app.core.carica.writer",
         "COPY fallito: BadCopyFileFormat",
         event="bulk.fallback",
         reason="copy_error",
@@ -217,7 +216,7 @@ def test_non_bulk_warning_still_reaches_db_via_default_handler(pg_execute_mock):
 
 def test_non_whitelist_extras_are_not_serialized(pg_execute_mock):
     _emit_bulk_info(
-        "app.core.carica.bulk_writers",
+        "app.core.carica.writer",
         "test",
         event="bulk.success",
         dialect="postgres",
@@ -241,7 +240,7 @@ def test_bulk_info_preserves_contextvar_injection(pg_execute_mock):
     set_user_id("user-3dot10-test")
     try:
         _emit_bulk_info(
-            "app.core.carica.bulk_writers",
+            "app.core.carica.writer",
             "Bulk COPY completato",
             event="bulk.success",
             dialect="postgres",
@@ -271,7 +270,7 @@ def test_details_jsonb_supports_top_level_key_extraction(pg_execute_mock):
     `SELECT COUNT(*) FROM logs WHERE details->>'event' = 'bulk.success'`
     in SQL PG."""
     _emit_bulk_info(
-        "app.core.carica.bulk_writers",
+        "app.core.carica.writer",
         "t",
         event="bulk.success",
         dialect="postgres",

@@ -25,7 +25,6 @@ _BACKEND_APP = Path(__file__).resolve().parent.parent.parent / "app"
     "key, expected_type, expected_default",
     [
         ("MSSQL_FAST_EXECUTEMANY", str, "on"),
-        ("CARICA_BULK_INSERT", str, "auto"),
         ("ENABLE_ASYNC_ENRICHMENT", bool, False),
         ("ENRICHMENT_POOL_SIZE", int, 50),
         ("TICKET_ATTACHMENT_MAX_BYTES", int, 10 * 1024 * 1024),
@@ -50,7 +49,6 @@ def test_default_present_and_typed(key, expected_type, expected_default):
     "key, env_value, expected_type, expected",
     [
         ("MSSQL_FAST_EXECUTEMANY", "off", str, "off"),
-        ("CARICA_BULK_INSERT", "off", str, "off"),
         ("ENABLE_ASYNC_ENRICHMENT", "true", bool, True),
         ("ENABLE_ASYNC_ENRICHMENT", "1", bool, True),
         ("ENABLE_ASYNC_ENRICHMENT", "yes", bool, True),
@@ -81,12 +79,6 @@ def test_query_executor_reads_mssql_fast_via_settings():
     assert "_settings.get(\"MSSQL_FAST_EXECUTEMANY\")" in src
     assert "_os.getenv(\"MSSQL_FAST_EXECUTEMANY" not in src
     assert "os.getenv(\"MSSQL_FAST_EXECUTEMANY" not in src
-
-
-def test_bulk_writers_reads_carica_bulk_via_settings():
-    src = _read(_BACKEND_APP / "core" / "carica" / "bulk_writers.py")
-    assert "_settings.get(\"CARICA_BULK_INSERT\")" in src
-    assert "os.getenv(\"CARICA_BULK_INSERT" not in src
 
 
 def test_enrichment_service_reads_async_flag_via_settings():
@@ -146,15 +138,3 @@ def test_async_http_pool_size_invalid_falls_back(monkeypatch):
     # silente ed e' come se non fosse settato.
     monkeypatch.setenv("ENRICHMENT_POOL_SIZE", "not-a-number")
     assert _get_pool_size() == 50
-
-
-def test_bulk_writers_is_bulk_enabled_default():
-    from app.core.carica.bulk_writers import is_bulk_enabled
-    assert is_bulk_enabled() is True
-
-
-@pytest.mark.parametrize("value", ["off", "false", "0", "no", "disabled", "OFF", "False"])
-def test_bulk_writers_is_bulk_enabled_off(monkeypatch, value):
-    from app.core.carica.bulk_writers import is_bulk_enabled
-    monkeypatch.setenv("CARICA_BULK_INSERT", value)
-    assert is_bulk_enabled() is False

@@ -11,10 +11,16 @@ from typing import TYPE_CHECKING, Any, Dict, Optional, Protocol, runtime_checkab
 from app.shared.execution.payloads import ArtifactPayload, _check_payload_safe
 
 if TYPE_CHECKING:
-    from app.models import CanvasState
+    from app.shared.models import CanvasState
 
 
-__all__ = ["CanvasExecutorProtocol", "ExecutionResult", "ArtifactPayload"]
+__all__ = [
+    "CanvasExecutorProtocol",
+    "ExecutionResult",
+    "ArtifactPayload",
+    "PipelineArtifactProtocol",
+    "PipelineDispatcherProtocol",
+]
 
 
 @dataclass(frozen=True)
@@ -173,4 +179,52 @@ class CanvasExecutorProtocol(Protocol):
         Returns ``{"success": True, "columns": [...], "rows": [...], ...}``
         or ``{"success": False, "message": str}`` on failure.
         """
+        ...
+
+
+@runtime_checkable
+class PipelineArtifactProtocol(Protocol):
+    """Structural result returned by recursive pipeline dispatch.
+
+    ``ManipolaExecutor`` only needs this small artifact surface when it
+    recomputes upstream project sources. Keeping the contract structural
+    avoids importing ``app.core.artifacts`` from the shared execution
+    package while still documenting the properties expected from
+    ``OrchestratorService.execute_pipeline``.
+    """
+
+    @property
+    def success(self) -> bool:
+        ...
+
+    @property
+    def message(self) -> Optional[str]:
+        ...
+
+    @property
+    def rows_count(self) -> Optional[int]:
+        ...
+
+    @property
+    def output_path(self) -> Optional[str]:
+        ...
+
+
+@runtime_checkable
+class PipelineDispatcherProtocol(Protocol):
+    """Callable boundary for recursive pipeline execution.
+
+    This is the explicit contract for the runtime cycle
+    ``orchestrator -> manipola -> orchestrator``. The orchestrator owns
+    dispatch; Manipola only depends on this callable shape.
+    """
+
+    def __call__(
+        self,
+        project_id: str,
+        force_recalculate: bool = False,
+        skip_carica: bool = False,
+        run_id: Optional[str] = None,
+        intermediate_mode_override: Optional[str] = None,
+    ) -> PipelineArtifactProtocol:
         ...

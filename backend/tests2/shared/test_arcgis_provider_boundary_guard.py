@@ -73,16 +73,8 @@ _LEGACY_FEATURES_PACKAGE_IMPORTS = {
 _CONCRETE_ARCGIS_CLIENT_IMPORTS = {
     ("app.core.features", "ArcGISClient"),
     ("app.core.features.arcgis_client", "ArcGISClient"),
-    ("app.core.connections.arcgis_client", "ArcGISClient"),
 }
 _CONCRETE_ARCGIS_CLIENT_IMPORT_ALLOWLIST = {
-    (
-        _BACKEND_DIR / "app" / "core" / "connections" / "arcgis_client.py"
-    ): (
-        "KEEP_COMPAT_WITH_REMOVAL_CONDITION: canonical neutral concrete-client "
-        "alias until the implementation body can move without breaking legacy "
-        "app.core.features.arcgis_client monkeypatch paths."
-    ),
     (
         _BACKEND_DIR / "app" / "core" / "connections" / "arcgis_provider_factory.py"
     ): (
@@ -463,7 +455,7 @@ def test_arcgis_connection_resolver_uses_neutral_provider_factory():
 
 def test_arcgis_provider_factory_is_neutral_canonical_import():
     """New provider construction belongs under app.core.connections."""
-    from app.core.connections.arcgis_client import ArcGISClient
+    from app.core.features.arcgis_client import ArcGISClient
     from app.core.connections.arcgis_provider_factory import create_arcgis_provider
     from app.shared.connections.arcgis_provider import ArcGISProviderProtocol
 
@@ -472,12 +464,16 @@ def test_arcgis_provider_factory_is_neutral_canonical_import():
     assert isinstance(provider, ArcGISClient)
 
 
-def test_arcgis_client_canonical_neutral_import_path():
-    """The concrete client has a neutral canonical path with feature compat."""
-    from app.core.connections.arcgis_client import ArcGISClient as FromConnections
-    from app.core.features.arcgis_client import ArcGISClient as FromFeatures
-
-    assert FromConnections is FromFeatures
+def test_arcgis_connections_client_shim_is_removed():
+    """Concrete-client construction must go through the provider factory."""
+    assert not (
+        _BACKEND_DIR / "app" / "core" / "connections" / "arcgis_client.py"
+    ).exists(), (
+        "app.core.connections.arcgis_client was a zero-consumer shim. Do not "
+        "recreate it; use app.core.connections.arcgis_provider_factory for "
+        "construction or app.core.features.arcgis_client for concrete-client "
+        "tests."
+    )
 
 
 def test_arcgis_client_satisfies_provider_protocol():

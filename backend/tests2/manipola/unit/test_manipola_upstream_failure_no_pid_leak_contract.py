@@ -47,11 +47,11 @@ _UPSTREAM_CONTEXT = ProjectExecutionContext(
 
 
 def _executor_with_callback(callback) -> ManipolaExecutor:
-    """ManipolaExecutor con orchestrator_callback iniettato.
+    """ManipolaExecutor con pipeline dispatcher iniettato.
     TE-009: group_id viene passato esplicitamente ad ogni chiamata."""
     executor = ManipolaExecutor(
         project_service=object(),
-        orchestrator_callback=callback,
+        pipeline_dispatcher=callback,
     )
     return executor
 

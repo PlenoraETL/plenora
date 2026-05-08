@@ -7,7 +7,7 @@ Policy RBAC:
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Protocol, Tuple
 
 from fastapi import HTTPException
 
@@ -59,17 +59,49 @@ _ROLES_TECH_DEBT_CREATE = {"admin", "superadmin"}
 _ROLES_ADMIN = {"admin", "superadmin"}
 
 
-# NOTIFIER HOOK (email-ready
+# NOTIFIER HOOK (email-ready)
 
 
-class TicketNotifier:
-    """Base class: stub per notifiche. In produzione viene sostituita da
-    una sottoclasse che spedisce email/Slack/Teams.
+class TicketNotifier(Protocol):
+    """Contratto strutturale per notifiche ticket.
 
     Ogni metodo e' best-effort: eccezioni vengono loggate ma non bloccano
     il flusso principale (la persistenza del ticket e' transazione gia'
     committata). Mai far fallire una write DB per una notifica persa.
     """
+
+    def on_ticket_created(self, ticket: tdb.TicketRow, actor: CurrentUser) -> None:
+        ...
+
+    def on_status_changed(
+        self,
+        ticket: tdb.TicketRow,
+        old_status: str,
+        new_status: str,
+        actor: CurrentUser,
+    ) -> None:
+        ...
+
+    def on_comment_added(
+        self,
+        ticket: tdb.TicketRow,
+        comment: tdb.CommentRow,
+        actor: CurrentUser,
+    ) -> None:
+        ...
+
+    def on_assignee_changed(
+        self,
+        ticket: tdb.TicketRow,
+        old_assignee: Optional[str],
+        new_assignee: Optional[str],
+        actor: CurrentUser,
+    ) -> None:
+        ...
+
+
+class NoopTicketNotifier:
+    """Default notifier esplicito: nessun side effect se non registrato."""
 
     def on_ticket_created(self, ticket: tdb.TicketRow, actor: CurrentUser) -> None:
         pass
@@ -101,12 +133,12 @@ class TicketNotifier:
         pass
 
 
-# Singleton default (no-op). Sostituibile a startup in main.py
-_notifier: TicketNotifier = TicketNotifier()
+# Singleton default no-op. Sostituibile a startup in main.py.
+_notifier: TicketNotifier = NoopTicketNotifier()
 
 
 def set_notifier(notifier: TicketNotifier) -> None:
-    """Hook per wiring del notifier custom (oggi no-op, futuro email)."""
+    """Registra il notifier custom per email/Slack/Teams."""
     global _notifier
     _notifier = notifier
 

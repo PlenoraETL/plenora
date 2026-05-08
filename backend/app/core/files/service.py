@@ -50,24 +50,24 @@ except ImportError:
     import logging as _logging
     _logger = _logging.getLogger(__name__)
 
-# Usa modelli da app.models in produzione, fallback a dataclass per test standalone
+# Usa i modelli canonici del dominio Files in produzione, con fallback a dataclass per test standalone
 
 try:
-    from app.models import (
+    from app.core.files.models import (
         FileSource,
         FileSourceCreate,
         FileSourceUpdate,
         FileSourceList,
         FileSourceLayersResponse,
         FileSourcePreview,
-        ColumnInfo
     )
+    from app.shared.models import ColumnInfo
     _USE_APP_MODELS = True
 except ImportError:
     _USE_APP_MODELS = False
 
 
-# Usate solo quando app.models non è disponibile (test standalone
+# Usate solo quando i modelli canonici non sono disponibili (test standalone)
 
 if not _USE_APP_MODELS:
     @dataclass
@@ -629,7 +629,7 @@ class FileSourceService:
                     files.append(fs)
             if _USE_APP_MODELS:
                 try:
-                    from app.models import FileSourceList
+                    from app.core.files.models import FileSourceList
                     return FileSourceList(files=files)
                 except ImportError:
                     pass
@@ -638,7 +638,7 @@ class FileSourceService:
             self._logger.error(f"[GESTITO] Errore list_file_sources: {e}")
             if _USE_APP_MODELS:
                 try:
-                    from app.models import FileSourceList
+                    from app.core.files.models import FileSourceList
                     return FileSourceList(files=[])
                 except ImportError:
                     pass

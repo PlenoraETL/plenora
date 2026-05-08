@@ -147,15 +147,16 @@ curl -X POST "$API/tickets/abc-123/attachments" \
 - `on_comment_added(ticket, comment, actor)`
 - `on_assignee_changed(ticket, old, new, actor)`
 
+Nota aggiornata: `TicketNotifier` e' un protocollo strutturale, non una
+base class da subclassare. Il default registrato e' `NoopTicketNotifier`.
+
 Ogni hook è **best-effort**: `_fire_notification` wrappa in try/except, le eccezioni sono loggate con warning ma non interrompono la persistenza del ticket. Policy: mai far fallire una write DB per una notifica persa.
 
 ### Collegare email quando serve
 
 ```python
 # app/core/tickets/email_notifier.py
-from app.core.tickets.service import TicketNotifier
-
-class EmailTicketNotifier(TicketNotifier):
+class EmailTicketNotifier:
     def on_ticket_created(self, ticket, actor):
         # usa il tuo mail client (smtplib, SES, ecc.)
         ...

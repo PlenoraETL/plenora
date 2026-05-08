@@ -30,11 +30,8 @@ from app.core.arricchisci.models import (
 from app.utils.logger import get_logger
 from app.core.arricchisci._rate_limiter import RateLimiter as _RateLimiter
 from app.shared.api_utils import (
-    geojson_to_wkt as _shared_geojson_to_wkt,
-    extract_json_value as _shared_extract_json_value,
     prepare_headers as _shared_prepare_headers,
-    get_oauth2_token as _shared_get_oauth2_token,
-    get_oauth2_client_credentials_token as _shared_get_oauth2_cc_token,
+    get_cached_oauth2_token as _shared_get_cached_oauth2_token,
     sanitize_for_log,
     sanitize_url_for_log,
 )
@@ -244,11 +241,15 @@ class EnrichmentExecutor(
 
     def _get_oauth2_token(self) -> Optional[str]:
         """Ottiene token OAuth2 con password flow. Delegato a shared/api_utils."""
-        return _shared_get_oauth2_token(self.auth)
+        auth = dict(self.auth)
+        auth.setdefault("type", "oauth2_password")
+        return _shared_get_cached_oauth2_token(auth)
 
     def _get_oauth2_client_credentials_token(self) -> Optional[str]:
         """Ottiene token OAuth2 con client_credentials flow. Delegato a shared/api_utils."""
-        return _shared_get_oauth2_cc_token(self.auth)
+        auth = dict(self.auth)
+        auth.setdefault("type", "oauth2_client_credentials")
+        return _shared_get_cached_oauth2_token(auth)
 
 
     def _update_progress(self, processed: int, total: int, stats: EnrichmentStats):
