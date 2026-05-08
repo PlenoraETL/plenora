@@ -11,7 +11,7 @@ import time as _time
 import traceback
 import uuid as _uuid
 from pathlib import PurePosixPath
-from typing import Any, Dict, Optional
+from typing import TYPE_CHECKING, Any, Dict, Optional, Protocol
 
 from app.utils.logger import get_logger, open_run, close_run, set_run_context, append_step
 from app.config import settings
@@ -20,6 +20,52 @@ from workers.celery_app import celery_app, BaseTaskWithRetry
 
 
 logger = get_logger("workers.carica_task")
+
+if TYPE_CHECKING:
+    import pandas as pd
+
+
+class ArcGISFeatureWriter(Protocol):
+    """Generic ArcGIS feature writer boundary consumed by CARICA orchestration."""
+
+    def create_service_from_df(
+        self,
+        connection_id: str,
+        service_name: str,
+        layer_name: str,
+        df: "pd.DataFrame",
+        geometry_column: str = "geometry",
+        source_srid: Optional[int] = None,
+        folder_id: str = "",
+    ) -> dict:
+        """Create a feature service from an in-memory DataFrame."""
+        ...
+
+    def write_features_from_df(
+        self,
+        connection_id: str,
+        layer_url: str,
+        operation: str,
+        df: "pd.DataFrame",
+        geometry_column: str = "geometry",
+        source_srid: Optional[int] = None,
+        batch_size: Optional[int] = None,
+        match_column: str = "",
+    ) -> dict:
+        """Write features to an existing feature layer from an in-memory DataFrame."""
+        ...
+
+
+def _create_arcgis_feature_writer() -> ArcGISFeatureWriter:
+    """Build the generic ArcGIS feature writer used by CARICA.
+
+    KEEP_COMPAT: the concrete writer remains FeaturesService so runtime
+    behavior and public API shapes stay unchanged.
+    """
+    from app.core.features.features_service import FeaturesService
+    from app.utils.dataframe import save_dataframe
+
+    return FeaturesService(save_function=save_dataframe)
 
 
 @celery_app.task(
@@ -401,12 +447,14 @@ def _execute_db_write(task, df, carica_node_data, project_id, task_id, triggered
     return result_dict
 
 
-def _execute_arcgis_write(task, df, carica_node_data, project_id, task_id):
+def _execute_arcgis_write(
+    task: Any,
+    df: "pd.DataFrame",
+    carica_node_data: Dict[str, Any],
+    project_id: str,
+    task_id: str,
+) -> Dict[str, Any]:
     """Esegue il caricamento su ArcGIS Feature Service."""
-    from app.core.features.features_service import FeaturesService
-    from app.utils.dataframe import save_dataframe
-    from app.config import settings
-
     _update_progress(task, 15, "Preparazione scrittura ArcGIS...")
 
     connection_id = carica_node_data.get('arcgis_connection_id', '')
@@ -427,7 +475,7 @@ def _execute_arcgis_write(task, df, carica_node_data, project_id, task_id):
     # Usa write_features_from_df che accetta DataFrame direttamente
     # evitando il round-trip su file (il blob è già stato consumato da _load_upstream_data
 
-    features_service = FeaturesService(save_function=save_dataframe)
+    feature_writer = _create_arcgis_feature_writer()
 
     _update_progress(task, 25, f"Scrittura ArcGIS ({operation})...")
 
@@ -448,7 +496,7 @@ def _execute_arcgis_write(task, df, carica_node_data, project_id, task_id):
 
             _update_progress(task, 30, f"Creazione servizio '{service_name}'...")
 
-            result = features_service.create_service_from_df(
+            result = feature_writer.create_service_from_df(
                 connection_id=connection_id,
                 service_name=service_name,
                 layer_name=layer_name,
@@ -473,7 +521,7 @@ def _execute_arcgis_write(task, df, carica_node_data, project_id, task_id):
             match_column = carica_node_data.get('arcgis_match_column', '')
             _update_progress(task, 30, f"Scrittura features ({operation})...")
 
-            result = features_service.write_features_from_df(
+            result = feature_writer.write_features_from_df(
                 connection_id=connection_id,
                 layer_url=layer_url,
                 operation=operation,

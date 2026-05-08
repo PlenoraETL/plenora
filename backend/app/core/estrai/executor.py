@@ -9,7 +9,7 @@ import re
 import pandas as pd
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, Any, List, Mapping, Optional, Sequence, Tuple
+from typing import Dict, Any, List, Mapping, MutableMapping, Optional, Protocol, Sequence, Tuple
 
 from app.models import CanvasState, Node
 from app.utils.logger import get_logger, append_step
@@ -32,6 +32,45 @@ logger = get_logger(__name__)
 class EstraiPreviewResource:
     dataframe: pd.DataFrame
     metadata: ResourceMetadata
+
+
+class ArcGISConnectionRecord(Protocol):
+    id: str
+
+
+class ArcGISFeatureReaderProtocol(Protocol):
+    """Read/output boundary EstrAi needs from the generic ArcGIS provider."""
+
+    def get_connection(self, connection_id: str) -> Optional[ArcGISConnectionRecord]:
+        ...
+
+    def query_layer(
+        self,
+        connection_id: str,
+        layer_url: str,
+        where: str = "1=1",
+        out_fields: str = "*",
+        return_geometry: bool = True,
+        max_features: Optional[int] = None,
+        out_sr: Optional[int] = None,
+    ) -> Tuple[Sequence[Sequence[object]], Sequence[str]]:
+        ...
+
+    def execute_query(
+        self,
+        connection_id: str,
+        layer_url: str,
+        project_id: str,
+        output_filename: str,
+        output_format: str = "csv",
+        where: str = "1=1",
+        out_fields: str = "*",
+        return_geometry: bool = True,
+        max_features: Optional[int] = None,
+        out_sr: Optional[int] = None,
+        geom_column: str = "geometry",
+    ) -> MutableMapping[str, object]:
+        ...
 
 
 def _traduci_errore_sql(message: str) -> str:
@@ -275,12 +314,24 @@ class EstraiExecutor:
     - features_service: (opzionale) accesso a Feature Service ArcGIS
     """
 
-    def __init__(self, project_service, executor, generator, connection_service, features_service=None):
+    def __init__(
+        self,
+        project_service: object,
+        executor: object,
+        generator: object,
+        connection_service: object,
+        features_service: Optional[ArcGISFeatureReaderProtocol] = None,
+    ) -> None:
         self.project_service = project_service
         self.executor = executor
         self.generator = generator
         self.connection_service = connection_service
         self.features_service = features_service
+
+    def _require_feature_reader(self) -> ArcGISFeatureReaderProtocol:
+        if self.features_service is None:
+            raise ValueError("Provider ArcGIS Feature Service non configurato")
+        return self.features_service
 
     # RISOLUZIONE CONNESSIONE (DB o ArcGIS
 
@@ -300,8 +351,9 @@ class EstraiExecutor:
             return connection, 'db'
         
         # Cerca tra le connessioni ArcGIS
-        if self.features_service:
-            connection = self.features_service.get_connection(connection_id)
+        feature_reader = self.features_service
+        if feature_reader:
+            connection = feature_reader.get_connection(connection_id)
             if connection:
                 return connection, 'arcgis'
         
@@ -442,7 +494,8 @@ class EstraiExecutor:
         max_features = result_node.limit if result_node.limit else None
 
         try:
-            res = self.features_service.execute_query(
+            feature_reader = self._require_feature_reader()
+            res = feature_reader.execute_query(
                 connection_id=connection.id,
                 layer_url=layer_url,
                 project_id=project_id,
@@ -597,7 +650,8 @@ class EstraiExecutor:
 
         try:
             # Query con limit+1 per detect troncamento (stessa logica del DB
-            rows, columns = self.features_service.query_layer(
+            feature_reader = self._require_feature_reader()
+            rows, columns = feature_reader.query_layer(
                 connection_id=connection.id,
                 layer_url=layer_url,
                 where=where,
