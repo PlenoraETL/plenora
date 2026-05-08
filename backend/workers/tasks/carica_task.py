@@ -23,6 +23,7 @@ logger = get_logger("workers.carica_task")
 
 if TYPE_CHECKING:
     import pandas as pd
+    from app.core.features.arcgis_write_mapping import ArcGISWriteMappingContract
 
 
 class ArcGISFeatureWriter(Protocol):
@@ -37,6 +38,7 @@ class ArcGISFeatureWriter(Protocol):
         geometry_column: str = "geometry",
         source_srid: Optional[int] = None,
         folder_id: str = "",
+        column_mappings: Optional["ArcGISWriteMappingContract"] = None,
     ) -> dict:
         """Create a feature service from an in-memory DataFrame."""
         ...
@@ -51,6 +53,7 @@ class ArcGISFeatureWriter(Protocol):
         source_srid: Optional[int] = None,
         batch_size: Optional[int] = None,
         match_column: str = "",
+        column_mappings: Optional["ArcGISWriteMappingContract"] = None,
     ) -> dict:
         """Write features to an existing feature layer from an in-memory DataFrame."""
         ...
@@ -462,6 +465,10 @@ def _execute_arcgis_write(
     geometry_column = carica_node_data.get('geometry_column', 'geometry')
     source_srid = carica_node_data.get('source_srid')
     batch_size = carica_node_data.get('batch_size')  # None = usa default WRITE_BATCH_SIZE=1000
+    from app.core.features.arcgis_write_mapping import ArcGISWriteMappingContract
+    column_mappings = ArcGISWriteMappingContract.from_raw(
+        carica_node_data.get("column_mappings", [])
+    )
 
     if not connection_id:
         return {
@@ -504,6 +511,7 @@ def _execute_arcgis_write(
                 geometry_column=geometry_column,
                 source_srid=source_srid,
                 folder_id=folder_id,
+                column_mappings=column_mappings,
             )
 
         else:
@@ -530,6 +538,7 @@ def _execute_arcgis_write(
                 source_srid=source_srid,
                 batch_size=batch_size,
                 match_column=match_column,
+                column_mappings=column_mappings,
             )
 
         rows = result.get("feature_count", result.get("count", 0))

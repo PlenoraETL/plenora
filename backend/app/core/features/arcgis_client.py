@@ -6,7 +6,7 @@ Keeps provider-specific behavior behind a narrow integration boundary.
 
 import time
 import json
-from typing import Iterator, List, Dict, Any, Optional, Sequence, Tuple, Protocol
+from typing import Iterator, List, Dict, Any, Mapping, Optional, Sequence, Tuple, Protocol
 from dataclasses import dataclass
 
 import requests
@@ -864,6 +864,94 @@ class ArcGISClient:
             
         except requests.RequestException as e:
             raise ConnectionError(f"Errore connessione ArcGIS Online: {e}")
+
+    def _list_user_content_page(
+        self,
+        conn: ArcGISConnectionInfo,
+        base_url: str,
+        username: str,
+        folder_id: str,
+        start: int,
+        num: int,
+    ) -> dict:
+        content_url = (
+            f"{base_url}/content/users/{username}/{folder_id}"
+            if folder_id
+            else f"{base_url}/content/users/{username}"
+        )
+        response = self._request_with_token(
+            "GET",
+            content_url,
+            conn,
+            params={"f": "json", "num": num, "start": start},
+            timeout=self.DEFAULT_TIMEOUT,
+            extra_headers={"Referer": conn.server_url},
+        )
+        data = response.json()
+        if "error" in data:
+            message = data["error"].get("message", "Errore Content API")
+            raise ConnectionError(f"Errore ArcGIS content items: {message}")
+        return data
+
+    def _list_user_items_in_folder(
+        self,
+        conn: ArcGISConnectionInfo,
+        base_url: str,
+        username: str,
+        folder_id: str,
+        *,
+        num: int,
+    ) -> Tuple[List[dict], List[dict]]:
+        items: List[dict] = []
+        folders: List[dict] = []
+        start = 1
+        first_page = True
+
+        while True:
+            data = self._list_user_content_page(
+                conn, base_url, username, folder_id, start, num
+            )
+            if first_page and not folder_id:
+                folders = list(data.get("folders", []) or [])
+                first_page = False
+
+            page_items = data.get("items", []) or []
+            items.extend(page_items)
+
+            next_start = data.get("nextStart", -1)
+            if next_start == -1 or next_start <= start or not page_items:
+                break
+            start = next_start
+
+        return items, folders
+
+    def list_user_items(self, conn: ArcGISConnectionInfo) -> List[dict]:
+        """List raw ArcGIS content items for the connected user.
+
+        The provider owns Content API pagination and folder traversal. Domain
+        callers such as IMDF keep their own type/name matching policy above
+        this raw item boundary.
+        """
+        username = conn.username
+        if not username:
+            return []
+
+        base_url = self._portal_sharing_base_url(conn)
+        root_items, folders = self._list_user_items_in_folder(
+            conn, base_url, username, "", num=100
+        )
+        all_items = list(root_items)
+
+        for folder in folders:
+            folder_id = folder.get("id")
+            if not folder_id:
+                continue
+            folder_items, _ = self._list_user_items_in_folder(
+                conn, base_url, username, str(folder_id), num=100
+            )
+            all_items.extend(folder_items)
+
+        return all_items
     
     def list_folders(self, conn: ArcGISConnectionInfo) -> List[dict]:
         """
@@ -930,6 +1018,55 @@ class ArcGISClient:
             logger.warning(f"Errore lista folders server: {e}")
             return [{"id": "", "title": "(root)"}]
 
+    def ensure_folder(
+        self,
+        conn: ArcGISConnectionInfo,
+        folder_name: str,
+    ) -> Optional[str]:
+        """Find or create a user content folder and return its folder id.
+
+        Blank folder names map to the root folder and do not create content
+        folders. Error-shaped createFolder responses remain exceptional so
+        orchestrators can decide whether to stop or recover.
+        """
+        normalized_name = folder_name.strip()
+        if not normalized_name:
+            return ""
+        if not conn.username:
+            raise ValueError("ArcGIS username richiesto per ensure_folder")
+
+        from urllib.parse import urlparse
+
+        parsed = urlparse(conn.server_url)
+        base_url = f"{parsed.scheme}://{parsed.netloc}/sharing/rest"
+        referer = {"Referer": conn.server_url}
+
+        list_response = self._request_with_token(
+            "GET",
+            f"{base_url}/content/users/{conn.username}",
+            conn,
+            params={"f": "json"},
+            timeout=self.DEFAULT_TIMEOUT,
+            extra_headers=referer,
+        )
+        list_data = list_response.json()
+        for folder in list_data.get("folders", []) or []:
+            if folder.get("title") == normalized_name:
+                return folder.get("id")
+
+        create_response = self._request_with_token(
+            "POST",
+            f"{base_url}/content/users/{conn.username}/createFolder",
+            conn,
+            data={"title": normalized_name, "f": "json"},
+            timeout=self.DEFAULT_TIMEOUT,
+            extra_headers=referer,
+        )
+        create_data = create_response.json()
+        if not create_data.get("success"):
+            raise RuntimeError(f"createFolder fallito: {create_data}")
+        return (create_data.get("folder") or {}).get("id")
+
     def is_service_name_available(
         self,
         conn: ArcGISConnectionInfo,
@@ -969,6 +1106,51 @@ class ArcGISClient:
             logger.warning(f"is_service_name_available error: {e}")
             return True, str(e)
 
+    def search_items(
+        self,
+        conn: ArcGISConnectionInfo,
+        query: str,
+    ) -> List[dict]:
+        """Search raw portal items with provider-managed pagination."""
+        base_url = self._portal_sharing_base_url(conn)
+        all_results: List[dict] = []
+        start = 1
+
+        try:
+            while True:
+                params = {
+                    "q": query,
+                    "f": "json",
+                    "num": 100,
+                    "start": start,
+                    "sortField": "modified",
+                    "sortOrder": "desc",
+                }
+                response = self._request_with_token(
+                    "GET",
+                    f"{base_url}/search",
+                    conn,
+                    params=params,
+                    timeout=self.DEFAULT_TIMEOUT,
+                )
+                data = response.json()
+
+                if "error" in data:
+                    error_msg = data["error"].get("message", "Errore ricerca")
+                    raise ConnectionError(f"Errore ricerca ArcGIS Online: {error_msg}")
+
+                results = data.get("results", []) or []
+                all_results.extend(results)
+
+                next_start = data.get("nextStart", -1)
+                if next_start == -1 or next_start <= start or not results:
+                    break
+                start = next_start
+
+            return all_results
+        except requests.RequestException as e:
+            raise ConnectionError(f"Errore ricerca ArcGIS Online: {e}")
+
     def search_services_online(
         self,
         conn: ArcGISConnectionInfo,
@@ -989,12 +1171,8 @@ class ArcGISClient:
         Returns:
             Lista di dict con {name, url, folder, ...}
         """
-        token = self.authenticate(conn)
         username = conn.username
-        from urllib.parse import urlparse
-        parsed = urlparse(conn.server_url)
-        base_url = f"{parsed.scheme}://{parsed.netloc}/sharing/rest"
-        
+
         # Costruisci query di ricerca
         search_parts = ['type:"Feature Service"']
         
@@ -1008,61 +1186,26 @@ class ArcGISClient:
         
         search_query = " ".join(search_parts)
         
-        try:
-            all_results = []
-            start = 1
-            
-            while True:
-                params = {
-                    "q": search_query,
-                    "f": "json",
-                    "num": 100,
-                    "start": start,
-                    "sortField": "modified",
-                    "sortOrder": "desc",
-                }
-                response = self._request_with_token(
-                    "GET", f"{base_url}/search", conn,
-                    params=params, timeout=self.DEFAULT_TIMEOUT,
-                )
-                data = response.json()
+        results = []
+        for item in self.search_items(conn, search_query):
+            item_url = item.get("url", "")
+            if not item_url:
+                continue
 
-                if "error" in data:
-                    error_msg = data["error"].get("message", "Errore ricerca")
-                    raise ConnectionError(f"Errore ricerca ArcGIS Online: {error_msg}")
-                
-                results = data.get("results", [])
-                if not results:
-                    break
-                
-                for item in results:
-                    item_url = item.get("url", "")
-                    if not item_url:
-                        continue
-                    
-                    all_results.append({
-                        "name": item.get("title", item.get("name", "Senza nome")),
-                        "full_name": item.get("name", item.get("title", "")),
-                        "url": item_url,
-                        "folder": "",
-                        "service_type": "FeatureServer",
-                        "item_id": item.get("id", ""),
-                        "owner": item.get("owner", ""),
-                        "num_views": item.get("numViews", 0),
-                        "modified": item.get("modified", 0),
-                    })
-                
-                # Paginazione
-                next_start = data.get("nextStart", -1)
-                if next_start == -1 or next_start <= start:
-                    break
-                start = next_start
-            
-            logger.info(f"Ricerca ArcGIS Online '{search_query}': {len(all_results)} risultati")
-            return all_results
-            
-        except requests.RequestException as e:
-            raise ConnectionError(f"Errore ricerca ArcGIS Online: {e}")
+            results.append({
+                "name": item.get("title", item.get("name", "Senza nome")),
+                "full_name": item.get("name", item.get("title", "")),
+                "url": item_url,
+                "folder": "",
+                "service_type": "FeatureServer",
+                "item_id": item.get("id", ""),
+                "owner": item.get("owner", ""),
+                "num_views": item.get("numViews", 0),
+                "modified": item.get("modified", 0),
+            })
+
+        logger.info(f"Ricerca ArcGIS Online '{search_query}': {len(results)} risultati")
+        return results
     
     # ArcGIS Server/Enterprise: catalogo REST
     
@@ -2683,6 +2826,255 @@ class ArcGISClient:
 
         except requests.RequestException as e:
             return {"success": False, "message": str(e)}
+
+    def update_layer_renderer(
+        self,
+        conn: ArcGISConnectionInfo,
+        layer_url: str,
+        drawing_info: Mapping[str, object],
+    ) -> dict:
+        """
+        Aggiorna il renderer di un layer tramite layer-level updateDefinition.
+
+        This is the generic provider boundary for ArcGIS endpoints that ignore
+        service-level renderer updates while still returning success=True.
+        Existing ``update_renderer`` remains service-level for compatibility.
+        """
+        layer_admin_url = layer_url.replace("/rest/services/", "/rest/admin/services/")
+        update_def = {"drawingInfo": dict(drawing_info)}
+        data = {
+            "updateDefinition": json.dumps(update_def),
+            "f": "json",
+        }
+        referer_headers = {"Referer": conn.server_url}
+
+        try:
+            response = self._request_with_token(
+                "POST",
+                f"{layer_admin_url.rstrip('/')}/updateDefinition",
+                conn,
+                data=data,
+                timeout=60,
+                extra_headers=referer_headers,
+            )
+            result = response.json()
+
+            if result.get("success"):
+                logger.info(f"Renderer aggiornato per layer URL {layer_url}")
+                return {"success": True, "message": "Renderer aggiornato"}
+
+            error = result.get("error", {})
+            msg = error.get("message", str(result)) if isinstance(error, dict) else str(result)
+            logger.error(f"[GESTITO] layer updateDefinition renderer fallito: {msg}")
+            return {"success": False, "message": msg}
+
+        except requests.RequestException as e:
+            return {"success": False, "message": str(e)}
+
+    # SERVICE / ITEM LIFECYCLE
+
+    def _portal_sharing_base_url(self, conn: ArcGISConnectionInfo) -> str:
+        """Return the portal sharing REST base for an ArcGIS connection."""
+        from urllib.parse import urlparse
+
+        parsed = urlparse(conn.server_url)
+        return f"{parsed.scheme}://{parsed.netloc}/sharing/rest"
+
+    def delete_item_permanently(
+        self,
+        conn: ArcGISConnectionInfo,
+        item_id: str,
+    ) -> dict:
+        """Delete a portal item permanently.
+
+        ArcGIS Online supports ``permanentDelete=true`` on item delete. Older
+        Enterprise installs may require a normal delete followed by the
+        ``/permanentDelete`` endpoint, so this method preserves that fallback.
+        """
+        base_url = self._portal_sharing_base_url(conn)
+        referer_headers = {"Referer": conn.server_url}
+        delete_url = f"{base_url}/content/users/{conn.username}/items/{item_id}/delete"
+        delete_data = {"f": "json", "permanentDelete": "true"}
+
+        try:
+            response = self._request_with_token(
+                "POST",
+                delete_url,
+                conn,
+                data=delete_data,
+                timeout=self.DEFAULT_TIMEOUT,
+                extra_headers=referer_headers,
+            )
+            result = response.json()
+            if result.get("success"):
+                return {"success": True, "message": "item deleted", "item_id": item_id}
+
+            logger.warning(f"delete item {item_id} risposta: {result}")
+
+            fallback_response = self._request_with_token(
+                "POST",
+                delete_url,
+                conn,
+                data={"f": "json"},
+                timeout=self.DEFAULT_TIMEOUT,
+                extra_headers=referer_headers,
+            )
+            fallback_result = fallback_response.json()
+            if not fallback_result.get("success"):
+                return {
+                    "success": False,
+                    "message": f"delete item failed: {result}",
+                    "item_id": item_id,
+                    "response": result,
+                }
+
+            permanent_url = (
+                f"{base_url}/content/users/{conn.username}/items/{item_id}/permanentDelete"
+            )
+            permanent_response = self._request_with_token(
+                "POST",
+                permanent_url,
+                conn,
+                data={"f": "json"},
+                timeout=self.DEFAULT_TIMEOUT,
+                extra_headers=referer_headers,
+            )
+            permanent_result = permanent_response.json()
+            if permanent_result.get("success"):
+                return {
+                    "success": True,
+                    "message": "item permanent-deleted via fallback endpoint",
+                    "item_id": item_id,
+                }
+            return {
+                "success": False,
+                "message": f"permanentDelete failed: {permanent_result}",
+                "item_id": item_id,
+                "response": permanent_result,
+            }
+        except Exception as e:
+            logger.warning(f"delete item {item_id} fallita: {e}")
+            return {"success": False, "message": str(e), "item_id": item_id}
+
+    def delete_feature_service_items(
+        self,
+        conn: ArcGISConnectionInfo,
+        items: Sequence[Mapping[str, object]],
+        service_name: str = "",
+    ) -> Tuple[int, int]:
+        """Delete discovered Feature Service portal items.
+
+        Discovery and selection policy stays with the caller; this method owns
+        the generic ArcGIS portal item deletion mechanics and counters.
+        """
+        attempted = 0
+        succeeded = 0
+
+        for item in items:
+            item_id = str(item.get("id") or "")
+            if not item_id:
+                continue
+            attempted += 1
+            result = self.delete_item_permanently(conn, item_id)
+            if result.get("success"):
+                succeeded += 1
+                logger.info(
+                    f"Item ArcGIS cancellato (permanent): {item_id} "
+                    f"('{service_name}', folder={item.get('ownerFolder') or 'root'})"
+                )
+            else:
+                logger.warning(f"delete item {item_id} risposta: {result}")
+
+        return attempted, succeeded
+
+    def _resolve_hosting_admin_url(
+        self,
+        conn: ArcGISConnectionInfo,
+    ) -> Tuple[Optional[str], Optional[str]]:
+        """Resolve hosted server admin URL from portal metadata."""
+        base_url = self._portal_sharing_base_url(conn)
+        referer_headers = {"Referer": conn.server_url}
+
+        try:
+            response = self._request_with_token(
+                "GET",
+                f"{base_url}/portals/self",
+                conn,
+                params={"f": "json"},
+                timeout=self.DEFAULT_TIMEOUT,
+                extra_headers=referer_headers,
+            )
+            portal_info = response.json()
+        except Exception as e:
+            return None, f"portal/self failed: {e}"
+
+        for server in (portal_info.get("helperServices") or {}).get("hostingServers", []) or []:
+            admin_url = server.get("admin")
+            if admin_url:
+                return str(admin_url), None
+
+        org_id = portal_info.get("id") or portal_info.get("orgId")
+        if not org_id:
+            return None, "hosting server URL non determinato da /portals/self"
+
+        for host in ("services-eu1.arcgis.com", "services.arcgis.com", "services1.arcgis.com"):
+            candidate = f"https://{host}/{org_id}/arcgis"
+            try:
+                response = self._request_with_token(
+                    "GET",
+                    f"{candidate}/admin/services",
+                    conn,
+                    params={"f": "json"},
+                    timeout=15,
+                    extra_headers=referer_headers,
+                )
+                if "services" in response.json():
+                    return candidate, None
+            except Exception:
+                continue
+
+        return None, "hosting server URL non determinato da /portals/self"
+
+    def cleanup_zombie_feature_service(
+        self,
+        conn: ArcGISConnectionInfo,
+        service_name: str,
+    ) -> Tuple[bool, str]:
+        """Delete a hosted Feature Service whose portal item is not enumerable."""
+        hosting_url, error = self._resolve_hosting_admin_url(conn)
+        if not hosting_url:
+            return False, error or "hosting server URL non determinato da /portals/self"
+
+        referer_headers = {"Referer": conn.server_url}
+        admin_base = f"{hosting_url.rstrip('/')}/admin/services"
+        describe_url = f"{admin_base}/{service_name}.FeatureServer"
+
+        try:
+            response = self._request_with_token(
+                "GET",
+                describe_url,
+                conn,
+                params={"f": "json"},
+                timeout=self.DEFAULT_TIMEOUT,
+                extra_headers=referer_headers,
+            )
+            admin_info = response.json()
+            if "error" in admin_info:
+                return False, f"admin describe error: {admin_info['error']}"
+            service_item_id = str(admin_info.get("serviceItemId") or "")
+            if not service_item_id:
+                return False, "serviceItemId non presente in admin describe"
+        except Exception as e:
+            return False, f"admin describe failed: {e}"
+
+        delete_result = self.delete_item_permanently(conn, service_item_id)
+        if delete_result.get("success"):
+            logger.info(
+                f"Zombie cleanup: item {service_item_id} ('{service_name}') "
+                f"cancellato via admin fallback"
+            )
+            return True, f"item {service_item_id} cancellato"
+        return False, str(delete_result.get("message") or delete_result)
 
 
 # FACTORY FUNCTION

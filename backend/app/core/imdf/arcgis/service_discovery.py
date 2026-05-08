@@ -5,7 +5,6 @@ sul portal ArcGIS.
 """
 
 from typing import List, Optional, Tuple
-from urllib.parse import urlparse
 
 from app.shared.connections.arcgis_connection import ArcGISConnectionInfo
 from app.shared.connections.arcgis_provider import ArcGISDiscoveryProviderProtocol
@@ -42,39 +41,22 @@ def _list_user_folders(
         return []
 
 
-def _ensure_folder(client, conn, folder_name: str) -> Optional[str]:
-    """Trova (o crea) una folder nei contenuti dell'utente. Ritorna folder_id."""
-    token = client.authenticate(conn)
-    parsed = urlparse(conn.server_url)
-    base_url = f"{parsed.scheme}://{parsed.netloc}/sharing/rest"
-    referer = {"Referer": conn.server_url}
-
-    # 1. Lista folder esistenti
-    list_url = f"{base_url}/content/users/{conn.username}"
-    params = {"f": "json"}
-    if token:
-        params["token"] = token
-
-    r = client._http.get(list_url, params=params, timeout=30, headers=referer)
-    data = r.json()
-    folders = data.get("folders", []) or []
-    for f in folders:
-        if f.get("title") == folder_name:
-            return f.get("id")
-
-    # 2. Crea
-    create_url = f"{base_url}/content/users/{conn.username}/createFolder"
-    create_data = {"title": folder_name, "f": "json"}
-    if token:
-        create_data["token"] = token
-    r = client._http.post(create_url, data=create_data, timeout=30, headers=referer)
-    res = r.json()
-    if not res.get("success"):
-        raise RuntimeError(f"createFolder fallito: {res}")
-    return (res.get("folder") or {}).get("id")
+def _ensure_folder(
+    client: ArcGISDiscoveryProviderProtocol,
+    conn: ArcGISConnectionInfo,
+    folder_name: str,
+) -> Optional[str]:
+    """KEEP_COMPAT: IMDF wrapper over the generic ArcGIS folder boundary."""
+    if not folder_name:
+        return ""
+    return client.ensure_folder(conn, folder_name)
 
 
-def _is_service_name_available(client, conn, fs_name: str) -> Tuple[bool, Optional[str]]:
+def _is_service_name_available(
+    client: ArcGISDiscoveryProviderProtocol,
+    conn: ArcGISConnectionInfo,
+    fs_name: str,
+) -> Tuple[bool, Optional[str]]:
     """Controlla presso il portal se il nome servizio e' disponibile.
 
     KEEP_COMPAT: wrapper IMDF legacy delegato al boundary generico
@@ -92,56 +74,32 @@ def _is_service_name_available(client, conn, fs_name: str) -> Tuple[bool, Option
         return True, str(e)  # fail-open: assume disponibile, poi createService dara' errore
 
 
-def _enumerate_all_user_items(client, conn) -> List[dict]:
+def _enumerate_all_user_items(
+    client: ArcGISDiscoveryProviderProtocol,
+    conn: ArcGISConnectionInfo,
+) -> List[dict]:
     """Enumera TUTTI gli item (in tutte le folder + root) dell'utente corrente.
     Approccio robusto che non dipende dall'endpoint /search (che in alcuni
     casi non matcha esattamente per via della tokenizzazione del titolo).
 
     Ritorna lista di item {id, title, type, name, url, ownerFolder, ...}.
+
+    KEEP_COMPAT: wrapper IMDF legacy delegato al boundary generico
+    `ArcGISClient.list_user_items`. IMDF mantiene sopra questo boundary solo
+    la policy di filtro/matching Feature Service.
     """
-    token = client.authenticate(conn)
-    parsed = urlparse(conn.server_url)
-    base_url = f"{parsed.scheme}://{parsed.netloc}/sharing/rest"
-    referer = {"Referer": conn.server_url}
-
-    def _get(url, params):
-        if token:
-            params = {**params, "token": token}
-        r = client._http.get(url, params=params, timeout=30, headers=referer)
-        return r.json()
-
-    all_items: List[dict] = []
-
-    # Root content
     try:
-        root_data = _get(
-            f"{base_url}/content/users/{conn.username}",
-            {"f": "json", "num": 1000},
-        )
-        all_items.extend(root_data.get("items", []) or [])
-        folders = root_data.get("folders", []) or []
+        return client.list_user_items(conn) or []
     except Exception as e:
-        logger.warning(f"_enumerate_all_user_items: root fallita: {e}")
-        folders = []
-
-    # Per ogni folder
-    for f in folders:
-        fid = f.get("id")
-        if not fid:
-            continue
-        try:
-            folder_data = _get(
-                f"{base_url}/content/users/{conn.username}/{fid}",
-                {"f": "json", "num": 1000},
-            )
-            all_items.extend(folder_data.get("items", []) or [])
-        except Exception as e:
-            logger.warning(f"_enumerate_all_user_items: folder {fid} fallita: {e}")
-
-    return all_items
+        logger.warning(f"_enumerate_all_user_items: list_user_items fallita: {e}")
+        return []
 
 
-def _search_user_items(client, conn, fs_name: str) -> List[dict]:
+def _search_user_items(
+    client: ArcGISDiscoveryProviderProtocol,
+    conn: ArcGISConnectionInfo,
+    fs_name: str,
+) -> List[dict]:
     """Trova Feature Service dell'utente corrente che matchano `fs_name`.
 
     Match strategia (in ordine, il primo che trova qualcosa vince):
@@ -200,7 +158,12 @@ def _search_user_items(client, conn, fs_name: str) -> List[dict]:
     return []
 
 
-def _find_existing_service(client, conn, fs_name: str, folder_id: str = "") -> tuple:
+def _find_existing_service(
+    client: ArcGISDiscoveryProviderProtocol,
+    conn: ArcGISConnectionInfo,
+    fs_name: str,
+    folder_id: str = "",
+) -> tuple:
     """Cerca un Feature Service col nome dato IN QUALSIASI FOLDER dell'utente
     corrente (via /sharing/rest/search) e ritorna una tupla
     (service_url, item_id, owner_folder). owner_folder è la folder ArcGIS

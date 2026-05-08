@@ -12,6 +12,7 @@ from workers.tasks.carica_task import (
     ArcGISFeatureWriter,
     _execute_arcgis_write,
 )
+from app.core.features.arcgis_write_mapping import ArcGISWriteMappingContract
 
 
 pytestmark = [pytest.mark.unit, pytest.mark.carica, pytest.mark.contract]
@@ -50,11 +51,17 @@ def test_execute_arcgis_write_uses_generic_writer_boundary_for_existing_layer() 
                 "source_srid": 3003,
                 "batch_size": 250,
                 "arcgis_match_column": "id",
+                "column_mappings": [
+                    {"source": "name", "dest": "NAME"},
+                ],
             },
             project_id="proj-1",
             task_id="task-1",
         )
 
+    expected_mapping = ArcGISWriteMappingContract.from_raw([
+        {"source": "name", "dest": "NAME"},
+    ])
     create_writer.assert_called_once_with()
     writer.write_features_from_df.assert_called_once_with(
         connection_id="arc-1",
@@ -65,6 +72,7 @@ def test_execute_arcgis_write_uses_generic_writer_boundary_for_existing_layer() 
         source_srid=3003,
         batch_size=250,
         match_column="id",
+        column_mappings=expected_mapping,
     )
     assert result["success"] is True
     assert result["rows_written"] == 1
@@ -103,11 +111,17 @@ def test_execute_arcgis_write_uses_generic_writer_boundary_for_service_create() 
                 "arcgis_folder_id": "folder-1",
                 "geometry_column": "shape",
                 "source_srid": 3003,
+                "column_mappings": [
+                    {"source_column": "name", "dest_column": "NAME"},
+                ],
             },
             project_id="proj-1",
             task_id="task-1",
         )
 
+    expected_mapping = ArcGISWriteMappingContract.from_raw([
+        {"source_column": "name", "dest_column": "NAME"},
+    ])
     create_writer.assert_called_once_with()
     writer.create_service_from_df.assert_called_once_with(
         connection_id="arc-1",
@@ -117,6 +131,7 @@ def test_execute_arcgis_write_uses_generic_writer_boundary_for_service_create() 
         geometry_column="shape",
         source_srid=3003,
         folder_id="folder-1",
+        column_mappings=expected_mapping,
     )
     assert result["success"] is True
     assert result["rows_written"] == 1

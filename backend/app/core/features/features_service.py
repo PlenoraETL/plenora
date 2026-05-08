@@ -30,6 +30,7 @@ from app.core.features.arcgis_client import (
     EsriJsonConverter,
     create_client,
 )
+from app.core.features.arcgis_write_mapping import ArcGISWriteMappingContract
 
 logger = get_logger(__name__)
 
@@ -669,6 +670,7 @@ class FeaturesService:
         source_srid: Optional[int] = None,
         batch_size: Optional[int] = None,
         match_column: str = "",
+        column_mappings: Optional[ArcGISWriteMappingContract] = None,
     ) -> dict:
         """
         Scrive features su un layer ArcGIS esistente.
@@ -719,6 +721,14 @@ class FeaturesService:
             import geopandas as gpd
             df = df.set_crs(epsg=source_srid)
             logger.info(f"CRS impostato da source_srid: EPSG:{source_srid}")
+
+        mapped = (column_mappings or ArcGISWriteMappingContract()).apply(
+            df,
+            geometry_column=geometry_column,
+            required_match_column=match_column if operation in ("update", "upsert", "delete") else "",
+        )
+        df = mapped.df
+        geometry_column = mapped.geometry_column
         
         # Converti in Esri JSON
         features = self._client.dataframe_to_esri_features(
@@ -828,6 +838,7 @@ class FeaturesService:
         source_srid: Optional[int] = None,
         batch_size: Optional[int] = None,
         match_column: str = "",
+        column_mappings: Optional[ArcGISWriteMappingContract] = None,
     ) -> dict:
         """
         Scrive features su un layer ArcGIS partendo da un DataFrame.
@@ -851,6 +862,14 @@ class FeaturesService:
         if source_srid and hasattr(df, 'set_crs') and getattr(df, 'crs', None) is None:
             import geopandas as gpd
             df = df.set_crs(epsg=source_srid)
+
+        mapped = (column_mappings or ArcGISWriteMappingContract()).apply(
+            df,
+            geometry_column=geometry_column,
+            required_match_column=match_column if operation in ("update", "upsert", "delete") else "",
+        )
+        df = mapped.df
+        geometry_column = mapped.geometry_column
 
         # Converti in Esri JSON
         features = self._client.dataframe_to_esri_features(
@@ -950,6 +969,7 @@ class FeaturesService:
         geometry_column: str = "geometry",
         source_srid: Optional[int] = None,
         folder_id: str = "",
+        column_mappings: Optional[ArcGISWriteMappingContract] = None,
     ) -> dict:
         """
         Crea un nuovo Feature Service su ArcGIS Online con dati da file.
@@ -983,6 +1003,13 @@ class FeaturesService:
             import geopandas as gpd
             df = df.set_crs(epsg=source_srid)
             logger.info(f"CRS impostato da source_srid: EPSG:{source_srid}")
+
+        mapped = (column_mappings or ArcGISWriteMappingContract()).apply(
+            df,
+            geometry_column=geometry_column,
+        )
+        df = mapped.df
+        geometry_column = mapped.geometry_column
         
         result = self._client.create_service(
             conn_info,
@@ -1004,6 +1031,7 @@ class FeaturesService:
         geometry_column: str = "geometry",
         source_srid: Optional[int] = None,
         folder_id: str = "",
+        column_mappings: Optional[ArcGISWriteMappingContract] = None,
     ) -> dict:
         """Crea un nuovo Feature Service da un DataFrame (senza file intermedio)."""
         connection = self.get_connection(connection_id)
@@ -1015,6 +1043,13 @@ class FeaturesService:
         if source_srid and hasattr(df, 'set_crs') and (getattr(df, 'crs', None) is None):
             import geopandas as gpd
             df = df.set_crs(epsg=source_srid)
+
+        mapped = (column_mappings or ArcGISWriteMappingContract()).apply(
+            df,
+            geometry_column=geometry_column,
+        )
+        df = mapped.df
+        geometry_column = mapped.geometry_column
 
         return self._client.create_service(
             conn_info,

@@ -27,6 +27,9 @@ def test_arcgis_provider_protocol_exports_read_write_capabilities() -> None:
     required_methods = {
         "list_services",
         "list_folders",
+        "ensure_folder",
+        "list_user_items",
+        "search_items",
         "is_service_name_available",
         "list_layers",
         "get_layer_schema",
@@ -39,6 +42,10 @@ def test_arcgis_provider_protocol_exports_read_write_capabilities() -> None:
         "update_features",
         "delete_features",
         "update_renderer",
+        "update_layer_renderer",
+        "delete_item_permanently",
+        "delete_feature_service_items",
+        "cleanup_zombie_feature_service",
     }
 
     for method_name in required_methods:
@@ -46,7 +53,15 @@ def test_arcgis_provider_protocol_exports_read_write_capabilities() -> None:
 
 
 def test_arcgis_provider_capability_protocols_have_expected_method_sets() -> None:
-    assert {"list_services", "list_folders", "is_service_name_available", "list_layers"} <= set(
+    assert {
+        "list_services",
+        "list_folders",
+        "ensure_folder",
+        "list_user_items",
+        "search_items",
+        "is_service_name_available",
+        "list_layers",
+    } <= set(
         dir(ArcGISDiscoveryProviderProtocol)
     )
     assert {"get_layer_schema", "query_features", "count_features_where", "query_oid_by_key"} <= set(
@@ -55,7 +70,15 @@ def test_arcgis_provider_capability_protocols_have_expected_method_sets() -> Non
     assert {"add_features", "update_features", "delete_features"} <= set(
         dir(ArcGISWriteProviderProtocol)
     )
-    assert {"create_service", "add_layer_to_service", "update_renderer"} <= set(
+    assert {
+        "create_service",
+        "add_layer_to_service",
+        "update_renderer",
+        "update_layer_renderer",
+        "delete_item_permanently",
+        "delete_feature_service_items",
+        "cleanup_zombie_feature_service",
+    } <= set(
         dir(ArcGISServiceAdminProviderProtocol)
     )
 
@@ -64,6 +87,9 @@ def test_arcgis_provider_protocol_signature_shapes_match_client_boundary() -> No
     expected_parameters = {
         "list_services": ["self", "conn", "folder", "_depth", "_max_depth"],
         "list_folders": ["self", "conn"],
+        "ensure_folder": ["self", "conn", "folder_name"],
+        "list_user_items": ["self", "conn"],
+        "search_items": ["self", "conn", "query"],
         "is_service_name_available": ["self", "conn", "service_name"],
         "list_layers": ["self", "conn", "service_url"],
         "get_layer_schema": ["self", "conn", "layer_url"],
@@ -105,6 +131,10 @@ def test_arcgis_provider_protocol_signature_shapes_match_client_boundary() -> No
             "srid",
         ],
         "update_renderer": ["self", "conn", "layer_url", "drawing_info"],
+        "update_layer_renderer": ["self", "conn", "layer_url", "drawing_info"],
+        "delete_item_permanently": ["self", "conn", "item_id"],
+        "delete_feature_service_items": ["self", "conn", "items", "service_name"],
+        "cleanup_zombie_feature_service": ["self", "conn", "service_name"],
     }
 
     for method_name, parameter_names in expected_parameters.items():

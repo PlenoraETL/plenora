@@ -6,7 +6,6 @@ Orchestrator end-to-end (Fase 1B):
 
 from __future__ import annotations
 
-import json
 from typing import Dict, Optional
 
 from app.utils.logger import get_logger
@@ -309,35 +308,22 @@ def upload_imdf_layers(
             step += 1
 
     # ── 7. Applica renderers (opzionale) ───────────────────────────────
-    # Nota: NON usiamo client.update_renderer perche' quel metodo posta
-    # su `service-level updateDefinition` con `{layers: [{id, drawingInfo}]}`
     # — Esri ritorna success=True ma in pratica non aggiorna nulla. Usiamo
-    # invece il pattern layer-level: POST su `.../FeatureServer/<id>/updateDefinition`
-    # con payload `{drawingInfo: {renderer: ...}}` (verificato sperimentalmente
+    # IMDF decides which renderer to apply; the ArcGIS provider owns the
+    # layer-level updateDefinition mechanics.
     if apply_renderers and renderers_data:
         _emit("renderers", step, total_steps, "Applicazione renderer ArcGIS...")
-        token = client.authenticate(conn)
-        admin_base = service_url.replace("/rest/services/", "/rest/admin/services/")
-        referer = {"Referer": conn.server_url}
         for layer_info in result["layers"]:
             name = layer_info["name"]
             drawing_info = renderers_data.get(name)
             if not drawing_info:
                 continue
             try:
-                update_def = {"drawingInfo": drawing_info}
-                upd_url = f"{admin_base}/{layer_info['id']}/updateDefinition"
-                r = client._http.post(
-                    upd_url,
-                    data={
-                        "updateDefinition": json.dumps(update_def),
-                        "f": "json",
-                        "token": token or "",
-                    },
-                    timeout=30,
-                    headers=referer,
+                res = client.update_layer_renderer(
+                    conn=conn,
+                    layer_url=f"{service_url}/{layer_info['id']}",
+                    drawing_info=drawing_info,
                 )
-                res = r.json()
                 if res.get("success"):
                     result["renderers_applied"] += 1
                     logger.info(f"Renderer applicato a {name}")

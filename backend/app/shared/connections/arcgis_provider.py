@@ -37,6 +37,26 @@ class ArcGISDiscoveryProviderProtocol(Protocol):
         """List folders available to the connection."""
         ...
 
+    def ensure_folder(
+        self,
+        conn: ArcGISConnectionInfo,
+        folder_name: str,
+    ) -> Optional[str]:
+        """Return an existing user folder id, or create the folder."""
+        ...
+
+    def list_user_items(self, conn: ArcGISConnectionInfo) -> List[dict]:
+        """List raw content items owned by the connected user."""
+        ...
+
+    def search_items(
+        self,
+        conn: ArcGISConnectionInfo,
+        query: str,
+    ) -> List[dict]:
+        """Search raw portal items with provider-managed pagination."""
+        ...
+
     def is_service_name_available(
         self,
         conn: ArcGISConnectionInfo,
@@ -176,6 +196,40 @@ class ArcGISServiceAdminProviderProtocol(Protocol):
         drawing_info: dict,
     ) -> ProviderResult:
         """Apply renderer/drawingInfo to a layer when the provider supports it."""
+        ...
+
+    def delete_item_permanently(
+        self,
+        conn: ArcGISConnectionInfo,
+        item_id: str,
+    ) -> ProviderResult:
+        """Delete a portal item permanently, with Enterprise fallback support."""
+        ...
+
+    def delete_feature_service_items(
+        self,
+        conn: ArcGISConnectionInfo,
+        items: Sequence[Mapping[str, object]],
+        service_name: str = "",
+    ) -> Tuple[int, int]:
+        """Delete already-discovered Feature Service items and return counts."""
+        ...
+
+    def cleanup_zombie_feature_service(
+        self,
+        conn: ArcGISConnectionInfo,
+        service_name: str,
+    ) -> Tuple[bool, str]:
+        """Delete a hosted service whose portal item is only discoverable via admin."""
+        ...
+
+    def update_layer_renderer(
+        self,
+        conn: ArcGISConnectionInfo,
+        layer_url: str,
+        drawing_info: Mapping[str, object],
+    ) -> ProviderResult:
+        """Apply renderer/drawingInfo with layer-level updateDefinition."""
         ...
 
 

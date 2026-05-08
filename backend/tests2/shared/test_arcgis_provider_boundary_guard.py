@@ -14,8 +14,10 @@ import pytest
 pytestmark = [pytest.mark.unit, pytest.mark.shared]
 
 _IMDF_DIR = Path(__file__).parents[2] / "app" / "core" / "imdf"
+_SHARED_CONNECTIONS_DIR = Path(__file__).parents[2] / "app" / "shared" / "connections"
 
 _FORBIDDEN_PREFIXES = ("app.core.features",)
+_SHARED_CONNECTIONS_FORBIDDEN_PREFIXES = ("app.core", "app.db", "workers")
 
 # Known violations - TODO: fix these per macro-components.md section 2.3.
 # Each entry is (filename -> exact imported modules). The guard is strict
@@ -58,6 +60,10 @@ def _imdf_python_files() -> list[Path]:
     return sorted(_IMDF_DIR.rglob("*.py"))
 
 
+def _shared_connections_python_files() -> list[Path]:
+    return sorted(_SHARED_CONNECTIONS_DIR.rglob("*.py"))
+
+
 def _imports_in_file(path: Path) -> list[str]:
     try:
         tree = ast.parse(path.read_text(encoding="utf-8"))
@@ -71,6 +77,17 @@ def _imports_in_file(path: Path) -> list[str]:
             for alias in node.names:
                 modules.append(alias.name)
     return modules
+
+
+@pytest.mark.parametrize("src_file", _shared_connections_python_files(), ids=lambda p: p.name)
+def test_shared_connections_remains_leaf_like(src_file: Path) -> None:
+    """Shared connection contracts must not depend on app core/db/workers."""
+    for module in _imports_in_file(src_file):
+        for prefix in _SHARED_CONNECTIONS_FORBIDDEN_PREFIXES:
+            assert not module.startswith(prefix), (
+                f"{src_file.name}: app.shared.connections must remain leaf-like; "
+                f"forbidden import {module!r} starts with {prefix!r}."
+            )
 
 
 @pytest.mark.parametrize("src_file", _imdf_python_files(), ids=lambda p: p.name)
