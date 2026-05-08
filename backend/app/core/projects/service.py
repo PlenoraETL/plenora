@@ -130,6 +130,20 @@ class ProjectService:
         logger.info(f"Progetto creato: {project_id} (created_by={created_by})", op="create_project")
         return self._row_to_metadata(row)
 
+    def rollback_created_project(
+        self,
+        project_id: str,
+        group_id: Optional[str] = None,
+    ) -> bool:
+        """Delete a project row created in a failed create request.
+
+        This compensation is intentionally narrower than ``delete_project``:
+        during create rollback the project has not been exposed as a durable
+        user resource yet, so only the config row created in the same request
+        should be removed.
+        """
+        return project_db.delete_project(project_id, group_id=group_id)
+
     def list_projects(self, group_id: str = None) -> ProjectList:
         """Lista progetti.
 

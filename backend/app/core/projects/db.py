@@ -10,13 +10,17 @@ from __future__ import annotations
 from app.db.config import projects as _projects_leaf
 
 __all__ = [
+    "ProjectCanvasCheckRow",
     "ProjectDetailRow",
+    "ProjectDependencyRow",
     "ProjectRow",
     "create_project",
     "delete_project",
     "get_project",
     "get_project_retention_n",
     "get_project_row",
+    "list_project_canvas_check_rows",
+    "list_project_dependency_rows_using_connection",
     "list_owned_project_ids",
     "list_project_ids_for_group",
     "list_projects",

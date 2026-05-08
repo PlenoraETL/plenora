@@ -93,8 +93,77 @@ class ProjectDetailRow:
         return row
 
 
+@dataclass(frozen=True)
+class ProjectDependencyRow:
+    """Read model for lightweight project dependency checks."""
+
+    id: str
+    name: str
+    project_type: str
+    group_id: Optional[str]
+
+    @classmethod
+    def from_mapping(cls, row: Mapping[str, object]) -> "ProjectDependencyRow":
+        return cls(
+            id=cast(str, row["id"]),
+            name=cast(str, row["name"]),
+            project_type=cast(str, row["project_type"]),
+            group_id=cast(Optional[str], row.get("group_id")),
+        )
+
+    def to_legacy_dict(self) -> Dict[str, object]:
+        return {
+            "id": self.id,
+            "name": self.name,
+            "project_type": self.project_type,
+            "group_id": self.group_id,
+        }
+
+
+@dataclass(frozen=True)
+class ProjectCanvasCheckRow:
+    """Read model for datasource cascade checks over persisted canvases."""
+
+    id: str
+    name: str
+    project_type: str
+    canvas: object
+    group_id: Optional[str]
+
+    @classmethod
+    def from_mapping(cls, row: Mapping[str, object]) -> "ProjectCanvasCheckRow":
+        return cls(
+            id=cast(str, row["id"]),
+            name=cast(str, row["name"]),
+            project_type=cast(str, row["project_type"]),
+            canvas=row.get("canvas"),
+            group_id=cast(Optional[str], row.get("group_id")),
+        )
+
+    def to_legacy_dict(self) -> Dict[str, object]:
+        return {
+            "id": self.id,
+            "name": self.name,
+            "project_type": self.project_type,
+            "canvas": self.canvas,
+            "group_id": self.group_id,
+        }
+
+
 def _project_rows(rows: Iterable[Mapping[str, object]]) -> List[ProjectRow]:
     return [ProjectRow.from_mapping(row) for row in rows]
+
+
+def _project_dependency_rows(
+    rows: Iterable[Mapping[str, object]],
+) -> List[ProjectDependencyRow]:
+    return [ProjectDependencyRow.from_mapping(row) for row in rows]
+
+
+def _project_canvas_check_rows(
+    rows: Iterable[Mapping[str, object]],
+) -> List[ProjectCanvasCheckRow]:
+    return [ProjectCanvasCheckRow.from_mapping(row) for row in rows]
 
 
 def get_project_row(
@@ -268,17 +337,36 @@ def list_project_ids_for_group(group_id: str) -> Set[str]:
     return {r["id"] for r in rows}
 
 
-def list_projects_using_connection(connection_id: str) -> List[Dict]:
+def list_project_dependency_rows_using_connection(
+    connection_id: str,
+) -> List[ProjectDependencyRow]:
     """Projects that directly reference a database connection."""
-    return fetchall(
-        "SELECT id, name, project_type, group_id FROM projects WHERE connection_id = ?",
-        (connection_id,),
+    return _project_dependency_rows(
+        fetchall(
+            "SELECT id, name, project_type, group_id FROM projects WHERE connection_id = ?",
+            (connection_id,),
+        )
     )
 
 
-def list_projects_with_canvas_for_datasource_check() -> List[Dict]:
+def list_projects_using_connection(connection_id: str) -> List[Dict[str, object]]:
+    """KEEP_COMPAT: legacy dict wrapper for connection delete checks."""
+    return [
+        row.to_legacy_dict()
+        for row in list_project_dependency_rows_using_connection(connection_id)
+    ]
+
+
+def list_project_canvas_check_rows() -> List[ProjectCanvasCheckRow]:
     """Project rows needed by datasource cascade checks."""
-    return fetchall("SELECT id, name, project_type, canvas, group_id FROM projects")
+    return _project_canvas_check_rows(
+        fetchall("SELECT id, name, project_type, canvas, group_id FROM projects")
+    )
+
+
+def list_projects_with_canvas_for_datasource_check() -> List[Dict[str, object]]:
+    """KEEP_COMPAT: legacy dict wrapper for datasource delete checks."""
+    return [row.to_legacy_dict() for row in list_project_canvas_check_rows()]
 
 
 # ATOMIC CANVAS-KEY UPDATE

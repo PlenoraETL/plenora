@@ -22,6 +22,8 @@ def test_projects_domain_db_bridge_reexports_existing_sql_leaf() -> None:
     exported_names = {
         "ProjectRow",
         "ProjectDetailRow",
+        "ProjectDependencyRow",
+        "ProjectCanvasCheckRow",
         "get_project_row",
         "get_project",
         "list_projects",
@@ -31,7 +33,9 @@ def test_projects_domain_db_bridge_reexports_existing_sql_leaf() -> None:
         "get_project_retention_n",
         "list_owned_project_ids",
         "list_project_ids_for_group",
+        "list_project_dependency_rows_using_connection",
         "list_projects_using_connection",
+        "list_project_canvas_check_rows",
         "list_projects_with_canvas_for_datasource_check",
         "update_project_canvas_key_atomic",
     }

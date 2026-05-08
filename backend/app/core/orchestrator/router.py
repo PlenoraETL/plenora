@@ -19,7 +19,7 @@ from app.utils.logger import get_logger
 from app.shared import error_codes
 from app.shared.error_envelope import raise_typed_http
 from app.shared.models import ExecuteRequest
-from app.core.orchestrator.task_service import TaskType
+from app.core.orchestrator.task_service import TaskResultPayload, TaskType
 from app.utils.router_utils import require_service
 from app.shared.audit_action import audit_action
 from app.core.auth.dependencies import get_current_user, require_not_esecutore
@@ -48,6 +48,26 @@ def _mime_for_filename(filename: str) -> str:
 
 
 logger = get_logger(__name__)
+
+
+def _task_result_to_dict(result: object) -> Dict[str, Any]:
+    """Convert typed task result metadata at the HTTP/compat boundary."""
+    if result is None:
+        return {}
+    if isinstance(result, TaskResultPayload):
+        return result.to_dict()
+    if isinstance(result, dict):
+        return dict(result)
+    return {}
+
+
+def _task_result_project_id(result: object) -> Optional[str]:
+    if isinstance(result, TaskResultPayload):
+        return result.project_id or None
+    if isinstance(result, dict):
+        value = result.get("project_id")
+        return str(value) if value is not None else None
+    return None
 
 
 def _assert_project_group(project_id: str, current_user: CurrentUser) -> None:
@@ -97,7 +117,7 @@ def _assert_task_group(task_id: str, current_user: CurrentUser) -> None:
 
     project_id = getattr(task_info, "project_id", None)
     if not project_id and task_info.result:
-        project_id = task_info.result.get("project_id") if isinstance(task_info.result, dict) else None
+        project_id = _task_result_project_id(task_info.result)
 
     if not project_id:
         # Task senza project_id: accessibile solo ad admin+
@@ -576,12 +596,12 @@ def cleanup_task_completely(
 
     # 1. Estrai project_id + result_id dal task (se presenti
     project_id = None
-    task_result_payload: dict = {}
+    task_result_payload: Dict[str, Any] = {}
     try:
         task_info = task_service.get_task_status(task_id)
         project_id = task_info.project_id
         if task_info.result:
-            task_result_payload = task_info.result or {}
+            task_result_payload = _task_result_to_dict(task_info.result)
             if not project_id:
                 project_id = task_result_payload.get("project_id")
     except Exception as e:
@@ -787,7 +807,7 @@ def download_task_result(
         # NON `get_latest_result(project_id)`: due task sullo stesso
         # project condividono il "latest" e si scambierebbero l'output
         # in base a chi completa per ultimo (race cross-task
-        result = task_info.result or {}
+        result = _task_result_to_dict(task_info.result)
         project_id = result.get("project_id")
         if not project_id:
             raise HTTPException(status_code=404, detail="project_id non trovato nel risultato del task")

@@ -1,10 +1,9 @@
 """Canonical orchestrator boundary for asynchronous Celery task management."""
 
-import json
-from typing import Dict, Any, Optional, List
+from typing import Dict, Any, Mapping, Optional, List
 from datetime import datetime, timezone
 from enum import Enum
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass
 from celery.result import AsyncResult
 from workers.celery_app import celery_app
 from app.config import settings
@@ -32,6 +31,35 @@ class TaskType(str, Enum):
     PREVIEW = "preview"
 
 
+@dataclass(frozen=True)
+class TaskResultPayload:
+    """Typed core contract for successful Celery task result metadata."""
+
+    payload: Mapping[str, object]
+
+    @classmethod
+    def from_celery_meta(cls, meta: Mapping[str, object]) -> "TaskResultPayload":
+        return cls(payload=dict(meta))
+
+    @property
+    def project_id(self) -> str:
+        value = self.payload.get("project_id", "")
+        return str(value) if value is not None else ""
+
+    @property
+    def result_id(self) -> Optional[str]:
+        value = self.payload.get("result_id")
+        return str(value) if value is not None else None
+
+    @property
+    def output_file(self) -> Optional[str]:
+        value = self.payload.get("output_file")
+        return str(value) if value is not None else None
+
+    def to_dict(self) -> Dict[str, object]:
+        return dict(self.payload)
+
+
 @dataclass
 class TaskInfo:
     """Informazioni su un task."""
@@ -41,15 +69,31 @@ class TaskInfo:
     status: TaskStatus
     progress: int = 0
     message: str = ""
-    result: Optional[Dict] = None
+    result: Optional[TaskResultPayload] = None
     error: Optional[str] = None
     created_at: Optional[str] = None
     started_at: Optional[str] = None
     completed_at: Optional[str] = None
+
+    def __post_init__(self) -> None:
+        if isinstance(self.result, dict):
+            self.result = TaskResultPayload.from_celery_meta(self.result)
     
-    def to_dict(self) -> Dict:
+    def to_dict(self) -> Dict[str, object]:
         """Converte in dizionario."""
-        return {k: v.value if isinstance(v, Enum) else v for k, v in asdict(self).items()}
+        return {
+            "task_id": self.task_id,
+            "task_type": self.task_type.value,
+            "project_id": self.project_id,
+            "status": self.status.value,
+            "progress": self.progress,
+            "message": self.message,
+            "result": self.result.to_dict() if self.result else None,
+            "error": self.error,
+            "created_at": self.created_at,
+            "started_at": self.started_at,
+            "completed_at": self.completed_at,
+        }
 
 
 class TaskService:
@@ -298,11 +342,11 @@ class TaskService:
                     status = TaskStatus.FAILURE
                     progress = 100
                     message = meta.get("message", meta.get("error", "Errore"))
-                    task_result = meta
+                    task_result = TaskResultPayload.from_celery_meta(meta)
                 else:
                     progress = 100
                     message = "Completato"
-                    task_result = meta
+                    task_result = TaskResultPayload.from_celery_meta(meta)
             else:
                 task_result = None
 
@@ -323,8 +367,8 @@ class TaskService:
         
         # Estrai project_id dal risultato se disponibile
         project_id = ""
-        if isinstance(task_result, dict):
-            project_id = task_result.get("project_id", "")
+        if isinstance(task_result, TaskResultPayload):
+            project_id = task_result.project_id
         # Fallback alla cache locale (risolve PENDING prima che il worker scriva metadata
         if not project_id:
             project_id = self._task_project_cache.get(task_id, "")

@@ -113,6 +113,93 @@ def test_get_project_keeps_legacy_dict_wrapper(monkeypatch):
     assert row["canvas"] == {"nodes": [], "edges": []}
 
 
+def test_project_dependency_db_leaf_returns_typed_rows_and_legacy_wrapper(monkeypatch):
+    from app.db.config import projects as project_db
+
+    monkeypatch.setattr(
+        project_db,
+        "fetchall",
+        lambda *args, **kwargs: [
+            {
+                "id": "p1",
+                "name": "Project One",
+                "project_type": "estrai",
+                "group_id": "grp-1",
+            }
+        ],
+    )
+
+    typed_rows = project_db.list_project_dependency_rows_using_connection("conn-1")
+
+    assert typed_rows == [
+        project_db.ProjectDependencyRow(
+            id="p1",
+            name="Project One",
+            project_type="estrai",
+            group_id="grp-1",
+        )
+    ]
+    with pytest.raises(FrozenInstanceError):
+        typed_rows[0].name = "changed"
+
+    legacy_rows = project_db.list_projects_using_connection("conn-1")
+
+    assert legacy_rows == [
+        {
+            "id": "p1",
+            "name": "Project One",
+            "project_type": "estrai",
+            "group_id": "grp-1",
+        }
+    ]
+    assert isinstance(legacy_rows[0], dict)
+
+
+def test_project_canvas_check_db_leaf_returns_typed_rows_and_legacy_wrapper(monkeypatch):
+    from app.db.config import projects as project_db
+
+    monkeypatch.setattr(
+        project_db,
+        "fetchall",
+        lambda *args, **kwargs: [
+            {
+                "id": "p1",
+                "name": "Project One",
+                "project_type": "manipola",
+                "canvas": '{"nodes": []}',
+                "group_id": "grp-1",
+            }
+        ],
+    )
+
+    typed_rows = project_db.list_project_canvas_check_rows()
+
+    assert typed_rows == [
+        project_db.ProjectCanvasCheckRow(
+            id="p1",
+            name="Project One",
+            project_type="manipola",
+            canvas='{"nodes": []}',
+            group_id="grp-1",
+        )
+    ]
+    with pytest.raises(FrozenInstanceError):
+        typed_rows[0].name = "changed"
+
+    legacy_rows = project_db.list_projects_with_canvas_for_datasource_check()
+
+    assert legacy_rows == [
+        {
+            "id": "p1",
+            "name": "Project One",
+            "project_type": "manipola",
+            "canvas": '{"nodes": []}',
+            "group_id": "grp-1",
+        }
+    ]
+    assert isinstance(legacy_rows[0], dict)
+
+
 def test_project_service_list_projects_uses_typed_project_rows(monkeypatch):
     from app.db.config import projects as project_db
     from app.core.projects.service import ProjectService

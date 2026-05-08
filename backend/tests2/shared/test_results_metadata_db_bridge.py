@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from dataclasses import FrozenInstanceError
+
 import pytest
 
 from app.core.results import db as results_db
@@ -89,6 +91,35 @@ def test_result_metadata_reads_use_core_sql(monkeypatch):
     assert calls[2][2] == ("proj-1",)
     assert calls[3][0] == "fetchall"
     assert "FROM results WHERE project_id = ? ORDER BY created_at DESC" in calls[3][1]
+
+
+def test_result_metadata_row_is_typed_read_only_boundary(monkeypatch):
+    def _fetchone(sql: str, params: tuple[object, ...]) -> dict[str, object]:
+        return {
+            "id": "res-1",
+            "project_id": "proj-1",
+            "group_id": "grp-1",
+            "filename": "out.csv",
+            "format": "csv",
+            "size_bytes": 12,
+            "rows_count": 2,
+            "created_at": "2026-05-08T10:00:00+00:00",
+            "storage_key": "results/proj-1/res-1.bin",
+        }
+
+    monkeypatch.setattr(results_db, "fetchone", _fetchone)
+
+    row = results_db.get_result_row("res-1")
+
+    assert isinstance(row, results_db.ResultMetadataRow)
+    assert row.id == "res-1"
+    assert row.project_id == "proj-1"
+    assert row.group_id == "grp-1"
+    assert row.storage_key == "results/proj-1/res-1.bin"
+    assert row.to_legacy_dict() == results_db.get_result("res-1")
+
+    with pytest.raises(FrozenInstanceError):
+        row.id = "mutated"
 
 
 def test_results_db_service_retains_metadata_compat_exports():

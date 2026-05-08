@@ -5,6 +5,7 @@ Canonical implementation: app.core.orchestrator.task_service.
 
 from app.core.orchestrator.task_service import (
     TaskInfo,
+    TaskResultPayload,
     TaskService,
     TaskStatus,
     TaskType,
@@ -13,6 +14,7 @@ from app.core.orchestrator.task_service import (
 
 __all__ = [
     "TaskInfo",
+    "TaskResultPayload",
     "TaskService",
     "TaskStatus",
     "TaskType",

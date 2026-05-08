@@ -92,6 +92,35 @@ def test_save_result_blob_keeps_temp_file_when_db_save_fails(monkeypatch, tmp_pa
     assert temp_dir.exists()
 
 
+def test_apply_results_retention_uses_typed_result_rows(monkeypatch):
+    import app.core.projects.db as projects_db
+    import app.core.results.cleanup as results_cleanup
+    import app.core.results.db as results_db
+    import app.utils.result_store as result_store
+
+    deleted: list[str] = []
+    rows = [
+        results_db.ResultMetadataRow(id="res-new"),
+        results_db.ResultMetadataRow(id="res-keep"),
+        results_db.ResultMetadataRow(id="res-old"),
+    ]
+
+    monkeypatch.setattr(projects_db, "get_project_retention_n", lambda pid: 2)
+    monkeypatch.setattr(results_db, "list_result_rows", lambda pid: rows)
+    monkeypatch.setattr(
+        results_db,
+        "list_results",
+        lambda pid: (_ for _ in ()).throw(
+            AssertionError("legacy result dict wrapper should not be used")
+        ),
+    )
+    monkeypatch.setattr(results_cleanup, "delete_result", deleted.append)
+
+    result_store._apply_results_retention("proj-1")
+
+    assert deleted == ["res-old"]
+
+
 # RB.2 (2026-04-27): AWS credentials expired -> ResultSaveError con messaggio
 # operativo, no fallback silenzioso a DB se policy/threshold dice S3.
 

@@ -43,8 +43,8 @@ def _apply_results_retention(project_id: str) -> None:
         if retention_n is None:
             retention_n = DEFAULT_RESULTS_RETENTION
 
-        # Lista risultati ordinati dal più recente (results tables
-        all_results = results_db.list_results(project_id)
+        # Lista risultati ordinati dal piu' recente (results tables
+        all_results = results_db.list_result_rows(project_id)
 
         if len(all_results) <= retention_n:
             return  # Nulla da eliminare
@@ -52,9 +52,10 @@ def _apply_results_retention(project_id: str) -> None:
         # Elimina i risultati oltre retention_n (i più vecchi sono in fondo
         to_delete = all_results[retention_n:]
         for r in to_delete:
-            results_cleanup.delete_result(r["id"])
+            result_id = r.id
+            results_cleanup.delete_result(result_id)
             logger.debug(
-                f"Retention: eliminato risultato {r['id']} del progetto {project_id}",
+                f"Retention: eliminato risultato {result_id} del progetto {project_id}",
                 op="retention"
             )
 

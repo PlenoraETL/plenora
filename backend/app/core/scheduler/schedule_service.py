@@ -127,17 +127,17 @@ class ScheduleService:
         short_uuid = str(uuid.uuid4())[:12]
         return f"schedule_{short_uuid}"
 
-    def _row_to_config(self, row: dict) -> Optional[ScheduleConfig]:
+    def _row_to_config(self, row: Optional[db.ScheduleRow]) -> Optional[ScheduleConfig]:
         """Converte riga DB in ScheduleConfig."""
         if not row:
             return None
         try:
-            config_data = row.get("config") or {}
+            config_data = row.config or {}
             if isinstance(config_data, str):
                 config_data = json.loads(config_data)
             return ScheduleConfig.model_validate(config_data)
         except Exception as e:
-            logger.error(f"[GESTITO] Errore parsing schedule {row.get('id')}: {e}", exc_info=True)
+            logger.error(f"[GESTITO] Errore parsing schedule {row.id}: {e}", exc_info=True)
             return None
 
     def _config_to_db(self, config: ScheduleConfig, group_id: str) -> dict:
@@ -156,14 +156,14 @@ class ScheduleService:
 
     def get_schedule(self, schedule_id: str) -> Optional[ScheduleConfig]:
         """Carica un singolo schedule per ID."""
-        row = db.get_schedule(schedule_id)
+        row = db.get_schedule_row(schedule_id)
         return self._row_to_config(row)
 
     def list_schedules(self, project_id: Optional[str] = None,
                        group_id: str = None) -> ScheduleList:
         """Lista tutti gli schedule del gruppo, ordinati per data."""
         group_id = group_id or self.DEFAULT_GROUP
-        rows = db.list_schedules(group_id)
+        rows = db.list_schedule_rows(group_id)
         schedules = []
         for row in rows:
             config = self._row_to_config(row)
@@ -177,7 +177,7 @@ class ScheduleService:
         return ScheduleList(schedules=schedules, total=len(schedules))
 
     def schedule_exists(self, schedule_id: str) -> bool:
-        return db.get_schedule(schedule_id) is not None
+        return db.get_schedule_row(schedule_id) is not None
 
     # CREAZIONE
 
@@ -352,7 +352,7 @@ class ScheduleService:
 
     def delete_schedule(self, schedule_id: str) -> bool:
         """Elimina uno schedule e i suoi log."""
-        if not db.get_schedule(schedule_id):
+        if not db.get_schedule_row(schedule_id):
             return False
 
         db.delete_schedule(schedule_id)

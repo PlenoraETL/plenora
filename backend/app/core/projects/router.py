@@ -88,6 +88,18 @@ def create_project(
                 f"[CRASH] create_project canvas save fallito per {metadata.id}: {e}",
                 op="create_project", exc_info=True
             )
+            try:
+                _project_service.rollback_created_project(
+                    metadata.id,
+                    group_id=current_user.group_id,
+                )
+            except Exception as rollback_error:
+                logger.error(
+                    f"[CRASH] create_project rollback fallito per {metadata.id}: "
+                    f"{rollback_error}",
+                    op="create_project",
+                    exc_info=True,
+                )
             raise HTTPException(500, "Errore salvataggio canvas")
 
     canvas = _project_service.get_project_canvas(metadata.id)
