@@ -667,6 +667,8 @@ class FeaturesService:
         object_ids: Optional[List[int]] = None,
         where: Optional[str] = None,
         source_srid: Optional[int] = None,
+        batch_size: Optional[int] = None,
+        match_column: str = "",
     ) -> dict:
         """
         Scrive features su un layer ArcGIS esistente.
@@ -692,8 +694,8 @@ class FeaturesService:
         
         conn_info = self._to_connection_info(connection)
         
-        # DELETE non richiede file input
-        if operation == "delete":
+        # DELETE legacy via OBJECTID/where non richiede file input.
+        if operation == "delete" and not match_column:
             result = self._client.delete_features(
                 conn_info, layer_url, 
                 object_ids=object_ids, where=where
@@ -705,9 +707,9 @@ class FeaturesService:
                 "errors": result.get("errors", []),
             }
         
-        # ADD / UPDATE: leggi file e converti
+        # ADD / UPDATE / UPSERT / DELETE-by-match: leggi file e converti.
         if not input_path:
-            raise ValueError("input_path richiesto per operazioni add/update")
+            raise ValueError("input_path richiesto per operazioni add/update/upsert")
         
         df = self._load_dataframe(input_path)
         logger.info(f"Caricato file {input_path}: {len(df)} righe, colonne: {list(df.columns)}")
@@ -732,22 +734,89 @@ class FeaturesService:
             }
         
         if operation == "add":
-            result = self._client.add_features(conn_info, layer_url, features)
-            count_key = "added_count"
-            action = "Aggiunte"
+            result = self._client.add_features(
+                conn_info, layer_url, features, batch_size=batch_size
+            )
+            return self._write_result("Aggiunte", result, "added_count", len(features))
         elif operation == "update":
-            result = self._client.update_features(conn_info, layer_url, features)
-            count_key = "updated_count"
-            action = "Aggiornate"
-        else:
-            raise ValueError(f"Operazione non supportata: {operation}")
-        
-        return {
-            "success": result["success"],
-            "message": f"{action} {result[count_key]} features su {len(features)} totali",
-            "count": result[count_key],
-            "errors": result.get("errors", []),
-        }
+            if match_column:
+                features = self._resolve_objectids_for_update(
+                    conn_info, layer_url, features, match_column
+                )
+                if not features:
+                    return {
+                        "success": False,
+                        "message": f"Nessuna feature matchata per colonna '{match_column}'",
+                        "count": 0,
+                        "errors": [],
+                    }
+            result = self._client.update_features(
+                conn_info, layer_url, features, batch_size=batch_size
+            )
+            return self._write_result("Aggiornate", result, "updated_count", len(features))
+        elif operation == "upsert":
+            if not match_column:
+                raise ValueError("Colonna match obbligatoria per upsert")
+            to_update, to_add = self._split_upsert_features(
+                conn_info, layer_url, features, match_column
+            )
+            total_updated = 0
+            total_added = 0
+            all_errors = []
+
+            if to_update:
+                res_upd = self._client.update_features(
+                    conn_info, layer_url, to_update, batch_size=batch_size
+                )
+                total_updated = res_upd.get("updated_count", 0)
+                all_errors.extend(res_upd.get("errors", []))
+
+            if to_add:
+                res_add = self._client.add_features(
+                    conn_info, layer_url, to_add, batch_size=batch_size
+                )
+                total_added = res_add.get("added_count", 0)
+                all_errors.extend(res_add.get("errors", []))
+
+            total = total_updated + total_added
+            return {
+                "success": total > 0,
+                "message": (
+                    f"Upsert: {total_updated} aggiornate, {total_added} "
+                    f"inserite su {len(features)} totali"
+                ),
+                "count": total,
+                "feature_count": total,
+                "updated": total_updated,
+                "added": total_added,
+                "errors": all_errors,
+            }
+        elif operation == "delete":
+            if not match_column:
+                raise ValueError("Colonna match obbligatoria per delete")
+            oid_features = self._resolve_objectids_for_update(
+                conn_info, layer_url, features, match_column
+            )
+            if not oid_features:
+                return {
+                    "success": False,
+                    "message": f"Nessuna feature trovata per colonna '{match_column}'",
+                    "count": 0,
+                    "errors": [],
+                }
+            object_ids = [f["attributes"]["OBJECTID"] for f in oid_features]
+            result = self._client.delete_features(
+                conn_info, layer_url, object_ids=object_ids
+            )
+            return {
+                "success": result["success"],
+                "message": f"Eliminate {result['deleted_count']} features",
+                "count": result["deleted_count"],
+                "feature_count": result["deleted_count"],
+                "errors": result.get("errors", []),
+            }
+
+        raise ValueError(f"Operazione non supportata: {operation}")
     
     def write_features_from_df(
         self,
@@ -980,8 +1049,6 @@ class FeaturesService:
         - to_update: features con match nel layer (con OBJECTID assegnato)
         - to_add: features senza match nel layer (nuove)
         """
-        import requests as _requests
-
         match_values = []
         for feature in features:
             match_value = feature.get("attributes", {}).get(match_column)
@@ -991,48 +1058,17 @@ class FeaturesService:
         if not match_values:
             return [], features
 
-        token = self._client.authenticate(conn_info)
-        referer_headers = {"Referer": conn_info.server_url}
-
-        CHUNK = 200
-        oid_map = {}
-
-        for i in range(0, len(match_values), CHUNK):
-            chunk = match_values[i:i + CHUNK]
-            if isinstance(chunk[0], str):
-                vals_str = ",".join(f"'{v}'" for v in chunk)
-            else:
-                vals_str = ",".join(str(v) for v in chunk)
-
-            params = {
-                "where": f"{match_column} IN ({vals_str})",
-                "outFields": f"OBJECTID,{match_column}",
-                "returnGeometry": "false",
-                "f": "json",
-            }
-            if token:
-                params["token"] = token
-
-            try:
-                resp = self._client._http.get(
-                    f"{layer_url}/query", params=params, timeout=30,
-                    headers=referer_headers,
-                )
-                data = resp.json()
-                for feature_data in data.get("features", []):
-                    attrs = feature_data.get("attributes", {})
-                    oid = attrs.get("OBJECTID") or attrs.get("objectid")
-                    match_val = attrs.get(match_column)
-                    if oid is not None and match_val is not None:
-                        oid_map[match_val] = oid
-            except Exception as e:
-                logger.error(f"Errore query OBJECTID per upsert: {e}", exc_info=True)
+        oid_map, query_errors = self._client.query_oid_by_key(
+            conn_info, layer_url, match_column, match_values
+        )
+        for error in query_errors:
+            logger.error(f"Errore query OBJECTID per upsert: {error}")
 
         to_update = []
         to_add = []
         for feature in features:
             match_val = feature.get("attributes", {}).get(match_column)
-            oid = oid_map.get(match_val)
+            oid = oid_map.get(str(match_val))
             if oid is not None:
                 feature["attributes"]["OBJECTID"] = oid
                 to_update.append(feature)
@@ -1062,8 +1098,6 @@ class FeaturesService:
 
         Features senza match vengono scartate (log warning).
         """
-        import requests as _requests
-
         # Raccogli valori match dal payload
         match_values = []
         for feature in features:
@@ -1075,46 +1109,11 @@ class FeaturesService:
             logger.warning(f"Nessun valore trovato per colonna match '{match_column}'")
             return []
 
-        token = self._client.authenticate(conn_info)
-        referer_headers = {"Referer": conn_info.server_url}
-
-        # Query a blocchi di 200 valori
-        CHUNK = 200
-        oid_map = {}  # match_value → OBJECTID
-
-        for i in range(0, len(match_values), CHUNK):
-            chunk = match_values[i:i + CHUNK]
-            # Costruisci WHERE: stringhe con apici, numeri senza
-            if isinstance(chunk[0], str):
-                vals_str = ",".join(f"'{v}'" for v in chunk)
-            else:
-                vals_str = ",".join(str(v) for v in chunk)
-
-            where = f"{match_column} IN ({vals_str})"
-
-            params = {
-                "where": where,
-                "outFields": f"OBJECTID,{match_column}",
-                "returnGeometry": "false",
-                "f": "json",
-            }
-            if token:
-                params["token"] = token
-
-            try:
-                resp = self._client._http.get(
-                    f"{layer_url}/query", params=params, timeout=30,
-                    headers=referer_headers,
-                )
-                data = resp.json()
-                for feature_data in data.get("features", []):
-                    attrs = feature_data.get("attributes", {})
-                    oid = attrs.get("OBJECTID") or attrs.get("objectid")
-                    match_val = attrs.get(match_column)
-                    if oid is not None and match_val is not None:
-                        oid_map[match_val] = oid
-            except Exception as e:
-                logger.error(f"Errore query OBJECTID per match: {e}", exc_info=True)
+        oid_map, query_errors = self._client.query_oid_by_key(
+            conn_info, layer_url, match_column, match_values
+        )
+        for error in query_errors:
+            logger.error(f"Errore query OBJECTID per match: {error}")
 
         logger.info(f"Risolti {len(oid_map)} OBJECTID su {len(match_values)} valori match")
 
@@ -1123,7 +1122,7 @@ class FeaturesService:
         skipped = 0
         for feature in features:
             match_val = feature.get("attributes", {}).get(match_column)
-            oid = oid_map.get(match_val)
+            oid = oid_map.get(str(match_val))
             if oid is not None:
                 feature["attributes"]["OBJECTID"] = oid
                 resolved.append(feature)

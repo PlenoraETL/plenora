@@ -84,6 +84,42 @@ def test_write_features_skips_project_visibility_for_explicit_input_path(client)
 
     assert response.status_code == 200
     assert_project_visible.assert_not_called()
+    write_features_mock.assert_called_once()
+    assert write_features_mock.call_args.kwargs["operation"] == "add"
+    assert write_features_mock.call_args.kwargs["match_column"] == ""
+    assert write_features_mock.call_args.kwargs["batch_size"] is None
+
+
+def test_write_features_accepts_arcgis_writer_knobs(client):
+    write_features_mock = MagicMock(return_value={
+        "success": True,
+        "message": "Upsert: 1 aggiornate, 1 inserite su 2 totali",
+        "count": 2,
+        "errors": [],
+    })
+    service = SimpleNamespace(write_features=write_features_mock)
+
+    with patch("app.core.features.routes._check_arcgis_access"), \
+         patch("app.core.features.routes.get_service", return_value=service), \
+         patch("app.core.features.routes._resolve_input_path", return_value=_fake_materialized("/tmp/result.parquet")):
+        response = client.post(
+            "/api/features/write",
+            json={
+                "connection_id": "conn-1",
+                "layer_url": "https://example.test/FeatureServer/0",
+                "operation": "add",
+                "upsert": True,
+                "input_path": "/tmp/result.parquet",
+                "match_column": "external_id",
+                "batch_size": 250,
+            },
+        )
+
+    assert response.status_code == 200
+    write_features_mock.assert_called_once()
+    assert write_features_mock.call_args.kwargs["operation"] == "upsert"
+    assert write_features_mock.call_args.kwargs["match_column"] == "external_id"
+    assert write_features_mock.call_args.kwargs["batch_size"] == 250
 
 
 def test_create_service_checks_project_visibility_before_loading_project_output(client, current_user):

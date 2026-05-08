@@ -320,11 +320,14 @@ class WriteRequest(BaseModel):
     """Request per scrittura su layer esistente."""
     connection_id: str
     layer_url: str  # URL completo del layer (es. .../FeatureServer/0
-    operation: str = "add"  # add, update, delete
+    operation: str = "add"  # add, update, upsert, delete
+    upsert: bool = False  # Compat shorthand: true forces operation="upsert"
     input_path: str = ""  # Path file sorgente (per add/update
     project_id: str = ""  # Alternativa: cerca output in RESULTS_DIR/{project_id}
     geometry_column: str = "geometry"
     source_srid: Optional[int] = None  # SRID sorgente (dal nodo pipeline
+    batch_size: Optional[int] = None
+    match_column: str = ""
     object_ids: Optional[List[int]] = None  # Per delete
     where: Optional[str] = None  # Per delete
 
@@ -459,15 +462,18 @@ async def write_features(request: WriteRequest, current_user: CurrentUser = Depe
             request.project_id,
             expected_group_id=current_user.group_id,
         ) as materialized:
+            operation = "upsert" if request.upsert else request.operation
             result = get_service().write_features(
                 connection_id=request.connection_id,
                 layer_url=request.layer_url,
-                operation=request.operation,
+                operation=operation,
                 input_path=str(materialized.path),
                 geometry_column=request.geometry_column,
                 object_ids=request.object_ids,
                 where=request.where,
                 source_srid=request.source_srid,
+                batch_size=request.batch_size,
+                match_column=request.match_column,
             )
         return result
         

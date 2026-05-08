@@ -9,13 +9,14 @@ Higher-level services may keep connection-id facades above this boundary.
 
 from __future__ import annotations
 
-from typing import List, Mapping, Optional, Protocol, Sequence, Tuple, runtime_checkable
+from typing import Dict, List, Mapping, Optional, Protocol, Sequence, Tuple, runtime_checkable
 
 from app.shared.connections.arcgis_connection import ArcGISConnectionInfo
 
 FeaturePayload = Mapping[str, object]
 ProviderResult = Mapping[str, object]
 LayerRows = Tuple[List[tuple], List[str]]
+OidLookupResult = Tuple[Dict[str, int], List[str]]
 
 
 @runtime_checkable
@@ -34,6 +35,14 @@ class ArcGISDiscoveryProviderProtocol(Protocol):
 
     def list_folders(self, conn: ArcGISConnectionInfo) -> List[dict]:
         """List folders available to the connection."""
+        ...
+
+    def is_service_name_available(
+        self,
+        conn: ArcGISConnectionInfo,
+        service_name: str,
+    ) -> Tuple[bool, Optional[str]]:
+        """Check whether a Feature Service name is available on the portal."""
         ...
 
     def list_layers(
@@ -83,6 +92,16 @@ class ArcGISReadProviderProtocol(Protocol):
         max_features: Optional[int] = None,
     ) -> LayerRows:
         """Query/read layer rows in the tuple shape consumed by Estrai."""
+        ...
+
+    def query_oid_by_key(
+        self,
+        conn: ArcGISConnectionInfo,
+        layer_url: str,
+        match_col: str,
+        values: Sequence[object],
+    ) -> OidLookupResult:
+        """Resolve OBJECTID values for business-key values on a layer."""
         ...
 
 
@@ -184,5 +203,6 @@ __all__ = [
     "ArcGISWriteProviderProtocol",
     "FeaturePayload",
     "LayerRows",
+    "OidLookupResult",
     "ProviderResult",
 ]

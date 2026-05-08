@@ -7,30 +7,36 @@ sul portal ArcGIS.
 from typing import List, Optional, Tuple
 from urllib.parse import urlparse
 
+from app.shared.connections.arcgis_connection import ArcGISConnectionInfo
+from app.shared.connections.arcgis_provider import ArcGISDiscoveryProviderProtocol
 from app.utils.logger import get_logger
 
 logger = get_logger("app.core.imdf.arcgis_uploader")
 
 
-def _list_user_folders(client, conn) -> List[dict]:
+_IMDF_NON_USER_FOLDER_TITLES = {"", "(root)", "root", "system", "utilities"}
+
+
+def _is_imdf_user_folder(folder: dict) -> bool:
+    folder_id = str(folder.get("id") or "").strip()
+    title = str(folder.get("title") or "").strip()
+    if not folder_id:
+        return False
+    return title.lower() not in _IMDF_NON_USER_FOLDER_TITLES
+
+
+def _list_user_folders(
+    client: ArcGISDiscoveryProviderProtocol,
+    conn: ArcGISConnectionInfo,
+) -> List[dict]:
     """Read-only: lista folder dell'utente corrente (senza crearne).
     Ritorna lista di dict [{id, title, ...}]. Usato dal validator per
     risolvere ownerFolder (id) → title prima di confrontare con la
     selezione utente.
     """
-    token = client.authenticate(conn)
-    parsed = urlparse(conn.server_url)
-    base_url = f"{parsed.scheme}://{parsed.netloc}/sharing/rest"
-    referer = {"Referer": conn.server_url}
-
-    list_url = f"{base_url}/content/users/{conn.username}"
-    params = {"f": "json"}
-    if token:
-        params["token"] = token
     try:
-        r = client._http.get(list_url, params=params, timeout=30, headers=referer)
-        data = r.json()
-        return data.get("folders", []) or []
+        folders = client.list_folders(conn) or []
+        return [folder for folder in folders if _is_imdf_user_folder(folder)]
     except Exception as e:
         logger.warning(f"_list_user_folders: errore: {e}")
         return []
@@ -71,36 +77,16 @@ def _ensure_folder(client, conn, folder_name: str) -> Optional[str]:
 def _is_service_name_available(client, conn, fs_name: str) -> Tuple[bool, Optional[str]]:
     """Controlla presso il portal se il nome servizio e' disponibile.
 
-    Usa `/sharing/rest/portals/self/isServiceNameAvailable` che interroga
-    il hosted server indipendentemente dalla visibilita' del portal item —
-    utile per rilevare "zombie services" (item cancellato ma nome ancora
-    riservato) o nomi di altri utenti dell'organizzazione.
+    KEEP_COMPAT: wrapper IMDF legacy delegato al boundary generico
+    `ArcGISClient.is_service_name_available`.
 
     Returns:
         (available, error_message):
             available = True → il nome e' libero, createService andra' a buon fine
             available = False → il nome e' occupato; error_message se disponibile
     """
-    token = client.authenticate(conn)
-    parsed = urlparse(conn.server_url)
-    base_url = f"{parsed.scheme}://{parsed.netloc}/sharing/rest"
-    referer = {"Referer": conn.server_url}
-    params = {
-        "name": fs_name,
-        "type": "Feature Service",
-        "f": "json",
-    }
-    if token:
-        params["token"] = token
     try:
-        r = client._http.get(
-            f"{base_url}/portals/self/isServiceNameAvailable",
-            params=params, timeout=20, headers=referer,
-        )
-        data = r.json()
-        if "error" in data:
-            return True, f"check fallito: {data['error'].get('message', '')}"
-        return bool(data.get("available", False)), None
+        return client.is_service_name_available(conn, fs_name)
     except Exception as e:
         logger.warning(f"_is_service_name_available error: {e}")
         return True, str(e)  # fail-open: assume disponibile, poi createService dara' errore

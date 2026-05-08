@@ -120,7 +120,12 @@ def test_arcgis_provider_protocol_importable_from_shared():
 def test_arcgis_provider_protocol_has_required_methods():
     """The protocol must expose the three methods validator.py calls on client."""
     from app.shared.connections.arcgis_provider import ArcGISProviderProtocol
-    for method in ("count_features_where", "list_layers", "get_layer_schema"):
+    for method in (
+        "count_features_where",
+        "is_service_name_available",
+        "list_layers",
+        "get_layer_schema",
+    ):
         assert hasattr(ArcGISProviderProtocol, method), (
             f"ArcGISProviderProtocol missing method {method!r}. "
             "validator.py calls this method on the ArcGIS client."

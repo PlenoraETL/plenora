@@ -6,15 +6,29 @@ Keeps provider-specific behavior behind a narrow integration boundary.
 
 import time
 import json
-from typing import List, Dict, Any, Optional, Tuple, Protocol
+from typing import Iterator, List, Dict, Any, Optional, Sequence, Tuple, Protocol
 from dataclasses import dataclass
 
 import requests
 import pandas as pd
 
+from app.shared.connections.arcgis_sql import (
+    chunk_arcgis_values,
+    quote_arcgis_sql_value,
+)
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
+
+
+def _quote_arcgis_sql_value(value: object) -> str:
+    """Quote a Python value for an ArcGIS SQL WHERE literal."""
+    return quote_arcgis_sql_value(value)
+
+
+def _chunked_values(values: Sequence[object], size: int) -> Iterator[Sequence[object]]:
+    """Yield ordered chunks of at most ``size`` values."""
+    yield from chunk_arcgis_values(values, size)
 
 
 def _mask_secret(value: str, visible: int = 4) -> str:
@@ -916,6 +930,45 @@ class ArcGISClient:
             logger.warning(f"Errore lista folders server: {e}")
             return [{"id": "", "title": "(root)"}]
 
+    def is_service_name_available(
+        self,
+        conn: ArcGISConnectionInfo,
+        service_name: str,
+    ) -> Tuple[bool, Optional[str]]:
+        """Check whether a Feature Service name is available on the portal.
+
+        The return shape matches the legacy IMDF helper: error-shaped
+        responses and request failures fail open so createService remains the
+        authoritative lifecycle operation.
+        """
+        from urllib.parse import urlparse
+
+        parsed = urlparse(conn.server_url)
+        base_url = f"{parsed.scheme}://{parsed.netloc}/sharing/rest"
+        params = {
+            "name": service_name,
+            "type": "Feature Service",
+            "f": "json",
+        }
+
+        try:
+            response = self._request_with_token(
+                "GET",
+                f"{base_url}/portals/self/isServiceNameAvailable",
+                conn,
+                params=params,
+                timeout=20,
+                extra_headers={"Referer": conn.server_url},
+            )
+            data = response.json()
+            if "error" in data:
+                message = data["error"].get("message", "")
+                return True, f"check fallito: {message}"
+            return bool(data.get("available", False)), None
+        except Exception as e:
+            logger.warning(f"is_service_name_available error: {e}")
+            return True, str(e)
+
     def search_services_online(
         self,
         conn: ArcGISConnectionInfo,
@@ -1421,6 +1474,73 @@ class ArcGISClient:
         if "error" in payload:
             raise RuntimeError(f"Errore ArcGIS: {payload['error']}")
         return int(payload.get("count", 0))
+
+    def query_oid_by_key(
+        self,
+        conn: ArcGISConnectionInfo,
+        layer_url: str,
+        match_col: str,
+        values: Sequence[object],
+    ) -> Tuple[Dict[str, int], List[str]]:
+        """Resolve ``{business_key: OBJECTID}`` from a Feature Service layer.
+
+        This is a provider-level resolver only. Callers decide whether partial
+        results are acceptable; IMDF update/delete strictness stays above this
+        boundary.
+        """
+        token = self.authenticate(conn)
+        referer_headers = {"Referer": conn.server_url}
+        oid_by_key: Dict[str, int] = {}
+        errors: List[str] = []
+        batches_ok = 0
+        batches_failed = 0
+
+        for batch in _chunked_values(values, 200):
+            where = (
+                f"{match_col} IN "
+                f"({','.join(_quote_arcgis_sql_value(value) for value in batch)})"
+            )
+            params = {
+                "where": where,
+                "outFields": f"OBJECTID,{match_col}",
+                "returnGeometry": "false",
+                "f": "json",
+            }
+            if token:
+                params["token"] = token
+
+            try:
+                response = self._http.get(
+                    f"{layer_url}/query",
+                    params=params,
+                    timeout=self.DEFAULT_TIMEOUT,
+                    headers=referer_headers,
+                )
+                payload = response.json()
+                for feature in payload.get("features") or []:
+                    attributes = feature.get("attributes") or {}
+                    key = attributes.get(match_col)
+                    oid = attributes.get("OBJECTID") or attributes.get("objectid")
+                    if key is not None and oid is not None:
+                        oid_by_key[str(key)] = int(oid)
+                batches_ok += 1
+            except Exception as exc:
+                batches_failed += 1
+                batch_number = batches_ok + batches_failed
+                errors.append(f"query OBJECTID batch {batch_number}: {exc}")
+
+        if errors or len(oid_by_key) < len(values):
+            logger.warning(
+                "query_oid_by_key(%s): expected %s values, resolved %s OID. "
+                "Batches: %s ok, %s failed. Errors: %s",
+                match_col,
+                len(values),
+                len(oid_by_key),
+                batches_ok,
+                batches_failed,
+                len(errors),
+            )
+        return oid_by_key, errors
     
     # QUERY FEATURES
     

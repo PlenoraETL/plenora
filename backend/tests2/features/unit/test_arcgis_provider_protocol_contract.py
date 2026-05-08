@@ -27,9 +27,11 @@ def test_arcgis_provider_protocol_exports_read_write_capabilities() -> None:
     required_methods = {
         "list_services",
         "list_folders",
+        "is_service_name_available",
         "list_layers",
         "get_layer_schema",
         "query_features",
+        "query_oid_by_key",
         "count_features_where",
         "create_service",
         "add_layer_to_service",
@@ -44,10 +46,10 @@ def test_arcgis_provider_protocol_exports_read_write_capabilities() -> None:
 
 
 def test_arcgis_provider_capability_protocols_have_expected_method_sets() -> None:
-    assert {"list_services", "list_folders", "list_layers"} <= set(
+    assert {"list_services", "list_folders", "is_service_name_available", "list_layers"} <= set(
         dir(ArcGISDiscoveryProviderProtocol)
     )
-    assert {"get_layer_schema", "query_features", "count_features_where"} <= set(
+    assert {"get_layer_schema", "query_features", "count_features_where", "query_oid_by_key"} <= set(
         dir(ArcGISReadProviderProtocol)
     )
     assert {"add_features", "update_features", "delete_features"} <= set(
@@ -62,8 +64,10 @@ def test_arcgis_provider_protocol_signature_shapes_match_client_boundary() -> No
     expected_parameters = {
         "list_services": ["self", "conn", "folder", "_depth", "_max_depth"],
         "list_folders": ["self", "conn"],
+        "is_service_name_available": ["self", "conn", "service_name"],
         "list_layers": ["self", "conn", "service_url"],
         "get_layer_schema": ["self", "conn", "layer_url"],
+        "query_oid_by_key": ["self", "conn", "layer_url", "match_col", "values"],
         "query_features": [
             "self",
             "conn",

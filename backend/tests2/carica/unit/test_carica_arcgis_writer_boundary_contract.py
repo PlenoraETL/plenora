@@ -81,6 +81,9 @@ def test_execute_arcgis_write_uses_generic_writer_boundary_for_service_create() 
                 "feature_count": 1,
                 "message": "Servizio creato",
                 "service_url": "https://example.test/FeatureServer",
+                "layer_url": "https://example.test/FeatureServer/0",
+                "item_id": "item-1",
+                "errors": [],
             }
         )
     )
@@ -118,3 +121,11 @@ def test_execute_arcgis_write_uses_generic_writer_boundary_for_service_create() 
     assert result["success"] is True
     assert result["rows_written"] == 1
     assert result["service_url"] == "https://example.test/FeatureServer"
+    assert result["layer_url"] == "https://example.test/FeatureServer/0"
+    assert result["item_id"] == "item-1"
+    assert result["arcgis_result"] == {
+        "service_url": "https://example.test/FeatureServer",
+        "layer_url": "https://example.test/FeatureServer/0",
+        "item_id": "item-1",
+        "errors": [],
+    }

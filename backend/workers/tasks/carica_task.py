@@ -545,6 +545,13 @@ def _execute_arcgis_write(
             "columns_count": len(df.columns),
             "message": result.get("message", f"Scrittura ArcGIS completata: {rows} features"),
             "service_url": result.get("service_url", ""),
+            "layer_url": result.get("layer_url", ""),
+            "item_id": result.get("item_id", ""),
+            "arcgis_result": {
+                key: result[key]
+                for key in ("service_url", "layer_url", "item_id", "errors")
+                if key in result
+            },
         }
 
     except Exception as e:
