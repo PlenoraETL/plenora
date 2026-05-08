@@ -836,8 +836,8 @@ class QueryExecutor:
                     group_id=group_id,
                 )
             else:
-                from app.utils.result_store import save_pipeline_result
-                saved = save_pipeline_result(
+                from app.utils.result_store import save_pipeline_result_outcome
+                saved = save_pipeline_result_outcome(
                     project_id=project_id,
                     df=df,
                     output_format=output_format,
@@ -846,8 +846,8 @@ class QueryExecutor:
                     group_id=group_id,
                     geom_column=geom_column,
                 )
-                result_id = saved["result_id"]
-                saved_path = Path(saved["output_filename"])
+                result_id = saved.result_id
+                saved_path = Path(saved.output_filename)
             timings["save"] = time.time() - t_save
             self._logger.info(f"Salvataggio file ({output_format}): {timings['save']:.2f}s")
 

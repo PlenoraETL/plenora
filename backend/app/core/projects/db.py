@@ -15,6 +15,7 @@ __all__ = [
     "ProjectDependencyRow",
     "ProjectRow",
     "create_project",
+    "create_project_row",
     "delete_project",
     "get_project",
     "get_project_retention_n",
@@ -27,8 +28,33 @@ __all__ = [
     "list_projects_using_connection",
     "list_projects_with_canvas_for_datasource_check",
     "update_project",
+    "update_project_row",
     "update_project_canvas_key_atomic",
 ]
+
+
+def get_project(*args, **kwargs):
+    return _projects_leaf.get_project(*args, **kwargs)
+
+
+def get_project_row(*args, **kwargs):
+    return _projects_leaf.get_project_row(*args, **kwargs)
+
+
+def create_project(*args, **kwargs):
+    return _projects_leaf.create_project(*args, **kwargs)
+
+
+def create_project_row(*args, **kwargs):
+    return _projects_leaf.create_project_row(*args, **kwargs)
+
+
+def update_project(*args, **kwargs):
+    return _projects_leaf.update_project(*args, **kwargs)
+
+
+def update_project_row(*args, **kwargs):
+    return _projects_leaf.update_project_row(*args, **kwargs)
 
 
 def __getattr__(name: str) -> object:

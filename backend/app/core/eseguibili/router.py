@@ -43,23 +43,36 @@ logger = get_logger(__name__)
 router = APIRouter(prefix="/eseguibili", tags=["eseguibili"])
 
 
-def _check_group_access(eseguibile: dict, user: CurrentUser) -> None:
+def _check_group_access(eseguibile: object, user: CurrentUser) -> None:
     """Hierarchical ownership (operazioni di SCRITTURA): solo admin del gruppo
     proprietario, e solo se non creato da un superadmin."""
     assert_can_modify(eseguibile, user, "Eseguibile")
 
 
-def _check_visible(eseguibile: dict, user: CurrentUser) -> None:
+def _check_visible(eseguibile: object, user: CurrentUser) -> None:
     """Visibility check (operazioni di LETTURA: get / analyze / execute):
     owned + condivisi via allowed_groups."""
     assert_resource_visible(eseguibile, "eseguibili", user, "Eseguibile")
 
 
-def _inject_can_edit(record: dict, user: CurrentUser) -> dict:
-    """Inietta can_edit nel dict eseguibile in-place (per response models)."""
-    if record is not None:
-        record["can_edit"] = compute_can_edit(record, user)
-    return record
+def _summary_response(
+    record: eseguibili_db.EseguibileSummaryRow,
+    user: CurrentUser,
+) -> dict:
+    """Serialize summary row at the API edge."""
+    data = record.to_legacy_dict()
+    data["can_edit"] = compute_can_edit(record, user)
+    return data
+
+
+def _details_response(
+    record: eseguibili_db.EseguibileRow,
+    user: CurrentUser,
+) -> dict:
+    """Serialize detail row at the API edge."""
+    data = _to_details(record)
+    data["can_edit"] = compute_can_edit(record, user)
+    return data
 
 
 # LIST
@@ -78,12 +91,9 @@ def list_eseguibili(current_user: CurrentUser = Depends(get_current_user)):
             current_user.group_id,
             is_superadmin=False,
         )
-        rows = [r for r in rows if r["id"] in visible_ids]
+        rows = [r for r in rows if r.id in visible_ids]
 
-    # Inietta can_edit in ogni dict (il response_model lo serializza
-    for r in rows:
-        r["can_edit"] = compute_can_edit(r, current_user)
-    return rows
+    return [_summary_response(r, current_user) for r in rows]
 
 
 # CREATE (solo admin
@@ -116,8 +126,7 @@ def create_eseguibile(
         logger.error(f"[CRASH] Errore creazione eseguibile: {e}", exc_info=True)
         raise_typed_http(error_codes.INTERNAL_ERROR, status_code=500, message="Errore interno del server")
 
-    _inject_can_edit(record, current_user)
-    return _to_details(record)
+    return _details_response(record, current_user)
 
 
 # GET ONE
@@ -130,8 +139,7 @@ def get_eseguibile(
     """Dettaglio eseguibile. Read-only su risorsa visibile (owned + shared)."""
     record = eseguibili_db.get_eseguibile(eseguibile_id)
     _check_visible(record, current_user)
-    _inject_can_edit(record, current_user)
-    return _to_details(record)
+    return _details_response(record, current_user)
 
 
 # UPDATE (solo admin
@@ -154,8 +162,9 @@ def update_eseguibile(
         default_output_name=payload.default_output_name,
         icon=payload.icon,
     )
-    _inject_can_edit(updated, current_user)
-    return _to_details(updated)
+    if updated is None:
+        raise HTTPException(status_code=404, detail="Eseguibile non trovato")
+    return _details_response(updated, current_user)
 
 
 # DELETE (solo admin
@@ -618,24 +627,24 @@ def _detect_file_based_output(canvas: dict) -> tuple:
     return True, ext
 
 
-def _to_details(record: dict) -> dict:
+def _to_details(record: eseguibili_db.EseguibileRow) -> dict:
     """Converte un record DB in EseguibileDetails response."""
-    canvas = record.get("canvas") or {}
+    canvas = record.canvas
     is_file_based, inferred_ext = _detect_file_based_output(canvas)
     return {
-        "id": record["id"],
-        "name": record["name"],
-        "description": record.get("description") or "",
-        "expected_columns": record.get("expected_columns") or [],
-        "default_output_format": record.get("default_output_format", "xlsx"),
-        "default_output_name": record.get("default_output_name"),
-        "icon": record.get("icon"),
-        "source_canvas_id": record.get("source_canvas_id"),
-        "group_id": record["group_id"],
-        "created_by": record["created_by"],
-        "created_at": record["created_at"],
-        "updated_at": record["updated_at"],
-        "can_edit": record.get("can_edit"),
+        "id": record.id,
+        "name": record.name,
+        "description": record.description or "",
+        "expected_columns": record.expected_columns,
+        "default_output_format": record.default_output_format or "xlsx",
+        "default_output_name": record.default_output_name,
+        "icon": record.icon,
+        "source_canvas_id": record.source_canvas_id,
+        "group_id": record.group_id,
+        "created_by": record.created_by,
+        "created_at": record.created_at,
+        "updated_at": record.updated_at,
+        "can_edit": None,
         "output_is_file_based": is_file_based,
         "inferred_output_extension": inferred_ext,
     }

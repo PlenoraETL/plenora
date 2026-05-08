@@ -550,16 +550,16 @@ def test_aggregator_includes_new_blocks(monkeypatch):
     from app.core.admin_system_status import service
 
     # Mock tutte le fonti esterne per non toccare DB/S3/redis reali
-    monkeypatch.setattr(service, "get_backup_status", lambda: {"status": "ok"})
-    monkeypatch.setattr(service, "get_verify_restore_status", lambda: {"status": "ok"})
-    monkeypatch.setattr(service, "get_schedules_status", lambda: {"status": "ok"})
-    monkeypatch.setattr(service, "get_workers_status", lambda: {"status": "ok"})
-    monkeypatch.setattr(service, "get_host_resources", lambda: {"status": "ok", "disk": {}, "memory": {}, "cpu": {}})
-    monkeypatch.setattr(service, "get_db_pool_status", lambda: {"status": "ok"})
-    monkeypatch.setattr(service, "get_redis_status", lambda: {"status": "ok"})
-    monkeypatch.setattr(service, "get_db_schema_size", lambda: {"status": "ok"})
-    monkeypatch.setattr(service, "get_blacklist_status", lambda: {"status": "ok"})
-    monkeypatch.setattr(service, "get_tickets_status", lambda: {"status": "ok"})
+    monkeypatch.setattr(service, "get_backup_status", lambda: {"status": "ok", "message": "ok"})
+    monkeypatch.setattr(service, "get_verify_restore_status", lambda: {"status": "ok", "message": "ok"})
+    monkeypatch.setattr(service, "get_schedules_status", lambda: {"status": "ok", "message": "ok"})
+    monkeypatch.setattr(service, "get_workers_status", lambda: {"status": "ok", "message": "ok"})
+    monkeypatch.setattr(service, "get_host_resources", lambda: {"status": "ok", "message": "ok"})
+    monkeypatch.setattr(service, "get_db_pool_status", lambda: {"status": "ok", "message": "ok"})
+    monkeypatch.setattr(service, "get_redis_status", lambda: {"status": "ok", "message": "ok"})
+    monkeypatch.setattr(service, "get_db_schema_size", lambda: {"status": "ok", "message": "ok"})
+    monkeypatch.setattr(service, "get_blacklist_status", lambda: {"status": "ok", "message": "ok"})
+    monkeypatch.setattr(service, "get_tickets_status", lambda: {"status": "ok", "message": "ok"})
 
     out = service.get_system_status()
     # Keys attese (contratto API)
@@ -567,6 +567,34 @@ def test_aggregator_includes_new_blocks(monkeypatch):
               "host_resources", "db_pool", "redis", "db_schema",
               "jwt_blacklist", "tickets", "generated_at"):
         assert k in out, f"Mancante: {k}"
+
+
+def test_router_serializes_typed_system_status(monkeypatch):
+    """Router is the API serialization edge; service remains typed."""
+    from app.core.admin_system_status import router, service
+    from app.core.admin_system_status.models import AdminStatusBlock, SystemStatusPayload
+
+    typed_payload = SystemStatusPayload(
+        generated_at="2026-05-08T00:00:00Z",
+        backup=AdminStatusBlock(status="unknown", message="S3 non accessibile", error="boom"),
+        verify_restore=AdminStatusBlock(status="unknown", message="Nessuna verifica registrata", last_run_at=None),
+        schedules=AdminStatusBlock(status="ok", message="Nessuno schedule attivo", total_active=0, failing_count=0, failing=[]),
+        workers=AdminStatusBlock(status="error", message="Nessun worker online", nodes=0, workers_online=0),
+        host_resources=AdminStatusBlock(status="unknown", message="Metriche non disponibili", disk=None, memory=None, cpu=None),
+        db_pool=AdminStatusBlock(status="unknown", message="pg_stat_activity vuoto"),
+        redis=AdminStatusBlock(status="error", message="Redis non raggiungibile: ConnectionError", error="down"),
+        db_schema=AdminStatusBlock(status="unknown", message="DB non accessibile", error="down"),
+        jwt_blacklist=AdminStatusBlock(status="unknown", message="Client Redis non inizializzato", counters={}, last_ok_epoch=None, minutes_since_last_ok=None),
+        tickets=AdminStatusBlock(status="unknown", message="Query ticket fallita", error="down"),
+    )
+    monkeypatch.setattr(service, "get_system_status", lambda: typed_payload)
+
+    out = router.get_system_status()
+
+    assert isinstance(out, dict)
+    assert out["backup"]["status"] == "unknown"
+    assert "last_key" not in out["backup"]
+    assert out["verify_restore"]["last_run_at"] is None
 
 
 # get_blacklist_status — wrapper graceful su token_blacklist.get_blacklist_status
@@ -588,7 +616,7 @@ def test_blacklist_status_ok_via_wrapper(monkeypatch):
     monkeypatch.setattr(tb, "get_blacklist_status", lambda stale_threshold_seconds: expected)
 
     out = service.get_blacklist_status()
-    assert out == expected
+    assert out.to_api_dict() == expected
 
 
 def test_blacklist_status_unknown_when_module_missing(monkeypatch):

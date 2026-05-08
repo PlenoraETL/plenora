@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict
-
 from fastapi import APIRouter, Depends
 
 from app.core.admin_system_status import service
@@ -17,7 +15,7 @@ router = APIRouter(prefix="/admin/system-status", tags=["admin-system-status"])
 @router.get("", summary="Aggregato stato sistema per dashboard admin")
 def get_system_status(
     _user: CurrentUser = Depends(require_superadmin),
-) -> Dict[str, Any]:
+) -> dict[str, object]:
     """Ritorna un JSON con metriche aggregate per il dashboard admin:
 
     - `backup`: stato ultimo dump S3 (soglie 26h/48h)
@@ -34,4 +32,4 @@ def get_system_status(
     human-readable. Errori di uno NON bloccano gli altri (graceful
     degradation).
     """
-    return service.get_system_status()
+    return service.get_system_status().to_api_dict()

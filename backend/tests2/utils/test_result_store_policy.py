@@ -55,7 +55,7 @@ def mock_db(monkeypatch):
                         SimpleNamespace(uuid4=lambda: "res-pol"))
     monkeypatch.setattr(projects_db, "get_project",
                         lambda pid: {"id": pid, "group_id": "grp-1"})
-    monkeypatch.setattr(results_db, "save_result",
+    monkeypatch.setattr(results_db, "save_result_row",
                         lambda **kw: saved.append(kw))
     monkeypatch.setattr(result_store, "_apply_results_retention",
                         lambda pid: None)

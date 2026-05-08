@@ -15,7 +15,7 @@ import pandas as pd
 
 from app.config import settings
 from app.utils.logger import get_logger
-from app.utils.result_store import save_pipeline_result
+from app.utils.result_store import save_pipeline_result_outcome
 from app.utils.dataframe import _read_csv_safe
 from app.core.features.models import (
     ArcGISConnection,
@@ -523,7 +523,7 @@ class FeaturesService:
             # Fase 3: Salvataggio su blob DB (single entry, dispatch interno
             t_save = time.time()
             filename_stem = Path(output_filename).stem or "result"
-            saved = save_pipeline_result(
+            saved = save_pipeline_result_outcome(
                 project_id=project_id,
                 df=df,
                 output_format=output_format,
@@ -532,7 +532,7 @@ class FeaturesService:
                 geom_column=geom_column if return_geometry else None,
                 crs=layer_crs,
             )
-            saved_path_display = saved["output_filename"]
+            saved_path_display = saved.output_filename
             timings["save"] = time.time() - t_save
 
             timings["total"] = time.time() - inizio

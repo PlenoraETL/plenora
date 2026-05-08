@@ -223,7 +223,7 @@ def test_save_pipeline_result_dict_shape(monkeypatch):
                         SimpleNamespace(uuid4=lambda: "res-xyz"))
     monkeypatch.setattr(projects_db, "get_project",
                         lambda pid: {"id": pid, "group_id": "grp"})
-    monkeypatch.setattr(results_db, "save_result",
+    monkeypatch.setattr(results_db, "save_result_row",
                         lambda **kw: saved_calls.append(kw))
     monkeypatch.setattr(result_store, "_apply_results_retention",
                         lambda pid: None)
@@ -279,7 +279,7 @@ def test_save_pipeline_result_fs_only_fallback_to_filesystem(monkeypatch, tmp_pa
                         SimpleNamespace(uuid4=lambda: "res-fs"))
     monkeypatch.setattr(projects_db, "get_project",
                         lambda pid: {"id": pid, "group_id": "grp"})
-    monkeypatch.setattr(results_db, "save_result",
+    monkeypatch.setattr(results_db, "save_result_row",
                         lambda **kw: saved_calls.append(kw))
     monkeypatch.setattr(result_store, "_apply_results_retention",
                         lambda pid: None)

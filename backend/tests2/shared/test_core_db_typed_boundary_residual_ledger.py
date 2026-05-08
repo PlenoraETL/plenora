@@ -71,15 +71,27 @@ _LEDGER: tuple[BoundaryEntry, ...] = (
     ),
     BoundaryEntry(
         "app/db/config/projects.py",
+        "create_project_row",
+        "DONE",
+        "project create post-write hydration returns ProjectDetailRow",
+    ),
+    BoundaryEntry(
+        "app/db/config/projects.py",
         "create_project",
-        "KEEP_COMPAT_WITH_REMOVAL_CONDITION",
-        "write path still returns legacy dict; remove after ProjectService CRUD consumes typed post-write rows",
+        "KEEP_PUBLIC_COMPAT",
+        "legacy project create wrapper delegates to create_project_row at public compatibility edge",
+    ),
+    BoundaryEntry(
+        "app/db/config/projects.py",
+        "update_project_row",
+        "DONE",
+        "project update post-write hydration returns ProjectDetailRow",
     ),
     BoundaryEntry(
         "app/db/config/projects.py",
         "update_project",
-        "KEEP_COMPAT_WITH_REMOVAL_CONDITION",
-        "write path still returns legacy dict; remove after ProjectService CRUD consumes typed post-write rows",
+        "KEEP_PUBLIC_COMPAT",
+        "legacy project update wrapper delegates to update_project_row at public compatibility edge",
     ),
     BoundaryEntry(
         "app/db/config/projects.py",
@@ -124,6 +136,12 @@ _LEDGER: tuple[BoundaryEntry, ...] = (
         "public save helper still returns legacy metadata dict",
     ),
     BoundaryEntry(
+        "app/core/results/db.py",
+        "save_result_row",
+        "DONE",
+        "result metadata writes hydrate ResultMetadataRow at the core DB boundary",
+    ),
+    BoundaryEntry(
         "app/db/config/schedules.py",
         "ScheduleRow",
         "DONE",
@@ -160,28 +178,46 @@ _LEDGER: tuple[BoundaryEntry, ...] = (
         "dict conversion stays explicit for external callers that still need it",
     ),
     BoundaryEntry(
+        "app/core/connections/db.py",
+        "create_connection",
+        "DONE",
+        "connection writes hydrate ConnectionConfigRow at the core DB boundary",
+    ),
+    BoundaryEntry(
+        "app/core/connections/db.py",
+        "update_connection",
+        "DONE",
+        "connection updates hydrate ConnectionConfigRow at the core DB boundary",
+    ),
+    BoundaryEntry(
+        "app/core/connections/db.py",
+        "list_connection_configs",
+        "DONE",
+        "connection lists return ConnectionConfigRow objects at the core DB boundary",
+    ),
+    BoundaryEntry(
         "app/db/config/connections.py",
         "get_connection_config",
         "KEEP_COMPAT_WITH_REMOVAL_CONDITION",
-        "legacy config leaf returns dict until all consumers use app.core.connections.db",
+        "legacy config leaf returns dict until config_db_service facade exports are removed",
     ),
     BoundaryEntry(
         "app/db/config/connections.py",
         "list_connections",
         "KEEP_COMPAT_WITH_REMOVAL_CONDITION",
-        "legacy config leaf returns dict until list callers use typed core bridge",
+        "legacy config leaf returns dict until config_db_service facade exports are removed",
     ),
     BoundaryEntry(
         "app/db/config/connections.py",
         "create_connection",
         "KEEP_COMPAT_WITH_REMOVAL_CONDITION",
-        "legacy config leaf returns dict until writes hydrate ConnectionConfigRow directly",
+        "legacy config leaf returns dict until config_db_service facade exports are removed",
     ),
     BoundaryEntry(
         "app/db/config/connections.py",
         "update_connection",
         "KEEP_COMPAT_WITH_REMOVAL_CONDITION",
-        "legacy config leaf returns dict until writes hydrate ConnectionConfigRow directly",
+        "legacy config leaf returns dict until config_db_service facade exports are removed",
     ),
     BoundaryEntry(
         "app/core/orchestrator/task_service.py",
@@ -242,6 +278,66 @@ _LEDGER: tuple[BoundaryEntry, ...] = (
         "FeaturesService.create_service_from_df",
         "KEEP_PUBLIC_COMPAT",
         "public FeaturesService create-service seam delegates to ArcGISFeatureOperations and preserves API dict shape",
+    ),
+    BoundaryEntry(
+        "app/core/eseguibili/db.py",
+        "EseguibileRow",
+        "DONE",
+        "eseguibili detail DB reads and writes return frozen row models",
+    ),
+    BoundaryEntry(
+        "app/core/eseguibili/db.py",
+        "EseguibileSummaryRow",
+        "DONE",
+        "eseguibili list DB reads return frozen summary row models",
+    ),
+    BoundaryEntry(
+        "app/core/eseguibili/db.py",
+        "EseguibileSourceRefRow",
+        "DONE",
+        "project delete dependency checks consume typed eseguibile source refs",
+    ),
+    BoundaryEntry(
+        "app/core/eseguibili/db.py",
+        "EseguibileRow.to_legacy_dict",
+        "KEEP_PUBLIC_COMPAT",
+        "router/service compatibility keeps explicit dict serialization for the public eseguibili shape",
+    ),
+    BoundaryEntry(
+        "app/core/eseguibili/service.py",
+        "create_from_project",
+        "DONE",
+        "create_from_project returns an EseguibileRow and router code owns public dict serialization",
+    ),
+    BoundaryEntry(
+        "app/core/eseguibili/service.py",
+        "analyze_file_upload",
+        "KEEP_COMPAT_WITH_REMOVAL_CONDITION",
+        "remove after upload analysis returns a typed payload model and the router serializes the response",
+    ),
+    BoundaryEntry(
+        "app/core/eseguibili/service.py",
+        "execute",
+        "KEEP_COMPAT_WITH_REMOVAL_CONDITION",
+        "remove after eseguibile execution returns a typed task-launch payload and the router serializes the response",
+    ),
+    BoundaryEntry(
+        "app/core/admin_system_status/models.py",
+        "AdminStatusBlock",
+        "DONE",
+        "admin status probes return typed status blocks",
+    ),
+    BoundaryEntry(
+        "app/core/admin_system_status/models.py",
+        "SystemStatusPayload",
+        "DONE",
+        "admin status aggregate returns a typed payload model before router serialization",
+    ),
+    BoundaryEntry(
+        "app/core/admin_system_status/router.py",
+        "get_system_status",
+        "KEEP_PUBLIC_COMPAT",
+        "admin status endpoint preserves the public dashboard JSON shape",
     ),
 )
 
@@ -305,6 +401,24 @@ def _dataclass_frozen_flags(tree: ast.AST) -> dict[str, bool]:
     return flags
 
 
+def _pydantic_forbid_classes(tree: ast.AST) -> set[str]:
+    classes: set[str] = set()
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.ClassDef):
+            continue
+        bases = {ast.unparse(base) for base in node.bases}
+        if "BaseModel" not in bases:
+            continue
+        for item in node.body:
+            if not isinstance(item, ast.Assign):
+                continue
+            if not any(isinstance(target, ast.Name) and target.id == "model_config" for target in item.targets):
+                continue
+            if "extra='forbid'" in ast.unparse(item.value) or 'extra="forbid"' in ast.unparse(item.value):
+                classes.add(node.name)
+    return classes
+
+
 def _public_dict_returns(rel_path: str) -> set[str]:
     returns = _top_level_function_returns(_tree(rel_path))
     found: set[str] = set()
@@ -333,9 +447,10 @@ def test_done_row_contracts_are_present_and_frozen():
         tree = _tree(rel_path)
         classes = _classes(tree)
         frozen_flags = _dataclass_frozen_flags(tree)
+        pydantic_forbid_classes = _pydantic_forbid_classes(tree)
         for symbol in symbols:
             assert symbol in classes
-            assert frozen_flags.get(symbol) is True
+            assert frozen_flags.get(symbol) is True or symbol in pydantic_forbid_classes
 
 
 def test_batch_094_public_dict_boundaries_are_classified():

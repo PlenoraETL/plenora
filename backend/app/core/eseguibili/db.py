@@ -4,37 +4,214 @@ CRUD per la tabella `eseguibili` (storage: PostgreSQL via
 `app.db.pg_connection`).
 """
 
+from __future__ import annotations
+
 import json
 import uuid
+from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import List, Optional, Dict, Any
+from typing import Any, Dict, List, Mapping, Optional
 
 from app.db import pg_connection as db
+
+
+JsonObject = Dict[str, Any]
+ExpectedColumns = List[Dict[str, Any]]
+
+
+@dataclass(frozen=True)
+class EseguibileRow:
+    id: str
+    name: str
+    description: str
+    canvas: JsonObject
+    expected_columns: ExpectedColumns
+    default_output_format: str
+    group_id: str
+    created_by: str
+    created_at: str
+    updated_at: str
+    default_output_name: str | None = None
+    icon: str | None = None
+    source_canvas_id: str | None = None
+
+    def __getitem__(self, key: str) -> Any:
+        return getattr(self, key)
+
+    def get(self, key: str, default: Any = None) -> Any:
+        return getattr(self, key, default)
+
+    def to_legacy_dict(self) -> Dict[str, Any]:
+        return {
+            "id": self.id,
+            "name": self.name,
+            "description": self.description,
+            "canvas": self.canvas,
+            "expected_columns": self.expected_columns,
+            "default_output_format": self.default_output_format,
+            "default_output_name": self.default_output_name,
+            "icon": self.icon,
+            "source_canvas_id": self.source_canvas_id,
+            "group_id": self.group_id,
+            "created_by": self.created_by,
+            "created_at": self.created_at,
+            "updated_at": self.updated_at,
+        }
+
+
+@dataclass(frozen=True)
+class EseguibileSummaryRow:
+    id: str
+    name: str
+    description: str
+    default_output_format: str
+    group_id: str
+    created_by: str
+    created_at: str
+    updated_at: str
+    expected_columns_count: int = 0
+    default_output_name: str | None = None
+    icon: str | None = None
+    source_canvas_id: str | None = None
+
+    def __getitem__(self, key: str) -> Any:
+        return getattr(self, key)
+
+    def get(self, key: str, default: Any = None) -> Any:
+        return getattr(self, key, default)
+
+    def to_legacy_dict(self) -> Dict[str, Any]:
+        return {
+            "id": self.id,
+            "name": self.name,
+            "description": self.description,
+            "default_output_format": self.default_output_format,
+            "default_output_name": self.default_output_name,
+            "icon": self.icon,
+            "source_canvas_id": self.source_canvas_id,
+            "group_id": self.group_id,
+            "created_by": self.created_by,
+            "created_at": self.created_at,
+            "updated_at": self.updated_at,
+            "expected_columns_count": self.expected_columns_count,
+        }
+
+
+@dataclass(frozen=True)
+class EseguibileSourceRefRow:
+    id: str
+    name: str
+
+    def __getitem__(self, key: str) -> str:
+        return getattr(self, key)
+
+    def get(self, key: str, default: object = None) -> object:
+        return getattr(self, key, default)
+
+    def to_legacy_dict(self) -> Dict[str, str]:
+        return {"id": self.id, "name": self.name}
 
 
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
-def _parse_row(row) -> Optional[Dict[str, Any]]:
-    """Converte una row DB in dict Python con JSON deserializzato."""
-    if row is None:
+def _required_str(row: Mapping[str, object], key: str) -> str:
+    value = row.get(key)
+    if not isinstance(value, str):
+        raise ValueError(f"Malformed eseguibile DB row: {key} must be a string")
+    return value
+
+
+def _optional_str(row: Mapping[str, object], key: str) -> str | None:
+    value = row.get(key)
+    if value is None:
         return None
-    d = dict(row)
-    # canvas e expected_columns sono JSON in TEXT
-    if d.get("canvas"):
+    if not isinstance(value, str):
+        raise ValueError(
+            f"Malformed eseguibile DB row: {key} must be a string or null"
+        )
+    return value
+
+
+def _parse_json_object(value: object, *, field_name: str) -> JsonObject:
+    if value is None or value == "":
+        return {}
+    parsed: object
+    if isinstance(value, str):
         try:
-            d["canvas"] = json.loads(d["canvas"]) if isinstance(d["canvas"], str) else d["canvas"]
+            parsed = json.loads(value)
         except json.JSONDecodeError:
-            d["canvas"] = {}
-    if d.get("expected_columns"):
-        try:
-            d["expected_columns"] = json.loads(d["expected_columns"]) if isinstance(d["expected_columns"], str) else d["expected_columns"]
-        except json.JSONDecodeError:
-            d["expected_columns"] = []
+            return {}
     else:
-        d["expected_columns"] = []
-    return d
+        parsed = value
+    if not isinstance(parsed, dict):
+        raise ValueError(
+            f"Malformed eseguibile DB row: {field_name} must decode to an object"
+        )
+    return parsed
+
+
+def _parse_expected_columns(value: object) -> ExpectedColumns:
+    if value is None or value == "":
+        return []
+    parsed: object
+    if isinstance(value, str):
+        try:
+            parsed = json.loads(value)
+        except json.JSONDecodeError:
+            return []
+    else:
+        parsed = value
+    if not isinstance(parsed, list):
+        raise ValueError(
+            "Malformed eseguibile DB row: expected_columns must decode to a list"
+        )
+    return [item for item in parsed if isinstance(item, dict)]
+
+
+def eseguibile_row_from_db(row: Mapping[str, object]) -> EseguibileRow:
+    return EseguibileRow(
+        id=_required_str(row, "id"),
+        name=_required_str(row, "name"),
+        description=_optional_str(row, "description") or "",
+        canvas=_parse_json_object(row.get("canvas"), field_name="canvas"),
+        expected_columns=_parse_expected_columns(row.get("expected_columns")),
+        default_output_format=_required_str(row, "default_output_format"),
+        default_output_name=_optional_str(row, "default_output_name"),
+        icon=_optional_str(row, "icon"),
+        source_canvas_id=_optional_str(row, "source_canvas_id"),
+        group_id=_required_str(row, "group_id"),
+        created_by=_required_str(row, "created_by"),
+        created_at=_required_str(row, "created_at"),
+        updated_at=_required_str(row, "updated_at"),
+    )
+
+
+def eseguibile_summary_row_from_db(row: Mapping[str, object]) -> EseguibileSummaryRow:
+    return EseguibileSummaryRow(
+        id=_required_str(row, "id"),
+        name=_required_str(row, "name"),
+        description=_optional_str(row, "description") or "",
+        default_output_format=_required_str(row, "default_output_format"),
+        default_output_name=_optional_str(row, "default_output_name"),
+        icon=_optional_str(row, "icon"),
+        source_canvas_id=_optional_str(row, "source_canvas_id"),
+        group_id=_required_str(row, "group_id"),
+        created_by=_required_str(row, "created_by"),
+        created_at=_required_str(row, "created_at"),
+        updated_at=_required_str(row, "updated_at"),
+        expected_columns_count=len(_parse_expected_columns(row.get("expected_columns"))),
+    )
+
+
+def eseguibile_source_ref_row_from_db(
+    row: Mapping[str, object],
+) -> EseguibileSourceRefRow:
+    return EseguibileSourceRefRow(
+        id=_required_str(row, "id"),
+        name=_required_str(row, "name"),
+    )
 
 
 def create_eseguibile(
@@ -48,7 +225,7 @@ def create_eseguibile(
     default_output_name: Optional[str] = None,
     source_canvas_id: Optional[str] = None,
     icon: Optional[str] = None,
-) -> Dict[str, Any]:
+) -> EseguibileRow:
     """Crea un nuovo eseguibile. Ritorna il record creato."""
     eid = f"exec_{uuid.uuid4().hex[:12]}"
     now = _now()
@@ -68,10 +245,13 @@ def create_eseguibile(
             group_id, created_by, now, now,
         )
     )
-    return get_eseguibile(eid)
+    created = get_eseguibile(eid)
+    if created is None:
+        raise RuntimeError(f"Eseguibile '{eid}' was inserted but not found")
+    return created
 
 
-def get_eseguibile(eid: str, group_id: str = None) -> Optional[Dict[str, Any]]:
+def get_eseguibile(eid: str, group_id: str = None) -> Optional[EseguibileRow]:
     """Ritorna l'eseguibile con canvas e expected_columns deserializzati.
 
     group_id=None → no filter (backward compat per uso interno).
@@ -84,10 +264,10 @@ def get_eseguibile(eid: str, group_id: str = None) -> Optional[Dict[str, Any]]:
         )
     else:
         row = db.fetchone("SELECT * FROM eseguibili WHERE id = ?", (eid,))
-    return _parse_row(row)
+    return eseguibile_row_from_db(row) if row else None
 
 
-def list_eseguibili(group_id: Optional[str] = None) -> List[Dict[str, Any]]:
+def list_eseguibili(group_id: Optional[str] = None) -> List[EseguibileSummaryRow]:
     """Lista eseguibili, opzionalmente filtrati per gruppo.
 
     Non carica canvas/expected_columns per la summary (prestazioni).
@@ -108,21 +288,10 @@ def list_eseguibili(group_id: Optional[str] = None) -> List[Dict[str, Any]]:
                       expected_columns
                FROM eseguibili ORDER BY created_at DESC"""
         )
-    result = []
-    for row in rows:
-        d = dict(row)
-        # parsing minimale: solo count di expected_columns per la summary
-        try:
-            cols = json.loads(d.get("expected_columns") or "[]")
-            d["expected_columns_count"] = len(cols)
-        except Exception:
-            d["expected_columns_count"] = 0
-        d.pop("expected_columns", None)  # non serve nella summary
-        result.append(d)
-    return result
+    return [eseguibile_summary_row_from_db(row) for row in rows]
 
 
-def list_eseguibili_by_source(source_canvas_id: str) -> List[Dict[str, Any]]:
+def list_eseguibili_by_source(source_canvas_id: str) -> List[EseguibileSourceRefRow]:
     """Ritorna gli eseguibili pubblicati a partire dal progetto indicato.
 
     Restituisce solo id e name (sufficienti per messaggi di errore).
@@ -131,10 +300,10 @@ def list_eseguibili_by_source(source_canvas_id: str) -> List[Dict[str, Any]]:
         "SELECT id, name FROM eseguibili WHERE source_canvas_id = ?",
         (source_canvas_id,)
     )
-    return [dict(row) for row in rows]
+    return [eseguibile_source_ref_row_from_db(row) for row in rows]
 
 
-def update_eseguibile(eid: str, **fields) -> Optional[Dict[str, Any]]:
+def update_eseguibile(eid: str, **fields: object) -> Optional[EseguibileRow]:
     """Aggiorna i campi passati (solo metadata, non canvas/expected_columns)."""
     allowed = {"name", "description", "default_output_format", "default_output_name", "icon"}
     to_update = {k: v for k, v in fields.items() if k in allowed and v is not None}

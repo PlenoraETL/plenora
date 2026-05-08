@@ -232,8 +232,14 @@ def list_projects(
     )
 
 
-def create_project(project_id: str, group_id: str, name: str, project_type: str,
-                   connection_id: str = None, created_by: str = None) -> Dict:
+def create_project_row(
+    project_id: str,
+    group_id: str,
+    name: str,
+    project_type: str,
+    connection_id: str = None,
+    created_by: str = None,
+) -> ProjectDetailRow:
     from datetime import datetime, timezone
     now = datetime.now(timezone.utc).isoformat()
     canvas = json.dumps({"nodes": [], "edges": []})
@@ -241,17 +247,42 @@ def create_project(project_id: str, group_id: str, name: str, project_type: str,
         "INSERT INTO projects (id, group_id, name, project_type, canvas, connection_id, created_at, updated_at, created_by) VALUES (?,?,?,?,?,?,?,?,?)",
         (project_id, group_id, name, project_type, canvas, connection_id, now, now, created_by)
     )
-    return get_project(project_id)
+    row = get_project_row(project_id)
+    if row is None:
+        raise RuntimeError(f"Project write hydration failed for created project {project_id}")
+    return row
 
 
-def update_project(project_id: str, **fields: object) -> Optional[Dict]:
+def create_project(project_id: str, group_id: str, name: str, project_type: str,
+                   connection_id: str = None, created_by: str = None) -> Dict:
+    """KEEP_PUBLIC_COMPAT: legacy dict wrapper around typed project creation."""
+    return create_project_row(
+        project_id=project_id,
+        group_id=group_id,
+        name=name,
+        project_type=project_type,
+        connection_id=connection_id,
+        created_by=created_by,
+    ).to_legacy_dict()
+
+
+def update_project_row(
+    project_id: str,
+    **fields: object,
+) -> Optional[ProjectDetailRow]:
     from datetime import datetime, timezone
     if "canvas" in fields and isinstance(fields["canvas"], dict):
         fields["canvas"] = json.dumps(fields["canvas"])
     fields["updated_at"] = datetime.now(timezone.utc).isoformat()
     set_clause, vals = safe_set_clause("projects", fields)
     execute(f"UPDATE projects SET {set_clause} WHERE id = ?", vals + (project_id,))
-    return get_project(project_id)
+    return get_project_row(project_id)
+
+
+def update_project(project_id: str, **fields: object) -> Optional[Dict]:
+    """KEEP_PUBLIC_COMPAT: legacy dict wrapper around typed project update."""
+    row = update_project_row(project_id, **fields)
+    return row.to_legacy_dict() if row else None
 
 
 def delete_project(project_id: str, group_id: str = None) -> bool:

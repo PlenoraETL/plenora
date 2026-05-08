@@ -296,12 +296,12 @@ class ApiConnectionSupportMixin:
         downstream usano `result_id` via `PipelineArtifact.artifact_kind
         == "blob"` e l'ArtifactResolver per materializzare dal DB.
         """
-        from app.utils.result_store import save_pipeline_result
+        from app.utils.result_store import save_pipeline_result_outcome
 
         timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
         filename_stem = f"{output_name}_{timestamp}"
 
-        saved = save_pipeline_result(
+        saved = save_pipeline_result_outcome(
             project_id=project_id,
             df=final_df,
             output_format=output_format,
@@ -311,8 +311,8 @@ class ApiConnectionSupportMixin:
 
         return {
             "success": True,
-            "result_id": saved["result_id"],
-            "output_filename": saved["output_filename"],
+            "result_id": saved.result_id,
+            "output_filename": saved.output_filename,
             "rows": len(final_df),
             "rows_count": len(final_df),
             "rows_processed": len(final_df),

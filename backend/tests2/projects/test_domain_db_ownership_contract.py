@@ -28,7 +28,9 @@ def test_projects_domain_db_bridge_reexports_existing_sql_leaf() -> None:
         "get_project",
         "list_projects",
         "create_project",
+        "create_project_row",
         "update_project",
+        "update_project_row",
         "delete_project",
         "get_project_retention_n",
         "list_owned_project_ids",
@@ -41,8 +43,19 @@ def test_projects_domain_db_bridge_reexports_existing_sql_leaf() -> None:
     }
 
     assert set(domain_db.__all__) == exported_names
-    for name in exported_names:
+    dynamic_wrapper_names = {
+        "get_project",
+        "get_project_row",
+        "create_project",
+        "create_project_row",
+        "update_project",
+        "update_project_row",
+    }
+    for name in exported_names - dynamic_wrapper_names:
         assert getattr(domain_db, name) is getattr(projects_leaf, name)
+    for name in dynamic_wrapper_names:
+        assert callable(getattr(domain_db, name))
+        assert callable(getattr(projects_leaf, name))
 
 
 def test_projects_router_imports_domain_db_bridge_not_db_leaf() -> None:

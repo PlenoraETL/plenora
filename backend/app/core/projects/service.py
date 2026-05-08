@@ -137,7 +137,7 @@ class ProjectService:
         group_id = resolve_project_group_id(group_id, self.DEFAULT_GROUP)
         project_id = self._generate_project_id(project_data.name)
 
-        row = project_db.create_project(
+        row = project_db.create_project_row(
             project_id=project_id,
             group_id=group_id,
             name=project_data.name,
@@ -146,7 +146,7 @@ class ProjectService:
             created_by=created_by,
         )
         logger.info(f"Progetto creato: {project_id} (created_by={created_by})", op="create_project")
-        return self._row_to_metadata(row)
+        return self._project_detail_row_to_metadata(row)
 
     def rollback_created_project(
         self,
@@ -320,8 +320,10 @@ class ProjectService:
 
         self._assert_no_lineage_cycle(project_id, canvas)
 
-        project_db.update_project(project_id, canvas=canvas.model_dump())
-        return True
+        updated_row = project_db.update_project_row(
+            project_id, canvas=canvas.model_dump()
+        )
+        return updated_row is not None
 
     def _assert_no_lineage_cycle(self, project_id: str, canvas: CanvasState) -> None:
         """Verifica che salvare `canvas` per `project_id` non introduca

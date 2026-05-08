@@ -113,6 +113,100 @@ def test_get_project_keeps_legacy_dict_wrapper(monkeypatch):
     assert row["canvas"] == {"nodes": [], "edges": []}
 
 
+def test_project_create_db_leaf_returns_typed_row_and_legacy_wrapper(monkeypatch):
+    from app.db.config import projects as project_db
+
+    now = datetime(2026, 5, 7, 10, 0, tzinfo=timezone.utc)
+    executed: list[tuple[str, tuple[object, ...]]] = []
+
+    def fake_execute(sql, params):
+        executed.append((sql, params))
+
+    monkeypatch.setattr(project_db, "execute", fake_execute)
+    monkeypatch.setattr(
+        project_db,
+        "get_project_row",
+        lambda project_id: project_db.ProjectDetailRow(
+            id=project_id,
+            group_id="grp-1",
+            name="Project One",
+            project_type="estrai",
+            canvas={"nodes": [], "edges": []},
+            connection_id="conn-1",
+            created_at=now,
+            updated_at=now,
+            created_by="user-1",
+        ),
+    )
+
+    typed_row = project_db.create_project_row(
+        project_id="p1",
+        group_id="grp-1",
+        name="Project One",
+        project_type="estrai",
+        connection_id="conn-1",
+        created_by="user-1",
+    )
+
+    assert isinstance(typed_row, project_db.ProjectDetailRow)
+    assert typed_row.id == "p1"
+    assert executed
+
+    legacy_row = project_db.create_project(
+        project_id="p1",
+        group_id="grp-1",
+        name="Project One",
+        project_type="estrai",
+        connection_id="conn-1",
+        created_by="user-1",
+    )
+
+    assert isinstance(legacy_row, dict)
+    assert legacy_row["id"] == "p1"
+
+
+def test_project_update_db_leaf_returns_typed_row_and_legacy_wrapper(monkeypatch):
+    from app.db.config import projects as project_db
+
+    now = datetime(2026, 5, 7, 10, 0, tzinfo=timezone.utc)
+    executed: list[tuple[str, tuple[object, ...]]] = []
+
+    def fake_execute(sql, params):
+        executed.append((sql, params))
+
+    monkeypatch.setattr(project_db, "execute", fake_execute)
+    monkeypatch.setattr(
+        project_db,
+        "get_project_row",
+        lambda project_id: project_db.ProjectDetailRow(
+            id=project_id,
+            group_id="grp-1",
+            name="Project One",
+            project_type="estrai",
+            canvas={"nodes": [], "edges": []},
+            connection_id=None,
+            created_at=now,
+            updated_at=now,
+            created_by=None,
+        ),
+    )
+
+    typed_row = project_db.update_project_row(
+        "p1", canvas={"nodes": [], "edges": []}
+    )
+
+    assert isinstance(typed_row, project_db.ProjectDetailRow)
+    assert typed_row.id == "p1"
+    assert executed
+
+    legacy_row = project_db.update_project(
+        "p1", canvas={"nodes": [], "edges": []}
+    )
+
+    assert isinstance(legacy_row, dict)
+    assert legacy_row["id"] == "p1"
+
+
 def test_project_dependency_db_leaf_returns_typed_rows_and_legacy_wrapper(monkeypatch):
     from app.db.config import projects as project_db
 
@@ -250,6 +344,57 @@ def test_project_service_list_projects_uses_typed_project_rows(monkeypatch):
     }
 
 
+def test_project_service_create_project_uses_typed_post_write_row(monkeypatch):
+    from app.core.projects import db as project_db
+    from app.core.projects.service import ProjectService
+    from app.models import ProjectCreate
+
+    now = datetime(2026, 5, 7, 10, 0, tzinfo=timezone.utc)
+    monkeypatch.setattr(ProjectService, "_ensure_default_group", lambda self: None)
+    monkeypatch.setattr(ProjectService, "_generate_project_id", lambda self, name: "p1")
+    monkeypatch.setattr(
+        project_db,
+        "create_project_row",
+        lambda **kwargs: project_db.ProjectDetailRow(
+            id=kwargs["project_id"],
+            group_id=kwargs["group_id"],
+            name=kwargs["name"],
+            project_type=kwargs["project_type"],
+            canvas={"nodes": [], "edges": []},
+            connection_id=kwargs["connection_id"],
+            created_at=now,
+            updated_at=now,
+            created_by=kwargs["created_by"],
+        ),
+    )
+
+    def fail_if_legacy_dict_wrapper_is_used(*args, **kwargs):
+        raise AssertionError("create_project must consume ProjectDetailRow")
+
+    monkeypatch.setattr(project_db, "create_project", fail_if_legacy_dict_wrapper_is_used)
+
+    result = ProjectService().create_project(
+        ProjectCreate(
+            name="Project One",
+            project_type="estrai",
+            default_connection_id="conn-1",
+        ),
+        group_id="grp-1",
+        created_by="user-1",
+    )
+
+    assert result.model_dump() == {
+        "id": "p1",
+        "name": "Project One",
+        "description": "",
+        "project_type": "estrai",
+        "default_connection_id": "conn-1",
+        "group_id": "grp-1",
+        "created_at": now,
+        "updated_at": now,
+    }
+
+
 def test_project_service_metadata_uses_typed_project_detail_row(monkeypatch):
     from app.db.config import projects as project_db
     from app.core.projects.service import ProjectService
@@ -335,3 +480,46 @@ def test_project_service_get_project_converts_typed_row_at_public_compat_edge(
         "canvas": {"nodes": [], "edges": []},
         "id": "p1",
     }
+
+
+def test_project_service_update_canvas_uses_typed_post_write_row(monkeypatch):
+    from app.core.projects import db as project_db
+    from app.core.projects.service import ProjectService
+    from app.models import CanvasState
+
+    monkeypatch.setattr(
+        project_db,
+        "get_project",
+        lambda project_id: {
+            "id": project_id,
+            "group_id": "grp-1",
+            "canvas": {"nodes": [], "edges": []},
+        },
+    )
+    monkeypatch.setattr(
+        ProjectService,
+        "_assert_no_lineage_cycle",
+        lambda self, project_id, canvas: None,
+    )
+    monkeypatch.setattr(
+        project_db,
+        "update_project_row",
+        lambda project_id, **fields: project_db.ProjectDetailRow(
+            id=project_id,
+            group_id="grp-1",
+            name="Project One",
+            project_type="estrai",
+            canvas=fields["canvas"],
+            connection_id=None,
+            created_at=None,
+            updated_at=None,
+            created_by=None,
+        ),
+    )
+
+    def fail_if_legacy_dict_wrapper_is_used(*args, **kwargs):
+        raise AssertionError("update_canvas must hydrate via ProjectDetailRow")
+
+    monkeypatch.setattr(project_db, "update_project", fail_if_legacy_dict_wrapper_is_used)
+
+    assert ProjectService().update_canvas("p1", CanvasState()) is True

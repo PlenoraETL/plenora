@@ -35,7 +35,7 @@ def mock_db(monkeypatch):
                         SimpleNamespace(uuid4=lambda: "res-1"))
     monkeypatch.setattr(projects_db, "get_project",
                         lambda pid: {"id": pid, "group_id": "grp-1"})
-    monkeypatch.setattr(results_db, "save_result",
+    monkeypatch.setattr(results_db, "save_result_row",
                         lambda **kwargs: saved.update(kwargs))
     monkeypatch.setattr(result_store, "_apply_results_retention",
                         lambda pid: None)
@@ -80,7 +80,7 @@ def test_regression_path_based_save_keeps_temp_on_db_error(monkeypatch, tmp_path
                         SimpleNamespace(uuid4=lambda: "res-x"))
     monkeypatch.setattr(projects_db, "get_project",
                         lambda pid: {"id": pid, "group_id": "grp"})
-    monkeypatch.setattr(results_db, "save_result", _boom)
+    monkeypatch.setattr(results_db, "save_result_row", _boom)
 
     class _FakeSettings:
         @staticmethod

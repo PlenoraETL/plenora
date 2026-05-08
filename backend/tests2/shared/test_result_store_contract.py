@@ -10,7 +10,10 @@ from types import SimpleNamespace
 import pytest
 
 from app.utils.result_store import (
+    PipelineResultSave,
     ResultSaveError,
+    save_pipeline_result,
+    save_pipeline_result_outcome,
     save_result_blob,
     save_result_blob_from_bytes,
 )
@@ -39,7 +42,7 @@ def test_save_result_blob_removes_temp_file_only_after_success(monkeypatch, tmp_
     monkeypatch.setattr(projects_db, "get_project",
         lambda project_id: {"id": project_id, "group_id": "grp-1"},
     )
-    monkeypatch.setattr(results_db, "save_result",
+    monkeypatch.setattr(results_db, "save_result_row",
         lambda **kwargs: saved.update(kwargs),
     )
     monkeypatch.setattr(
@@ -81,7 +84,7 @@ def test_save_result_blob_keeps_temp_file_when_db_save_fails(monkeypatch, tmp_pa
     monkeypatch.setattr(projects_db, "get_project",
         lambda project_id: {"id": project_id, "group_id": "grp-1"},
     )
-    monkeypatch.setattr(results_db, "save_result",
+    monkeypatch.setattr(results_db, "save_result_row",
         lambda **kwargs: (_ for _ in ()).throw(RuntimeError("db down")),
     )
 
@@ -119,6 +122,61 @@ def test_apply_results_retention_uses_typed_result_rows(monkeypatch):
     result_store._apply_results_retention("proj-1")
 
     assert deleted == ["res-old"]
+
+
+def test_save_pipeline_result_outcome_is_typed_internal_boundary(monkeypatch):
+    import app.utils.result_store as result_store
+
+    calls: dict[str, object] = {}
+
+    monkeypatch.setattr(
+        "app.utils.dataframe.save_dataframe_to_bytes",
+        lambda df, fmt, geom_column=None, crs="EPSG:4326": b"id\n1\n",
+    )
+
+    def _save_from_bytes(**kwargs):
+        calls.update(kwargs)
+        return "res-typed"
+
+    monkeypatch.setattr(
+        result_store,
+        "save_result_blob_from_bytes",
+        _save_from_bytes,
+    )
+
+    outcome = save_pipeline_result_outcome(
+        project_id="proj-1",
+        df=object(),
+        output_format="csv",
+        filename_stem="typed-output",
+        rows_count=1,
+        group_id="grp-1",
+    )
+
+    assert isinstance(outcome, PipelineResultSave)
+    assert outcome.result_id == "res-typed"
+    assert outcome.output_filename == "typed-output.csv"
+    assert calls["filename"] == "typed-output.csv"
+
+
+def test_save_pipeline_result_public_wrapper_is_explicit_legacy_dict(monkeypatch):
+    import app.utils.result_store as result_store
+
+    monkeypatch.setattr(
+        result_store,
+        "save_pipeline_result_outcome",
+        lambda **kwargs: PipelineResultSave(
+            result_id="res-compat",
+            output_filename="compat.csv",
+        ),
+    )
+
+    assert save_pipeline_result(
+        project_id="proj-1",
+        df=object(),
+        output_format="csv",
+        filename_stem="compat",
+    ) == {"result_id": "res-compat", "output_filename": "compat.csv"}
 
 
 # RB.2 (2026-04-27): AWS credentials expired -> ResultSaveError con messaggio
@@ -278,7 +336,7 @@ def _wire_object_storage_writer(monkeypatch, *, fake_storage, saved):
     monkeypatch.setattr(projects_db, "get_project",
         lambda project_id: {"id": project_id, "group_id": "grp-1"},
     )
-    monkeypatch.setattr(results_db, "save_result",
+    monkeypatch.setattr(results_db, "save_result_row",
         lambda **kwargs: saved.update(kwargs),
     )
     monkeypatch.setattr(result_store, "_apply_results_retention", lambda pid: None)

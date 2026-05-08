@@ -7,7 +7,7 @@ Operazioni principali:
 import copy
 import json
 import uuid
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional
 from datetime import datetime, timezone
 
 from app.utils.logger import get_logger
@@ -29,7 +29,7 @@ def create_from_project(
     default_output_format: str = "xlsx",
     default_output_name: Optional[str] = None,
     icon: Optional[str] = None,
-) -> Dict[str, Any]:
+) -> eseguibili_db.EseguibileRow:
     """Crea un eseguibile clonando il canvas di un progetto arricchisci.
 
     Raises:
@@ -98,7 +98,7 @@ def create_from_project(
         icon=icon,
     )
     logger.info(
-        f"Eseguibile creato: {record['id']} ({name}) da progetto {source_project_id}",
+        f"Eseguibile creato: {record.id} ({name}) da progetto {source_project_id}",
         op="eseguibili_create"
     )
     return record
@@ -107,7 +107,7 @@ def create_from_project(
 # ANALYZE UPLOAD — upload file utente + estrazione colonne
 
 def analyze_file_upload(
-    eseguibile: Dict[str, Any],
+    eseguibile: eseguibili_db.EseguibileRow,
     file_path: str,
     filename: str,
 ) -> Dict[str, Any]:
@@ -205,7 +205,7 @@ def analyze_file_upload(
 # EXECUTE — sostituisce sorgente nel canvas e lancia task
 
 def execute(
-    eseguibile: Dict[str, Any],
+    eseguibile: eseguibili_db.EseguibileRow,
     file_path: str,
     column_mapping: List[Dict[str, str]],
     output_format: Optional[str] = None,

@@ -80,7 +80,7 @@ def mock_db_save_ok(monkeypatch):
     )
     monkeypatch.setattr(projects_db, "get_project", lambda pid: {"id": pid, "group_id": "grp-1"}
     )
-    monkeypatch.setattr(results_db, "save_result", lambda **kw: saved.append(kw))
+    monkeypatch.setattr(results_db, "save_result_row", lambda **kw: saved.append(kw))
     monkeypatch.setattr(
         result_store, "_apply_results_retention", lambda pid: None
     )
@@ -104,7 +104,7 @@ def mock_db_save_fails(monkeypatch):
     def _raise(**_kw):
         raise RuntimeError("DB save FK violation")
 
-    monkeypatch.setattr(results_db, "save_result", _raise)
+    monkeypatch.setattr(results_db, "save_result_row", _raise)
     monkeypatch.setattr(
         result_store, "_apply_results_retention", lambda pid: None
     )

@@ -6,6 +6,7 @@ Helper per salvare i risultati pipeline nel DB.
 
 import os
 import uuid
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, Optional
 
@@ -17,6 +18,20 @@ logger = get_logger(__name__)
 # Numero default di risultati da conservare per progetto
 # Sovrascrivibile per singolo progetto tramite projects.retention_n nelle config tables
 DEFAULT_RESULTS_RETENTION = 10
+
+
+@dataclass(frozen=True)
+class PipelineResultSave:
+    """Typed result for pipeline output persistence."""
+
+    result_id: str
+    output_filename: str
+
+    def to_legacy_dict(self) -> Dict[str, str]:
+        return {
+            "result_id": self.result_id,
+            "output_filename": self.output_filename,
+        }
 
 
 def get_temp_output_path(filename: str) -> Path:
@@ -219,7 +234,7 @@ def save_result_blob(project_id: str, path: Path, fmt: str,
     _saved = False
     try:
         from app.core.projects.db import get_project
-        from app.core.results.db import save_result
+        from app.core.results.db import save_result_row
         from app.config import settings
 
         # Risolvi group_id
@@ -242,7 +257,7 @@ def save_result_blob(project_id: str, path: Path, fmt: str,
             # DB blob path — hard cap guard (db sempre; hybrid ramo DB
             _enforce_db_hard_cap(file_size, ctx=f"save_result_blob/{policy}")
             blob = path.read_bytes()
-            save_result(
+            save_result_row(
                 result_id=result_id,
                 project_id=project_id,
                 group_id=resolved_group_id,
@@ -283,7 +298,7 @@ def save_result_blob(project_id: str, path: Path, fmt: str,
             # cosi' il caller riceve sempre la root cause (DB save) e
             # l'object storage non accumula orfani
             try:
-                save_result(
+                save_result_row(
                     result_id=result_id,
                     project_id=project_id,
                     group_id=resolved_group_id,
@@ -383,7 +398,7 @@ def save_result_blob_from_bytes(
     """
     try:
         from app.core.projects.db import get_project
-        from app.core.results.db import save_result
+        from app.core.results.db import save_result_row
         from app.config import settings
 
         size = len(data)
@@ -402,7 +417,7 @@ def save_result_blob_from_bytes(
         if not use_object_storage:
             # DB blob path — hard cap guard (db sempre; hybrid ramo DB
             _enforce_db_hard_cap(size, ctx=f"save_result_blob_from_bytes/{policy}")
-            save_result(
+            save_result_row(
                 result_id=result_id,
                 project_id=project_id,
                 group_id=resolved_group_id,
@@ -440,7 +455,7 @@ def save_result_blob_from_bytes(
             # rationale: compensating delete best-effort se la DB save
             # fallisce dopo upload riuscito
             try:
-                save_result(
+                save_result_row(
                     result_id=result_id,
                     project_id=project_id,
                     group_id=resolved_group_id,
@@ -493,6 +508,29 @@ def save_pipeline_result(
     geom_column: Optional[str] = None,
     crs: str = "EPSG:4326",
 ) -> Dict[str, str]:
+    """Compatibility wrapper returning legacy dict result metadata."""
+    return save_pipeline_result_outcome(
+        project_id=project_id,
+        df=df,
+        output_format=output_format,
+        filename_stem=filename_stem,
+        rows_count=rows_count,
+        group_id=group_id,
+        geom_column=geom_column,
+        crs=crs,
+    ).to_legacy_dict()
+
+
+def save_pipeline_result_outcome(
+    project_id: str,
+    df,
+    output_format: str,
+    filename_stem: str,
+    rows_count: Optional[int] = None,
+    group_id: Optional[str] = None,
+    geom_column: Optional[str] = None,
+    crs: str = "EPSG:4326",
+) -> PipelineResultSave:
     """Salva un DataFrame come result pipeline. Un solo entry point.
 
     Dispatch interno:
@@ -531,7 +569,7 @@ def save_pipeline_result(
             viene derivata da output_format.
 
     Returns:
-        dict {"result_id": str, "output_filename": str}
+        typed result save outcome.
     """
     from app.utils.dataframe import (
         save_dataframe, save_dataframe_to_bytes,
@@ -575,7 +613,10 @@ def save_pipeline_result(
         finally:
             shutil.rmtree(tmp_dir, ignore_errors=True)
         # tmp_dir + contenuto rimossi best-effort (idempotent, no-throw)
-        return {"result_id": result_id, "output_filename": output_filename}
+        return PipelineResultSave(
+            result_id=result_id,
+            output_filename=output_filename,
+        )
 
     # In-memory path: zero touch su DATA_DIR/temp
     data = save_dataframe_to_bytes(df, fmt_lower, geom_column=geom_column, crs=crs)
@@ -587,7 +628,7 @@ def save_pipeline_result(
         rows_count=rows_count,
         group_id=group_id,
     )
-    return {"result_id": result_id, "output_filename": filename}
+    return PipelineResultSave(result_id=result_id, output_filename=filename)
 
 
 def get_result_as_bytes(project_id: str) -> Optional[bytes]:

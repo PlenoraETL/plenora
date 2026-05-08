@@ -114,6 +114,27 @@ def test_backup_status_age_unparseable_returns_unknown():
     assert "timestamp non parsabile" in out["message"]
 
 
+def test_backup_status_null_last_modified_returns_typed_unknown():
+    """Null timestamp stays graceful and service returns the typed block."""
+    from app.core.admin_system_status import service
+    from app.core.admin_system_status.models import AdminStatusBlock
+
+    with patch(
+        "app.core.admin_backups.service.list_backups",
+        return_value=[{
+            "key": "x.dump",
+            "size_bytes": 1,
+            "last_modified": None,
+            "storage_class": "STANDARD",
+        }],
+    ):
+        out = service.get_backup_status()
+
+    assert isinstance(out, AdminStatusBlock)
+    assert out["status"] == "unknown"
+    assert out["age_hours"] is None
+
+
 # get_verify_restore_status — legge da plenora.verify_runs (DB)
 
 
@@ -235,6 +256,24 @@ def test_verify_restore_running_result():
     assert out["message"] == "Verifica in corso"
 
 
+def test_verify_restore_malformed_finished_at_stays_graceful():
+    from app.core.admin_system_status import service
+
+    row = {
+        "started_at": datetime.now(timezone.utc),
+        "finished_at": "not-a-datetime",
+        "exit_code": 0,
+        "result": "success",
+        "error_message": None,
+    }
+    with patch("app.db.pg_connection.fetchone", return_value=row):
+        out = service.get_verify_restore_status()
+
+    assert out["status"] == "ok"
+    assert out["age_days"] is None
+    assert out["last_run_at"] is None
+
+
 # get_schedules_status — DB query schedules
 
 
@@ -334,7 +373,8 @@ def test_workers_status_when_inspect_returns_none(monkeypatch):
 
     out = service.get_workers_status()
 
-    assert isinstance(out, dict)
+    from app.core.admin_system_status.models import AdminStatusBlock
+    assert isinstance(out, AdminStatusBlock)
     assert "status" in out
 
 
@@ -353,5 +393,6 @@ def test_workers_status_when_inspect_raises(monkeypatch):
     monkeypatch.setitem(sys.modules, "workers.celery_app", fake_module)
 
     out = service.get_workers_status()
-    assert isinstance(out, dict)
+    from app.core.admin_system_status.models import AdminStatusBlock
+    assert isinstance(out, AdminStatusBlock)
     assert "status" in out

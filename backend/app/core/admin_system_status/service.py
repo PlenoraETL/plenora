@@ -6,14 +6,32 @@ Ogni metrica (backup, verify-restore, schedules, workers) e' una funzione
 
 from __future__ import annotations
 
-import os
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Optional
 
+from app.core.admin_system_status.models import (
+    AdminStatusBlock,
+    CpuStatus,
+    DbSchemaTableStatus,
+    DiskStatus,
+    MemoryStatus,
+    ScheduleFailure,
+    SystemStatusPayload,
+    WorkerDetail,
+)
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
+
+
+def _as_status_block(value: AdminStatusBlock | dict[str, object]) -> AdminStatusBlock:
+    """Normalize test doubles and legacy delegates at the service boundary."""
+    if isinstance(value, AdminStatusBlock):
+        return value
+    if "message" not in value:
+        value = {**value, "message": ""}
+    return AdminStatusBlock.model_validate(value)
 
 
 # Soglie (documentate qui per review esplicita
@@ -27,7 +45,7 @@ _VERIFY_ERROR_DAYS = 14
 # Backup (ultimo dump su S3
 
 
-def get_backup_status() -> Dict[str, Any]:
+def get_backup_status() -> AdminStatusBlock:
     """Ultimo dump .dump caricato su S3 (il piu' recente per LastModified).
 
     Soglie:
@@ -40,17 +58,17 @@ def get_backup_status() -> Dict[str, Any]:
         backups = list_backups()
     except Exception as e:
         logger.warning(f"list_backups fallito: {e}")
-        return {
-            "status": "unknown",
-            "message": "S3 non accessibile",
-            "error": str(e)[:200],
-        }
+        return AdminStatusBlock(
+            status="unknown",
+            message="S3 non accessibile",
+            error=str(e)[:200],
+        )
 
     if not backups:
-        return {
-            "status": "error",
-            "message": "Nessun backup trovato su S3",
-        }
+        return AdminStatusBlock(
+            status="error",
+            message="Nessun backup trovato su S3",
+        )
 
     # list_backups ritorna gia' ordinato dal piu' recente
     latest = backups[0]
@@ -91,17 +109,17 @@ def get_backup_status() -> Dict[str, Any]:
         else:
             message = f"Ultimo backup {age_hours:.0f}h fa"
 
-    return {
-        "status": status,
-        "message": message,
-        "last_key": latest.get("key"),
-        "last_modified": last_modified if isinstance(last_modified, str) else (
+    return AdminStatusBlock(
+        status=status,
+        message=message,
+        last_key=str(latest.get("key")) if latest.get("key") is not None else None,
+        last_modified=last_modified if isinstance(last_modified, str) else (
             last_modified.isoformat() if last_modified else None
         ),
-        "size_bytes": size_bytes,
-        "age_hours": round(age_hours, 1) if age_hours is not None else None,
-        "total_backups": len(backups),
-    }
+        size_bytes=size_bytes,
+        age_hours=round(age_hours, 1) if age_hours is not None else None,
+        total_backups=len(backups),
+    )
 
 
 # Verify restore (ultima esecuzione plenora-backup-test via DB
@@ -109,7 +127,7 @@ def get_backup_status() -> Dict[str, Any]:
 # a fine job. Container-safe: nessuna dipendenza da systemctl/journalctl
 
 
-def get_verify_restore_status() -> Dict[str, Any]:
+def get_verify_restore_status() -> AdminStatusBlock:
     """Stato ultima esecuzione verify restore da plenora.verify_runs.
 
     Soglie weekly: ok < 8gg, warn 8-14gg, error > 14gg.
@@ -122,28 +140,30 @@ def get_verify_restore_status() -> Dict[str, Any]:
         )
     except Exception as e:
         logger.warning(f"query verify_runs fallita: {e}")
-        return {
-            "status": "unknown",
-            "message": "DB non accessibile",
-            "last_result": "unknown",
-            "last_run_at": None,
-            "age_days": None,
-            "exit_code": None,
-            "error": str(e)[:200],
-        }
+        return AdminStatusBlock(
+            status="unknown",
+            message="DB non accessibile",
+            last_result="unknown",
+            last_run_at=None,
+            age_days=None,
+            exit_code=None,
+            error=str(e)[:200],
+        )
 
     if not row:
-        return {
-            "status": "unknown",
-            "message": "Nessuna verifica registrata",
-            "last_result": "unknown",
-            "last_run_at": None,
-            "age_days": None,
-            "exit_code": None,
-        }
+        return AdminStatusBlock(
+            status="unknown",
+            message="Nessuna verifica registrata",
+            last_result="unknown",
+            last_run_at=None,
+            age_days=None,
+            exit_code=None,
+        )
 
-    result = row.get("result") or "unknown"
-    exit_code = row.get("exit_code")
+    result_value = row.get("result") or "unknown"
+    result = result_value if isinstance(result_value, str) else str(result_value)
+    exit_code_value = row.get("exit_code")
+    exit_code = exit_code_value if isinstance(exit_code_value, int) else None
     finished_at = row.get("finished_at")
     error_message = row.get("error_message")
 
@@ -183,20 +203,20 @@ def get_verify_restore_status() -> Dict[str, Any]:
         status = "unknown"
         message = f"Stato verifica: {result}"
 
-    return {
-        "status": status,
-        "message": message,
-        "last_result": result,
-        "last_run_at": last_run_iso,
-        "age_days": age_days,
-        "exit_code": exit_code,
-    }
+    return AdminStatusBlock(
+        status=status,
+        message=message,
+        last_result=result,
+        last_run_at=last_run_iso,
+        age_days=age_days,
+        exit_code=exit_code,
+    )
 
 
 # Schedules (DB query: attivi, failing recenti
 
 
-def get_schedules_status() -> Dict[str, Any]:
+def get_schedules_status() -> AdminStatusBlock:
     """Count schedule attivi + count failing — cross-group (superadmin)."""
     try:
         from app.db.pg_connection import fetchall
@@ -206,14 +226,14 @@ def get_schedules_status() -> Dict[str, Any]:
         )
     except Exception as e:
         logger.warning(f"query schedules fallita: {e}")
-        return {
-            "status": "unknown",
-            "message": "Schedule table non accessibile",
-            "error": str(e)[:200],
-        }
+        return AdminStatusBlock(
+            status="unknown",
+            message="Schedule table non accessibile",
+            error=str(e)[:200],
+        )
 
     total_active = 0
-    failing: List[Dict[str, str]] = []
+    failing: list[ScheduleFailure] = []
 
     for row in rows:
         if not row.get("is_enabled"):
@@ -221,19 +241,19 @@ def get_schedules_status() -> Dict[str, Any]:
         total_active += 1
         last_status = row.get("last_status")
         if last_status in ("failed", "failing", "error"):
-            failing.append({
-                "id": row.get("id") or "?",
-                "name": row.get("name") or "?",
-            })
+            failing.append(ScheduleFailure(
+                id=str(row.get("id") or "?"),
+                name=str(row.get("name") or "?"),
+            ))
 
     if total_active == 0:
-        return {
-            "status": "ok",
-            "message": "Nessuno schedule attivo",
-            "total_active": 0,
-            "failing_count": 0,
-            "failing": [],
-        }
+        return AdminStatusBlock(
+            status="ok",
+            message="Nessuno schedule attivo",
+            total_active=0,
+            failing_count=0,
+            failing=[],
+        )
 
     failing_count = len(failing)
     if failing_count == 0:
@@ -246,19 +266,19 @@ def get_schedules_status() -> Dict[str, Any]:
         status = "warn"
         message = f"{total_active} attivi, {failing_count} failing"
 
-    return {
-        "status": status,
-        "message": message,
-        "total_active": total_active,
-        "failing_count": failing_count,
-        "failing": failing[:5],  # max 5 nel payload
-    }
+    return AdminStatusBlock(
+        status=status,
+        message=message,
+        total_active=total_active,
+        failing_count=failing_count,
+        failing=failing[:5],  # max 5 nel payload
+    )
 
 
 # Celery workers (inspect.active via broker
 
 
-def get_workers_status() -> Dict[str, Any]:
+def get_workers_status() -> AdminStatusBlock:
     """Worker Celery: nodi + slot concorrenza totali + task attivi + queue.
 
     Nota sulla semantica:
@@ -274,16 +294,16 @@ def get_workers_status() -> Dict[str, Any]:
         from workers.celery_app import celery_app
     except Exception as e:
         logger.warning(f"celery_app import fallito: {e}")
-        return {
-            "status": "unknown",
-            "message": "Celery app non importabile",
-            "error": str(e)[:200],
-        }
+        return AdminStatusBlock(
+            status="unknown",
+            message="Celery app non importabile",
+            error=str(e)[:200],
+        )
 
     nodes = 0
     concurrency_slots = 0
     active_tasks = 0
-    details: List[Dict[str, Any]] = []
+    details: list[WorkerDetail] = []
 
     try:
         inspect = celery_app.control.inspect(timeout=2.0)
@@ -332,23 +352,23 @@ def get_workers_status() -> Dict[str, Any]:
                 if q.get("name")
             ]
 
-            details.append({
-                "name": worker_name,
-                "hostname": hostname,
-                "pid": s.get("pid"),
-                "pool_size": max_conc if isinstance(max_conc, int) else None,
-                "child_processes": len(processes),
-                "active_tasks": len(active.get(worker_name, []) or []),
-                "total_tasks_processed": total_processed,
-                "queues": queue_names,
-            })
+            details.append(WorkerDetail(
+                name=worker_name,
+                hostname=hostname,
+                pid=s.get("pid") if isinstance(s.get("pid"), int) else None,
+                pool_size=max_conc if isinstance(max_conc, int) else None,
+                child_processes=len(processes),
+                active_tasks=len(active.get(worker_name, []) or []),
+                total_tasks_processed=total_processed,
+                queues=queue_names,
+            ))
     except Exception as e:
         logger.warning(f"celery inspect fallito: {e}")
-        return {
-            "status": "unknown",
-            "message": "Broker Celery non raggiungibile",
-            "error": str(e)[:200],
-        }
+        return AdminStatusBlock(
+            status="unknown",
+            message="Broker Celery non raggiungibile",
+            error=str(e)[:200],
+        )
 
     # Queue depth via Redis diretto (best-effort
     # Usiamo settings.CELERY_BROKER_URL come unica variabile canonica
@@ -379,17 +399,17 @@ def get_workers_status() -> Dict[str, Any]:
     if queue_depth is not None and queue_depth > 0:
         message += f" · {queue_depth} in coda"
 
-    return {
-        "status": status,
-        "message": message,
-        "nodes": nodes,
-        "concurrency_slots": concurrency_slots,
-        "active_tasks": active_tasks,
-        "queue_depth": queue_depth,
-        "details": details,
+    return AdminStatusBlock(
+        status=status,
+        message=message,
+        nodes=nodes,
+        concurrency_slots=concurrency_slots,
+        active_tasks=active_tasks,
+        queue_depth=queue_depth,
+        details=details,
         # Retrocompat per chiamanti legacy (la vecchia chiave era workers_online
-        "workers_online": nodes,
-    }
+        workers_online=nodes,
+    )
 
 
 # Host resources (psutil
@@ -426,7 +446,7 @@ def _disk_usage_probe_path(data_dir: Path) -> Path:
         return Path(".")
 
 
-def get_host_resources() -> Dict[str, Any]:
+def get_host_resources() -> AdminStatusBlock:
     """Metriche host via psutil: disco (sul mount DATA_DIR), RAM, CPU.
 
     In container/K8s misura le risorse del pod backend (cgroup limits se
@@ -437,17 +457,17 @@ def get_host_resources() -> Dict[str, Any]:
     try:
         import psutil
     except ImportError:
-        return {
-            "status": "unknown",
-            "message": "psutil non installato",
-            "disk": None,
-            "memory": None,
-            "cpu": None,
-        }
+        return AdminStatusBlock(
+            status="unknown",
+            message="psutil non installato",
+            disk=None,
+            memory=None,
+            cpu=None,
+        )
 
-    disk_info: Optional[Dict[str, Any]] = None
-    memory_info: Optional[Dict[str, Any]] = None
-    cpu_info: Optional[Dict[str, Any]] = None
+    disk_info: Optional[DiskStatus] = None
+    memory_info: Optional[MemoryStatus] = None
+    cpu_info: Optional[CpuStatus] = None
     worst_status = "ok"
 
     # Disco sul mount di DATA_DIR
@@ -486,14 +506,14 @@ def get_host_resources() -> Dict[str, Any]:
                 f"({type(_pse).__module__}.{type(_pse).__name__}: {_pse!r}), "
                 f"fallback shutil.disk_usage OK su usage_path={usage_path!r}"
             )
-        disk_info = {
-            "path": data_dir,
-            "usage_path": str(usage_path),
-            "total_gb": round(total / (1024 ** 3), 2),
-            "used_gb": round(used / (1024 ** 3), 2),
-            "free_gb": round(free / (1024 ** 3), 2),
-            "percent": pct,
-        }
+        disk_info = DiskStatus(
+            path=data_dir,
+            usage_path=str(usage_path),
+            total_gb=round(total / (1024 ** 3), 2),
+            used_gb=round(used / (1024 ** 3), 2),
+            free_gb=round(free / (1024 ** 3), 2),
+            percent=pct,
+        )
         if pct >= _DISK_ERROR_PCT:
             worst_status = "error"
         elif pct >= _DISK_WARN_PCT and worst_status == "ok":
@@ -531,12 +551,12 @@ def get_host_resources() -> Dict[str, Any]:
         import psutil
         vm = psutil.virtual_memory()
         pct = round(vm.percent, 1)
-        memory_info = {
-            "total_gb": round(vm.total / (1024 ** 3), 2),
-            "available_gb": round(vm.available / (1024 ** 3), 2),
-            "used_gb": round(vm.used / (1024 ** 3), 2),
-            "percent": pct,
-        }
+        memory_info = MemoryStatus(
+            total_gb=round(vm.total / (1024 ** 3), 2),
+            available_gb=round(vm.available / (1024 ** 3), 2),
+            used_gb=round(vm.used / (1024 ** 3), 2),
+            percent=pct,
+        )
         if pct >= _MEM_ERROR_PCT:
             worst_status = "error"
         elif pct >= _MEM_WARN_PCT and worst_status != "error":
@@ -552,38 +572,38 @@ def get_host_resources() -> Dict[str, Any]:
         except (AttributeError, OSError):
             load_1 = load_5 = load_15 = None
         cpu_count = psutil.cpu_count(logical=True) or 1
-        cpu_info = {
-            "count": cpu_count,
-            "load_1m": round(load_1, 2) if load_1 is not None else None,
-            "load_5m": round(load_5, 2) if load_5 is not None else None,
-            "load_15m": round(load_15, 2) if load_15 is not None else None,
-            "percent": round(psutil.cpu_percent(interval=None), 1),
-        }
+        cpu_info = CpuStatus(
+            count=cpu_count,
+            load_1m=round(load_1, 2) if load_1 is not None else None,
+            load_5m=round(load_5, 2) if load_5 is not None else None,
+            load_15m=round(load_15, 2) if load_15 is not None else None,
+            percent=round(psutil.cpu_percent(interval=None), 1),
+        )
     except Exception as e:
         logger.warning(f"host_resources cpu error: {e}")
 
     parts = []
     if disk_info:
-        parts.append(f"disco {disk_info['percent']:.0f}%")
+        parts.append(f"disco {disk_info.percent:.0f}%")
     if memory_info:
-        parts.append(f"RAM {memory_info['percent']:.0f}%")
-    if cpu_info and cpu_info.get("percent") is not None:
-        parts.append(f"CPU {cpu_info['percent']:.0f}%")
+        parts.append(f"RAM {memory_info.percent:.0f}%")
+    if cpu_info and cpu_info.percent is not None:
+        parts.append(f"CPU {cpu_info.percent:.0f}%")
     message = " · ".join(parts) if parts else "Metriche non disponibili"
 
-    return {
-        "status": worst_status if (disk_info or memory_info or cpu_info) else "unknown",
-        "message": message,
-        "disk": disk_info,
-        "memory": memory_info,
-        "cpu": cpu_info,
-    }
+    return AdminStatusBlock(
+        status=worst_status if (disk_info or memory_info or cpu_info) else "unknown",
+        message=message,
+        disk=disk_info,
+        memory=memory_info,
+        cpu=cpu_info,
+    )
 
 
 # DB pool stats (Postgres
 
 
-def get_db_pool_status() -> Dict[str, Any]:
+def get_db_pool_status() -> AdminStatusBlock:
     """Stato del connection pool Postgres: attive/idle, lock, query lunghe.
 
     Usa `pg_stat_activity` per count + max connections. Soglia warn a
@@ -603,17 +623,17 @@ def get_db_pool_status() -> Dict[str, Any]:
         )
     except Exception as e:
         logger.warning(f"db_pool status query failed: {e}")
-        return {
-            "status": "unknown",
-            "message": "DB non accessibile",
-            "error": str(e)[:200],
-        }
+        return AdminStatusBlock(
+            status="unknown",
+            message="DB non accessibile",
+            error=str(e)[:200],
+        )
 
     if not row:
-        return {
-            "status": "unknown",
-            "message": "pg_stat_activity vuoto",
-        }
+        return AdminStatusBlock(
+            status="unknown",
+            message="pg_stat_activity vuoto",
+        )
 
     max_conn = row.get("max_conn") or 100
     total = int(row.get("total") or 0)
@@ -632,33 +652,33 @@ def get_db_pool_status() -> Dict[str, Any]:
     else:
         status = "ok"
 
-    return {
-        "status": status,
-        "message": f"{total}/{max_conn} conn ({pct:.0f}%) · {active} attive · {waiting} waiting",
-        "max_connections": max_conn,
-        "total": total,
-        "active": active,
-        "idle": idle,
-        "idle_in_transaction": idle_in_tx,
-        "waiting": waiting,
-        "percent": pct,
-    }
+    return AdminStatusBlock(
+        status=status,
+        message=f"{total}/{max_conn} conn ({pct:.0f}%) · {active} attive · {waiting} waiting",
+        max_connections=max_conn,
+        total=total,
+        active=active,
+        idle=idle,
+        idle_in_transaction=idle_in_tx,
+        waiting=waiting,
+        percent=pct,
+    )
 
 
 # Redis info
 
 
-def get_redis_status() -> Dict[str, Any]:
+def get_redis_status() -> AdminStatusBlock:
     """Stato Redis broker/cache: memory usage, clients connessi, uptime."""
     try:
         import redis as _redis_mod
         from app.config import settings as _settings
     except Exception as e:
-        return {
-            "status": "unknown",
-            "message": "redis client non importabile",
-            "error": str(e)[:200],
-        }
+        return AdminStatusBlock(
+            status="unknown",
+            message="redis client non importabile",
+            error=str(e)[:200],
+        )
 
     try:
         client = _redis_mod.Redis.from_url(
@@ -667,14 +687,14 @@ def get_redis_status() -> Dict[str, Any]:
         info = client.info()
     except Exception as e:
         logger.warning(f"redis info failed: {e}")
-        return {
-            "status": "error",
-            "message": f"Redis non raggiungibile: {type(e).__name__}",
-            "error": str(e)[:200],
-        }
+        return AdminStatusBlock(
+            status="error",
+            message=f"Redis non raggiungibile: {type(e).__name__}",
+            error=str(e)[:200],
+        )
 
     used_bytes = int(info.get("used_memory", 0))
-    used_human = info.get("used_memory_human", "?")
+    used_human = str(info.get("used_memory_human", "?"))
     max_bytes = int(info.get("maxmemory", 0))
     clients = int(info.get("connected_clients", 0))
     uptime_sec = int(info.get("uptime_in_seconds", 0))
@@ -699,22 +719,22 @@ def get_redis_status() -> Dict[str, Any]:
     if uptime_days > 0:
         msg_parts.append(f"uptime {uptime_days}d")
 
-    return {
-        "status": status,
-        "message": " · ".join(msg_parts),
-        "used_memory_bytes": used_bytes,
-        "used_memory_human": used_human,
-        "max_memory_bytes": max_bytes,
-        "connected_clients": clients,
-        "uptime_seconds": uptime_sec,
-        "percent": pct,
-    }
+    return AdminStatusBlock(
+        status=status,
+        message=" · ".join(msg_parts),
+        used_memory_bytes=used_bytes,
+        used_memory_human=used_human,
+        max_memory_bytes=max_bytes,
+        connected_clients=clients,
+        uptime_seconds=uptime_sec,
+        percent=pct,
+    )
 
 
 # JWT blacklist (Redis) — health dedicato
 
 
-def get_blacklist_status() -> Dict[str, Any]:
+def get_blacklist_status() -> AdminStatusBlock:
     """Status della blacklist JWT (revoca token via /auth/logout).
 
     Wrapper su `app.shared.token_blacklist.get_blacklist_status` che
@@ -728,11 +748,11 @@ def get_blacklist_status() -> Dict[str, Any]:
     try:
         from app.shared.token_blacklist import get_blacklist_status as _probe
     except Exception as e:
-        return {
-            "status": "unknown",
-            "message": "Modulo blacklist non importabile",
-            "error": str(e)[:200],
-        }
+        return AdminStatusBlock(
+            status="unknown",
+            message="Modulo blacklist non importabile",
+            error=str(e)[:200],
+        )
 
     # BE-CONFIG-001C: default tipato in `Settings.DEFAULTS`
     # `JWT_BLACKLIST_STALE_THRESHOLD_SEC=1800`). Guard `ValueError` resta
@@ -744,21 +764,23 @@ def get_blacklist_status() -> Dict[str, Any]:
         threshold = 1800
 
     try:
-        return _probe(stale_threshold_seconds=threshold)
+        return AdminStatusBlock.model_validate(
+            _probe(stale_threshold_seconds=threshold)
+        )
     except Exception as e:
         # Safety net: get_blacklist_status e' gia' graceful, ma blindo
         logger.warning(f"get_blacklist_status wrapper fallito: {e}")
-        return {
-            "status": "unknown",
-            "message": "Probe blacklist fallita",
-            "error": str(e)[:200],
-        }
+        return AdminStatusBlock(
+            status="unknown",
+            message="Probe blacklist fallita",
+            error=str(e)[:200],
+        )
 
 
 # Ticketing — count attivi cross-group per dashboard superadmin
 
 
-def get_tickets_status() -> Dict[str, Any]:
+def get_tickets_status() -> AdminStatusBlock:
     """Aggregato ticket per card dashboard superadmin.
 
     Ritorna counts dei ticket in stato attivo (open, in_progress,
@@ -775,28 +797,32 @@ def get_tickets_status() -> Dict[str, Any]:
         from app.db import tickets_db_service as tdb
         from app.core.tickets.service import TICKET_STATUSES_ACTIVE
     except Exception as e:
-        return {
-            "status": "unknown",
-            "message": "Modulo tickets non disponibile",
-            "error": str(e)[:200],
-        }
+        return AdminStatusBlock(
+            status="unknown",
+            message="Modulo tickets non disponibile",
+            error=str(e)[:200],
+        )
 
     try:
         total_active = tdb.count_tickets(
             status_in=list(TICKET_STATUSES_ACTIVE),
         )
-        by_severity = tdb.counts_by_severity(
+        by_severity_raw = tdb.counts_by_severity(
             status_in=list(TICKET_STATUSES_ACTIVE),
         )
+        by_severity = {
+            str(key): int(value or 0)
+            for key, value in by_severity_raw.items()
+        }
         critical = by_severity.get("critical", 0)
         high = by_severity.get("high", 0)
     except Exception as e:
         logger.warning(f"get_tickets_status DB error: {e}")
-        return {
-            "status": "unknown",
-            "message": "Query ticket fallita",
-            "error": str(e)[:200],
-        }
+        return AdminStatusBlock(
+            status="unknown",
+            message="Query ticket fallita",
+            error=str(e)[:200],
+        )
 
     if critical >= 3:
         status = "error"
@@ -816,12 +842,12 @@ def get_tickets_status() -> Dict[str, Any]:
         else:
             message = f"{total_active} ticket attivi (nessuno critico)"
 
-    return {
-        "status": status,
-        "message": message,
-        "total_active": total_active,
-        "by_severity": by_severity,
-    }
+    return AdminStatusBlock(
+        status=status,
+        message=message,
+        total_active=total_active,
+        by_severity=by_severity,
+    )
 
 
 # DB schema size + row counts tabelle critiche
@@ -841,7 +867,7 @@ _CRITICAL_TABLES = [
 ]
 
 
-def get_db_schema_size() -> Dict[str, Any]:
+def get_db_schema_size() -> AdminStatusBlock:
     """Dimensione schema `plenora` + row count tabelle critiche.
 
     Utile per early-detection di growth anomali (es. file_sources.data
@@ -869,21 +895,21 @@ def get_db_schema_size() -> Dict[str, Any]:
         )
     except Exception as e:
         logger.warning(f"db_schema_size query failed: {e}")
-        return {
-            "status": "unknown",
-            "message": "DB non accessibile",
-            "error": str(e)[:200],
-        }
+        return AdminStatusBlock(
+            status="unknown",
+            message="DB non accessibile",
+            error=str(e)[:200],
+        )
 
     size_bytes = int((size_row or {}).get("size_bytes") or 0)
-    size_pretty = (size_row or {}).get("size_pretty") or "0 bytes"
+    size_pretty = str((size_row or {}).get("size_pretty") or "0 bytes")
     tables = [
-        {
-            "name": r.get("table"),
-            "rows": int(r.get("rows") or 0),
-            "size_bytes": int(r.get("size_bytes") or 0),
-            "size_pretty": r.get("size_pretty") or "0 bytes",
-        }
+        DbSchemaTableStatus(
+            name=str(r.get("table")) if r.get("table") is not None else None,
+            rows=int(r.get("rows") or 0),
+            size_bytes=int(r.get("size_bytes") or 0),
+            size_pretty=str(r.get("size_pretty") or "0 bytes"),
+        )
         for r in (table_rows or [])
     ]
 
@@ -903,35 +929,35 @@ def get_db_schema_size() -> Dict[str, Any]:
     else:
         status = "ok"
 
-    return {
-        "status": status,
-        "message": f"schema plenora: {size_pretty}",
-        "size_bytes": size_bytes,
-        "size_pretty": size_pretty,
-        "size_gb": round(size_gb, 3),
-        "tables": tables,
-    }
+    return AdminStatusBlock(
+        status=status,
+        message=f"schema plenora: {size_pretty}",
+        size_bytes=size_bytes,
+        size_pretty=size_pretty,
+        size_gb=round(size_gb, 3),
+        tables=tables,
+    )
 
 
 # Aggregator
 
 
-def get_system_status() -> Dict[str, Any]:
+def get_system_status() -> SystemStatusPayload:
     """Ritorna il JSON aggregato per la dashboard.
 
     Ogni metrica e' un blocco separato: errori in una NON bloccano le altre.
     """
-    generated_at = datetime.now(timezone.utc).isoformat()
-    return {
-        "generated_at": generated_at,
-        "backup": get_backup_status(),
-        "verify_restore": get_verify_restore_status(),
-        "schedules": get_schedules_status(),
-        "workers": get_workers_status(),
-        "host_resources": get_host_resources(),
-        "db_pool": get_db_pool_status(),
-        "redis": get_redis_status(),
-        "db_schema": get_db_schema_size(),
-        "jwt_blacklist": get_blacklist_status(),
-        "tickets": get_tickets_status(),
-    }
+    generated_at = datetime.now(timezone.utc)
+    return SystemStatusPayload(
+        generated_at=generated_at,
+        backup=_as_status_block(get_backup_status()),
+        verify_restore=_as_status_block(get_verify_restore_status()),
+        schedules=_as_status_block(get_schedules_status()),
+        workers=_as_status_block(get_workers_status()),
+        host_resources=_as_status_block(get_host_resources()),
+        db_pool=_as_status_block(get_db_pool_status()),
+        redis=_as_status_block(get_redis_status()),
+        db_schema=_as_status_block(get_db_schema_size()),
+        jwt_blacklist=_as_status_block(get_blacklist_status()),
+        tickets=_as_status_block(get_tickets_status()),
+    )

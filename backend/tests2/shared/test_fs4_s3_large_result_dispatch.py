@@ -53,7 +53,7 @@ def stub_storage(monkeypatch):
 
 @pytest.fixture
 def mock_db(monkeypatch):
-    """DB mock che registra save_result calls."""
+    """DB mock che registra save_result_row calls."""
     import app.db.config.projects as projects_db
     from app.core.results import db as results_db
     import app.utils.result_store as result_store
@@ -64,7 +64,7 @@ def mock_db(monkeypatch):
                         SimpleNamespace(uuid4=lambda: "res-fs4"))
     monkeypatch.setattr(projects_db, "get_project",
                         lambda pid: {"id": pid, "group_id": "grp-1"})
-    monkeypatch.setattr(results_db, "save_result",
+    monkeypatch.setattr(results_db, "save_result_row",
                         lambda **kw: saved.append(kw))
     monkeypatch.setattr(result_store, "_apply_results_retention",
                         lambda pid: None)

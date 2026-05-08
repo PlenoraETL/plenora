@@ -17,7 +17,7 @@ from app.core.projects.lineage import ProjectLineageCycleError
 from app.shared.execution.canvas_graph import CanvasGraph
 from app.shared.execution.graph import kahn_topological_order
 from app.utils.logger import get_logger, append_step
-from app.utils.result_store import save_pipeline_result
+from app.utils.result_store import save_pipeline_result_outcome
 from app.utils.dataframe import (
     load_dataframe_from_file, filter_visible_columns,
     sanitize_for_json, find_latest_output_file,
@@ -1142,7 +1142,7 @@ class ManipolaExecutor:
             # Single entry-point: in-memory per csv/xlsx/json/parquet/
             # geojson (zero temp), filesystem fallback interno per
             # gpkg/shp. Nessun if/else duplicato caller-side
-            saved = save_pipeline_result(
+            saved = save_pipeline_result_outcome(
                 project_id=project_id,
                 df=df,
                 output_format=fmt,
@@ -1154,12 +1154,12 @@ class ManipolaExecutor:
             )
             return {
                 "success": True,
-                "output_path": saved["output_filename"],
+                "output_path": saved.output_filename,
                 "format": fmt.lower(),
                 "rows_count": len(df),
                 "columns_count": len(df.columns),
-                "result_id": saved["result_id"],
-                "message": f"Salvato {len(df)} righe in {saved['output_filename']}"
+                "result_id": saved.result_id,
+                "message": f"Salvato {len(df)} righe in {saved.output_filename}"
             }
         except Exception as e:
             return {"success": False, "message": f"Errore salvataggio: {e}"}

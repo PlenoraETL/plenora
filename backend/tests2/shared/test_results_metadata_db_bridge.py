@@ -25,6 +25,19 @@ def test_result_metadata_sql_lives_in_core_results_db(monkeypatch):
     monkeypatch.setattr(results_db, "execute", _execute)
     monkeypatch.setattr(results_db, "fetchone", _fetchone)
 
+    saved_row = results_db.save_result_row(
+        result_id="res-1",
+        project_id="proj-1",
+        group_id="grp-1",
+        filename="out.csv",
+        fmt="csv",
+        data=b"id\n1\n",
+        rows_count=1,
+        created_by="user-1",
+    )
+
+    assert isinstance(saved_row, results_db.ResultMetadataRow)
+    assert saved_row.id == "res-1"
     assert results_db.save_result(
         result_id="res-1",
         project_id="proj-1",
@@ -60,6 +73,8 @@ def test_result_metadata_sql_lives_in_core_results_db(monkeypatch):
         ),
         ("res-1",),
     )
+    assert calls[2][0] == "execute"
+    assert calls[3][0] == "fetchone"
 
 
 def test_result_metadata_reads_use_core_sql(monkeypatch):

@@ -122,11 +122,16 @@ class ConnectionService:
             created_by=row.created_by,
         )
 
-    def create_connection(self, data: ConnectionCreate, group_id: str = None, created_by: str = None) -> DatabaseConnection:
+    def create_connection(
+        self,
+        data: ConnectionCreate,
+        group_id: str | None = None,
+        created_by: str | None = None,
+    ) -> DatabaseConnection:
         group_id = group_id or self.DEFAULT_GROUP
         connection_id = self._generate_connection_id(data.name)
         extra = {"description": getattr(data, "description", "")}
-        connection_db.create_connection(
+        row = connection_db.create_connection(
             conn_id=connection_id,
             group_id=group_id,
             name=data.name,
@@ -141,10 +146,9 @@ class ConnectionService:
             created_by=created_by,
         )
         logger.info(f"Connessione creata: {connection_id}", op="create_connection")
-        row = connection_db.get_connection_config(connection_id)
         return self._row_to_connection(row)
 
-    def list_connections(self, group_id: str = None) -> ConnectionList:
+    def list_connections(self, group_id: str | None = None) -> ConnectionList:
         # group_id=None → no filter (usato da superadmin e dalla path allowed_groups
         # Fix N+1: fetch tutte le righe complete in una query, no loop di get_connection_config
         rows = connection_db.list_connection_configs(group_id)
@@ -188,8 +192,8 @@ class ConnectionService:
             extra["description"] = update_fields["description"]
             db_fields["extra"] = extra
         if db_fields:
-            connection_db.update_connection(connection_id, **db_fields)
-        return self._row_to_connection(connection_db.get_connection_config(connection_id))
+            row = connection_db.update_connection(connection_id, **db_fields)
+        return self._row_to_connection(row)
 
     def delete_connection(self, connection_id: str) -> bool:
         if not connection_db.get_connection_config(connection_id):

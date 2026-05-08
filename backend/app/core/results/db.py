@@ -85,6 +85,36 @@ def save_result(
     storage_key: Optional[str] = None,
     size_bytes: Optional[int] = None,
 ) -> Optional[dict[str, object]]:
+    """Persist result metadata and return legacy metadata dict."""
+    row = save_result_row(
+        result_id=result_id,
+        project_id=project_id,
+        group_id=group_id,
+        filename=filename,
+        fmt=fmt,
+        data=data,
+        rows_count=rows_count,
+        created_by=created_by,
+        storage_key=storage_key,
+        size_bytes=size_bytes,
+    )
+    if row is None:
+        return None
+    return row.to_legacy_dict()
+
+
+def save_result_row(
+    result_id: str,
+    project_id: str,
+    group_id: str,
+    filename: str,
+    fmt: str,
+    data: Optional[bytes] = None,
+    rows_count: Optional[int] = None,
+    created_by: Optional[str] = None,
+    storage_key: Optional[str] = None,
+    size_bytes: Optional[int] = None,
+) -> Optional[ResultMetadataRow]:
     """Persist result metadata.
 
     Supports both legacy BYTEA blobs and object-storage backed rows.
@@ -115,7 +145,7 @@ def save_result(
             storage_key,
         ),
     )
-    return get_result(result_id)
+    return get_result_row(result_id)
 
 
 def get_result_row(result_id: str) -> Optional[ResultMetadataRow]:

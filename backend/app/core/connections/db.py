@@ -7,14 +7,13 @@ move to the connection domain boundary.
 from __future__ import annotations
 
 import json
+from datetime import datetime, timezone
 from dataclasses import dataclass
 from typing import Mapping, Optional
 
-from app.db.config.connections import create_connection as _create_connection
 from app.db.config.connections import delete_connection as _delete_connection
-from app.db.config.connections import get_connection_config as _get_connection_config
-from app.db.config.connections import update_connection as _update_connection
-from app.db.pg_connection import fetchall, fetchone
+from app.db.config.safe_set import safe_set_clause
+from app.db.pg_connection import execute, fetchall, fetchone
 
 
 @dataclass(frozen=True)
@@ -127,7 +126,14 @@ def get_connection_config(
     conn_id: str,
     group_id: str | None = None,
 ) -> Optional[ConnectionConfigRow]:
-    return _optional_connection_row(_get_connection_config(conn_id, group_id))
+    if group_id:
+        row = fetchone(
+            "SELECT * FROM connections WHERE id = ? AND group_id = ?",
+            (conn_id, group_id),
+        )
+    else:
+        row = fetchone("SELECT * FROM connections WHERE id = ?", (conn_id,))
+    return _optional_connection_row(row)
 
 
 def create_connection(
@@ -144,25 +150,40 @@ def create_connection(
     extra: Mapping[str, object] | None = None,
     created_by: str | None = None,
 ) -> ConnectionConfigRow:
-    row = _create_connection(
-        conn_id=conn_id,
-        group_id=group_id,
-        name=name,
-        db_type=db_type,
-        host=host,
-        port=port,
-        database=database,
-        db_schema=db_schema,
-        username=username,
-        password=password,
-        extra=extra,
-        created_by=created_by,
+    now = datetime.now(timezone.utc).isoformat()
+    execute(
+        "INSERT INTO connections (id, group_id, name, db_type, host, port, database, db_schema, username, password, extra, created_at, updated_at, created_by) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+        (
+            conn_id,
+            group_id,
+            name,
+            db_type,
+            host,
+            port,
+            database,
+            db_schema,
+            username,
+            password,
+            json.dumps(dict(extra or {})),
+            now,
+            now,
+            created_by,
+        ),
     )
-    return ConnectionConfigRow.from_mapping(row)
+    row = get_connection_config(conn_id)
+    if row is None:
+        raise RuntimeError(f"connection '{conn_id}' was inserted but could not be loaded")
+    return row
 
 
 def update_connection(conn_id: str, **fields: object) -> Optional[ConnectionConfigRow]:
-    return _optional_connection_row(_update_connection(conn_id, **fields))
+    update_fields = dict(fields)
+    if "extra" in update_fields and isinstance(update_fields["extra"], Mapping):
+        update_fields["extra"] = json.dumps(dict(update_fields["extra"]))
+    update_fields["updated_at"] = datetime.now(timezone.utc).isoformat()
+    set_clause, vals = safe_set_clause("connections", update_fields)
+    execute(f"UPDATE connections SET {set_clause} WHERE id = ?", vals + (conn_id,))
+    return get_connection_config(conn_id)
 
 
 def delete_connection(conn_id: str) -> bool:
@@ -174,7 +195,7 @@ def list_connection_configs(group_id: str | None = None) -> list[ConnectionConfi
         rows = fetchall("SELECT * FROM connections ORDER BY name")
     else:
         rows = fetchall(
-            "SELECT * FROM connections WHERE group_id = %s ORDER BY name",
+            "SELECT * FROM connections WHERE group_id = ? ORDER BY name",
             (group_id,),
         )
     return [ConnectionConfigRow.from_mapping(row) for row in rows]
