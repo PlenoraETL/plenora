@@ -33,6 +33,10 @@ def test_upload_imdf_layers_uses_provider_layer_renderer(monkeypatch: pytest.Mon
     }
 
     monkeypatch.setattr(
+        "app.core.connections.arcgis_connection_resolver.resolve_arcgis_connection",
+        lambda connection_id: (conn, client),
+    )
+    monkeypatch.setattr(
         "app.core.features.arcgis_connection_adapter.resolve_arcgis_connection",
         lambda connection_id: (conn, client),
     )

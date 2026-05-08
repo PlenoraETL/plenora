@@ -86,7 +86,7 @@ def validate_publish(
         Non lancia eccezioni per errori di validazione — li riporta nel dict.
     """
     from app.config import settings
-    from app.core.features.arcgis_connection_adapter import resolve_arcgis_connection
+    from app.core.connections.arcgis_connection_resolver import resolve_arcgis_connection
     from app.core.imdf.loader import load_imdf_layers
     from app.core.imdf.arcgis_uploader import (
         DEFAULT_MATCH_COLUMNS, LAYER_ORDER, PUBLISH_MODES,

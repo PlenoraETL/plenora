@@ -28,10 +28,16 @@ def _list_user_folders(
     client: ArcGISDiscoveryProviderProtocol,
     conn: ArcGISConnectionInfo,
 ) -> List[dict]:
-    """Read-only: lista folder dell'utente corrente (senza crearne).
+    """KEEP_COMPAT: read-only IMDF folder-list wrapper.
+
+    Lista folder dell'utente corrente (senza crearne).
     Ritorna lista di dict [{id, title, ...}]. Usato dal validator per
     risolvere ownerFolder (id) → title prima di confrontare con la
     selezione utente.
+
+    Guardrail: keep provider access limited to `client.list_folders`.
+    Additional ArcGIS discovery logic belongs in the provider boundary;
+    IMDF-only filtering may stay in `_is_imdf_user_folder`.
     """
     try:
         folders = client.list_folders(conn) or []
@@ -46,7 +52,11 @@ def _ensure_folder(
     conn: ArcGISConnectionInfo,
     folder_name: str,
 ) -> Optional[str]:
-    """KEEP_COMPAT: IMDF wrapper over the generic ArcGIS folder boundary."""
+    """KEEP_COMPAT: IMDF wrapper over the generic ArcGIS folder boundary.
+
+    Guardrail: keep this as root-folder compatibility plus delegation to
+    `client.ensure_folder`; new folder logic belongs in the provider.
+    """
     if not folder_name:
         return ""
     return client.ensure_folder(conn, folder_name)
@@ -61,6 +71,10 @@ def _is_service_name_available(
 
     KEEP_COMPAT: wrapper IMDF legacy delegato al boundary generico
     `ArcGISClient.is_service_name_available`.
+
+    Guardrail: keep this as fail-open compatibility around
+    `client.is_service_name_available`; new availability logic belongs in
+    the provider.
 
     Returns:
         (available, error_message):

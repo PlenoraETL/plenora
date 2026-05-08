@@ -72,7 +72,7 @@ def stub_externals(monkeypatch):
     loader, resolve_arcgis_connection, _find_existing_service,
     _is_service_name_available."""
     import app.core.imdf.loader as loader_mod
-    import app.core.features.arcgis_connection_adapter as adapter_mod
+    import app.core.connections.arcgis_connection_resolver as adapter_mod
     import app.core.imdf.arcgis_uploader as uploader_mod
 
     # Layer finti (solo Locale per avere un layer presente)

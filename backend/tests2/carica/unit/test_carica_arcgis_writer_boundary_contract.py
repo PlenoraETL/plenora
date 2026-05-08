@@ -12,7 +12,6 @@ from workers.tasks.carica_task import (
     ArcGISFeatureWriter,
     _execute_arcgis_write,
 )
-from app.core.features.arcgis_write_mapping import ArcGISWriteMappingContract
 
 
 pytestmark = [pytest.mark.unit, pytest.mark.carica, pytest.mark.contract]
@@ -59,9 +58,7 @@ def test_execute_arcgis_write_uses_generic_writer_boundary_for_existing_layer() 
             task_id="task-1",
         )
 
-    expected_mapping = ArcGISWriteMappingContract.from_raw([
-        {"source": "name", "dest": "NAME"},
-    ])
+    expected_mapping = [{"source": "name", "dest": "NAME"}]
     create_writer.assert_called_once_with()
     writer.write_features_from_df.assert_called_once_with(
         connection_id="arc-1",
@@ -119,9 +116,7 @@ def test_execute_arcgis_write_uses_generic_writer_boundary_for_service_create() 
             task_id="task-1",
         )
 
-    expected_mapping = ArcGISWriteMappingContract.from_raw([
-        {"source_column": "name", "dest_column": "NAME"},
-    ])
+    expected_mapping = [{"source_column": "name", "dest_column": "NAME"}]
     create_writer.assert_called_once_with()
     writer.create_service_from_df.assert_called_once_with(
         connection_id="arc-1",

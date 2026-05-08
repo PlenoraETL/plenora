@@ -112,6 +112,9 @@ def test_write_features_accepts_arcgis_writer_knobs(client):
                 "input_path": "/tmp/result.parquet",
                 "match_column": "external_id",
                 "batch_size": 250,
+                "column_mappings": [
+                    {"source": "external_id", "dest": "EXT_ID"},
+                ],
             },
         )
 
@@ -120,6 +123,9 @@ def test_write_features_accepts_arcgis_writer_knobs(client):
     assert write_features_mock.call_args.kwargs["operation"] == "upsert"
     assert write_features_mock.call_args.kwargs["match_column"] == "external_id"
     assert write_features_mock.call_args.kwargs["batch_size"] == 250
+    assert write_features_mock.call_args.kwargs["column_mappings"] == [
+        {"source": "external_id", "dest": "EXT_ID"},
+    ]
 
 
 def test_create_service_checks_project_visibility_before_loading_project_output(client, current_user):

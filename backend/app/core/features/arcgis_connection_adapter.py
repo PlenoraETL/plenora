@@ -1,51 +1,8 @@
-"""
-ArcGIS connection resolver - thin adapter for IMDF validation.
-
- narrows the Features domain surface that
-"""
+"""KEEP_COMPAT wrapper for the moved ArcGIS connection resolver."""
 
 from __future__ import annotations
 
-from typing import Optional, Tuple
-
-from app.core.features.arcgis_client import create_client
-from app.core.features.features_service import get_connection_db
-from app.shared.connections.arcgis_connection import ArcGISConnectionInfo
-from app.shared.connections.arcgis_provider import ArcGISProviderProtocol
+from app.core.connections.arcgis_connection_resolver import resolve_arcgis_connection
 
 
 __all__ = ["resolve_arcgis_connection"]
-
-
-def resolve_arcgis_connection(
-    connection_id: str,
-) -> Optional[Tuple[ArcGISConnectionInfo, ArcGISProviderProtocol]]:
-    """Resolve a connection_id to (ArcGISConnectionInfo, client).
-
-    Returns ``None`` if the connection is not found in the DB. The
-    client is typed against ``ArcGISProviderProtocol`` so callers
-    (validator.py) remain decoupled from the concrete ``ArcGISClient``
-    class.
-
-    Token cache: each call creates a fresh ``ArcGISClient`` instance.
-    The validator is a short-lived read-only path; the minor extra
-    token acquisition is acceptable. If token-cache sharing becomes
-    a concern, the caller can inject an existing client via the
-    ``ArcGISProviderProtocol`` type directly.
-    """
-    conn_pyd = get_connection_db(connection_id)
-    if conn_pyd is None:
-        return None
-
-    conn_info = ArcGISConnectionInfo(
-        server_url=conn_pyd.server_url,
-        server_type=conn_pyd.server_type,
-        auth_type=conn_pyd.auth_type,
-        username=conn_pyd.username,
-        password=conn_pyd.password,
-        client_id=conn_pyd.client_id,
-        client_secret=conn_pyd.client_secret,
-        token_url=conn_pyd.token_url or "",
-    )
-    client: ArcGISProviderProtocol = create_client()
-    return conn_info, client

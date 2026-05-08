@@ -84,7 +84,7 @@ def patch_collaborators(monkeypatch):
         lambda conn, url: knobs.layer_schema_return.get(_layer_name_from_url(url), {})
     )
     monkeypatch.setattr(
-        "app.core.features.arcgis_connection_adapter.resolve_arcgis_connection",
+        "app.core.connections.arcgis_connection_resolver.resolve_arcgis_connection",
         lambda conn_id: (fake_conn_info, fake_client),
     )
 

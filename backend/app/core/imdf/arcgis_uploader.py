@@ -82,7 +82,7 @@ def upload_imdf_layers(
                 "errors": [str, ...],
             }
     """
-    from app.core.features.arcgis_connection_adapter import resolve_arcgis_connection
+    from app.core.connections.arcgis_connection_resolver import resolve_arcgis_connection
 
     if mode not in PUBLISH_MODES:
         return {
@@ -328,9 +328,9 @@ def upload_imdf_layers(
                     result["renderers_applied"] += 1
                     logger.info(f"Renderer applicato a {name}")
                 else:
-                    logger.warning(f"updateDefinition {name} non riuscito: {res}")
+                    logger.warning(f"renderer update {name} non riuscito: {res}")
             except Exception as e:
-                logger.warning(f"updateDefinition {name} eccezione: {e}")
+                logger.warning(f"renderer update {name} eccezione: {e}")
         step += 1
 
     _emit("done", total_steps, total_steps, "Upload completato")

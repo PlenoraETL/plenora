@@ -11,10 +11,11 @@ import time as _time
 import traceback
 import uuid as _uuid
 from pathlib import PurePosixPath
-from typing import TYPE_CHECKING, Any, Dict, Optional, Protocol
+from typing import TYPE_CHECKING, Any, Dict, Optional
 
 from app.utils.logger import get_logger, open_run, close_run, set_run_context, append_step
 from app.config import settings
+from app.core.features.arcgis_writer_boundary import ArcGISFeatureWriter
 
 from workers.celery_app import celery_app, BaseTaskWithRetry
 
@@ -23,40 +24,6 @@ logger = get_logger("workers.carica_task")
 
 if TYPE_CHECKING:
     import pandas as pd
-    from app.core.features.arcgis_write_mapping import ArcGISWriteMappingContract
-
-
-class ArcGISFeatureWriter(Protocol):
-    """Generic ArcGIS feature writer boundary consumed by CARICA orchestration."""
-
-    def create_service_from_df(
-        self,
-        connection_id: str,
-        service_name: str,
-        layer_name: str,
-        df: "pd.DataFrame",
-        geometry_column: str = "geometry",
-        source_srid: Optional[int] = None,
-        folder_id: str = "",
-        column_mappings: Optional["ArcGISWriteMappingContract"] = None,
-    ) -> dict:
-        """Create a feature service from an in-memory DataFrame."""
-        ...
-
-    def write_features_from_df(
-        self,
-        connection_id: str,
-        layer_url: str,
-        operation: str,
-        df: "pd.DataFrame",
-        geometry_column: str = "geometry",
-        source_srid: Optional[int] = None,
-        batch_size: Optional[int] = None,
-        match_column: str = "",
-        column_mappings: Optional["ArcGISWriteMappingContract"] = None,
-    ) -> dict:
-        """Write features to an existing feature layer from an in-memory DataFrame."""
-        ...
 
 
 def _create_arcgis_feature_writer() -> ArcGISFeatureWriter:
@@ -465,10 +432,7 @@ def _execute_arcgis_write(
     geometry_column = carica_node_data.get('geometry_column', 'geometry')
     source_srid = carica_node_data.get('source_srid')
     batch_size = carica_node_data.get('batch_size')  # None = usa default WRITE_BATCH_SIZE=1000
-    from app.core.features.arcgis_write_mapping import ArcGISWriteMappingContract
-    column_mappings = ArcGISWriteMappingContract.from_raw(
-        carica_node_data.get("column_mappings", [])
-    )
+    column_mappings = carica_node_data.get("column_mappings", [])
 
     if not connection_id:
         return {

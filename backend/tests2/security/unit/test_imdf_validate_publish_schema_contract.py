@@ -81,7 +81,7 @@ def stub_externals_with_fs_schema(monkeypatch):
     """Stub con FS esistente + schema esteso per testare la logica
     schema-compat."""
     import app.core.imdf.loader as loader_mod
-    import app.core.features.arcgis_connection_adapter as adapter_mod
+    import app.core.connections.arcgis_connection_resolver as adapter_mod
     import app.core.imdf.arcgis_uploader as uploader_mod
 
     # Bundle con un layer 'Locale' che ha alcuni campi
@@ -226,7 +226,7 @@ def test_append_detects_duplicate_business_keys(fake_bundle, monkeypatch):
     business che gia' esistono sul FS, dopo il publish ci sono feature
     duplicate. Il validator deve emettere un warning quantitativo."""
     import app.core.imdf.loader as loader_mod
-    import app.core.features.arcgis_connection_adapter as adapter_mod
+    import app.core.connections.arcgis_connection_resolver as adapter_mod
     import app.core.imdf.arcgis_uploader as uploader_mod
 
     # Bundle con colonna UNIT_ID (default match_col per 'Locale') e 3 valori
@@ -321,7 +321,7 @@ def test_append_no_duplicates_no_warning(fake_bundle, monkeypatch):
     """Se tutte le chiavi bundle sono nuove (nessun overlap con FS),
     append non deve emettere warning duplicati."""
     import app.core.imdf.loader as loader_mod
-    import app.core.features.arcgis_connection_adapter as adapter_mod
+    import app.core.connections.arcgis_connection_resolver as adapter_mod
     import app.core.imdf.arcgis_uploader as uploader_mod
 
     class _UnitIdSeries:

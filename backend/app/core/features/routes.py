@@ -34,7 +34,6 @@ from app.core.features.models import (
     BrowseLayersResponse,
 )
 from app.core.features.features_service import FeaturesService
-from app.core.features.arcgis_write_mapping import ArcGISWriteMappingContract
 from app.shared import error_codes
 from app.shared.error_envelope import raise_typed_http
 from app.shared.audit_action import audit_action
@@ -477,7 +476,7 @@ async def write_features(request: WriteRequest, current_user: CurrentUser = Depe
                 source_srid=request.source_srid,
                 batch_size=request.batch_size,
                 match_column=request.match_column,
-                column_mappings=ArcGISWriteMappingContract.from_raw(request.column_mappings),
+                column_mappings=request.column_mappings,
             )
         return result
         
@@ -532,7 +531,7 @@ async def create_service(request: CreateServiceRequest, current_user: CurrentUse
                 input_path=str(materialized.path),
                 geometry_column=request.geometry_column,
                 source_srid=request.source_srid,
-                column_mappings=ArcGISWriteMappingContract.from_raw(request.column_mappings),
+                column_mappings=request.column_mappings,
             )
         return result
         

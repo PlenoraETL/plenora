@@ -15,45 +15,35 @@ pytestmark = [pytest.mark.unit, pytest.mark.shared]
 
 _IMDF_DIR = Path(__file__).parents[2] / "app" / "core" / "imdf"
 _SHARED_CONNECTIONS_DIR = Path(__file__).parents[2] / "app" / "shared" / "connections"
+_BACKEND_DIR = Path(__file__).parents[2]
 
 _FORBIDDEN_PREFIXES = ("app.core.features",)
 _SHARED_CONNECTIONS_FORBIDDEN_PREFIXES = ("app.core", "app.db", "workers")
+
+_ARCGIS_REST_MECHANICS_PATTERNS = (
+    "._http",
+    "_request_with_token",
+    "/sharing/rest",
+    "/rest/admin",
+    "createFolder",
+    "permanentDelete",
+    "updateDefinition",
+)
+_ARCGIS_REST_MECHANICS_ROOTS = (
+    _BACKEND_DIR / "app",
+    _BACKEND_DIR / "workers",
+)
+_ARCGIS_REST_MECHANICS_ALLOWED_FILES = {
+    _BACKEND_DIR / "app" / "core" / "features" / "arcgis_client.py",
+}
 
 # Known violations - TODO: fix these per macro-components.md section 2.3.
 # Each entry is (filename -> exact imported modules). The guard is strict
 # on all other files and on any new module inside known-bad files.
 # Remove an entry only when the cross-domain import is gone.
-_KNOWN_VIOLATIONS: dict[str, set[str]] = {
-    "validator.py": {
-        # batch 059-W4: FeaturesService replaced by the thin adapter module.
-        # The adapter is the one remaining cross-domain import; it encapsulates
-        # the DB lookup so the validator does not duplicate that logic.
-        "app.core.features.arcgis_connection_adapter",
-    },
-    "arcgis_uploader.py": {
-        # batch 060-W2: FeaturesService + create_client replaced by the thin adapter.
-        # Remaining: one cross-domain import — the same adapter as validator.py.
-        "app.core.features.arcgis_connection_adapter",
-    },
-}
+_KNOWN_VIOLATIONS: dict[str, set[str]] = {}
 
-_KNOWN_VIOLATION_REASONS: dict[str, str] = {
-    "validator.py": (
-        "TODO ADR-0023: EsriTypeMapper moved to app/shared/esri_types (batch 056). "
-        "FeaturesService replaced by arcgis_connection_adapter (batch 059-W4). "
-        "Remaining: the adapter module is in app.core.features because the DB "
-        "connection lookup (get_connection_db) lives there. Next cut: move the "
-        "connection DB table to a shared/connection_repository leaf so the adapter "
-        "can move to app.shared.connections without duplicating DB logic."
-    ),
-    "arcgis_uploader.py": (
-        "TODO ADR-0023: FeaturesService + create_client replaced by "
-        "arcgis_connection_adapter.resolve_arcgis_connection (batch 060-W2). "
-        "Remaining: adapter lives in app.core.features because get_connection_db "
-        "needs the DB. Next cut: connection repository leaf so adapter can move "
-        "to app.shared.connections."
-    ),
-}
+_KNOWN_VIOLATION_REASONS: dict[str, str] = {}
 
 
 def _imdf_python_files() -> list[Path]:
@@ -62,6 +52,13 @@ def _imdf_python_files() -> list[Path]:
 
 def _shared_connections_python_files() -> list[Path]:
     return sorted(_SHARED_CONNECTIONS_DIR.rglob("*.py"))
+
+
+def _arcgis_rest_mechanics_python_files() -> list[Path]:
+    files: list[Path] = []
+    for root in _ARCGIS_REST_MECHANICS_ROOTS:
+        files.extend(root.rglob("*.py"))
+    return sorted(files)
 
 
 def _imports_in_file(path: Path) -> list[str]:
@@ -79,6 +76,71 @@ def _imports_in_file(path: Path) -> list[str]:
     return modules
 
 
+def _scan_arcgis_rest_mechanics(path: Path) -> list[tuple[int, str]]:
+    try:
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+    except SyntaxError as exc:
+        return [(exc.lineno or 0, f"syntax error: {exc}")]
+
+    violations: list[tuple[int, str]] = []
+    parents: dict[ast.AST, ast.AST] = {}
+    for parent in ast.walk(tree):
+        for child in ast.iter_child_nodes(parent):
+            parents[child] = parent
+
+    def is_dict_key(node: ast.AST) -> bool:
+        parent = parents.get(node)
+        return isinstance(parent, ast.Dict) and node in parent.keys
+
+    def scan_node(node: ast.AST) -> None:
+        if isinstance(node, ast.Attribute) and node.attr == "_http":
+            violations.append((node.lineno, "._http"))
+        elif isinstance(node, ast.Name) and node.id == "_request_with_token":
+            violations.append((node.lineno, "_request_with_token"))
+        elif isinstance(node, ast.Constant) and isinstance(node.value, str):
+            for pattern in _ARCGIS_REST_MECHANICS_PATTERNS:
+                if pattern == "._http":
+                    continue
+                if pattern in ("/sharing/rest", "/rest/admin") and pattern in node.value:
+                    violations.append((node.lineno, pattern))
+                elif pattern in {"createFolder", "permanentDelete", "updateDefinition"} and (
+                    node.value == pattern
+                    or f"/{pattern}" in node.value
+                    or (is_dict_key(node) and pattern in node.value)
+                ):
+                    violations.append((node.lineno, pattern))
+
+        for child in ast.iter_child_nodes(node):
+            scan_node(child)
+
+    def scan_body(body: list[ast.stmt]) -> None:
+        statements = body
+        if (
+            statements
+            and isinstance(statements[0], ast.Expr)
+            and isinstance(statements[0].value, ast.Constant)
+            and isinstance(statements[0].value.value, str)
+        ):
+            statements = statements[1:]
+        for statement in statements:
+            if isinstance(statement, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+                if isinstance(statement, ast.ClassDef):
+                    for part in [*statement.bases, *statement.keywords, *statement.decorator_list]:
+                        scan_node(part)
+                else:
+                    parts: list[ast.AST] = [statement.args, *statement.decorator_list]
+                    if statement.returns is not None:
+                        parts.append(statement.returns)
+                    for part in parts:
+                        scan_node(part)
+                scan_body(statement.body)
+            else:
+                scan_node(statement)
+
+    scan_body(tree.body)
+    return violations
+
+
 @pytest.mark.parametrize("src_file", _shared_connections_python_files(), ids=lambda p: p.name)
 def test_shared_connections_remains_leaf_like(src_file: Path) -> None:
     """Shared connection contracts must not depend on app core/db/workers."""
@@ -88,6 +150,33 @@ def test_shared_connections_remains_leaf_like(src_file: Path) -> None:
                 f"{src_file.name}: app.shared.connections must remain leaf-like; "
                 f"forbidden import {module!r} starts with {prefix!r}."
             )
+
+
+@pytest.mark.parametrize(
+    "src_file",
+    _arcgis_rest_mechanics_python_files(),
+    ids=lambda p: p.relative_to(_BACKEND_DIR).as_posix(),
+)
+def test_direct_arcgis_rest_mechanics_stay_inside_provider_client(src_file: Path) -> None:
+    """Direct ArcGIS REST mechanics belong in the provider/client boundary.
+
+    IMDF and workers must call provider methods instead of constructing portal
+    or admin REST calls, touching the injected HTTP client, or invoking the
+    private token-aware request helper directly.
+    """
+    if src_file in _ARCGIS_REST_MECHANICS_ALLOWED_FILES:
+        return
+
+    violations = _scan_arcgis_rest_mechanics(src_file)
+
+    assert not violations, (
+        f"{src_file.relative_to(_BACKEND_DIR).as_posix()}: direct ArcGIS REST "
+        "mechanics detected outside the provider/client boundary. "
+        f"Violations: {violations}. "
+        "Use app.core.features.arcgis_client.ArcGISClient provider methods "
+        "instead of direct REST/HTTP mechanics. If a provider module is being "
+        "intentionally introduced, add a narrow allowlist entry with rationale."
+    )
 
 
 @pytest.mark.parametrize("src_file", _imdf_python_files(), ids=lambda p: p.name)

@@ -6,6 +6,8 @@ Service ArcGIS (create+populate / append / upsert / update).
 
 from typing import Dict, List
 
+from app.shared.connections.arcgis_connection import ArcGISConnectionInfo
+from app.shared.connections.arcgis_provider import ArcGISServiceAdminProviderProtocol
 from app.utils.logger import get_logger
 
 from .sql_helpers import _quote_sql_value, _chunked, _query_oid_by_key
@@ -14,14 +16,14 @@ logger = get_logger("app.core.imdf.arcgis_uploader")
 
 
 def _add_layer_to_service(
-    client,
-    conn,
+    client: ArcGISServiceAdminProviderProtocol,
+    conn: ArcGISConnectionInfo,
     service_url: str,
-    gdf,
+    gdf: object,
     layer_name: str,
     layer_id: int,
     srid: int = 4326,
-) -> Dict:
+) -> Dict[str, object]:
     """Aggiunge un layer a un Feature Service esistente.
 
     BE-IMDF-006B: implementazione promossa a
@@ -36,6 +38,9 @@ def _add_layer_to_service(
     3. mantenere il path di monkeypatch usato dai test contract
        (`tests2/imdf/unit/test_add_layer_to_service_contract.py`
        chiama questa funzione e mocka i collaboratori del client).
+
+    Guardrail: keep this as delegation plus legacy result conversion only.
+    New Feature Service write logic belongs in the provider method.
     """
     return client.add_layer_to_service(
         conn, service_url, gdf, layer_name, layer_id, srid,

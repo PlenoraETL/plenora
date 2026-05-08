@@ -30,7 +30,10 @@ from app.core.features.arcgis_client import (
     EsriJsonConverter,
     create_client,
 )
-from app.core.features.arcgis_write_mapping import ArcGISWriteMappingContract
+from app.core.features.arcgis_writer_boundary import (
+    ArcGISColumnMappingsInput,
+    normalize_arcgis_column_mappings,
+)
 
 logger = get_logger(__name__)
 
@@ -670,7 +673,7 @@ class FeaturesService:
         source_srid: Optional[int] = None,
         batch_size: Optional[int] = None,
         match_column: str = "",
-        column_mappings: Optional[ArcGISWriteMappingContract] = None,
+        column_mappings: ArcGISColumnMappingsInput = None,
     ) -> dict:
         """
         Scrive features su un layer ArcGIS esistente.
@@ -716,21 +719,162 @@ class FeaturesService:
         df = self._load_dataframe(input_path)
         logger.info(f"Caricato file {input_path}: {len(df)} righe, colonne: {list(df.columns)}")
         
-        # Imposta CRS se fornito (dal nodo sorgente della pipeline
-        if source_srid and hasattr(df, 'set_crs') and (df.crs is None):
-            import geopandas as gpd
+        return self._write_features_df_core(
+            conn_info=conn_info,
+            layer_url=layer_url,
+            operation=operation,
+            df=df,
+            geometry_column=geometry_column,
+            source_srid=source_srid,
+            batch_size=batch_size,
+            match_column=match_column,
+            column_mappings=column_mappings,
+        )
+    
+    def write_features_from_df(
+        self,
+        connection_id: str,
+        layer_url: str,
+        operation: str,
+        df: pd.DataFrame,
+        geometry_column: str = "geometry",
+        source_srid: Optional[int] = None,
+        batch_size: Optional[int] = None,
+        match_column: str = "",
+        column_mappings: ArcGISColumnMappingsInput = None,
+    ) -> dict:
+        """
+        Scrive features su un layer ArcGIS partendo da un DataFrame.
+        Alternativa a write_features che evita il round-trip su file.
+
+        Args:
+            connection_id: ID connessione ArcGIS
+            layer_url: URL completo del layer
+            operation: "add" o "update"
+            df: DataFrame (o GeoDataFrame) con le features
+            geometry_column: nome colonna geometria
+            source_srid: SRID sorgente (default 4326)
+        """
+        conn_info = self._resolve_write_connection(connection_id)
+        return self._write_features_df_core(
+            conn_info=conn_info,
+            layer_url=layer_url,
+            operation=operation,
+            df=df,
+            geometry_column=geometry_column,
+            source_srid=source_srid,
+            batch_size=batch_size,
+            match_column=match_column,
+            column_mappings=column_mappings,
+        )
+
+    def create_service(
+        self,
+        connection_id: str,
+        service_name: str,
+        layer_name: str,
+        input_path: str,
+        geometry_column: str = "geometry",
+        source_srid: Optional[int] = None,
+        folder_id: str = "",
+        column_mappings: ArcGISColumnMappingsInput = None,
+    ) -> dict:
+        """
+        Crea un nuovo Feature Service su ArcGIS Online con dati da file.
+
+        Flusso:
+        1. Legge il file di output pipeline
+        2. Crea il servizio con schema derivato dal DataFrame
+        3. Carica i dati
+
+        Args:
+            connection_id: ID connessione ArcGIS
+            service_name: nome del nuovo servizio
+            layer_name: nome del layer
+            input_path: path del file sorgente
+            geometry_column: nome colonna geometria
+
+        Returns:
+            {success, service_url, layer_url, feature_count}
+        """
+        df = self._load_dataframe(input_path)
+        logger.info(f"Caricato file {input_path}: {len(df)} righe per nuovo servizio '{service_name}'")
+        return self.create_service_from_df(
+            connection_id=connection_id,
+            service_name=service_name,
+            layer_name=layer_name,
+            df=df,
+            geometry_column=geometry_column,
+            source_srid=source_srid,
+            folder_id=folder_id,
+            column_mappings=column_mappings,
+        )
+
+    def create_service_from_df(
+        self,
+        connection_id: str,
+        service_name: str,
+        layer_name: str,
+        df: pd.DataFrame,
+        geometry_column: str = "geometry",
+        source_srid: Optional[int] = None,
+        folder_id: str = "",
+        column_mappings: ArcGISColumnMappingsInput = None,
+    ) -> dict:
+        """Crea un nuovo Feature Service da un DataFrame (senza file intermedio)."""
+        conn_info = self._resolve_write_connection(connection_id)
+
+        if source_srid and hasattr(df, 'set_crs') and (getattr(df, 'crs', None) is None):
             df = df.set_crs(epsg=source_srid)
             logger.info(f"CRS impostato da source_srid: EPSG:{source_srid}")
 
-        mapped = (column_mappings or ArcGISWriteMappingContract()).apply(
+        mapped = normalize_arcgis_column_mappings(column_mappings).apply(
+            df,
+            geometry_column=geometry_column,
+        )
+        df = mapped.df
+        geometry_column = mapped.geometry_column
+
+        return self._client.create_service(
+            conn_info,
+            service_name=service_name,
+            layer_name=layer_name,
+            df=df,
+            geometry_column=geometry_column,
+            folder_id=folder_id,
+        )
+
+    def _resolve_write_connection(self, connection_id: str) -> ArcGISConnectionInfo:
+        connection = self.get_connection(connection_id)
+        if not connection:
+            raise ValueError(f"Connessione '{connection_id}' non trovata")
+        return self._to_connection_info(connection)
+
+    def _write_features_df_core(
+        self,
+        conn_info: ArcGISConnectionInfo,
+        layer_url: str,
+        operation: str,
+        df: pd.DataFrame,
+        geometry_column: str,
+        source_srid: Optional[int],
+        batch_size: Optional[int],
+        match_column: str,
+        column_mappings: ArcGISColumnMappingsInput,
+    ) -> dict:
+        """Shared provider write path for file-backed and DataFrame-backed callers."""
+        if source_srid and hasattr(df, 'set_crs') and getattr(df, 'crs', None) is None:
+            df = df.set_crs(epsg=source_srid)
+            logger.info(f"CRS impostato da source_srid: EPSG:{source_srid}")
+
+        mapped = normalize_arcgis_column_mappings(column_mappings).apply(
             df,
             geometry_column=geometry_column,
             required_match_column=match_column if operation in ("update", "upsert", "delete") else "",
         )
         df = mapped.df
         geometry_column = mapped.geometry_column
-        
-        # Converti in Esri JSON
+
         features = self._client.dataframe_to_esri_features(
             df, geometry_column=geometry_column, operation=operation
         )
@@ -742,13 +886,14 @@ class FeaturesService:
                 "count": 0,
                 "errors": [],
             }
-        
+
         if operation == "add":
             result = self._client.add_features(
                 conn_info, layer_url, features, batch_size=batch_size
             )
             return self._write_result("Aggiunte", result, "added_count", len(features))
-        elif operation == "update":
+
+        if operation == "update":
             if match_column:
                 features = self._resolve_objectids_for_update(
                     conn_info, layer_url, features, match_column
@@ -764,7 +909,8 @@ class FeaturesService:
                 conn_info, layer_url, features, batch_size=batch_size
             )
             return self._write_result("Aggiornate", result, "updated_count", len(features))
-        elif operation == "upsert":
+
+        if operation == "upsert":
             if not match_column:
                 raise ValueError("Colonna match obbligatoria per upsert")
             to_update, to_add = self._split_upsert_features(
@@ -772,7 +918,7 @@ class FeaturesService:
             )
             total_updated = 0
             total_added = 0
-            all_errors = []
+            all_errors: list[dict] = []
 
             if to_update:
                 res_upd = self._client.update_features(
@@ -801,7 +947,8 @@ class FeaturesService:
                 "added": total_added,
                 "errors": all_errors,
             }
-        elif operation == "delete":
+
+        if operation == "delete":
             if not match_column:
                 raise ValueError("Colonna match obbligatoria per delete")
             oid_features = self._resolve_objectids_for_update(
@@ -814,7 +961,7 @@ class FeaturesService:
                     "count": 0,
                     "errors": [],
                 }
-            object_ids = [f["attributes"]["OBJECTID"] for f in oid_features]
+            object_ids = [feature["attributes"]["OBJECTID"] for feature in oid_features]
             result = self._client.delete_features(
                 conn_info, layer_url, object_ids=object_ids
             )
@@ -827,238 +974,6 @@ class FeaturesService:
             }
 
         raise ValueError(f"Operazione non supportata: {operation}")
-    
-    def write_features_from_df(
-        self,
-        connection_id: str,
-        layer_url: str,
-        operation: str,
-        df: pd.DataFrame,
-        geometry_column: str = "geometry",
-        source_srid: Optional[int] = None,
-        batch_size: Optional[int] = None,
-        match_column: str = "",
-        column_mappings: Optional[ArcGISWriteMappingContract] = None,
-    ) -> dict:
-        """
-        Scrive features su un layer ArcGIS partendo da un DataFrame.
-        Alternativa a write_features che evita il round-trip su file.
-
-        Args:
-            connection_id: ID connessione ArcGIS
-            layer_url: URL completo del layer
-            operation: "add" o "update"
-            df: DataFrame (o GeoDataFrame) con le features
-            geometry_column: nome colonna geometria
-            source_srid: SRID sorgente (default 4326)
-        """
-        connection = self.get_connection(connection_id)
-        if not connection:
-            raise ValueError(f"Connessione '{connection_id}' non trovata")
-
-        conn_info = self._to_connection_info(connection)
-
-        # Imposta CRS se necessario
-        if source_srid and hasattr(df, 'set_crs') and getattr(df, 'crs', None) is None:
-            import geopandas as gpd
-            df = df.set_crs(epsg=source_srid)
-
-        mapped = (column_mappings or ArcGISWriteMappingContract()).apply(
-            df,
-            geometry_column=geometry_column,
-            required_match_column=match_column if operation in ("update", "upsert", "delete") else "",
-        )
-        df = mapped.df
-        geometry_column = mapped.geometry_column
-
-        # Converti in Esri JSON
-        features = self._client.dataframe_to_esri_features(
-            df, geometry_column=geometry_column, operation=operation
-        )
-
-        if not features:
-            return {
-                "success": False,
-                "message": "Nessuna feature da caricare",
-                "count": 0,
-                "errors": [],
-            }
-
-        if operation == "add":
-            result = self._client.add_features(conn_info, layer_url, features, batch_size=batch_size)
-            return self._write_result("Aggiunte", result, "added_count", len(features))
-
-        elif operation == "update":
-            if match_column:
-                features = self._resolve_objectids_for_update(
-                    conn_info, layer_url, features, match_column
-                )
-                if not features:
-                    return {
-                        "success": False,
-                        "message": f"Nessuna feature matchata per colonna '{match_column}'",
-                        "count": 0, "errors": [],
-                    }
-            result = self._client.update_features(conn_info, layer_url, features, batch_size=batch_size)
-            return self._write_result("Aggiornate", result, "updated_count", len(features))
-
-        elif operation == "upsert":
-            if not match_column:
-                raise ValueError("Colonna match obbligatoria per upsert")
-            # Separa features: quelle con match → update, le altre → add
-            to_update, to_add = self._split_upsert_features(
-                conn_info, layer_url, features, match_column
-            )
-            total_updated = 0
-            total_added = 0
-            all_errors = []
-
-            if to_update:
-                res_upd = self._client.update_features(conn_info, layer_url, to_update, batch_size=batch_size)
-                total_updated = res_upd.get("updated_count", 0)
-                all_errors.extend(res_upd.get("errors", []))
-
-            if to_add:
-                res_add = self._client.add_features(conn_info, layer_url, to_add, batch_size=batch_size)
-                total_added = res_add.get("added_count", 0)
-                all_errors.extend(res_add.get("errors", []))
-
-            total = total_updated + total_added
-            return {
-                "success": total > 0,
-                "message": f"Upsert: {total_updated} aggiornate, {total_added} inserite su {len(features)} totali",
-                "count": total,
-                "feature_count": total,
-                "updated": total_updated,
-                "added": total_added,
-                "errors": all_errors,
-            }
-
-        elif operation == "delete":
-            if not match_column:
-                raise ValueError("Colonna match obbligatoria per delete")
-            # Risolvi OBJECTID per i valori match e cancella
-            oid_features = self._resolve_objectids_for_update(
-                conn_info, layer_url, features, match_column
-            )
-            if not oid_features:
-                return {
-                    "success": False,
-                    "message": f"Nessuna feature trovata per colonna '{match_column}'",
-                    "count": 0, "errors": [],
-                }
-            object_ids = [f["attributes"]["OBJECTID"] for f in oid_features]
-            result = self._client.delete_features(conn_info, layer_url, object_ids=object_ids)
-            return {
-                "success": result["success"],
-                "message": f"Eliminate {result['deleted_count']} features",
-                "count": result["deleted_count"],
-                "feature_count": result["deleted_count"],
-                "errors": result.get("errors", []),
-            }
-
-        else:
-            raise ValueError(f"Operazione non supportata: {operation}")
-
-    def create_service(
-        self,
-        connection_id: str,
-        service_name: str,
-        layer_name: str,
-        input_path: str,
-        geometry_column: str = "geometry",
-        source_srid: Optional[int] = None,
-        folder_id: str = "",
-        column_mappings: Optional[ArcGISWriteMappingContract] = None,
-    ) -> dict:
-        """
-        Crea un nuovo Feature Service su ArcGIS Online con dati da file.
-        
-        Flusso:
-        1. Legge il file di output pipeline
-        2. Crea il servizio con schema derivato dal DataFrame
-        3. Carica i dati
-        
-        Args:
-            connection_id: ID connessione ArcGIS
-            service_name: nome del nuovo servizio
-            layer_name: nome del layer
-            input_path: path del file sorgente
-            geometry_column: nome colonna geometria
-            
-        Returns:
-            {success, service_url, layer_url, feature_count}
-        """
-        connection = self.get_connection(connection_id)
-        if not connection:
-            raise ValueError(f"Connessione '{connection_id}' non trovata")
-        
-        conn_info = self._to_connection_info(connection)
-        
-        df = self._load_dataframe(input_path)
-        logger.info(f"Caricato file {input_path}: {len(df)} righe per nuovo servizio '{service_name}'")
-        
-        # Imposta CRS se fornito (dal nodo sorgente della pipeline
-        if source_srid and hasattr(df, 'set_crs') and (df.crs is None):
-            import geopandas as gpd
-            df = df.set_crs(epsg=source_srid)
-            logger.info(f"CRS impostato da source_srid: EPSG:{source_srid}")
-
-        mapped = (column_mappings or ArcGISWriteMappingContract()).apply(
-            df,
-            geometry_column=geometry_column,
-        )
-        df = mapped.df
-        geometry_column = mapped.geometry_column
-        
-        result = self._client.create_service(
-            conn_info,
-            service_name=service_name,
-            layer_name=layer_name,
-            df=df,
-            geometry_column=geometry_column,
-            folder_id=folder_id,
-        )
-        
-        return result
-
-    def create_service_from_df(
-        self,
-        connection_id: str,
-        service_name: str,
-        layer_name: str,
-        df: pd.DataFrame,
-        geometry_column: str = "geometry",
-        source_srid: Optional[int] = None,
-        folder_id: str = "",
-        column_mappings: Optional[ArcGISWriteMappingContract] = None,
-    ) -> dict:
-        """Crea un nuovo Feature Service da un DataFrame (senza file intermedio)."""
-        connection = self.get_connection(connection_id)
-        if not connection:
-            raise ValueError(f"Connessione '{connection_id}' non trovata")
-
-        conn_info = self._to_connection_info(connection)
-
-        if source_srid and hasattr(df, 'set_crs') and (getattr(df, 'crs', None) is None):
-            import geopandas as gpd
-            df = df.set_crs(epsg=source_srid)
-
-        mapped = (column_mappings or ArcGISWriteMappingContract()).apply(
-            df,
-            geometry_column=geometry_column,
-        )
-        df = mapped.df
-        geometry_column = mapped.geometry_column
-
-        return self._client.create_service(
-            conn_info,
-            service_name=service_name,
-            layer_name=layer_name,
-            df=df,
-            geometry_column=geometry_column,
-            folder_id=folder_id,
-        )
 
     @staticmethod
     def _write_result(action: str, result: dict, count_key: str, total: int) -> dict:

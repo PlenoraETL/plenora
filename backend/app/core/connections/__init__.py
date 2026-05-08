@@ -11,7 +11,6 @@ from .models import (
     ConnectionList,
     ConnectionTestResult,
 )
-from .service import ConnectionService, _sanitize_mssql_error
 
 __all__ = [
     "DatabaseConnection",
@@ -22,3 +21,15 @@ __all__ = [
     "ConnectionService",
     "_sanitize_mssql_error",
 ]
+
+
+def __getattr__(name: str) -> object:
+    if name in {"ConnectionService", "_sanitize_mssql_error"}:
+        from .service import ConnectionService, _sanitize_mssql_error
+
+        values: dict[str, object] = {
+            "ConnectionService": ConnectionService,
+            "_sanitize_mssql_error": _sanitize_mssql_error,
+        }
+        return values[name]
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

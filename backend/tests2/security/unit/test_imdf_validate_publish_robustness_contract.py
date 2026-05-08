@@ -59,7 +59,7 @@ def fake_bundle(tmp_path, monkeypatch):
 
 def _install_stubs(monkeypatch, gdf, get_layer_schema_ret, capabilities="Query,Create,Update,Delete"):
     import app.core.imdf.loader as loader_mod
-    import app.core.features.arcgis_connection_adapter as adapter_mod
+    import app.core.connections.arcgis_connection_resolver as adapter_mod
     import app.core.imdf.arcgis_uploader as uploader_mod
 
     monkeypatch.setattr(loader_mod, "load_imdf_layers", lambda gdb: {"Locale": gdf})

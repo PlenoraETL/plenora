@@ -73,14 +73,55 @@ def test_write_features_from_df_applies_mapping_before_feature_serialization() -
         layer_url="https://example.test/FeatureServer/0",
         operation="add",
         df=df,
-        column_mappings=ArcGISWriteMappingContract.from_raw(
-            [{"source": "city_name", "dest": "CITY"}]
-        ),
+        column_mappings=[{"source": "city_name", "dest": "CITY"}],
     )
 
     assert result["success"] is True
     assert captured_columns == ["CITY"]
     assert list(df.columns) == ["city_name", "unused"]
+
+
+def test_file_and_dataframe_writes_delegate_to_same_provider_write_core() -> None:
+    df = pd.DataFrame([{"city_name": "Torino"}])
+    conn_info = SimpleNamespace()
+    core_result = {"success": True, "message": "ok", "count": 1, "errors": []}
+    service = FeaturesService(client=SimpleNamespace())
+    service.get_connection = MagicMock(return_value=object())
+    service._to_connection_info = MagicMock(return_value=conn_info)
+    service._resolve_write_connection = MagicMock(return_value=conn_info)
+    service._load_dataframe = MagicMock(return_value=df)
+    service._write_features_df_core = MagicMock(return_value=core_result)
+
+    raw_mappings = [{"source": "city_name", "dest": "CITY"}]
+
+    file_result = service.write_features(
+        connection_id="conn-1",
+        layer_url="https://example.test/FeatureServer/0",
+        operation="add",
+        input_path="/tmp/result.parquet",
+        geometry_column="shape",
+        source_srid=3003,
+        batch_size=250,
+        match_column="CITY",
+        column_mappings=raw_mappings,
+    )
+    dataframe_result = service.write_features_from_df(
+        connection_id="conn-1",
+        layer_url="https://example.test/FeatureServer/0",
+        operation="add",
+        df=df,
+        geometry_column="shape",
+        source_srid=3003,
+        batch_size=250,
+        match_column="CITY",
+        column_mappings=raw_mappings,
+    )
+
+    assert file_result == core_result
+    assert dataframe_result == core_result
+    first_call, second_call = service._write_features_df_core.call_args_list
+    assert first_call.kwargs == second_call.kwargs
+    assert first_call.kwargs["column_mappings"] is raw_mappings
 
 
 def test_create_service_from_df_applies_mapping_before_schema_creation() -> None:

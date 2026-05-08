@@ -16,6 +16,15 @@ from app.shared.connections.arcgis_sql import (
     chunk_arcgis_values,
     quote_arcgis_sql_value,
 )
+from app.shared.connections.arcgis_provider_results import (
+    DeleteFeatureServiceItemsResult,
+    FolderEnsureResult,
+    ItemDeleteResult,
+    ItemListingResult,
+    ItemSearchResult,
+    RendererUpdateResult,
+    ServiceNameAvailabilityResult,
+)
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -925,8 +934,8 @@ class ArcGISClient:
 
         return items, folders
 
-    def list_user_items(self, conn: ArcGISConnectionInfo) -> List[dict]:
-        """List raw ArcGIS content items for the connected user.
+    def _list_user_items_result(self, conn: ArcGISConnectionInfo) -> ItemListingResult:
+        """List raw ArcGIS content items as a typed provider result.
 
         The provider owns Content API pagination and folder traversal. Domain
         callers such as IMDF keep their own type/name matching policy above
@@ -934,7 +943,7 @@ class ArcGISClient:
         """
         username = conn.username
         if not username:
-            return []
+            return ItemListingResult(items=())
 
         base_url = self._portal_sharing_base_url(conn)
         root_items, folders = self._list_user_items_in_folder(
@@ -951,7 +960,11 @@ class ArcGISClient:
             )
             all_items.extend(folder_items)
 
-        return all_items
+        return ItemListingResult(items=tuple(all_items))
+
+    def list_user_items(self, conn: ArcGISConnectionInfo) -> List[dict]:
+        """List raw ArcGIS content items for the connected user."""
+        return self._list_user_items_result(conn).to_compat_list()
     
     def list_folders(self, conn: ArcGISConnectionInfo) -> List[dict]:
         """
@@ -1018,12 +1031,12 @@ class ArcGISClient:
             logger.warning(f"Errore lista folders server: {e}")
             return [{"id": "", "title": "(root)"}]
 
-    def ensure_folder(
+    def _ensure_folder_result(
         self,
         conn: ArcGISConnectionInfo,
         folder_name: str,
-    ) -> Optional[str]:
-        """Find or create a user content folder and return its folder id.
+    ) -> FolderEnsureResult:
+        """Find or create a user content folder as a typed provider result.
 
         Blank folder names map to the root folder and do not create content
         folders. Error-shaped createFolder responses remain exceptional so
@@ -1031,7 +1044,7 @@ class ArcGISClient:
         """
         normalized_name = folder_name.strip()
         if not normalized_name:
-            return ""
+            return FolderEnsureResult(folder_id="", title="", created=False)
         if not conn.username:
             raise ValueError("ArcGIS username richiesto per ensure_folder")
 
@@ -1052,7 +1065,11 @@ class ArcGISClient:
         list_data = list_response.json()
         for folder in list_data.get("folders", []) or []:
             if folder.get("title") == normalized_name:
-                return folder.get("id")
+                return FolderEnsureResult(
+                    folder_id=folder.get("id"),
+                    title=normalized_name,
+                    created=False,
+                )
 
         create_response = self._request_with_token(
             "POST",
@@ -1065,13 +1082,25 @@ class ArcGISClient:
         create_data = create_response.json()
         if not create_data.get("success"):
             raise RuntimeError(f"createFolder fallito: {create_data}")
-        return (create_data.get("folder") or {}).get("id")
+        return FolderEnsureResult(
+            folder_id=(create_data.get("folder") or {}).get("id"),
+            title=normalized_name,
+            created=True,
+        )
 
-    def is_service_name_available(
+    def ensure_folder(
+        self,
+        conn: ArcGISConnectionInfo,
+        folder_name: str,
+    ) -> Optional[str]:
+        """Find or create a user content folder and return its folder id."""
+        return self._ensure_folder_result(conn, folder_name).to_compat_id()
+
+    def _service_name_availability_result(
         self,
         conn: ArcGISConnectionInfo,
         service_name: str,
-    ) -> Tuple[bool, Optional[str]]:
+    ) -> ServiceNameAvailabilityResult:
         """Check whether a Feature Service name is available on the portal.
 
         The return shape matches the legacy IMDF helper: error-shaped
@@ -1100,18 +1129,35 @@ class ArcGISClient:
             data = response.json()
             if "error" in data:
                 message = data["error"].get("message", "")
-                return True, f"check fallito: {message}"
-            return bool(data.get("available", False)), None
+                return ServiceNameAvailabilityResult(
+                    available=True,
+                    error=f"check fallito: {message}",
+                )
+            return ServiceNameAvailabilityResult(
+                available=bool(data.get("available", False)),
+                error=None,
+            )
         except Exception as e:
             logger.warning(f"is_service_name_available error: {e}")
-            return True, str(e)
+            return ServiceNameAvailabilityResult(available=True, error=str(e))
 
-    def search_items(
+    def is_service_name_available(
+        self,
+        conn: ArcGISConnectionInfo,
+        service_name: str,
+    ) -> Tuple[bool, Optional[str]]:
+        """Check whether a Feature Service name is available on the portal."""
+        return self._service_name_availability_result(
+            conn,
+            service_name,
+        ).to_compat_tuple()
+
+    def _search_items_result(
         self,
         conn: ArcGISConnectionInfo,
         query: str,
-    ) -> List[dict]:
-        """Search raw portal items with provider-managed pagination."""
+    ) -> ItemSearchResult:
+        """Search raw portal items as a typed provider result."""
         base_url = self._portal_sharing_base_url(conn)
         all_results: List[dict] = []
         start = 1
@@ -1147,9 +1193,17 @@ class ArcGISClient:
                     break
                 start = next_start
 
-            return all_results
+            return ItemSearchResult(items=tuple(all_results))
         except requests.RequestException as e:
             raise ConnectionError(f"Errore ricerca ArcGIS Online: {e}")
+
+    def search_items(
+        self,
+        conn: ArcGISConnectionInfo,
+        query: str,
+    ) -> List[dict]:
+        """Search raw portal items with provider-managed pagination."""
+        return self._search_items_result(conn, query).to_compat_list()
 
     def search_services_online(
         self,
@@ -2764,12 +2818,12 @@ class ArcGISClient:
 
     # STILI / RENDERER
 
-    def update_renderer(
+    def _renderer_update_result(
         self,
         conn: ArcGISConnectionInfo,
         layer_url: str,
         drawing_info: dict,
-    ) -> dict:
+    ) -> RendererUpdateResult:
         """
         Aggiorna il renderer (stile) di un layer tramite updateDefinition.
 
@@ -2817,22 +2871,31 @@ class ArcGISClient:
 
             if result.get("success"):
                 logger.info(f"Renderer aggiornato per layer {layer_id}")
-                return {"success": True, "message": "Renderer aggiornato"}
+                return RendererUpdateResult(success=True, message="Renderer aggiornato")
             else:
                 error = result.get("error", {})
                 msg = error.get("message", str(result))
                 logger.error(f"[GESTITO] updateDefinition renderer fallito: {msg}")
-                return {"success": False, "message": msg}
+                return RendererUpdateResult(success=False, message=msg)
 
         except requests.RequestException as e:
-            return {"success": False, "message": str(e)}
+            return RendererUpdateResult(success=False, message=str(e))
 
-    def update_layer_renderer(
+    def update_renderer(
+        self,
+        conn: ArcGISConnectionInfo,
+        layer_url: str,
+        drawing_info: dict,
+    ) -> dict:
+        """Apply renderer/drawingInfo and return the legacy dict shape."""
+        return self._renderer_update_result(conn, layer_url, drawing_info).to_compat_dict()
+
+    def _layer_renderer_update_result(
         self,
         conn: ArcGISConnectionInfo,
         layer_url: str,
         drawing_info: Mapping[str, object],
-    ) -> dict:
+    ) -> RendererUpdateResult:
         """
         Aggiorna il renderer di un layer tramite layer-level updateDefinition.
 
@@ -2861,15 +2924,33 @@ class ArcGISClient:
 
             if result.get("success"):
                 logger.info(f"Renderer aggiornato per layer URL {layer_url}")
-                return {"success": True, "message": "Renderer aggiornato"}
+                return RendererUpdateResult(success=True, message="Renderer aggiornato")
 
             error = result.get("error", {})
             msg = error.get("message", str(result)) if isinstance(error, dict) else str(result)
             logger.error(f"[GESTITO] layer updateDefinition renderer fallito: {msg}")
-            return {"success": False, "message": msg}
+            return RendererUpdateResult(success=False, message=msg)
 
         except requests.RequestException as e:
-            return {"success": False, "message": str(e)}
+            return RendererUpdateResult(success=False, message=str(e))
+
+    def update_layer_renderer(
+        self,
+        conn: ArcGISConnectionInfo,
+        layer_url: str,
+        drawing_info: Mapping[str, object],
+    ) -> dict:
+        """
+        Aggiorna il renderer di un layer tramite layer-level updateDefinition.
+
+        Public provider compatibility returns the legacy ``{success, message}``
+        dict while the internal boundary uses ``RendererUpdateResult``.
+        """
+        return self._layer_renderer_update_result(
+            conn,
+            layer_url,
+            drawing_info,
+        ).to_compat_dict()
 
     # SERVICE / ITEM LIFECYCLE
 
@@ -2880,11 +2961,11 @@ class ArcGISClient:
         parsed = urlparse(conn.server_url)
         return f"{parsed.scheme}://{parsed.netloc}/sharing/rest"
 
-    def delete_item_permanently(
+    def _delete_item_permanently_result(
         self,
         conn: ArcGISConnectionInfo,
         item_id: str,
-    ) -> dict:
+    ) -> ItemDeleteResult:
         """Delete a portal item permanently.
 
         ArcGIS Online supports ``permanentDelete=true`` on item delete. Older
@@ -2907,7 +2988,11 @@ class ArcGISClient:
             )
             result = response.json()
             if result.get("success"):
-                return {"success": True, "message": "item deleted", "item_id": item_id}
+                return ItemDeleteResult(
+                    success=True,
+                    message="item deleted",
+                    item_id=item_id,
+                )
 
             logger.warning(f"delete item {item_id} risposta: {result}")
 
@@ -2921,12 +3006,12 @@ class ArcGISClient:
             )
             fallback_result = fallback_response.json()
             if not fallback_result.get("success"):
-                return {
-                    "success": False,
-                    "message": f"delete item failed: {result}",
-                    "item_id": item_id,
-                    "response": result,
-                }
+                return ItemDeleteResult(
+                    success=False,
+                    message=f"delete item failed: {result}",
+                    item_id=item_id,
+                    response=result,
+                )
 
             permanent_url = (
                 f"{base_url}/content/users/{conn.username}/items/{item_id}/permanentDelete"
@@ -2941,27 +3026,35 @@ class ArcGISClient:
             )
             permanent_result = permanent_response.json()
             if permanent_result.get("success"):
-                return {
-                    "success": True,
-                    "message": "item permanent-deleted via fallback endpoint",
-                    "item_id": item_id,
-                }
-            return {
-                "success": False,
-                "message": f"permanentDelete failed: {permanent_result}",
-                "item_id": item_id,
-                "response": permanent_result,
-            }
+                return ItemDeleteResult(
+                    success=True,
+                    message="item permanent-deleted via fallback endpoint",
+                    item_id=item_id,
+                )
+            return ItemDeleteResult(
+                success=False,
+                message=f"permanentDelete failed: {permanent_result}",
+                item_id=item_id,
+                response=permanent_result,
+            )
         except Exception as e:
             logger.warning(f"delete item {item_id} fallita: {e}")
-            return {"success": False, "message": str(e), "item_id": item_id}
+            return ItemDeleteResult(success=False, message=str(e), item_id=item_id)
 
-    def delete_feature_service_items(
+    def delete_item_permanently(
+        self,
+        conn: ArcGISConnectionInfo,
+        item_id: str,
+    ) -> dict:
+        """Delete a portal item permanently and return the legacy dict shape."""
+        return self._delete_item_permanently_result(conn, item_id).to_compat_dict()
+
+    def _delete_feature_service_items_result(
         self,
         conn: ArcGISConnectionInfo,
         items: Sequence[Mapping[str, object]],
         service_name: str = "",
-    ) -> Tuple[int, int]:
+    ) -> DeleteFeatureServiceItemsResult:
         """Delete discovered Feature Service portal items.
 
         Discovery and selection policy stays with the caller; this method owns
@@ -2975,17 +3068,33 @@ class ArcGISClient:
             if not item_id:
                 continue
             attempted += 1
-            result = self.delete_item_permanently(conn, item_id)
-            if result.get("success"):
+            result = ItemDeleteResult.from_compat_dict(
+                self.delete_item_permanently(conn, item_id),
+                item_id,
+            )
+            if result.success:
                 succeeded += 1
                 logger.info(
                     f"Item ArcGIS cancellato (permanent): {item_id} "
                     f"('{service_name}', folder={item.get('ownerFolder') or 'root'})"
                 )
             else:
-                logger.warning(f"delete item {item_id} risposta: {result}")
+                logger.warning(f"delete item {item_id} risposta: {result.to_compat_dict()}")
 
-        return attempted, succeeded
+        return DeleteFeatureServiceItemsResult(attempted=attempted, succeeded=succeeded)
+
+    def delete_feature_service_items(
+        self,
+        conn: ArcGISConnectionInfo,
+        items: Sequence[Mapping[str, object]],
+        service_name: str = "",
+    ) -> Tuple[int, int]:
+        """Delete discovered Feature Service portal items and return counters."""
+        return self._delete_feature_service_items_result(
+            conn,
+            items,
+            service_name,
+        ).to_compat_tuple()
 
     def _resolve_hosting_admin_url(
         self,
