@@ -32,6 +32,18 @@ users_router = APIRouter(prefix="/auth/users", tags=["users"])
 _security = HTTPBearer(auto_error=False)
 
 
+def _user_response_payload(user: _users_dal.UserRow) -> dict[str, object]:
+    return {
+        "id": user.id,
+        "username": user.username,
+        "email": user.email,
+        "group_id": user.group_id,
+        "role": user.role,
+        "is_active": user.is_active,
+        "created_at": user.created_at,
+    }
+
+
 def _get_current_user_proxy(
     credentials: HTTPAuthorizationCredentials | None = Depends(_security),
 ) -> CurrentUser:
@@ -63,7 +75,7 @@ def list_users(current_user: CurrentUser = Depends(require_admin)):
         users = _users_dal.list_all_users()
     else:
         users = _users_dal.list_users(current_user.group_id)
-    return [UserResponse(**{k: u[k] for k in UserResponse.model_fields if k in u}) for u in users]
+    return [UserResponse(**_user_response_payload(user)) for user in users]
 
 
 @users_router.post("", response_model=UserResponse, status_code=201)
@@ -101,7 +113,7 @@ def create_user(data: UserCreate, current_user: CurrentUser = Depends(require_ad
         password_hash=hash_password(data.password),
         group_id=data.group_id, email=data.email, role=data.role,
     )
-    return UserResponse(**{k: user[k] for k in UserResponse.model_fields if k in user})
+    return UserResponse(**_user_response_payload(user))
 
 
 @users_router.put("/{user_id}", response_model=UserResponse)
@@ -124,7 +136,7 @@ def update_user(user_id: str, data: dict,
     target = _users_dal.get_user(user_id)
     if not target:
         _disclosure.raise_disclosure(_disclosure.user_not_found())
-    if current_user.role != "superadmin" and target.get("group_id") != current_user.group_id:
+    if current_user.role != "superadmin" and target.group_id != current_user.group_id:
         _disclosure.raise_disclosure(_disclosure.access_denied())
 
     # Fail-fast sui campi sensibili non gestiti qui: meglio errore esplicito
@@ -184,7 +196,7 @@ def update_user(user_id: str, data: dict,
     updated = _users_dal.update_user(user_id, **fields)
     if not updated:
         _disclosure.raise_disclosure(_disclosure.user_not_found())
-    return UserResponse(**{k: updated[k] for k in UserResponse.model_fields if k in updated})
+    return UserResponse(**_user_response_payload(updated))
 
 
 @users_router.post("/{user_id}/reset-password")
@@ -205,7 +217,7 @@ def reset_password(user_id: str, data: ResetPasswordRequest,
     # e' informazione gia' accessibile per loro
     if not target or (
         current_user.role != "superadmin"
-        and target.get("group_id") != current_user.group_id
+        and target.group_id != current_user.group_id
     ):
         # Anti-enum #3 — invariante encoded in disclosure.admin_target_not_visible
         # superadmin sees 404 USER_NOT_FOUND, admin sees uniform 403 ACCESS_DENIED
@@ -237,7 +249,7 @@ def delete_user(user_id: str, current_user: CurrentUser = Depends(require_admin)
     # C10: stesso pattern di reset-password — anti-enum #3 invariant
     if not target or (
         current_user.role != "superadmin"
-        and target.get("group_id") != current_user.group_id
+        and target.group_id != current_user.group_id
     ):
         _disclosure.raise_disclosure(
             _disclosure.admin_target_not_visible(

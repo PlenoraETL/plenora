@@ -6,7 +6,9 @@ Scope S5 (inventory_report.md Sez. 5.1):
 
 from __future__ import annotations
 
+import ast
 import logging
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -34,11 +36,74 @@ class _ListHandler(logging.Handler):
 # spostata da `app/core/auth/auth.py` a `app/core/auth/groups_router.py`.
 # Il record ERROR e' ora emesso dal logger del modulo nuovo.
 _AUTH_LOGGER = "app.core.auth.groups_router"
+_BACKEND_ROOT = Path(__file__).resolve().parents[3]
+_GROUP_CLEANUP_PATH = (
+    _BACKEND_ROOT / "app" / "core" / "auth" / "group_cleanup.py"
+)
 
 
 def _superadmin_user():
     return SimpleNamespace(
         user_id="root", username="root", group_id="", role="superadmin",
+    )
+
+
+def test_delete_group_cascade_delegates_intermediate_cleanup_boundary(monkeypatch):
+    """Group cascade must not be orchestrated from auth.db."""
+    from app.core.auth import group_cleanup
+
+    class _Cursor:
+        rowcount = 1
+
+    intermediate_calls: list[str] = []
+
+    def _execute(_sql, _params=()):
+        return _Cursor()
+
+    def _fetchall(sql, _params=()):
+        if "SELECT id FROM projects" in sql:
+            return [{"id": "project-1"}]
+        return []
+
+    monkeypatch.setattr(group_cleanup, "execute", _execute)
+    monkeypatch.setattr(group_cleanup, "fetchall", _fetchall)
+    monkeypatch.setattr(group_cleanup, "delete_results_for_project", lambda _pid: 2)
+    monkeypatch.setattr(group_cleanup.auth_db, "delete_group", lambda _gid: True)
+    monkeypatch.setattr(
+        group_cleanup,
+        "delete_intermediate_runs_for_group_project",
+        lambda project_id: intermediate_calls.append(project_id) or 3,
+    )
+
+    report = group_cleanup.delete_group_cascade("group-1")
+
+    assert intermediate_calls == ["project-1"]
+    assert report["intermediate_runs"] == 3
+
+
+def test_group_cleanup_imports_intermediate_cleanup_boundary_only():
+    src = _GROUP_CLEANUP_PATH.read_text(encoding="utf-8")
+
+    assert "app.core.intermediate.cleanup" in src
+    assert "app.core.intermediate.db" not in src
+    assert "delete_all_runs_for_canvas" not in src
+
+
+def test_group_cleanup_execute_calls_do_not_use_f_string_sql():
+    tree = ast.parse(_GROUP_CLEANUP_PATH.read_text(encoding="utf-8"))
+
+    unsafe_calls = []
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        if not isinstance(node.func, ast.Name) or node.func.id != "execute":
+            continue
+        if node.args and isinstance(node.args[0], ast.JoinedStr):
+            unsafe_calls.append(node.lineno)
+
+    assert not unsafe_calls, (
+        "group_cleanup must use static SQL constants for execute() calls; "
+        f"f-string SQL found on lines {unsafe_calls}"
     )
 
 
@@ -70,7 +135,11 @@ def test_delete_group_cascade_failure_is_logged_then_raised_as_500(monkeypatch):
     def _raising_cascade(gid):
         raise boom
 
-    monkeypatch.setattr(groups_mod._groups, "delete_group_cascade", _raising_cascade)
+    monkeypatch.setattr(
+        groups_mod._group_cleanup,
+        "delete_group_cascade",
+        _raising_cascade,
+    )
 
     target_logger = logging.getLogger(_AUTH_LOGGER)
     handler = _ListHandler()

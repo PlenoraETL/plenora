@@ -73,11 +73,11 @@ class ProjectService:
                 self.DEFAULT_GROUP, "Default", "Gruppo di default"
             )
 
-    def _project_row_to_metadata(
-        self,
+    @staticmethod
+    def project_row_to_metadata(
         row: project_db.ProjectRow,
     ) -> ProjectMetadata:
-        """Converte ProjectRow in ProjectMetadata."""
+        """Serialize a typed ProjectRow into the public metadata model."""
         return ProjectMetadata(
             id=row.id,
             name=row.name,
@@ -91,11 +91,11 @@ class ProjectService:
             updated_at=row.updated_at,
         )
 
-    def _project_detail_row_to_metadata(
-        self,
+    @staticmethod
+    def project_detail_row_to_metadata(
         row: project_db.ProjectDetailRow,
     ) -> ProjectMetadata:
-        """Converte ProjectDetailRow in ProjectMetadata."""
+        """Serialize a typed ProjectDetailRow into the public metadata model."""
         return ProjectMetadata(
             id=row.id,
             name=row.name,
@@ -108,6 +108,18 @@ class ProjectService:
             created_at=row.created_at,
             updated_at=row.updated_at,
         )
+
+    def _project_row_to_metadata(
+        self,
+        row: project_db.ProjectRow,
+    ) -> ProjectMetadata:
+        return self.project_row_to_metadata(row)
+
+    def _project_detail_row_to_metadata(
+        self,
+        row: project_db.ProjectDetailRow,
+    ) -> ProjectMetadata:
+        return self.project_detail_row_to_metadata(row)
 
     def create_project(
         self,
@@ -129,7 +141,7 @@ class ProjectService:
             created_by=created_by,
         )
         logger.info(f"Progetto creato: {project_id} (created_by={created_by})", op="create_project")
-        return self._project_detail_row_to_metadata(row)
+        return self.project_detail_row_to_metadata(row)
 
     def rollback_created_project(
         self,
@@ -154,7 +166,7 @@ class ProjectService:
         self._ensure_default_group()
         rows = project_db.list_projects(group_id)  # NB: list_projects deve supportare None
         return ProjectList(
-            projects=[self._project_row_to_metadata(row) for row in rows]
+            projects=[self.project_row_to_metadata(row) for row in rows]
         )
 
     def get_project_metadata(self, project_id: str, group_id: str = None) -> Optional[ProjectMetadata]:
@@ -165,7 +177,7 @@ class ProjectService:
         - group_id="X" → solo se appartiene al gruppo X.
         """
         row = project_db.get_project_row(project_id, group_id=group_id)
-        return self._project_detail_row_to_metadata(row) if row else None
+        return self.project_detail_row_to_metadata(row) if row else None
 
     def get_project_canvas(self, project_id: str) -> Optional[CanvasState]:
         """Carica canvas del progetto.
@@ -281,7 +293,7 @@ class ProjectService:
         row = project_db.get_project_row(project_id, group_id=group_id)
         if not row:
             return None
-        metadata = self._project_detail_row_to_metadata(row)
+        metadata = self.project_detail_row_to_metadata(row)
         canvas = row.canvas or {"nodes": [], "edges": []}
         return {
             "metadata": metadata.model_dump() if metadata else {},
@@ -480,8 +492,8 @@ class ProjectService:
         # dinamiche contengono dati utente (volume potenzialmente grande
         # outcome: fail-closed via aggregazione (vedi gate sotto
         try:
-            from app.core.intermediate.db import delete_all_runs_for_canvas
-            deleted_runs = delete_all_runs_for_canvas(project_id)
+            from app.core.intermediate.cleanup import delete_runs_for_canvas
+            deleted_runs = delete_runs_for_canvas(project_id)
             if deleted_runs:
                 logger.info(
                     f"Cleanup intermediate: {deleted_runs} run eliminate per progetto {project_id}",

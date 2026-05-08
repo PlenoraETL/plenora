@@ -13,6 +13,13 @@ from app.core.intermediate import db
 logger = get_logger(__name__)
 
 
+def _resolve_runs_retention_n(retention_n: int | None = None) -> int:
+    """Normalize caller-provided retention policy for intermediate cleanup."""
+    if retention_n is None:
+        return db.DEFAULT_RUNS_RETENTION
+    return retention_n
+
+
 # HASH AGGREGATO (opzione 2) per input_hash / output_hash
 
 def compute_aggregate_hash(rows: List[Dict], col_schema: dict) -> str:
@@ -255,7 +262,8 @@ def write_node(run_id: str, node_id: str, node_type: str,
 
 
 def close_run(run_id: str, input_hash: str, output_hash: str,
-              total_exec_time: float, success: bool) -> None:
+              total_exec_time: float, success: bool,
+              retention_n: int | None = None) -> None:
     """
     Chiude una run aggiornando runs con i dati finali.
     """
@@ -295,12 +303,18 @@ def close_run(run_id: str, input_hash: str, output_hash: str,
         # alcun callsite -> intermediate.runs + node_meta + node_rows
         # crescevano indefinitamente causando disk fill nel tempo
         # Ora retention FIFO (N run piu' recenti non pinnate, N da
-        # projects.retention_n o default 5) viene applicata a ogni
-        # chiusura run. Best-effort: un errore qui non rollbacka l'update
+        # projects.retention_n passato dagli orchestration edge, o default 5)
+        # viene applicata a ogni chiusura run. Best-effort: un errore qui non
+        # rollbacka l'update
         try:
             run = db.get_run(run_id)
             if run and run.get("canvas_id"):
-                db.apply_runs_retention(run["canvas_id"], run.get("group_id", ""))
+                canvas_id = run["canvas_id"]
+                db.apply_runs_retention(
+                    canvas_id,
+                    run.get("group_id", ""),
+                    retention_n=_resolve_runs_retention_n(retention_n),
+                )
         except Exception as _re:
             logger.warning(
                 f"[N8] Retention intermediate fallita (non bloccante) "

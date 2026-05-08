@@ -50,6 +50,27 @@ def _fake_request():
     )
 
 
+def _fake_user_row(
+    *,
+    user_id: str,
+    username: str,
+    password_hash: str,
+    group_id: str = "g1",
+    role: str = "user",
+    is_active: bool = True,
+):
+    from app.core.auth.db import UserRow
+
+    return UserRow(
+        id=user_id,
+        username=username,
+        password_hash=password_hash,
+        group_id=group_id,
+        role=role,
+        is_active=is_active,
+    )
+
+
 # hash_password / verify_password
 
 
@@ -136,10 +157,11 @@ def test_login_rehashes_bcrypt_user_on_success(monkeypatch):
 
     pwd = "correctpass12345"
     legacy_hash = bcrypt.hashpw(pwd.encode(), bcrypt.gensalt(rounds=4)).decode()
-    fake_user = {
-        "id": "u1", "username": "legacy", "password_hash": legacy_hash,
-        "group_id": "g1", "role": "user", "is_active": True,
-    }
+    fake_user = _fake_user_row(
+        user_id="u1",
+        username="legacy",
+        password_hash=legacy_hash,
+    )
     monkeypatch.setattr(auth_mod.db, "get_user_by_username", lambda u: fake_user)
 
     captured = {}
@@ -169,10 +191,11 @@ def test_login_does_not_rehash_argon2id_user(monkeypatch):
 
     pwd = "alreadyarg2id123"
     fresh_hash = hash_password(pwd)
-    fake_user = {
-        "id": "u2", "username": "modern", "password_hash": fresh_hash,
-        "group_id": "g1", "role": "user", "is_active": True,
-    }
+    fake_user = _fake_user_row(
+        user_id="u2",
+        username="modern",
+        password_hash=fresh_hash,
+    )
     monkeypatch.setattr(auth_mod.db, "get_user_by_username", lambda u: fake_user)
 
     calls = {"n": 0}
@@ -195,10 +218,11 @@ def test_login_does_not_rehash_on_wrong_password(monkeypatch):
     from app.core.auth import auth as auth_mod
 
     legacy_hash = bcrypt.hashpw(b"realpass123456", bcrypt.gensalt(rounds=4)).decode()
-    fake_user = {
-        "id": "u3", "username": "legacy2", "password_hash": legacy_hash,
-        "group_id": "g1", "role": "user", "is_active": True,
-    }
+    fake_user = _fake_user_row(
+        user_id="u3",
+        username="legacy2",
+        password_hash=legacy_hash,
+    )
     monkeypatch.setattr(auth_mod.db, "get_user_by_username", lambda u: fake_user)
 
     calls = {"n": 0}
@@ -224,10 +248,11 @@ def test_login_rehash_best_effort_db_failure_does_not_block_login(monkeypatch):
 
     pwd = "correctpass12345"
     legacy_hash = bcrypt.hashpw(pwd.encode(), bcrypt.gensalt(rounds=4)).decode()
-    fake_user = {
-        "id": "u4", "username": "legacy3", "password_hash": legacy_hash,
-        "group_id": "g1", "role": "user", "is_active": True,
-    }
+    fake_user = _fake_user_row(
+        user_id="u4",
+        username="legacy3",
+        password_hash=legacy_hash,
+    )
     monkeypatch.setattr(auth_mod.db, "get_user_by_username", lambda u: fake_user)
 
     def boom(*a, **kw):

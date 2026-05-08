@@ -20,6 +20,7 @@ from app.shared.error_envelope import raise_typed_http
 from app.utils.logger import get_logger
 
 from app.core.auth import db as _groups
+from app.core.auth import group_cleanup as _group_cleanup
 
 
 logger = get_logger(__name__)
@@ -30,6 +31,26 @@ __all__ = ["groups_router"]
 
 groups_router = APIRouter(prefix="/auth/groups", tags=["groups"])
 _security = HTTPBearer(auto_error=False)
+
+
+def _group_response_payload(group: _groups.GroupRow) -> dict[str, str]:
+    return {
+        "group_id": group.id,
+        "name": group.name or "",
+        "description": group.description or "",
+    }
+
+
+def _group_summary_payload(summary: _groups.GroupSummaryRow) -> dict[str, int]:
+    return {
+        "projects": summary.projects,
+        "users": summary.users,
+        "connections": summary.connections,
+        "file_sources": summary.file_sources,
+        "datasources": summary.datasources,
+        "api_connections": summary.api_connections,
+        "schedules": summary.schedules,
+    }
 
 
 def _get_current_user_proxy(
@@ -74,14 +95,7 @@ def list_groups(current_user: CurrentUser = Depends(require_admin)):
     else:
         g = _groups.get_group(current_user.group_id)
         groups = [g] if g else []
-    # FIXME: #3 (2026-04-23): description=NULL nel DB ritorna None da dict.get
-    # non la stringa default; GroupResponse.description: str alza ValidationError
-    # Stesso pattern null-safe applicato su name per robustezza
-    return [GroupResponse(
-                group_id=g["id"],
-                name=g.get("name") or "",
-                description=g.get("description") or "")
-            for g in groups if g]
+    return [GroupResponse(**_group_response_payload(group)) for group in groups if group]
 
 
 @groups_router.post("", response_model=GroupResponse, status_code=201)
@@ -92,7 +106,7 @@ def create_group(data: GroupCreate,
     if _groups.get_group(data.group_id):
         _disclosure.raise_disclosure(_disclosure.group_id_already_exists())
     group = _groups.create_group(data.group_id, data.name, data.description)
-    return GroupResponse(group_id=group["id"], name=group["name"], description=group.get("description", ""))
+    return GroupResponse(**_group_response_payload(group))
 
 
 @groups_router.get("/{group_id}/summary")
@@ -104,7 +118,7 @@ def get_group_summary(group_id: str,
     """
     if not _groups.get_group(group_id):
         _disclosure.raise_disclosure(_disclosure.group_not_found())
-    return _groups.get_group_summary(group_id)
+    return _group_summary_payload(_groups.get_group_summary(group_id))
 
 
 @groups_router.delete("/{group_id}", status_code=200)
@@ -123,7 +137,7 @@ def delete_group(group_id: str,
         _disclosure.raise_disclosure(_disclosure.group_not_found())
 
     try:
-        report = _groups.delete_group_cascade(group_id)
+        report = _group_cleanup.delete_group_cascade(group_id)
     except Exception as e:
         logger.error(f"[CRASH] delete_group_cascade fallito per group_id={group_id}: {e}", exc_info=True)
         raise_typed_http(

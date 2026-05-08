@@ -59,7 +59,7 @@ def test_close_run_references_apply_runs_retention():
 
 def test_close_run_invokes_retention_with_correct_args(monkeypatch):
     """Test funzionale: close_run fa list_node_meta + update_run + get_run +
-    apply_runs_retention(canvas_id, group_id) nell'ordine giusto."""
+    apply_runs_retention(canvas_id, group_id, retention_n) nell'ordine giusto."""
     from app.core.intermediate import writer as wr
 
     calls = []
@@ -75,16 +75,17 @@ def test_close_run_invokes_retention_with_correct_args(monkeypatch):
         calls.append(("get_run", run_id))
         return {"canvas_id": "proj_1", "group_id": "group_A"}
 
-    def spy_retention(canvas_id, group_id):
-        calls.append(("apply_runs_retention", canvas_id, group_id))
+    def spy_retention(canvas_id, group_id, *, retention_n=None):
+        calls.append(("apply_runs_retention", canvas_id, group_id, retention_n))
 
     monkeypatch.setattr(wr.db, "list_node_meta", spy_list_node_meta)
     monkeypatch.setattr(wr.db, "update_run", spy_update_run)
     monkeypatch.setattr(wr.db, "get_run", spy_get_run)
     monkeypatch.setattr(wr.db, "apply_runs_retention", spy_retention)
+    monkeypatch.setattr(wr, "_resolve_runs_retention_n", lambda retention_n=None: 7)
 
     wr.close_run(run_id="r1", input_hash="a", output_hash="b",
-                 total_exec_time=1.23, success=True)
+                 total_exec_time=1.23, success=True, retention_n=7)
 
     # Sequenza attesa: list_node_meta -> update_run -> get_run -> apply_runs_retention
     ops = [c[0] for c in calls]
@@ -94,7 +95,7 @@ def test_close_run_invokes_retention_with_correct_args(monkeypatch):
     assert ops.index("apply_runs_retention") > ops.index("update_run")
     # retention con i canvas_id/group_id corretti dal get_run
     retention_call = next(c for c in calls if c[0] == "apply_runs_retention")
-    assert retention_call[1:] == ("proj_1", "group_A")
+    assert retention_call[1:] == ("proj_1", "group_A", 7)
 
 
 def test_retention_failure_does_not_propagate(monkeypatch):
@@ -117,12 +118,42 @@ def test_retention_failure_does_not_propagate(monkeypatch):
 
 
 def test_apply_runs_retention_signature_stable():
-    """Signature stabile di apply_runs_retention: (canvas_id, group_id)."""
+    """Signature stabile di apply_runs_retention: (canvas_id, group_id, retention_n)."""
     from app.core.intermediate.db import apply_runs_retention
 
     sig = inspect.signature(apply_runs_retention)
     params = list(sig.parameters.keys())
-    assert params[:2] == ["canvas_id", "group_id"], (
+    assert params[:3] == ["canvas_id", "group_id", "retention_n"], (
         f"apply_runs_retention signature cambiata: {params}. "
-        "Breaking per writer.close_run che la chiama positional."
+        "Breaking per writer.close_run che passa la policy di retention."
     )
+
+
+def test_intermediate_db_does_not_read_project_retention_policy():
+    """La policy projects.retention_n non deve vivere dentro intermediate.db."""
+    import ast
+    from pathlib import Path
+
+    src_path = Path("backend/app/core/intermediate/db.py")
+    tree = ast.parse(src_path.read_text(encoding="utf-8"))
+
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom):
+            assert node.module != "app.core.projects.db"
+        elif isinstance(node, ast.Import):
+            assert all(alias.name != "app.core.projects.db" for alias in node.names)
+
+
+def test_intermediate_writer_does_not_read_project_retention_policy():
+    """La policy projects.retention_n viene passata al writer dagli orchestration edge."""
+    import ast
+    from pathlib import Path
+
+    src_path = Path("backend/app/core/intermediate/writer.py")
+    tree = ast.parse(src_path.read_text(encoding="utf-8"))
+
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom):
+            assert node.module != "app.core.projects.db"
+        elif isinstance(node, ast.Import):
+            assert all(alias.name != "app.core.projects.db" for alias in node.names)

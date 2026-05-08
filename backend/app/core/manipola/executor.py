@@ -566,7 +566,14 @@ class ManipolaExecutor:
                 from app.utils.logger import open_run
                 from app.core.intermediate import db as idb
                 from app.core.projects.db import get_project as _get_project
+                from app.core.projects.retention import resolve_runs_retention_n
                 upstream_meta = _get_project(source_project_id) or {}
+                upstream_retention_n = upstream_meta.get("retention_n")
+                if upstream_retention_n is None:
+                    upstream_retention_n = resolve_runs_retention_n(
+                        source_project_id,
+                        default=idb.DEFAULT_RUNS_RETENTION,
+                    )
                 open_run(
                     run_id=upstream_run_id,
                     project_id=source_project_id,
@@ -582,6 +589,7 @@ class ManipolaExecutor:
             except Exception as _oe:
                 logger.warning(f"Apertura run upstream {source_project_id} fallita (non bloccante): {_oe}")
                 upstream_run_id = None
+                upstream_retention_n = None
 
             # `orchestrator_callback` e' `OrchestratorService.execute_pipeline`
             # vedi orchestrator/service.py:83) che ritorna `PipelineArtifact`
@@ -608,6 +616,7 @@ class ManipolaExecutor:
                     idb_close_run(
                         run_id=upstream_run_id, input_hash="", output_hash="",
                         total_exec_time=0.0, success=upstream.success,
+                        retention_n=upstream_retention_n,
                     )
                 except Exception as _ce:
                     logger.warning(f"Chiusura run upstream {source_project_id} fallita (non bloccante): {_ce}")

@@ -197,6 +197,7 @@ def execute_enrichment_task(
     # "Contesto di sicurezza non determinabile (group_id mancante)"
     _run_start = time.time()
     _group_id = ""
+    _retention_n = None
     if is_eseguibile:
         _run_id = None
         try:
@@ -213,8 +214,13 @@ def execute_enrichment_task(
         try:
             from app.core.intermediate import db as _idb
             from app.core.projects.service import ProjectService as _PS
+            from app.core.projects.retention import resolve_runs_retention_n
             _meta = _PS().get_project_metadata(project_id)
             _group_id = getattr(_meta, 'group_id', 'unknown') if _meta else 'unknown'
+            _retention_n = resolve_runs_retention_n(
+                project_id,
+                default=_idb.DEFAULT_RUNS_RETENTION,
+            )
             _idb.create_run(run_id=_run_id, canvas_id=project_id, group_id=_group_id, user_id=user_id)
         except Exception as _rie:
             logger.warning(f"[Task {task_id}] Intermediate: apertura run fallita (non bloccante): {_rie}")
@@ -1115,11 +1121,13 @@ def execute_enrichment_task(
         if _run_id and not is_eseguibile:
             _exec_time = time.time() - _run_start
             _rid_c = _run_id
-            def _async_close(_r: str = _rid_c, _t: float = _exec_time) -> None:
+            _retention_c = _retention_n
+            def _async_close(_r: str = _rid_c, _t: float = _exec_time,
+                             _rn: int | None = _retention_c) -> None:
                 try:
                     from app.core.intermediate.writer import close_run as _cr
                     _cr(run_id=_r, input_hash="", output_hash="",
-                        total_exec_time=_t, success=True)
+                        total_exec_time=_t, success=True, retention_n=_rn)
                 except Exception as e:
                     logger.debug(f"cleanup async close_run fallito: {type(e).__name__}: {e}")
             threading.Thread(target=_async_close, daemon=True).start()
@@ -1175,7 +1183,8 @@ def execute_enrichment_task(
                 try:
                     from app.core.intermediate.writer import close_run as _close_run
                     _close_run(run_id=_run_id, input_hash="", output_hash="",
-                               total_exec_time=time.time() - _run_start, success=False)
+                               total_exec_time=time.time() - _run_start, success=False,
+                               retention_n=_retention_n)
                 except Exception as e_inner:
                     logger.debug(f"close_run intermediate fallito (early return): {type(e_inner).__name__}: {e_inner}")
             if not is_eseguibile:
@@ -1193,7 +1202,8 @@ def execute_enrichment_task(
             try:
                 from app.core.intermediate.writer import close_run as _close_run
                 _close_run(run_id=_run_id, input_hash="", output_hash="",
-                           total_exec_time=time.time() - _run_start, success=False)
+                           total_exec_time=time.time() - _run_start, success=False,
+                           retention_n=_retention_n)
             except Exception as e_inner:
                 logger.debug(f"close_connection intermediate fallito (outer except): {type(e_inner).__name__}: {e_inner}")
         error_message = str(e)

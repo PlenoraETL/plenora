@@ -134,16 +134,16 @@ def cleanup_orphans(dry_run: bool = False) -> OrphanCleanupReport:
 
     # 2. Orphan runs in intermediate tables
     try:
-        from app.core.intermediate.db import delete_all_runs_for_canvas
+        from app.core.intermediate.cleanup import delete_runs_for_canvas
         orphan_canvas_ids = find_orphan_run_canvas_ids()
         report["orphan_runs"]["canvas_ids"] = orphan_canvas_ids
         if not dry_run:
             for cid in orphan_canvas_ids:
                 try:
-                    n = delete_all_runs_for_canvas(cid)
+                    n = delete_runs_for_canvas(cid)
                     report["orphan_runs"]["runs_deleted"] += n
                 except Exception as e:
-                    err = f"delete_all_runs_for_canvas({cid}): {e}"
+                    err = f"delete_runs_for_canvas({cid}): {e}"
                     logger.warning(f"orphan_cleanup: {err}")
                     report["errors"].append(err)
     except Exception as e:

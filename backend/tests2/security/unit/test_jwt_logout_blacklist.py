@@ -60,17 +60,18 @@ def auth_client(monkeypatch, patched_blacklist):
     """
     from app.core.auth import auth as auth_mod
     from app.core.auth import db as _users_dal
+    from app.core.auth.db import UserRow
 
     def _fake_get_user(user_id: str):
-        return {
-            "id": user_id,
-            "username": "testuser",
-            "group_id": "G1",
-            "role": "user",
-            "is_active": True,
-            "email": None,
-            "created_at": "2026-01-01T00:00:00Z",
-        }
+        return UserRow(
+            id=user_id,
+            username="testuser",
+            group_id="G1",
+            role="user",
+            is_active=True,
+            email=None,
+            created_at="2026-01-01T00:00:00Z",
+        )
 
     # AUTH-ENGINE-015: due call site distinti consumano `get_user`
     # in questa flow, e `from X import Y` bind alla import-time

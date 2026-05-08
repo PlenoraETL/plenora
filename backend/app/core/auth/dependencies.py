@@ -51,7 +51,7 @@ def get_current_user(
     if is_jti_blacklisted(payload.get("jti")):
         _disclosure.raise_disclosure(_disclosure.token_revoked())
     user = _users_dal.get_user(payload["sub"])
-    if not user or not user.get("is_active"):
+    if not user or not user.is_active:
         _disclosure.raise_disclosure(_disclosure.user_not_found_or_disabled())
     return CurrentUser(
         user_id=payload["sub"],

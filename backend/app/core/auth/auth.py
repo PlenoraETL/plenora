@@ -163,6 +163,18 @@ from app.core.auth.models import (  # noqa: F401 (compatibility export pubblico)
 )
 
 
+def _user_response_payload(user: db.UserRow) -> dict[str, object]:
+    return {
+        "id": user.id,
+        "username": user.username,
+        "email": user.email,
+        "group_id": user.group_id,
+        "role": user.role,
+        "is_active": user.is_active,
+        "created_at": user.created_at,
+    }
+
+
 from app.shared.password_hashing import (  # noqa: F401 (compatibility export pubblico)
     _ph,
     hash_password,
@@ -213,12 +225,12 @@ def login(data: LoginRequest, request: Request):
     # di enumerare gli username misurando il tempo di risposta (bcrypt
     # richiede ~200-400ms; la differenza con la risposta 401 immediata
     # rendeva banale l'enumeration
-    password_hash = user["password_hash"] if user else _DUMMY_PASSWORD_HASH
+    password_hash = user.password_hash if user else _DUMMY_PASSWORD_HASH
     password_ok = verify_password(data.password, password_hash)
     if not user or not password_ok:
         _record_failed_login(client_ip)
         _disclosure.raise_disclosure(_disclosure.invalid_credentials())
-    if not user.get("is_active"):
+    if not user.is_active:
         _disclosure.raise_disclosure(_disclosure.account_disabled())
 
     # MFA opt-in: se l'utente ha MFA attiva, il codice TOTP e' richiesto
@@ -227,10 +239,10 @@ def login(data: LoginRequest, request: Request):
     # differisce da 401 password errata, quindi rivela "utente con MFA
     # attiva". Mitigazione: rate limit su client_ip (gia' attivo
     from app.core.auth import mfa as _mfa
-    if _mfa.is_enabled(user["id"]):
+    if _mfa.is_enabled(user.id):
         if not data.mfa_code:
             _disclosure.raise_disclosure(_disclosure.mfa_required())
-        if not _mfa.verify_code(user["id"], data.mfa_code):
+        if not _mfa.verify_code(user.id, data.mfa_code):
             _record_failed_login(client_ip)
             _disclosure.raise_disclosure(_disclosure.mfa_invalid())
 
@@ -238,23 +250,23 @@ def login(data: LoginRequest, request: Request):
 
     # Rehash progressivo bcrypt → Argon2id (best-effort: un fallimento del DB
     # non deve negare il login, al prossimo login riproveremo
-    if needs_rehash(user["password_hash"]):
+    if needs_rehash(user.password_hash):
         try:
-            db.update_user_password(user["id"], hash_password(data.password))
+            db.update_user_password(user.id, hash_password(data.password))
         except Exception as e:
             logger.warning(
-                f"Rehash password fallito per {user['username']}: {e}",
+                f"Rehash password fallito per {user.username}: {e}",
                 op="login_rehash",
             )
 
     token = create_access_token(
-        user_id=user["id"], username=user["username"],
-        group_id=user["group_id"], role=user["role"],
+        user_id=user.id, username=user.username,
+        group_id=user.group_id, role=user.role,
     )
-    logger.info(f"Login: {user['username']} (gruppo: {user['group_id']})", op="login")
+    logger.info(f"Login: {user.username} (gruppo: {user.group_id})", op="login")
     return TokenResponse(
-        access_token=token, user_id=user["id"], username=user["username"],
-        group_id=user["group_id"], role=user["role"],
+        access_token=token, user_id=user.id, username=user.username,
+        group_id=user.group_id, role=user.role,
         expires_in=ACCESS_TOKEN_EXPIRE_HOURS * 3600,
     )
 
@@ -307,7 +319,7 @@ def get_me(current_user: CurrentUser = Depends(get_current_user)):
     user = db.get_user(current_user.user_id)
     if not user:
         _disclosure.raise_disclosure(_disclosure.user_not_found())
-    return UserResponse(**{k: user[k] for k in UserResponse.model_fields if k in user})
+    return UserResponse(**_user_response_payload(user))
 
 
 @router.post("/change-password")
@@ -324,7 +336,7 @@ def change_password(
     if not user:
         _disclosure.raise_disclosure(_disclosure.user_not_found())
 
-    if not verify_password(data.old_password, user["password_hash"]):
+    if not verify_password(data.old_password, user.password_hash):
         raise HTTPException(status_code=400, detail="Password attuale errata")
 
     if len(data.new_password) < 12:

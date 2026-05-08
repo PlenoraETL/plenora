@@ -205,11 +205,19 @@ def test_shared_recheck_invokes_assert_project_access(monkeypatch):
     spy diretto sul collaborator -> osserva la chiamata al helper.
     """
     from app.shared import async_user_recheck as mod
+    from app.core.auth.db import UserRow
 
-    monkeypatch.setattr(mod, "get_user", lambda uid: {
-        "id": uid, "username": "u", "group_id": "g_1",
-        "role": "admin", "is_active": True,
-    })
+    monkeypatch.setattr(
+        mod,
+        "get_user",
+        lambda uid: UserRow(
+            id=uid,
+            username="u",
+            group_id="g_1",
+            role="admin",
+            is_active=True,
+        ),
+    )
 
     spy_calls = []
 
@@ -381,9 +389,16 @@ def test_shared_recheck_returns_none_when_user_id_missing():
 def test_shared_recheck_returns_permission_revoked_on_disabled_user(monkeypatch):
     """User disabilitato -> return permission_revoked dict."""
     from app.shared import async_user_recheck as mod
+    from app.core.auth.db import UserRow
 
     def fake_get_user(uid):
-        return {"id": uid, "username": "x", "group_id": "g", "role": "user", "is_active": False}
+        return UserRow(
+            id=uid,
+            username="x",
+            group_id="g",
+            role="user",
+            is_active=False,
+        )
 
     # NB: `async_user_recheck.py` importa `get_user` dal leaf canonico
     # `app.db.config.users` AT MODULE LOAD: il symbol `get_user` e' bound nel namespace

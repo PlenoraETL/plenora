@@ -74,6 +74,20 @@ def _get_project_info(project_id: str) -> Dict[str, Any]:
         return {}
 
 
+def _resolve_intermediate_retention_n(project_id: str) -> int | None:
+    try:
+        from app.core.intermediate import db as idb
+        from app.core.projects.retention import resolve_runs_retention_n
+
+        return resolve_runs_retention_n(
+            project_id,
+            default=idb.DEFAULT_RUNS_RETENTION,
+        )
+    except Exception as e:
+        logger.debug(f"retention policy lookup fallito: {type(e).__name__}: {e}")
+        return None
+
+
 @celery_app.task(
     bind=True,
     base=BaseTaskWithRetry,
@@ -160,6 +174,9 @@ def execute_pipeline_task(
     project_info = _get_project_info(project_id)
     group_id = project_info.get("group_id", "")
     module   = project_info.get("project_type", "")
+    retention_n = project_info.get("retention_n")
+    if retention_n is None:
+        retention_n = _resolve_intermediate_retention_n(project_id)
 
     open_run(
         run_id=run_id,
@@ -301,6 +318,7 @@ def execute_pipeline_task(
             idb_close_run(
                 run_id=run_id, input_hash="", output_hash="",
                 total_exec_time=_time.time() - _run_start, success=True,
+                retention_n=retention_n,
             )
         except Exception as _ce:
             logger.warning(f"Intermediate: chiusura run fallita: {_ce}")
@@ -363,6 +381,7 @@ def execute_pipeline_task(
             idb_close_run(
                 run_id=run_id, input_hash="", output_hash="",
                 total_exec_time=_time.time() - _run_start, success=False,
+                retention_n=retention_n,
             )
         except Exception as e:
             logger.debug(f"close_run intermediate fallito post-crash: {type(e).__name__}: {e}")

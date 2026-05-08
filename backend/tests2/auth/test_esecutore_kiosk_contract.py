@@ -303,17 +303,18 @@ def test_esecutore_can_access_auth_me():
     """`GET /api/auth/me` usa solo `get_current_user`, quindi qualsiasi
     autenticato (incluso esecutore) deve ricevere 200."""
     from app.core.auth.auth import router as auth_router
+    from app.core.auth.db import UserRow
 
     # Tutti i campi obbligatori di UserResponse
-    fake_user_record = {
-        "id": "u1",
-        "username": "esecutore_user",
-        "email": None,
-        "group_id": "g1",
-        "role": "esecutore",
-        "is_active": True,
-        "created_at": "2026-01-01T00:00:00",
-    }
+    fake_user_record = UserRow(
+        id="u1",
+        username="esecutore_user",
+        email=None,
+        group_id="g1",
+        role="esecutore",
+        is_active=True,
+        created_at="2026-01-01T00:00:00",
+    )
 
     # auth_router gia' ha prefix='/auth' interno, includere con prefix='/api'
     app = FastAPI()

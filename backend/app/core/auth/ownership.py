@@ -93,7 +93,7 @@ def compute_can_edit(
 
     if created_by and created_by != current_user.user_id:
         creator = _users_dal.get_user(created_by)
-        if creator and creator.get("role") == "superadmin":
+        if creator and creator.role == "superadmin":
             return False
 
     return True
@@ -138,7 +138,7 @@ def assert_can_modify(
     if created_by and created_by != current_user.user_id:
         # Lookup live del ruolo del creator
         creator = _users_dal.get_user(created_by)
-        if creator and creator.get("role") == "superadmin":
+        if creator and creator.role == "superadmin":
             _disclosure.raise_disclosure(
                 _disclosure.hierarchical_owner_required(label)
             )

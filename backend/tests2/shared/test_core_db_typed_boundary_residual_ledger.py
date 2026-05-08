@@ -28,6 +28,21 @@ _ALLOWED_STATUSES = frozenset(
         "BLOCKER",
     }
 )
+_EXPECTED_TO_LEGACY_DICT_CALL_SITES = frozenset(
+    {
+        ("app/core/arricchisci/db.py", "get_api_connection"),
+        ("app/core/arricchisci/db.py", "list_api_connections"),
+        ("app/core/arricchisci/db.py", "save_api_connection"),
+        ("app/core/datasources/service.py", "DataSourceService._get_full_config"),
+        ("app/core/datasources/service.py", "DataSourceService.list_datasources"),
+        ("app/core/results/db.py", "get_latest_result"),
+        ("app/core/results/db.py", "get_result"),
+        ("app/core/results/db.py", "list_results"),
+        ("app/core/results/db.py", "save_result"),
+        ("app/core/scheduler/db.py", "get_schedule"),
+        ("app/core/scheduler/db.py", "list_schedules"),
+    }
+)
 
 
 @dataclass(frozen=True)
@@ -328,6 +343,24 @@ _LEDGER: tuple[BoundaryEntry, ...] = (
         "group persistence config leaf removed after imports migrated to app.core.auth.db",
     ),
     BoundaryEntry(
+        "app/core/auth/db.py",
+        "UserRow",
+        "DONE",
+        "auth user reads hydrate immutable auth-owned dataclass rows",
+    ),
+    BoundaryEntry(
+        "app/core/auth/db.py",
+        "GroupRow",
+        "DONE",
+        "auth group reads hydrate immutable auth-owned dataclass rows",
+    ),
+    BoundaryEntry(
+        "app/core/auth/db.py",
+        "GroupSummaryRow",
+        "DONE",
+        "auth group summary reads hydrate immutable auth-owned dataclass rows",
+    ),
+    BoundaryEntry(
         "app/db/config/file_sources.py",
         "module",
         "REMOVED",
@@ -544,6 +577,45 @@ def _defined_symbols(tree: ast.AST) -> set[str]:
 
     Visitor().visit(tree)
     return symbols
+
+
+def _to_legacy_dict_call_sites() -> set[tuple[str, str]]:
+    found: set[tuple[str, str]] = set()
+    for path in sorted((_APP_ROOT / "core").rglob("*.py")):
+        rel_path = _rel(path)
+        tree = _tree(rel_path)
+        scope: list[str] = []
+
+        class Visitor(ast.NodeVisitor):
+            def visit_ClassDef(self, node: ast.ClassDef) -> None:
+                scope.append(node.name)
+                self.generic_visit(node)
+                scope.pop()
+
+            def visit_FunctionDef(self, node: ast.FunctionDef) -> None:
+                self._visit_function(node)
+
+            def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef) -> None:
+                self._visit_function(node)
+
+            def _visit_function(
+                self,
+                node: ast.FunctionDef | ast.AsyncFunctionDef,
+            ) -> None:
+                scope.append(node.name)
+                self.generic_visit(node)
+                scope.pop()
+
+            def visit_Call(self, node: ast.Call) -> None:
+                if (
+                    isinstance(node.func, ast.Attribute)
+                    and node.func.attr == "to_legacy_dict"
+                ):
+                    found.add((rel_path, ".".join(scope) or "<module>"))
+                self.generic_visit(node)
+
+        Visitor().visit(tree)
+    return found
 
 
 def _symbol_exists(entry: BoundaryEntry) -> bool:
@@ -784,6 +856,19 @@ def test_core_db_to_legacy_dict_residuals_are_explicitly_ledgered():
     }
 
     assert found == classified_live
+
+
+def test_to_legacy_dict_call_sites_are_explicitly_bounded():
+    """Legacy row serializers may not quietly spread to new core callers."""
+    found = _to_legacy_dict_call_sites()
+
+    assert found == set(_EXPECTED_TO_LEGACY_DICT_CALL_SITES), (
+        "Core to_legacy_dict callers changed. New callers must move dict "
+        "serialization to public/API edges or be explicitly ratcheted here; "
+        "removed callers should lower the expected residual set. "
+        f"Unexpected: {sorted(found - _EXPECTED_TO_LEGACY_DICT_CALL_SITES)}; "
+        f"Removed: {sorted(_EXPECTED_TO_LEGACY_DICT_CALL_SITES - found)}"
+    )
 
 
 def test_project_db_getattr_bridge_is_explicit_blocker_only():

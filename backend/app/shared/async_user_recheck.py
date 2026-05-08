@@ -43,7 +43,7 @@ def recheck_user_authorized(
 
     try:
         user = get_user(user_id)
-        if not user or not user.get("is_active"):
+        if not user or not user.is_active:
             logger.warning(
                 f"[N9] {task_name} {task_id} rifiutato: user {user_id} "
                 f"non trovato o disabilitato",
@@ -60,10 +60,10 @@ def recheck_user_authorized(
         # cross-group, HTTP 404 inesistente (gestito come revoked anche
         # quello — un project sparito durante la coda e' comunque no-go
         live_user = CurrentUser(
-            user_id=user["id"],
-            username=user.get("username", ""),
-            group_id=user.get("group_id", ""),
-            role=user.get("role", ""),
+            user_id=user.id,
+            username=user.username,
+            group_id=user.group_id,
+            role=user.role,
         )
         try:
             assert_project_access(project_id, live_user)

@@ -16,6 +16,7 @@ from app.shared.contracts.auth import CurrentUser
 # `app.core.auth.groups_router` (handler home since AUTH-ENGINE-004
 # extraction).
 from app.core.auth.groups_router import list_groups
+from app.core.auth.db import GroupRow
 
 
 pytestmark = [pytest.mark.unit, pytest.mark.contract, pytest.mark.regression]
@@ -34,8 +35,8 @@ def superadmin_user() -> CurrentUser:
 def test_list_groups_with_null_description_returns_empty_string(superadmin_user):
     """Bug #3: description=NULL nel DB → response con description=''."""
     groups_from_db = [
-        {"id": "g1", "name": "Gruppo A", "description": None},
-        {"id": "g2", "name": "Gruppo B", "description": "desc valida"},
+        GroupRow(id="g1", name="Gruppo A", description=None),
+        GroupRow(id="g2", name="Gruppo B", description="desc valida"),
     ]
 
     with patch("app.core.auth.groups_router._groups.list_groups", return_value=groups_from_db):
@@ -49,7 +50,7 @@ def test_list_groups_with_null_description_returns_empty_string(superadmin_user)
 def test_list_groups_with_null_name_returns_empty_string(superadmin_user):
     """Bug #3 guard simmetrico: name=NULL non deve crashare (robustezza)."""
     groups_from_db = [
-        {"id": "g1", "name": None, "description": "desc"},
+        GroupRow(id="g1", name="", description="desc"),
     ]
 
     with patch("app.core.auth.groups_router._groups.list_groups", return_value=groups_from_db):
@@ -63,7 +64,7 @@ def test_list_groups_with_null_name_returns_empty_string(superadmin_user):
 def test_list_groups_missing_description_key_still_returns_empty(superadmin_user):
     """Bug #3 regression: la chiave NON presente continua a default a '' (caso pre-bug)."""
     groups_from_db = [
-        {"id": "g1", "name": "Gruppo A"},  # nessuna chiave description
+        GroupRow(id="g1", name="Gruppo A"),
     ]
 
     with patch("app.core.auth.groups_router._groups.list_groups", return_value=groups_from_db):

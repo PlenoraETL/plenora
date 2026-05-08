@@ -40,32 +40,7 @@ class AllowedCrossDomainDbEdge:
     reason: str
 
 
-_ALLOWED_CROSS_DOMAIN_DB_EDGES: tuple[AllowedCrossDomainDbEdge, ...] = (
-    AllowedCrossDomainDbEdge(
-        src_path="app/core/auth/db.py",
-        imported_module="app.core.intermediate.db",
-        imported_name="delete_all_runs_for_canvas",
-        severity="HIGH",
-        reason=(
-            "KEEP_COMPAT_WITH_REMOVAL_CONDITION: auth group cascade still "
-            "coordinates intermediate run cleanup directly; remove by moving "
-            "cross-domain cleanup into an application-level group-deletion "
-            "orchestrator."
-        ),
-    ),
-    AllowedCrossDomainDbEdge(
-        src_path="app/core/intermediate/db.py",
-        imported_module="app.core.projects.db",
-        imported_name="get_project_retention_n",
-        severity="MEDIUM",
-        reason=(
-            "KEEP_COMPAT_WITH_REMOVAL_CONDITION: intermediate retention reads "
-            "project-owned retention policy directly; remove by passing "
-            "retention_n into the retention boundary or using an explicit "
-            "policy provider."
-        ),
-    ),
-)
+_ALLOWED_CROSS_DOMAIN_DB_EDGES: tuple[AllowedCrossDomainDbEdge, ...] = ()
 
 
 def _domain_db_files() -> list[Path]:
@@ -180,3 +155,28 @@ def test_cross_domain_db_import_allowlist_has_explicit_severity_and_removal() ->
             "start with KEEP_COMPAT_WITH_REMOVAL_CONDITION: or BLOCKER: and "
             "state the removal path."
         )
+
+
+def test_auth_db_does_not_import_intermediate_db() -> None:
+    src = (_CORE_ROOT / "auth" / "db.py").read_text(encoding="utf-8")
+
+    assert "app.core.intermediate.db" not in src
+    assert "delete_all_runs_for_canvas" not in src
+
+
+def test_intermediate_db_facade_does_not_import_projects_db() -> None:
+    src = (_CORE_ROOT / "intermediate" / "db.py").read_text(encoding="utf-8")
+    tree = ast.parse(src)
+    imported_modules: set[str] = set()
+
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom) and node.module:
+            imported_modules.add(node.module)
+            imported_modules.update(
+                f"{node.module}.{alias.name}" for alias in node.names
+            )
+        elif isinstance(node, ast.Import):
+            imported_modules.update(alias.name for alias in node.names)
+
+    assert "app.core.projects.db" not in imported_modules
+    assert "projects.db" not in src

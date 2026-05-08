@@ -37,6 +37,27 @@ def _fake_request():
     )
 
 
+def _fake_user_row(
+    *,
+    user_id: str = "u1",
+    username: str = "real",
+    password_hash: str = "$2b$12$hash",
+    group_id: str = "g1",
+    role: str = "user",
+    is_active: bool = True,
+):
+    from app.core.auth.db import UserRow
+
+    return UserRow(
+        id=user_id,
+        username=username,
+        password_hash=password_hash,
+        group_id=group_id,
+        role=role,
+        is_active=is_active,
+    )
+
+
 def test_login_calls_verify_password_even_when_user_missing(monkeypatch):
     """C10: quando il DB non trova l'username, login DEVE comunque chiamare
     verify_password (con dummy hash). Altrimenti il timing differenziale
@@ -73,10 +94,7 @@ def test_login_calls_verify_password_when_user_exists(monkeypatch):
         call_count["n"] += 1
         return False  # password sbagliata
 
-    fake_user = {
-        "id": "u1", "username": "real", "password_hash": "$2b$12$hash",
-        "group_id": "g1", "role": "user", "is_active": True,
-    }
+    fake_user = _fake_user_row()
     monkeypatch.setattr(auth_mod.db, "get_user_by_username", lambda u: fake_user)
     monkeypatch.setattr(auth_mod, "verify_password", spy_verify)
 
@@ -146,7 +164,7 @@ def test_reset_password_nonsuperadmin_user_other_group_returns_403(monkeypatch):
     from app.core.auth import users_router as users_mod
     from app.shared.contracts.auth import ResetPasswordRequest
 
-    other_user = {"id": "x", "group_id": "g_other", "username": "x", "is_active": True}
+    other_user = _fake_user_row(user_id="x", username="x", group_id="g_other")
     monkeypatch.setattr(users_mod._users_dal, "get_user", lambda uid: other_user)
 
     data = ResetPasswordRequest(new_password="newsecret12345")
@@ -183,7 +201,7 @@ def test_delete_user_nonsuperadmin_user_not_found_returns_403(monkeypatch):
 def test_delete_user_nonsuperadmin_user_other_group_returns_403(monkeypatch):
     from app.core.auth import users_router as users_mod
 
-    other_user = {"id": "x", "group_id": "g_other", "username": "x", "is_active": True}
+    other_user = _fake_user_row(user_id="x", username="x", group_id="g_other")
     monkeypatch.setattr(users_mod._users_dal, "get_user", lambda uid: other_user)
 
     with pytest.raises(HTTPException) as excinfo:

@@ -8,66 +8,119 @@ removed after callers migrated to this auth-owned boundary.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Optional, TypedDict, cast
+from typing import Any, Mapping, Optional
 
 from app.db.pg_connection import execute, fetchall, fetchone
 from app.db.sql_safety import safe_set_clause
 
 
-class UserRow(TypedDict, total=False):
+@dataclass(frozen=True)
+class UserRow:
     id: str
     username: str
-    password_hash: str
-    email: str
-    group_id: str
-    role: str
-    is_active: bool
-    created_at: str
-    updated_at: str
+    password_hash: str = ""
+    email: str | None = ""
+    group_id: str = ""
+    role: str = ""
+    is_active: bool = True
+    created_at: str = ""
+    updated_at: str = ""
 
 
-class GroupRow(TypedDict, total=False):
+@dataclass(frozen=True)
+class GroupRow:
     id: str
-    name: str
-    description: str
-    created_at: str
-    updated_at: str
+    name: str = ""
+    description: str | None = ""
+    created_at: str = ""
+    updated_at: str = ""
 
 
-class GroupSummaryRow(TypedDict):
-    projects: int
-    users: int
-    connections: int
-    file_sources: int
-    datasources: int
-    api_connections: int
-    schedules: int
-
-
-_GROUP_SUMMARY_KEYS = (
-    "projects",
-    "users",
-    "connections",
-    "file_sources",
-    "datasources",
-    "api_connections",
-    "schedules",
-)
+@dataclass(frozen=True)
+class GroupSummaryRow:
+    projects: int = 0
+    users: int = 0
+    connections: int = 0
+    file_sources: int = 0
+    datasources: int = 0
+    api_connections: int = 0
+    schedules: int = 0
 
 
 def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+def _as_str(value: object, default: str = "") -> str:
+    if value is None:
+        return default
+    return str(value)
+
+
+def _as_bool(value: object, default: bool = True) -> bool:
+    if value is None:
+        return default
+    return bool(value)
+
+
+def _as_int(value: object, default: int = 0) -> int:
+    if value is None:
+        return default
+    return int(value)
+
+
+def hydrate_user_row(row: Mapping[str, Any] | None) -> UserRow | None:
+    if not row:
+        return None
+    return UserRow(
+        id=_as_str(row.get("id")),
+        username=_as_str(row.get("username")),
+        password_hash=_as_str(row.get("password_hash")),
+        email=row.get("email") if row.get("email") is None else _as_str(row.get("email")),
+        group_id=_as_str(row.get("group_id")),
+        role=_as_str(row.get("role")),
+        is_active=_as_bool(row.get("is_active")),
+        created_at=_as_str(row.get("created_at")),
+        updated_at=_as_str(row.get("updated_at")),
+    )
+
+
+def hydrate_group_row(row: Mapping[str, Any] | None) -> GroupRow | None:
+    if not row:
+        return None
+    return GroupRow(
+        id=_as_str(row.get("id")),
+        name=_as_str(row.get("name")),
+        description=row.get("description") if row.get("description") is None else _as_str(row.get("description")),
+        created_at=_as_str(row.get("created_at")),
+        updated_at=_as_str(row.get("updated_at")),
+    )
+
+
+def hydrate_group_summary_row(row: Mapping[str, Any] | None) -> GroupSummaryRow:
+    if not row:
+        return GroupSummaryRow()
+    return GroupSummaryRow(
+        projects=_as_int(row.get("projects")),
+        users=_as_int(row.get("users")),
+        connections=_as_int(row.get("connections")),
+        file_sources=_as_int(row.get("file_sources")),
+        datasources=_as_int(row.get("datasources")),
+        api_connections=_as_int(row.get("api_connections")),
+        schedules=_as_int(row.get("schedules")),
+    )
+
+
 def get_user(user_id: str) -> Optional[UserRow]:
     row = fetchone("SELECT * FROM users WHERE id = ?", (user_id,))
-    return cast(Optional[UserRow], row)
+    return hydrate_user_row(row)
 
 
 def get_user_by_username(username: str) -> Optional[UserRow]:
     row = fetchone("SELECT * FROM users WHERE username = ?", (username,))
-    return cast(Optional[UserRow], row)
+    return hydrate_user_row(row)
 
 
 def list_users(group_id: str) -> list[UserRow]:
@@ -76,11 +129,12 @@ def list_users(group_id: str) -> list[UserRow]:
         "FROM users WHERE group_id = ? ORDER BY username",
         (group_id,),
     )
-    return cast(list[UserRow], rows)
+    return [row for row in (hydrate_user_row(row) for row in rows) if row is not None]
 
 
 def list_all_users() -> list[UserRow]:
-    return cast(list[UserRow], fetchall("SELECT * FROM users ORDER BY username"))
+    rows = fetchall("SELECT * FROM users ORDER BY username")
+    return [row for row in (hydrate_user_row(row) for row in rows) if row is not None]
 
 
 def create_user(
@@ -141,11 +195,12 @@ def delete_user(user_id: str) -> bool:
 
 def get_group(group_id: str) -> Optional[GroupRow]:
     row = fetchone("SELECT * FROM groups WHERE id = ?", (group_id,))
-    return cast(Optional[GroupRow], row)
+    return hydrate_group_row(row)
 
 
 def list_groups() -> list[GroupRow]:
-    return cast(list[GroupRow], fetchall("SELECT * FROM groups ORDER BY name"))
+    rows = fetchall("SELECT * FROM groups ORDER BY name")
+    return [row for row in (hydrate_group_row(row) for row in rows) if row is not None]
 
 
 def create_group(group_id: str, name: str, description: str = "") -> GroupRow:
@@ -173,117 +228,7 @@ def get_group_summary(group_id: str) -> GroupSummaryRow:
         "(SELECT COUNT(*) FROM schedules WHERE group_id = ?) AS schedules",
         tuple([group_id] * 7),
     )
-    if not row:
-        return cast(GroupSummaryRow, {key: 0 for key in _GROUP_SUMMARY_KEYS})
-    return {
-        "projects": int(row.get("projects", 0)),
-        "users": int(row.get("users", 0)),
-        "connections": int(row.get("connections", 0)),
-        "file_sources": int(row.get("file_sources", 0)),
-        "datasources": int(row.get("datasources", 0)),
-        "api_connections": int(row.get("api_connections", 0)),
-        "schedules": int(row.get("schedules", 0)),
-    }
-
-
-def delete_group_cascade(group_id: str) -> dict[str, int]:
-    """
-    Cascade delete a group and its auth/config-owned data.
-
-    The existing recovery policy is preserved: non-final cleanup failures are
-    logged and counted as zero; deleting the group itself remains fail-loud.
-    """
-    from app.utils.logger import get_logger
-
-    log = get_logger("auth.db.delete_group_cascade")
-    report = {
-        "schedules": 0,
-        "api_connections": 0,
-        "datasources": 0,
-        "file_sources": 0,
-        "connections": 0,
-        "projects": 0,
-        "users": 0,
-        "results": 0,
-        "intermediate_runs": 0,
-        "log_runs": 0,
-    }
-
-    for table in [
-        "schedules",
-        "api_connections",
-        "datasources",
-        "file_sources",
-        "connections",
-    ]:
-        try:
-            cur = execute(f"DELETE FROM {table} WHERE group_id = ?", (group_id,))
-            report[table] = cur.rowcount
-        except Exception as exc:
-            log.warning(f"Cascade delete {table} fallito: {exc}")
-
-    try:
-        projects = fetchall("SELECT id FROM projects WHERE group_id = ?", (group_id,))
-        project_ids = [str(project["id"]) for project in projects]
-
-        for project_id in project_ids:
-            try:
-                from app.core.results.cleanup import delete_results_for_project
-
-                report["results"] += delete_results_for_project(project_id)
-            except Exception as exc:
-                log.warning(f"Cascade delete results progetto {project_id}: {exc}")
-
-            try:
-                from app.core.intermediate.db import delete_all_runs_for_canvas
-
-                report["intermediate_runs"] += delete_all_runs_for_canvas(project_id)
-            except Exception as exc:
-                log.warning(
-                    f"Cascade delete intermediate progetto {project_id}: {exc}"
-                )
-
-        if project_ids:
-            try:
-                execute(
-                    "DELETE FROM comparison_keys WHERE canvas_id IN "
-                    "(SELECT id FROM projects WHERE group_id = ?)",
-                    (group_id,),
-                )
-            except Exception as exc:
-                log.warning(f"Cascade batch delete comparison_keys fallito: {exc}")
-
-            try:
-                cur = execute("DELETE FROM projects WHERE group_id = ?", (group_id,))
-                report["projects"] = cur.rowcount if hasattr(cur, "rowcount") else len(project_ids)
-            except Exception as exc:
-                log.warning(f"Cascade batch delete projects fallito: {exc}")
-    except Exception as exc:
-        log.warning(f"Cascade delete projects fallito: {exc}")
-
-    try:
-        cur = execute("DELETE FROM users WHERE group_id = ?", (group_id,))
-        report["users"] = cur.rowcount
-    except Exception as exc:
-        log.warning(f"Cascade delete users fallito: {exc}")
-
-    try:
-        cur = execute("DELETE FROM log_runs WHERE group_id = ?", (group_id,))
-        report["log_runs"] = cur.rowcount
-    except Exception as exc:
-        log.warning(f"Cascade delete log_runs fallito: {exc}")
-
-    try:
-        execute("DELETE FROM groups WHERE id = ?", (group_id,))
-    except Exception as exc:
-        log.error(f"Eliminazione gruppo {group_id} fallita: {exc}")
-        raise
-
-    log.info(
-        f"Cascade delete gruppo {group_id} completato: {report}",
-        op="delete_group_cascade",
-    )
-    return report
+    return hydrate_group_summary_row(row)
 
 
 def delete_group(group_id: str) -> bool:
@@ -298,12 +243,14 @@ __all__ = [
     "create_group",
     "create_user",
     "delete_group",
-    "delete_group_cascade",
     "delete_user",
     "get_group",
     "get_group_summary",
     "get_user",
     "get_user_by_username",
+    "hydrate_group_row",
+    "hydrate_group_summary_row",
+    "hydrate_user_row",
     "list_all_users",
     "list_groups",
     "list_users",

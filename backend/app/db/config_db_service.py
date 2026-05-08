@@ -29,8 +29,8 @@ from app.core.auth.db import (  # noqa: F401,E402
     create_group,
     get_group_summary,
     delete_group,
-    delete_group_cascade,
 )
+from app.core.auth.group_cleanup import delete_group_cascade  # noqa: F401,E402
 
 
 # USERS

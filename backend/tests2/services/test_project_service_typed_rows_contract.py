@@ -428,6 +428,61 @@ def test_project_service_metadata_uses_typed_project_detail_row(monkeypatch):
     }
 
 
+def test_project_service_exposes_explicit_typed_row_serializers():
+    from app.core.projects import db as project_db
+    from app.core.projects.service import ProjectService
+
+    now = datetime(2026, 5, 8, 10, 0, tzinfo=timezone.utc)
+
+    list_metadata = ProjectService.project_row_to_metadata(
+        project_db.ProjectRow(
+            id="p-list",
+            group_id=None,
+            name="List Project",
+            project_type="estrai",
+            connection_id="conn-1",
+            created_at=now,
+            updated_at=now,
+            created_by="user-1",
+        )
+    )
+    detail_metadata = ProjectService.project_detail_row_to_metadata(
+        project_db.ProjectDetailRow(
+            id="p-detail",
+            group_id="grp-1",
+            name="Detail Project",
+            project_type="manipola",
+            canvas={"nodes": [], "edges": []},
+            connection_id=None,
+            created_at=now,
+            updated_at=now,
+            created_by="user-1",
+            description="typed detail",
+        )
+    )
+
+    assert list_metadata.model_dump() == {
+        "id": "p-list",
+        "name": "List Project",
+        "description": "",
+        "project_type": "estrai",
+        "default_connection_id": "conn-1",
+        "group_id": "default",
+        "created_at": now,
+        "updated_at": now,
+    }
+    assert detail_metadata.model_dump() == {
+        "id": "p-detail",
+        "name": "Detail Project",
+        "description": "typed detail",
+        "project_type": "manipola",
+        "default_connection_id": None,
+        "group_id": "grp-1",
+        "created_at": now,
+        "updated_at": now,
+    }
+
+
 def test_project_service_get_project_converts_typed_row_at_public_compat_edge(
     monkeypatch,
 ):

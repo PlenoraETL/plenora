@@ -11,6 +11,9 @@ from unittest.mock import MagicMock
 
 import pytest
 from fastapi import HTTPException
+from dataclasses import replace
+
+from app.core.auth.db import GroupRow, UserRow
 
 
 pytestmark = [pytest.mark.unit, pytest.mark.security, pytest.mark.contract]
@@ -34,12 +37,17 @@ def _superadmin_user():
 
 
 def _target_user(group_id="g1", user_id="usr_target"):
-    return {
-        "id": user_id, "username": "mario", "email": "m@x.it",
-        "role": "user", "group_id": group_id, "is_active": True,
-        "password_hash": "$2b$12$fakehashforbctest",
-        "created_at": "2024-01-01T00:00:00Z", "updated_at": "2024-01-01T00:00:00Z",
-    }
+    return UserRow(
+        id=user_id,
+        username="mario",
+        email="m@x.it",
+        role="user",
+        group_id=group_id,
+        is_active=True,
+        password_hash="$2b$12$fakehashforbctest",
+        created_at="2024-01-01T00:00:00Z",
+        updated_at="2024-01-01T00:00:00Z",
+    )
 
 
 @pytest.fixture
@@ -58,15 +66,13 @@ def mock_db(monkeypatch):
     monkeypatch.setattr(users_mod._users_dal, "get_user", lambda uid: target)
     # update_user: echo dei campi modificati sul target
     def _upd(uid, **fields):
-        result = dict(target)
-        result.update(fields)
-        return result
+        return replace(target, **fields)
     monkeypatch.setattr(users_mod._users_dal, "update_user", _upd)
     # get_group: sempre esistente
     monkeypatch.setattr(
         users_mod._groups_dal,
         "get_group",
-        lambda gid: {"id": gid, "name": "fake"},
+        lambda gid: GroupRow(id=gid, name="fake"),
     )
     return users_mod
 
