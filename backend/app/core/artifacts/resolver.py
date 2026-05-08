@@ -119,7 +119,7 @@ class ArtifactResolver:
           latest blob ... fallita)`` con ``[GESTITO]`` log + chain.
         """
         from app.core.projects.db import get_project as _get_project
-        from app.core.results.db import get_latest_result as _get_latest_result
+        from app.core.results.db import get_latest_result_row
 
         if expected_group_id is not None:
             project = (
@@ -132,7 +132,7 @@ class ArtifactResolver:
                     f"Progetto {ref.project_id} non trovato"
                 )
 
-        row = _get_latest_result(ref.project_id)
+        row = get_latest_result_row(ref.project_id)
         if not row:
             return None
 
@@ -143,7 +143,7 @@ class ArtifactResolver:
         # already enforced upstream via the project_id project
         # check above) keeps its symmetric audit log entry on the
         # loader side
-        result_row_group_id = row.get("group_id")
+        result_row_group_id = row.group_id
         if not result_row_group_id:
             raise ArtifactResolutionError(
                 f"latest result for project_id '{ref.project_id}' "
@@ -151,7 +151,11 @@ class ArtifactResolver:
                 "binding row)"
             )
 
-        result_id = row["id"]
+        result_id = row.id
+        if not result_id:
+            raise ArtifactResolutionError(
+                f"latest result for project_id '{ref.project_id}' without id"
+            )
         result_ref = ResourceRef(
             kind="result_blob",
             result_id=result_id,
@@ -191,7 +195,7 @@ class ArtifactResolver:
                 f"'{ref.project_id}' fallita: {e}"
             ) from e
 
-        fmt = row.get("format") or "csv"
+        fmt = row.format or "csv"
         return MaterializedArtifact(
             path=resource.path,
             format=fmt,
@@ -219,11 +223,11 @@ class ArtifactResolver:
           `mode="bytes"` (no tempfile) — il caller HTTP fa
           `StreamingResponse(blob.data)` direttamente.
         """
-        from app.core.results.db import get_result as _get_result
+        from app.core.results.db import get_result_row
 
         # intent: boundary / outcome: fail-closed (broad→domain con chain preservata
         try:
-            row = _get_result(result_id)
+            row = get_result_row(result_id)
         except Exception as e:
             logger.error(
                 "[GESTITO] resolver lookup result_id '%s' fallito: %s",
@@ -238,7 +242,7 @@ class ArtifactResolver:
             raise ArtifactResolutionError(
                 f"result_id '{result_id}' non trovato"
             )
-        if row.get("project_id") != expected_project_id:
+        if row.project_id != expected_project_id:
             raise ArtifactResolutionError(
                 f"result_id '{result_id}' non appartiene al "
                 f"project_id '{expected_project_id}'"
@@ -247,7 +251,7 @@ class ArtifactResolver:
         # ResourceRef requires a non-empty `expected_group_id`
         # The row's `group_id` IS the resource's tenant binding
         # mirror del defensive check in _materialize_from_result_id
-        group_id = row.get("group_id")
+        group_id = row.group_id
         if not group_id:
             raise ArtifactResolutionError(
                 f"result_id '{result_id}': row senza group_id "
@@ -302,10 +306,10 @@ class ArtifactResolver:
 
         return RunBlob(
             data=resource.data,
-            filename=row.get("filename") or f"{result_id}",
-            format=row.get("format") or "csv",
-            project_id=row["project_id"],
-            result_id=row["id"],
+            filename=row.filename or f"{result_id}",
+            format=row.format or "csv",
+            project_id=row.project_id or expected_project_id,
+            result_id=row.id or result_id,
         )
 
     # internals
@@ -329,7 +333,7 @@ class ArtifactResolver:
         Italian operator error string the rest of the system
         depends on).
         """
-        from app.core.results.db import get_result as _get_result
+        from app.core.results.db import get_result_row
 
         # ResourceRef + default_registry are top-level imports on
         # this module (see header). That makes the symbols
@@ -339,7 +343,7 @@ class ArtifactResolver:
 
         # intent: boundary / outcome: fail-closed (broad→domain con chain preservata
         try:
-            row = _get_result(result_id)
+            row = get_result_row(result_id)
         except Exception as e:
             logger.error(
                 "[GESTITO] resolver lookup result_id '%s' fallito: %s",
@@ -358,7 +362,7 @@ class ArtifactResolver:
         # Cross-tenant binding fail-closed: niente fallback "latest by
         # project" che produrrebbe race cross-task fra due esecuzioni
         # parallele dello stesso progetto
-        if row.get("project_id") != expected_project_id:
+        if row.project_id != expected_project_id:
             raise ArtifactResolutionError(
                 f"result_id '{result_id}' non appartiene al "
                 f"project_id '{expected_project_id}'"
@@ -370,7 +374,7 @@ class ArtifactResolver:
         # by the row lookup above; passing it through preserves
         # the typed contract and gives defense-in-depth in the
         # event of a row-mutation race between lookup and load
-        group_id = row.get("group_id")
+        group_id = row.group_id
         if not group_id:
             raise ArtifactResolutionError(
                 f"result_id '{result_id}': row senza group_id "
@@ -418,7 +422,7 @@ class ArtifactResolver:
         # does not learn the format. The resolver attaches it to
         # the MaterializedArtifact for downstream readers
         # load_dataframe_from_file dispatches on format/extension
-        fmt = row.get("format") or "csv"
+        fmt = row.format or "csv"
         return MaterializedArtifact(
             path=resource.path,
             format=fmt,

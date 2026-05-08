@@ -105,3 +105,74 @@ def test_get_schedule_keeps_legacy_dict_wrapper(monkeypatch):
     assert isinstance(row, dict)
     assert row["id"] == "schedule-1"
     assert row["config"] == {"id": "schedule-1"}
+
+
+def test_save_schedule_returns_typed_schedule_row(monkeypatch):
+    from app.db.config import schedules as schedule_db
+
+    persisted = schedule_db.ScheduleRow(
+        id="schedule-1",
+        group_id="grp-1",
+        project_id="project-1",
+        name="Morning load",
+        cron_expression="0 6 * * *",
+        is_enabled=True,
+        config={"id": "schedule-1"},
+        created_at=None,
+        updated_at=None,
+        created_by="user-1",
+    )
+    monkeypatch.setattr(schedule_db, "execute", lambda *args, **kwargs: None)
+    monkeypatch.setattr(schedule_db, "get_schedule_row", lambda schedule_id: persisted)
+    monkeypatch.setattr(
+        schedule_db,
+        "get_schedule",
+        lambda schedule_id: pytest.fail("save_schedule should return ScheduleRow directly"),
+    )
+
+    row = schedule_db.save_schedule(
+        schedule_id="schedule-1",
+        group_id="grp-1",
+        project_id="project-1",
+        name="Morning load",
+        cron_expression="0 6 * * *",
+        config={"id": "schedule-1"},
+        created_by="user-1",
+    )
+
+    assert row is persisted
+    assert isinstance(row, schedule_db.ScheduleRow)
+
+
+def test_update_schedule_returns_typed_schedule_row(monkeypatch):
+    from app.db.config import schedules as schedule_db
+
+    persisted = schedule_db.ScheduleRow(
+        id="schedule-1",
+        group_id="grp-1",
+        project_id="project-1",
+        name="Morning load",
+        cron_expression="0 7 * * *",
+        is_enabled=True,
+        config={"id": "schedule-1"},
+        created_at=None,
+        updated_at=None,
+        created_by="user-1",
+    )
+    monkeypatch.setattr(
+        schedule_db,
+        "safe_set_clause",
+        lambda table, fields: ("cron_expression = ?", ("0 7 * * *",)),
+    )
+    monkeypatch.setattr(schedule_db, "execute", lambda *args, **kwargs: None)
+    monkeypatch.setattr(schedule_db, "get_schedule_row", lambda schedule_id: persisted)
+    monkeypatch.setattr(
+        schedule_db,
+        "get_schedule",
+        lambda schedule_id: pytest.fail("update_schedule should return ScheduleRow directly"),
+    )
+
+    row = schedule_db.update_schedule("schedule-1", cron_expression="0 7 * * *")
+
+    assert row is persisted
+    assert isinstance(row, schedule_db.ScheduleRow)

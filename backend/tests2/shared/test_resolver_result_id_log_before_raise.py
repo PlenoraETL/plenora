@@ -96,12 +96,12 @@ def test_materialize_from_result_id_logs_error_before_raise_on_lookup_failure(
     class _UnderlyingDbError(RuntimeError):
         """Simula un errore dalla libreria PG (psycopg2 / SQLAlchemy / ...)."""
 
-    def _raising_get_result(result_id):
+    def _raising_get_result_row(result_id):
         raise _UnderlyingDbError(
             f"connection lost while fetching result {result_id}"
         )
 
-    monkeypatch.setattr(results_db, "get_result", _raising_get_result)
+    monkeypatch.setattr(results_db, "get_result_row", _raising_get_result_row)
 
     resolver = ArtifactResolver()
 
@@ -158,15 +158,15 @@ def test_materialize_from_result_id_logs_error_before_raise_on_blob_read_failure
     class _UnderlyingBlobError(IOError):
         """Simula un errore di lettura blob (I/O, timeout, corruzione)."""
 
-    def _ok_get_result(result_id):
-        return {
-            "id": result_id,
-            "project_id": "proj-abc",
-            "group_id": "grp-1",
-            "format": "csv",
-        }
+    def _ok_get_result_row(result_id):
+        return results_db.ResultMetadataRow(
+            id=result_id,
+            project_id="proj-abc",
+            group_id="grp-1",
+            format="csv",
+        )
 
-    monkeypatch.setattr(results_db, "get_result", _ok_get_result)
+    monkeypatch.setattr(results_db, "get_result_row", _ok_get_result_row)
 
     # 019: l'errore di lettura blob arriva dal registry, NON da
     # `db_service.get_result_data`. Mock il registry per simulare
@@ -226,13 +226,14 @@ def test_materialize_from_result_id_happy_path_unaffected_by_log_fix(
     from app.core.resources import Resource
 
     monkeypatch.setattr(
-        results_db, "get_result",
-        lambda rid: {
-            "id": rid,
-            "project_id": "proj-x",
-            "group_id": "grp-1",
-            "format": "csv",
-        },
+        results_db,
+        "get_result_row",
+        lambda rid: results_db.ResultMetadataRow(
+            id=rid,
+            project_id="proj-x",
+            group_id="grp-1",
+            format="csv",
+        ),
     )
 
     # 019: il registry materializza il blob in un tempfile (path
@@ -303,8 +304,11 @@ def test_materialize_from_result_id_tenant_mismatch_does_not_log_gestito(
     from app.core.results import db as results_db
 
     monkeypatch.setattr(
-        results_db, "get_result",
-        lambda rid: {"id": rid, "project_id": "OTHER-tenant", "format": "csv"},
+        results_db,
+        "get_result_row",
+        lambda rid: results_db.ResultMetadataRow(
+            id=rid, project_id="OTHER-tenant", format="csv"
+        ),
     )
 
     resolver = ArtifactResolver()

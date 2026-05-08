@@ -8,8 +8,9 @@ from __future__ import annotations
 import os as _os
 import tempfile
 import time
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional, Tuple
+from typing import Mapping, Optional, Tuple
 
 from app.shared.exceptions import MemoryLimitExceededError
 
@@ -57,13 +58,52 @@ from app.core.resources.loaders._shared import (
 # Internal helpers — log key abbreviation + SQL row fetch
 
 
+@dataclass(frozen=True)
+class ResultBlobLookupRow:
+    """Typed row for result blob dispatch."""
+
+    storage_key: Optional[str]
+    project_id: Optional[str]
+    data_size: Optional[int]
+    data: Optional[bytes | memoryview]
+
+    @classmethod
+    def from_mapping(cls, row: Mapping[str, object]) -> "ResultBlobLookupRow":
+        data = row.get("data")
+        if isinstance(data, bytearray):
+            data = bytes(data)
+        elif data is not None and not isinstance(data, (bytes, memoryview)):
+            raise TypeError(
+                "ResultBlobLookupRow.data must be bytes, memoryview, "
+                f"bytearray or None; got {type(data).__name__}"
+            )
+        return cls(
+            storage_key=_optional_str(row.get("storage_key")),
+            project_id=_optional_str(row.get("project_id")),
+            data_size=_optional_int(row.get("data_size")),
+            data=data,
+        )
+
+
+def _optional_str(value: object) -> Optional[str]:
+    if value is None:
+        return None
+    return str(value)
+
+
+def _optional_int(value: object) -> Optional[int]:
+    if value is None:
+        return None
+    return int(value)
+
+
 def _fetch_row(
     result_id: str,
     *,
     max_bytes: int,
     group_id_filter: Optional[str],
     project_id_filter: Optional[str] = None,
-) -> Optional[dict]:
+) -> Optional[ResultBlobLookupRow]:
     """SELECT row metadata + bounded BYTEA via SQL preflight.
 
      (R-010.1 closure): the BYTEA
@@ -139,7 +179,10 @@ def _fetch_row(
     # 3. AND group_id = ? -> group_id_filter (if set
     # 4. AND project_id = ? -> project_id_filter (if set
     params = (max_bytes, *where_params)
-    return fetchone(sql, params)
+    row = fetchone(sql, params)
+    if row is None:
+        return None
+    return ResultBlobLookupRow.from_mapping(row)
 
 
 def _download_object_storage(storage_key: str) -> Optional[bytes]:
@@ -202,7 +245,7 @@ def _dispatch_by_id(
     if not row:
         return None, "none"
 
-    storage_key = row.get("storage_key")
+    storage_key = row.storage_key
     if storage_key:
         data = _download_object_storage(storage_key)
         duration_ms = round((time.monotonic() - _t0) * 1000, 1)
@@ -220,7 +263,7 @@ def _dispatch_by_id(
     # the PG/Python wire. Pre-013 the cap was post-fetch (PG had
     # already loaded the bytes into the driver before any check
     # could run
-    data_size = row.get("data_size")
+    data_size = row.data_size
     if data_size is not None and data_size > max_bytes:
         duration_ms = round((time.monotonic() - _t0) * 1000, 1)
         logger.error(
@@ -236,7 +279,7 @@ def _dispatch_by_id(
             stage="result_blob_oversize",
         )
 
-    data = row.get("data")
+    data = row.data
     if isinstance(data, memoryview):
         data = bytes(data)
     duration_ms = round((time.monotonic() - _t0) * 1000, 1)

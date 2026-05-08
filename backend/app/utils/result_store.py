@@ -605,12 +605,14 @@ def get_result_as_bytes(project_id: str) -> Optional[bytes]:
     (o se il download S3 fallisce — log warning in quel caso).
     """
     try:
-        from app.core.results.db import get_latest_result
+        from app.core.results.db import get_latest_result_row
         from app.core.results.blob import get_result_data
-        row = get_latest_result(project_id)
+        row = get_latest_result_row(project_id)
         if not row:
             return None
-        return get_result_data(row["id"])
+        if not row.id:
+            return None
+        return get_result_data(row.id)
     except Exception as e:
         logger.warning(f"Errore lettura blob result ({project_id}): {e}")
         return None
@@ -624,18 +626,21 @@ def get_result_as_tempfile(project_id: str) -> Optional[Path]:
     Returns: Path del file temp, o None se non trovato
     """
     try:
-        from app.core.results.db import get_latest_result
+        from app.core.results.db import get_latest_result_row
         from app.core.results.blob import get_result_data
 
-        row = get_latest_result(project_id)
+        row = get_latest_result_row(project_id)
         if not row:
             return None
 
-        data = get_result_data(row["id"])
+        if not row.id:
+            return None
+
+        data = get_result_data(row.id)
         if not data:
             return None
 
-        suffix = f".{row['format']}"
+        suffix = f".{row.format or 'csv'}"
         from app.config import settings
         tmp_dir = Path(settings.DATA_DIR) / "temp"
         tmp_dir.mkdir(parents=True, exist_ok=True)

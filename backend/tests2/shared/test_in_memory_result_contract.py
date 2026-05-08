@@ -210,8 +210,11 @@ def test_get_result_as_bytes_returns_raw_blob(monkeypatch):
     import app.core.results.blob as result_blob
 
     expected = b"col1,col2\n1,a\n2,b\n"
-    monkeypatch.setattr(results_db, "get_latest_result",
-                        lambda pid: {"id": "r1", "format": "csv"})
+    monkeypatch.setattr(
+        results_db,
+        "get_latest_result_row",
+        lambda pid: results_db.ResultMetadataRow(id="r1", format="csv"),
+    )
     monkeypatch.setattr(result_blob, "get_result_data",
                         lambda rid: expected)
 
@@ -223,7 +226,7 @@ def test_get_result_as_bytes_returns_none_when_missing(monkeypatch):
     from app.utils import result_store
     import app.db.config.projects as projects_db
     import app.core.results.db as results_db
-    monkeypatch.setattr(results_db, "get_latest_result", lambda pid: None)
+    monkeypatch.setattr(results_db, "get_latest_result_row", lambda pid: None)
     assert result_store.get_result_as_bytes("missing") is None
 
 
@@ -284,8 +287,11 @@ def test_get_result_as_bytes_creates_no_files_on_disk(
         DATA_DIR = tmp_path
     monkeypatch.setattr(result_store, "settings", _FakeSettings, raising=False)
 
-    monkeypatch.setattr(results_db, "get_latest_result",
-                        lambda pid: {"id": "r1", "format": "csv"})
+    monkeypatch.setattr(
+        results_db,
+        "get_latest_result_row",
+        lambda pid: results_db.ResultMetadataRow(id="r1", format="csv"),
+    )
     monkeypatch.setattr(result_blob, "get_result_data",
                         lambda rid: b"payload")
 

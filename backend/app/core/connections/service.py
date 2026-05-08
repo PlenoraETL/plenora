@@ -74,14 +74,17 @@ class ConnectionService:
         safe_name = safe_name.replace(" ", "_")[:30]
         return f"{safe_name}_{timestamp}_{short_uuid}"
 
-    def _row_to_connection(self, row: dict, mask_password: bool = False) -> Optional[DatabaseConnection]:
+    def _row_to_connection(
+        self,
+        row: connection_db.ConnectionConfigRow | None,
+        mask_password: bool = False,
+    ) -> Optional[DatabaseConnection]:
         if not row:
             return None
-        extra = row.get("extra") or {}
+        extra = row.extra or {}
         if isinstance(extra, str):
-            import json
             extra = json.loads(extra)
-        raw_password = row.get("password")
+        raw_password = row.password
         if mask_password:
             display_password = "***"
         else:
@@ -94,29 +97,29 @@ class ConnectionService:
             # Il router traduce in HTTP 422
             if raw_password is None:
                 raise CredentialUnavailableError(
-                    f"connection '{row.get('id')}': password non configurata"
+                    f"connection '{row.id}': password non configurata"
                 )
             display_password = _decrypt_password(raw_password)
             if display_password is None and is_encrypted(raw_password):
                 raise CredentialUnavailableError(
-                    f"connection '{row.get('id')}': password non decriptabile "
+                    f"connection '{row.id}': password non decriptabile "
                     "(chiave mancante/sbagliata o token corrotto)"
                 )
         return DatabaseConnection(
-            id=row["id"],
-            name=row["name"],
+            id=row.id,
+            name=row.name,
             description=extra.get("description", ""),
-            type=row["db_type"],
-            host=row.get("host"),
-            port=row.get("port"),
-            database=row.get("database"),
-            db_schema=row.get("db_schema"),
-            username=row.get("username"),
+            type=row.db_type,
+            host=row.host,
+            port=row.port,
+            database=row.database,
+            db_schema=row.db_schema,
+            username=row.username,
             password=display_password,
-            group_id=row.get("group_id", ""),
-            created_at=row.get("created_at"),
-            updated_at=row.get("updated_at"),
-            created_by=row.get("created_by"),
+            group_id=row.group_id,
+            created_at=row.created_at,
+            updated_at=row.updated_at,
+            created_by=row.created_by,
         )
 
     def create_connection(self, data: ConnectionCreate, group_id: str = None, created_by: str = None) -> DatabaseConnection:
@@ -177,9 +180,11 @@ class ConnectionService:
             else:
                 db_fields["password"] = _encrypt_password(pwd)
         if "description" in update_fields:
-            extra = row.get("extra") or {}
+            extra = row.extra or {}
             if isinstance(extra, str):
                 extra = json.loads(extra)
+            else:
+                extra = dict(extra)
             extra["description"] = update_fields["description"]
             db_fields["extra"] = extra
         if db_fields:

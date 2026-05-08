@@ -108,6 +108,24 @@ class ProjectService:
             updated_at=row.updated_at,
         )
 
+    def _project_detail_row_to_metadata(
+        self,
+        row: project_db.ProjectDetailRow,
+    ) -> ProjectMetadata:
+        """Converte ProjectDetailRow in ProjectMetadata."""
+        return ProjectMetadata(
+            id=row.id,
+            name=row.name,
+            description=row.description or "",
+            project_type=row.project_type,
+            default_connection_id=row.connection_id,
+            group_id=resolve_project_group_id(
+                row.group_id, settings.DEFAULT_GROUP
+            ),
+            created_at=row.created_at,
+            updated_at=row.updated_at,
+        )
+
     def create_project(
         self,
         project_data: ProjectCreate,
@@ -163,8 +181,8 @@ class ProjectService:
           spetta al chiamante (es. assert_group_access nel router).
         - group_id="X" → solo se appartiene al gruppo X.
         """
-        row = project_db.get_project(project_id, group_id=group_id)
-        return self._row_to_metadata(row)
+        row = project_db.get_project_row(project_id, group_id=group_id)
+        return self._project_detail_row_to_metadata(row) if row else None
 
     def get_project_canvas(self, project_id: str) -> Optional[CanvasState]:
         """Carica canvas del progetto.
@@ -277,11 +295,11 @@ class ProjectService:
           spetta al chiamante.
         - group_id="X" → solo se appartiene al gruppo X.
         """
-        row = project_db.get_project(project_id, group_id=group_id)
+        row = project_db.get_project_row(project_id, group_id=group_id)
         if not row:
             return None
-        metadata = self._row_to_metadata(row)
-        canvas = row.get("canvas", {"nodes": [], "edges": []})
+        metadata = self._project_detail_row_to_metadata(row)
+        canvas = row.canvas or {"nodes": [], "edges": []}
         return {
             "metadata": metadata.model_dump() if metadata else {},
             "canvas": canvas,

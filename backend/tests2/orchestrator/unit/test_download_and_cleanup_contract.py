@@ -86,14 +86,17 @@ def test_tasks_download_falls_back_to_db_blob_if_no_s3_key():
                 is_temporary=False,
             )
 
+    from app.core.results.db import ResultMetadataRow
+
     with patch("app.core.orchestrator.router._assert_task_group", return_value=None), \
          patch("app.services.task_service.task_service.get_task_status",
                return_value=fake_task_info), \
          patch("app.core.eseguibili.storage.find_keys", return_value=[]), \
-         patch("app.core.results.db.get_result",
-               return_value={"id": "res-abc", "project_id": "p1",
-                             "group_id": "g1", "filename": "out.csv",
-                             "format": "csv"}), \
+         patch("app.core.results.db.get_result_row",
+               return_value=ResultMetadataRow(
+                   id="res-abc", project_id="p1", group_id="g1",
+                   filename="out.csv", format="csv"
+               )), \
          patch("app.core.artifacts.resolver.default_registry",
                return_value=_FakeRegistry()):
         try:

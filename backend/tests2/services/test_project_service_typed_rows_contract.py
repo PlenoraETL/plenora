@@ -248,3 +248,90 @@ def test_project_service_list_projects_uses_typed_project_rows(monkeypatch):
             }
         ]
     }
+
+
+def test_project_service_metadata_uses_typed_project_detail_row(monkeypatch):
+    from app.db.config import projects as project_db
+    from app.core.projects.service import ProjectService
+
+    now = datetime(2026, 5, 7, 10, 0, tzinfo=timezone.utc)
+    monkeypatch.setattr(
+        project_db,
+        "get_project_row",
+        lambda project_id, group_id=None: project_db.ProjectDetailRow(
+            id=project_id,
+            group_id=None,
+            name="Project One",
+            project_type="manipola",
+            canvas={"nodes": [], "edges": []},
+            connection_id="conn-1",
+            created_at=now,
+            updated_at=now,
+            created_by="user-1",
+            description="typed detail",
+        ),
+    )
+
+    def fail_if_legacy_dict_wrapper_is_used(*args, **kwargs):
+        raise AssertionError("metadata reads must consume ProjectDetailRow")
+
+    monkeypatch.setattr(project_db, "get_project", fail_if_legacy_dict_wrapper_is_used)
+
+    result = ProjectService().get_project_metadata("p1")
+
+    assert result is not None
+    assert result.model_dump() == {
+        "id": "p1",
+        "name": "Project One",
+        "description": "typed detail",
+        "project_type": "manipola",
+        "default_connection_id": "conn-1",
+        "group_id": "default",
+        "created_at": now,
+        "updated_at": now,
+    }
+
+
+def test_project_service_get_project_converts_typed_row_at_public_compat_edge(
+    monkeypatch,
+):
+    from app.db.config import projects as project_db
+    from app.core.projects.service import ProjectService
+
+    monkeypatch.setattr(
+        project_db,
+        "get_project_row",
+        lambda project_id, group_id=None: project_db.ProjectDetailRow(
+            id=project_id,
+            group_id="grp-1",
+            name="Project One",
+            project_type="estrai",
+            canvas={"nodes": [], "edges": []},
+            connection_id=None,
+            created_at=None,
+            updated_at=None,
+            created_by=None,
+        ),
+    )
+
+    def fail_if_legacy_dict_wrapper_is_used(*args, **kwargs):
+        raise AssertionError("service compat response must start from ProjectDetailRow")
+
+    monkeypatch.setattr(project_db, "get_project", fail_if_legacy_dict_wrapper_is_used)
+
+    result = ProjectService().get_project("p1", group_id="grp-1")
+
+    assert result == {
+        "metadata": {
+            "id": "p1",
+            "name": "Project One",
+            "description": "",
+            "project_type": "estrai",
+            "default_connection_id": None,
+            "group_id": "grp-1",
+            "created_at": None,
+            "updated_at": None,
+        },
+        "canvas": {"nodes": [], "edges": []},
+        "id": "p1",
+    }

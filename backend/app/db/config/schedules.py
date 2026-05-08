@@ -103,7 +103,7 @@ def save_schedule(
     is_enabled: bool = True,
     config: Optional[Dict[str, object]] = None,
     created_by: Optional[str] = None,
-) -> Dict[str, object]:
+) -> ScheduleRow:
     from datetime import datetime, timezone
     now = datetime.now(timezone.utc).isoformat()
     execute(
@@ -114,13 +114,16 @@ def save_schedule(
         (schedule_id, group_id, project_id, name, cron_expression,
          is_enabled, json.dumps(config or {}), now, now, created_by)
     )
-    return get_schedule(schedule_id)
+    row = get_schedule_row(schedule_id)
+    if row is None:
+        raise RuntimeError(f"Schedule '{schedule_id}' was not persisted")
+    return row
 
 
 def update_schedule(
     schedule_id: str,
     **fields: object,
-) -> Optional[Dict[str, object]]:
+) -> Optional[ScheduleRow]:
     from datetime import datetime, timezone
     if "config" in fields and isinstance(fields["config"], dict):
         fields["config"] = json.dumps(fields["config"])
@@ -129,7 +132,7 @@ def update_schedule(
     fields["updated_at"] = datetime.now(timezone.utc).isoformat()
     set_clause, vals = safe_set_clause("schedules", fields)
     execute(f"UPDATE schedules SET {set_clause} WHERE id = ?", vals + (schedule_id,))
-    return get_schedule(schedule_id)
+    return get_schedule_row(schedule_id)
 
 
 def delete_schedule(schedule_id: str) -> bool:

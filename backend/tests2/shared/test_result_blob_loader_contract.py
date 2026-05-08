@@ -159,6 +159,38 @@ def test_load_dispatches_to_object_storage_when_storage_key_present():
     assert out.size_bytes == len(b"s3-payload")
 
 
+def test_fetch_row_returns_typed_lookup_row():
+    from app.core.resources.loaders.result_blob import (
+        ResultBlobLookupRow,
+        _fetch_row,
+    )
+    from app.core.resources.resource_caps import resolve_resource_max_bytes
+
+    captured, fake_fetch = fake_fetchone(
+        row={
+            "project_id": "proj-1",
+            "data": b"bytea",
+            "data_size": 5,
+            "storage_key": None,
+        }
+    )
+
+    with patch("app.db.pg_connection.fetchone", fake_fetch):
+        row = _fetch_row(
+            "r1",
+            max_bytes=resolve_resource_max_bytes(),
+            group_id_filter="g1",
+            project_id_filter="proj-1",
+        )
+
+    assert isinstance(row, ResultBlobLookupRow)
+    assert row.project_id == "proj-1"
+    assert row.data == b"bytea"
+    assert row.data_size == 5
+    assert row.storage_key is None
+    assert "AND project_id = ?" in captured["sql"]
+
+
 def test_load_falls_back_to_bytea_when_storage_key_null():
     from app.core.resources.loaders.result_blob import ResultBlobLoader
 

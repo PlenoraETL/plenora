@@ -84,7 +84,7 @@ def test_load_project_blocks_cross_tenant_via_resolver():
     ref = SourceRef(project=LatestProjectArtifactRef(project_id="proj-1"))
 
     with patch.object(projects_db, "get_project", return_value=None), \
-         patch.object(results_db, "get_latest_result", return_value=None):
+         patch.object(results_db, "get_latest_result_row", return_value=None):
         with pytest.raises(SourceLoadingError, match="non trovato"):
             loader.load(ref, expected_group_id="grp-mine")
 
@@ -100,7 +100,7 @@ def test_load_project_returns_none_when_no_latest_result():
 
     with patch.object(projects_db, "get_project",
                       return_value={"id": "proj-1", "group_id": "grp-mine"}), \
-         patch.object(results_db, "get_latest_result", return_value=None):
+         patch.object(results_db, "get_latest_result_row", return_value=None):
         result = loader.load(ref, expected_group_id="grp-mine")
     assert result is None
 
@@ -143,7 +143,7 @@ def test_resolve_project_path_blocks_cross_tenant_via_resolver():
     ref = LatestProjectArtifactRef(project_id="proj-1")
 
     with patch.object(projects_db, "get_project", return_value=None), \
-         patch.object(results_db, "get_latest_result", return_value=None):
+         patch.object(results_db, "get_latest_result_row", return_value=None):
         with pytest.raises(SourceLoadingError, match="non trovato"):
             loader.resolve_project_path(ref, expected_group_id="grp-mine")
 
@@ -158,7 +158,7 @@ def test_resolve_project_path_returns_none_when_no_latest_result():
 
     with patch.object(projects_db, "get_project",
                       return_value={"id": "proj-1", "group_id": "grp-mine"}), \
-         patch.object(results_db, "get_latest_result", return_value=None):
+         patch.object(results_db, "get_latest_result_row", return_value=None):
         result = loader.resolve_project_path(ref, expected_group_id="grp-mine")
     assert result is None
 

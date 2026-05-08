@@ -1,6 +1,6 @@
 """Canonical orchestrator boundary for asynchronous Celery task management."""
 
-from typing import Dict, Any, Mapping, Optional, List
+from typing import Dict, Mapping, Optional, List
 from datetime import datetime, timezone
 from enum import Enum
 from dataclasses import dataclass
@@ -93,6 +93,38 @@ class TaskInfo:
             "created_at": self.created_at,
             "started_at": self.started_at,
             "completed_at": self.completed_at,
+        }
+
+
+@dataclass(frozen=True)
+class ActiveTaskInfo:
+    """Typed core contract for a Celery worker task listing row."""
+
+    task_id: str
+    name: str
+    worker: str
+    status: str
+
+    @classmethod
+    def from_celery_task(
+        cls,
+        worker: str,
+        task: Mapping[str, object],
+        status: str,
+    ) -> "ActiveTaskInfo":
+        return cls(
+            task_id=str(task["id"]),
+            name=str(task["name"]),
+            worker=worker,
+            status=status,
+        )
+
+    def to_dict(self) -> Dict[str, str]:
+        return {
+            "task_id": self.task_id,
+            "name": self.name,
+            "worker": self.worker,
+            "status": self.status,
         }
 
 
@@ -420,7 +452,7 @@ class TaskService:
     
     # RECUPERA RISULTATO
     
-    def get_task_result(self, task_id: str) -> Optional[Dict]:
+    def get_task_result(self, task_id: str) -> Optional[TaskResultPayload]:
         """
         Ottiene il risultato di un task completato.
         
@@ -432,13 +464,13 @@ class TaskService:
         """
         result = AsyncResult(task_id, app=self.app)
         
-        if result.state == "SUCCESS":
-            return result.result
+        if result.state == "SUCCESS" and isinstance(result.result, Mapping):
+            return TaskResultPayload.from_celery_meta(result.result)
         return None
     
     # LISTA TASK ATTIVI
     
-    def list_active_tasks(self) -> List[Dict]:
+    def list_active_tasks(self) -> List[ActiveTaskInfo]:
         """
         Lista i task attualmente in esecuzione.
         
@@ -451,27 +483,17 @@ class TaskService:
             active = inspect.active() or {}
             reserved = inspect.reserved() or {}
             
-            tasks = []
+            tasks: List[ActiveTaskInfo] = []
             
             # Task in esecuzione
             for worker, worker_tasks in active.items():
                 for task in worker_tasks:
-                    tasks.append({
-                        "task_id": task["id"],
-                        "name": task["name"],
-                        "worker": worker,
-                        "status": "active"
-                    })
+                    tasks.append(ActiveTaskInfo.from_celery_task(worker, task, "active"))
             
             # Task in coda
             for worker, worker_tasks in reserved.items():
                 for task in worker_tasks:
-                    tasks.append({
-                        "task_id": task["id"],
-                        "name": task["name"],
-                        "worker": worker,
-                        "status": "reserved"
-                    })
+                    tasks.append(ActiveTaskInfo.from_celery_task(worker, task, "reserved"))
             
             return tasks
             

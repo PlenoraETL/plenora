@@ -6,19 +6,128 @@ move to the connection domain boundary.
 
 from __future__ import annotations
 
-from typing import Optional
+import json
+from dataclasses import dataclass
+from typing import Mapping, Optional
 
 from app.db.config.connections import create_connection as _create_connection
 from app.db.config.connections import delete_connection as _delete_connection
 from app.db.config.connections import get_connection_config as _get_connection_config
 from app.db.config.connections import update_connection as _update_connection
-from app.db.pg_connection import fetchall
-
-ConnectionRow = dict[str, object]
+from app.db.pg_connection import fetchall, fetchone
 
 
-def get_connection_config(conn_id: str, group_id: str | None = None) -> Optional[ConnectionRow]:
-    return _get_connection_config(conn_id, group_id)
+@dataclass(frozen=True)
+class ConnectionConfigRow:
+    """Typed database connection row consumed inside the connections domain."""
+
+    id: str
+    group_id: str
+    name: str
+    db_type: str
+    host: str | None = None
+    port: int | None = None
+    database: str | None = None
+    db_schema: str | None = None
+    username: str | None = None
+    password: str | None = None
+    extra: Mapping[str, object] | None = None
+    created_at: object | None = None
+    updated_at: object | None = None
+    created_by: str | None = None
+
+    @classmethod
+    def from_mapping(cls, row: Mapping[str, object]) -> "ConnectionConfigRow":
+        extra = row.get("extra") or {}
+        if isinstance(extra, str):
+            extra = json.loads(extra)
+        if not isinstance(extra, Mapping):
+            extra = {}
+
+        port_value = row.get("port")
+        port = int(port_value) if port_value is not None else None
+
+        return cls(
+            id=str(row["id"]),
+            group_id=str(row.get("group_id") or ""),
+            name=str(row["name"]),
+            db_type=str(row["db_type"]),
+            host=_optional_str(row.get("host")),
+            port=port,
+            database=_optional_str(row.get("database")),
+            db_schema=_optional_str(row.get("db_schema")),
+            username=_optional_str(row.get("username")),
+            password=_optional_str(row.get("password")),
+            extra=extra,
+            created_at=row.get("created_at"),
+            updated_at=row.get("updated_at"),
+            created_by=_optional_str(row.get("created_by")),
+        )
+
+    def to_legacy_dict(self) -> dict[str, object]:
+        """KEEP_PUBLIC_COMPAT: dict shape for callers not yet typed."""
+        return {
+            "id": self.id,
+            "group_id": self.group_id,
+            "name": self.name,
+            "db_type": self.db_type,
+            "host": self.host,
+            "port": self.port,
+            "database": self.database,
+            "db_schema": self.db_schema,
+            "username": self.username,
+            "password": self.password,
+            "extra": dict(self.extra or {}),
+            "created_at": self.created_at,
+            "updated_at": self.updated_at,
+            "created_by": self.created_by,
+        }
+
+
+@dataclass(frozen=True)
+class ArcGISConnectionRow:
+    """Typed ArcGIS connection row used by provider resolution."""
+
+    id: str
+    server_url: str
+    server_type: str = "arcgis_server"
+    auth_type: str = "token"
+    username: str = ""
+    password: str = ""
+    client_id: str = ""
+    client_secret: str = ""
+    token_url: str = ""
+
+    @classmethod
+    def from_mapping(cls, row: Mapping[str, object]) -> "ArcGISConnectionRow":
+        return cls(
+            id=str(row["id"]),
+            server_url=str(row["server_url"]),
+            server_type=str(row.get("server_type") or "arcgis_server"),
+            auth_type=str(row.get("auth_type") or "token"),
+            username=str(row.get("username") or ""),
+            password=str(row.get("password") or ""),
+            client_id=str(row.get("client_id") or ""),
+            client_secret=str(row.get("client_secret") or ""),
+            token_url=str(row.get("token_url") or ""),
+        )
+
+
+def _optional_str(value: object) -> str | None:
+    return str(value) if value is not None else None
+
+
+def _optional_connection_row(
+    row: Mapping[str, object] | None,
+) -> Optional[ConnectionConfigRow]:
+    return ConnectionConfigRow.from_mapping(row) if row else None
+
+
+def get_connection_config(
+    conn_id: str,
+    group_id: str | None = None,
+) -> Optional[ConnectionConfigRow]:
+    return _optional_connection_row(_get_connection_config(conn_id, group_id))
 
 
 def create_connection(
@@ -32,10 +141,10 @@ def create_connection(
     db_schema: str | None = None,
     username: str | None = None,
     password: str | None = None,
-    extra: ConnectionRow | None = None,
+    extra: Mapping[str, object] | None = None,
     created_by: str | None = None,
-) -> ConnectionRow:
-    return _create_connection(
+) -> ConnectionConfigRow:
+    row = _create_connection(
         conn_id=conn_id,
         group_id=group_id,
         name=name,
@@ -49,20 +158,30 @@ def create_connection(
         extra=extra,
         created_by=created_by,
     )
+    return ConnectionConfigRow.from_mapping(row)
 
 
-def update_connection(conn_id: str, **fields: object) -> Optional[ConnectionRow]:
-    return _update_connection(conn_id, **fields)
+def update_connection(conn_id: str, **fields: object) -> Optional[ConnectionConfigRow]:
+    return _optional_connection_row(_update_connection(conn_id, **fields))
 
 
 def delete_connection(conn_id: str) -> bool:
     return _delete_connection(conn_id)
 
 
-def list_connection_configs(group_id: str | None = None) -> list[ConnectionRow]:
+def list_connection_configs(group_id: str | None = None) -> list[ConnectionConfigRow]:
     if group_id is None:
-        return fetchall("SELECT * FROM connections ORDER BY name")
-    return fetchall(
-        "SELECT * FROM connections WHERE group_id = %s ORDER BY name",
-        (group_id,),
-    )
+        rows = fetchall("SELECT * FROM connections ORDER BY name")
+    else:
+        rows = fetchall(
+            "SELECT * FROM connections WHERE group_id = %s ORDER BY name",
+            (group_id,),
+        )
+    return [ConnectionConfigRow.from_mapping(row) for row in rows]
+
+
+def get_arcgis_connection_row(connection_id: str) -> Optional[ArcGISConnectionRow]:
+    row = fetchone("SELECT * FROM arcgis_connections WHERE id = ?", (connection_id,))
+    if row is None:
+        return None
+    return ArcGISConnectionRow.from_mapping(row)
