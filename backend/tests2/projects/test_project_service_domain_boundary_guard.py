@@ -13,8 +13,6 @@ BACKEND_ROOT = Path(__file__).resolve().parent.parent.parent
 PROJECTS_CORE_ROOT = BACKEND_ROOT / "app" / "core" / "projects"
 LEGACY_PROJECT_MODULES = {
     "app.services.project_service",
-    "app.services.project_domain",
-    "app.services.project_repository",
 }
 
 
@@ -49,8 +47,6 @@ def test_legacy_project_service_wrappers_delegate_to_core_projects() -> None:
     legacy_root = BACKEND_ROOT / "app" / "services"
     expected_targets = {
         "project_service.py": "app.core.projects.service",
-        "project_domain.py": "app.core.projects.domain",
-        "project_repository.py": "app.core.projects.repository",
     }
 
     for filename, target_module in expected_targets.items():
@@ -61,3 +57,10 @@ def test_legacy_project_service_wrappers_delegate_to_core_projects() -> None:
             if isinstance(node, ast.ImportFrom)
         ]
         assert imports == [target_module]
+
+
+def test_zero_consumer_project_wrappers_stay_removed() -> None:
+    legacy_root = BACKEND_ROOT / "app" / "services"
+    removed = {"project_domain.py", "project_repository.py"}
+
+    assert {path.name for path in legacy_root.glob("project_*.py") if path.name in removed} == set()

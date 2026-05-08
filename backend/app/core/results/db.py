@@ -39,8 +39,8 @@ class ResultMetadataRow:
             group_id=_optional_str(row.get("group_id")),
             filename=_optional_str(row.get("filename")),
             format=_optional_str(row.get("format")),
-            size_bytes=_optional_int(row.get("size_bytes")),
-            rows_count=_optional_int(row.get("rows_count")),
+            size_bytes=_optional_int(row.get("size_bytes"), field_name="size_bytes"),
+            rows_count=_optional_int(row.get("rows_count"), field_name="rows_count"),
             created_at=row.get("created_at"),
             storage_key=_optional_str(row.get("storage_key")),
             _selected_keys=tuple(row.keys()),
@@ -67,10 +67,19 @@ def _optional_str(value: object) -> Optional[str]:
     return str(value)
 
 
-def _optional_int(value: object) -> Optional[int]:
+def _optional_int(value: object, *, field_name: str = "integer field") -> Optional[int]:
     if value is None:
         return None
-    return int(value)
+    if isinstance(value, bool):
+        raise ValueError(
+            f"Malformed result DB row: {field_name} must be an int or null"
+        )
+    try:
+        return int(value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(
+            f"Malformed result DB row: {field_name} must be an int or null"
+        ) from exc
 
 
 def save_result(

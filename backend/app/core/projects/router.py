@@ -679,11 +679,14 @@ def update_project_canvas(
         )
         result_node = find_result_node(canvas)
         if result_node is not None:
+            from app.core.projects.schema_inference import SchemaInferenceService
+
             computed = compute_result_columns(
                 canvas=canvas,
                 result_id=result_node.id,
                 project_id=project_id,
                 project_service=_project_service,
+                schema_inference_service_factory=SchemaInferenceService,
             )
             if computed:
                 # Mutate in-place: il canvas verra' persistito subito

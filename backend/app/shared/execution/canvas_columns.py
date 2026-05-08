@@ -6,6 +6,7 @@ Motivazione
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import Any, Dict, List
 
 from app.utils.logger import get_logger
@@ -52,6 +53,7 @@ def compute_result_columns(
     result_id: str,
     project_id: str,
     project_service: object,
+    schema_inference_service_factory: Callable[[object], object],
 ) -> List[Dict[str, Any]]:
     """Computa le colonne autorevoli del result_node via BFS backward.
 
@@ -72,10 +74,7 @@ def compute_result_columns(
         Le customizzazioni utente (alias, visible) presenti nel
         result_node corrente sono preservate per nome.
     """
-    # Lazy import per evitare cicli durante il bootstrap dei progetti.
-    from app.core.projects.schema_inference import SchemaInferenceService
-
-    service = SchemaInferenceService(project_service)
+    service = schema_inference_service_factory(project_service)
     service._schema_cache = {}
 
     nodes_by_id = {n.id: n for n in canvas.nodes}

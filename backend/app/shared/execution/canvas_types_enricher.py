@@ -6,14 +6,14 @@ Risolve il "Type inference loss" tra ESTRAI -> MANIPOLA -> CARICA:
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import Any, Dict
-
-from app.core.projects.service import ProjectService
 
 
 def enrich_canvas_types_from_metadata(
     carica_node_data: Dict[str, Any],
     project_id: str,
+    columns_metadata_loader: Callable[[str], object],
 ) -> Dict[str, Any]:
     """Arricchisce in-place `carica_node_data["canvas_types"]` con i tipi
     canvas del project da `projects.columns_metadata`.
@@ -40,7 +40,7 @@ def enrich_canvas_types_from_metadata(
 
     project_column_types: Dict[str, str] = {}
     try:
-        cols_md = ProjectService().get_project_columns_metadata(project_id)
+        cols_md = columns_metadata_loader(project_id)
         project_column_types = metadata_to_dict(cols_md)
     except Exception as e:
         logger.warning(

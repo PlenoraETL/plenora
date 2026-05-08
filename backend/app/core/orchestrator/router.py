@@ -447,7 +447,13 @@ def create_task(
             if not request.carica_node_data:
                 raise HTTPException(status_code=400, detail="carica_node_data è obbligatorio per task CARICA")
             # N11: arricchisci canvas_types da project columns_metadata
-            enrich_canvas_types_from_metadata(request.carica_node_data, request.project_id)
+            from app.core.projects.service import ProjectService
+
+            enrich_canvas_types_from_metadata(
+                request.carica_node_data,
+                request.project_id,
+                ProjectService().get_project_columns_metadata,
+            )
             task_info = task_service.create_carica_task(
                 project_id=request.project_id,
                 canvas=request.canvas,

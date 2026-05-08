@@ -16,6 +16,38 @@ from app.db.config.safe_set import safe_set_clause
 from app.db.pg_connection import execute, fetchall, fetchone
 
 
+def _required_str(row: Mapping[str, object], key: str) -> str:
+    value = row.get(key)
+    if not isinstance(value, str):
+        raise ValueError(f"Malformed connection DB row: {key} must be a string")
+    return value
+
+
+def _optional_str(value: object, *, field_name: str) -> str | None:
+    if value is None:
+        return None
+    if not isinstance(value, str):
+        raise ValueError(
+            f"Malformed connection DB row: {field_name} must be a string or null"
+        )
+    return value
+
+
+def _optional_int(value: object, *, field_name: str) -> int | None:
+    if value is None:
+        return None
+    if isinstance(value, bool):
+        raise ValueError(
+            f"Malformed connection DB row: {field_name} must be an int or null"
+        )
+    try:
+        return int(value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(
+            f"Malformed connection DB row: {field_name} must be an int or null"
+        ) from exc
+
+
 @dataclass(frozen=True)
 class ConnectionConfigRow:
     """Typed database connection row consumed inside the connections domain."""
@@ -43,24 +75,21 @@ class ConnectionConfigRow:
         if not isinstance(extra, Mapping):
             extra = {}
 
-        port_value = row.get("port")
-        port = int(port_value) if port_value is not None else None
-
         return cls(
-            id=str(row["id"]),
-            group_id=str(row.get("group_id") or ""),
-            name=str(row["name"]),
-            db_type=str(row["db_type"]),
-            host=_optional_str(row.get("host")),
-            port=port,
-            database=_optional_str(row.get("database")),
-            db_schema=_optional_str(row.get("db_schema")),
-            username=_optional_str(row.get("username")),
-            password=_optional_str(row.get("password")),
+            id=_required_str(row, "id"),
+            group_id=_required_str(row, "group_id"),
+            name=_required_str(row, "name"),
+            db_type=_required_str(row, "db_type"),
+            host=_optional_str(row.get("host"), field_name="host"),
+            port=_optional_int(row.get("port"), field_name="port"),
+            database=_optional_str(row.get("database"), field_name="database"),
+            db_schema=_optional_str(row.get("db_schema"), field_name="db_schema"),
+            username=_optional_str(row.get("username"), field_name="username"),
+            password=_optional_str(row.get("password"), field_name="password"),
             extra=extra,
             created_at=row.get("created_at"),
             updated_at=row.get("updated_at"),
-            created_by=_optional_str(row.get("created_by")),
+            created_by=_optional_str(row.get("created_by"), field_name="created_by"),
         )
 
     def to_legacy_dict(self) -> dict[str, object]:
@@ -100,20 +129,25 @@ class ArcGISConnectionRow:
     @classmethod
     def from_mapping(cls, row: Mapping[str, object]) -> "ArcGISConnectionRow":
         return cls(
-            id=str(row["id"]),
-            server_url=str(row["server_url"]),
-            server_type=str(row.get("server_type") or "arcgis_server"),
-            auth_type=str(row.get("auth_type") or "token"),
-            username=str(row.get("username") or ""),
-            password=str(row.get("password") or ""),
-            client_id=str(row.get("client_id") or ""),
-            client_secret=str(row.get("client_secret") or ""),
-            token_url=str(row.get("token_url") or ""),
+            id=_required_str(row, "id"),
+            server_url=_required_str(row, "server_url"),
+            server_type=_optional_str(
+                row.get("server_type"),
+                field_name="server_type",
+            )
+            or "arcgis_server",
+            auth_type=_optional_str(row.get("auth_type"), field_name="auth_type")
+            or "token",
+            username=_optional_str(row.get("username"), field_name="username") or "",
+            password=_optional_str(row.get("password"), field_name="password") or "",
+            client_id=_optional_str(row.get("client_id"), field_name="client_id") or "",
+            client_secret=_optional_str(
+                row.get("client_secret"),
+                field_name="client_secret",
+            )
+            or "",
+            token_url=_optional_str(row.get("token_url"), field_name="token_url") or "",
         )
-
-
-def _optional_str(value: object) -> str | None:
-    return str(value) if value is not None else None
 
 
 def _optional_connection_row(

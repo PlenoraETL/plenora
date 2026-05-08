@@ -59,7 +59,13 @@ def test_compute_returns_empty_if_result_node_missing():
     canvas = _make_canvas([{"id": "src1", "type": "source"}])
     project_service = MagicMock()
 
-    out = compute_result_columns(canvas, "nonexistent", "proj-1", project_service)
+    out = compute_result_columns(
+        canvas,
+        "nonexistent",
+        "proj-1",
+        project_service,
+        schema_inference_service_factory=MagicMock(),
+    )
     assert out == []
 
 
@@ -83,7 +89,13 @@ def test_compute_delegates_to_schema_inference_and_formats_output():
             [("name", "str"), ("age", "int"), ("lat", "real")]
         )
 
-        out = compute_result_columns(canvas, "res1", "proj-1", project_service)
+        out = compute_result_columns(
+            canvas,
+            "res1",
+            "proj-1",
+            project_service,
+            schema_inference_service_factory=MockService,
+        )
 
         # Forma attesa: dict con name/type/alias/visible
         assert out == [
@@ -123,7 +135,13 @@ def test_compute_preserves_user_alias_and_visible_flags():
             [("name", "str"), ("age", "int"), ("lat", "real")]  # new col appears
         )
 
-        out = compute_result_columns(canvas, "res1", "proj-1", project_service)
+        out = compute_result_columns(
+            canvas,
+            "res1",
+            "proj-1",
+            project_service,
+            schema_inference_service_factory=MockService,
+        )
 
         by_name = {c["name"]: c for c in out}
         assert by_name["name"]["alias"] == "Nome Utente", "alias non preservato"
@@ -153,7 +171,13 @@ def test_compute_handles_inference_exception_gracefully():
         instance._infer_node_schema.side_effect = RuntimeError("canvas malformato")
 
         # Non deve sollevare
-        out = compute_result_columns(canvas, "res1", "proj-1", project_service)
+        out = compute_result_columns(
+            canvas,
+            "res1",
+            "proj-1",
+            project_service,
+            schema_inference_service_factory=MockService,
+        )
         assert out == []
 
 
@@ -185,6 +209,12 @@ def test_compute_reads_alias_visible_from_data_columns_fallback():
         instance._group_edges_by_target.return_value = {}
         instance._infer_node_schema.return_value = _fake_schema([("x", "str")])
 
-        out = compute_result_columns(canvas, "res1", "proj-1", project_service)
+        out = compute_result_columns(
+            canvas,
+            "res1",
+            "proj-1",
+            project_service,
+            schema_inference_service_factory=MockService,
+        )
         assert out[0]["alias"] == "X alias"
         assert out[0]["visible"] is False

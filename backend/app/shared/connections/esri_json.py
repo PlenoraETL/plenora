@@ -6,11 +6,19 @@ from __future__ import annotations
 
 from typing import List, Optional, Tuple
 
-import pandas as pd
-
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
+
+
+def _is_missing_value(value: object) -> bool:
+    if value is None:
+        return True
+    try:
+        comparison = value != value
+    except (TypeError, ValueError):
+        return False
+    return isinstance(comparison, bool) and comparison
 
 
 class EsriJsonConverter:
@@ -160,7 +168,7 @@ class EsriJsonConverter:
                     continue
                 attribute_value = row[col]
                 # Converti tipi numpy/pandas in tipi Python nativi
-                if pd.isna(attribute_value):
+                if _is_missing_value(attribute_value):
                     feature["attributes"][col] = None
                 elif hasattr(attribute_value, "item"):
                     feature["attributes"][col] = attribute_value.item()

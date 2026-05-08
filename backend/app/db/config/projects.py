@@ -7,13 +7,52 @@ This module owns the 6 pure-DAL CRUD operations on `projects`
 import json
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Dict, Iterable, List, Mapping, Optional, Set, cast
+from typing import Dict, Iterable, List, Mapping, Optional, Set
 
 from .safe_set import safe_set_clause
 from app.db.pg_connection import fetchone, fetchall, execute, transaction
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
+
+
+def _required_str(row: Mapping[str, object], key: str) -> str:
+    value = row.get(key)
+    if not isinstance(value, str):
+        raise ValueError(f"Malformed project DB row: {key} must be a string")
+    return value
+
+
+def _optional_str(row: Mapping[str, object], key: str) -> Optional[str]:
+    value = row.get(key)
+    if value is None:
+        return None
+    if not isinstance(value, str):
+        raise ValueError(f"Malformed project DB row: {key} must be a string or null")
+    return value
+
+
+def _optional_datetime_or_str(
+    row: Mapping[str, object],
+    key: str,
+) -> Optional[datetime | str]:
+    value = row.get(key)
+    if value is None:
+        return None
+    if isinstance(value, (datetime, str)):
+        return value
+    raise ValueError(
+        f"Malformed project DB row: {key} must be a datetime, string, or null"
+    )
+
+
+def _optional_int(row: Mapping[str, object], key: str) -> Optional[int]:
+    value = row.get(key)
+    if value is None:
+        return None
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise ValueError(f"Malformed project DB row: {key} must be an int or null")
+    return value
 
 
 @dataclass(frozen=True)
@@ -32,14 +71,14 @@ class ProjectRow:
     @classmethod
     def from_mapping(cls, row: Mapping[str, object]) -> "ProjectRow":
         return cls(
-            id=cast(str, row["id"]),
-            group_id=cast(Optional[str], row.get("group_id")),
-            name=cast(str, row["name"]),
-            project_type=cast(str, row["project_type"]),
-            connection_id=cast(Optional[str], row.get("connection_id")),
-            created_at=cast(Optional[datetime | str], row.get("created_at")),
-            updated_at=cast(Optional[datetime | str], row.get("updated_at")),
-            created_by=cast(Optional[str], row.get("created_by")),
+            id=_required_str(row, "id"),
+            group_id=_optional_str(row, "group_id"),
+            name=_required_str(row, "name"),
+            project_type=_required_str(row, "project_type"),
+            connection_id=_optional_str(row, "connection_id"),
+            created_at=_optional_datetime_or_str(row, "created_at"),
+            updated_at=_optional_datetime_or_str(row, "updated_at"),
+            created_by=_optional_str(row, "created_by"),
         )
 
 
@@ -62,17 +101,17 @@ class ProjectDetailRow:
     @classmethod
     def from_mapping(cls, row: Mapping[str, object]) -> "ProjectDetailRow":
         return cls(
-            id=cast(str, row["id"]),
-            group_id=cast(Optional[str], row.get("group_id")),
-            name=cast(str, row["name"]),
-            project_type=cast(str, row["project_type"]),
+            id=_required_str(row, "id"),
+            group_id=_optional_str(row, "group_id"),
+            name=_required_str(row, "name"),
+            project_type=_required_str(row, "project_type"),
             canvas=row.get("canvas"),
-            connection_id=cast(Optional[str], row.get("connection_id")),
-            created_at=cast(Optional[datetime | str], row.get("created_at")),
-            updated_at=cast(Optional[datetime | str], row.get("updated_at")),
-            created_by=cast(Optional[str], row.get("created_by")),
-            description=cast(Optional[str], row.get("description")),
-            retention_n=cast(Optional[int], row.get("retention_n")),
+            connection_id=_optional_str(row, "connection_id"),
+            created_at=_optional_datetime_or_str(row, "created_at"),
+            updated_at=_optional_datetime_or_str(row, "updated_at"),
+            created_by=_optional_str(row, "created_by"),
+            description=_optional_str(row, "description"),
+            retention_n=_optional_int(row, "retention_n"),
         )
 
     def to_legacy_dict(self) -> Dict[str, object]:
@@ -105,10 +144,10 @@ class ProjectDependencyRow:
     @classmethod
     def from_mapping(cls, row: Mapping[str, object]) -> "ProjectDependencyRow":
         return cls(
-            id=cast(str, row["id"]),
-            name=cast(str, row["name"]),
-            project_type=cast(str, row["project_type"]),
-            group_id=cast(Optional[str], row.get("group_id")),
+            id=_required_str(row, "id"),
+            name=_required_str(row, "name"),
+            project_type=_required_str(row, "project_type"),
+            group_id=_optional_str(row, "group_id"),
         )
 
     def to_legacy_dict(self) -> Dict[str, object]:
@@ -133,11 +172,11 @@ class ProjectCanvasCheckRow:
     @classmethod
     def from_mapping(cls, row: Mapping[str, object]) -> "ProjectCanvasCheckRow":
         return cls(
-            id=cast(str, row["id"]),
-            name=cast(str, row["name"]),
-            project_type=cast(str, row["project_type"]),
+            id=_required_str(row, "id"),
+            name=_required_str(row, "name"),
+            project_type=_required_str(row, "project_type"),
             canvas=row.get("canvas"),
-            group_id=cast(Optional[str], row.get("group_id")),
+            group_id=_optional_str(row, "group_id"),
         )
 
     def to_legacy_dict(self) -> Dict[str, object]:

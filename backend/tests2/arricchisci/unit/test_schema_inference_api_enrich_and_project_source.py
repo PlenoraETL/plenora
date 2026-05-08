@@ -161,6 +161,12 @@ def test_compute_result_columns_includes_api_enrich_added_columns():
         result_id="r1",
         project_id="proj-test",
         project_service=project_service,
+        schema_inference_service_factory=(
+            lambda service: __import__(
+                "app.core.projects.schema_inference",
+                fromlist=["SchemaInferenceService"],
+            ).SchemaInferenceService(service)
+        ),
     )
 
     names = [c["name"] for c in out]

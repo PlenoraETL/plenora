@@ -8,32 +8,32 @@ from __future__ import annotations
 from collections.abc import Iterator, Sequence
 
 
+def _is_missing_value(value: object) -> bool:
+    if value is None:
+        return True
+    try:
+        comparison = value != value
+    except (TypeError, ValueError):
+        return False
+    return isinstance(comparison, bool) and comparison
+
+
+def _to_python_scalar(value: object) -> object:
+    package = type(value).__module__.split(".", 1)[0]
+    if package in {"numpy", "pandas"} and hasattr(value, "item"):
+        try:
+            return value.item()
+        except (AttributeError, TypeError, ValueError):
+            return value
+    return value
+
+
 def quote_arcgis_sql_value(value: object) -> str:
     """Quote a Python value for an ArcGIS SQL WHERE literal."""
-    try:
-        import pandas as _pd
+    if _is_missing_value(value):
+        return "NULL"
 
-        if value is None or _pd.isna(value):
-            return "NULL"
-    except (TypeError, ValueError):
-        if value is None:
-            return "NULL"
-
-    try:
-        import numpy as _np
-
-        if isinstance(value, (bool, _np.bool_)):
-            return "1" if bool(value) else "0"
-        if isinstance(value, _np.integer):
-            return str(int(value))
-        if isinstance(value, _np.floating):
-            float_value = float(value)
-            if float_value != float_value:
-                return "NULL"
-            return repr(float_value)
-    except ImportError:
-        if isinstance(value, bool):
-            return "1" if value else "0"
+    value = _to_python_scalar(value)
 
     if isinstance(value, bool):
         return "1" if value else "0"

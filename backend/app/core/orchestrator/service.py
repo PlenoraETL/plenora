@@ -232,7 +232,11 @@ class OrchestratorService:
                 # per evitare che CARICA perda il tipo semantico quando MANIPOLA
                 # promuove silenziosamente int->float per NaN
                 from app.shared.execution.canvas_types_enricher import enrich_canvas_types_from_metadata
-                enrich_canvas_types_from_metadata(carica_node_data, project_id)
+                enrich_canvas_types_from_metadata(
+                    carica_node_data,
+                    project_id,
+                    project_service.get_project_columns_metadata,
+                )
                 logger.info(
                     f"Nodo {carica_node.id} — connection_id: '{carica_node_data.get('connection_id', 'MANCANTE')}', "
                     f"dest_type: '{carica_node_data.get('dest_type', 'MANCANTE')}', "

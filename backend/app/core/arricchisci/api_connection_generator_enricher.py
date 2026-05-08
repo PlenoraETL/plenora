@@ -17,7 +17,7 @@ from app.shared.api_utils import (
     sanitize_for_log,
 )
 from app.utils.logger import get_logger
-from app.utils.response_parser import ResponseParser, get_preset_config
+from app.core.arricchisci.response_parser import ResponseParser, get_preset_config
 from app.utils.template_variables import process_static_fields
 
 # Stesso logger name di `api_connector.py` (`__name__` valuta a

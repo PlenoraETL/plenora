@@ -106,18 +106,6 @@ _KEEP_COMPAT_WRAPPERS: tuple[KeepCompatWrapper, ...] = (
         canonical_target="app.core.files.multi_layer_upload",
     ),
     KeepCompatWrapper(
-        rel_path="app/services/project_domain.py",
-        wrapper="module",
-        owner="VERSIONING_SNAPSHOT_ENGINE",
-        canonical_target="app.core.projects.domain",
-    ),
-    KeepCompatWrapper(
-        rel_path="app/services/project_repository.py",
-        wrapper="module",
-        owner="VERSIONING_SNAPSHOT_ENGINE",
-        canonical_target="app.core.projects.repository",
-    ),
-    KeepCompatWrapper(
         rel_path="app/services/project_service.py",
         wrapper="module",
         owner="VERSIONING_SNAPSHOT_ENGINE",
@@ -128,12 +116,6 @@ _KEEP_COMPAT_WRAPPERS: tuple[KeepCompatWrapper, ...] = (
         wrapper="module",
         owner="VERSIONING_SNAPSHOT_ENGINE",
         canonical_target="app.core.projects.lineage",
-    ),
-    KeepCompatWrapper(
-        rel_path="app/services/log_archive.py",
-        wrapper="module",
-        owner="ORCHESTRATION_ENGINE",
-        canonical_target="app.core.scheduler.log_archive",
     ),
     KeepCompatWrapper(
         rel_path="app/services/schema_inference.py",
@@ -182,6 +164,14 @@ _KEEP_COMPAT_WRAPPERS: tuple[KeepCompatWrapper, ...] = (
     ),
 )
 
+_REMOVED_ZERO_CONSUMER_WRAPPERS: frozenset[str] = frozenset(
+    {
+        "app/services/log_archive.py",
+        "app/services/project_domain.py",
+        "app/services/project_repository.py",
+    }
+)
+
 _FILE_COMPAT_ALIASES: tuple[tuple[str, str], ...] = (
     ("app.services.file_load_dispatch", "app.core.files.load_dispatch"),
     ("app.services.file_storage_dispatch", "app.core.files.storage_dispatch"),
@@ -215,6 +205,21 @@ def _legacy_service_wrappers() -> set[str]:
         if "KEEP_COMPAT" in _module_docstring(rel_path):
             wrappers.add(rel_path)
     return wrappers
+
+
+def _module_name(rel_path: str) -> str:
+    return rel_path.removesuffix(".py").replace("/", ".")
+
+
+def _imported_compat_modules(path: Path, removed_modules: set[str]) -> set[str]:
+    tree = ast.parse(path.read_text(encoding="utf-8"))
+    hits: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom) and node.module in removed_modules:
+            hits.add(node.module)
+        elif isinstance(node, ast.Import):
+            hits.update(alias.name for alias in node.names if alias.name in removed_modules)
+    return hits
 
 
 def test_keep_compat_wrappers_have_owner_and_canonical_target():
@@ -262,6 +267,30 @@ def test_app_services_keep_compat_wrappers_are_registered():
         f"Unregistered: {sorted(active - registered)}\n"
         f"Stale registry rows: {sorted(registered - active)}"
     )
+
+
+def test_removed_zero_consumer_wrappers_stay_removed():
+    removed_modules = {
+        _module_name(rel_path)
+        for rel_path in _REMOVED_ZERO_CONSUMER_WRAPPERS
+    }
+
+    for rel_path in _REMOVED_ZERO_CONSUMER_WRAPPERS:
+        assert not (_BACKEND_ROOT / rel_path).exists(), (
+            f"{rel_path} was removed as a zero-consumer compatibility wrapper."
+        )
+
+    offenders: dict[str, list[str]] = {}
+    for root in (_BACKEND_ROOT / "app", _BACKEND_ROOT / "tests2"):
+        for path in root.rglob("*.py"):
+            rel_path = path.relative_to(_BACKEND_ROOT).as_posix()
+            if rel_path == Path(__file__).relative_to(_BACKEND_ROOT).as_posix():
+                continue
+            hits = _imported_compat_modules(path, removed_modules)
+            if hits:
+                offenders[rel_path] = sorted(hits)
+
+    assert offenders == {}
 
 
 @pytest.mark.parametrize(("legacy_module", "canonical_module"), _FILE_COMPAT_ALIASES)

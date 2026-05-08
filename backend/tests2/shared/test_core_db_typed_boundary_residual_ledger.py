@@ -1,7 +1,7 @@
 """1.0 residual ledger for typed core/DB boundary seams.
 
-This is intentionally narrow: it locks the Batch 094 DB/core rows that were
-typed, plus the compatibility wrappers still returning public dict shapes.
+This is intentionally narrow: it locks the Batch 094 DB/core rows plus the
+BE095-BE097 Wave A-C typed-boundary closures and compatibility wrappers.
 """
 
 from __future__ import annotations
@@ -175,7 +175,7 @@ _LEDGER: tuple[BoundaryEntry, ...] = (
         "app/core/connections/db.py",
         "ConnectionConfigRow.to_legacy_dict",
         "KEEP_PUBLIC_COMPAT",
-        "dict conversion stays explicit for external callers that still need it",
+        "public dict conversion stays explicit for external callers that still need it",
     ),
     BoundaryEntry(
         "app/core/connections/db.py",
@@ -194,6 +194,24 @@ _LEDGER: tuple[BoundaryEntry, ...] = (
         "list_connection_configs",
         "DONE",
         "connection lists return ConnectionConfigRow objects at the core DB boundary",
+    ),
+    BoundaryEntry(
+        "app/core/connections/arcgis_connection_resolver.py",
+        "resolve_arcgis_connection",
+        "DONE",
+        "ArcGIS connection resolution returns typed ArcGISConnectionRow data",
+    ),
+    BoundaryEntry(
+        "app/core/connections/arcgis_client.py",
+        "ArcGISClient",
+        "KEEP_COMPAT_WITH_REMOVAL_CONDITION",
+        "remove after concrete-client tests and monkeypatch paths stop importing app.core.features.arcgis_client",
+    ),
+    BoundaryEntry(
+        "app/core/connections/arcgis_provider_factory.py",
+        "create_arcgis_provider",
+        "DONE",
+        "provider construction is exposed through the neutral connection factory",
     ),
     BoundaryEntry(
         "app/db/config/connections.py",
@@ -245,7 +263,7 @@ _LEDGER: tuple[BoundaryEntry, ...] = (
     ),
     BoundaryEntry(
         "app/core/orchestrator/task_service.py",
-        "get_task_result",
+        "TaskService.get_task_result",
         "DONE",
         "completed-task Celery results are normalized into TaskResultPayload",
     ),
@@ -256,10 +274,28 @@ _LEDGER: tuple[BoundaryEntry, ...] = (
         "task status dict serialization is kept at the router/API boundary",
     ),
     BoundaryEntry(
+        "app/core/features/__init__.py",
+        "ArcGISClient",
+        "REMOVED",
+        "package-level concrete ArcGIS client re-export had zero consumers",
+    ),
+    BoundaryEntry(
+        "app/core/features/__init__.py",
+        "create_client",
+        "REMOVED",
+        "package-level ArcGIS factory re-export had zero consumers",
+    ),
+    BoundaryEntry(
+        "app/core/features/arcgis_connection_adapter.py",
+        "module",
+        "REMOVED",
+        "Features-owned ArcGIS connection adapter was replaced by app.core.connections.arcgis_connection_resolver",
+    ),
+    BoundaryEntry(
         "workers/tasks/carica_task.py",
         "_execute_arcgis_write",
         "KEEP_PUBLIC_COMPAT",
-        "Carica worker delegates ArcGIS writes to the domain boundary but still returns Celery result dict shape",
+        "Carica worker delegates ArcGIS writes to the domain boundary but still returns public Celery result dict shape",
     ),
     BoundaryEntry(
         "app/core/features/arcgis_feature_operations.py",
@@ -350,6 +386,63 @@ def _classes(tree: ast.AST) -> set[str]:
     return {node.name for node in ast.walk(tree) if isinstance(node, ast.ClassDef)}
 
 
+def _defined_symbols(tree: ast.AST) -> set[str]:
+    symbols: set[str] = set()
+    scope: list[str] = []
+
+    class Visitor(ast.NodeVisitor):
+        def visit_ClassDef(self, node: ast.ClassDef) -> None:
+            qualified = ".".join([*scope, node.name])
+            symbols.add(qualified)
+            scope.append(node.name)
+            self.generic_visit(node)
+            scope.pop()
+
+        def visit_FunctionDef(self, node: ast.FunctionDef) -> None:
+            qualified = ".".join([*scope, node.name])
+            symbols.add(qualified)
+            scope.append(node.name)
+            self.generic_visit(node)
+            scope.pop()
+
+        def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef) -> None:
+            qualified = ".".join([*scope, node.name])
+            symbols.add(qualified)
+            scope.append(node.name)
+            self.generic_visit(node)
+            scope.pop()
+
+        def visit_ImportFrom(self, node: ast.ImportFrom) -> None:
+            if scope:
+                return
+            symbols.update(alias.asname or alias.name for alias in node.names)
+
+        def visit_Assign(self, node: ast.Assign) -> None:
+            if scope:
+                return
+            for target in node.targets:
+                if isinstance(target, ast.Name):
+                    symbols.add(target.id)
+
+        def visit_AnnAssign(self, node: ast.AnnAssign) -> None:
+            if scope:
+                return
+            if isinstance(node.target, ast.Name):
+                symbols.add(node.target.id)
+
+    Visitor().visit(tree)
+    return symbols
+
+
+def _symbol_exists(entry: BoundaryEntry) -> bool:
+    path = _BACKEND_ROOT / entry.path
+    if not path.exists():
+        return False
+    if entry.symbol == "module":
+        return True
+    return entry.symbol in _defined_symbols(_tree(entry.path))
+
+
 def _function_returns(tree: ast.AST) -> dict[str, str]:
     returns: dict[str, str] = {}
     for node in ast.walk(tree):
@@ -437,10 +530,53 @@ def test_core_db_boundary_ledger_uses_only_1_0_statuses():
     assert "KEEP_COMPAT" not in statuses
 
 
+def test_final_1_0_ledger_has_no_duplicate_entries():
+    keys = [(entry.path, entry.symbol) for entry in _LEDGER]
+    duplicates = sorted({key for key in keys if keys.count(key) > 1})
+    assert not duplicates
+
+
+def test_final_1_0_ledger_has_no_stale_live_entries():
+    stale_live = [
+        entry
+        for entry in _LEDGER
+        if entry.status != "REMOVED" and not _symbol_exists(entry)
+    ]
+    stale_removed = [
+        entry
+        for entry in _LEDGER
+        if entry.status == "REMOVED" and _symbol_exists(entry)
+    ]
+
+    assert not stale_live, (
+        "Non-removed ledger entries must point at live symbols. "
+        f"Stale entries: {stale_live}"
+    )
+    assert not stale_removed, (
+        "REMOVED ledger entries must stay absent. "
+        f"Reintroduced symbols: {stale_removed}"
+    )
+
+
+def test_final_1_0_compat_entries_have_specific_removal_conditions():
+    banned_words = {"MIGRATE_NEXT", "TODO", "eventually", "later", "debt"}
+    for entry in _LEDGER:
+        upper_reason = entry.reason.upper()
+        assert not any(word in upper_reason for word in banned_words), entry
+        if entry.status == "KEEP_COMPAT_WITH_REMOVAL_CONDITION":
+            assert "after" in entry.reason or "until" in entry.reason, entry
+        if entry.status == "KEEP_PUBLIC_COMPAT":
+            assert (
+                "public" in entry.reason
+                or "API" in entry.reason
+                or "legacy" in entry.reason
+            ), entry
+
+
 def test_done_row_contracts_are_present_and_frozen():
     by_path: dict[str, list[str]] = {}
     for entry in _LEDGER:
-        if entry.status == "DONE" and entry.symbol[0].isupper():
+        if entry.status == "DONE" and "." not in entry.symbol and entry.symbol[0].isupper():
             by_path.setdefault(entry.path, []).append(entry.symbol)
 
     for rel_path, symbols in by_path.items():
