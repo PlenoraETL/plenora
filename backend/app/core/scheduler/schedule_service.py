@@ -82,7 +82,7 @@ from app.core.scheduler.models import (
     ScheduleConflictPolicy,
     ScheduleRuntime,
 )
-from app.db.config import schedules as db
+from app.core.scheduler import db
 
 logger = get_logger(__name__)
 

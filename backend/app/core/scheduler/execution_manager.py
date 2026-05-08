@@ -233,7 +233,7 @@ class ExecutionManager:
         # per sempre (orphan run che sporca la dashboard e inquina il
         # check di task bloccate
         from app.core.projects.service import ProjectService
-        from app.db.config.schedules import get_schedule
+        from app.core.scheduler.db import get_schedule
         project_service = ProjectService()
 
         schedule_row = get_schedule(schedule_id)

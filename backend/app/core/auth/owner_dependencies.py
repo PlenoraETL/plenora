@@ -35,7 +35,7 @@ def require_schedule_owner(
     current_user: CurrentUser = Depends(get_current_user),
 ) -> CurrentUser:
     """Owner check su schedules per update, delete, toggle e run."""
-    from app.db.config.schedules import get_schedule as _get_schedule
+    from app.core.scheduler.db import get_schedule as _get_schedule
     schedule = _get_schedule(schedule_id)
     _check_ownership(schedule, "Schedule", current_user)
     return current_user
@@ -46,7 +46,7 @@ def require_file_owner(
     current_user: CurrentUser = Depends(get_current_user),
 ) -> CurrentUser:
     """Owner check su file_sources per delete."""
-    from app.db.config.file_sources import get_file_source as _get_file_source
+    from app.core.files.db import get_file_source as _get_file_source
     file_source = _get_file_source(file_id)
     _check_ownership(file_source, "File", current_user)
     return current_user

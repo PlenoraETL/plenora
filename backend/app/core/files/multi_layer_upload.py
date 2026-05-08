@@ -12,7 +12,7 @@ import zipfile
 from pathlib import Path
 from typing import Any, BinaryIO, Callable, Dict, List, Optional, Tuple
 
-from app.db.config.file_sources import FileSourceRow
+from app.core.files.db import FileSourceRow
 from app.core.files.storage_dispatch import BlobDispatchResult
 from app.core.files.upload import mkdtemp_writable
 

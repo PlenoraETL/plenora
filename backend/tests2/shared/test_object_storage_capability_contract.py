@@ -216,7 +216,7 @@ def test_file_sources_delete_skips_s3_cleanup_when_disabled(monkeypatch):
     cleanup post-commit). Il test deve quindi mockare il transaction
     boundary, non i vecchi helper autocommit `fetchone/execute`.
     """
-    from app.db.config import file_sources
+    from app.core.files import db as file_sources
 
     fake_cur = MagicMock()
     fake_cur.fetchone.return_value = {"storage_key": "file-sources/abc/xxx"}

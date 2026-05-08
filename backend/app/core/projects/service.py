@@ -18,7 +18,7 @@ from app.models import (
     CanvasState,
 )
 
-from app.db.config import groups as _groups
+from app.core.auth import db as _groups
 from app.core.projects import db as project_db
 from app.db import pg_connection
 from app.core.results import blob as results_blob

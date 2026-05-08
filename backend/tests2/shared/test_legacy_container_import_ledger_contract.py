@@ -23,6 +23,7 @@ pytestmark = [pytest.mark.unit, pytest.mark.contract]
 
 
 _BACKEND_ROOT = Path(__file__).resolve().parent.parent.parent
+_CONFIG_ROOT = _BACKEND_ROOT / "app" / "db" / "config"
 _PROD_ROOTS = (_BACKEND_ROOT / "app", _BACKEND_ROOT / "workers")
 _DOMAINS = (
     "projects",
@@ -65,44 +66,15 @@ _LEGACY_IMPORT_BASELINES: dict[str, dict[str, frozenset[str]]] = {
     "app.db.config": {
         "projects": frozenset({
             "app/core/projects/service.py -> app.db.config.comparison_keys",
-            "app/core/projects/service.py -> app.db.config.groups",
         }),
         "connections": frozenset({
             "app/core/arricchisci/api_connection_management.py -> app.db.config.api_connections",
-            "app/core/arricchisci/api_connection_rest_file.py -> app.db.config.file_sources",
-            "app/core/connections/db.py -> app.db.config.connections",
             "app/db/config_db_service.py -> app.db.config.api_connections",
-            "app/db/config_db_service.py -> app.db.config.connections",
         }),
-        "files_storage": frozenset({
-            "app/core/auth/owner_dependencies.py -> app.db.config.file_sources",
-            "app/core/files/multi_layer_upload.py -> app.db.config.file_sources",
-            "app/core/files/router.py -> app.db.config.file_sources",
-            "app/core/tickets/router.py -> app.db.config.file_sources",
-            "app/core/files/service.py -> app.db.config.file_sources",
-            "app/db/config_db_service.py -> app.db.config.file_sources",
-            "app/shared/authz_helpers.py -> app.db.config.file_sources",
-        }),
-        "tasks_orchestration": frozenset({
-            "app/core/auth/owner_dependencies.py -> app.db.config.schedules",
-            "app/core/scheduler/execution_manager.py -> app.db.config.schedules",
-            "app/core/scheduler/router.py -> app.db.config.schedules",
-            "app/core/scheduler/schedule_service.py -> app.db.config.schedules",
-            "app/db/config_db_service.py -> app.db.config.schedules",
-        }),
+        "files_storage": frozenset(),
+        "tasks_orchestration": frozenset(),
         "auth_datasources_other": frozenset({
-            "app/core/auth/auth.py -> app.db.config.users",
-            "app/core/auth/dependencies.py -> app.db.config.users",
-            "app/core/auth/groups_router.py -> app.db.config.groups",
-            "app/core/auth/ownership.py -> app.db.config.users",
-            "app/core/auth/users_router.py -> app.db.config.groups",
-            "app/core/auth/users_router.py -> app.db.config.users",
-            "app/core/datasources/service.py -> app.db.config.datasources",
             "app/db/config_db_service.py -> app.db.config.comparison_keys",
-            "app/db/config_db_service.py -> app.db.config.datasources",
-            "app/db/config_db_service.py -> app.db.config.groups",
-            "app/db/config_db_service.py -> app.db.config.users",
-            "app/shared/async_user_recheck.py -> app.db.config.users",
         }),
     },
 }
@@ -118,6 +90,18 @@ _ALLOWED_LEDGER_STATUSES = frozenset(
 )
 
 _PROJECT_CONFIG_IMPORT_BLOCKERS: dict[str, str] = {}
+_DELETED_CONFIG_LEAVES = frozenset(
+    {
+        "connections.py",
+        "datasources.py",
+        "file_sources.py",
+        "groups.py",
+        "projects.py",
+        "safe_set.py",
+        "schedules.py",
+        "users.py",
+    }
+)
 
 
 def _rel(path: Path) -> str:
@@ -257,3 +241,34 @@ def test_project_config_leaf_production_imports_are_explicit_blockers():
     assert set(_PROJECT_CONFIG_IMPORT_BLOCKERS) == project_leaf_edges
     assert set(_PROJECT_CONFIG_IMPORT_BLOCKERS.values()) <= _ALLOWED_LEDGER_STATUSES
     assert not project_leaf_edges
+
+
+def test_deleted_config_leaves_stay_absent():
+    reintroduced = sorted(
+        leaf for leaf in _DELETED_CONFIG_LEAVES if (_CONFIG_ROOT / leaf).exists()
+    )
+
+    assert not reintroduced, (
+        "Deleted app.db.config persistence leaves were reintroduced. "
+        f"Use the domain-owned DB boundary instead: {reintroduced}"
+    )
+
+
+def test_config_package_has_no_magic_bridge_modules():
+    """Config tombstones/compat leaves must stay explicit named exports only."""
+    scanned = [*_CONFIG_ROOT.glob("*.py"), _BACKEND_ROOT / "app" / "db" / "config_db_service.py"]
+    violations: list[str] = []
+
+    for path in scanned:
+        tree = _parse(path)
+        if tree is None:
+            continue
+        for node in ast.walk(tree):
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name == "__getattr__":
+                violations.append(f"{_rel(path)} defines __getattr__")
+            if isinstance(node, ast.Assign):
+                for target in node.targets:
+                    if isinstance(target, ast.Subscript) and ast.unparse(target.value) == "sys.modules":
+                        violations.append(f"{_rel(path)} assigns sys.modules")
+
+    assert not violations

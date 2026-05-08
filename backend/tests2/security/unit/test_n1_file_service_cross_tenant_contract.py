@@ -134,7 +134,7 @@ def test_load_dataframe_passes_when_group_matches_owner(svc):
     non blocca)."""
     fs = _file_source(group_id="A")
     with patch.object(svc, "get_file_source", return_value=fs):
-        with patch("app.db.config.file_sources.get_file_source", return_value=None):
+        with patch("app.core.files.db.get_file_source", return_value=None):
             with pytest.raises(ValueError, match="Nessun dato"):
                 svc.load_dataframe("f1", expected_group_id="A")
 

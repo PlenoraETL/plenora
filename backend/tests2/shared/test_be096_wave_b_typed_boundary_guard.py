@@ -38,7 +38,6 @@ _WAVE_B_TARGETS: tuple[str, ...] = (
     "app/core/projects/db.py",
     "app/core/connections/db.py",
     "app/core/connections/service.py",
-    "app/db/config/connections.py",
 )
 
 
@@ -73,10 +72,6 @@ _EXPECTED_WAVE_B_BROAD_DICT_RETURNS: frozenset[BroadDictReturn] = frozenset(
         BroadDictReturn("app/core/projects/db.py", "list_projects_using_connection", "list[dict[str, object]]"),
         BroadDictReturn("app/core/projects/db.py", "list_projects_with_canvas_for_datasource_check", "list[dict[str, object]]"),
         BroadDictReturn("app/core/connections/db.py", "ConnectionConfigRow.to_legacy_dict", "dict[str, object]"),
-        BroadDictReturn("app/db/config/connections.py", "get_connection_config", "Optional[Dict]"),
-        BroadDictReturn("app/db/config/connections.py", "list_connections", "List[Dict]"),
-        BroadDictReturn("app/db/config/connections.py", "create_connection", "Dict"),
-        BroadDictReturn("app/db/config/connections.py", "update_connection", "Optional[Dict]"),
     }
 )
 

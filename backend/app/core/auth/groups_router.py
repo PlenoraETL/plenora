@@ -19,7 +19,7 @@ from app.shared.audit_action import audit_action
 from app.shared.error_envelope import raise_typed_http
 from app.utils.logger import get_logger
 
-from app.db.config import groups as _groups
+from app.core.auth import db as _groups
 
 
 logger = get_logger(__name__)

@@ -11,7 +11,7 @@ import pytest
 
 from app.core.scheduler.models import ScheduleUpdate
 from app.core.scheduler.schedule_service import ScheduleService
-from app.db.config.schedules import ScheduleRow
+from app.core.scheduler.db import ScheduleRow
 
 
 pytestmark = [pytest.mark.unit, pytest.mark.scheduler, pytest.mark.contract]

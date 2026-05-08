@@ -101,7 +101,7 @@ def test_execute_blocks_cross_group_isolation(schedule_config):
     hard fail con status='failed', niente esecuzione downstream."""
     manager = _make_manager_for_isolation_test(schedule_config)
 
-    with patch("app.db.config.schedules.get_schedule", return_value={"id": "s-1", "group_id": "grp-A"}), \
+    with patch("app.core.scheduler.db.get_schedule", return_value={"id": "s-1", "group_id": "grp-A"}), \
          patch("app.core.projects.service.ProjectService") as project_service_cls:
         project_service_cls.return_value.get_project_metadata.return_value = _project_meta("grp-B")
         result = manager.execute("s-1")
@@ -118,7 +118,7 @@ def test_execute_blocks_schedule_without_group_id(schedule_config):
     pre-Refactor #2 a causa dello short-circuit del check)."""
     manager = _make_manager_for_isolation_test(schedule_config)
 
-    with patch("app.db.config.schedules.get_schedule", return_value={"id": "s-1", "group_id": None}), \
+    with patch("app.core.scheduler.db.get_schedule", return_value={"id": "s-1", "group_id": None}), \
          patch("app.core.projects.service.ProjectService") as project_service_cls:
         project_service_cls.return_value.get_project_metadata.return_value = _project_meta("grp-B")
         result = manager.execute("s-1")
@@ -134,7 +134,7 @@ def test_execute_blocks_project_without_group_id(schedule_config):
     Era fail-OPEN pre-Refactor #2."""
     manager = _make_manager_for_isolation_test(schedule_config)
 
-    with patch("app.db.config.schedules.get_schedule", return_value={"id": "s-1", "group_id": "grp-A"}), \
+    with patch("app.core.scheduler.db.get_schedule", return_value={"id": "s-1", "group_id": "grp-A"}), \
          patch("app.core.projects.service.ProjectService") as project_service_cls:
         project_service_cls.return_value.get_project_metadata.return_value = _project_meta("")
         result = manager.execute("s-1")
@@ -153,7 +153,7 @@ def test_execute_passes_group_isolation_when_groups_match(schedule_config):
     # cosi' evitiamo di mockare l'intera pipeline downstream.
     manager.concurrency.try_acquire.return_value = "queued"
 
-    with patch("app.db.config.schedules.get_schedule", return_value={"id": "s-1", "group_id": "grp-A"}), \
+    with patch("app.core.scheduler.db.get_schedule", return_value={"id": "s-1", "group_id": "grp-A"}), \
          patch("app.core.projects.service.ProjectService") as project_service_cls:
         project_service_cls.return_value.get_project_metadata.return_value = _project_meta("grp-A")
         result = manager.execute("s-1")

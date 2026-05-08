@@ -23,7 +23,7 @@ pytestmark = [pytest.mark.unit, pytest.mark.contract]
 
 
 def _install_fake_db(monkeypatch):
-    """Patcha le funzioni di `app.db.config.file_sources` con fake in-memory.
+    """Patcha le funzioni di `app.core.files.db` con fake in-memory.
 
     Preferisce `monkeypatch.setattr` sul modulo reale (gia' importato)
     invece di sostituire il modulo in `sys.modules` — il service importa
@@ -32,7 +32,7 @@ def _install_fake_db(monkeypatch):
 
     Ritorna lo `store` dict per inspect lato test.
     """
-    import app.db.config.file_sources as real_db
+    import app.core.files.db as real_db
 
     store: dict[str, dict] = {}
 
@@ -191,7 +191,7 @@ def test_update_file_source_fallback_uses_settings_default_group(monkeypatch):
         "created_by": None,
     }
 
-    import app.db.config.file_sources as real_db
+    import app.core.files.db as real_db
 
     saved_calls: list[dict] = []
 
@@ -480,7 +480,7 @@ def test_read_blob_from_s3_downloads_and_cleans_temp(monkeypatch, tmp_path):
     from app.services.file_service import FileSourceService
 
     _install_fake_db(monkeypatch)
-    import app.db.config.file_sources as real_db
+    import app.core.files.db as real_db
 
     s3_payload = b"s3-blob-content-42"
 
@@ -578,7 +578,7 @@ def test_read_blob_from_s3_cleanup_temp_on_download_exception(monkeypatch):
     from app.services.file_service import FileSourceService
 
     _install_fake_db(monkeypatch)
-    import app.db.config.file_sources as real_db
+    import app.core.files.db as real_db
 
     class FakeStorage:
         def get_object_stream(self, key):

@@ -21,7 +21,7 @@ pytestmark = [pytest.mark.unit, pytest.mark.security, pytest.mark.contract]
 @pytest.fixture(autouse=True)
 def _ensure_database_url_for_module_import(monkeypatch):
     """Placeholder DATABASE_URL per permettere l'import di
-    ``app.db.config.datasources`` (via ``pg_connection``, che al top-level
+    ``app.core.datasources.db`` (via ``pg_connection``, che al top-level
     richiede la env var).
 
     Il valore è fittizio: il fixture `_mock_db` che segue monkeypatch-a
@@ -45,11 +45,9 @@ def service():
 def fake_db(monkeypatch):
     """Mock dei punti di accesso DB usati dal service.
 
-    Il service fa lazy import di ``app.db.config.datasources`` dentro i metodi,
-    quindi il monkeypatch deve agire sul modulo reale (non sul namespace
-    del service).
+    Il service usa il modulo domain-owned ``app.core.datasources.db``.
     """
-    import app.db.config.datasources as datasource_db
+    import app.core.datasources.db as datasource_db
 
     # Calls capture dicts
     captured = {"save": None, "update": None, "delete": [], "get": {}}
@@ -61,7 +59,8 @@ def fake_db(monkeypatch):
         captured["update"] = {"ds_id": ds_id, **kwargs}
 
     def _get(ds_id):
-        return captured["get"].get(ds_id)
+        row = captured["get"].get(ds_id)
+        return datasource_db.DataSourceRow.from_mapping(row) if row else None
 
     def _delete(ds_id):
         captured["delete"].append(ds_id)
@@ -106,6 +105,8 @@ def _make_existing_row(ds_id: str, *, password_plain: str = "pwd-old",
     return {
         "id": ds_id,
         "group_id": group_id,
+        "name": "SFTP Test",
+        "ds_type": "sftp",
         "created_by": created_by,
         "config": config,
     }
@@ -299,7 +300,7 @@ def test_update_nonexistent_datasource_returns_none_no_db_write(service, fake_db
 def test_get_full_config_strict_raises_on_undecryptable_field(service, monkeypatch):
     """Bug #2: _get_full_config(strict=True) con campo cifrato corrotto →
     CredentialUnavailableError invece di passare None al backend."""
-    import app.db.config.datasources as datasource_db
+    import app.core.datasources.db as datasource_db
 
     # Config con password cifrata ma non decriptabile (token random non valido)
     corrupted_config = {
@@ -312,12 +313,18 @@ def test_get_full_config_strict_raises_on_undecryptable_field(service, monkeypat
         "password": "enc:Z0FBQUFBQm5vdEF0b2tlbkNvcnJvdHRvQ2hlRmFsbGlzY2U=",  # token corrotto
     }
 
-    monkeypatch.setattr(datasource_db, "get_datasource", lambda _id: {
-        "id": "ds-broken",
-        "config": corrupted_config,
-        "group_id": "grp-1",
-        "created_by": "u-1",
-    })
+    monkeypatch.setattr(
+        datasource_db,
+        "get_datasource",
+        lambda _id: datasource_db.DataSourceRow.from_mapping({
+            "id": "ds-broken",
+            "name": "ftp-broken",
+            "ds_type": "ftp",
+            "config": corrupted_config,
+            "group_id": "grp-1",
+            "created_by": "u-1",
+        }),
+    )
 
     with pytest.raises(crypto.CredentialUnavailableError) as exc_info:
         service._get_full_config("ds-broken", strict=True)
@@ -329,7 +336,7 @@ def test_get_full_config_non_strict_returns_none_field_silently(service, monkeyp
     """Bug #2 guard: retro-compat — senza strict=True, decrypt fallito
     ritorna None nel campo (comportamento pre-fix per path NON-test).
     Serve per non rompere list_datasources / get_datasource / enrichment runtime."""
-    import app.db.config.datasources as datasource_db
+    import app.core.datasources.db as datasource_db
 
     corrupted_config = {
         "id": "ds-broken",
@@ -338,12 +345,18 @@ def test_get_full_config_non_strict_returns_none_field_silently(service, monkeyp
         "password": "enc:Z0FBQUFBQm5vdEF0b2tlbkNvcnJvdHRvQ2hlRmFsbGlzY2U=",
     }
 
-    monkeypatch.setattr(datasource_db, "get_datasource", lambda _id: {
-        "id": "ds-broken",
-        "config": corrupted_config,
-        "group_id": "grp-1",
-        "created_by": "u-1",
-    })
+    monkeypatch.setattr(
+        datasource_db,
+        "get_datasource",
+        lambda _id: datasource_db.DataSourceRow.from_mapping({
+            "id": "ds-broken",
+            "name": "ftp-broken",
+            "ds_type": "ftp",
+            "config": corrupted_config,
+            "group_id": "grp-1",
+            "created_by": "u-1",
+        }),
+    )
 
     config = service._get_full_config("ds-broken")  # strict default False
 

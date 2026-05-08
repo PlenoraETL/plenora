@@ -122,7 +122,7 @@ from .models import (
 
 logger = get_logger(__name__)
 
-from app.db.config.file_sources import get_file_source as _get_file_source
+from app.core.files.db import get_file_source as _get_file_source
 
 
 def _check_file_ownership(file_id: str, group_id: str, is_superadmin: bool = False):

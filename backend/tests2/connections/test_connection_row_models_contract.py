@@ -144,6 +144,22 @@ def test_connection_db_update_returns_typed_row(monkeypatch) -> None:
     assert executed[0][1][-1] == "conn-1"
 
 
+def test_connection_db_delete_owns_delete_sql(monkeypatch) -> None:
+    class Cursor:
+        rowcount = 1
+
+    executed: list[tuple[str, tuple[object, ...]]] = []
+
+    def _execute(sql: str, params: tuple[object, ...]) -> Cursor:
+        executed.append((sql, params))
+        return Cursor()
+
+    monkeypatch.setattr(connection_db, "execute", _execute)
+
+    assert connection_db.delete_connection("conn-1") is True
+    assert executed == [("DELETE FROM connections WHERE id = ?", ("conn-1",))]
+
+
 def test_connection_db_list_returns_typed_rows(monkeypatch) -> None:
     def _fetchall(sql: str, params: tuple[object, ...] = ()) -> list[dict[str, object]]:
         assert "FROM connections" in sql

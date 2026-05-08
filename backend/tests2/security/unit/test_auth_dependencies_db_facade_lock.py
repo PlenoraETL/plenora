@@ -1,7 +1,6 @@
 """
-Source-bound lock — `app.core.auth.dependencies` must NOT
-
-import `app.db.db_service`.
+Source-bound lock: `app.core.auth.dependencies` must NOT import
+`app.db.db_service` or legacy config leaves.
 """
 
 from __future__ import annotations
@@ -22,17 +21,9 @@ _DEPENDENCIES_PY = (
 
 
 def test_dependencies_does_not_import_db_service():
-    """`app/core/auth/dependencies.py` MUST NOT import
-    ``app.db.db_service`` (the cross-engine bulk re-export
-    bundle). The canonical lookup site for the active-user
-    check is ``app.db.config.users.get_user`` (canonical leaf
-    used by every other consumer migrated under
-    BE-GO-READY-DB-ENGINE-002 / -003 / -004 / -005).
-
-    Three import shapes are forbidden:
-      - ``import app.db.db_service [as <alias>]``
-      - ``from app.db.db_service import <X>``
-      - ``from app.db import db_service [as <alias>]``
+    """`app/core/auth/dependencies.py` MUST NOT import the cross-engine
+    DB facade. The canonical active-user lookup is
+    `app.core.auth.db.get_user`.
     """
     text = _DEPENDENCIES_PY.read_text(encoding="utf-8")
     tree = ast.parse(text, filename=str(_DEPENDENCIES_PY))
@@ -72,42 +63,40 @@ def test_dependencies_does_not_import_db_service():
         "`app/core/auth/dependencies.py` re-introduce un import "
         "di `app.db.db_service`:\n"
         + "\n".join(f"  {v}" for v in violations)
-        + "\nIl canonical leaf per `get_user` e' "
-        "`app.db.config.users.get_user`. Il facade "
-        "`app.db.db_service` re-esporta lo stesso oggetto ma "
-        "drag l'intero cross-engine bundle (results +"
-        " logs + config); il leaf rimuove quella superficie."
+        + "\nIl canonical boundary per `get_user` e' "
+        "`app.core.auth.db.get_user`."
     )
 
 
-def test_dependencies_imports_users_leaf():
-    """Positive lock: `app/core/auth/dependencies.py` MUST
-    import ``app.db.config.users`` (the canonical leaf the
-    active-user check now consumes). If this assertion fails
-    someone migrated AWAY from the leaf without updating this
-    contract test."""
+def test_dependencies_imports_auth_db_boundary():
+    """Positive lock: dependencies must import `app.core.auth.db`."""
     text = _DEPENDENCIES_PY.read_text(encoding="utf-8")
     tree = ast.parse(text, filename=str(_DEPENDENCIES_PY))
     found = False
+    legacy_found = False
     for node in ast.walk(tree):
         if isinstance(node, ast.Import):
             for alias in node.names:
-                if alias.name == "app.db.config.users":
+                if alias.name == "app.core.auth.db":
                     found = True
-                    break
+                if alias.name == "app.db.config.users":
+                    legacy_found = True
         elif isinstance(node, ast.ImportFrom):
-            if node.module == "app.db.config.users":
+            if node.module == "app.core.auth.db":
                 found = True
-                break
+            if node.module == "app.core.auth":
+                found = found or any(alias.name == "db" for alias in node.names)
+            if node.module == "app.db.config.users":
+                legacy_found = True
             if node.module == "app.db.config":
-                for alias in node.names:
-                    if alias.name == "users":
-                        found = True
-                        break
+                legacy_found = legacy_found or any(
+                    alias.name == "users" for alias in node.names
+                )
     assert found, (
-        "REGRESSIONE BE-GO-READY-AUTH-ENGINE-015: "
-        "`app/core/auth/dependencies.py` non importa piu' "
-        "`app.db.config.users` (canonical leaf per `get_user`). "
-        "Se la chiamata e' stata spostata altrove, aggiornare "
-        "questa asserzione + la docstring del modulo."
+        "`app/core/auth/dependencies.py` must import `app.core.auth.db` "
+        "for the active-user DB lookup."
+    )
+    assert not legacy_found, (
+        "`app/core/auth/dependencies.py` must not import "
+        "`app.db.config.users`."
     )

@@ -349,7 +349,7 @@ def mock_download_deps(mock_file_service, monkeypatch):
     """Setup per download: mock blob + get_file_source metadata."""
     mock_file_service.get_blob_bytes.return_value = b"FAKEBLOB" * 10
 
-    import app.db.config.file_sources as db_mod
+    import app.core.files.db as db_mod
     monkeypatch.setattr(
         db_mod, "get_file_source",
         lambda file_id, include_data=False: {
@@ -386,7 +386,7 @@ def test_download_log_forces_attachment_disposition(
 ):
     mock_file_service.get_blob_bytes.return_value = b"log data\n"
 
-    import app.db.config.file_sources as db_mod
+    import app.core.files.db as db_mod
     monkeypatch.setattr(
         db_mod, "get_file_source",
         lambda file_id, include_data=False: {

@@ -15,6 +15,7 @@ from fastapi.testclient import TestClient
 
 from app.shared.contracts.auth import CurrentUser, ROLES_KIOSK_ONLY, VALID_ROLES
 from app.core.auth.auth import get_current_user, require_admin, require_not_esecutore, require_superadmin, require_user_or_above
+from app.core.eseguibili.db import EseguibileRow, EseguibileSummaryRow
 
 
 pytestmark = [pytest.mark.unit, pytest.mark.contract, pytest.mark.security]
@@ -167,18 +168,18 @@ def test_esecutore_can_list_eseguibili(
     Nessun guard `require_not_esecutore` su questo endpoint."""
     client, router_module = eseguibili_app_as_esecutore
     # Tutti i campi obbligatori di EseguibileSummary (response_model)
-    fake_row = {
-        "id": "e1",
-        "name": "test-exec",
-        "description": "",
-        "default_output_format": "csv",
-        "icon": None,
-        "group_id": "g1",
-        "created_by": "u-admin",
-        "created_at": "2026-01-01T00:00:00",
-        "updated_at": "2026-01-01T00:00:00",
-        "expected_columns_count": 0,
-    }
+    fake_row = EseguibileSummaryRow(
+        id="e1",
+        name="test-exec",
+        description="",
+        default_output_format="csv",
+        icon=None,
+        group_id="g1",
+        created_by="u-admin",
+        created_at="2026-01-01T00:00:00",
+        updated_at="2026-01-01T00:00:00",
+        expected_columns_count=0,
+    )
     with patch.object(
         router_module.eseguibili_db, "list_eseguibili", return_value=[fake_row]
     ), patch(
@@ -201,22 +202,21 @@ def test_esecutore_can_get_eseguibile_visible(
 ):
     """`GET /api/eseguibili/{id}` per risorsa visibile -> 200."""
     client, router_module = eseguibili_app_as_esecutore
-    fake_row = {
-        "id": "e1",
-        "name": "test-exec",
-        "description": "",
-        "expected_columns": [],
-        "default_output_format": "csv",
-        "default_output_name": None,
-        "icon": None,
-        "source_canvas_id": None,
-        "group_id": "g1",
-        "created_by": "u-admin",
-        "created_at": "2026-01-01T00:00:00",
-        "updated_at": "2026-01-01T00:00:00",
-        "output_is_file_based": False,
-        "inferred_output_extension": None,
-    }
+    fake_row = EseguibileRow(
+        id="e1",
+        name="test-exec",
+        description="",
+        canvas={},
+        expected_columns=[],
+        default_output_format="csv",
+        default_output_name=None,
+        icon=None,
+        source_canvas_id=None,
+        group_id="g1",
+        created_by="u-admin",
+        created_at="2026-01-01T00:00:00",
+        updated_at="2026-01-01T00:00:00",
+    )
     with patch.object(
         router_module.eseguibili_db, "get_eseguibile", return_value=fake_row
     ), patch.object(
@@ -237,13 +237,18 @@ def test_esecutore_cannot_get_eseguibile_cross_tenant(
     visibile -> 403/404 (a seconda del helper assert_resource_visible).
     Il punto e': NON 200, niente leak cross-tenant."""
     client, router_module = eseguibili_app_as_esecutore
-    fake_row = {
-        "id": "e2",
-        "name": "other-group-exec",
-        "group_id": "g2",  # altro gruppo
-        "created_by": "u-admin-other",
-        "project_id": "p2",
-    }
+    fake_row = EseguibileRow(
+        id="e2",
+        name="other-group-exec",
+        description="",
+        canvas={},
+        expected_columns=[],
+        default_output_format="csv",
+        group_id="g2",  # altro gruppo
+        created_by="u-admin-other",
+        created_at="2026-01-01T00:00:00",
+        updated_at="2026-01-01T00:00:00",
+    )
 
     def _deny(*a, **kw):
         raise HTTPException(status_code=404, detail="Eseguibile non trovato")

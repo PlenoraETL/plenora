@@ -10,7 +10,7 @@ import psycopg2
 import pytest
 
 import app.config as config_mod
-import app.db.config.file_sources as file_sources_db
+import app.core.files.db as file_sources_db
 import app.shared.sharing as sharing_mod
 from app.core.arricchisci.execution_context import ArricchisciExecutionContext
 from app.shared.exceptions import FileSourceResolutionError

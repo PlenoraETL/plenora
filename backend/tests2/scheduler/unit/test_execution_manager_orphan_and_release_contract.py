@@ -96,7 +96,7 @@ def test_execute_marks_schedule_as_orphan_when_project_does_not_exist(
     manager.concurrency.try_acquire = MagicMock(return_value="acquired")
 
     with patch(
-        "app.db.config.schedules.get_schedule",
+        "app.core.scheduler.db.get_schedule",
         return_value={"id": "s-orphan", "group_id": "grp-A"},
     ), patch(
         "app.services.project_service.ProjectService"
@@ -168,7 +168,7 @@ def test_finally_release_lock_retries_once_after_transient_db_failure(
     )
 
     with patch(
-        "app.db.config.schedules.get_schedule",
+        "app.core.scheduler.db.get_schedule",
         return_value={"id": "s-release", "group_id": "grp-A"},
     ), patch(
         "app.services.project_service.ProjectService"
@@ -239,7 +239,7 @@ def test_finally_does_not_propagate_when_both_release_attempts_fail(
     )
 
     with patch(
-        "app.db.config.schedules.get_schedule",
+        "app.core.scheduler.db.get_schedule",
         return_value={"id": "s-disaster", "group_id": "grp-A"},
     ), patch(
         "app.services.project_service.ProjectService"

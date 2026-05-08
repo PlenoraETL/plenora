@@ -1,7 +1,7 @@
 """
 Contract test - BE-HARDEN-001C E3: save_file_sources_batch atomic.
 
-Verifica le invarianti del nuovo `app.db.config.file_sources.save_file_sources_batch`:
+Verifica le invarianti del nuovo `app.core.files.db.save_file_sources_batch`:
 """
 
 from __future__ import annotations
@@ -41,7 +41,7 @@ def patched_transaction(fake_conn_cursor):
     def tx_cm():
         yield conn
 
-    return patch("app.db.config.file_sources.transaction", side_effect=tx_cm), conn, cursor
+    return patch("app.core.files.db.transaction", side_effect=tx_cm), conn, cursor
 
 
 def _row(file_id: str, **overrides):
@@ -65,7 +65,7 @@ def _row(file_id: str, **overrides):
 
 
 def test_save_batch_happy_path_single_executemany_in_transaction(patched_transaction):
-    from app.db.config import file_sources as fs_db
+    from app.core.files import db as fs_db
 
     patcher, conn, cursor = patched_transaction
     rows = [_row("f1"), _row("f2"), _row("f3")]
@@ -88,7 +88,7 @@ def test_save_batch_happy_path_single_executemany_in_transaction(patched_transac
 def test_save_batch_shares_single_timestamp_across_rows(patched_transaction):
     """now() chiamato UNA volta -> created_at == updated_at e identico
     per tutte le N row del batch."""
-    from app.db.config import file_sources as fs_db
+    from app.core.files import db as fs_db
 
     patcher, conn, cursor = patched_transaction
     rows = [_row("f1"), _row("f2")]
@@ -113,7 +113,7 @@ def test_save_batch_shares_single_timestamp_across_rows(patched_transaction):
 def test_save_batch_raises_before_transaction_when_row_missing_blob():
     """Row con data=None E storage_key=None -> ValueError SOLLEVATA PRIMA
     che `transaction()` venga chiamato. Zero side effect DB."""
-    from app.db.config import file_sources as fs_db
+    from app.core.files import db as fs_db
 
     bad_rows = [
         _row("f1"),
@@ -121,7 +121,7 @@ def test_save_batch_raises_before_transaction_when_row_missing_blob():
         _row("f3"),
     ]
 
-    with patch("app.db.config.file_sources.transaction") as mock_tx:
+    with patch("app.core.files.db.transaction") as mock_tx:
         with pytest.raises(ValueError, match="senza data ne storage_key"):
             fs_db.save_file_sources_batch(bad_rows)
 
@@ -133,7 +133,7 @@ def test_save_batch_raises_before_transaction_when_row_missing_blob():
 def test_save_batch_storage_key_only_row_is_valid(patched_transaction):
     """Row con data=None ma storage_key valorizzato -> validation pass,
     INSERT eseguito (object_storage path)."""
-    from app.db.config import file_sources as fs_db
+    from app.core.files import db as fs_db
 
     patcher, conn, cursor = patched_transaction
     rows = [_row("f1", data=None, storage_key="file-sources/batch_x/file.csv",
@@ -151,7 +151,7 @@ def test_save_batch_storage_key_only_row_is_valid(patched_transaction):
 def test_save_batch_rolls_back_on_executemany_exception(patched_transaction):
     """executemany solleva -> exception propaga al caller. Il rollback e'
     responsabilita' di `transaction()` (verificato in pg_connection)."""
-    from app.db.config import file_sources as fs_db
+    from app.core.files import db as fs_db
 
     patcher, conn, cursor = patched_transaction
     cursor.executemany.side_effect = RuntimeError("DB constraint violated")
@@ -166,9 +166,9 @@ def test_save_batch_rolls_back_on_executemany_exception(patched_transaction):
 
 
 def test_save_batch_empty_rows_is_noop():
-    from app.db.config import file_sources as fs_db
+    from app.core.files import db as fs_db
 
-    with patch("app.db.config.file_sources.transaction") as mock_tx:
+    with patch("app.core.files.db.transaction") as mock_tx:
         out = fs_db.save_file_sources_batch([])
 
     assert out is None
@@ -180,12 +180,12 @@ def test_save_batch_empty_rows_is_noop():
 
 def test_save_batch_does_not_call_fetchone_post_insert(patched_transaction):
     """Risparmio N round-trip: nessun SELECT per row post-INSERT."""
-    from app.db.config import file_sources as fs_db
+    from app.core.files import db as fs_db
 
     patcher, conn, cursor = patched_transaction
     rows = [_row("f1"), _row("f2")]
 
-    with patcher, patch("app.db.config.file_sources.fetchone") as mock_fo:
+    with patcher, patch("app.core.files.db.fetchone") as mock_fo:
         fs_db.save_file_sources_batch(rows)
 
     mock_fo.assert_not_called()

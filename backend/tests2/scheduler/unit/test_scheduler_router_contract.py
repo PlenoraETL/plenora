@@ -42,7 +42,7 @@ def test_download_without_run_uses_latest_archived_schedule_run(current_user, tm
     schedule_cfg = SimpleNamespace(pipeline=SimpleNamespace(project_id=project_id))
 
     with patch("app.core.scheduler.schedule_service.ScheduleService.get_schedule", return_value=schedule_cfg), \
-         patch("app.db.config.schedules.get_schedule", return_value={"id": schedule_id, "group_id": "grp-1"}), \
+         patch("app.core.scheduler.db.get_schedule", return_value={"id": schedule_id, "group_id": "grp-1"}), \
          patch("app.config.settings", new=SimpleNamespace(RESULTS_DIR=tmp_path)):
         response = client.get(f"/api/schedules/{schedule_id}/download")
 
@@ -57,7 +57,7 @@ def test_download_rejects_malformed_run_parameter(current_user):
     schedule_cfg = SimpleNamespace(pipeline=SimpleNamespace(project_id="proj-1"))
 
     with patch("app.core.scheduler.schedule_service.ScheduleService.get_schedule", return_value=schedule_cfg), \
-         patch("app.db.config.schedules.get_schedule", return_value={"id": schedule_id, "group_id": "grp-1"}):
+         patch("app.core.scheduler.db.get_schedule", return_value={"id": schedule_id, "group_id": "grp-1"}):
         response = client.get(f"/api/schedules/{schedule_id}/download", params={"run": "../evil"})
 
     assert response.status_code == 400
@@ -76,7 +76,7 @@ def test_download_specific_run_returns_requested_file(current_user, tmp_path):
     schedule_cfg = SimpleNamespace(pipeline=SimpleNamespace(project_id=project_id))
 
     with patch("app.core.scheduler.schedule_service.ScheduleService.get_schedule", return_value=schedule_cfg), \
-         patch("app.db.config.schedules.get_schedule", return_value={"id": schedule_id, "group_id": "grp-1"}), \
+         patch("app.core.scheduler.db.get_schedule", return_value={"id": schedule_id, "group_id": "grp-1"}), \
          patch("app.config.settings", new=SimpleNamespace(RESULTS_DIR=tmp_path)):
         response = client.get(
             f"/api/schedules/{schedule_id}/download",
@@ -101,7 +101,7 @@ def test_list_runs_returns_archived_runs_with_sizes(current_user, tmp_path):
     schedule_cfg = SimpleNamespace(pipeline=SimpleNamespace(project_id=project_id))
 
     with patch("app.core.scheduler.schedule_service.ScheduleService.get_schedule", return_value=schedule_cfg), \
-         patch("app.db.config.schedules.get_schedule", return_value={"id": schedule_id, "group_id": "grp-1"}), \
+         patch("app.core.scheduler.db.get_schedule", return_value={"id": schedule_id, "group_id": "grp-1"}), \
          patch("app.config.settings", new=SimpleNamespace(RESULTS_DIR=tmp_path)):
         response = client.get(f"/api/schedules/{schedule_id}/runs")
 
@@ -119,7 +119,7 @@ def test_list_runs_returns_empty_payload_when_no_archived_runs(current_user):
     schedule_cfg = SimpleNamespace(pipeline=SimpleNamespace(project_id=project_id))
 
     with patch("app.core.scheduler.schedule_service.ScheduleService.get_schedule", return_value=schedule_cfg), \
-         patch("app.db.config.schedules.get_schedule", return_value={"id": schedule_id, "group_id": "grp-1"}):
+         patch("app.core.scheduler.db.get_schedule", return_value={"id": schedule_id, "group_id": "grp-1"}):
         response = client.get(f"/api/schedules/{schedule_id}/runs")
 
     assert response.status_code == 200

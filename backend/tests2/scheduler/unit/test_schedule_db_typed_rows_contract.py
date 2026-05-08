@@ -25,7 +25,7 @@ def _raw_schedule_row(now: datetime) -> dict[str, object]:
 
 
 def test_get_schedule_row_returns_immutable_schedule_row(monkeypatch):
-    from app.db.config import schedules as schedule_db
+    from app.core.scheduler import db as schedule_db
 
     now = datetime(2026, 5, 7, 10, 0, tzinfo=timezone.utc)
     monkeypatch.setattr(
@@ -53,7 +53,7 @@ def test_get_schedule_row_returns_immutable_schedule_row(monkeypatch):
 
 
 def test_list_schedule_rows_returns_typed_rows(monkeypatch):
-    from app.db.config import schedules as schedule_db
+    from app.core.scheduler import db as schedule_db
 
     now = datetime(2026, 5, 7, 10, 0, tzinfo=timezone.utc)
     monkeypatch.setattr(
@@ -81,7 +81,7 @@ def test_list_schedule_rows_returns_typed_rows(monkeypatch):
 
 
 def test_get_schedule_keeps_legacy_dict_wrapper(monkeypatch):
-    from app.db.config import schedules as schedule_db
+    from app.core.scheduler import db as schedule_db
 
     monkeypatch.setattr(
         schedule_db,
@@ -108,7 +108,7 @@ def test_get_schedule_keeps_legacy_dict_wrapper(monkeypatch):
 
 
 def test_save_schedule_returns_typed_schedule_row(monkeypatch):
-    from app.db.config import schedules as schedule_db
+    from app.core.scheduler import db as schedule_db
 
     persisted = schedule_db.ScheduleRow(
         id="schedule-1",
@@ -145,7 +145,7 @@ def test_save_schedule_returns_typed_schedule_row(monkeypatch):
 
 
 def test_update_schedule_returns_typed_schedule_row(monkeypatch):
-    from app.db.config import schedules as schedule_db
+    from app.core.scheduler import db as schedule_db
 
     persisted = schedule_db.ScheduleRow(
         id="schedule-1",

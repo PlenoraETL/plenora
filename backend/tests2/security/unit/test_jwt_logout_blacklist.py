@@ -59,7 +59,7 @@ def auth_client(monkeypatch, patched_blacklist):
     duplicare il fake.
     """
     from app.core.auth import auth as auth_mod
-    import app.db.config.users as _users_dal
+    from app.core.auth import db as _users_dal
 
     def _fake_get_user(user_id: str):
         return {

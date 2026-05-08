@@ -192,7 +192,7 @@ def test_resolve_file_source_id_path_ctx_wins_over_stale_singleton(api_service, 
     winner-grp-B, e mock del DB blob per evitare I/O reale."""
     import app.config as config_mod
     import app.shared.sharing as sharing_mod
-    import app.db.config.file_sources as file_sources_db
+    import app.core.files.db as file_sources_db
 
     # Stato legacy stale.
     api_service._current_group_id = "stale-grp-A"
@@ -334,7 +334,7 @@ def test_resolve_file_source_id_path_requires_visibility_before_materializing_bl
     # BE-GO-READY-TRANSFORMATION-ENGINE-022: typed ctx Phase 2.
     import app.config as config_mod
     import app.shared.sharing as sharing_mod
-    import app.db.config.file_sources as file_sources_db
+    import app.core.files.db as file_sources_db
 
     monkeypatch.setattr(
         config_mod,

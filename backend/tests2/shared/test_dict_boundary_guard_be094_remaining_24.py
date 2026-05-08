@@ -25,7 +25,6 @@ _TARGET_BOUNDARY_MODULES_BE094: tuple[str, ...] = (
     "app/db/config/schedules.py",
     "app/core/orchestrator/task_service.py",
     "app/core/connections/db.py",
-    "app/db/config/connections.py",
     "app/core/connections/service.py",
     "app/core/connections/arcgis_connection_resolver.py",
 )
@@ -37,10 +36,10 @@ class BroadDictReturn(NamedTuple):
     annotation: str
 
 
-# Count report: 22 remaining broad dict-return residuals across the selected
+# Count report: 18 remaining broad dict-return residuals across the selected
 # BE094 core/db boundary modules. Future batches should remove entries here
 # as they replace compatibility dict wrappers with typed contracts.
-EXPECTED_BROAD_DICT_RETURN_RESIDUALS_BE094_REMAINING_22: frozenset[
+EXPECTED_BROAD_DICT_RETURN_RESIDUALS_BE094_REMAINING_18: frozenset[
     BroadDictReturn
 ] = frozenset(
     {
@@ -130,22 +129,6 @@ EXPECTED_BROAD_DICT_RETURN_RESIDUALS_BE094_REMAINING_22: frozenset[
             "ConnectionConfigRow.to_legacy_dict",
             "dict[str, object]",
         ),
-        BroadDictReturn(
-            "app/db/config/connections.py",
-            "get_connection_config",
-            "Optional[Dict]",
-        ),
-        BroadDictReturn(
-            "app/db/config/connections.py",
-            "list_connections",
-            "List[Dict]",
-        ),
-        BroadDictReturn("app/db/config/connections.py", "create_connection", "Dict"),
-        BroadDictReturn(
-            "app/db/config/connections.py",
-            "update_connection",
-            "Optional[Dict]",
-        ),
     }
 )
 
@@ -156,7 +139,7 @@ BROAD_DICT_RETURN_CLASSIFICATIONS_BE094: dict[BroadDictReturn, str] = {
         if residual.qualname.endswith(("to_legacy_dict", "to_dict"))
         else "KEEP_COMPAT_WITH_REMOVAL_CONDITION"
     )
-    for residual in EXPECTED_BROAD_DICT_RETURN_RESIDUALS_BE094_REMAINING_22
+    for residual in EXPECTED_BROAD_DICT_RETURN_RESIDUALS_BE094_REMAINING_18
 }
 
 TYPED_ZERO_COUNT_MODULES_BE094_DONE: frozenset[str] = frozenset(
@@ -233,15 +216,15 @@ def _scan_broad_dict_returns(paths: Iterable[str]) -> frozenset[BroadDictReturn]
     return frozenset(hits)
 
 
-def test_be094_selected_boundary_broad_dict_returns_match_remaining_22() -> None:
+def test_be094_selected_boundary_broad_dict_returns_match_remaining_18() -> None:
     """Ratchet selected core/db boundary broad-dict returns.
 
     Extra entries mean new broad dict returns crossed one of the selected
     service/repository boundaries. Missing entries mean a future batch removed
-    residuals and should lower the ``REMAINING_22`` baseline.
+    residuals and should lower the ``REMAINING_18`` baseline.
     """
     found = _scan_broad_dict_returns(_TARGET_BOUNDARY_MODULES_BE094)
-    expected = EXPECTED_BROAD_DICT_RETURN_RESIDUALS_BE094_REMAINING_22
+    expected = EXPECTED_BROAD_DICT_RETURN_RESIDUALS_BE094_REMAINING_18
 
     extra = sorted(found - expected)
     missing = sorted(expected - found)
@@ -253,8 +236,8 @@ def test_be094_selected_boundary_broad_dict_returns_match_remaining_22() -> None
     )
     assert not missing, (
         "Broad dict return residuals were removed from selected BE094 "
-        f"boundary modules: {missing}. Ratchet the count below 22 by "
-        "updating EXPECTED_BROAD_DICT_RETURN_RESIDUALS_BE094_REMAINING_22."
+        f"boundary modules: {missing}. Ratchet the count below 18 by "
+        "updating EXPECTED_BROAD_DICT_RETURN_RESIDUALS_BE094_REMAINING_18."
     )
 
 

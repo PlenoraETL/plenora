@@ -10,7 +10,7 @@ from typing import Optional
 from fastapi import Depends
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 
-import app.db.config.users as _users_dal
+from app.core.auth import db as _users_dal
 from app.core.auth import disclosure as _disclosure
 from app.core.auth.roles import (
     ROLES_ABOVE_VIEWER,

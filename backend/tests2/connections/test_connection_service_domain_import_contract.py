@@ -45,7 +45,7 @@ def test_connection_service_uses_domain_db_bridge_not_legacy_config_leaf() -> No
     assert "app.core.connections" in imported_modules
 
 
-def test_connection_db_bridge_delegates_to_config_leaf() -> None:
+def test_connection_db_bridge_owns_sql_without_legacy_config_leaf() -> None:
     source_path = _BACKEND_ROOT / "app" / "core" / "connections" / "db.py"
     tree = ast.parse(source_path.read_text(encoding="utf-8"))
 
@@ -56,5 +56,5 @@ def test_connection_db_bridge_delegates_to_config_leaf() -> None:
         elif isinstance(node, ast.ImportFrom) and node.module:
             imported_modules.add(node.module)
 
-    assert "app.db.config.connections" in imported_modules
+    assert "app.db.config.connections" not in imported_modules
     assert "app.db.db_service" not in imported_modules

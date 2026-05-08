@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from fastapi import HTTPException
 
-import app.db.config.users as _users_dal
+from app.core.auth import db as _users_dal
 from app.core.auth import disclosure as _disclosure
 from app.core.auth.roles import ROLES_ADMIN_OR_ABOVE
 from app.shared.contracts.auth import CurrentUser

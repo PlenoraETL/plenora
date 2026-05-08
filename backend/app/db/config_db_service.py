@@ -23,7 +23,7 @@ def init_db():
 
 # GROUPS
 
-from app.db.config.groups import (  # noqa: F401,E402
+from app.core.auth.db import (  # noqa: F401,E402
     get_group,
     list_groups,
     create_group,
@@ -35,7 +35,7 @@ from app.db.config.groups import (  # noqa: F401,E402
 
 # USERS
 
-from app.db.config.users import (  # noqa: F401,E402
+from app.core.auth.db import (  # noqa: F401,E402
     get_user,
     get_user_by_username,
     list_users,
@@ -66,9 +66,9 @@ from app.db.config.comparison_keys import delete_comparison_keys  # noqa: F401,E
 
 # CONNECTIONS
 
-from app.db.config.connections import (  # noqa: F401,E402
+from app.core.connections.db import (  # noqa: F401,E402
     get_connection_config,
-    list_connections,
+    list_connection_configs as list_connections,
     create_connection,
     update_connection,
     delete_connection,
@@ -77,7 +77,7 @@ from app.db.config.connections import (  # noqa: F401,E402
 
 # FILE SOURCES
 
-from app.db.config.file_sources import (  # noqa: F401,E402
+from app.core.files.db import (  # noqa: F401,E402
     FileSourceRow,
     get_file_source,
     list_file_sources,
@@ -88,9 +88,10 @@ from app.db.config.file_sources import (  # noqa: F401,E402
 )
 
 
-# DATASOURCES
+# DATASOURCES - explicit domain-owned persistence surface
 
-from app.db.config.datasources import (  # noqa: F401,E402
+from app.core.datasources.db import (  # noqa: F401,E402
+    DataSourceRow,
     get_datasource,
     list_datasources,
     save_datasource,
@@ -113,7 +114,7 @@ from app.db.config.api_connections import (  # noqa: F401,E402
 
 # SCHEDULES
 
-from app.db.config.schedules import (  # noqa: F401,E402
+from app.core.scheduler.db import (  # noqa: F401,E402
     get_schedule,
     list_schedules,
     save_schedule,

@@ -7,12 +7,16 @@ Invariants blindati (da ``backend/docs/architecture/invariants.md``):
 from __future__ import annotations
 
 import json
+import ast
 from datetime import datetime, timezone
+from pathlib import Path
 
 import pytest
 
 
 pytestmark = [pytest.mark.unit, pytest.mark.contract, pytest.mark.shared]
+
+_BACKEND_ROOT = Path(__file__).resolve().parent.parent.parent
 
 
 @pytest.fixture(autouse=True)
@@ -55,6 +59,22 @@ def _make_row(ds_id: str, group_id: str, name: str = "test ds",
     }
 
 
+def test_datasource_service_uses_domain_db_not_config_leaf() -> None:
+    source_path = _BACKEND_ROOT / "app" / "core" / "datasources" / "service.py"
+    tree = ast.parse(source_path.read_text(encoding="utf-8"))
+
+    imported_modules: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            imported_modules.update(alias.name for alias in node.names)
+        elif isinstance(node, ast.ImportFrom) and node.module:
+            imported_modules.add(node.module)
+
+    assert "app.db.config.datasources" not in imported_modules
+    assert "app.db.pg_connection" not in imported_modules
+    assert "app.core.datasources" in imported_modules
+
+
 def test_list_datasources_filters_by_group_id_uses_where_clause(monkeypatch):
     """Blinda §4.1 tenant isolation: con ``group_id`` non-None la query SQL
     include ``WHERE group_id = %s`` e i params passano l'id del tenant.
@@ -64,10 +84,7 @@ def test_list_datasources_filters_by_group_id_uses_where_clause(monkeypatch):
     nessun errore, solo lista gonfia.
     """
     from app.core.datasources.service import DataSourceService
-    # BE-GO-READY-DB-ENGINE-005: production code does
-    # `from app.db.pg_connection import fetchall as _fetchall`
-    # at the lazy-import boundary. Patch the canonical helper.
-    import app.db.pg_connection as pg
+    import app.core.datasources.db as datasource_db
 
     captured = []
 
@@ -75,7 +92,7 @@ def test_list_datasources_filters_by_group_id_uses_where_clause(monkeypatch):
         captured.append((query, params))
         return []
 
-    monkeypatch.setattr(pg, "fetchall", fake_fetchall)
+    monkeypatch.setattr(datasource_db, "fetchall", fake_fetchall)
 
     service = DataSourceService()
     service.list_datasources(group_id="tenant-a")
@@ -103,10 +120,7 @@ def test_list_datasources_no_where_clause_when_group_id_is_none(monkeypatch):
     del caller (router/auth layer) proteggere la chiamata.
     """
     from app.core.datasources.service import DataSourceService
-    # BE-GO-READY-DB-ENGINE-005: production code does
-    # `from app.db.pg_connection import fetchall as _fetchall`
-    # at the lazy-import boundary. Patch the canonical helper.
-    import app.db.pg_connection as pg
+    import app.core.datasources.db as datasource_db
 
     captured = []
 
@@ -114,7 +128,7 @@ def test_list_datasources_no_where_clause_when_group_id_is_none(monkeypatch):
         captured.append((query, params))
         return []
 
-    monkeypatch.setattr(pg, "fetchall", fake_fetchall)
+    monkeypatch.setattr(datasource_db, "fetchall", fake_fetchall)
 
     service = DataSourceService()
     service.list_datasources(group_id=None)
@@ -147,11 +161,7 @@ def test_list_datasources_uses_single_fetchall_no_per_row_requery(monkeypatch):
     c'è un path di re-fetch che non deve esserci.
     """
     from app.core.datasources.service import DataSourceService
-    # BE-GO-READY-DB-ENGINE-005: production code does
-    # `from app.db.pg_connection import fetchall as _fetchall`
-    # at the lazy-import boundary.
-    import app.db.pg_connection as pg
-    import app.db.config.datasources as datasource_db
+    import app.core.datasources.db as datasource_db
 
     rows = [_make_row(f"ds-{i}", "tenant-a", f"ds{i}") for i in range(5)]
 
@@ -166,7 +176,7 @@ def test_list_datasources_uses_single_fetchall_no_per_row_requery(monkeypatch):
         get_datasource_count[0] += 1
         return rows[0]  # non dovrebbe mai essere chiamato
 
-    monkeypatch.setattr(pg, "fetchall", fake_fetchall)
+    monkeypatch.setattr(datasource_db, "fetchall", fake_fetchall)
     monkeypatch.setattr(datasource_db, "get_datasource", fake_get_datasource)
 
     service = DataSourceService()
@@ -197,7 +207,7 @@ def test_delete_datasource_returns_false_for_nonexistent_no_db_delete(monkeypatc
     operazione DB viene eseguita.
     """
     from app.core.datasources.service import DataSourceService
-    import app.db.config.datasources as datasource_db
+    import app.core.datasources.db as datasource_db
 
     delete_called_with = []
     monkeypatch.setattr(datasource_db, "get_datasource", lambda ds_id: None)
@@ -235,7 +245,7 @@ def test_create_datasource_generates_id_with_canonical_pattern(monkeypatch):
     """
     from app.core.datasources.service import DataSourceService
     from app.core.datasources.models import DataSourceCreate
-    import app.db.config.datasources as datasource_db
+    import app.core.datasources.db as datasource_db
 
     saved = []
     monkeypatch.setattr(datasource_db, "save_datasource", lambda **kw: saved.append(kw))

@@ -22,7 +22,7 @@ def test_file_source_row_keys_cover_save_file_source_kwargs():
     `save_file_source` ECCETTO il kwarg legacy positional `fmt` (la
     colonna SQL si chiama `format` ma il param Python e' `fmt` per
     evitare clash con la builtin)."""
-    from app.db.config.file_sources import FileSourceRow, save_file_source
+    from app.core.files.db import FileSourceRow, save_file_source
 
     sig = inspect.signature(save_file_source)
     save_kwargs = set(sig.parameters.keys())  # file_id, group_id, name, ...
@@ -41,7 +41,7 @@ def test_file_source_row_required_keys_present():
     """I 5 campi obbligatori per un INSERT valido devono essere
     annotati in `FileSourceRow` (TypedDict ha total=False, ma i caller
     devono sempre fornirli)."""
-    from app.db.config.file_sources import FileSourceRow
+    from app.core.files.db import FileSourceRow
 
     required = {"file_id", "group_id", "name", "original_filename", "fmt"}
     row_keys = set(FileSourceRow.__annotations__.keys())
@@ -52,7 +52,7 @@ def test_file_source_row_required_keys_present():
 
 def test_file_source_row_config_facade_points_at_canonical_contract():
     """`FileSourceRow` deve restare ancorato al modulo canonico."""
-    from app.db.config.file_sources import FileSourceRow as canonical
+    from app.core.files.db import FileSourceRow as canonical
     from app.db.config_db_service import FileSourceRow as via_config_facade
 
     assert via_config_facade is canonical
@@ -83,7 +83,7 @@ def test_blob_dispatch_result_subset_of_file_source_row():
     batch save / dei kwargs del single-row save. Se BlobDispatchResult
     introduce una chiave non presente in FileSourceRow, save_file_source
     rifiuterebbe il kwarg con TypeError."""
-    from app.db.config.file_sources import FileSourceRow
+    from app.core.files.db import FileSourceRow
     from app.services.file_storage_dispatch import BlobDispatchResult
 
     blob_keys = set(BlobDispatchResult.__annotations__.keys())

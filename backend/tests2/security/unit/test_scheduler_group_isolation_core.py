@@ -79,9 +79,9 @@ def test_core_blocks_cross_group_execution(schedule_config):
     """schedule(grp-A) → progetto(grp-B): hard fail prima del lock."""
     manager = _make_manager(schedule_config)
 
-    with patch("app.db.config.schedules.get_schedule",
+    with patch("app.core.scheduler.db.get_schedule",
                return_value={"id": "s-1", "group_id": "grp-A"}), \
-         patch("app.services.project_service.ProjectService") as project_service_cls:
+         patch("app.core.projects.service.ProjectService") as project_service_cls:
         project_service_cls.return_value.get_project_metadata.return_value = _project_meta("grp-B")
         result = manager.execute("s-1")
 
@@ -99,9 +99,9 @@ def test_core_blocks_schedule_with_missing_group_id(schedule_config):
     `if schedule_group_id and ...` saltava silente. Ora hard fail."""
     manager = _make_manager(schedule_config)
 
-    with patch("app.db.config.schedules.get_schedule",
+    with patch("app.core.scheduler.db.get_schedule",
                return_value={"id": "s-1", "group_id": None}), \
-         patch("app.services.project_service.ProjectService") as project_service_cls:
+         patch("app.core.projects.service.ProjectService") as project_service_cls:
         project_service_cls.return_value.get_project_metadata.return_value = _project_meta("grp-B")
         result = manager.execute("s-1")
 
@@ -116,9 +116,9 @@ def test_core_blocks_schedule_with_empty_string_group_id(schedule_config):
     Anche questo deve essere fail-closed."""
     manager = _make_manager(schedule_config)
 
-    with patch("app.db.config.schedules.get_schedule",
+    with patch("app.core.scheduler.db.get_schedule",
                return_value={"id": "s-1", "group_id": ""}), \
-         patch("app.services.project_service.ProjectService") as project_service_cls:
+         patch("app.core.projects.service.ProjectService") as project_service_cls:
         project_service_cls.return_value.get_project_metadata.return_value = _project_meta("grp-A")
         result = manager.execute("s-1")
 
@@ -131,9 +131,9 @@ def test_core_blocks_project_with_missing_group_id(schedule_config):
     """Progetto senza group_id assegnato: hard fail."""
     manager = _make_manager(schedule_config)
 
-    with patch("app.db.config.schedules.get_schedule",
+    with patch("app.core.scheduler.db.get_schedule",
                return_value={"id": "s-1", "group_id": "grp-A"}), \
-         patch("app.services.project_service.ProjectService") as project_service_cls:
+         patch("app.core.projects.service.ProjectService") as project_service_cls:
         project_service_cls.return_value.get_project_metadata.return_value = _project_meta(None)
         result = manager.execute("s-1")
 
@@ -145,9 +145,9 @@ def test_core_blocks_project_with_missing_group_id(schedule_config):
 def test_core_blocks_project_with_empty_string_group_id(schedule_config):
     manager = _make_manager(schedule_config)
 
-    with patch("app.db.config.schedules.get_schedule",
+    with patch("app.core.scheduler.db.get_schedule",
                return_value={"id": "s-1", "group_id": "grp-A"}), \
-         patch("app.services.project_service.ProjectService") as project_service_cls:
+         patch("app.core.projects.service.ProjectService") as project_service_cls:
         project_service_cls.return_value.get_project_metadata.return_value = _project_meta("")
         result = manager.execute("s-1")
 
@@ -165,9 +165,9 @@ def test_core_allows_same_group_execution(schedule_config):
     manager = _make_manager(schedule_config)
     manager.concurrency.try_acquire.return_value = "queued"
 
-    with patch("app.db.config.schedules.get_schedule",
+    with patch("app.core.scheduler.db.get_schedule",
                return_value={"id": "s-1", "group_id": "grp-A"}), \
-         patch("app.services.project_service.ProjectService") as project_service_cls:
+         patch("app.core.projects.service.ProjectService") as project_service_cls:
         project_service_cls.return_value.get_project_metadata.return_value = _project_meta("grp-A")
         result = manager.execute("s-1")
 

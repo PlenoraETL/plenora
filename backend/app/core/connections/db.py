@@ -1,8 +1,4 @@
-"""Domain-owned database bridge for connection persistence.
-
-The SQL implementation remains in the existing config DB leaf while callers
-move to the connection domain boundary.
-"""
+"""Domain-owned database bridge for connection persistence."""
 
 from __future__ import annotations
 
@@ -11,7 +7,6 @@ from datetime import datetime, timezone
 from dataclasses import dataclass
 from typing import Mapping, Optional
 
-from app.db.config.connections import delete_connection as _delete_connection
 from app.db.sql_safety import safe_set_clause
 from app.db.pg_connection import execute, fetchall, fetchone
 
@@ -221,7 +216,8 @@ def update_connection(conn_id: str, **fields: object) -> Optional[ConnectionConf
 
 
 def delete_connection(conn_id: str) -> bool:
-    return _delete_connection(conn_id)
+    cur = execute("DELETE FROM connections WHERE id = ?", (conn_id,))
+    return cur.rowcount > 0
 
 
 def list_connection_configs(group_id: str | None = None) -> list[ConnectionConfigRow]:

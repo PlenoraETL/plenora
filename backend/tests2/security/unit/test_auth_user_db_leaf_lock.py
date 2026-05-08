@@ -1,5 +1,5 @@
 """
-Source-bound lock: auth user lookup paths must use config DB leaves.
+Source-bound lock: auth user lookup paths must use auth-owned DB boundary.
 """
 
 from __future__ import annotations
@@ -15,9 +15,9 @@ pytestmark = [pytest.mark.unit, pytest.mark.security, pytest.mark.contract]
 
 _BACKEND_ROOT = Path(__file__).resolve().parents[3]
 _AUTH_FILES = {
-    "app/core/auth/auth.py": "app.db.config.users",
-    "app/core/auth/ownership.py": "app.db.config.users",
-    "app/core/auth/users_router.py": "app.db.config.users",
+    "app/core/auth/auth.py": "app.core.auth.db",
+    "app/core/auth/ownership.py": "app.core.auth.db",
+    "app/core/auth/users_router.py": "app.core.auth.db",
 }
 
 
@@ -45,15 +45,14 @@ def test_auth_user_lookup_paths_do_not_import_db_service(rel_path: str) -> None:
     tree = _tree(rel_path)
     assert not _imports_module(tree, "app.db.db_service", "db_service"), (
         f"{rel_path} re-introduced app.db.db_service. User/auth lookup "
-        "paths must import app.db.config.users directly."
+        "paths must import app.core.auth.db directly."
     )
 
 
 @pytest.mark.parametrize("rel_path, leaf", sorted(_AUTH_FILES.items()))
-def test_auth_user_lookup_paths_import_users_leaf(rel_path: str, leaf: str) -> None:
+def test_auth_user_lookup_paths_import_auth_db(rel_path: str, leaf: str) -> None:
     tree = _tree(rel_path)
-    assert _imports_module(tree, leaf, "users"), (
+    assert _imports_module(tree, leaf, "db"), (
         f"{rel_path} no longer imports {leaf}. Update this guard only if "
-        "the user lookup moved to a narrower canonical leaf."
+        "the auth user lookup moved to another narrower canonical boundary."
     )
-

@@ -12,7 +12,7 @@ from app.core.auth.ownership import (
     assert_resource_visible,
 )
 from app.core.projects.service import ProjectService
-from app.db.config.file_sources import get_file_source as _get_file_source
+from app.core.files.db import get_file_source as _get_file_source
 
 
 def assert_project_access(project_id: str, current_user: CurrentUser) -> dict:

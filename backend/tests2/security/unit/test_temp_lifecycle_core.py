@@ -141,7 +141,7 @@ def test_temp_file_for_cleans_up_tmp_dir_when_zip_extraction_fails(tmp_path):
     # cross-tenant e' testato altrove.
     from app.services.file_service import FileSourceService
     with patch.object(svc, "_get_blob_from_db", return_value=fake_blob), \
-         patch("app.db.config.file_sources.get_file_source", return_value=fake_meta), \
+         patch("app.core.files.db.get_file_source", return_value=fake_meta), \
          patch.object(svc, "_assert_visible", return_value=None):
         result = svc._temp_file_for(
             "fs-1", expected_group_id=FileSourceService.SUPERADMIN_BYPASS,
@@ -185,7 +185,7 @@ def test_temp_file_for_cleans_up_tmp_dir_when_no_shp_inside_valid_zip(tmp_path):
     # N1: stesso bypass del test sopra
     from app.services.file_service import FileSourceService
     with patch.object(svc, "_get_blob_from_db", return_value=fake_blob), \
-         patch("app.db.config.file_sources.get_file_source", return_value=fake_meta), \
+         patch("app.core.files.db.get_file_source", return_value=fake_meta), \
          patch.object(svc, "_assert_visible", return_value=None):
         result = svc._temp_file_for(
             "fs-1", expected_group_id=FileSourceService.SUPERADMIN_BYPASS,

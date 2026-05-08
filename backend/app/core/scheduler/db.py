@@ -1,16 +1,19 @@
 """
-Schedules DAL helpers.
+Scheduler-owned database helpers for schedules.
 
-Keeps config-table persistence isolated behind a narrow database module.
+Classification: DONE. Schedule SQL and row hydration belong to the
+ORCHESTRATION_ENGINE scheduler domain, not to app.db.config.
 """
+
+from __future__ import annotations
 
 import json
 from dataclasses import dataclass
-from datetime import datetime
-from typing import Dict, Iterable, List, Mapping, Optional, cast
+from datetime import datetime, timezone
+from typing import Iterable, Mapping, Optional, cast
 
+from app.db.pg_connection import execute, fetchall, fetchone
 from app.db.sql_safety import safe_set_clause
-from app.db.pg_connection import fetchone, fetchall, execute
 
 
 @dataclass(frozen=True)
@@ -43,8 +46,8 @@ class ScheduleRow:
             created_by=cast(Optional[str], row.get("created_by")),
         )
 
-    def to_legacy_dict(self) -> Dict[str, object]:
-        """Compatibility shape for callers not migrated to ScheduleRow."""
+    def to_legacy_dict(self) -> dict[str, object]:
+        """Compatibility shape for callers that still need mapping access."""
         return {
             "id": self.id,
             "group_id": self.group_id,
@@ -59,12 +62,12 @@ class ScheduleRow:
         }
 
 
-def _decode_schedule_config(row: Dict[str, object]) -> None:
+def _decode_schedule_config(row: dict[str, object]) -> None:
     if isinstance(row.get("config"), str):
         row["config"] = json.loads(cast(str, row["config"]))
 
 
-def _schedule_rows(rows: Iterable[Mapping[str, object]]) -> List[ScheduleRow]:
+def _schedule_rows(rows: Iterable[Mapping[str, object]]) -> list[ScheduleRow]:
     return [ScheduleRow.from_mapping(row) for row in rows]
 
 
@@ -75,22 +78,22 @@ def get_schedule_row(schedule_id: str) -> Optional[ScheduleRow]:
     return ScheduleRow.from_mapping(row) if row else None
 
 
-def list_schedule_rows(group_id: str) -> List[ScheduleRow]:
+def list_schedule_rows(group_id: str) -> list[ScheduleRow]:
     rows = fetchall(
         "SELECT * FROM schedules WHERE group_id = ? ORDER BY created_at DESC",
-        (group_id,)
+        (group_id,),
     )
-    for r in rows:
-        _decode_schedule_config(r)
+    for row in rows:
+        _decode_schedule_config(row)
     return _schedule_rows(rows)
 
 
-def get_schedule(schedule_id: str) -> Optional[Dict[str, object]]:
+def get_schedule(schedule_id: str) -> Optional[dict[str, object]]:
     row = get_schedule_row(schedule_id)
     return row.to_legacy_dict() if row else None
 
 
-def list_schedules(group_id: str) -> List[Dict[str, object]]:
+def list_schedules(group_id: str) -> list[dict[str, object]]:
     return [row.to_legacy_dict() for row in list_schedule_rows(group_id)]
 
 
@@ -101,18 +104,27 @@ def save_schedule(
     name: str,
     cron_expression: str,
     is_enabled: bool = True,
-    config: Optional[Dict[str, object]] = None,
+    config: Optional[dict[str, object]] = None,
     created_by: Optional[str] = None,
 ) -> ScheduleRow:
-    from datetime import datetime, timezone
     now = datetime.now(timezone.utc).isoformat()
     execute(
         "INSERT INTO schedules (id, group_id, project_id, name, cron_expression, is_enabled, config, created_at, updated_at, created_by) "
         "VALUES (?,?,?,?,?,?,?,?,?,?) ON CONFLICT (id) DO UPDATE SET "
         "name=EXCLUDED.name, cron_expression=EXCLUDED.cron_expression, is_enabled=EXCLUDED.is_enabled, "
         "config=EXCLUDED.config, updated_at=EXCLUDED.updated_at",
-        (schedule_id, group_id, project_id, name, cron_expression,
-         is_enabled, json.dumps(config or {}), now, now, created_by)
+        (
+            schedule_id,
+            group_id,
+            project_id,
+            name,
+            cron_expression,
+            is_enabled,
+            json.dumps(config or {}),
+            now,
+            now,
+            created_by,
+        ),
     )
     row = get_schedule_row(schedule_id)
     if row is None:
@@ -124,7 +136,6 @@ def update_schedule(
     schedule_id: str,
     **fields: object,
 ) -> Optional[ScheduleRow]:
-    from datetime import datetime, timezone
     if "config" in fields and isinstance(fields["config"], dict):
         fields["config"] = json.dumps(fields["config"])
     if "is_enabled" in fields:

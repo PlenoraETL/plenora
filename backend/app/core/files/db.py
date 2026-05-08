@@ -1,8 +1,4 @@
-"""
-File Sources DAL helpers.
-
-Keeps config-table persistence isolated behind a narrow database module.
-"""
+"""Domain-owned file-source DB helpers."""
 
 import json
 from typing import Any, Dict, List, Optional, TypedDict

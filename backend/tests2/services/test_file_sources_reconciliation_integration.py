@@ -72,7 +72,7 @@ def _make_tx_patcher(
         yield conn
 
     return (
-        patch("app.db.config.file_sources.transaction", side_effect=tx_cm),
+        patch("app.core.files.db.transaction", side_effect=tx_cm),
         cursor,
         conn,
     )
@@ -86,7 +86,7 @@ def _executed_sqls(cursor):
 
 
 def test_last_reference_records_pending_inside_transaction():
-    from app.db.config import file_sources as fs_db
+    from app.core.files import db as fs_db
 
     patcher, cursor, _conn = _make_tx_patcher(
         current_storage_key="file-sources/file_abc/x.csv",
@@ -138,7 +138,7 @@ def test_last_reference_records_pending_inside_transaction():
 
 
 def test_compensating_delete_ok_marks_done():
-    from app.db.config import file_sources as fs_db
+    from app.core.files import db as fs_db
 
     patcher, cursor, _conn = _make_tx_patcher(
         current_storage_key="key1",
@@ -168,7 +168,7 @@ def test_compensating_delete_failed_marks_failed_attempt_and_returns_true():
     """ADR-0011 posture preserved: storage failure does NOT undo
     the DB delete and does NOT propagate to the user. The new
     contract: it is now PERSISTED for the future reconciler."""
-    from app.db.config import file_sources as fs_db
+    from app.core.files import db as fs_db
 
     patcher, _cursor, _conn = _make_tx_patcher(
         current_storage_key="key2",
@@ -209,7 +209,7 @@ def test_capability_disabled_marks_done():
     short-circuits and returns `"skipped"`. There is nothing to
     reconcile (no orphan possible because no storage backend is
     being targeted), so the entry transitions straight to `done`."""
-    from app.db.config import file_sources as fs_db
+    from app.core.files import db as fs_db
 
     patcher, _cursor, _conn = _make_tx_patcher(
         current_storage_key="key3",
@@ -238,7 +238,7 @@ def test_capability_disabled_marks_done():
 def test_shared_blob_path_does_not_record_pending():
     """`record_pending` MUST NOT be called when a sibling row keeps
     the storage_key alive: the blob is not an orphan candidate."""
-    from app.db.config import file_sources as fs_db
+    from app.core.files import db as fs_db
 
     patcher, _cursor, _conn = _make_tx_patcher(
         current_storage_key="shared-key",
@@ -277,7 +277,7 @@ def test_bytea_path_does_not_record_pending():
     """Rows with `storage_key=None` (BYTEA blob in DB) have no
     object-storage cleanup at all. Reconciliation log must stay
     empty."""
-    from app.db.config import file_sources as fs_db
+    from app.core.files import db as fs_db
 
     patcher, _cursor, _conn = _make_tx_patcher(
         current_storage_key=None,
@@ -314,7 +314,7 @@ def test_record_pending_is_inside_transaction_before_delete():
 
     Verified by letting the REAL `record_pending` run and inspecting
     the cursor's execute history for INSERT-before-DELETE ordering."""
-    from app.db.config import file_sources as fs_db
+    from app.core.files import db as fs_db
 
     patcher, cursor, _conn = _make_tx_patcher(
         current_storage_key="key-order",

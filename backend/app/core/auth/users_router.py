@@ -21,8 +21,8 @@ from app.core.auth.roles import ROLES_ADMIN_OR_ABOVE, VALID_ROLES
 from app.shared.audit_action import audit_action
 from app.shared.password_hashing import hash_password
 
-from app.db.config import groups as _groups_dal
-from app.db.config import users as _users_dal
+from app.core.auth import db as _groups_dal
+from app.core.auth import db as _users_dal
 
 
 __all__ = ["users_router"]

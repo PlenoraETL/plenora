@@ -99,7 +99,7 @@ def _make_tx_patcher(*, current_storage_key, siblings, delete_rowcount):
         yield conn
 
     return (
-        patch("app.db.config.file_sources.transaction", side_effect=tx_cm),
+        patch("app.core.files.db.transaction", side_effect=tx_cm),
         cursor,
         conn,
     )
@@ -120,7 +120,7 @@ def _executed_sqls(cursor):
 def test_delete_with_no_refs_proceeds_with_storage_cleanup(fake_storage):
     """Storage_key univoco (legacy data o ultimo ref): nessun sibling ->
     storage.delete chiamata DOPO commit. SQL usa FOR UPDATE."""
-    from app.db.config import file_sources as fs_db
+    from app.core.files import db as fs_db
 
     patcher, cursor, _conn = _make_tx_patcher(
         current_storage_key="file-sources/file_abc/x.csv",
@@ -157,7 +157,7 @@ def test_delete_with_no_refs_proceeds_with_storage_cleanup(fake_storage):
 def test_delete_with_other_refs_skips_storage_cleanup_and_logs(fake_storage):
     """Storage_key condiviso con altre 2 row: siblings list len=2 ->
     storage.delete NON chiamata + log structured. Row corrente DELETE."""
-    from app.db.config import file_sources as fs_db
+    from app.core.files import db as fs_db
 
     patcher, cursor, _conn = _make_tx_patcher(
         current_storage_key="file-sources/batch_xyz/multi.gpkg",
@@ -194,7 +194,7 @@ def test_delete_with_other_refs_skips_storage_cleanup_and_logs(fake_storage):
 def test_delete_last_remaining_ref_proceeds_with_storage_cleanup(fake_storage):
     """Multi-layer: dopo aver cancellato N-1 fratelli, il delete dell'ultimo
     ref vede siblings vuoti -> storage.delete chiamata."""
-    from app.db.config import file_sources as fs_db
+    from app.core.files import db as fs_db
 
     patcher, cursor, _conn = _make_tx_patcher(
         current_storage_key="file-sources/batch_xyz/multi.gpkg",
@@ -218,7 +218,7 @@ def test_delete_last_remaining_ref_proceeds_with_storage_cleanup(fake_storage):
 def test_delete_bytea_mode_skips_siblings_and_storage(fake_storage):
     """BYTEA: storage_key None -> nessuna sibling query, nessuna interazione
     object storage, solo SELECT corrente + DELETE."""
-    from app.db.config import file_sources as fs_db
+    from app.core.files import db as fs_db
 
     patcher, cursor, _conn = _make_tx_patcher(
         current_storage_key=None,
@@ -249,7 +249,7 @@ def test_delete_bytea_mode_skips_siblings_and_storage(fake_storage):
 def test_delete_nonexistent_row_returns_false_no_side_effects(fake_storage):
     """Row inesistente: SELECT ritorna None, no siblings query, DELETE
     rowcount=0 -> False. Nessuna interazione storage."""
-    from app.db.config import file_sources as fs_db
+    from app.core.files import db as fs_db
 
     patcher, cursor, _conn = _make_tx_patcher(
         current_storage_key=_NO_ROW,
@@ -279,7 +279,7 @@ def test_delete_uses_transaction_context_manager(fake_storage):
     `pg_connection.transaction()` (single conn). Verificato indirettamente
     dal fatto che `_make_tx_patcher` patcha `transaction` e tutte le
     cur.execute call accadono sullo stesso cursor mock."""
-    from app.db.config import file_sources as fs_db
+    from app.core.files import db as fs_db
 
     patcher, cursor, conn = _make_tx_patcher(
         current_storage_key="file-sources/file_x/y.csv",
@@ -307,7 +307,7 @@ def test_delete_uses_for_update_on_current_row_and_siblings(fake_storage):
     devono usare `FOR UPDATE` per serializzare delete concorrenti su
     blob shared (Race A.2). Il refactor sostituisce COUNT(*) con SELECT
     id FOR UPDATE perche' COUNT(*) non blocca le row."""
-    from app.db.config import file_sources as fs_db
+    from app.core.files import db as fs_db
 
     patcher, cursor, _conn = _make_tx_patcher(
         current_storage_key="file-sources/batch_x/data",
@@ -342,7 +342,7 @@ def test_storage_delete_happens_after_db_commit_not_inside_transaction(
       - ADR-0011 contract preservato (storage failure -> orphan accepted,
         DB row gia' cancellata).
     Verifica via call_order: tracciamo l'ordine di tx_cm.exit vs storage.delete."""
-    from app.db.config import file_sources as fs_db
+    from app.core.files import db as fs_db
 
     cursor = MagicMock()
     cursor.fetchone.side_effect = [
@@ -370,7 +370,7 @@ def test_storage_delete_happens_after_db_commit_not_inside_transaction(
         f"storage_delete:{key}"
     )
 
-    with patch("app.db.config.file_sources.transaction", side_effect=tx_cm), \
+    with patch("app.core.files.db.transaction", side_effect=tx_cm), \
          patch("app.shared.cloud_backends.object_storage_enabled", return_value=True), \
          patch("app.shared.cloud_backends.get_runtime_object_storage",
                return_value=fake_storage):
@@ -396,7 +396,7 @@ def test_storage_delete_failure_after_commit_does_not_undo_db_delete(
     """Race C: storage.delete solleva DOPO il commit DB. Comportamento
     atteso (ADR-0011 contract): warning log + ritorna True (la row e'
     stata effettivamente cancellata), orphan blob accepted."""
-    from app.db.config import file_sources as fs_db
+    from app.core.files import db as fs_db
 
     patcher, cursor, _conn = _make_tx_patcher(
         current_storage_key="file-sources/file_q/r.csv",
@@ -437,7 +437,7 @@ def test_storage_delete_skipped_when_capability_disabled_post_commit(
 ):
     """Race E: capability disabilitata tra commit e storage call ->
     debug log, no errore, row gia' cancellata (returns True)."""
-    from app.db.config import file_sources as fs_db
+    from app.core.files import db as fs_db
 
     patcher, cursor, _conn = _make_tx_patcher(
         current_storage_key="file-sources/file_s/t.csv",

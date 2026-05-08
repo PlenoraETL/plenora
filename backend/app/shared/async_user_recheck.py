@@ -11,7 +11,7 @@ from typing import Any, Dict, Optional
 from fastapi import HTTPException
 
 from app.utils.logger import get_logger
-from app.db.config.users import get_user
+from app.core.auth.db import get_user
 from app.shared.contracts.auth import CurrentUser
 from app.shared.authz_helpers import assert_project_access
 

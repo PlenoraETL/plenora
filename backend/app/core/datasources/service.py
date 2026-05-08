@@ -1,7 +1,7 @@
 """
 PLENORA-ETL — Data Source Service
 
-CRUD configurazioni Data Source → PostgreSQL via app.db.config.datasources.
+CRUD configurazioni Data Source -> PostgreSQL via app.core.datasources.db.
 """
 
 import json
@@ -27,6 +27,7 @@ from app.core.datasources.models import (
 )
 from app.core.datasources.factory import create_backend
 from app.core.datasources.interface import DataSourceInterface
+from app.core.datasources import db as datasource_db
 
 logger = get_logger(__name__)
 
@@ -51,20 +52,10 @@ class DataSourceService:
     def list_datasources(self, group_id: Optional[str] = None) -> DataSourceList:
         # group_id=None → no filter (superadmin o path allowed_groups
         # Fix N+1: fetch tutte le row in una query, parse config in memoria
-        # Usa il helper DB canonico invece della superficie aggregata.
-        from app.db.pg_connection import fetchall as _fetchall
-        if group_id is None:
-            rows = _fetchall(
-                "SELECT * FROM datasources ORDER BY name"
-            )
-        else:
-            rows = _fetchall(
-                "SELECT * FROM datasources WHERE group_id = %s ORDER BY name",
-                (group_id,)
-            )
+        rows = datasource_db.list_datasources(group_id)
         result = []
         for row in rows:
-            config = self._row_to_config(row)
+            config = self._row_to_config(row.to_legacy_dict())
             if config:
                 result.append(self._to_model(config, redact=True))
         return DataSourceList(datasources=result)
@@ -105,7 +96,6 @@ class DataSourceService:
         group_id: Optional[str] = None,
         created_by: Optional[str] = None,
     ) -> DataSource:
-        import app.db.config.datasources as datasource_db
         ds_id = self._generate_id(data.name)
         now = datetime.now(timezone.utc)
 
@@ -159,7 +149,6 @@ class DataSourceService:
         return self._to_model(config, redact=True)
 
     def update_datasource(self, ds_id: str, data: DataSourceUpdate) -> Optional[DataSource]:
-        import app.db.config.datasources as datasource_db
         config = self._get_full_config(ds_id)  # già decifrato
         if not config:
             return None
@@ -186,7 +175,6 @@ class DataSourceService:
         return self._to_model(config, redact=True)
 
     def delete_datasource(self, ds_id: str) -> bool:
-        import app.db.config.datasources as datasource_db
         if not datasource_db.get_datasource(ds_id):
             return False
         datasource_db.delete_datasource(ds_id)
@@ -421,11 +409,11 @@ class DataSourceService:
         ``CredentialUnavailableError``. Usato dal path test_connection
         (Bug #2, 2026-04-23) per non rispondere 200-OK con secret silent-None.
         """
-        import app.db.config.datasources as datasource_db
         row = datasource_db.get_datasource(ds_id)
         if not row:
             return None
-        config = row.get("config") or {}
+        legacy_row = row.to_legacy_dict()
+        config = legacy_row.get("config") or {}
         if isinstance(config, str):
             try:
                 config = json.loads(config)
@@ -444,8 +432,8 @@ class DataSourceService:
         # Decifra at-rest i campi sensibili (strict propagato
         _decrypt_dict_fields(config, _SENSITIVE_FIELDS, strict=strict)
         # Inietta group_id e created_by dal record DB nel config dict
-        config["group_id"] = row.get("group_id", "")
-        config["created_by"] = row.get("created_by")
+        config["group_id"] = legacy_row.get("group_id", "")
+        config["created_by"] = legacy_row.get("created_by")
         return config
 
     def _get_backend(self, ds_id: str) -> DataSourceInterface:

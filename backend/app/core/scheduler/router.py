@@ -172,8 +172,8 @@ async def create_schedule(data: ScheduleCreate, current_user: CurrentUser = Depe
 @router.get("/{schedule_id}", response_model=ScheduleConfig)
 async def get_schedule(schedule_id: str, current_user: CurrentUser = Depends(require_not_esecutore)):
     """Dettaglio di uno schedule specifico."""
+    from app.core.scheduler.db import get_schedule as get_schedule_row
     from app.core.scheduler.schedule_service import ScheduleService
-    from app.db.config.schedules import get_schedule as get_schedule_row
     try:
         service = ScheduleService()
         row = get_schedule_row(schedule_id)
@@ -404,7 +404,7 @@ async def download_schedule_output(
             )
 
         # SECURITY: verifica che lo schedule appartenga al gruppo dell'utente
-        from app.db.config.schedules import get_schedule as _get_schedule_row
+        from app.core.scheduler.db import get_schedule as _get_schedule_row
         _sched_row = _get_schedule_row(schedule_id)
         if _sched_row:
             assert_group_access(_sched_row, current_user, f"Schedule '{schedule_id}'")
@@ -494,7 +494,7 @@ async def list_schedule_runs(schedule_id: str, current_user: CurrentUser = Depen
             )
 
         # SECURITY: group isolation check
-        from app.db.config.schedules import get_schedule as _get_schedule_row
+        from app.core.scheduler.db import get_schedule as _get_schedule_row
         _sched_row = _get_schedule_row(schedule_id)
         if _sched_row:
             assert_group_access(_sched_row, current_user, f"Schedule '{schedule_id}'")

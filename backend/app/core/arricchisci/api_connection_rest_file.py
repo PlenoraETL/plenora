@@ -13,7 +13,7 @@ from typing import Any, Dict, List, Optional
 import pandas as pd
 import psycopg2
 
-import app.db.config.file_sources as file_sources_db
+import app.core.files.db as file_sources_db
 from app.config import settings
 from app.core.arricchisci._api_connection_helpers import _nd
 from app.core.arricchisci.execution_context import (
