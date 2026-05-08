@@ -60,7 +60,20 @@ def _summary_response(
     user: CurrentUser,
 ) -> dict:
     """Serialize summary row at the API edge."""
-    data = record.to_legacy_dict()
+    data = {
+        "id": record.id,
+        "name": record.name,
+        "description": record.description,
+        "default_output_format": record.default_output_format,
+        "default_output_name": record.default_output_name,
+        "icon": record.icon,
+        "source_canvas_id": record.source_canvas_id,
+        "group_id": record.group_id,
+        "created_by": record.created_by,
+        "created_at": record.created_at,
+        "updated_at": record.updated_at,
+        "expected_columns_count": record.expected_columns_count,
+    }
     data["can_edit"] = compute_can_edit(record, user)
     return data
 

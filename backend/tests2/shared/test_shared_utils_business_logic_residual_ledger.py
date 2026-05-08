@@ -80,13 +80,22 @@ _LEDGER: tuple[SharedUtilsBusinessLogicEntry, ...] = (
         ),
     ),
     SharedUtilsBusinessLogicEntry(
-        path="app/shared/sharing.py",
-        symbol="module",
-        status="KEEP_COMPAT_WITH_REMOVAL_CONDITION",
+        path="app/core/auth/shares.py",
+        symbol="list_resource_shares",
+        status="DONE",
         owner="AUTH_SECURITY_ENGINE",
         removal_condition=(
-            "Remove after legacy sharing CRUD endpoints move off app.shared.sharing "
-            "and external compatibility imports switch to app.core.auth.visibility."
+            "Auth share CRUD owns cross-group sharing row persistence."
+        ),
+    ),
+    SharedUtilsBusinessLogicEntry(
+        path="app/shared/sharing.py",
+        symbol="module",
+        status="KEEP_PUBLIC_COMPAT",
+        owner="AUTH_SECURITY_ENGINE",
+        removal_condition=(
+            "External compatibility imports should switch to app.core.auth.visibility "
+            "or app.core.auth.shares."
         ),
     ),
 )
@@ -132,16 +141,13 @@ def test_visibility_policy_runtime_imports_are_auth_owned() -> None:
     assert offenders == []
 
 
-def test_shared_sharing_runtime_imports_are_limited_to_crud_router() -> None:
+def test_production_runtime_does_not_import_shared_sharing() -> None:
     offenders: list[str] = []
-    allowed = {"app/core/auth/shares_router.py"}
     for path in (_BACKEND_ROOT / "app").rglob("*.py"):
         if path.parts[-3:] == ("app", "shared", "sharing.py"):
             continue
         text = path.read_text(encoding="utf-8")
         if "app.shared.sharing" in text:
-            rel = path.relative_to(_BACKEND_ROOT).as_posix()
-            if rel not in allowed:
-                offenders.append(rel)
+            offenders.append(path.relative_to(_BACKEND_ROOT).as_posix())
 
     assert offenders == []

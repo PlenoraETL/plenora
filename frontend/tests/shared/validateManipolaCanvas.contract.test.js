@@ -174,6 +174,31 @@ describe('validateManipolaCanvas', () => {
     });
   });
 
+  describe('carica REST validation', () => {
+    it('dest_type=rest richiede endpoint valido senza richiedere connection/schema/table DB', () => {
+      const r = validateManipolaCanvas(
+        [projectSource('s1'), resultM('r1'), caricaM('c1', { dest_type: 'rest', rest_method: 'POST' })],
+        [edge('s1','r1'), edge('r1','c1')],
+      );
+      expect(findIssue(errors(r), /endpoint HTTP\/HTTPS valido/i)).toBeDefined();
+      expect(findIssue(errors(r), /connessione database/i)).toBeUndefined();
+      expect(findIssue(errors(r), /schema di destinazione/i)).toBeUndefined();
+      expect(findIssue(errors(r), /nome della tabella/i)).toBeUndefined();
+    });
+
+    it('dest_type=rest accetta endpoint HTTP e metodo supportato', () => {
+      const r = validateManipolaCanvas(
+        [projectSource('s1'), resultM('r1'), caricaM('c1', {
+          dest_type: 'rest',
+          rest_url: 'https://api.example.com/items',
+          rest_method: 'PATCH',
+        })],
+        [edge('s1','r1'), edge('r1','c1')],
+      );
+      expect(findIssue(errors(r), /Carica REST/i)).toBeUndefined();
+    });
+  });
+
   describe('carica ArcGIS validation', () => {
     it('arcgis op=add senza layer_url -> errore C5', () => {
       const r = validateManipolaCanvas(

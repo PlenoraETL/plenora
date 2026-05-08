@@ -61,7 +61,10 @@ export function getNodeName(node, registry = null) {
     case 'file_source':      return node.data?.fileName || node.data?.alias || 'File sorgente';
     case 'staticValues':     return node.data?.alias || 'Valori statici';
     case 'result':           return 'Output';
-    case 'carica':           return node.data?.dest_type === 'arcgis' ? 'Carica ArcGIS' : 'Carica DB';
+    case 'carica':
+      if (node.data?.dest_type === 'arcgis') return 'Carica ArcGIS';
+      if (node.data?.dest_type === 'rest') return 'Carica REST';
+      return 'Carica DB';
     case 'transform': {
       const opId = node.data?.transform_op;
       if (opId && registry && registry[opId]) return registry[opId].name || opId;

@@ -94,6 +94,10 @@ describe('getNodeName', () => {
     expect(getNodeName({ type: 'carica', data: { dest_type: 'arcgis' } })).toBe('Carica ArcGIS');
   });
 
+  it('carica con dest_type=rest -> "Carica REST"', () => {
+    expect(getNodeName({ type: 'carica', data: { dest_type: 'rest' } })).toBe('Carica REST');
+  });
+
   it('carica senza dest_type -> "Carica DB"', () => {
     expect(getNodeName({ type: 'carica', data: {} })).toBe('Carica DB');
   });

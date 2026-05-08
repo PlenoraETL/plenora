@@ -181,12 +181,13 @@ def execute_carica_task(
             f"Dati caricati: {len(df)} righe. Avvio scrittura..."
         )
 
-        node_type = carica_node_data.get('type', '')
-        dest_type = carica_node_data.get('dest_type', 'db')
+        write_branch = _select_carica_write_branch(carica_node_data)
 
-        if node_type == 'datasource_node':
+        if write_branch == 'datasource':
             result = _execute_datasource_write(self, df, carica_node_data, project_id, task_id)
-        elif dest_type == 'arcgis' or node_type == 'carica_arcgis':
+        elif write_branch == 'rest':
+            result = _execute_rest_write(self, df, carica_node_data, project_id, task_id)
+        elif write_branch == 'arcgis':
             result = _execute_arcgis_write(self, df, carica_node_data, project_id, task_id)
         else:
             result = _execute_db_write(self, df, carica_node_data, project_id, task_id, triggered_by, run_id)
@@ -287,6 +288,20 @@ def execute_carica_task(
             _close_cfg()
         except Exception as e:
             logger.debug(f"close_connection config fallito: {type(e).__name__}: {e}")
+
+
+def _select_carica_write_branch(carica_node_data: Dict[str, Any]) -> str:
+    """Return the write branch for a CARICA node without executing writes."""
+    node_type = carica_node_data.get('type', '')
+    dest_type = carica_node_data.get('dest_type', 'db')
+
+    if node_type == 'datasource_node':
+        return 'datasource'
+    if dest_type == 'rest':
+        return 'rest'
+    if dest_type == 'arcgis' or node_type == 'carica_arcgis':
+        return 'arcgis'
+    return 'db'
 
 
 def _execute_datasource_write(task, df, carica_node_data, project_id, task_id):
@@ -407,6 +422,95 @@ def _execute_db_write(task, df, carica_node_data, project_id, task_id, triggered
     
     logger.info(f"Task CARICA DB {task_id} completato: {result.status.value}")
     return result_dict
+
+
+def _execute_rest_write(
+    task: Any,
+    df: "pd.DataFrame",
+    carica_node_data: Dict[str, Any],
+    project_id: str,
+    task_id: str,
+) -> Dict[str, Any]:
+    """Coordinate REST write progress while the domain owns REST payload writes."""
+    _update_progress(task, 15, "Preparazione scrittura REST...")
+
+    try:
+        from app.core.carica.rest_config_parser import parse_carica_rest_config
+        from app.core.carica.rest_write_boundary import execute_carica_rest_write
+
+        parsed_config = parse_carica_rest_config(carica_node_data)
+        _update_progress(task, 25, "Scrittura REST...")
+        outcome = execute_carica_rest_write(
+            df=df,
+            config=parsed_config.sink_config,
+            http_client=create_default_rest_http_client(),
+        )
+        result = outcome.to_task_result()
+
+        is_success = result.get("success", False)
+        rows = result.get("rows_written", 0) or 0
+        if not is_success:
+            _update_progress(
+                task,
+                -1,
+                result.get("error_message") or result.get("message") or "Errore scrittura REST",
+            )
+            return result
+
+        _update_progress(task, 100, f"REST completato: {rows} righe scritte")
+        logger.info(f"Task CARICA REST {task_id} completato: {rows} righe")
+        return result
+
+    except Exception as e:
+        logger.error(f"[GESTITO] Errore scrittura REST: {e}", exc_info=True)
+        return {
+            "status": "write_error",
+            "success": False,
+            "error": "carica_rest_write_failed",
+            "message": "Errore scrittura REST (consulta log)",
+            "error_message": "Errore scrittura REST (consulta log)",
+            "rows_written": 0,
+            "total_rows": len(df),
+        }
+
+
+class _RequestsRestHttpClient:
+    """Synchronous HTTP adapter for the Celery REST write edge."""
+
+    def request(
+        self,
+        *,
+        method: str,
+        url: str,
+        headers: Dict[str, str],
+        json: Any,
+        timeout: float,
+    ) -> Any:
+        import requests
+        from app.core.features.rest_sink import RestSinkHttpResponse
+
+        response = requests.request(
+            method=method,
+            url=url,
+            headers=headers,
+            json=json,
+            timeout=timeout,
+        )
+        response_body: Any
+        try:
+            response_body = response.json()
+        except ValueError:
+            response_body = None
+        return RestSinkHttpResponse(
+            status_code=response.status_code,
+            body=response_body,
+            text=response.text,
+        )
+
+
+def create_default_rest_http_client() -> _RequestsRestHttpClient:
+    """Create the default HTTP client injected into the REST write boundary."""
+    return _RequestsRestHttpClient()
 
 
 def _execute_arcgis_write(

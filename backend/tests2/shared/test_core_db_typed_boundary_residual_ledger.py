@@ -131,6 +131,12 @@ _LEDGER: tuple[BoundaryEntry, ...] = (
     ),
     BoundaryEntry(
         "app/core/results/db.py",
+        "ResultMetadataRow.to_legacy_dict",
+        "KEEP_PUBLIC_COMPAT",
+        "legacy result metadata dict conversion stays explicit until result routers/services consume typed row serializers",
+    ),
+    BoundaryEntry(
+        "app/core/results/db.py",
         "get_result",
         "KEEP_PUBLIC_COMPAT",
         "legacy metadata wrapper returns dict at public edge",
@@ -164,6 +170,12 @@ _LEDGER: tuple[BoundaryEntry, ...] = (
         "ScheduleRow",
         "DONE",
         "schedule DB reads and post-write reads use immutable scheduler-owned row contracts",
+    ),
+    BoundaryEntry(
+        "app/core/scheduler/db.py",
+        "ScheduleRow.to_legacy_dict",
+        "KEEP_PUBLIC_COMPAT",
+        "legacy schedule dict conversion stays explicit until scheduler API callers serialize typed rows at their public edges",
     ),
     BoundaryEntry(
         "app/core/scheduler/db.py",
@@ -420,8 +432,20 @@ _LEDGER: tuple[BoundaryEntry, ...] = (
     BoundaryEntry(
         "app/core/eseguibili/db.py",
         "EseguibileRow.to_legacy_dict",
-        "KEEP_PUBLIC_COMPAT",
-        "router/service compatibility keeps explicit dict serialization for the public eseguibili shape",
+        "REMOVED",
+        "eseguibili detail row serialization moved to router/API edge helpers",
+    ),
+    BoundaryEntry(
+        "app/core/eseguibili/db.py",
+        "EseguibileSummaryRow.to_legacy_dict",
+        "REMOVED",
+        "eseguibili summary row serialization moved to router/API edge helpers",
+    ),
+    BoundaryEntry(
+        "app/core/eseguibili/db.py",
+        "EseguibileSourceRefRow.to_legacy_dict",
+        "REMOVED",
+        "project delete dependency checks consume typed source refs without dict conversion",
     ),
     BoundaryEntry(
         "app/core/eseguibili/service.py",
@@ -718,7 +742,7 @@ def test_project_core_domain_has_no_row_to_legacy_dict_crutch():
     """Project row dict conversion may not move into the core domain.
 
     Any remaining project dict compatibility belongs at API/public edges or in
-    the explicitly blocked legacy config leaf while Batch 098 is incomplete.
+    explicitly named wrapper functions, never on Project*Row read models.
     """
     project_core_paths = sorted((_APP_ROOT / "core" / "projects").glob("*.py"))
     found = {
@@ -727,15 +751,39 @@ def test_project_core_domain_has_no_row_to_legacy_dict_crutch():
         for symbol in _defined_symbols(_tree(_rel(path)))
         if symbol.endswith(".to_legacy_dict")
     }
-    classified_blockers = {
-        (entry.path, entry.symbol)
+    assert not found
+    assert not {
+        entry
         for entry in _LEDGER
-        if entry.status == "BLOCKER"
-        and entry.path.startswith("app/core/projects/")
+        if entry.path.startswith("app/core/projects/")
         and entry.symbol.endswith(".to_legacy_dict")
     }
 
-    assert found == classified_blockers
+
+def test_core_db_to_legacy_dict_residuals_are_explicitly_ledgered():
+    """Core DB row serializers must be consciously kept, never reintroduced."""
+    core_db_paths = sorted((_APP_ROOT / "core").glob("*/db.py"))
+    found = {
+        (_rel(path), symbol)
+        for path in core_db_paths
+        for symbol in _defined_symbols(_tree(_rel(path)))
+        if symbol.endswith(".to_legacy_dict")
+    }
+    classified_live = {
+        (entry.path, entry.symbol)
+        for entry in _LEDGER
+        if entry.path.startswith("app/core/")
+        and entry.path.endswith("/db.py")
+        and entry.status
+        in {
+            "KEEP_PUBLIC_COMPAT",
+            "KEEP_COMPAT_WITH_REMOVAL_CONDITION",
+            "BLOCKER",
+        }
+        and entry.symbol.endswith(".to_legacy_dict")
+    }
+
+    assert found == classified_live
 
 
 def test_project_db_getattr_bridge_is_explicit_blocker_only():

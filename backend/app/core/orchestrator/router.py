@@ -19,7 +19,12 @@ from app.utils.logger import get_logger
 from app.shared import error_codes
 from app.shared.error_envelope import raise_typed_http
 from app.shared.models import ExecuteRequest
-from app.core.orchestrator.task_service import TaskInfo, TaskResultPayload, TaskType
+from app.core.orchestrator.task_service import (
+    TaskInfo,
+    TaskResultPayload,
+    TaskSubmitRequest,
+    TaskType,
+)
 from app.utils.router_utils import require_service
 from app.shared.audit_action import audit_action
 from app.core.auth.dependencies import get_current_user, require_not_esecutore
@@ -48,6 +53,48 @@ def _mime_for_filename(filename: str) -> str:
 
 
 logger = get_logger(__name__)
+
+_REST_CARICA_DEST_TYPES = {"rest", "http", "https", "rest_api"}
+
+
+def _nested_carica_value(carica_node_data: Dict[str, Any], key: str) -> Any:
+    if key in carica_node_data:
+        return carica_node_data.get(key)
+    nested = carica_node_data.get("data")
+    if isinstance(nested, dict):
+        return nested.get(key)
+    return None
+
+
+def _rest_carica_parser_input(carica_node_data: Dict[str, Any]) -> Dict[str, Any]:
+    has_rest_config = isinstance(carica_node_data.get("rest_config"), dict)
+    has_rest_alias = isinstance(carica_node_data.get("rest"), dict)
+    if has_rest_config or has_rest_alias:
+        return carica_node_data
+    for key in ("destination", "target"):
+        value = _nested_carica_value(carica_node_data, key)
+        if isinstance(value, dict):
+            return {"rest_config": value}
+    return carica_node_data
+
+
+def _is_rest_carica_destination(carica_node_data: Dict[str, Any]) -> bool:
+    dest_type = _nested_carica_value(carica_node_data, "dest_type")
+    if dest_type is None:
+        dest_type = _nested_carica_value(carica_node_data, "destination_type")
+    return str(dest_type or "").strip().lower() in _REST_CARICA_DEST_TYPES
+
+
+def _validate_rest_carica_task_payload(carica_node_data: Dict[str, Any]) -> None:
+    if not _is_rest_carica_destination(carica_node_data):
+        return
+
+    from app.core.carica.rest_config_parser import parse_carica_rest_config
+
+    try:
+        parse_carica_rest_config(_rest_carica_parser_input(carica_node_data))
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 def _task_result_to_dict(result: object) -> Dict[str, Any]:
@@ -269,10 +316,21 @@ def preview_project(
     _assert_project_group(project_id, current_user)
     try:
         from app.core.orchestrator.task_service import task_service
-        task_info = task_service.create_preview_task(
-            project_id=project_id,
-            limit=limit,
-            user_id=current_user.user_id,  # N9
+        from workers.tasks.pipeline_task import preview_pipeline_task
+
+        task_info = task_service.submit_task(
+            TaskSubmitRequest(
+                celery_task=preview_pipeline_task,
+                task_type=TaskType.PREVIEW,
+                project_id=project_id,
+                kwargs={
+                    "project_id": project_id,
+                    "limit": limit,
+                    "user_id": current_user.user_id,  # N9
+                },
+                queued_message="Preview in coda...",
+                log_label="preview",
+            )
         )
         result = _task_info_to_dict(task_info)
         result["async"] = True
@@ -446,6 +504,7 @@ def create_task(
         elif request.task_type == TaskType.CARICA:
             if not request.carica_node_data:
                 raise HTTPException(status_code=400, detail="carica_node_data è obbligatorio per task CARICA")
+            _validate_rest_carica_task_payload(request.carica_node_data)
             # N11: arricchisci canvas_types da project columns_metadata
             from app.core.projects.service import ProjectService
 

@@ -104,6 +104,48 @@ def test_router_serializes_typed_row_at_api_edge(monkeypatch) -> None:
     assert payload["can_edit"] is True
 
 
+def test_eseguibile_rows_do_not_own_legacy_dict_serialization() -> None:
+    assert not hasattr(eseguibili_db.EseguibileRow, "to_legacy_dict")
+    assert not hasattr(eseguibili_db.EseguibileSummaryRow, "to_legacy_dict")
+    assert not hasattr(eseguibili_db.EseguibileSourceRefRow, "to_legacy_dict")
+
+
+def test_router_serializes_summary_row_at_api_edge(monkeypatch) -> None:
+    monkeypatch.setattr(eseguibili_router, "compute_can_edit", lambda *args: False)
+    row = eseguibili_db.EseguibileSummaryRow(
+        id="exec-1",
+        name="Executable",
+        description="",
+        default_output_format="xlsx",
+        default_output_name="out.xlsx",
+        icon="table",
+        source_canvas_id="project-1",
+        group_id="grp-1",
+        created_by="u-1",
+        created_at="2026-05-08T08:00:00+00:00",
+        updated_at="2026-05-08T08:00:00+00:00",
+        expected_columns_count=2,
+    )
+
+    payload = eseguibili_router._summary_response(row, _user())
+
+    assert payload == {
+        "id": "exec-1",
+        "name": "Executable",
+        "description": "",
+        "default_output_format": "xlsx",
+        "default_output_name": "out.xlsx",
+        "icon": "table",
+        "source_canvas_id": "project-1",
+        "group_id": "grp-1",
+        "created_by": "u-1",
+        "created_at": "2026-05-08T08:00:00+00:00",
+        "updated_at": "2026-05-08T08:00:00+00:00",
+        "expected_columns_count": 2,
+        "can_edit": False,
+    }
+
+
 def test_create_from_project_returns_typed_eseguibile_row(monkeypatch) -> None:
     from app.core.projects import db as projects_db
 

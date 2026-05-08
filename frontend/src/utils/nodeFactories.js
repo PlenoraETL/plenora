@@ -221,6 +221,7 @@ function createCaricanNode(node) {
     position: node.position,
     data: {
       connection_id:           nd(node, 'connection_id', ''),
+      dest_type:               nd(node, 'dest_type', 'db'),
       schema_name:             nd(node, 'schema_name', ''),
       table_name:              nd(node, 'table_name', ''),
       write_mode:              nd(node, 'write_mode', 'create'),
@@ -230,6 +231,14 @@ function createCaricanNode(node) {
       transaction_mode:        nd(node, 'transaction_mode', 'all_or_nothing'),
       create_spatial_index:    nd(node, 'create_spatial_index') !== false,
       conflict_policy:         nd(node, 'conflict_policy', 'abort'),
+      rest_url:                nd(node, 'rest_url', ''),
+      rest_method:             nd(node, 'rest_method', 'POST'),
+      rest_headers:            nd(node, 'rest_headers', []),
+      rest_body_mapping:       nd(node, 'rest_body_mapping', []),
+      rest_batch_mode:         nd(node, 'rest_batch_mode', 'batch'),
+      rest_batch_size:         nd(node, 'rest_batch_size', 1000),
+      rest_timeout_seconds:    nd(node, 'rest_timeout_seconds', 30),
+      rest_success_statuses:   nd(node, 'rest_success_statuses', [200, 201, 202, 204]),
       availableColumns: [],
     },
   };

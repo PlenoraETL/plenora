@@ -20,9 +20,9 @@ pytestmark = [pytest.mark.unit, pytest.mark.shared, pytest.mark.contract]
 _BACKEND_ROOT = Path(__file__).resolve().parent.parent.parent
 
 _TARGET_BOUNDARY_MODULES_BE094: tuple[str, ...] = (
-    "app/db/config/projects.py",
+    "app/core/projects/db.py",
     "app/core/results/db.py",
-    "app/db/config/schedules.py",
+    "app/core/scheduler/db.py",
     "app/core/orchestrator/task_service.py",
     "app/core/connections/db.py",
     "app/core/connections/service.py",
@@ -44,40 +44,44 @@ EXPECTED_BROAD_DICT_RETURN_RESIDUALS_BE094_REMAINING_18: frozenset[
 ] = frozenset(
     {
         BroadDictReturn(
-            "app/db/config/projects.py",
-            "ProjectDetailRow.to_legacy_dict",
-            "Dict[str, object]",
+            "app/core/projects/db.py",
+            "_detail_compat_payload",
+            "dict[str, object]",
         ),
         BroadDictReturn(
-            "app/db/config/projects.py",
-            "ProjectDependencyRow.to_legacy_dict",
-            "Dict[str, object]",
+            "app/core/projects/db.py",
+            "_dependency_compat_payload",
+            "dict[str, object]",
         ),
         BroadDictReturn(
-            "app/db/config/projects.py",
-            "ProjectCanvasCheckRow.to_legacy_dict",
-            "Dict[str, object]",
+            "app/core/projects/db.py",
+            "_canvas_check_compat_payload",
+            "dict[str, object]",
         ),
         BroadDictReturn(
-            "app/db/config/projects.py",
+            "app/core/projects/db.py",
             "get_project",
-            "Optional[Dict[str, object]]",
+            "dict[str, object] | None",
         ),
-        BroadDictReturn("app/db/config/projects.py", "create_project", "Dict"),
         BroadDictReturn(
-            "app/db/config/projects.py",
+            "app/core/projects/db.py",
+            "create_project",
+            "dict[str, object]",
+        ),
+        BroadDictReturn(
+            "app/core/projects/db.py",
             "update_project",
-            "Optional[Dict]",
+            "dict[str, object] | None",
         ),
         BroadDictReturn(
-            "app/db/config/projects.py",
+            "app/core/projects/db.py",
             "list_projects_using_connection",
-            "List[Dict[str, object]]",
+            "list[dict[str, object]]",
         ),
         BroadDictReturn(
-            "app/db/config/projects.py",
+            "app/core/projects/db.py",
             "list_projects_with_canvas_for_datasource_check",
-            "List[Dict[str, object]]",
+            "list[dict[str, object]]",
         ),
         BroadDictReturn(
             "app/core/results/db.py",
@@ -105,19 +109,19 @@ EXPECTED_BROAD_DICT_RETURN_RESIDUALS_BE094_REMAINING_18: frozenset[
             "list[dict[str, object]]",
         ),
         BroadDictReturn(
-            "app/db/config/schedules.py",
+            "app/core/scheduler/db.py",
             "ScheduleRow.to_legacy_dict",
-            "Dict[str, object]",
+            "dict[str, object]",
         ),
         BroadDictReturn(
-            "app/db/config/schedules.py",
+            "app/core/scheduler/db.py",
             "get_schedule",
-            "Optional[Dict[str, object]]",
+            "Optional[dict[str, object]]",
         ),
         BroadDictReturn(
-            "app/db/config/schedules.py",
+            "app/core/scheduler/db.py",
             "list_schedules",
-            "List[Dict[str, object]]",
+            "list[dict[str, object]]",
         ),
         BroadDictReturn(
             "app/core/orchestrator/task_service.py",

@@ -93,3 +93,55 @@ def test_create_task_parses_canvas_graph_once_before_resource_authz():
     assert_file_source_access.assert_called_once()
     assert_file_source_access.assert_called_once_with("fs-1", build_current_user())
     assert create_task.call_args.kwargs["canvas"] == canvas
+
+
+def test_create_carica_rest_task_rejects_bad_url_before_task_creation():
+    client = _build_client()
+
+    with patch("app.shared.authz_helpers.assert_project_access"), \
+         patch("app.shared.authz_helpers.assert_canvas_resources_access"), \
+         patch("app.core.orchestrator.task_service.task_service.create_carica_task") as create_task:
+        response = client.post(
+            "/api/tasks",
+            json={
+                "task_type": "carica",
+                "project_id": "proj-1",
+                "canvas": {"nodes": [], "edges": []},
+                "carica_node_data": {
+                    "id": "carica-rest-1",
+                    "dest_type": "rest",
+                    "method": "POST",
+                    "url": "not-a-url",
+                },
+            },
+        )
+
+    assert response.status_code == 400
+    assert "url must be absolute" in str(response.json()).lower()
+    create_task.assert_not_called()
+
+
+def test_create_carica_rest_task_rejects_bad_method_before_task_creation():
+    client = _build_client()
+
+    with patch("app.shared.authz_helpers.assert_project_access"), \
+         patch("app.shared.authz_helpers.assert_canvas_resources_access"), \
+         patch("app.core.orchestrator.task_service.task_service.create_carica_task") as create_task:
+        response = client.post(
+            "/api/tasks",
+            json={
+                "task_type": "carica",
+                "project_id": "proj-1",
+                "canvas": {"nodes": [], "edges": []},
+                "carica_node_data": {
+                    "id": "carica-rest-1",
+                    "dest_type": "rest",
+                    "method": "GET",
+                    "url": "https://example.test/ingest",
+                },
+            },
+        )
+
+    assert response.status_code == 400
+    assert "method must be one of" in str(response.json()).lower()
+    create_task.assert_not_called()

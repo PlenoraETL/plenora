@@ -41,23 +41,6 @@ class EseguibileRow:
     def get(self, key: str, default: Any = None) -> Any:
         return getattr(self, key, default)
 
-    def to_legacy_dict(self) -> Dict[str, Any]:
-        return {
-            "id": self.id,
-            "name": self.name,
-            "description": self.description,
-            "canvas": self.canvas,
-            "expected_columns": self.expected_columns,
-            "default_output_format": self.default_output_format,
-            "default_output_name": self.default_output_name,
-            "icon": self.icon,
-            "source_canvas_id": self.source_canvas_id,
-            "group_id": self.group_id,
-            "created_by": self.created_by,
-            "created_at": self.created_at,
-            "updated_at": self.updated_at,
-        }
-
 
 @dataclass(frozen=True)
 class EseguibileSummaryRow:
@@ -80,22 +63,6 @@ class EseguibileSummaryRow:
     def get(self, key: str, default: Any = None) -> Any:
         return getattr(self, key, default)
 
-    def to_legacy_dict(self) -> Dict[str, Any]:
-        return {
-            "id": self.id,
-            "name": self.name,
-            "description": self.description,
-            "default_output_format": self.default_output_format,
-            "default_output_name": self.default_output_name,
-            "icon": self.icon,
-            "source_canvas_id": self.source_canvas_id,
-            "group_id": self.group_id,
-            "created_by": self.created_by,
-            "created_at": self.created_at,
-            "updated_at": self.updated_at,
-            "expected_columns_count": self.expected_columns_count,
-        }
-
 
 @dataclass(frozen=True)
 class EseguibileSourceRefRow:
@@ -107,9 +74,6 @@ class EseguibileSourceRefRow:
 
     def get(self, key: str, default: object = None) -> object:
         return getattr(self, key, default)
-
-    def to_legacy_dict(self) -> Dict[str, str]:
-        return {"id": self.id, "name": self.name}
 
 
 def _now() -> str:

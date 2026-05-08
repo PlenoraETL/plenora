@@ -186,6 +186,28 @@ function validateCarica(caricaNode, edges, nodes) {
     }
   }
 
+  if (d.dest_type === 'rest') {
+    if (!d.rest_url || !/^https?:\/\//i.test(d.rest_url)) {
+      issues.push(createIssue({
+        id: RULE_IDS.CARICA_REST_URL_MISSING,
+        severity: SEVERITY.ERROR,
+        message: 'Carica REST: specifica un endpoint HTTP/HTTPS valido.',
+        nodeId: caricaNode.id,
+        nodeName,
+      }));
+    }
+    if (!['POST', 'PUT', 'PATCH'].includes(d.rest_method || 'POST')) {
+      issues.push(createIssue({
+        id: RULE_IDS.CARICA_REST_METHOD_INVALID,
+        severity: SEVERITY.ERROR,
+        message: 'Carica REST: metodo non supportato.',
+        nodeId: caricaNode.id,
+        nodeName,
+      }));
+    }
+    return issues;
+  }
+
   if (!d.connection_id) {
     issues.push(createIssue({
       id: RULE_IDS.CARICA_DB_CONNECTION_MISSING,

@@ -45,9 +45,6 @@ _EXPECTED_WAVE_B_BROAD_DICT_RETURNS: frozenset[BroadDictReturn] = frozenset(
     {
         BroadDictReturn("app/core/eseguibili/service.py", "analyze_file_upload", "Dict[str, Any]"),
         BroadDictReturn("app/core/eseguibili/service.py", "execute", "Dict[str, Any]"),
-        BroadDictReturn("app/core/eseguibili/db.py", "EseguibileRow.to_legacy_dict", "Dict[str, Any]"),
-        BroadDictReturn("app/core/eseguibili/db.py", "EseguibileSummaryRow.to_legacy_dict", "Dict[str, Any]"),
-        BroadDictReturn("app/core/eseguibili/db.py", "EseguibileSourceRefRow.to_legacy_dict", "Dict[str, str]"),
         BroadDictReturn("app/core/eseguibili/router.py", "_summary_response", "dict"),
         BroadDictReturn("app/core/eseguibili/router.py", "_details_response", "dict"),
         BroadDictReturn("app/core/eseguibili/router.py", "_load_upload_meta", "Optional[dict]"),
@@ -121,6 +118,7 @@ _DONE_ZERO_BROAD_DICT_MODULES: frozenset[str] = frozenset(
     {
         "app/core/admin_system_status/service.py",
         "app/core/connections/service.py",
+        "app/core/eseguibili/db.py",
     }
 )
 
@@ -247,5 +245,6 @@ def test_connection_and_project_services_use_domain_db_bridges() -> None:
     assert "app.db.pg_connection" not in connection_imports
     assert "app.core.connections" in connection_imports
 
-    assert "app.core.projects.db" not in project_imports
+    assert "app.db.config.projects" not in project_imports
+    assert "app.db.pg_connection" not in project_imports
     assert "app.core.projects" in project_imports

@@ -130,6 +130,52 @@ describe('canvasSerializer contract', () => {
     expect(serializeEdge(passthroughEdge)).toBe(passthroughEdge);
   });
 
+  it('roundtrips CARICA REST destination fields without coercing them back to DB', () => {
+    const backendCanvas = {
+      nodes: [
+        {
+          id: 'carica-rest-1',
+          type: 'carica',
+          position: { x: 100, y: 200 },
+          dest_type: 'rest',
+          rest_url: 'https://api.example.com/items',
+          rest_method: 'PATCH',
+          rest_headers: [{ name: 'Authorization', value: 'Bearer token', secret: true }],
+          rest_body_mapping: [{ source: 'city', target: 'payload.city', required: true }],
+          rest_batch_mode: 'per_record',
+          rest_batch_size: 25,
+          rest_timeout_seconds: 45,
+          rest_success_statuses: [200, 204],
+        },
+      ],
+      edges: [],
+    };
+
+    const rehydrated = deserializeNodes(backendCanvas.nodes);
+    const serialized = serializeCanvas(rehydrated, []);
+
+    expect(rehydrated[0].data).toEqual(expect.objectContaining({
+      dest_type: 'rest',
+      rest_url: 'https://api.example.com/items',
+      rest_method: 'PATCH',
+      rest_headers: [{ name: 'Authorization', value: 'Bearer token', secret: true }],
+      rest_body_mapping: [{ source: 'city', target: 'payload.city', required: true }],
+      rest_batch_mode: 'per_record',
+      rest_batch_size: 25,
+      rest_timeout_seconds: 45,
+      rest_success_statuses: [200, 204],
+    }));
+    expect(serialized.nodes[0]).toEqual(expect.objectContaining({
+      type: 'carica',
+      dest_type: 'rest',
+      rest_url: 'https://api.example.com/items',
+      rest_method: 'PATCH',
+      rest_body_mapping: [{ source: 'city', target: 'payload.city', required: true }],
+      rest_batch_mode: 'per_record',
+      rest_batch_size: 25,
+    }));
+  });
+
   it('roundtrips a complex join edge without losing join conditions or spatial metadata', () => {
     const backendEdge = {
       id: 'edge-join-complex',

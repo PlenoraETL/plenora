@@ -212,6 +212,20 @@ describe('validateEstraiCanvas', () => {
       );
       expect(findIssue(errors(r), /carica non collegato.*output/i)).toBeDefined();
     });
+
+    it('carica REST non richiede connection/schema/table DB', () => {
+      const r = validateEstraiCanvas(
+        [tableNode('t1'), resultNode('r1'), caricaNode('c1', {
+          dest_type: 'rest',
+          rest_url: 'https://api.example.com/items',
+          rest_method: 'POST',
+        })],
+        [edge('t1','r1'), edge('r1','c1')],
+      );
+      expect(findIssue(errors(r), /connessione database/i)).toBeUndefined();
+      expect(findIssue(errors(r), /schema di destinazione/i)).toBeUndefined();
+      expect(findIssue(errors(r), /nome della tabella/i)).toBeUndefined();
+    });
   });
 
   describe('C4-C7 - validazione carica ArcGIS', () => {

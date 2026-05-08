@@ -56,6 +56,7 @@ const CaricanNode = memo(({ data, id }) => {
   // =========================================================================
   
   const connectionId = data.connection_id || '';
+  const destType = data.dest_type || 'db';
   const schemaName = data.schema_name || '';
   const tableName = data.table_name || '';
   const writeMode = data.write_mode || 'create';
@@ -67,6 +68,13 @@ const CaricanNode = memo(({ data, id }) => {
   const conflictPolicy = data.conflict_policy || 'abort';
   const createUniqueIndex = data.create_unique_index || false;
   const uniqueKeyColumn = data.unique_key_column || '';
+  const restUrl = data.rest_url || '';
+  const restMethod = data.rest_method || 'POST';
+  const restBatchMode = data.rest_batch_mode || 'batch';
+  const restBatchSize = data.rest_batch_size || data.batch_size || 1000;
+  const restTimeoutSeconds = data.rest_timeout_seconds || 30;
+  const restHeaders = data.rest_headers || [];
+  const restBodyMapping = data.rest_body_mapping || [];
   const connections = useCanvasStore(s => s.connections);
   const canvasNodes = useCanvasStore(s => s.nodes) || [];
   const canvasEdges = useCanvasStore(s => s.edges) || [];
@@ -101,34 +109,41 @@ const CaricanNode = memo(({ data, id }) => {
     { value: 'per_batch', label: 'Per batch', desc: 'Commit ogni batch (parziale ok)' },
   ];
 
+  const restMethods = ['POST', 'PUT', 'PATCH'];
+
+  const restBatchModes = [
+    { value: 'batch', label: 'Batch' },
+    { value: 'per_record', label: 'Per riga' },
+  ];
+
   // =========================================================================
   // EFFETTI — DB
   // =========================================================================
 
   useEffect(() => {
-    if (connectionId) {
+    if (destType === 'db' && connectionId) {
       loadSchemas(connectionId);
     } else {
       setSchemas([]); setTables([]); setDestColumns([]);
     }
-  }, [connectionId]);
+  }, [connectionId, destType]);
 
   useEffect(() => {
-    if (connectionId && schemaName) {
+    if (destType === 'db' && connectionId && schemaName) {
       loadTables(connectionId, schemaName);
     } else {
       setTables([]); setDestColumns([]);
     }
-  }, [connectionId, schemaName]);
+  }, [connectionId, schemaName, destType]);
 
   useEffect(() => {
-    if (connectionId && schemaName && tableName
+    if (destType === 'db' && connectionId && schemaName && tableName
         && writeMode !== 'create' && writeMode !== 'replace') {
       loadDestColumns(connectionId, schemaName, tableName);
     } else {
       setDestColumns([]);
     }
-  }, [connectionId, schemaName, tableName, writeMode]);
+  }, [connectionId, schemaName, tableName, writeMode, destType]);
 
   // =========================================================================
   // FUNZIONI API — DB
@@ -222,6 +237,25 @@ const CaricanNode = memo(({ data, id }) => {
     });
   };
 
+  const handleDestinationTypeChange = (newDestType) => {
+    handleMultiUpdate({
+      dest_type: newDestType,
+      ...(newDestType === 'rest'
+        ? {
+            connection_id: '',
+            schema_name: '',
+            table_name: '',
+            match_columns: [],
+            column_mappings: [],
+            rest_method: restMethod,
+            rest_batch_mode: restBatchMode,
+            rest_batch_size: restBatchSize,
+            rest_timeout_seconds: restTimeoutSeconds,
+          }
+        : {}),
+    });
+  };
+
   const handleSchemaChange = (newSchema) => {
     handleMultiUpdate({
       schema_name: newSchema,
@@ -251,6 +285,34 @@ const CaricanNode = memo(({ data, id }) => {
 
   const handleRemoveMapping = (index) => {
     handleUpdate('column_mappings', columnMappings.filter((_, i) => i !== index));
+  };
+
+  const handleRestHeaderChange = (index, field, value) => {
+    const nextHeaders = [...restHeaders];
+    nextHeaders[index] = { ...nextHeaders[index], [field]: value };
+    handleUpdate('rest_headers', nextHeaders);
+  };
+
+  const handleAddRestHeader = () => {
+    handleUpdate('rest_headers', [...restHeaders, { name: '', value: '', secret: false }]);
+  };
+
+  const handleRemoveRestHeader = (index) => {
+    handleUpdate('rest_headers', restHeaders.filter((_, i) => i !== index));
+  };
+
+  const handleRestBodyMappingChange = (index, field, value) => {
+    const nextMapping = [...restBodyMapping];
+    nextMapping[index] = { ...nextMapping[index], [field]: value };
+    handleUpdate('rest_body_mapping', nextMapping);
+  };
+
+  const handleAddRestBodyMapping = () => {
+    handleUpdate('rest_body_mapping', [...restBodyMapping, { source: '', target: '', required: false }]);
+  };
+
+  const handleRemoveRestBodyMapping = (index) => {
+    handleUpdate('rest_body_mapping', restBodyMapping.filter((_, i) => i !== index));
   };
 
   const handleToggleMatchColumn = (columnName) => {
@@ -343,14 +405,15 @@ const CaricanNode = memo(({ data, id }) => {
   const isDbValid = connectionId && schemaName && tableName;
   const needsMatchColumns = ['upsert', 'update'].includes(writeMode);
   const matchColumnsValid = !needsMatchColumns || matchColumns.length > 0;
-  const isValid = isDbValid && matchColumnsValid;
+  const isRestValid = /^https?:\/\//i.test(restUrl) && restMethods.includes(restMethod);
+  const isValid = destType === 'rest' ? isRestValid : (isDbValid && matchColumnsValid);
 
   // =========================================================================
   // RENDER
   // =========================================================================
 
   return (
-    <div className={`carica-node ${!isValid ? 'carica-node--invalid' : ''}`}>
+    <div className={`carica-node ${destType === 'rest' ? 'carica-node--rest' : ''} ${!isValid ? 'carica-node--invalid' : ''}`}>
       {/* Handle input — connessione dal nodo Output */}
       <Handle
         type="target"
@@ -362,7 +425,7 @@ const CaricanNode = memo(({ data, id }) => {
       <div className="carica-node__header" role="button" tabIndex={0} onClick={() => setIsExpanded(!isExpanded)} onKeyDown={e => (e.key === 'Enter' || e.key === ' ') && setIsExpanded(v => !v)}>
         <div className="carica-node__header-left">
           <span className="carica-node__icon">💾</span>
-          <span className="carica-node__title">CARICA su DB</span>
+          <span className="carica-node__title">{destType === 'rest' ? 'CARICA su REST' : 'CARICA su DB'}</span>
         </div>
         <div className="carica-node__header-right">
           <span className="carica-node__expand-icon">
@@ -382,7 +445,26 @@ const CaricanNode = memo(({ data, id }) => {
       {isExpanded && (
         <div className="carica-node__body">
 
+          <div className="carica-node__dest-selector" role="group" aria-label="Tipo destinazione Carica">
+            <button
+              type="button"
+              className={`carica-node__dest-btn ${destType === 'db' ? 'carica-node__dest-btn--active' : ''}`}
+              onClick={() => handleDestinationTypeChange('db')}
+            >
+              DB
+            </button>
+            <button
+              type="button"
+              className={`carica-node__dest-btn ${destType === 'rest' ? 'carica-node__dest-btn--active carica-node__dest-btn--rest' : ''}`}
+              onClick={() => handleDestinationTypeChange('rest')}
+            >
+              REST
+            </button>
+          </div>
+
           {/* ============ SEZIONI DB ============ */}
+          {destType === 'db' && (
+            <>
               {/* Connessione Database */}
               <div className="carica-node__section">
                 <label className="carica-node__label">🔌 Connessione Database</label>
@@ -704,17 +786,186 @@ const CaricanNode = memo(({ data, id }) => {
             )}
           </div>
 
+            </>
+          )}
+
+          {destType === 'rest' && (
+            <>
+              <div className="carica-node__section">
+                <label className="carica-node__label">Endpoint REST</label>
+                <input
+                  type="url"
+                  value={restUrl}
+                  onChange={(e) => handleUpdate('rest_url', e.target.value)}
+                  placeholder="https://api.example.com/items"
+                  className="carica-node__input"
+                />
+              </div>
+
+              <div className="carica-node__section">
+                <label className="carica-node__label">Metodo</label>
+                <select
+                  value={restMethod}
+                  onChange={(e) => handleUpdate('rest_method', e.target.value)}
+                  className="carica-node__select"
+                >
+                  {restMethods.map(method => (
+                    <option key={method} value={method}>{method}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="carica-node__section">
+                <div
+                  className="carica-node__section-header"
+                  onClick={() => setShowMapping(!showMapping)}
+                >
+                  <span>Body Mapping</span>
+                  <span className="carica-node__toggle">{showMapping ? '▼' : '▶'}</span>
+                </div>
+
+                {showMapping && (
+                  <div className="carica-node__mapping">
+                    <div className="carica-node__mapping-actions">
+                      <button type="button" onClick={handleAddRestBodyMapping} className="carica-node__btn carica-node__btn--secondary">
+                        + Campo
+                      </button>
+                    </div>
+                    {restBodyMapping.length === 0 ? (
+                      <div className="carica-node__hint">
+                        Nessun mapping: il backend invia le righe con le colonne disponibili.
+                      </div>
+                    ) : (
+                      <div className="carica-node__mapping-list">
+                        {restBodyMapping.map((mapping, idx) => (
+                          <div key={idx} className="carica-node__mapping-row">
+                            <select
+                              value={mapping.source || ''}
+                              onChange={(e) => handleRestBodyMappingChange(idx, 'source', e.target.value)}
+                              className="carica-node__mapping-select"
+                            >
+                              <option value="">Colonna...</option>
+                              {availableColumns.map((col, colIdx) => {
+                                const originalName = col.name || col;
+                                const displayName = col.alias ? col.alias + ' (' + originalName + ')' : originalName;
+                                return <option key={colIdx} value={originalName}>{displayName}</option>;
+                              })}
+                            </select>
+                            <span className="carica-node__mapping-arrow">→</span>
+                            <input
+                              type="text"
+                              value={mapping.target || ''}
+                              onChange={(e) => handleRestBodyMappingChange(idx, 'target', e.target.value)}
+                              placeholder="Campo JSON..."
+                              className="carica-node__mapping-input"
+                            />
+                            <button type="button" onClick={() => handleRemoveRestBodyMapping(idx)} className="carica-node__mapping-remove">
+                              ×
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              <div className="carica-node__section">
+                <div
+                  className="carica-node__section-header"
+                  onClick={() => setShowAdvanced(!showAdvanced)}
+                >
+                  <span>Headers e batch</span>
+                  <span className="carica-node__toggle">{showAdvanced ? '▼' : '▶'}</span>
+                </div>
+
+                {showAdvanced && (
+                  <div className="carica-node__advanced">
+                    <div className="carica-node__advanced-row">
+                      <label>Batch mode:</label>
+                      <select
+                        value={restBatchMode}
+                        onChange={(e) => handleUpdate('rest_batch_mode', e.target.value)}
+                        className="carica-node__select carica-node__select--small"
+                      >
+                        {restBatchModes.map(mode => (
+                          <option key={mode.value} value={mode.value}>{mode.label}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="carica-node__advanced-row">
+                      <label>Batch size:</label>
+                      <input
+                        type="number"
+                        value={restBatchSize}
+                        onChange={(e) => handleUpdate('rest_batch_size', parseInt(e.target.value) || 1)}
+                        min={1} max={10000} step={1}
+                        className="carica-node__input carica-node__input--small"
+                      />
+                    </div>
+                    <div className="carica-node__advanced-row">
+                      <label>Timeout:</label>
+                      <input
+                        type="number"
+                        value={restTimeoutSeconds}
+                        onChange={(e) => handleUpdate('rest_timeout_seconds', parseInt(e.target.value) || 30)}
+                        min={1} max={600} step={1}
+                        className="carica-node__input carica-node__input--small"
+                      />
+                    </div>
+                    <div className="carica-node__rest-header-list">
+                      <div className="carica-node__mapping-actions">
+                        <button type="button" onClick={handleAddRestHeader} className="carica-node__btn carica-node__btn--secondary">
+                          + Header
+                        </button>
+                      </div>
+                      {restHeaders.map((header, idx) => (
+                        <div key={idx} className="carica-node__mapping-row">
+                          <input
+                            type="text"
+                            value={header.name || ''}
+                            onChange={(e) => handleRestHeaderChange(idx, 'name', e.target.value)}
+                            placeholder="Header"
+                            className="carica-node__mapping-input"
+                          />
+                          <input
+                            type={header.secret ? 'password' : 'text'}
+                            value={header.value || ''}
+                            onChange={(e) => handleRestHeaderChange(idx, 'value', e.target.value)}
+                            placeholder="Valore"
+                            className="carica-node__mapping-input"
+                          />
+                          <label className="carica-node__secret-toggle" title="Marca come segreto">
+                            <input
+                              type="checkbox"
+                              checked={!!header.secret}
+                              onChange={(e) => handleRestHeaderChange(idx, 'secret', e.target.checked)}
+                            />
+                            Secret
+                          </label>
+                          <button type="button" onClick={() => handleRemoveRestHeader(idx)} className="carica-node__mapping-remove">
+                            ×
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </>
+          )}
+
           {/* ============ PREVIEW / STATUS ============ */}
           {isValid && (
             <div className="carica-node__preview">
               <div className="carica-node__preview-item">
                 <span className="carica-node__preview-label">Destinazione:</span>
-                <span className="carica-node__preview-value">{schemaName}.{tableName}</span>
+                <span className="carica-node__preview-value">{destType === 'rest' ? restUrl : `${schemaName}.${tableName}`}</span>
               </div>
               <div className="carica-node__preview-item">
                 <span className="carica-node__preview-label">Modalità:</span>
                 <span className="carica-node__preview-value">
-                  {writeModes.find(m => m.value === writeMode)?.label}
+                  {destType === 'rest' ? restMethod : writeModes.find(m => m.value === writeMode)?.label}
                 </span>
               </div>
               {availableColumns.length > 0 && (

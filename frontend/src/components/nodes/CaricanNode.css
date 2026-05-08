@@ -17,6 +17,12 @@
   --cn-accent-bdr:  rgba(45,212,191,0.22);
   --cn-accent-hi:   rgba(45,212,191,0.38);
 }
+.carica-node--rest {
+  --cn-accent:      #14B8A6;
+  --cn-accent-dim:  rgba(20,184,166,0.10);
+  --cn-accent-bdr:  rgba(20,184,166,0.24);
+  --cn-accent-hi:   rgba(20,184,166,0.36);
+}
 
 /* ── Container ─────────────────────────────────────────────────── */
 .carica-node {
@@ -163,6 +169,11 @@
   background: rgba(45,212,191,0.1);
   color: #2DD4BF;
   border-color: rgba(45,212,191,0.25);
+}
+.carica-node__dest-btn--active.carica-node__dest-btn--rest {
+  background: rgba(20,184,166,0.1);
+  color: #14B8A6;
+  border-color: rgba(20,184,166,0.25);
 }
 
 /* ── Section ────────────────────────────────────────────────────── */
@@ -417,6 +428,21 @@
   font-family: var(--plen-font-body);
 }
 .carica-node__advanced-row input[type="checkbox"] { accent-color: var(--cn-accent); }
+
+.carica-node__rest-header-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.carica-node__secret-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+  color: var(--plen-text-sub, #7D8BA8);
+  font-size: 10.5px;
+}
 
 /* ── Preview ────────────────────────────────────────────────────── */
 .carica-node__preview {

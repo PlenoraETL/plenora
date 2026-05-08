@@ -263,6 +263,58 @@ def test_submit_task_launches_celery_and_returns_pending_task_info():
     assert service._task_project_cache["task-submit-1"] == "project-1"
 
 
+def test_preview_router_builds_typed_submit_request_directly(monkeypatch):
+    from app.core.orchestrator import router as router_mod
+    from app.core.orchestrator.task_service import task_service
+    from workers.tasks.pipeline_task import preview_pipeline_task
+
+    router_mod.init_orchestrator(object())
+    monkeypatch.setattr(router_mod, "_assert_project_group", lambda *args, **kwargs: None)
+
+    captured_requests = []
+
+    def fail_create_preview_task(**kwargs):
+        raise AssertionError("preview router used create_preview_task wrapper")
+
+    def fake_submit_task(request):
+        captured_requests.append(request)
+        return TaskInfo(
+            task_id="preview-task-1",
+            task_type=request.task_type,
+            project_id=request.project_id,
+            status=TaskStatus.PENDING,
+            message=request.queued_message,
+        )
+
+    monkeypatch.setattr(task_service, "create_preview_task", fail_create_preview_task)
+    monkeypatch.setattr(task_service, "submit_task", fake_submit_task)
+
+    response = router_mod.preview_project(
+        project_id="project-1",
+        limit=42,
+        current_user=SimpleNamespace(user_id="user-1"),
+    )
+
+    assert response["task_id"] == "preview-task-1"
+    assert response["task_type"] == "preview"
+    assert response["project_id"] == "project-1"
+    assert response["async"] is True
+
+    assert len(captured_requests) == 1
+    request = captured_requests[0]
+    assert isinstance(request, TaskSubmitRequest)
+    assert request.celery_task is preview_pipeline_task
+    assert request.task_type is TaskType.PREVIEW
+    assert request.project_id == "project-1"
+    assert request.kwargs == {
+        "project_id": "project-1",
+        "limit": 42,
+        "user_id": "user-1",
+    }
+    assert request.queued_message == "Preview in coda..."
+    assert request.log_label == "preview"
+
+
 @pytest.mark.parametrize(
     ("method_name", "call_kwargs", "expected_task_type", "expected_message", "expected_kwargs"),
     [

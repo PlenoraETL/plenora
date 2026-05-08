@@ -159,7 +159,7 @@ const serializers = {
 
   carica: (node) => ({
     id: node.id, type: 'carica', position: node.position,
-    dest_type:               'db',
+    dest_type:               nd(node, 'dest_type', 'db'),
     connection_id:           nd(node, 'connection_id'),
     schema_name:             nd(node, 'schema_name'),
     table_name:              nd(node, 'table_name'),
@@ -172,6 +172,14 @@ const serializers = {
     conflict_policy:         nd(node, 'conflict_policy',         'abort'),
     create_unique_index:     nd(node, 'create_unique_index',     false),
     unique_key_column:       nd(node, 'unique_key_column',       ''),
+    rest_url:                nd(node, 'rest_url',                ''),
+    rest_method:             nd(node, 'rest_method',             'POST'),
+    rest_headers:            nd(node, 'rest_headers',            []),
+    rest_body_mapping:       nd(node, 'rest_body_mapping',       []),
+    rest_batch_mode:         nd(node, 'rest_batch_mode',         'batch'),
+    rest_batch_size:         nd(node, 'rest_batch_size',         1000),
+    rest_timeout_seconds:    nd(node, 'rest_timeout_seconds',    30),
+    rest_success_statuses:   nd(node, 'rest_success_statuses',   [200, 201, 202, 204]),
   }),
 
   caricaArcgis: (node) => ({
