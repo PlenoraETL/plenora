@@ -68,7 +68,7 @@ def test_record_upload_intent_inserts_pending_row(monkeypatch):
     assert intent_id == "abc-1234"
     assert len(calls) == 1
     sql, params = calls[0]
-    assert "INSERT INTO plenora.storage_reconciliation_log" in sql
+    assert "INSERT INTO storage_reconciliation_log" in sql
     assert "'upload_intent'" in sql
     assert "'pending'" in sql
     assert "RETURNING id" in sql
@@ -223,7 +223,7 @@ def test_is_storage_key_referenced_returns_none_on_db_error():
 
 
 def test_is_storage_key_referenced_uses_indexed_column():
-    """SQL must hit `plenora.file_sources.storage_key` (indexed by
+    """SQL must hit `file_sources.storage_key` (indexed by
     `idx_file_sources_storage_key_notnull`)."""
     from app.shared.storage_reconciliation import is_storage_key_referenced
 
@@ -237,7 +237,7 @@ def test_is_storage_key_referenced_uses_indexed_column():
     with patch("app.db.pg_connection.fetchall", _fake):
         is_storage_key_referenced("file-sources/x/y.csv")
 
-    assert "plenora.file_sources" in captured["sql"]
+    assert "file_sources" in captured["sql"]
     assert "storage_key" in captured["sql"]
     assert captured["params"] == ("file-sources/x/y.csv",)
 

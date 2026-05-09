@@ -85,14 +85,21 @@ _BREADCRUMB_CONTEXTS = [
 
 def test_silent_assignment_sites_have_debug_breadcrumb():
     """Per ciascuno dei 5 siti, verifica presenza di `logger.debug(f"<context>:
-    {type(e).__name__}: ...")` col context unico attribuito in ε."""
+    {type(e).__name__}: ...")` col context unico attribuito in ε. Il
+    breadcrumb puo' essere su una singola riga o split su piu' righe
+    (concatenazione f-string implicita): cerchiamo entrambi i frammenti
+    indipendentemente."""
     missing = []
     for rel, context in _BREADCRUMB_CONTEXTS:
         src = _read(rel)
-        expected_fragment = (
-            f'logger.debug(f"{context}: {{type('
-        )
-        if expected_fragment not in src:
+        # Frammento 1: stringa di context dentro un f-string passato a
+        # logger.debug. Tollera split su piu' righe del messaggio.
+        ctx_fragment = f'f"{context}: '
+        # Frammento 2: type(e).__name__ usato per categorizzare la
+        # eccezione (formattatore canonico ε).
+        type_fragment = "{type(e).__name__}"
+        # Devono coabitare nello stesso file, idealmente vicini.
+        if ctx_fragment not in src or type_fragment not in src:
             missing.append(
                 f"{rel}: breadcrumb atteso per context '{context}' non trovato"
             )

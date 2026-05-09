@@ -426,7 +426,7 @@ def test_archive_and_purge_single_batch_happy_path():
     # DELETE invocata una volta, scoped a cutoff + max_id = 3.
     assert len(deletes) == 1
     sql, params = deletes[0]
-    assert "DELETE FROM plenora.logs" in sql
+    assert "DELETE FROM logs" in sql
     assert "ts < %s" in sql
     assert "id <= %s" in sql
     assert params == (cutoff, 3)
@@ -590,7 +590,7 @@ def test_archive_and_purge_rejects_bad_inputs_before_any_side_effect():
 
 def test_archive_and_purge_delete_scoped_to_cutoff_and_batch_max_id():
     """Il callable DELETE riceve SQL + params coerenti:
-    - per `logs`: `DELETE FROM plenora.logs WHERE ts < %s AND id <= %s`
+    - per `logs`: `DELETE FROM logs WHERE ts < %s AND id <= %s`
     - per `audit_actions`: `... WHERE timestamp < %s AND id <= %s`
     - params = (cutoff_ts, max(id) del batch).
 
@@ -620,7 +620,7 @@ def test_archive_and_purge_delete_scoped_to_cutoff_and_batch_max_id():
     )
 
     sql_logs, params_logs = deletes_logs[0]
-    assert "DELETE FROM plenora.logs" in sql_logs
+    assert "DELETE FROM logs" in sql_logs
     assert "WHERE ts < %s" in sql_logs
     assert "AND id <= %s" in sql_logs
     assert "timestamp" not in sql_logs  # non la colonna di audit
@@ -644,7 +644,7 @@ def test_archive_and_purge_delete_scoped_to_cutoff_and_batch_max_id():
     )
 
     sql_audit, params_audit = deletes_audit[0]
-    assert "DELETE FROM plenora.audit_actions" in sql_audit
+    assert "DELETE FROM audit_actions" in sql_audit
     assert "WHERE timestamp < %s" in sql_audit
     assert "AND id <= %s" in sql_audit
     # NOTE: la clausola WHERE NON deve referenziare la colonna `ts`

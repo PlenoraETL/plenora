@@ -158,7 +158,7 @@ def test_delete_result_records_pending_inside_transaction_and_marks_done(
     sqls = [s for s, _ in cursor.executed]
     assert any("SELECT storage_key FROM results" in s and "FOR UPDATE" in s
                for s in sqls)
-    assert any("INSERT INTO plenora.storage_reconciliation_log" in s
+    assert any("INSERT INTO storage_reconciliation_log" in s
                for s in sqls), "record_pending must INSERT inside tx"
     assert any("DELETE FROM results" in s for s in sqls)
 
@@ -167,7 +167,7 @@ def test_delete_result_records_pending_inside_transaction_and_marks_done(
         "select": next(i for i, (s, _) in enumerate(cursor.executed)
                        if "SELECT storage_key FROM results" in s),
         "insert": next(i for i, (s, _) in enumerate(cursor.executed)
-                       if "INSERT INTO plenora.storage_reconciliation_log" in s),
+                       if "INSERT INTO storage_reconciliation_log" in s),
         "delete": next(i for i, (s, _) in enumerate(cursor.executed)
                        if "DELETE FROM results" in s),
     }
@@ -276,7 +276,7 @@ def test_delete_result_legacy_bytea_row_skips_reconciliation(monkeypatch):
     assert deleted is True
     # No INSERT into reconciliation log for BYTEA path.
     sqls = [s for s, _ in cursor.executed]
-    assert all("INSERT INTO plenora.storage_reconciliation_log" not in s
+    assert all("INSERT INTO storage_reconciliation_log" not in s
                for s in sqls)
     # Compensating delete NOT called for BYTEA path.
     comp_called.assert_not_called()
@@ -301,7 +301,7 @@ def test_delete_result_row_not_found_skips_reconciliation(monkeypatch):
 
     assert deleted is False
     sqls = [s for s, _ in cursor.executed]
-    assert all("INSERT INTO plenora.storage_reconciliation_log" not in s
+    assert all("INSERT INTO storage_reconciliation_log" not in s
                for s in sqls)
     comp_called.assert_not_called()
 
@@ -357,7 +357,7 @@ def test_delete_results_for_project_records_pending_per_key_in_one_tx(
     sqls = [s for s, _ in cursor.executed]
     insert_count = sum(
         1 for s in sqls
-        if "INSERT INTO plenora.storage_reconciliation_log" in s
+        if "INSERT INTO storage_reconciliation_log" in s
     )
     delete_count = sum(1 for s in sqls if "DELETE FROM results" in s)
     assert insert_count == 2
@@ -368,7 +368,7 @@ def test_delete_results_for_project_records_pending_per_key_in_one_tx(
                       if "DELETE FROM results" in s)
     insert_indices = [
         i for i, (s, _) in enumerate(cursor.executed)
-        if "INSERT INTO plenora.storage_reconciliation_log" in s
+        if "INSERT INTO storage_reconciliation_log" in s
     ]
     assert all(i < delete_idx for i in insert_indices)
 
@@ -409,7 +409,7 @@ def test_delete_results_for_project_no_s3_rows_skips_reconciliation(
     # Still deletes legacy BYTEA rows (rowcount reflects the DELETE).
     assert rowcount == 3
     sqls = [s for s, _ in cursor.executed]
-    assert all("INSERT INTO plenora.storage_reconciliation_log" not in s
+    assert all("INSERT INTO storage_reconciliation_log" not in s
                for s in sqls)
     comp_called.assert_not_called()
 

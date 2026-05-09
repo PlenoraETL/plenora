@@ -133,7 +133,7 @@ def test_success_path_writes_audit_row_with_status_200(audit_writes):
     assert result == {"deleted": "proj_abc"}, "valore di ritorno passthrough"
     assert len(audit_writes) == 1, "esattamente una INSERT audit"
     sql, params = audit_writes[0]
-    assert "plenora.audit_actions" in sql
+    assert "audit_actions" in sql
     assert params == (
         "user_42",           # user_id
         "project.delete",    # action

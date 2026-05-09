@@ -28,7 +28,11 @@ from app.core.resources.column_types import (
 pytestmark = [pytest.mark.unit, pytest.mark.shared]
 
 
-def test_shared_column_types_is_compatibility_facade_only():
+# Tombstone: il facade compat `app/shared/resources/column_types.py` e'
+# stato rimosso (BE-GO-READY-ARCH-057-W1: gli engine subpackage in
+# `app.shared.*` non possono importare `app.core.*`). I consumer ora
+# importano direttamente da `app.core.resources.column_types`.
+def test_shared_column_types_facade_stays_removed():
     shared_module = (
         Path(__file__).resolve().parents[2]
         / "app"
@@ -36,11 +40,7 @@ def test_shared_column_types_is_compatibility_facade_only():
         / "resources"
         / "column_types.py"
     )
-    source = shared_module.read_text(encoding="utf-8")
-
-    assert "from app.core.resources.column_types import" in source
-    assert "\ndef " not in source
-    assert "\nclass " not in source
+    assert not shared_module.exists()
 
 
 # metadata_to_dict

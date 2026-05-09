@@ -338,5 +338,5 @@ def test_record_pending_is_inside_transaction_before_delete():
     # Crucial: INSERT happens BEFORE the DELETE — commit groups them
     # atomically (process death after commit cannot leak an orphan
     # without a corresponding pending row).
-    assert "INSERT INTO plenora.storage_reconciliation_log" in sqls[2]
+    assert "INSERT INTO storage_reconciliation_log" in sqls[2]
     assert "DELETE FROM file_sources" in sqls[3]

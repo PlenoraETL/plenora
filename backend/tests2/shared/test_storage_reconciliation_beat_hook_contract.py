@@ -211,9 +211,9 @@ def test_mark_lost_issues_update_to_state_lost(monkeypatch):
     mark_lost("rec-99", error="max_attempts_exceeded (5)")
     assert len(calls) == 1
     sql, params = calls[0]
-    assert "UPDATE plenora.storage_reconciliation_log" in sql
+    assert "UPDATE storage_reconciliation_log" in sql
     assert "state = 'lost'" in sql
-    assert "last_error = ?" in sql
+    assert "last_error = %s" in sql
     assert params == ("max_attempts_exceeded (5)", "rec-99")
 
 

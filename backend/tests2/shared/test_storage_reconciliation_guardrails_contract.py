@@ -143,12 +143,12 @@ def test_prune_terminal_older_than_issues_canonical_delete(monkeypatch):
     sql, params = calls[0]
     # Hard SQL invariants: terminals only, bounded LIMIT subquery,
     # oldest-first ordering.
-    assert "DELETE FROM plenora.storage_reconciliation_log" in sql
+    assert "DELETE FROM storage_reconciliation_log" in sql
     assert "WHERE id IN (" in sql
     assert "WHERE state IN ('done', 'orphan_deleted')" in sql
-    assert "updated_at < ?" in sql
+    assert "updated_at < %s" in sql
     assert "ORDER BY updated_at ASC" in sql
-    assert "LIMIT ?" in sql
+    assert "LIMIT %s" in sql
     # Params: cutoff first, limit last (matches placeholder order).
     assert params == (cutoff, 100)
 
