@@ -113,19 +113,36 @@ def test_delete_log_run_by_run_id_propagates_sql_error(monkeypatch):
 # Router source-bound: orchestrator no longer imports pg_connection
 
 
-def test_orchestrator_router_uses_helper_not_pg_connection():
+def test_orchestrator_router_uses_domain_cleanup_not_db_service():
     """`orchestrator/router.py` must delegate the `log_runs`
-    cleanup to `app.db.log_runs_db_service.delete_log_run_by_run_id`
-    and not import `pg_connection` directly. Pinned by the
-    architecture-guard `Rule 3` allowlist (orchestrator removed)
-    plus this source-bound check."""
+    cleanup to the orchestrator domain cleanup boundary and not import
+    DB helpers directly. Pinned by the architecture-guard `Rule 3`
+    allowlist (orchestrator removed) plus this source-bound check."""
     from app.core.orchestrator import router as orchestrator_router
 
     src = open(orchestrator_router.__file__, encoding="utf-8").read()
     assert "from app.db.pg_connection" not in src
     assert "import app.db.pg_connection" not in src
-    # The helper is referenced.
-    assert "delete_log_run_by_run_id" in src
+    assert "app.db.log_runs_db_service" not in src
+    assert "delete_task_log_runs" in src
+
+
+def test_orchestrator_log_cleanup_delegates_to_db_adapter(monkeypatch):
+    from app.core.orchestrator import log_cleanup
+
+    calls = []
+
+    def _delete(run_id):
+        calls.append(run_id)
+        return 1
+
+    monkeypatch.setattr(
+        "app.db.log_runs_db_service.delete_log_run_by_run_id",
+        _delete,
+    )
+
+    assert log_cleanup.delete_task_log_runs("task-abc") == 1
+    assert calls == ["task-abc"]
 
 
 # Module hygiene

@@ -6,13 +6,12 @@ Keeps this module's responsibility explicit and isolated from adjacent code.
 
 import re
 from app.utils.logger import get_logger
-from typing import List, Dict, Optional, Any, Tuple
+from typing import List, Dict, Optional, Any
 
 from app.shared.models import Node, Edge
-from app.db.sql_functions import translate_calculated_column, get_translator
-from app.db.sql_translator import sql_translator
 from app.core.estrai.query_filters import WhereClauseBuilder
 from app.core.estrai.query_joins import QueryJoinRenderer
+from app.core.estrai.query_projection import QueryProjectionRenderer
 
 logger = get_logger(__name__)
 
@@ -410,216 +409,25 @@ class QueryGenerator:
         result_node: Node,
         group_by_config: Dict[str, Any] = None
     ) -> str:
-        """
-        Genera la clausola SELECT con colonne visibili, alias e colonne calcolate.
-
-        Se GROUP BY è attivo, delega a _genera_select_con_groupby.
-        Altrimenti genera un SELECT normale con:
-        - Colonne visibili (con eventuale alias)
-        - Colonne geometriche wrappate in ST_AsText
-        - Colonne calcolate tradotte tramite sql_functions
-        """
-        # Se GROUP BY è attivo, usa il generatore specifico
-        if group_by_config and group_by_config.get("enabled"):
-            return self._genera_select_con_groupby(table_nodes, group_by_config)
-
-        # SELECT normale (senza GROUP BY
-        columns = []
-
-        for node in table_nodes:
-            table_alias = node.alias or self._get_node_table_name(node)
-
-            if node.type == 'datasource_node':
-                visible_cols = [c for c in (node.columns or []) if getattr(c, 'visible', True)]
-                if not visible_cols:
-                    columns.append(f"{table_alias}.*")
-                    continue
-
-            for col in node.columns:
-                if not col.visible:
-                    continue
-
-                col_name = col.name
-                col_alias = col.alias
-                col_type = getattr(col, 'type', 'str') or 'str'
-
-                col_name_sql = self._safe_identifier(col_name, "Nome colonna")
-
-                # Colonne geometriche: wrappa con funzione WKT per il database
-                if col_type.startswith('geometry'):
-                    col_expr = self._wrap_geometry_as_wkt(f"{table_alias}.{col_name_sql}")
-                    output_alias = col_alias if col_alias else col_name
-                    output_alias_sql = self._safe_identifier(output_alias, "Alias colonna")
-                    columns.append(f"{col_expr} AS {output_alias_sql}")
-                else:
-                    if col_alias:
-                        col_alias_sql = self._safe_identifier(col_alias, "Alias colonna")
-                        columns.append(f"{table_alias}.{col_name_sql} AS {col_alias_sql}")
-                    else:
-                        columns.append(f"{table_alias}.{col_name_sql}")
-
-            calculated_columns = getattr(node, 'calculated_columns', None) or []
-            for calc_col in calculated_columns:
-                try:
-                    if calc_col.get('is_manual') and calc_col.get('sql'):
-                        # SQL manuale: usa l'espressione così com'è
-                        sql_expr = calc_col['sql']
-                    elif calc_col.get('function_name') and calc_col.get('params'):
-                        # Formato preferito: function_name + params (database-agnostic
-                        sql_expr = translate_calculated_column(
-                            db_type=self.db_type,
-                            column_name=calc_col['name'],
-                            expression={
-                                "function": calc_col['function_name'],
-                                "params": calc_col['params']
-                            },
-                            table_alias=table_alias
-                        )
-                    elif calc_col.get('expression') and isinstance(calc_col['expression'], dict):
-                        # Fallback: expression come dizionario (formato legacy
-                        sql_expr = translate_calculated_column(
-                            db_type=self.db_type,
-                            column_name=calc_col['name'],
-                            expression=calc_col['expression'],
-                            table_alias=table_alias
-                        )
-                    else:
-                        # Nessun formato riconosciuto: skip silenzioso
-                        continue
-
-                    columns.append(sql_expr)
-
-                except Exception as e:
-                    raise ValueError(
-                        f"Errore colonna calcolata '{calc_col.get('name', '?')}': {e}"
-                    )
-
-        if not columns:
-            raise ValueError("Nessuna colonna selezionata")
-
-        return ", ".join(columns)
+        return self._projection_renderer().generate_select(
+            table_nodes, result_node, group_by_config
+        )
 
     def _genera_select_con_groupby(
         self,
         table_nodes: List[Node],
         group_by_config: Dict[str, Any]
     ) -> str:
-        """
-        Genera SELECT per query con GROUP BY.
+        return self._projection_renderer().generate_select_with_groupby(
+            table_nodes, group_by_config
+        )
 
-        Output tipico: "comune, provincia, SUM(area) AS totale_area, COUNT(*) AS conteggio"
-
-        Composizione:
-        1. Colonne di raggruppamento (qualificate con alias tabella)
-        2. Funzioni aggregate (COUNT, SUM, AVG, MIN, MAX)
-        """
-        columns = []
-        group_columns = group_by_config.get("columns", [])
-        aggregations = group_by_config.get("aggregations", [])
-
-        # Costruisci mappa nome_colonna e alias → alias_tabella
-        table_map = {}
-        for node in table_nodes:
-            table_alias = node.alias or self._get_node_table_name(node)
-            for col in node.columns:
-                if col.visible:
-                    table_map[col.name] = table_alias
-                    if hasattr(col, 'alias') and col.alias:
-                        table_map[col.alias] = table_alias
-
-        def _resolve_col(col_name, context):
-            """Risolve alias → table.real_col oppure restituisce col_name qualificato."""
-            resolved = table_map.get(col_name)
-            if resolved:
-                col_real = col_name.split("__", 1)[1] if "__" in col_name else col_name
-                col_sql = self._safe_identifier(col_real, context)
-                return f"{resolved}.{col_sql}", col_sql
-            col_sql = self._safe_identifier(col_name, context)
-            return col_sql, col_sql
-
-        # 1. Colonne di raggruppamento
-        for col_name in group_columns:
-            col_ref, _ = _resolve_col(col_name, "Nome colonna GROUP BY")
-            columns.append(col_ref)
-
-        # 2. Funzioni aggregate
-        valid_agg_functions = {'COUNT', 'SUM', 'AVG', 'MIN', 'MAX', 'FIRST', 'LAST'}
-
-        for agg in aggregations:
-            # Supporta sia dizionari che oggetti Pydantic
-            if hasattr(agg, 'column'):
-                col = agg.column or '*'
-                func = (agg.function or 'COUNT').upper()
-                alias = agg.alias or f"{func.lower()}_{col}"
-            else:
-                col = agg.get('column', '*')
-                func = agg.get('function', 'COUNT').upper()
-                alias = agg.get('alias', f"{func.lower()}_{col}")
-
-            if func not in valid_agg_functions:
-                raise ValueError(f"Funzione aggregazione non valida: {func}")
-            alias_sql = self._safe_identifier(alias, "Alias aggregazione")
-
-            # COUNT(*) è l'unica aggregazione che non richiede una colonna specifica
-            if col == '*':
-                if func != 'COUNT':
-                    raise ValueError(f"Solo COUNT può usare *, non {func}")
-                columns.append(f"COUNT(*) AS {alias_sql}")
-            else:
-                col_ref, _ = _resolve_col(col, "Nome colonna aggregazione")
-                columns.append(f"{func}({col_ref}) AS {alias_sql}")
-
-        if not columns:
-            raise ValueError("Nessuna colonna per GROUP BY")
-
-        return ", ".join(columns)
-
-    def _genera_group_by(self, group_by_config: Dict[str, Any], table_nodes: List[Node] = None) -> str:
-        """
-        Genera clausola GROUP BY con colonne qualificate (tabella.colonna).
-
-        Qualificare è necessario quando più tabelle hanno colonne con lo stesso nome
-        (es. bl_id in bl e prt_su_ls_link) — senza qualifica SQL Server dà errore
-        "Ambiguous column name".
-
-        Returns:
-            Stringa "t1.col1, t2.col2, ..." oppure stringa vuota se GROUP BY non attivo
-        """
-        if not group_by_config or not group_by_config.get("enabled"):
-            return ""
-
-        columns = group_by_config.get("columns", [])
-        if not columns:
-            return ""
-
-        # Costruisci mappa colonna → alias tabella per qualificare
-        # Filtra per visible=True, stesso criterio di _genera_select_con_groupby
-        # così SELECT e GROUP BY usano sempre la stessa tabella per ogni colonna
-        table_map = {}
-        if table_nodes:
-            for node in table_nodes:
-                table_alias = node.alias or self._get_node_table_name(node)
-                for col in (node.columns or []):
-                    col_name    = col.name  if hasattr(col, 'name')  else col.get('name', '')
-                    col_alias   = col.alias if hasattr(col, 'alias') else col.get('alias', '')
-                    col_visible = col.visible if hasattr(col, 'visible') else col.get('visible', True)
-                    if col_name and col_visible:
-                        table_map[col_name] = table_alias
-                        if col_alias:
-                            table_map[col_alias] = table_alias
-
-        qualified = []
-        for col in columns:
-            resolved = table_map.get(col)
-            if resolved:
-                col_real = col.split('__', 1)[1] if '__' in col else col
-                col_sql  = self._safe_identifier(col_real, "Nome colonna GROUP BY")
-                qualified.append(f"{resolved}.{col_sql}")
-            else:
-                col_sql = self._safe_identifier(col, "Nome colonna GROUP BY")
-                qualified.append(col_sql)
-
-        return ", ".join(qualified)
+    def _genera_group_by(
+        self,
+        group_by_config: Dict[str, Any],
+        table_nodes: List[Node] = None
+    ) -> str:
+        return self._projection_renderer().generate_group_by(group_by_config, table_nodes)
 
     # ORDER BY
 
@@ -629,76 +437,9 @@ class QueryGenerator:
         table_nodes: List[Node],
         group_by_config: Dict[str, Any]
     ) -> str:
-        """
-        Genera la clausola ORDER BY.
-
-        Se GROUP BY è attivo, permette di ordinare solo per colonne nel GROUP BY
-        o per espressioni aggregate (es. SUM(area), COUNT(*)).
-
-        Args:
-            order_by_config: configurazione ORDER BY dal nodo risultato
-            table_nodes: nodi tabella per risolvere gli alias
-            group_by_config: configurazione GROUP BY (per validazione)
-
-        Returns:
-            Stringa ORDER BY (senza la keyword), o stringa vuota.
-        """
-        if not order_by_config.get("enabled") or not order_by_config.get("columns"):
-            return ""
-
-        columns = order_by_config["columns"]
-
-        # Mappa colonne → alias tabella
-        table_map = {}
-        if table_nodes:
-            for node in table_nodes:
-                table_alias = node.alias or self._get_node_table_name(node)
-                for col in (node.columns or []):
-                    col_name = col.name if hasattr(col, 'name') else col.get('name', '')
-                    col_alias = col.alias if hasattr(col, 'alias') else col.get('alias', '')
-                    col_visible = col.visible if hasattr(col, 'visible') else col.get('visible', True)
-                    if col_name and col_visible:
-                        table_map[col_name] = table_alias
-                        if col_alias:
-                            table_map[col_alias] = table_alias
-
-        # Set delle funzioni aggregate valide (per ORDER BY con GROUP BY
-        aggregate_functions = {"COUNT", "SUM", "AVG", "MIN", "MAX"}
-
-        parti = []
-        for item in columns:
-            col = item.get("column", "") if isinstance(item, dict) else str(item)
-            direction = item.get("direction", "ASC") if isinstance(item, dict) else "ASC"
-
-            # Normalizza direzione
-            direction = direction.upper()
-            if direction not in ("ASC", "DESC"):
-                direction = "ASC"
-
-            # Controlla se è un'espressione aggregata (es. "COUNT(*)", "SUM(area)"
-            col_upper = col.upper().strip()
-            is_aggregate = any(col_upper.startswith(f"{fn}(") for fn in aggregate_functions)
-
-            if is_aggregate:
-                # Espressione aggregata: valida la struttura base prima dell'interpolazione
-                # Pattern atteso: FUNC(identifier) — es. COUNT(*), SUM(area), AVG(col1
-                # Rifiuta input che contengono SQL injection keywords
-                import re as _re
-                if not _re.match(r'^[A-Z_]+\([a-zA-Z0-9_.*\s,]+\)$', col.strip()):
-                    raise ValueError(f"Espressione aggregata ORDER BY non valida: {col}")
-                parti.append(f"{col} {direction}")
-            else:
-                # Colonna normale: qualifica con alias tabella
-                col_real = col.split('__', 1)[1] if '__' in col else col
-                resolved = table_map.get(col)
-                if resolved:
-                    col_sql = self._safe_identifier(col_real, "Nome colonna ORDER BY")
-                    parti.append(f"{resolved}.{col_sql} {direction}")
-                else:
-                    col_sql = self._safe_identifier(col_real, "Nome colonna ORDER BY")
-                    parti.append(f"{col_sql} {direction}")
-
-        return ", ".join(parti)
+        return self._projection_renderer().generate_order_by(
+            order_by_config, table_nodes, group_by_config
+        )
 
     # HAVING
 
@@ -708,79 +449,14 @@ class QueryGenerator:
         group_by_config: Dict[str, Any],
         params: Dict[str, Any]
     ) -> str:
-        """
-        Genera la clausola HAVING.
-
-        HAVING è valido solo quando GROUP BY è attivo.
-        Permette di filtrare i risultati aggregati (es. HAVING COUNT(*) > 10).
-
-        Args:
-            having_config: configurazione HAVING dal nodo risultato
-            group_by_config: configurazione GROUP BY (deve essere attivo)
-            params: dizionario parametri da riempire (per query parametrizzate)
-
-        Returns:
-            Stringa HAVING (senza la keyword), o stringa vuota.
-        """
-        if not having_config.get("enabled") or not having_config.get("conditions"):
-            return ""
-
-        # HAVING ha senso solo con GROUP BY
-        if not group_by_config.get("enabled"):
-            return ""
-
-        conditions = having_config["conditions"]
-
-        # Operatori validi
-        operatori_validi = {"=", "!=", ">", "<", ">=", "<="}
-
-        parti = []
-        for cond in conditions:
-            funzione = cond.get("function", "COUNT").upper()
-            colonna = cond.get("column", "*")
-            operatore = cond.get("operator", ">")
-            valore = cond.get("value", "0")
-
-            # Validazione
-            if funzione not in ("COUNT", "SUM", "AVG", "MIN", "MAX"):
-                continue
-            if operatore not in operatori_validi:
-                continue
-
-            # Costruisci l'espressione aggregata
-            if colonna == "*":
-                espressione = f"{funzione}(*)"
-            else:
-                col_sql = self._safe_identifier(colonna, "Nome colonna HAVING")
-                espressione = f"{funzione}({col_sql})"
-
-            # Parametrizza il valore
-            param_name = self._prossimo_nome_param()
-            try:
-                valore_tipizzato = float(valore) if '.' in str(valore) else int(valore)
-            except (ValueError, TypeError):
-                valore_tipizzato = valore
-            params[param_name] = valore_tipizzato
-
-            parti.append(f"{espressione} {operatore} :{param_name}")
-
-        return " AND ".join(parti)
+        return self._projection_renderer().generate_having(
+            having_config, group_by_config, params
+        )
 
     # GEOMETRIE — CONVERSIONE WKT
 
     def _wrap_geometry_as_wkt(self, col_ref: str) -> str:
-        """
-        Wrappa una colonna geometrica con la funzione ST_AsText appropriata.
-
-        Usa sql_translator per tradurre nel dialetto corretto del database.
-        Fallback su sintassi PostGIS standard se il database non è nel registry.
-        """
-        db = self.db_type.lower() if self.db_type else 'postgres'
-
-        try:
-            return sql_translator.translate('ST_AsText', db, geom=col_ref)
-        except (ValueError, KeyError):
-            return f"ST_AsText({col_ref})"
+        return self._projection_renderer().wrap_geometry_as_wkt(col_ref)
 
     # GENERAZIONE CLAUSOLA FROM + JOIN
 
@@ -811,6 +487,7 @@ class QueryGenerator:
         return QueryJoinRenderer(self).generate_on_attribute(
             edge, source_alias, table_alias, node, join_type, is_reversed
         )
+
     # GENERAZIONE CLAUSOLA WHERE
 
     def _genera_where(self, table_nodes: List[Node], params: Dict[str, Any]) -> str:
@@ -853,57 +530,13 @@ class QueryGenerator:
             self._get_node_table_name,
         )
 
+    def _projection_renderer(self) -> QueryProjectionRenderer:
+        return QueryProjectionRenderer(self)
+
     # ASSEMBLAGGIO QUERY
 
     def _assembla_query(self, sql_parts: Dict) -> str:
-        """
-        Assembla le parti SQL in una query completa.
-
-        Ordine: SELECT [DISTINCT] colonne FROM tabelle [JOIN...]
-                [WHERE...] [GROUP BY...] [HAVING...] [ORDER BY...] [LIMIT]
-
-        La sintassi LIMIT varia per database:
-        - PostgreSQL, MySQL, SQLite: LIMIT N (in fondo)
-        - Oracle 12c+: FETCH FIRST N ROWS ONLY (in fondo)
-        - SQL Server: SELECT TOP N (dopo SELECT, inserito tramite replace)
-        """
-        query = "SELECT "
-
-        # DISTINCT (non applicato se c'è GROUP BY
-        if sql_parts.get('distinct') and not sql_parts.get('group_by'):
-            query += "DISTINCT "
-
-        query += sql_parts['select']
-        query += f"\nFROM {sql_parts['from']}"
-
-        if sql_parts['where']:
-            query += f"\nWHERE {sql_parts['where']}"
-
-        if sql_parts.get('group_by'):
-            query += f"\nGROUP BY {sql_parts['group_by']}"
-
-        if sql_parts.get('having'):
-            query += f"\nHAVING {sql_parts['having']}"
-
-        if sql_parts.get('order_by'):
-            query += f"\nORDER BY {sql_parts['order_by']}"
-
-        # LIMIT con sintassi database-specifica
-        limit = sql_parts.get('limit')
-        if limit is not None:
-            if not isinstance(limit, int) or limit < 0:
-                raise ValueError(f"LIMIT deve essere un intero positivo, ricevuto: {limit}")
-
-            db = self.db_type.lower() if self.db_type else 'postgres'
-
-            if db == 'oracle':
-                query += f"\nFETCH FIRST {limit} ROWS ONLY"
-            elif db in ('mssql', 'sqlserver'):
-                query = query.replace("SELECT ", f"SELECT TOP {limit} ", 1)
-            else:
-                query += f"\nLIMIT {limit}"
-
-        return query
+        return self._projection_renderer().assemble_query(sql_parts)
 
     # UTILITÀ
 

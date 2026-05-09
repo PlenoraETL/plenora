@@ -24,11 +24,11 @@ def _col(name: str, ctype: str = "str") -> ColumnSchema:
 def _join(left, right, *, left_on, right_on):
     from unittest.mock import MagicMock
     svc = SchemaInferenceService(project_service=MagicMock())
-    return svc._schema_join(
-        input_schemas=[left, right],
-        config={"left_on": left_on, "right_on": right_on},
-        node_id="join_node",
-        edges_by_target={},  # non usato dal merge logic, basta dict vuoto
+    handler = svc._build_transform_handlers(edges_by_target={})["join"]
+    return handler(
+        [left, right],
+        {"left_on": left_on, "right_on": right_on},
+        "join_node",
     )
 
 

@@ -13,6 +13,7 @@ import pytest
 
 from app.db.query_streaming import execute_streaming_to_file
 from app.db.query_executor import QueryExecutor
+from app.db.query_result_persistence import PersistedQueryResult
 
 
 pytestmark = [pytest.mark.unit, pytest.mark.estrai, pytest.mark.contract, pytest.mark.regression]
@@ -22,6 +23,7 @@ def test_query_executor_delegates_streaming_mechanics_to_query_streaming_module(
     source = Path("backend/app/db/query_executor.py").read_text(encoding="utf-8")
 
     assert "from app.db.query_streaming import execute_streaming_to_file" in source
+    assert "from app.utils.result_store import save_result_blob" not in source
     assert "csv.writer" not in source
     assert "ParquetWriter" not in source
     assert "pyarrow" not in source
@@ -156,17 +158,22 @@ def test_execute_query_streamable_skips_global_dataframe_and_legacy_save(tmp_pat
             return_value=(2, ["id", "name"]),
         ) as mock_stream,
         patch.object(
+            executor._result_persistence,
+            "streaming_output_path",
+            return_value=Path(tmp_path) / "estrai_stream.csv",
+        ),
+        patch.object(
             executor._df_builder,
             "from_rows",
             side_effect=AssertionError("global DataFrame path must not run"),
         ),
-        patch(
-            "app.db.query_executor.get_temp_output_path",
-            side_effect=lambda name: Path(tmp_path) / name,
-        ),
-        patch(
-            "app.db.query_executor.save_result_blob",
-            return_value="res-stream-1",
+        patch.object(
+            executor._result_persistence,
+            "persist_streamed_file",
+            return_value=PersistedQueryResult(
+                result_id="res-stream-1",
+                output_path=Path(tmp_path) / "estrai_stream.csv",
+            ),
         ) as mock_save_blob,
     ):
         result = executor.execute_query(

@@ -404,21 +404,14 @@ class SchemaInferenceService:
         handler = handlers.get(transform_op)
         if handler is None:
             logger.warning(f"Operazione {transform_op} non gestita - passthrough")
-            return self._schema_passthrough(input_schemas, node.id)
+            return self._transform_handlers.schema_passthrough(input_schemas, node.id)
         return handler(input_schemas, config, node.id)
 
     def _build_transform_handlers(
         self,
         edges_by_target: dict,
     ) -> Dict[str, Callable[[List[List[ColumnSchema]], dict, str], List[ColumnSchema]]]:
-        return self._transform_handlers._build_transform_handlers(edges_by_target)
-
-    def __getattr__(self, name: str):
-        if name.startswith("_schema_"):
-            handler_attr = getattr(self._transform_handlers, name, None)
-            if handler_attr is not None:
-                return handler_attr
-        raise AttributeError(f"{type(self).__name__!s} object has no attribute {name!r}")
+        return self._transform_handlers.build_transform_handlers(edges_by_target)
 
     def _infer_api_enrich_schema(
         self,

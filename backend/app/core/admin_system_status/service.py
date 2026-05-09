@@ -794,8 +794,10 @@ def get_tickets_status() -> AdminStatusBlock:
     Graceful degradation: mai raise, ritorna sempre dict con status.
     """
     try:
-        from app.db import tickets_db_service as tdb
-        from app.core.tickets.service import TICKET_STATUSES_ACTIVE
+        from app.core.admin_system_status.tickets_metrics import (
+            TicketsMetricsUnavailable,
+            get_active_ticket_metrics,
+        )
     except Exception as e:
         return AdminStatusBlock(
             status="unknown",
@@ -804,18 +806,17 @@ def get_tickets_status() -> AdminStatusBlock:
         )
 
     try:
-        total_active = tdb.count_tickets(
-            status_in=list(TICKET_STATUSES_ACTIVE),
-        )
-        by_severity_raw = tdb.counts_by_severity(
-            status_in=list(TICKET_STATUSES_ACTIVE),
-        )
-        by_severity = {
-            str(key): int(value or 0)
-            for key, value in by_severity_raw.items()
-        }
+        metrics = get_active_ticket_metrics()
+        total_active = metrics.total_active
+        by_severity = metrics.by_severity
         critical = by_severity.get("critical", 0)
         high = by_severity.get("high", 0)
+    except TicketsMetricsUnavailable as e:
+        return AdminStatusBlock(
+            status="unknown",
+            message="Modulo tickets non disponibile",
+            error=str(e)[:200],
+        )
     except Exception as e:
         logger.warning(f"get_tickets_status DB error: {e}")
         return AdminStatusBlock(

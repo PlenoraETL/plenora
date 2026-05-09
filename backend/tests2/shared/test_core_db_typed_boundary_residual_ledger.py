@@ -18,6 +18,7 @@ pytestmark = [pytest.mark.unit, pytest.mark.contract]
 
 _BACKEND_ROOT = Path(__file__).resolve().parent.parent.parent
 _APP_ROOT = _BACKEND_ROOT / "app"
+_PROD_ROOTS = (_BACKEND_ROOT / "app", _BACKEND_ROOT / "workers")
 
 _ALLOWED_STATUSES = frozenset(
     {
@@ -32,6 +33,19 @@ _EXPECTED_TO_LEGACY_DICT_CALL_SITES = frozenset(
     {
     }
 )
+_DB_FACADE_BOUNDARY_ALLOWLIST = {
+    "app.db.tickets_db_service": frozenset(
+        {
+            "app/core/admin_system_status/tickets_metrics.py",
+            "app/core/tickets/db.py",
+        }
+    ),
+    "app.db.log_runs_db_service": frozenset(
+        {
+            "app/core/orchestrator/log_cleanup.py",
+        }
+    ),
+}
 
 
 @dataclass(frozen=True)
@@ -416,8 +430,28 @@ def _tree(rel_path: str) -> ast.Module:
     return ast.parse((_BACKEND_ROOT / rel_path).read_text(encoding="utf-8-sig"))
 
 
+def _iter_prod_python() -> list[Path]:
+    paths: list[Path] = []
+    for root in _PROD_ROOTS:
+        if root.exists():
+            paths.extend(root.rglob("*.py"))
+    return sorted(paths)
+
+
 def _rel(path: Path) -> str:
     return path.relative_to(_BACKEND_ROOT).as_posix()
+
+
+def _import_edges(tree: ast.AST) -> set[str]:
+    edges: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            edges.update(alias.name for alias in node.names)
+            continue
+        if isinstance(node, ast.ImportFrom) and node.module:
+            edges.add(node.module)
+            edges.update(f"{node.module}.{alias.name}" for alias in node.names)
+    return edges
 
 
 def _classes(tree: ast.AST) -> set[str]:
@@ -762,6 +796,50 @@ def test_to_legacy_dict_call_sites_are_explicitly_bounded():
         f"Unexpected: {sorted(found - _EXPECTED_TO_LEGACY_DICT_CALL_SITES)}; "
         f"Removed: {sorted(_EXPECTED_TO_LEGACY_DICT_CALL_SITES - found)}"
     )
+
+
+def test_production_code_does_not_import_app_services_facades():
+    violations = {
+        (_rel(path), edge)
+        for path in _iter_prod_python()
+        for edge in _import_edges(_tree(_rel(path)))
+        if edge == "app.services" or edge.startswith("app.services.")
+    }
+
+    assert not violations, (
+        "Production code must not import tombstoned app.services facades. "
+        f"Violations: {sorted(violations)}"
+    )
+
+
+def test_core_consumers_use_ticket_and_log_domain_boundaries():
+    violations: list[tuple[str, str]] = []
+    for path in sorted((_APP_ROOT / "core").rglob("*.py")):
+        rel_path = _rel(path)
+        edges = _import_edges(_tree(rel_path))
+        for facade, allowed_paths in _DB_FACADE_BOUNDARY_ALLOWLIST.items():
+            if any(edge == facade or edge.startswith(f"{facade}.") for edge in edges):
+                if rel_path not in allowed_paths:
+                    violations.append((rel_path, facade))
+
+    assert not violations, (
+        "Core consumers must use the domain-owned ticket/log boundaries "
+        "instead of importing legacy DB facades directly. "
+        f"Violations: {violations}"
+    )
+
+
+def test_schema_inference_service_has_no_getattr_bridge():
+    tree = _tree("app/core/projects/schema_inference.py")
+    found = {
+        child.name
+        for node in ast.walk(tree)
+        if isinstance(node, ast.ClassDef) and node.name == "SchemaInferenceService"
+        for child in node.body
+        if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef))
+    }
+
+    assert "__getattr__" not in found
 
 
 def test_project_db_getattr_bridge_is_explicit_blocker_only():

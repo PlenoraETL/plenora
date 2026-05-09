@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import re
+import inspect
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -144,6 +145,15 @@ def test_dispatcher_source_and_runtime_match_expected_snapshot():
     handlers = _service()._build_transform_handlers(edges_by_target={})
     assert set(handlers.keys()) == EXPECTED_DISPATCHER_BRANCHES
     assert all(callable(handler) for handler in handlers.values())
+
+
+def test_schema_inference_service_does_not_magic_delegate_schema_handlers():
+    source = inspect.getsource(SchemaInferenceService)
+    service = _service()
+
+    assert "def __getattr__" not in source
+    assert not hasattr(service, "_schema_join")
+    assert callable(service._build_transform_handlers(edges_by_target={})["join"])
 
 
 def test_registry_loads_and_is_fully_classified():

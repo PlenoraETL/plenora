@@ -30,13 +30,51 @@ class EnrichmentExecutionEnginesMixin:
     sequenziale in base alla configurazione del batch e a parallel_workers.
     """
 
+    def _serial_engine_required_reason(self) -> Optional[str]:
+        """Ritorna il motivo per cui serve il motore sequenziale.
+
+        Il path ThreadPoolExecutor e' un motore throughput-only per workload
+        indipendenti dove ogni gruppo produce una riga logica e non sono
+        richieste semantiche di stop anticipato. Il path sequenziale e' il
+        motore canonico per preview e per le opzioni che dipendono dall'ordine
+        di elaborazione o dalla gestione per-riga degli errori.
+        """
+        if not self.options.skip_null_params:
+            return "skip_null_params=False"
+        if not self.options.continue_on_error:
+            return "continue_on_error=False"
+        if self.options.stop_on_error_threshold > 0:
+            return "stop_on_error_threshold"
+        if self.auth.get("type") in ("oauth2_password", "oauth2_client_credentials"):
+            return "oauth2_header_refresh"
+        return None
+
+    def _should_use_parallel_engine(self) -> bool:
+        """True quando il dispatcher pubblico puo' usare ThreadPoolExecutor."""
+        return (
+            self.options.parallel_workers > 1
+            and self._serial_engine_required_reason() is None
+        )
+
     def _execute_parallel(
         self,
         df: pd.DataFrame
     ) -> Tuple[pd.DataFrame, EnrichmentStats, List[RowError]]:
         """
         Esecuzione parallela con ThreadPoolExecutor.
+
+        Se il caller ha richiesto semantiche serial-only, delega al motore
+        sequenziale: questo mantiene il comportamento pubblico di `execute`
+        anche quando il dispatcher storico entra qui con parallel_workers > 1.
         """
+        serial_reason = self._serial_engine_required_reason()
+        if serial_reason is not None:
+            logger.info(
+                f"Esecuzione sequenziale richiesta ({serial_reason}); "
+                "ThreadPoolExecutor non usato."
+            )
+            return self._execute_internal(df)
+
         result_df = df.copy()
         stats = EnrichmentStats(total_rows=len(df))
         errors: List[RowError] = []

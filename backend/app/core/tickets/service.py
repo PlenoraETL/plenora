@@ -12,7 +12,7 @@ from typing import Any, Dict, List, Optional, Protocol, Tuple
 from fastapi import HTTPException
 
 from app.shared.contracts.auth import CurrentUser
-from app.db import tickets_db_service as tdb
+from app.core.tickets import db as tdb
 from app.shared import error_codes
 from app.utils.logger import get_logger
 

@@ -17,8 +17,8 @@ from pydantic import BaseModel, Field
 
 from app.core.auth.dependencies import get_current_user
 from app.shared.contracts.auth import CurrentUser
+from app.core.tickets import db as tdb
 from app.core.tickets import service as svc
-from app.db import tickets_db_service as tdb
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)

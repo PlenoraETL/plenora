@@ -9,6 +9,7 @@ from enum import Enum
 from dataclasses import dataclass
 
 from app.db.sql_date_functions import SqlDateFunctionMixin
+from app.db.sql_numeric_functions import SqlNumericFunctionMixin
 from app.db.sql_string_functions import SqlStringFunctionMixin
 
 
@@ -636,7 +637,11 @@ FUNCTION_CATALOG: Dict[str, FunctionDef] = {
 
 # TRADUTTORE SQL MULTI-DATABASE
 
-class SqlFunctionTranslator(SqlDateFunctionMixin, SqlStringFunctionMixin):
+class SqlFunctionTranslator(
+    SqlDateFunctionMixin,
+    SqlNumericFunctionMixin,
+    SqlStringFunctionMixin,
+):
     """
     Traduce funzioni astratte nel dialetto SQL specifico del database.
 
@@ -862,160 +867,6 @@ class SqlFunctionTranslator(SqlDateFunctionMixin, SqlStringFunctionMixin):
             DbType.SQLITE: f"Envelope({col})",
         }
         return self._ottieni_traduzione(traduzioni, "ENVELOPE")
-
-    # FUNZIONI NUMERICHE
-
-    def _translate_round(self, params: Dict, table_alias: str = None) -> str:
-        """Arrotondamento — al numero di decimali specificato."""
-        col = self._qualify_column(params["column"], table_alias)
-        decimali = params.get("decimals")
-
-        # Normalizza il valore decimali (può essere None, stringa vuota, etc
-        if decimali is None or decimali == "":
-            decimali = 0
-        else:
-            try:
-                decimali = int(decimali)
-            except (ValueError, TypeError):
-                decimali = 0
-
-        # PostgreSQL richiede cast a numeric per ROUND con decimali
-        if self.db_type == DbType.POSTGRES:
-            return f"ROUND({col}::numeric, {decimali})"
-        return f"ROUND({col}, {decimali})"
-
-    def _translate_abs(self, params: Dict, table_alias: str = None) -> str:
-        """Valore assoluto — identico su tutti i database."""
-        col = self._qualify_column(params["column"], table_alias)
-        return f"ABS({col})"
-
-    def _translate_ceil(self, params: Dict, table_alias: str = None) -> str:
-        """Arrotondamento per eccesso — MSSQL usa CEILING, altri usano CEIL."""
-        col = self._qualify_column(params["column"], table_alias)
-        if self.db_type == DbType.MSSQL:
-            return f"CEILING({col})"
-        return f"CEIL({col})"
-
-    def _translate_floor(self, params: Dict, table_alias: str = None) -> str:
-        """Arrotondamento per difetto — identico su tutti i database."""
-        col = self._qualify_column(params["column"], table_alias)
-        return f"FLOOR({col})"
-
-    # OPERAZIONE MATEMATICA
-
-    def _translate_math(self, params: Dict, table_alias: str = None) -> str:
-        """
-        Operazione aritmetica tra colonne o con valore fisso.
-
-        Supporta: +, -, *, /
-        Include protezione divisione per zero specifica per database:
-            - PostgreSQL/SQLite: NULLIF(divisore, 0)
-            - MSSQL/Oracle: CASE WHEN divisore = 0 THEN NULL
-            - MySQL: IF(divisore = 0, NULL, ...)
-        """
-        col1 = self._qualify_column(params["column1"], table_alias)
-        operatore = params.get("operator") or "+"
-
-        # Validazione operatore
-        operatori_validi = {"+", "-", "*", "/"}
-        if operatore not in operatori_validi:
-            raise ValueError(f"Operatore non valido: {operatore}. Usa: +, -, *, /")
-
-        # Secondo operando: colonna o valore fisso
-        col2 = params.get("column2")
-        valore = params.get("value")
-
-        if col2:
-            secondo_operando = self._qualify_column(col2, table_alias)
-        elif valore is not None:
-            # N2: cast strict su value (finiva f-string raw → injection
-            secondo_operando = str(_safe_number(valore, "float"))
-        else:
-            raise ValueError("Specificare column2 o value per l'operazione matematica")
-
-        # Gestione divisione per zero (database-specifica
-        if operatore == "/":
-            protezioni = {
-                DbType.POSTGRES: f"({col1} / NULLIF({secondo_operando}, 0))",
-                DbType.MSSQL: f"CASE WHEN {secondo_operando} = 0 THEN NULL ELSE {col1} / {secondo_operando} END",
-                DbType.MYSQL: f"IF({secondo_operando} = 0, NULL, {col1} / {secondo_operando})",
-                DbType.ORACLE: f"CASE WHEN {secondo_operando} = 0 THEN NULL ELSE {col1} / {secondo_operando} END",
-                DbType.SQLITE: f"({col1} / NULLIF({secondo_operando}, 0))",
-            }
-            return protezioni.get(self.db_type, f"({col1} / NULLIF({secondo_operando}, 0))")
-
-        return f"({col1} {operatore} {secondo_operando})"
-
-    # FUNZIONI NUMERICHE (nuove
-
-    def _translate_mod(self, params: Dict, table_alias: str = None) -> str:
-        """Resto divisione — MSSQL/SQLite usano %, altri MOD(). Protezione div per zero."""
-        col = self._qualify_column(params["column"], table_alias)
-        # N2: cast strict su divisor (finiva f-string raw in NULLIF → injection
-        divisore = _safe_number(params["divisor"], "float")
-        if divisore == 0:
-            raise ValueError("MOD: divisore non puo essere zero")
-        # NULLIF non piu' necessaria come protezione runtime (divisore
-        # e' gia' numerico validato), ma lasciata per safety a livello SQL
-        safe_div = f"NULLIF({divisore}, 0)"
-        traduzioni = {
-            DbType.POSTGRES: f"MOD({col}, {safe_div})",
-            DbType.MSSQL: f"({col} % {safe_div})",
-            DbType.MYSQL: f"MOD({col}, {safe_div})",
-            DbType.ORACLE: f"MOD({col}, {safe_div})",
-            DbType.SQLITE: f"({col} % {safe_div})",
-        }
-        return self._ottieni_traduzione(traduzioni, "MOD")
-
-    def _translate_power(self, params: Dict, table_alias: str = None) -> str:
-        """Potenza — POWER() su tutti i database."""
-        col = self._qualify_column(params["column"], table_alias)
-        # N2: cast float su exponent (accetta fratti es. 2.5
-        esponente = _safe_number(params["exponent"], "float")
-        return f"POWER({col}, {esponente})"
-
-    def _translate_sqrt(self, params: Dict, table_alias: str = None) -> str:
-        """Radice quadrata — SQRT() su tutti i database."""
-        col = self._qualify_column(params["column"], table_alias)
-        return f"SQRT({col})"
-
-    def _translate_sign(self, params: Dict, table_alias: str = None) -> str:
-        """Segno — SIGN() su tutti i database."""
-        col = self._qualify_column(params["column"], table_alias)
-        return f"SIGN({col})"
-
-    def _translate_greatest(self, params: Dict, table_alias: str = None) -> str:
-        """Massimo tra valori — MSSQL non ha GREATEST nativo (pre-2022)."""
-        valori = params["values"]
-        if isinstance(valori, str):
-            valori = [v.strip() for v in valori.split(',') if v.strip()]
-        valori_q = [self._qualify_column(v, table_alias) for v in valori]
-
-        if self.db_type == DbType.MSSQL:
-            # MSSQL < 2022: catena di IIF
-            risultato = valori_q[0]
-            for v in valori_q[1:]:
-                risultato = f"IIF({risultato} > {v}, {risultato}, {v})"
-            return risultato
-        if self.db_type == DbType.SQLITE:
-            return f"MAX({', '.join(valori_q)})"
-        return f"GREATEST({', '.join(valori_q)})"
-
-    def _translate_least(self, params: Dict, table_alias: str = None) -> str:
-        """Minimo tra valori — MSSQL non ha LEAST nativo (pre-2022)."""
-        valori = params["values"]
-        if isinstance(valori, str):
-            valori = [v.strip() for v in valori.split(',') if v.strip()]
-        valori_q = [self._qualify_column(v, table_alias) for v in valori]
-
-        if self.db_type == DbType.MSSQL:
-            risultato = valori_q[0]
-            for v in valori_q[1:]:
-                risultato = f"IIF({risultato} < {v}, {risultato}, {v})"
-            return risultato
-        if self.db_type == DbType.SQLITE:
-            return f"MIN({', '.join(valori_q)})"
-        return f"LEAST({', '.join(valori_q)})"
 
     # FUNZIONI CONDIZIONALI (nuove
 

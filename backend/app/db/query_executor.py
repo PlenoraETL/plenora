@@ -20,13 +20,12 @@ from app.db.query_session import (
     build_execution_context,
     normalize_result_columns,
 )
+from app.db.query_result_persistence import QueryResultPersistence
 from app.db.query_streaming import execute_streaming_to_file
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
 
-# Result store — salva blob nel DB e usa temp files
-from app.utils.result_store import get_temp_output_path, save_result_blob
 
 
 # DEFINIZIONI TIPI
@@ -228,6 +227,7 @@ class QueryExecutor:
         # Componenti interni (funzioni pure senza stato
         self._result_builder = ResultBuilder
         self._df_builder = DataFrameBuilder
+        self._result_persistence = QueryResultPersistence()
 
     @staticmethod
     def _salvataggio_default(
@@ -429,8 +429,10 @@ class QueryExecutor:
             if _streamable:
                 # STREAMING PATH (CSV / Parquet senza geometria
                 t_query = time.time()
-                output_path = get_temp_output_path(output_filename)
-                output_path = output_path.with_suffix(f".{output_format}")
+                output_path = self._result_persistence.streaming_output_path(
+                    output_filename,
+                    output_format,
+                )
                 row_count, columns = self._execute_streaming_to_file(
                     connection=connection,
                     sql=sql,
@@ -469,19 +471,23 @@ class QueryExecutor:
 
             # Salva risultato
             # Streaming path: il file esiste gia' su disco, usiamo
-            # save_result_blob (path-based) che lo legge e lo cancella
+            # il persistence collaborator path-based che lo legge e lo cancella
             # Fallback path: delegamo a save_pipeline_result (single
             # entry-point che fa in-memory per formati serializzabili
             # e fallback FS trasparente per gpkg/shp
             t_save = time.time()
             if _streamable:
-                result_id = save_result_blob(
-                    project_id, saved_path, output_format, row_count,
+                persisted = self._result_persistence.persist_streamed_file(
+                    project_id=project_id,
+                    output_path=saved_path,
+                    output_format=output_format,
+                    rows_count=row_count,
                     group_id=group_id,
                 )
+                result_id = persisted.result_id
+                saved_path = persisted.output_path
             else:
-                from app.utils.result_store import save_pipeline_result_outcome
-                saved = save_pipeline_result_outcome(
+                persisted = self._result_persistence.persist_dataframe_result(
                     project_id=project_id,
                     df=df,
                     output_format=output_format,
@@ -490,8 +496,8 @@ class QueryExecutor:
                     group_id=group_id,
                     geom_column=geom_column,
                 )
-                result_id = saved.result_id
-                saved_path = Path(saved.output_filename)
+                result_id = persisted.result_id
+                saved_path = persisted.output_path
             timings["save"] = time.time() - t_save
             self._logger.info(f"Salvataggio file ({output_format}): {timings['save']:.2f}s")
 

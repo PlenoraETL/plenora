@@ -11,6 +11,8 @@ from unittest.mock import MagicMock, patch
 import pandas as pd
 import pytest
 
+from app.db.query_result_persistence import PersistedQueryResult
+
 
 pytestmark = [pytest.mark.unit, pytest.mark.contract]
 
@@ -53,13 +55,15 @@ def _build_executor():
 
 
 def _stub_save(monkeypatch):
-    """Mock save_pipeline_result + result_store glue per evitare FS I/O."""
-    fake_save = MagicMock(return_value={
-        "result_id": "rid-1",
-        "output_filename": "out.csv",
-    })
-    import app.utils.result_store as _rs
-    monkeypatch.setattr(_rs, "save_pipeline_result", fake_save, raising=False)
+    """Mock query result persistence per evitare FS I/O."""
+    fake_save = MagicMock(return_value=PersistedQueryResult(
+        result_id="rid-1",
+        output_path="out.csv",
+    ))
+    monkeypatch.setattr(
+        "app.db.query_result_persistence.QueryResultPersistence.persist_dataframe_result",
+        fake_save,
+    )
     return fake_save
 
 
@@ -219,11 +223,13 @@ def test_estrai_streaming_branch_uses_legacy_write_node_ok_streamed(monkeypatch)
     status legacy `ok_streamed` via write_node legacy con rows=[]."""
     executor = _build_executor()
 
-    # Stub save_result_blob (path streaming).
     monkeypatch.setattr(
-        "app.db.query_executor.save_result_blob",
-        MagicMock(return_value="rid-stream"),
-        raising=False,
+        executor._result_persistence,
+        "persist_streamed_file",
+        MagicMock(return_value=PersistedQueryResult(
+            result_id="rid-stream",
+            output_path="out.csv",
+        )),
     )
 
     monkeypatch.setattr(

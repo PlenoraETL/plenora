@@ -12,6 +12,7 @@ import pytest
 
 from app.core.arricchisci.enrichment_service import EnrichmentExecutor
 from app.core.arricchisci.models import (
+    EnrichmentStats,
     EnrichmentOptions,
     RowError,
     RowStatus,
@@ -198,3 +199,58 @@ def test_parallel_sync_progress_callback_invoked():
     executor._execute_parallel(df)
 
     assert calls
+
+
+def test_parallel_sync_guard_allows_thread_pool_for_default_contract():
+    executor = _make_executor()
+
+    assert executor._should_use_parallel_engine() is True
+    assert executor._serial_engine_required_reason() is None
+
+
+@pytest.mark.parametrize(
+    ("kwargs", "auth", "reason"),
+    [
+        ({"skip_null_params": False}, {}, "skip_null_params=False"),
+        ({"continue_on_error": False}, {}, "continue_on_error=False"),
+        ({"stop_on_error_threshold": 1}, {}, "stop_on_error_threshold"),
+        ({}, {"type": "oauth2_client_credentials"}, "oauth2_header_refresh"),
+    ],
+)
+def test_parallel_sync_guard_requires_serial_for_serial_only_contracts(
+    kwargs,
+    auth,
+    reason,
+):
+    executor = _make_executor(**kwargs)
+    executor.auth.update(auth)
+
+    assert executor._should_use_parallel_engine() is False
+    assert executor._serial_engine_required_reason() == reason
+
+
+def test_parallel_sync_guard_delegates_to_serial_for_early_stop_contract():
+    df = pd.DataFrame({"q": ["a", "b"]})
+    executor = _make_executor(stop_on_error_threshold=1)
+    called = []
+
+    def fake_internal(input_df):
+        called.append(input_df)
+        result_df = input_df.copy()
+        result_df["result"] = "serial"
+        return result_df, EnrichmentStats(total_rows=len(input_df), success=len(input_df)), []
+
+    def fake_call(params, row_index):
+        raise AssertionError("parallel worker should not run for serial-only options")
+
+    executor._execute_internal = fake_internal
+    _install_fake_call(executor, fake_call)
+
+    result_df, stats, errors = executor._execute_parallel(df)
+
+    assert executor._should_use_parallel_engine() is False
+    assert executor._serial_engine_required_reason() == "stop_on_error_threshold"
+    assert len(called) == 1
+    assert list(result_df["result"]) == ["serial", "serial"]
+    assert stats.success == 2
+    assert errors == []

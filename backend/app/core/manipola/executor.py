@@ -23,6 +23,12 @@ from app.utils.dataframe import (
 from app.utils.geo import detect_geometry_column
 from .plugin_executor import get_executor
 from .source_loading import load_file_sources
+from .canvas_schema_runtime import (
+    build_canvas_type_map,
+    build_columns_with_types,
+    detect_geometry_from_content,
+    extract_srid_from_canvas,
+)
 from .project_source_runtime import (
     ProjectLineageCycleError,
     load_project_sources,
@@ -933,23 +939,7 @@ class ManipolaExecutor:
         getattr/data.get dual-path. CanvasGraph stays structural: no
         Manipola-specific logic added to it.
         """
-        from app.shared.resources.metadata import ResourceMetadata
-        graph = canvas_graph or CanvasGraph.from_canvas(canvas)
-        for cn in graph.nodes:
-            raw = cn.get_field('columns')
-            if not raw:
-                continue
-            cols_dicts = [
-                {
-                    "name": c.get("name") if isinstance(c, dict) else getattr(c, "name", None),
-                    "type": c.get("type", "") if isinstance(c, dict) else getattr(c, "type", ""),
-                }
-                for c in raw
-            ]
-            meta = ResourceMetadata.from_columns_list(cols_dicts, source_kind="file")
-            if meta.crs_epsg:
-                return meta.crs_epsg
-        return None
+        return extract_srid_from_canvas(canvas, canvas_graph=canvas_graph)
 
     # MAPPA TIPI CANVAS
 
@@ -960,95 +950,16 @@ class ManipolaExecutor:
         canvas_graph: Optional[CanvasGraph] = None,
     ) -> Dict[str, str]:
         """Costruisce mappa colonna->tipo dal canvas. Include suffissi _L/_R per JOIN."""
-        type_map: Dict[str, str] = {}
-        graph = canvas_graph or CanvasGraph.from_canvas(canvas)
-        for node in graph.nodes:
-            columns = node.get_field('columns')
-            if columns:
-                for col in columns:
-                    if isinstance(col, dict):
-                        column_name = col.get('alias') or col.get('name')
-                        column_type, original_name = col.get('type', 'str'), col.get('name')
-                    else:
-                        column_name = col.alias if hasattr(col, 'alias') and col.alias else col.name
-                        column_type = col.type if hasattr(col, 'type') and col.type else "str"
-                        original_name = col.name if hasattr(col, 'name') else None
-                    if column_name:
-                        type_map[column_name] = type_map[f"{column_name}_L"] = type_map[f"{column_name}_R"] = column_type
-                    if original_name and original_name != column_name:
-                        type_map[original_name] = type_map[f"{original_name}_L"] = type_map[f"{original_name}_R"] = column_type
-
-            calculated = node.get_field('calculated_columns')
-            if calculated:
-                for calc in calculated:
-                    column_name = calc.get("name") if isinstance(calc, dict) else getattr(calc, 'name', None)
-                    column_type = (calc.get("output_type", "str") if isinstance(calc, dict)
-                                   else getattr(calc, 'output_type', 'str'))
-                    if column_name:
-                        type_map[column_name] = type_map[f"{column_name}_L"] = type_map[f"{column_name}_R"] = column_type
-        return type_map
+        return build_canvas_type_map(canvas, canvas_graph=canvas_graph)
 
     def _costruisci_colonne_con_tipi(
         self,
         df: pd.DataFrame,
         canvas_type_map: Dict[str, str],
     ) -> List[Dict[str, str]]:
-        """Costruisce lista colonne con tipi. Lookup: esatto → lower → base _L/_R → dtype → WKT."""
-        columns = []
-        lower_map = {k.lower(): v for k, v in canvas_type_map.items()}
-        for col in df.columns:
-            column_type = canvas_type_map.get(col) or lower_map.get(col.lower())
-            if column_type is None and (col.endswith('_L') or col.endswith('_R')):
-                base = col[:-2]
-                column_type = canvas_type_map.get(base) or lower_map.get(base.lower())
-            
-            # Se il tipo è str ma il nome suggerisce geometry, verifica il contenuto
-            if column_type == 'str' and col.lower() in ('geometry', 'geom', 'the_geom', 'shape'):
-                column_type = self._rileva_geometria_da_contenuto(df, col)
-            
-            if column_type is None:
-                dtype = str(df[col].dtype)
-                if 'int' in dtype: column_type = 'int'
-                elif 'float' in dtype: column_type = 'real'
-                elif 'bool' in dtype: column_type = 'bool'
-                elif 'datetime' in dtype: column_type = 'date'
-                elif 'geometry' in dtype.lower(): column_type = 'geometry'  # GeoDataFrame dtype
-                else: column_type = self._rileva_geometria_da_contenuto(df, col)
-            columns.append({'name': col, 'type': column_type})
-        return columns
+        """Costruisce lista colonne con tipi. Lookup: canvas -> dtype -> WKT."""
+        return build_columns_with_types(df, canvas_type_map, logger=logger)
 
     def _rileva_geometria_da_contenuto(self, df: pd.DataFrame, col_name: str) -> str:
         """Rileva geometria WKT o oggetti Shapely dal contenuto di una colonna."""
-        try:
-            # Check nome colonna comune per geometry
-            if col_name.lower() in ('geometry', 'geom', 'the_geom', 'shape'):
-                sample = df[col_name].dropna().head(1)
-                if not sample.empty:
-                    sample_value = sample.iloc[0]
-                    # Se ha geom_type o è WKT, è geometry
-                    if hasattr(sample_value, 'geom_type'):
-                        return 'geometry'
-                    sample_text = str(sample_value).upper().strip()
-                    if sample_text and sample_text[0] in 'PLMG':  # Quick check for WKT prefixes
-                        return 'geometry'
-            
-            sample = df[col_name].dropna().head(1)
-            if sample.empty:
-                return 'str'
-            sample_value = sample.iloc[0]
-            
-            # Controlla se è un oggetto Shapely
-            if hasattr(sample_value, 'geom_type'):
-                return 'geometry'
-            
-            # Controlla se è WKT string
-            sample_text = str(sample_value).upper().strip()
-            prefixes = ('POINT', 'LINESTRING', 'POLYGON', 'MULTIPOINT',
-                        'MULTILINESTRING', 'MULTIPOLYGON', 'GEOMETRYCOLLECTION')
-            return 'geometry' if any(sample_text.startswith(p) for p in prefixes) else 'str'
-        except Exception as _geo_probe_err:
-            logger.debug(
-                f"Rilevamento geometria da contenuto fallito per "
-                f"colonna '{col_name}', fallback a 'str': {_geo_probe_err}"
-            )
-            return 'str'
+        return detect_geometry_from_content(df, col_name, logger=logger)

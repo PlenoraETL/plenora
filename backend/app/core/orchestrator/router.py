@@ -730,8 +730,8 @@ def cleanup_task_completely(
         failed_steps.append("unlink_output_file")
 
     try:
-        from app.db.log_runs_db_service import delete_log_run_by_run_id
-        delete_log_run_by_run_id(task_id)
+        from app.core.orchestrator.log_cleanup import delete_task_log_runs
+        delete_task_log_runs(task_id)
     except Exception as e:
         logger.warning(f"cleanup: errore delete log_runs: {e}", exc_info=True)
         failed_steps.append("delete_log_runs")

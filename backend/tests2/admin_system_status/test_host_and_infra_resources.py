@@ -680,10 +680,16 @@ def test_blacklist_status_env_threshold_invalid_fallback(monkeypatch):
 )
 def test_tickets_status_thresholds(monkeypatch, total, counts, expected_status, message_part):
     from app.core.admin_system_status import service
-    import app.db.tickets_db_service as tdb
+    from app.core.admin_system_status import tickets_metrics
 
-    monkeypatch.setattr(tdb, "count_tickets", lambda **kw: total)
-    monkeypatch.setattr(tdb, "counts_by_severity", lambda **kw: counts)
+    monkeypatch.setattr(
+        tickets_metrics,
+        "get_active_ticket_metrics",
+        lambda: tickets_metrics.ActiveTicketMetrics(
+            total_active=total,
+            by_severity=counts,
+        ),
+    )
 
     out = service.get_tickets_status()
     assert out["status"] == expected_status
@@ -695,11 +701,12 @@ def test_tickets_status_thresholds(monkeypatch, total, counts, expected_status, 
 
 def test_tickets_status_unknown_on_db_error(monkeypatch):
     from app.core.admin_system_status import service
-    import app.db.tickets_db_service as tdb
+    from app.core.admin_system_status import tickets_metrics
 
-    def boom(**kw):
+    def boom():
         raise RuntimeError("db down")
-    monkeypatch.setattr(tdb, "count_tickets", boom)
+
+    monkeypatch.setattr(tickets_metrics, "get_active_ticket_metrics", boom)
 
     out = service.get_tickets_status()
     assert out["status"] == "unknown"
