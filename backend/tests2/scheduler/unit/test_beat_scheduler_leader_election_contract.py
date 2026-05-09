@@ -192,8 +192,14 @@ def test_redis_unavailable_falls_back_to_single_instance_leader(monkeypatch):
 
     Nota: il DEFAULT e' fail-closed. Questo test documenta il
     comportamento opt-in per deployment mono-host."""
+    # `SCHEDULE_BEAT_LEADER_FAIL_OPEN` vive dentro DEFAULTS dict, non come
+    # property di Settings: il consumer (workers/beat_scheduler.py) fa
+    # `getattr(settings, key, False)`. Settiamo l'attributo con
+    # `raising=False` cosi' monkeypatch lo aggiunge in setup e lo rimuove
+    # al teardown senza esigere che esista a priori.
     monkeypatch.setattr(
-        "app.config.settings.SCHEDULE_BEAT_LEADER_FAIL_OPEN", True
+        "app.config.settings.SCHEDULE_BEAT_LEADER_FAIL_OPEN", True,
+        raising=False,
     )
     scheduler = _FakeScheduler(leader_id="pid-1@host-a", redis_client=None)
 

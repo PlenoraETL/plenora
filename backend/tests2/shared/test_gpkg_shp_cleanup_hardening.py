@@ -76,7 +76,7 @@ def test_save_pipeline_result_gpkg_no_file_in_data_dir_temp(monkeypatch, tmp_pat
     monkeypatch.setattr(result_store, "uuid",
                         SimpleNamespace(uuid4=lambda: "res-gpkg"))
     monkeypatch.setattr(projects_db, "get_project_row",
-                        lambda pid: {"id": pid, "group_id": "grp"})
+                        lambda pid: SimpleNamespace(id=pid, group_id="grp"))
     monkeypatch.setattr(results_db, "save_result_row",
                         lambda **kw: saved_db_calls.append(kw))
     monkeypatch.setattr(result_store, "_apply_results_retention",
@@ -131,7 +131,7 @@ def test_save_pipeline_result_gpkg_uses_temporary_directory_prefix(monkeypatch, 
     monkeypatch.setattr(result_store, "uuid",
                         SimpleNamespace(uuid4=lambda: "res-1"))
     monkeypatch.setattr(projects_db, "get_project_row",
-                        lambda pid: {"id": pid, "group_id": "grp"})
+                        lambda pid: SimpleNamespace(id=pid, group_id="grp"))
     monkeypatch.setattr(results_db, "save_result_row", lambda **kw: None)
     monkeypatch.setattr(result_store, "_apply_results_retention",
                         lambda pid: None)
@@ -177,7 +177,7 @@ def test_save_pipeline_result_gpkg_cleans_tmp_dir_on_upload_failure(monkeypatch,
     monkeypatch.setattr(result_store, "uuid",
                         SimpleNamespace(uuid4=lambda: "res-fail"))
     monkeypatch.setattr(projects_db, "get_project_row",
-                        lambda pid: {"id": pid, "group_id": "grp"})
+                        lambda pid: SimpleNamespace(id=pid, group_id="grp"))
     def _boom(**kw):
         raise RuntimeError("DB unavailable")
     monkeypatch.setattr(results_db, "save_result_row", _boom)
