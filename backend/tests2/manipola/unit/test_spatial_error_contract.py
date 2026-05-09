@@ -180,7 +180,7 @@ def test_builder_extractor_reraises_and_closes_s6(transform, args, kwargs):
     df = pd.DataFrame({"geometry": [None], "id": [1], "grp": ["A"]})
 
     with patch(
-        "app.core.manipola.transforms.spatial.to_geodataframe",
+        f"{transform.__module__}.to_geodataframe",
         side_effect=RuntimeError("mock-builder-failure"),
     ) as mock_tgdf:
         with pytest.raises(RuntimeError, match="mock-builder-failure"):

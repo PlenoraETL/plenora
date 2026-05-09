@@ -11,6 +11,7 @@ from typing import List, Dict, Optional, Any, Tuple
 from app.shared.models import Node, Edge
 from app.db.sql_functions import translate_calculated_column, get_translator
 from app.db.sql_translator import sql_translator
+from app.core.estrai.query_filters import WhereClauseBuilder
 
 logger = get_logger(__name__)
 
@@ -1156,53 +1157,7 @@ class QueryGenerator:
     # GENERAZIONE CLAUSOLA WHERE
 
     def _genera_where(self, table_nodes: List[Node], params: Dict[str, Any]) -> str:
-        """
-        Genera clausola WHERE da tutti i filtri dei nodi tabella.
-
-        Ogni filtro diventa una condizione parametrizzata.
-        Le condizioni sono combinate con AND.
-        """
-        conditions = []
-
-        for node in table_nodes:
-            table_alias = node.alias or self._get_node_table_name(node)
-            filters = getattr(node, 'filters', []) or []
-
-            # Costruisci mappa colonna → tipo per gestire CLOB Oracle
-            column_type_map = {}
-            for col in node.columns:
-                col_name = col.name if hasattr(col, 'name') else col.get('name')
-                col_type = (
-                    (col.type if hasattr(col, 'type') else None)
-                    or (col.get('type') if isinstance(col, dict) else None)
-                    or 'str'
-                )
-                if col_name:
-                    column_type_map[col_name] = col_type
-
-
-            for filter_item in filters:
-                column = filter_item.column
-                operator = filter_item.operator
-                value = filter_item.value
-
-                if not column or not operator:
-                    continue
-                if not self._is_valid_identifier(column):
-                    raise ValueError(f"Nome colonna filtro non valido: {column}")
-
-                column_type = column_type_map.get(column, 'str')
-
-                condition = self._crea_condizione(
-                    table_alias, column, operator, value, params, column_type
-                )
-                if condition:
-                    conditions.append(condition)
-
-        if not conditions:
-            return ""
-
-        return " AND ".join(conditions)
+        return self._where_builder().generate_where(table_nodes, params)
 
     def _crea_condizione(
         self,
@@ -1213,259 +1168,33 @@ class QueryGenerator:
         params: Dict[str, Any],
         column_type: str = 'str'
     ) -> str:
-        """
-        Crea una singola condizione WHERE con parametri preparati.
-
-        Operatori supportati: =, !=, >, <, >=, <=, LIKE, IN, IS NULL, IS NOT NULL
-
-        Gestione speciale per Oracle:
-        - Colonne CLOB/NCLOB vengono wrappate con TO_CHAR perché Oracle
-          non permette confronti diretti su tipi LOB.
-        """
-        col_ref = f"{table_alias}.{column}"
-
-        # Oracle: wrappa colonne LOB con TO_CHAR per permettere confronti
-        db = self.db_type.lower() if self.db_type else 'postgres'
-        col_type_upper = (column_type or '').upper()
-        is_oracle_lob = (
-            db == 'oracle'
-            and col_type_upper in ('CLOB', 'NCLOB', 'LONG', 'TEXT', 'TESTO', 'STRING', 'STR')
+        return self._where_builder().create_condition(
+            table_alias, column, operator, value, params, column_type
         )
-        if is_oracle_lob:
-            col_ref = f"TO_CHAR({table_alias}.{column})"
 
-        # Validazione operatore
-        valid_operators = {'=', '!=', '>', '<', '>=', '<=', 'LIKE', 'IN', 'IS NULL', 'IS NOT NULL'}
-        if operator not in valid_operators:
-            raise ValueError(f"Operatore non valido: {operator}")
-
-        if operator == 'IS NULL':
-            return f"{col_ref} IS NULL"
-        if operator == 'IS NOT NULL':
-            return f"{col_ref} IS NOT NULL"
-
-        if operator == 'IN':
-            return self._crea_condizione_in(col_ref, value, params)
-
-        if operator == 'LIKE':
-            param_name = self._prossimo_nome_param()
-            params[param_name] = f"%{value}%"
-            return f"{col_ref} LIKE :{param_name}"
-
-
-        # Se il valore è una funzione SQL nativa (es. GETDATE, DATEADD(...), NOW
-        # lo inietta inline invece di parametrizzarlo — i parametri bind non supportano
-        # espressioni SQL, solo valori scalari
-        if isinstance(value, str) and self._is_sql_function(value):
-            translated = self._translate_date_function(value)
-            return f"{col_ref} {operator} {translated}"
-
-        param_name = self._prossimo_nome_param()
-        # Converti il valore al tipo Python corretto in base al tipo colonna
-        # I valori arrivano sempre come stringa dal frontend — senza conversione
-        # PostgreSQL riceve '50' come stringa e fa confronto lessicografico invece
-        # che numerico (es. id < '50' esclude '6','7',... che sono > '50' come str
-        col_type_norm = (column_type or 'str').lower().split(':')[0]
-        typed_value = value
-        if col_type_norm in ('int', 'integer', 'bigint', 'smallint'):
-            try:
-                typed_value = int(value)
-            except (ValueError, TypeError):
-                typed_value = value
-        elif col_type_norm in ('real', 'float', 'double', 'numeric', 'decimal'):
-            try:
-                typed_value = float(value)
-            except (ValueError, TypeError):
-                typed_value = value
-        params[param_name] = typed_value
-        return f"{col_ref} {operator} :{param_name}"
-
-    _SQL_FUNCTION_RE = None  # inizializzato al primo uso
+    _SQL_FUNCTION_RE = None  # mantenuto per compatibilita' con call-site privati
 
     @classmethod
     def _is_sql_function(cls, value: str) -> bool:
-        """
-        Ritorna True se il valore è una funzione SQL nativa da iniettare inline.
-        Queste espressioni non possono essere parametrizzate — vanno inserite raw nell'SQL.
-        Supporta: SQL Server, PostgreSQL, MySQL, Oracle.
-        """
-        import re
-        if cls._SQL_FUNCTION_RE is None:
-            cls._SQL_FUNCTION_RE = re.compile(
-                r'^('
-                r'GETDATE\s*\(\s*\)'
-                r'|GETUTCDATE\s*\(\s*\)'
-                r'|SYSDATETIME\s*\(\s*\)'
-                r'|DATEADD\s*\('
-                r'|DATEDIFF\s*\('
-                r'|DATEPART\s*\('
-                r'|DATEFROMPARTS\s*\('
-                r'|EOMONTH\s*\('
-                r'|NOW\s*\(\s*\)'
-                r'|CURDATE\s*\(\s*\)'
-                r'|CURRENT_DATE\b'
-                r'|CURRENT_TIMESTAMP\b'
-                r'|CURRENT_TIME\b'
-                r'|SYSDATE\b'
-                r'|SYSTIMESTAMP\b'
-                r'|ADD_MONTHS\s*\('
-                r'|TRUNC\s*\('
-                r'|date_trunc\s*\('
-                r'|INTERVAL\b'
-                r'|EXTRACT\s*\('
-                r'|DATE_ADD\s*\('
-                r'|DATE_SUB\s*\('
-                r'|DATE_FORMAT\s*\('
-                r')',
-                re.IGNORECASE
-            )
-        # SECURITY: fullmatch (non match) per evitare che un prefisso valido
-        # seguito da SQL injection passi il check
-        # Prima: match matchava solo l'inizio → "GETDATE; DROP TABLE--" passava
-        # Ora: fullmatch richiede che TUTTA la stringa sia una funzione valida
-        # Per le funzioni con argomenti (DATEADD, etc.) il pattern termina con \
-        # che non matcha con fullmatch. Usiamo match + lunghezza safe check
-        stripped = value.strip()
-        if not cls._SQL_FUNCTION_RE.match(stripped):
-            return False
-        # Dopo il match del prefisso, verifica che il resto sia solo caratteri
-        # safe per argomenti di funzione SQL (digits, spazi, virgole, parentesi
-        # apici singoli, nomi colonna). Rifiuta ; -- UNION SELECT ecc
-        import re as _re
-        _UNSAFE_SQL_PATTERN = _re.compile(
-            r'(;|--|\bUNION\b|\bSELECT\b|\bDROP\b|\bINSERT\b|\bUPDATE\b|\bDELETE\b'
-            r'|\bEXEC\b|\bEXECUTE\b|\bALTER\b|\bCREATE\b)',
-            _re.IGNORECASE
-        )
-        if _UNSAFE_SQL_PATTERN.search(stripped):
-            return False
-        return True
+        if cls._SQL_FUNCTION_RE is not None:
+            WhereClauseBuilder._SQL_FUNCTION_RE = cls._SQL_FUNCTION_RE
+        result = WhereClauseBuilder.is_sql_function(value)
+        cls._SQL_FUNCTION_RE = WhereClauseBuilder._SQL_FUNCTION_RE
+        return result
 
     def _translate_date_function(self, value: str) -> str:
-        """
-        Traduce una funzione data SQL nel dialetto corretto per self.db_type.
-
-        Normalizza funzioni di qualsiasi dialetto (GETDATE, NOW, SYSDATE, ecc.)
-        in quella corretta per il DB attivo — così il canvas funziona su tutti i DB
-        indipendentemente da quale funzione ha generato Claude.
-
-        Mapping astratto → per-DB:
-            NOW → GETDATE / NOW / SYSDATE / NOW
-            NOW + N months → DATEADD / NOW+INTERVAL / ADD_MONTHS / DATE_ADD
-            TODAY (date only) → CAST(GETDATE AS DATE) / CURRENT_DATE / TRUNC(SYSDATE)
-        """
-        import re
-
-        v = value.strip()
-        db = (self.db_type or 'postgres').lower()
-
-        # Mappa db_type → (now_fn, today_fn, add_months_fn_template
-        _DIALECTS = {
-            'mssql':    {
-                'now':       'GETDATE()',
-                'today':     'CAST(GETDATE() AS DATE)',
-                'add_months': lambda n: f'DATEADD(month, {n}, GETDATE())',
-                'add_days':   lambda n: f'DATEADD(day, {n}, GETDATE())',
-            },
-            'postgres': {
-                'now':       'NOW()',
-                'today':     'CURRENT_DATE',
-                'add_months': lambda n: f"NOW() + INTERVAL '{n} months'",
-                'add_days':   lambda n: f"NOW() + INTERVAL '{n} days'",
-            },
-            'mysql': {
-                'now':       'NOW()',
-                'today':     'CURDATE()',
-                'add_months': lambda n: f'DATE_ADD(NOW(), INTERVAL {n} MONTH)',
-                'add_days':   lambda n: f'DATE_ADD(NOW(), INTERVAL {n} DAY)',
-            },
-            'oracle': {
-                'now':       'SYSDATE',
-                'today':     'TRUNC(SYSDATE)',
-                'add_months': lambda n: f'ADD_MONTHS(SYSDATE, {n})',
-                'add_days':   lambda n: f'SYSDATE + {n}',
-            },
-            'sqlite': {
-                'now':       "datetime('now')",
-                'today':     "date('now')",
-                'add_months': lambda n: f"datetime('now', '+{n} months')",
-                'add_days':   lambda n: f"datetime('now', '+{n} days')",
-            },
-        }
-        dialect = _DIALECTS.get(db, _DIALECTS['postgres'])
-
-        # DATEADD(month, N, ...) → add_months
-        m = re.match(r'DATEADD\s*\(\s*month\s*,\s*(\d+)\s*,', v, re.IGNORECASE)
-        if m:
-            return dialect['add_months'](m.group(1))
-
-        # DATEADD(day, N, ...) → add_days
-        m = re.match(r'DATEADD\s*\(\s*day\s*,\s*(\d+)\s*,', v, re.IGNORECASE)
-        if m:
-            return dialect['add_days'](m.group(1))
-
-        # ADD_MONTHS(SYSDATE, N) → add_months
-        m = re.match(r'ADD_MONTHS\s*\(\s*\w+\s*,\s*(\d+)\s*\)', v, re.IGNORECASE)
-        if m:
-            return dialect['add_months'](m.group(1))
-
-        # DATE_ADD(NOW, INTERVAL N MONTH) → add_months
-        m = re.match(r'DATE_ADD\s*\(.*?INTERVAL\s+(\d+)\s+MONTH', v, re.IGNORECASE)
-        if m:
-            return dialect['add_months'](m.group(1))
-
-        # NOW + INTERVAL 'N months' (PostgreSQL) → add_months
-        m = re.match(r"NOW\s*\(\s*\)\s*\+\s*INTERVAL\s+'(\d+)\s+months?'", v, re.IGNORECASE)
-        if m:
-            return dialect['add_months'](m.group(1))
-
-        # CURRENT_DATE / CURDATE / TRUNC(SYSDATE) → today
-        if re.match(r'CURRENT_DATE|CURDATE\s*\(\s*\)|TRUNC\s*\(\s*SYSDATE', v, re.IGNORECASE):
-            return dialect['today']
-
-        # Qualsiasi funzione "now" (GETDATE, NOW, SYSDATE, GETUTCDATE, SYSDATETIME) → now
-        if re.match(r'GETDATE\s*\(\s*\)|GETUTCDATE\s*\(\s*\)|SYSDATETIME\s*\(\s*\)|NOW\s*\(\s*\)|SYSDATE|SYSTIMESTAMP', v, re.IGNORECASE):
-            return dialect['now']
-
-        # Fallback SICURO: rifiuta funzioni SQL non riconosciute invece di
-        # iniettarle raw. Prima: "return v" iniettava il valore intero nel SQL
-        # Se _is_sql_function ha matchato il prefisso ma nessun translate
-        # pattern lo riconosce, è meglio errore che injection
-        raise ValueError(
-            f"Funzione SQL '{v[:50]}' riconosciuta come funzione ma non traducibile "
-            f"per il dialetto '{db}'. Usare una funzione supportata."
-        )
+        return self._where_builder().translate_date_function(value)
 
     def _crea_condizione_in(self, col_ref: str, value: Any, params: Dict[str, Any]) -> str:
-        """
-        Genera condizione IN con parametri preparati.
+        return self._where_builder().create_condition_in(col_ref, value, params)
 
-        Accetta sia una lista Python sia una stringa con valori separati da virgola.
-        I valori numerici vengono automaticamente convertiti in int.
-        """
-        # Converte stringa CSV in lista
-        if isinstance(value, str) and ',' in value:
-            value = [v.strip() for v in value.split(',') if v.strip()]
-
-        if isinstance(value, list):
-            if not value:
-                return "1=0"
-            placeholders = []
-            for v in value:
-                param_name = self._prossimo_nome_param()
-                try:
-                    params[param_name] = int(v) if isinstance(v, str) and v.isdigit() else v
-                except (ValueError, TypeError):
-                    params[param_name] = v
-                placeholders.append(f":{param_name}")
-            return f"{col_ref} IN ({', '.join(placeholders)})"
-        else:
-            param_name = self._prossimo_nome_param()
-            try:
-                params[param_name] = int(value) if isinstance(value, str) and value.isdigit() else value
-            except (ValueError, TypeError):
-                params[param_name] = value
-            return f"{col_ref} IN (:{param_name})"
+    def _where_builder(self) -> WhereClauseBuilder:
+        return WhereClauseBuilder(
+            self.db_type,
+            self._prossimo_nome_param,
+            self._is_valid_identifier,
+            self._get_node_table_name,
+        )
 
     # ASSEMBLAGGIO QUERY
 

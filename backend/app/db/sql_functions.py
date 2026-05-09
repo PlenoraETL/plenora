@@ -8,6 +8,8 @@ from typing import Dict, List, Optional, Any
 from enum import Enum
 from dataclasses import dataclass
 
+from app.db.sql_string_functions import SqlStringFunctionMixin
+
 
 def _sql_escape(value: str) -> str:
     """Escape apici singoli per string literal SQL (limitato).
@@ -633,7 +635,7 @@ FUNCTION_CATALOG: Dict[str, FunctionDef] = {
 
 # TRADUTTORE SQL MULTI-DATABASE
 
-class SqlFunctionTranslator:
+class SqlFunctionTranslator(SqlStringFunctionMixin):
     """
     Traduce funzioni astratte nel dialetto SQL specifico del database.
 
@@ -898,92 +900,6 @@ class SqlFunctionTranslator:
         col = self._qualify_column(params["column"], table_alias)
         return f"FLOOR({col})"
 
-    # FUNZIONI STRINGA
-
-    def _translate_upper(self, params: Dict, table_alias: str = None) -> str:
-        """Conversione in maiuscolo — identica su tutti i database."""
-        col = self._qualify_column(params["column"], table_alias)
-        return f"UPPER({col})"
-
-    def _translate_lower(self, params: Dict, table_alias: str = None) -> str:
-        """Conversione in minuscolo — identica su tutti i database."""
-        col = self._qualify_column(params["column"], table_alias)
-        return f"LOWER({col})"
-
-    def _translate_trim(self, params: Dict, table_alias: str = None) -> str:
-        """Rimozione spazi — MSSQL usa LTRIM(RTRIM(...)), gli altri TRIM(...)."""
-        col = self._qualify_column(params["column"], table_alias)
-        if self.db_type == DbType.MSSQL:
-            return f"LTRIM(RTRIM({col}))"
-        return f"TRIM({col})"
-
-    def _translate_concat(self, params: Dict, table_alias: str = None) -> str:
-        """
-        Concatenazione di più colonne con separatore opzionale.
-
-        Oracle e SQLite non supportano CONCAT_WS nativo, quindi usano
-        l'operatore || con il separatore inserito tra i valori.
-        """
-        valori = params["values"]  # Lista di nomi colonna (o stringa singola
-        # Normalizza a lista: il frontend può mandare una stringa singola o CSV
-        if isinstance(valori, str):
-            valori = [v.strip() for v in valori.split(',') if v.strip()]
-        separatore = _sql_escape(params.get("separator", ""))
-        valori_qualificati = [self._qualify_column(v, table_alias) for v in valori]
-
-        if self.db_type in (DbType.POSTGRES, DbType.MSSQL, DbType.MYSQL):
-            if separatore:
-                return f"CONCAT_WS('{separatore}', {', '.join(valori_qualificati)})"
-            return f"CONCAT({', '.join(valori_qualificati)})"
-
-        elif self.db_type in (DbType.ORACLE, DbType.SQLITE):
-            # Oracle/SQLite: usa operatore || per concatenazione
-            if separatore:
-                parti = [f"{v} || '{separatore}'" for v in valori_qualificati[:-1]]
-                parti.append(valori_qualificati[-1])
-                return " || ".join(parti)
-            return " || ".join(valori_qualificati)
-
-        return f"CONCAT({', '.join(valori_qualificati)})"
-
-    def _translate_substring(self, params: Dict, table_alias: str = None) -> str:
-        """
-        Estrazione sottostringa.
-
-        Ogni database ha una sintassi leggermente diversa:
-            - PostgreSQL: SUBSTRING(col FROM start FOR length)
-            - MSSQL: SUBSTRING(col, start, length) — richiede length
-            - MySQL: SUBSTRING(col, start[, length])
-            - Oracle/SQLite: SUBSTR(col, start[, length])
-        """
-        col = self._qualify_column(params["column"], table_alias)
-        # N2: cast strict — start e length sono sempre int in SQL SUBSTRING
-        inizio = _safe_number(params.get("start", 1), "int")
-        lunghezza = params.get("length")
-        if lunghezza is not None and lunghezza != "":
-            lunghezza = _safe_number(lunghezza, "int")
-        else:
-            lunghezza = None
-
-        if self.db_type == DbType.POSTGRES:
-            if lunghezza:
-                return f"SUBSTRING({col} FROM {inizio} FOR {lunghezza})"
-            return f"SUBSTRING({col} FROM {inizio})"
-        elif self.db_type == DbType.MSSQL:
-            if lunghezza:
-                return f"SUBSTRING({col}, {inizio}, {lunghezza})"
-            return f"SUBSTRING({col}, {inizio}, LEN({col}))"
-        elif self.db_type == DbType.MYSQL:
-            if lunghezza:
-                return f"SUBSTRING({col}, {inizio}, {lunghezza})"
-            return f"SUBSTRING({col}, {inizio})"
-        elif self.db_type in (DbType.ORACLE, DbType.SQLITE):
-            if lunghezza:
-                return f"SUBSTR({col}, {inizio}, {lunghezza})"
-            return f"SUBSTR({col}, {inizio})"
-
-        return f"SUBSTRING({col}, {inizio}, {lunghezza or 'NULL'})"
-
     # FUNZIONI DATA
 
     def _translate_year(self, params: Dict, table_alias: str = None) -> str:
@@ -1137,66 +1053,6 @@ class SqlFunctionTranslator:
         if self.db_type == DbType.SQLITE:
             return f"MIN({', '.join(valori_q)})"
         return f"LEAST({', '.join(valori_q)})"
-
-    # FUNZIONI STRINGA (nuove
-
-    def _translate_replace(self, params: Dict, table_alias: str = None) -> str:
-        """Sostituzione testo — REPLACE() identico su tutti i database."""
-        col = self._qualify_column(params["column"], table_alias)
-        cerca = _sql_escape(params["search"])
-        sostituisci = _sql_escape(params.get("replace", ""))
-        return f"REPLACE({col}, '{cerca}', '{sostituisci}')"
-
-    def _translate_left(self, params: Dict, table_alias: str = None) -> str:
-        """Primi N caratteri — Oracle/SQLite usano SUBSTR."""
-        col = self._qualify_column(params["column"], table_alias)
-        # N2: cast int — length e' sempre intero
-        lunghezza = _safe_number(params["length"], "int")
-        traduzioni = {
-            DbType.POSTGRES: f"LEFT({col}, {lunghezza})",
-            DbType.MSSQL: f"LEFT({col}, {lunghezza})",
-            DbType.MYSQL: f"LEFT({col}, {lunghezza})",
-            DbType.ORACLE: f"SUBSTR({col}, 1, {lunghezza})",
-            DbType.SQLITE: f"SUBSTR({col}, 1, {lunghezza})",
-        }
-        return self._ottieni_traduzione(traduzioni, "LEFT")
-
-    def _translate_right(self, params: Dict, table_alias: str = None) -> str:
-        """Ultimi N caratteri — Oracle/SQLite usano SUBSTR con indice negativo."""
-        col = self._qualify_column(params["column"], table_alias)
-        # N2: cast int — length e' sempre intero
-        lunghezza = _safe_number(params["length"], "int")
-        traduzioni = {
-            DbType.POSTGRES: f"RIGHT({col}, {lunghezza})",
-            DbType.MSSQL: f"RIGHT({col}, {lunghezza})",
-            DbType.MYSQL: f"RIGHT({col}, {lunghezza})",
-            DbType.ORACLE: f"SUBSTR({col}, -{lunghezza})",
-            DbType.SQLITE: f"SUBSTR({col}, -{lunghezza})",
-        }
-        return self._ottieni_traduzione(traduzioni, "RIGHT")
-
-    def _translate_position(self, params: Dict, table_alias: str = None) -> str:
-        """Trova posizione — sintassi diversa per ogni database."""
-        col = self._qualify_column(params["column"], table_alias)
-        cerca = _sql_escape(params["search"])
-        traduzioni = {
-            DbType.POSTGRES: f"POSITION('{cerca}' IN {col})",
-            DbType.MSSQL: f"CHARINDEX('{cerca}', {col})",
-            DbType.MYSQL: f"LOCATE('{cerca}', {col})",
-            DbType.ORACLE: f"INSTR({col}, '{cerca}')",
-            DbType.SQLITE: f"INSTR({col}, '{cerca}')",
-        }
-        return self._ottieni_traduzione(traduzioni, "POSITION")
-
-    def _translate_ltrim(self, params: Dict, table_alias: str = None) -> str:
-        """Rimuovi spazi a sinistra — LTRIM() identico su tutti i database."""
-        col = self._qualify_column(params["column"], table_alias)
-        return f"LTRIM({col})"
-
-    def _translate_rtrim(self, params: Dict, table_alias: str = None) -> str:
-        """Rimuovi spazi a destra — RTRIM() identico su tutti i database."""
-        col = self._qualify_column(params["column"], table_alias)
-        return f"RTRIM({col})"
 
     # FUNZIONI DATA (nuove
 

@@ -20,6 +20,9 @@ _SCHEMA_INFER_PY = _BACKEND_ROOT / "app" / "core" / "projects" / "schema_inferen
 _SCHEMA_TRANSFORM_HANDLERS_PY = (
     _BACKEND_ROOT / "app" / "core" / "projects" / "schema_transform_handlers.py"
 )
+_SCHEMA_GEO_HANDLERS_PY = (
+    _BACKEND_ROOT / "app" / "core" / "projects" / "schema_geo_handlers.py"
+)
 _PROJECT_CONTEXT_LOADER_PY = (
     _BACKEND_ROOT / "app" / "core" / "projects" / "project_context_loader.py"
 )
@@ -135,6 +138,46 @@ def test_schema_inference_delegates_transform_schema_handlers_to_module():
     }, "schema_inference.py must not own transform `_schema_*` handlers"
     assert "_schema_join" in handler_functions
     assert "_schema_passthrough" in handler_functions
+
+
+def test_geo_transform_schema_handlers_live_in_geo_module():
+    """Geo/spatial schema handlers stay out of the root transform module."""
+    root_functions = _function_names(_SCHEMA_TRANSFORM_HANDLERS_PY)
+    geo_functions = _function_names(_SCHEMA_GEO_HANDLERS_PY)
+
+    expected_geo_handlers = {
+        "_schema_sjoin",
+        "_schema_geo_area",
+        "_schema_geo_boundary",
+        "_schema_geo_bounds_extractor",
+        "_schema_geo_buffer",
+        "_schema_geo_builder",
+        "_schema_geo_centroid",
+        "_schema_geo_clip",
+        "_schema_geo_convex_hull",
+        "_schema_geo_count_points_in_polygons",
+        "_schema_geo_dissolve",
+        "_schema_geo_distance",
+        "_schema_geo_from_coords",
+        "_schema_geo_length",
+        "_schema_geo_line_builder",
+        "_schema_geo_nearest",
+        "_schema_geo_overlay",
+        "_schema_geo_perimeter",
+        "_schema_geo_point_on_surface",
+        "_schema_geo_polygon_builder",
+        "_schema_geo_to_wkt",
+        "_schema_geo_vertex_count",
+        "_schema_geo_voronoi",
+        "_schema_geo_within",
+    }
+
+    assert not {
+        name
+        for name in root_functions
+        if name.startswith("_schema_geo_") or name == "_schema_sjoin"
+    }
+    assert expected_geo_handlers <= geo_functions
 
 
 def test_schema_inference_does_not_import_projects_db_directly():

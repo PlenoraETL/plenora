@@ -5,6 +5,8 @@ Contratto:
 """
 
 from unittest.mock import MagicMock
+import ast
+from pathlib import Path
 
 import pytest
 
@@ -13,6 +15,10 @@ from app.shared.clock import FakeClock
 
 
 pytestmark = [pytest.mark.unit, pytest.mark.scheduler, pytest.mark.contract]
+
+BACKEND_ROOT = Path(__file__).resolve().parents[3]
+EXECUTION_MANAGER = BACKEND_ROOT / "app" / "core" / "scheduler" / "execution_manager.py"
+RUNTIME = BACKEND_ROOT / "app" / "core" / "scheduler" / "scheduler_execution_runtime.py"
 
 
 # _start_lock_heartbeat / _stop_lock_heartbeat (helpers isolati)
@@ -136,3 +142,44 @@ def test_heartbeat_swallows_refresh_errors():
         assert state["thread"].is_alive()
     finally:
         manager._stop_lock_heartbeat(state)
+
+
+def test_heartbeat_wrapper_logic_stays_outside_execution_manager():
+    """ExecutionManager keeps only compat delegation for heartbeat helpers."""
+    execution_src = EXECUTION_MANAGER.read_text(encoding="utf-8")
+    runtime_src = RUNTIME.read_text(encoding="utf-8")
+    tree = ast.parse(execution_src)
+
+    method_names = {"_start_lock_heartbeat", "_stop_lock_heartbeat"}
+    methods = {
+        node.name: node
+        for node in ast.walk(tree)
+        if isinstance(node, ast.FunctionDef) and node.name in method_names
+    }
+
+    assert method_names == set(methods)
+    assert "LockHeartbeat" not in execution_src
+    assert "SCHEDULE_LOCK_HEARTBEAT_INTERVAL_SECONDS" not in execution_src
+    assert "thread.join" not in execution_src
+    assert "stop_event.set" not in execution_src
+    assert "LockHeartbeat" in runtime_src
+    assert "SCHEDULE_LOCK_HEARTBEAT_INTERVAL_SECONDS" in runtime_src
+    assert "thread.join" in runtime_src
+    assert "stop_event.set" in runtime_src
+
+    start_calls = [
+        node
+        for node in ast.walk(methods["_start_lock_heartbeat"])
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Name)
+        and node.func.id == "start_lock_heartbeat"
+    ]
+    stop_calls = [
+        node
+        for node in ast.walk(methods["_stop_lock_heartbeat"])
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Name)
+        and node.func.id == "stop_lock_heartbeat"
+    ]
+    assert len(start_calls) == 1
+    assert len(stop_calls) == 1

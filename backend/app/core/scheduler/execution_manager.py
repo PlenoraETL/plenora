@@ -11,8 +11,7 @@ from pathlib import Path
 from typing import Dict, Any, Optional
 
 from app.config import settings
-from app.shared import error_codes
-from app.utils.logger import get_logger, open_run, close_run, set_run_context, append_step
+from app.utils.logger import get_logger, open_run, close_run, set_run_context
 
 logger = get_logger(__name__)
 
@@ -21,6 +20,11 @@ from app.core.scheduler.schedule_service import ScheduleService
 from app.core.scheduler.log_service import ScheduleLogService
 from app.core.scheduler.concurrency_manager import ConcurrencyManager
 from app.core.scheduler.policy_engine import PolicyEngine
+from app.core.scheduler.scheduler_execution_runtime import (
+    handle_failure,
+    start_lock_heartbeat,
+    stop_lock_heartbeat,
+)
 from app.core.scheduler.scheduler_preflight import pre_check_destination_connection
 
 
@@ -92,88 +96,12 @@ class ExecutionManager:
     # HEARTBEAT LOCK (C3 fix 4)
 
     def _start_lock_heartbeat(self, schedule_id: str, interval: float = None, clock=None) -> Dict[str, Any]:
-        """Lancia un thread daemon che rinfresca periodicamente il lock
-        scheduler fino a `_stop_lock_heartbeat`.
-
-        La logica del thread vive in `LockHeartbeat`
-        (`app.core.scheduler.scheduler_lock`).
-        Questo metodo resta come thin wrapper compat: l'API pubblica
-        verso `execute` e' invariata 1:1. Il dict ritornato espone le
-        stesse chiavi (`stop_event`, `thread`, `lock_lost`) + chiave
-        opaca `_hb` consumata solo da `_stop_lock_heartbeat`.
-
-        Motivazione: il TTL del
-        lock e' corto (10min) per permettere recovery veloce su SIGKILL
-        del worker. Finche' la pipeline e' attiva, il worker rinfresca
-        il TTL via questo thread. Se il worker muore, il thread daemon
-        muore con lui, non rinfresca piu', e il lock scade entro il TTL
-        invece di restare appeso.
-
-        Lock lost handling (C3 follow-up fix A): se `refresh_lock`
-        ritorna False (lock scaduto/rilasciato), il thread tenta
-        re-acquire atomico. Se riesce → WARNING, continua;
-        se fallisce → ERROR + flag `state["lock_lost"] = True` cosi'
-        execute puo' includere il warning nel risultato.
-
-        Args:
-            schedule_id: schedule il cui lock va tenuto vivo.
-            interval: secondi tra due refresh. Default letto da
-                `settings.SCHEDULE_LOCK_HEARTBEAT_INTERVAL_SECONDS`.
-
-        Returns:
-            Stato opaco (dict) da passare a `_stop_lock_heartbeat`.
-            Chiavi pubblicate: `stop_event`, `thread`, `lock_lost`.
-            La chiave `lock_lost` riflette LIVE le mutazioni del thread
-            loop (il dict e' la stessa reference dello state interno
-            di `LockHeartbeat`, non una copia).
-        """
-        from app.core.scheduler.scheduler_lock import LockHeartbeat
-
-        if interval is None:
-            interval = float(settings.SCHEDULE_LOCK_HEARTBEAT_INTERVAL_SECONDS)
-
-        hb = LockHeartbeat(
-            concurrency=self.concurrency,
-            schedule_id=schedule_id,
-            interval=interval,
-            clock=clock,  # R-05: None -> default WALL_CLOCK in produzione
-        )
-        hb.start()
-        # Reference LIVE allo state interno: mutazioni del thread loop
-        # es. `state["lock_lost"] = True`) sono visibili al chiamante
-        # tramite `state.get("lock_lost", False)`. Aggiungiamo una
-        # chiave opaca `_hb` consumata solo da `_stop_lock_heartbeat`
-        # NON letta da `execute`
-        state = hb.get_state_dict()
-        state["_hb"] = hb
-        return state
+        """Compatibility wrapper for scheduler_execution_runtime."""
+        return start_lock_heartbeat(self.concurrency, schedule_id, interval, clock)
 
     def _stop_lock_heartbeat(self, state: Dict[str, Any]) -> None:
-        """Segnala lo stop al thread heartbeat e aspetta la sua fine.
-
-        PR-#36: usa `state["_hb"].stop` quando presente (path
-        post-refactor). Fallback su pattern legacy `stop_event` +
-        `thread.join` se la chiave opaca non e' presente (back-compat
-        con eventuali state dict costruiti a mano).
-
-        Idempotente: chiamarlo due volte non solleva.
-        Timeout del join: 5s — se il thread non finisce per qualche
-        motivo (es. refresh_lock e' appeso su DB), non blocchiamo
-        il finally di execute indefinitamente.
-        """
-        if not state:
-            return
-        hb = state.get("_hb")
-        if hb is not None:
-            hb.stop()
-            return
-        # Fallback compat (state senza chiave _hb
-        stop_event = state.get("stop_event")
-        thread = state.get("thread")
-        if stop_event is not None:
-            stop_event.set()
-        if thread is not None and thread.is_alive():
-            thread.join(timeout=5.0)
+        """Compatibility wrapper for scheduler_execution_runtime."""
+        stop_lock_heartbeat(state)
 
     # ESECUZIONE PRINCIPALE
 
@@ -823,153 +751,21 @@ class ExecutionManager:
         run_id: str = "",
         scheduled_for: Optional[str] = None,
     ) -> dict:
-        """
-        Gestisce un fallimento: decide se fare retry o arrendersi.
-
-        N15: `scheduled_for` viene propagato nei retry kwargs cosi' la
-        chiave idempotency di CARICA (derivata da schedule_id + scheduled_for)
-        resta stabile attraverso i retry dello stesso tick schedulato.
-        """
-        total_duration = int((time.time() - start_time) * 1000)
-        
-        decision = self.policy.decide_after_failure(config, retry_attempt, error_message)
-        
-        # Scrivi log scheduler (filesystem
-        entry = self.log_service.create_log_entry(
+        """Compatibility wrapper for scheduler_execution_runtime."""
+        return handle_failure(
+            schedule_service=self.schedule_service,
+            log_service=self.log_service,
+            policy=self.policy,
+            config=config,
             schedule_id=schedule_id,
-            event=decision["event"],
             triggered_by=triggered_by,
-            level=decision["log_level"],
-            steps=steps,
-            total_duration_ms=total_duration,
+            retry_attempt=retry_attempt,
             error_message=error_message,
-            pipeline_info={
-                "project_id": config.pipeline.project_id,
-                "project_name": config.pipeline.project_name,
-                "project_type": config.pipeline.project_type
-            },
-            execution_info={
-                "use_cache": config.execution.use_cache,
-                "retry_attempt": retry_attempt
-            }
+            steps=steps,
+            start_time=start_time,
+            run_id=run_id,
+            scheduled_for=scheduled_for,
         )
-        log_path = self.log_service.write_log(entry)
-
-        if run_id:
-            _steps_json = [
-                {
-                    "module":      s.step.lower(),
-                    "status":      s.status,
-                    "rows_out":    s.rows or 0,
-                    "duration_ms": s.duration_ms or 0,
-                }
-                for s in steps
-            ]
-            # Costruisci debug_payload
-            try:
-                from app.utils.debug_payload_builder import DebugPayloadBuilder
-                _debug_payload = DebugPayloadBuilder().build(
-                    run_id=run_id,
-                    project_id=config.pipeline.project_id,
-                    steps=_steps_json,
-                    failure={
-                        "node_id":        None,
-                        "node_type":      None,
-                        "node_label":     None,
-                        "module":         config.pipeline.project_type,
-                        "error_type":     "SchedulerError",
-                        "error_message":  error_message,
-                        "traceback":      None,
-                        "occurred_at_ms": total_duration,
-                    },
-                )
-            except Exception as e:
-                logger.debug(f"DebugPayloadBuilder fallito (scheduler): {type(e).__name__}: {e}")
-                _debug_payload = None
-
-            close_run(
-                run_id=run_id,
-                status="failure",
-                duration_ms=total_duration,
-                steps=_steps_json,
-                error_module=config.pipeline.project_type,
-                error_message=error_message,
-                debug_payload=_debug_payload,
-            )
-        
-        if decision["action"] == "retry":
-            logger.warning(
-                f"Schedule {schedule_id} fallito (tentativo {retry_attempt}), "
-                f"retry tra {decision['wait_seconds']}s"
-            )
-            
-            # Aggiorna runtime ma non lo stato finale (resta "running" durante retry
-            self.schedule_service.set_runtime_status(schedule_id, "running")
-            
-            # Schedula il retry come task Celery con countdown
-            try:
-                from workers.tasks.schedule_task import schedule_pipeline_task
-                # N15: propaga scheduled_for nei retry cosi' la chiave
-                # idempotency di CARICA resta stabile sul tick (altrimenti
-                # il retry perde il contesto e il guard non scatta
-                _retry_kwargs = {
-                    "triggered_by": triggered_by,
-                    "retry_attempt": retry_attempt + 1,
-                }
-                if scheduled_for:
-                    _retry_kwargs["scheduled_for"] = scheduled_for
-                schedule_pipeline_task.apply_async(
-                    args=[schedule_id],
-                    kwargs=_retry_kwargs,
-                    countdown=decision["wait_seconds"]
-                )
-                logger.info(f"Retry schedulato: {schedule_id} tra {decision['wait_seconds']}s")
-            except Exception as e:
-                logger.error(f"[CRASH] Errore scheduling retry: {e}", exc_info=True)
-                # Se non riusciamo a schedulare il retry, segna come fallito
-                self.schedule_service.update_runtime(
-                    schedule_id,
-                    status="failed",
-                    last_execution={
-                        "timestamp": datetime.now(timezone.utc).isoformat(),
-                        "status": "failed",
-                        "rows_written": 0,
-                        "duration_ms": total_duration,
-                        "log_file": log_path
-                    }
-                )
-            
-            return {
-                "success": False,
-                "status": "retry",
-                "message": f"Retry {retry_attempt + 1} tra {decision['wait_seconds']}s",
-                "log_file": log_path
-            }
-        
-        else:
-            # Retry esauriti — fallimento definitivo
-            logger.error(f"[GESTITO] Schedule {schedule_id} fallito definitivamente dopo {retry_attempt} tentativi")
-            
-            self.schedule_service.update_runtime(
-                schedule_id,
-                status="failed",
-                last_execution={
-                    "timestamp": datetime.now(timezone.utc).isoformat(),
-                    "status": "failed",
-                    "rows_written": 0,
-                    "duration_ms": total_duration,
-                    "log_file": log_path
-                }
-            )
-            
-            return {
-                "success": False,
-                "status": "failed",
-                "error": "schedule_execution_fatal",
-                "message": error_message,
-                "log_file": log_path
-            }
-
 
 class ExecutionError(Exception):
     """Errore durante l'esecuzione di uno step specifico."""

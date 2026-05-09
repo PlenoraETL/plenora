@@ -15,11 +15,16 @@ pytestmark = [pytest.mark.unit, pytest.mark.contract, pytest.mark.regression]
 
 
 _BACKEND_ROOT = Path(__file__).resolve().parents[3]
-_TARGET = _BACKEND_ROOT / "app/core/scheduler/execution_manager.py"
+_EXECUTION_MANAGER = _BACKEND_ROOT / "app/core/scheduler/execution_manager.py"
+_RUNTIME = _BACKEND_ROOT / "app/core/scheduler/scheduler_execution_runtime.py"
 
 
-def _read_src() -> str:
-    return _TARGET.read_text(encoding="utf-8")
+def _read_manager_src() -> str:
+    return _EXECUTION_MANAGER.read_text(encoding="utf-8")
+
+
+def _read_runtime_src() -> str:
+    return _RUNTIME.read_text(encoding="utf-8")
 
 
 # TEST 1 — err_msg ramo broad Exception sanitizzato (no str(e) interpolato)
@@ -29,7 +34,7 @@ def test_err_msg_inatteso_no_str_e_interpolation():
     """Il sorgente NON deve piu' contenere `err_msg = f"Errore inatteso: {e}"`
     (pattern pre-fix che interpolava str(e) user-facing). Post-fix la
     stringa italiana canonica fissa e' presente."""
-    src = _read_src()
+    src = _read_manager_src()
 
     # Pattern pre-fix rimosso
     assert 'err_msg = f"Errore inatteso: {e}"' not in src, (
@@ -49,7 +54,7 @@ def test_err_msg_execution_error_branch_preserved():
     """Il ramo `isinstance(e, ExecutionError): err_msg = str(e)` deve restare
     invariato — ExecutionError e' domain exception costruita dal codice
     applicativo (message controllato), NON leak di internals."""
-    src = _read_src()
+    src = _read_manager_src()
     # Pattern ExecutionError branch preservato
     assert "if isinstance(e, ExecutionError):" in src
     # `err_msg = str(e)` presente sotto quel branch (domain safe)
@@ -79,7 +84,19 @@ def test_handle_failure_failed_branch_has_canonical_error_token():
     `"error": "schedule_execution_fatal"` (token machine-readable coerente
     con pattern 7.c). Il branch `retry` resta invariato (decisione ratificata:
     niente token retry in questo batch)."""
-    src = _read_src()
+    manager_src = _read_manager_src()
+    src = _read_runtime_src()
+
+    assert '"error": "schedule_execution_fatal"' not in manager_src, (
+        "failure finalization must stay in scheduler_execution_runtime.py; "
+        "ExecutionManager should only delegate through _handle_failure"
+    )
+    assert "decide_after_failure" not in manager_src
+    assert "DebugPayloadBuilder" not in manager_src
+    assert "schedule_pipeline_task.apply_async" not in manager_src
+    assert "decide_after_failure" in src
+    assert "DebugPayloadBuilder" in src
+    assert "schedule_pipeline_task.apply_async" in src
     # Token fatal presente
     assert '"error": "schedule_execution_fatal"' in src, (
         "token canonico `schedule_execution_fatal` non trovato nel file"
@@ -119,7 +136,7 @@ def test_no_schedule_execution_retry_token_added():
     """Decisione ratificata: niente token `schedule_execution_retry` nel
     branch retry in questo batch. Verifica che non sia stato aggiunto
     per errore."""
-    src = _read_src()
-    assert "schedule_execution_retry" not in src, (
+    combined = _read_manager_src() + "\n" + _read_runtime_src()
+    assert "schedule_execution_retry" not in combined, (
         "token schedule_execution_retry NON doveva essere aggiunto in 7.c-bis"
     )
