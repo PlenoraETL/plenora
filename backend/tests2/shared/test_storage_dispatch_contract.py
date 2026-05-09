@@ -51,38 +51,32 @@ def test_truth_table(policy, size_bytes, threshold_bytes, expected):
 # Case insensitivity + strip
 
 @pytest.mark.parametrize(
-    "policy",
-    ["DB", "Db", "dB", " db ", "DB\n", "\tdb"],
+    "policy, size_bytes, threshold_bytes, expected",
+    [
+        ("DB", 10**9, 1, "db"),
+        ("Db", 10**9, 1, "db"),
+        ("dB", 10**9, 1, "db"),
+        (" db ", 10**9, 1, "db"),
+        ("DB\n", 10**9, 1, "db"),
+        ("\tdb", 10**9, 1, "db"),
+        ("OBJECT_STORAGE", 0, 10**9, "object_storage"),
+        ("Object_Storage", 0, 10**9, "object_storage"),
+        (" object_storage ", 0, 10**9, "object_storage"),
+        ("object_storage\n", 0, 10**9, "object_storage"),
+        ("HYBRID", 49, 50, "db"),
+        ("Hybrid", 50, 50, "object_storage"),
+        (" hybrid ", 49, 50, "db"),
+        ("hybrid\n", 50, 50, "object_storage"),
+    ],
 )
-def test_db_policy_case_insensitive_with_strip(policy):
+def test_policy_case_insensitive_with_strip(
+    policy, size_bytes, threshold_bytes, expected,
+):
     assert resolve_payload_target(
-        policy=policy, size_bytes=10**9, threshold_bytes=1,
-    ) == "db"
-
-
-@pytest.mark.parametrize(
-    "policy",
-    ["OBJECT_STORAGE", "Object_Storage", " object_storage ", "object_storage\n"],
-)
-def test_object_storage_policy_case_insensitive_with_strip(policy):
-    assert resolve_payload_target(
-        policy=policy, size_bytes=0, threshold_bytes=10**9,
-    ) == "object_storage"
-
-
-@pytest.mark.parametrize(
-    "policy",
-    ["HYBRID", "Hybrid", " hybrid ", "hybrid\n"],
-)
-def test_hybrid_policy_case_insensitive_with_strip(policy):
-    # size < threshold -> db
-    assert resolve_payload_target(
-        policy=policy, size_bytes=49, threshold_bytes=50,
-    ) == "db"
-    # size >= threshold -> object_storage
-    assert resolve_payload_target(
-        policy=policy, size_bytes=50, threshold_bytes=50,
-    ) == "object_storage"
+        policy=policy,
+        size_bytes=size_bytes,
+        threshold_bytes=threshold_bytes,
+    ) == expected
 
 
 # Unknown / empty policy fallback
@@ -184,7 +178,7 @@ def test_policy_constants_match_canonical_strings():
     assert POLICY_HYBRID == "hybrid"
 
 
-# Equivalenza con i dispatch pre-001B
+# Equivalenza con un dispatch pre-001B
 
 def _legacy_should_use_object_storage_result_store(size: int, policy: str, threshold: int) -> bool:
     """Replica testuale del `result_store._should_use_object_storage`
@@ -193,17 +187,6 @@ def _legacy_should_use_object_storage_result_store(size: int, policy: str, thres
         return False
     if policy == "object_storage":
         return True
-    return size >= threshold
-
-
-def _legacy_should_use_object_storage_file_dispatch(size: int, policy: str, threshold: int) -> bool:
-    """Replica testuale del ramo policy in
-    `file_storage_dispatch.dispatch_blob_storage` pre-001B."""
-    if policy == "db":
-        return False
-    if policy == "object_storage":
-        return True
-    # hybrid
     return size >= threshold
 
 
@@ -222,27 +205,6 @@ def _legacy_should_use_object_storage_file_dispatch(size: int, policy: str, thre
 )
 def test_equivalence_with_legacy_result_store(policy, size, threshold):
     legacy = _legacy_should_use_object_storage_result_store(size, policy, threshold)
-    new = resolve_payload_target(
-        policy=policy, size_bytes=size, threshold_bytes=threshold,
-    )
-    assert (new == "object_storage") == legacy
-
-
-@pytest.mark.parametrize(
-    "policy, size, threshold",
-    [
-        ("db", 0, 100),
-        ("db", 1000, 100),
-        ("object_storage", 0, 100),
-        ("object_storage", 1000, 100),
-        ("hybrid", 0, 100),
-        ("hybrid", 99, 100),
-        ("hybrid", 100, 100),
-        ("hybrid", 101, 100),
-    ],
-)
-def test_equivalence_with_legacy_file_storage_dispatch(policy, size, threshold):
-    legacy = _legacy_should_use_object_storage_file_dispatch(size, policy, threshold)
     new = resolve_payload_target(
         policy=policy, size_bytes=size, threshold_bytes=threshold,
     )

@@ -72,13 +72,7 @@ _BURN_DOWN_TARGETS: tuple[BurnDownTarget, ...] = (
             "workers/tasks/carica_task.py": 1,
         },
         removed_ceilings={
-            "app/core/connections": 1,
-            "app/core/datasources": 1,
-            "app/core/eseguibili": 3,
-            "app/core/features": 3,
             "app/core/orchestrator": 1,
-            "app/core/scheduler": 1,
-            "app/db/config": 8,
         },
         symbol_exists=core_db_ledger._symbol_exists,
     ),

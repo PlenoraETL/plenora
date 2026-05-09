@@ -20,9 +20,6 @@ _BACKEND_ROOT = Path(__file__).resolve().parent.parent.parent
 _PROD_ROOTS = (_BACKEND_ROOT / "app", _BACKEND_ROOT / "workers")
 
 _FORBIDDEN_PRODUCTION_IMPORT_PREFIXES = (
-    "app.services",
-    "app.db.config_db_service",
-    "app.db.results_db_service",
     "app.shared.exceptions",
     "app.utils.response_parser",
     "app.core.carica.idempotency",

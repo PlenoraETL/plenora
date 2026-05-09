@@ -86,12 +86,6 @@ _LEDGER: tuple[BoundaryEntry, ...] = (
         "project-owned persistence boundary cleans comparison-key rows for project delete cascade",
     ),
     BoundaryEntry(
-        "app/db/config/comparison_keys.py",
-        "module",
-        "REMOVED",
-        "comparison-key SQL moved to app.core.projects.db and config leaf removed",
-    ),
-    BoundaryEntry(
         "app/core/results/db.py",
         "ResultMetadataRow",
         "DONE",
@@ -141,12 +135,6 @@ _LEDGER: tuple[BoundaryEntry, ...] = (
     ),
     BoundaryEntry(
         "app/core/scheduler/db.py",
-        "ScheduleRow.to_legacy_dict",
-        "REMOVED",
-        "schedule row serialization moved to the scheduler DB public compatibility wrappers",
-    ),
-    BoundaryEntry(
-        "app/core/scheduler/db.py",
         "get_schedule",
         "KEEP_PUBLIC_COMPAT",
         "legacy schedule dict wrapper remains at the scheduler DB boundary for public compatibility callers",
@@ -156,12 +144,6 @@ _LEDGER: tuple[BoundaryEntry, ...] = (
         "list_schedules",
         "KEEP_PUBLIC_COMPAT",
         "legacy schedule dict list wrapper remains at the scheduler DB boundary for public compatibility callers",
-    ),
-    BoundaryEntry(
-        "app/db/config/schedules.py",
-        "module",
-        "REMOVED",
-        "schedule persistence config leaf removed after imports migrated to app.core.scheduler.db",
     ),
     BoundaryEntry(
         "app/core/connections/db.py",
@@ -174,12 +156,6 @@ _LEDGER: tuple[BoundaryEntry, ...] = (
         "ArcGISConnectionRow",
         "DONE",
         "ArcGIS provider resolution consumes typed connection rows",
-    ),
-    BoundaryEntry(
-        "app/core/connections/db.py",
-        "ConnectionConfigRow.to_legacy_dict",
-        "REMOVED",
-        "connection row serialization was removed after connection service callers consumed typed rows",
     ),
     BoundaryEntry(
         "app/core/connections/db.py",
@@ -218,34 +194,16 @@ _LEDGER: tuple[BoundaryEntry, ...] = (
         "provider construction is exposed through the neutral connection factory",
     ),
     BoundaryEntry(
-        "app/db/config/connections.py",
-        "module",
-        "REMOVED",
-        "connection persistence config leaf removed after config_db_service exports moved to app.core.connections.db",
-    ),
-    BoundaryEntry(
         "app/core/arricchisci/db.py",
         "ApiConnectionRow",
         "DONE",
         "API connection service reads and writes consume immutable arricchisci-owned dataclasses",
     ),
     BoundaryEntry(
-        "app/db/config/api_connections.py",
-        "module",
-        "REMOVED",
-        "API connection persistence config leaf removed after config_db_service exports moved to app.core.arricchisci.db",
-    ),
-    BoundaryEntry(
         "app/core/datasources/db.py",
         "DataSourceRow",
         "DONE",
         "datasource persistence rows are immutable domain-owned dataclasses",
-    ),
-    BoundaryEntry(
-        "app/core/datasources/db.py",
-        "DataSourceRow.to_legacy_dict",
-        "REMOVED",
-        "datasource service now consumes typed DataSourceRow fields directly",
     ),
     BoundaryEntry(
         "app/core/datasources/db.py",
@@ -266,24 +224,6 @@ _LEDGER: tuple[BoundaryEntry, ...] = (
         "datasource saves hydrate DataSourceRow at the domain DB boundary",
     ),
     BoundaryEntry(
-        "app/db/config/datasources.py",
-        "module",
-        "REMOVED",
-        "datasource persistence config leaf removed after config_db_service exports moved to app.core.datasources.db",
-    ),
-    BoundaryEntry(
-        "app/db/config/users.py",
-        "module",
-        "REMOVED",
-        "user persistence config leaf removed after imports migrated to app.core.auth.db",
-    ),
-    BoundaryEntry(
-        "app/db/config/groups.py",
-        "module",
-        "REMOVED",
-        "group persistence config leaf removed after imports migrated to app.core.auth.db",
-    ),
-    BoundaryEntry(
         "app/core/auth/db.py",
         "UserRow",
         "DONE",
@@ -300,12 +240,6 @@ _LEDGER: tuple[BoundaryEntry, ...] = (
         "GroupSummaryRow",
         "DONE",
         "auth group summary reads hydrate immutable auth-owned dataclass rows",
-    ),
-    BoundaryEntry(
-        "app/db/config/file_sources.py",
-        "module",
-        "REMOVED",
-        "file-source persistence config leaf removed after imports migrated to app.core.files.db",
     ),
     BoundaryEntry(
         "app/core/orchestrator/task_service.py",
@@ -398,24 +332,6 @@ _LEDGER: tuple[BoundaryEntry, ...] = (
         "task status dict serialization is kept at the router/API boundary",
     ),
     BoundaryEntry(
-        "app/core/features/__init__.py",
-        "ArcGISClient",
-        "REMOVED",
-        "package-level concrete ArcGIS client re-export had zero consumers",
-    ),
-    BoundaryEntry(
-        "app/core/features/__init__.py",
-        "create_client",
-        "REMOVED",
-        "package-level ArcGIS factory re-export had zero consumers",
-    ),
-    BoundaryEntry(
-        "app/core/features/arcgis_connection_adapter.py",
-        "module",
-        "REMOVED",
-        "Features-owned ArcGIS connection adapter was replaced by app.core.connections.arcgis_connection_resolver",
-    ),
-    BoundaryEntry(
         "workers/tasks/carica_task.py",
         "_execute_arcgis_write",
         "KEEP_PUBLIC_COMPAT",
@@ -456,24 +372,6 @@ _LEDGER: tuple[BoundaryEntry, ...] = (
         "EseguibileSourceRefRow",
         "DONE",
         "project delete dependency checks consume typed eseguibile source refs",
-    ),
-    BoundaryEntry(
-        "app/core/eseguibili/db.py",
-        "EseguibileRow.to_legacy_dict",
-        "REMOVED",
-        "eseguibili detail row serialization moved to router/API edge helpers",
-    ),
-    BoundaryEntry(
-        "app/core/eseguibili/db.py",
-        "EseguibileSummaryRow.to_legacy_dict",
-        "REMOVED",
-        "eseguibili summary row serialization moved to router/API edge helpers",
-    ),
-    BoundaryEntry(
-        "app/core/eseguibili/db.py",
-        "EseguibileSourceRefRow.to_legacy_dict",
-        "REMOVED",
-        "project delete dependency checks consume typed source refs without dict conversion",
     ),
     BoundaryEntry(
         "app/core/eseguibili/service.py",

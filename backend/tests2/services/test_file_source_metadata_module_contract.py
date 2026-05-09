@@ -201,3 +201,33 @@ def test_file_source_service_get_file_source_facade_delegates():
     assert delegated.call_args.kwargs["file_source_model"] is service_module.FileSource
     assert delegated.call_args.kwargs["use_app_models"] is True
     assert delegated.call_args.kwargs["logger"] is svc._logger
+
+
+def test_file_source_service_update_file_source_facade_delegates():
+    from app.core.files import service as service_module
+    from app.core.files.service import FileSourceService
+
+    svc = FileSourceService.__new__(FileSourceService)
+    svc._logger = MagicMock()
+    svc._time = MagicMock()
+    svc._time.now = MagicMock(return_value="now")
+    svc._column_builder = MagicMock()
+    svc._column_builder.from_dataframe = MagicMock()
+    svc._get_blob_from_db = MagicMock()
+
+    with patch("app.core.files.source_metadata.update_file_source") as delegated:
+        delegated.return_value = "updated"
+        out = svc.update_file_source("file-1", {"name": "new"})
+
+    assert out == "updated"
+    assert delegated.call_args.args == ("file-1", {"name": "new"})
+    assert delegated.call_args.kwargs["get_file_source_by_id"] == svc.get_file_source
+    assert delegated.call_args.kwargs["load_dataframe"] == svc.load_dataframe
+    assert (
+        delegated.call_args.kwargs["column_builder_from_dataframe"]
+        is svc._column_builder.from_dataframe
+    )
+    assert delegated.call_args.kwargs["get_blob_from_db"] is svc._get_blob_from_db
+    assert delegated.call_args.kwargs["time_now"] is svc._time.now
+    assert delegated.call_args.kwargs["use_app_models"] is service_module._USE_APP_MODELS
+    assert delegated.call_args.kwargs["logger"] is svc._logger

@@ -45,7 +45,7 @@ def _scan_assign_targets(src: str) -> list:
             # Check if the receiver is `api_connection_service`
             # (or any local that we want to ban). For Phase 3 we
             # ban ALL setattr on `_current_group_id` /
-            # `_preview_limit` in this file — the typed context
+            # `_preview_limit` in this file - the typed context
             # boundary is the only allowed path.
             violations.append((node.lineno, tgt.attr))
     return violations
@@ -56,9 +56,8 @@ def test_enrichment_task_no_direct_singleton_mutation():
     `api_connection_service._current_group_id = ...` o
     `_preview_limit = ...` come Assign target.
 
-    Phase 3 chiusura: il typed `ArricchisciExecutionContext` +
-    `apply_to_legacy_state(...)` sono l'unica via per inizializzare
-    il tenant binding.
+    Phase 3 chiusura: il typed `ArricchisciExecutionContext`
+    porta esplicitamente il tenant binding.
     """
     src = _ENRICHMENT_TASK_PY.read_text(encoding="utf-8")
     violations = _scan_assign_targets(src)
@@ -76,9 +75,7 @@ def test_enrichment_task_no_direct_singleton_mutation():
 def test_enrichment_task_imports_and_uses_typed_context():
     """`enrichment_task.py` deve importare `ArricchisciExecutionContext`
     dal modulo `execution_context` e costruire il context esplicitamente.
-    Post-OE012 il worker NON chiama il legacy mirror (la funzione
-    e' stata cancellata) e NON muta `svc._current_group_id`
-    direttamente."""
+    Il worker NON muta `svc._current_group_id` direttamente."""
     src = _ENRICHMENT_TASK_PY.read_text(encoding="utf-8")
     assert (
         "from app.core.arricchisci.execution_context import" in src
@@ -128,17 +125,15 @@ def test_enrichment_task_threads_ctx_to_mixin_callsites():
             assert has_ctx, (
                 f"REGRESSIONE Phase 3: chiamata a `{name}(...)` in "
                 f"enrichment_task.py:{lineno} non passa `ctx=...`. "
-                f"Senza il kwarg, il reader cade sul singleton state "
-                f"(KEEP_COMPAT) invece di usare il typed boundary."
+                f"Senza il kwarg, il reader non usa il typed boundary."
             )
 
 
 # 4. Negative source-bound lock (BE-GO-READY-ORCHESTRATION-ENGINE-012)
 
 
-# Files that the lock MUST tolerate as "self-references" — this
-# test file defines the lock and obviously names the symbol; the
-# cancellation note in execution_context.py is doc-comment only.
+# Files that the lock MUST tolerate as "self-references" - this
+# test file defines the lock and obviously names the symbol.
 _LOCK_SELF_FILES = {
     Path("tests2") / "arricchisci" / "unit"
     / "test_external_consumers_ctx_migration_contract.py",

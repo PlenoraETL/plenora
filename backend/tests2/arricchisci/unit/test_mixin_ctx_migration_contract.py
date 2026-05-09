@@ -1,5 +1,5 @@
 """
-Contract test BE-GO-READY-TRANSFORMATION-ENGINE-019 — Phase 2 mixin ctx migration.
+Contract test BE-GO-READY-TRANSFORMATION-ENGINE-019 - Phase 2 mixin ctx migration.
 
 Lock i 6 invariant della Phase 2:
 """
@@ -21,7 +21,7 @@ pytestmark = [pytest.mark.unit, pytest.mark.arricchisci, pytest.mark.contract]
 _BACKEND_ROOT = Path(__file__).resolve().parent.parent.parent.parent
 
 
-# 1. Signature Phase 2 — `ctx` as kwarg on all 6 reader sites
+# 1. Signature Phase 2 - `ctx` as kwarg on all 6 reader sites
 
 
 def test_load_source_project_accepts_ctx_kwarg():
@@ -90,53 +90,7 @@ def test_resolve_file_source_path_accepts_ctx_kwarg():
     assert sig.parameters["ctx"].kind == inspect.Parameter.KEYWORD_ONLY
 
 
-# 2 + 4. Phase 2 wins over singleton state
-
-
-def test_load_static_values_uses_ctx_group_id_over_singleton(api_service):
-    """Phase 2 lock: se `ctx.group_id` ≠ `svc._current_group_id`, il
-    reader usa `ctx.group_id` (typed boundary wins). Senza questo
-    lock un tenant leak sarebbe possibile dopo Phase 2.
-
-    Lo static branch e' il path piu' semplice da testare (no DB,
-    no SourceLoader real call) — esercita comunque la `group_id`
-    resolution path via `_group_id_from_ctx(ctx)` (TE-023 strict).
-    """
-    from app.core.arricchisci.execution_context import (
-        ArricchisciExecutionContext,
-    )
-
-    api_service._current_group_id = "grp-SINGLETON"
-    ctx = ArricchisciExecutionContext(
-        project_id="p1", group_id="grp-CTX", preview_limit=None,
-    )
-
-    # Mock SourceLoader().load: cattura `expected_group_id` per
-    # verificare che venga passato `grp-CTX`, non `grp-SINGLETON`.
-    captured = {}
-
-    class _FakeSL:
-        def load(self, ref, expected_group_id):
-            captured["group_id"] = expected_group_id
-            return pd.DataFrame()
-
-    with patch(
-        "app.core.artifacts.SourceLoader",
-        return_value=_FakeSL(),
-    ):
-        api_service._load_static_values(
-            {"id": "sv1", "type": "staticValues", "fields": []},
-            ctx=ctx,
-        )
-
-    assert captured["group_id"] == "grp-CTX", (
-        "REGRESSIONE Phase 2: ctx.group_id deve vincere sul "
-        "singleton state. Senza questo lock, un context con "
-        "tenant diverso non avrebbe effetto."
-    )
-
-
-# 3. KEEP_COMPAT fallback to singleton when ctx is None
+# 2. Typed context wins over stale singleton state
 
 
 def test_load_static_values_ignores_stale_singleton_with_explicit_ctx(api_service):
@@ -149,10 +103,8 @@ def test_load_static_values_ignores_stale_singleton_with_explicit_ctx(api_servic
     branch static MUST consumare `ctx.group_id` (typed boundary
     wins) e NEVER toccare il singleton.
 
-    Lock pre-emptivo della rimozione del legacy fallback nel
-    helper `_group_id_from_ctx`: anche se future regression
-    accidentalmente ripristinasse un fallback al singleton, il
-    valore stale non vincerebbe contro il ctx esplicito.
+    Questo lock cattura regressioni in cui il valore stale del
+    singleton torna a vincere contro il ctx esplicito.
     """
     from app.core.arricchisci.execution_context import (
         ArricchisciExecutionContext,
@@ -222,7 +174,7 @@ def test_load_file_source_ignores_stale_preview_limit_when_ctx_preview_none(api_
     -030B (group_id strict promotion): `_load_file_source` non
     legge piu' `_preview_limit` ne' `_current_group_id` dal
     singleton. Quando `ctx.preview_limit is None`, il preview_limit
-    e' considerato non-richiesto (no truncation) — anche se
+    e' considerato non-richiesto (no truncation) - anche se
     `svc._preview_limit` ha un valore stale da una pre-existing
     execution.
 
@@ -232,11 +184,8 @@ def test_load_file_source_ignores_stale_preview_limit_when_ctx_preview_none(api_
     `preview_limit=None`. Pre-batch -025 questo era un fail-soft
     behavior che dipendeva dall'ordine di esecuzione sul singleton.
 
-    Storia: pre-TE-030B il test usava `ctx=None` (singleton fallback
-    per group_id). Post-TE-030B il fallback singleton e' stato
-    rimosso, quindi il test passa ctx con `group_id` valido +
-    `preview_limit=None` per esercitare il medesimo invariant
-    (stale singleton preview_limit ignored).
+    Il test passa ctx con `group_id` valido + `preview_limit=None`
+    per esercitare l'invariant: stale singleton preview_limit ignored.
     """
     from app.core.arricchisci import api_connection_source_loading as mod
     from app.core.arricchisci.execution_context import (
@@ -281,10 +230,8 @@ def test_load_file_source_ctx_preview_limit_wins_over_stale_singleton(api_servic
     stale. Il caller passa `ctx.preview_limit = 5`. La truncation
     deve usare 5 (typed boundary), NON 999 (singleton stale).
 
-    Lock pre-emptivo della rimozione del fallback nel helper
-    `_preview_limit_from_ctx`: anche se future regression
-    accidentalmente ripristinasse un fallback al singleton, il
-    valore stale non vincerebbe contro il ctx esplicito.
+    Questo lock cattura regressioni in cui il valore stale del
+    singleton torna a vincere contro il ctx esplicito.
     """
     from app.core.arricchisci import api_connection_source_loading as mod
     from app.core.arricchisci.execution_context import (
@@ -317,55 +264,18 @@ def test_load_file_source_ctx_preview_limit_wins_over_stale_singleton(api_servic
         f"singleton _preview_limit={api_service._preview_limit}. Got "
         f"{len(result)} rows."
     )
-
-
-def test_load_file_source_uses_ctx_preview_limit_over_singleton(api_service):
-    """Phase 2 lock: `preview_limit` letto dal ctx tipato quando
-    fornito, dal singleton come KEEP_COMPAT fallback."""
-    from app.core.arricchisci import api_connection_source_loading as mod
-    from app.core.arricchisci.execution_context import (
-        ArricchisciExecutionContext,
-    )
-
-    api_service._current_group_id = "grp-A"
-    api_service._preview_limit = 999  # singleton
-
-    ctx = ArricchisciExecutionContext(
-        project_id="p1", group_id="grp-A", preview_limit=3,
-    )
-
-    df_source = pd.DataFrame([{"a": i} for i in range(10)])
-
-    class _FakeSL:
-        def load(self, ref, expected_group_id):
-            return df_source.copy()
-
-    with patch("app.core.artifacts.SourceLoader", return_value=_FakeSL()), \
-         patch.object(mod, "filter_visible_columns",
-                      side_effect=lambda df, cols: df):
-        result = api_service._load_file_source(
-            {"id": "fs1", "file_source_id": "f-1"},
-            ctx=ctx,
-        )
-
-    assert len(result) == 3, (
-        "REGRESSIONE Phase 2: preview_limit deve essere letto da "
-        "ctx (3) invece che dal singleton (999)."
-    )
-
-
-# 5. Fail-closed when ctx.group_id is None
+# 3. Fail-closed when ctx.group_id is None
 
 
 def test_load_source_project_fails_closed_when_ctx_group_id_none(api_service):
     """Phase 2: ctx con `group_id=None` (progetto inesistente)
-    deve fail-closed con stesso messaggio del legacy fallback."""
+    deve fail-closed senza consultare il singleton."""
     from app.core.arricchisci.execution_context import (
         ArricchisciExecutionContext,
     )
 
-    # Singleton ha un group_id valido — il ctx None DEVE vincere
-    # (non leakare al fallback singleton).
+    # Singleton ha un group_id valido - il ctx None DEVE vincere
+    # (non leakare al singleton).
     api_service._current_group_id = "grp-LEAK"
     ctx = ArricchisciExecutionContext(
         project_id="p-missing", group_id=None, preview_limit=None,
@@ -397,7 +307,7 @@ def test_assert_file_source_group_access_fails_closed_with_ctx_none_group(
         api_service._assert_file_source_group_access("fs-1", ctx=ctx)
 
 
-# 6. canvas_orchestrator threads ctx through to mixin callsites
+# 4. canvas_orchestrator threads ctx through to mixin callsites
 
 
 def _has_ctx_kwarg_in_call(node: ast.Call) -> bool:
@@ -447,14 +357,13 @@ def test_canvas_orchestrator_passes_ctx_to_mixin_callsites():
             assert has_ctx, (
                 f"REGRESSIONE Phase 2: chiamata a `svc.{name}(...)` "
                 f"in canvas_orchestrator.py:{lineno} non passa `ctx=...`. "
-                f"Senza il kwarg, il reader cade sul singleton state "
-                f"(KEEP_COMPAT) invece di usare il typed boundary."
+                f"Senza il kwarg, il reader non usa il typed boundary."
             )
 
 
 def test_canvas_orchestrator_init_returns_ctx_used_in_dispatch():
-    """Lock the wiring: `init_execution_context(...)` → variabile
-    `ctx` → passata ai callsite. Verificato leggendo il sorgente."""
+    """Lock the wiring: `init_execution_context(...)` -> variabile
+    `ctx` -> passata ai callsite. Verificato leggendo il sorgente."""
     src = (
         _BACKEND_ROOT / "app" / "core" / "arricchisci" / "canvas_orchestrator.py"
     ).read_text(encoding="utf-8")
@@ -462,64 +371,11 @@ def test_canvas_orchestrator_init_returns_ctx_used_in_dispatch():
         "Atteso assignment `ctx = init_execution_context(...)` nel "
         "body di `execute_canvas_enrichment`."
     )
-
-
-# rest_file legacy helper removal (BE-GO-READY-TRANSFORMATION-ENGINE-027)
-
-
-def test_rest_file_legacy_resolve_helper_is_removed():
-    """BE-GO-READY-TRANSFORMATION-ENGINE-027 lock:
-    `_resolve_rest_file_group_id` (legacy helper introdotto in
-    -019, sostituito da `_extract_file_source_group_id` /
-    `_extract_project_source_group_id` strict helpers in -024/-026)
-    NON deve piu' esistere come definizione attiva nel modulo.
-
-    Verifica AST-bound: nessun `def _resolve_rest_file_group_id`
-    a livello modulo. Le menzioni in docstring/commenti restano
-    ammesse (documentazione storica della removal).
-
-    Rationale: l'helper legacy mescolava il path Phase 2 (typed
-    ctx) con il fallback singleton in modo *implicito*. La sua
-    presenza, anche dead, sarebbe un foot-gun: future modifiche
-    potrebbero re-introdurla come "scorciatoia" perdendo il
-    fail-closed strict per i path file_source/project_source. Il
-    lock previene la reintroduzione."""
-    import ast
-
-    src_path = (
-        _BACKEND_ROOT / "app" / "core" / "arricchisci"
-        / "api_connection_rest_file.py"
-    )
-    src = src_path.read_text(encoding="utf-8")
-    tree = ast.parse(src)
-
-    forbidden_def_names = {"_resolve_rest_file_group_id"}
-
-    violations = []
-    for node in ast.walk(tree):
-        # Catch both module-level FunctionDef and any nested
-        # def. We don't expect nested defs of this name, but be
-        # defensive against future refactors.
-        if isinstance(node, ast.FunctionDef) and node.name in forbidden_def_names:
-            violations.append((node.name, node.lineno))
-
-    assert not violations, (
-        f"REGRESSIONE BE-GO-READY-TRANSFORMATION-ENGINE-027: "
-        f"helper legacy reintrodotto: {violations}. "
-        f"Usare invece `_extract_file_source_group_id` (strict, "
-        f"per file_source path) o `_extract_project_source_group_id` "
-        f"(strict, per project_source path). Il legacy helper "
-        f"mescolava Phase 2 (ctx) e fallback singleton in modo "
-        f"implicito — foot-gun rimosso intenzionalmente in -027."
-    )
-
-
 def test_rest_file_strict_helpers_still_present():
-    """Lock complementare al test sopra: assicura che le
-    rimpiazzanti strict (`_extract_file_source_group_id`,
+    """Assicura che le strict boundary (`_extract_file_source_group_id`,
     `_extract_project_source_group_id`) siano ancora presenti
     come definizioni a livello modulo. Senza questo lock, una
-    rimozione accidentale di entrambe (legacy + strict) lascierebbe
+    rimozione accidentale di entrambe lascierebbe
     il file privo di un boundary di resolve esplicito."""
     import ast
 
@@ -547,7 +403,7 @@ def test_rest_file_strict_helpers_still_present():
     )
 
 
-# BE-GO-READY-TRANSFORMATION-ENGINE-029 — source-loading migratable locks
+# BE-GO-READY-TRANSFORMATION-ENGINE-029 - source-loading migratable locks
 
 
 def test_te029_source_loading_migratable_tests_use_ctx_and_stale_singleton():
@@ -600,7 +456,7 @@ def test_te029_source_loading_migratable_tests_use_ctx_and_stale_singleton():
     for test_name, body_src in found.items():
         assert "_make_service_no_singleton()" in body_src, (
             f"{test_name}: must use `_make_service_no_singleton()` "
-            f"fixture — TE-029 migration moves these tests off the "
+            f"fixture - TE-029 migration moves these tests off the "
             f"singleton-pre-set pattern. Got body:\n{body_src}"
         )
         # ast.unparse normalizes string quoting; accept both forms.
@@ -616,59 +472,14 @@ def test_te029_source_loading_migratable_tests_use_ctx_and_stale_singleton():
             f"{test_name}: must pass `ctx=_ctx_grp(group_id=...)` to "
             f"the SUT call. Got body:\n{body_src}"
         )
-
-
-def test_te030b_source_loading_legacy_helpers_removed():
-    """BE-GO-READY-TRANSFORMATION-ENGINE-030B regression guard: i 2
-    helper legacy in `api_connection_source_loading.py` —
-    `_resolve_group_id` (ctx-or-singleton-fallback) e
-    `_resolve_preview_limit` (idem per preview) — DEVONO essere stati
-    rimossi.
-
-    Motivo: post-TE-030A (worker no-singleton-mutation) + TE-030B
-    (3 critical fail-closed test migrati a ctx-strict + 2 callsite
-    promossi a `_group_id_from_ctx`), entrambi i legacy helper sono
-    dead code. La loro re-introduzione riaprirebbe il leak singleton
-    cross-execution che le strict variant chiudono.
-
-    Pre-TE-030B questo lock asseriva il contrario (helper MUST
-    exist) per impedire rimozione prematura mentre il worker /
-    fail-closed locks dipendevano ancora dalla fallback. Post-TE-030B
-    il lock e' invertito.
-    """
-    src_path = (
-        _BACKEND_ROOT / "app" / "core" / "arricchisci"
-        / "api_connection_source_loading.py"
-    )
-    src = src_path.read_text(encoding="utf-8")
-    tree = ast.parse(src)
-
-    forbidden = {"_resolve_group_id", "_resolve_preview_limit"}
-    violations = []
-    for node in ast.walk(tree):
-        if isinstance(node, ast.FunctionDef) and node.name in forbidden:
-            violations.append((node.name, node.lineno))
-
-    assert not violations, (
-        f"BE-GO-READY-TRANSFORMATION-ENGINE-030B regression: legacy "
-        f"helper(s) re-introdotti in api_connection_source_loading.py: "
-        f"{violations}. Questi helper mescolano Phase-2 ctx con "
-        f"singleton fallback in modo implicito (foot-gun cross-tenant "
-        f"leak). Usare `_group_id_from_ctx(ctx)` / "
-        f"`_preview_limit_from_ctx(ctx)` strict invece."
-    )
-
-
 def test_te030b_source_loading_callsites_use_strict_helper():
     """Positive lock TE-030B: i 2 callsite production
     `_load_source_project` e `_load_file_source` in
     `api_connection_source_loading.py` DEVONO chiamare
-    `_group_id_from_ctx(ctx)` (strict) e NON nessun helper legacy
-    rimosso.
+    `_group_id_from_ctx(ctx)` (strict).
 
     Senza questo lock, un futuro refactor potrebbe rollback i
-    callsite a un nuovo helper ctx-or-fallback re-introducendo lo
-    stesso pattern foot-gun.
+    callsite a un helper che consulta stato non tipato.
     """
     src_path = (
         _BACKEND_ROOT / "app" / "core" / "arricchisci"
@@ -702,7 +513,7 @@ def test_te030b_source_loading_callsites_use_strict_helper():
     )
 
 
-# BE-GO-READY-TRANSFORMATION-ENGINE-032 — ctx required signatures
+# BE-GO-READY-TRANSFORMATION-ENGINE-032 - ctx required signatures
 
 
 def test_arricchisci_project_access_uses_local_boundary_not_projects_db_get_project():
@@ -745,15 +556,14 @@ def _get_signature_from_mixin(method_name: str):
 def test_te032_load_source_project_ctx_is_required_keyword_only():
     """BE-GO-READY-TRANSFORMATION-ENGINE-032: `ctx` su
     `_load_source_project` e' un keyword-only **required**
-    parameter — niente default `None`. I 3 production callsite
+    parameter - niente default `None`. I 3 production callsite
     (canvas_orchestrator, executor.preview, enrichment_task) e
     tutti i test callsite passano `ctx=ctx` esplicito post-
     TE-019/-020/-030A/-030B/-031.
 
     Lock contro rollback a `Optional` con default None: senza,
     un futuro refactor potrebbe accidentalmente accettare
-    callsite senza ctx, riaprendo il foot-gun di tenant binding
-    via singleton fallback (chiuso da TE-030B).
+    callsite senza ctx.
     """
     sig = _get_signature_from_mixin("_load_source_project")
     assert "ctx" in sig.parameters, (
@@ -765,7 +575,7 @@ def test_te032_load_source_project_ctx_is_required_keyword_only():
     )
     assert p.default is inspect.Parameter.empty, (
         f"REGRESSIONE TE-032: `ctx` su `_load_source_project` ha "
-        f"default `{p.default!r}` — deve essere required (no default). "
+        f"default `{p.default!r}` - deve essere required (no default). "
         f"Cambiare la signature a `ctx: ArricchisciExecutionContext` "
         f"senza default."
     )
@@ -784,7 +594,7 @@ def test_te032_load_file_source_ctx_is_required_keyword_only():
     )
     assert p.default is inspect.Parameter.empty, (
         f"REGRESSIONE TE-032: `ctx` su `_load_file_source` ha default "
-        f"`{p.default!r}` — deve essere required (no default)."
+        f"`{p.default!r}` - deve essere required (no default)."
     )
 
 
@@ -825,7 +635,7 @@ def test_te032_no_app_workers_callsite_omits_ctx_for_tenant_loaders():
     (singleton import) e su `svc` (instance-level).
 
     Senza questo guard, un futuro callsite production potrebbe
-    accidentalmente omettere ctx → TypeError al runtime per il
+    accidentalmente omettere ctx -> TypeError al runtime per il
     keyword-only required, oppure (peggio) un wrapper che
     accetta `ctx=None` di default re-introdurrebbe il foot-gun.
 
@@ -859,6 +669,6 @@ def test_te032_no_app_workers_callsite_omits_ctx_for_tenant_loaders():
     assert not violations, (
         f"TE-032 regression: callsite production di tenant-bound "
         f"loader senza `ctx=` kwarg:\n"
-        + "\n".join(f"  {v[0]}:{v[1]} → {v[2]}" for v in violations)
+        + "\n".join(f"  {v[0]}:{v[1]} -> {v[2]}" for v in violations)
         + "\nPost-TE-032 i 2 metodi richiedono ctx esplicito."
     )

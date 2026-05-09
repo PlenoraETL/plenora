@@ -1,5 +1,5 @@
 """
-Contract test BE-GO-READY-TRANSFORMATION-ENGINE-011 — canvas_orchestrator extraction.
+Contract test BE-GO-READY-TRANSFORMATION-ENGINE-011 - canvas_orchestrator extraction.
 
 Lock i 6 invariant dell'estrazione:
 """
@@ -31,8 +31,8 @@ def test_canvas_orchestrator_module_exists():
 def test_execute_enrichment_no_longer_inline_in_api_connector():
     """Source-bound: la sostanza dell'orchestrator (BFS sui nodi,
     dispatch per node_type, gruppi paralleli) non deve piu' vivere
-    in `api_connector.py`. Il wrapper KEEP_COMPAT e' ammesso (10
-    righe), ma le sezioni canvas-graph specifiche devono essere
+    in `api_connector.py`. Il wrapper sottile e' ammesso, ma le
+    sezioni canvas-graph specifiche devono essere
     sparite."""
     src = (
         _BACKEND_ROOT / "app" / "core" / "arricchisci" / "api_connector.py"
@@ -87,7 +87,7 @@ def test_orchestrator_module_exposes_pure_function_api():
     }
 
 
-# 2 + 3. KEEP_COMPAT wrappers
+# 2 + 3. ApiConnectionService wrapper
 
 
 def test_api_connection_service_execute_enrichment_is_thin_wrapper():
@@ -108,17 +108,6 @@ def test_api_connection_service_execute_enrichment_is_thin_wrapper():
     assert "step_node_ids" not in src
 
 
-# BE-GO-READY-CONNECTION-ENGINE-009-API-CONNECTOR-INSTANCE-WRAPPER-CUT:
-# rimosso `test_api_connection_service_get_execution_order_is_thin_wrapper`.
-# Il wrapper KEEP_COMPAT `ApiConnectionService._get_execution_order` e'
-# stato eliminato: l'ultimo callsite di produzione
-# (`workers/tasks/enrichment_task.py:306`) e' stato migrato alla pure
-# function `canvas_orchestrator.get_execution_order(...)`. Il lock
-# negativo (assenza del metodo dalla classe) vive ora in
-# `test_api_connection_service_no_longer_exposes_get_execution_order`
-# (vedi sezione "Pure-function behavior locks" sotto).
-
-
 # 5. No re-export maze
 
 
@@ -126,7 +115,7 @@ def test_api_connector_does_not_wildcard_import_orchestrator():
     """Anti-frammentazione (AST-bound): `api_connector.py` NON deve
     fare `from ... canvas_orchestrator import *` ne' top-level
     re-import dei 5 nomi pubblici dell'orchestrator. Il wrapper
-    KEEP_COMPAT chiama esplicitamente le 2 funzioni che servono via
+    chiama esplicitamente le 2 funzioni che servono via
     lazy import dentro il body del metodo.
 
     Lo scan e' AST-based per ignorare commenti / docstring che
@@ -147,7 +136,7 @@ def test_api_connector_does_not_wildcard_import_orchestrator():
     violations = []
     for node in tree.body:
         # Top-level imports only (lazy imports inside def/class bodies
-        # are NOT walked here — that's intentional, the wrapper does
+        # are NOT walked here - that's intentional, the wrapper does
         # `from ... import execute_canvas_enrichment` lazy).
         if (
             isinstance(node, _ast.ImportFrom)
@@ -157,7 +146,7 @@ def test_api_connector_does_not_wildcard_import_orchestrator():
                 # Wildcard re-export forbidden.
                 assert alias.name != "*", (
                     "REGRESSIONE: wildcard import da canvas_orchestrator "
-                    "in api_connector.py — anti-frammentazione."
+                    "in api_connector.py - anti-frammentazione."
                 )
                 if alias.name in forbidden_names:
                     violations.append(alias.name)
@@ -194,14 +183,6 @@ def test_get_execution_order_disconnected_nodes_appear_first():
     assert order.index("A") < order.index("B")
 
 
-# BE-GO-READY-CONNECTION-ENGINE-009: rimosso
-# `test_get_execution_order_via_class_wrapper_matches_module_function`.
-# Il wrapper KEEP_COMPAT e' stato eliminato; l'identita' wrapper-vs-
-# function non e' piu' applicabile. Lock dell'assenza del wrapper:
-# `test_api_connection_service_no_longer_exposes_get_execution_order`
-# in `test_executor_orchestrator_callsite_contract.py`.
-
-
 def test_is_file_source_for_file_processor_pure_predicate():
     """Pure predicate: ritorna True se file_source e' connesso a un
     api_enrich di tipo `rest_file`."""
@@ -217,14 +198,14 @@ def test_is_file_source_for_file_processor_pure_predicate():
     api_connections = {"api-1": {"connection_type": "rest_file"}}
     assert is_file_source_for_file_processor("fs", edges, node_map, api_connections)
 
-    # Non rest_file → False.
+    # Non rest_file -> False.
     api_connections_other = {"api-1": {"connection_type": "rest"}}
     assert not is_file_source_for_file_processor(
         "fs", edges, node_map, api_connections_other
     )
 
 
-# 7. KEEP_COMPAT execute_canvas_enrichment dispatch (smoke)
+# 7. execute_canvas_enrichment dispatch (smoke)
 
 
 def test_node_wrappers_built_once_at_entry_boundary():
@@ -232,13 +213,13 @@ def test_node_wrappers_built_once_at_entry_boundary():
 
     `execute_canvas_enrichment` must parse the canvas graph exactly once at
     the entry boundary via ``CanvasGraph.from_canvas(...)``.  No raw
-    ``CanvasNode(...)`` calls may appear inside the function body — they all
+    ``CanvasNode(...)`` calls may appear inside the function body - they all
     live inside ``CanvasGraph.from_canvas``.
 
     Updated in BE-GO-READY-ARCH-058-W6: W3 replaced the ``node_wrappers``
-    comprehension (1 × CanvasNode call) with ``CanvasGraph.from_nodes_edges``
-    (0 × direct CanvasNode call in execute_canvas_enrichment).  The invariant
-    — no per-iteration node re-wrapping — is still enforced here.
+    comprehension (1 x CanvasNode call) with ``CanvasGraph.from_nodes_edges``
+    (0 x direct CanvasNode call in execute_canvas_enrichment).  The invariant
+    - no per-iteration node re-wrapping - is still enforced here.
     """
     import ast as _ast
 
@@ -259,7 +240,7 @@ def test_node_wrappers_built_once_at_entry_boundary():
     )
     assert exec_fn is not None, "execute_canvas_enrichment not found in AST"
 
-    # No bare CanvasNode(...) calls allowed — they moved inside CanvasGraph.
+    # No bare CanvasNode(...) calls allowed - they moved inside CanvasGraph.
     canvas_node_calls = [
         n
         for n in _ast.walk(exec_fn)

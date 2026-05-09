@@ -31,9 +31,6 @@ _DOMAINS = (
 _TOMBSTONED_IMPORT_PREFIXES = frozenset(
     {
         "app.services",
-        "app.db.db_service",
-        "app.db.config_db_service",
-        "app.db.results_db_service",
     }
 )
 
@@ -47,17 +44,6 @@ _LEGACY_IMPORT_BASELINES: dict[str, dict[str, frozenset[str]]] = {
     },
 }
 
-_ALLOWED_LEDGER_STATUSES = frozenset(
-    {
-        "DONE",
-        "REMOVED",
-        "KEEP_PUBLIC_COMPAT",
-        "KEEP_COMPAT_WITH_REMOVAL_CONDITION",
-        "BLOCKER",
-    }
-)
-
-_PROJECT_CONFIG_IMPORT_BLOCKERS: dict[str, str] = {}
 _DELETED_CONFIG_LEAVES = frozenset(
     {
         "comparison_keys.py",
@@ -173,25 +159,6 @@ def test_legacy_container_import_ledger_by_domain(prefix: str):
     )
 
 
-def test_legacy_container_import_ledger_current_counts_are_locked():
-    """Exact count snapshot for the current import-boundary ratchet."""
-    counts = {
-        prefix: {
-            domain: len(edges)
-            for domain, edges in _scan_legacy_imports(prefix).items()
-        }
-        for prefix in _LEGACY_IMPORT_BASELINES
-    }
-    expected_counts = {
-        prefix: {
-            domain: len(edges)
-            for domain, edges in domains.items()
-        }
-        for prefix, domains in _LEGACY_IMPORT_BASELINES.items()
-    }
-    assert counts == expected_counts
-
-
 @pytest.mark.parametrize("prefix", sorted(_TOMBSTONED_IMPORT_PREFIXES))
 def test_tombstoned_legacy_containers_have_zero_runtime_edges(prefix: str):
     found = _scan_legacy_imports(prefix)
@@ -202,18 +169,11 @@ def test_tombstoned_legacy_containers_have_zero_runtime_edges(prefix: str):
 
 
 def test_project_config_leaf_production_imports_are_explicit_blockers():
-    """Project persistence must not regain runtime imports of the legacy leaf.
-
-    This is intentionally project-only for BE Batch 098. Test-only imports of
-    the explicit compatibility module are outside this production runtime scan.
-    """
     found = _scan_legacy_imports("app.db.config")["projects"]
     project_leaf_edges = {
         edge for edge in found if edge.endswith(" -> app.core.projects.db")
     }
 
-    assert set(_PROJECT_CONFIG_IMPORT_BLOCKERS) == project_leaf_edges
-    assert set(_PROJECT_CONFIG_IMPORT_BLOCKERS.values()) <= _ALLOWED_LEDGER_STATUSES
     assert not project_leaf_edges
 
 

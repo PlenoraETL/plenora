@@ -56,20 +56,40 @@ def _patched_settings(policy_value):
     return patch("app.config.settings", fake_settings)
 
 
-# 1. STORAGE_POLICY=db -> sempre DB BYTEA
+# 1. Storage policy routing
 
 
-def test_dispatch_db_policy_always_returns_bytea(fake_logger, fake_storage):
+@pytest.mark.parametrize(
+    "policy, raw, threshold, expected_key",
+    [
+        ("db", b"x" * 2048, 100, None),
+        ("object_storage", b"y" * 100, 1024, "file-sources/file_abc/f.csv"),
+        ("hybrid", b"x" * 512, 1024, None),
+        ("hybrid", b"y" * 2048, 1024, "file-sources/file_abc/f.csv"),
+        ("hybrid", b"z" * 1024, 1024, "file-sources/file_abc/f.csv"),
+        (None, b"x" * 512, 1024, None),
+    ],
+)
+def test_dispatch_policy_routes_payload(
+    fake_logger, fake_storage, monkeypatch, policy, raw, threshold, expected_key,
+):
     from app.core.files.storage_dispatch import dispatch_blob_storage
 
-    raw = b"x" * 2048
-    with _patched_settings("db"), \
+    monkeypatch.setenv("FILE_SOURCE_S3_THRESHOLD_BYTES", str(threshold))
+    with _patched_settings(policy), \
          patch("app.shared.cloud_backends.get_runtime_object_storage",
                return_value=fake_storage):
         out = dispatch_blob_storage("file_abc", raw, "f.csv", logger=fake_logger)
 
-    assert out == {"data": raw, "storage_key": None, "size_bytes": 2048}
-    fake_storage.upload_bytes.assert_not_called()
+    assert out == {
+        "data": None if expected_key else raw,
+        "storage_key": expected_key,
+        "size_bytes": len(raw),
+    }
+    if expected_key:
+        fake_storage.upload_bytes.assert_called_once_with(raw, expected_key)
+    else:
+        fake_storage.upload_bytes.assert_not_called()
 
 
 def test_dispatch_db_policy_does_not_log(fake_logger):
@@ -83,24 +103,7 @@ def test_dispatch_db_policy_does_not_log(fake_logger):
     fake_logger.error.assert_not_called()
 
 
-# 2. STORAGE_POLICY=object_storage -> sempre object storage
-
-
-def test_dispatch_object_storage_policy_uploads_and_returns_storage_key(
-    fake_logger, fake_storage,
-):
-    from app.core.files.storage_dispatch import dispatch_blob_storage
-
-    raw = b"y" * 100
-    with _patched_settings("object_storage"), \
-         patch("app.shared.cloud_backends.get_runtime_object_storage",
-               return_value=fake_storage):
-        out = dispatch_blob_storage("file_xyz", raw, "tiny.csv", logger=fake_logger)
-
-    expected_key = "file-sources/file_xyz/tiny.csv"
-    assert out == {"data": None, "storage_key": expected_key, "size_bytes": 100}
-    fake_storage.upload_bytes.assert_called_once_with(raw, expected_key)
-    fake_logger.info.assert_called_once()
+# 2. Object storage upload failure
 
 
 def test_dispatch_object_storage_policy_reraises_upload_exception(
@@ -119,105 +122,7 @@ def test_dispatch_object_storage_policy_reraises_upload_exception(
     fake_logger.error.assert_called_once()
 
 
-# 3. STORAGE_POLICY=hybrid -> threshold-based
-
-
-def test_dispatch_hybrid_policy_below_threshold_uses_bytea(
-    fake_logger, fake_storage, monkeypatch,
-):
-    from app.core.files.storage_dispatch import dispatch_blob_storage
-
-    monkeypatch.setenv("FILE_SOURCE_S3_THRESHOLD_BYTES", str(1024))
-    raw = b"x" * 512  # sotto soglia (1024)
-    with _patched_settings("hybrid"), \
-         patch("app.shared.cloud_backends.get_runtime_object_storage",
-               return_value=fake_storage):
-        out = dispatch_blob_storage("file_a", raw, "f.csv", logger=fake_logger)
-
-    assert out["data"] == raw
-    assert out["storage_key"] is None
-    assert out["size_bytes"] == 512
-    fake_storage.upload_bytes.assert_not_called()
-
-
-def test_dispatch_hybrid_policy_at_or_above_threshold_uses_object_storage(
-    fake_logger, fake_storage, monkeypatch,
-):
-    from app.core.files.storage_dispatch import dispatch_blob_storage
-
-    monkeypatch.setenv("FILE_SOURCE_S3_THRESHOLD_BYTES", str(1024))
-    raw = b"y" * 2048  # sopra soglia (1024)
-    with _patched_settings("hybrid"), \
-         patch("app.shared.cloud_backends.get_runtime_object_storage",
-               return_value=fake_storage):
-        out = dispatch_blob_storage("file_b", raw, "big.csv", logger=fake_logger)
-
-    assert out["data"] is None
-    assert out["storage_key"] == "file-sources/file_b/big.csv"
-    assert out["size_bytes"] == 2048
-    fake_storage.upload_bytes.assert_called_once()
-
-
-def test_dispatch_hybrid_policy_at_exact_threshold_uses_object_storage(
-    fake_logger, fake_storage, monkeypatch,
-):
-    """Boundary: size == threshold -> object storage (>= confronto)."""
-    from app.core.files.storage_dispatch import dispatch_blob_storage
-
-    monkeypatch.setenv("FILE_SOURCE_S3_THRESHOLD_BYTES", str(1024))
-    raw = b"z" * 1024  # esattamente la soglia
-    with _patched_settings("hybrid"), \
-         patch("app.shared.cloud_backends.get_runtime_object_storage",
-               return_value=fake_storage):
-        out = dispatch_blob_storage("file_c", raw, "boundary.csv", logger=fake_logger)
-
-    assert out["data"] is None
-    assert out["storage_key"] == "file-sources/file_c/boundary.csv"
-
-
-def test_dispatch_falls_back_to_hybrid_when_settings_returns_none(
-    fake_logger, fake_storage, monkeypatch,
-):
-    """STORAGE_POLICY presente come None -> fallback `or 'hybrid'`.
-
-    Esercita il path `(settings.get(...) or 'hybrid')`: la fixture forza
-    settings.get('STORAGE_POLICY', ...) a ritornare None (ignorando il
-    default), cosi' il codice deve cadere sul `or 'hybrid'` e poi
-    valutare la threshold.
-    """
-    from app.core.files.storage_dispatch import dispatch_blob_storage
-
-    monkeypatch.setenv("FILE_SOURCE_S3_THRESHOLD_BYTES", str(1024))
-    raw = b"x" * 512  # sotto soglia: se il fallback 'hybrid' funziona -> BYTEA
-    with _patched_settings(None), \
-         patch("app.shared.cloud_backends.get_runtime_object_storage",
-               return_value=fake_storage):
-        out = dispatch_blob_storage("file_d", raw, "f.csv", logger=fake_logger)
-
-    assert out["data"] == raw
-    assert out["storage_key"] is None
-    fake_storage.upload_bytes.assert_not_called()
-
-
-def test_dispatch_explicit_hybrid_policy_under_threshold_uses_bytea(
-    fake_logger, fake_storage, monkeypatch,
-):
-    """STORAGE_POLICY='hybrid' esplicito (no fallback) - smoke gemello del
-    test sopra per separare le due semantiche (None vs 'hybrid' explicit)."""
-    from app.core.files.storage_dispatch import dispatch_blob_storage
-
-    monkeypatch.setenv("FILE_SOURCE_S3_THRESHOLD_BYTES", str(1024))
-    raw = b"x" * 512
-    with _patched_settings("hybrid"), \
-         patch("app.shared.cloud_backends.get_runtime_object_storage",
-               return_value=fake_storage):
-        out = dispatch_blob_storage("file_e", raw, "f.csv", logger=fake_logger)
-
-    assert out["data"] == raw
-    assert out["storage_key"] is None
-
-
-# 4. Logger e' iniettato (non viene da FileSourceService)
+# 3. Logger e' iniettato (non viene da FileSourceService)
 
 
 def test_dispatch_uses_injected_logger_not_global(fake_storage):
@@ -242,7 +147,7 @@ def test_dispatch_uses_injected_logger_not_global(fake_storage):
     assert "file_b" in log_b.info.call_args[0][0]
 
 
-# 5. Il facade FileSourceService._dispatch_blob_storage delega alla
+# 4. Il facade FileSourceService._dispatch_blob_storage delega alla
 #    funzione modulo.
 
 
@@ -267,7 +172,7 @@ def test_file_source_service_dispatch_facade_delegates_to_module_function(
     assert out["size_bytes"] == len(raw)
 
 
-# 6. BE-HARDEN-001C E1: storage_key_id opzionale per shared blob multi-layer
+# 5. BE-HARDEN-001C E1: storage_key_id opzionale per shared blob multi-layer
 
 
 def test_dispatch_uses_storage_key_id_when_provided(fake_logger, fake_storage):

@@ -1,8 +1,4 @@
-"""
-Source-bound guard — facade strangler Phase-1 + Phase-2.
-
-Locks the auth-facade strangler against regression. Two contracts:
-"""
+"""Source-bound guards for the auth-facade strangler boundary."""
 
 from __future__ import annotations
 
@@ -45,20 +41,6 @@ _PHASE2_PER_NAME_BAN: dict[Path, frozenset[str]] = {
         frozenset({"CurrentUser"}),
     _APP / "core" / "orchestrator" / "router.py":
         frozenset({"CurrentUser", "assert_group_access"}),
-    # imdf/router.py: CurrentUser top-level migrated to leaf
-    # (Phase-9 contract fan-out). `assert_resource_visible`
-    # migrated to leaf by AUTH-ENGINE-020 (closes R-019.1):
-    # the IMDF router now imports it from
-    # `app.core.auth.ownership` at module top, the 2 IMDF
-    # tests monkeypatch via the consuming router-module
-    # surface, and the facade re-export was removed.
-    # AUTH-ENGINE-025 adds `assert_resource_visible` to this
-    # per-name ban dict as a defense-in-depth lock alongside
-    # the global Phase-13 lock + the dedicated
-    # `test_phase2_imdf_lazy_assert_resource_visible_migrated_to_leaf`
-    # test: the symbol cannot be re-imported via the facade in
-    # `imdf/router.py` even if a future diff also widens the
-    # global allowlist.
     _APP / "core" / "imdf" / "router.py":
         frozenset({"CurrentUser", "assert_resource_visible"}),
 }
@@ -118,21 +100,8 @@ _PHASE4_PER_NAME_BAN: dict[Path, frozenset[str]] = {
 }
 
 
-# Phase-5 (BE-GO-READY-AUTH-ENGINE-010): contract-boundary prep on
-# the next coherent router group (files / intermediate / projects /
-# scheduler). Same split as Phase-3/4: facade may keep FastAPI
-# Depends (`get_current_user`, `require_*`, `require_*_owner`,
-# `require_admin`, `require_user_or_above`, `require_superadmin`,
-# `require_not_esecutore`) and `group_filter`. CurrentUser + the 4
-# ownership helpers MUST come from their leaf modules
-# (`app.core.auth.models` / `app.core.auth.ownership`).
-#
-# Audit context — see `.agent-temp/BE_AUTH_ENGINE_AUDIT.md` Incoming
-# Phase-5 section for the proposed `app.shared.contracts.auth`
-# split (pure contracts vs. implementation deps). This phase
-# preserves the facade as the dependency-magnet target only for
-# names that cannot move yet (FastAPI Depends + `group_filter`),
-# leaving every leaf-safe symbol on a direct leaf import.
+# Phase-5: same facade ban for files / intermediate / projects /
+# scheduler.
 _PHASE5_PER_NAME_BAN: dict[Path, frozenset[str]] = {
     _APP / "core" / "files" / "router.py":
         _OWNERSHIP_HELPER_BAN_NAMES,
@@ -145,18 +114,7 @@ _PHASE5_PER_NAME_BAN: dict[Path, frozenset[str]] = {
 }
 
 
-# Phase-6 (BE-GO-READY-AUTH-ENGINE-011): `group_filter` leaf
-# extraction. The function moved to its canonical home
-# `app.core.auth.ownership` (pure policy helper, zero side
-# effects). The auth.py facade keeps a `KEEP_COMPAT` re-export
-# (no auth.py shrink) but app routers MUST consume `group_filter`
-# from the leaf — facade pull becomes a strangler regression.
-#
-# The 9 router files below are the complete set of app callsites
-# using `group_filter` at this batch's start. Facade may keep
-# FastAPI Depends + `require_*` (Bucket A from the Phase-5
-# audit's contract-boundary analysis); banned name: just
-# `group_filter`.
+# Phase-6: routers using `group_filter` must not pull it from the facade.
 _PHASE6_GROUP_FILTER_BAN: frozenset[str] = frozenset({"group_filter"})
 
 _PHASE6_PER_NAME_BAN: dict[Path, frozenset[str]] = {
@@ -362,13 +320,8 @@ def test_phase6_migrated_file_does_not_import_group_filter_from_facade(
     path: Path, banned_names: frozenset[str]
 ):
     """Phase-6 contract (BE-GO-READY-AUTH-ENGINE-011):
-    `group_filter` canonical home is `app.core.auth.ownership`.
-    The 9 app routers using it MUST consume the leaf directly;
-    facade pull is a strangler regression. The auth.py facade
-    keeps a KEEP_COMPAT re-export so the symbol identity is
-    preserved for any test/code that still imports
-    `from app.core.auth.auth import group_filter` — but the
-    routers themselves are pinned to the leaf."""
+    routers using `group_filter` must not import it from the
+    auth facade."""
     assert path.exists(), f"migrated file missing: {path}"
     violations = _per_name_ban_violations(path, banned_names)
     assert violations == [], (
@@ -376,27 +329,6 @@ def test_phase6_migrated_file_does_not_import_group_filter_from_facade(
         f"name `group_filter` from the facade:\n"
         + "\n".join(f"  line {ln}: {nm}" for ln, nm in violations)
         + "\nLeaf source: group_filter ← app.core.auth.ownership."
-    )
-
-
-def test_group_filter_leaf_canonical_home():
-    """Lock the canonical home: `group_filter` lives in
-    `app.core.auth.ownership` (pure policy helper, zero side
-    effects). The 9 app routers using it consume the leaf directly
-    per the Phase-6 strangler ban above.
-
-    BE-GO-READY-AUTH-ENGINE-014: the auth.py facade KEEP_COMPAT
-    re-export was deleted. Negative lock asserting the cut lives
-    in
-    `test_auth_models_and_ownership_module_contract.py
-    ::test_auth_no_longer_reexports_group_filter`. This test now
-    only pins that the leaf canonical home is callable.
-    """
-    from app.core.auth.ownership import group_filter as gf_leaf
-
-    assert callable(gf_leaf), (
-        "`app.core.auth.ownership.group_filter` must remain "
-        "callable as the canonical home for the policy helper."
     )
 
 
@@ -593,102 +525,6 @@ def test_phase4_imports_ownership_helpers_from_leaf(
         )
 
 
-# Phase-7 (BE-GO-READY-AUTH-ENGINE-013) contract fan-out
-#
-# Phase-7 moves pure-contract consumption (`CurrentUser`,
-# `group_filter`) for a coherent group of routers from the leaf
-# implementation modules (`app.core.auth.models`,
-# `app.core.auth.ownership`) to the shared contract module
-# `app.shared.contracts.auth`. Identity is preserved end-to-end:
-# the contract module re-exports `CurrentUser` from `auth.models`
-# and defines `group_filter` as the canonical pure policy
-# (`auth.ownership.group_filter` re-exports for KEEP_COMPAT).
-#
-# Routers continue to import:
-#   - DB-bound ownership helpers (`assert_*`, `compute_can_edit`)
-#     from `app.core.auth.ownership` (their canonical home — they
-#     drag `app.db.db_service`);
-#   - FastAPI Depends + `require_*` from the auth facade.
-#
-# The 5 routers below were migrated in TE-013 (this batch).
-# Phase-7 supersedes the Phase-3/4/5 `models`-direct-leaf
-# assertions for these files.
-
-_PHASE7_CONTRACT_FAN_OUT_FILES = (
-    _APP / "core" / "features" / "routes.py",
-    _APP / "core" / "files" / "router.py",
-    _APP / "core" / "connections" / "router.py",
-    _APP / "core" / "datasources" / "router.py",
-    _APP / "core" / "eseguibili" / "router.py",
-)
-
-
-@pytest.mark.parametrize(
-    "path",
-    _PHASE7_CONTRACT_FAN_OUT_FILES,
-    ids=lambda p: str(p.relative_to(_BACKEND_ROOT)).replace("\\", "/"),
-)
-def test_phase7_imports_currentuser_and_group_filter_from_contract(path: Path):
-    """Phase-7 contract fan-out: `CurrentUser` AND `group_filter`
-    must come from `app.shared.contracts.auth` — NOT from
-    `app.core.auth.models` / `app.core.auth.ownership`."""
-    text = path.read_text(encoding="utf-8")
-    assert (
-        "from app.shared.contracts.auth import" in text
-    ), (
-        f"{path.relative_to(_BACKEND_ROOT)} must import from "
-        "app.shared.contracts.auth (Phase-7 contract fan-out)."
-    )
-    for name in ("CurrentUser", "group_filter"):
-        assert name in text, (
-            f"{path.name} must consume `{name}` (Phase-7 contract)."
-        )
-
-
-@pytest.mark.parametrize(
-    "path",
-    _PHASE7_CONTRACT_FAN_OUT_FILES,
-    ids=lambda p: str(p.relative_to(_BACKEND_ROOT)).replace("\\", "/"),
-)
-def test_phase7_does_not_import_currentuser_from_models_leaf(path: Path):
-    """Phase-7 contract: source-bound check that the migrated file
-    does NOT import `CurrentUser` from `app.core.auth.models`
-    (canonical for Phase-3/4/5; superseded by the contract for
-    Phase-7 files)."""
-    text = path.read_text(encoding="utf-8")
-    assert (
-        "from app.core.auth.models import CurrentUser" not in text
-    ), (
-        f"{path.relative_to(_BACKEND_ROOT)} regressed to importing "
-        "CurrentUser from `app.core.auth.models` — Phase-7 routes "
-        "this through `app.shared.contracts.auth` instead."
-    )
-
-
-@pytest.mark.parametrize(
-    "path",
-    _PHASE7_CONTRACT_FAN_OUT_FILES,
-    ids=lambda p: str(p.relative_to(_BACKEND_ROOT)).replace("\\", "/"),
-)
-def test_phase7_does_not_import_group_filter_from_ownership_leaf(path: Path):
-    """Phase-7 contract: source-bound check that the migrated file
-    does NOT import `group_filter` from `app.core.auth.ownership`
-    (KEEP_COMPAT re-export still exists, but the canonical
-    home is the contract module). Detects via AST to avoid false
-    positives when `group_filter` appears only as a comment."""
-    text = path.read_text(encoding="utf-8")
-    tree = ast.parse(text, filename=str(path))
-    for node in ast.walk(tree):
-        if isinstance(node, ast.ImportFrom) and node.module == "app.core.auth.ownership":
-            names = {a.name for a in node.names}
-            assert "group_filter" not in names, (
-                f"{path.relative_to(_BACKEND_ROOT)} line {node.lineno}: "
-                "regressed to importing `group_filter` from "
-                "`app.core.auth.ownership` — Phase-7 routes this "
-                "through `app.shared.contracts.auth`."
-            )
-
-
 # Phase-8 (BE-GO-READY-AUTH-ENGINE-014) contract fan-out
 #
 # Phase-8 closes TE13-R1/R2: the 5 routers below previously
@@ -855,7 +691,7 @@ _PHASE9_MODELS_LEAF_ALLOWLIST = frozenset({
 
 def test_phase9_models_leaf_currentuser_consumers_locked_to_allowlist():
     """Source-bound facade death map lock: after Phase-9, only the
-    explicit allowlist (`auth.ownership`, `contracts.auth`) is
+    explicit allowlist (`auth.py`, `contracts.auth`) is
     permitted to import `CurrentUser` directly from
     `app.core.auth.models`. Every other consumer regression to
     the leaf would be caught here."""
@@ -1127,26 +963,22 @@ def test_auth_engine_013_dependencies_leaf_exports_all_five_callables():
         )
 
 
-def test_auth_engine_013_facade_reexports_share_identity_with_leaf():
-    """W-013 contract: the facade re-export of each dependency
-    callable MUST be the SAME Python object as the leaf
-    definition. Without this property, FastAPI `Depends(...)`
-    resolutions through the two import paths would diverge,
-    breaking caching keyed on the callable identity."""
-    import app.core.auth.auth as facade
-    import app.core.auth.dependencies as leaf
+def test_auth_engine_013_facade_reexports_dependencies_from_leaf():
+    """auth.py must remain a facade for standard dependency callables."""
+    path = _APP / "core" / "auth" / "auth.py"
+    text = path.read_text(encoding="utf-8")
+    tree = ast.parse(text, filename=str(path))
+    imported_from_leaf: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom) and node.module == _AUTH_ENGINE_013_DEPENDENCY_LEAF:
+            imported_from_leaf.update(alias.name for alias in node.names)
 
-    for name in _AUTH_ENGINE_013_LEAF_SYMBOLS:
-        leaf_obj = getattr(leaf, name)
-        facade_obj = getattr(facade, name)
-        assert leaf_obj is facade_obj, (
-            f"Identity broken for `{name}`: "
-            f"`app.core.auth.auth.{name}` is NOT "
-            f"`app.core.auth.dependencies.{name}`. The facade "
-            "must re-export the leaf's callable as the same "
-            "Python object; FastAPI Depends resolution depends "
-            "on it."
-        )
+    missing = set(_AUTH_ENGINE_013_LEAF_SYMBOLS) - imported_from_leaf
+    assert not missing, (
+        "app.core.auth.auth must re-export dependency callables by "
+        f"importing them from `{_AUTH_ENGINE_013_DEPENDENCY_LEAF}`. "
+        f"Missing: {sorted(missing)}"
+    )
 
 
 # Phase-10 (BE-GO-READY-AUTH-ENGINE-016) minor-DTO contract fan-out
@@ -1231,36 +1063,6 @@ def test_phase10_minor_dto_consumers_locked_to_allowlist():
     )
 
 
-def test_phase10_contract_module_exposes_all_minor_dtos():
-    """Source-bound: `app.shared.contracts.auth` MUST expose
-    every Phase-10 minor DTO in its `__all__`. Otherwise the
-    fan-out is incomplete — consumers cannot route through the
-    contract without a missing symbol."""
-    contract_path = _APP / "shared" / "contracts" / "auth.py"
-    text = contract_path.read_text(encoding="utf-8")
-    tree = ast.parse(text, filename=str(contract_path))
-
-    # Find `__all__` assignment.
-    all_names: set[str] = set()
-    for node in ast.walk(tree):
-        if isinstance(node, ast.Assign):
-            for target in node.targets:
-                if isinstance(target, ast.Name) and target.id == "__all__":
-                    if isinstance(node.value, (ast.List, ast.Tuple)):
-                        for elt in node.value.elts:
-                            if isinstance(elt, ast.Constant) and isinstance(elt.value, str):
-                                all_names.add(elt.value)
-
-    missing = _PHASE10_MINOR_DTOS - all_names
-    assert not missing, (
-        "app/shared/contracts/auth.py `__all__` is missing "
-        "Phase-10 minor DTOs:\n"
-        + "\n".join(f"  {n}" for n in sorted(missing))
-        + "\nAdd them to `__all__` AND to the `from "
-        "app.core.auth.models import (...)` block."
-    )
-
-
 # Phase-11 (BE-GO-READY-AUTH-ENGINE-017) — pure-DTO consumer migration
 # in tests2/ + workers/
 #
@@ -1271,7 +1073,7 @@ def test_phase10_contract_module_exposes_all_minor_dtos():
 # or `app.core.auth.models` (leaf) by non-app-tree consumers
 # must now route through `app.shared.contracts.auth`.
 #
-# Allowlist: 2 contract test files that legitimately need to
+# Allowlist: contract tests that legitimately need to
 # import directly from the facade/leaf to assert the identity
 # property (`auth.X is contract.X is models.X`). Adding any
 # new consumer outside the allowlist requires migrating that
@@ -1369,7 +1171,7 @@ def _scan_tree_for_pure_dto_facade_or_leaf_imports(roots: list[Path]) -> dict[st
 def test_phase11_tests2_workers_pure_dto_consumers_locked_to_allowlist():
     """BE-GO-READY-AUTH-ENGINE-017: pure-DTO consumers in
     `tests2/` + `workers/` must route through
-    `app.shared.contracts.auth`. The only exceptions are 2
+    `app.shared.contracts.auth`. The only exceptions are
     contract test files asserting identity equality between
     facade/leaf/contract paths.
 
@@ -1409,7 +1211,7 @@ def test_phase11_tests2_workers_pure_dto_consumers_locked_to_allowlist():
 def test_phase11_allowlist_is_used_only_when_legitimate():
     """Lock complementare: l'allowlist Phase-11 deve elencare
     SOLO file che hanno effettivamente import facade/leaf attivi.
-    Trim regression: se uno dei 2 file allowlistati smettesse di
+    Trim regression: se un file allowlistato smettesse di
     importare pure-DTO names da auth.auth/models, il rationale
     dell'allowlist sarebbe stantio e l'entry andrebbe rimossa.
     """
@@ -2050,25 +1852,22 @@ def test_auth_engine_018_owner_deps_use_domain_access_boundaries():
     assert expected_boundaries <= imported_modules
 
 
-def test_auth_engine_018_facade_reexports_share_identity_with_leaf():
-    """AUTH-ENGINE-018 contract: the facade re-export of each owner
-    dependency callable MUST be the SAME Python object as the leaf
-    definition. Without this property, FastAPI ``Depends(...)``
-    resolutions through the two import paths would diverge, breaking
-    caching keyed on the callable identity."""
-    import app.core.auth.auth as facade
-    import app.core.auth.owner_dependencies as owner_deps
+def test_auth_engine_018_facade_reexports_owner_deps_from_leaf():
+    """auth.py must remain a facade for owner dependency callables."""
+    path = _APP / "core" / "auth" / "auth.py"
+    text = path.read_text(encoding="utf-8")
+    tree = ast.parse(text, filename=str(path))
+    imported_from_leaf: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom) and node.module == _AUTH_ENGINE_018_OWNER_LEAF:
+            imported_from_leaf.update(alias.name for alias in node.names)
 
-    for name in _AUTH_ENGINE_018_OWNER_SYMBOLS:
-        leaf_obj = getattr(owner_deps, name)
-        facade_obj = getattr(facade, name)
-        assert leaf_obj is facade_obj, (
-            f"Identity broken for `{name}`: "
-            f"`app.core.auth.auth.{name}` is NOT "
-            f"`app.core.auth.owner_dependencies.{name}`. The facade "
-            "must re-export the leaf's callable as the same "
-            "Python object; FastAPI Depends resolution depends on it."
-        )
+    missing = _AUTH_ENGINE_018_OWNER_SYMBOLS - imported_from_leaf
+    assert not missing, (
+        "app.core.auth.auth must re-export owner dependency callables by "
+        f"importing them from `{_AUTH_ENGINE_018_OWNER_LEAF}`. "
+        f"Missing: {sorted(missing)}"
+    )
 
 
 def test_auth_engine_018_projects_router_imports_standard_deps_from_leaf():

@@ -1,5 +1,5 @@
 """
-Contract test BE-GO-READY-TRANSFORMATION-ENGINE-015 — typed
+Contract test BE-GO-READY-TRANSFORMATION-ENGINE-015 - typed
 
 execution context per arricchisci canvas execution.
 """
@@ -20,10 +20,7 @@ pytestmark = [pytest.mark.unit, pytest.mark.arricchisci, pytest.mark.contract]
 
 
 def test_execution_context_module_exposes_typed_boundary():
-    """Post-OE012: il modulo espone il typed shape + il builder.
-    `apply_to_legacy_state` e' stato cancellato (legacy mirror dead
-    write); il negative lock vive in
-    `test_external_consumers_ctx_migration_contract.py`."""
+    """Il modulo espone il typed shape + il builder."""
     from app.core.arricchisci.execution_context import (
         ArricchisciExecutionContext,
         build_execution_context,
@@ -51,7 +48,7 @@ def test_canvas_orchestrator_reexports_context_boundary():
 
 
 def test_context_is_frozen_dataclass():
-    """`@dataclass(frozen=True)` ⇒ setattr solleva."""
+    """`@dataclass(frozen=True)` => setattr solleva."""
     from app.core.arricchisci.execution_context import (
         ArricchisciExecutionContext,
     )
@@ -102,9 +99,8 @@ def test_two_contexts_are_isolated():
 
 
 def test_build_context_raises_execution_context_error_on_db_error(monkeypatch):
-    """`psycopg2.OperationalError` → `ExecutionContextError` con
-    chain preservata. Stesso contract del legacy
-    `init_execution_context`."""
+    """DB errors are wrapped as `ExecutionContextError` with
+    the original cause preserved."""
     from app.core.arricchisci import execution_context as ec_mod  # noqa: F401
     from app.core.arricchisci.exceptions import ExecutionContextError
 
@@ -143,7 +139,7 @@ def test_build_context_happy_path(monkeypatch):
 
 
 def test_build_context_missing_project_yields_none_group(monkeypatch):
-    """Progetto inesistente → `group_id=None` (ramo dati legittimo,
+    """Progetto inesistente -> `group_id=None` (ramo dati legittimo,
     non eccezione). I mixin downstream sollevano "Contesto di
     sicurezza non determinabile"."""
     from app.core.arricchisci import execution_context as ec_mod  # noqa: F401
@@ -161,14 +157,8 @@ def test_build_context_missing_project_yields_none_group(monkeypatch):
 
 
 def test_init_execution_context_returns_typed_context(api_service, monkeypatch):
-    """Post-OE011: `init_execution_context` returns the typed
-    `ArricchisciExecutionContext` and does NOT mutate
-    `svc._current_group_id` / `svc._preview_limit`. The
-    pre-OE011 KEEP_COMPAT mirror was retired -- production
-    mixin readers are all ctx-strict, so the singleton write was
-    dead-write. The standalone function `apply_to_legacy_state`
-    remains available for callers that explicitly want the
-    mirror (test surface only post-OE011)."""
+    """`init_execution_context` returns the typed context and does
+    NOT mutate `svc._current_group_id` / `svc._preview_limit`."""
     from app.core.arricchisci import canvas_orchestrator as co
     from app.core.arricchisci.execution_context import (
         ArricchisciExecutionContext,
@@ -189,19 +179,9 @@ def test_init_execution_context_returns_typed_context(api_service, monkeypatch):
 def test_init_execution_context_does_not_write_singleton_state(
     api_service, monkeypatch,
 ):
-    """OE011 explicit cut lock: `init_execution_context` MUST
-    NOT mutate `svc._current_group_id` or `svc._preview_limit`.
-    Pre-OE011 the function called `apply_to_legacy_state(svc,
-    ctx)` to mirror values; post-OE011 production mixin readers
-    are ctx-strict, so the mirror was dead-write. This test
-    catches a regression where someone re-adds the mirror "for
-    safety" without checking that production reads are
-    ctx-strict.
-
-    We pre-set a STALE singleton value before calling
-    `init_execution_context` and assert the function did NOT
-    overwrite it -- the singleton is no longer the orchestrator's
-    concern."""
+    """`init_execution_context` MUST NOT mutate
+    `svc._current_group_id` or `svc._preview_limit`.
+    Pre-set stale singleton values must survive unchanged."""
     from app.core.arricchisci import canvas_orchestrator as co
 
     monkeypatch.setattr(
@@ -225,17 +205,3 @@ def test_init_execution_context_does_not_write_singleton_state(
     # run because no production reader consults it.
     assert api_service._current_group_id == "grp-STALE"
     assert api_service._preview_limit == 9999
-
-
-# 7. (RITIRATO post-OE012) apply_to_legacy_state mirroring tests
-#
-# Pre-OE012 questa sezione locckava due test che esercitavano la
-# funzione `apply_to_legacy_state` in modalita' standalone:
-#   - test_apply_to_legacy_state_mirrors_context
-#   - test_apply_to_legacy_state_with_none_group_clears_singleton
-# Entrambi sono stati eliminati insieme alla funzione. Lo state
-# `_current_group_id` / `_preview_limit` sul singleton non e' piu'
-# letto da nessun reader di produzione (OE011 ha reso ctx-strict
-# i mixin), quindi non ha piu' senso lockarne la mirror.
-# Il negative source-bound lock vive in
-# `tests2/arricchisci/unit/test_external_consumers_ctx_migration_contract.py`.

@@ -57,7 +57,6 @@ def test_get_api_connection_response_has_expected_shape(
         headers=integration_auth_headers,
         timeout=10.0,
     )
-    # POST /api/api-connections risponde 201 Created (router status_code=201)
     assert status == 201
     api_id = created["id"]
 
@@ -262,7 +261,6 @@ def test_schedule_runs_response_has_expected_shape(
             headers=integration_auth_headers,
             timeout=10.0,
         )
-        # POST /api/schedules risponde 201 Created (router status_code=201)
         assert status == 201
         schedule_id = schedule_created["id"]
 
@@ -319,7 +317,6 @@ def test_schedule_runs_response_has_expected_shape(
                 headers=integration_auth_headers,
                 timeout=10.0,
             )
-            # DELETE /api/schedules/{id} risponde 204 (router status_code=204)
             assert status in (200, 204, 404)
 
 
@@ -353,7 +350,6 @@ def test_get_schedule_response_has_expected_shape(
         headers=integration_auth_headers,
         timeout=10.0,
     )
-    # POST /api/projects risponde 201 Created (router status_code=201)
     assert status == 201
     project_id = project_created["metadata"]["id"]
 
@@ -375,7 +371,6 @@ def test_get_schedule_response_has_expected_shape(
         headers=integration_auth_headers,
         timeout=10.0,
     )
-    # POST /api/schedules risponde 201 Created (router status_code=201)
     assert status == 201
     schedule_id = schedule_created["id"]
 
@@ -412,7 +407,6 @@ def test_get_schedule_response_has_expected_shape(
             headers=integration_auth_headers,
             timeout=10.0,
         )
-        # DELETE /api/schedules/{id} risponde 204 (router status_code=204)
         assert status in (200, 204, 404)
         status, _, _ = http_json_response(
             f"{integration_backend_server['base_url']}/api/projects/{project_id}",
@@ -420,5 +414,4 @@ def test_get_schedule_response_has_expected_shape(
             headers=integration_auth_headers,
             timeout=10.0,
         )
-        # DELETE /api/projects/{id} risponde 204 (F2-B2 2026-04-24)
         assert status in (200, 204, 404)

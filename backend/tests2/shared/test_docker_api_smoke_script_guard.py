@@ -1,8 +1,4 @@
-"""
-Source-bound guards for the Docker API smoke runner.
-
-BE-CLEANROOM-072-W4-DOCKER-API-SMOKE-SKELETON.
-"""
+"""Source-bound guards for the Docker API smoke runner."""
 
 from __future__ import annotations
 
@@ -18,39 +14,21 @@ _REPO_ROOT = Path(__file__).resolve().parents[3]
 _SCRIPT = _REPO_ROOT / "scripts" / "docker-api-smoke.sh"
 
 
-def test_docker_api_smoke_script_exists():
-    assert _SCRIPT.is_file(), (
-        "scripts/docker-api-smoke.sh must exist as the Docker-native API "
-        "acceptance runner skeleton. It targets an already running backend "
-        "instead of booting or mutating Docker compose resources."
-    )
+def _script_text() -> str:
+    assert _SCRIPT.is_file()
+    return _SCRIPT.read_text(encoding="utf-8")
 
 
-def test_docker_api_smoke_script_locks_base_url_env_default():
-    text = _SCRIPT.read_text(encoding="utf-8")
-    assert "PLENORA_ACCEPTANCE_BASE_URL" in text, (
-        "scripts/docker-api-smoke.sh must read PLENORA_ACCEPTANCE_BASE_URL "
-        "so operators can target a non-default already running backend."
-    )
-    assert "http://127.0.0.1:5004" in text, (
-        "scripts/docker-api-smoke.sh must default to the Docker-published "
-        "backend URL http://127.0.0.1:5004."
-    )
-    assert 'BASE_URL="${BASE_URL%/}"' in text, (
-        "scripts/docker-api-smoke.sh must normalize a trailing slash from "
-        "PLENORA_ACCEPTANCE_BASE_URL before appending endpoint paths."
-    )
-
-
-def test_docker_api_smoke_script_checks_health_ready_and_full_flow():
-    text = _SCRIPT.read_text(encoding="utf-8")
-    for endpoint in ('run_get_check "/health"', 'run_get_check "/ready"'):
-        assert endpoint in text, (
-            f"scripts/docker-api-smoke.sh must include implemented safe "
-            f"check {endpoint!r}. These checks require no unknown "
-            "credentials and can run against an already booted backend."
-        )
+def test_docker_api_smoke_script_keeps_targeting_existing_backend():
+    text = _script_text()
     for marker in (
+        "PLENORA_ACCEPTANCE_BASE_URL",
+        "http://127.0.0.1:5004",
+        'BASE_URL="${BASE_URL%/}"',
+        'run_get_check "/health"',
+        'run_get_check "/ready"',
+        "--infrastructure-only",
+        "Infrastructure-only Docker API smoke checks passed.",
         'curl_json "POST" "/api/auth/login"',
         'curl_json "GET" "/api/auth/me"',
         'curl_json "POST" "/api/projects"',
@@ -59,18 +37,15 @@ def test_docker_api_smoke_script_checks_health_ready_and_full_flow():
         'curl_json "POST" "/api/auth/logout"',
         "Full Docker API smoke passed.",
     ):
-        assert marker in text, (
-            f"scripts/docker-api-smoke.sh must include real full-flow marker "
-            f"{marker!r}; health-only smoke is not release acceptance."
-        )
+        assert marker in text
+
     assert "docker compose up" not in _strip_shell_comments_and_heredocs(text), (
-        "scripts/docker-api-smoke.sh must target an already running backend. "
-        "Boot orchestration belongs in scripts/docker-validate.sh."
+        "docker-api-smoke.sh must target an already running backend."
     )
 
 
 def test_docker_api_smoke_script_polls_with_bounded_timeouts():
-    text = _SCRIPT.read_text(encoding="utf-8")
+    text = _script_text()
     for marker in (
         "PLENORA_ACCEPTANCE_TIMEOUT_SECONDS",
         "PLENORA_ACCEPTANCE_POLL_INTERVAL_SECONDS",
@@ -79,60 +54,31 @@ def test_docker_api_smoke_script_polls_with_bounded_timeouts():
         "Polling GET ${url} for up to ${TIMEOUT_SECONDS}s",
         "did not return 2xx",
     ):
-        assert marker in text, (
-            f"scripts/docker-api-smoke.sh must keep bounded polling marker "
-            f"{marker!r}. Docker CI should tolerate normal backend boot time "
-            "without becoming an unbounded or flaky probe."
-        )
-
-
-def test_docker_api_smoke_script_has_infrastructure_only_success_mode():
-    text = _SCRIPT.read_text(encoding="utf-8")
-    assert "--infrastructure-only" in text, (
-        "scripts/docker-api-smoke.sh must expose --infrastructure-only so "
-        "the currently implemented /health and /ready checks can be used "
-        "without pretending the full auth/project/upload/execute smoke is done."
-    )
-    assert "Infrastructure-only Docker API smoke checks passed." in text, (
-        "scripts/docker-api-smoke.sh must print a narrow success message "
-        "that names infrastructure-only scope."
-    )
+        assert marker in text
 
 
 def test_docker_api_smoke_script_requires_seeded_credentials():
-    text = _SCRIPT.read_text(encoding="utf-8")
+    text = _script_text()
     for marker in (
         "PLENORA_SMOKE_USERNAME",
         "PLENORA_SMOKE_PASSWORD",
         "python -m app.core.auth.smoke_seed",
         "require_full_flow_credentials",
     ):
-        assert marker in text, (
-            f"scripts/docker-api-smoke.sh must require deterministic seeded "
-            f"credentials marker {marker!r} before claiming full API smoke."
-        )
+        assert marker in text
 
 
 def test_docker_api_smoke_script_serializes_json_payloads_safely():
-    text = _SCRIPT.read_text(encoding="utf-8")
-    for marker in (
-        "login_payload_json",
-        "project_payload_json",
-        "json.dumps",
-    ):
-        assert marker in text, (
-            f"scripts/docker-api-smoke.sh must keep safe JSON serialization "
-            f"marker {marker!r} for env-provided smoke credentials and "
-            "generated project names."
-        )
+    text = _script_text()
+    for marker in ("login_payload_json", "project_payload_json", "json.dumps"):
+        assert marker in text
     assert '\\"username\\":\\"${SMOKE_USERNAME}\\"' not in text, (
-        "scripts/docker-api-smoke.sh must not interpolate env credentials "
-        "directly into JSON strings."
+        "docker-api-smoke.sh must not interpolate env credentials into JSON."
     )
 
 
 def test_docker_api_smoke_script_does_not_leave_full_acceptance_pending():
-    text = _SCRIPT.read_text(encoding="utf-8")
+    text = _script_text()
     offenders = [
         marker
         for marker in (
@@ -143,16 +89,11 @@ def test_docker_api_smoke_script_does_not_leave_full_acceptance_pending():
         )
         if marker in text
     ]
-    assert not offenders, (
-        "scripts/docker-api-smoke.sh must not keep the old health-only "
-        f"acceptance placeholders. Offenders: {offenders}"
-    )
+    assert not offenders
 
 
 def test_docker_api_smoke_script_is_non_destructive():
-    code = _strip_shell_comments_and_heredocs(
-        _SCRIPT.read_text(encoding="utf-8")
-    )
+    code = _strip_shell_comments_and_heredocs(_script_text())
     banned_patterns = (
         "docker compose down",
         "docker compose rm",
@@ -165,9 +106,7 @@ def test_docker_api_smoke_script_is_non_destructive():
     )
     offenders = [pattern for pattern in banned_patterns if pattern in code]
     assert not offenders, (
-        "scripts/docker-api-smoke.sh must remain non-destructive while it "
-        "targets an already running backend. Banned invocations found: "
-        f"{offenders}"
+        f"docker-api-smoke.sh must remain non-destructive. Offenders: {offenders}"
     )
 
 

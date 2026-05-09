@@ -24,6 +24,4 @@ def test_docker_smoke_seed_is_explicit_and_non_prod_guarded():
         "db.create_user",
         "db.update_user_password",
     ):
-        assert marker in text, (
-            f"smoke_seed must keep deterministic seed marker {marker!r}."
-        )
+        assert marker in text
