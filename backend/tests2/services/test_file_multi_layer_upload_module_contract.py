@@ -18,6 +18,7 @@ import pytest
 
 
 pytestmark = [pytest.mark.unit, pytest.mark.contract]
+THREE_LAYERS = [{"layer": "L1"}, {"layer": "L2"}, {"layer": "L3"}]
 
 
 # Fixtures
@@ -73,6 +74,58 @@ def collaborators(fake_logger, tmp_path):
     }
 
 
+def _create_multi(
+    collaborators,
+    content=b"x",
+    filename="data.gpkg",
+    name="Multi",
+    *,
+    layers_config=None,
+    group_id="g1",
+):
+    from app.core.files.multi_layer_upload import create_multi_layer_from_upload
+
+    return create_multi_layer_from_upload(
+        io.BytesIO(content), filename, name,
+        layers_config=THREE_LAYERS if layers_config is None else layers_config,
+        group_id=group_id,
+        **collaborators,
+    )
+
+
+def _builds(collaborators):
+    return [c.kwargs for c in collaborators["build_file_source"].call_args_list]
+
+
+def _batch_rows(collaborators):
+    return collaborators["db_save_file_sources_batch"].call_args.args[0]
+
+
+def _zip_bytes(filename="placeholder.txt", content=b"hi"):
+    buf = io.BytesIO()
+    with _zipfile.ZipFile(buf, "w") as z:
+        z.writestr(filename, content)
+    return buf.getvalue()
+
+
+def _service_with_multi_layer_collaborators():
+    from app.core.files.service import FileSourceService
+
+    svc = FileSourceService.__new__(FileSourceService)
+    svc._generate_file_id = MagicMock(return_value="file_x")
+    svc._detect_format = MagicMock(return_value="gpkg")
+    svc._time = MagicMock()
+    svc._time.now = MagicMock(return_value=datetime.now(timezone.utc))
+    svc._load_by_format = MagicMock(return_value=(pd.DataFrame({"a": [1]}), None))
+    svc._column_builder = MagicMock()
+    svc._column_builder.from_dataframe = MagicMock(return_value=[])
+    svc._dispatch_blob_storage = MagicMock(
+        return_value={"data": b"x", "storage_key": None, "size_bytes": 1}
+    )
+    svc._logger = MagicMock()
+    return svc
+
+
 # 1. layers_config empty/None -> ValueError, no side effect
 
 
@@ -97,16 +150,14 @@ def test_empty_layers_config_raises_value_error(collaborators, empty_value):
 
 
 def test_mime_block_short_circuits_before_any_layer_processing(collaborators):
-    from app.core.files.multi_layer_upload import create_multi_layer_from_upload
     from app.utils.mime_validator import MimeMismatchError
 
     collaborators["mime_validate"].side_effect = MimeMismatchError("executable")
 
     with pytest.raises(ValueError, match="executable"):
-        create_multi_layer_from_upload(
-            io.BytesIO(b"MZ\x90\x00 fake exe"), "trojan.gpkg", "Trojan",
-            layers_config=[{"layer": "L1"}, {"layer": "L2"}],
-            **collaborators,
+        _create_multi(
+            collaborators, b"MZ\x90\x00 fake exe", "trojan.gpkg", "Trojan",
+            layers_config=THREE_LAYERS[:2],
         )
 
     collaborators["load_by_format"].assert_not_called()
@@ -123,15 +174,11 @@ def test_mime_block_short_circuits_before_any_layer_processing(collaborators):
 
 
 def test_xlsx_multi_sheet_creates_n_file_sources_with_sheet_field(collaborators):
-    from app.core.files.multi_layer_upload import create_multi_layer_from_upload
-
     collaborators["detect_format"].return_value = "xlsx"
 
-    out = create_multi_layer_from_upload(
-        io.BytesIO(b"fake xlsx"), "data.xlsx", "Workbook",
+    out = _create_multi(
+        collaborators, b"fake xlsx", "data.xlsx", "Workbook",
         layers_config=[{"sheet": "Sheet1"}, {"sheet": "Sheet2"}],
-        group_id="g1",
-        **collaborators,
     )
 
     assert len(out) == 2
@@ -139,10 +186,10 @@ def test_xlsx_multi_sheet_creates_n_file_sources_with_sheet_field(collaborators)
     assert collaborators["dispatch_blob_storage"].call_count == 1
     # E3: save_batch chiamato UNA volta con N row
     assert collaborators["db_save_file_sources_batch"].call_count == 1
-    rows_arg = collaborators["db_save_file_sources_batch"].call_args.args[0]
+    rows_arg = _batch_rows(collaborators)
     assert len(rows_arg) == 2
     # build_file_source: per XLSX -> sheet valorizzato, layer None
-    builds = [c.kwargs for c in collaborators["build_file_source"].call_args_list]
+    builds = _builds(collaborators)
     assert builds[0]["sheet"] == "Sheet1"
     assert builds[0]["layer"] is None
     assert builds[1]["sheet"] == "Sheet2"
@@ -159,8 +206,6 @@ def test_xlsx_multi_sheet_creates_n_file_sources_with_sheet_field(collaborators)
 
 
 def test_gpkg_multi_layer_creates_n_file_sources_with_layer_and_crs(collaborators):
-    from app.core.files.multi_layer_upload import create_multi_layer_from_upload
-
     collaborators["detect_format"].return_value = "gpkg"
 
     fake_gdf = MagicMock()
@@ -170,19 +215,17 @@ def test_gpkg_multi_layer_creates_n_file_sources_with_layer_and_crs(collaborator
         pd.DataFrame({"id": [1]}), fake_gdf,
     )
 
-    out = create_multi_layer_from_upload(
-        io.BytesIO(b"fake gpkg"), "data.gpkg", "Geo",
+    out = _create_multi(
+        collaborators, b"fake gpkg", "data.gpkg", "Geo",
         layers_config=[
             {"layer": "roads"},
             {"layer": "buildings"},
             {"layer": "rivers"},
         ],
-        group_id="g1",
-        **collaborators,
     )
 
     assert len(out) == 3
-    builds = [c.kwargs for c in collaborators["build_file_source"].call_args_list]
+    builds = _builds(collaborators)
     assert [b["layer"] for b in builds] == ["roads", "buildings", "rivers"]
     assert all(b["sheet"] is None for b in builds)
     assert all(b["crs"] == "EPSG:4326" for b in builds)
@@ -194,15 +237,8 @@ def test_gpkg_multi_layer_creates_n_file_sources_with_layer_and_crs(collaborator
 # 5. ZIP unwrap .gpkg -> parse usa extracted path
 
 
-def test_zip_unwrap_finds_gpkg_and_uses_extracted_path(
-    collaborators, tmp_path,
-):
-    from app.core.files.multi_layer_upload import create_multi_layer_from_upload
-
+def test_zip_unwrap_finds_gpkg_and_uses_extracted_path(collaborators):
     collaborators["detect_format"].side_effect = ["zip", "gpkg"]
-
-    inner_gpkg = tmp_path / "_seam_inner.gpkg"
-    inner_gpkg.write_bytes(b"inner gpkg bytes")
 
     def fake_extract(z, dest):
         target = Path(dest) / "inner.gpkg"
@@ -210,16 +246,9 @@ def test_zip_unwrap_finds_gpkg_and_uses_extracted_path(
 
     collaborators["safe_extractall"].side_effect = fake_extract
 
-    buf = io.BytesIO()
-    with _zipfile.ZipFile(buf, "w") as z:
-        z.writestr("placeholder.txt", b"hi")
-    zip_bytes = buf.getvalue()
-
-    create_multi_layer_from_upload(
-        io.BytesIO(zip_bytes), "bundle.zip", "Pack",
+    _create_multi(
+        collaborators, _zip_bytes(), "bundle.zip", "Pack",
         layers_config=[{"layer": "L1"}],
-        group_id="g1",
-        **collaborators,
     )
 
     collaborators["safe_extractall"].assert_called_once()
@@ -232,17 +261,13 @@ def test_zip_unwrap_finds_gpkg_and_uses_extracted_path(
 # 6. BadZipFile -> ValueError, no save_batch
 
 
-def test_bad_zip_file_raises_value_error_no_save_batch(collaborators, tmp_path):
-    from app.core.files.multi_layer_upload import create_multi_layer_from_upload
-
+def test_bad_zip_file_raises_value_error_no_save_batch(collaborators):
     collaborators["detect_format"].return_value = "zip"
-    bad_bytes = b"this is not a real zip file at all"
 
     with pytest.raises(ValueError, match="ZIP non valido"):
-        create_multi_layer_from_upload(
-            io.BytesIO(bad_bytes), "fake.zip", "Bad",
+        _create_multi(
+            collaborators, b"this is not a real zip file at all", "fake.zip", "Bad",
             layers_config=[{"layer": "L1"}],
-            **collaborators,
         )
 
     collaborators["db_save_file_sources_batch"].assert_not_called()
@@ -254,20 +279,13 @@ def test_bad_zip_file_raises_value_error_no_save_batch(collaborators, tmp_path):
 
 
 def test_zip_slip_error_raises_value_error_no_save_batch(collaborators):
-    from app.core.files.multi_layer_upload import create_multi_layer_from_upload
-
     collaborators["detect_format"].return_value = "zip"
     collaborators["safe_extractall"].side_effect = RuntimeError("/etc/passwd traversal")
 
-    buf = io.BytesIO()
-    with _zipfile.ZipFile(buf, "w") as z:
-        z.writestr("placeholder.txt", b"hi")
-
     with pytest.raises(ValueError, match="path traversal"):
-        create_multi_layer_from_upload(
-            io.BytesIO(buf.getvalue()), "evil.zip", "Evil",
+        _create_multi(
+            collaborators, _zip_bytes(), "evil.zip", "Evil",
             layers_config=[{"layer": "L1"}],
-            **collaborators,
         )
 
     collaborators["db_save_file_sources_batch"].assert_not_called()
@@ -278,8 +296,6 @@ def test_zip_slip_error_raises_value_error_no_save_batch(collaborators):
 
 
 def test_parse_failure_per_layer_continues_with_empty_columns(collaborators):
-    from app.core.files.multi_layer_upload import create_multi_layer_from_upload
-
     collaborators["detect_format"].return_value = "gpkg"
     # 1# layer parse OK, 2# fallisce, 3# parse OK
     collaborators["load_by_format"].side_effect = [
@@ -288,15 +304,13 @@ def test_parse_failure_per_layer_continues_with_empty_columns(collaborators):
         (pd.DataFrame({"a": [2, 3]}), None),
     ]
 
-    out = create_multi_layer_from_upload(
-        io.BytesIO(b"fake gpkg"), "data.gpkg", "Multi",
+    out = _create_multi(
+        collaborators, b"fake gpkg", "data.gpkg", "Multi",
         layers_config=[
             {"layer": "ok1"},
             {"layer": "broken"},
             {"layer": "ok3"},
         ],
-        group_id="g1",
-        **collaborators,
     )
 
     # 3 FileSource creati nonostante il fail del 2# (soft preserve)
@@ -306,55 +320,46 @@ def test_parse_failure_per_layer_continues_with_empty_columns(collaborators):
         if "Errore inferenza colonne layer 'broken'" in c.args[0]
     ]
     assert len(warning_calls) == 1
-    builds = [c.kwargs for c in collaborators["build_file_source"].call_args_list]
+    builds = _builds(collaborators)
     assert builds[1]["columns"] == []
     assert builds[1]["row_count"] == 0
     # E3: tutti i 3 row inviati nello stesso save_batch (1 sola call)
     assert collaborators["db_save_file_sources_batch"].call_count == 1
-    rows_arg = collaborators["db_save_file_sources_batch"].call_args.args[0]
-    assert len(rows_arg) == 3
+    assert len(_batch_rows(collaborators)) == 3
 
 
 # 9. group_id None -> default_group propagato a tutti
 
 
 def test_default_group_used_when_group_id_is_none(collaborators):
-    from app.core.files.multi_layer_upload import create_multi_layer_from_upload
-
     collaborators["detect_format"].return_value = "gpkg"
 
-    create_multi_layer_from_upload(
-        io.BytesIO(b"x"), "data.gpkg", "Multi",
-        layers_config=[{"layer": "L1"}, {"layer": "L2"}],
+    _create_multi(
+        collaborators,
+        layers_config=THREE_LAYERS[:2],
         group_id=None,
-        **collaborators,
     )
 
-    builds = [c.kwargs for c in collaborators["build_file_source"].call_args_list]
+    builds = _builds(collaborators)
     assert all(b["group_id"] == "default_grp" for b in builds)
-    rows_arg = collaborators["db_save_file_sources_batch"].call_args.args[0]
-    assert all(r["group_id"] == "default_grp" for r in rows_arg)
+    assert all(r["group_id"] == "default_grp" for r in _batch_rows(collaborators))
 
 
 # 10. safe layer name sanitization
 
 
 def test_safe_layer_name_sanitization_replaces_spaces_and_dashes(collaborators):
-    from app.core.files.multi_layer_upload import create_multi_layer_from_upload
-
     collaborators["detect_format"].return_value = "gpkg"
 
-    create_multi_layer_from_upload(
-        io.BytesIO(b"x"), "data.gpkg", "Pack",
+    _create_multi(
+        collaborators, name="Pack",
         layers_config=[
             {"layer": "my layer-name"},
             {"layer": "another-one with spaces"},
         ],
-        group_id="g1",
-        **collaborators,
     )
 
-    builds = [c.kwargs for c in collaborators["build_file_source"].call_args_list]
+    builds = _builds(collaborators)
     assert builds[0]["name"] == "Pack_my_layer_name"
     assert builds[1]["name"] == "Pack_another_one_with_spaces"
     fid_calls = [c.args[0] for c in collaborators["generate_file_id"].call_args_list]
@@ -369,21 +374,7 @@ def test_file_source_service_multi_layer_delegates_with_save_batch_and_delete_bl
     app.core.files.multi_layer_upload con i collaborator del service.
     Verifica E3: passa db_save_file_sources_batch + delete_blob; verifica
     cleanup_file=os.unlink (asimmetria preservata)."""
-    from app.core.files.service import FileSourceService
-
-    svc = FileSourceService.__new__(FileSourceService)
-    svc._generate_file_id = MagicMock(return_value="file_x")
-    svc._detect_format = MagicMock(return_value="gpkg")
-    svc._time = MagicMock()
-    svc._time.now = MagicMock(return_value=datetime.now(timezone.utc))
-    svc._load_by_format = MagicMock(return_value=(pd.DataFrame({"a": [1]}), None))
-    svc._column_builder = MagicMock()
-    svc._column_builder.from_dataframe = MagicMock(return_value=[])
-    svc._dispatch_blob_storage = MagicMock(
-        return_value={"data": b"x", "storage_key": None, "size_bytes": 1}
-    )
-    svc._logger = MagicMock()
-
+    svc = _service_with_multi_layer_collaborators()
     fake_result = [MagicMock()]
     with patch(
         "app.core.files.multi_layer_upload.create_multi_layer_from_upload",
@@ -428,21 +419,7 @@ def _capture_delete_blob_callback():
     """Helper: costruisce il service, intercetta `_impl` e ritorna il
     callback `delete_blob` realmente passato dal facade. Permette di
     testare la closure in isolamento senza eseguire il batch reale."""
-    from app.core.files.service import FileSourceService
-
-    svc = FileSourceService.__new__(FileSourceService)
-    svc._generate_file_id = MagicMock(return_value="file_x")
-    svc._detect_format = MagicMock(return_value="gpkg")
-    svc._time = MagicMock()
-    svc._time.now = MagicMock(return_value=datetime.now(timezone.utc))
-    svc._load_by_format = MagicMock(return_value=(pd.DataFrame({"a": [1]}), None))
-    svc._column_builder = MagicMock()
-    svc._column_builder.from_dataframe = MagicMock(return_value=[])
-    svc._dispatch_blob_storage = MagicMock(
-        return_value={"data": b"x", "storage_key": None, "size_bytes": 1}
-    )
-    svc._logger = MagicMock()
-
+    svc = _service_with_multi_layer_collaborators()
     captured = {}
     with patch(
         "app.core.files.multi_layer_upload.create_multi_layer_from_upload",
@@ -505,15 +482,11 @@ def test_delete_blob_calls_storage_when_object_storage_enabled():
 # 12. MULTI-GDB-001 fix: GDB directory in ZIP -> raw_data resta lo ZIP
 
 
-def test_zip_unwrap_gdb_directory_uses_original_zip_blob(
-    collaborators, tmp_path,
-):
+def test_zip_unwrap_gdb_directory_uses_original_zip_blob(collaborators):
     """MULTI-GDB-001 fix: per GDB-in-ZIP il path estratto e' una directory
     .gdb (non un file). Pre-fix: tmp_path.read_bytes() su directory
     sollevava IsADirectoryError. Post-fix: per format='gdb' conserviamo
     il ZIP originale come blob."""
-    from app.core.files.multi_layer_upload import create_multi_layer_from_upload
-
     collaborators["detect_format"].side_effect = ["zip", "gdb"]
 
     def fake_extract(z, dest):
@@ -523,16 +496,11 @@ def test_zip_unwrap_gdb_directory_uses_original_zip_blob(
 
     collaborators["safe_extractall"].side_effect = fake_extract
 
-    buf = io.BytesIO()
-    with _zipfile.ZipFile(buf, "w") as z:
-        z.writestr("placeholder.txt", b"placeholder content")
-    zip_bytes = buf.getvalue()
+    zip_bytes = _zip_bytes(content=b"placeholder content")
 
-    out = create_multi_layer_from_upload(
-        io.BytesIO(zip_bytes), "geodatabase.zip", "Geo",
+    out = _create_multi(
+        collaborators, zip_bytes, "geodatabase.zip", "Geo",
         layers_config=[{"layer": "feature_class_1"}],
-        group_id="g1",
-        **collaborators,
     )
 
     assert len(out) == 1
@@ -564,18 +532,9 @@ def test_multi_layer_uses_single_dispatch_with_batch_id_storage_key(collaborator
     """3 layer -> dispatch_blob_storage chiamato 1 volta PRIMA del batch
     save. Argomenti: file_id e storage_key_id sono entrambi un `batch_*`
     opaque id (non legati ad alcun file_id specifico del layer)."""
-    from app.core.files.multi_layer_upload import create_multi_layer_from_upload
-
     collaborators["detect_format"].return_value = "gpkg"
 
-    create_multi_layer_from_upload(
-        io.BytesIO(b"shared blob"), "data.gpkg", "Multi",
-        layers_config=[
-            {"layer": "L1"}, {"layer": "L2"}, {"layer": "L3"},
-        ],
-        group_id="g1",
-        **collaborators,
-    )
+    _create_multi(collaborators, b"shared blob")
 
     assert collaborators["dispatch_blob_storage"].call_count == 1
     assert collaborators["db_save_file_sources_batch"].call_count == 1
@@ -593,8 +552,6 @@ def test_multi_layer_uses_single_dispatch_with_batch_id_storage_key(collaborator
 def test_n_save_batch_rows_share_same_storage_key(collaborators):
     """Object_storage path: le N row del batch ricevono lo stesso storage_key
     e file_id distinti per ciascuna row."""
-    from app.core.files.multi_layer_upload import create_multi_layer_from_upload
-
     collaborators["detect_format"].return_value = "gpkg"
     shared_kwargs = {
         "data": None,
@@ -603,16 +560,9 @@ def test_n_save_batch_rows_share_same_storage_key(collaborators):
     }
     collaborators["dispatch_blob_storage"].return_value = shared_kwargs
 
-    create_multi_layer_from_upload(
-        io.BytesIO(b"big blob"), "data.gpkg", "Multi",
-        layers_config=[
-            {"layer": "L1"}, {"layer": "L2"}, {"layer": "L3"},
-        ],
-        group_id="g1",
-        **collaborators,
-    )
+    _create_multi(collaborators, b"big blob")
 
-    rows_arg = collaborators["db_save_file_sources_batch"].call_args.args[0]
+    rows_arg = _batch_rows(collaborators)
     assert len(rows_arg) == 3
     storage_keys = {r["storage_key"] for r in rows_arg}
     assert storage_keys == {"file-sources/batch_xyz/data.gpkg"}
@@ -627,22 +577,13 @@ def test_n_save_batch_rows_share_same_storage_key(collaborators):
 def test_dispatch_failure_before_loop_no_save_batch_no_cleanup(collaborators):
     """E1: dispatch fallisce PRE-LOOP -> 0 save_batch chiamato; nessun
     delete_blob (lo storage_key e' opaco al caller in caso di fail)."""
-    from app.core.files.multi_layer_upload import create_multi_layer_from_upload
-
     collaborators["detect_format"].return_value = "gpkg"
     collaborators["dispatch_blob_storage"].side_effect = RuntimeError(
         "S3 dispatch down"
     )
 
     with pytest.raises(RuntimeError, match="S3 dispatch down"):
-        create_multi_layer_from_upload(
-            io.BytesIO(b"x"), "data.gpkg", "Multi",
-            layers_config=[
-                {"layer": "L1"}, {"layer": "L2"}, {"layer": "L3"},
-            ],
-            group_id="g1",
-            **collaborators,
-        )
+        _create_multi(collaborators)
 
     assert collaborators["dispatch_blob_storage"].call_count == 1
     collaborators["db_save_file_sources_batch"].assert_not_called()
@@ -658,21 +599,12 @@ def test_batch_save_called_once_with_n_rows_in_object_storage_mode(collaborators
     """E3 happy path: 3 layer -> 1 sola chiamata a db_save_file_sources_batch
     con 3 row formate correttamente (file_id, group_id, name, original_filename,
     fmt, metadata, data, storage_key, size_bytes)."""
-    from app.core.files.multi_layer_upload import create_multi_layer_from_upload
-
     collaborators["detect_format"].return_value = "gpkg"
 
-    create_multi_layer_from_upload(
-        io.BytesIO(b"blob"), "data.gpkg", "Multi",
-        layers_config=[
-            {"layer": "L1"}, {"layer": "L2"}, {"layer": "L3"},
-        ],
-        group_id="g1",
-        **collaborators,
-    )
+    _create_multi(collaborators, b"blob")
 
     assert collaborators["db_save_file_sources_batch"].call_count == 1
-    rows_arg = collaborators["db_save_file_sources_batch"].call_args.args[0]
+    rows_arg = _batch_rows(collaborators)
     assert len(rows_arg) == 3
     required_keys = {
         "file_id", "group_id", "name", "original_filename", "fmt",
@@ -688,8 +620,6 @@ def test_batch_save_failure_triggers_compensating_blob_cleanup(collaborators):
     """E3 rollback: save_batch solleva (rollback DB atomico, 0 row).
     Se shared storage_key e' valorizzato -> delete_blob(shared_key) chiamato
     best-effort. La eccezione DB originale propaga inalterata."""
-    from app.core.files.multi_layer_upload import create_multi_layer_from_upload
-
     collaborators["detect_format"].return_value = "gpkg"
     shared_kwargs = {
         "data": None,
@@ -702,14 +632,7 @@ def test_batch_save_failure_triggers_compensating_blob_cleanup(collaborators):
     )
 
     with pytest.raises(RuntimeError, match="DB transaction rolled back"):
-        create_multi_layer_from_upload(
-            io.BytesIO(b"x"), "data.gpkg", "Multi",
-            layers_config=[
-                {"layer": "L1"}, {"layer": "L2"}, {"layer": "L3"},
-            ],
-            group_id="g1",
-            **collaborators,
-        )
+        _create_multi(collaborators)
 
     # Cleanup compensativo eseguito col shared storage_key
     collaborators["delete_blob"].assert_called_once_with(
@@ -723,8 +646,6 @@ def test_batch_save_failure_in_bytea_mode_no_blob_cleanup_attempted(collaborator
     """E3 rollback in BYTEA mode (storage_key=None): save_batch fallisce ->
     NESSUN delete_blob chiamato (non c'e' blob remoto da pulire). DB error
     propaga normalmente."""
-    from app.core.files.multi_layer_upload import create_multi_layer_from_upload
-
     collaborators["detect_format"].return_value = "gpkg"
     # Default fixture e' gia' BYTEA: data=b"raw", storage_key=None
     collaborators["db_save_file_sources_batch"].side_effect = RuntimeError(
@@ -732,11 +653,9 @@ def test_batch_save_failure_in_bytea_mode_no_blob_cleanup_attempted(collaborator
     )
 
     with pytest.raises(RuntimeError, match="DB constraint violation"):
-        create_multi_layer_from_upload(
-            io.BytesIO(b"x"), "data.gpkg", "Multi",
+        _create_multi(
+            collaborators,
             layers_config=[{"layer": "L1"}, {"layer": "L2"}],
-            group_id="g1",
-            **collaborators,
         )
 
     collaborators["delete_blob"].assert_not_called()
@@ -746,8 +665,6 @@ def test_batch_save_failure_with_cleanup_failure_logs_orphan_event(collaborators
     """E3 double-failure: save_batch fallisce + delete_blob a sua volta
     fallisce -> log strutturato `event=orphan_blob_cleanup_failed` emesso,
     eccezione DB ORIGINALE propaga (NON mascherata da cleanup error)."""
-    from app.core.files.multi_layer_upload import create_multi_layer_from_upload
-
     collaborators["detect_format"].return_value = "gpkg"
     shared_kwargs = {
         "data": None,
@@ -761,11 +678,9 @@ def test_batch_save_failure_with_cleanup_failure_logs_orphan_event(collaborators
     collaborators["delete_blob"].side_effect = RuntimeError("S3 delete failed")
 
     with pytest.raises(RuntimeError, match="Original DB error"):
-        create_multi_layer_from_upload(
-            io.BytesIO(b"x"), "data.gpkg", "Multi",
+        _create_multi(
+            collaborators,
             layers_config=[{"layer": "L1"}, {"layer": "L2"}],
-            group_id="g1",
-            **collaborators,
         )
 
     # Log error strutturato emesso col contesto del batch_id e dell'errore

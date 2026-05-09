@@ -167,13 +167,18 @@ def test_fetch_due_stale_upload_intents_returns_typed_rows():
     assert out[0].operation == "upload_intent"
 
 
-def test_fetch_due_stale_upload_intents_rejects_invalid_args():
+@pytest.mark.parametrize(
+    "kwargs",
+    [
+        {"limit": 0, "grace_seconds": 600},
+        {"limit": 10, "grace_seconds": -1},
+    ],
+)
+def test_fetch_due_stale_upload_intents_rejects_invalid_args(kwargs):
     from app.shared import storage_reconciliation as recon
 
     with pytest.raises(ValueError):
-        recon.fetch_due_stale_upload_intents(limit=0, grace_seconds=600)
-    with pytest.raises(ValueError):
-        recon.fetch_due_stale_upload_intents(limit=10, grace_seconds=-1)
+        recon.fetch_due_stale_upload_intents(**kwargs)
 
 
 def test_fetch_due_stale_upload_intents_swallows_db_error():
@@ -191,18 +196,15 @@ def test_fetch_due_stale_upload_intents_swallows_db_error():
 # is_storage_key_referenced — three-valued result
 
 
-def test_is_storage_key_referenced_returns_true_when_row_exists():
+@pytest.mark.parametrize(
+    ("db_rows", "expected"),
+    [([(1,)], True), ([], False)],
+)
+def test_is_storage_key_referenced_returns_boolean(db_rows, expected):
     from app.shared.storage_reconciliation import is_storage_key_referenced
 
-    with patch("app.db.pg_connection.fetchall", lambda sql, params=(): [(1,)]):
-        assert is_storage_key_referenced("file-sources/x/y.csv") is True
-
-
-def test_is_storage_key_referenced_returns_false_when_no_row():
-    from app.shared.storage_reconciliation import is_storage_key_referenced
-
-    with patch("app.db.pg_connection.fetchall", lambda sql, params=(): []):
-        assert is_storage_key_referenced("file-sources/missing.csv") is False
+    with patch("app.db.pg_connection.fetchall", lambda sql, params=(): db_rows):
+        assert is_storage_key_referenced("file-sources/x/y.csv") is expected
 
 
 def test_is_storage_key_referenced_returns_none_on_db_error():
@@ -471,64 +473,67 @@ def _ui_row(*, id="ui-1", attempts=0, storage_key="file-sources/abc/x.csv"):
     )
 
 
-def test_reconcile_upload_intent_referenced_marks_done(monkeypatch):
-    """referenced=True (DB row exists) -> mark_done. No delete attempted."""
+def _run_upload_intent_reconcile(
+    monkeypatch,
+    *,
+    row,
+    referenced,
+    settings=None,
+):
     sched = _make_scheduler()
     monkeypatch.setattr(time, "time", lambda: 1_000_000.0)
+    calls = {"done": [], "orphan": [], "failed": [], "lost": [], "delete": []}
 
-    mark_done_calls = []
-    delete_calls = []
-
-    with patch("app.config.settings", new=_settings_stub()), \
+    with patch("app.config.settings", new=settings or _settings_stub()), \
          patch("app.shared.storage_reconciliation.fetch_due_pending_deletes",
                return_value=[]), \
          patch("app.shared.storage_reconciliation.fetch_due_stale_upload_intents",
-               return_value=[_ui_row(id="ui-1")]), \
+               return_value=[row]), \
          patch("app.shared.storage_reconciliation.is_storage_key_referenced",
-               return_value=True), \
+               return_value=referenced), \
          patch("app.shared.storage_reconciliation.mark_done",
-               side_effect=lambda i: mark_done_calls.append(i)), \
+               side_effect=lambda i: calls["done"].append(i)), \
+         patch("app.shared.storage_reconciliation.mark_orphan_deleted",
+               side_effect=lambda i: calls["orphan"].append(i)), \
+         patch("app.shared.storage_reconciliation.mark_failed_attempt",
+               side_effect=lambda i, **kw: calls["failed"].append((i, kw))), \
+         patch("app.shared.storage_reconciliation.mark_lost",
+               side_effect=lambda i, **kw: calls["lost"].append((i, kw))), \
          patch("app.shared.storage_reconciliation.count_active_by_state_domain",
                return_value=[]), \
          patch("app.shared.storage_reconciliation.prune_terminal_older_than",
                return_value=0), \
          patch("app.shared.storage_compensation.compensating_delete",
-               side_effect=lambda *a, **kw: delete_calls.append((a, kw)) or "ok"):
+               side_effect=lambda *a, **kw: calls["delete"].append((a, kw)) or "ok"):
         sched._reconcile_storage()
 
-    assert mark_done_calls == ["ui-1"]
-    assert delete_calls == []  # NO compensating_delete on referenced=True
+    return calls
+
+
+def test_reconcile_upload_intent_referenced_marks_done(monkeypatch):
+    """referenced=True (DB row exists) -> mark_done. No delete attempted."""
+    calls = _run_upload_intent_reconcile(
+        monkeypatch,
+        row=_ui_row(id="ui-1"),
+        referenced=True,
+    )
+
+    assert calls["done"] == ["ui-1"]
+    assert calls["delete"] == []  # NO compensating_delete on referenced=True
 
 
 def test_reconcile_upload_intent_not_referenced_calls_compensating_delete(monkeypatch):
     """referenced=False -> compensating_delete + mark_orphan_deleted."""
-    sched = _make_scheduler()
-    monkeypatch.setattr(time, "time", lambda: 1_000_000.0)
+    calls = _run_upload_intent_reconcile(
+        monkeypatch,
+        row=_ui_row(id="ui-2"),
+        referenced=False,
+    )
 
-    delete_calls = []
-    mark_orphan_calls = []
-
-    with patch("app.config.settings", new=_settings_stub()), \
-         patch("app.shared.storage_reconciliation.fetch_due_pending_deletes",
-               return_value=[]), \
-         patch("app.shared.storage_reconciliation.fetch_due_stale_upload_intents",
-               return_value=[_ui_row(id="ui-2")]), \
-         patch("app.shared.storage_reconciliation.is_storage_key_referenced",
-               return_value=False), \
-         patch("app.shared.storage_reconciliation.mark_orphan_deleted",
-               side_effect=lambda i: mark_orphan_calls.append(i)), \
-         patch("app.shared.storage_reconciliation.count_active_by_state_domain",
-               return_value=[]), \
-         patch("app.shared.storage_reconciliation.prune_terminal_older_than",
-               return_value=0), \
-         patch("app.shared.storage_compensation.compensating_delete",
-               side_effect=lambda *a, **kw: delete_calls.append((a, kw)) or "ok"):
-        sched._reconcile_storage()
-
-    assert len(delete_calls) == 1
-    assert mark_orphan_calls == ["ui-2"]
+    assert len(calls["delete"]) == 1
+    assert calls["orphan"] == ["ui-2"]
     # storage_key passed positionally, domain + reason in kwargs
-    args, kwargs = delete_calls[0]
+    args, kwargs = calls["delete"][0]
     assert args[0] == "file-sources/abc/x.csv"
     assert kwargs["domain"] == "file_source"
     assert kwargs["reason"] == "upload_intent_orphan"
@@ -537,32 +542,15 @@ def test_reconcile_upload_intent_not_referenced_calls_compensating_delete(monkey
 def test_reconcile_upload_intent_read_error_marks_failed_attempt(monkeypatch):
     """referenced=None (read-error) -> mark_failed_attempt + backoff.
     NEVER calls compensating_delete (data-loss risk)."""
-    sched = _make_scheduler()
-    monkeypatch.setattr(time, "time", lambda: 1_000_000.0)
+    calls = _run_upload_intent_reconcile(
+        monkeypatch,
+        row=_ui_row(id="ui-3", attempts=1),
+        referenced=None,
+    )
 
-    delete_calls = []
-    mark_failed_calls = []
-
-    with patch("app.config.settings", new=_settings_stub()), \
-         patch("app.shared.storage_reconciliation.fetch_due_pending_deletes",
-               return_value=[]), \
-         patch("app.shared.storage_reconciliation.fetch_due_stale_upload_intents",
-               return_value=[_ui_row(id="ui-3", attempts=1)]), \
-         patch("app.shared.storage_reconciliation.is_storage_key_referenced",
-               return_value=None), \
-         patch("app.shared.storage_reconciliation.mark_failed_attempt",
-               side_effect=lambda i, **kw: mark_failed_calls.append((i, kw))), \
-         patch("app.shared.storage_reconciliation.count_active_by_state_domain",
-               return_value=[]), \
-         patch("app.shared.storage_reconciliation.prune_terminal_older_than",
-               return_value=0), \
-         patch("app.shared.storage_compensation.compensating_delete",
-               side_effect=lambda *a, **kw: delete_calls.append((a, kw)) or "ok"):
-        sched._reconcile_storage()
-
-    assert delete_calls == []  # critical: no delete on read-error
-    assert len(mark_failed_calls) == 1
-    intent_id, kwargs = mark_failed_calls[0]
+    assert calls["delete"] == []  # critical: no delete on read-error
+    assert len(calls["failed"]) == 1
+    intent_id, kwargs = calls["failed"][0]
     assert intent_id == "ui-3"
     assert "ref_check_failed" in kwargs["error"]
     assert kwargs["next_retry_at"] is not None
@@ -570,32 +558,16 @@ def test_reconcile_upload_intent_read_error_marks_failed_attempt(monkeypatch):
 
 def test_reconcile_upload_intent_read_error_at_max_attempts_promotes_to_lost(monkeypatch):
     """attempts+1 >= max_attempts -> mark_lost (not retry forever)."""
-    sched = _make_scheduler()
-    monkeypatch.setattr(time, "time", lambda: 1_000_000.0)
-
-    mark_lost_calls = []
-
     # MAX_ATTEMPTS=2, attempts=1 -> new_attempts=2 -> >= max -> lost
-    with patch("app.config.settings",
-               new=_settings_stub(STORAGE_RECONCILE_MAX_ATTEMPTS=2)), \
-         patch("app.shared.storage_reconciliation.fetch_due_pending_deletes",
-               return_value=[]), \
-         patch("app.shared.storage_reconciliation.fetch_due_stale_upload_intents",
-               return_value=[_ui_row(id="ui-4", attempts=1)]), \
-         patch("app.shared.storage_reconciliation.is_storage_key_referenced",
-               return_value=None), \
-         patch("app.shared.storage_reconciliation.mark_lost",
-               side_effect=lambda i, **kw: mark_lost_calls.append((i, kw))), \
-         patch("app.shared.storage_reconciliation.count_active_by_state_domain",
-               return_value=[]), \
-         patch("app.shared.storage_reconciliation.prune_terminal_older_than",
-               return_value=0), \
-         patch("app.shared.storage_compensation.compensating_delete",
-               return_value="ok"):
-        sched._reconcile_storage()
+    calls = _run_upload_intent_reconcile(
+        monkeypatch,
+        row=_ui_row(id="ui-4", attempts=1),
+        referenced=None,
+        settings=_settings_stub(STORAGE_RECONCILE_MAX_ATTEMPTS=2),
+    )
 
-    assert len(mark_lost_calls) == 1
-    intent_id, kwargs = mark_lost_calls[0]
+    assert len(calls["lost"]) == 1
+    intent_id, kwargs = calls["lost"][0]
     assert intent_id == "ui-4"
     assert "max_attempts" in kwargs["error"]
 

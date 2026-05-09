@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import importlib
 import inspect
+from pathlib import Path
 from types import SimpleNamespace
 from typing import Optional
 from unittest.mock import MagicMock
@@ -16,6 +17,34 @@ import pytest
 
 
 pytestmark = [pytest.mark.unit, pytest.mark.security, pytest.mark.contract]
+
+
+OTHER_USER_TASKS = [
+    ("preview_pipeline_task", "workers.tasks.pipeline_task"),
+    ("execute_carica_task", "workers.tasks.carica_task"),
+    ("execute_enrichment_task", "workers.tasks.enrichment_task"),
+]
+
+OTHER_USER_SERVICES = [
+    (
+        "create_preview_task",
+        "preview_pipeline_task",
+        "workers.tasks.pipeline_task",
+        {"project_id": "p1", "limit": 10},
+    ),
+    (
+        "create_carica_task",
+        "execute_carica_task",
+        "workers.tasks.carica_task",
+        {"project_id": "p1", "canvas": {"nodes": [], "edges": []}, "carica_node_data": {}},
+    ),
+    (
+        "create_enrichment_task",
+        "execute_enrichment_task",
+        "workers.tasks.enrichment_task",
+        {"project_id": "p1", "canvas": {"nodes": [], "edges": []}, "output_format": "csv"},
+    ),
+]
 
 
 # Helpers â€” bytecode probe (refactor-resilient)
@@ -53,6 +82,83 @@ def _references_name(callable_or_task, name: str) -> bool:
     return _walk(code)
 
 
+def _assert_optional_user_id(callable_obj, missing_message: str):
+    sig = inspect.signature(callable_obj)
+    assert "user_id" in sig.parameters, missing_message
+    assert sig.parameters["user_id"].default is None
+    return sig
+
+
+def _capture_execute(monkeypatch, target):
+    captured_calls = []
+
+    def spy_execute(sql, params=()):
+        captured_calls.append({"sql": sql, "params": tuple(params)})
+
+    monkeypatch.setattr(target, spy_execute)
+    return captured_calls
+
+
+def _assert_single_insert_user_id(captured_calls, table_name, expected_user_id, label):
+    assert len(captured_calls) == 1, (
+        f"{label} deve eseguire 1 INSERT. Captured: {captured_calls}"
+    )
+    sql = captured_calls[0]["sql"]
+    params = captured_calls[0]["params"]
+
+    assert f"INSERT INTO {table_name}" in sql, (
+        f"SQL deve essere INSERT INTO {table_name}"
+    )
+    assert "user_id" in sql, (
+        f"INSERT {table_name} deve includere la colonna user_id."
+    )
+    assert expected_user_id in params, (
+        f"user_id non bindato nei params (hardcoded NULL?). Params: {params}"
+    )
+
+
+def _assert_user_id_migration_exists(filename_part, alter_table, missing_message):
+    mig_dir = Path(__file__).resolve().parents[3] / "migrations"
+    candidates = [f for f in mig_dir.iterdir() if filename_part in f.name]
+    assert len(candidates) >= 1, missing_message.format(mig_dir=mig_dir)
+    sql = candidates[0].read_text(encoding="utf-8")
+    assert "ADD COLUMN IF NOT EXISTS user_id" in sql
+    assert alter_table in sql
+
+
+def _task_service_signature_target(service_method):
+    from app.core.orchestrator import task_service as task_service_mod
+    from app.core.orchestrator.task_service import TaskService
+
+    if hasattr(TaskService, service_method):
+        return getattr(TaskService, service_method)
+    return getattr(task_service_mod, f"_{service_method}_compat")
+
+
+def _patch_pipeline_eager_success(monkeypatch):
+    from workers.tasks import pipeline_task as pt
+    from workers.celery_app import celery_app
+
+    monkeypatch.setattr(celery_app.conf, "task_always_eager", True)
+    monkeypatch.setattr(celery_app.conf, "task_eager_propagates", True)
+    monkeypatch.setattr(pt.execute_pipeline_task, "update_state", lambda *a, **kw: None)
+    monkeypatch.setattr(
+        "app.shared.idempotency.is_already_completed",
+        lambda run_id: False,
+    )
+    monkeypatch.setattr(
+        "app.shared.async_user_recheck.recheck_user_authorized",
+        lambda **kwargs: None,
+    )
+
+    fake_orchestrator = MagicMock()
+    fake_result = MagicMock(success=True, message="ok")
+    fake_result.to_dict = lambda: {"success": True}
+    fake_orchestrator.execute_pipeline.return_value = fake_result
+    monkeypatch.setattr(pt, "_build_orchestrator", lambda: fake_orchestrator)
+    return pt
+
+
 # 1. Task accetta user_id
 
 
@@ -61,16 +167,10 @@ def test_execute_pipeline_task_accepts_user_id_kwarg():
     re-check permessi al pickup del worker."""
     from workers.tasks.pipeline_task import execute_pipeline_task
 
-    sig = inspect.signature(execute_pipeline_task)
-    assert "user_id" in sig.parameters, (
+    _assert_optional_user_id(execute_pipeline_task, (
         "execute_pipeline_task non accetta user_id. Senza, il re-check "
         "permessi al pickup non e' possibile."
-    )
-    # Default None -> backward compat con task cron senza user umano
-    assert sig.parameters["user_id"].default is None, (
-        "user_id default deve essere None per backward compat con cron/"
-        "scheduler che non hanno un user umano dietro."
-    )
+    ))
 
 
 def test_execute_pipeline_task_references_recheck_helper():
@@ -105,11 +205,10 @@ def test_create_pipeline_task_accepts_user_id():
     """task_service.create_pipeline_task deve accettare e forward user_id."""
     from app.core.orchestrator.task_service import TaskService
 
-    sig = inspect.signature(TaskService.create_pipeline_task)
-    assert "user_id" in sig.parameters, (
+    _assert_optional_user_id(TaskService.create_pipeline_task, (
         "TaskService.create_pipeline_task non accetta user_id. "
         "Senza, il router non puo' propagare l'identita' alla task."
-    )
+    ))
 
 
 def test_create_pipeline_task_forwards_user_id_to_delay(monkeypatch):
@@ -247,31 +346,7 @@ def test_pipeline_task_passes_user_id_to_open_run(monkeypatch):
     (idempotency, recheck, orchestrator, close_run) per ridurre il
     body del task al pass-through che ci interessa.
     """
-    from workers.tasks import pipeline_task as pt
-    from workers.celery_app import celery_app
-
-    monkeypatch.setattr(celery_app.conf, "task_always_eager", True)
-    monkeypatch.setattr(celery_app.conf, "task_eager_propagates", True)
-    monkeypatch.setattr(pt.execute_pipeline_task, "update_state", lambda *a, **kw: None)
-
-    # Idempotency: not completed -> task procede.
-    monkeypatch.setattr(
-        "app.shared.idempotency.is_already_completed",
-        lambda run_id: False,
-    )
-    # N9 recheck: autorizzato.
-    monkeypatch.setattr(
-        "app.shared.async_user_recheck.recheck_user_authorized",
-        lambda **kwargs: None,
-    )
-    # Orchestrator: success path con risultato minimal.
-    fake_orchestrator = MagicMock()
-    fake_result = MagicMock()
-    fake_result.success = True
-    fake_result.message = "ok"
-    fake_result.to_dict = lambda: {"success": True}
-    fake_orchestrator.execute_pipeline.return_value = fake_result
-    monkeypatch.setattr(pt, "_build_orchestrator", lambda: fake_orchestrator)
+    pt = _patch_pipeline_eager_success(monkeypatch)
 
     # Spy su open_run: NB il task fa `from app.utils.logger import open_run`
     # at module load -> il symbol e' bound in `workers.tasks.pipeline_task`,
@@ -316,14 +391,10 @@ def test_open_run_accepts_user_id_kwarg():
     optional per persistenza audit."""
     from app.utils.logger import open_run
 
-    sig = inspect.signature(open_run)
-    assert "user_id" in sig.parameters, (
+    _assert_optional_user_id(open_run, (
         "open_run non accetta user_id. Senza, non possiamo persistere "
         "chi ha lanciato la run nel log_runs."
-    )
-    assert sig.parameters["user_id"].default is None, (
-        "user_id default deve essere None (backward compat con cron/scheduled)."
-    )
+    ))
 
 
 def test_open_run_writes_user_id_in_insert_sql(monkeypatch):
@@ -336,32 +407,14 @@ def test_open_run_writes_user_id_in_insert_sql(monkeypatch):
     """
     from app.utils import logger as logger_mod
 
-    captured_calls = []
-
-    def spy_execute(sql, params=()):
-        captured_calls.append({"sql": sql, "params": tuple(params)})
-
-    monkeypatch.setattr("app.db.pg_connection.execute", spy_execute)
-
+    captured_calls = _capture_execute(monkeypatch, "app.db.pg_connection.execute")
     handler = logger_mod.PostgresLogHandler()
     handler.open_run(
         run_id="r1", project_id="p1", group_id="g1",
         module="estrai", triggered_by="manual", user_id="usr_target",
     )
 
-    assert len(captured_calls) == 1, (
-        f"open_run deve eseguire 1 INSERT. Captured: {captured_calls}"
-    )
-    sql = captured_calls[0]["sql"]
-    params = captured_calls[0]["params"]
-
-    assert "INSERT INTO log_runs" in sql, "SQL deve essere INSERT INTO log_runs"
-    assert "user_id" in sql, (
-        "INSERT log_runs deve includere la colonna user_id."
-    )
-    assert "usr_target" in params, (
-        f"user_id non bindato nei params (hardcoded NULL?). Params: {params}"
-    )
+    _assert_single_insert_user_id(captured_calls, "log_runs", "usr_target", "open_run")
 
 
 # 4. Scope completo N9 â€” preview, carica, enrichment (+ helper condiviso)
@@ -416,11 +469,7 @@ def test_shared_recheck_returns_permission_revoked_on_disabled_user(monkeypatch)
     assert "disabilit" in result["message"].lower() or "autorizzat" in result["message"].lower()
 
 
-@pytest.mark.parametrize("task_attr,task_module", [
-    ("preview_pipeline_task", "workers.tasks.pipeline_task"),
-    ("execute_carica_task", "workers.tasks.carica_task"),
-    ("execute_enrichment_task", "workers.tasks.enrichment_task"),
-])
+@pytest.mark.parametrize("task_attr,task_module", OTHER_USER_TASKS)
 def test_other_tasks_accept_user_id_kwarg(task_attr, task_module):
     """preview/carica/enrichment task devono accettare user_id optional."""
     mod = importlib.import_module(task_module)
@@ -432,11 +481,7 @@ def test_other_tasks_accept_user_id_kwarg(task_attr, task_module):
     assert sig.parameters["user_id"].default is None
 
 
-@pytest.mark.parametrize("task_attr,task_module", [
-    ("preview_pipeline_task", "workers.tasks.pipeline_task"),
-    ("execute_carica_task", "workers.tasks.carica_task"),
-    ("execute_enrichment_task", "workers.tasks.enrichment_task"),
-])
+@pytest.mark.parametrize("task_attr,task_module", OTHER_USER_TASKS)
 def test_other_tasks_reference_shared_recheck_helper(task_attr, task_module):
     """preview/carica/enrichment task devono referenziare
     `recheck_user_authorized` come callee (single source of truth).
@@ -452,13 +497,12 @@ def test_other_tasks_reference_shared_recheck_helper(task_attr, task_module):
     )
 
 
-@pytest.mark.parametrize("service_method,task_attr,task_module", [
-    ("create_preview_task", "preview_pipeline_task", "workers.tasks.pipeline_task"),
-    ("create_carica_task", "execute_carica_task", "workers.tasks.carica_task"),
-    ("create_enrichment_task", "execute_enrichment_task", "workers.tasks.enrichment_task"),
-])
+@pytest.mark.parametrize(
+    "service_method,task_attr,task_module,service_kwargs",
+    OTHER_USER_SERVICES,
+)
 def test_other_services_forward_user_id_to_delay(
-    monkeypatch, service_method, task_attr, task_module,
+    monkeypatch, service_method, task_attr, task_module, service_kwargs,
 ):
     """`create_{preview,carica,enrichment}_task` accettano e forward
     user_id alla task Celery via `.delay()`.
@@ -466,9 +510,9 @@ def test_other_services_forward_user_id_to_delay(
     Replacement R-04 di `inspect.getsource(method) + "user_id" in src`:
     spy su `.delay` per ogni task. Verifica anche signature.
     """
-    from app.core.orchestrator.task_service import TaskService, task_service
+    from app.core.orchestrator.task_service import task_service
 
-    method = getattr(TaskService, service_method)
+    method = _task_service_signature_target(service_method)
     sig = inspect.signature(method)
     assert "user_id" in sig.parameters, (
         f"TaskService.{service_method} non accetta user_id â€” il router "
@@ -490,21 +534,7 @@ def test_other_services_forward_user_id_to_delay(
 
     monkeypatch.setattr(task, "delay", fake_delay)
 
-    # Argomenti minimi richiesti per ogni service method.
-    common_kwargs = {"user_id": "usr_y"}
-    if service_method == "create_preview_task":
-        common_kwargs["project_id"] = "p1"
-        common_kwargs["limit"] = 10
-    elif service_method == "create_carica_task":
-        common_kwargs["project_id"] = "p1"
-        common_kwargs["canvas"] = {"nodes": [], "edges": []}
-        common_kwargs["carica_node_data"] = {}
-    elif service_method == "create_enrichment_task":
-        common_kwargs["project_id"] = "p1"
-        common_kwargs["canvas"] = {"nodes": [], "edges": []}
-        common_kwargs["output_format"] = "csv"
-
-    getattr(task_service, service_method)(**common_kwargs)
+    getattr(task_service, service_method)(user_id="usr_y", **service_kwargs)
 
     assert captured.get("user_id") == "usr_y", (
         f"{service_method} non forward user_id a .delay. "
@@ -515,20 +545,10 @@ def test_other_services_forward_user_id_to_delay(
 def test_migration_for_log_runs_user_id_exists():
     """La migration SQL che aggiunge la colonna user_id deve esistere
     ed essere applicabile (idempotente)."""
-    import os
-    from pathlib import Path
-
-    mig_dir = Path(__file__).resolve().parents[3] / "migrations"
-    candidates = [f for f in os.listdir(mig_dir) if "log_runs_user_id" in f]
-    assert len(candidates) >= 1, (
-        f"Nessuna migration per log_runs.user_id trovata in {mig_dir}"
-    )
-    sql = (mig_dir / candidates[0]).read_text(encoding="utf-8")
-    assert "ADD COLUMN IF NOT EXISTS user_id" in sql, (
-        "La migration deve usare ADD COLUMN IF NOT EXISTS per idempotenza."
-    )
-    assert "ALTER TABLE log_runs" in sql, (
-        "La migration deve alterare la tabella log_runs."
+    _assert_user_id_migration_exists(
+        "log_runs_user_id",
+        "ALTER TABLE log_runs",
+        "Nessuna migration per log_runs.user_id trovata in {mig_dir}",
     )
 
 
@@ -539,18 +559,12 @@ def test_migration_for_intermediate_runs_user_id_exists():
     """La nota originale N9 diceva 'persisti user_id nella run': ci sono
     DUE tabelle run (plenora.log_runs + intermediate.runs). Allineiamo
     entrambe per coerenza. Questa migration copre la seconda."""
-    import os
-    from pathlib import Path
-
-    mig_dir = Path(__file__).resolve().parents[3] / "migrations"
-    candidates = [f for f in os.listdir(mig_dir) if "intermediate_runs_user_id" in f]
-    assert len(candidates) >= 1, (
-        f"Nessuna migration per intermediate.runs.user_id in {mig_dir}. "
-        "Allineamento fra log_runs e runs incompleto."
+    _assert_user_id_migration_exists(
+        "intermediate_runs_user_id",
+        "ALTER TABLE runs",
+        "Nessuna migration per intermediate.runs.user_id in {mig_dir}. "
+        "Allineamento fra log_runs e runs incompleto.",
     )
-    sql = (mig_dir / candidates[0]).read_text(encoding="utf-8")
-    assert "ADD COLUMN IF NOT EXISTS user_id" in sql
-    assert "ALTER TABLE runs" in sql
 
 
 def test_intermediate_create_run_accepts_user_id():
@@ -574,12 +588,7 @@ def test_intermediate_create_run_writes_user_id_in_insert_sql(monkeypatch):
     """
     from app.core.intermediate import db as int_db
 
-    captured_calls = []
-
-    def spy_execute(sql, params=()):
-        captured_calls.append({"sql": sql, "params": tuple(params)})
-
-    monkeypatch.setattr(int_db, "execute", spy_execute)
+    captured_calls = _capture_execute(monkeypatch, "app.core.intermediate.db.execute")
     # Stub get_run per evitare fetch reale dopo l'INSERT.
     monkeypatch.setattr(int_db, "get_run", lambda run_id: {"run_id": run_id})
 
@@ -588,18 +597,11 @@ def test_intermediate_create_run_writes_user_id_in_insert_sql(monkeypatch):
         total_nodes=3, user_id="usr_intermediate",
     )
 
-    assert len(captured_calls) == 1, (
-        f"create_run deve eseguire 1 INSERT. Captured: {captured_calls}"
-    )
-    sql = captured_calls[0]["sql"]
-    params = captured_calls[0]["params"]
-
-    assert "INSERT INTO runs" in sql, "SQL deve essere INSERT INTO runs"
-    assert "user_id" in sql, (
-        "INSERT runs deve includere la colonna user_id."
-    )
-    assert "usr_intermediate" in params, (
-        f"user_id non bindato nei params (hardcoded NULL?). Params: {params}"
+    _assert_single_insert_user_id(
+        captured_calls,
+        "runs",
+        "usr_intermediate",
+        "create_run",
     )
 
 
@@ -632,29 +634,7 @@ def test_pipeline_task_passes_user_id_to_intermediate_create_run(monkeypatch):
     enrichment_task il pattern e' lo stesso ma il task body e' grosso
     (tested via bytecode probe `test_tasks_reference_intermediate_create_run`).
     """
-    from workers.tasks import pipeline_task as pt
-    from workers.celery_app import celery_app
-
-    monkeypatch.setattr(celery_app.conf, "task_always_eager", True)
-    monkeypatch.setattr(celery_app.conf, "task_eager_propagates", True)
-    monkeypatch.setattr(pt.execute_pipeline_task, "update_state", lambda *a, **kw: None)
-
-    # Idempotency / recheck / orchestrator: pass-through autorizzato.
-    monkeypatch.setattr(
-        "app.shared.idempotency.is_already_completed",
-        lambda run_id: False,
-    )
-    monkeypatch.setattr(
-        "app.shared.async_user_recheck.recheck_user_authorized",
-        lambda **kwargs: None,
-    )
-    fake_orchestrator = MagicMock()
-    fake_result = MagicMock()
-    fake_result.success = True
-    fake_result.message = "ok"
-    fake_result.to_dict = lambda: {"success": True}
-    fake_orchestrator.execute_pipeline.return_value = fake_result
-    monkeypatch.setattr(pt, "_build_orchestrator", lambda: fake_orchestrator)
+    pt = _patch_pipeline_eager_success(monkeypatch)
 
     # Logger no-op.
     monkeypatch.setattr("app.utils.logger.open_run", lambda **kwargs: None)

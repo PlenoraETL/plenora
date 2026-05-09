@@ -17,6 +17,33 @@ import pytest
 pytestmark = [pytest.mark.unit, pytest.mark.shared, pytest.mark.contract]
 
 
+_BACKEND_ROOT = Path(__file__).resolve().parent.parent.parent
+_MAIN_PY = _BACKEND_ROOT / "app" / "main.py"
+_RUNTIME_SERVICES_PY = _BACKEND_ROOT / "app" / "runtime" / "services.py"
+_RUNTIME_FIELD_NAMES = (
+    "project_service",
+    "connection_service",
+    "database_inspector",
+    "query_generator",
+    "query_executor",
+    "features_service",
+    "orchestrator",
+    "api_connection_service",
+    "datasource_service",
+)
+def _read(path: Path) -> str:
+    return path.read_text(encoding="utf-8")
+
+
+def _build_runtime_for_contract():
+    from app.runtime import build_runtime_services
+
+    return build_runtime_services(
+        settings=SimpleNamespace(DATA_DIR=Path("/tmp/plenora")),
+        save_function=MagicMock(name="save_dataframe"),
+    )
+
+
 # 1. Public API shape
 
 
@@ -45,18 +72,7 @@ def test_runtime_services_has_nine_canonical_fields():
     """
     from app.runtime import RuntimeServices
 
-    field_names = {f.name for f in fields(RuntimeServices)}
-    assert field_names == {
-        "project_service",
-        "connection_service",
-        "database_inspector",
-        "query_generator",
-        "query_executor",
-        "features_service",
-        "orchestrator",
-        "api_connection_service",
-        "datasource_service",
-    }
+    assert {f.name for f in fields(RuntimeServices)} == set(_RUNTIME_FIELD_NAMES)
 
 
 def test_runtime_services_is_frozen():
@@ -64,23 +80,10 @@ def test_runtime_services_is_frozen():
     source of truth, not a mutable scratch space."""
     from app.runtime import RuntimeServices
 
-    instance = RuntimeServices(
-        project_service=object(),
-        connection_service=object(),
-        database_inspector=object(),
-        query_generator=object(),
-        query_executor=object(),
-        features_service=object(),
-        orchestrator=object(),
-        api_connection_service=object(),
-        datasource_service=object(),
-    )
-    with pytest.raises(Exception):
-        instance.orchestrator = object()  # type: ignore[misc]
-    with pytest.raises(Exception):
-        instance.api_connection_service = object()  # type: ignore[misc]
-    with pytest.raises(Exception):
-        instance.datasource_service = object()  # type: ignore[misc]
+    instance = RuntimeServices(**{name: object() for name in _RUNTIME_FIELD_NAMES})
+    for name in ("orchestrator", "api_connection_service", "datasource_service"):
+        with pytest.raises(Exception):
+            setattr(instance, name, object())
 
 
 # 2. Factory dependency order â€” locked behavioural test
@@ -254,10 +257,7 @@ def test_build_runtime_services_kw_only():
 def test_main_py_consumes_runtime_services_factory():
     """Source-bound: `app/main.py` invokes `build_runtime_services`
     instead of constructing the 7 services inline. Drift guard."""
-    main_py = (
-        Path(__file__).resolve().parent.parent.parent / "app" / "main.py"
-    )
-    src = main_py.read_text(encoding="utf-8")
+    src = _read(_MAIN_PY)
 
     # Factory consumed.
     assert "from app.runtime import build_runtime_services" in src
@@ -294,24 +294,11 @@ def test_main_py_rebinds_globals_from_runtime_container():
     BE-GO-READY-BOOTSTRAP-ENGINE-017: added
     `datasource_service` as the 9th re-export.
     """
-    main_py = (
-        Path(__file__).resolve().parent.parent.parent / "app" / "main.py"
-    )
-    src = main_py.read_text(encoding="utf-8")
+    src = _read(_MAIN_PY)
 
     assert "_runtime_services = build_runtime_services(" in src
     # Each field is rebound at module level.
-    for name in (
-        "project_service",
-        "connection_service",
-        "database_inspector",
-        "query_generator",
-        "query_executor",
-        "features_service",
-        "orchestrator",
-        "api_connection_service",
-        "datasource_service",
-    ):
+    for name in _RUNTIME_FIELD_NAMES:
         assert f"{name} = _runtime_services.{name}" in src, (
             f"main.py must re-export `{name}` from the container "
             "to preserve the test monkeypatch surface."
@@ -348,9 +335,13 @@ def test_bootstrap_flips_completion_flag_only_on_success(monkeypatch):
     importlib.reload(bootstrap_mod)
 
     # Stub the four step entry points.
-    fake_settings = SimpleNamespace(validate_startup=MagicMock())
+    fake_settings = SimpleNamespace()
 
     monkeypatch.setattr("app.config.settings", fake_settings)
+    monkeypatch.setattr(
+        "app.startup_validation.validate_startup",
+        MagicMock(),
+    )
     monkeypatch.setattr(
         "app.shared.cloud_backends.validate_storage_config",
         MagicMock(),
@@ -371,6 +362,10 @@ def test_bootstrap_flips_completion_flag_only_on_success(monkeypatch):
     # bootstrap. The flag should NOT flip from False back to True.
     importlib.reload(bootstrap_mod)
     monkeypatch.setattr("app.config.settings", fake_settings)
+    monkeypatch.setattr(
+        "app.startup_validation.validate_startup",
+        MagicMock(),
+    )
     monkeypatch.setattr(
         "app.shared.cloud_backends.validate_storage_config",
         MagicMock(),
@@ -394,11 +389,7 @@ def test_runtime_services_module_does_not_import_fastapi_or_starlette():
     """The factory module must remain leaf: no FastAPI / Starlette
     imports. Tests that exercise the container shape should not pay
     the cost of pulling the web stack."""
-    src_path = (
-        Path(__file__).resolve().parent.parent.parent
-        / "app" / "runtime" / "services.py"
-    )
-    src = src_path.read_text(encoding="utf-8")
+    src = _read(_RUNTIME_SERVICES_PY)
     forbidden = ("fastapi", "starlette")
     for line in src.splitlines():
         stripped = line.lstrip()
@@ -418,15 +409,9 @@ def test_runtime_container_owns_api_connection_service_field():
     """The 8th field exists, is typed, and references the canonical
     arricchisci singleton â€” NOT a fresh construction."""
     import app.core.arricchisci.api_connector as api_connector_mod
-    from app.runtime import RuntimeServices, build_runtime_services
-    from types import SimpleNamespace
-    from pathlib import Path as _Path
+    from app.runtime import RuntimeServices
 
-    fake_settings = SimpleNamespace(DATA_DIR=_Path("/tmp/plenora"))
-    container = build_runtime_services(
-        settings=fake_settings,
-        save_function=MagicMock(name="save_dataframe"),
-    )
+    container = _build_runtime_for_contract()
     # Identity invariant: the field is the SAME object as the
     # canonical module-level singleton. Any test that
     # `patch("app.core.arricchisci.api_connector.api_connection_service.<method>", ...)`
@@ -444,10 +429,7 @@ def test_main_py_no_longer_imports_api_connection_service_directly():
     patch surface preserved), but `main.py` consumes it via the
     container re-export, not via a direct import.
     """
-    main_py = (
-        Path(__file__).resolve().parent.parent.parent / "app" / "main.py"
-    )
-    src = main_py.read_text(encoding="utf-8")
+    src = _read(_MAIN_PY)
     forbidden_import = (
         "from app.core.arricchisci.api_connector import api_connection_service"
     )
@@ -482,11 +464,7 @@ def test_factory_does_not_reconstruct_api_connection_service():
     construction would produce a divergent instance, breaking every
     `patch("...api_connection_service.<method>", ...)` test.
     """
-    src_path = (
-        Path(__file__).resolve().parent.parent.parent
-        / "app" / "runtime" / "services.py"
-    )
-    src = src_path.read_text(encoding="utf-8")
+    src = _read(_RUNTIME_SERVICES_PY)
     # Reject any line that constructs ApiConnectionService inline.
     for line in src.splitlines():
         stripped = line.strip()
@@ -515,15 +493,9 @@ def test_runtime_container_owns_datasource_service_field():
     """The 9th field exists, is typed, and references the canonical
     datasources singleton â€” NOT a fresh construction."""
     import app.core.datasources.service as ds_service_mod
-    from app.runtime import RuntimeServices, build_runtime_services
-    from types import SimpleNamespace
-    from pathlib import Path as _Path
+    from app.runtime import RuntimeServices
 
-    fake_settings = SimpleNamespace(DATA_DIR=_Path("/tmp/plenora"))
-    container = build_runtime_services(
-        settings=fake_settings,
-        save_function=MagicMock(name="save_dataframe"),
-    )
+    container = _build_runtime_for_contract()
     # Identity invariant: same object as the canonical module
     # singleton. A future test that does
     # `patch("app.core.datasources.service.datasource_service.<m>", ...)`
@@ -540,10 +512,7 @@ def test_main_py_no_longer_imports_datasource_service_directly():
     The singleton stays in `service.py:440` (canonical attribute
     preserved); `main.py` consumes it via container re-export.
     """
-    main_py = (
-        Path(__file__).resolve().parent.parent.parent / "app" / "main.py"
-    )
-    src = main_py.read_text(encoding="utf-8")
+    src = _read(_MAIN_PY)
     forbidden_import = (
         "from app.core.datasources.service import datasource_service"
     )
@@ -577,11 +546,7 @@ def test_factory_does_not_reconstruct_datasource_service():
     construction would produce a divergent instance, breaking the
     identity invariant.
     """
-    src_path = (
-        Path(__file__).resolve().parent.parent.parent
-        / "app" / "runtime" / "services.py"
-    )
-    src = src_path.read_text(encoding="utf-8")
+    src = _read(_RUNTIME_SERVICES_PY)
     # Reject any line that constructs DataSourceService inline.
     for line in src.splitlines():
         stripped = line.strip()

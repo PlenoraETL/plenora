@@ -18,6 +18,47 @@ pytestmark = [pytest.mark.unit, pytest.mark.contract]
 _BACKEND_ROOT = Path(__file__).resolve().parent.parent.parent
 _APP = _BACKEND_ROOT / "app"
 _WORKERS = _BACKEND_ROOT / "workers"
+_TEMP_TARGETS = {"NamedTemporaryFile", "mkdtemp", "TemporaryDirectory"}
+_VALID_TEMP_CATEGORIES = {
+    "PATH_REQUIRED_FILE",
+    "DIR_MULTIFILE",
+    "STAGING_INGESTION",
+    "MIGRATION_CANDIDATE",
+}
+
+
+def _iter_python_modules():
+    for root in (_APP, _WORKERS):
+        if not root.exists():
+            continue
+        for py in root.rglob("*.py"):
+            if "__pycache__" in str(py):
+                continue
+            try:
+                text = py.read_text(encoding="utf-8")
+                tree = ast.parse(text, filename=str(py))
+            except (UnicodeDecodeError, OSError, SyntaxError):
+                continue
+            rel = str(py.relative_to(_BACKEND_ROOT)).replace("\\", "/")
+            yield rel, tree
+
+
+def _call_name(node: ast.Call) -> str | None:
+    func = node.func
+    if isinstance(func, ast.Name):
+        return func.id
+    if isinstance(func, ast.Attribute):
+        return func.attr
+    return None
+
+
+def _scan_callsites(predicate) -> dict[str, list[int]]:
+    found: dict[str, list[int]] = {}
+    for rel, tree in _iter_python_modules():
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Call) and predicate(node):
+                found.setdefault(rel, []).append(node.lineno)
+    return found
 
 
 # A) Bytes-first preference for the Resource Engine
@@ -60,34 +101,15 @@ def _scan_resource_engine_path_mode_callers() -> dict[str, list[int]]:
     intentionally generic — narrowing to specific receivers
     (registry / loader instance) would miss future call shapes.
     """
-    found: dict[str, list[int]] = {}
-    for root in (_APP, _WORKERS):
-        if not root.exists():
-            continue
-        for py in root.rglob("*.py"):
-            if "__pycache__" in str(py):
-                continue
-            try:
-                text = py.read_text(encoding="utf-8")
-            except (UnicodeDecodeError, OSError):
-                continue
-            try:
-                tree = ast.parse(text, filename=str(py))
-            except SyntaxError:
-                continue
-            for node in ast.walk(tree):
-                if not isinstance(node, ast.Call):
-                    continue
-                for kw in node.keywords:
-                    if kw.arg != "mode":
-                        continue
-                    if not isinstance(kw.value, ast.Constant):
-                        continue
-                    if kw.value.value != "path":
-                        continue
-                    rel = str(py.relative_to(_BACKEND_ROOT)).replace("\\", "/")
-                    found.setdefault(rel, []).append(node.lineno)
-    return found
+    def is_path_mode_call(node: ast.Call) -> bool:
+        return any(
+            kw.arg == "mode"
+            and isinstance(kw.value, ast.Constant)
+            and kw.value.value == "path"
+            for kw in node.keywords
+        )
+
+    return _scan_callsites(is_path_mode_call)
 
 
 def test_resource_engine_path_mode_callers_locked_to_allowlist():
@@ -267,13 +289,7 @@ def test_temp_inventory_classification_buckets_match_brief():
     explicit decision to add a 5th bucket here.
     """
     used_categories = {cat for (cat, _) in _TEMP_INVENTORY.values()}
-    valid = {
-        "PATH_REQUIRED_FILE",
-        "DIR_MULTIFILE",
-        "STAGING_INGESTION",
-        "MIGRATION_CANDIDATE",
-    }
-    extra = used_categories - valid
+    extra = used_categories - _VALID_TEMP_CATEGORIES
     assert not extra, (
         f"Inventory uses categories outside the four-bucket "
         f"brief: {sorted(extra)}. If a new category is needed "
@@ -325,7 +341,7 @@ _TEMP_INVENTORY: dict[tuple[str, int], tuple[str, str]] = {
     # The line is no longer a tempfile call site; the inventory
     # ratchet (`test_temp_materialization_inventory_is_complete`)
     # confirms it is no longer in the AST scan.
-    ("app/core/files/service.py", 577): (
+    ("app/core/files/service.py", 571): (
         "PATH_REQUIRED_FILE",
         "FileSourceService._temp_file_for caller contract returns "
         "Path for SHP/GDB downstream consumers (fiona/geopandas "
@@ -360,7 +376,7 @@ _TEMP_INVENTORY: dict[tuple[str, int], tuple[str, str]] = {
     # was deleted as dead code. R-021.1 is closed; the typed
     # replacement is `ResultBlobLoader._materialize_to_temp_path`,
     # already inventoried below as PATH_REQUIRED_FILE.
-    ("app/core/eseguibili/router.py", 308): (
+    ("app/core/eseguibili/router.py", 330): (
         "PATH_REQUIRED_FILE",
         "Eseguibile output materialization: temp path written to "
         "FastAPI StreamingResponse via FileResponse. Path "
@@ -380,7 +396,7 @@ _TEMP_INVENTORY: dict[tuple[str, int], tuple[str, str]] = {
         "DIR_MULTIFILE",
         "IMDF bundle re-cache fallback: same multi-file pattern.",
     ),
-    ("app/core/resources/loaders/result_blob.py", 303): (
+    ("app/core/resources/loaders/result_blob.py", 343): (
         "PATH_REQUIRED_FILE",
         "ResultBlobLoader._materialize_to_temp_path (mode='path'): "
         "the ENGINE'S OWN path-mode tempfile. Caller-owned "
@@ -415,7 +431,7 @@ _TEMP_INVENTORY: dict[tuple[str, int], tuple[str, str]] = {
         "OGR driver requires path; multi-file zip not "
         "expressible as bytes-only.",
     ),
-    ("workers/tasks/enrichment_task.py", 1012): (
+    ("workers/tasks/enrichment_task.py", 1018): (
         "PATH_REQUIRED_FILE",
         "Enrichment task gpkg/shp output (eseguibile): same "
         "OGR-driver-requires-path constraint as "
@@ -452,39 +468,12 @@ def _scan_temp_callsites() -> set[tuple[str, int]]:
     """Find every ``NamedTemporaryFile`` / ``mkdtemp`` /
     ``TemporaryDirectory`` Call in app/+workers/.
     """
-    targets = {"NamedTemporaryFile", "mkdtemp", "TemporaryDirectory"}
-    found: set[tuple[str, int]] = set()
-    for root in (_APP, _WORKERS):
-        if not root.exists():
-            continue
-        for py in root.rglob("*.py"):
-            if "__pycache__" in str(py):
-                continue
-            try:
-                text = py.read_text(encoding="utf-8")
-            except (UnicodeDecodeError, OSError):
-                continue
-            try:
-                tree = ast.parse(text, filename=str(py))
-            except SyntaxError:
-                continue
-            for node in ast.walk(tree):
-                if not isinstance(node, ast.Call):
-                    continue
-                f = node.func
-                # Match `NamedTemporaryFile(...)` and
-                # `tempfile.NamedTemporaryFile(...)` and
-                # `_tf.TemporaryDirectory(...)` etc.
-                attr_name = None
-                if isinstance(f, ast.Name):
-                    attr_name = f.id
-                elif isinstance(f, ast.Attribute):
-                    attr_name = f.attr
-                if attr_name not in targets:
-                    continue
-                rel = str(py.relative_to(_BACKEND_ROOT)).replace("\\", "/")
-                found.add((rel, node.lineno))
-    return found
+    by_file = _scan_callsites(lambda node: _call_name(node) in _TEMP_TARGETS)
+    return {
+        (rel, lineno)
+        for rel, lines in by_file.items()
+        for lineno in lines
+    }
 
 
 def test_temp_materialization_inventory_is_complete():
@@ -524,18 +513,12 @@ def test_temp_inventory_entries_have_valid_category_and_rationale():
     categories and carry a non-trivial rationale (no empty
     string, no bare TODO, at least 30 chars).
     """
-    valid_categories = {
-        "PATH_REQUIRED_FILE",
-        "DIR_MULTIFILE",
-        "STAGING_INGESTION",
-        "MIGRATION_CANDIDATE",
-    }
     bad: list[str] = []
     for (rel, ln), (category, rationale) in _TEMP_INVENTORY.items():
-        if category not in valid_categories:
+        if category not in _VALID_TEMP_CATEGORIES:
             bad.append(
                 f"{rel}:{ln} — invalid category {category!r}; "
-                f"must be one of {sorted(valid_categories)}"
+                f"must be one of {sorted(_VALID_TEMP_CATEGORIES)}"
             )
             continue
         if not rationale or len(rationale.strip()) < 30 or "TODO" in rationale:

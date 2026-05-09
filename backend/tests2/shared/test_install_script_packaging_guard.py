@@ -23,6 +23,23 @@ def install_sh_text() -> str:
     return _INSTALL_SH.read_text(encoding="utf-8")
 
 
+def _bash_function(text: str, name: str) -> str:
+    start = text.index(f"\n{name}() {{")
+    end = text.index("\n}\n", start)
+    return text[start:end]
+
+
+def _array_block(text: str, name: str) -> str:
+    start = text.index(f"{name}=(")
+    end = text.index(")", start)
+    return text[start:end]
+
+
+def _assert_contains_all(text: str, markers: tuple[str, ...], message: str) -> None:
+    for marker in markers:
+        assert marker in text, message.format(marker=marker)
+
+
 # 1. Required commands array stays canonical
 
 
@@ -42,17 +59,13 @@ def test_installer_required_commands_array_is_canonical(install_sh_text: str):
         "Single source of truth for required commands missing - "
         "INSTALLER_REQUIRED_COMMANDS array must exist."
     )
-    # Slice from the array opener to its closing paren (single-quoted
-    # search; bash arrays are line-delimited in this script).
-    start = install_sh_text.index("INSTALLER_REQUIRED_COMMANDS=(")
-    end = install_sh_text.index(")", start)
-    array_block = install_sh_text[start:end]
-    for cmd in _EXPECTED_REQUIRED_COMMANDS:
-        assert cmd in array_block, (
-            f"INSTALLER_REQUIRED_COMMANDS missing canonical entry: {cmd!r}. "
-            "Removing or renaming an entry breaks the cleanroom acceptance "
-            "contract documented in docs/ops/install-non-docker.md section 12.1."
-        )
+    _assert_contains_all(
+        _array_block(install_sh_text, "INSTALLER_REQUIRED_COMMANDS"),
+        _EXPECTED_REQUIRED_COMMANDS,
+        "INSTALLER_REQUIRED_COMMANDS missing canonical entry: {marker!r}. "
+        "Removing or renaming an entry breaks the cleanroom acceptance "
+        "contract documented in docs/ops/install-non-docker.md section 12.1.",
+    )
 
 
 # 2. Python pin matches CI
@@ -76,10 +89,7 @@ def test_installer_shared_lib_probe_includes_gdal(install_sh_text: str):
         "INSTALLER_REQUIRED_SHARED_LIBS array missing - the cleanroom "
         "guard MUST probe at least one native shared lib."
     )
-    start = install_sh_text.index("INSTALLER_REQUIRED_SHARED_LIBS=(")
-    end = install_sh_text.index(")", start)
-    array_block = install_sh_text[start:end]
-    assert "gdal:" in array_block, (
+    assert "gdal:" in _array_block(install_sh_text, "INSTALLER_REQUIRED_SHARED_LIBS"), (
         "Native lib probe must include 'gdal' - it is the only "
         "non-pip-bundled runtime dep (fiona/geopandas import it via "
         "ctypes at runtime). Without this probe a host can pass `pip "
@@ -88,42 +98,65 @@ def test_installer_shared_lib_probe_includes_gdal(install_sh_text: str):
     )
 
 
-# 4. --check flag wired and short-circuits
+# 4. CLI flags wired and short-circuit
 
 
-def test_check_flag_is_parsed(install_sh_text: str):
-    assert "--check)" in install_sh_text, (
-        "`--check` flag must be parsed in the argv loop."
+@pytest.mark.parametrize(
+    ("flag", "assignment", "default"),
+    (
+        ("--check)", "CHECK_ONLY=1", None),
+        ("--smoke)", "SMOKE_ONLY=1", "SMOKE_ONLY=0"),
+    ),
+)
+def test_installer_mode_flag_is_parsed(
+    install_sh_text: str,
+    flag: str,
+    assignment: str,
+    default: str | None,
+):
+    assert flag in install_sh_text, f"`{flag[:-1]}` flag must be parsed."
+    assert assignment in install_sh_text, (
+        f"`{flag[:-1]}` must set {assignment!r} in the argv loop."
     )
-    assert "CHECK_ONLY=1" in install_sh_text, (
-        "`--check` must set CHECK_ONLY=1."
-    )
+    if default is not None:
+        assert default in install_sh_text, (
+            f"Default value {default!r} must be initialized before the "
+            "mode branch is evaluated under `set -u`."
+        )
 
 
-def test_check_only_short_circuits_before_prompts(install_sh_text: str):
-    # main() must run validate_prereqs + validate_packaging then exit
-    # via step_check_only_summary BEFORE step_gather_config (which
-    # prompts the operator).
-    main_start = install_sh_text.index("\nmain() {")
-    main_end = install_sh_text.index("\n}\n", main_start)
-    main_body = install_sh_text[main_start:main_end]
-
-    assert "(( CHECK_ONLY ))" in main_body, (
-        "main() must branch on CHECK_ONLY before running the full "
-        "install pipeline."
+@pytest.mark.parametrize(
+    ("mode_expr", "summary_step", "must_precede"),
+    (
+        ("(( CHECK_ONLY ))", "step_check_only_summary", ("step_gather_config",)),
+        (
+            "(( SMOKE_ONLY ))",
+            "step_smoke_summary",
+            ("step_gather_config", "step_probe_services", "step_write_env"),
+        ),
+    ),
+)
+def test_installer_mode_branch_short_circuits_before_prompting_or_writes(
+    install_sh_text: str,
+    mode_expr: str,
+    summary_step: str,
+    must_precede: tuple[str, ...],
+):
+    main_body = _bash_function(install_sh_text, "main")
+    assert mode_expr in main_body, (
+        f"main() must branch on {mode_expr} before the full install pipeline."
     )
-    assert "step_check_only_summary" in main_body, (
-        "main() must invoke step_check_only_summary in the --check "
-        "branch so the script exits with a structured PASS/FAIL summary."
+    assert summary_step in main_body, (
+        f"main() must invoke {summary_step} in the mode branch so it exits "
+        "with a structured PASS/FAIL summary."
     )
-    # Ordering: the CHECK_ONLY branch must appear lexically BEFORE
-    # step_gather_config (which prompts).
-    check_pos = main_body.index("CHECK_ONLY")
-    gather_pos = main_body.index("step_gather_config")
-    assert check_pos < gather_pos, (
-        "CHECK_ONLY branch must short-circuit BEFORE step_gather_config; "
-        "otherwise --check would prompt the operator."
-    )
+    mode_pos = main_body.index(mode_expr)
+    for later_step in must_precede:
+        assert mode_pos < main_body.index(later_step), (
+            f"{mode_expr} branch must short-circuit BEFORE {later_step}; "
+            "otherwise the read-only mode would prompt, connect to services, "
+            "or mutate backend/.env."
+        )
 
 
 # 5. step_validate_packaging exists and is invoked in main
@@ -135,9 +168,7 @@ def test_step_validate_packaging_defined_and_invoked(install_sh_text: str):
         "native packaging probes (shared libs, pg_dump version, venv "
         "smoke import)."
     )
-    main_start = install_sh_text.index("\nmain() {")
-    main_end = install_sh_text.index("\n}\n", main_start)
-    main_body = install_sh_text[main_start:main_end]
+    main_body = _bash_function(install_sh_text, "main")
     # Must be invoked at least twice: once on the --check branch, once
     # on the full-install branch.
     assert main_body.count("step_validate_packaging") >= 2, (
@@ -252,64 +283,6 @@ def test_smoke_flag_documented_in_usage_block(install_sh_text: str):
     )
 
 
-def test_smoke_flag_is_parsed(install_sh_text: str):
-    assert "--smoke)" in install_sh_text, (
-        "`--smoke` flag must be parsed in the argv loop alongside "
-        "`--check`."
-    )
-    assert "SMOKE_ONLY=1" in install_sh_text, (
-        "`--smoke` must set SMOKE_ONLY=1 (mirrors the CHECK_ONLY "
-        "pattern)."
-    )
-    assert "SMOKE_ONLY=0" in install_sh_text, (
-        "Default value `SMOKE_ONLY=0` must be initialized at the top "
-        "of the globals block (set -u would otherwise trip on the "
-        "(( SMOKE_ONLY )) test)."
-    )
-
-
-def test_smoke_only_short_circuits_before_prompts_and_writes(
-    install_sh_text: str,
-):
-    # main() must enter the SMOKE_ONLY branch BEFORE step_gather_config
-    # (which prompts), step_probe_services (which connects to PG/Redis),
-    # and step_write_env (which writes backend/.env). Exit must happen
-    # via step_smoke_summary which `exit`s explicitly.
-    main_start = install_sh_text.index("\nmain() {")
-    main_end = install_sh_text.index("\n}\n", main_start)
-    main_body = install_sh_text[main_start:main_end]
-
-    assert "(( SMOKE_ONLY ))" in main_body, (
-        "main() must branch on SMOKE_ONLY before running the full "
-        "install pipeline."
-    )
-    assert "step_smoke_summary" in main_body, (
-        "main() must invoke step_smoke_summary in the --smoke branch "
-        "so the script exits with a structured PASS/FAIL summary."
-    )
-
-    smoke_pos = main_body.index("(( SMOKE_ONLY ))")
-    gather_pos = main_body.index("step_gather_config")
-    probe_pos = main_body.index("step_probe_services")
-    write_pos = main_body.index("step_write_env")
-
-    assert smoke_pos < gather_pos, (
-        "SMOKE_ONLY branch must short-circuit BEFORE "
-        "step_gather_config; otherwise --smoke would prompt the "
-        "operator (forbidden by the smoke contract)."
-    )
-    assert smoke_pos < probe_pos, (
-        "SMOKE_ONLY branch must short-circuit BEFORE "
-        "step_probe_services; the smoke flag must not connect to "
-        "PG/Redis on its own (those probes belong to the full "
-        "installer)."
-    )
-    assert smoke_pos < write_pos, (
-        "SMOKE_ONLY branch must short-circuit BEFORE step_write_env; "
-        "--smoke is read-only and must not touch backend/.env."
-    )
-
-
 # 10. INSTALLER_SMOKE_MEMORY_CAPS canonical (six caps)
 #
 # The smoke harness reads runtime-effective memory caps via
@@ -336,36 +309,13 @@ def test_installer_smoke_memory_caps_array_is_canonical(
         "INSTALLER_SMOKE_MEMORY_CAPS array must exist as the script-"
         "side single source of truth for the smoke caps loop."
     )
-    start = install_sh_text.index("INSTALLER_SMOKE_MEMORY_CAPS=(")
-    end = install_sh_text.index(")", start)
-    array_block = install_sh_text[start:end]
-    for cap in _EXPECTED_SMOKE_MEMORY_CAPS:
-        assert cap in array_block, (
-            f"INSTALLER_SMOKE_MEMORY_CAPS missing canonical cap: "
-            f"{cap!r}. Dropping a cap here means the runtime guard "
-            "becomes invisible at install time. Adding a cap here "
-            "without also updating the doc-side list "
-            "(test_install_smoke_harness_doc_guard.py) is also a bug."
-        )
-
-
-def test_installer_smoke_memory_caps_includes_artifact_preview(
-    install_sh_text: str,
-):
-    # Pin ARTIFACT_PREVIEW_MAX_BYTES specifically: this cap was added
-    # by BE-GO-READY-RESOURCE-ENGINE-012 (intermediate artifact bounded
-    # preview) and must remain in the smoke loop so operators see the
-    # runtime-effective value at install time.
-    start = install_sh_text.index("INSTALLER_SMOKE_MEMORY_CAPS=(")
-    end = install_sh_text.index(")", start)
-    array_block = install_sh_text[start:end]
-    assert "ARTIFACT_PREVIEW_MAX_BYTES" in array_block, (
-        "ARTIFACT_PREVIEW_MAX_BYTES must remain in "
-        "INSTALLER_SMOKE_MEMORY_CAPS. The intermediate artifact "
-        "preview reader (R-008.H1) is bounded by this cap; dropping "
-        "it from the smoke loop would let an operator declare a "
-        "small-PC install green without verifying the cap that "
-        "actually triggers on Parquet preview."
+    _assert_contains_all(
+        _array_block(install_sh_text, "INSTALLER_SMOKE_MEMORY_CAPS"),
+        _EXPECTED_SMOKE_MEMORY_CAPS,
+        "INSTALLER_SMOKE_MEMORY_CAPS missing canonical cap: {marker!r}. "
+        "Dropping a cap here means the runtime guard becomes invisible "
+        "at install time. ARTIFACT_PREVIEW_MAX_BYTES is included in this "
+        "canonical set for the intermediate artifact preview cap.",
     )
 
 
@@ -518,47 +468,26 @@ def test_smoke_cleanroom_ping_uses_bounded_get(install_sh_text: str):
 
 def test_smoke_branch_only_reads_smoke_env_vars(install_sh_text: str):
     smoke_block = _slice_smoke_block(install_sh_text)
-    # The smoke section may consult only PLENORA_SMOKE_* variables.
-    # Reading PLENORA_INSTALL_* would mean the smoke flag is
-    # double-purposing the installer's input env vars, which violates
-    # the read-only contract (those drive prompts/writes).
-    for forbidden in (
+    forbidden_install_vars = (
         "PLENORA_INSTALL_DATABASE_URL",
         "PLENORA_INSTALL_REDIS_URL",
         "PLENORA_INSTALL_STORAGE_POLICY",
-    ):
-        assert forbidden not in smoke_block, (
-            f"--smoke must not read {forbidden}. The smoke flag is "
-            "post-install verification; it consumes only "
-            "PLENORA_SMOKE_* env vars."
+    )
+    for var_name in forbidden_install_vars:
+        assert var_name not in smoke_block, (
+            f"--smoke must not read {var_name}. The smoke flag is "
+            "post-install verification; it consumes only PLENORA_SMOKE_* "
+            "env vars."
         )
-    # Positive lock: at least the two documented smoke knobs must be
-    # consulted.
-    for required in (
-        "PLENORA_SMOKE_BACKEND_URL",
-        "PLENORA_SMOKE_RUN_PING",
-    ):
-        assert required in smoke_block, (
-            f"--smoke must consult {required} (documented in the "
-            "usage header and in docs/ops/install-marco-dry-run.md "
-            "section 5.0)."
-        )
+    _assert_contains_all(
+        smoke_block,
+        ("PLENORA_SMOKE_BACKEND_URL", "PLENORA_SMOKE_RUN_PING"),
+        "--smoke must consult {marker} (documented in the usage header "
+        "and in docs/ops/install-marco-dry-run.md section 5.0).",
+    )
 
 
 # 15. --check reports env file + venv status (BE-GO-READY-INSTALL-020)
-
-
-def test_check_env_status_function_defined(install_sh_text: str):
-    """BE-GO-READY-INSTALL-020: step_check_env_status must be defined
-    in scripts/install.sh so --check reports backend/.env and
-    backend/venv existence as part of its informational preflight
-    output without reading secrets or writing anything."""
-    assert "step_check_env_status() {" in install_sh_text, (
-        "step_check_env_status function must be defined in "
-        "scripts/install.sh (BE-GO-READY-INSTALL-020). It reports "
-        "backend/.env and backend/venv existence in --check mode "
-        "without reading secrets or writing anything."
-    )
 
 
 def test_check_env_status_reports_env_file_and_venv(install_sh_text: str):
@@ -572,21 +501,12 @@ def test_check_env_status_reports_env_file_and_venv(install_sh_text: str):
         "# Step 2 - Gather configuration", fn_start
     )
     fn_text = install_sh_text[fn_start:next_section]
-    assert "ENV_FILE" in fn_text, (
-        "step_check_env_status must reference ENV_FILE to check "
-        "whether backend/.env exists (BE-GO-READY-INSTALL-020). "
-        "Reading only the path, not any secret values."
-    )
-    assert "venv" in fn_text, (
-        "step_check_env_status must reference 'venv' to check "
-        "whether backend/venv exists (BE-GO-READY-INSTALL-020). "
-        "The venv path is the operator's indicator that step 6 "
-        "of the install runbook has been completed."
-    )
-    assert "EXISTS" in fn_text, (
-        "step_check_env_status must emit 'EXISTS' when backend/.env "
-        "is present so the operator gets a clear positive signal "
-        "in the --check transcript (BE-GO-READY-INSTALL-020)."
+    _assert_contains_all(
+        fn_text,
+        ("ENV_FILE", "venv", "EXISTS"),
+        "step_check_env_status must include {marker!r} so --check reports "
+        "backend/.env and backend/venv existence without reading secrets "
+        "or writing anything (BE-GO-READY-INSTALL-020).",
     )
 
 
@@ -595,9 +515,7 @@ def test_check_env_status_called_in_check_only_branch(install_sh_text: str):
     branch of main(), before step_gather_config (which prompts) and
     before step_check_only_summary (so the env/venv status appears
     before the final PASS/FAIL line)."""
-    main_start = install_sh_text.index("\nmain() {")
-    main_end = install_sh_text.index("\n}\n", main_start)
-    main_body = install_sh_text[main_start:main_end]
+    main_body = _bash_function(install_sh_text, "main")
     assert "step_check_env_status" in main_body, (
         "step_check_env_status must be called inside main() "
         "(BE-GO-READY-INSTALL-020). Currently absent from main."

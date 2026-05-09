@@ -6,11 +6,10 @@ Lock the boundary additions and the beat hook wiring:
 
 from __future__ import annotations
 
-import sys
 import time
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 
@@ -36,58 +35,48 @@ def test_settings_defaults_expose_storage_reconcile_tunables():
     assert Settings.DEFAULTS["STORAGE_RECONCILE_BACKOFF_BASE_SECONDS"] > 0
 
 
-# compute_next_retry_at — pure backoff helper
+# compute_next_retry_at - pure backoff helper
 
 
-def test_compute_next_retry_at_first_attempt_no_backoff():
-    """attempts=1 (first failure) → now + base_seconds (no exponent)."""
+@pytest.mark.parametrize(
+    ("attempts", "expected_seconds"),
+    [(1, 60), (2, 120), (3, 240), (4, 480)],
+)
+def test_compute_next_retry_at_backoff_growth(attempts, expected_seconds):
     from app.shared.storage_reconciliation import compute_next_retry_at
 
     now = datetime(2026, 5, 4, 12, 0, 0, tzinfo=timezone.utc)
-    out = compute_next_retry_at(1, base_seconds=60, now=now)
-    assert out == now + timedelta(seconds=60)
-
-
-def test_compute_next_retry_at_exponential_growth():
-    """attempts=N → base * 2**(N-1) seconds."""
-    from app.shared.storage_reconciliation import compute_next_retry_at
-
-    now = datetime(2026, 5, 4, 12, 0, 0, tzinfo=timezone.utc)
-    assert compute_next_retry_at(2, base_seconds=60, now=now) == now + timedelta(seconds=120)
-    assert compute_next_retry_at(3, base_seconds=60, now=now) == now + timedelta(seconds=240)
-    assert compute_next_retry_at(4, base_seconds=60, now=now) == now + timedelta(seconds=480)
+    assert compute_next_retry_at(attempts, base_seconds=60, now=now) == (
+        now + timedelta(seconds=expected_seconds)
+    )
 
 
 def test_compute_next_retry_at_capped_at_24h_or_2_8():
-    """Exponent capped (2**8) so backoff never explodes."""
     from app.shared.storage_reconciliation import compute_next_retry_at
 
     now = datetime(2026, 5, 4, 12, 0, 0, tzinfo=timezone.utc)
-    # attempts=20 → exponent capped → not larger than attempts=9 (2**8).
     out_20 = compute_next_retry_at(20, base_seconds=60, now=now)
     out_9 = compute_next_retry_at(9, base_seconds=60, now=now)
     assert out_20 == out_9
 
 
-def test_compute_next_retry_at_rejects_invalid_attempts():
+@pytest.mark.parametrize(
+    "kwargs",
+    [
+        {"attempts": 0, "base_seconds": 60},
+        {"attempts": -1, "base_seconds": 60},
+        {"attempts": 1, "base_seconds": 0},
+        {"attempts": 1, "base_seconds": -5},
+    ],
+)
+def test_compute_next_retry_at_rejects_invalid_args(kwargs):
     from app.shared.storage_reconciliation import compute_next_retry_at
 
     with pytest.raises(ValueError):
-        compute_next_retry_at(0, base_seconds=60)
-    with pytest.raises(ValueError):
-        compute_next_retry_at(-1, base_seconds=60)
+        compute_next_retry_at(**kwargs)
 
 
-def test_compute_next_retry_at_rejects_invalid_base_seconds():
-    from app.shared.storage_reconciliation import compute_next_retry_at
-
-    with pytest.raises(ValueError):
-        compute_next_retry_at(1, base_seconds=0)
-    with pytest.raises(ValueError):
-        compute_next_retry_at(1, base_seconds=-5)
-
-
-# fetch_due_pending_deletes — read-only fetch
+# fetch_due_pending_deletes - read-only fetch
 
 
 def _capture_fetchall(monkeypatch, return_rows):
@@ -160,13 +149,12 @@ def test_fetch_due_pending_deletes_returns_typed_rows():
     assert out[1].attempts == 3
 
 
-def test_fetch_due_pending_deletes_zero_or_negative_limit_raises():
+@pytest.mark.parametrize("limit", [0, -1])
+def test_fetch_due_pending_deletes_zero_or_negative_limit_raises(limit):
     from app.shared import storage_reconciliation as recon
 
     with pytest.raises(ValueError):
-        recon.fetch_due_pending_deletes(limit=0)
-    with pytest.raises(ValueError):
-        recon.fetch_due_pending_deletes(limit=-1)
+        recon.fetch_due_pending_deletes(limit=limit)
 
 
 def test_fetch_due_pending_deletes_swallows_db_error_returns_empty():
@@ -272,6 +260,62 @@ def _settings_stub(**kwargs):
     return ns
 
 
+def _delete_row(
+    *,
+    id="rec-1",
+    domain="file_source",
+    storage_key="key/x",
+    attempts=0,
+):
+    from app.shared.storage_reconciliation import PendingReconciliationRow
+
+    return PendingReconciliationRow(
+        id=id,
+        domain=domain,
+        storage_key=storage_key,
+        operation="delete",
+        attempts=attempts,
+    )
+
+
+def _run_reconcile_storage(
+    monkeypatch,
+    *,
+    rows,
+    outcome="ok",
+    settings=None,
+    compensating_delete=None,
+):
+    sched = _make_scheduler()
+    monkeypatch.setattr(time, "time", lambda: 1_000_000.0)
+    calls = {"orphan": [], "failed": [], "lost": []}
+
+    def _comp(*args, **kwargs):
+        if compensating_delete is not None:
+            return compensating_delete(*args, **kwargs)
+        return outcome
+
+    with patch("app.config.settings", new=settings or _settings_stub()), patch(
+        "app.shared.storage_reconciliation.fetch_due_pending_deletes",
+        lambda **kw: rows,
+    ), patch(
+        "app.shared.storage_compensation.compensating_delete",
+        _comp,
+    ), patch(
+        "app.shared.storage_reconciliation.mark_orphan_deleted",
+        lambda rid: calls["orphan"].append(rid),
+    ), patch(
+        "app.shared.storage_reconciliation.mark_failed_attempt",
+        lambda rid, **kw: calls["failed"].append((rid, kw)),
+    ), patch(
+        "app.shared.storage_reconciliation.mark_lost",
+        lambda rid, **kw: calls["lost"].append((rid, kw)),
+    ):
+        sched._reconcile_storage()
+
+    return calls
+
+
 def test_reconcile_storage_skips_when_interval_zero(monkeypatch):
     """Cap <= 0 -> hook disabled (escape hatch)."""
     sched = _make_scheduler()
@@ -331,161 +375,60 @@ def test_reconcile_storage_advances_gate_after_run(monkeypatch):
     assert sched._last_storage_reconcile == now
 
 
-def test_reconcile_storage_marks_orphan_deleted_on_ok(monkeypatch):
-    """outcome='ok' → mark_orphan_deleted."""
-    sched = _make_scheduler()
-    monkeypatch.setattr(time, "time", lambda: 1_000_000.0)
-
-    from app.shared.storage_reconciliation import PendingReconciliationRow
-
-    pending = [
-        PendingReconciliationRow(
-            id="rec-1", domain="file_source",
-            storage_key="key/x", operation="delete", attempts=0,
+@pytest.mark.parametrize(
+    ("outcome", "row", "expected_id"),
+    [
+        ("ok", _delete_row(id="rec-1"), "rec-1"),
+        (
+            "skipped",
+            _delete_row(
+                id="rec-skip",
+                domain="result_blob",
+                storage_key="results/p/r.bin",
+                attempts=2,
+            ),
+            "rec-skip",
         ),
-    ]
+    ],
+)
+def test_reconcile_storage_marks_orphan_deleted_on_terminal_outcomes(
+    monkeypatch, outcome, row, expected_id
+):
+    calls = _run_reconcile_storage(monkeypatch, rows=[row], outcome=outcome)
 
-    orphan_calls = []
-    fail_calls = []
-    lost_calls = []
-
-    def _comp(storage_key, *, domain, reason, **kw):
-        return "ok"
-
-    with patch("app.config.settings", new=_settings_stub()):
-        with patch(
-            "app.shared.storage_reconciliation.fetch_due_pending_deletes",
-            lambda **kw: pending,
-        ), patch(
-            "app.shared.storage_compensation.compensating_delete", _comp
-        ), patch(
-            "app.shared.storage_reconciliation.mark_orphan_deleted",
-            lambda rid: orphan_calls.append(rid),
-        ), patch(
-            "app.shared.storage_reconciliation.mark_failed_attempt",
-            lambda rid, **kw: fail_calls.append((rid, kw)),
-        ), patch(
-            "app.shared.storage_reconciliation.mark_lost",
-            lambda rid, **kw: lost_calls.append((rid, kw)),
-        ):
-            sched._reconcile_storage()
-
-    assert orphan_calls == ["rec-1"]
-    assert fail_calls == []
-    assert lost_calls == []
-
-
-def test_reconcile_storage_marks_orphan_deleted_on_skipped(monkeypatch):
-    """outcome='skipped' (capability off) → mark_orphan_deleted."""
-    sched = _make_scheduler()
-    monkeypatch.setattr(time, "time", lambda: 1_000_000.0)
-
-    from app.shared.storage_reconciliation import PendingReconciliationRow
-
-    pending = [
-        PendingReconciliationRow(
-            id="rec-skip", domain="result_blob",
-            storage_key="results/p/r.bin", operation="delete", attempts=2,
-        ),
-    ]
-
-    orphan_calls = []
-
-    with patch("app.config.settings", new=_settings_stub()):
-        with patch(
-            "app.shared.storage_reconciliation.fetch_due_pending_deletes",
-            lambda **kw: pending,
-        ), patch(
-            "app.shared.storage_compensation.compensating_delete",
-            lambda *a, **kw: "skipped",
-        ), patch(
-            "app.shared.storage_reconciliation.mark_orphan_deleted",
-            lambda rid: orphan_calls.append(rid),
-        ):
-            sched._reconcile_storage()
-
-    assert orphan_calls == ["rec-skip"]
+    assert calls["orphan"] == [expected_id]
+    assert calls["failed"] == []
+    assert calls["lost"] == []
 
 
 def test_reconcile_storage_marks_failed_attempt_on_failure_below_cap(monkeypatch):
-    """outcome='failed' + attempts+1 < max → mark_failed_attempt with next_retry_at."""
-    sched = _make_scheduler()
-    monkeypatch.setattr(time, "time", lambda: 1_000_000.0)
+    calls = _run_reconcile_storage(
+        monkeypatch,
+        rows=[_delete_row(id="rec-fail", attempts=1)],
+        outcome="failed",
+        settings=_settings_stub(STORAGE_RECONCILE_MAX_ATTEMPTS=5),
+    )
 
-    from app.shared.storage_reconciliation import PendingReconciliationRow
-
-    pending = [
-        PendingReconciliationRow(
-            id="rec-fail", domain="file_source",
-            storage_key="key/x", operation="delete", attempts=1,
-        ),
-    ]
-
-    fail_calls = []
-    lost_calls = []
-
-    with patch("app.config.settings", new=_settings_stub(STORAGE_RECONCILE_MAX_ATTEMPTS=5)):
-        with patch(
-            "app.shared.storage_reconciliation.fetch_due_pending_deletes",
-            lambda **kw: pending,
-        ), patch(
-            "app.shared.storage_compensation.compensating_delete",
-            lambda *a, **kw: "failed",
-        ), patch(
-            "app.shared.storage_reconciliation.mark_failed_attempt",
-            lambda rid, **kw: fail_calls.append((rid, kw)),
-        ), patch(
-            "app.shared.storage_reconciliation.mark_lost",
-            lambda rid, **kw: lost_calls.append((rid, kw)),
-        ):
-            sched._reconcile_storage()
-
-    # 1 + 1 = 2 < 5 → failed_attempt path.
-    assert len(fail_calls) == 1
-    rid, kw = fail_calls[0]
+    assert len(calls["failed"]) == 1
+    rid, kw = calls["failed"][0]
     assert rid == "rec-fail"
     assert "next_retry_at" in kw
     assert isinstance(kw["next_retry_at"], datetime)
     assert "error" in kw
-    assert lost_calls == []
+    assert calls["lost"] == []
 
 
 def test_reconcile_storage_marks_lost_on_max_attempts(monkeypatch):
-    """outcome='failed' + (attempts+1) >= max_attempts → mark_lost."""
-    sched = _make_scheduler()
-    monkeypatch.setattr(time, "time", lambda: 1_000_000.0)
+    calls = _run_reconcile_storage(
+        monkeypatch,
+        rows=[_delete_row(id="rec-lost", attempts=4)],
+        outcome="failed",
+        settings=_settings_stub(STORAGE_RECONCILE_MAX_ATTEMPTS=5),
+    )
 
-    from app.shared.storage_reconciliation import PendingReconciliationRow
-
-    pending = [
-        PendingReconciliationRow(
-            id="rec-lost", domain="file_source",
-            storage_key="key/x", operation="delete", attempts=4,  # next=5
-        ),
-    ]
-
-    fail_calls = []
-    lost_calls = []
-
-    with patch("app.config.settings", new=_settings_stub(STORAGE_RECONCILE_MAX_ATTEMPTS=5)):
-        with patch(
-            "app.shared.storage_reconciliation.fetch_due_pending_deletes",
-            lambda **kw: pending,
-        ), patch(
-            "app.shared.storage_compensation.compensating_delete",
-            lambda *a, **kw: "failed",
-        ), patch(
-            "app.shared.storage_reconciliation.mark_failed_attempt",
-            lambda rid, **kw: fail_calls.append((rid, kw)),
-        ), patch(
-            "app.shared.storage_reconciliation.mark_lost",
-            lambda rid, **kw: lost_calls.append((rid, kw)),
-        ):
-            sched._reconcile_storage()
-
-    assert fail_calls == []
-    assert len(lost_calls) == 1
-    rid, kw = lost_calls[0]
+    assert calls["failed"] == []
+    assert len(calls["lost"]) == 1
+    rid, kw = calls["lost"][0]
     assert rid == "rec-lost"
     assert "max_attempts_exceeded" in kw["error"]
 
@@ -512,58 +455,30 @@ def test_reconcile_storage_swallows_compensating_delete_exception(monkeypatch):
     to next row. The raising row stays `pending` (unchanged) for the
     next tick to retry — no spurious mark_failed_attempt that would
     risk double-counting attempts."""
-    sched = _make_scheduler()
-    monkeypatch.setattr(time, "time", lambda: 1_000_000.0)
-
-    from app.shared.storage_reconciliation import PendingReconciliationRow
-
     pending = [
-        PendingReconciliationRow(
-            id="rec-A", domain="file_source",
-            storage_key="key/A", operation="delete", attempts=0,
-        ),
-        PendingReconciliationRow(
-            id="rec-B", domain="file_source",
-            storage_key="key/B", operation="delete", attempts=0,
-        ),
+        _delete_row(id="rec-A", storage_key="key/A"),
+        _delete_row(id="rec-B", storage_key="key/B"),
     ]
-
-    orphan_calls = []
-    fail_calls = []
-    lost_calls = []
 
     def _comp(storage_key, *, domain, reason, **kw):
         if storage_key == "key/A":
             raise RuntimeError("network blip")
         return "ok"
 
-    with patch("app.config.settings", new=_settings_stub()):
-        with patch(
-            "app.shared.storage_reconciliation.fetch_due_pending_deletes",
-            lambda **kw: pending,
-        ), patch(
-            "app.shared.storage_compensation.compensating_delete", _comp
-        ), patch(
-            "app.shared.storage_reconciliation.mark_orphan_deleted",
-            lambda rid: orphan_calls.append(rid),
-        ), patch(
-            "app.shared.storage_reconciliation.mark_failed_attempt",
-            lambda rid, **kw: fail_calls.append((rid, kw)),
-        ), patch(
-            "app.shared.storage_reconciliation.mark_lost",
-            lambda rid, **kw: lost_calls.append((rid, kw)),
-        ):
-            # Must NOT raise.
-            sched._reconcile_storage()
+    calls = _run_reconcile_storage(
+        monkeypatch,
+        rows=pending,
+        compensating_delete=_comp,
+    )
 
     # rec-B succeeded normally.
-    assert "rec-B" in orphan_calls
+    assert "rec-B" in calls["orphan"]
     # rec-A raised: per-row try/except swallowed it; no mark_*
     # call was issued for rec-A (entry stays pending, next tick
     # retries). Don't double-count attempts on internal blip.
-    assert "rec-A" not in orphan_calls
-    assert all(rid != "rec-A" for rid, _ in fail_calls)
-    assert all(rid != "rec-A" for rid, _ in lost_calls)
+    assert "rec-A" not in calls["orphan"]
+    assert all(rid != "rec-A" for rid, _ in calls["failed"])
+    assert all(rid != "rec-A" for rid, _ in calls["lost"])
 
 
 # Source-bound: tick wires _reconcile_storage

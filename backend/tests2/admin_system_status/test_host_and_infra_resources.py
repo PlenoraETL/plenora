@@ -16,6 +16,97 @@ import pytest
 pytestmark = [pytest.mark.unit, pytest.mark.contract]
 
 
+GB = 1024 ** 3
+
+
+def _usage(total_gb, used_gb, free_gb, percent):
+    return MagicMock(
+        total=total_gb * GB,
+        used=used_gb * GB,
+        free=free_gb * GB,
+        available=free_gb * GB,
+        percent=percent,
+    )
+
+
+def _fake_psutil(
+    *,
+    disk_percent=30.0,
+    memory_percent=25.0,
+    loadavg=(0.5, 0.5, 0.5),
+    cpu_count=4,
+    cpu_percent=10.0,
+):
+    fake_psutil = MagicMock()
+    fake_psutil.disk_usage.return_value = _usage(
+        total_gb=100,
+        used_gb=disk_percent,
+        free_gb=100 - disk_percent,
+        percent=disk_percent,
+    )
+    fake_psutil.virtual_memory.return_value = _usage(
+        total_gb=16,
+        used_gb=round(16 * memory_percent / 100, 2),
+        free_gb=round(16 * (100 - memory_percent) / 100, 2),
+        percent=memory_percent,
+    )
+    if isinstance(loadavg, BaseException):
+        fake_psutil.getloadavg.side_effect = loadavg
+    else:
+        fake_psutil.getloadavg.return_value = loadavg
+    fake_psutil.cpu_count.return_value = cpu_count
+    fake_psutil.cpu_percent.return_value = cpu_percent
+    return fake_psutil
+
+
+def _db_pool_row(
+    *,
+    total,
+    active=5,
+    idle=15,
+    idle_in_tx=0,
+    waiting=0,
+    max_conn=100,
+):
+    return {
+        "max_conn": max_conn,
+        "total": total,
+        "active": active,
+        "idle": idle,
+        "idle_in_tx": idle_in_tx,
+        "waiting": waiting,
+    }
+
+
+def _fake_redis_info(
+    *,
+    used_mb,
+    max_mb,
+    clients=5,
+    uptime_seconds=3600,
+):
+    fake_client = MagicMock()
+    fake_client.info.return_value = {
+        "used_memory": used_mb * 1024 * 1024,
+        "used_memory_human": f"{used_mb}M",
+        "maxmemory": max_mb * 1024 * 1024,
+        "connected_clients": clients,
+        "uptime_in_seconds": uptime_seconds,
+    }
+    fake_redis_mod = MagicMock()
+    fake_redis_mod.Redis.from_url.return_value = fake_client
+    return fake_redis_mod
+
+
+def _ticket_counts(*, low=0, medium=0, high=0, critical=0):
+    return {
+        "low": low,
+        "medium": medium,
+        "high": high,
+        "critical": critical,
+    }
+
+
 # get_host_resources — psutil
 
 
@@ -46,23 +137,12 @@ def test_host_resources_happy_path(monkeypatch):
     """Con psutil mockato: shape stabile, status OK se tutti < soglie."""
     from app.core.admin_system_status import service
 
-    fake_psutil = MagicMock()
-    fake_psutil.disk_usage.return_value = MagicMock(
-        total=100 * 1024 ** 3,  # 100 GB
-        used=50 * 1024 ** 3,
-        free=50 * 1024 ** 3,
-        percent=50.0,
+    fake_psutil = _fake_psutil(
+        disk_percent=50.0,
+        memory_percent=50.0,
+        loadavg=(1.0, 1.5, 2.0),
+        cpu_percent=25.0,
     )
-    fake_psutil.virtual_memory.return_value = MagicMock(
-        total=16 * 1024 ** 3,
-        used=8 * 1024 ** 3,
-        available=8 * 1024 ** 3,
-        percent=50.0,
-    )
-    fake_psutil.getloadavg.return_value = (1.0, 1.5, 2.0)
-    fake_psutil.cpu_count.return_value = 4
-    fake_psutil.cpu_percent.return_value = 25.0
-
     monkeypatch.setitem(sys.modules, "psutil", fake_psutil)
 
     out = service.get_host_resources()
@@ -83,22 +163,11 @@ def test_host_resources_uses_existing_parent_for_missing_data_dir(monkeypatch, t
     missing_data_dir = tmp_path / "missing" / "data"
     fake_settings = SimpleNamespace(DATA_DIR=missing_data_dir)
 
-    fake_psutil = MagicMock()
-    fake_psutil.disk_usage.return_value = MagicMock(
-        total=100 * 1024 ** 3,
-        used=20 * 1024 ** 3,
-        free=80 * 1024 ** 3,
-        percent=20.0,
+    fake_psutil = _fake_psutil(
+        disk_percent=20.0,
+        memory_percent=25.0,
+        loadavg=AttributeError("Windows non ha load avg"),
     )
-    fake_psutil.virtual_memory.return_value = MagicMock(
-        total=16 * 1024 ** 3,
-        used=4 * 1024 ** 3,
-        available=12 * 1024 ** 3,
-        percent=25.0,
-    )
-    fake_psutil.getloadavg.side_effect = AttributeError("Windows non ha load avg")
-    fake_psutil.cpu_count.return_value = 4
-    fake_psutil.cpu_percent.return_value = 10.0
 
     monkeypatch.setattr(config_mod, "settings", fake_settings)
     monkeypatch.setitem(sys.modules, "psutil", fake_psutil)
@@ -127,23 +196,17 @@ def test_host_resources_falls_back_to_shutil_when_psutil_disk_fails(monkeypatch,
     # psutil.disk_usage scoppia come in produzione locale
     boom = SystemError("argument 1 (impossible<bad format char>)")
 
-    fake_psutil = MagicMock()
-    fake_psutil.disk_usage.side_effect = boom
-    fake_psutil.virtual_memory.return_value = MagicMock(
-        total=16 * 1024 ** 3,
-        used=4 * 1024 ** 3,
-        available=12 * 1024 ** 3,
-        percent=25.0,
+    fake_psutil = _fake_psutil(
+        memory_percent=25.0,
+        loadavg=AttributeError("no load avg"),
     )
-    fake_psutil.getloadavg.side_effect = AttributeError("no load avg")
-    fake_psutil.cpu_count.return_value = 4
-    fake_psutil.cpu_percent.return_value = 10.0
+    fake_psutil.disk_usage.side_effect = boom
 
     # shutil.disk_usage ritorna namedtuple-like con total/used/free
     shutil_result = SimpleNamespace(
-        total=200 * 1024 ** 3,
-        used=50 * 1024 ** 3,
-        free=150 * 1024 ** 3,
+        total=200 * GB,
+        used=50 * GB,
+        free=150 * GB,
     )
     import shutil as _shutil_mod
 
@@ -212,17 +275,11 @@ def test_host_resources_logs_enriched_diagnostics_when_both_psutil_and_shutil_fa
     psutil_boom = _struct.error("argument 1 (impossible<bad format char>)")
     shutil_boom = OSError("disk gone")
 
-    fake_psutil = MagicMock()
-    fake_psutil.disk_usage.side_effect = psutil_boom
-    fake_psutil.virtual_memory.return_value = MagicMock(
-        total=16 * 1024 ** 3,
-        used=4 * 1024 ** 3,
-        available=12 * 1024 ** 3,
-        percent=25.0,
+    fake_psutil = _fake_psutil(
+        memory_percent=25.0,
+        loadavg=AttributeError("no load avg"),
     )
-    fake_psutil.getloadavg.side_effect = AttributeError("no load avg")
-    fake_psutil.cpu_count.return_value = 4
-    fake_psutil.cpu_percent.return_value = 10.0
+    fake_psutil.disk_usage.side_effect = psutil_boom
 
     import shutil as _shutil_mod
 
@@ -266,63 +323,35 @@ def test_host_resources_logs_enriched_diagnostics_when_both_psutil_and_shutil_fa
     assert "impossible<bad format char>" in msg
 
 
-def test_host_resources_disk_over_error_threshold(monkeypatch):
-    """Disk > 92% → status=error."""
+@pytest.mark.parametrize(
+    ("disk_percent", "memory_percent", "expected_status", "metric", "expected_percent"),
+    [
+        pytest.param(95.0, 25.0, "error", "disk", 95.0, id="disk-error"),
+        pytest.param(30.0, 87.0, "warn", "memory", 87.0, id="memory-warn"),
+    ],
+)
+def test_host_resources_threshold_statuses(
+    monkeypatch, disk_percent, memory_percent, expected_status, metric, expected_percent
+):
+    """Disk/memory thresholds keep their status mapping."""
     from app.core.admin_system_status import service
 
-    fake_psutil = MagicMock()
-    fake_psutil.disk_usage.return_value = MagicMock(
-        total=100 * 1024 ** 3, used=95 * 1024 ** 3, free=5 * 1024 ** 3, percent=95.0,
+    fake_psutil = _fake_psutil(
+        disk_percent=disk_percent,
+        memory_percent=memory_percent,
     )
-    fake_psutil.virtual_memory.return_value = MagicMock(
-        total=16 * 1024 ** 3, used=4 * 1024 ** 3, available=12 * 1024 ** 3, percent=25.0,
-    )
-    fake_psutil.getloadavg.return_value = (0.5, 0.5, 0.5)
-    fake_psutil.cpu_count.return_value = 4
-    fake_psutil.cpu_percent.return_value = 10.0
     monkeypatch.setitem(sys.modules, "psutil", fake_psutil)
 
     out = service.get_host_resources()
-    assert out["status"] == "error"
-    assert out["disk"]["percent"] == 95.0
-
-
-def test_host_resources_memory_over_warn_threshold(monkeypatch):
-    """Memory 85% → warn (no error)."""
-    from app.core.admin_system_status import service
-
-    fake_psutil = MagicMock()
-    fake_psutil.disk_usage.return_value = MagicMock(
-        total=100 * 1024 ** 3, used=30 * 1024 ** 3, free=70 * 1024 ** 3, percent=30.0,
-    )
-    fake_psutil.virtual_memory.return_value = MagicMock(
-        total=16 * 1024 ** 3, used=14 * 1024 ** 3, available=2 * 1024 ** 3, percent=87.0,
-    )
-    fake_psutil.getloadavg.return_value = (0.5, 0.5, 0.5)
-    fake_psutil.cpu_count.return_value = 4
-    fake_psutil.cpu_percent.return_value = 10.0
-    monkeypatch.setitem(sys.modules, "psutil", fake_psutil)
-
-    out = service.get_host_resources()
-    assert out["status"] == "warn"
-    assert out["memory"]["percent"] == 87.0
-
+    assert out["status"] == expected_status
+    assert out[metric]["percent"] == expected_percent
 
 def test_host_resources_no_loadavg_on_windows(monkeypatch):
     """psutil.getloadavg() solleva AttributeError su Windows → load_*m None,
     non crash."""
     from app.core.admin_system_status import service
 
-    fake_psutil = MagicMock()
-    fake_psutil.disk_usage.return_value = MagicMock(
-        total=100 * 1024 ** 3, used=30 * 1024 ** 3, free=70 * 1024 ** 3, percent=30.0,
-    )
-    fake_psutil.virtual_memory.return_value = MagicMock(
-        total=16 * 1024 ** 3, used=4 * 1024 ** 3, available=12 * 1024 ** 3, percent=25.0,
-    )
-    fake_psutil.getloadavg.side_effect = AttributeError("Windows non ha load avg")
-    fake_psutil.cpu_count.return_value = 4
-    fake_psutil.cpu_percent.return_value = 10.0
+    fake_psutil = _fake_psutil(loadavg=AttributeError("Windows non ha load avg"))
     monkeypatch.setitem(sys.modules, "psutil", fake_psutil)
 
     out = service.get_host_resources()
@@ -345,59 +374,35 @@ def test_db_pool_when_db_fails_returns_unknown(monkeypatch):
     assert out["message"] == "DB non accessibile"
 
 
-def test_db_pool_under_warn_threshold_is_ok(monkeypatch):
+@pytest.mark.parametrize(
+    ("row", "expected_status", "expected_percent"),
+    [
+        pytest.param(_db_pool_row(total=20), "ok", 20.0, id="under-warn"),
+        pytest.param(_db_pool_row(total=82, active=50, idle=32), "warn", None, id="warn"),
+        pytest.param(
+            _db_pool_row(total=97, active=80, idle=17, waiting=2),
+            "error",
+            None,
+            id="error",
+        ),
+        pytest.param(
+            _db_pool_row(total=15, active=2, idle=3, idle_in_tx=10),
+            "warn",
+            None,
+            id="idle-in-transaction",
+        ),
+    ],
+)
+def test_db_pool_threshold_statuses(monkeypatch, row, expected_status, expected_percent):
     from app.core.admin_system_status import service
 
-    row = {
-        "max_conn": 100, "total": 20, "active": 5, "idle": 15,
-        "idle_in_tx": 0, "waiting": 0,
-    }
     with patch("app.db.pg_connection.fetchone", return_value=row):
         out = service.get_db_pool_status()
 
-    assert out["status"] == "ok"
-    assert out["total"] == 20
-    assert out["percent"] == 20.0
-
-
-def test_db_pool_warn_threshold(monkeypatch):
-    from app.core.admin_system_status import service
-
-    row = {
-        "max_conn": 100, "total": 82, "active": 50, "idle": 32,
-        "idle_in_tx": 0, "waiting": 0,
-    }
-    with patch("app.db.pg_connection.fetchone", return_value=row):
-        out = service.get_db_pool_status()
-
-    assert out["status"] == "warn"
-
-
-def test_db_pool_error_threshold(monkeypatch):
-    from app.core.admin_system_status import service
-
-    row = {
-        "max_conn": 100, "total": 97, "active": 80, "idle": 17,
-        "idle_in_tx": 0, "waiting": 2,
-    }
-    with patch("app.db.pg_connection.fetchone", return_value=row):
-        out = service.get_db_pool_status()
-
-    assert out["status"] == "error"
-
-
-def test_db_pool_many_idle_in_transaction_triggers_warn(monkeypatch):
-    """idle_in_transaction > 5 → warn anche se pct basso."""
-    from app.core.admin_system_status import service
-
-    row = {
-        "max_conn": 100, "total": 15, "active": 2, "idle": 3,
-        "idle_in_tx": 10, "waiting": 0,
-    }
-    with patch("app.db.pg_connection.fetchone", return_value=row):
-        out = service.get_db_pool_status()
-
-    assert out["status"] == "warn"
+    assert out["status"] == expected_status
+    if expected_percent is not None:
+        assert out["total"] == row["total"]
+        assert out["percent"] == expected_percent
 
 
 # get_redis_status
@@ -419,17 +424,12 @@ def test_redis_unreachable_returns_error(monkeypatch):
 def test_redis_info_happy_path(monkeypatch):
     from app.core.admin_system_status import service
 
-    fake_client = MagicMock()
-    fake_client.info.return_value = {
-        "used_memory": 50 * 1024 * 1024,
-        "used_memory_human": "50M",
-        "maxmemory": 200 * 1024 * 1024,
-        "connected_clients": 12,
-        "uptime_in_seconds": 86400 * 3,
-    }
-
-    fake_redis_mod = MagicMock()
-    fake_redis_mod.Redis.from_url.return_value = fake_client
+    fake_redis_mod = _fake_redis_info(
+        used_mb=50,
+        max_mb=200,
+        clients=12,
+        uptime_seconds=86400 * 3,
+    )
     monkeypatch.setitem(sys.modules, "redis", fake_redis_mod)
 
     out = service.get_redis_status()
@@ -442,16 +442,7 @@ def test_redis_info_happy_path(monkeypatch):
 def test_redis_over_warn_threshold(monkeypatch):
     from app.core.admin_system_status import service
 
-    fake_client = MagicMock()
-    fake_client.info.return_value = {
-        "used_memory": 80 * 1024 * 1024,
-        "used_memory_human": "80M",
-        "maxmemory": 100 * 1024 * 1024,
-        "connected_clients": 5,
-        "uptime_in_seconds": 3600,
-    }
-    fake_redis_mod = MagicMock()
-    fake_redis_mod.Redis.from_url.return_value = fake_client
+    fake_redis_mod = _fake_redis_info(used_mb=80, max_mb=100)
     monkeypatch.setitem(sys.modules, "redis", fake_redis_mod)
 
     out = service.get_redis_status()
@@ -462,16 +453,12 @@ def test_redis_without_maxmemory_has_no_percent(monkeypatch):
     """maxmemory=0 (unlimited): pct=None, status resta ok."""
     from app.core.admin_system_status import service
 
-    fake_client = MagicMock()
-    fake_client.info.return_value = {
-        "used_memory": 500 * 1024 * 1024,
-        "used_memory_human": "500M",
-        "maxmemory": 0,
-        "connected_clients": 3,
-        "uptime_in_seconds": 600,
-    }
-    fake_redis_mod = MagicMock()
-    fake_redis_mod.Redis.from_url.return_value = fake_client
+    fake_redis_mod = _fake_redis_info(
+        used_mb=500,
+        max_mb=0,
+        clients=3,
+        uptime_seconds=600,
+    )
     monkeypatch.setitem(sys.modules, "redis", fake_redis_mod)
 
     out = service.get_redis_status()
@@ -675,70 +662,36 @@ def test_blacklist_status_env_threshold_invalid_fallback(monkeypatch):
 # get_tickets_status — graceful + soglie severity
 
 
-def test_tickets_status_ok_when_no_critical(monkeypatch):
+@pytest.mark.parametrize(
+    ("total", "counts", "expected_status", "message_part"),
+    [
+        pytest.param(3, _ticket_counts(low=1, medium=2), "ok", None, id="no-critical"),
+        pytest.param(0, _ticket_counts(), "ok", "nessun ticket", id="zero"),
+        pytest.param(5, _ticket_counts(medium=2, high=2, critical=1), "warn", None, id="some-critical"),
+        pytest.param(8, _ticket_counts(high=8), "warn", None, id="many-high"),
+        pytest.param(
+            10,
+            _ticket_counts(medium=1, high=2, critical=3),
+            "error",
+            "3 ticket critici",
+            id="many-critical",
+        ),
+    ],
+)
+def test_tickets_status_thresholds(monkeypatch, total, counts, expected_status, message_part):
     from app.core.admin_system_status import service
     import app.db.tickets_db_service as tdb
 
-    monkeypatch.setattr(tdb, "count_tickets", lambda **kw: 3)
-    monkeypatch.setattr(tdb, "counts_by_severity",
-                        lambda **kw: {"low": 1, "medium": 2, "high": 0, "critical": 0})
+    monkeypatch.setattr(tdb, "count_tickets", lambda **kw: total)
+    monkeypatch.setattr(tdb, "counts_by_severity", lambda **kw: counts)
 
     out = service.get_tickets_status()
-    assert out["status"] == "ok"
-    assert out["total_active"] == 3
-    assert out["by_severity"]["critical"] == 0
-
-
-def test_tickets_status_ok_when_zero(monkeypatch):
-    from app.core.admin_system_status import service
-    import app.db.tickets_db_service as tdb
-
-    monkeypatch.setattr(tdb, "count_tickets", lambda **kw: 0)
-    monkeypatch.setattr(tdb, "counts_by_severity",
-                        lambda **kw: {"low": 0, "medium": 0, "high": 0, "critical": 0})
-
-    out = service.get_tickets_status()
-    assert out["status"] == "ok"
-    assert "nessun ticket" in out["message"].lower()
-
-
-def test_tickets_status_warn_on_some_critical(monkeypatch):
-    from app.core.admin_system_status import service
-    import app.db.tickets_db_service as tdb
-
-    monkeypatch.setattr(tdb, "count_tickets", lambda **kw: 5)
-    monkeypatch.setattr(tdb, "counts_by_severity",
-                        lambda **kw: {"low": 0, "medium": 2, "high": 2, "critical": 1})
-
-    out = service.get_tickets_status()
-    assert out["status"] == "warn"
-
-
-def test_tickets_status_warn_on_many_high(monkeypatch):
-    """high > 5 senza critical → warn (non ok)."""
-    from app.core.admin_system_status import service
-    import app.db.tickets_db_service as tdb
-
-    monkeypatch.setattr(tdb, "count_tickets", lambda **kw: 8)
-    monkeypatch.setattr(tdb, "counts_by_severity",
-                        lambda **kw: {"low": 0, "medium": 0, "high": 8, "critical": 0})
-
-    out = service.get_tickets_status()
-    assert out["status"] == "warn"
-
-
-def test_tickets_status_error_on_many_critical(monkeypatch):
-    from app.core.admin_system_status import service
-    import app.db.tickets_db_service as tdb
-
-    monkeypatch.setattr(tdb, "count_tickets", lambda **kw: 10)
-    monkeypatch.setattr(tdb, "counts_by_severity",
-                        lambda **kw: {"low": 0, "medium": 1, "high": 2, "critical": 3})
-
-    out = service.get_tickets_status()
-    assert out["status"] == "error"
-    assert "3 ticket critici" in out["message"]
-
+    assert out["status"] == expected_status
+    if total == 3:
+        assert out["total_active"] == 3
+        assert out["by_severity"]["critical"] == 0
+    if message_part:
+        assert message_part in out["message"].lower()
 
 def test_tickets_status_unknown_on_db_error(monkeypatch):
     from app.core.admin_system_status import service
