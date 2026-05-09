@@ -165,7 +165,7 @@ def create_ticket(
     execute(
         "INSERT INTO tickets (id, kind, title, description, severity, status, "
         "category, created_by, assignee, group_id, created_at, updated_at) "
-        "VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+        "VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)",
         (ticket_id, kind, title, description, severity, status,
          category, created_by, assignee, group_id, now, now),
     )
@@ -181,10 +181,10 @@ def get_ticket(
     Riservato a operazioni di audit / superadmin recovery.
     """
     if include_deleted:
-        row = fetchone("SELECT * FROM tickets WHERE id = ?", (ticket_id,))
+        row = fetchone("SELECT * FROM tickets WHERE id = %s", (ticket_id,))
     else:
         row = fetchone(
-            "SELECT * FROM tickets WHERE id = ? AND deleted_at IS NULL",
+            "SELECT * FROM tickets WHERE id = %s AND deleted_at IS NULL",
             (ticket_id,),
         )
     return ticket_row_from_db(row) if row else None
@@ -219,28 +219,28 @@ def list_tickets(
     params: List[Any] = []
 
     if group_id is not None:
-        clauses.append("group_id = ?")
+        clauses.append("group_id = %s")
         params.append(group_id)
     if created_by is not None:
-        clauses.append("created_by = ?")
+        clauses.append("created_by = %s")
         params.append(created_by)
     if assignee is not None:
-        clauses.append("assignee = ?")
+        clauses.append("assignee = %s")
         params.append(assignee)
     if kind is not None:
-        clauses.append("kind = ?")
+        clauses.append("kind = %s")
         params.append(kind)
     if status_in:
-        placeholders = ",".join(["?"] * len(status_in))
+        placeholders = ",".join(["%s"] * len(status_in))
         clauses.append(f"status IN ({placeholders})")
         params.extend(status_in)
     if severity_in:
-        placeholders = ",".join(["?"] * len(severity_in))
+        placeholders = ",".join(["%s"] * len(severity_in))
         clauses.append(f"severity IN ({placeholders})")
         params.extend(severity_in)
 
     where = f"WHERE {' AND '.join(clauses)}"
-    sql = f"SELECT * FROM tickets {where} ORDER BY updated_at DESC LIMIT ?"
+    sql = f"SELECT * FROM tickets {where} ORDER BY updated_at DESC LIMIT %s"
     params.append(int(limit))
     return [ticket_row_from_db(row) for row in fetchall(sql, tuple(params))]
 
@@ -295,11 +295,11 @@ def update_ticket(
     set_parts = []
     params: List[Any] = []
     for k, v in fields.items():
-        set_parts.append(f"{k} = ?")
+        set_parts.append(f"{k} = %s")
         params.append(v)
     params.append(ticket_id)
     execute(
-        f"UPDATE tickets SET {', '.join(set_parts)} WHERE id = ?",
+        f"UPDATE tickets SET {', '.join(set_parts)} WHERE id = %s",
         tuple(params),
     )
     return get_ticket(ticket_id)
@@ -318,16 +318,16 @@ def count_tickets(
     params: List[Any] = []
 
     if group_id is not None:
-        clauses.append("group_id = ?")
+        clauses.append("group_id = %s")
         params.append(group_id)
     if assignee is not None:
-        clauses.append("assignee = ?")
+        clauses.append("assignee = %s")
         params.append(assignee)
     if kind is not None:
-        clauses.append("kind = ?")
+        clauses.append("kind = %s")
         params.append(kind)
     if status_in:
-        placeholders = ",".join(["?"] * len(status_in))
+        placeholders = ",".join(["%s"] * len(status_in))
         clauses.append(f"status IN ({placeholders})")
         params.extend(status_in)
 
@@ -345,10 +345,10 @@ def counts_by_severity(
     clauses: List[str] = ["deleted_at IS NULL"]
     params: List[Any] = []
     if group_id is not None:
-        clauses.append("group_id = ?")
+        clauses.append("group_id = %s")
         params.append(group_id)
     if status_in:
-        placeholders = ",".join(["?"] * len(status_in))
+        placeholders = ",".join(["%s"] * len(status_in))
         clauses.append(f"status IN ({placeholders})")
         params.extend(status_in)
 
@@ -398,7 +398,7 @@ def list_comments(ticket_id: str) -> List[CommentRow]:
             "SELECT c.*, u.username AS author_username "
             "FROM ticket_comments c "
             "LEFT JOIN users u ON u.id = c.author_id "
-            "WHERE c.ticket_id = ? ORDER BY c.created_at ASC",
+            "WHERE c.ticket_id = %s ORDER BY c.created_at ASC",
             (ticket_id,),
         )
     ]
@@ -418,12 +418,12 @@ def link_attachment(
     now = datetime.now(timezone.utc).isoformat()
     execute(
         "INSERT INTO ticket_attachments (id, ticket_id, file_source_id, uploaded_by, uploaded_at) "
-        "VALUES (?, ?, ?, ?, ?)",
+        "VALUES (%s, %s, %s, %s, %s)",
         (aid, ticket_id, file_source_id, uploaded_by, now),
     )
     # Touch ticket updated_at
     execute(
-        "UPDATE tickets SET updated_at = ? WHERE id = ?",
+        "UPDATE tickets SET updated_at = %s WHERE id = %s",
         (now, ticket_id),
     )
     return AttachmentRow(
@@ -446,7 +446,7 @@ def list_attachments(ticket_id: str) -> List[AttachmentRow]:
             "FROM ticket_attachments a "
             "JOIN file_sources fs ON fs.id = a.file_source_id "
             "LEFT JOIN users u ON u.id = a.uploaded_by "
-            "WHERE a.ticket_id = ? ORDER BY a.uploaded_at ASC",
+            "WHERE a.ticket_id = %s ORDER BY a.uploaded_at ASC",
             (ticket_id,),
         )
     ]
@@ -456,14 +456,14 @@ def delete_attachment(attachment_id: str) -> bool:
     """Rimuove il link allegato. Il file_source sottostante NON viene
     cancellato da qui (responsabilita' del caller via file_service)."""
     cur = execute(
-        "DELETE FROM ticket_attachments WHERE id = ?", (attachment_id,)
+        "DELETE FROM ticket_attachments WHERE id = %s", (attachment_id,)
     )
     return cur.rowcount > 0
 
 
 def get_attachment(attachment_id: str) -> AttachmentRow | None:
     row = fetchone(
-        "SELECT * FROM ticket_attachments WHERE id = ?", (attachment_id,)
+        "SELECT * FROM ticket_attachments WHERE id = %s", (attachment_id,)
     )
     return attachment_row_from_db(row) if row else None
 
@@ -481,7 +481,7 @@ def soft_delete_ticket(ticket_id: str) -> bool:
     """
     now = datetime.now(timezone.utc).isoformat()
     cur = execute(
-        "UPDATE tickets SET deleted_at = ? WHERE id = ?",
+        "UPDATE tickets SET deleted_at = %s WHERE id = %s",
         (now, ticket_id),
     )
     return cur.rowcount > 0
@@ -496,5 +496,5 @@ def delete_ticket(ticket_id: str) -> bool:
     Nota: per il flusso normale usare `soft_delete_ticket`. Hard delete
     riservato a superadmin via `?hard=true` per casi GDPR / pulizia.
     """
-    cur = execute("DELETE FROM tickets WHERE id = ?", (ticket_id,))
+    cur = execute("DELETE FROM tickets WHERE id = %s", (ticket_id,))
     return cur.rowcount > 0

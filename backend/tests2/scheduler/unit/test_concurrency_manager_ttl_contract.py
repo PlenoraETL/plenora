@@ -29,9 +29,9 @@ class _FakeDb:
 
     Riconosce solo i pattern SQL usati da ``concurrency_manager``:
     - CREATE TABLE IF NOT EXISTS (bootstrap no-op)
-    - INSERT INTO scheduler_locks (...) VALUES (?, ?, ?)
-    - SELECT value, expires_at FROM scheduler_locks WHERE key = ?
-    - DELETE FROM scheduler_locks WHERE key = ?
+    - INSERT INTO scheduler_locks (...) VALUES (%s, %s, %s)
+    - SELECT value, expires_at FROM scheduler_locks WHERE key = %s
+    - DELETE FROM scheduler_locks WHERE key = %s
     - UPDATE scheduler_locks SET expires_at = %s WHERE key = %s
       (refresh_lock, usa %s al posto di ? perché è su pg_connection)
     """
@@ -55,7 +55,7 @@ class _FakeDb:
             return _FakeCursor(rowcount=1)
 
         if "DELETE FROM SCHEDULER_LOCKS" in norm:
-            # Supporta sia DELETE WHERE key = ? sia DELETE WHERE key LIKE ...
+            # Supporta sia DELETE WHERE key = %s sia DELETE WHERE key LIKE ...
             if "LIKE" in norm:
                 prefix = params[0].replace("%", "") if params else "scheduler:"
                 removed = [k for k in self.rows if k.startswith(prefix)]

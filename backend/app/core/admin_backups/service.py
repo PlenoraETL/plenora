@@ -216,7 +216,7 @@ def get_last_run_status() -> Dict[str, Any]:
         row = fetchone(
             "SELECT id, started_at, finished_at, exit_code, result, bucket_key, "
             "size_bytes, log_tail, error_message "
-            "FROM plenora.backup_runs ORDER BY started_at DESC LIMIT 1"
+            "FROM backup_runs ORDER BY started_at DESC LIMIT 1"
         )
     except Exception as e:
         logger.warning(f"get_last_run_status query fallita: {e}")
@@ -301,7 +301,7 @@ def get_schedule_info() -> Dict[str, Any]:
     try:
         from app.db.pg_connection import fetchone
         row = fetchone(
-            "SELECT started_at FROM plenora.backup_runs "
+            "SELECT started_at FROM backup_runs "
             "ORDER BY started_at DESC LIMIT 1"
         )
         if row and row.get("started_at"):

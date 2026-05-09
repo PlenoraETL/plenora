@@ -36,6 +36,20 @@ from app.core.scheduler.models import (
 router = APIRouter(prefix="/schedules", tags=["schedules"])
 
 
+def _as_aware_datetime(value):
+    from datetime import datetime, timezone
+
+    if isinstance(value, datetime):
+        dt = value
+    elif isinstance(value, str):
+        dt = datetime.fromisoformat(value)
+    else:
+        raise TypeError(f"expected datetime or ISO string, got {type(value).__name__}")
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt
+
+
 @router.get("/healthcheck", response_model=BeatHealthcheck)
 async def beat_healthcheck(current_user: CurrentUser = Depends(require_not_esecutore)):
     """
@@ -49,9 +63,7 @@ async def beat_healthcheck(current_user: CurrentUser = Depends(require_not_esecu
         row = db.fetchone("SELECT ts FROM beat_heartbeat WHERE id = 'beat'")
 
         if row and row["ts"]:
-            beat_time = datetime.fromisoformat(row["ts"])
-            if beat_time.tzinfo is None:
-                beat_time = beat_time.replace(tzinfo=timezone.utc)
+            beat_time = _as_aware_datetime(row["ts"])
             age = (datetime.now(timezone.utc) - beat_time).total_seconds()
 
             # Conta schedule attivi

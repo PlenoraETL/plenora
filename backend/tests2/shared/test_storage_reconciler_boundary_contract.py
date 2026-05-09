@@ -89,9 +89,9 @@ def test_fetch_due_pending_deletes_passes_limit_and_now_to_sql():
     # SQL filters and ORDER BY are explicit and stable.
     assert "WHERE state = 'pending'" in sql
     assert "operation = 'delete'" in sql
-    assert "next_retry_at IS NULL OR next_retry_at <= ?" in sql
+    assert "next_retry_at IS NULL OR next_retry_at <= %s" in sql
     assert "ORDER BY next_retry_at NULLS FIRST, created_at ASC" in sql
-    assert "LIMIT ?" in sql
+    assert "LIMIT %s" in sql
     # Params: (cutoff, limit) in this exact order.
     assert params == (fixed_now, 25)
 
@@ -173,9 +173,9 @@ def test_mark_lost_runs_autocommit_update():
 
     assert len(captured) == 1
     sql, params = captured[0]
-    assert "UPDATE plenora.storage_reconciliation_log" in sql
+    assert "UPDATE storage_reconciliation_log" in sql
     assert "SET state = 'lost'" in sql
-    assert "last_error = ?" in sql
+    assert "last_error = %s" in sql
     # `mark_lost` does NOT increment attempts (the call site has just
     # observed a failure via mark_failed_attempt — promoting is the
     # decision, not a fresh attempt).

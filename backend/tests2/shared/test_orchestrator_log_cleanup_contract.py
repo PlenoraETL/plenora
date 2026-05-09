@@ -58,7 +58,7 @@ def test_delete_task_log_runs_issues_canonical_sql(monkeypatch):
     assert len(calls) == 1
     sql, params = calls[0]
     # Canonical SQL: unqualified `log_runs` (search_path resolved).
-    assert sql == "DELETE FROM log_runs WHERE run_id = ?"
+    assert sql == "DELETE FROM log_runs WHERE run_id = %s"
     # Single positional placeholder bound to the supplied run_id.
     assert params == ("task-abc-123",)
 
@@ -132,7 +132,7 @@ def test_orchestrator_log_cleanup_owns_sql_not_db_service():
     src = open(log_cleanup.__file__, encoding="utf-8").read()
     legacy_module = "app.db." + "log_runs" + "_db_" + "service"
     assert legacy_module not in src
-    assert "DELETE FROM log_runs WHERE run_id = ?" in src
+    assert "DELETE FROM log_runs WHERE run_id = %s" in src
 
 
 # Module hygiene

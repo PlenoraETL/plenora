@@ -199,7 +199,7 @@ def create_eseguibile(
             id, name, description, canvas, expected_columns,
             default_output_format, default_output_name, icon, source_canvas_id,
             group_id, created_by, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
         """,
         (
             eid, name, description,
@@ -223,11 +223,11 @@ def get_eseguibile(eid: str, group_id: str = None) -> Optional[EseguibileRow]:
     """
     if group_id:
         row = db.fetchone(
-            "SELECT * FROM eseguibili WHERE id = ? AND group_id = ?",
+            "SELECT * FROM eseguibili WHERE id = %s AND group_id = %s",
             (eid, group_id)
         )
     else:
-        row = db.fetchone("SELECT * FROM eseguibili WHERE id = ?", (eid,))
+        row = db.fetchone("SELECT * FROM eseguibili WHERE id = %s", (eid,))
     return eseguibile_row_from_db(row) if row else None
 
 
@@ -242,7 +242,7 @@ def list_eseguibili(group_id: Optional[str] = None) -> List[EseguibileSummaryRow
             """SELECT id, name, description, default_output_format, default_output_name,
                       icon, source_canvas_id, group_id, created_by, created_at, updated_at,
                       expected_columns
-               FROM eseguibili WHERE group_id = ? ORDER BY created_at DESC""",
+               FROM eseguibili WHERE group_id = %s ORDER BY created_at DESC""",
             (group_id,)
         )
     else:
@@ -261,7 +261,7 @@ def list_eseguibili_by_source(source_canvas_id: str) -> List[EseguibileSourceRef
     Restituisce solo id e name (sufficienti per messaggi di errore).
     """
     rows = db.fetchall(
-        "SELECT id, name FROM eseguibili WHERE source_canvas_id = ?",
+        "SELECT id, name FROM eseguibili WHERE source_canvas_id = %s",
         (source_canvas_id,)
     )
     return [eseguibile_source_ref_row_from_db(row) for row in rows]
@@ -274,9 +274,9 @@ def update_eseguibile(eid: str, **fields: object) -> Optional[EseguibileRow]:
     if not to_update:
         return get_eseguibile(eid)
     to_update["updated_at"] = _now()
-    set_clause = ", ".join(f"{k} = ?" for k in to_update.keys())
+    set_clause = ", ".join(f"{k} = %s" for k in to_update.keys())
     values = list(to_update.values()) + [eid]
-    db.execute(f"UPDATE eseguibili SET {set_clause} WHERE id = ?", tuple(values))
+    db.execute(f"UPDATE eseguibili SET {set_clause} WHERE id = %s", tuple(values))
     return get_eseguibile(eid)
 
 
@@ -285,5 +285,5 @@ def delete_eseguibile(eid: str) -> bool:
     # db.execute non restituisce rowcount in modo uniforme, verifichiamo prima
     if get_eseguibile(eid) is None:
         return False
-    db.execute("DELETE FROM eseguibili WHERE id = ?", (eid,))
+    db.execute("DELETE FROM eseguibili WHERE id = %s", (eid,))
     return True

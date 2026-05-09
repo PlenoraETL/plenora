@@ -98,7 +98,7 @@ def test_loader_rejects_stream_mode():
 
 
 def test_default_call_applies_group_id_sql_filter():
-    """``is_superadmin=False`` -> the SQL has ``AND group_id = ?``
+    """``is_superadmin=False`` -> the SQL has ``AND group_id = %s``
     AND ``params`` carry the caller's group_id. This is the
     fail-closed surface: a row owned by another group simply does
     not return."""
@@ -112,7 +112,7 @@ def test_default_call_applies_group_id_sql_filter():
     with patch("app.db.pg_connection.fetchone", fake):
         out = FileSourceBlobLoader().load(_make_ref(), mode="bytes")
 
-    assert "AND group_id = ?" in captured["sql"]
+    assert "AND group_id = %s" in captured["sql"]
     # params: (max_bytes, file_source_id, group_id)
     assert captured["params"][1] == "fs1"
     assert captured["params"][2] == "g1"
@@ -122,7 +122,7 @@ def test_default_call_applies_group_id_sql_filter():
 
 
 def test_superadmin_bypass_skips_group_filter_and_audits():
-    """``is_superadmin=True`` -> SQL has NO ``AND group_id = ?``
+    """``is_superadmin=True`` -> SQL has NO ``AND group_id = %s``
     clause AND the audit log records the bypass with the
     canonical ``[AUDIT] FileSourceBlobLoader.load
     is_superadmin=True`` token."""
@@ -159,7 +159,7 @@ def test_superadmin_bypass_skips_group_filter_and_audits():
             _make_ref(is_superadmin=True), mode="bytes",
         )
 
-    assert "AND group_id = ?" not in captured["sql"]
+    assert "AND group_id = %s" not in captured["sql"]
     audit_logger.info.assert_called_once()
     audit_msg = audit_logger.info.call_args.args[0]
     assert "[AUDIT] FileSourceBlobLoader.load is_superadmin=True" in audit_msg
@@ -202,10 +202,10 @@ def test_sql_preflight_uses_length_and_case_pattern():
     assert "length(data) AS data_size" in sql
     # The bounded-BYTEA CASE: oversized data NULLs out at SQL.
     assert "CASE" in sql
-    assert "WHEN length(data) > ? THEN NULL" in sql
+    assert "WHEN length(data) > %s THEN NULL" in sql
     assert "ELSE data" in sql
-    # WHERE id = ? is the primary key clause.
-    assert "FROM file_sources WHERE id = ?" in sql
+    # WHERE id = %s is the primary key clause.
+    assert "FROM file_sources WHERE id = %s" in sql
 
 
 def test_oversized_bytea_raises_memory_limit_exceeded(monkeypatch):

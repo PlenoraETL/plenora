@@ -72,7 +72,7 @@ def _schedule_rows(rows: Iterable[Mapping[str, object]]) -> list[ScheduleRow]:
 
 
 def get_schedule_row(schedule_id: str) -> Optional[ScheduleRow]:
-    row = fetchone("SELECT * FROM schedules WHERE id = ?", (schedule_id,))
+    row = fetchone("SELECT * FROM schedules WHERE id = %s", (schedule_id,))
     if row:
         _decode_schedule_config(row)
     return ScheduleRow.from_mapping(row) if row else None
@@ -80,7 +80,7 @@ def get_schedule_row(schedule_id: str) -> Optional[ScheduleRow]:
 
 def list_schedule_rows(group_id: str) -> list[ScheduleRow]:
     rows = fetchall(
-        "SELECT * FROM schedules WHERE group_id = ? ORDER BY created_at DESC",
+        "SELECT * FROM schedules WHERE group_id = %s ORDER BY created_at DESC",
         (group_id,),
     )
     for row in rows:
@@ -110,7 +110,7 @@ def save_schedule(
     now = datetime.now(timezone.utc).isoformat()
     execute(
         "INSERT INTO schedules (id, group_id, project_id, name, cron_expression, is_enabled, config, created_at, updated_at, created_by) "
-        "VALUES (?,?,?,?,?,?,?,?,?,?) ON CONFLICT (id) DO UPDATE SET "
+        "VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) ON CONFLICT (id) DO UPDATE SET "
         "name=EXCLUDED.name, cron_expression=EXCLUDED.cron_expression, is_enabled=EXCLUDED.is_enabled, "
         "config=EXCLUDED.config, updated_at=EXCLUDED.updated_at",
         (
@@ -142,10 +142,10 @@ def update_schedule(
         fields["is_enabled"] = bool(fields["is_enabled"])
     fields["updated_at"] = datetime.now(timezone.utc).isoformat()
     set_clause, vals = safe_set_clause("schedules", fields)
-    execute(f"UPDATE schedules SET {set_clause} WHERE id = ?", vals + (schedule_id,))
+    execute(f"UPDATE schedules SET {set_clause} WHERE id = %s", vals + (schedule_id,))
     return get_schedule_row(schedule_id)
 
 
 def delete_schedule(schedule_id: str) -> bool:
-    cur = execute("DELETE FROM schedules WHERE id = ?", (schedule_id,))
+    cur = execute("DELETE FROM schedules WHERE id = %s", (schedule_id,))
     return cur.rowcount > 0

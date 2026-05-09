@@ -71,7 +71,7 @@ class ConcurrencyManager:
     def _get(self, key: str) -> str | None:
         """Legge un valore dal lock store, rispettando TTL."""
         row = db.fetchone(
-            "SELECT value, expires_at FROM scheduler_locks WHERE key = ?", (key,)
+            "SELECT value, expires_at FROM scheduler_locks WHERE key = %s", (key,)
         )
         if not row:
             return None
@@ -82,7 +82,7 @@ class ConcurrencyManager:
                 if exp.tzinfo is None:
                     exp = exp.replace(tzinfo=timezone.utc)
                 if datetime.now(timezone.utc) > exp:
-                    db.execute("DELETE FROM scheduler_locks WHERE key = ?", (key,))
+                    db.execute("DELETE FROM scheduler_locks WHERE key = %s", (key,))
                     return None
             except Exception:
                 pass
@@ -109,7 +109,7 @@ class ConcurrencyManager:
         # outcome: fail-closed sugli errori non-UNIQUE (propagano
         try:
             db.execute(
-                "INSERT INTO scheduler_locks (key, value, expires_at) VALUES (?,?,?)",
+                "INSERT INTO scheduler_locks (key, value, expires_at) VALUES (%s,%s,%s)",
                 (key, value, expires_at)
             )
             return True
@@ -196,7 +196,7 @@ class ConcurrencyManager:
             put_connection(conn)
 
     def _delete(self, key: str):
-        db.execute("DELETE FROM scheduler_locks WHERE key = ?", (key,))
+        db.execute("DELETE FROM scheduler_locks WHERE key = %s", (key,))
 
 
     def try_acquire(self, schedule_id: str, max_queue_size: int = 3) -> Literal["acquired", "queued", "skipped"]:

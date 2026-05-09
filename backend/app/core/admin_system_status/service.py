@@ -136,7 +136,7 @@ def get_verify_restore_status() -> AdminStatusBlock:
         from app.db.pg_connection import fetchone
         row = fetchone(
             "SELECT started_at, finished_at, exit_code, result, error_message "
-            "FROM plenora.verify_runs ORDER BY started_at DESC LIMIT 1"
+            "FROM verify_runs ORDER BY started_at DESC LIMIT 1"
         )
     except Exception as e:
         logger.warning(f"query verify_runs fallita: {e}")
@@ -890,7 +890,7 @@ def get_db_schema_size() -> AdminStatusBlock:
             "FROM pg_stat_user_tables s "
             "JOIN pg_class c ON c.oid = s.relid "
             "JOIN pg_namespace n ON n.oid = c.relnamespace "
-            "WHERE n.nspname = 'plenora' AND c.relname = ANY(?) "
+            "WHERE n.nspname = 'plenora' AND c.relname = ANY(%s) "
             "ORDER BY size_bytes DESC",
             (_CRITICAL_TABLES,),
         )

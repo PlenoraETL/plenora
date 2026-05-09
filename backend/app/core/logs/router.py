@@ -69,17 +69,17 @@ def get_logs(
     params = []
 
     if level:
-        placeholders = ",".join("?" * len(level.split(",")))
+        placeholders = ",".join(["%s"] * len(level.split(",")))
         conditions.append(f"level IN ({placeholders})")
         params.extend(l.strip().upper() for l in level.split(","))
 
     if module:
-        placeholders = ",".join("?" * len(module.split(",")))
+        placeholders = ",".join(["%s"] * len(module.split(",")))
         conditions.append(f"module IN ({placeholders})")
         params.extend(m.strip().lower() for m in module.split(","))
 
     if op:
-        placeholders = ",".join("?" * len(op.split(",")))
+        placeholders = ",".join(["%s"] * len(op.split(",")))
         conditions.append(f"op IN ({placeholders})")
         params.extend(o.strip().lower() for o in op.split(","))
 
@@ -93,7 +93,7 @@ def get_logs(
         # via assert_project_visible che accetta anche progetti condivisi
         if current_user.role != "superadmin":
             assert_project_visible(project_id, current_user)
-        conditions.append("project_id = ?")
+        conditions.append("project_id = %s")
         params.append(project_id)
 
     if search:
@@ -102,20 +102,20 @@ def get_logs(
         # pattern wildcard arbitrari (es. cercare `%password%` per discovery
         # PostgreSQL supporta `ESCAPE '\'` per l'escape esplicito
         escaped = search.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
-        conditions.append("msg LIKE ? ESCAPE '\\'")
+        conditions.append("msg LIKE %s ESCAPE '\\'")
         params.append(f"%{escaped}%")
 
     if after:
-        conditions.append("ts >= ?")
+        conditions.append("ts >= %s")
         params.append(after)
 
     if before:
-        conditions.append("ts <= ?")
+        conditions.append("ts <= %s")
         params.append(before)
 
     # Filtro per gruppo (superadmin vede tutto, altri solo il proprio gruppo
     if current_user.role != "superadmin":
-        conditions.append("(group_id = ? OR group_id = '')")
+        conditions.append("(group_id = %s OR group_id = '')")
         params.append(current_user.group_id)
 
     where = f"WHERE {' AND '.join(conditions)}" if conditions else ""
@@ -123,7 +123,7 @@ def get_logs(
     total_row = _fetchone(f"SELECT COUNT(*) as c FROM logs {where}", tuple(params))
     total = total_row["c"] if total_row else 0
     rows = _fetchall(
-        f"SELECT * FROM logs {where} ORDER BY id DESC LIMIT ? OFFSET ?",
+        f"SELECT * FROM logs {where} ORDER BY id DESC LIMIT %s OFFSET %s",
         tuple(params) + (limit, offset)
     )
 
@@ -146,10 +146,10 @@ def get_log_stats(
     conditions = []
     params = []
     if after:
-        conditions.append("ts >= ?")
+        conditions.append("ts >= %s")
         params.append(after)
     if current_user.role != "superadmin":
-        conditions.append("(group_id = ? OR group_id = '')")
+        conditions.append("(group_id = %s OR group_id = '')")
         params.append(current_user.group_id)
 
     where = f"WHERE {' AND '.join(conditions)}" if conditions else ""

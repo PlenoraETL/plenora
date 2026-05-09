@@ -161,7 +161,7 @@ def test_connection_db_delete_owns_delete_sql(monkeypatch) -> None:
     monkeypatch.setattr(connection_db, "execute", _execute)
 
     assert connection_db.delete_connection("conn-1") is True
-    assert executed == [("DELETE FROM connections WHERE id = ?", ("conn-1",))]
+    assert executed == [("DELETE FROM connections WHERE id = %s", ("conn-1",))]
 
 
 def test_connection_db_list_returns_typed_rows(monkeypatch) -> None:

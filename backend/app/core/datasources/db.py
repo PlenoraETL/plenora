@@ -76,11 +76,11 @@ def get_datasource(
 ) -> Optional[DataSourceRow]:
     if group_id:
         row = fetchone(
-            "SELECT * FROM datasources WHERE id = ? AND group_id = ?",
+            "SELECT * FROM datasources WHERE id = %s AND group_id = %s",
             (ds_id, group_id),
         )
     else:
-        row = fetchone("SELECT * FROM datasources WHERE id = ?", (ds_id,))
+        row = fetchone("SELECT * FROM datasources WHERE id = %s", (ds_id,))
     return _optional_datasource_row(row)
 
 
@@ -89,7 +89,7 @@ def list_datasources(group_id: str | None = None) -> list[DataSourceRow]:
         rows = fetchall("SELECT * FROM datasources ORDER BY name")
     else:
         rows = fetchall(
-            "SELECT * FROM datasources WHERE group_id = ? ORDER BY name",
+            "SELECT * FROM datasources WHERE group_id = %s ORDER BY name",
             (group_id,),
         )
     return [DataSourceRow.from_mapping(row) for row in rows]
@@ -106,7 +106,7 @@ def save_datasource(
     now = datetime.now(timezone.utc).isoformat()
     execute(
         "INSERT INTO datasources (id, group_id, name, ds_type, config, created_at, updated_at, created_by) "
-        "VALUES (?,?,?,?,?,?,?,?) ON CONFLICT (id) DO UPDATE SET "
+        "VALUES (%s,%s,%s,%s,%s,%s,%s,%s) ON CONFLICT (id) DO UPDATE SET "
         "name=EXCLUDED.name, ds_type=EXCLUDED.ds_type, config=EXCLUDED.config, updated_at=EXCLUDED.updated_at",
         (
             ds_id,
@@ -133,9 +133,9 @@ def update_datasource(ds_id: str, **fields: object) -> None:
         update_fields["config"] = json.dumps(dict(update_fields["config"]))
     update_fields["updated_at"] = datetime.now(timezone.utc).isoformat()
     set_clause, params = safe_set_clause("datasources", update_fields)
-    execute(f"UPDATE datasources SET {set_clause} WHERE id = ?", params + (ds_id,))
+    execute(f"UPDATE datasources SET {set_clause} WHERE id = %s", params + (ds_id,))
 
 
 def delete_datasource(ds_id: str) -> bool:
-    cur = execute("DELETE FROM datasources WHERE id = ?", (ds_id,))
+    cur = execute("DELETE FROM datasources WHERE id = %s", (ds_id,))
     return cur.rowcount > 0

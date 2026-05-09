@@ -77,7 +77,7 @@ def test_write_log_issues_insert(monkeypatch):
     # Una sola INSERT
     assert len(state["executions"]) == 1
     sql, args = state["executions"][0]
-    assert "INSERT INTO plenora.schedule_logs" in sql
+    assert "INSERT INTO schedule_logs" in sql
     assert args[0] == entry.log_id
     assert args[1] == entry.schedule_id
     assert args[2] == entry.timestamp
@@ -102,7 +102,7 @@ def test_write_log_serializes_steps_as_jsonb(monkeypatch):
     svc.write_log(entry)
 
     _, args = state["executions"][0]
-    # args[6] = steps (JSON string passato a ?::jsonb cast)
+    # args[6] = steps (JSON string passato a %s::jsonb cast)
     import json
     steps = json.loads(args[6])
     assert len(steps) == 2
@@ -225,7 +225,7 @@ def test_get_logs_status_filter_matches_pipeline_event(monkeypatch):
     svc.get_logs("schedule_x", status_filter="success")
 
     # Il filtro deve aver aggiunto "event = 'PIPELINE_SUCCESS'" come arg
-    assert "AND event = ?" in captured_args["count"][0]
+    assert "AND event = %s" in captured_args["count"][0]
     assert captured_args["count"][1] == ("schedule_x", "PIPELINE_SUCCESS")
 
 
@@ -276,8 +276,8 @@ def test_delete_schedule_logs_issues_delete(monkeypatch):
 
     assert deleted == 7
     sql, args = state["executions"][0]
-    assert "DELETE FROM plenora.schedule_logs" in sql
-    assert "WHERE schedule_id = ?" in sql
+    assert "DELETE FROM schedule_logs" in sql
+    assert "WHERE schedule_id = %s" in sql
     assert args == ("schedule_abc",)
 
 
@@ -292,8 +292,8 @@ def test_delete_logs_before_uses_timestamp_filter(monkeypatch):
 
     assert deleted == 150
     sql, args = state["executions"][0]
-    assert "DELETE FROM plenora.schedule_logs" in sql
-    assert "WHERE timestamp < ?" in sql
+    assert "DELETE FROM schedule_logs" in sql
+    assert "WHERE timestamp < %s" in sql
     # arg e' datetime UTC costruito da date + 00:00:00
     assert args[0].date() == date(2026, 1, 1)
     assert args[0].hour == 0

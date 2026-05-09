@@ -79,24 +79,24 @@ def get_file_source(file_id: str, include_data: bool = False, group_id: str = No
     if include_data:
         if group_id:
             row = fetchone(
-                "SELECT * FROM file_sources WHERE id = ? AND group_id = ?",
+                "SELECT * FROM file_sources WHERE id = %s AND group_id = %s",
                 (file_id, group_id),
             )
         else:
             row = fetchone(
-                "SELECT * FROM file_sources WHERE id = ?",
+                "SELECT * FROM file_sources WHERE id = %s",
                 (file_id,),
             )
     elif group_id:
         row = fetchone(
             "SELECT id, group_id, name, original_filename, format, size_bytes, metadata, created_at, created_by "
-            "FROM file_sources WHERE id = ? AND group_id = ?",
+            "FROM file_sources WHERE id = %s AND group_id = %s",
             (file_id, group_id),
         )
     else:
         row = fetchone(
             "SELECT id, group_id, name, original_filename, format, size_bytes, metadata, created_at, created_by "
-            "FROM file_sources WHERE id = ?",
+            "FROM file_sources WHERE id = %s",
             (file_id,),
         )
     if row and row.get("metadata"):
@@ -111,7 +111,7 @@ def list_file_sources(group_id: Optional[str] = None) -> List[Dict]:
             "SELECT id, group_id, name, original_filename, format, size_bytes, created_at, created_by FROM file_sources ORDER BY created_at DESC"
         )
     return fetchall(
-        "SELECT id, group_id, name, original_filename, format, size_bytes, created_at, created_by FROM file_sources WHERE group_id = ? ORDER BY created_at DESC",
+        "SELECT id, group_id, name, original_filename, format, size_bytes, created_at, created_by FROM file_sources WHERE group_id = %s ORDER BY created_at DESC",
         (group_id,)
     )
 
@@ -141,7 +141,7 @@ def save_file_source(file_id: str, group_id: str, name: str, original_filename: 
     effective_size = size_bytes if size_bytes is not None else (len(data) if data else 0)
     execute(
         "INSERT INTO file_sources (id, group_id, name, original_filename, format, data, storage_key, size_bytes, metadata, created_at, updated_at, created_by) "
-        "VALUES (?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT (id) DO UPDATE SET "
+        "VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) ON CONFLICT (id) DO UPDATE SET "
         "name=EXCLUDED.name, original_filename=EXCLUDED.original_filename, format=EXCLUDED.format, "
         "data=EXCLUDED.data, storage_key=EXCLUDED.storage_key, size_bytes=EXCLUDED.size_bytes, "
         "metadata=EXCLUDED.metadata, updated_at=EXCLUDED.updated_at",
@@ -228,7 +228,7 @@ def update_file_source_metadata(file_id: str, metadata: dict) -> None:
     from datetime import datetime, timezone
     now = datetime.now(timezone.utc).isoformat()
     execute(
-        "UPDATE file_sources SET metadata = ?, updated_at = ? WHERE id = ?",
+        "UPDATE file_sources SET metadata = %s, updated_at = %s WHERE id = %s",
         (json.dumps(metadata), now, file_id)
     )
 

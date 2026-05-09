@@ -71,7 +71,7 @@ def test_record_pending_executes_insert_with_pending_state_and_jsonb_cast():
         extras={"file_id": "fs-1"},
     )
     sql, params = cur.execute.call_args[0]
-    assert "INSERT INTO plenora.storage_reconciliation_log" in sql
+    assert "INSERT INTO storage_reconciliation_log" in sql
     # State is hard-coded to 'pending' in the SQL, not a parameter.
     assert "'pending'" in sql
     assert "RETURNING id" in sql
@@ -173,7 +173,7 @@ def test_mark_done_issues_update_to_state_done(monkeypatch):
     mark_done("rec-1")
     assert len(calls) == 1
     sql, params = calls[0]
-    assert "UPDATE plenora.storage_reconciliation_log" in sql
+    assert "UPDATE storage_reconciliation_log" in sql
     assert "state = 'done'" in sql
     assert "updated_at = now()" in sql
     assert params == ("rec-1",)
@@ -194,8 +194,8 @@ def test_mark_failed_attempt_increments_and_sets_error(monkeypatch):
     assert len(calls) == 1
     sql, params = calls[0]
     assert "attempts = attempts + 1" in sql
-    assert "last_error = ?" in sql
-    assert "next_retry_at = ?" in sql
+    assert "last_error = %s" in sql
+    assert "next_retry_at = %s" in sql
     # Does NOT auto-promote to 'lost' (reconciler's job, batch 006).
     assert "state = 'lost'" not in sql
     assert params == ("RuntimeError: S3 timeout", None, "rec-3")

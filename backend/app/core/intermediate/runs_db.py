@@ -145,7 +145,7 @@ def create_run(
     execute_boundary(
         """INSERT INTO runs
            (run_id, canvas_id, group_id, timestamp, status, total_nodes, user_id)
-           VALUES (?,?,?,?,?,?,?)""",
+           VALUES (%s,%s,%s,%s,%s,%s,%s)""",
         (run_id, canvas_id, group_id, now, "running", total_nodes, user_id),
     )
     return _hydrate_run(get_run_boundary(run_id))
@@ -158,7 +158,7 @@ def get_run(
 ) -> Optional[RunRow]:
     fetchone_boundary = fetchone_func or fetchone
     return _hydrate_run(
-        fetchone_boundary("SELECT * FROM runs WHERE run_id = ?", (run_id,))
+        fetchone_boundary("SELECT * FROM runs WHERE run_id = %s", (run_id,))
     )
 
 
@@ -172,7 +172,7 @@ def list_runs(
     """List runs for a canvas, isolated by group, newest first."""
     fetchall_boundary = fetchall_func or fetchall
     rows = fetchall_boundary(
-        "SELECT * FROM runs WHERE canvas_id = ? AND group_id = ? ORDER BY timestamp DESC LIMIT ?",
+        "SELECT * FROM runs WHERE canvas_id = %s AND group_id = %s ORDER BY timestamp DESC LIMIT %s",
         (canvas_id, group_id, limit),
     )
     return [RunRow.from_record(row) for row in rows]
@@ -199,10 +199,10 @@ def update_run(
             f"Campi non consentiti per UPDATE runs: {invalid}. "
             f"Consentiti: {_ALLOWED_RUN_UPDATE_FIELDS}"
         )
-    set_clause = ", ".join(f"{k} = ?" for k in fields)
+    set_clause = ", ".join(f"{k} = %s" for k in fields)
     execute_boundary = execute_func or execute
     execute_boundary(
-        f"UPDATE runs SET {set_clause} WHERE run_id = ?",
+        f"UPDATE runs SET {set_clause} WHERE run_id = %s",
         tuple(fields.values()) + (run_id,),
     )
 
@@ -218,12 +218,12 @@ def pin_run(
     execute_boundary = execute_func or execute
     if group_id is None:
         cur = execute_boundary(
-            "UPDATE runs SET pinned = ? WHERE run_id = ?",
+            "UPDATE runs SET pinned = %s WHERE run_id = %s",
             (pinned, run_id),
         )
     else:
         cur = execute_boundary(
-            "UPDATE runs SET pinned = ? WHERE run_id = ? AND group_id = ?",
+            "UPDATE runs SET pinned = %s WHERE run_id = %s AND group_id = %s",
             (pinned, run_id, group_id),
         )
     return cur.rowcount > 0

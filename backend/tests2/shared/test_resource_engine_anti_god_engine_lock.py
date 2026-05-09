@@ -259,7 +259,7 @@ def test_loader_owns_the_dispatch_tokens():
         # 013: CASE-bounded `data` column. Without this, PG would
         # ship the oversized BYTEA over the wire before any cap
         # check could fire.
-        "WHEN length(data) > ? THEN NULL",
+        "WHEN length(data) > %s THEN NULL",
         "ELSE data",
         # BYTEA conversion path
         "isinstance(data, memoryview)",

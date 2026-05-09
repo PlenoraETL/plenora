@@ -124,7 +124,7 @@ def _fetch_row(
     project_id (back-compat for existing callers). Non-empty
     string -> additional AND filter (RESOURCE-ENGINE-007 row-metadata
     project-level binding). The clause is built dynamically so the
-    SQL still uses `?` placeholders for every value (no string
+    SQL uses native psycopg2 `%s` placeholders for every value (no string
     interpolation; psycopg2 quotes every filter).
 
     SQL shape note:
@@ -140,13 +140,13 @@ def _fetch_row(
     """
     from app.db.pg_connection import fetchone
 
-    clauses = ["id = ?"]
+    clauses = ["id = %s"]
     where_params: list = [result_id]
     if group_id_filter:
-        clauses.append("group_id = ?")
+        clauses.append("group_id = %s")
         where_params.append(group_id_filter)
     if project_id_filter:
-        clauses.append("project_id = ?")
+        clauses.append("project_id = %s")
         where_params.append(project_id_filter)
 
     # SQL fragment layout note: the SELECT projection is kept on
@@ -159,16 +159,16 @@ def _fetch_row(
         "SELECT storage_key, project_id, length(data) AS data_size, "
         "CASE "
         "WHEN storage_key IS NOT NULL THEN NULL "
-        "WHEN length(data) > ? THEN NULL "
+        "WHEN length(data) > %s THEN NULL "
         "ELSE data "
         "END AS data "
         "FROM results WHERE " + " AND ".join(clauses)
     )
     # Parameter order matches placeholder order in the SQL text
-    # 1. CASE WHEN length(data) > ? -> max_bytes
-    # 2. WHERE id = ? -> result_id
-    # 3. AND group_id = ? -> group_id_filter (if set
-    # 4. AND project_id = ? -> project_id_filter (if set
+    # 1. CASE WHEN length(data) > %s -> max_bytes
+    # 2. WHERE id = %s -> result_id
+    # 3. AND group_id = %s -> group_id_filter (if set
+    # 4. AND project_id = %s -> project_id_filter (if set
     params = (max_bytes, *where_params)
     row = fetchone(sql, params)
     if row is None:
@@ -210,7 +210,7 @@ def _dispatch_by_id(
     funnel through here.
 
     ``project_id_filter`` (RESOURCE-ENGINE-007) is row-metadata
-    only: the SQL ``WHERE project_id = ?`` clause is what
+    only: the SQL ``WHERE project_id = %s`` clause is what
     enforces the binding. The fail-closed surface is identical to
     the group-level filter — a row owned by another project
     simply does not return (becomes ``"none"`` backend tag).
@@ -485,7 +485,7 @@ class ResultBlobLoader:
         # RESOURCE-ENGINE-007: optional row-metadata project-level
         # binding. None => no project filter (back-compat for
         # every existing caller). Non-empty => SQL `AND project_id
-        # = ?`. is_superadmin does NOT bypass project filter when
+        # = %s`. is_superadmin does NOT bypass project filter when
         # the caller explicitly opts in: the audit-bypass semantic
         # only applies to the primary group filter; project
         # binding is a row-level invariant the caller asked for

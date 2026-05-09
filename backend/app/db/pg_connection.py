@@ -5,7 +5,6 @@ Canonical entry point per i query helper DAL (`fetchone`, `fetchall`,
 """
 
 import os
-import json
 import threading
 from contextlib import contextmanager
 from dataclasses import dataclass
@@ -19,50 +18,10 @@ from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
 
-import psycopg2.extensions
-_JSONB_OID = 3802
-_JSON_OID = 114
-
-def _json_as_text(value, cur):
-    return value  # ritorna la stringa JSON raw, non parsed
-
-psycopg2.extensions.register_type(
-    psycopg2.extensions.new_type((_JSONB_OID,), 'JSONB_AS_TEXT', _json_as_text)
-)
-psycopg2.extensions.register_type(
-    psycopg2.extensions.new_type((_JSON_OID,), 'JSON_AS_TEXT', _json_as_text)
-)
-
-_TIMESTAMPTZ_OID = 1184
-_TIMESTAMP_OID = 1114
-_DATE_OID = 1082
-
-def _timestamp_as_text(value, cur):
-    if value is None:
-        return None
-    # PostgreSQL ritorna timezone come +00, Pydantic vuole +00:00
-    # Fix: se finisce con +XX o -XX (2 cifre), aggiungi :00
-    import re as _re
-    if _re.search(r'[+-]\d{2}$', value):
-        value = value + ':00'
-    return value
-
-psycopg2.extensions.register_type(
-    psycopg2.extensions.new_type((_TIMESTAMPTZ_OID,), 'TSTZ_AS_TEXT', _timestamp_as_text)
-)
-psycopg2.extensions.register_type(
-    psycopg2.extensions.new_type((_TIMESTAMP_OID,), 'TS_AS_TEXT', _timestamp_as_text)
-)
-psycopg2.extensions.register_type(
-    psycopg2.extensions.new_type((_DATE_OID,), 'DATE_AS_TEXT', _timestamp_as_text)
-)
-
 # ── Configurazione ──────────────────────────────────────────────────────────
 
-_DATABASE_URL = os.getenv("DATABASE_URL")
-if not _DATABASE_URL:
-    raise RuntimeError("DATABASE_URL non configurato. Imposta la variabile d'ambiente.")
-_DB_SCHEMA = os.getenv("DB_SCHEMA", "plenora")
+_DATABASE_URL: Optional[str] = None
+_DB_SCHEMA = "plenora"
 
 
 def _read_int_env(name: str, default: int) -> int:
@@ -80,37 +39,41 @@ def _read_int_env(name: str, default: int) -> int:
         )
 
 
-_POOL_MIN = _read_int_env("DB_POOL_MIN", 2)
-_POOL_MAX = _read_int_env("DB_POOL_MAX", 12)
+_POOL_MIN = 2
+_POOL_MAX = 12
 
 # C7: idle_in_transaction timeout applicato tramite GUC per-connection
 # Evita zombie da transazioni applicative leaked (codice che apre BEGIN
 # e non committa/rollbacka mai) senza richiedere modifiche a
 # postgresql.conf. Scope: solo le connessioni del nostro pool
 # Default 300000ms = 5min. Imposta 0 per disabilitare
-_IDLE_IN_TRANSACTION_MS = _read_int_env(
-    "DB_IDLE_IN_TRANSACTION_TIMEOUT_MS", 300000
-)
+_IDLE_IN_TRANSACTION_MS = 300000
+_POOL_CONFIG_LOADED = False
 
 
 # C7 fix-nit: guardrail espliciti sui parametri del pool. Senza questi
 # check, valori malformati (MIN>MAX, negativi, 0) si propagano fino a
 # ThreadedConnectionPool dove falliscono con errori poco leggibili
 # Fail fast all'import con messaggio diagnostico
-def _validate_pool_params() -> None:
+def _validate_pool_params(
+    *,
+    pool_min: int,
+    pool_max: int,
+    idle_in_transaction_ms: int,
+) -> None:
     errors = []
-    if _POOL_MIN < 0:
-        errors.append(f"DB_POOL_MIN={_POOL_MIN} deve essere >= 0")
-    if _POOL_MAX < 1:
-        errors.append(f"DB_POOL_MAX={_POOL_MAX} deve essere >= 1")
-    if _POOL_MIN > _POOL_MAX:
+    if pool_min < 0:
+        errors.append(f"DB_POOL_MIN={pool_min} deve essere >= 0")
+    if pool_max < 1:
+        errors.append(f"DB_POOL_MAX={pool_max} deve essere >= 1")
+    if pool_min > pool_max:
         errors.append(
-            f"DB_POOL_MIN={_POOL_MIN} > DB_POOL_MAX={_POOL_MAX}: "
+            f"DB_POOL_MIN={pool_min} > DB_POOL_MAX={pool_max}: "
             f"il minimo non puo' superare il massimo"
         )
-    if _IDLE_IN_TRANSACTION_MS < 0:
+    if idle_in_transaction_ms < 0:
         errors.append(
-            f"DB_IDLE_IN_TRANSACTION_TIMEOUT_MS={_IDLE_IN_TRANSACTION_MS} "
+            f"DB_IDLE_IN_TRANSACTION_TIMEOUT_MS={idle_in_transaction_ms} "
             f"deve essere >= 0 (0 = disabilitato)"
         )
     if errors:
@@ -120,12 +83,47 @@ def _validate_pool_params() -> None:
         )
 
 
-_validate_pool_params()
+def _load_pool_config() -> None:
+    """Load and validate PostgreSQL pool config lazily.
+
+    Importing this module must be passive: unit tests and import-time
+    dependency checks can load `app.db.pg_connection` without a
+    DATABASE_URL. A clear error is raised only when a DB operation tries
+    to initialize the pool.
+    """
+    global _DATABASE_URL, _DB_SCHEMA, _POOL_MIN, _POOL_MAX
+    global _IDLE_IN_TRANSACTION_MS, _POOL_CONFIG_LOADED
+
+    if _POOL_CONFIG_LOADED:
+        return
+
+    database_url = os.getenv("DATABASE_URL")
+    if not database_url:
+        raise RuntimeError("DATABASE_URL non configurato. Imposta la variabile d'ambiente.")
+
+    pool_min = _read_int_env("DB_POOL_MIN", 2)
+    pool_max = _read_int_env("DB_POOL_MAX", 12)
+    idle_in_transaction_ms = _read_int_env(
+        "DB_IDLE_IN_TRANSACTION_TIMEOUT_MS", 300000
+    )
+    _validate_pool_params(
+        pool_min=pool_min,
+        pool_max=pool_max,
+        idle_in_transaction_ms=idle_in_transaction_ms,
+    )
+
+    _DATABASE_URL = database_url
+    _DB_SCHEMA = os.getenv("DB_SCHEMA", "plenora")
+    _POOL_MIN = pool_min
+    _POOL_MAX = pool_max
+    _IDLE_IN_TRANSACTION_MS = idle_in_transaction_ms
+    _POOL_CONFIG_LOADED = True
 
 # ── Pool singleton ──────────────────────────────────────────────────────────
 
 _pool: Optional[psycopg2.pool.ThreadedConnectionPool] = None
 _pool_lock = threading.Lock()
+_transaction_state = threading.local()
 
 
 def _get_pool() -> psycopg2.pool.ThreadedConnectionPool:
@@ -139,6 +137,7 @@ def _get_pool() -> psycopg2.pool.ThreadedConnectionPool:
     if _pool is None or _pool.closed:
         with _pool_lock:
             if _pool is None or _pool.closed:
+                _load_pool_config()
                 # C7: GUC per-connection via startup `options` parameter
                 # c search_path=... → schema predefinito
                 # c idle_in_transaction_session_timeout=Nms → zombie guard
@@ -272,20 +271,18 @@ def get_pool_headroom() -> PoolHeadroom:
 # ── Query helpers (canonical DAL surface) ────────────────────────────────────
 
 def _adapt_params(sql: str, params: tuple) -> Tuple[str, tuple]:
-    """Adatta i placeholder `?` storici al `%s` di psycopg2.
+    """Reject legacy SQLite-style placeholders.
 
-    Il backend canonico è PostgreSQL/psycopg2 (placeholder `%s`); i
-    callsite legacy che ancora usano `?` continuano a funzionare
-    grazie a questa conversione automatica.
-
-    NOTA: non converte `?` dentro stringhe quotate (es. LIKE
-    patterns con literal `?`). Per query complesse usare direttamente
-    `%s`.
+    `pg_connection` is the PostgreSQL boundary and must receive native
+    psycopg2 placeholders (`%s`). A global `?` -> `%s` rewrite is unsafe:
+    it also rewrites literal question marks and PostgreSQL operators.
     """
-    # Semplice sostituzione: ogni ? non dentro apici diventa %s
-    # Per il 99% dei casi è sufficiente
-    adapted_sql = sql.replace("?", "%s")
-    return adapted_sql, params
+    if "?" in sql:
+        raise ValueError(
+            "pg_connection accepts only native psycopg2 placeholders (%s); "
+            "legacy '?' placeholders must be migrated at the caller"
+        )
+    return sql, params
 
 
 def fetchone(sql: str, params: tuple = ()) -> Optional[Dict]:
@@ -371,7 +368,14 @@ def transaction():
             conn.execute("UPDATE ...")
         # auto-commit alla fine, rollback su exception
     """
+    if getattr(_transaction_state, "active", False):
+        raise RuntimeError(
+            "Nested pg_connection.transaction() is not supported. "
+            "Pass the existing transaction connection through the call chain "
+            "or add explicit savepoint support at this boundary."
+        )
     conn = get_connection()
+    _transaction_state.active = True
     try:
         yield conn
         conn.commit()
@@ -379,7 +383,10 @@ def transaction():
         conn.rollback()
         raise
     finally:
-        put_connection(conn)
+        try:
+            put_connection(conn)
+        finally:
+            _transaction_state.active = False
 
 
 # ── Init DB (crea tabelle se non esistono) ──────────────────────────────────

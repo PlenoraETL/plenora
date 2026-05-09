@@ -51,7 +51,7 @@ def test_cleanup_task_deletes_only_task_result_and_task_logs(client, tmp_path):
     delete_result.assert_called_once_with("res-1")
     assert not task_file.exists()
     assert deleted_sql == [
-        ("DELETE FROM log_runs WHERE run_id = ?", (task_id,)),
+        ("DELETE FROM log_runs WHERE run_id = %s", (task_id,)),
     ]
 
 

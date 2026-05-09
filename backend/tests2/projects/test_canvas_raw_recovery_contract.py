@@ -61,7 +61,7 @@ def test_service_raw_canvas_read_keeps_group_filter() -> None:
         canvas=malformed_canvas,
     )
     fetchone.assert_called_once_with(
-        "SELECT id, canvas FROM projects WHERE id = ? AND group_id = ?",
+        "SELECT id, canvas FROM projects WHERE id = %s AND group_id = %s",
         ("p-corrupt", "grp-1"),
     )
 

@@ -66,28 +66,28 @@ def get_runs(
     params = []
 
     if project_id:
-        conditions.append("project_id = ?")
+        conditions.append("project_id = %s")
         params.append(project_id)
 
     if status:
-        conditions.append("status = ?")
+        conditions.append("status = %s")
         params.append(status)
 
     if module:
-        conditions.append("module = ?")
+        conditions.append("module = %s")
         params.append(module)
 
     if after:
-        conditions.append("ts_start >= ?")
+        conditions.append("ts_start >= %s")
         params.append(after)
 
     if before:
-        conditions.append("ts_start <= ?")
+        conditions.append("ts_start <= %s")
         params.append(before)
 
     # Isolamento per gruppo
     if current_user.role != "superadmin":
-        conditions.append("(group_id = ? OR group_id = '')")
+        conditions.append("(group_id = %s OR group_id = '')")
         params.append(current_user.group_id)
 
     where = f"WHERE {' AND '.join(conditions)}" if conditions else ""
@@ -95,7 +95,7 @@ def get_runs(
     total_row = _fetchone(f"SELECT COUNT(*) as c FROM log_runs {where}", tuple(params))
     total = total_row["c"] if total_row else 0
     rows = _fetchall(
-        f"SELECT * FROM log_runs {where} ORDER BY ts_start DESC LIMIT ? OFFSET ?",
+        f"SELECT * FROM log_runs {where} ORDER BY ts_start DESC LIMIT %s OFFSET %s",
         tuple(params) + (limit, offset)
     )
 
@@ -121,7 +121,7 @@ def get_run(
     Dettaglio run: metadati + steps + (opzionale) log tecnici correlati.
     debug_payload escluso — usa /runs/{run_id}/payload per il Debug Agent.
     """
-    row = _fetchone("SELECT * FROM log_runs WHERE run_id = ?", (run_id,))
+    row = _fetchone("SELECT * FROM log_runs WHERE run_id = %s", (run_id,))
     if not row:
         raise HTTPException(
             status_code=404,
@@ -144,7 +144,7 @@ def get_run(
 
     if include_logs:
         log_rows = _fetchall(
-            "SELECT * FROM logs WHERE run_id = ? ORDER BY id ASC LIMIT ?",
+            "SELECT * FROM logs WHERE run_id = %s ORDER BY id ASC LIMIT %s",
             (run_id, log_limit)
         )
         run["logs"] = [_log_to_dict(r) for r in log_rows]
@@ -165,7 +165,7 @@ def get_run_payload(
     Solo run in status='failure' hanno un payload.
     """
     row = _fetchone(
-        "SELECT run_id, status, group_id, debug_payload FROM log_runs WHERE run_id = ?",
+        "SELECT run_id, status, group_id, debug_payload FROM log_runs WHERE run_id = %s",
         (run_id,)
     )
 

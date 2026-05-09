@@ -79,9 +79,9 @@ def test_get_result_data_uses_group_filter_when_provided(monkeypatch):
 
     results_blob.get_result_data("res-1", group_id="grp-1")
 
-    assert "group_id = ?" in seen["sql"]
+    assert "group_id = %s" in seen["sql"]
     # 013: the BYTEA SQL preflight prepends `max_bytes` as the
-    # leading bound parameter (CASE WHEN length(data) > ?). The
+    # leading bound parameter (CASE WHEN length(data) > %s). The
     # WHERE-clause params follow in declaration order. MEMORY-007
     # removed the loader's `_resolve_max_bytes` alias; the canonical
     # entry point is `resolve_resource_max_bytes`.

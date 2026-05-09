@@ -79,8 +79,8 @@ def test_update_log_updates_execution_status(monkeypatch):
 
     assert calls == [
         (
-            "UPDATE execution_logs SET status=?, finished_at=?, duration_s=?, "
-            "rows_count=?, message=?, error=? WHERE id=?",
+            "UPDATE execution_logs SET status=%s, finished_at=%s, duration_s=%s, "
+            "rows_count=%s, message=%s, error=%s WHERE id=%s",
             (
                 "success",
                 "2026-05-07T12:00:00+00:00",
@@ -109,8 +109,8 @@ def test_list_logs_applies_filters_and_bounds(monkeypatch):
     assert out == rows
     assert calls == [
         (
-            "SELECT * FROM execution_logs WHERE project_id = ? AND group_id = ? "
-            "ORDER BY started_at DESC LIMIT ? OFFSET ?",
+            "SELECT * FROM execution_logs WHERE project_id = %s AND group_id = %s "
+            "ORDER BY started_at DESC LIMIT %s OFFSET %s",
             ("project-1", "group-1", 500, 0),
         )
     ]

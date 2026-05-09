@@ -367,7 +367,7 @@ class LogArchiveWriter:
             # su id crescente -> id fuori dal batch = riga piu' recente
             max_id = max(row["id"] for row in rows)
             sql = (
-                f"DELETE FROM plenora.{table} "
+                f"DELETE FROM {table} "
                 f"WHERE {ts_column} < %s AND id <= %s"
             )
             retention_bypass_execute(sql, (cutoff_ts, max_id))

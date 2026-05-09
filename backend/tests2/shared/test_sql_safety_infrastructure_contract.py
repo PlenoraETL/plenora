@@ -63,13 +63,13 @@ _ALLOWED_DYNAMIC_SQL_FSTRINGS = {
     (
         "app/core/files/db.py",
         "get_file_source",
-        "SELECT * FROM file_sources WHERE id = ?",
-    ): "Optional group filter is a static `AND group_id = ?` fragment.",
+        "SELECT * FROM file_sources WHERE id = %s",
+    ): "Optional group filter is a static `AND group_id = %s` fragment.",
     (
         "app/core/files/db.py",
         "get_file_source",
-        "SELECT id, group_id, name, original_filename, format, size_bytes, metadata, created_at FROM file_sources WHERE id = ?",
-    ): "Optional group filter is a static `AND group_id = ?` fragment.",
+        "SELECT id, group_id, name, original_filename, format, size_bytes, metadata, created_at FROM file_sources WHERE id = %s",
+    ): "Optional group filter is a static `AND group_id = %s` fragment.",
     (
         "app/core/intermediate/runs_db.py",
         "update_run",
@@ -158,6 +158,21 @@ _ALLOWED_DYNAMIC_SQL_FSTRINGS = {
         "get_logs",
         "SELECT * FROM plenora.schedule_logs ",
     ): "WHERE fragment is selected from static schedule_id/event filters.",
+    (
+        "app/core/tickets/db.py",
+        "update_ticket",
+        "UPDATE tickets SET ",
+    ): "Dynamic SET identifiers come from the local update_ticket fields whitelist.",
+    (
+        "app/core/tickets/db.py",
+        "count_tickets",
+        "SELECT COUNT(*) AS cnt FROM tickets ",
+    ): "WHERE fragment is built from static ticket filter templates and generated placeholders.",
+    (
+        "app/core/tickets/db.py",
+        "counts_by_severity",
+        "SELECT severity, COUNT(*) AS cnt FROM tickets ",
+    ): "WHERE fragment is built from static ticket filter templates and generated placeholders.",
 }
 
 

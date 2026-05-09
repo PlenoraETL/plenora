@@ -450,7 +450,7 @@ def check_beat_heartbeat() -> CheckOutcome:
     try:
         from app.db.pg_connection import fetchone
         row = fetchone(
-            "SELECT ts FROM plenora.beat_heartbeat WHERE id = 'beat'"
+            "SELECT ts FROM beat_heartbeat WHERE id = 'beat'"
         )
     except Exception as e:
         # Table missing (fresh dev DB) / DB unreachable / SQL syntax

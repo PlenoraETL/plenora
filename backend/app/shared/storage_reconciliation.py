@@ -45,7 +45,7 @@ __all__ = [
 class ReconciliationEntryRef:
     """Tipato handle ritornato da `record_pending`.
 
-    Identifica una riga in `plenora.storage_reconciliation_log` per
+    Identifica una riga in `storage_reconciliation_log` per
     le successive transizioni `mark_*`. Frozen perche' immutabile
     una volta committed.
     """
@@ -81,7 +81,7 @@ class PendingReconciliationRow:
 
 
 _INSERT_PENDING_SQL = (
-    "INSERT INTO plenora.storage_reconciliation_log "
+    "INSERT INTO storage_reconciliation_log "
     "(domain, storage_key, operation, state, reason, extras) "
     "VALUES (%s, %s, %s, 'pending', %s, %s::jsonb) "
     "RETURNING id"
@@ -180,9 +180,9 @@ def mark_done(reconciliation_id: str) -> None:
     raises.
     """
     _autocommit_update(
-        "UPDATE plenora.storage_reconciliation_log "
+        "UPDATE storage_reconciliation_log "
         "SET state = 'done', updated_at = now() "
-        "WHERE id = ?",
+        "WHERE id = %s",
         (reconciliation_id,),
         reconciliation_id=reconciliation_id,
         transition="done",
@@ -196,9 +196,9 @@ def mark_orphan_deleted(reconciliation_id: str) -> None:
     successful catch-up delete. Best-effort: never raises.
     """
     _autocommit_update(
-        "UPDATE plenora.storage_reconciliation_log "
+        "UPDATE storage_reconciliation_log "
         "SET state = 'orphan_deleted', updated_at = now() "
-        "WHERE id = ?",
+        "WHERE id = %s",
         (reconciliation_id,),
         reconciliation_id=reconciliation_id,
         transition="orphan_deleted",
@@ -227,12 +227,12 @@ def mark_failed_attempt(
             column stays NULL (reconciler picks it up immediately).
     """
     _autocommit_update(
-        "UPDATE plenora.storage_reconciliation_log "
+        "UPDATE storage_reconciliation_log "
         "SET attempts = attempts + 1, "
-        "    last_error = ?, "
-        "    next_retry_at = ?, "
+        "    last_error = %s, "
+        "    next_retry_at = %s, "
         "    updated_at = now() "
-        "WHERE id = ?",
+        "WHERE id = %s",
         (error, next_retry_at, reconciliation_id),
         reconciliation_id=reconciliation_id,
         transition="failed_attempt",
@@ -259,11 +259,11 @@ def mark_lost(reconciliation_id: str, *, error: str) -> None:
             `mark_failed_attempt.error`.
     """
     _autocommit_update(
-        "UPDATE plenora.storage_reconciliation_log "
+        "UPDATE storage_reconciliation_log "
         "SET state = 'lost', "
-        "    last_error = ?, "
+        "    last_error = %s, "
         "    updated_at = now() "
-        "WHERE id = ?",
+        "WHERE id = %s",
         (error, reconciliation_id),
         reconciliation_id=reconciliation_id,
         transition="lost",
@@ -275,12 +275,12 @@ def mark_lost(reconciliation_id: str, *, error: str) -> None:
 
 _FETCH_DUE_PENDING_DELETES_SQL = (
     "SELECT id, domain, storage_key, operation, attempts "
-    "FROM plenora.storage_reconciliation_log "
+    "FROM storage_reconciliation_log "
     "WHERE state = 'pending' "
     "  AND operation = 'delete' "
-    "  AND (next_retry_at IS NULL OR next_retry_at <= ?) "
+    "  AND (next_retry_at IS NULL OR next_retry_at <= %s) "
     "ORDER BY next_retry_at NULLS FIRST, created_at ASC "
-    "LIMIT ?"
+    "LIMIT %s"
 )
 
 
@@ -416,7 +416,7 @@ def compute_next_retry_at(
 
 
 # Operational guardrails
-# Goal: prevent `plenora.storage_reconciliation_log` from becoming a
+# Goal: prevent `storage_reconciliation_log` from becoming a
 # silent landfill. Two minimal, additive helpers — NO new transitions
 # on existing states, NO new operations, NO new migration
 # 1. `count_active_by_state_domain` — read-only aggregation of
@@ -450,7 +450,7 @@ class ReconciliationStateCount:
 
 _COUNT_ACTIVE_BY_STATE_DOMAIN_SQL = (
     "SELECT state, domain, COUNT(*) AS count "
-    "FROM plenora.storage_reconciliation_log "
+    "FROM storage_reconciliation_log "
     "WHERE state IN ('pending', 'lost') "
     "GROUP BY state, domain "
     "ORDER BY state ASC, domain ASC"
@@ -506,13 +506,13 @@ def count_active_by_state_domain() -> list["ReconciliationStateCount"]:
 
 
 _PRUNE_TERMINAL_SQL = (
-    "DELETE FROM plenora.storage_reconciliation_log "
+    "DELETE FROM storage_reconciliation_log "
     "WHERE id IN ("
-    "    SELECT id FROM plenora.storage_reconciliation_log "
+    "    SELECT id FROM storage_reconciliation_log "
     "    WHERE state IN ('done', 'orphan_deleted') "
-    "      AND updated_at < ? "
+    "      AND updated_at < %s "
     "    ORDER BY updated_at ASC "
-    "    LIMIT ?"
+    "    LIMIT %s"
     ")"
 )
 
@@ -583,7 +583,7 @@ def prune_terminal_older_than(
 # no orphan exists because nothing was uploaded
 # 3. On upload success, the intent row stays `pending`. The
 # reconciler beat hook closes it after a grace window
-# if `plenora.file_sources.storage_key` already references the
+# if `file_sources.storage_key` already references the
 # key → caller's DB save committed → `mark_done`
 # otherwise → `compensating_delete` + `mark_orphan_deleted`
 # or backoff + `mark_failed_attempt`, eventually `mark_lost`
@@ -594,7 +594,7 @@ def prune_terminal_older_than(
 
 
 _INSERT_UPLOAD_INTENT_SQL = (
-    "INSERT INTO plenora.storage_reconciliation_log "
+    "INSERT INTO storage_reconciliation_log "
     "(domain, storage_key, operation, state, reason, extras) "
     "VALUES (%s, %s, 'upload_intent', 'pending', %s, %s::jsonb) "
     "RETURNING id"
@@ -631,7 +631,7 @@ def record_upload_intent(
       (`STORAGE_RECONCILE_INTERVAL_SECONDS`) + grace window
       (`STORAGE_RECONCILE_UPLOAD_INTENT_GRACE_SECONDS`) +
       observation indiretta (`is_storage_key_referenced` su
-      `plenora.file_sources.storage_key`). Un vero outbox
+      `file_sources.storage_key`). Un vero outbox
       committerebbe la pending entry nella stessa transaction
       della business write e produrrebbe garanzie at-least-once
       sul publisher; qui il garante e' il reconciler heuristico.
@@ -697,13 +697,13 @@ def record_upload_intent(
 
 _FETCH_DUE_STALE_UPLOAD_INTENTS_SQL = (
     "SELECT id, domain, storage_key, operation, attempts "
-    "FROM plenora.storage_reconciliation_log "
+    "FROM storage_reconciliation_log "
     "WHERE state = 'pending' "
     "  AND operation = 'upload_intent' "
-    "  AND created_at < ? "
-    "  AND (next_retry_at IS NULL OR next_retry_at <= ?) "
+    "  AND created_at < %s "
+    "  AND (next_retry_at IS NULL OR next_retry_at <= %s) "
     "ORDER BY next_retry_at NULLS FIRST, created_at ASC "
-    "LIMIT ?"
+    "LIMIT %s"
 )
 
 
@@ -796,14 +796,14 @@ def fetch_due_stale_upload_intents(
 
 
 _FILE_SOURCE_STORAGE_KEY_REF_SQL = (
-    "SELECT 1 FROM plenora.file_sources "
-    "WHERE storage_key = ? LIMIT 1"
+    "SELECT 1 FROM file_sources "
+    "WHERE storage_key = %s LIMIT 1"
 )
 
 
 def is_storage_key_referenced(storage_key: str) -> Optional[bool]:
     """Verifica se `storage_key` e' referenziato da una row in
-    `plenora.file_sources` (idx_file_sources_storage_key_notnull).
+    `file_sources` (idx_file_sources_storage_key_notnull).
 
      il reconciler usa questo helper
     per decidere se un upload_intent stantio rappresenta:
@@ -871,7 +871,7 @@ def is_storage_key_referenced(storage_key: str) -> Optional[bool]:
 
 _COUNT_PENDING_BY_OPERATION_SQL = (
     "SELECT operation, COUNT(*) AS count "
-    "FROM plenora.storage_reconciliation_log "
+    "FROM storage_reconciliation_log "
     "WHERE state = 'pending' "
     "GROUP BY operation "
     "ORDER BY operation ASC"

@@ -70,6 +70,11 @@ sudo -u postgres psql
 CREATE USER plenora WITH PASSWORD 'plenora';
 CREATE DATABASE plenora OWNER plenora;
 GRANT ALL PRIVILEGES ON DATABASE plenora TO plenora;
+\c plenora
+REVOKE CREATE ON SCHEMA public FROM PUBLIC;
+CREATE SCHEMA IF NOT EXISTS plenora AUTHORIZATION plenora;
+GRANT USAGE, CREATE ON SCHEMA plenora TO plenora;
+ALTER ROLE plenora SET search_path TO plenora, public;
 \q
 ```
 
@@ -78,6 +83,10 @@ Probe:
 ```bash
 psql "postgresql://plenora:plenora@localhost:5432/plenora" -c "SELECT 1"
 ```
+
+The application pool also sets `search_path=<DB_SCHEMA>,public` on every
+connection. The `public` schema is kept read-only for the application role:
+do not grant `CREATE` on `public` to `plenora`.
 
 ## 4. Redis
 

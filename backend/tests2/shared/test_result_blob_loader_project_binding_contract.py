@@ -96,20 +96,20 @@ def test_fetch_row_no_project_filter_when_none():
             )
 
     assert "sql" in captured
-    assert "id = ?" in captured["sql"]
-    assert "group_id = ?" in captured["sql"]
-    assert "project_id = ?" not in captured["sql"], (
+    assert "id = %s" in captured["sql"]
+    assert "group_id = %s" in captured["sql"]
+    assert "project_id = %s" not in captured["sql"], (
         "project_id_filter=None must NOT add a project_id clause"
     )
     # 013: the BYTEA preflight prepends a `max_bytes` parameter for
-    # the CASE WHEN length(data) > ? clause. The WHERE-clause params
+    # the CASE WHEN length(data) > %s clause. The WHERE-clause params
     # follow in the same order as before.
     assert captured["params"] == (1024, "r-1", "g-1")
 
 
 def test_fetch_row_adds_project_clause_when_set():
     """`project_id_filter='p-42'` => SQL gains `AND project_id =
-    ?` and the parameter is bound."""
+    %s` and the parameter is bound."""
     from app.core.resources.loaders import result_blob
 
     captured: dict = {}
@@ -130,9 +130,9 @@ def test_fetch_row_adds_project_clause_when_set():
             project_id_filter="p-42",
         )
 
-    assert "id = ?" in captured["sql"]
-    assert "group_id = ?" in captured["sql"]
-    assert "project_id = ?" in captured["sql"], (
+    assert "id = %s" in captured["sql"]
+    assert "group_id = %s" in captured["sql"]
+    assert "project_id = %s" in captured["sql"], (
         "project_id_filter set must add a project_id clause"
     )
     # 013: max_bytes is the leading parameter (CASE WHEN length(data)

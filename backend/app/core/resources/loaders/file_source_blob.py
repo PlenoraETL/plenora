@@ -69,10 +69,10 @@ def _fetch_row(
     """
     from app.db.pg_connection import fetchone
 
-    clauses = ["id = ?"]
+    clauses = ["id = %s"]
     where_params: list = [file_source_id]
     if group_id_filter:
-        clauses.append("group_id = ?")
+        clauses.append("group_id = %s")
         where_params.append(group_id_filter)
 
     # Single-line SELECT projection so source-bound contract tests
@@ -81,15 +81,15 @@ def _fetch_row(
         "SELECT storage_key, length(data) AS data_size, "
         "CASE "
         "WHEN storage_key IS NOT NULL THEN NULL "
-        "WHEN length(data) > ? THEN NULL "
+        "WHEN length(data) > %s THEN NULL "
         "ELSE data "
         "END AS data "
         "FROM file_sources WHERE " + " AND ".join(clauses)
     )
     # Parameter order matches placeholder order
-    # 1. CASE WHEN length(data) > ? -> max_bytes
-    # 2. WHERE id = ? -> file_source_id
-    # 3. AND group_id = ? -> group_id_filter (if set
+    # 1. CASE WHEN length(data) > %s -> max_bytes
+    # 2. WHERE id = %s -> file_source_id
+    # 3. AND group_id = %s -> group_id_filter (if set
     params = (max_bytes, *where_params)
     return fetchone(sql, params)
 
@@ -196,7 +196,7 @@ class FileSourceBlobLoader:
     inline after the old helper module was retired.
 
     Tenant binding (mirror of ``ResultBlobLoader``):
-      - ``is_superadmin=False`` -> SQL ``WHERE group_id = ?``
+      - ``is_superadmin=False`` -> SQL ``WHERE group_id = %s``
         filter; row owned by another group does not return.
       - ``is_superadmin=True`` -> SQL filter skipped; bypass
         recorded in the audit log. Used by

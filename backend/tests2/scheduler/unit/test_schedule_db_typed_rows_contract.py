@@ -168,7 +168,7 @@ def test_update_schedule_returns_typed_schedule_row(monkeypatch):
     monkeypatch.setattr(
         schedule_db,
         "safe_set_clause",
-        lambda table, fields: ("cron_expression = ?", ("0 7 * * *",)),
+        lambda table, fields: ("cron_expression = %s", ("0 7 * * *",)),
     )
     monkeypatch.setattr(schedule_db, "execute", lambda *args, **kwargs: None)
     monkeypatch.setattr(schedule_db, "get_schedule_row", lambda schedule_id: persisted)

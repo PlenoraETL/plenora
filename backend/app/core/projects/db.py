@@ -208,11 +208,11 @@ class ProjectRepository:
     ) -> None:
         if node_id:
             execute(
-                "DELETE FROM comparison_keys WHERE canvas_id = ? AND node_id = ?",
+                "DELETE FROM comparison_keys WHERE canvas_id = %s AND node_id = %s",
                 (canvas_id, node_id),
             )
         else:
-            execute("DELETE FROM comparison_keys WHERE canvas_id = ?", (canvas_id,))
+            execute("DELETE FROM comparison_keys WHERE canvas_id = %s", (canvas_id,))
 
     def get_project_row(
         self,
@@ -221,11 +221,11 @@ class ProjectRepository:
     ) -> ProjectDetailRow | None:
         if group_id:
             row = fetchone(
-                "SELECT * FROM projects WHERE id = ? AND group_id = ?",
+                "SELECT * FROM projects WHERE id = %s AND group_id = %s",
                 (project_id, group_id),
             )
         else:
-            row = fetchone("SELECT * FROM projects WHERE id = ?", (project_id,))
+            row = fetchone("SELECT * FROM projects WHERE id = %s", (project_id,))
         if row and row.get("canvas"):
             try:
                 row["canvas"] = json.loads(row["canvas"])
@@ -250,7 +250,7 @@ class ProjectRepository:
                     fetchall(
                         "SELECT id, group_id, name, project_type, connection_id, "
                         "created_at, updated_at, created_by FROM projects "
-                        "WHERE project_type = ? ORDER BY updated_at DESC",
+                        "WHERE project_type = %s ORDER BY updated_at DESC",
                         (project_type,),
                     )
                 )
@@ -266,7 +266,7 @@ class ProjectRepository:
                 fetchall(
                     "SELECT id, group_id, name, project_type, connection_id, "
                     "created_at, updated_at, created_by FROM projects "
-                    "WHERE group_id = ? AND project_type = ? ORDER BY updated_at DESC",
+                    "WHERE group_id = %s AND project_type = %s ORDER BY updated_at DESC",
                     (group_id, project_type),
                 )
             )
@@ -274,7 +274,7 @@ class ProjectRepository:
             fetchall(
                 "SELECT id, group_id, name, project_type, connection_id, "
                 "created_at, updated_at, created_by FROM projects "
-                "WHERE group_id = ? ORDER BY updated_at DESC",
+                "WHERE group_id = %s ORDER BY updated_at DESC",
                 (group_id,),
             )
         )
@@ -293,7 +293,7 @@ class ProjectRepository:
         execute(
             "INSERT INTO projects (id, group_id, name, project_type, canvas, "
             "connection_id, created_at, updated_at, created_by) "
-            "VALUES (?,?,?,?,?,?,?,?,?)",
+            "VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s)",
             (
                 project_id,
                 group_id,
@@ -322,21 +322,21 @@ class ProjectRepository:
             fields["canvas"] = json.dumps(fields["canvas"])
         fields["updated_at"] = datetime.now(timezone.utc).isoformat()
         set_clause, vals = safe_set_clause("projects", fields)
-        execute(f"UPDATE projects SET {set_clause} WHERE id = ?", vals + (project_id,))
+        execute(f"UPDATE projects SET {set_clause} WHERE id = %s", vals + (project_id,))
         return get_project_row(project_id)
 
     def delete_project(self, project_id: str, group_id: str | None = None) -> bool:
         if group_id:
             cur = execute(
-                "DELETE FROM projects WHERE id = ? AND group_id = ?",
+                "DELETE FROM projects WHERE id = %s AND group_id = %s",
                 (project_id, group_id),
             )
         else:
-            cur = execute("DELETE FROM projects WHERE id = ?", (project_id,))
+            cur = execute("DELETE FROM projects WHERE id = %s", (project_id,))
         return cur.rowcount > 0
 
     def get_project_retention_n(self, project_id: str) -> int | None:
-        row = fetchone("SELECT retention_n FROM projects WHERE id = ?", (project_id,))
+        row = fetchone("SELECT retention_n FROM projects WHERE id = %s", (project_id,))
         if not row:
             return None
         return _optional_int(row, "retention_n")
@@ -350,9 +350,9 @@ class ProjectRepository:
         ids = {pid for pid in (project_ids or ()) if pid}
         if not ids or not owner_group_id:
             return set()
-        placeholders = ",".join(["?"] * len(ids))
+        placeholders = ",".join(["%s"] * len(ids))
         rows = fetchall(
-            f"SELECT id FROM projects WHERE id IN ({placeholders}) AND group_id = ?",
+            f"SELECT id FROM projects WHERE id IN ({placeholders}) AND group_id = %s",
             tuple(ids) + (owner_group_id,),
         )
         return {_required_str(row, "id") for row in rows}
@@ -361,7 +361,7 @@ class ProjectRepository:
         if not group_id:
             return set()
         rows = fetchall(
-            "SELECT id FROM projects WHERE group_id = ?",
+            "SELECT id FROM projects WHERE group_id = %s",
             (group_id,),
         )
         return {_required_str(row, "id") for row in rows}
@@ -373,7 +373,7 @@ class ProjectRepository:
         return _project_dependency_rows(
             fetchall(
                 "SELECT id, name, project_type, group_id "
-                "FROM projects WHERE connection_id = ?",
+                "FROM projects WHERE connection_id = %s",
                 (connection_id,),
             )
         )

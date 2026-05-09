@@ -76,7 +76,7 @@ def _delete_run(
     artifact_rows = fetchall_boundary(
         "SELECT node_id, artifact_uri "
         "FROM node_meta "
-        "WHERE run_id = ? "
+        "WHERE run_id = %s "
         "  AND artifact_uri IS NOT NULL "
         "  AND artifact_status = 'complete'",
         (run_id,),
@@ -155,7 +155,7 @@ def delete_all_runs_for_canvas(
     log = logger_obj or logger
     try:
         rows = fetchall_boundary(
-            "SELECT run_id FROM runs WHERE canvas_id = ?",
+            "SELECT run_id FROM runs WHERE canvas_id = %s",
             (canvas_id,),
         )
         if not rows:

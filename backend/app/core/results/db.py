@@ -158,7 +158,7 @@ def save_result_row(
     execute(
         "INSERT INTO results (id, project_id, group_id, filename, format, data, "
         "size_bytes, rows_count, created_at, created_by, storage_key) "
-        "VALUES (?,?,?,?,?,?,?,?,?,?,?) "
+        "VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) "
         "ON CONFLICT (id) DO UPDATE SET data=EXCLUDED.data, size_bytes=EXCLUDED.size_bytes, "
         "rows_count=EXCLUDED.rows_count, created_at=EXCLUDED.created_at, "
         "storage_key=EXCLUDED.storage_key",
@@ -184,7 +184,7 @@ def get_result_row(result_id: str) -> Optional[ResultMetadataRow]:
     row = fetchone(
         "SELECT id, project_id, group_id, filename, format, size_bytes, "
         "rows_count, created_at, storage_key "
-        "FROM results WHERE id = ?",
+        "FROM results WHERE id = %s",
         (result_id,),
     )
     if row is None:
@@ -208,13 +208,13 @@ def get_latest_result_row(
     if group_id:
         row = fetchone(
             "SELECT id, project_id, group_id, filename, format, size_bytes, rows_count, created_at "
-            "FROM results WHERE project_id = ? AND group_id = ? ORDER BY created_at DESC LIMIT 1",
+            "FROM results WHERE project_id = %s AND group_id = %s ORDER BY created_at DESC LIMIT 1",
             (project_id, group_id),
         )
     else:
         row = fetchone(
             "SELECT id, project_id, group_id, filename, format, size_bytes, rows_count, created_at "
-            "FROM results WHERE project_id = ? ORDER BY created_at DESC LIMIT 1",
+            "FROM results WHERE project_id = %s ORDER BY created_at DESC LIMIT 1",
             (project_id,),
         )
     if row is None:
@@ -237,7 +237,7 @@ def list_result_rows(project_id: str) -> list[ResultMetadataRow]:
     """Return typed result metadata rows for a project, newest first."""
     rows = fetchall(
         "SELECT id, project_id, filename, format, size_bytes, rows_count, created_at "
-        "FROM results WHERE project_id = ? ORDER BY created_at DESC",
+        "FROM results WHERE project_id = %s ORDER BY created_at DESC",
         (project_id,),
     )
     return _result_metadata_rows(rows)

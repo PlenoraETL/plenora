@@ -36,7 +36,7 @@ class MFAEnrollment(TypedDict):
 def _row_for(user_id: str) -> Optional[dict]:
     return pg_connection.fetchone(
         "SELECT user_id, secret_encrypted, enabled, enrolled_at, last_verified_at "
-        "FROM plenora.user_mfa WHERE user_id = ?",
+        "FROM user_mfa WHERE user_id = %s",
         (user_id,),
     )
 
@@ -71,8 +71,8 @@ def generate_enrollment(user_id: str, username: str) -> MFAEnrollment:
 
     pg_connection.execute(
         """
-        INSERT INTO plenora.user_mfa (user_id, secret_encrypted, enabled, created_at, updated_at)
-        VALUES (?, ?, FALSE, NOW(), NOW())
+        INSERT INTO user_mfa (user_id, secret_encrypted, enabled, created_at, updated_at)
+        VALUES (%s, %s, FALSE, NOW(), NOW())
         ON CONFLICT (user_id) DO UPDATE
         SET secret_encrypted = EXCLUDED.secret_encrypted,
             enabled = FALSE,
@@ -129,8 +129,8 @@ def verify_code(user_id: str, code: str) -> bool:
     if not totp.verify(code, valid_window=TOTP_WINDOW):
         return False
     pg_connection.execute(
-        "UPDATE plenora.user_mfa SET last_verified_at = NOW(), updated_at = NOW() "
-        "WHERE user_id = ?",
+        "UPDATE user_mfa SET last_verified_at = NOW(), updated_at = NOW() "
+        "WHERE user_id = %s",
         (user_id,),
     )
     return True
@@ -145,9 +145,9 @@ def verify_enrollment(user_id: str, code: str) -> bool:
     if not verify_code(user_id, code):
         return False
     pg_connection.execute(
-        "UPDATE plenora.user_mfa "
+        "UPDATE user_mfa "
         "SET enabled = TRUE, enrolled_at = COALESCE(enrolled_at, NOW()), updated_at = NOW() "
-        "WHERE user_id = ?",
+        "WHERE user_id = %s",
         (user_id,),
     )
     logger.info(f"MFA enrollment activated for user {user_id}", op="mfa_enroll_activated")
@@ -166,7 +166,7 @@ def disable(user_id: str, code: str) -> bool:
     if not verify_code(user_id, code):
         return False
     pg_connection.execute(
-        "DELETE FROM plenora.user_mfa WHERE user_id = ?",
+        "DELETE FROM user_mfa WHERE user_id = %s",
         (user_id,),
     )
     logger.info(f"MFA disabled for user {user_id}", op="mfa_disable")

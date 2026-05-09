@@ -99,7 +99,7 @@ def test_load_filters_by_group_id_when_not_superadmin():
             loader.load(ref, mode="bytes")
 
     sql = captured["sql"]
-    assert "WHERE id = ? AND group_id = ?" in sql, (
+    assert "WHERE id = %s AND group_id = %s" in sql, (
         f"SQL must filter by group_id; got: {sql}"
     )
     # 013: max_bytes is the leading bound parameter (CASE cap).
@@ -188,7 +188,7 @@ def test_fetch_row_returns_typed_lookup_row():
     assert row.data == b"bytea"
     assert row.data_size == 5
     assert row.storage_key is None
-    assert "AND project_id = ?" in captured["sql"]
+    assert "AND project_id = %s" in captured["sql"]
 
 
 def test_load_falls_back_to_bytea_when_storage_key_null():
@@ -293,7 +293,7 @@ def test_results_blob_boundary_with_group_id_filters_sql():
         out = results_blob.get_result_data("r1", group_id="g1")
 
     assert out == b"x"
-    assert "AND group_id = ?" in captured["sql"]
+    assert "AND group_id = %s" in captured["sql"]
     expected_cap = resolve_resource_max_bytes()
     assert captured["params"] == (expected_cap, "r1", "g1")
 
@@ -316,7 +316,7 @@ def test_result_blob_boundary_with_group_id_filters_sql_against_core_path():
         out = results_blob.get_result_data("r1", group_id="g1")
 
     assert out == b"x"
-    assert "AND group_id = ?" in captured["sql"]
+    assert "AND group_id = %s" in captured["sql"]
     expected_cap = resolve_resource_max_bytes()
     assert captured["params"] == (expected_cap, "r1", "g1")
 

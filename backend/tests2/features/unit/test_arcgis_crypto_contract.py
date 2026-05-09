@@ -4,6 +4,8 @@ Tests the arcgis crypto behavior.
 Locks backend contracts and regression boundaries for the current architecture.
 """
 
+from datetime import datetime, timezone
+
 import pytest
 
 from app.core.features.features_service import _row_to_connection, create_connection_db
@@ -92,3 +94,30 @@ def test_row_to_connection_decrypts_sensitive_fields_from_storage():
 
     assert conn.password == "pwd-123"
     assert conn.client_secret == "secret-123"
+
+
+def test_row_to_connection_accepts_native_pg_datetimes_from_psycopg2():
+    created = datetime(2026, 4, 13, tzinfo=timezone.utc)
+    updated = datetime(2026, 4, 14, tzinfo=timezone.utc)
+    row = {
+        "id": "arcgis_test",
+        "group_id": "grp-1",
+        "name": "ArcGIS",
+        "description": "",
+        "server_url": "https://example.test",
+        "server_type": "arcgis_server",
+        "auth_type": "oauth2",
+        "username": "user-1",
+        "password": "",
+        "client_id": "client-1",
+        "client_secret": "",
+        "token_url": "",
+        "created_at": created,
+        "updated_at": updated,
+        "created_by": "u-1",
+    }
+
+    conn = _row_to_connection(row)
+
+    assert conn.created_at is created
+    assert conn.updated_at is updated

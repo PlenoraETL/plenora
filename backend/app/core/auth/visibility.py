@@ -63,7 +63,7 @@ def load_shareable_resource_owner(
     """Load the owner group row for a shareable resource."""
     _validate_table(resource_table)
     row = _pg_fetchone(
-        f"SELECT id, group_id FROM {resource_table} WHERE id = ?",
+        f"SELECT id, group_id FROM {resource_table} WHERE id = %s",
         (resource_id,),
     )
     return cast(ShareableResourceOwner, dict(row)) if row else None

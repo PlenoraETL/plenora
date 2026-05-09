@@ -306,7 +306,7 @@ def test_object_storage_connectivity_error_still_returns_none(monkeypatch):
 def test_bytea_oversize_raises_at_dispatch(monkeypatch):
     """An oversized BYTEA row raises MemoryLimitExceededError
     BEFORE the bytes ever reach Python. Post-013 the SQL
-    ``CASE WHEN length(data) > ? THEN NULL ELSE data END``
+    ``CASE WHEN length(data) > %s THEN NULL ELSE data END``
     nullifies ``data`` server-side; the loader uses the
     projected ``data_size`` column to raise. The mock returns
     ``data=None`` (mirroring the SQL CASE result) and
@@ -413,8 +413,8 @@ def test_bytea_preflight_sql_carries_length_and_case(monkeypatch):
         "can raise on oversize without touching the bytes"
     )
     # CASE-bounded data column — required for wire-level preflight.
-    assert "CASE" in sql and "WHEN length(data) > ?" in sql, (
-        "SQL must NULL `data` via CASE WHEN length(data) > ?, "
+    assert "CASE" in sql and "WHEN length(data) > %s" in sql, (
+        "SQL must NULL `data` via CASE WHEN length(data) > %s, "
         "otherwise PG ships the oversized BYTEA over the wire"
     )
     assert "ELSE data" in sql, (

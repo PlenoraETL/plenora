@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import ast
+from datetime import datetime, timezone
 from dataclasses import FrozenInstanceError, is_dataclass
 from pathlib import Path
 from typing import get_origin
@@ -138,3 +139,12 @@ def test_intermediate_db_facade_serializes_runrow_to_dict(monkeypatch) -> None:
     assert one["run_id"] == "run-1"
     assert one["pinned"] is True
     assert many == [one]
+
+
+def test_intermediate_router_serializes_native_pg_run_timestamp() -> None:
+    from app.core.intermediate.router import _run_to_summary
+
+    native_ts = datetime(2026, 5, 8, 9, tzinfo=timezone.utc)
+    summary = _run_to_summary({**_record(), "timestamp": native_ts})
+
+    assert summary.timestamp == native_ts.isoformat()

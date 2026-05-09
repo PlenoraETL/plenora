@@ -126,7 +126,7 @@ def delete_results_for_project(project_id: str) -> int:
       3. Post-commit: per ogni reconciliation_ref, `compensating_delete`
          + `mark_done`/`mark_failed_attempt` per outcome.
 
-    L'INSERT N pending + DELETE all WHERE project_id=? e' atomico: o si
+    L'INSERT N pending + DELETE all WHERE project_id=%s e' atomico: o si
     committano TUTTE le pending entries con la cancellazione, o nessuna
     (rollback). Cosi' il reconciler beat hook puo' coprire la finestra
     "DB committed -> process death -> S3 orphan" anche sulla bulk path.
@@ -138,7 +138,7 @@ def delete_results_for_project(project_id: str) -> int:
         r
         for r in fetchall(
             "SELECT id, storage_key FROM results "
-            "WHERE project_id = ? AND storage_key IS NOT NULL",
+            "WHERE project_id = %s AND storage_key IS NOT NULL",
             (project_id,),
         )
         if r.get("storage_key")

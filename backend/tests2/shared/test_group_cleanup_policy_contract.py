@@ -56,7 +56,7 @@ def test_group_cleanup_helper_uses_table_allowlist():
         and node.value.startswith("DELETE FROM ")
     ]
     assert sorted(delete_literals) == sorted(
-        f"DELETE FROM {table_name} WHERE group_id = ?"
+        f"DELETE FROM {table_name} WHERE group_id = %s"
         for table_name in _KNOWN_GROUP_TABLES
         if table_name not in {"log_runs", "schedules"}
     )

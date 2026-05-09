@@ -28,7 +28,7 @@ def upsert_node_meta(
     execute(
         """INSERT INTO node_meta
            (run_id, node_id, node_type, row_count, col_schema, exec_time, status, error_msg)
-           VALUES (?,?,?,?,?,?,?,?)
+           VALUES (%s,%s,%s,%s,%s,%s,%s,%s)
            ON CONFLICT (run_id, node_id) DO UPDATE SET
            node_type=EXCLUDED.node_type, row_count=EXCLUDED.row_count,
            col_schema=EXCLUDED.col_schema, exec_time=EXCLUDED.exec_time,
@@ -51,7 +51,7 @@ INSERT INTO node_meta (
     run_id, node_id, node_type, row_count, col_schema, exec_time, status, error_msg,
     node_hash, hash_algo, persistence_mode, persisted_rows_count,
     preview_truncated, artifact_uri, artifact_format, artifact_status, artifact_error
-) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
 ON CONFLICT (run_id, node_id) DO UPDATE SET
     node_type=EXCLUDED.node_type, row_count=EXCLUDED.row_count,
     col_schema=EXCLUDED.col_schema, exec_time=EXCLUDED.exec_time,
@@ -141,7 +141,7 @@ def write_node_snapshot_atomic(
             cur.execute(_SQL_DELETE_NODE_ROWS, (run_id, node_id))
             _bulk_insert_node_rows(cur, records)
             cur.execute(
-                _SQL_UPSERT_NODE_META_EXT.replace("?", "%s"),
+                _SQL_UPSERT_NODE_META_EXT,
                 (
                     run_id,
                     node_id,
@@ -166,7 +166,7 @@ def write_node_snapshot_atomic(
 
 def get_node_meta(run_id: str, node_id: str) -> Optional[Dict]:
     row = fetchone(
-        "SELECT * FROM node_meta WHERE run_id = ? AND node_id = ?",
+        "SELECT * FROM node_meta WHERE run_id = %s AND node_id = %s",
         (run_id, node_id),
     )
     if row and row.get("col_schema"):
@@ -175,7 +175,7 @@ def get_node_meta(run_id: str, node_id: str) -> Optional[Dict]:
 
 
 def list_node_meta(run_id: str) -> List[Dict]:
-    rows = fetchall("SELECT * FROM node_meta WHERE run_id = ?", (run_id,))
+    rows = fetchall("SELECT * FROM node_meta WHERE run_id = %s", (run_id,))
     for row in rows:
         if row.get("col_schema"):
             row["col_schema"] = json.loads(row["col_schema"])
@@ -362,10 +362,10 @@ def get_node_table_rows(
 ) -> List[Dict]:
     """Read persisted node rows after verifying run ownership."""
     if group_id is None:
-        run = fetchone("SELECT run_id FROM runs WHERE run_id = ?", (run_id,))
+        run = fetchone("SELECT run_id FROM runs WHERE run_id = %s", (run_id,))
     else:
         run = fetchone(
-            "SELECT run_id FROM runs WHERE run_id = ? AND group_id = ?",
+            "SELECT run_id FROM runs WHERE run_id = %s AND group_id = %s",
             (run_id, group_id),
         )
     if not run:
@@ -373,11 +373,11 @@ def get_node_table_rows(
 
     sql = (
         "SELECT row_hash, row_data FROM node_rows "
-        "WHERE run_id = ? AND node_id = ? ORDER BY row_idx"
+        "WHERE run_id = %s AND node_id = %s ORDER BY row_idx"
     )
     params: tuple = (run_id, node_id)
     if limit:
-        sql += " LIMIT ?"
+        sql += " LIMIT %s"
         params = params + (int(limit),)
 
     raw_rows = fetchall(sql, params)

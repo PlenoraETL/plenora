@@ -47,11 +47,11 @@ def get_api_connection_row(
 ) -> ApiConnectionRow | None:
     if group_id:
         record = fetchone(
-            "SELECT * FROM api_connections WHERE id = ? AND group_id = ?",
+            "SELECT * FROM api_connections WHERE id = %s AND group_id = %s",
             (api_id, group_id),
         )
     else:
-        record = fetchone("SELECT * FROM api_connections WHERE id = ?", (api_id,))
+        record = fetchone("SELECT * FROM api_connections WHERE id = %s", (api_id,))
     if not record:
         return None
     return _row_from_record(record)
@@ -62,7 +62,7 @@ def list_api_connection_rows(group_id: str | None = None) -> list[ApiConnectionR
         records = fetchall("SELECT * FROM api_connections ORDER BY created_at DESC")
     else:
         records = fetchall(
-            "SELECT * FROM api_connections WHERE group_id = ? ORDER BY created_at DESC",
+            "SELECT * FROM api_connections WHERE group_id = %s ORDER BY created_at DESC",
             (group_id,),
         )
     return [_row_from_record(record) for record in records]
@@ -77,7 +77,7 @@ def save_api_connection_row(
     now = datetime.now(timezone.utc).isoformat()
     execute(
         "INSERT INTO api_connections (id, group_id, config, created_at, updated_at, created_by) "
-        "VALUES (?,?,?,?,?,?) ON CONFLICT (id) DO UPDATE SET "
+        "VALUES (%s,%s,%s,%s,%s,%s) ON CONFLICT (id) DO UPDATE SET "
         "config=EXCLUDED.config, updated_at=EXCLUDED.updated_at",
         (api_id, group_id, json.dumps(config), now, now, created_by),
     )
@@ -90,12 +90,12 @@ def save_api_connection_row(
 def update_api_connection_row(api_id: str, config: dict[str, Any]) -> ApiConnectionRow | None:
     now = datetime.now(timezone.utc).isoformat()
     execute(
-        "UPDATE api_connections SET config = ?, updated_at = ? WHERE id = ?",
+        "UPDATE api_connections SET config = %s, updated_at = %s WHERE id = %s",
         (json.dumps(config), now, api_id),
     )
     return get_api_connection_row(api_id)
 
 
 def delete_api_connection(api_id: str) -> bool:
-    cur = execute("DELETE FROM api_connections WHERE id = ?", (api_id,))
+    cur = execute("DELETE FROM api_connections WHERE id = %s", (api_id,))
     return cur.rowcount > 0

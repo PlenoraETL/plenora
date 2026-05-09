@@ -87,11 +87,16 @@ class PinRequest(BaseModel):
 
 # HELPERS
 
+def _as_iso(value: Any) -> str:
+    if hasattr(value, "isoformat"):
+        return value.isoformat()
+    return str(value)
+
 def _run_to_summary(run: dict) -> RunSummary:
     return RunSummary(
         run_id=run["run_id"],
         canvas_id=run["canvas_id"],
-        timestamp=run["timestamp"],
+        timestamp=_as_iso(run["timestamp"]),
         status=run["status"],
         pinned=bool(run.get("pinned", 0)),
         total_rows_in=run.get("total_rows_in"),
@@ -129,7 +134,7 @@ def list_runs(
         if gid is None:
             from app.db.pg_connection import fetchall as _pg_fetchall
             runs = _pg_fetchall(
-                "SELECT * FROM runs WHERE canvas_id = ? ORDER BY timestamp DESC LIMIT ?",
+                "SELECT * FROM runs WHERE canvas_id = %s ORDER BY timestamp DESC LIMIT %s",
                 (canvas_id, limit)
             )
         else:
@@ -499,10 +504,10 @@ def compare_runs_l2(
             """
             SELECT a.row_hash, a.row_data
             FROM node_rows a
-            WHERE a.run_id = ? AND a.node_id = ?
+            WHERE a.run_id = %s AND a.node_id = %s
               AND NOT EXISTS (
                 SELECT 1 FROM node_rows b
-                WHERE b.run_id = ? AND b.node_id = ?
+                WHERE b.run_id = %s AND b.node_id = %s
                   AND b.row_hash = a.row_hash
               )
             ORDER BY a.row_idx
@@ -516,10 +521,10 @@ def compare_runs_l2(
             """
             SELECT b.row_hash, b.row_data
             FROM node_rows b
-            WHERE b.run_id = ? AND b.node_id = ?
+            WHERE b.run_id = %s AND b.node_id = %s
               AND NOT EXISTS (
                 SELECT 1 FROM node_rows a
-                WHERE a.run_id = ? AND a.node_id = ?
+                WHERE a.run_id = %s AND a.node_id = %s
                   AND a.row_hash = b.row_hash
               )
             ORDER BY b.row_idx
@@ -530,11 +535,11 @@ def compare_runs_l2(
 
         # Conta totali senza limite
         row_a = fetchone(
-            "SELECT COUNT(*) AS cnt FROM node_rows WHERE run_id = ? AND node_id = ?",
+            "SELECT COUNT(*) AS cnt FROM node_rows WHERE run_id = %s AND node_id = %s",
             (run_id_a, node_id),
         )
         row_b = fetchone(
-            "SELECT COUNT(*) AS cnt FROM node_rows WHERE run_id = ? AND node_id = ?",
+            "SELECT COUNT(*) AS cnt FROM node_rows WHERE run_id = %s AND node_id = %s",
             (run_id_b, node_id),
         )
         count_a = row_a["cnt"] if row_a else 0

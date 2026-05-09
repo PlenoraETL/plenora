@@ -123,19 +123,19 @@ def hydrate_group_summary_row(row: Mapping[str, Any] | None) -> GroupSummaryRow:
 
 
 def get_user(user_id: str) -> Optional[UserRow]:
-    row = fetchone("SELECT * FROM users WHERE id = ?", (user_id,))
+    row = fetchone("SELECT * FROM users WHERE id = %s", (user_id,))
     return hydrate_user_row(row)
 
 
 def get_user_by_username(username: str) -> Optional[UserRow]:
-    row = fetchone("SELECT * FROM users WHERE username = ?", (username,))
+    row = fetchone("SELECT * FROM users WHERE username = %s", (username,))
     return hydrate_user_row(row)
 
 
 def list_users(group_id: str) -> list[UserRow]:
     rows = fetchall(
         "SELECT id, username, email, group_id, role, is_active, created_at "
-        "FROM users WHERE group_id = ? ORDER BY username",
+        "FROM users WHERE group_id = %s ORDER BY username",
         (group_id,),
     )
     return [row for row in (hydrate_user_row(row) for row in rows) if row is not None]
@@ -158,7 +158,7 @@ def create_user(
     execute(
         "INSERT INTO users (id, username, password_hash, email, group_id, "
         "role, is_active, created_at, updated_at) "
-        "VALUES (?,?,?,?,?,?,TRUE,?,?)",
+        "VALUES (%s,%s,%s,%s,%s,%s,TRUE,%s,%s)",
         (user_id, username, password_hash, email, group_id, role, now, now),
     )
     user = get_user(user_id)
@@ -186,24 +186,24 @@ def update_user(
         fields["group_id"] = group_id
     fields["updated_at"] = _now_iso()
     set_clause, vals = safe_set_clause("users", fields)
-    execute(f"UPDATE users SET {set_clause} WHERE id = ?", vals + (user_id,))
+    execute(f"UPDATE users SET {set_clause} WHERE id = %s", vals + (user_id,))
     return get_user(user_id)
 
 
 def update_user_password(user_id: str, password_hash: str) -> None:
     execute(
-        "UPDATE users SET password_hash = ?, updated_at = ? WHERE id = ?",
+        "UPDATE users SET password_hash = %s, updated_at = %s WHERE id = %s",
         (password_hash, _now_iso(), user_id),
     )
 
 
 def delete_user(user_id: str) -> bool:
-    cur = execute("DELETE FROM users WHERE id = ?", (user_id,))
+    cur = execute("DELETE FROM users WHERE id = %s", (user_id,))
     return cur.rowcount > 0
 
 
 def get_group(group_id: str) -> Optional[GroupRow]:
-    row = fetchone("SELECT * FROM groups WHERE id = ?", (group_id,))
+    row = fetchone("SELECT * FROM groups WHERE id = %s", (group_id,))
     return hydrate_group_row(row)
 
 
@@ -216,7 +216,7 @@ def create_group(group_id: str, name: str, description: str = "") -> GroupRow:
     now = _now_iso()
     execute(
         "INSERT INTO groups (id, name, description, created_at, updated_at) "
-        "VALUES (?,?,?,?,?)",
+        "VALUES (%s,%s,%s,%s,%s)",
         (group_id, name, description, now, now),
     )
     group = get_group(group_id)
@@ -228,20 +228,20 @@ def create_group(group_id: str, name: str, description: str = "") -> GroupRow:
 def get_group_summary(group_id: str) -> GroupSummaryRow:
     row = fetchone(
         "SELECT "
-        "(SELECT COUNT(*) FROM projects WHERE group_id = ?) AS projects, "
-        "(SELECT COUNT(*) FROM users WHERE group_id = ?) AS users, "
-        "(SELECT COUNT(*) FROM connections WHERE group_id = ?) AS connections, "
-        "(SELECT COUNT(*) FROM file_sources WHERE group_id = ?) AS file_sources, "
-        "(SELECT COUNT(*) FROM datasources WHERE group_id = ?) AS datasources, "
-        "(SELECT COUNT(*) FROM api_connections WHERE group_id = ?) AS api_connections, "
-        "(SELECT COUNT(*) FROM schedules WHERE group_id = ?) AS schedules",
+        "(SELECT COUNT(*) FROM projects WHERE group_id = %s) AS projects, "
+        "(SELECT COUNT(*) FROM users WHERE group_id = %s) AS users, "
+        "(SELECT COUNT(*) FROM connections WHERE group_id = %s) AS connections, "
+        "(SELECT COUNT(*) FROM file_sources WHERE group_id = %s) AS file_sources, "
+        "(SELECT COUNT(*) FROM datasources WHERE group_id = %s) AS datasources, "
+        "(SELECT COUNT(*) FROM api_connections WHERE group_id = %s) AS api_connections, "
+        "(SELECT COUNT(*) FROM schedules WHERE group_id = %s) AS schedules",
         tuple([group_id] * 7),
     )
     return hydrate_group_summary_row(row)
 
 
 def delete_group(group_id: str) -> bool:
-    cur = execute("DELETE FROM groups WHERE id = ?", (group_id,))
+    cur = execute("DELETE FROM groups WHERE id = %s", (group_id,))
     return cur.rowcount > 0
 
 

@@ -53,9 +53,17 @@ DEFAULT_GROUP = "default"
 _SENSITIVE_FIELDS = ("password", "client_secret")
 
 
+def _as_datetime(value: Any) -> datetime:
+    if isinstance(value, datetime):
+        return value
+    if isinstance(value, str):
+        return datetime.fromisoformat(value)
+    raise TypeError(f"expected datetime or ISO string, got {type(value).__name__}")
+
+
 def _ensure_default_group() -> None:
     now = datetime.now(timezone.utc).isoformat()
-    db.execute("INSERT INTO groups (id, name, description, created_at, updated_at) VALUES (?,?,?,?,?) ON CONFLICT (id) DO NOTHING",
+    db.execute("INSERT INTO groups (id, name, description, created_at, updated_at) VALUES (%s,%s,%s,%s,%s) ON CONFLICT (id) DO NOTHING",
                (DEFAULT_GROUP, "Default", "Gruppo default", now, now))
 
 
@@ -75,8 +83,8 @@ def _row_to_connection(row: dict) -> ArcGISConnection:
         client_id=row.get("client_id") or "",
         client_secret=_decrypt(row.get("client_secret") or "") or "",
         token_url=row.get("token_url") or None,
-        created_at=datetime.fromisoformat(row["created_at"]),
-        updated_at=datetime.fromisoformat(row["updated_at"]),
+        created_at=_as_datetime(row["created_at"]),
+        updated_at=_as_datetime(row["updated_at"]),
         created_by=row.get("created_by"),
     )
 
@@ -114,7 +122,7 @@ def create_connection_db(data: ArcGISCreate, group_id: str = DEFAULT_GROUP,
         INSERT INTO arcgis_connections
         (id, group_id, name, description, server_url, server_type, auth_type,
          username, password, client_id, client_secret, token_url, created_at, updated_at, created_by)
-        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+        VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
     """, (connection_id, group_id, data.name, data.description or "",
           data.server_url, server_type, data.auth_type,
           data.username or "", enc_password,
@@ -122,7 +130,7 @@ def create_connection_db(data: ArcGISCreate, group_id: str = DEFAULT_GROUP,
           data.token_url or "", now, now, created_by))
 
     logger.info(f"Connessione ArcGIS creata: {connection_id} (group {group_id})", op="create")
-    return _row_to_connection(dict(db.fetchone("SELECT * FROM arcgis_connections WHERE id = ?", (connection_id,))))
+    return _row_to_connection(dict(db.fetchone("SELECT * FROM arcgis_connections WHERE id = %s", (connection_id,))))
 
 
 def list_connections_db(group_id: Optional[str] = None) -> ArcGISList:
@@ -135,7 +143,7 @@ def list_connections_db(group_id: Optional[str] = None) -> ArcGISList:
         rows = db.fetchall("SELECT * FROM arcgis_connections ORDER BY updated_at DESC")
     else:
         rows = db.fetchall(
-            "SELECT * FROM arcgis_connections WHERE group_id = ? ORDER BY updated_at DESC",
+            "SELECT * FROM arcgis_connections WHERE group_id = %s ORDER BY updated_at DESC",
             (group_id,),
         )
     return ArcGISList(connections=[_row_to_connection(dict(r)) for r in rows])
@@ -146,12 +154,12 @@ def get_connection_db(connection_id: str) -> Optional[ArcGISConnection]:
     Ritorna la connessione (senza filtro gruppo).
     Il group check va fatto dal chiamante con `assert_group_access`.
     """
-    row = db.fetchone("SELECT * FROM arcgis_connections WHERE id = ?", (connection_id,))
+    row = db.fetchone("SELECT * FROM arcgis_connections WHERE id = %s", (connection_id,))
     return _row_to_connection(dict(row)) if row else None
 
 
 def update_connection_db(connection_id: str, data: ArcGISUpdate) -> Optional[ArcGISConnection]:
-    if not db.fetchone("SELECT id FROM arcgis_connections WHERE id = ?", (connection_id,)):
+    if not db.fetchone("SELECT id FROM arcgis_connections WHERE id = %s", (connection_id,)):
         return None
 
     update_data = data.model_dump(exclude_unset=True)
@@ -175,7 +183,7 @@ def update_connection_db(connection_id: str, data: ArcGISUpdate) -> Optional[Arc
     sets, params = [], []
     for payload_field, column_name in field_map.items():
         if payload_field in update_data:
-            sets.append(f"{column_name} = ?")
+            sets.append(f"{column_name} = %s")
             field_value = update_data[payload_field]
             # Cifratura at-rest per i campi sensibili (idempotente su valori
             # gia' cifrati grazie al prefisso "enc:" riconosciuto dal modulo
@@ -191,16 +199,16 @@ def update_connection_db(connection_id: str, data: ArcGISUpdate) -> Optional[Arc
     if not sets:
         return get_connection_db(connection_id)
 
-    sets.append("updated_at = ?")
+    sets.append("updated_at = %s")
     params.extend([now, connection_id])
-    db.execute(f"UPDATE arcgis_connections SET {', '.join(sets)} WHERE id = ?", params)
+    db.execute(f"UPDATE arcgis_connections SET {', '.join(sets)} WHERE id = %s", params)
     return get_connection_db(connection_id)
 
 
 def delete_connection_db(connection_id: str) -> bool:
-    if not db.fetchone("SELECT id FROM arcgis_connections WHERE id = ?", (connection_id,)):
+    if not db.fetchone("SELECT id FROM arcgis_connections WHERE id = %s", (connection_id,)):
         return False
-    db.execute("DELETE FROM arcgis_connections WHERE id = ?", (connection_id,))
+    db.execute("DELETE FROM arcgis_connections WHERE id = %s", (connection_id,))
     logger.info(f"Connessione ArcGIS eliminata: {connection_id}", op="delete")
     return True
 

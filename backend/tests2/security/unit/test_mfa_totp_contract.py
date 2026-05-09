@@ -274,20 +274,20 @@ def mfa_user(request):
     now = datetime.now(timezone.utc).isoformat()
 
     pg_connection.execute(
-        "INSERT INTO plenora.groups (id, name) VALUES (?, ?)",
+        "INSERT INTO plenora.groups (id, name) VALUES (%s, %s)",
         (group_id, "mfa_test_group"),
     )
     pg_connection.execute(
         "INSERT INTO plenora.users (id, username, password_hash, group_id, role, "
-        "is_active, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+        "is_active, created_at, updated_at) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)",
         (user_id, username, "x", group_id, "user", True, now, now),
     )
 
     def _cleanup():
         # CASCADE su plenora.user_mfa + FK su altre tabelle: cancellare users
         # basta. groups lo rimuoviamo esplicitamente (no CASCADE upstream).
-        pg_connection.execute("DELETE FROM plenora.users WHERE id = ?", (user_id,))
-        pg_connection.execute("DELETE FROM plenora.groups WHERE id = ?", (group_id,))
+        pg_connection.execute("DELETE FROM plenora.users WHERE id = %s", (user_id,))
+        pg_connection.execute("DELETE FROM plenora.groups WHERE id = %s", (group_id,))
 
     request.addfinalizer(_cleanup)
     return {"user_id": user_id, "username": username, "group_id": group_id}
@@ -310,7 +310,7 @@ def test_enroll_creates_pending_row(mfa_user):
 
     row = pg_connection.fetchone(
         "SELECT enabled, secret_encrypted, enrolled_at "
-        "FROM plenora.user_mfa WHERE user_id = ?",
+        "FROM plenora.user_mfa WHERE user_id = %s",
         (mfa_user["user_id"],),
     )
     assert row is not None

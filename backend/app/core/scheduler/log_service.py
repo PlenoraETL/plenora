@@ -40,11 +40,11 @@ class ScheduleLogService:
         try:
             from app.db.pg_connection import execute
             execute(
-                "INSERT INTO plenora.schedule_logs "
+                "INSERT INTO schedule_logs "
                 "(log_id, schedule_id, timestamp, level, event, triggered_by, "
                 " steps, total_duration_ms, error_message, schedule_info, "
                 " pipeline_info, execution_info) "
-                "VALUES (?,?,?,?,?,?,?::jsonb,?,?,?::jsonb,?::jsonb,?::jsonb)",
+                "VALUES (%s,%s,%s,%s,%s,%s,%s::jsonb,%s,%s,%s::jsonb,%s::jsonb,%s::jsonb)",
                 (
                     log_entry.log_id,
                     log_entry.schedule_id,
@@ -97,7 +97,7 @@ class ScheduleLogService:
         try:
             from app.db.pg_connection import fetchone
             row = fetchone(
-                "SELECT * FROM plenora.schedule_logs WHERE log_id = ?",
+                "SELECT * FROM schedule_logs WHERE log_id = %s",
                 (log_id,),
             )
             if not row:
@@ -134,25 +134,34 @@ class ScheduleLogService:
             from app.db.pg_connection import fetchall, fetchone
 
             if event_filter:
-                where = "WHERE schedule_id = ? AND event = ?"
+                count_sql = (
+                    "SELECT COUNT(*) AS n FROM schedule_logs "
+                    "WHERE schedule_id = %s AND event = %s"
+                )
+                page_sql = (
+                    "SELECT * FROM schedule_logs "
+                    "WHERE schedule_id = %s AND event = %s "
+                    "ORDER BY timestamp DESC LIMIT %s OFFSET %s"
+                )
                 args_count = (schedule_id, event_filter)
                 args_page = (schedule_id, event_filter, page_size, offset)
             else:
-                where = "WHERE schedule_id = ?"
+                count_sql = (
+                    "SELECT COUNT(*) AS n FROM schedule_logs "
+                    "WHERE schedule_id = %s"
+                )
+                page_sql = (
+                    "SELECT * FROM schedule_logs "
+                    "WHERE schedule_id = %s "
+                    "ORDER BY timestamp DESC LIMIT %s OFFSET %s"
+                )
                 args_count = (schedule_id,)
                 args_page = (schedule_id, page_size, offset)
 
-            count_row = fetchone(
-                f"SELECT COUNT(*) AS n FROM plenora.schedule_logs {where}",
-                args_count,
-            )
+            count_row = fetchone(count_sql, args_count)
             total = int(count_row["n"]) if count_row else 0
 
-            rows = fetchall(
-                f"SELECT * FROM plenora.schedule_logs {where} "
-                f"ORDER BY timestamp DESC LIMIT ? OFFSET ?",
-                args_page,
-            )
+            rows = fetchall(page_sql, args_page)
             logs = [self._row_to_entry(r) for r in rows]
 
             return ScheduleLogList(
@@ -170,7 +179,7 @@ class ScheduleLogService:
         try:
             from app.db.pg_connection import fetchone
             row = fetchone(
-                "SELECT * FROM plenora.schedule_logs WHERE schedule_id = ? "
+                "SELECT * FROM schedule_logs WHERE schedule_id = %s "
                 "ORDER BY timestamp DESC LIMIT 1",
                 (schedule_id,),
             )
@@ -193,7 +202,7 @@ class ScheduleLogService:
             # Convert date -> datetime UTC per comparison con TIMESTAMPTZ
             before_dt = datetime.combine(before_date, datetime.min.time(), tzinfo=timezone.utc)
             cur = execute(
-                "DELETE FROM plenora.schedule_logs WHERE timestamp < ?",
+                "DELETE FROM schedule_logs WHERE timestamp < %s",
                 (before_dt,),
             )
             deleted = cur.rowcount
@@ -209,7 +218,7 @@ class ScheduleLogService:
         try:
             from app.db.pg_connection import execute
             cur = execute(
-                "DELETE FROM plenora.schedule_logs WHERE schedule_id = ?",
+                "DELETE FROM schedule_logs WHERE schedule_id = %s",
                 (schedule_id,),
             )
             deleted = cur.rowcount

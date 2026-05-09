@@ -4,6 +4,7 @@ Tests the scheduler router behavior.
 Locks backend contracts and regression boundaries for the current architecture.
 """
 
+from datetime import datetime, timezone
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -24,6 +25,14 @@ def _build_client(current_user):
     app.dependency_overrides[require_not_esecutore] = lambda: current_user
     app.include_router(router, prefix="/api")
     return TestClient(app, raise_server_exceptions=False)
+
+
+def test_scheduler_heartbeat_parser_accepts_native_pg_datetime():
+    from app.core.scheduler.router import _as_aware_datetime
+
+    native_ts = datetime(2026, 5, 8, 9, tzinfo=timezone.utc)
+
+    assert _as_aware_datetime(native_ts) is native_ts
 
 
 def test_download_without_run_uses_latest_archived_schedule_run(current_user, tmp_path):

@@ -5,8 +5,8 @@ from __future__ import annotations
 from app.db.cleanup_sql import delete_group_rows
 
 
-_DELETE_SCHEDULES_FOR_GROUP_SQL = "DELETE FROM schedules WHERE group_id = ?"
-_DELETE_LOG_RUNS_FOR_GROUP_SQL = "DELETE FROM log_runs WHERE group_id = ?"
+_DELETE_SCHEDULES_FOR_GROUP_SQL = "DELETE FROM schedules WHERE group_id = %s"
+_DELETE_LOG_RUNS_FOR_GROUP_SQL = "DELETE FROM log_runs WHERE group_id = %s"
 
 
 def delete_schedules_for_group(group_id: str) -> int:

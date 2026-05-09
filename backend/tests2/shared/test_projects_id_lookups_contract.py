@@ -88,12 +88,12 @@ def test_list_owned_project_ids_uses_single_batch_query(monkeypatch):
     # Exactly ONE query (batch IN(...)), not N lookups.
     assert len(calls) == 1
     sql, params = calls[0]
-    # Single-statement SELECT with `IN (?,?,?)` and AND group_id = ?.
+    # Single-statement SELECT with `IN (%s,%s,%s)` and AND group_id = %s.
     assert "SELECT id FROM projects" in sql
     assert "IN (" in sql and ")" in sql
-    assert "group_id = ?" in sql
+    assert "group_id = %s" in sql
     # 3 placeholders for ids + 1 for owner_group_id = 4 params.
-    assert sql.count("?") == 4
+    assert sql.count("%s") == 4
     # Last param is always the owner_group_id; the leading 3 are the
     # project ids in arbitrary order (set iteration). Cannot assume
     # order, only the count + presence.
@@ -112,7 +112,7 @@ def test_list_owned_project_ids_dedupes_input(monkeypatch):
     )
     assert out == {"p1"}
     sql, params = calls[0]
-    assert sql.count("?") == 2  # 1 id + 1 group_id
+    assert sql.count("%s") == 2  # 1 id + 1 group_id
     assert params == ("p1", "g1")
 
 
@@ -148,7 +148,7 @@ def test_list_project_ids_for_group_uses_single_query(monkeypatch):
     list_project_ids_for_group("g1")
     assert len(calls) == 1
     sql, params = calls[0]
-    assert sql == "SELECT id FROM projects WHERE group_id = ?"
+    assert sql == "SELECT id FROM projects WHERE group_id = %s"
     assert params == ("g1",)
 
 

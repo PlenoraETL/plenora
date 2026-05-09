@@ -78,7 +78,7 @@ def test_result_metadata_sql_lives_in_core_results_db(monkeypatch):
         (
             "SELECT id, project_id, group_id, filename, format, size_bytes, "
             "rows_count, created_at, storage_key "
-            "FROM results WHERE id = ?"
+            "FROM results WHERE id = %s"
         ),
         ("res-1",),
     )
@@ -107,14 +107,14 @@ def test_result_metadata_reads_use_core_sql(monkeypatch):
     assert results_db.get_latest_result("proj-1") == {"id": "latest"}
     assert results_db.list_results("proj-1") == [{"id": "latest"}]
 
-    assert "FROM results WHERE id = ?" in calls[0][1]
+    assert "FROM results WHERE id = %s" in calls[0][1]
     assert calls[0][2] == ("res-1",)
-    assert "project_id = ? AND group_id = ?" in calls[1][1]
+    assert "project_id = %s AND group_id = %s" in calls[1][1]
     assert calls[1][2] == ("proj-1", "grp-1")
-    assert "WHERE project_id = ? ORDER BY created_at DESC" in calls[2][1]
+    assert "WHERE project_id = %s ORDER BY created_at DESC" in calls[2][1]
     assert calls[2][2] == ("proj-1",)
     assert calls[3][0] == "fetchall"
-    assert "FROM results WHERE project_id = ? ORDER BY created_at DESC" in calls[3][1]
+    assert "FROM results WHERE project_id = %s ORDER BY created_at DESC" in calls[3][1]
 
 
 def test_result_metadata_row_is_typed_read_only_boundary(monkeypatch):

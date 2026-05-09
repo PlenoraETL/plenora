@@ -17,5 +17,5 @@ def delete_task_log_runs(task_id: str) -> int:
     """
     from app.db.pg_connection import execute as pg_execute
 
-    cur = pg_execute("DELETE FROM log_runs WHERE run_id = ?", (task_id,))
+    cur = pg_execute("DELETE FROM log_runs WHERE run_id = %s", (task_id,))
     return cur.rowcount

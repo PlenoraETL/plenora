@@ -276,12 +276,12 @@ class ProjectService:
         """
         if group_id:
             row = pg_connection.fetchone(
-                "SELECT id, canvas FROM projects WHERE id = ? AND group_id = ?",
+                "SELECT id, canvas FROM projects WHERE id = %s AND group_id = %s",
                 (project_id, group_id),
             )
         else:
             row = pg_connection.fetchone(
-                "SELECT id, canvas FROM projects WHERE id = ?",
+                "SELECT id, canvas FROM projects WHERE id = %s",
                 (project_id,),
             )
         if not row:
