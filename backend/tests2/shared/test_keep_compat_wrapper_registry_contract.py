@@ -1,4 +1,4 @@
-"""Registry contract for active KEEP_COMPAT wrappers and deleted tombstones.
+﻿"""Registry contract for active KEEP_COMPAT wrappers and deleted tombstones.
 
 Wrappers are allowed while callers migrate, but each one needs an
 explicit owner, canonical target, and removal condition so the
@@ -46,44 +46,7 @@ class KeepCompatWrapper:
         return self.canonical_target
 
 
-_KEEP_COMPAT_WRAPPERS: tuple[KeepCompatWrapper, ...] = (
-    KeepCompatWrapper(
-        rel_path="app/core/arricchisci/api_connector.py",
-        wrapper="ApiConnectionService.execute_enrichment",
-        owner="TRANSFORMATION_ENGINE",
-        canonical_target=(
-            "app.core.arricchisci.canvas_orchestrator."
-            "execute_canvas_enrichment"
-        ),
-        removal_condition=(
-            "after ApiConnectionService callers invoke "
-            "execute_canvas_enrichment through the canvas orchestrator"
-        ),
-    ),
-    KeepCompatWrapper(
-        rel_path="app/core/arricchisci/api_connector.py",
-        wrapper="ApiConnectionService._init_execution_context",
-        owner="TRANSFORMATION_ENGINE",
-        canonical_target=(
-            "app.core.arricchisci.canvas_orchestrator."
-            "init_execution_context"
-        ),
-        removal_condition=(
-            "after ApiConnectionService callers construct execution context "
-            "through the canvas orchestrator"
-        ),
-    ),
-    KeepCompatWrapper(
-        rel_path="app/core/arricchisci/execution_context.py",
-        wrapper="ArricchisciExecutionContext",
-        owner="TRANSFORMATION_ENGINE",
-        canonical_target="app.shared.execution.context.CanvasExecutionContext",
-        removal_condition=(
-            "after arricchisci callers and tests import "
-            "CanvasExecutionContext directly"
-        ),
-    ),
-)
+_KEEP_COMPAT_WRAPPERS: tuple[KeepCompatWrapper, ...] = ()
 
 _REMOVED_ZERO_CONSUMER_WRAPPERS: frozenset[str] = frozenset(
     {
@@ -110,19 +73,7 @@ _REMOVED_ZERO_CONSUMER_WRAPPERS: frozenset[str] = frozenset(
 
 _MODULE_COMPAT_ALIASES: tuple[tuple[str, str], ...] = ()
 _PLAIN_KEEP_COMPAT_PRODUCTION_ALLOWLIST: frozenset[str] = frozenset()
-_LEGACY_DB_FACADE_CONSUMER_ALLOWLIST = {
-    "app.db.tickets_db_service": frozenset(
-        {
-            "app/core/admin_system_status/tickets_metrics.py",
-            "app/core/tickets/db.py",
-        }
-    ),
-    "app.db.log_runs_db_service": frozenset(
-        {
-            "app/core/orchestrator/log_cleanup.py",
-        }
-    ),
-}
+_LEGACY_DB_FACADE_CONSUMER_ALLOWLIST: dict[str, frozenset[str]] = {}
 
 
 def _source(rel_path: str) -> str:

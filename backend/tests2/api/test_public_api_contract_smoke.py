@@ -1,4 +1,4 @@
-"""Public API JSON contract smoke for typed backend internals."""
+﻿"""Public API JSON contract smoke for typed backend internals."""
 
 from __future__ import annotations
 
@@ -121,7 +121,7 @@ def test_tickets_public_shapes_survive_typed_rows(
     from app.core.auth.dependencies import get_current_user
     from app.core.tickets import service as svc
     from app.core.tickets.router import router
-    from app.db import tickets_db_service as tdb
+    from app.core.tickets import db as tdb
 
     ticket = tdb.TicketRow(
         id="t-1",

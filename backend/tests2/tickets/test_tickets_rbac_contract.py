@@ -1,4 +1,4 @@
-"""
+﻿"""
 Contract test — ticket RBAC + state transitions.
 
 Copre le regole descritte in app/core/tickets/service.py:
@@ -12,7 +12,7 @@ import pytest
 from fastapi import HTTPException
 
 from app.shared.contracts.auth import CurrentUser
-from app.db import tickets_db_service as tdb
+from app.core.tickets import db as tdb
 
 
 pytestmark = [pytest.mark.unit, pytest.mark.contract]
@@ -61,7 +61,7 @@ def _comment(**overrides) -> tdb.CommentRow:
 def mock_tdb(monkeypatch):
     """Mocka tickets_db_service. Ritorna il MagicMock cosi' il test
     imposta side_effect / return_value."""
-    import app.db.tickets_db_service as real_tdb
+    import app.core.tickets.db as real_tdb
     m = MagicMock(spec=real_tdb)
     # Defaults sensati
     m.create_ticket.return_value = _ticket()

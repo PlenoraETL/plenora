@@ -19,13 +19,13 @@ def get_active_ticket_metrics() -> ActiveTicketMetrics:
     """Return cross-group active ticket counters for the superadmin dashboard."""
     try:
         from app.core.tickets.service import TICKET_STATUSES_ACTIVE
-        from app.db import tickets_db_service as tdb
+        from app.core.tickets import db as tickets_db
     except Exception as exc:
         raise TicketsMetricsUnavailable(str(exc)) from exc
 
     active_statuses = list(TICKET_STATUSES_ACTIVE)
-    total_active = tdb.count_tickets(status_in=active_statuses)
-    by_severity_raw = tdb.counts_by_severity(status_in=active_statuses)
+    total_active = tickets_db.count_tickets(status_in=active_statuses)
+    by_severity_raw = tickets_db.counts_by_severity(status_in=active_statuses)
     return ActiveTicketMetrics(
         total_active=total_active,
         by_severity={

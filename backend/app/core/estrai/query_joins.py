@@ -2,7 +2,7 @@
 Rendering delle clausole FROM/JOIN per QueryGenerator.
 """
 
-from typing import List
+from typing import Callable, List
 
 from app.shared.models import Edge, Node
 from app.db.sql_translator import sql_translator
@@ -12,10 +12,15 @@ class QueryJoinRenderer:
     """Builds FROM/JOIN clauses while reusing QueryGenerator validation helpers."""
 
     def __init__(self, generator):
-        self.generator = generator
-
-    def __getattr__(self, name):
-        return getattr(self.generator, name)
+        self.db_type = generator.db_type
+        self._get_node_table_name: Callable[[Node], str] = generator._get_node_table_name
+        self._qualify_table_name: Callable[[str], str] = generator._qualify_table_name
+        self._safe_identifier: Callable[[str, str], str] = generator._safe_identifier
+        self._is_valid_identifier: Callable[[str], bool] = generator._is_valid_identifier
+        self._wrap_col_with_func: Callable[[str, str], str] = generator._wrap_col_with_func
+        self._generate_join = generator._genera_join
+        self._generate_on_spatial = generator._genera_on_spaziale
+        self._generate_on_attribute = generator._genera_on_attributivo
 
     def generate_from(self, table_nodes: List[Node], edges: List[Edge]) -> str:
         """
@@ -44,7 +49,7 @@ class QueryJoinRenderer:
         processed_ids = {first_node.id}
 
         for node in table_nodes[1:]:
-            join_str = self.generator._genera_join(node, edges, table_nodes, processed_ids)
+            join_str = self._generate_join(node, edges, table_nodes, processed_ids)
             from_clause += f"\n{join_str}"
             processed_ids.add(node.id)
 
@@ -130,11 +135,11 @@ class QueryJoinRenderer:
 
         if is_spatial:
             if is_reversed:
-                on_clause = self.generator._genera_on_spaziale(edge, table_alias, source_alias)
+                on_clause = self._generate_on_spatial(edge, table_alias, source_alias)
             else:
-                on_clause = self.generator._genera_on_spaziale(edge, source_alias, table_alias)
+                on_clause = self._generate_on_spatial(edge, source_alias, table_alias)
         else:
-            on_clause = self.generator._genera_on_attributivo(
+            on_clause = self._generate_on_attribute(
                 edge, source_alias, table_alias, node, join_type, is_reversed
             )
 
@@ -160,7 +165,7 @@ class QueryJoinRenderer:
         if not self._is_valid_identifier(target_geom):
             raise ValueError(f"Colonna geometria non valida: {target_geom}")
 
-        db = self.generator.db_type.lower() if self.generator.db_type else 'postgres'
+        db = self.db_type.lower() if self.db_type else 'postgres'
         geom1 = f"{source_alias}.{source_geom}"
         geom2 = f"{table_alias}.{target_geom}"
 

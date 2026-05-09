@@ -10,10 +10,12 @@ def delete_task_log_runs(task_id: str) -> int:
     """Delete log-run rows owned by one orchestrator task.
 
     The orchestrator owns the cleanup decision and failure handling; the DB
-    module remains a leaf adapter that performs the concrete SQL operation.
-    Exceptions intentionally propagate so the router can preserve its existing
-    best-effort partial-cleanup response contract.
+    write is intentionally kept at this orchestrator boundary instead of going
+    through a legacy `app.db.*_service` facade. Exceptions intentionally
+    propagate so the router can preserve its existing best-effort
+    partial-cleanup response contract.
     """
-    from app.db.log_runs_db_service import delete_log_run_by_run_id
+    from app.db.pg_connection import execute as pg_execute
 
-    return delete_log_run_by_run_id(task_id)
+    cur = pg_execute("DELETE FROM log_runs WHERE run_id = ?", (task_id,))
+    return cur.rowcount

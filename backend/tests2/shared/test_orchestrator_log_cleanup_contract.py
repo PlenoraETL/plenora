@@ -1,8 +1,4 @@
-"""
-Contract test BE-GO-READY-CONNECTION-ENGINE-006 — typed boundary
-
-`app.db.log_runs_db_service.delete_log_run_by_run_id`.
-"""
+"""Contract tests for the orchestrator-owned log_runs cleanup boundary."""
 
 from __future__ import annotations
 
@@ -51,14 +47,14 @@ def _capture_execute(
     return calls
 
 
-# delete_log_run_by_run_id
+# delete_task_log_runs
 
 
-def test_delete_log_run_by_run_id_issues_canonical_sql(monkeypatch):
-    from app.db.log_runs_db_service import delete_log_run_by_run_id
+def test_delete_task_log_runs_issues_canonical_sql(monkeypatch):
+    from app.core.orchestrator.log_cleanup import delete_task_log_runs
 
     calls = _capture_execute(monkeypatch, rowcount=1)
-    delete_log_run_by_run_id("task-abc-123")
+    delete_task_log_runs("task-abc-123")
     assert len(calls) == 1
     sql, params = calls[0]
     # Canonical SQL: unqualified `log_runs` (search_path resolved).
@@ -67,47 +63,49 @@ def test_delete_log_run_by_run_id_issues_canonical_sql(monkeypatch):
     assert params == ("task-abc-123",)
 
 
-def test_delete_log_run_by_run_id_returns_rowcount_when_present(monkeypatch):
-    from app.db.log_runs_db_service import delete_log_run_by_run_id
+def test_delete_task_log_runs_returns_rowcount_when_present(monkeypatch):
+    from app.core.orchestrator.log_cleanup import delete_task_log_runs
 
     _capture_execute(monkeypatch, rowcount=1)
-    out = delete_log_run_by_run_id("task-abc")
+    out = delete_task_log_runs("task-abc")
     assert isinstance(out, int)
     assert out == 1
 
 
-def test_delete_log_run_by_run_id_returns_zero_when_absent(monkeypatch):
+def test_delete_task_log_runs_returns_zero_when_absent(monkeypatch):
     """Idempotent: deleting a non-existing run_id is not an error,
     rowcount is 0. Caller treats this as a no-op."""
-    from app.db.log_runs_db_service import delete_log_run_by_run_id
+    from app.core.orchestrator.log_cleanup import delete_task_log_runs
 
     _capture_execute(monkeypatch, rowcount=0)
-    assert delete_log_run_by_run_id("task-unknown") == 0
+    assert delete_task_log_runs("task-unknown") == 0
 
 
-def test_delete_log_run_by_run_id_does_not_translate_rowcount(monkeypatch):
+def test_delete_task_log_runs_does_not_translate_rowcount(monkeypatch):
     """Contract: the helper returns `int` rowcount, NOT a deleted
     bool. Translation would lose information for the caller and
-    couple the DAL to one specific consumer."""
-    from app.db.log_runs_db_service import delete_log_run_by_run_id
+    couple the boundary to a boolean-only consumer."""
+    from app.core.orchestrator.log_cleanup import delete_task_log_runs
 
     _capture_execute(monkeypatch, rowcount=2)  # hypothetical multi-row
-    out = delete_log_run_by_run_id("task-multi")
+    out = delete_task_log_runs("task-multi")
     assert out == 2  # NOT True, NOT 1
     assert not isinstance(out, bool)
 
 
-def test_delete_log_run_by_run_id_propagates_sql_error(monkeypatch):
-    """Contract: DAL must NOT swallow. The orchestrator caller
-    runs in a best-effort cascade and decides log+continue at the
-    call site."""
-    from app.db.log_runs_db_service import delete_log_run_by_run_id
+def test_delete_task_log_runs_propagates_sql_error(monkeypatch):
+    """Contract: boundary must NOT swallow.
+
+    The router runs in a best-effort cascade and decides log+continue at the
+    call site.
+    """
+    from app.core.orchestrator.log_cleanup import delete_task_log_runs
 
     _capture_execute(
         monkeypatch, raise_exc=RuntimeError("DB unreachable"),
     )
     with pytest.raises(RuntimeError, match="DB unreachable"):
-        delete_log_run_by_run_id("task-x")
+        delete_task_log_runs("task-x")
 
 
 # Router source-bound: orchestrator no longer imports pg_connection
@@ -121,49 +119,28 @@ def test_orchestrator_router_uses_domain_cleanup_not_db_service():
     from app.core.orchestrator import router as orchestrator_router
 
     src = open(orchestrator_router.__file__, encoding="utf-8").read()
+    legacy_module = "app.db." + "log_runs" + "_db_" + "service"
     assert "from app.db.pg_connection" not in src
     assert "import app.db.pg_connection" not in src
-    assert "app.db.log_runs_db_service" not in src
+    assert legacy_module not in src
     assert "delete_task_log_runs" in src
 
 
-def test_orchestrator_log_cleanup_delegates_to_db_adapter(monkeypatch):
+def test_orchestrator_log_cleanup_owns_sql_not_db_service():
     from app.core.orchestrator import log_cleanup
 
-    calls = []
-
-    def _delete(run_id):
-        calls.append(run_id)
-        return 1
-
-    monkeypatch.setattr(
-        "app.db.log_runs_db_service.delete_log_run_by_run_id",
-        _delete,
-    )
-
-    assert log_cleanup.delete_task_log_runs("task-abc") == 1
-    assert calls == ["task-abc"]
+    src = open(log_cleanup.__file__, encoding="utf-8").read()
+    legacy_module = "app.db." + "log_runs" + "_db_" + "service"
+    assert legacy_module not in src
+    assert "DELETE FROM log_runs WHERE run_id = ?" in src
 
 
 # Module hygiene
 
 
-def test_module_is_leaf_no_app_core_or_app_services_imports():
-    """The DAL must stay leaf-y: no upward imports into
-    `app.core.*` or `app.services.*`. Future helpers (logs router
-    extraction follow-up) extend this module without coupling
-    to consumer code."""
-    import app.db.log_runs_db_service  # noqa: F401
+def test_legacy_log_runs_adapter_stays_tombstoned():
+    from pathlib import Path
 
-    src = open(
-        app.db.log_runs_db_service.__file__, encoding="utf-8"
-    ).read()
-    for line in src.splitlines():
-        stripped = line.strip()
-        if not (stripped.startswith("import ") or stripped.startswith("from ")):
-            continue
-        for forbidden in ("app.core.", "app.services."):
-            assert forbidden not in stripped, (
-                f"log_runs_db_service must not import {forbidden}; "
-                f"offending line: {stripped!r}"
-            )
+    backend_root = Path(__file__).resolve().parent.parent.parent
+    adapter_file = "log_runs" + "_db_service.py"
+    assert not (backend_root / "app/db" / adapter_file).exists()

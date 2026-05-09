@@ -74,6 +74,7 @@ def test_value_error_str_e_lock_exists_in_catalog_test():
 # Razionale per file (ADR-0021 + BE_RULES sez. 6 "Config boundary"):
 # - `app/config.py`: Settings.DEFAULTS infrastructure entry point.
 # - `app/main.py`: startup boot, env diagnostics.
+# - `app/startup_validation.py`: explicit bootstrap validation boundary.
 # - `app/db/migrations_runner.py`: bootstrap migrations runner
 #   (deve distinguere "user did set" vs "default" ⇒ os.getenv diretto).
 # - `app/db/pg_connection.py`: DB connection bootstrap (DATABASE_URL
@@ -97,9 +98,12 @@ def test_value_error_str_e_lock_exists_in_catalog_test():
 #   sono migrate a `Settings.DEFAULTS`). Il legacy `BACKUP_S3_REGION`
 #   era un dead alias e viene retirato. `AWS_REGION` resta DEPLOY_INFRA
 #   env-only per coerenza con il pattern in `cloud_backends._build_object_storage`.
+# - `app/core/auth/smoke_seed.py`: docker smoke seed boundary; deve
+#   distinguere variabili esplicitamente settate dal default runtime.
 ALLOWLIST_GETENV_COUNTS: Dict[str, int] = {
-    "app/config.py": 5,
+    "app/config.py": 3,
     "app/main.py": 2,
+    "app/startup_validation.py": 2,
     "app/db/migrations_runner.py": 1,
     "app/db/pg_connection.py": 3,
     "app/shared/cloud_backends.py": 30,
@@ -108,6 +112,7 @@ ALLOWLIST_GETENV_COUNTS: Dict[str, int] = {
     "app/shared/request_utils.py": 1,
     "app/utils/zip_safe.py": 1,
     "app/core/admin_backups/service.py": 1,
+    "app/core/auth/smoke_seed.py": 3,
 }
 
 
@@ -173,8 +178,8 @@ def test_os_getenv_only_at_boundary_modules():
 #   project-id-by-group lookup migrato a
 #   `app.core.projects.db.list_project_ids_for_group`.
 # - `app/core/orchestrator/router.py` (BE-GO-READY-CONNECTION-ENGINE-006):
-#   single `DELETE log_runs` migrato a
-#   `app.db.log_runs_db_service.delete_log_run_by_run_id`.
+#   single `DELETE log_runs` migrato al boundary
+#   `app.core.orchestrator.log_cleanup.delete_task_log_runs`.
 #
 # Lock: SET di file allowlistati. Nuovi router NON possono importare
 # pg_connection senza esplicita aggiunta + razionale.

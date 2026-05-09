@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import re
-from typing import Any, Dict, List
+from typing import Any, Callable, Dict, List
 
 from app.db.sql_functions import translate_calculated_column
 from app.db.sql_translator import sql_translator
@@ -14,10 +14,10 @@ class QueryProjectionRenderer:
     """Builds projection-oriented clauses while reusing QueryGenerator helpers."""
 
     def __init__(self, generator):
-        self.generator = generator
-
-    def __getattr__(self, name):
-        return getattr(self.generator, name)
+        self.db_type = generator.db_type
+        self._get_node_table_name: Callable[[Node], str] = generator._get_node_table_name
+        self._safe_identifier: Callable[[str, str], str] = generator._safe_identifier
+        self._prossimo_nome_param: Callable[[], str] = generator._prossimo_nome_param
 
     def generate_select(
         self,
@@ -72,7 +72,7 @@ class QueryProjectionRenderer:
                         sql_expr = calc_col["sql"]
                     elif calc_col.get("function_name") and calc_col.get("params"):
                         sql_expr = translate_calculated_column(
-                            db_type=self.generator.db_type,
+                            db_type=self.db_type,
                             column_name=calc_col["name"],
                             expression={
                                 "function": calc_col["function_name"],
@@ -82,7 +82,7 @@ class QueryProjectionRenderer:
                         )
                     elif calc_col.get("expression") and isinstance(calc_col["expression"], dict):
                         sql_expr = translate_calculated_column(
-                            db_type=self.generator.db_type,
+                            db_type=self.db_type,
                             column_name=calc_col["name"],
                             expression=calc_col["expression"],
                             table_alias=table_alias,
@@ -256,7 +256,7 @@ class QueryProjectionRenderer:
                 col_sql = self._safe_identifier(column, "Nome colonna HAVING")
                 expression = f"{function}({col_sql})"
 
-            param_name = self.generator._prossimo_nome_param()
+            param_name = self._prossimo_nome_param()
             try:
                 typed_value = float(value) if "." in str(value) else int(value)
             except (ValueError, TypeError):
@@ -269,7 +269,7 @@ class QueryProjectionRenderer:
 
     def wrap_geometry_as_wkt(self, col_ref: str) -> str:
         """Wrappa una colonna geometrica con la funzione ST_AsText del dialetto."""
-        db = self.generator.db_type.lower() if self.generator.db_type else "postgres"
+        db = self.db_type.lower() if self.db_type else "postgres"
 
         try:
             return sql_translator.translate("ST_AsText", db, geom=col_ref)
@@ -303,7 +303,7 @@ class QueryProjectionRenderer:
             if not isinstance(limit, int) or limit < 0:
                 raise ValueError(f"LIMIT deve essere un intero positivo, ricevuto: {limit}")
 
-            db = self.generator.db_type.lower() if self.generator.db_type else "postgres"
+            db = self.db_type.lower() if self.db_type else "postgres"
 
             if db == "oracle":
                 query += f"\nFETCH FIRST {limit} ROWS ONLY"

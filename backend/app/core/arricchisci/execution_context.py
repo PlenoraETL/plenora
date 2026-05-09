@@ -23,16 +23,12 @@ __all__ = [
 
 @dataclass(frozen=True)
 class ArricchisciExecutionContext(CanvasExecutionContext):
-    """Arricchisci-named adapter over `CanvasExecutionContext`.
+    """Public arricchisci execution-context type.
 
-    KEEP_COMPAT_WITH_REMOVAL_CONDITION: remove after arricchisci
-    production modules and tests type against
-    `app.shared.execution.context.CanvasExecutionContext` directly.
-    Owner: TRANSFORMATION_ENGINE. Canonical target:
-    `CanvasExecutionContext`.
-
-    See `app.shared.execution.context.CanvasExecutionContext` for
-    field documentation.
+    It intentionally preserves the domain-specific type name while
+    inheriting the shared canvas execution-context shape. See
+    `app.shared.execution.context.CanvasExecutionContext` for field
+    documentation.
     """
 
 

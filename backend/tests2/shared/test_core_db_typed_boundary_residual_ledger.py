@@ -1,4 +1,4 @@
-"""1.0 residual ledger for typed core/DB boundary seams.
+﻿"""1.0 residual ledger for typed core/DB boundary seams.
 
 This is intentionally narrow: it locks the Batch 094 DB/core rows plus the
 BE095-BE097 Wave A-C typed-boundary closures and compatibility wrappers.
@@ -33,19 +33,7 @@ _EXPECTED_TO_LEGACY_DICT_CALL_SITES = frozenset(
     {
     }
 )
-_DB_FACADE_BOUNDARY_ALLOWLIST = {
-    "app.db.tickets_db_service": frozenset(
-        {
-            "app/core/admin_system_status/tickets_metrics.py",
-            "app/core/tickets/db.py",
-        }
-    ),
-    "app.db.log_runs_db_service": frozenset(
-        {
-            "app/core/orchestrator/log_cleanup.py",
-        }
-    ),
-}
+_DB_FACADE_BOUNDARY_ALLOWLIST: dict[str, frozenset[str]] = {}
 
 
 @dataclass(frozen=True)

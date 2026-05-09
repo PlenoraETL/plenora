@@ -1,4 +1,4 @@
-"""
+﻿"""
 Contract test — endpoints /tickets/meta e /tickets/counts.
 
 Coperture:
@@ -35,7 +35,7 @@ def _make_client(current_user: CurrentUser) -> TestClient:
 
 @pytest.fixture
 def mock_tdb(monkeypatch):
-    import app.db.tickets_db_service as real_tdb
+    import app.core.tickets.db as real_tdb
     m = MagicMock(spec=real_tdb)
     m.count_tickets.return_value = 0
     m.counts_by_severity.return_value = {"low": 0, "medium": 0, "high": 0, "critical": 0}

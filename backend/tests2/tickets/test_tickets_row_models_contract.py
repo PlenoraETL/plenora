@@ -1,8 +1,8 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import pytest
 
-from app.db import tickets_db_service as tdb
+from app.core.tickets import db as tdb
 
 
 pytestmark = [pytest.mark.unit, pytest.mark.contract]

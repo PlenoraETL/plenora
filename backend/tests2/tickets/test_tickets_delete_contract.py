@@ -1,4 +1,4 @@
-"""
+﻿"""
 Contract test — DELETE /api/tickets/{id}.
 
 Default = soft delete (set deleted_at, audit preservato).
@@ -14,7 +14,7 @@ from fastapi.testclient import TestClient
 
 from app.shared.contracts.auth import CurrentUser
 from app.core.tickets.router import _require_not_esecutore, router as tickets_router
-from app.db import tickets_db_service as tdb
+from app.core.tickets import db as tdb
 
 
 pytestmark = [pytest.mark.unit, pytest.mark.contract]
@@ -54,7 +54,7 @@ def _make_client(current_user: CurrentUser) -> TestClient:
 
 @pytest.fixture
 def mock_tdb(monkeypatch):
-    import app.db.tickets_db_service as real_tdb
+    import app.core.tickets.db as real_tdb
     m = MagicMock(spec=real_tdb)
     m.get_ticket.return_value = _ticket()
     m.list_attachments.return_value = []

@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 from pydantic import ValidationError
 import pytest
@@ -8,7 +8,7 @@ from app.core.connections import arcgis_connection_resolver
 from app.core.connections import db as connection_db
 from app.core.eseguibili import db as eseguibili_db
 from app.core.results import db as results_db
-from app.db import tickets_db_service as tickets_db
+from app.core.tickets import db as tickets_db
 from app.core.projects import db as project_db
 
 

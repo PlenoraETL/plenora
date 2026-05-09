@@ -91,7 +91,9 @@ def test_init_execution_context_raises_execution_context_error_on_db_error(
     monkeypatch.setattr(execution_context_mod, "load_project_access_context", _boom)
 
     with pytest.raises(ExecutionContextError) as exc_info:
-        api_service._init_execution_context("proj-1", preview_limit=None)
+        canvas_orchestrator_mod.init_execution_context(
+            api_service, "proj-1", preview_limit=None,
+        )
 
     err = exc_info.value
     assert err.project_id == "proj-1"

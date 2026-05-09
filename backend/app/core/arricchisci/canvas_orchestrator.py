@@ -121,17 +121,15 @@ def init_execution_context(
       / `svc._preview_limit` (verificato da AST scan: zero read
       sites in `app/core/arricchisci/`).
 
-    - ** (this cut)**: il
+    Contratto attuale:
       mirror `apply_to_legacy_state(svc, ctx)` in questa
       funzione era diventato dead-write: scriveva attributi che
       nessuno leggeva. Removed. Il `svc` parametro non e' piu'
       mutato; `init_execution_context` e' ora una thin wrapper
-      che delega a `build_execution_context` + ritorna il typed
-      ctx. La firma con `svc` resta per
-      KEEP_COMPAT_WITH_REMOVAL_CONDITION: remove after
-      `ApiConnectionService._init_execution_context` is deleted and
-      all callers use `build_execution_context(project_id,
-      preview_limit)` or this module-level adapter directly.
+      pubblica che delega a `build_execution_context` e ritorna il
+      typed ctx. La firma con `svc` e' mantenuta come API esplicita
+      dell'orchestratore per i caller che hanno gia' il servizio in
+      scope.
 
     Behavior post-011:
     - Pure delegation: nessun side effect su `svc`. Il typed
@@ -193,12 +191,9 @@ def execute_canvas_enrichment(
 ) -> Dict:
     """Orchestra l'esecuzione del canvas arricchisci.
 
-    Estratta byte-per-byte da
-    `ApiConnectionService.execute_enrichment` (BE-portable-
-    TRANSFORMATION-ENGINE-011). Il metodo originale resta sulla
-    classe come wrapper thin per
-    KEEP_COMPAT_WITH_REMOVAL_CONDITION: remove after callers use
-    this module-level orchestrator directly.
+    Il modulo contiene l'algoritmo canonico di esecuzione canvas.
+    `ApiConnectionService.execute_enrichment` resta la facade
+    pubblica per i caller runtime service-oriented e delega qui.
 
     Flusso:
     1. Carica tutte le API connections configurate (decifrate).

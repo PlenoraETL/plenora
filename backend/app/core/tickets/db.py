@@ -1,30 +1,500 @@
-"""Persistence adapter for the tickets core domain.
+"""
+DB service layer — tickets + comments + attachments.
 
-This module is the only core/tickets boundary that knows about the legacy
-database facade. Domain services and routers import this adapter instead of
-depending on ``app.db.tickets_db_service`` directly.
+Tabelle in `plenora.*`:
 """
 
 from __future__ import annotations
 
-from app.db import tickets_db_service as _tdb
+import json
+import uuid
+from dataclasses import dataclass
+from datetime import datetime, timezone
+from typing import Any, Dict, List, Mapping, Optional
 
-TicketRow = _tdb.TicketRow
-CommentRow = _tdb.CommentRow
-AttachmentRow = _tdb.AttachmentRow
+from app.db.pg_connection import (
+    fetchone, fetchall, execute, transaction,
+)
+from app.utils.logger import get_logger
 
-create_ticket = _tdb.create_ticket
-get_ticket = _tdb.get_ticket
-list_tickets = _tdb.list_tickets
-update_ticket = _tdb.update_ticket
-count_tickets = _tdb.count_tickets
-counts_by_severity = _tdb.counts_by_severity
-add_comment = _tdb.add_comment
-list_comments = _tdb.list_comments
-link_attachment = _tdb.link_attachment
-list_attachments = _tdb.list_attachments
-delete_attachment = _tdb.delete_attachment
-get_attachment = _tdb.get_attachment
-soft_delete_ticket = _tdb.soft_delete_ticket
-delete_ticket = _tdb.delete_ticket
+logger = get_logger(__name__)
 
+
+# TICKETS — CRUD
+
+
+@dataclass(frozen=True)
+class TicketRow:
+    id: str
+    kind: str
+    title: str
+    description: str
+    severity: str
+    status: str
+    category: str
+    created_by: str
+    group_id: str
+    created_at: str
+    updated_at: str
+    assignee: str | None = None
+    resolved_at: str | None = None
+    deleted_at: str | None = None
+
+    def __getitem__(self, key: str) -> object:
+        return getattr(self, key)
+
+    def get(self, key: str, default: object = None) -> object:
+        return getattr(self, key, default)
+
+
+@dataclass(frozen=True)
+class CommentRow:
+    id: str
+    ticket_id: str
+    author_id: str
+    body: str
+    created_at: str
+    author_username: str | None = None
+
+    def __getitem__(self, key: str) -> object:
+        return getattr(self, key)
+
+
+@dataclass(frozen=True)
+class AttachmentRow:
+    id: str
+    ticket_id: str
+    file_source_id: str
+    uploaded_by: str
+    uploaded_at: str
+    file_name: str | None = None
+    original_filename: str | None = None
+    format: str | None = None
+    size_bytes: int | None = None
+    uploaded_by_username: str | None = None
+
+    def __getitem__(self, key: str) -> object:
+        return getattr(self, key)
+
+
+def _required_str(row: Mapping[str, object], key: str) -> str:
+    value = row.get(key)
+    if not isinstance(value, str):
+        raise ValueError(f"Malformed ticket DB row: {key} must be a string")
+    return value
+
+
+def _optional_str(row: Mapping[str, object], key: str) -> str | None:
+    value = row.get(key)
+    if value is None:
+        return None
+    if not isinstance(value, str):
+        raise ValueError(f"Malformed ticket DB row: {key} must be a string or null")
+    return value
+
+
+def _optional_int(row: Mapping[str, object], key: str) -> int | None:
+    value = row.get(key)
+    if value is None:
+        return None
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise ValueError(f"Malformed ticket DB row: {key} must be an int or null")
+    return value
+
+
+def ticket_row_from_db(row: Mapping[str, object]) -> TicketRow:
+    return TicketRow(
+        id=_required_str(row, "id"),
+        kind=_required_str(row, "kind"),
+        title=_required_str(row, "title"),
+        description=_required_str(row, "description"),
+        severity=_required_str(row, "severity"),
+        status=_required_str(row, "status"),
+        category=_required_str(row, "category"),
+        created_by=_required_str(row, "created_by"),
+        group_id=_required_str(row, "group_id"),
+        created_at=_required_str(row, "created_at"),
+        updated_at=_required_str(row, "updated_at"),
+        assignee=_optional_str(row, "assignee"),
+        resolved_at=_optional_str(row, "resolved_at"),
+        deleted_at=_optional_str(row, "deleted_at"),
+    )
+
+
+def comment_row_from_db(row: Mapping[str, object]) -> CommentRow:
+    return CommentRow(
+        id=_required_str(row, "id"),
+        ticket_id=_required_str(row, "ticket_id"),
+        author_id=_required_str(row, "author_id"),
+        body=_required_str(row, "body"),
+        created_at=_required_str(row, "created_at"),
+        author_username=_optional_str(row, "author_username"),
+    )
+
+
+def attachment_row_from_db(row: Mapping[str, object]) -> AttachmentRow:
+    return AttachmentRow(
+        id=_required_str(row, "id"),
+        ticket_id=_required_str(row, "ticket_id"),
+        file_source_id=_required_str(row, "file_source_id"),
+        uploaded_by=_required_str(row, "uploaded_by"),
+        uploaded_at=_required_str(row, "uploaded_at"),
+        file_name=_optional_str(row, "file_name"),
+        original_filename=_optional_str(row, "original_filename"),
+        format=_optional_str(row, "format"),
+        size_bytes=_optional_int(row, "size_bytes"),
+        uploaded_by_username=_optional_str(row, "uploaded_by_username"),
+    )
+
+
+def create_ticket(
+    *,
+    kind: str,
+    title: str,
+    description: str,
+    severity: str,
+    category: str,
+    created_by: str,
+    group_id: str,
+    status: str = "open",
+    assignee: Optional[str] = None,
+) -> TicketRow:
+    """Crea nuovo ticket. Ritorna la row appena creata."""
+    ticket_id = str(uuid.uuid4())
+    now = datetime.now(timezone.utc).isoformat()
+    execute(
+        "INSERT INTO tickets (id, kind, title, description, severity, status, "
+        "category, created_by, assignee, group_id, created_at, updated_at) "
+        "VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+        (ticket_id, kind, title, description, severity, status,
+         category, created_by, assignee, group_id, now, now),
+    )
+    return get_ticket(ticket_id)
+
+
+def get_ticket(
+    ticket_id: str, *, include_deleted: bool = False,
+) -> TicketRow | None:
+    """Recupera ticket per id. None se non esiste o e' soft-deleted.
+
+    `include_deleted=True`: bypass del filtro `deleted_at IS NULL`.
+    Riservato a operazioni di audit / superadmin recovery.
+    """
+    if include_deleted:
+        row = fetchone("SELECT * FROM tickets WHERE id = ?", (ticket_id,))
+    else:
+        row = fetchone(
+            "SELECT * FROM tickets WHERE id = ? AND deleted_at IS NULL",
+            (ticket_id,),
+        )
+    return ticket_row_from_db(row) if row else None
+
+
+def list_tickets(
+    *,
+    group_id: Optional[str] = None,
+    created_by: Optional[str] = None,
+    assignee: Optional[str] = None,
+    status_in: Optional[List[str]] = None,
+    kind: Optional[str] = None,
+    severity_in: Optional[List[str]] = None,
+    limit: int = 500,
+) -> List[TicketRow]:
+    """Lista ticket con filtri componibili.
+
+    Filtri:
+      - group_id: solo ticket di questo gruppo (None = cross-group, solo
+        superadmin lo passa None)
+      - created_by: solo ticket aperti da questo utente
+      - assignee: solo ticket assegnati a questo utente
+      - status_in: uno o piu' stati (default = tutti)
+      - kind: 'tech_debt' | 'user_support'
+      - severity_in: uno o piu' livelli
+
+    Ordine: updated_at DESC (cosa e' cambiato di recente sta sopra).
+    """
+    # Filtro soft-delete sempre attivo: chi vuole vedere i cancellati
+    # passa per get_ticket(include_deleted=True) puntuale
+    clauses: List[str] = ["deleted_at IS NULL"]
+    params: List[Any] = []
+
+    if group_id is not None:
+        clauses.append("group_id = ?")
+        params.append(group_id)
+    if created_by is not None:
+        clauses.append("created_by = ?")
+        params.append(created_by)
+    if assignee is not None:
+        clauses.append("assignee = ?")
+        params.append(assignee)
+    if kind is not None:
+        clauses.append("kind = ?")
+        params.append(kind)
+    if status_in:
+        placeholders = ",".join(["?"] * len(status_in))
+        clauses.append(f"status IN ({placeholders})")
+        params.extend(status_in)
+    if severity_in:
+        placeholders = ",".join(["?"] * len(severity_in))
+        clauses.append(f"severity IN ({placeholders})")
+        params.extend(severity_in)
+
+    where = f"WHERE {' AND '.join(clauses)}"
+    sql = f"SELECT * FROM tickets {where} ORDER BY updated_at DESC LIMIT ?"
+    params.append(int(limit))
+    return [ticket_row_from_db(row) for row in fetchall(sql, tuple(params))]
+
+
+def update_ticket(
+    ticket_id: str,
+    *,
+    status: Optional[str] = None,
+    severity: Optional[str] = None,
+    category: Optional[str] = None,
+    assignee: Optional[str] = "__UNSET__",
+    title: Optional[str] = None,
+    description: Optional[str] = None,
+) -> TicketRow | None:
+    """Update parziale. Passare `assignee=None` per rimuovere l'assegnazione
+    (differente da default sentinel `"__UNSET__"` che significa "non toccare").
+    Auto-aggiorna `updated_at` e popola `resolved_at` quando si passa a
+    status='resolved' la prima volta.
+
+    Ritorna la row aggiornata, None se ticket inesistente.
+    """
+    current = get_ticket(ticket_id)
+    if not current:
+        return None
+
+    fields: Dict[str, Any] = {}
+    if status is not None:
+        fields["status"] = status
+    if severity is not None:
+        fields["severity"] = severity
+    if category is not None:
+        fields["category"] = category
+    if assignee != "__UNSET__":
+        fields["assignee"] = assignee  # anche None e' valido (unassign
+    if title is not None:
+        fields["title"] = title
+    if description is not None:
+        fields["description"] = description
+
+    if not fields:
+        return current
+
+    now = datetime.now(timezone.utc).isoformat()
+    fields["updated_at"] = now
+
+    # resolved_at: popolato solo alla PRIMA transizione verso 'resolved'
+    # preservato poi (anche se il ticket viene riaperto e richiuso, il
+    # primo resolved_at e' sufficiente per metriche time-to-first-resolution
+    if status == "resolved" and not current.get("resolved_at"):
+        fields["resolved_at"] = now
+
+    set_parts = []
+    params: List[Any] = []
+    for k, v in fields.items():
+        set_parts.append(f"{k} = ?")
+        params.append(v)
+    params.append(ticket_id)
+    execute(
+        f"UPDATE tickets SET {', '.join(set_parts)} WHERE id = ?",
+        tuple(params),
+    )
+    return get_ticket(ticket_id)
+
+
+def count_tickets(
+    *,
+    group_id: Optional[str] = None,
+    assignee: Optional[str] = None,
+    status_in: Optional[List[str]] = None,
+    kind: Optional[str] = None,
+) -> int:
+    """Conta ticket matching i filtri. Usato per badge sidebar e card dashboard.
+    Esclude i soft-deleted (per definizione: il badge non deve contare ticket cancellati)."""
+    clauses: List[str] = ["deleted_at IS NULL"]
+    params: List[Any] = []
+
+    if group_id is not None:
+        clauses.append("group_id = ?")
+        params.append(group_id)
+    if assignee is not None:
+        clauses.append("assignee = ?")
+        params.append(assignee)
+    if kind is not None:
+        clauses.append("kind = ?")
+        params.append(kind)
+    if status_in:
+        placeholders = ",".join(["?"] * len(status_in))
+        clauses.append(f"status IN ({placeholders})")
+        params.extend(status_in)
+
+    where = f"WHERE {' AND '.join(clauses)}"
+    row = fetchone(f"SELECT COUNT(*) AS cnt FROM tickets {where}", tuple(params))
+    return int(row["cnt"]) if row else 0
+
+
+def counts_by_severity(
+    *,
+    group_id: Optional[str] = None,
+    status_in: Optional[List[str]] = None,
+) -> Dict[str, int]:
+    """Breakdown counts per severity (per card dashboard). Esclude soft-deleted."""
+    clauses: List[str] = ["deleted_at IS NULL"]
+    params: List[Any] = []
+    if group_id is not None:
+        clauses.append("group_id = ?")
+        params.append(group_id)
+    if status_in:
+        placeholders = ",".join(["?"] * len(status_in))
+        clauses.append(f"status IN ({placeholders})")
+        params.extend(status_in)
+
+    where = f"WHERE {' AND '.join(clauses)}"
+    rows = fetchall(
+        f"SELECT severity, COUNT(*) AS cnt FROM tickets {where} "
+        f"GROUP BY severity",
+        tuple(params),
+    )
+    out = {"low": 0, "medium": 0, "high": 0, "critical": 0}
+    for r in rows:
+        out[r["severity"]] = int(r["cnt"])
+    return out
+
+
+# COMMENTS
+
+
+def add_comment(ticket_id: str, author_id: str, body: str) -> CommentRow:
+    """Aggiunge un commento + tocca updated_at del ticket."""
+    cid = str(uuid.uuid4())
+    now = datetime.now(timezone.utc).isoformat()
+    with transaction() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "INSERT INTO ticket_comments (id, ticket_id, author_id, body, created_at) "
+                "VALUES (%s, %s, %s, %s, %s)",
+                (cid, ticket_id, author_id, body, now),
+            )
+            cur.execute(
+                "UPDATE tickets SET updated_at = %s WHERE id = %s",
+                (now, ticket_id),
+            )
+    return CommentRow(
+        id=cid,
+        ticket_id=ticket_id,
+        author_id=author_id,
+        body=body,
+        created_at=now,
+    )
+
+
+def list_comments(ticket_id: str) -> List[CommentRow]:
+    return [
+        comment_row_from_db(row)
+        for row in fetchall(
+            "SELECT c.*, u.username AS author_username "
+            "FROM ticket_comments c "
+            "LEFT JOIN users u ON u.id = c.author_id "
+            "WHERE c.ticket_id = ? ORDER BY c.created_at ASC",
+            (ticket_id,),
+        )
+    ]
+
+
+# ATTACHMENTS
+
+
+def link_attachment(
+    ticket_id: str,
+    file_source_id: str,
+    uploaded_by: str,
+) -> AttachmentRow:
+    """Registra un file_source come allegato del ticket.
+    Il file_source deve essere gia' stato creato prima (via file_service)."""
+    aid = str(uuid.uuid4())
+    now = datetime.now(timezone.utc).isoformat()
+    execute(
+        "INSERT INTO ticket_attachments (id, ticket_id, file_source_id, uploaded_by, uploaded_at) "
+        "VALUES (?, ?, ?, ?, ?)",
+        (aid, ticket_id, file_source_id, uploaded_by, now),
+    )
+    # Touch ticket updated_at
+    execute(
+        "UPDATE tickets SET updated_at = ? WHERE id = ?",
+        (now, ticket_id),
+    )
+    return AttachmentRow(
+        id=aid,
+        ticket_id=ticket_id,
+        file_source_id=file_source_id,
+        uploaded_by=uploaded_by,
+        uploaded_at=now,
+    )
+
+
+def list_attachments(ticket_id: str) -> List[AttachmentRow]:
+    """Lista allegati del ticket join con file_sources per nome/size."""
+    return [
+        attachment_row_from_db(row)
+        for row in fetchall(
+            "SELECT a.id, a.ticket_id, a.file_source_id, a.uploaded_by, a.uploaded_at, "
+            "       fs.name AS file_name, fs.original_filename, fs.format, "
+            "       fs.size_bytes, u.username AS uploaded_by_username "
+            "FROM ticket_attachments a "
+            "JOIN file_sources fs ON fs.id = a.file_source_id "
+            "LEFT JOIN users u ON u.id = a.uploaded_by "
+            "WHERE a.ticket_id = ? ORDER BY a.uploaded_at ASC",
+            (ticket_id,),
+        )
+    ]
+
+
+def delete_attachment(attachment_id: str) -> bool:
+    """Rimuove il link allegato. Il file_source sottostante NON viene
+    cancellato da qui (responsabilita' del caller via file_service)."""
+    cur = execute(
+        "DELETE FROM ticket_attachments WHERE id = ?", (attachment_id,)
+    )
+    return cur.rowcount > 0
+
+
+def get_attachment(attachment_id: str) -> AttachmentRow | None:
+    row = fetchone(
+        "SELECT * FROM ticket_attachments WHERE id = ?", (attachment_id,)
+    )
+    return attachment_row_from_db(row) if row else None
+
+
+# DELETE TICKET (cascade su comments/attachments via FK ON DELETE CASCADE
+
+
+def soft_delete_ticket(ticket_id: str) -> bool:
+    """Soft delete: setta `deleted_at = NOW()`. Il ticket sparisce
+    dalle query CRUD (filtrate by default) ma la riga + commenti +
+    allegati restano in DB per audit / recovery.
+
+    Idempotente: chiamata su un ticket gia' soft-deleted aggiorna
+    `deleted_at` al timestamp piu' recente (rare race ok).
+    """
+    now = datetime.now(timezone.utc).isoformat()
+    cur = execute(
+        "UPDATE tickets SET deleted_at = ? WHERE id = ?",
+        (now, ticket_id),
+    )
+    return cur.rowcount > 0
+
+
+def delete_ticket(ticket_id: str) -> bool:
+    """Hard delete del ticket. Cascade automatico su `ticket_comments` e
+    `ticket_attachments` via FK. Il cleanup dei file_source sottostanti
+    e' responsabilita' del caller (loop su list_attachments prima del
+    delete, perche' a cancellazione avvenuta non c'e' piu' la riga link).
+
+    Nota: per il flusso normale usare `soft_delete_ticket`. Hard delete
+    riservato a superadmin via `?hard=true` per casi GDPR / pulizia.
+    """
+    cur = execute("DELETE FROM tickets WHERE id = ?", (ticket_id,))
+    return cur.rowcount > 0

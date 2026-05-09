@@ -22,12 +22,9 @@ def test_execute_raw_raises_when_rows_exceed_cap(monkeypatch):
     """Il loop fetchmany deve raise ValueError se il cumulativo supera
     ESTRAI_MAX_ROWS. Previene OOM su query mal filtrate."""
     from app.db.query_executor import QueryExecutor
-    import app.config
 
     # Abbassa il cap per il test
-    monkeypatch.setattr(
-        app.config.settings, "ESTRAI_MAX_ROWS", 100, raising=False
-    )
+    monkeypatch.setenv("ESTRAI_MAX_ROWS", "100")
 
     # Fake cursor che ritorna 10k righe per chunk (> 100 cap)
     fake_chunk = [(1, "a")] * 10_000

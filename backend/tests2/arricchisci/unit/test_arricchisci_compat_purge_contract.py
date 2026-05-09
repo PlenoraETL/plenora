@@ -62,3 +62,19 @@ def test_enrichment_service_does_not_reexport_rate_limiter_compat_alias() -> Non
     assert not hasattr(enrichment_service, "RateLimiter")
     assert hasattr(enrichment_service, "_RateLimiter")
     assert enrichment_service._RateLimiter is RateLimiter
+
+
+def test_arricchisci_core_has_no_keep_compat_markers() -> None:
+    violations: list[str] = []
+    for path in _python_files(_ARRICCHISCI_ROOT):
+        text = path.read_text(encoding="utf-8-sig")
+        if "KEEP_COMPAT" in text:
+            violations.append(str(path.relative_to(_BACKEND_ROOT)))
+
+    assert not violations
+
+
+def test_api_connection_service_does_not_expose_context_init_adapter() -> None:
+    from app.core.arricchisci.api_connector import ApiConnectionService
+
+    assert not hasattr(ApiConnectionService, "_init_execution_context")
