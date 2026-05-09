@@ -170,7 +170,10 @@ def get_node_meta(run_id: str, node_id: str) -> Optional[Dict]:
         (run_id, node_id),
     )
     if row and row.get("col_schema"):
-        row["col_schema"] = json.loads(row["col_schema"])
+        col_schema = row["col_schema"]
+        # psycopg2 auto-deserializes JSONB after the custom typecaster removal.
+        if not isinstance(col_schema, (dict, list)):
+            row["col_schema"] = json.loads(col_schema)
     return row
 
 
@@ -178,7 +181,9 @@ def list_node_meta(run_id: str) -> List[Dict]:
     rows = fetchall("SELECT * FROM node_meta WHERE run_id = %s", (run_id,))
     for row in rows:
         if row.get("col_schema"):
-            row["col_schema"] = json.loads(row["col_schema"])
+            col_schema = row["col_schema"]
+            if not isinstance(col_schema, (dict, list)):
+                row["col_schema"] = json.loads(col_schema)
     return rows
 
 

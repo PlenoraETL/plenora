@@ -100,7 +100,12 @@ def get_file_source(file_id: str, include_data: bool = False, group_id: str = No
             (file_id,),
         )
     if row and row.get("metadata"):
-        row["metadata"] = json.loads(row["metadata"])
+        metadata = row["metadata"]
+        # psycopg2 auto-deserializes JSONB into dict after the custom
+        # JSONB_AS_TEXT typecaster was removed by the "Harden PostgreSQL
+        # boundary" commit. Older text rows still arrive as str.
+        if not isinstance(metadata, (dict, list)):
+            row["metadata"] = json.loads(metadata)
     return row
 
 
