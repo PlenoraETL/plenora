@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from tests2.functional.harness.http import http_json_response, poll_json_until
+from tests2.integration.harness.canvas_builders import build_estrai_preview_canvas
 from tests2.integration.harness.oracle import (
     ORACLE_HOST,
     ORACLE_PASSWORD,
@@ -50,35 +51,9 @@ def _delete_connection(base_url: str, auth_headers: dict, connection_id: str) ->
 
 
 def _estrai_oracle_canvas(table_name: str) -> dict:
-    return {
-        "nodes": [
-            {
-                "id": "src-1",
-                "type": "source",
-                "position": {"x": 100, "y": 100},
-                "table_name": table_name,
-                "alias": "src",
-                "columns": [
-                    {"name": "ID", "type": "int", "visible": True},
-                    {"name": "CITY", "type": "str", "visible": True},
-                    {"name": "SCORE", "type": "int", "visible": True},
-                ],
-                "filters": [],
-                "calculated_columns": [],
-            },
-            {
-                "id": "result-1",
-                "type": "result",
-                "position": {"x": 350, "y": 100},
-                "fileName": "oracle_preview",
-                "format": "csv",
-                "columns": [],
-            },
-        ],
-        "edges": [
-            {"id": "edge-1", "source": "src-1", "target": "result-1", "join_type": "output"}
-        ],
-    }
+    return build_estrai_preview_canvas(
+        table_name, file_name="oracle_preview", uppercase_columns=True,
+    )
 
 
 def test_oracle_connection_tables_and_estrai_preview_roundtrip(

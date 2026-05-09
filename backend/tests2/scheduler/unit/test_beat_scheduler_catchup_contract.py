@@ -136,13 +136,6 @@ def test_emits_task_with_triggered_by_catchup_and_scheduled_for(scheduler):
 # Update last_run per prevenire re-trigger
 
 
-# Nota: il test `test_updates_last_run_to_expected_time_to_prevent_retrigger`
-# e' stato rimosso nel C3 follow-up (fix 2). Il nuovo contract richiede
-# che last_run NON venga aggiornato al emit — e' il dedupe via
-# schedule_catchup_history che previene il re-trigger. Vedi
-# test_beat_scheduler_catchup_no_premature_update_contract.py.
-
-
 # Audit history
 
 

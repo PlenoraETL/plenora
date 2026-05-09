@@ -1,7 +1,5 @@
 """
 Bench formalizzato: `op_concat_columns` nuovo impl vs legacy vs naive apply.
-
-La baseline (test_baseline_pandas_ops.py) aveva mostrato che l'impl
 """
 
 from __future__ import annotations

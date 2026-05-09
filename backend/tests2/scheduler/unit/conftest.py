@@ -8,6 +8,7 @@ from datetime import datetime, timezone
 
 import pytest
 
+from app.shared.clock import FakeClock
 from app.shared.contracts.auth import CurrentUser
 from app.core.scheduler.models import (
     ScheduleConcurrency,
@@ -21,6 +22,25 @@ from app.core.scheduler.models import (
     SchedulePreCheck,
     ScheduleRuntime,
 )
+
+
+
+
+@pytest.fixture
+def tick():
+    """Forza un tick deterministico del loop heartbeat parked sul wait virtuale.
+
+    Pattern: il thread chiama ``clock.wait(stop, interval)`` -> si parka.
+    Il test aspetta che sia parked (1 waiter), poi ``advance(interval+eps)``
+    libera il wait, il loop esegue ``refresh_lock``/``try_acquire`` e si
+    re-parka. Estratta da `_tick` duplicato in 4 file heartbeat/lock_lost.
+    """
+
+    def _tick(fc: FakeClock, interval: float) -> None:
+        fc.wait_for_pending_waiters(1)
+        fc.advance(interval + 0.001)
+
+    return _tick
 
 
 @pytest.fixture

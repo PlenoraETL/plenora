@@ -39,17 +39,6 @@ def fake_concurrency():
     return cm
 
 
-def _tick(fc: FakeClock, interval: float) -> None:
-    """Forza un tick deterministico del loop heartbeat parked sul wait virtuale.
-
-    Pattern: il thread chiama clock.wait(stop, interval) -> si parka.
-    Il test aspetta che sia parked (1 waiter), poi advance(interval+eps)
-    libera il wait, il loop esegue refresh_lock/try_acquire e si re-parka.
-    """
-    fc.wait_for_pending_waiters(1)
-    fc.advance(interval + 0.001)
-
-
 def test_start_spawns_daemon_thread(fake_concurrency):
     """start() crea un thread daemon nominato per lo schedule_id."""
     from app.core.scheduler.scheduler_lock import LockHeartbeat
@@ -108,7 +97,7 @@ def test_stop_is_idempotent(fake_concurrency):
 
 
 def test_lock_lost_flag_true_when_refresh_false_and_reacquire_fails(
-    fake_concurrency,
+    fake_concurrency, tick,
 ):
     """Pattern critico C3: refresh_lock False + try_acquire != 'acquired'
     -> state['lock_lost'] = True via mutazione thread loop."""
@@ -128,7 +117,7 @@ def test_lock_lost_flag_true_when_refresh_false_and_reacquire_fails(
     try:
         # Forza 1 tick: thread esegue refresh=False + try_acquire="failed"
         # -> mutazione _state["lock_lost"] = True.
-        _tick(fc, 10.0)
+        tick(fc, 10.0)
         # Aspetta che il thread si re-parka cosi' siamo sicuri che il
         # body dell'iterazione (incluso il set di lock_lost) e' completo.
         fc.wait_for_pending_waiters(1)
@@ -142,7 +131,7 @@ def test_lock_lost_flag_true_when_refresh_false_and_reacquire_fails(
     assert state["lock_lost"] is True
 
 
-def test_lock_lost_flag_remains_false_when_refresh_ok(fake_concurrency):
+def test_lock_lost_flag_remains_false_when_refresh_ok(fake_concurrency, tick):
     """Happy path: refresh_lock sempre True -> lock_lost resta False."""
     from app.core.scheduler.scheduler_lock import LockHeartbeat
 
@@ -158,8 +147,8 @@ def test_lock_lost_flag_remains_false_when_refresh_ok(fake_concurrency):
     hb.start()
     try:
         # Almeno 2 tick deterministici
-        _tick(fc, 10.0)
-        _tick(fc, 10.0)
+        tick(fc, 10.0)
+        tick(fc, 10.0)
         fc.wait_for_pending_waiters(1)
     finally:
         hb.stop()
@@ -169,7 +158,7 @@ def test_lock_lost_flag_remains_false_when_refresh_ok(fake_concurrency):
 
 
 def test_refresh_exception_does_not_propagate_or_set_lock_lost(
-    fake_concurrency,
+    fake_concurrency, tick,
 ):
     """Transient blip: refresh_lock solleva -> loop continua, no
     state['lock_lost']=True (e' una situazione retry-safe)."""
@@ -188,9 +177,9 @@ def test_refresh_exception_does_not_propagate_or_set_lock_lost(
     )
     hb.start()
     try:
-        _tick(fc, 10.0)
-        _tick(fc, 10.0)
-        _tick(fc, 10.0)
+        tick(fc, 10.0)
+        tick(fc, 10.0)
+        tick(fc, 10.0)
         # Il thread deve essere ancora parked (vivo) dopo 3 exception
         fc.wait_for_pending_waiters(1)
     finally:

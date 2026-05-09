@@ -84,8 +84,7 @@ QUERY_MYSQL_BY_TENANT = """
 """
 
 
-# Verdetti (funzioni pure, zero dipendenza DB — testate in
-# backend/tests2/carica/unit/test_perf_bulk_verdict_thresholds.py)
+# Verdetti (funzioni pure, zero dipendenza DB).
 
 
 @dataclass

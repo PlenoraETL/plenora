@@ -190,9 +190,8 @@ def test_redis_unavailable_falls_back_to_single_instance_leader(monkeypatch):
     """Con SCHEDULE_BEAT_LEADER_FAIL_OPEN=True (flag esplicito), Redis
     unavailable → beat diventa leader single-instance (behavior legacy).
 
-    Nota: il DEFAULT e' fail-closed (vedi
-    test_beat_scheduler_leader_fail_closed_contract.py). Questo test
-    documenta il comportamento opt-in per deployment mono-host."""
+    Nota: il DEFAULT e' fail-closed. Questo test documenta il
+    comportamento opt-in per deployment mono-host."""
     monkeypatch.setattr(
         "app.config.settings.SCHEDULE_BEAT_LEADER_FAIL_OPEN", True
     )

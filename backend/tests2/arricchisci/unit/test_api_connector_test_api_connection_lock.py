@@ -369,8 +369,7 @@ class TestTestApiConnectionExceptions:
         modulo figlio estratto) viene catturata via handler — purche'
         il wrapper sia ottenuto via `get_logger("app.core.arricchisci.api_connector")`.
         Indipendente dalla posizione fisica. Stesso pattern modernizzato
-        in `test_database_writer_log_consistency_contract.py` (B2.0) +
-        `test_unsafe_append_gate_contract.py` (B2.5a).
+        in `test_unsafe_append_gate_contract.py` (B2.5a).
 
         Anti-regressione preservata: se un futuro fix spostasse il
         `logger.error` su un logger ad-hoc con nome diverso (es.

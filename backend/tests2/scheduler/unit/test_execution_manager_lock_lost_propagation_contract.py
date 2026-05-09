@@ -45,11 +45,6 @@ def _build_em_with_fake_concurrency():
     return em, cm
 
 
-def _tick(fc: FakeClock, interval: float) -> None:
-    fc.wait_for_pending_waiters(1)
-    fc.advance(interval + 0.001)
-
-
 def test_start_lock_heartbeat_returns_dict_with_lock_lost_key():
     """Il dict ritornato espone `lock_lost` come chiave: la proprieta'
     pubblica che `execute()` consuma in `heartbeat_state.get("lock_lost", False)`.
@@ -66,7 +61,7 @@ def test_start_lock_heartbeat_returns_dict_with_lock_lost_key():
         em._stop_lock_heartbeat(state)
 
 
-def test_start_lock_heartbeat_state_lock_lost_is_live_reference():
+def test_start_lock_heartbeat_state_lock_lost_is_live_reference(tick):
     """`state['lock_lost']` riflette LIVE le mutazioni del thread loop:
     quando il thread rileva refresh False + reacquire failed, il dict
     visibile dal chiamante mostra lock_lost=True (non e' un snapshot
@@ -79,7 +74,7 @@ def test_start_lock_heartbeat_state_lock_lost_is_live_reference():
     fc = FakeClock()
     state = em._start_lock_heartbeat("sch-1", interval=10.0, clock=fc)
     try:
-        _tick(fc, 10.0)
+        tick(fc, 10.0)
         # Aspetta la re-park per garantire che l'iterazione (incluso
         # il set di lock_lost) sia completa.
         fc.wait_for_pending_waiters(1)
@@ -92,7 +87,7 @@ def test_start_lock_heartbeat_state_lock_lost_is_live_reference():
         em._stop_lock_heartbeat(state)
 
 
-def test_lock_heartbeat_emits_error_log_when_lock_definitively_lost():
+def test_lock_heartbeat_emits_error_log_when_lock_definitively_lost(tick):
     """Il thread loop emette log ERROR quando lock perso e
     re-acquire fallito. Senza questo log, il flag `lock_lost` nel
     result resta senza audit trail server-side.
@@ -107,7 +102,7 @@ def test_lock_heartbeat_emits_error_log_when_lock_definitively_lost():
     fc = FakeClock()
     state = em._start_lock_heartbeat("sch-test", interval=10.0, clock=fc)
     try:
-        _tick(fc, 10.0)
+        tick(fc, 10.0)
         fc.wait_for_pending_waiters(1)
     finally:
         em._stop_lock_heartbeat(state)

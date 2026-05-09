@@ -36,15 +36,10 @@ def _build_manager(refresh_return_values=None, reacquire_succeeds=True):
     return manager, fake
 
 
-def _tick(fc: FakeClock, interval: float) -> None:
-    fc.wait_for_pending_waiters(1)
-    fc.advance(interval + 0.001)
-
-
 # refresh OK -> nessun problema
 
 
-def test_heartbeat_does_not_try_reacquire_when_refresh_returns_true():
+def test_heartbeat_does_not_try_reacquire_when_refresh_returns_true(tick):
     """Caso normale: refresh ritorna True -> il thread continua senza
     provare re-acquire."""
     manager, fake = _build_manager(refresh_return_values=[True, True, True, True, True])
@@ -52,8 +47,8 @@ def test_heartbeat_does_not_try_reacquire_when_refresh_returns_true():
     fc = FakeClock()
     state = manager._start_lock_heartbeat("sched-1", interval=10.0, clock=fc)
     try:
-        _tick(fc, 10.0)
-        _tick(fc, 10.0)
+        tick(fc, 10.0)
+        tick(fc, 10.0)
         fc.wait_for_pending_waiters(1)
     finally:
         manager._stop_lock_heartbeat(state)
@@ -65,7 +60,7 @@ def test_heartbeat_does_not_try_reacquire_when_refresh_returns_true():
 # refresh False -> tenta re-acquire
 
 
-def test_heartbeat_attempts_reacquire_when_refresh_returns_false(caplog):
+def test_heartbeat_attempts_reacquire_when_refresh_returns_false(tick, caplog):
     """Se refresh_lock ritorna False, il thread deve tentare re-acquire."""
     import logging
 
@@ -78,7 +73,7 @@ def test_heartbeat_attempts_reacquire_when_refresh_returns_false(caplog):
     with caplog.at_level(logging.WARNING, logger="app.core.scheduler.execution_manager"):
         state = manager._start_lock_heartbeat("sched-1", interval=10.0, clock=fc)
         try:
-            _tick(fc, 10.0)
+            tick(fc, 10.0)
             fc.wait_for_pending_waiters(1)
         finally:
             manager._stop_lock_heartbeat(state)
@@ -88,7 +83,7 @@ def test_heartbeat_attempts_reacquire_when_refresh_returns_false(caplog):
     assert args[0] == "sched-1"
 
 
-def test_heartbeat_successful_reacquire_does_not_set_lock_lost_flag():
+def test_heartbeat_successful_reacquire_does_not_set_lock_lost_flag(tick):
     """refresh=False + re-acquire=OK -> lock temporaneamente perso ma
     riacquisito, NON e' un caso di lock_lost definitivo."""
     manager, fake = _build_manager(
@@ -99,8 +94,8 @@ def test_heartbeat_successful_reacquire_does_not_set_lock_lost_flag():
     fc = FakeClock()
     state = manager._start_lock_heartbeat("sched-1", interval=10.0, clock=fc)
     try:
-        _tick(fc, 10.0)
-        _tick(fc, 10.0)
+        tick(fc, 10.0)
+        tick(fc, 10.0)
         fc.wait_for_pending_waiters(1)
     finally:
         manager._stop_lock_heartbeat(state)
@@ -108,7 +103,7 @@ def test_heartbeat_successful_reacquire_does_not_set_lock_lost_flag():
     assert state.get("lock_lost") is not True
 
 
-def test_heartbeat_failed_reacquire_sets_lock_lost_flag():
+def test_heartbeat_failed_reacquire_sets_lock_lost_flag(tick):
     """refresh=False + re-acquire=FAIL -> qualcun altro ha preso il lock.
     Il thread setta lock_lost=True nello state, cosi' execute() puo'
     riportarlo nel risultato."""
@@ -120,7 +115,7 @@ def test_heartbeat_failed_reacquire_sets_lock_lost_flag():
     fc = FakeClock()
     state = manager._start_lock_heartbeat("sched-1", interval=10.0, clock=fc)
     try:
-        _tick(fc, 10.0)
+        tick(fc, 10.0)
         fc.wait_for_pending_waiters(1)
     finally:
         manager._stop_lock_heartbeat(state)

@@ -5,6 +5,7 @@ from __future__ import annotations
 import pytest
 
 from tests2.functional.harness.http import http_json_response, poll_json_until
+from tests2.integration.harness.canvas_builders import build_estrai_preview_canvas
 from tests2.integration.harness.projects import managed_project
 from tests2.integration.harness.sqlserver import (
     SQLSERVER_DATABASE,
@@ -61,35 +62,7 @@ def _delete_connection(base_url: str, auth_headers: dict, connection_id: str) ->
 
 
 def _estrai_sqlserver_canvas(table_name: str) -> dict:
-    return {
-        "nodes": [
-            {
-                "id": "src-1",
-                "type": "source",
-                "position": {"x": 100, "y": 100},
-                "table_name": table_name,
-                "alias": "src",
-                "columns": [
-                    {"name": "id", "type": "int", "visible": True},
-                    {"name": "city", "type": "str", "visible": True},
-                    {"name": "score", "type": "int", "visible": True},
-                ],
-                "filters": [],
-                "calculated_columns": [],
-            },
-            {
-                "id": "result-1",
-                "type": "result",
-                "position": {"x": 350, "y": 100},
-                "fileName": "sqlserver_preview",
-                "format": "csv",
-                "columns": [],
-            },
-        ],
-        "edges": [
-            {"id": "edge-1", "source": "src-1", "target": "result-1", "join_type": "output"}
-        ],
-    }
+    return build_estrai_preview_canvas(table_name, file_name="sqlserver_preview")
 
 
 def test_sqlserver_connection_tables_and_estrai_preview_roundtrip(

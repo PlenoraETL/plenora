@@ -114,8 +114,7 @@ def test_unsafe_append_combo_with_flag_proceeds(monkeypatch):
     (anche da un futuro modulo figlio estratto) viene catturata —
     purche' il wrapper sia ottenuto via
     `get_logger("app.core.carica.writer")`. Indipendente dalla
-    posizione fisica. Stesso pattern modernizzato in
-    `test_database_writer_log_consistency_contract.py` (B2.0).
+    posizione fisica.
 
     Anti-regressione preservata: se un futuro fix spostasse il
     warning su un logger ad-hoc con nome diverso (es.

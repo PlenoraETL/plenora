@@ -494,13 +494,30 @@ def test_materialize_latest_writes_tempfile_with_format_suffix(
     _assert_single_blob_call(captured, mode="path")
 
 
-def test_materialize_latest_enforces_group_binding(resolver, monkeypatch):
+@pytest.mark.parametrize(
+    "project_id,expected_group_id,is_superadmin",
+    [
+        # Default fail-closed: missing project + missing latest row.
+        ("proj-1", "grp-mine", False),
+        # Mirror without superadmin bypass: cross-tenant must not leak the
+        # real tenant. Same fail-closed semantics, different ids.
+        ("proj-cross", "default", False),
+    ],
+    ids=["enforces_group_binding", "non_superadmin_blocks_cross_tenant"],
+)
+def test_materialize_latest_fail_closed_when_project_unreachable(
+    resolver, monkeypatch, project_id, expected_group_id, is_superadmin
+):
+    """When ``get_project_row`` returns ``None`` for the tenant scope, the
+    resolver must raise ``ArtifactResolutionError`` without revealing the
+    actual project tenant. Covers both the explicit group-binding check
+    and the non-superadmin cross-tenant block: same fail-closed shape."""
     import app.core.results.db as _rdb
     import app.core.projects.db as _projects_leaf
 
     def _tenant_scoped_project(pid, group_id=None):
-        assert pid == "proj-1"
-        assert group_id == "grp-mine"
+        assert pid == project_id
+        assert group_id == expected_group_id
         return None
 
     monkeypatch.setattr(
@@ -510,9 +527,16 @@ def test_materialize_latest_enforces_group_binding(resolver, monkeypatch):
     )
     monkeypatch.setattr(_rdb, "get_latest_result_row", lambda pid: None)
 
-    ref = LatestProjectArtifactRef(project_id="proj-1")
-    with pytest.raises(ArtifactResolutionError, match="Progetto proj-1 non trovato"):
-        resolver.materialize_latest(ref, expected_group_id="grp-mine")
+    ref = LatestProjectArtifactRef(project_id=project_id)
+    with pytest.raises(
+        ArtifactResolutionError,
+        match=f"Progetto {project_id} non trovato",
+    ):
+        resolver.materialize_latest(
+            ref,
+            expected_group_id=expected_group_id,
+            is_superadmin=is_superadmin,
+        )
 
 
 # fetch_run_blob
@@ -698,37 +722,6 @@ def test_materialize_latest_superadmin_bypass_cross_tenant(resolver, monkeypatch
         group_id="gruppo_ania",
     )
     assert ref_passed.is_superadmin is True
-
-
-def test_materialize_latest_non_superadmin_blocks_cross_tenant(resolver, monkeypatch):
-    """Mirror del test sopra: senza `is_superadmin=True` il check
-    cross-tenant deve scattare senza rivelare il tenant reale. Il
-    default e' fail-closed."""
-    import app.core.results.db as _rdb
-    import app.core.projects.db as _projects_leaf
-
-    def _tenant_scoped_project(pid, group_id=None):
-        assert pid == "proj-cross"
-        assert group_id == "default"
-        return None
-
-    monkeypatch.setattr(
-        _projects_leaf,
-        "get_project_row",
-        _tenant_scoped_project,
-    )
-    monkeypatch.setattr(_rdb, "get_latest_result_row", lambda pid: None)
-
-    ref = LatestProjectArtifactRef(project_id="proj-cross")
-    with pytest.raises(
-        ArtifactResolutionError,
-        match="Progetto proj-cross non trovato",
-    ):
-        resolver.materialize_latest(
-            ref,
-            expected_group_id="default",
-            is_superadmin=False,
-        )
 
 
 # BE-GO-READY-RESOURCE-ENGINE-021: materialize_latest registry boundary
