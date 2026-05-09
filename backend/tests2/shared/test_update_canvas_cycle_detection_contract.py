@@ -11,7 +11,7 @@ import pytest
 
 from app.core.projects.lineage import ProjectLineageCycleError
 from app.core.projects.service import ProjectService
-from app.shared.models import CanvasState, Node, Edge
+from app.core.projects.canvas_models import CanvasState, Node, Edge
 
 
 pytestmark = [pytest.mark.unit, pytest.mark.contract]

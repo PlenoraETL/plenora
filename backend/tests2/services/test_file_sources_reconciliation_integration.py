@@ -110,8 +110,8 @@ def test_last_reference_records_pending_inside_transaction():
         )
 
     with patcher, \
-         patch("app.shared.cloud_backends.object_storage_enabled", return_value=True), \
-         patch("app.shared.cloud_backends.get_runtime_object_storage", return_value=MagicMock(delete=MagicMock())), \
+         patch("app.infrastructure.storage.cloud_backends.object_storage_enabled", return_value=True), \
+         patch("app.infrastructure.storage.cloud_backends.get_runtime_object_storage", return_value=MagicMock(delete=MagicMock())), \
          patch("app.core.resources.storage_reconciliation.record_pending", side_effect=_spy_record_pending), \
          patch("app.core.resources.storage_reconciliation.mark_done", side_effect=lambda rid: mark_done_calls.append(rid)), \
          patch("app.core.resources.storage_reconciliation.mark_failed_attempt", side_effect=lambda rid, **kw: mark_failed_calls.append((rid, kw))):
@@ -151,8 +151,8 @@ def test_compensating_delete_ok_marks_done():
     mark_failed_calls = []
 
     with patcher, \
-         patch("app.shared.cloud_backends.object_storage_enabled", return_value=True), \
-         patch("app.shared.cloud_backends.get_runtime_object_storage", return_value=MagicMock(delete=MagicMock())), \
+         patch("app.infrastructure.storage.cloud_backends.object_storage_enabled", return_value=True), \
+         patch("app.infrastructure.storage.cloud_backends.get_runtime_object_storage", return_value=MagicMock(delete=MagicMock())), \
          patch("app.core.resources.storage_reconciliation.mark_done", side_effect=lambda rid: mark_done_calls.append(rid)), \
          patch("app.core.resources.storage_reconciliation.mark_failed_attempt", side_effect=lambda rid, **kw: mark_failed_calls.append((rid, kw))):
         fs_db.delete_file_source("file_abc")
@@ -184,8 +184,8 @@ def test_compensating_delete_failed_marks_failed_attempt_and_returns_true():
     failing_storage.delete = MagicMock(side_effect=RuntimeError("S3 5xx"))
 
     with patcher, \
-         patch("app.shared.cloud_backends.object_storage_enabled", return_value=True), \
-         patch("app.shared.cloud_backends.get_runtime_object_storage", return_value=failing_storage), \
+         patch("app.infrastructure.storage.cloud_backends.object_storage_enabled", return_value=True), \
+         patch("app.infrastructure.storage.cloud_backends.get_runtime_object_storage", return_value=failing_storage), \
          patch("app.core.resources.storage_reconciliation.mark_done", side_effect=lambda rid: mark_done_calls.append(rid)), \
          patch("app.core.resources.storage_reconciliation.mark_failed_attempt", side_effect=lambda rid, **kw: mark_failed_calls.append((rid, kw))):
         out = fs_db.delete_file_source("file_abc")
@@ -222,7 +222,7 @@ def test_capability_disabled_marks_done():
     mark_failed_calls = []
 
     with patcher, \
-         patch("app.shared.cloud_backends.object_storage_enabled", return_value=False), \
+         patch("app.infrastructure.storage.cloud_backends.object_storage_enabled", return_value=False), \
          patch("app.core.resources.storage_reconciliation.mark_done", side_effect=lambda rid: mark_done_calls.append(rid)), \
          patch("app.core.resources.storage_reconciliation.mark_failed_attempt", side_effect=lambda rid, **kw: mark_failed_calls.append((rid, kw))):
         out = fs_db.delete_file_source("file_abc")
@@ -254,8 +254,8 @@ def test_shared_blob_path_does_not_record_pending():
     fake_storage.delete = MagicMock()
 
     with patcher, \
-         patch("app.shared.cloud_backends.object_storage_enabled", return_value=True), \
-         patch("app.shared.cloud_backends.get_runtime_object_storage", return_value=fake_storage), \
+         patch("app.infrastructure.storage.cloud_backends.object_storage_enabled", return_value=True), \
+         patch("app.infrastructure.storage.cloud_backends.get_runtime_object_storage", return_value=fake_storage), \
          patch("app.core.resources.storage_reconciliation.record_pending", side_effect=lambda cur, **kw: record_pending_calls.append(kw)), \
          patch("app.core.resources.storage_reconciliation.mark_done", side_effect=lambda rid: mark_done_calls.append(rid)), \
          patch("app.core.resources.storage_reconciliation.mark_failed_attempt", side_effect=lambda rid, **kw: mark_failed_calls.append((rid, kw))):
@@ -290,8 +290,8 @@ def test_bytea_path_does_not_record_pending():
     mark_failed_calls = []
 
     with patcher, \
-         patch("app.shared.cloud_backends.object_storage_enabled", return_value=True), \
-         patch("app.shared.cloud_backends.get_runtime_object_storage", return_value=MagicMock(delete=MagicMock())), \
+         patch("app.infrastructure.storage.cloud_backends.object_storage_enabled", return_value=True), \
+         patch("app.infrastructure.storage.cloud_backends.get_runtime_object_storage", return_value=MagicMock(delete=MagicMock())), \
          patch("app.core.resources.storage_reconciliation.record_pending", side_effect=lambda cur, **kw: record_pending_calls.append(kw)), \
          patch("app.core.resources.storage_reconciliation.mark_done", side_effect=lambda rid: mark_done_calls.append(rid)), \
          patch("app.core.resources.storage_reconciliation.mark_failed_attempt", side_effect=lambda rid, **kw: mark_failed_calls.append((rid, kw))):
@@ -324,8 +324,8 @@ def test_record_pending_is_inside_transaction_before_delete():
     )
 
     with patcher, \
-         patch("app.shared.cloud_backends.object_storage_enabled", return_value=True), \
-         patch("app.shared.cloud_backends.get_runtime_object_storage", return_value=MagicMock(delete=MagicMock())), \
+         patch("app.infrastructure.storage.cloud_backends.object_storage_enabled", return_value=True), \
+         patch("app.infrastructure.storage.cloud_backends.get_runtime_object_storage", return_value=MagicMock(delete=MagicMock())), \
          patch("app.core.resources.storage_reconciliation.mark_done"), \
          patch("app.core.resources.storage_reconciliation.mark_failed_attempt"):
         fs_db.delete_file_source("file_abc")

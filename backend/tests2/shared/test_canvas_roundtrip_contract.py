@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from app.shared.models import CanvasState
+from app.core.projects.canvas_models import CanvasState
 
 
 def _dump_canvas(payload: dict) -> dict:

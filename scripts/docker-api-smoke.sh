@@ -33,6 +33,7 @@ SMOKE_PASSWORD="${PLENORA_SMOKE_PASSWORD:-}"
 PROJECT_ID=""
 TOKEN=""
 TMP_FILES=""
+SMOKE_PROJECT_PREFIX="${PLENORA_SMOKE_PROJECT_PREFIX:-docker-smoke-}"
 
 cleanup_smoke_project_on_exit() {
     if [ -n "$PROJECT_ID" ] && [ -n "$TOKEN" ]; then
@@ -76,6 +77,9 @@ Environment:
                               Per-request curl timeout. Defaults to 5.
   PLENORA_SMOKE_USERNAME      Seeded smoke username. Required for full flow.
   PLENORA_SMOKE_PASSWORD      Seeded smoke password. Required for full flow.
+  PLENORA_SMOKE_PROJECT_PREFIX
+                              Prefix used for smoke projects and pre-run
+                              orphan cleanup. Defaults to docker-smoke-.
 
 Implemented full flow:
   GET /health
@@ -285,7 +289,7 @@ create_smoke_project() {
     local body_file
     local payload
     local project_name
-    project_name="docker-smoke-$(date +%s)-$$"
+    project_name="${SMOKE_PROJECT_PREFIX}$(date +%s)-$$"
     payload="$(project_payload_json "$project_name")"
     body_file="$(
         curl_json "POST" "/api/projects" \
@@ -298,6 +302,48 @@ create_smoke_project() {
         exit 2
     fi
     echo "Created smoke project ${PROJECT_ID}"
+}
+
+cleanup_stale_smoke_projects() {
+    local body_file
+    local stale_ids
+    local stale_id
+
+    body_file="$(curl_json "GET" "/api/projects" "" "$TOKEN" "200")"
+    stale_ids="$(
+        python - "$body_file" "$SMOKE_PROJECT_PREFIX" <<'PY'
+import json
+import sys
+
+with open(sys.argv[1], encoding="utf-8") as fh:
+    payload = json.load(fh)
+prefix = sys.argv[2]
+for project in payload.get("projects", []):
+    name = str(project.get("name") or "")
+    project_id = str(project.get("id") or "")
+    if project_id and name.startswith(prefix):
+        print(project_id)
+PY
+    )"
+
+    if [ -z "$stale_ids" ]; then
+        echo "No stale smoke projects found for prefix ${SMOKE_PROJECT_PREFIX}"
+        return
+    fi
+
+    for stale_id in $stale_ids; do
+        if [ -n "$PROJECT_ID" ] && [ "$stale_id" = "$PROJECT_ID" ]; then
+            continue
+        fi
+        if curl -sS --max-time "$CURL_MAX_TIME_SECONDS" \
+            -X DELETE "${BASE_URL}/api/projects/${stale_id}" \
+            -H "Authorization: Bearer ${TOKEN}" \
+            >/dev/null 2>&1; then
+            echo "Deleted stale smoke project ${stale_id}"
+        else
+            echo "WARN: stale smoke project ${stale_id} could not be deleted" >&2
+        fi
+    done
 }
 
 list_smoke_projects() {
@@ -344,6 +390,7 @@ fi
 require_full_flow_credentials
 login_smoke_user
 check_auth_me
+cleanup_stale_smoke_projects
 create_smoke_project
 list_smoke_projects
 delete_smoke_project

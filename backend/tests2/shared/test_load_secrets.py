@@ -51,7 +51,7 @@ def test_fetch_secrets_delegates_to_backend(ssm_mod):
         "DATABASE_URL": "postgresql://u:p@h/db",
         "REDIS_URL": "redis://r:6379",
     })
-    with patch("app.shared.cloud_backends.get_secrets_backend", return_value=fake):
+    with patch("app.infrastructure.storage.cloud_backends.get_secrets_backend", return_value=fake):
         secrets = ssm_mod.fetch_secrets()
     assert secrets == {
         "DATABASE_URL": "postgresql://u:p@h/db",
@@ -62,7 +62,7 @@ def test_fetch_secrets_delegates_to_backend(ssm_mod):
 def test_fetch_secrets_backend_error_exits_1(ssm_mod):
     """Qualunque errore dal backend (network, permessi) -> exit 1."""
     fake = _FakeSecretsBackend(raise_on_call=RuntimeError("backend down"))
-    with patch("app.shared.cloud_backends.get_secrets_backend", return_value=fake):
+    with patch("app.infrastructure.storage.cloud_backends.get_secrets_backend", return_value=fake):
         with pytest.raises(SystemExit) as exc:
             ssm_mod.fetch_secrets()
         assert exc.value.code == 1
@@ -70,7 +70,7 @@ def test_fetch_secrets_backend_error_exits_1(ssm_mod):
 
 def test_fetch_secrets_empty_returns_empty_dict(ssm_mod):
     fake = _FakeSecretsBackend({})
-    with patch("app.shared.cloud_backends.get_secrets_backend", return_value=fake):
+    with patch("app.infrastructure.storage.cloud_backends.get_secrets_backend", return_value=fake):
         assert ssm_mod.fetch_secrets() == {}
 
 
@@ -148,7 +148,7 @@ def test_main_calls_execv_with_target(ssm_mod, monkeypatch, tmp_path):
         raise SystemExit(0)
 
     fake = _FakeSecretsBackend({})
-    with patch("app.shared.cloud_backends.get_secrets_backend", return_value=fake):
+    with patch("app.infrastructure.storage.cloud_backends.get_secrets_backend", return_value=fake):
         with patch("os.execv", side_effect=_fake_execv):
             with pytest.raises(SystemExit):
                 ssm_mod.main()
@@ -176,7 +176,7 @@ def test_main_injects_secrets_before_exec(ssm_mod, monkeypatch, tmp_path):
         raise SystemExit(0)
 
     fake = _FakeSecretsBackend({"TEST_INJECTED_SECRET": "yes"})
-    with patch("app.shared.cloud_backends.get_secrets_backend", return_value=fake):
+    with patch("app.infrastructure.storage.cloud_backends.get_secrets_backend", return_value=fake):
         with patch("os.execv", side_effect=_fake_execv):
             with pytest.raises(SystemExit):
                 ssm_mod.main()

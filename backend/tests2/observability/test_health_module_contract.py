@@ -643,7 +643,7 @@ def test_check_object_storage_returns_skipped_when_capability_off():
     `(True, "skipped: capability disabled")`. Modalita' on-prem
     legitima."""
     with (
-        patch("app.shared.cloud_backends.object_storage_enabled", return_value=False),
+        patch("app.infrastructure.storage.cloud_backends.object_storage_enabled", return_value=False),
     ):
         from app.observability.health import check_object_storage
 
@@ -666,9 +666,9 @@ def test_check_object_storage_ok_when_list_objects_succeeds():
             timeouts.append(timeout_seconds)
 
     with (
-        patch("app.shared.cloud_backends.object_storage_enabled", return_value=True),
+        patch("app.infrastructure.storage.cloud_backends.object_storage_enabled", return_value=True),
         patch(
-            "app.shared.cloud_backends.get_runtime_object_storage",
+            "app.infrastructure.storage.cloud_backends.get_runtime_object_storage",
             return_value=_Storage(),
         ),
     ):
@@ -688,9 +688,9 @@ def test_check_object_storage_failed_on_network_error():
             raise ConnectionError("S3 endpoint unreachable")
 
     with (
-        patch("app.shared.cloud_backends.object_storage_enabled", return_value=True),
+        patch("app.infrastructure.storage.cloud_backends.object_storage_enabled", return_value=True),
         patch(
-            "app.shared.cloud_backends.get_runtime_object_storage",
+            "app.infrastructure.storage.cloud_backends.get_runtime_object_storage",
             return_value=_RaisingStorage(),
         ),
     ):
@@ -706,14 +706,14 @@ def test_check_object_storage_skipped_on_disabled_race():
     """`get_runtime_object_storage()` solleva
     `ObjectStorageDisabledError` (race tra capability check e
     factory) -> outcome `(True, "skipped: capability disabled (race)")`."""
-    from app.shared.cloud_backends import ObjectStorageDisabledError
+    from app.infrastructure.storage.cloud_backends import ObjectStorageDisabledError
 
     def _raise():
         raise ObjectStorageDisabledError("capability went off")
 
     with (
-        patch("app.shared.cloud_backends.object_storage_enabled", return_value=True),
-        patch("app.shared.cloud_backends.get_runtime_object_storage", _raise),
+        patch("app.infrastructure.storage.cloud_backends.object_storage_enabled", return_value=True),
+        patch("app.infrastructure.storage.cloud_backends.get_runtime_object_storage", _raise),
     ):
         from app.observability.health import check_object_storage
 
@@ -731,8 +731,8 @@ def test_check_object_storage_failed_on_factory_unexpected_error():
         raise RuntimeError("AWS_ACCESS_KEY_ID not set")
 
     with (
-        patch("app.shared.cloud_backends.object_storage_enabled", return_value=True),
-        patch("app.shared.cloud_backends.get_runtime_object_storage", _raise),
+        patch("app.infrastructure.storage.cloud_backends.object_storage_enabled", return_value=True),
+        patch("app.infrastructure.storage.cloud_backends.get_runtime_object_storage", _raise),
     ):
         from app.observability.health import check_object_storage
 

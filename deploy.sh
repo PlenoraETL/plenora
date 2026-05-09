@@ -289,7 +289,7 @@ pre_deploy_check() {
     # 1. validate_storage_config — fail-fast se policy/bucket coerenza rotta.
     echo "--- validate_storage_config ---"
     run_or_dry ssh -i "$PEM" "$SERVER" \
-        "cd '${REMOTE_BACKEND_PATH}' && venv/bin/python -c 'from app.shared.cloud_backends import validate_storage_config; validate_storage_config(); print(\"validate_storage_config: ok\")'" \
+        "cd '${REMOTE_BACKEND_PATH}' && venv/bin/python -c 'from app.infrastructure.storage.cloud_backends import validate_storage_config; validate_storage_config(); print(\"validate_storage_config: ok\")'" \
         || { echo "ERRORE: validate_storage_config fallita sul server." >&2; exit 1; }
 
     # 2. check_deps — riusa la routine esistente (dipendenze sistema).

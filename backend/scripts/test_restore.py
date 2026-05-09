@@ -17,7 +17,7 @@ from typing import Tuple
 from urllib.parse import urlparse, urlunparse
 
 
-# Script standalone: aggiungi backend root a sys.path per `app.shared.*` imports.
+# Script standalone: aggiungi backend root a sys.path per `app.*` imports.
 _BACKEND_ROOT = Path(__file__).resolve().parent.parent
 if str(_BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(_BACKEND_ROOT))
@@ -156,7 +156,7 @@ def make_target_url(admin_url: str, test_db: str) -> str:
 def _storage():
     """Lazy import + factory del backend object storage (backup bucket)."""
     try:
-        from app.shared.cloud_backends import get_backup_object_storage
+        from app.infrastructure.storage.cloud_backends import get_backup_object_storage
     except ImportError as e:
         log("ERROR", f"cloud_backends import fallito: {e}")
         sys.exit(4)

@@ -10,7 +10,7 @@ import logging
 
 import pytest
 
-from app.shared.cloud_backends import (
+from app.infrastructure.storage.cloud_backends import (
     StorageConfigError,
     validate_storage_config,
 )

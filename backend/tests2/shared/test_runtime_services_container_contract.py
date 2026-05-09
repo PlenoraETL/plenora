@@ -343,7 +343,7 @@ def test_bootstrap_flips_completion_flag_only_on_success(monkeypatch):
         MagicMock(),
     )
     monkeypatch.setattr(
-        "app.shared.cloud_backends.validate_storage_config",
+        "app.infrastructure.storage.cloud_backends.validate_storage_config",
         MagicMock(),
     )
     monkeypatch.setattr(
@@ -367,7 +367,7 @@ def test_bootstrap_flips_completion_flag_only_on_success(monkeypatch):
         MagicMock(),
     )
     monkeypatch.setattr(
-        "app.shared.cloud_backends.validate_storage_config",
+        "app.infrastructure.storage.cloud_backends.validate_storage_config",
         MagicMock(),
     )
 

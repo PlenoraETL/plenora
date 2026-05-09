@@ -1,12 +1,12 @@
 """
-Unit test per `app.shared.cloud_backends.aws_credentials_error_message`.
+Unit test per `app.infrastructure.storage.cloud_backends.aws_credentials_error_message`.
 
 Helper boundary che riconosce errori boto3/botocore di credenziali AWS
 """
 
 import pytest
 
-from app.shared.cloud_backends import aws_credentials_error_message
+from app.infrastructure.storage.cloud_backends import aws_credentials_error_message
 
 
 pytestmark = [pytest.mark.unit, pytest.mark.contract, pytest.mark.regression]

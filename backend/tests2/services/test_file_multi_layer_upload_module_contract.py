@@ -443,9 +443,9 @@ def test_delete_blob_short_circuits_when_object_storage_disabled():
     svc, delete_blob = _capture_delete_blob_callback()
 
     with patch(
-        "app.shared.cloud_backends.object_storage_enabled", return_value=False,
+        "app.infrastructure.storage.cloud_backends.object_storage_enabled", return_value=False,
     ), patch(
-        "app.shared.cloud_backends.get_runtime_object_storage",
+        "app.infrastructure.storage.cloud_backends.get_runtime_object_storage",
     ) as mock_get_storage:
         delete_blob("file-sources/batch_x/data.gpkg")
 
@@ -469,9 +469,9 @@ def test_delete_blob_calls_storage_when_object_storage_enabled():
 
     fake_storage = MagicMock()
     with patch(
-        "app.shared.cloud_backends.object_storage_enabled", return_value=True,
+        "app.infrastructure.storage.cloud_backends.object_storage_enabled", return_value=True,
     ), patch(
-        "app.shared.cloud_backends.get_runtime_object_storage",
+        "app.infrastructure.storage.cloud_backends.get_runtime_object_storage",
         return_value=fake_storage,
     ):
         delete_blob("file-sources/batch_y/data.gpkg")

@@ -195,13 +195,25 @@ def test_production_runtime_does_not_import_shared_sharing() -> None:
 def test_production_runtime_does_not_import_shared_storage_reconciliation() -> None:
     offenders: list[str] = []
     for path in (_BACKEND_ROOT / "app").rglob("*.py"):
-        if path.parts[-3:] == ("app", "shared", "storage_reconciliation.py"):
-            continue
         text = path.read_text(encoding="utf-8")
         if (
             "app.shared.storage_reconciliation" in text
             or "from app.shared import storage_reconciliation" in text
         ):
+            offenders.append(path.relative_to(_BACKEND_ROOT).as_posix())
+
+    assert offenders == []
+
+
+def test_shared_storage_reconciliation_compat_module_is_removed() -> None:
+    assert not (_BACKEND_ROOT / "app" / "shared" / "storage_reconciliation.py").exists()
+
+
+def test_production_runtime_does_not_import_shared_api_utils() -> None:
+    offenders: list[str] = []
+    for path in (_BACKEND_ROOT / "app").rglob("*.py"):
+        text = path.read_text(encoding="utf-8")
+        if "app.shared.api_utils" in text or "from app.shared import api_utils" in text:
             offenders.append(path.relative_to(_BACKEND_ROOT).as_posix())
 
     assert offenders == []

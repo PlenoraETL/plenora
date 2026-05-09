@@ -129,8 +129,8 @@ def test_delete_with_no_refs_proceeds_with_storage_cleanup(fake_storage):
     )
 
     with patcher, \
-         patch("app.shared.cloud_backends.object_storage_enabled", return_value=True), \
-         patch("app.shared.cloud_backends.get_runtime_object_storage",
+         patch("app.infrastructure.storage.cloud_backends.object_storage_enabled", return_value=True), \
+         patch("app.infrastructure.storage.cloud_backends.get_runtime_object_storage",
                return_value=fake_storage):
         out = fs_db.delete_file_source("file_abc")
 
@@ -168,7 +168,7 @@ def test_delete_with_other_refs_skips_storage_cleanup_and_logs(fake_storage):
     fake_logger = MagicMock()
     with patcher, \
          patch.object(fs_db, "logger", fake_logger), \
-         patch("app.shared.cloud_backends.get_runtime_object_storage",
+         patch("app.infrastructure.storage.cloud_backends.get_runtime_object_storage",
                return_value=fake_storage) as mock_get_storage:
         out = fs_db.delete_file_source("file_layer1")
 
@@ -203,8 +203,8 @@ def test_delete_last_remaining_ref_proceeds_with_storage_cleanup(fake_storage):
     )
 
     with patcher, \
-         patch("app.shared.cloud_backends.object_storage_enabled", return_value=True), \
-         patch("app.shared.cloud_backends.get_runtime_object_storage",
+         patch("app.infrastructure.storage.cloud_backends.object_storage_enabled", return_value=True), \
+         patch("app.infrastructure.storage.cloud_backends.get_runtime_object_storage",
                return_value=fake_storage):
         out = fs_db.delete_file_source("file_last_layer")
 
@@ -227,7 +227,7 @@ def test_delete_bytea_mode_skips_siblings_and_storage(fake_storage):
     )
 
     with patcher, \
-         patch("app.shared.cloud_backends.get_runtime_object_storage",
+         patch("app.infrastructure.storage.cloud_backends.get_runtime_object_storage",
                return_value=fake_storage) as mock_get_storage:
         out = fs_db.delete_file_source("file_bytea")
 
@@ -258,7 +258,7 @@ def test_delete_nonexistent_row_returns_false_no_side_effects(fake_storage):
     )
 
     with patcher, \
-         patch("app.shared.cloud_backends.get_runtime_object_storage",
+         patch("app.infrastructure.storage.cloud_backends.get_runtime_object_storage",
                return_value=fake_storage) as mock_get_storage:
         out = fs_db.delete_file_source("ghost")
 
@@ -288,8 +288,8 @@ def test_delete_uses_transaction_context_manager(fake_storage):
     )
 
     with patcher, \
-         patch("app.shared.cloud_backends.object_storage_enabled", return_value=True), \
-         patch("app.shared.cloud_backends.get_runtime_object_storage",
+         patch("app.infrastructure.storage.cloud_backends.object_storage_enabled", return_value=True), \
+         patch("app.infrastructure.storage.cloud_backends.get_runtime_object_storage",
                return_value=fake_storage):
         fs_db.delete_file_source("file_x")
 
@@ -371,8 +371,8 @@ def test_storage_delete_happens_after_db_commit_not_inside_transaction(
     )
 
     with patch("app.core.files.db.transaction", side_effect=tx_cm), \
-         patch("app.shared.cloud_backends.object_storage_enabled", return_value=True), \
-         patch("app.shared.cloud_backends.get_runtime_object_storage",
+         patch("app.infrastructure.storage.cloud_backends.object_storage_enabled", return_value=True), \
+         patch("app.infrastructure.storage.cloud_backends.get_runtime_object_storage",
                return_value=fake_storage):
         out = fs_db.delete_file_source("file_y")
 
@@ -408,8 +408,8 @@ def test_storage_delete_failure_after_commit_does_not_undo_db_delete(
     fake_logger = MagicMock()
     with patcher, \
          patch.object(fs_db, "logger", fake_logger), \
-         patch("app.shared.cloud_backends.object_storage_enabled", return_value=True), \
-         patch("app.shared.cloud_backends.get_runtime_object_storage",
+         patch("app.infrastructure.storage.cloud_backends.object_storage_enabled", return_value=True), \
+         patch("app.infrastructure.storage.cloud_backends.get_runtime_object_storage",
                return_value=fake_storage):
         out = fs_db.delete_file_source("file_q")
 
@@ -448,8 +448,8 @@ def test_storage_delete_skipped_when_capability_disabled_post_commit(
     fake_logger = MagicMock()
     with patcher, \
          patch.object(fs_db, "logger", fake_logger), \
-         patch("app.shared.cloud_backends.object_storage_enabled", return_value=False), \
-         patch("app.shared.cloud_backends.get_runtime_object_storage",
+         patch("app.infrastructure.storage.cloud_backends.object_storage_enabled", return_value=False), \
+         patch("app.infrastructure.storage.cloud_backends.get_runtime_object_storage",
                return_value=fake_storage) as mock_get_storage:
         out = fs_db.delete_file_source("file_s")
 

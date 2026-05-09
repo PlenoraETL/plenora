@@ -63,7 +63,7 @@ def test_query_generator_raises_on_orphan_join_node():
     """Un nodo tabella senza alcun edge di JOIN → ValueError esplicito.
     Pre-C11 emetteva silent CROSS JOIN (rischio cartesian product)."""
     from app.core.estrai.query_generator import QueryGenerator
-    from app.shared.models import Node
+    from app.core.projects.canvas_models import Node
 
     gen = QueryGenerator(db_type="postgres")
     orphan_node = Node(
@@ -92,7 +92,7 @@ def test_query_generator_raises_on_orphan_join_node():
 def test_canvas_put_rejects_orphan_transform_node():
     """Un nodo transform senza edge incoming → 400 al PUT /canvas."""
     from app.core.projects.router import update_project_canvas, CanvasWithPlugins
-    from app.shared.models import Node, Edge
+    from app.core.projects.canvas_models import Node, Edge
     from fastapi import HTTPException
 
     fake_svc = MagicMock()
@@ -124,7 +124,7 @@ def test_canvas_put_accepts_source_nodes_without_incoming_edges():
     """Nodi source-like (source, file_source, project_source, etc.) non
     hanno mai edge incoming — non devono triggerare il reject."""
     from app.core.projects.router import update_project_canvas, CanvasWithPlugins
-    from app.shared.models import Node, Edge
+    from app.core.projects.canvas_models import Node, Edge
 
     fake_svc = MagicMock()
     fake_svc.get_project_metadata.return_value = {"id": "p1", "group_id": "g1"}
@@ -185,7 +185,7 @@ def test_canvas_put_rejects_file_source_not_visible_to_owner_group():
     from fastapi import HTTPException
 
     from app.core.projects.router import CanvasWithPlugins, update_project_canvas
-    from app.shared.models import Edge, Node
+    from app.core.projects.canvas_models import Edge, Node
 
     body = CanvasWithPlugins(
         nodes=[
@@ -232,7 +232,7 @@ def test_canvas_put_rejects_source_project_not_visible_to_owner_group():
     from fastapi import HTTPException
 
     from app.core.projects.router import CanvasWithPlugins, update_project_canvas
-    from app.shared.models import Edge, Node
+    from app.core.projects.canvas_models import Edge, Node
 
     body = CanvasWithPlugins(
         nodes=[
@@ -274,7 +274,7 @@ def test_canvas_put_accepts_when_all_refs_visible_to_owner_group():
     """Regression: canvas con file_source_id e source_project_id tutti
     visibili al gruppo del progetto -> 200, save invocato regolarmente."""
     from app.core.projects.router import CanvasWithPlugins, update_project_canvas
-    from app.shared.models import Edge, Node
+    from app.core.projects.canvas_models import Edge, Node
 
     body = CanvasWithPlugins(
         nodes=[
@@ -325,7 +325,7 @@ def test_canvas_put_skips_visibility_check_when_no_cross_tenant_refs():
     """Canvas senza nodi file_source / project_source: nessun chiamata a
     visible_resource_ids (no overhead, no DB hit). Verifica la fast-path."""
     from app.core.projects.router import CanvasWithPlugins, update_project_canvas
-    from app.shared.models import Edge, Node
+    from app.core.projects.canvas_models import Edge, Node
 
     body = CanvasWithPlugins(
         nodes=[
@@ -351,7 +351,7 @@ def test_canvas_put_superadmin_can_save_any_ref():
     """superadmin bypassa il check (visible_resource_ids ritorna TUTTI gli
     id quando is_superadmin=True). Coerente con la policy globale."""
     from app.core.projects.router import CanvasWithPlugins, update_project_canvas
-    from app.shared.models import Edge, Node
+    from app.core.projects.canvas_models import Edge, Node
 
     body = CanvasWithPlugins(
         nodes=[
@@ -422,7 +422,7 @@ def test_canvas_put_rejects_arcgis_connection_not_visible_to_owner_group(
     from fastapi import HTTPException
 
     from app.core.projects.router import CanvasWithPlugins, update_project_canvas
-    from app.shared.models import Edge, Node
+    from app.core.projects.canvas_models import Edge, Node
 
     body = CanvasWithPlugins(
         nodes=[
@@ -460,7 +460,7 @@ def test_canvas_put_accepts_when_arcgis_connection_is_visible():
     """Regression: canvas con arcgis_connection visibile al gruppo del
     progetto -> 200, save invocato regolarmente."""
     from app.core.projects.router import CanvasWithPlugins, update_project_canvas
-    from app.shared.models import Edge, Node
+    from app.core.projects.canvas_models import Edge, Node
 
     body = CanvasWithPlugins(
         nodes=[
@@ -507,7 +507,7 @@ def test_canvas_put_collects_arcgis_connection_id_from_node_data_dict():
     from fastapi import HTTPException
 
     from app.core.projects.router import CanvasWithPlugins, update_project_canvas
-    from app.shared.models import Edge, Node
+    from app.core.projects.canvas_models import Edge, Node
 
     body = CanvasWithPlugins(
         nodes=[
@@ -624,7 +624,7 @@ def test_canvas_put_with_project_source_does_not_raise_value_error_anymore():
     from fastapi import HTTPException
 
     from app.core.projects.router import CanvasWithPlugins, update_project_canvas
-    from app.shared.models import Edge, Node
+    from app.core.projects.canvas_models import Edge, Node
 
     body = CanvasWithPlugins(
         nodes=[
@@ -686,7 +686,7 @@ def test_canvas_with_plugins_rejects_malformed_node_dict():
 def test_edge_accepts_reactflow_handle_fields():
     """sourceHandle/targetHandle sono campi opzionali (forward-compat
     con ReactFlow che a volte li invia senza essere a noi utili)."""
-    from app.shared.models import Edge
+    from app.core.projects.canvas_models import Edge
 
     # Non deve sollevare — campi dichiarati come Optional
     edge = Edge(
@@ -707,7 +707,7 @@ def test_edge_accepts_reactflow_handle_fields():
 )
 def test_edge_rejects_empty_id_source_target(kwargs):
     """id/source/target sono obbligatori e non-vuoti (min_length=1)."""
-    from app.shared.models import Edge
+    from app.core.projects.canvas_models import Edge
 
     with pytest.raises(ValidationError):
         Edge(**kwargs)
@@ -721,7 +721,7 @@ def test_edge_accepts_explicit_cross_join_type():
     join_type='CROSS' per CROSS JOIN intenzionale. Il model DEVE
     accettare questo valore, altrimenti il contract e' rotto
     (messaggio promette una configurazione impossibile da costruire)."""
-    from app.shared.models import Edge
+    from app.core.projects.canvas_models import Edge
 
     edge = Edge(id="e1", source="n1", target="n2", join_type="cross")
     assert edge.join_type == "cross"
@@ -732,7 +732,7 @@ def test_query_generator_emits_cross_join_without_on_clause():
     deve emettere `CROSS JOIN table [alias]` SENZA clausola ON
     (SQL standard rifiuta `CROSS JOIN t ON ...`)."""
     from app.core.estrai.query_generator import QueryGenerator
-    from app.shared.models import Node, Edge
+    from app.core.projects.canvas_models import Node, Edge
 
     gen = QueryGenerator(db_type="postgres")
     other_node = Node(

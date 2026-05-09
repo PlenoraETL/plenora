@@ -10,8 +10,6 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, Optional
 
-from celery import current_task
-
 from app.config import settings
 from app.shared.resources.path_policy import validate_imdf_task_id
 from app.utils.logger import get_logger

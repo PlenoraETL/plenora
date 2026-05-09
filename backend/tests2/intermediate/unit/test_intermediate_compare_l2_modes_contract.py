@@ -211,7 +211,7 @@ def test_l2_full_artifact_complete_returns_501_not_implemented(superadmin_user):
         "app.core.intermediate.router.idb.get_node_meta",
         side_effect=_fake_meta,
     ), patch(
-        "app.shared.cloud_backends.get_runtime_object_storage",
+        "app.infrastructure.storage.cloud_backends.get_runtime_object_storage",
         side_effect=AssertionError("L2 non deve scaricare l'artifact"),
     ), patch(
         "app.db.pg_connection.fetchall",

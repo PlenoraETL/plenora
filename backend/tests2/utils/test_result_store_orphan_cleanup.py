@@ -59,7 +59,7 @@ def stub_storage_factory(monkeypatch):
 
     def _make(*, delete_should_fail: bool = False) -> _StubStorage:
         stub = _StubStorage(delete_should_fail=delete_should_fail)
-        from app.shared import cloud_backends
+        from app.infrastructure.storage import cloud_backends
         monkeypatch.setattr(
             cloud_backends, "get_runtime_object_storage", lambda: stub
         )

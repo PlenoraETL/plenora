@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import ast
-import importlib
 from pathlib import Path
 
 import pytest
@@ -50,11 +49,8 @@ def test_sanitize_for_log_redacts_nested_sensitive_values_without_mutating() -> 
     assert sanitized["params"][0]["city"] == REDACTED
 
 
-def test_api_utils_does_not_reexport_log_sanitizers() -> None:
-    api_utils = importlib.import_module("app.shared.api_utils")
-
-    assert not hasattr(api_utils, "sanitize_for_log")
-    assert not hasattr(api_utils, "sanitize_url_for_log")
+def test_shared_api_utils_compat_module_is_removed() -> None:
+    assert not (_APP_ROOT / "shared" / "api_utils.py").exists()
 
 
 def test_shared_no_longer_owns_log_sanitization_implementation() -> None:

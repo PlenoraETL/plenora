@@ -15,7 +15,7 @@ from pathlib import Path
 from typing import Optional
 
 
-# Script standalone: aggiungi backend root a sys.path per `app.shared.*` imports.
+# Script standalone: aggiungi backend root a sys.path per `app.*` imports.
 _BACKEND_ROOT = Path(__file__).resolve().parent.parent
 if str(_BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(_BACKEND_ROOT))
@@ -224,12 +224,12 @@ def verify_dump_integrity(dump_file: Path) -> None:
 def upload_to_storage(dump_file: Path, key: str) -> None:
     """Upload via ObjectStorage backend (cloud-agnostic; default AWS S3).
 
-    Backend scelto dalla factory in app.shared.cloud_backends basata su
+    Backend scelto dalla factory in app.infrastructure.storage.cloud_backends basata su
     CLOUD_PROVIDER env. Credenziali risolte dal backend (IAM role EC2
     per AWS, Managed Identity per Azure, SA per GCP).
     """
     try:
-        from app.shared.cloud_backends import get_backup_object_storage
+        from app.infrastructure.storage.cloud_backends import get_backup_object_storage
     except ImportError as e:
         log("ERROR", f"cloud_backends import fallito: {e}")
         sys.exit(4)

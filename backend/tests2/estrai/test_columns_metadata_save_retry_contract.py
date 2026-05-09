@@ -50,7 +50,7 @@ def _make_canvas():
     """Crea un CanvasState minimale (senza nodi) — il save passa per
     _build_canvas_type_map che ritorna {} per canvas vuoti, e usa
     fallback 'str' sulle colonne di `res`."""
-    from app.shared.models import CanvasState
+    from app.core.projects.canvas_models import CanvasState
     return CanvasState(nodes=[], edges=[])
 
 

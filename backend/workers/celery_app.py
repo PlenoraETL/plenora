@@ -219,7 +219,7 @@ def _bootstrap_on_beat_init(**kwargs) -> None:
 
 
 @before_task_publish.connect
-def _propagate_request_id_on_publish(sender=None, headers=None, **kwargs):
+def _propagate_request_id_on_publish(_sender=None, headers=None, **kwargs):
     """Copia il request_id dal ContextVar locale nei headers del task."""
     try:
         from app.utils.logger import get_request_id

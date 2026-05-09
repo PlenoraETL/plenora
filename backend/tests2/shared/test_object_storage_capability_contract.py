@@ -22,25 +22,25 @@ pytestmark = [pytest.mark.unit, pytest.mark.contract]
 def _patch_capability(enabled, backend):
     """Sovrascrive lettura settings/provider per il test."""
     return patch(
-        "app.shared.cloud_backends._read_object_storage_capability",
+        "app.infrastructure.storage.cloud_backends._read_object_storage_capability",
         return_value={"enabled": enabled, "backend": backend},
     )
 
 
 def test_object_storage_enabled_true_when_settings_say_so():
-    from app.shared import cloud_backends as cb
+    from app.infrastructure.storage import cloud_backends as cb
     with _patch_capability(True, "s3"):
         assert cb.object_storage_enabled() is True
 
 
 def test_object_storage_enabled_false_when_disabled_flag():
-    from app.shared import cloud_backends as cb
+    from app.infrastructure.storage import cloud_backends as cb
     with _patch_capability(False, "s3"):
         assert cb.object_storage_enabled() is False
 
 
 def test_object_storage_enabled_false_when_backend_none():
-    from app.shared import cloud_backends as cb
+    from app.infrastructure.storage import cloud_backends as cb
     with _patch_capability(True, "none"):
         assert cb.object_storage_enabled() is False
 
@@ -49,14 +49,14 @@ def test_object_storage_enabled_false_when_backend_none():
 
 
 def test_runtime_factory_raises_when_disabled():
-    from app.shared import cloud_backends as cb
+    from app.infrastructure.storage import cloud_backends as cb
     with _patch_capability(False, "s3"):
         with pytest.raises(cb.ObjectStorageDisabledError):
             cb.get_runtime_object_storage()
 
 
 def test_backup_factory_raises_when_disabled():
-    from app.shared import cloud_backends as cb
+    from app.infrastructure.storage import cloud_backends as cb
     with _patch_capability(False, "s3"):
         with pytest.raises(cb.ObjectStorageDisabledError):
             cb.get_backup_object_storage()
@@ -64,7 +64,7 @@ def test_backup_factory_raises_when_disabled():
 
 def test_runtime_factory_uses_object_storage_bucket(monkeypatch):
     """OBJECT_STORAGE_BUCKET vince su PLENORA_ARTIFACT_BUCKET e BACKUP_BUCKET."""
-    from app.shared import cloud_backends as cb
+    from app.infrastructure.storage import cloud_backends as cb
 
     monkeypatch.setenv("OBJECT_STORAGE_BUCKET", "runtime-bucket")
     monkeypatch.setenv("PLENORA_ARTIFACT_BUCKET", "artifact-bucket")
@@ -86,7 +86,7 @@ def test_runtime_factory_uses_object_storage_bucket(monkeypatch):
 
 
 def test_runtime_factory_falls_back_to_plenora_artifact_bucket(monkeypatch):
-    from app.shared import cloud_backends as cb
+    from app.infrastructure.storage import cloud_backends as cb
 
     monkeypatch.delenv("OBJECT_STORAGE_BUCKET", raising=False)
     monkeypatch.setenv("PLENORA_ARTIFACT_BUCKET", "artifact-bucket")
@@ -111,7 +111,7 @@ def test_runtime_factory_falls_back_to_backup_bucket_with_warning(monkeypatch):
     """Retro-compat: se solo BACKUP_BUCKET e' settato, runtime cade su
     quello con warning. Il warning serve a operations per migrare alla
     config canonica (OBJECT_STORAGE_BUCKET distinto)."""
-    from app.shared import cloud_backends as cb
+    from app.infrastructure.storage import cloud_backends as cb
 
     monkeypatch.delenv("OBJECT_STORAGE_BUCKET", raising=False)
     monkeypatch.setenv("PLENORA_ARTIFACT_BUCKET", "")
@@ -143,7 +143,7 @@ def test_runtime_factory_falls_back_to_backup_bucket_with_warning(monkeypatch):
 
 def test_backup_factory_uses_backup_bucket_only(monkeypatch):
     """get_backup_object_storage NON cade mai su OBJECT_STORAGE_BUCKET."""
-    from app.shared import cloud_backends as cb
+    from app.infrastructure.storage import cloud_backends as cb
 
     monkeypatch.setenv("OBJECT_STORAGE_BUCKET", "runtime-bucket")
     monkeypatch.delenv("BACKUP_BUCKET", raising=False)
@@ -155,7 +155,7 @@ def test_backup_factory_uses_backup_bucket_only(monkeypatch):
 
 
 def test_backup_factory_returns_backup_bucket(monkeypatch):
-    from app.shared import cloud_backends as cb
+    from app.infrastructure.storage import cloud_backends as cb
 
     monkeypatch.setenv("OBJECT_STORAGE_BUCKET", "runtime-bucket")
     monkeypatch.setenv("BACKUP_BUCKET", "backup-bucket")
@@ -267,7 +267,7 @@ def test_file_sources_delete_skips_s3_cleanup_when_disabled(monkeypatch):
         raise AssertionError("get_runtime_object_storage NON deve essere chiamato")
 
     with _patch_capability(False, "s3"), patch(
-        "app.shared.cloud_backends.get_runtime_object_storage",
+        "app.infrastructure.storage.cloud_backends.get_runtime_object_storage",
         side_effect=_fake_runtime,
     ):
         ok = file_sources.delete_file_source("abc")
@@ -301,7 +301,7 @@ def test_admin_backups_list_raises_disabled_without_touching_runtime_factory():
     fallisce nella factory `get_backup_object_storage`).
     """
     from app.core.admin_backups import service as admin_service
-    from app.shared import cloud_backends as cb
+    from app.infrastructure.storage import cloud_backends as cb
 
     # Spy: se la capability e' off, _build_object_storage NON deve essere
     # invocato (e' il punto in cui il client boto3 viene costruito).
@@ -324,7 +324,7 @@ def test_admin_backups_list_raises_disabled_without_touching_runtime_factory():
 def test_get_object_storage_delegates_to_runtime():
     """Compat shim: get_object_storage ritorna l'identica istanza di
     get_runtime_object_storage."""
-    from app.shared import cloud_backends as cb
+    from app.infrastructure.storage import cloud_backends as cb
 
     sentinel = MagicMock()
     with patch.object(cb, "get_runtime_object_storage", return_value=sentinel):
@@ -335,7 +335,7 @@ def test_get_object_storage_delegates_to_runtime():
 
 def test_get_object_storage_propagates_disabled_error():
     """Compat shim non deve nascondere ObjectStorageDisabledError."""
-    from app.shared import cloud_backends as cb
+    from app.infrastructure.storage import cloud_backends as cb
 
     with _patch_capability(False, "s3"):
         with pytest.raises(cb.ObjectStorageDisabledError):

@@ -118,7 +118,7 @@ def test_object_storage_skip_path_returns_true():
     from app.observability import health as h
 
     with patch(
-        "app.shared.cloud_backends.object_storage_enabled",
+        "app.infrastructure.storage.cloud_backends.object_storage_enabled",
         return_value=False,
     ):
         ok, detail = h.check_object_storage()
@@ -132,16 +132,16 @@ def test_object_storage_capability_race_returns_true():
     """Race teorica: capability ON al check, OFF al call -> skip-as-OK
     (no 503 on a transient capability flip)."""
     from app.observability import health as h
-    from app.shared.cloud_backends import ObjectStorageDisabledError
+    from app.infrastructure.storage.cloud_backends import ObjectStorageDisabledError
 
     def _raise_disabled():
         raise ObjectStorageDisabledError("capability_disabled_race")
 
     with patch(
-        "app.shared.cloud_backends.object_storage_enabled",
+        "app.infrastructure.storage.cloud_backends.object_storage_enabled",
         return_value=True,
     ), patch(
-        "app.shared.cloud_backends.get_runtime_object_storage",
+        "app.infrastructure.storage.cloud_backends.get_runtime_object_storage",
         side_effect=_raise_disabled,
     ):
         ok, detail = h.check_object_storage()
@@ -528,7 +528,7 @@ def test_health_module_has_no_top_level_heavy_imports():
         "from app.bootstrap",
         "import app.bootstrap",
         "from app.db.migrations_runner",
-        "from app.shared.cloud_backends",
+        "from app.infrastructure.storage.cloud_backends",
         "from app.core.resources.storage_reconciliation",
         "from app.db.pg_connection",
     }
@@ -775,10 +775,10 @@ def test_check_object_storage_uses_bounded_probe_method():
             captured["readiness_probe_timeout"] = timeout_seconds
 
     with patch(
-        "app.shared.cloud_backends.object_storage_enabled",
+        "app.infrastructure.storage.cloud_backends.object_storage_enabled",
         return_value=True,
     ), patch(
-        "app.shared.cloud_backends.get_runtime_object_storage",
+        "app.infrastructure.storage.cloud_backends.get_runtime_object_storage",
         return_value=_StubStorage(),
     ):
         ok, detail = h.check_object_storage()
@@ -811,10 +811,10 @@ def test_check_object_storage_falls_back_to_three_seconds_on_invalid_setting():
             return default
 
     with patch(
-        "app.shared.cloud_backends.object_storage_enabled",
+        "app.infrastructure.storage.cloud_backends.object_storage_enabled",
         return_value=True,
     ), patch(
-        "app.shared.cloud_backends.get_runtime_object_storage",
+        "app.infrastructure.storage.cloud_backends.get_runtime_object_storage",
         return_value=_StubStorage(),
     ), patch(
         "app.config.settings", new=_SettingsStub()
@@ -834,7 +834,7 @@ def test_object_storage_readiness_probe_builds_bounded_boto3_client():
     retries={"max_attempts": 1})`. The retry disable is critical:
     boto3's default 3-attempt exponential retry would multiply the
     timeout window by ~3x on a hung endpoint."""
-    from app.shared.cloud_backends import AwsS3ObjectStorage
+    from app.infrastructure.storage.cloud_backends import AwsS3ObjectStorage
 
     captured: dict = {}
 
@@ -887,7 +887,7 @@ def test_minio_readiness_probe_preserves_endpoint_and_addressing_style():
     and `addressing_style=path` on the readiness client (vanilla
     MinIO does NOT support virtual-hosted style). Dropping any of
     these would break the probe on every MinIO deploy."""
-    from app.shared.cloud_backends import MinioObjectStorage
+    from app.infrastructure.storage.cloud_backends import MinioObjectStorage
 
     captured: dict = {}
 

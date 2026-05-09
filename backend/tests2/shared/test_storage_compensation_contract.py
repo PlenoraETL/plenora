@@ -58,11 +58,11 @@ def test_capability_disabled_returns_skipped_no_factory_call(
 ):
     factory = MagicMock(side_effect=AssertionError("factory non deve essere chiamata"))
     monkeypatch.setattr(
-        "app.shared.cloud_backends.object_storage_enabled",
+        "app.infrastructure.storage.cloud_backends.object_storage_enabled",
         lambda: False,
     )
     monkeypatch.setattr(
-        "app.shared.cloud_backends.get_runtime_object_storage",
+        "app.infrastructure.storage.cloud_backends.get_runtime_object_storage",
         factory,
     )
 
@@ -90,7 +90,7 @@ def test_capability_disabled_with_supplied_storage_still_skipped(
     callsite non sa se la capability e' ancora attiva."""
     storage = _StubStorage()
     monkeypatch.setattr(
-        "app.shared.cloud_backends.object_storage_enabled",
+        "app.infrastructure.storage.cloud_backends.object_storage_enabled",
         lambda: False,
     )
 
@@ -113,11 +113,11 @@ def test_capability_on_delete_ok_returns_ok_emits_info_event(
 ):
     storage = _StubStorage()
     monkeypatch.setattr(
-        "app.shared.cloud_backends.object_storage_enabled",
+        "app.infrastructure.storage.cloud_backends.object_storage_enabled",
         lambda: True,
     )
     monkeypatch.setattr(
-        "app.shared.cloud_backends.get_runtime_object_storage",
+        "app.infrastructure.storage.cloud_backends.get_runtime_object_storage",
         lambda: storage,
     )
 
@@ -148,11 +148,11 @@ def test_supplied_storage_used_instead_of_factory(monkeypatch):
     storage = _StubStorage()
     factory = MagicMock(side_effect=AssertionError("factory non deve essere chiamata"))
     monkeypatch.setattr(
-        "app.shared.cloud_backends.object_storage_enabled",
+        "app.infrastructure.storage.cloud_backends.object_storage_enabled",
         lambda: True,
     )
     monkeypatch.setattr(
-        "app.shared.cloud_backends.get_runtime_object_storage",
+        "app.infrastructure.storage.cloud_backends.get_runtime_object_storage",
         factory,
     )
 
@@ -176,11 +176,11 @@ def test_delete_failure_returns_failed_never_raises(
 ):
     storage = _StubStorage(delete_should_fail=True, exc=RuntimeError("S3 503"))
     monkeypatch.setattr(
-        "app.shared.cloud_backends.object_storage_enabled",
+        "app.infrastructure.storage.cloud_backends.object_storage_enabled",
         lambda: True,
     )
     monkeypatch.setattr(
-        "app.shared.cloud_backends.get_runtime_object_storage",
+        "app.infrastructure.storage.cloud_backends.get_runtime_object_storage",
         lambda: storage,
     )
 
@@ -211,11 +211,11 @@ def test_delete_failure_warning_log_level(monkeypatch, caplog_helper):
     `warning`, non `error`. Allerta attiva senza crashing semantics."""
     storage = _StubStorage(delete_should_fail=True)
     monkeypatch.setattr(
-        "app.shared.cloud_backends.object_storage_enabled",
+        "app.infrastructure.storage.cloud_backends.object_storage_enabled",
         lambda: True,
     )
     monkeypatch.setattr(
-        "app.shared.cloud_backends.get_runtime_object_storage",
+        "app.infrastructure.storage.cloud_backends.get_runtime_object_storage",
         lambda: storage,
     )
 
@@ -242,10 +242,10 @@ def test_race_capability_disabled_during_factory_resolution(
     """Capability era ON al gate, OFF quando la factory tenta di
     risolvere il client (race teorica). Outcome = `"skipped"` con
     `skip_reason=capability_disabled_race`."""
-    from app.shared.cloud_backends import ObjectStorageDisabledError
+    from app.infrastructure.storage.cloud_backends import ObjectStorageDisabledError
 
     monkeypatch.setattr(
-        "app.shared.cloud_backends.object_storage_enabled",
+        "app.infrastructure.storage.cloud_backends.object_storage_enabled",
         lambda: True,
     )
 
@@ -253,7 +253,7 @@ def test_race_capability_disabled_during_factory_resolution(
         raise ObjectStorageDisabledError("disabled mid-flight")
 
     monkeypatch.setattr(
-        "app.shared.cloud_backends.get_runtime_object_storage",
+        "app.infrastructure.storage.cloud_backends.get_runtime_object_storage",
         _factory_disabled,
     )
 
@@ -276,7 +276,7 @@ def test_factory_unexpected_error_returns_failed(monkeypatch, caplog_helper):
     """Factory solleva un errore non-disabled (es. boto config rotto):
     outcome `"failed"`, mai solleva."""
     monkeypatch.setattr(
-        "app.shared.cloud_backends.object_storage_enabled",
+        "app.infrastructure.storage.cloud_backends.object_storage_enabled",
         lambda: True,
     )
 
@@ -284,7 +284,7 @@ def test_factory_unexpected_error_returns_failed(monkeypatch, caplog_helper):
         raise RuntimeError("boto config invalid")
 
     monkeypatch.setattr(
-        "app.shared.cloud_backends.get_runtime_object_storage",
+        "app.infrastructure.storage.cloud_backends.get_runtime_object_storage",
         _factory_explodes,
     )
 
@@ -312,11 +312,11 @@ def test_extras_protected_keys_filtered(monkeypatch, caplog_helper):
     suffix per non collidere con i campi canonici."""
     storage = _StubStorage()
     monkeypatch.setattr(
-        "app.shared.cloud_backends.object_storage_enabled",
+        "app.infrastructure.storage.cloud_backends.object_storage_enabled",
         lambda: True,
     )
     monkeypatch.setattr(
-        "app.shared.cloud_backends.get_runtime_object_storage",
+        "app.infrastructure.storage.cloud_backends.get_runtime_object_storage",
         lambda: storage,
     )
 
@@ -350,11 +350,11 @@ def test_extras_none_value_omitted(monkeypatch, caplog_helper):
     """Valori `None` negli extras vengono omessi per non sporcare il log."""
     storage = _StubStorage()
     monkeypatch.setattr(
-        "app.shared.cloud_backends.object_storage_enabled",
+        "app.infrastructure.storage.cloud_backends.object_storage_enabled",
         lambda: True,
     )
     monkeypatch.setattr(
-        "app.shared.cloud_backends.get_runtime_object_storage",
+        "app.infrastructure.storage.cloud_backends.get_runtime_object_storage",
         lambda: storage,
     )
 
@@ -379,11 +379,11 @@ def test_caller_logger_receives_records(monkeypatch):
     (e non al helper-default)."""
     storage = _StubStorage()
     monkeypatch.setattr(
-        "app.shared.cloud_backends.object_storage_enabled",
+        "app.infrastructure.storage.cloud_backends.object_storage_enabled",
         lambda: True,
     )
     monkeypatch.setattr(
-        "app.shared.cloud_backends.get_runtime_object_storage",
+        "app.infrastructure.storage.cloud_backends.get_runtime_object_storage",
         lambda: storage,
     )
 

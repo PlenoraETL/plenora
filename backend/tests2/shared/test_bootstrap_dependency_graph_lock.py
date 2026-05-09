@@ -233,7 +233,7 @@ def test_is_bootstrapped_flips_to_true_after_successful_bootstrap(
         "app.startup_validation.validate_startup", lambda settings: None,
     )
     monkeypatch.setattr(
-        "app.shared.cloud_backends.validate_storage_config", lambda: None,
+        "app.infrastructure.storage.cloud_backends.validate_storage_config", lambda: None,
     )
     monkeypatch.setattr("app.core.runtime.db_init.init_all_dbs", lambda: None)
     monkeypatch.setattr(
@@ -255,7 +255,7 @@ def test_is_bootstrapped_stays_false_when_step_raises(
         "app.startup_validation.validate_startup", lambda settings: None,
     )
     monkeypatch.setattr(
-        "app.shared.cloud_backends.validate_storage_config", lambda: None,
+        "app.infrastructure.storage.cloud_backends.validate_storage_config", lambda: None,
     )
 
     # init_all_dbs raises mid-bootstrap.
@@ -285,7 +285,7 @@ def test_is_bootstrapped_recovers_to_true_on_retry_after_transient_failure(
         "app.startup_validation.validate_startup", lambda settings: None,
     )
     monkeypatch.setattr(
-        "app.shared.cloud_backends.validate_storage_config", lambda: None,
+        "app.infrastructure.storage.cloud_backends.validate_storage_config", lambda: None,
     )
 
     # First call: init_all_dbs raises. Second call: succeeds.

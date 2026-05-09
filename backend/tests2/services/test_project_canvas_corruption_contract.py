@@ -234,7 +234,7 @@ def test_corrupted_canvas_never_returns_empty_silently(service_with_fake_db):
     un CanvasState() vuoto senza sollevare. Post-fix, tutti devono
     sollevare CanvasCorruptedError."""
     from app.core.projects.exceptions import CanvasCorruptedError
-    from app.shared.models import CanvasState
+    from app.core.projects.canvas_models import CanvasState
 
     svc, state = service_with_fake_db
 

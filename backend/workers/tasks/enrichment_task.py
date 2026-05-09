@@ -18,7 +18,6 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, Any, Optional, List
-from celery import current_task
 from workers.celery_app import celery_app
 from app.config import settings
 from app.utils.logger import get_logger, open_run, close_run, set_run_context, append_step

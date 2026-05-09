@@ -3,7 +3,7 @@ from __future__ import annotations
 import pytest
 
 from app.core.estrai.query_generator import QueryGenerator
-from app.shared.models import Column, Edge, Filter, Node
+from app.core.projects.canvas_models import Column, Edge, Filter, Node
 
 
 pytestmark = [

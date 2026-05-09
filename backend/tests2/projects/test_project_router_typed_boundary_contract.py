@@ -8,7 +8,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from app.shared.contracts.auth import CurrentUser
-from app.shared.models import CanvasState
+from app.core.projects.canvas_models import CanvasState
 
 
 pytestmark = [pytest.mark.unit, pytest.mark.contract]

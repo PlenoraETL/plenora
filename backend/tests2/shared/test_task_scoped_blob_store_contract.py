@@ -123,7 +123,7 @@ def test_module_has_no_heavy_imports():
         "import requests",
         "from requests",
         "import boto3",
-        "from app.shared.cloud_backends",
+        "from app.infrastructure.storage.cloud_backends",
         "from app.config",
         "import os",
         "os.getenv",

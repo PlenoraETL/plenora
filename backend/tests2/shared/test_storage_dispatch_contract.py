@@ -125,7 +125,7 @@ def test_hybrid_inclusive_at_boundary():
 
 def test_module_has_no_settings_or_services_imports():
     """Verifica statica che `storage_dispatch.py` non importi
-    `app.config.settings`, `app.shared.cloud_backends`, ne' qualunque
+    `app.config.settings`, `app.infrastructure.storage.cloud_backends`, ne' qualunque
     modulo da `app.services.*` / `app.db.*` / `app.utils.*`. Pure
     module = nessun side-effect, nessun env read."""
     from pathlib import Path
@@ -140,7 +140,7 @@ def test_module_has_no_settings_or_services_imports():
     forbidden = [
         "from app.config",
         "import app.config",
-        "from app.shared.cloud_backends",
+        "from app.infrastructure.storage.cloud_backends",
         "from app.services",
         "import app.services",
         "from app.db",

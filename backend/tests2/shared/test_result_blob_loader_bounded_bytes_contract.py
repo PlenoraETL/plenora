@@ -209,7 +209,7 @@ def test_object_storage_oversize_raises_without_consuming_full_iterator(
     fake_storage = _FakeStorage(body)
 
     monkeypatch.setattr(
-        "app.shared.cloud_backends.get_runtime_object_storage",
+        "app.infrastructure.storage.cloud_backends.get_runtime_object_storage",
         lambda: fake_storage,
     )
     _, fake_fetch = fake_fetchone(
@@ -245,7 +245,7 @@ def test_object_storage_under_cap_returns_full_bytes(monkeypatch):
     fake_storage = _FakeStorage(body)
 
     monkeypatch.setattr(
-        "app.shared.cloud_backends.get_runtime_object_storage",
+        "app.infrastructure.storage.cloud_backends.get_runtime_object_storage",
         lambda: fake_storage,
     )
     _, fake_fetch = fake_fetchone(
@@ -274,7 +274,7 @@ def test_object_storage_oversize_does_not_swallow_to_none(monkeypatch):
     body = _TrackingBody([b"x" * 100])
     fake_storage = _FakeStorage(body)
     monkeypatch.setattr(
-        "app.shared.cloud_backends.get_runtime_object_storage",
+        "app.infrastructure.storage.cloud_backends.get_runtime_object_storage",
         lambda: fake_storage,
     )
 
@@ -293,7 +293,7 @@ def test_object_storage_connectivity_error_still_returns_none(monkeypatch):
             raise RuntimeError("simulated network outage")
 
     monkeypatch.setattr(
-        "app.shared.cloud_backends.get_runtime_object_storage",
+        "app.infrastructure.storage.cloud_backends.get_runtime_object_storage",
         lambda: _Boom(),
     )
     out = loader_mod._download_object_storage("results/p/r.bin")
@@ -457,7 +457,7 @@ def test_path_mode_oversize_does_not_create_tempfile(monkeypatch, tmp_path):
     body = _TrackingBody([b"x" * 100])
     fake_storage = _FakeStorage(body)
     monkeypatch.setattr(
-        "app.shared.cloud_backends.get_runtime_object_storage",
+        "app.infrastructure.storage.cloud_backends.get_runtime_object_storage",
         lambda: fake_storage,
     )
     _, fake_fetch = fake_fetchone(
@@ -512,7 +512,7 @@ def test_stream_mode_raises_before_any_storage_access(monkeypatch):
             raise AssertionError("get_object_stream must NOT be called")
 
     monkeypatch.setattr(
-        "app.shared.cloud_backends.get_runtime_object_storage",
+        "app.infrastructure.storage.cloud_backends.get_runtime_object_storage",
         lambda: _Tripwire(),
     )
 

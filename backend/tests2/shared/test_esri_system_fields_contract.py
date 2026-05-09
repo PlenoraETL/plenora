@@ -147,7 +147,7 @@ def test_module_has_no_heavy_imports():
         "os.getenv",
         "os.environ",
         "from app.config",
-        "from app.shared.cloud_backends",
+        "from app.infrastructure.storage.cloud_backends",
     ]
     for pattern in forbidden:
         assert pattern not in src, (

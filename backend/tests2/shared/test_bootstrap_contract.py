@@ -87,7 +87,7 @@ def test_bootstrap_invokes_four_steps_in_canonical_order(monkeypatch):
     _patch_settings(monkeypatch, fake_settings)
     _patch_startup_validation(monkeypatch, _record_startup_validate)
     monkeypatch.setattr(
-        "app.shared.cloud_backends.validate_storage_config",
+        "app.infrastructure.storage.cloud_backends.validate_storage_config",
         _record_storage_validate,
     )
     monkeypatch.setattr(
@@ -116,7 +116,7 @@ def test_bootstrap_signature_returns_none(monkeypatch):
     )
     _patch_startup_validation(monkeypatch, lambda _settings: None)
     monkeypatch.setattr(
-        "app.shared.cloud_backends.validate_storage_config", lambda: None
+        "app.infrastructure.storage.cloud_backends.validate_storage_config", lambda: None
     )
     monkeypatch.setattr("app.core.runtime.db_init.init_all_dbs", lambda: None)
     monkeypatch.setattr(
@@ -164,7 +164,7 @@ def test_ssl_env_cleanup_runs_after_init_all_dbs(monkeypatch):
     )
     _patch_startup_validation(monkeypatch, lambda _settings: None)
     monkeypatch.setattr(
-        "app.shared.cloud_backends.validate_storage_config", lambda: None
+        "app.infrastructure.storage.cloud_backends.validate_storage_config", lambda: None
     )
     monkeypatch.setattr("app.core.runtime.db_init.init_all_dbs", _record_init_all_dbs)
     monkeypatch.setattr(
@@ -250,7 +250,7 @@ def test_bootstrap_is_idempotent(monkeypatch):
         monkeypatch, lambda _settings: _bump("validate_startup")()
     )
     monkeypatch.setattr(
-        "app.shared.cloud_backends.validate_storage_config",
+        "app.infrastructure.storage.cloud_backends.validate_storage_config",
         _bump("validate_storage_config"),
     )
     monkeypatch.setattr(
@@ -292,7 +292,7 @@ def test_bootstrap_propagates_validate_startup_systemexit(monkeypatch):
     # run (because the first step raised).
     other_called = {"flag": False}
     monkeypatch.setattr(
-        "app.shared.cloud_backends.validate_storage_config",
+        "app.infrastructure.storage.cloud_backends.validate_storage_config",
         lambda: other_called.__setitem__("flag", True),
     )
     monkeypatch.setattr("app.core.runtime.db_init.init_all_dbs", lambda: None)
@@ -311,7 +311,7 @@ def test_bootstrap_propagates_validate_startup_systemexit(monkeypatch):
 def test_bootstrap_propagates_storage_config_error(monkeypatch):
     """validate_storage_config raises StorageConfigError on
     incoherent combos. `bootstrap()` must not wrap or remap it."""
-    from app.shared.cloud_backends import StorageConfigError
+    from app.infrastructure.storage.cloud_backends import StorageConfigError
 
     def _bad_storage():
         raise StorageConfigError("bad combo")
@@ -322,7 +322,7 @@ def test_bootstrap_propagates_storage_config_error(monkeypatch):
     )
     _patch_startup_validation(monkeypatch, lambda _settings: None)
     monkeypatch.setattr(
-        "app.shared.cloud_backends.validate_storage_config", _bad_storage
+        "app.infrastructure.storage.cloud_backends.validate_storage_config", _bad_storage
     )
 
     init_called = {"flag": False}
@@ -357,7 +357,7 @@ def test_bootstrap_propagates_init_all_dbs_error(monkeypatch):
     )
     _patch_startup_validation(monkeypatch, lambda _settings: None)
     monkeypatch.setattr(
-        "app.shared.cloud_backends.validate_storage_config", lambda: None
+        "app.infrastructure.storage.cloud_backends.validate_storage_config", lambda: None
     )
     monkeypatch.setattr("app.core.runtime.db_init.init_all_dbs", _bad_init)
 
@@ -496,7 +496,7 @@ def test_bootstrap_module_uses_lazy_imports_for_heavy_modules():
     for forbidden in (
         "from app.config import settings",
         "from app.startup_validation import validate_startup",
-        "from app.shared.cloud_backends import validate_storage_config",
+        "from app.infrastructure.storage.cloud_backends import validate_storage_config",
         "from app.core.runtime.db_init import init_all_dbs",
     ):
         assert forbidden not in head, (

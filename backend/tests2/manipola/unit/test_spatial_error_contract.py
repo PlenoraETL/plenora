@@ -26,7 +26,7 @@ from app.core.manipola.transforms.spatial import (
     op_sjoin,
 )
 from app.core.manipola.plugin_executor import PluginExecutor
-from app.shared.models import Node, Position
+from app.core.projects.canvas_models import Node, Position
 
 
 pytestmark = [pytest.mark.unit, pytest.mark.manipola, pytest.mark.contract]

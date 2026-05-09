@@ -27,7 +27,6 @@ def test_oauth_token_implementation_lives_outside_api_utils():
     oauth_path = APP_SHARED / "connections" / "oauth.py"
     root_oauth_path = APP_SHARED / "oauth.py"
 
-    api_utils_functions = _defined_functions(api_utils_path)
     oauth_functions = _defined_functions(oauth_path)
 
     token_impl_functions = {
@@ -39,13 +38,9 @@ def test_oauth_token_implementation_lives_outside_api_utils():
         "get_arcgis_token",
     }
 
-    assert token_impl_functions.isdisjoint(api_utils_functions)
+    assert not api_utils_path.exists()
     assert token_impl_functions.issubset(oauth_functions)
     assert not root_oauth_path.exists()
-
-    api_utils_src = api_utils_path.read_text(encoding="utf-8")
-    assert "_OAUTH2_TOKEN_CACHE" not in api_utils_src
-    assert "_ARCGIS_TOKEN_CACHE" not in api_utils_src
 
 
 def test_http_and_ssrf_implementation_lives_outside_api_utils():
@@ -53,27 +48,17 @@ def test_http_and_ssrf_implementation_lives_outside_api_utils():
     http_session_path = APP_DIR / "infrastructure" / "http" / "session.py"
     outbound_url_path = APP_DIR / "core" / "security" / "outbound_url.py"
 
-    api_utils_functions = _defined_functions(api_utils_path)
-    assert "get_shared_session" not in api_utils_functions
-    assert "validate_external_url" not in api_utils_functions
-    assert "validate_external_url_silent" not in api_utils_functions
-    assert "_check_outbound_address" not in api_utils_functions
+    assert not api_utils_path.exists()
 
     assert "get_shared_session" in _defined_functions(http_session_path)
     assert "validate_external_url" in _defined_functions(outbound_url_path)
     assert "check_outbound_address" in _defined_functions(outbound_url_path)
-
-    api_utils_src = api_utils_path.read_text(encoding="utf-8")
-    assert "HTTPAdapter" not in api_utils_src
-    assert "socket.getaddrinfo" not in api_utils_src
 
 
 def test_runtime_code_does_not_import_shared_api_utils():
     offenders: list[str] = []
     for path in APP_DIR.rglob("*.py"):
         rel = path.relative_to(APP_DIR).as_posix()
-        if rel == "shared/api_utils.py":
-            continue
         src = path.read_text(encoding="utf-8")
         if "app.shared.api_utils" in src:
             offenders.append(rel)

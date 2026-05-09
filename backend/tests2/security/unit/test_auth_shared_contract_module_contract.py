@@ -52,7 +52,7 @@ _FORBIDDEN_IMPORTS = {
     "app.shared.login_rate_limiter",
     # Cloud SDK
     "boto3",
-    "app.shared.cloud_backends",
+    "app.infrastructure.storage.cloud_backends",
 }
 
 

@@ -1,5 +1,5 @@
 """
-Contract test — app/shared/cloud_backends.py (astrazione cloud-agnostic).
+Contract test — app/infrastructure/storage/cloud_backends.py (astrazione cloud-agnostic).
 
 1. Factory `get_secrets_backend()` / `get_object_storage()` dispatch via
 """
@@ -37,7 +37,7 @@ def _isolate_bucket_env(monkeypatch):
 
 @pytest.fixture(scope="module")
 def cb():
-    from app.shared import cloud_backends
+    from app.infrastructure.storage import cloud_backends
     return cloud_backends
 
 

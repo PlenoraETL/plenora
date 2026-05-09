@@ -66,7 +66,7 @@ def test_no_tests_import_legacy_app_models_shim() -> None:
     hits = sorted(_module_importers((_TEST_ROOT,), "app.models"))
 
     assert not hits, (
-        "Tests must import models from app.shared.models or a domain-owned "
+        "Tests must import models from app.core.projects.canvas_models or a domain-owned "
         "models module, not the legacy app.models shim.\nViolations:\n  - "
         + "\n  - ".join(hits)
     )
@@ -77,7 +77,7 @@ def test_no_production_imports_of_legacy_app_models_shim() -> None:
 
     assert not hits, (
         "Production imports from app.models are forbidden. Use "
-        "app.shared.models or a domain-owned models module instead.\n"
+        "app.core.projects.canvas_models or a domain-owned models module instead.\n"
         "Violations:\n  - "
         + "\n  - ".join(hits)
     )
@@ -88,14 +88,19 @@ def test_app_models_shim_is_removed() -> None:
     assert not shim.exists()
 
 
-def test_shared_models_shim_reexports_canvas_models() -> None:
-    from app.core.projects import canvas_models
-    from app.shared import models as shared_models
+def test_shared_models_shim_is_removed() -> None:
+    shim = _BACKEND_ROOT / "app" / "shared" / "models.py"
+    assert not shim.exists()
 
-    assert shared_models.CanvasState is canvas_models.CanvasState
-    assert shared_models.Node is canvas_models.Node
-    assert shared_models.Edge is canvas_models.Edge
-    assert shared_models.ColumnInfo is canvas_models.ColumnInfo
+
+def test_no_tests_import_shared_models_compat_shim() -> None:
+    hits = sorted(_module_importers((_TEST_ROOT,), "app.shared.models"))
+
+    assert not hits, (
+        "Tests import from app.shared.models. Use "
+        "app.core.projects.canvas_models instead.\nViolations:\n  - "
+        + "\n  - ".join(hits)
+    )
 
 
 def test_no_production_imports_of_shared_models_compat_shim() -> None:

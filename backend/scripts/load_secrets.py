@@ -14,7 +14,7 @@ from typing import Dict
 
 
 # Script standalone (invocato da systemd o CLI): aggiungi backend root
-# a sys.path cosi' `app.shared.*` e' importabile come package normale.
+# a sys.path cosi' `app.*` e' importabile come package normale.
 # Un unico hack al top del modulo, non scattered nelle funzioni.
 _BACKEND_ROOT = Path(__file__).resolve().parent.parent
 if str(_BACKEND_ROOT) not in sys.path:
@@ -33,8 +33,8 @@ def log(level: str, msg: str) -> None:
 
 
 def fetch_secrets() -> Dict[str, str]:
-    """Delega al SecretsBackend configurato (factory in app.shared.cloud_backends)."""
-    from app.shared.cloud_backends import get_secrets_backend
+    """Delega al SecretsBackend configurato."""
+    from app.infrastructure.storage.cloud_backends import get_secrets_backend
 
     try:
         backend = get_secrets_backend()

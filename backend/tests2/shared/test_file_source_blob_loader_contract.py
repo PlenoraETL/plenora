@@ -263,7 +263,7 @@ def test_storage_key_path_routes_through_bounded_read():
     })
     fake_storage = _FakeStorage([b"hello", b"world"])
     with patch("app.db.pg_connection.fetchone", fake), patch(
-        "app.shared.cloud_backends.get_runtime_object_storage",
+        "app.infrastructure.storage.cloud_backends.get_runtime_object_storage",
         return_value=fake_storage,
     ):
         out = FileSourceBlobLoader().load(_make_ref(), mode="bytes")
@@ -292,7 +292,7 @@ def test_storage_key_oversize_raises_memory_limit_exceeded(monkeypatch):
     # Two 70 B chunks; second push would exceed 100 B.
     fake_storage = _FakeStorage([b"x" * 70, b"y" * 70])
     with patch("app.db.pg_connection.fetchone", fake), patch(
-        "app.shared.cloud_backends.get_runtime_object_storage",
+        "app.infrastructure.storage.cloud_backends.get_runtime_object_storage",
         return_value=fake_storage,
     ):
         with pytest.raises(MemoryLimitExceededError) as exc_info:

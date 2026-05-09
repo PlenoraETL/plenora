@@ -293,7 +293,7 @@ def test_save_result_blob_aws_credentials_expired_raises_operational_message(
             raise LoginRefreshRequired()
 
     monkeypatch.setattr(
-        "app.shared.cloud_backends.get_runtime_object_storage",
+        "app.infrastructure.storage.cloud_backends.get_runtime_object_storage",
         lambda: _ExpiredStorage(),
     )
 
@@ -327,7 +327,7 @@ def test_save_result_blob_no_credentials_error_raises_operational_message(
             raise NoCredentialsError()
 
     monkeypatch.setattr(
-        "app.shared.cloud_backends.get_runtime_object_storage",
+        "app.infrastructure.storage.cloud_backends.get_runtime_object_storage",
         lambda: _NoCredsStorage(),
     )
 
@@ -354,7 +354,7 @@ def test_save_result_blob_generic_storage_error_keeps_old_message(
             raise RuntimeError("connection reset by peer")
 
     monkeypatch.setattr(
-        "app.shared.cloud_backends.get_runtime_object_storage",
+        "app.infrastructure.storage.cloud_backends.get_runtime_object_storage",
         lambda: _NetworkErrorStorage(),
     )
 
@@ -414,7 +414,7 @@ def _wire_object_storage_writer(monkeypatch, *, fake_storage, saved):
     # policy=object_storage: dispatcher forza sempre object storage
     monkeypatch.setattr(result_store, "_storage_policy", lambda: "object_storage")
     monkeypatch.setattr(
-        "app.shared.cloud_backends.get_runtime_object_storage",
+        "app.infrastructure.storage.cloud_backends.get_runtime_object_storage",
         lambda: fake_storage,
     )
 
@@ -493,7 +493,7 @@ def test_save_result_blob_object_storage_capability_off_raises(
     mancante), il writer deve fallire esplicitamente. Nessun degrado
     silenzioso a BYTEA: il result non viene salvato e il file temp
     resta sul disco per recovery."""
-    from app.shared.cloud_backends import ObjectStorageDisabledError
+    from app.infrastructure.storage.cloud_backends import ObjectStorageDisabledError
 
     _force_object_storage(monkeypatch, tmp_path)
 
@@ -508,7 +508,7 @@ def test_save_result_blob_object_storage_capability_off_raises(
         )
 
     monkeypatch.setattr(
-        "app.shared.cloud_backends.get_runtime_object_storage",
+        "app.infrastructure.storage.cloud_backends.get_runtime_object_storage",
         _disabled_factory,
     )
 

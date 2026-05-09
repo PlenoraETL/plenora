@@ -68,7 +68,7 @@ def provider(request, monkeypatch):
 
 def _make_moto_provider(name: str, bucket: str):
     """Istanza provider configurata contro moto (in-process)."""
-    from app.shared import cloud_backends as cb
+    from app.infrastructure.storage import cloud_backends as cb
     if name == "aws":
         return cb.AwsS3ObjectStorage(bucket=bucket, region="us-east-1")
     if name == "minio":
@@ -90,7 +90,7 @@ def _make_real_minio_provider():
     Crea il bucket idempotentemente (ignorando errore se esiste).
     Dopo il test, rimuove tutte le key residue (best-effort).
     """
-    from app.shared.cloud_backends import MinioObjectStorage
+    from app.infrastructure.storage.cloud_backends import MinioObjectStorage
 
     endpoint = os.environ["MINIO_E2E_ENDPOINT_URL"]
     access = os.environ["MINIO_E2E_ACCESS_KEY"]

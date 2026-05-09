@@ -77,7 +77,7 @@ def test_dispatch_policy_routes_payload(
 
     monkeypatch.setenv("FILE_SOURCE_S3_THRESHOLD_BYTES", str(threshold))
     with _patched_settings(policy), \
-         patch("app.shared.cloud_backends.get_runtime_object_storage",
+         patch("app.infrastructure.storage.cloud_backends.get_runtime_object_storage",
                return_value=fake_storage):
         out = dispatch_blob_storage("file_abc", raw, "f.csv", logger=fake_logger)
 
@@ -114,7 +114,7 @@ def test_dispatch_object_storage_policy_reraises_upload_exception(
 
     fake_storage.upload_bytes.side_effect = RuntimeError("S3 down")
     with _patched_settings("object_storage"), \
-         patch("app.shared.cloud_backends.get_runtime_object_storage",
+         patch("app.infrastructure.storage.cloud_backends.get_runtime_object_storage",
                return_value=fake_storage):
         with pytest.raises(RuntimeError, match="S3 down"):
             dispatch_blob_storage("file_z", b"data", "f.csv", logger=fake_logger)
@@ -134,7 +134,7 @@ def test_dispatch_uses_injected_logger_not_global(fake_storage):
     log_b = MagicMock()
 
     with _patched_settings("object_storage"), \
-         patch("app.shared.cloud_backends.get_runtime_object_storage",
+         patch("app.infrastructure.storage.cloud_backends.get_runtime_object_storage",
                return_value=fake_storage):
         dispatch_blob_storage("file_a", b"x", "a.csv", logger=log_a)
         dispatch_blob_storage("file_b", b"y", "b.csv", logger=log_b)
@@ -163,7 +163,7 @@ def test_file_source_service_dispatch_facade_delegates_to_module_function(
 
     raw = b"data" * 10
     with _patched_settings("db"), \
-         patch("app.shared.cloud_backends.get_runtime_object_storage",
+         patch("app.infrastructure.storage.cloud_backends.get_runtime_object_storage",
                return_value=fake_storage):
         out = svc._dispatch_blob_storage("file_w", raw, "w.csv")
 
@@ -183,7 +183,7 @@ def test_dispatch_uses_storage_key_id_when_provided(fake_logger, fake_storage):
 
     raw = b"shared blob bytes" * 10
     with _patched_settings("object_storage"), \
-         patch("app.shared.cloud_backends.get_runtime_object_storage",
+         patch("app.infrastructure.storage.cloud_backends.get_runtime_object_storage",
                return_value=fake_storage):
         out = dispatch_blob_storage(
             "batch_abc", raw, "multi.gpkg",
@@ -204,7 +204,7 @@ def test_dispatch_storage_key_id_none_falls_back_to_file_id(
 
     raw = b"single file bytes"
     with _patched_settings("object_storage"), \
-         patch("app.shared.cloud_backends.get_runtime_object_storage",
+         patch("app.infrastructure.storage.cloud_backends.get_runtime_object_storage",
                return_value=fake_storage):
         out = dispatch_blob_storage(
             "file_single", raw, "single.csv",

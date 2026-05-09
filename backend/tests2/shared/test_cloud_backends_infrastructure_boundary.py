@@ -13,6 +13,8 @@ pytestmark = [pytest.mark.unit, pytest.mark.shared, pytest.mark.contract]
 
 _BACKEND_ROOT = Path(__file__).resolve().parent.parent.parent
 _APP_ROOT = _BACKEND_ROOT / "app"
+_TESTS_ROOT = _BACKEND_ROOT / "tests2"
+_LEGACY_MODULE = "app.shared.cloud_backends"
 
 
 def _rel(path: Path) -> str:
@@ -24,29 +26,26 @@ def _imports_legacy_cloud_backends(path: Path) -> bool:
     for node in ast.walk(tree):
         if isinstance(node, ast.ImportFrom):
             module = node.module or ""
-            if module == "app.shared.cloud_backends":
+            if module == _LEGACY_MODULE:
                 return True
             if module == "app.shared" and any(
                 alias.name == "cloud_backends" for alias in node.names
             ):
                 return True
         if isinstance(node, ast.Import):
-            if any(alias.name == "app.shared.cloud_backends" for alias in node.names):
+            if any(alias.name == _LEGACY_MODULE for alias in node.names):
                 return True
     return False
 
 
-def test_backend_runtime_does_not_import_shared_cloud_backends() -> None:
+def test_backend_runtime_does_not_import_legacy_shared_cloud_backends() -> None:
     """Runtime modules must use ``app.infrastructure.storage.cloud_backends``.
 
-    ``app.shared.cloud_backends`` is intentionally kept as a compatibility alias
-    for older tests and external imports, not for new backend runtime code.
+    The historical ``app.shared.cloud_backends`` path is forbidden for backend
+    runtime code.
     """
-    legacy_shim = _APP_ROOT / "shared" / "cloud_backends.py"
     offenders = []
     for path in _APP_ROOT.rglob("*.py"):
-        if path == legacy_shim:
-            continue
         try:
             if _imports_legacy_cloud_backends(path):
                 offenders.append(_rel(path))
@@ -55,8 +54,14 @@ def test_backend_runtime_does_not_import_shared_cloud_backends() -> None:
     assert offenders == []
 
 
-def test_shared_cloud_backends_is_module_alias_shim() -> None:
-    import app.infrastructure.storage.cloud_backends as infra_cloud_backends
-    import app.shared.cloud_backends as shared_cloud_backends
-
-    assert shared_cloud_backends is infra_cloud_backends
+def test_backend_tests_do_not_patch_or_import_legacy_shared_cloud_backends() -> None:
+    """Tests must patch the infrastructure module, not the legacy shared path."""
+    this_file = Path(__file__).resolve()
+    offenders = []
+    for path in _TESTS_ROOT.rglob("*.py"):
+        if path.resolve() == this_file:
+            continue
+        text = path.read_text(encoding="utf-8")
+        if _LEGACY_MODULE in text or "from app.shared import cloud_backends" in text:
+            offenders.append(_rel(path))
+    assert offenders == []

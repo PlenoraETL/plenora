@@ -293,7 +293,7 @@ def test_read_blob_from_s3_downloads_and_cleans_temp(monkeypatch, tmp_path):
 
     fake_module = MagicMock()
     fake_module.get_runtime_object_storage.return_value = FakeStorage()
-    monkeypatch.setitem(sys.modules, "app.shared.cloud_backends", fake_module)
+    monkeypatch.setitem(sys.modules, "app.infrastructure.storage.cloud_backends", fake_module)
     monkeypatch.setitem(
         sys.modules, "app.infrastructure.storage.cloud_backends", fake_module
     )
@@ -389,7 +389,7 @@ def test_read_blob_from_s3_cleanup_temp_on_download_exception(monkeypatch):
 
     fake_module = MagicMock()
     fake_module.get_runtime_object_storage.return_value = FakeStorage()
-    monkeypatch.setitem(sys.modules, "app.shared.cloud_backends", fake_module)
+    monkeypatch.setitem(sys.modules, "app.infrastructure.storage.cloud_backends", fake_module)
     monkeypatch.setitem(
         sys.modules, "app.infrastructure.storage.cloud_backends", fake_module
     )

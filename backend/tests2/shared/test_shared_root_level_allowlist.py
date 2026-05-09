@@ -19,7 +19,6 @@ _SHARED_DIR = Path(__file__).parents[2] / "app" / "shared"
 # Engine-specific code belongs in the engine subpackages above.
 _ALLOWED_ROOT_MODULES: frozenset[str] = frozenset(
     {
-        "api_utils",          # generic FastAPI helpers (response shaping, pagination)
         "async_http",         # thin httpx async wrapper used across domains
         "request_utils",      # request context extraction helpers
         "async_user_recheck", # async per-request permission re-validation helper
@@ -34,20 +33,16 @@ _ALLOWED_ROOT_MODULES: frozenset[str] = frozenset(
         "password_hashing",   # bcrypt password helpers
         "token_blacklist",    # JWT revocation store
         "upload_guards",      # upload size / MIME type enforcement
-        "cloud_backends",          # compatibility alias for infrastructure storage
         "file_helpers",            # pandas-backed file inspection helpers
         "memory_guard",            # per-tenant memory allocation guard
         "storage_compensation",    # object-storage failure compensation helpers
-        "storage_reconciliation",  # compatibility alias for resources reconciliation
         "columns_metadata",       # column-level metadata helpers
-        "models",                 # shared Pydantic base models
         "clock",                       # wall-clock abstraction for testability
         "idempotency",                 # idempotency key helpers
     }
 )
 
 _ROOT_MODULE_CLASSIFICATIONS: dict[str, str] = {
-    "api_utils": "MOVE_TO_CONNECTIONS_CANDIDATE",
     "async_http": "MOVE_TO_CONNECTIONS_CANDIDATE",
     "request_utils": "KEEP_ROOT_CROSS_CUTTING",
     "async_user_recheck": "MOVE_TO_SECURITY_PACKAGE_LATER",
@@ -62,13 +57,10 @@ _ROOT_MODULE_CLASSIFICATIONS: dict[str, str] = {
     "password_hashing": "MOVE_TO_SECURITY_PACKAGE_LATER",
     "token_blacklist": "MOVE_TO_SECURITY_PACKAGE_LATER",
     "upload_guards": "MOVE_TO_SECURITY_PACKAGE_LATER",
-    "cloud_backends": "KEEP_ROOT_CROSS_CUTTING",
     "file_helpers": "HEAVY_ROOT_UTILITY",
     "memory_guard": "MOVE_TO_EXECUTION_CANDIDATE",
     "storage_compensation": "MOVE_TO_RESOURCES_CANDIDATE",
-    "storage_reconciliation": "MOVE_TO_RESOURCES_CANDIDATE",
     "columns_metadata": "MOVE_TO_RESOURCES_CANDIDATE",
-    "models": "HEAVY_ROOT_UTILITY",
     "clock": "KEEP_ROOT_CROSS_CUTTING",
     "idempotency": "MOVE_TO_EXECUTION_CANDIDATE",
 }

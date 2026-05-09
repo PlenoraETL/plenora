@@ -34,22 +34,22 @@ class _AliasCase:
 
 
 def _get_urby_loopback_helper() -> Any:
-    from app.shared import api_utils
-    return api_utils._warn_urby_loopback_alias_once
+    from app.core.security import outbound_url
+    return outbound_url._warn_urby_loopback_alias_once
 
 
 def _invoke_urby_loopback() -> Any:
-    from app.shared import api_utils
-    return api_utils._warn_urby_loopback_alias_once()
+    from app.core.security import outbound_url
+    return outbound_url._warn_urby_loopback_alias_once()
 
 
 def _get_object_storage_helper() -> Any:
-    from app.shared import cloud_backends
+    from app.infrastructure.storage import cloud_backends
     return cloud_backends._warn_get_object_storage_deprecated_once
 
 
 def _invoke_object_storage() -> Any:
-    from app.shared import cloud_backends
+    from app.infrastructure.storage import cloud_backends
     fake_storage = object()
     with patch.object(
         cloud_backends, "get_runtime_object_storage",
@@ -168,23 +168,18 @@ def test_each_alias_has_an_independent_cache():
     assert "get_object_storage" in str(record[0].message)
 
 
-def test_oauth2_deprecated_wrappers_are_tombstoned():
-    """R-23 OAuth wrappers were removed after migrating internal callers."""
-    from app.shared import api_utils
+def test_api_utils_compat_module_is_tombstoned():
+    """R-23/R-24 API utility shim was removed after migrating callers."""
+    from pathlib import Path
 
-    removed = (
-        "_warn_get_oauth2_token_deprecated_once",
-        "_warn_get_oauth2_cc_token_deprecated_once",
-        "get_oauth2_token",
-        "get_oauth2_client_credentials_token",
-    )
-    for name in removed:
-        assert not hasattr(api_utils, name), f"{name} must not be resurrected"
+    backend_root = Path(__file__).resolve().parents[2]
+
+    assert not (backend_root / "app" / "shared" / "api_utils.py").exists()
 
 
 def test_prepare_headers_uses_canonical_cached_oauth2_token():
     """OAuth auth headers must use the canonical cache helper directly."""
-    from app.shared import api_utils
+    from app.shared.connections import oauth
 
     calls: list[dict[str, Any]] = []
 
@@ -192,14 +187,14 @@ def test_prepare_headers_uses_canonical_cached_oauth2_token():
         calls.append(dict(auth))
         return "tok-1"
 
-    with patch.object(api_utils, "get_cached_oauth2_token", side_effect=_fake_cached):
-        headers = api_utils.prepare_headers(
-            {
-                "type": "oauth2_client_credentials",
-                "token_url": "https://auth.example/token",
-                "client_id": "client-1",
-            }
-        )
+    headers = oauth.prepare_headers(
+        {
+            "type": "oauth2_client_credentials",
+            "token_url": "https://auth.example/token",
+            "client_id": "client-1",
+        },
+        oauth2_token_getter=_fake_cached,
+    )
 
     assert headers["Authorization"] == "Bearer tok-1"
     assert calls == [

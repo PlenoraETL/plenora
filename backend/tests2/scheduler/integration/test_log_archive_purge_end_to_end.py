@@ -304,7 +304,7 @@ def test_end_to_end_archive_and_purge_logs_real_pg(test_marker):
     with patch(
         "app.config.settings", new=_settings_ns(key_prefix),
     ), patch(
-        "app.shared.cloud_backends.get_log_archive_storage",
+        "app.infrastructure.storage.cloud_backends.get_log_archive_storage",
         return_value=fake_storage,
     ):
         scheduler._archive_old_logs()
@@ -374,7 +374,7 @@ def test_end_to_end_archive_and_purge_audit_actions_real_pg(test_marker):
     with patch(
         "app.config.settings", new=_settings_ns(key_prefix),
     ), patch(
-        "app.shared.cloud_backends.get_log_archive_storage",
+        "app.infrastructure.storage.cloud_backends.get_log_archive_storage",
         return_value=fake_storage,
     ):
         scheduler._archive_old_audit_actions()
@@ -475,7 +475,7 @@ def test_re_run_same_day_idempotent_empty_batch(test_marker):
     with patch(
         "app.config.settings", new=settings_ns,
     ), patch(
-        "app.shared.cloud_backends.get_log_archive_storage",
+        "app.infrastructure.storage.cloud_backends.get_log_archive_storage",
         return_value=fake_storage,
     ):
         scheduler._archive_old_logs()
@@ -491,7 +491,7 @@ def test_re_run_same_day_idempotent_empty_batch(test_marker):
     with patch(
         "app.config.settings", new=settings_ns,
     ), patch(
-        "app.shared.cloud_backends.get_log_archive_storage",
+        "app.infrastructure.storage.cloud_backends.get_log_archive_storage",
         return_value=fake_storage,
     ):
         scheduler._archive_old_logs()
@@ -546,7 +546,7 @@ def test_upload_failure_leaves_rows_in_db_and_no_observability_log(
     with patch(
         "app.config.settings", new=_settings_ns(key_prefix),
     ), patch(
-        "app.shared.cloud_backends.get_log_archive_storage",
+        "app.infrastructure.storage.cloud_backends.get_log_archive_storage",
         return_value=fake_storage,
     ):
         # (a) must not raise

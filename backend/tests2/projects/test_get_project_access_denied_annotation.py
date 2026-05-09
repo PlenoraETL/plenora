@@ -11,7 +11,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from app.core.projects.router import get_project
-from app.shared.models import CanvasState, Edge, Node
+from app.core.projects.canvas_models import CanvasState, Edge, Node
 
 
 pytestmark = [pytest.mark.unit, pytest.mark.security, pytest.mark.contract]

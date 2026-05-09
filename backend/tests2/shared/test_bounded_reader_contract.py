@@ -251,7 +251,7 @@ _FORBIDDEN_TOPLEVEL_IMPORTS = {
     # HTTP / cloud SDKs
     "boto3",
     "requests",
-    "app.shared.cloud_backends",
+    "app.infrastructure.storage.cloud_backends",
     # Heavy data
     "pandas",
     "geopandas",

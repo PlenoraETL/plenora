@@ -143,7 +143,7 @@ def test_full_artifact_override_non_verifica_capability(monkeypatch):
     """
     # Patch di object_storage_enabled() per assicurare che NON venga
     # nemmeno chiamato (questa fn deve essere puramente sintattica).
-    import app.shared.cloud_backends as _cb
+    import app.infrastructure.storage.cloud_backends as _cb
 
     called = {"flag": False}
 

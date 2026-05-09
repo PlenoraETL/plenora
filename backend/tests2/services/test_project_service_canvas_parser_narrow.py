@@ -181,7 +181,7 @@ def test_assert_no_lineage_cycle_skips_malformed_canvas_in_sources(monkeypatch):
     [] per quel pid (con warning) senza mascherare errori inattesi."""
     from app.core.projects import db as project_db
     from app.core.projects.service import ProjectService
-    from app.shared.models import CanvasState
+    from app.core.projects.canvas_models import CanvasState
 
     def fake_get_project_row(pid, group_id=None):
         if pid == "other-proj":
@@ -213,7 +213,7 @@ def test_assert_no_lineage_cycle_propagates_non_parse_exceptions(monkeypatch):
     l'eccezione propaga fail-loud."""
     from app.core.projects import db as project_db
     from app.core.projects.service import ProjectService
-    from app.shared.models import CanvasState
+    from app.core.projects.canvas_models import CanvasState
 
     # Il current-proj ha un project_source che forza get_sources a visitare other-proj
     new_canvas = MagicMock(spec=CanvasState)
