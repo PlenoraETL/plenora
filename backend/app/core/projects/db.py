@@ -227,16 +227,24 @@ class ProjectRepository:
         else:
             row = fetchone("SELECT * FROM projects WHERE id = %s", (project_id,))
         if row and row.get("canvas"):
-            try:
-                row["canvas"] = json.loads(row["canvas"])
-            except (json.JSONDecodeError, TypeError) as exc:
-                logger.warning(
-                    "Corrupted canvas in DB for project %s: %s. "
-                    "Falling back to empty canvas.",
-                    project_id,
-                    exc,
-                )
-                row["canvas"] = {"nodes": [], "edges": []}
+            canvas = row["canvas"]
+            # psycopg2 auto-deserializes JSONB columns into Python dicts after
+            # the custom JSONB_AS_TEXT typecaster was removed by the
+            # "Harden PostgreSQL boundary" commit. Older rows persisted as
+            # text still come back as str. Accept both transparently.
+            if isinstance(canvas, (dict, list)):
+                row["canvas"] = canvas
+            else:
+                try:
+                    row["canvas"] = json.loads(canvas)
+                except (json.JSONDecodeError, TypeError) as exc:
+                    logger.warning(
+                        "Corrupted canvas in DB for project %s: %s. "
+                        "Falling back to empty canvas.",
+                        project_id,
+                        exc,
+                    )
+                    row["canvas"] = {"nodes": [], "edges": []}
         return ProjectDetailRow.from_mapping(row) if row else None
 
     def list_projects(

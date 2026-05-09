@@ -36,7 +36,7 @@ from app.core.scheduler.models import (
 router = APIRouter(prefix="/schedules", tags=["schedules"])
 
 
-def _as_aware_datetime(value):
+def _as_aware_datetime(value: object) -> "datetime":
     from datetime import datetime, timezone
 
     if isinstance(value, datetime):

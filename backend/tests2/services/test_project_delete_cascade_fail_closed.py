@@ -97,7 +97,12 @@ def _patch_cascade(
             "app.core.scheduler.schedule_service.ScheduleService",
             return_value=fake_schedule_svc
         ), patch(
-            "app.core.intermediate.db.delete_all_runs_for_canvas",
+            # `app.core.intermediate.cleanup` imports `delete_all_runs_for_canvas`
+            # from `app.core.intermediate.retention`, so the local name to patch
+            # is the one bound on `cleanup` (the call site) — patching the
+            # `db` module would target a different copy of the symbol that
+            # the cleanup module never reads.
+            "app.core.intermediate.cleanup.delete_all_runs_for_canvas",
             **intermediate_patch
         ), patch(
             "app.core.results.cleanup.delete_results_for_project",

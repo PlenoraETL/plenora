@@ -37,7 +37,7 @@ from app.core.artifacts import (
 )
 
 
-def _load_request_data(request, current_user):
+def _load_request_data(request, current_user) -> dict:
     """Carica i dati sorgente per validate/estimate enrichment.
 
     Dispatcher 2-vie:
@@ -123,7 +123,7 @@ def _check_api_connection_visible(api_id: str, current_user: CurrentUser) -> dic
     return connection
 
 
-def _check_project_ownership(project_id: str, current_user: CurrentUser):
+def _check_project_ownership(project_id: str, current_user: CurrentUser) -> dict:
     """Verifica che il progetto appartenga al gruppo dell'utente.
 
     Ritorna i metadata del progetto.

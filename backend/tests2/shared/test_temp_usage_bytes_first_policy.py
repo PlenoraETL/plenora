@@ -341,17 +341,9 @@ _TEMP_INVENTORY: dict[tuple[str, int], tuple[str, str]] = {
     # The line is no longer a tempfile call site; the inventory
     # ratchet (`test_temp_materialization_inventory_is_complete`)
     # confirms it is no longer in the AST scan.
-    ("app/core/files/service.py", 571): (
-        "PATH_REQUIRED_FILE",
-        "FileSourceService._temp_file_for caller contract returns "
-        "Path for SHP/GDB downstream consumers (fiona/geopandas "
-        "read_file). Bytes API not available in those drivers. "
-        "Post BE-GO-READY-RESOURCE-ENGINE-024: this entry replaces "
-        "the retired `app/services/file_blob_materialization.py` "
-        "helper -- the SHP/GDB extraction lives inline in the "
-        "service now, fed by the Resource Engine `mode='bytes'` "
-        "fetch via `self._get_blob_from_db`.",
-    ),
+    # Removed: ("app/core/files/service.py", 571) — Batch 092/093 moved
+    # the SHP/GDB tempfile materialization into `app/core/files/source_blob.py`
+    # (inventoried below). The original line is no longer a tempfile call site.
     ("app/core/files/multi_layer_upload.py", 97): (
         "STAGING_INGESTION",
         "Multi-layer file probe: writes HTTP-body chunks to disk "

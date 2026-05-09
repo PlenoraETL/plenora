@@ -305,6 +305,18 @@ def pytest_collection_modifyitems(config, items):
         if not is_integration_file:
             continue
 
+        # Tag every test under tests2/integration/ with the canonical
+        # `integration` marker. The repo-wide autouse fixture
+        # `_stub_pg_connection_execute` (in `tests2/conftest.py`) replaces
+        # `app.db.pg_connection.execute` with a no-op for any test that
+        # does NOT carry this marker, to shield unit tests from psycopg2
+        # crashes. Without this line the integration suite silently runs
+        # against the no-op stub, so cleanup DELETEs (group cascade,
+        # api_connections, ...) report rowcount=0 even though the rows
+        # exist — which then breaks the foreign-key teardown of the
+        # group itself.
+        item.add_marker(pytest.mark.integration)
+
         if filename in _TIER1_INSTALL_VALIDATION_FILES:
             item.add_marker(pytest.mark.install_validation)
         else:

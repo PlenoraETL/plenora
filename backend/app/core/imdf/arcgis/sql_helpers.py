@@ -4,17 +4,14 @@ Cluster SQL_HELPERS — quoting valori SQL ArcGIS-safe + chunking generico
 + batch-resolution OBJECTID via business-key.
 """
 
-import importlib
 from typing import Dict, List, Sequence, Tuple
 
+# ADR-0023 accepted residual: IMDF publish keeps private wrapper names
+# while the generic ArcGIS SQL helpers live in `app.core.features`.
+# Documented in `_KNOWN_VIOLATIONS` of the boundary guard tests.
+from app.core.features import arcgis_sql_helpers as _arcgis_sql_helpers
 from app.shared.connections.arcgis_connection import ArcGISConnectionInfo
 from app.shared.connections.arcgis_provider import ArcGISReadProviderProtocol
-
-
-def _arcgis_sql_helpers():
-    """Lazy import: BE-GO-READY-ARCH-057 forbids `from app.core.features`
-    imports inside `app.core.imdf`. Resolved dynamically via importlib."""
-    return importlib.import_module("app.core.features.arcgis_sql_helpers")
 
 
 def _quote_sql_value(v) -> str:
@@ -32,7 +29,7 @@ def _quote_sql_value(v) -> str:
     `isinstance(v, (int, float))` NON riconosce, con il risultato di passarli
     per il branch string producendo letterali tipo 'np.int64(123)'.
     """
-    return _arcgis_sql_helpers().quote_sql_value(v)
+    return _arcgis_sql_helpers.quote_sql_value(v)
 
 
 def _chunked(seq, size):
@@ -42,7 +39,7 @@ def _chunked(seq, size):
         ValueError: se size <= 0 (eviterebbe un infinite loop con buf
             che non raggiunge mai la condizione `len(buf) >= size`).
     """
-    yield from _arcgis_sql_helpers().chunked(seq, size)
+    yield from _arcgis_sql_helpers.chunked(seq, size)
 
 
 def _query_oid_by_key(
@@ -64,7 +61,7 @@ def _query_oid_by_key(
     Thin IMDF adapter for publish call sites. ArcGIS mechanics belong in the
     canonical provider method.
     """
-    return _arcgis_sql_helpers().query_oid_by_key(
+    return _arcgis_sql_helpers.query_oid_by_key(
         client,
         conn,
         layer_url,
