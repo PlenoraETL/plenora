@@ -83,7 +83,7 @@ def test_value_error_str_e_lock_exists_in_catalog_test():
 #   (deve distinguere "user did set" vs "default" ⇒ os.getenv diretto).
 # - `app/db/pg_connection.py`: DB connection bootstrap (DATABASE_URL
 #   fail-fast).
-# - `app/shared/cloud_backends.py`: boot-time storage validation;
+# - `app/infrastructure/storage/cloud_backends.py`: boot-time storage validation;
 #   `validate_storage_config` deve distinguere "user explicitly set"
 #   vs "Settings default" — Settings.get swallows malformed input.
 #   Documentato come eccezione esplicita ADR-0021.
@@ -111,7 +111,7 @@ ALLOWLIST_GETENV_COUNTS: Dict[str, int] = {
     "app/startup_validation.py": 2,
     "app/db/migrations_runner.py": 1,
     "app/db/pg_connection.py": 3,
-    "app/shared/cloud_backends.py": 30,
+    "app/infrastructure/storage/cloud_backends.py": 30,
     "app/shared/crypto.py": 4,
     "app/shared/jwt_token.py": 3,
     "app/shared/request_utils.py": 1,

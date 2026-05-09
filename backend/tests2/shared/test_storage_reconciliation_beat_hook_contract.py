@@ -43,7 +43,7 @@ def test_settings_defaults_expose_storage_reconcile_tunables():
     [(1, 60), (2, 120), (3, 240), (4, 480)],
 )
 def test_compute_next_retry_at_backoff_growth(attempts, expected_seconds):
-    from app.shared.storage_reconciliation import compute_next_retry_at
+    from app.core.resources.storage_reconciliation import compute_next_retry_at
 
     now = datetime(2026, 5, 4, 12, 0, 0, tzinfo=timezone.utc)
     assert compute_next_retry_at(attempts, base_seconds=60, now=now) == (
@@ -52,7 +52,7 @@ def test_compute_next_retry_at_backoff_growth(attempts, expected_seconds):
 
 
 def test_compute_next_retry_at_capped_at_24h_or_2_8():
-    from app.shared.storage_reconciliation import compute_next_retry_at
+    from app.core.resources.storage_reconciliation import compute_next_retry_at
 
     now = datetime(2026, 5, 4, 12, 0, 0, tzinfo=timezone.utc)
     out_20 = compute_next_retry_at(20, base_seconds=60, now=now)
@@ -70,7 +70,7 @@ def test_compute_next_retry_at_capped_at_24h_or_2_8():
     ],
 )
 def test_compute_next_retry_at_rejects_invalid_args(kwargs):
-    from app.shared.storage_reconciliation import compute_next_retry_at
+    from app.core.resources.storage_reconciliation import compute_next_retry_at
 
     with pytest.raises(ValueError):
         compute_next_retry_at(**kwargs)
@@ -96,7 +96,7 @@ def _capture_fetchall(monkeypatch, return_rows):
 def test_fetch_due_pending_deletes_filters_pending_delete_due():
     """SQL must filter state='pending' AND operation='delete' AND
     next_retry_at IS NULL OR <= now."""
-    from app.shared import storage_reconciliation as recon
+    from app.core.resources import storage_reconciliation as recon
 
     captured = {}
     rows = []
@@ -118,7 +118,7 @@ def test_fetch_due_pending_deletes_filters_pending_delete_due():
 
 def test_fetch_due_pending_deletes_returns_typed_rows():
     """Maps DB rows to PendingReconciliationRow with expected fields."""
-    from app.shared import storage_reconciliation as recon
+    from app.core.resources import storage_reconciliation as recon
 
     db_rows = [
         {
@@ -151,7 +151,7 @@ def test_fetch_due_pending_deletes_returns_typed_rows():
 
 @pytest.mark.parametrize("limit", [0, -1])
 def test_fetch_due_pending_deletes_zero_or_negative_limit_raises(limit):
-    from app.shared import storage_reconciliation as recon
+    from app.core.resources import storage_reconciliation as recon
 
     with pytest.raises(ValueError):
         recon.fetch_due_pending_deletes(limit=limit)
@@ -159,7 +159,7 @@ def test_fetch_due_pending_deletes_zero_or_negative_limit_raises(limit):
 
 def test_fetch_due_pending_deletes_swallows_db_error_returns_empty():
     """Best-effort: DB error → log warning, return [] (don't crash beat)."""
-    from app.shared import storage_reconciliation as recon
+    from app.core.resources import storage_reconciliation as recon
 
     def _raise(sql, params=()):
         raise RuntimeError("DB unreachable")
@@ -172,7 +172,7 @@ def test_fetch_due_pending_deletes_swallows_db_error_returns_empty():
 
 def test_fetch_due_pending_deletes_handles_tuple_rows():
     """Tolerates non-dict cursor flavors."""
-    from app.shared import storage_reconciliation as recon
+    from app.core.resources import storage_reconciliation as recon
 
     db_rows = [
         ("rec-tuple", "file_source", "key/abc", "delete", 2),
@@ -205,7 +205,7 @@ def _capture_pg_execute(monkeypatch):
 
 
 def test_mark_lost_issues_update_to_state_lost(monkeypatch):
-    from app.shared.storage_reconciliation import mark_lost
+    from app.core.resources.storage_reconciliation import mark_lost
 
     calls = _capture_pg_execute(monkeypatch)
     mark_lost("rec-99", error="max_attempts_exceeded (5)")
@@ -218,7 +218,7 @@ def test_mark_lost_issues_update_to_state_lost(monkeypatch):
 
 
 def test_mark_lost_swallows_exception(monkeypatch):
-    from app.shared.storage_reconciliation import mark_lost
+    from app.core.resources.storage_reconciliation import mark_lost
 
     def _raise(*a, **kw):
         raise RuntimeError("DB unreachable")
@@ -267,7 +267,7 @@ def _delete_row(
     storage_key="key/x",
     attempts=0,
 ):
-    from app.shared.storage_reconciliation import PendingReconciliationRow
+    from app.core.resources.storage_reconciliation import PendingReconciliationRow
 
     return PendingReconciliationRow(
         id=id,
@@ -296,19 +296,19 @@ def _run_reconcile_storage(
         return outcome
 
     with patch("app.config.settings", new=settings or _settings_stub()), patch(
-        "app.shared.storage_reconciliation.fetch_due_pending_deletes",
+        "app.core.resources.storage_reconciliation.fetch_due_pending_deletes",
         lambda **kw: rows,
     ), patch(
         "app.shared.storage_compensation.compensating_delete",
         _comp,
     ), patch(
-        "app.shared.storage_reconciliation.mark_orphan_deleted",
+        "app.core.resources.storage_reconciliation.mark_orphan_deleted",
         lambda rid: calls["orphan"].append(rid),
     ), patch(
-        "app.shared.storage_reconciliation.mark_failed_attempt",
+        "app.core.resources.storage_reconciliation.mark_failed_attempt",
         lambda rid, **kw: calls["failed"].append((rid, kw)),
     ), patch(
-        "app.shared.storage_reconciliation.mark_lost",
+        "app.core.resources.storage_reconciliation.mark_lost",
         lambda rid, **kw: calls["lost"].append((rid, kw)),
     ):
         sched._reconcile_storage()
@@ -329,7 +329,7 @@ def test_reconcile_storage_skips_when_interval_zero(monkeypatch):
 
     with patch("app.config.settings", new=_settings_stub(STORAGE_RECONCILE_INTERVAL_SECONDS=0)):
         with patch(
-            "app.shared.storage_reconciliation.fetch_due_pending_deletes", _fetch
+            "app.core.resources.storage_reconciliation.fetch_due_pending_deletes", _fetch
         ):
             sched._reconcile_storage()
 
@@ -351,7 +351,7 @@ def test_reconcile_storage_skips_when_gate_not_elapsed(monkeypatch):
 
     with patch("app.config.settings", new=_settings_stub()):
         with patch(
-            "app.shared.storage_reconciliation.fetch_due_pending_deletes", _fetch
+            "app.core.resources.storage_reconciliation.fetch_due_pending_deletes", _fetch
         ):
             sched._reconcile_storage()
 
@@ -367,7 +367,7 @@ def test_reconcile_storage_advances_gate_after_run(monkeypatch):
 
     with patch("app.config.settings", new=_settings_stub()):
         with patch(
-            "app.shared.storage_reconciliation.fetch_due_pending_deletes",
+            "app.core.resources.storage_reconciliation.fetch_due_pending_deletes",
             lambda **kw: [],
         ):
             sched._reconcile_storage()
@@ -441,7 +441,7 @@ def test_reconcile_storage_skips_when_batch_size_zero(monkeypatch):
     fetch_calls = []
     with patch("app.config.settings", new=_settings_stub(STORAGE_RECONCILE_BATCH_SIZE=0)):
         with patch(
-            "app.shared.storage_reconciliation.fetch_due_pending_deletes",
+            "app.core.resources.storage_reconciliation.fetch_due_pending_deletes",
             lambda **kw: fetch_calls.append(1) or [],
         ):
             sched._reconcile_storage()

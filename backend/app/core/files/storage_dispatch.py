@@ -62,7 +62,7 @@ def dispatch_blob_storage(
 
     intent_id: Optional[str] = None
     try:
-        from app.shared.storage_reconciliation import record_upload_intent
+        from app.core.resources.storage_reconciliation import record_upload_intent
 
         intent_id = record_upload_intent(
             domain="file_source",
@@ -76,7 +76,7 @@ def dispatch_blob_storage(
         )
 
     try:
-        from app.shared.cloud_backends import get_runtime_object_storage
+        from app.infrastructure.storage.cloud_backends import get_runtime_object_storage
 
         storage = get_runtime_object_storage()
         storage.upload_bytes(raw_data, storage_key)
@@ -87,7 +87,7 @@ def dispatch_blob_storage(
         )
         if intent_id is not None:
             try:
-                from app.shared.storage_reconciliation import mark_done
+                from app.core.resources.storage_reconciliation import mark_done
 
                 mark_done(intent_id)
             except Exception:

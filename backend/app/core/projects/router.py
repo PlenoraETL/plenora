@@ -13,7 +13,7 @@ from app.utils.logger import get_logger
 from app.shared import error_codes
 from app.shared.error_envelope import raise_typed_http
 from app.shared.audit_action import audit_action
-from app.shared.models import CanvasState, Node, Edge
+from app.core.projects.canvas_models import CanvasState, Node, Edge
 from app.core.projects.exceptions import (
     CanvasCorruptedError,
     ProjectCleanupPartialError,
@@ -688,7 +688,7 @@ def update_project_canvas(
                 # Mutate in-place: il canvas verra' persistito subito
                 # dopo con update_canvas. Column(BaseModel) accetta
                 # **dict via pydantic
-                from app.shared.models import Column
+                from app.core.projects.canvas_models import Column
                 result_node.columns = [Column(**c) for c in computed]
     except Exception as _ccerr:
         # Non bloccare il save se il compute fallisce (canvas malformato

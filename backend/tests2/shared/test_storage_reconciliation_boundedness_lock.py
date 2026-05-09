@@ -27,7 +27,7 @@ def _read(rel: str) -> str:
 def test_storage_reconciliation_exposes_boundedness_symbols():
     """The 4 boundedness public symbols must remain importable. A
     future refactor that drops one of them would defeat the lock."""
-    from app.shared.storage_reconciliation import (
+    from app.core.resources.storage_reconciliation import (
         compute_next_retry_at,
         count_active_by_state_domain,
         mark_lost,
@@ -43,7 +43,7 @@ def test_storage_reconciliation_state_alphabet_locked():
     """The state alphabet must include the 4 known states. Adding
     new states is allowed (Literal extension); removing one breaks
     the contract — `lost` is the sad-terminal sink."""
-    from app.shared.storage_reconciliation import ReconciliationState
+    from app.core.resources.storage_reconciliation import ReconciliationState
 
     # ReconciliationState is a typing.Literal; introspect via __args__.
     args = getattr(ReconciliationState, "__args__", ())
@@ -61,7 +61,7 @@ def test_compute_next_retry_at_caps_the_exponent():
     the exponent — otherwise a row that has been failing for days
     would schedule retries hours / years apart, accumulating in
     `pending` state forever."""
-    from app.shared.storage_reconciliation import compute_next_retry_at
+    from app.core.resources.storage_reconciliation import compute_next_retry_at
     from datetime import datetime, timezone
 
     now = datetime(2026, 5, 5, 12, 0, 0, tzinfo=timezone.utc)
@@ -94,7 +94,7 @@ def test_count_active_by_state_domain_sql_excludes_terminals():
     not "active". Locking the SQL prevents silent inclusion of
     terminals (which would mask a real backlog under a swelling
     `done` count)."""
-    src = _read("app/shared/storage_reconciliation.py")
+    src = _read("app/core/resources/storage_reconciliation.py")
     # Source-bound assertion on the SQL constant.
     assert "WHERE state IN ('pending', 'lost')" in src, (
         "count_active_by_state_domain SQL must filter `state IN "
@@ -106,7 +106,7 @@ def test_prune_terminal_older_than_sql_only_touches_terminals():
     """The prune DELETE must restrict to `done` / `orphan_deleted` —
     pruning `pending` would lose work in flight; pruning `lost`
     would erase the forensic trail operators rely on."""
-    src = _read("app/shared/storage_reconciliation.py")
+    src = _read("app/core/resources/storage_reconciliation.py")
     # The SQL is split across multiple lines with whitespace; check
     # for the canonical fragment.
     assert "state IN ('done', 'orphan_deleted')" in src, (
@@ -264,7 +264,7 @@ def test_storage_reconcile_terminal_retention_days_is_finite():
 def test_log_event_names_locked_in_source():
     """Ops dashboards/alerts filter on these exact event names. A
     rename here is a breaking change to the operational contract."""
-    src_recon = _read("app/shared/storage_reconciliation.py")
+    src_recon = _read("app/core/resources/storage_reconciliation.py")
     src_beat = _read("workers/beat_scheduler.py")
 
     # Per-row outcomes (boundary).

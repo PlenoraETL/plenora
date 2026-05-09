@@ -4,7 +4,7 @@ Rendering delle clausole FROM/JOIN per QueryGenerator.
 
 from typing import Callable, List
 
-from app.shared.models import Edge, Node
+from app.core.projects.canvas_models import Edge, Node
 from app.db.sql_translator import sql_translator
 
 

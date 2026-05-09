@@ -36,10 +36,10 @@ def _body_shape(fn: Callable[..., object]) -> tuple[str, ...]:
     [
         (
             service_discovery._list_user_folders,
-            {"list_folders", "get", "strip", "lower", "warning"},
+            {"get", "list_user_folders", "strip", "lower", "warning"},
             ("Expr", "Try"),
         ),
-        (service_discovery._ensure_folder, {"ensure_folder"}, ("Expr", "If", "Return")),
+        (service_discovery._ensure_folder, {"ensure_folder"}, ("Expr", "Return")),
         (
             service_discovery._is_service_name_available,
             {"is_service_name_available", "warning"},

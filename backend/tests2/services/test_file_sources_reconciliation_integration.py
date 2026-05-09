@@ -100,7 +100,7 @@ def test_last_reference_records_pending_inside_transaction():
     mark_failed_calls = []
 
     def _spy_record_pending(cur, **kwargs):
-        from app.shared.storage_reconciliation import ReconciliationEntryRef
+        from app.core.resources.storage_reconciliation import ReconciliationEntryRef
         record_pending_calls.append((cur, kwargs))
         return ReconciliationEntryRef(
             id="aaaa1111-bbbb-2222-cccc-333344445555",
@@ -112,9 +112,9 @@ def test_last_reference_records_pending_inside_transaction():
     with patcher, \
          patch("app.shared.cloud_backends.object_storage_enabled", return_value=True), \
          patch("app.shared.cloud_backends.get_runtime_object_storage", return_value=MagicMock(delete=MagicMock())), \
-         patch("app.shared.storage_reconciliation.record_pending", side_effect=_spy_record_pending), \
-         patch("app.shared.storage_reconciliation.mark_done", side_effect=lambda rid: mark_done_calls.append(rid)), \
-         patch("app.shared.storage_reconciliation.mark_failed_attempt", side_effect=lambda rid, **kw: mark_failed_calls.append((rid, kw))):
+         patch("app.core.resources.storage_reconciliation.record_pending", side_effect=_spy_record_pending), \
+         patch("app.core.resources.storage_reconciliation.mark_done", side_effect=lambda rid: mark_done_calls.append(rid)), \
+         patch("app.core.resources.storage_reconciliation.mark_failed_attempt", side_effect=lambda rid, **kw: mark_failed_calls.append((rid, kw))):
         out = fs_db.delete_file_source("file_abc")
 
     assert out is True
@@ -153,8 +153,8 @@ def test_compensating_delete_ok_marks_done():
     with patcher, \
          patch("app.shared.cloud_backends.object_storage_enabled", return_value=True), \
          patch("app.shared.cloud_backends.get_runtime_object_storage", return_value=MagicMock(delete=MagicMock())), \
-         patch("app.shared.storage_reconciliation.mark_done", side_effect=lambda rid: mark_done_calls.append(rid)), \
-         patch("app.shared.storage_reconciliation.mark_failed_attempt", side_effect=lambda rid, **kw: mark_failed_calls.append((rid, kw))):
+         patch("app.core.resources.storage_reconciliation.mark_done", side_effect=lambda rid: mark_done_calls.append(rid)), \
+         patch("app.core.resources.storage_reconciliation.mark_failed_attempt", side_effect=lambda rid, **kw: mark_failed_calls.append((rid, kw))):
         fs_db.delete_file_source("file_abc")
 
     assert mark_done_calls == ["rec-OK"]
@@ -186,8 +186,8 @@ def test_compensating_delete_failed_marks_failed_attempt_and_returns_true():
     with patcher, \
          patch("app.shared.cloud_backends.object_storage_enabled", return_value=True), \
          patch("app.shared.cloud_backends.get_runtime_object_storage", return_value=failing_storage), \
-         patch("app.shared.storage_reconciliation.mark_done", side_effect=lambda rid: mark_done_calls.append(rid)), \
-         patch("app.shared.storage_reconciliation.mark_failed_attempt", side_effect=lambda rid, **kw: mark_failed_calls.append((rid, kw))):
+         patch("app.core.resources.storage_reconciliation.mark_done", side_effect=lambda rid: mark_done_calls.append(rid)), \
+         patch("app.core.resources.storage_reconciliation.mark_failed_attempt", side_effect=lambda rid, **kw: mark_failed_calls.append((rid, kw))):
         out = fs_db.delete_file_source("file_abc")
 
     # ADR-0011: still True, the row was deleted from DB.
@@ -223,8 +223,8 @@ def test_capability_disabled_marks_done():
 
     with patcher, \
          patch("app.shared.cloud_backends.object_storage_enabled", return_value=False), \
-         patch("app.shared.storage_reconciliation.mark_done", side_effect=lambda rid: mark_done_calls.append(rid)), \
-         patch("app.shared.storage_reconciliation.mark_failed_attempt", side_effect=lambda rid, **kw: mark_failed_calls.append((rid, kw))):
+         patch("app.core.resources.storage_reconciliation.mark_done", side_effect=lambda rid: mark_done_calls.append(rid)), \
+         patch("app.core.resources.storage_reconciliation.mark_failed_attempt", side_effect=lambda rid, **kw: mark_failed_calls.append((rid, kw))):
         out = fs_db.delete_file_source("file_abc")
 
     assert out is True
@@ -256,9 +256,9 @@ def test_shared_blob_path_does_not_record_pending():
     with patcher, \
          patch("app.shared.cloud_backends.object_storage_enabled", return_value=True), \
          patch("app.shared.cloud_backends.get_runtime_object_storage", return_value=fake_storage), \
-         patch("app.shared.storage_reconciliation.record_pending", side_effect=lambda cur, **kw: record_pending_calls.append(kw)), \
-         patch("app.shared.storage_reconciliation.mark_done", side_effect=lambda rid: mark_done_calls.append(rid)), \
-         patch("app.shared.storage_reconciliation.mark_failed_attempt", side_effect=lambda rid, **kw: mark_failed_calls.append((rid, kw))):
+         patch("app.core.resources.storage_reconciliation.record_pending", side_effect=lambda cur, **kw: record_pending_calls.append(kw)), \
+         patch("app.core.resources.storage_reconciliation.mark_done", side_effect=lambda rid: mark_done_calls.append(rid)), \
+         patch("app.core.resources.storage_reconciliation.mark_failed_attempt", side_effect=lambda rid, **kw: mark_failed_calls.append((rid, kw))):
         out = fs_db.delete_file_source("file_abc")
 
     assert out is True
@@ -292,9 +292,9 @@ def test_bytea_path_does_not_record_pending():
     with patcher, \
          patch("app.shared.cloud_backends.object_storage_enabled", return_value=True), \
          patch("app.shared.cloud_backends.get_runtime_object_storage", return_value=MagicMock(delete=MagicMock())), \
-         patch("app.shared.storage_reconciliation.record_pending", side_effect=lambda cur, **kw: record_pending_calls.append(kw)), \
-         patch("app.shared.storage_reconciliation.mark_done", side_effect=lambda rid: mark_done_calls.append(rid)), \
-         patch("app.shared.storage_reconciliation.mark_failed_attempt", side_effect=lambda rid, **kw: mark_failed_calls.append((rid, kw))):
+         patch("app.core.resources.storage_reconciliation.record_pending", side_effect=lambda cur, **kw: record_pending_calls.append(kw)), \
+         patch("app.core.resources.storage_reconciliation.mark_done", side_effect=lambda rid: mark_done_calls.append(rid)), \
+         patch("app.core.resources.storage_reconciliation.mark_failed_attempt", side_effect=lambda rid, **kw: mark_failed_calls.append((rid, kw))):
         out = fs_db.delete_file_source("file_abc")
 
     assert out is True
@@ -326,8 +326,8 @@ def test_record_pending_is_inside_transaction_before_delete():
     with patcher, \
          patch("app.shared.cloud_backends.object_storage_enabled", return_value=True), \
          patch("app.shared.cloud_backends.get_runtime_object_storage", return_value=MagicMock(delete=MagicMock())), \
-         patch("app.shared.storage_reconciliation.mark_done"), \
-         patch("app.shared.storage_reconciliation.mark_failed_attempt"):
+         patch("app.core.resources.storage_reconciliation.mark_done"), \
+         patch("app.core.resources.storage_reconciliation.mark_failed_attempt"):
         fs_db.delete_file_source("file_abc")
 
     # SQL order on the cursor: 4 statements.

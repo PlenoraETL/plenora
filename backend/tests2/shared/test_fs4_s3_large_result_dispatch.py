@@ -318,10 +318,10 @@ def test_delete_result_s3_backed_triggers_s3_delete(monkeypatch, stub_storage):
         lambda key, **_: calls.append(key) or "ok",
     )
     monkeypatch.setattr(
-        "app.shared.storage_reconciliation.mark_done", lambda rid: None
+        "app.core.resources.storage_reconciliation.mark_done", lambda rid: None
     )
     monkeypatch.setattr(
-        "app.shared.storage_reconciliation.mark_failed_attempt",
+        "app.core.resources.storage_reconciliation.mark_failed_attempt",
         lambda rid, **_: None,
     )
 
@@ -503,10 +503,10 @@ def test_delete_results_for_project_cleans_all_s3_keys(monkeypatch):
         lambda key, **_: calls.append(key) or "ok",
     )
     monkeypatch.setattr(
-        "app.shared.storage_reconciliation.mark_done", lambda rid: None
+        "app.core.resources.storage_reconciliation.mark_done", lambda rid: None
     )
     monkeypatch.setattr(
-        "app.shared.storage_reconciliation.mark_failed_attempt",
+        "app.core.resources.storage_reconciliation.mark_failed_attempt",
         lambda rid, **_: None,
     )
 

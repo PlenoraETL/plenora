@@ -20,7 +20,7 @@ load_backend_dotenv(logging.getLogger("app.config_env_loader"))
 
 from app.config import settings
 from app.utils.logger import get_logger
-from app.utils.dataframe import save_dataframe
+from app.core.files.dataframe_io import save_dataframe
 from app.shared import error_codes
 from app.shared.error_envelope import (
     build_error_envelope_body,

@@ -18,7 +18,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from app.shared.storage_reconciliation import PendingReconciliationRow
+from app.core.resources.storage_reconciliation import PendingReconciliationRow
 from workers.beat_scheduler import PlenoraBeatScheduler
 
 
@@ -87,7 +87,7 @@ def test_reconcile_storage_skips_within_interval(monkeypatch):
     fetch_mock = MagicMock()
 
     with patch("app.config.settings", _settings_ns()), \
-         patch("app.shared.storage_reconciliation.fetch_due_pending_deletes",
+         patch("app.core.resources.storage_reconciliation.fetch_due_pending_deletes",
                fetch_mock):
         sched._reconcile_storage()
 
@@ -101,7 +101,7 @@ def test_reconcile_storage_runs_when_interval_elapsed(monkeypatch):
     fetch_mock = MagicMock(return_value=[])
 
     with patch("app.config.settings", _settings_ns()), \
-         patch("app.shared.storage_reconciliation.fetch_due_pending_deletes",
+         patch("app.core.resources.storage_reconciliation.fetch_due_pending_deletes",
                fetch_mock), \
          patch("app.shared.storage_compensation.compensating_delete"):
         sched._reconcile_storage()
@@ -116,7 +116,7 @@ def test_reconcile_storage_disabled_when_interval_le_zero(monkeypatch):
 
     with patch("app.config.settings",
                _settings_ns(STORAGE_RECONCILE_INTERVAL_SECONDS=0)), \
-         patch("app.shared.storage_reconciliation.fetch_due_pending_deletes",
+         patch("app.core.resources.storage_reconciliation.fetch_due_pending_deletes",
                fetch_mock):
         sched._reconcile_storage()
 
@@ -130,7 +130,7 @@ def test_reconcile_storage_disabled_when_batch_size_le_zero(monkeypatch):
 
     with patch("app.config.settings",
                _settings_ns(STORAGE_RECONCILE_BATCH_SIZE=0)), \
-         patch("app.shared.storage_reconciliation.fetch_due_pending_deletes",
+         patch("app.core.resources.storage_reconciliation.fetch_due_pending_deletes",
                fetch_mock):
         sched._reconcile_storage()
 
@@ -144,7 +144,7 @@ def test_reconcile_storage_updates_last_run_slot_even_on_empty_fetch():
     before = sched._last_storage_reconcile
 
     with patch("app.config.settings", _settings_ns()), \
-         patch("app.shared.storage_reconciliation.fetch_due_pending_deletes",
+         patch("app.core.resources.storage_reconciliation.fetch_due_pending_deletes",
                return_value=[]):
         sched._reconcile_storage()
 
@@ -161,7 +161,7 @@ def test_reconcile_storage_passes_batch_size_to_fetch():
 
     with patch("app.config.settings",
                _settings_ns(STORAGE_RECONCILE_BATCH_SIZE=25)), \
-         patch("app.shared.storage_reconciliation.fetch_due_pending_deletes",
+         patch("app.core.resources.storage_reconciliation.fetch_due_pending_deletes",
                fetch_mock):
         sched._reconcile_storage()
 
@@ -177,13 +177,13 @@ def test_reconcile_storage_ok_outcome_marks_orphan_deleted():
     mark_lost = MagicMock()
 
     with patch("app.config.settings", _settings_ns()), \
-         patch("app.shared.storage_reconciliation.fetch_due_pending_deletes",
+         patch("app.core.resources.storage_reconciliation.fetch_due_pending_deletes",
                return_value=[row]), \
-         patch("app.shared.storage_reconciliation.mark_orphan_deleted",
+         patch("app.core.resources.storage_reconciliation.mark_orphan_deleted",
                mark_orphan), \
-         patch("app.shared.storage_reconciliation.mark_failed_attempt",
+         patch("app.core.resources.storage_reconciliation.mark_failed_attempt",
                mark_failed), \
-         patch("app.shared.storage_reconciliation.mark_lost", mark_lost), \
+         patch("app.core.resources.storage_reconciliation.mark_lost", mark_lost), \
          patch("app.shared.storage_compensation.compensating_delete",
                return_value="ok") as comp_mock:
         sched._reconcile_storage()
@@ -212,13 +212,13 @@ def test_reconcile_storage_skipped_outcome_marks_orphan_deleted():
     mark_lost = MagicMock()
 
     with patch("app.config.settings", _settings_ns()), \
-         patch("app.shared.storage_reconciliation.fetch_due_pending_deletes",
+         patch("app.core.resources.storage_reconciliation.fetch_due_pending_deletes",
                return_value=[row]), \
-         patch("app.shared.storage_reconciliation.mark_orphan_deleted",
+         patch("app.core.resources.storage_reconciliation.mark_orphan_deleted",
                mark_orphan), \
-         patch("app.shared.storage_reconciliation.mark_failed_attempt",
+         patch("app.core.resources.storage_reconciliation.mark_failed_attempt",
                mark_failed), \
-         patch("app.shared.storage_reconciliation.mark_lost", mark_lost), \
+         patch("app.core.resources.storage_reconciliation.mark_lost", mark_lost), \
          patch("app.shared.storage_compensation.compensating_delete",
                return_value="skipped"):
         sched._reconcile_storage()
@@ -240,13 +240,13 @@ def test_reconcile_storage_failed_outcome_marks_failed_attempt_with_backoff():
     mark_lost = MagicMock()
 
     with patch("app.config.settings", _settings_ns()), \
-         patch("app.shared.storage_reconciliation.fetch_due_pending_deletes",
+         patch("app.core.resources.storage_reconciliation.fetch_due_pending_deletes",
                return_value=[row]), \
-         patch("app.shared.storage_reconciliation.mark_orphan_deleted",
+         patch("app.core.resources.storage_reconciliation.mark_orphan_deleted",
                mark_orphan), \
-         patch("app.shared.storage_reconciliation.mark_failed_attempt",
+         patch("app.core.resources.storage_reconciliation.mark_failed_attempt",
                mark_failed), \
-         patch("app.shared.storage_reconciliation.mark_lost", mark_lost), \
+         patch("app.core.resources.storage_reconciliation.mark_lost", mark_lost), \
          patch("app.shared.storage_compensation.compensating_delete",
                return_value="failed"):
         sched._reconcile_storage()
@@ -275,13 +275,13 @@ def test_reconcile_storage_failed_outcome_at_max_attempts_marks_lost():
     mark_lost = MagicMock()
 
     with patch("app.config.settings", _settings_ns()), \
-         patch("app.shared.storage_reconciliation.fetch_due_pending_deletes",
+         patch("app.core.resources.storage_reconciliation.fetch_due_pending_deletes",
                return_value=[row]), \
-         patch("app.shared.storage_reconciliation.mark_orphan_deleted",
+         patch("app.core.resources.storage_reconciliation.mark_orphan_deleted",
                mark_orphan), \
-         patch("app.shared.storage_reconciliation.mark_failed_attempt",
+         patch("app.core.resources.storage_reconciliation.mark_failed_attempt",
                mark_failed), \
-         patch("app.shared.storage_reconciliation.mark_lost", mark_lost), \
+         patch("app.core.resources.storage_reconciliation.mark_lost", mark_lost), \
          patch("app.shared.storage_compensation.compensating_delete",
                return_value="failed"):
         sched._reconcile_storage()
@@ -305,11 +305,11 @@ def test_reconcile_storage_max_attempts_cap_respected_when_configured():
 
     with patch("app.config.settings",
                _settings_ns(STORAGE_RECONCILE_MAX_ATTEMPTS=3)), \
-         patch("app.shared.storage_reconciliation.fetch_due_pending_deletes",
+         patch("app.core.resources.storage_reconciliation.fetch_due_pending_deletes",
                return_value=[row]), \
-         patch("app.shared.storage_reconciliation.mark_orphan_deleted"), \
-         patch("app.shared.storage_reconciliation.mark_failed_attempt"), \
-         patch("app.shared.storage_reconciliation.mark_lost", mark_lost), \
+         patch("app.core.resources.storage_reconciliation.mark_orphan_deleted"), \
+         patch("app.core.resources.storage_reconciliation.mark_failed_attempt"), \
+         patch("app.core.resources.storage_reconciliation.mark_lost", mark_lost), \
          patch("app.shared.storage_compensation.compensating_delete",
                return_value="failed"):
         sched._reconcile_storage()
@@ -327,13 +327,13 @@ def test_reconcile_storage_skips_non_delete_operations():
     comp_mock = MagicMock()
 
     with patch("app.config.settings", _settings_ns()), \
-         patch("app.shared.storage_reconciliation.fetch_due_pending_deletes",
+         patch("app.core.resources.storage_reconciliation.fetch_due_pending_deletes",
                return_value=[row]), \
          patch("app.shared.storage_compensation.compensating_delete",
                comp_mock), \
-         patch("app.shared.storage_reconciliation.mark_orphan_deleted"), \
-         patch("app.shared.storage_reconciliation.mark_failed_attempt"), \
-         patch("app.shared.storage_reconciliation.mark_lost"):
+         patch("app.core.resources.storage_reconciliation.mark_orphan_deleted"), \
+         patch("app.core.resources.storage_reconciliation.mark_failed_attempt"), \
+         patch("app.core.resources.storage_reconciliation.mark_lost"):
         sched._reconcile_storage()
 
     comp_mock.assert_not_called()
@@ -354,13 +354,13 @@ def test_reconcile_storage_processes_multiple_rows_independently():
         return "ok" if storage_key == "file-sources/x.csv" else "failed"
 
     with patch("app.config.settings", _settings_ns()), \
-         patch("app.shared.storage_reconciliation.fetch_due_pending_deletes",
+         patch("app.core.resources.storage_reconciliation.fetch_due_pending_deletes",
                return_value=[row_a, row_b]), \
-         patch("app.shared.storage_reconciliation.mark_orphan_deleted",
+         patch("app.core.resources.storage_reconciliation.mark_orphan_deleted",
                mark_orphan), \
-         patch("app.shared.storage_reconciliation.mark_failed_attempt",
+         patch("app.core.resources.storage_reconciliation.mark_failed_attempt",
                mark_failed), \
-         patch("app.shared.storage_reconciliation.mark_lost"), \
+         patch("app.core.resources.storage_reconciliation.mark_lost"), \
          patch("app.shared.storage_compensation.compensating_delete",
                side_effect=_comp_dispatch):
         sched._reconcile_storage()
@@ -388,12 +388,12 @@ def test_reconcile_storage_per_row_exception_does_not_break_batch():
         return "ok"
 
     with patch("app.config.settings", _settings_ns()), \
-         patch("app.shared.storage_reconciliation.fetch_due_pending_deletes",
+         patch("app.core.resources.storage_reconciliation.fetch_due_pending_deletes",
                return_value=[row_a, row_b]), \
-         patch("app.shared.storage_reconciliation.mark_orphan_deleted",
+         patch("app.core.resources.storage_reconciliation.mark_orphan_deleted",
                mark_orphan), \
-         patch("app.shared.storage_reconciliation.mark_failed_attempt"), \
-         patch("app.shared.storage_reconciliation.mark_lost"), \
+         patch("app.core.resources.storage_reconciliation.mark_failed_attempt"), \
+         patch("app.core.resources.storage_reconciliation.mark_lost"), \
          patch("app.shared.storage_compensation.compensating_delete",
                side_effect=_comp_dispatch):
         # Must not raise.
@@ -407,7 +407,7 @@ def test_reconcile_storage_fetch_error_does_not_raise():
     sched = _make_scheduler()
 
     with patch("app.config.settings", _settings_ns()), \
-         patch("app.shared.storage_reconciliation.fetch_due_pending_deletes",
+         patch("app.core.resources.storage_reconciliation.fetch_due_pending_deletes",
                side_effect=RuntimeError("PG down")), \
          patch("app.shared.storage_compensation.compensating_delete") as comp_mock:
         # Must not raise.

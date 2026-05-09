@@ -59,11 +59,11 @@ def gen_env(api_service):
             svc=api_service,
             session=session,
             shared_session=_p(
-                "app.shared.api_utils.get_shared_session",
+                "app.infrastructure.http.session.get_shared_session",
                 return_value=session,
             ),
             ssrf=_p(
-                "app.shared.api_utils.validate_external_url",
+                "app.core.security.outbound_url.validate_external_url",
                 return_value=None,
             ),
             prep_headers=_po(

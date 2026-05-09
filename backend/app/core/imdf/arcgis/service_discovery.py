@@ -1,11 +1,10 @@
 """
-Cluster SERVICE_DISCOVERY — folder + Feature Service discovery/lookup
-
-sul portal ArcGIS.
+Cluster SERVICE_DISCOVERY - IMDF folder + Feature Service discovery policy.
 """
 
 from typing import List, Optional, Tuple
 
+from app.core.features import arcgis_service_discovery as _arcgis_discovery
 from app.shared.connections.arcgis_connection import ArcGISConnectionInfo
 from app.shared.connections.arcgis_provider import ArcGISDiscoveryProviderProtocol
 from app.utils.logger import get_logger
@@ -28,19 +27,13 @@ def _list_user_folders(
     client: ArcGISDiscoveryProviderProtocol,
     conn: ArcGISConnectionInfo,
 ) -> List[dict]:
-    """Read-only IMDF adapter for ArcGIS folder listing.
-
-    Lista folder dell'utente corrente (senza crearne).
-    Ritorna lista di dict [{id, title, ...}]. Usato dal validator per
-    risolvere ownerFolder (id) → title prima di confrontare con la
-    selezione utente.
-
-    Guardrail: delegate discovery to `client.list_folders`; only IMDF folder
-    filtering belongs here.
-    """
+    """Read-only IMDF adapter for ArcGIS folder listing."""
     try:
-        folders = client.list_folders(conn) or []
-        return [folder for folder in folders if _is_imdf_user_folder(folder)]
+        return _arcgis_discovery.list_user_folders(
+            client,
+            conn,
+            folder_filter=_is_imdf_user_folder,
+        )
     except Exception as e:
         logger.warning(f"_list_user_folders: errore: {e}")
         return []
@@ -51,14 +44,8 @@ def _ensure_folder(
     conn: ArcGISConnectionInfo,
     folder_name: str,
 ) -> Optional[str]:
-    """IMDF adapter over the generic ArcGIS folder boundary.
-
-    Guardrail: keep this as root-folder compatibility plus delegation to
-    `client.ensure_folder`; new folder logic belongs in the provider.
-    """
-    if not folder_name:
-        return ""
-    return client.ensure_folder(conn, folder_name)
+    """IMDF adapter over the generic ArcGIS folder boundary."""
+    return _arcgis_discovery.ensure_folder(client, conn, folder_name)
 
 
 def _is_service_name_available(
@@ -66,38 +53,21 @@ def _is_service_name_available(
     conn: ArcGISConnectionInfo,
     fs_name: str,
 ) -> Tuple[bool, Optional[str]]:
-    """Controlla presso il portal se il nome servizio e' disponibile.
-
-    IMDF adapter around `client.is_service_name_available` with the
-    domain-required fail-open behavior.
-
-    Returns:
-        (available, error_message):
-            available = True → il nome e' libero, createService andra' a buon fine
-            available = False → il nome e' occupato; error_message se disponibile
-    """
+    """Check portal service-name availability with IMDF fail-open behavior."""
     try:
-        return client.is_service_name_available(conn, fs_name)
+        return _arcgis_discovery.is_service_name_available(client, conn, fs_name)
     except Exception as e:
         logger.warning(f"_is_service_name_available error: {e}")
-        return True, str(e)  # fail-open: assume disponibile, poi createService dara' errore
+        return True, str(e)
 
 
 def _enumerate_all_user_items(
     client: ArcGISDiscoveryProviderProtocol,
     conn: ArcGISConnectionInfo,
 ) -> List[dict]:
-    """Enumera TUTTI gli item (in tutte le folder + root) dell'utente corrente.
-    Approccio robusto che non dipende dall'endpoint /search (che in alcuni
-    casi non matcha esattamente per via della tokenizzazione del titolo).
-
-    Ritorna lista di item {id, title, type, name, url, ownerFolder, ...}.
-
-    IMDF adapter over `client.list_user_items`; only Feature Service
-    matching policy stays here.
-    """
+    """Enumerate all current-user portal items through the provider."""
     try:
-        return client.list_user_items(conn) or []
+        return _arcgis_discovery.enumerate_user_items(client, conn)
     except Exception as e:
         logger.warning(f"_enumerate_all_user_items: list_user_items fallita: {e}")
         return []
@@ -108,62 +78,8 @@ def _search_user_items(
     conn: ArcGISConnectionInfo,
     fs_name: str,
 ) -> List[dict]:
-    """Trova Feature Service dell'utente corrente che matchano `fs_name`.
-
-    Match strategia (in ordine, il primo che trova qualcosa vince):
-      1. title esatto (case-sensitive)
-      2. title esatto (case-insensitive)
-      3. name esatto (il service name ArcGIS, usato nell'URL)
-
-    Usa l'enumerazione completa folder-by-folder per essere robusto.
-    """
-    all_items = _enumerate_all_user_items(client, conn)
-    fs_items  = [it for it in all_items if it.get("type") == "Feature Service"]
-
-    logger.info(
-        f"_search_user_items: enumerati {len(all_items)} item totali, "
-        f"{len(fs_items)} Feature Service per utente '{conn.username}'. "
-        f"Cerco: '{fs_name}'"
-    )
-
-    if not fs_items:
-        return []
-
-    # 1. title esatto
-    matching = [it for it in fs_items if it.get("title") == fs_name]
-    if matching:
-        logger.info(f"_search_user_items: {len(matching)} match per title esatto")
-        return matching
-
-    # 2. title case-insensitive
-    fs_name_lower = fs_name.lower()
-    matching = [it for it in fs_items if (it.get("title") or "").lower() == fs_name_lower]
-    if matching:
-        logger.info(f"_search_user_items: {len(matching)} match per title case-insensitive")
-        return matching
-
-    # 3. name esatto (es. se fs_name e' il service name non il title
-    matching = [it for it in fs_items
-                if (it.get("name") or "") == fs_name
-                or (it.get("name") or "").lower() == fs_name_lower]
-    if matching:
-        logger.info(f"_search_user_items: {len(matching)} match per name")
-        return matching
-
-    # 4. URL contiene fs_name (/services/{fs_name}/FeatureServer
-    matching = [it for it in fs_items
-                if f"/services/{fs_name}/" in (it.get("url") or "")]
-    if matching:
-        logger.info(f"_search_user_items: {len(matching)} match per URL pattern")
-        return matching
-
-    # Niente trovato — log dei titoli esistenti per debug
-    titles_preview = [f"{it.get('title')} (name={it.get('name')})" for it in fs_items[:10]]
-    logger.warning(
-        f"_search_user_items: NESSUN match per '{fs_name}'. "
-        f"Primi FS dell'utente: {titles_preview}"
-    )
-    return []
+    """Find current-user Feature Service items matching ``fs_name``."""
+    return _arcgis_discovery.search_user_feature_service_items(client, conn, fs_name)
 
 
 def _find_existing_service(
@@ -172,14 +88,5 @@ def _find_existing_service(
     fs_name: str,
     folder_id: str = "",
 ) -> tuple:
-    """Cerca un Feature Service col nome dato IN QUALSIASI FOLDER dell'utente
-    corrente (via /sharing/rest/search) e ritorna una tupla
-    (service_url, item_id, owner_folder). owner_folder è la folder ArcGIS
-    effettiva in cui vive l'item (None = root).
-    Ritorna (None, None, None) se non esiste.
-    """
-    matching = _search_user_items(client, conn, fs_name)
-    if not matching:
-        return None, None, None
-    it = matching[0]
-    return it.get("url"), it.get("id"), it.get("ownerFolder")
+    """Return ``(service_url, item_id, owner_folder)`` for an existing service."""
+    return _arcgis_discovery.find_existing_feature_service(client, conn, fs_name)

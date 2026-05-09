@@ -63,7 +63,7 @@ def test_load_upstream_data_does_not_fallback_to_latest_project_result_after_fai
          patch("app.core.estrai.query_generator.QueryGenerator", return_value=object()), \
          patch("app.db.query_executor.create_executor", return_value=object()), \
          patch("app.core.features.features_service.FeaturesService", return_value=object()), \
-         patch("app.utils.dataframe.save_dataframe"), \
+         patch("app.core.files.dataframe_io.save_dataframe"), \
          patch("app.core.orchestrator.service.OrchestratorService", return_value=orchestrator):
         result = _load_upstream_data(
             project_id="proj-1",

@@ -22,7 +22,7 @@ def test_record_upload_intent_docstring_disclaims_outbox_semantics():
     A future contributor that quietly re-tags this pattern as an
     outbox would mislead callers into expecting at-least-once
     semantics that this implementation does not provide."""
-    from app.shared.storage_reconciliation import record_upload_intent
+    from app.core.resources.storage_reconciliation import record_upload_intent
 
     doc = record_upload_intent.__doc__ or ""
     assert "NOT a transactional outbox" in doc, (
@@ -40,7 +40,7 @@ def test_record_upload_intent_docstring_names_disabled_state_failure_modes():
     Without this enumerated, ops won't know that toggling the
     reconciler flips the pattern from 'self-clearing' to 'silent
     accumulation'."""
-    from app.shared.storage_reconciliation import record_upload_intent
+    from app.core.resources.storage_reconciliation import record_upload_intent
 
     doc = record_upload_intent.__doc__ or ""
     required = (
@@ -61,7 +61,7 @@ def test_record_upload_intent_docstring_points_at_visibility_helpers():
     """The docstring must reference the visibility helpers so
     operators can find them: `count_pending_by_operation` and the
     `reconciliation_backlog` readiness check."""
-    from app.shared.storage_reconciliation import record_upload_intent
+    from app.core.resources.storage_reconciliation import record_upload_intent
 
     doc = record_upload_intent.__doc__ or ""
     assert "count_pending_by_operation" in doc, (
@@ -81,7 +81,7 @@ def test_record_upload_intent_docstring_points_at_visibility_helpers():
 
 def test_count_pending_by_operation_sql_filters_pending_groups_by_operation():
     """SQL must filter `state = 'pending'` and GROUP BY operation."""
-    from app.shared import storage_reconciliation as recon
+    from app.core.resources import storage_reconciliation as recon
 
     captured = {}
 
@@ -102,7 +102,7 @@ def test_count_pending_by_operation_sql_filters_pending_groups_by_operation():
 
 def test_count_pending_by_operation_returns_dict_keyed_on_operation():
     """The helper returns a `dict[operation_name, count]`."""
-    from app.shared import storage_reconciliation as recon
+    from app.core.resources import storage_reconciliation as recon
 
     rows = [
         {"operation": "delete", "count": 12},
@@ -117,7 +117,7 @@ def test_count_pending_by_operation_returns_dict_keyed_on_operation():
 def test_count_pending_by_operation_handles_tuple_rows():
     """Tolerates non-dict cursor flavors (mirror of
     `fetch_due_pending_deletes` tuple-row handling)."""
-    from app.shared import storage_reconciliation as recon
+    from app.core.resources import storage_reconciliation as recon
 
     rows = [("delete", 5), ("upload_intent", 2)]
     with patch("app.db.pg_connection.fetchall", lambda sql, params=(): rows):
@@ -129,7 +129,7 @@ def test_count_pending_by_operation_handles_tuple_rows():
 def test_count_pending_by_operation_swallows_db_error_returns_empty():
     """Best-effort: DB error -> warning + return `{}`. The
     readiness check MUST NOT crash on a transient DB issue."""
-    from app.shared import storage_reconciliation as recon
+    from app.core.resources import storage_reconciliation as recon
 
     def _raise(sql, params=()):
         raise RuntimeError("DB unreachable")
@@ -143,7 +143,7 @@ def test_count_pending_by_operation_swallows_db_error_returns_empty():
 def test_count_pending_by_operation_empty_table_returns_empty_dict():
     """Empty result set -> empty dict (NOT None, NOT [], NOT a
     dict with zero counts for known operations)."""
-    from app.shared import storage_reconciliation as recon
+    from app.core.resources import storage_reconciliation as recon
 
     with patch("app.db.pg_connection.fetchall", lambda sql, params=(): []):
         out = recon.count_pending_by_operation()
@@ -185,10 +185,10 @@ def test_backlog_check_detail_string_embeds_per_operation_breakdown():
     from app.observability import health as h
 
     with patch(
-        "app.shared.storage_reconciliation.count_active_by_state_domain",
+        "app.core.resources.storage_reconciliation.count_active_by_state_domain",
         return_value=_stub_state_domain_counts(pending_total=15, lost_total=0),
     ), patch(
-        "app.shared.storage_reconciliation.count_pending_by_operation",
+        "app.core.resources.storage_reconciliation.count_pending_by_operation",
         return_value={"delete": 12, "upload_intent": 3},
     ):
         ok, detail = h.check_reconciliation_backlog()
@@ -207,10 +207,10 @@ def test_backlog_check_detail_string_omits_breakdown_when_per_op_empty():
     from app.observability import health as h
 
     with patch(
-        "app.shared.storage_reconciliation.count_active_by_state_domain",
+        "app.core.resources.storage_reconciliation.count_active_by_state_domain",
         return_value=_stub_state_domain_counts(pending_total=0, lost_total=0),
     ), patch(
-        "app.shared.storage_reconciliation.count_pending_by_operation",
+        "app.core.resources.storage_reconciliation.count_pending_by_operation",
         return_value={},
     ):
         ok, detail = h.check_reconciliation_backlog()
@@ -247,10 +247,10 @@ def test_backlog_check_503_when_upload_intent_threshold_exceeded():
             }.get(key, default)
 
     with patch(
-        "app.shared.storage_reconciliation.count_active_by_state_domain",
+        "app.core.resources.storage_reconciliation.count_active_by_state_domain",
         return_value=_stub_state_domain_counts(pending_total=20, lost_total=0),
     ), patch(
-        "app.shared.storage_reconciliation.count_pending_by_operation",
+        "app.core.resources.storage_reconciliation.count_pending_by_operation",
         return_value={"delete": 12, "upload_intent": 8},
     ), patch("app.config.settings", new=_SettingsStub()):
         ok, detail = h.check_reconciliation_backlog()
@@ -277,10 +277,10 @@ def test_backlog_check_pending_global_threshold_still_fires():
             }.get(key, default)
 
     with patch(
-        "app.shared.storage_reconciliation.count_active_by_state_domain",
+        "app.core.resources.storage_reconciliation.count_active_by_state_domain",
         return_value=_stub_state_domain_counts(pending_total=15, lost_total=0),
     ), patch(
-        "app.shared.storage_reconciliation.count_pending_by_operation",
+        "app.core.resources.storage_reconciliation.count_pending_by_operation",
         return_value={"delete": 15},
     ), patch("app.config.settings", new=_SettingsStub()):
         ok, detail = h.check_reconciliation_backlog()
@@ -300,10 +300,10 @@ def test_backlog_check_swallows_per_op_helper_errors():
         raise RuntimeError("unexpected")
 
     with patch(
-        "app.shared.storage_reconciliation.count_active_by_state_domain",
+        "app.core.resources.storage_reconciliation.count_active_by_state_domain",
         return_value=_stub_state_domain_counts(pending_total=0, lost_total=0),
     ), patch(
-        "app.shared.storage_reconciliation.count_pending_by_operation",
+        "app.core.resources.storage_reconciliation.count_pending_by_operation",
         side_effect=_raise,
     ):
         ok, detail = h.check_reconciliation_backlog()
@@ -315,6 +315,6 @@ def test_backlog_check_swallows_per_op_helper_errors():
 
 def test_count_pending_by_operation_exported_in_storage_reconciliation_all():
     """The helper is part of the module's public surface."""
-    import app.shared.storage_reconciliation as recon
+    import app.core.resources.storage_reconciliation as recon
 
     assert "count_pending_by_operation" in recon.__all__

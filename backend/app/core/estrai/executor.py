@@ -11,9 +11,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, Any, List, Mapping, MutableMapping, Optional, Protocol, Sequence, Tuple
 
-from app.shared.models import CanvasState, Node
+from app.core.projects.canvas_models import CanvasState, Node
 from app.utils.logger import get_logger, append_step
-from app.utils.dataframe import load_dataframe_from_file, sanitize_for_json
+from app.core.files.dataframe_io import load_dataframe_from_file, sanitize_for_json
 from app.core.features.geo_utils import extract_srid_from_column_type
 from app.shared.crypto import CredentialUnavailableError
 from app.shared.resources.metadata import ResourceMetadata, SourceKind

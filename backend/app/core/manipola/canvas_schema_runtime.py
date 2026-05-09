@@ -7,7 +7,7 @@ from typing import Any, Dict, List, Optional
 import pandas as pd
 
 from app.shared.execution.canvas_graph import CanvasGraph
-from app.shared.models import CanvasState
+from app.core.projects.canvas_models import CanvasState
 
 
 def extract_srid_from_canvas(

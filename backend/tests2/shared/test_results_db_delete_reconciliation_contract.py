@@ -20,7 +20,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from app.core.results import cleanup as results_cleanup
-from app.shared.storage_reconciliation import ReconciliationEntryRef
+from app.core.resources.storage_reconciliation import ReconciliationEntryRef
 
 
 pytestmark = [pytest.mark.unit, pytest.mark.contract, pytest.mark.shared]
@@ -140,11 +140,11 @@ def test_delete_result_records_pending_inside_transaction_and_marks_done(
         "app.shared.storage_compensation.compensating_delete", _fake_comp
     )
     monkeypatch.setattr(
-        "app.shared.storage_reconciliation.mark_done",
+        "app.core.resources.storage_reconciliation.mark_done",
         lambda rid: mark_done_calls.append(rid),
     )
     monkeypatch.setattr(
-        "app.shared.storage_reconciliation.mark_failed_attempt",
+        "app.core.resources.storage_reconciliation.mark_failed_attempt",
         lambda rid, *, error: mark_failed_calls.append((rid, error)),
     )
 
@@ -204,11 +204,11 @@ def test_delete_result_failed_compensation_marks_failed_attempt(monkeypatch):
         lambda *a, **kw: "failed",
     )
     monkeypatch.setattr(
-        "app.shared.storage_reconciliation.mark_done",
+        "app.core.resources.storage_reconciliation.mark_done",
         lambda rid: mark_done_calls.append(rid),
     )
     monkeypatch.setattr(
-        "app.shared.storage_reconciliation.mark_failed_attempt",
+        "app.core.resources.storage_reconciliation.mark_failed_attempt",
         lambda rid, *, error: mark_failed_calls.append((rid, error)),
     )
 
@@ -241,11 +241,11 @@ def test_delete_result_skipped_outcome_marks_done(monkeypatch):
         lambda *a, **kw: "skipped",
     )
     monkeypatch.setattr(
-        "app.shared.storage_reconciliation.mark_done",
+        "app.core.resources.storage_reconciliation.mark_done",
         lambda rid: mark_done_calls.append(rid),
     )
     monkeypatch.setattr(
-        "app.shared.storage_reconciliation.mark_failed_attempt",
+        "app.core.resources.storage_reconciliation.mark_failed_attempt",
         lambda rid, *, error: mark_failed_calls.append((rid, error)),
     )
 
@@ -340,11 +340,11 @@ def test_delete_results_for_project_records_pending_per_key_in_one_tx(
         "app.shared.storage_compensation.compensating_delete", _fake_comp
     )
     monkeypatch.setattr(
-        "app.shared.storage_reconciliation.mark_done",
+        "app.core.resources.storage_reconciliation.mark_done",
         lambda rid: mark_done_calls.append(rid),
     )
     monkeypatch.setattr(
-        "app.shared.storage_reconciliation.mark_failed_attempt",
+        "app.core.resources.storage_reconciliation.mark_failed_attempt",
         lambda rid, *, error: None,
     )
 
@@ -442,11 +442,11 @@ def test_delete_results_for_project_per_key_failure_isolates_others(
         "app.shared.storage_compensation.compensating_delete", _comp_dispatch
     )
     monkeypatch.setattr(
-        "app.shared.storage_reconciliation.mark_done",
+        "app.core.resources.storage_reconciliation.mark_done",
         lambda rid: mark_done_calls.append(rid),
     )
     monkeypatch.setattr(
-        "app.shared.storage_reconciliation.mark_failed_attempt",
+        "app.core.resources.storage_reconciliation.mark_failed_attempt",
         lambda rid, *, error: mark_failed_calls.append((rid, error)),
     )
 

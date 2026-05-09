@@ -88,7 +88,7 @@ def test_guard_raises_when_file_size_exceeds_cap(tmp_path, monkeypatch):
 
     monkeypatch.setitem(_settings.DEFAULTS, "LOAD_FILE_MAX_BYTES", 1)
 
-    from app.utils.dataframe import load_dataframe_from_file
+    from app.core.files.dataframe_io import load_dataframe_from_file
 
     with pytest.raises(MemoryLimitExceededError) as exc_info:
         load_dataframe_from_file(csv)
@@ -111,7 +111,7 @@ def test_guard_passes_when_file_under_cap(tmp_path, monkeypatch):
         _settings.DEFAULTS, "LOAD_FILE_MAX_BYTES", 200 * 1024 * 1024,
     )
 
-    from app.utils.dataframe import load_dataframe_from_file
+    from app.core.files.dataframe_io import load_dataframe_from_file
 
     df = load_dataframe_from_file(csv)
     assert len(df) == 5
@@ -128,7 +128,7 @@ def test_guard_zero_or_negative_cap_disables_check(tmp_path, monkeypatch):
 
     # Cap a 0 = disabilitato
     monkeypatch.setitem(_settings.DEFAULTS, "LOAD_FILE_MAX_BYTES", 0)
-    from app.utils.dataframe import load_dataframe_from_file
+    from app.core.files.dataframe_io import load_dataframe_from_file
 
     df = load_dataframe_from_file(csv)
     assert len(df) == 5

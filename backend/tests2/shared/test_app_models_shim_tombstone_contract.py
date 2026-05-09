@@ -1,4 +1,4 @@
-"""Tombstone guard for the removed legacy app.models shim."""
+"""Tombstone guards for legacy model shims."""
 
 from __future__ import annotations
 
@@ -32,36 +32,38 @@ def _parse(path: Path) -> ast.AST | None:
         return None
 
 
-def _imports_app_models(path: Path) -> bool:
+def _imports_module(path: Path, module_name: str) -> bool:
     tree = _parse(path)
     if tree is None:
         return False
     for node in ast.walk(tree):
         if isinstance(node, ast.Import):
             if any(
-                alias.name == "app.models" or alias.name.startswith("app.models.")
+                alias.name == module_name or alias.name.startswith(f"{module_name}.")
                 for alias in node.names
             ):
                 return True
         if isinstance(node, ast.ImportFrom) and node.module:
-            if node.module == "app.models" or node.module.startswith("app.models."):
+            if node.module == module_name or node.module.startswith(f"{module_name}."):
                 return True
     return False
 
 
-def _app_models_importers(roots: tuple[Path, ...]) -> set[str]:
+def _module_importers(roots: tuple[Path, ...], module_name: str) -> set[str]:
     hits: set[str] = set()
     for root in roots:
         for path in _iter_python(root):
             if path == _BACKEND_ROOT / "app" / "models.py":
                 continue
-            if _imports_app_models(path):
+            if path == _BACKEND_ROOT / "app" / "shared" / "models.py":
+                continue
+            if _imports_module(path, module_name):
                 hits.add(_rel(path))
     return hits
 
 
 def test_no_tests_import_legacy_app_models_shim() -> None:
-    hits = sorted(_app_models_importers((_TEST_ROOT,)))
+    hits = sorted(_module_importers((_TEST_ROOT,), "app.models"))
 
     assert not hits, (
         "Tests must import models from app.shared.models or a domain-owned "
@@ -71,7 +73,7 @@ def test_no_tests_import_legacy_app_models_shim() -> None:
 
 
 def test_no_production_imports_of_legacy_app_models_shim() -> None:
-    hits = sorted(_app_models_importers(_PROD_ROOTS))
+    hits = sorted(_module_importers(_PROD_ROOTS, "app.models"))
 
     assert not hits, (
         "Production imports from app.models are forbidden. Use "
@@ -84,3 +86,23 @@ def test_no_production_imports_of_legacy_app_models_shim() -> None:
 def test_app_models_shim_is_removed() -> None:
     shim = _BACKEND_ROOT / "app" / "models.py"
     assert not shim.exists()
+
+
+def test_shared_models_shim_reexports_canvas_models() -> None:
+    from app.core.projects import canvas_models
+    from app.shared import models as shared_models
+
+    assert shared_models.CanvasState is canvas_models.CanvasState
+    assert shared_models.Node is canvas_models.Node
+    assert shared_models.Edge is canvas_models.Edge
+    assert shared_models.ColumnInfo is canvas_models.ColumnInfo
+
+
+def test_no_production_imports_of_shared_models_compat_shim() -> None:
+    hits = sorted(_module_importers(_PROD_ROOTS, "app.shared.models"))
+
+    assert not hits, (
+        "Production imports from app.shared.models are forbidden. Use "
+        "app.core.projects.canvas_models instead.\nViolations:\n  - "
+        + "\n  - ".join(hits)
+    )

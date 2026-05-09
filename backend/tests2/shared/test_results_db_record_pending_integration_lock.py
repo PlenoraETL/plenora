@@ -17,7 +17,7 @@ pytestmark = [pytest.mark.unit, pytest.mark.shared, pytest.mark.contract]
 _BACKEND_ROOT = Path(__file__).resolve().parent.parent.parent
 _RESULTS_CLEANUP = _BACKEND_ROOT / "app" / "core" / "results" / "cleanup.py"
 _STORAGE_RECONCILIATION = (
-    _BACKEND_ROOT / "app" / "shared" / "storage_reconciliation.py"
+    _BACKEND_ROOT / "app" / "core" / "resources" / "storage_reconciliation.py"
 )
 
 
@@ -63,7 +63,7 @@ def test_delete_result_calls_record_pending_inside_transaction():
         "delete_result must run inside a `with transaction()` block — "
         "record_pending and DELETE row must commit atomically."
     )
-    assert "from app.shared.storage_reconciliation import (" in body, (
+    assert "from app.core.resources.storage_reconciliation import (" in body, (
         "delete_result must import record_pending from the typed "
         "boundary module."
     )
@@ -119,7 +119,7 @@ def test_delete_results_for_project_calls_record_pending_inside_transaction():
         "delete_results_for_project must run inside a `with "
         "transaction()` block."
     )
-    assert "from app.shared.storage_reconciliation import (" in body, (
+    assert "from app.core.resources.storage_reconciliation import (" in body, (
         "delete_results_for_project must import record_pending from "
         "the typed boundary module."
     )
@@ -213,7 +213,7 @@ def test_storage_reconciliation_exposes_record_pending_surface():
         '"mark_failed_attempt"',
     ):
         assert symbol in source, (
-            f"app/shared/storage_reconciliation.py __all__ missing "
+            f"app/core/resources/storage_reconciliation.py __all__ missing "
             f"{symbol}. Removing it would silently break "
             "delete_result / delete_results_for_project imports."
         )

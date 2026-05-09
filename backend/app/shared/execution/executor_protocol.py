@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING, Any, Dict, Optional, Protocol, runtime_checkab
 from app.shared.execution.payloads import ArtifactPayload, _check_payload_safe
 
 if TYPE_CHECKING:
-    from app.shared.models import CanvasState
+    from app.core.projects.canvas_models import CanvasState
 
 
 __all__ = [

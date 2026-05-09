@@ -22,7 +22,7 @@ from app.core.arricchisci.models import (
 )
 from app.utils.logger import get_logger
 from app.core.arricchisci._rate_limiter import RateLimiter as _RateLimiter
-from app.shared.api_utils import (
+from app.shared.connections.oauth import (
     prepare_headers as _shared_prepare_headers,
     get_cached_oauth2_token as _shared_get_cached_oauth2_token,
 )
@@ -211,17 +211,17 @@ class EnrichmentExecutor(
     
 
     def _prepare_headers(self) -> Dict:
-        """Prepara headers HTTP. Delegato a shared/api_utils."""
+        """Prepara headers HTTP. Delegato a shared/connections/oauth."""
         return _shared_prepare_headers(self.auth)
 
     def _get_oauth2_token(self) -> Optional[str]:
-        """Ottiene token OAuth2 con password flow. Delegato a shared/api_utils."""
+        """Ottiene token OAuth2 con password flow. Delegato a shared/connections/oauth."""
         auth = dict(self.auth)
         auth.setdefault("type", "oauth2_password")
         return _shared_get_cached_oauth2_token(auth)
 
     def _get_oauth2_client_credentials_token(self) -> Optional[str]:
-        """Ottiene token OAuth2 con client_credentials flow. Delegato a shared/api_utils."""
+        """Ottiene token OAuth2 con client_credentials flow. Delegato a shared/connections/oauth."""
         auth = dict(self.auth)
         auth.setdefault("type", "oauth2_client_credentials")
         return _shared_get_cached_oauth2_token(auth)

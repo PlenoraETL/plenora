@@ -911,7 +911,7 @@ class ApiConnectionRestFileMixin:
                 # io.BytesIO per requests multipart — requests accetta ogni
                 # file-like object che implementa read
                 if isinstance(upstream_result, pd.DataFrame) and upstream_type != 'file_source':
-                    from app.utils.dataframe import save_dataframe_to_bytes
+                    from app.core.files.dataframe_io import save_dataframe_to_bytes
                     fmt = (materialize_format or 'xlsx').lower()
                     supported = {'xlsx', 'csv', 'json', 'parquet'}
                     if fmt not in supported:

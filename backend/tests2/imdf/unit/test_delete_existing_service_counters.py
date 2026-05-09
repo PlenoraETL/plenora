@@ -44,7 +44,7 @@ def test_delete_existing_service_happy_path_returns_one_one() -> None:
     items = [{"id": "item-abc", "ownerFolder": "root"}]
 
     with patch(
-        "app.core.imdf.arcgis.service_lifecycle._search_user_items",
+        "app.core.features.arcgis_service_lifecycle.search_user_feature_service_items",
         return_value=items,
     ):
         result = _delete_existing_service(client, conn, "MyFS")
@@ -59,7 +59,7 @@ def test_delete_existing_service_partial_fail_returns_one_zero() -> None:
     items = [{"id": "item-xyz", "ownerFolder": None}]
 
     with patch(
-        "app.core.imdf.arcgis.service_lifecycle._search_user_items",
+        "app.core.features.arcgis_service_lifecycle.search_user_feature_service_items",
         return_value=items,
     ):
         result = _delete_existing_service(client, conn, "MyFS")

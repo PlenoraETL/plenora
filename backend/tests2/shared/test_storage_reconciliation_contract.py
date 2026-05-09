@@ -1,7 +1,7 @@
 """
 Contract test BE-GO-READY-STORAGE-ENGINE-005 — typed boundary
 
-`app.shared.storage_reconciliation`.
+`app.core.resources.storage_reconciliation`.
 """
 
 from __future__ import annotations
@@ -14,7 +14,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from app.shared.storage_reconciliation import (
+from app.core.resources.storage_reconciliation import (
     ReconciliationEntryRef,
     mark_done,
     mark_failed_attempt,
@@ -255,10 +255,10 @@ def test_module_is_leaf_no_fastapi_boto3_settings():
     a false positive)."""
     import re
 
-    import app.shared.storage_reconciliation  # noqa: F401
+    import app.core.resources.storage_reconciliation  # noqa: F401
 
     src = open(
-        app.shared.storage_reconciliation.__file__, encoding="utf-8"
+        app.core.resources.storage_reconciliation.__file__, encoding="utf-8"
     ).read()
     # Strip module docstring + comments before pattern-matching.
     # Conservative approach: scan line-by-line for `import` / `from`

@@ -70,7 +70,7 @@ def compute_result_columns(
 
     Returns:
         Lista di dict {name, type, alias, visible} compatibile con
-        `canvas.nodes[result].columns` (Column model di app.shared.models).
+        `canvas.nodes[result].columns` (Column model di app.core.projects.canvas_models).
         Le customizzazioni utente (alias, visible) presenti nel
         result_node corrente sono preservate per nome.
     """

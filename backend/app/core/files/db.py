@@ -313,7 +313,7 @@ def delete_file_source(file_id: str) -> bool:
                     # process death follows the commit before the
                     # post-commit storage call, the pending row is
                     # the only application-side trace of the orphan
-                    from app.shared.storage_reconciliation import (
+                    from app.core.resources.storage_reconciliation import (
                         record_pending,
                     )
                     reconciliation_ref = record_pending(
@@ -344,7 +344,7 @@ def delete_file_source(file_id: str) -> bool:
             logger=logger,
         )
         if reconciliation_ref is not None:
-            from app.shared.storage_reconciliation import (
+            from app.core.resources.storage_reconciliation import (
                 mark_done,
                 mark_failed_attempt,
             )

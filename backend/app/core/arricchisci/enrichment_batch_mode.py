@@ -12,7 +12,7 @@ from typing import Any, Dict, List, Optional, Tuple
 import pandas as pd
 import requests
 
-from app.shared.api_utils import get_shared_session
+from app.infrastructure.http.session import get_shared_session
 from app.utils.logger import get_logger
 
 from app.core.arricchisci.models import (

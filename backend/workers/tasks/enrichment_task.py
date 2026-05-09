@@ -1012,7 +1012,7 @@ def execute_enrichment_task(
             # rmtree al __exit__ (no orphan su SIGKILL mid-run entro il
             # cleanup OS-level del /tmp
             from app.core.eseguibili import storage as _eseg_storage
-            from app.utils.dataframe import save_dataframe, save_dataframe_to_bytes
+            from app.core.files.dataframe_io import save_dataframe, save_dataframe_to_bytes
             fmt_lower = (final_format or "").lower()
             if fmt_lower in ("gpkg", "shp"):
                 with _tf.TemporaryDirectory(
@@ -1336,8 +1336,8 @@ def update_task_progress(
 # tenant binding (`_current_group_id`) fra task concorrenti sullo stesso
 # worker process Celery (prefork riusa i fork
 # `find_latest_output_file` e `load_dataframe_from_file` erano gia'
-# semplici alias di `app.utils.dataframe`: i call site usano direttamente
-# l'import canonico
+# semplici alias del boundary dataframe: i call site usano direttamente
+# l'import canonico.
 
 
 def _trigger_carica_if_present(project_id: str, canvas: Dict, output_format: str = "csv") -> Optional[Dict[str, Any]]:

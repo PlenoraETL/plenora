@@ -8,7 +8,7 @@ import re
 from app.utils.logger import get_logger
 from typing import List, Dict, Optional, Any
 
-from app.shared.models import Node, Edge
+from app.core.projects.canvas_models import Node, Edge
 from app.core.estrai.query_filters import WhereClauseBuilder
 from app.core.estrai.query_joins import QueryJoinRenderer
 from app.core.estrai.query_projection import QueryProjectionRenderer

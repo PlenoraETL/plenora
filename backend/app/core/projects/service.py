@@ -16,7 +16,7 @@ from app.core.projects.models import (
     ProjectCreate,
     ProjectList,
 )
-from app.shared.models import (
+from app.core.projects.canvas_models import (
     CanvasState,
 )
 

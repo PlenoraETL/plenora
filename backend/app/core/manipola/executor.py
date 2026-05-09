@@ -8,7 +8,7 @@ import time as _time
 import pandas as pd
 from typing import Dict, Any, List, Optional
 
-from app.shared.models import CanvasState, Node
+from app.core.projects.canvas_models import CanvasState, Node
 from app.config import settings
 from app.core.projects.execution_context import get_project_group_id
 from app.shared.execution.canvas_graph import CanvasGraph
@@ -16,7 +16,7 @@ from app.shared.execution.executor_protocol import PipelineDispatcherProtocol
 from app.shared.execution.graph import kahn_topological_order
 from app.utils.logger import get_logger, append_step
 from app.utils.result_store import save_pipeline_result_outcome
-from app.utils.dataframe import (
+from app.core.files.dataframe_io import (
     load_dataframe_from_file, sanitize_for_json,
 )
 from app.core.features.geo_utils import detect_geometry_column

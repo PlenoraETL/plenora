@@ -72,7 +72,7 @@ def delete_result(result_id: str) -> bool:
                 storage_key_to_clean = storage_key
                 # record cleanup intent inside the same transaction as
                 # the DELETE. Commit advances both atomically.
-                from app.shared.storage_reconciliation import (
+                from app.core.resources.storage_reconciliation import (
                     record_pending,
                 )
 
@@ -99,7 +99,7 @@ def delete_result(result_id: str) -> bool:
             logger=logger,
         )
         if reconciliation_ref is not None:
-            from app.shared.storage_reconciliation import (
+            from app.core.resources.storage_reconciliation import (
                 mark_done,
                 mark_failed_attempt,
             )
@@ -150,7 +150,7 @@ def delete_results_for_project(project_id: str) -> int:
     with transaction() as conn:
         with conn.cursor() as cur:
             if rows:
-                from app.shared.storage_reconciliation import (
+                from app.core.resources.storage_reconciliation import (
                     record_pending,
                 )
 
@@ -177,7 +177,7 @@ def delete_results_for_project(project_id: str) -> int:
 
     if pending_cleanups:
         from app.shared.storage_compensation import compensating_delete
-        from app.shared.storage_reconciliation import (
+        from app.core.resources.storage_reconciliation import (
             mark_done,
             mark_failed_attempt,
         )

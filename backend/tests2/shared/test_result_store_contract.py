@@ -198,7 +198,7 @@ def test_save_pipeline_result_outcome_is_typed_internal_boundary(monkeypatch):
     calls: dict[str, object] = {}
 
     monkeypatch.setattr(
-        "app.utils.dataframe.save_dataframe_to_bytes",
+        "app.core.files.dataframe_io.save_dataframe_to_bytes",
         lambda df, fmt, geom_column=None, crs="EPSG:4326": b"id\n1\n",
     )
 

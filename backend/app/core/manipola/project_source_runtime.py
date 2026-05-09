@@ -12,7 +12,7 @@ from app.core.intermediate.writer import close_run as idb_close_run
 from app.core.projects.execution_context import get_upstream_run_context
 from app.core.projects.lineage import ProjectLineageCycleError
 from app.shared.execution.executor_protocol import PipelineDispatcherProtocol
-from app.utils.dataframe import find_latest_output_file
+from app.core.files.dataframe_io import find_latest_output_file
 from app.utils.logger import get_logger
 
 from .source_loading import load_project_source_artifact

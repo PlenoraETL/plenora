@@ -7,9 +7,6 @@ preview delegation.
 import json
 import os
 import re
-import io
-import tempfile
-import zipfile
 import warnings
 from dataclasses import dataclass
 from datetime import datetime
@@ -62,7 +59,7 @@ try:
         FileSourceLayersResponse,
         FileSourcePreview,
     )
-    from app.shared.models import ColumnInfo
+    from app.core.projects.canvas_models import ColumnInfo
     _USE_APP_MODELS = True
 except ImportError:
     _USE_APP_MODELS = False
@@ -376,205 +373,37 @@ class FileSourceService:
     def _get_blob_from_db(
         self, file_id: str, expected_group_id: str = None,
     ) -> Optional[bytes]:
-        """Read the file_source blob, fail-soft.
-
-        the storage-read primitive lives in
-        ``app.core.resources.loaders.file_source_blob.FileSourceBlobLoader``.
-        This wrapper:
-
-          1. Calls ``self._assert_visible(file_id, expected_group_id)``
-             which raises ``PermissionError`` on cross-tenant access
-             not authorized by ownership OR shared-via-table.
-          2. Routes the actual fetch (SQL preflight + bounded
-             BYTEA + bounded object-storage download) through the
-             Resource Engine.
-
-        Tenant dispatch:
-          - **Owned case** (file's group_id == caller's group_id,
-            covers ~all real traffic): the engine's SQL filter
-            ``WHERE id = ? AND group_id = ?`` matches and returns
-            the row. No audit log line.
-          - **Shared case** (cross-group fetch authorized via
-            ``*_shares``): the SQL filter excludes the row, the
-            engine raises ``FileNotFoundError``, and we retry
-            with the audited loader bypass enabled. The retry path
-            produces the loader's audit log line, which is exactly
-            the artifact ops want for cross-group fetches.
-          - **Superadmin caller** (``expected_group_id == "*"``):
-            the first-shot ref already carries
-            ``is_superadmin=True`` so no retry is required.
-
-        Fail-soft contract preserved:
-          - missing row -> ``None`` (engine ``FileNotFoundError``
-            after the bypass retry collapses to ``None``);
-          - object-storage disabled / download failure -> ``None``
-            (engine returns ``Resource(data=None)`` -> ``None``);
-          - oversize -> log error + ``None`` (engine raises
-            ``MemoryLimitExceededError``; we catch + log here so
-            ``get_blob_bytes`` callers continue to see the
-            pre-020 ``Optional[bytes]`` surface).
-        """
-        from app.core.resources.file_source_blob_access import (
-            load_file_source_blob_bytes,
+        """Delegate to `source_blob.get_blob_from_db`."""
+        from app.core.files.source_blob import get_blob_from_db
+        return get_blob_from_db(
+            file_id,
+            expected_group_id=expected_group_id,
+            assert_visible=self._assert_visible,
+            superadmin_bypass=self.SUPERADMIN_BYPASS,
+            logger=self._logger,
         )
-        from app.core.resources.exceptions import MemoryLimitExceededError
-
-        # `_assert_visible` re-raises PermissionError to the caller
-        # kept identical to pre-020 behavior). After it returns
-        # the caller has been authorized for this file_source
-        self._assert_visible(file_id, expected_group_id or "")
-
-        is_superadmin_caller = expected_group_id == self.SUPERADMIN_BYPASS
-
-        def _fetch(is_superadmin: bool) -> Optional[bytes]:
-            return load_file_source_blob_bytes(
-                file_source_id=file_id,
-                expected_group_id=(expected_group_id or "").strip()
-                or self.SUPERADMIN_BYPASS,
-                is_superadmin=is_superadmin,
-            )
-
-        try:
-            return _fetch(is_superadmin=is_superadmin_caller)
-        except FileNotFoundError:
-            # Owned-path SQL filter excluded the row. Either the
-            # file genuinely does not exist OR `_assert_visible`
-            # authorized via *_shares. Retry with bypass: the
-            # engine's audit log records the cross-group fetch
-            if is_superadmin_caller:
-                # First shot already had bypass; no further retry
-                return None
-            try:
-                bypass_shared_fetch = not is_superadmin_caller
-                return _fetch(is_superadmin=bypass_shared_fetch)
-            except FileNotFoundError:
-                return None
-            except MemoryLimitExceededError as e:
-                self._logger.error(
-                    f"[GESTITO] Blob {file_id} oversize su retry "
-                    f"con bypass loader: {e}. "
-                    f"Cap RESOURCE_MAX_BYTES limita la lettura."
-                )
-                return None
-            except Exception as e:
-                self._logger.error(
-                    f"[GESTITO] Errore lettura blob {file_id} (retry): {e}"
-                )
-                return None
-        except MemoryLimitExceededError as e:
-            self._logger.error(
-                f"[GESTITO] Blob {file_id} oversize: {e}. "
-                f"Cap RESOURCE_MAX_BYTES limita la lettura."
-            )
-            return None
-        except Exception as e:
-            self._logger.error(
-                f"[GESTITO] Errore lettura blob {file_id}: {e}"
-            )
-            return None
 
     def _temp_file_for(
         self, file_id: str, expected_group_id: str = None,
     ) -> Optional[Path]:
-        """Materialize a file_source blob to a tempfile and return
-        the on-disk path (for SHP/GDB: returns the path of the .shp
-        / .gdb inside an extracted tempdir; caller cleans the parent).
-
-         (legacy helper retired):
-        the bytes fetch routes through ``self._get_blob_from_db``
-        (which itself goes through the Resource Engine via
-        ``FileSourceBlobLoader`` since RESOURCE-ENGINE-020). The
-        SHP/GDB ZIP separation + single-file tempfile materialization
-        live INLINE here -- the previously-shared
-        retired temp-file helper has been deleted, eliminating the duplicate
-        read path that bypassed the engine's tenant-binding
-        contract via callback injection.
-
-        Tenant binding: ``self._get_blob_from_db`` calls
-        ``self._assert_visible`` which raises ``PermissionError`` on
-        cross-tenant access not authorized by ownership OR shared-
-        via-table. SHP/GDB cleanup is preserved verbatim from the
-        pre-024 helper: the tmpdir is rmtree'd on every error path
-        (zip-separation failure, no .shp/.gdb found inside).
-
-        N1: ``expected_group_id`` obbligatorio (fail-closed via
-        ``_assert_visible`` invocato da ``_get_blob_from_db``).
-        """
+        """Delegate to `source_blob.temp_file_for`."""
         from app.config import settings
         from app.core.files.upload import mkdtemp_writable
         from app.shared.resources.file_cleanup import rmtree_safe
         from app.utils.zip_safe import safe_extractall
+        from app.core.files.source_blob import temp_file_for
 
-        # Metadata fetch (no blob): we need ``format`` +
-        # ``original_filename`` to choose extension / separation mode
-        try:
-            row_meta = files_db.get_file_source(file_id, include_data=False)
-        except Exception as e:
-            self._logger.warning(
-                f"[GESTITO] _temp_file_for {file_id}: fetch metadata fallito: {e}"
-            )
-            return None
-        if not row_meta:
-            return None
-
-        # Blob bytes via the Resource Engine. ``_get_blob_from_db``
-        # owns the tenant-binding ``_assert_visible`` call AND the
-        # fail-soft contract (returns None on missing row /
-        # capability disabled / oversize / fetch failure). Pre-024
-        # the legacy helper duplicated those checks via injected
-        # callbacks; post-024 they live in exactly one place
-        blob = self._get_blob_from_db(file_id, expected_group_id)
-        if not blob:
-            return None
-
-        fmt = row_meta.get("format", "")
-        original_filename = row_meta.get("original_filename", f"{file_id}.bin")
-
-        # SHP / GDB: blob is a ZIP - extract into a tempdir and return
-        # the .shp / .gdb path. Caller cleans up the tempdir parent
-        # after use. We clean up ONLY error paths here (separation
-        # failure or zip valid but no .shp/.gdb inside): without it
-        # every malformed shapefile would leak a tempdir per worker
-        if fmt in ("shp", "gdb"):
-            tmp_dir = mkdtemp_writable(dir=settings.TEMP_DIR)
-            try:
-                with zipfile.ZipFile(io.BytesIO(blob), "r") as zip_archive:
-                    safe_extractall(zip_archive, tmp_dir)
-                if fmt == "shp":
-                    shp_files = (
-                        list(tmp_dir.rglob("*.shp"))
-                        + list(tmp_dir.rglob("*.SHP"))
-                    )
-                    if shp_files:
-                        return shp_files[0]
-                else:
-                    gdb_dirs = [
-                        f for f in tmp_dir.rglob("*")
-                        if f.is_dir() and f.suffix.lower() == ".gdb"
-                    ]
-                    if gdb_dirs:
-                        return gdb_dirs[0]
-            except Exception as e:
-                self._logger.error(
-                    f"[GESTITO] Errore estrazione {fmt.upper()} zip {file_id}: {e}"
-                )
-            # Cleanup tmp_dir on both error paths (separation
-            # exception OR valid zip without .shp/.gdb): the
-            # alternative leaks a tempdir per malformed shapefile
-            rmtree_safe(tmp_dir)
-            return None
-
-        # Single-file format: materialize the blob with the
-        # original filename's suffix so downstream readers can
-        # dispatch by extension
-        suffix = Path(original_filename).suffix or ".bin"
-        temporary_file = tempfile.NamedTemporaryFile(
-            delete=False, suffix=suffix, dir=settings.TEMP_DIR,
+        return temp_file_for(
+            file_id,
+            expected_group_id=expected_group_id,
+            db_get_file_source=files_db.get_file_source,
+            get_blob_from_db=self._get_blob_from_db,
+            temp_dir=settings.TEMP_DIR,
+            mkdtemp_writable=mkdtemp_writable,
+            safe_extractall=safe_extractall,
+            rmtree_safe=rmtree_safe,
+            logger=self._logger,
         )
-        temporary_file.write(blob)
-        temporary_file.close()
-        return Path(temporary_file.name)
-
 
     def get_file_source(self, file_id: str) -> Optional[FileSource]:
         """Delegate to `source_metadata.get_file_source`."""

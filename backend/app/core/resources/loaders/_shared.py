@@ -67,7 +67,7 @@ def _download_object_storage_impl(
         ``"result_blob_oversize"`` or ``"file_source_blob_oversize"``.
     """
     from app.utils.logger import get_logger
-    from app.shared.cloud_backends import (
+    from app.infrastructure.storage.cloud_backends import (
         ObjectStorageDisabledError,
         get_runtime_object_storage,
     )

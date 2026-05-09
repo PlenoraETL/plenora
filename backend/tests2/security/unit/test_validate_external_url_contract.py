@@ -1,13 +1,13 @@
 """
-Lock tests per `app.shared.api_utils.validate_external_url`.
+Lock tests per `app.core.security.outbound_url.validate_external_url`.
 
 Garantisce il contratto SSRF anti-loopback + l'opt-in di test
 """
 
 import pytest
 
-from app.shared import api_utils
-from app.shared.api_utils import validate_external_url
+from app.core.security import outbound_url
+from app.core.security.outbound_url import validate_external_url
 
 
 pytestmark = [
@@ -34,7 +34,7 @@ def _clean_loopback_env(monkeypatch):
         "ENV",
     ):
         monkeypatch.delenv(name, raising=False)
-    api_utils._warn_urby_loopback_alias_once.cache_clear()
+    outbound_url._warn_urby_loopback_alias_once.cache_clear()
 
 
 # Schema validation
@@ -289,17 +289,17 @@ def test_loopback_opt_in_still_works_for_ipv6_loopback(monkeypatch):
 
 
 def _spy_warning(monkeypatch):
-    """Aggancia una spia su `api_utils.logger.warning` e ritorna la lista
+    """Aggancia una spia su `outbound_url.logger.warning` e ritorna la lista
     di chiamate registrate. Pattern behavior-bound: indipendente dal
     sink concreto (StructuredLogger / stdout / caplog handler chain)."""
     calls = []
-    original = api_utils.logger.warning
+    original = outbound_url.logger.warning
 
     def _spy(msg, *args, **kwargs):
         calls.append(msg if not args else (msg % args if "%" in str(msg) else msg))
         return original(msg, *args, **kwargs)
 
-    monkeypatch.setattr(api_utils.logger, "warning", _spy)
+    monkeypatch.setattr(outbound_url.logger, "warning", _spy)
     return calls
 
 
@@ -368,7 +368,7 @@ def test_cache_clear_allows_warning_to_be_re_emitted(monkeypatch):
     assert len(_deprecation_warnings(calls)) == 1
 
     # Reset cache + nuova chiamata: warning ri-emesso
-    api_utils._warn_urby_loopback_alias_once.cache_clear()
+    outbound_url._warn_urby_loopback_alias_once.cache_clear()
     validate_external_url("http://127.0.0.1:51360/ok")
     assert len(_deprecation_warnings(calls)) == 2, (
         "Dopo cache_clear() il warning deve ri-emettersi una volta"

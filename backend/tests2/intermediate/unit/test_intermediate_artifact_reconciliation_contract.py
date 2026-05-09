@@ -36,7 +36,7 @@ def _next_recon_id() -> str:
 
 def _make_ref(domain: str, storage_key: str, operation: str = "delete"):
     """Build a `ReconciliationEntryRef` that record_pending stub returns."""
-    from app.shared.storage_reconciliation import ReconciliationEntryRef
+    from app.core.resources.storage_reconciliation import ReconciliationEntryRef
     return ReconciliationEntryRef(
         id=_next_recon_id(),
         domain=domain,
@@ -103,13 +103,13 @@ def test_no_artifacts_only_deletes_run_no_reconciliation(monkeypatch):
     mark_fail_calls: List[tuple] = []
 
     with patcher, \
-         patch("app.shared.storage_reconciliation.record_pending",
+         patch("app.core.resources.storage_reconciliation.record_pending",
                side_effect=lambda cur, **kw: record_pending_calls.append(kw)), \
          patch("app.shared.storage_compensation.compensating_delete",
                side_effect=lambda key, **kw: (compensate_calls.append({"key": key, **kw}), "ok")[1]), \
-         patch("app.shared.storage_reconciliation.mark_done",
+         patch("app.core.resources.storage_reconciliation.mark_done",
                side_effect=lambda rid: mark_done_calls.append(rid)), \
-         patch("app.shared.storage_reconciliation.mark_failed_attempt",
+         patch("app.core.resources.storage_reconciliation.mark_failed_attempt",
                side_effect=lambda rid, **kw: mark_fail_calls.append((rid, kw))):
         idb._delete_run("run-empty")
 
@@ -162,13 +162,13 @@ def test_single_complete_artifact_records_pair_and_marks_done(monkeypatch):
     mark_done_calls: List[str] = []
 
     with patcher, \
-         patch("app.shared.storage_reconciliation.record_pending",
+         patch("app.core.resources.storage_reconciliation.record_pending",
                side_effect=_fake_record_pending), \
          patch("app.shared.storage_compensation.compensating_delete",
                side_effect=lambda key, **kw: (compensate_calls.append(key), "ok")[1]), \
-         patch("app.shared.storage_reconciliation.mark_done",
+         patch("app.core.resources.storage_reconciliation.mark_done",
                side_effect=lambda rid: mark_done_calls.append(rid)), \
-         patch("app.shared.storage_reconciliation.mark_failed_attempt",
+         patch("app.core.resources.storage_reconciliation.mark_failed_attempt",
                side_effect=lambda rid, **kw: pytest.fail(
                    "mark_failed_attempt called on happy path: "
                    f"{rid} {kw}",
@@ -229,12 +229,12 @@ def test_artifact_uri_with_scheme_is_skipped(monkeypatch):
     comp: List[str] = []
 
     with patcher, \
-         patch("app.shared.storage_reconciliation.record_pending",
+         patch("app.core.resources.storage_reconciliation.record_pending",
                side_effect=lambda cur, **kw: rec.append(kw)), \
          patch("app.shared.storage_compensation.compensating_delete",
                side_effect=lambda key, **kw: (comp.append(key), "ok")[1]), \
-         patch("app.shared.storage_reconciliation.mark_done"), \
-         patch("app.shared.storage_reconciliation.mark_failed_attempt"):
+         patch("app.core.resources.storage_reconciliation.mark_done"), \
+         patch("app.core.resources.storage_reconciliation.mark_failed_attempt"):
         idb._delete_run("r-scheme")
 
     assert rec == []
@@ -267,12 +267,12 @@ def test_artifact_uri_not_ending_in_data_parquet_skips_manifest(monkeypatch):
         return _make_ref(kwargs["domain"], kwargs["storage_key"])
 
     with patcher, \
-         patch("app.shared.storage_reconciliation.record_pending",
+         patch("app.core.resources.storage_reconciliation.record_pending",
                side_effect=_fake_record_pending), \
          patch("app.shared.storage_compensation.compensating_delete",
                return_value="ok"), \
-         patch("app.shared.storage_reconciliation.mark_done"), \
-         patch("app.shared.storage_reconciliation.mark_failed_attempt"):
+         patch("app.core.resources.storage_reconciliation.mark_done"), \
+         patch("app.core.resources.storage_reconciliation.mark_failed_attempt"):
         idb._delete_run("r-custom")
 
     assert len(rec) == 1
@@ -307,13 +307,13 @@ def test_compensating_delete_failed_marks_failed_attempt(monkeypatch):
     mark_fail_calls: List[tuple] = []
 
     with patcher, \
-         patch("app.shared.storage_reconciliation.record_pending",
+         patch("app.core.resources.storage_reconciliation.record_pending",
                side_effect=_fake_record_pending), \
          patch("app.shared.storage_compensation.compensating_delete",
                return_value="failed"), \
-         patch("app.shared.storage_reconciliation.mark_done",
+         patch("app.core.resources.storage_reconciliation.mark_done",
                side_effect=lambda rid: mark_done_calls.append(rid)), \
-         patch("app.shared.storage_reconciliation.mark_failed_attempt",
+         patch("app.core.resources.storage_reconciliation.mark_failed_attempt",
                side_effect=lambda rid, **kw: mark_fail_calls.append((rid, kw))):
         idb._delete_run("r-fail")
 
@@ -340,10 +340,10 @@ def test_pre_fetch_sql_excludes_failed_and_null_at_db_level(monkeypatch):
     patcher, _cursor, _conn = _make_tx_patcher()
 
     with patcher, \
-         patch("app.shared.storage_reconciliation.record_pending"), \
+         patch("app.core.resources.storage_reconciliation.record_pending"), \
          patch("app.shared.storage_compensation.compensating_delete"), \
-         patch("app.shared.storage_reconciliation.mark_done"), \
-         patch("app.shared.storage_reconciliation.mark_failed_attempt"):
+         patch("app.core.resources.storage_reconciliation.mark_done"), \
+         patch("app.core.resources.storage_reconciliation.mark_failed_attempt"):
         idb._delete_run("r-x")
 
     sql, _ = fa_calls[0]
@@ -383,13 +383,13 @@ def test_multiple_nodes_each_yield_pair_entries(monkeypatch):
     done: List[str] = []
 
     with patcher, \
-         patch("app.shared.storage_reconciliation.record_pending",
+         patch("app.core.resources.storage_reconciliation.record_pending",
                side_effect=_fake_record_pending), \
          patch("app.shared.storage_compensation.compensating_delete",
                side_effect=lambda key, **kw: (comp.append(key), "ok")[1]), \
-         patch("app.shared.storage_reconciliation.mark_done",
+         patch("app.core.resources.storage_reconciliation.mark_done",
                side_effect=lambda rid: done.append(rid)), \
-         patch("app.shared.storage_reconciliation.mark_failed_attempt"):
+         patch("app.core.resources.storage_reconciliation.mark_failed_attempt"):
         idb._delete_run("r-multi")
 
     # 3 parquet + 3 manifest = 6 pending.
@@ -448,12 +448,12 @@ def test_delete_all_runs_for_canvas_reconciles_each_run(monkeypatch):
         return _make_ref(kwargs["domain"], kwargs["storage_key"])
 
     with patcher, \
-         patch("app.shared.storage_reconciliation.record_pending",
+         patch("app.core.resources.storage_reconciliation.record_pending",
                side_effect=_fake_record_pending), \
          patch("app.shared.storage_compensation.compensating_delete",
                return_value="ok"), \
-         patch("app.shared.storage_reconciliation.mark_done"), \
-         patch("app.shared.storage_reconciliation.mark_failed_attempt"):
+         patch("app.core.resources.storage_reconciliation.mark_done"), \
+         patch("app.core.resources.storage_reconciliation.mark_failed_attempt"):
         deleted = idb.delete_all_runs_for_canvas("canvas-x")
 
     assert deleted == 2

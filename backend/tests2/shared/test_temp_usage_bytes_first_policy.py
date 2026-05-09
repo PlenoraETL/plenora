@@ -407,18 +407,18 @@ _TEMP_INVENTORY: dict[tuple[str, int], tuple[str, str]] = {
         "callers should prefer mode='bytes'.",
     ),
 
-    ("app/core/files/dataframe_io.py", 181): (
+    ("app/core/files/dataframe_io.py", 183): (
         "DIR_MULTIFILE",
         "Shapefile zip extraction: SHP is multi-file (shp+shx+"
         "dbf+prj+cpg). geopandas.read_file requires a directory "
         "with all sidecars present.",
     ),
-    ("app/core/files/dataframe_io.py", 193): (
+    ("app/core/files/dataframe_io.py", 195): (
         "DIR_MULTIFILE",
         "FileGDB zip extraction: GDB is a directory artifact. "
         "Path required by GDAL/OGR driver.",
     ),
-    ("app/core/files/dataframe_io.py", 201): (
+    ("app/core/files/dataframe_io.py", 203): (
         "DIR_MULTIFILE",
         "Single-file ZIP recursive load: extract to dir then "
         "recurse into load_dataframe_from_file (which dispatches "

@@ -62,13 +62,13 @@ def test_artifact_writer_does_not_import_os_anymore():
 # silenziosamente migrati a settings.get.
 
 def test_validate_storage_config_keeps_os_getenv_for_log_archive_key_prefix():
-    src = _read(_BACKEND_APP / "shared" / "cloud_backends.py")
+    src = _read(_BACKEND_APP / "infrastructure" / "storage" / "cloud_backends.py")
     # Il validator deve continuare a leggere il raw env per fail-fast
     assert "os.getenv(\"LOG_ARCHIVE_KEY_PREFIX\")" in src
 
 
 def test_validate_storage_config_keeps_os_getenv_for_audit_retention_days():
-    src = _read(_BACKEND_APP / "shared" / "cloud_backends.py")
+    src = _read(_BACKEND_APP / "infrastructure" / "storage" / "cloud_backends.py")
     assert "os.getenv(\"AUDIT_RETENTION_DAYS\")" in src
 
 
@@ -76,14 +76,14 @@ def test_validate_storage_config_check_positive_int_uses_os_getenv():
     """Il helper `_check_positive_int` legge direttamente l'env per
     distinguere unset vs malformed. Sostituirlo con settings.get
     romperebbe il fail-fast su typo (es. LOG_ARCHIVE_BATCH_ROWS=abc)."""
-    src = _read(_BACKEND_APP / "shared" / "cloud_backends.py")
+    src = _read(_BACKEND_APP / "infrastructure" / "storage" / "cloud_backends.py")
     assert "raw = os.getenv(name)" in src
 
 
 def test_validator_documents_intentional_direct_read():
     """Il commento BE-CONFIG-001E + ADR-0021 deve esserci per
     documentare la scelta deliberata."""
-    src = _read(_BACKEND_APP / "shared" / "cloud_backends.py")
+    src = _read(_BACKEND_APP / "infrastructure" / "storage" / "cloud_backends.py")
     assert "BE-CONFIG-001E + ADR-0021" in src
 
 

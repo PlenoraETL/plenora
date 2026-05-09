@@ -11,7 +11,7 @@ from typing import Dict, Optional, Tuple
 
 import requests
 
-from app.shared.api_utils import (
+from app.infrastructure.http.session import (
     get_shared_session,
 )
 from app.observability.log_sanitization import (
@@ -68,7 +68,7 @@ class EnrichmentRetryHttpMixin:
                 # Il token va come ?token=xxx, NON come Authorization header
                 # La cache su (token_url, username) gestisce l'auto-renewal
                 if self.auth.get("type") == "arcgis_token":
-                    from app.shared.api_utils import get_arcgis_token
+                    from app.shared.connections.oauth import get_arcgis_token
                     arcgis_tok = get_arcgis_token(self.auth)
                     if arcgis_tok:
                         call_params["token"] = arcgis_tok

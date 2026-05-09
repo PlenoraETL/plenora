@@ -11,7 +11,7 @@ from typing import List, Tuple
 
 import pytest
 
-from app.shared.storage_reconciliation import (
+from app.core.resources.storage_reconciliation import (
     ReconciliationStateCount,
     count_active_by_state_domain,
     prune_terminal_older_than,

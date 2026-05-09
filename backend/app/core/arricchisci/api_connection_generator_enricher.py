@@ -207,10 +207,8 @@ class ApiConnectionGeneratorEnricherMixin:
 
         Solleva `ValueError` su HTTP error.
         """
-        from app.shared.api_utils import (
-            get_shared_session,
-            validate_external_url,
-        )
+        from app.core.security.outbound_url import validate_external_url
+        from app.infrastructure.http.session import get_shared_session
 
         target_url = call_url or url
         # Generator: encoding stretto (safe='') — i path param vengono
@@ -469,10 +467,8 @@ class ApiConnectionGeneratorEnricherMixin:
         propagare l'eccezione). Le eccezioni network/parse risalgono al
         caller (che le cattura nel try/except del loop).
         """
-        from app.shared.api_utils import (
-            get_shared_session,
-            validate_external_url,
-        )
+        from app.core.security.outbound_url import validate_external_url
+        from app.infrastructure.http.session import get_shared_session
 
         auth = api_config.get('auth', {}) or {}
         params = dict(api_config.get('static_parameters', {}) or {})

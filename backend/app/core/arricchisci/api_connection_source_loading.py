@@ -16,7 +16,7 @@ from app.core.arricchisci.execution_context import (
     ArricchisciExecutionContext,
 )
 from app.core.arricchisci.project_access import load_project_access_context
-from app.utils.dataframe import (
+from app.core.files.dataframe_io import (
     filter_visible_columns,
     find_latest_output_file,
 )
@@ -152,7 +152,7 @@ class ApiConnectionSourceLoadingMixin:
             from app.core.estrai.query_generator import QueryGenerator
             from app.db.query_executor import QueryExecutor
             from app.core.features.features_service import FeaturesService
-            from app.utils.dataframe import save_dataframe as _save_df
+            from app.core.files.dataframe_io import save_dataframe as _save_df
 
             _proj_svc = ProjectService()
             _conn_svc = ConnectionService()
@@ -199,7 +199,7 @@ class ApiConnectionSourceLoadingMixin:
         Emette `logger.warning` con tag `[COMPAT-RESIDUE]` quando lo
         scatta: grep-ami i log di prod per verificare se e' ancora vivo.
         """
-        from app.utils.dataframe import load_dataframe_from_file
+        from app.core.files.dataframe_io import load_dataframe_from_file
 
         if output_dir is None:
             raise ValueError(f"Nessun output per progetto '{source_project_id}'")
@@ -243,7 +243,7 @@ class ApiConnectionSourceLoadingMixin:
             SourceLoadingError,
             SourceRef,
         )
-        from app.utils.dataframe import load_dataframe_from_file
+        from app.core.files.dataframe_io import load_dataframe_from_file
 
         # RB.#19 Step A: timing log totale del source project load
         # Aggrega tutti i sub-step (DB lookup, S3/blob fetch, temp write
@@ -466,7 +466,7 @@ class ApiConnectionSourceLoadingMixin:
         outbound del flusso REST_FILE.
 
         PR-#35 (P1-C SSRF single-source design): delega alla primitive
-        condivisa `app.shared.api_utils._check_outbound_address` con
+        condivisa `app.core.security.outbound_url.check_outbound_address` con
         `allow_loopback_opt_in=False`. REST_FILE NON accetta loopback
         nemmeno con env `PLENORA_ALLOW_LOOPBACK_OUTBOUND` settata: la
         coerenza col threat model REST_FILE (file processor via HTTP
@@ -481,5 +481,5 @@ class ApiConnectionSourceLoadingMixin:
 
         Ritorna None se URL safe, stringa con il motivo altrimenti.
         """
-        from app.shared.api_utils import _check_outbound_address
-        return _check_outbound_address(url, allow_loopback_opt_in=False)
+        from app.core.security.outbound_url import check_outbound_address
+        return check_outbound_address(url, allow_loopback_opt_in=False)

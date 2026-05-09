@@ -39,7 +39,7 @@ def _build_orchestrator() -> Any:
     from app.core.features.features_service import FeaturesService
     from app.db.query_executor import create_executor
     from app.core.orchestrator.service import OrchestratorService
-    from app.utils.dataframe import save_dataframe
+    from app.core.files.dataframe_io import save_dataframe
     from app.config import settings
 
     project_service = ProjectService()

@@ -32,7 +32,7 @@ class AdminBackupCredentialsError(RuntimeError):
     operativo, evitando il fallback silenzioso a lista vuota che faceva
     apparire l'endpoint come "success" senza backup elencati.
 
-    Cause riconosciute (vedi `app.shared.cloud_backends.aws_credentials_error_message`):
+    Cause riconosciute (vedi `app.infrastructure.storage.cloud_backends.aws_credentials_error_message`):
       - LoginRefreshRequired / TokenRetrievalError / UnauthorizedSSOTokenError
       - NoCredentialsError / SSOTokenLoadError / CredentialRetrievalError
       - ClientError AccessDeniedException con "refresh token" / "CreateOAuth2Token"
@@ -80,7 +80,7 @@ def _to_datetime(value: Any) -> datetime:
 # consumer in repo) e viene retirato qui
 # schedule cron / description -> `Settings.DEFAULTS` (APP_POLICY
 
-from app.shared.cloud_backends import _resolve_backup_bucket as _resolve_backup_bucket_env
+from app.infrastructure.storage.cloud_backends import _resolve_backup_bucket as _resolve_backup_bucket_env
 
 BUCKET = _resolve_backup_bucket_env() or "plenora-backup-112011134642-eu-south-1-an"
 REGION = os.getenv("AWS_REGION", "eu-south-1")
@@ -117,7 +117,7 @@ def list_backups() -> List[Dict[str, Any]]:
         AdminBackupDependencyError: botocore[crt] o altre dep AWS mancanti.
         AdminBackupCredentialsError: credenziali AWS scadute / SSO refresh.
     """
-    from app.shared.cloud_backends import (
+    from app.infrastructure.storage.cloud_backends import (
         ObjectStorageDisabledError,
         get_backup_object_storage,
     )
@@ -158,7 +158,7 @@ def list_backups() -> List[Dict[str, Any]]:
             pass  # botocore non importabile: improbabile qui, degrada
         # RB.2 (2026-04-27): credenziali AWS scadute / SSO refresh required
         # > 503 con detail strutturato. Niente lista vuota fuorviante
-        from app.shared.cloud_backends import aws_credentials_error_message
+        from app.infrastructure.storage.cloud_backends import aws_credentials_error_message
         hint = aws_credentials_error_message(e)
         if hint is not None:
             # R-1 (2026-04-27): log conciso. La causa e' classificata

@@ -60,7 +60,7 @@ def test_execute_carica_uses_result_id_artifact_before_output_path(schedule_conf
 
     from app.core.results.db import ResultMetadataRow
 
-    with patch("app.utils.dataframe.load_dataframe_from_file", return_value=df) as mock_load, \
+    with patch("app.core.files.dataframe_io.load_dataframe_from_file", return_value=df) as mock_load, \
          patch("app.core.carica.executor.CaricaExecutor") as mock_executor, \
          patch("app.core.results.db.get_result_row", return_value=ResultMetadataRow(id="res-1", project_id="proj-1", group_id="grp-1", format="csv")), \
          patch("app.db.pg_connection.fetchone", return_value={"data": b"id\n1\n2\n", "storage_key": None, "project_id": "proj-1"}):

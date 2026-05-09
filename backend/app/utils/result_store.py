@@ -241,7 +241,7 @@ def save_result_blob(project_id: str, path: Path, fmt: str,
             # Ordine: upload prima (no row DB orfana se upload fallisce
             storage_key = f"{RESULTS_PREFIX}/{project_id}/{result_id}.bin"
             try:
-                from app.shared.cloud_backends import (
+                from app.infrastructure.storage.cloud_backends import (
                     aws_credentials_error_message,
                     get_runtime_object_storage,
                 )
@@ -399,7 +399,7 @@ def save_result_blob_from_bytes(
             # ordine importante: no row DB orfana su upload failure
             storage_key = f"{RESULTS_PREFIX}/{project_id}/{result_id}.bin"
             try:
-                from app.shared.cloud_backends import (
+                from app.infrastructure.storage.cloud_backends import (
                     aws_credentials_error_message,
                     get_runtime_object_storage,
                 )
@@ -540,7 +540,7 @@ def save_pipeline_result_outcome(
     Returns:
         typed result save outcome.
     """
-    from app.utils.dataframe import (
+    from app.core.files.dataframe_io import (
         save_dataframe, save_dataframe_to_bytes,
     )
 

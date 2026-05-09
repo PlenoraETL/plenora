@@ -23,7 +23,7 @@ _logger = logging.getLogger(__name__)
 # ColumnInfo: modello condiviso canonico, con fallback dataclass per test
 # standalone che importano il modulo senza l'app completa.
 try:
-    from app.shared.models import ColumnInfo  # noqa: F401
+    from app.core.projects.canvas_models import ColumnInfo  # noqa: F401
     _USE_APP_MODELS = True
 except ImportError:  # pragma: no cover
     _USE_APP_MODELS = False

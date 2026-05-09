@@ -40,10 +40,10 @@ def _row() -> EseguibileRow:
 
 
 def test_analyze_file_upload_returns_typed_internal_payload(monkeypatch):
-    from app.utils import dataframe
+    from app.core.files import dataframe_io
 
     monkeypatch.setattr(
-        dataframe,
+        dataframe_io,
         "load_dataframe_from_file",
         lambda path: pd.DataFrame(
             {
@@ -65,11 +65,11 @@ def test_analyze_file_upload_returns_typed_internal_payload(monkeypatch):
 
 def test_execute_returns_typed_internal_payload(monkeypatch):
     from app.core.files.service import file_source_service
+    from app.core.files import dataframe_io
     from app.core.orchestrator.task_service import task_service
-    from app.utils import dataframe
 
     monkeypatch.setattr(
-        dataframe,
+        dataframe_io,
         "load_dataframe_from_file",
         lambda path: pd.DataFrame({"source_customer_id": [1, 2]}),
     )

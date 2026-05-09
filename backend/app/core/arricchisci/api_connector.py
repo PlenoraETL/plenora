@@ -8,7 +8,7 @@ from typing import Dict, List, Optional
 
 from app.config import settings
 from app.utils.logger import get_logger
-from app.shared.api_utils import (
+from app.shared.connections.oauth import (
     prepare_headers as _shared_prepare_headers,
 )
 
@@ -158,7 +158,7 @@ class ApiConnectionService(
     # `_get_oauth2_token` come dead code (prova forte: 0 self-call sites
     # in api_connector, 0 external refs in app/, 0 test patches, 0 direct
     # imports. EnrichmentExecutor mantiene helper propri, ma ora delegano
-    # direttamente a `app.shared.api_utils.get_cached_oauth2_token`.
+    # direttamente a `app.shared.connections.oauth.get_cached_oauth2_token`.
     # Vedi B3-B.3 mini-scan `_get_oauth2_*` dead-code candidate flag.
 
 

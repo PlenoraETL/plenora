@@ -138,7 +138,7 @@ class CaricaArcGISWriteOutcome:
 def create_default_arcgis_feature_writer() -> ArcGISFeatureWriter:
     """Build the generic ArcGIS feature writer used by CARICA."""
     from app.core.features.features_service import FeaturesService
-    from app.utils.dataframe import save_dataframe
+    from app.core.files.dataframe_io import save_dataframe
 
     return FeaturesService(save_function=save_dataframe)
 

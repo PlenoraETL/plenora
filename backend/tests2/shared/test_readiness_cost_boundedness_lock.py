@@ -529,7 +529,7 @@ def test_health_module_has_no_top_level_heavy_imports():
         "import app.bootstrap",
         "from app.db.migrations_runner",
         "from app.shared.cloud_backends",
-        "from app.shared.storage_reconciliation",
+        "from app.core.resources.storage_reconciliation",
         "from app.db.pg_connection",
     }
     offenders: list[str] = []
@@ -603,8 +603,10 @@ def test_object_storage_timeout_setting_default_is_three_seconds():
 
 def test_check_postgres_uses_statement_timeout():
     """`check_postgres` MUST `SET LOCAL statement_timeout = Nms` on
-    its transaction before running `SELECT 1`. Without this a stalled
-    PG would block /ready beyond the TCP keepalive."""
+    its transaction before running `SELECT 1` plus `current_schema()`.
+    Without this a stalled PG would block /ready beyond the TCP keepalive,
+    and a bad search_path could silently point runtime SQL at the wrong
+    schema."""
     from app.observability import health as h
 
     captured: list[str] = []
@@ -620,7 +622,7 @@ def test_check_postgres_uses_statement_timeout():
             captured.append(sql)
 
         def fetchone(self):
-            return {"v": 1}
+            return {"v": 1, "current_schema": "plenora"}
 
     class _StubConn:
         def cursor(self):
@@ -637,7 +639,7 @@ def test_check_postgres_uses_statement_timeout():
         ok, detail = h.check_postgres()
 
     assert ok is True
-    assert detail == "ok"
+    assert detail == "ok schema=plenora"
     assert any("SET LOCAL statement_timeout" in s for s in captured), (
         f"check_postgres must issue `SET LOCAL statement_timeout = Nms` "
         f"on the probe transaction. Captured statements: {captured}. "
@@ -648,6 +650,56 @@ def test_check_postgres_uses_statement_timeout():
         f"check_postgres must still issue `SELECT 1`. Captured: "
         f"{captured}."
     )
+    assert any("current_schema()" in s for s in captured), (
+        f"check_postgres must validate the active DB schema/search_path. "
+        f"Captured: {captured}."
+    )
+
+
+def test_check_postgres_fails_on_schema_mismatch():
+    """`check_postgres` must fail readiness when pool search_path does not
+    resolve to the configured DB_SCHEMA.
+    """
+    from app.observability import health as h
+
+    class _StubCursor:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return None
+
+        def execute(self, sql, params=None):
+            pass
+
+        def fetchone(self):
+            return {"v": 1, "current_schema": "public"}
+
+    class _StubConn:
+        def cursor(self):
+            return _StubCursor()
+
+        def commit(self):
+            pass
+
+        def rollback(self):
+            pass
+
+    class _SettingsStub:
+        def get(self, key, default=None):
+            if key == "DB_SCHEMA":
+                return "plenora"
+            return default
+
+    with patch("app.db.pg_connection.get_connection", return_value=_StubConn()), \
+         patch("app.db.pg_connection.put_connection", lambda c: None), \
+         patch("app.config.settings", new=_SettingsStub()):
+        ok, detail = h.check_postgres()
+
+    assert ok is False
+    assert "schema mismatch" in detail
+    assert "public" in detail
+    assert "plenora" in detail
 
 
 def test_check_postgres_falls_back_to_two_seconds_on_invalid_setting():
@@ -668,7 +720,7 @@ def test_check_postgres_falls_back_to_two_seconds_on_invalid_setting():
             captured.append(sql)
 
         def fetchone(self):
-            return {"v": 1}
+            return {"v": 1, "current_schema": "plenora"}
 
     class _StubConn:
         def cursor(self):

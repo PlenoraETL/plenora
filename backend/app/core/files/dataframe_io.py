@@ -4,7 +4,7 @@ Pure tabular DataFrame I/O helpers.
 This module intentionally owns pandas-oriented loading, tabular saving,
 column filtering, and JSON-safe row normalization. Geospatial export lives in
 ``app.core.files.geospatial_io`` so callers do not pull geometry decisions from
-the legacy ``app.utils.dataframe`` facade.
+the legacy utils facade.
 """
 
 import io
@@ -20,6 +20,8 @@ import pandas as pd
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
+
+_GEOSPATIAL_FORMATS = {"geojson", "gpkg", "shp"}
 
 
 def load_dataframe_from_file(
@@ -258,6 +260,39 @@ def save_tabular_dataframe(df: pd.DataFrame, base_path: Path, formato: str) -> P
     raise ValueError(f"Formato '{formato}' non supportato")
 
 
+def save_dataframe(
+    df: pd.DataFrame,
+    output_path: Union[str, Path],
+    format: str = "csv",
+    geom_column: Optional[str] = None,
+    crs: str = "EPSG:4326",
+) -> Path:
+    """Save a DataFrame, dispatching explicit file I/O boundaries by format."""
+    output_path = Path(output_path)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+
+    base_path = output_path.with_suffix("")
+    formato = format.lower()
+
+    try:
+        if formato in _GEOSPATIAL_FORMATS:
+            from app.core.files.geospatial_io import save_geospatial_dataframe
+
+            final_path = save_geospatial_dataframe(df, base_path, formato, geom_column, crs)
+        else:
+            final_path = save_tabular_dataframe(df, base_path, formato)
+
+        logger.info(f"Salvato: {final_path} ({len(df)} righe)", op="save")
+        return final_path
+
+    except ValueError as e:
+        logger.warning(f"Salvataggio non riuscito {output_path}: {e}")
+        raise
+    except Exception as e:
+        logger.error(f"[CRASH] Errore salvataggio {output_path}: {e}", exc_info=True)
+        raise
+
+
 def tabular_dataframe_to_bytes(df: pd.DataFrame, formato: str) -> bytes:
     """Serialize a DataFrame to bytes for non-geospatial formats."""
     if formato == "csv":
@@ -280,6 +315,23 @@ def tabular_dataframe_to_bytes(df: pd.DataFrame, formato: str) -> bytes:
         return buf.getvalue()
 
     raise ValueError(f"Formato '{formato}' non supportato")
+
+
+def save_dataframe_to_bytes(
+    df: pd.DataFrame,
+    format: str = "csv",
+    geom_column: Optional[str] = None,
+    crs: str = "EPSG:4326",
+) -> bytes:
+    """Serialize a DataFrame, dispatching explicit file I/O boundaries by format."""
+    formato = format.lower()
+
+    if formato in _GEOSPATIAL_FORMATS:
+        from app.core.files.geospatial_io import geospatial_dataframe_to_bytes
+
+        return geospatial_dataframe_to_bytes(df, formato, geom_column, crs)
+
+    return tabular_dataframe_to_bytes(df, formato)
 
 
 def filter_visible_columns(

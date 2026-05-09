@@ -78,7 +78,7 @@ def load_preview_from_artifact(
         return ArtifactPreviewResult(error=f"limit invalido: {limit}")
 
     try:
-        from app.shared.cloud_backends import (
+        from app.infrastructure.storage.cloud_backends import (
             ObjectStorageDisabledError,
             get_runtime_object_storage,
         )

@@ -139,7 +139,11 @@ def _make_pg_stub_conn(rows=None, default_row=None):
     # (the SET LOCAL execute does not call fetchone). Single-row default
     # is therefore the SELECT 1 result.
     if rows is None:
-        rows = [default_row if default_row is not None else {"v": 1}]
+        rows = [
+            default_row
+            if default_row is not None
+            else {"v": 1, "current_schema": "plenora"}
+        ]
     rows_iter = iter(rows)
 
     class _StubCursor:
@@ -176,7 +180,7 @@ def test_check_postgres_ok_on_select_1():
 
         ok, detail = check_postgres()
     assert ok is True
-    assert detail == "ok"
+    assert detail == "ok schema=plenora"
 
 
 def test_check_postgres_failed_on_unexpected_row():
@@ -786,7 +790,7 @@ def test_main_py_delegates_health_routes_to_health_module():
 
 def _mk_count_row(state: str, domain: str, count: int):
     """Costruisce un `ReconciliationStateCount` mock per i test."""
-    from app.shared.storage_reconciliation import ReconciliationStateCount
+    from app.core.resources.storage_reconciliation import ReconciliationStateCount
 
     return ReconciliationStateCount(state=state, domain=domain, count=count)
 
@@ -794,10 +798,10 @@ def _mk_count_row(state: str, domain: str, count: int):
 def test_check_reconciliation_backlog_ok_when_empty():
     """Tabella vuota -> outcome (True, "pending=0 lost=0")."""
     with patch(
-        "app.shared.storage_reconciliation.count_active_by_state_domain",
+        "app.core.resources.storage_reconciliation.count_active_by_state_domain",
         return_value=[],
     ), patch(
-        "app.shared.storage_reconciliation.count_pending_by_operation",
+        "app.core.resources.storage_reconciliation.count_pending_by_operation",
         return_value={"upload_intent": 0},
     ):
         from app.observability.health import check_reconciliation_backlog
@@ -815,10 +819,10 @@ def test_check_reconciliation_backlog_ok_when_below_thresholds():
         _mk_count_row("lost", "file_source", 2),
     ]
     with patch(
-        "app.shared.storage_reconciliation.count_active_by_state_domain",
+        "app.core.resources.storage_reconciliation.count_active_by_state_domain",
         return_value=counts,
     ), patch(
-        "app.shared.storage_reconciliation.count_pending_by_operation",
+        "app.core.resources.storage_reconciliation.count_pending_by_operation",
         return_value={"upload_intent": 0},
     ):
         from app.observability.health import check_reconciliation_backlog
@@ -847,10 +851,10 @@ def test_check_reconciliation_backlog_failed_above_pending_threshold(monkeypatch
         _mk_count_row("lost", "file_source", 1),
     ]
     with patch(
-        "app.shared.storage_reconciliation.count_active_by_state_domain",
+        "app.core.resources.storage_reconciliation.count_active_by_state_domain",
         return_value=counts,
     ), patch(
-        "app.shared.storage_reconciliation.count_pending_by_operation",
+        "app.core.resources.storage_reconciliation.count_pending_by_operation",
         return_value={"upload_intent": 0},
     ):
         from app.observability.health import check_reconciliation_backlog
@@ -880,7 +884,7 @@ def test_check_reconciliation_backlog_failed_above_lost_threshold(monkeypatch):
         _mk_count_row("lost", "file_source", 15),  # over 5
     ]
     with patch(
-        "app.shared.storage_reconciliation.count_active_by_state_domain",
+        "app.core.resources.storage_reconciliation.count_active_by_state_domain",
         return_value=counts,
     ):
         from app.observability.health import check_reconciliation_backlog
@@ -908,7 +912,7 @@ def test_check_reconciliation_backlog_failed_on_both_thresholds(monkeypatch):
         _mk_count_row("lost", "result_blob", 20),
     ]
     with patch(
-        "app.shared.storage_reconciliation.count_active_by_state_domain",
+        "app.core.resources.storage_reconciliation.count_active_by_state_domain",
         return_value=counts,
     ):
         from app.observability.health import check_reconciliation_backlog
@@ -940,7 +944,7 @@ def test_check_reconciliation_backlog_skipped_when_pending_threshold_zero(monkey
         _mk_count_row("lost", "file_source", 1),
     ]
     with patch(
-        "app.shared.storage_reconciliation.count_active_by_state_domain",
+        "app.core.resources.storage_reconciliation.count_active_by_state_domain",
         return_value=counts,
     ):
         from app.observability.health import check_reconciliation_backlog
@@ -961,7 +965,7 @@ def test_check_reconciliation_backlog_fail_open_on_count_error():
         raise RuntimeError("DB unreachable")
 
     with patch(
-        "app.shared.storage_reconciliation.count_active_by_state_domain",
+        "app.core.resources.storage_reconciliation.count_active_by_state_domain",
         _raise,
     ):
         from app.observability.health import check_reconciliation_backlog

@@ -69,7 +69,7 @@ def bootstrap() -> None:
     global _BOOT_COMPLETE
 
     # Local imports keep the module load cheap (no transitive
-    # `app.config` / `app.shared.cloud_backends` / runtime DB init
+    # `app.config` / `app.infrastructure.storage.cloud_backends` / runtime DB init
     # work until the function is actually invoked). Important for
     # test ergonomics: tests can `import app.bootstrap` without
     # paying for the full settings/storage/db graph
@@ -79,7 +79,7 @@ def bootstrap() -> None:
 
     from app.config import settings
     from app.core.runtime.db_init import init_all_dbs
-    from app.shared.cloud_backends import validate_storage_config
+    from app.infrastructure.storage.cloud_backends import validate_storage_config
     from app.startup_validation import validate_startup
 
     # 1. Verifica prerequisiti di sistema (DATA_DIR scrivibile, ecc

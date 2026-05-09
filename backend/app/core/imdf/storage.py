@@ -37,7 +37,7 @@ def _storage():
     i caller list/get_meta_only/list_task_ids degradano graceful
     (cache locale only) catturando l'eccezione; save_bundle invece
     deve fallire perche' il pubblico richiede deve completare l'upload."""
-    from app.shared.cloud_backends import get_runtime_object_storage
+    from app.infrastructure.storage.cloud_backends import get_runtime_object_storage
     return get_runtime_object_storage()
 
 
@@ -202,7 +202,7 @@ def get_meta_only(task_id: str) -> Optional[Dict[str, Any]]:
     Ritorna None se il meta non esiste su S3 (bundle non ancora pubblicato
     o solo local-cached) oppure se la capability object storage e' off.
     """
-    from app.shared.cloud_backends import object_storage_enabled
+    from app.infrastructure.storage.cloud_backends import object_storage_enabled
     if not object_storage_enabled():
         return None
     storage = _storage()
@@ -223,7 +223,7 @@ def list_task_ids() -> List[str]:
     quelli cached sul nodo corrente). ritorna [] se la
     capability object storage e' disabilitata (router fallback su
     cache locale only)."""
-    from app.shared.cloud_backends import object_storage_enabled
+    from app.infrastructure.storage.cloud_backends import object_storage_enabled
     if not object_storage_enabled():
         return []
     storage = _storage()

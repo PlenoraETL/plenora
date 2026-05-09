@@ -32,7 +32,7 @@ def _storage():
     caller (write/upload eseguibili output) deve trattarlo come
     "feature non disponibile" (eseguibili senza storage non possono
     persistere output → fail-fast con messaggio operativo)."""
-    from app.shared.cloud_backends import get_runtime_object_storage
+    from app.infrastructure.storage.cloud_backends import get_runtime_object_storage
     return get_runtime_object_storage()
 
 

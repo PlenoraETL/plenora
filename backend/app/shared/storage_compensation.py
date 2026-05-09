@@ -118,7 +118,7 @@ def compensating_delete(
     extras_suffix = _format_extras(extras)
 
     try:
-        from app.shared.cloud_backends import (
+        from app.infrastructure.storage.cloud_backends import (
             ObjectStorageDisabledError,
             get_runtime_object_storage,
             object_storage_enabled,

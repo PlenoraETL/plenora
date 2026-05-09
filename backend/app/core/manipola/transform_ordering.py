@@ -4,7 +4,7 @@ import re
 from typing import List, Optional, Sequence, Tuple
 
 from app.shared.execution.canvas_graph import CanvasGraph
-from app.shared.models import Edge
+from app.core.projects.canvas_models import Edge
 
 
 def get_target_handle(edge: Edge) -> Optional[str]:

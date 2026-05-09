@@ -56,6 +56,83 @@ class EnrichmentExecutionEnginesMixin:
             and self._serial_engine_required_reason() is None
         )
 
+    def _start_execution_state(
+        self,
+        df: pd.DataFrame,
+    ) -> Tuple[pd.DataFrame, EnrichmentStats, List[RowError], int, float]:
+        result_df = df.copy()
+        stats = EnrichmentStats(total_rows=len(df))
+        errors: List[RowError] = []
+
+        for mapping in self.output_mapping:
+            col_name = mapping.get("column", mapping.get("path"))
+            if col_name not in result_df.columns:
+                result_df[col_name] = None
+
+        return result_df, stats, errors, len(df), time.time()
+
+    def _build_execution_groups(
+        self,
+        df: pd.DataFrame,
+    ) -> Dict[str, List[int]]:
+        if self.options.enable_deduplication:
+            return self._group_by_params(df)
+        return {str(idx): [idx] for idx in df.index}
+
+    def _prune_cache_if_needed(self) -> None:
+        if len(self._cache) <= self._CACHE_MAX_SIZE:
+            return
+
+        keys = list(self._cache.keys())[:self._CACHE_MAX_SIZE // 2]
+        for key in keys:
+            self._cache.pop(key, None)
+
+    def _store_cache_result(self, cache_key: str, api_result) -> None:
+        self._cache[cache_key] = api_result
+        self._prune_cache_if_needed()
+
+    def _first_result_row(self, api_result) -> Dict:
+        if isinstance(api_result, list):
+            return api_result[0] if api_result else {}
+        if isinstance(api_result, dict):
+            return api_result
+
+        logger.warning(
+            f"api_result tipo inatteso: {type(api_result).__name__}. "
+            f"Riga ignorata."
+        )
+        return {}
+
+    def _append_group_errors(
+        self,
+        errors: List[RowError],
+        row_indices: List[int],
+        error: RowError,
+        *,
+        input_params: Optional[Dict] = None,
+    ) -> None:
+        for idx in row_indices:
+            errors.append(RowError(
+                row_index=idx,
+                status=error.status,
+                error_message=error.error_message,
+                error_type=error.error_type,
+                input_params=input_params,
+                http_status=error.http_status,
+                retry_count=error.retry_count,
+            ))
+
+    def _finish_execution_stats(
+        self,
+        stats: EnrichmentStats,
+        start_time: float,
+    ) -> None:
+        stats.total_time_ms = (time.time() - start_time) * 1000
+        if self._response_times:
+            stats.avg_response_time_ms = (
+                sum(self._response_times) / len(self._response_times)
+            )
+
     def _execute_parallel(
         self,
         df: pd.DataFrame
@@ -75,29 +152,18 @@ class EnrichmentExecutionEnginesMixin:
             )
             return self._execute_internal(df)
 
-        result_df = df.copy()
-        stats = EnrichmentStats(total_rows=len(df))
-        errors: List[RowError] = []
+        result_df, stats, errors, total_rows, start_time = (
+            self._start_execution_state(df)
+        )
         errors_lock = threading.Lock()
 
-        # Prepara colonne output
-        for mapping in self.output_mapping:
-            col_name = mapping.get("column", mapping.get("path"))
-            if col_name not in result_df.columns:
-                result_df[col_name] = None
-
-        total_rows = len(df)
-        start_time = time.time()
-
         # Deduplicazione: raggruppa per parametri unici
+        unique_groups = self._build_execution_groups(df)
         if self.options.enable_deduplication:
-            unique_groups = self._group_by_params(df)
             logger.info(
                 f"Esecuzione parallela: {len(unique_groups)} combinazioni uniche "
                 f"su {total_rows} righe, {self.options.parallel_workers} worker"
             )
-        else:
-            unique_groups = {str(idx): [idx] for idx in df.index}
 
         processed = [0]  # Lista per permettere modifica in closure
         processed_lock = threading.Lock()
@@ -151,12 +217,7 @@ class EnrichmentExecutionEnginesMixin:
             if self.options.enable_deduplication:
                 with self._cache_lock:
                     if api_result:
-                        self._cache[cache_key] = api_result
-                        if len(self._cache) > self._CACHE_MAX_SIZE:
-                            # Pruning FIFO: rimuove le entry più vecchie
-                            keys = list(self._cache.keys())[:self._CACHE_MAX_SIZE // 2]
-                            for k in keys:
-                                self._cache.pop(k, None)
+                        self._store_cache_result(cache_key, api_result)
                     else:
                         # Rimuovi placeholder: un retry futuro potrà riprovare
                         self._cache.pop(cache_key, None)
@@ -181,15 +242,7 @@ class EnrichmentExecutionEnginesMixin:
                     elif error:
                         # Errore - registra per tutte le righe del gruppo
                         with errors_lock:
-                            for idx in row_indices:
-                                errors.append(RowError(
-                                    row_index=idx,
-                                    status=error.status,
-                                    error_message=error.error_message,
-                                    error_type=error.error_type,
-                                    http_status=error.http_status,
-                                    retry_count=error.retry_count
-                                ))
+                            self._append_group_errors(errors, row_indices, error)
 
                         with self._stats_lock:
                             if error.status == RowStatus.RETRY_EXHAUSTED:
@@ -199,19 +252,7 @@ class EnrichmentExecutionEnginesMixin:
                             if api_called:
                                 stats.api_calls_made += 1
                     else:
-                        # Successo - api_result dovrebbe essere List[Dict] ma alcune
-                        # API restituiscono direttamente un dict (singolo risultato
-                        # Normalizziamo per evitare TypeError su `api_result[0]`
-                        if isinstance(api_result, list):
-                            first_row = api_result[0] if api_result else {}
-                        elif isinstance(api_result, dict):
-                            first_row = api_result
-                        else:
-                            logger.warning(
-                                f"api_result tipo inatteso: {type(api_result).__name__}. "
-                                f"Riga ignorata."
-                            )
-                            first_row = {}
+                        first_row = self._first_result_row(api_result)
                         for idx in row_indices:
                             self._apply_result(result_df, idx, first_row)
 
@@ -250,10 +291,7 @@ class EnrichmentExecutionEnginesMixin:
                     with self._stats_lock:
                         stats.errors += len(row_indices)
 
-        # Finalizza statistiche
-        stats.total_time_ms = (time.time() - start_time) * 1000
-        if self._response_times:
-            stats.avg_response_time_ms = sum(self._response_times) / len(self._response_times)
+        self._finish_execution_stats(stats, start_time)
 
         return result_df, stats, errors
 
@@ -264,29 +302,17 @@ class EnrichmentExecutionEnginesMixin:
         """
         Esecuzione interna sequenziale con deduplicazione e gestione errori.
         """
-        result_df = df.copy()
-        stats = EnrichmentStats(total_rows=len(df))
-        errors: List[RowError] = []
-
-        # Prepara colonne output
-        for mapping in self.output_mapping:
-            col_name = mapping.get("column", mapping.get("path"))
-            if col_name not in result_df.columns:
-                result_df[col_name] = None
+        result_df, stats, errors, total_rows, start_time = (
+            self._start_execution_state(df)
+        )
 
         # Rate limiting
         delay = 1.0 / self.options.rate_limit if self.options.rate_limit > 0 else 0
 
-        total_rows = len(df)
-        start_time = time.time()
-
         # Deduplicazione: raggruppa per parametri unici
+        unique_groups = self._build_execution_groups(df)
         if self.options.enable_deduplication:
-            unique_groups = self._group_by_params(df)
             logger.info(f"Deduplicazione: {len(unique_groups)} combinazioni uniche su {total_rows} righe", op="enrich")
-        else:
-            # Senza deduplicazione: ogni riga è un gruppo
-            unique_groups = {str(idx): [idx] for idx in df.index}
 
         processed = 0
         _extra_rows: List[Dict] = []  # righe espanse da FeatureCollection o array
@@ -337,8 +363,9 @@ class EnrichmentExecutionEnginesMixin:
             if self.options.enable_deduplication and cache_key in self._cache:
                 # Cache hit - cached_result è List[Dict
                 cached_result = self._cache[cache_key]
+                first_row = self._first_result_row(cached_result)
                 for idx in row_indices:
-                    self._apply_result(result_df, idx, cached_result[0] if cached_result else {})
+                    self._apply_result(result_df, idx, first_row)
                     stats.cached += 1
                 processed += len(row_indices)
                 self._update_progress(processed, total_rows, stats)
@@ -350,16 +377,13 @@ class EnrichmentExecutionEnginesMixin:
 
             if error:
                 # Errore - registra per tutte le righe del gruppo
+                self._append_group_errors(
+                    errors,
+                    row_indices,
+                    error,
+                    input_params=params,
+                )
                 for idx in row_indices:
-                    errors.append(RowError(
-                        row_index=idx,
-                        status=error.status,
-                        error_message=error.error_message,
-                        error_type=error.error_type,
-                        input_params=params,
-                        http_status=error.http_status,
-                        retry_count=error.retry_count
-                    ))
                     if error.status == RowStatus.RETRY_EXHAUSTED:
                         stats.retry_exhausted += 1
                         stats.errors += 1  # B-BE-56: conta anche nel threshold
@@ -375,11 +399,7 @@ class EnrichmentExecutionEnginesMixin:
                 # Se la lista ha >1 elementi (es. FeatureCollection), esplodi le righe
                 if self.options.enable_deduplication:
                     with self._cache_lock:
-                        self._cache[cache_key] = api_result
-                        if len(self._cache) > self._CACHE_MAX_SIZE:
-                            keys = list(self._cache.keys())[:self._CACHE_MAX_SIZE // 2]
-                            for k in keys:
-                                self._cache.pop(k, None)
+                        self._store_cache_result(cache_key, api_result)
 
                 for idx in row_indices:
                     if len(api_result) == 1:
@@ -418,9 +438,6 @@ class EnrichmentExecutionEnginesMixin:
             result_df = pd.concat([result_df, extra_df], ignore_index=True)
             logger.info(f"Esplosione FeatureCollection: aggiunte {len(_extra_rows)} righe extra")
 
-        # Finalizza statistiche
-        stats.total_time_ms = (time.time() - start_time) * 1000
-        if self._response_times:
-            stats.avg_response_time_ms = sum(self._response_times) / len(self._response_times)
+        self._finish_execution_stats(stats, start_time)
 
         return result_df, stats, errors

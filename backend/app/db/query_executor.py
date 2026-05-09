@@ -239,7 +239,7 @@ class QueryExecutor:
         """
         Salvataggio di fallback — supporta solo formati base (CSV, JSON, XLSX).
 
-        In produzione viene sostituito da app.utils.dataframe.save_dataframe
+        In produzione viene sostituito da app.core.files.dataframe_io.save_dataframe
         che supporta anche i formati geospaziali.
         """
         final_path = output_path.with_suffix(f".{format}")

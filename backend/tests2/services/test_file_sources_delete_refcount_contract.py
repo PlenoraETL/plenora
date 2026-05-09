@@ -30,7 +30,7 @@ def _no_op_reconciliation_boundary(monkeypatch):
     `tests2/services/test_file_sources_reconciliation_integration.py`.
     Here we only verify the refcount/transactional contract, which
     is orthogonal."""
-    from app.shared import storage_reconciliation as _recon
+    from app.core.resources import storage_reconciliation as _recon
 
     fake_ref = _recon.ReconciliationEntryRef(
         id="autouse-noop",

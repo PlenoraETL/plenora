@@ -26,7 +26,7 @@ _OAUTH2_REFRESH_THRESHOLD_SEC = 60
 
 
 def _get_shared_session() -> requests.Session:
-    from app.shared.api_utils import get_shared_session
+    from app.infrastructure.http.session import get_shared_session
 
     return get_shared_session()
 

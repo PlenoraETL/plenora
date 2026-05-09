@@ -55,7 +55,7 @@ def _capture_pg_fetchone(monkeypatch, *, return_id="11111111-1111-1111-1111-1111
 
 
 def test_record_upload_intent_inserts_pending_row(monkeypatch):
-    from app.shared.storage_reconciliation import record_upload_intent
+    from app.core.resources.storage_reconciliation import record_upload_intent
 
     calls = _capture_pg_fetchone(monkeypatch, return_id="abc-1234")
     intent_id = record_upload_intent(
@@ -81,7 +81,7 @@ def test_record_upload_intent_inserts_pending_row(monkeypatch):
 
 
 def test_record_upload_intent_handles_none_extras(monkeypatch):
-    from app.shared.storage_reconciliation import record_upload_intent
+    from app.core.resources.storage_reconciliation import record_upload_intent
 
     calls = _capture_pg_fetchone(monkeypatch)
     record_upload_intent(
@@ -99,7 +99,7 @@ def test_record_upload_intent_returns_none_on_db_error(monkeypatch):
     """Best-effort: DB error -> warning + return None. Caller must
     proceed with upload (W2 race for that single dispatch reverts to
     pre-008 behavior — acceptable, ADR-0011 posture preserved)."""
-    from app.shared.storage_reconciliation import record_upload_intent
+    from app.core.resources.storage_reconciliation import record_upload_intent
 
     def _raise(sql, params=()):
         raise RuntimeError("DB unreachable")
@@ -119,7 +119,7 @@ def test_record_upload_intent_returns_none_on_db_error(monkeypatch):
 
 
 def test_fetch_due_stale_upload_intents_filters_correctly():
-    from app.shared import storage_reconciliation as recon
+    from app.core.resources import storage_reconciliation as recon
 
     captured = {}
 
@@ -147,7 +147,7 @@ def test_fetch_due_stale_upload_intents_filters_correctly():
 
 
 def test_fetch_due_stale_upload_intents_returns_typed_rows():
-    from app.shared import storage_reconciliation as recon
+    from app.core.resources import storage_reconciliation as recon
 
     db_rows = [
         {
@@ -175,14 +175,14 @@ def test_fetch_due_stale_upload_intents_returns_typed_rows():
     ],
 )
 def test_fetch_due_stale_upload_intents_rejects_invalid_args(kwargs):
-    from app.shared import storage_reconciliation as recon
+    from app.core.resources import storage_reconciliation as recon
 
     with pytest.raises(ValueError):
         recon.fetch_due_stale_upload_intents(**kwargs)
 
 
 def test_fetch_due_stale_upload_intents_swallows_db_error():
-    from app.shared import storage_reconciliation as recon
+    from app.core.resources import storage_reconciliation as recon
 
     def _raise(sql, params=()):
         raise RuntimeError("DB unreachable")
@@ -201,7 +201,7 @@ def test_fetch_due_stale_upload_intents_swallows_db_error():
     [([(1,)], True), ([], False)],
 )
 def test_is_storage_key_referenced_returns_boolean(db_rows, expected):
-    from app.shared.storage_reconciliation import is_storage_key_referenced
+    from app.core.resources.storage_reconciliation import is_storage_key_referenced
 
     with patch("app.db.pg_connection.fetchall", lambda sql, params=(): db_rows):
         assert is_storage_key_referenced("file-sources/x/y.csv") is expected
@@ -211,7 +211,7 @@ def test_is_storage_key_referenced_returns_none_on_db_error():
     """Critical: must NOT return False on DB error — that would
     silently widen the orphan scope and could lead to data loss
     (compensating_delete on a key whose live status is unknown)."""
-    from app.shared.storage_reconciliation import is_storage_key_referenced
+    from app.core.resources.storage_reconciliation import is_storage_key_referenced
 
     def _raise(sql, params=()):
         raise RuntimeError("DB unreachable")
@@ -225,7 +225,7 @@ def test_is_storage_key_referenced_returns_none_on_db_error():
 def test_is_storage_key_referenced_uses_indexed_column():
     """SQL must hit `file_sources.storage_key` (indexed by
     `idx_file_sources_storage_key_notnull`)."""
-    from app.shared.storage_reconciliation import is_storage_key_referenced
+    from app.core.resources.storage_reconciliation import is_storage_key_referenced
 
     captured = {}
 
@@ -289,11 +289,11 @@ def test_dispatch_records_upload_intent_before_upload(monkeypatch):
 
     monkeypatch.setattr("app.config.settings", _settings_get_stub())
     monkeypatch.setattr(
-        "app.shared.storage_reconciliation.record_upload_intent",
+        "app.core.resources.storage_reconciliation.record_upload_intent",
         _fake_record_upload_intent,
     )
     monkeypatch.setattr(
-        "app.shared.storage_reconciliation.mark_done",
+        "app.core.resources.storage_reconciliation.mark_done",
         _fake_mark_done,
     )
     monkeypatch.setattr(
@@ -338,11 +338,11 @@ def test_dispatch_marks_done_when_upload_fails(monkeypatch):
 
     monkeypatch.setattr("app.config.settings", _settings_get_stub())
     monkeypatch.setattr(
-        "app.shared.storage_reconciliation.record_upload_intent",
+        "app.core.resources.storage_reconciliation.record_upload_intent",
         _fake_record_upload_intent,
     )
     monkeypatch.setattr(
-        "app.shared.storage_reconciliation.mark_done",
+        "app.core.resources.storage_reconciliation.mark_done",
         _fake_mark_done,
     )
     monkeypatch.setattr(
@@ -376,7 +376,7 @@ def test_dispatch_does_not_record_intent_on_db_bytea_path(monkeypatch):
         _settings_get_stub(STORAGE_POLICY="db"),
     )
     monkeypatch.setattr(
-        "app.shared.storage_reconciliation.record_upload_intent",
+        "app.core.resources.storage_reconciliation.record_upload_intent",
         _fake_record_upload_intent,
     )
 
@@ -412,11 +412,11 @@ def test_dispatch_proceeds_when_record_upload_intent_returns_none(monkeypatch):
 
     monkeypatch.setattr("app.config.settings", _settings_get_stub())
     monkeypatch.setattr(
-        "app.shared.storage_reconciliation.record_upload_intent",
+        "app.core.resources.storage_reconciliation.record_upload_intent",
         _fake_record_upload_intent,
     )
     monkeypatch.setattr(
-        "app.shared.storage_reconciliation.mark_done",
+        "app.core.resources.storage_reconciliation.mark_done",
         _fake_mark_done,
     )
     monkeypatch.setattr(
@@ -463,7 +463,7 @@ def _settings_stub(**kwargs):
 
 
 def _ui_row(*, id="ui-1", attempts=0, storage_key="file-sources/abc/x.csv"):
-    from app.shared.storage_reconciliation import PendingReconciliationRow
+    from app.core.resources.storage_reconciliation import PendingReconciliationRow
     return PendingReconciliationRow(
         id=id,
         domain="file_source",
@@ -485,23 +485,23 @@ def _run_upload_intent_reconcile(
     calls = {"done": [], "orphan": [], "failed": [], "lost": [], "delete": []}
 
     with patch("app.config.settings", new=settings or _settings_stub()), \
-         patch("app.shared.storage_reconciliation.fetch_due_pending_deletes",
+         patch("app.core.resources.storage_reconciliation.fetch_due_pending_deletes",
                return_value=[]), \
-         patch("app.shared.storage_reconciliation.fetch_due_stale_upload_intents",
+         patch("app.core.resources.storage_reconciliation.fetch_due_stale_upload_intents",
                return_value=[row]), \
-         patch("app.shared.storage_reconciliation.is_storage_key_referenced",
+         patch("app.core.resources.storage_reconciliation.is_storage_key_referenced",
                return_value=referenced), \
-         patch("app.shared.storage_reconciliation.mark_done",
+         patch("app.core.resources.storage_reconciliation.mark_done",
                side_effect=lambda i: calls["done"].append(i)), \
-         patch("app.shared.storage_reconciliation.mark_orphan_deleted",
+         patch("app.core.resources.storage_reconciliation.mark_orphan_deleted",
                side_effect=lambda i: calls["orphan"].append(i)), \
-         patch("app.shared.storage_reconciliation.mark_failed_attempt",
+         patch("app.core.resources.storage_reconciliation.mark_failed_attempt",
                side_effect=lambda i, **kw: calls["failed"].append((i, kw))), \
-         patch("app.shared.storage_reconciliation.mark_lost",
+         patch("app.core.resources.storage_reconciliation.mark_lost",
                side_effect=lambda i, **kw: calls["lost"].append((i, kw))), \
-         patch("app.shared.storage_reconciliation.count_active_by_state_domain",
+         patch("app.core.resources.storage_reconciliation.count_active_by_state_domain",
                return_value=[]), \
-         patch("app.shared.storage_reconciliation.prune_terminal_older_than",
+         patch("app.core.resources.storage_reconciliation.prune_terminal_older_than",
                return_value=0), \
          patch("app.shared.storage_compensation.compensating_delete",
                side_effect=lambda *a, **kw: calls["delete"].append((a, kw)) or "ok"):
@@ -586,13 +586,13 @@ def test_reconcile_upload_intent_disabled_when_grace_zero(monkeypatch):
 
     with patch("app.config.settings",
                new=_settings_stub(STORAGE_RECONCILE_UPLOAD_INTENT_GRACE_SECONDS=0)), \
-         patch("app.shared.storage_reconciliation.fetch_due_pending_deletes",
+         patch("app.core.resources.storage_reconciliation.fetch_due_pending_deletes",
                return_value=[]), \
-         patch("app.shared.storage_reconciliation.fetch_due_stale_upload_intents",
+         patch("app.core.resources.storage_reconciliation.fetch_due_stale_upload_intents",
                _fetch_ui), \
-         patch("app.shared.storage_reconciliation.count_active_by_state_domain",
+         patch("app.core.resources.storage_reconciliation.count_active_by_state_domain",
                return_value=[]), \
-         patch("app.shared.storage_reconciliation.prune_terminal_older_than",
+         patch("app.core.resources.storage_reconciliation.prune_terminal_older_than",
                return_value=0), \
          patch("app.shared.storage_compensation.compensating_delete",
                return_value="ok"):

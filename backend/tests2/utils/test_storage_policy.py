@@ -94,7 +94,7 @@ def test_db_policy_ignores_bucket_but_warns(monkeypatch):
     monkeypatch.setenv("CLOUD_PROVIDER", "aws")
     monkeypatch.setenv("BACKUP_BUCKET", "some-bucket")
 
-    mod_logger = logging.getLogger("app.shared.cloud_backends")
+    mod_logger = logging.getLogger("app.infrastructure.storage.cloud_backends")
     capturer = _WarningCapturer()
     mod_logger.addHandler(capturer)
     try:

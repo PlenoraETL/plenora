@@ -8,6 +8,11 @@ from unittest.mock import MagicMock
 import pytest
 
 from app.core.features.arcgis_client import ArcGISClient
+from app.core.features.arcgis_service_discovery import (
+    find_existing_feature_service,
+    list_user_folders,
+    search_user_feature_service_items,
+)
 
 
 pytestmark = [pytest.mark.unit, pytest.mark.contract]
@@ -131,4 +136,54 @@ def test_search_items_paginates_and_preserves_raw_result_shape(
     assert [call.kwargs["params"]["start"] for call in client._http.get.call_args_list] == [1, 2]
     assert client._http.get.call_args_list[0].kwargs["params"]["q"] == (
         'type:"Feature Service" owner:publisher'
+    )
+
+
+class _FakeDiscoveryProvider:
+    def __init__(self) -> None:
+        self.folders = [
+            {"id": "", "title": "(root)"},
+            {"id": "folder-a", "title": "Facilities"},
+        ]
+        self.items = [
+            {
+                "id": "fs-1",
+                "title": "Indoor",
+                "type": "Feature Service",
+                "name": "indoor_service",
+                "url": (
+                    "https://services.arcgis.com/org/arcgis/rest/services/"
+                    "Indoor/FeatureServer"
+                ),
+                "ownerFolder": "folder-a",
+            },
+            {"id": "doc-1", "title": "Indoor", "type": "PDF"},
+        ]
+
+    def list_folders(self, conn: SimpleNamespace) -> list[dict]:
+        return self.folders
+
+    def list_user_items(self, conn: SimpleNamespace) -> list[dict]:
+        return self.items
+
+
+def test_generic_service_discovery_helpers_filter_and_find_feature_services(
+    conn: SimpleNamespace,
+) -> None:
+    provider = _FakeDiscoveryProvider()
+
+    folders = list_user_folders(
+        provider,
+        conn,
+        folder_filter=lambda folder: bool(folder.get("id")),
+    )
+    matches = search_user_feature_service_items(provider, conn, "indoor_service")
+    existing = find_existing_feature_service(provider, conn, "Indoor")
+
+    assert folders == [{"id": "folder-a", "title": "Facilities"}]
+    assert matches == [provider.items[0]]
+    assert existing == (
+        provider.items[0]["url"],
+        "fs-1",
+        "folder-a",
     )

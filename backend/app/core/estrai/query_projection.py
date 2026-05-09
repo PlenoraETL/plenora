@@ -7,7 +7,7 @@ from typing import Any, Callable, Dict, List
 
 from app.db.sql_functions import translate_calculated_column
 from app.db.sql_translator import sql_translator
-from app.shared.models import Node
+from app.core.projects.canvas_models import Node
 
 
 class QueryProjectionRenderer:

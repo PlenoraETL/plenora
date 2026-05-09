@@ -54,7 +54,7 @@ class DefaultHttpClient:
         timeout: int = 30,
         headers: dict = None,
     ) -> requests.Response:
-        from app.shared.api_utils import get_shared_session
+        from app.infrastructure.http.session import get_shared_session
 
         return get_shared_session().get(
             url, params=params, timeout=timeout, headers=headers
@@ -67,7 +67,7 @@ class DefaultHttpClient:
         timeout: int = 30,
         headers: dict = None,
     ) -> requests.Response:
-        from app.shared.api_utils import get_shared_session
+        from app.infrastructure.http.session import get_shared_session
 
         return get_shared_session().post(
             url, data=data, timeout=timeout, headers=headers

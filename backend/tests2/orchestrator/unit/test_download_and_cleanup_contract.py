@@ -272,7 +272,7 @@ def test_save_pipeline_result_fs_only_fallback_to_filesystem(monkeypatch, tmp_pa
         out.write_bytes(b"fake-gpkg-bytes")
         return out
 
-    monkeypatch.setattr("app.utils.dataframe.save_dataframe", _fake_save_dataframe)
+    monkeypatch.setattr("app.core.files.dataframe_io.save_dataframe", _fake_save_dataframe)
 
     saved_calls = []
     monkeypatch.setattr(result_store, "uuid",

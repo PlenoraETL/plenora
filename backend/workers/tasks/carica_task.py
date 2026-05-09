@@ -616,7 +616,7 @@ def _load_upstream_data(
     import pandas as pd
 
     try:
-        from app.utils.dataframe import load_dataframe_from_file
+        from app.core.files.dataframe_io import load_dataframe_from_file
         from app.core.artifacts import (
             LatestProjectArtifactRef,
             SourceLoader,
@@ -674,7 +674,7 @@ def _load_upstream_data(
         from app.core.estrai.query_generator import QueryGenerator
         from app.db.query_executor import create_executor
         from app.core.features.features_service import FeaturesService
-        from app.utils.dataframe import save_dataframe
+        from app.core.files.dataframe_io import save_dataframe
 
         project_service = ProjectService()
         connection_service = ConnectionService()

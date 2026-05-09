@@ -34,11 +34,11 @@ _ALLOWED_ROOT_MODULES: frozenset[str] = frozenset(
         "password_hashing",   # bcrypt password helpers
         "token_blacklist",    # JWT revocation store
         "upload_guards",      # upload size / MIME type enforcement
-        "cloud_backends",          # object storage backend registry
+        "cloud_backends",          # compatibility alias for infrastructure storage
         "file_helpers",            # pandas-backed file inspection helpers
         "memory_guard",            # per-tenant memory allocation guard
         "storage_compensation",    # object-storage failure compensation helpers
-        "storage_reconciliation",  # stale-blob reconciliation helpers
+        "storage_reconciliation",  # compatibility alias for resources reconciliation
         "columns_metadata",       # column-level metadata helpers
         "models",                 # shared Pydantic base models
         "clock",                       # wall-clock abstraction for testability
@@ -62,11 +62,11 @@ _ROOT_MODULE_CLASSIFICATIONS: dict[str, str] = {
     "password_hashing": "MOVE_TO_SECURITY_PACKAGE_LATER",
     "token_blacklist": "MOVE_TO_SECURITY_PACKAGE_LATER",
     "upload_guards": "MOVE_TO_SECURITY_PACKAGE_LATER",
-    "cloud_backends": "HEAVY_ROOT_UTILITY",
+    "cloud_backends": "KEEP_ROOT_CROSS_CUTTING",
     "file_helpers": "HEAVY_ROOT_UTILITY",
     "memory_guard": "MOVE_TO_EXECUTION_CANDIDATE",
     "storage_compensation": "MOVE_TO_RESOURCES_CANDIDATE",
-    "storage_reconciliation": "HEAVY_ROOT_UTILITY",
+    "storage_reconciliation": "MOVE_TO_RESOURCES_CANDIDATE",
     "columns_metadata": "MOVE_TO_RESOURCES_CANDIDATE",
     "models": "HEAVY_ROOT_UTILITY",
     "clock": "KEEP_ROOT_CROSS_CUTTING",

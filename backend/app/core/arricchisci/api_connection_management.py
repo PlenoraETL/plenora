@@ -309,7 +309,7 @@ class ApiConnectionManagementMixin:
             params[auth.get('key_name', 'apiKey')] = auth.get('key_value', '')
 
         if auth.get('type') == 'arcgis_token':
-            from app.shared.api_utils import get_arcgis_token
+            from app.shared.connections.oauth import get_arcgis_token
             arcgis_tok = get_arcgis_token(auth)
             if arcgis_tok:
                 params['token'] = arcgis_tok
@@ -402,14 +402,14 @@ class ApiConnectionManagementMixin:
         # messaggio di `validate_external_url` include gia' il prefisso
         # "URL bloccato:" / "URL non valido:", quindi NON wrappare
         # ulteriormente o si ottiene il prefisso doppio
-        from app.shared.api_utils import validate_external_url
+        from app.core.security.outbound_url import validate_external_url
         try:
             validate_external_url(url)
         except ValueError as ssrf_err:
             return {"success": False, "error": str(ssrf_err)}
 
         try:
-            from app.shared.api_utils import get_shared_session
+            from app.infrastructure.http.session import get_shared_session
             if method == 'GET':
                 response = get_shared_session().get(url, params=params, headers=headers, timeout=30)
             else:

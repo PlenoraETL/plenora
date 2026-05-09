@@ -245,7 +245,7 @@ def test_file_sources_delete_skips_s3_cleanup_when_disabled(monkeypatch):
     # cur.fetchone for RETURNING id (which fake_cur has not been
     # shaped to supply). Capability-disabled S3 behavior — the
     # subject of this test — is orthogonal to reconciliation.
-    from app.shared import storage_reconciliation as _recon
+    from app.core.resources import storage_reconciliation as _recon
     fake_ref = _recon.ReconciliationEntryRef(
         id="capability-disabled-noop",
         domain="file_source",

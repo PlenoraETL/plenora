@@ -69,7 +69,7 @@ def test_save_pipeline_result_gpkg_no_file_in_data_dir_temp(monkeypatch, tmp_pat
         out = Path(str(output_path)).with_suffix(f".{fmt}")
         out.write_bytes(b"fake-gpkg-content")
         return out
-    monkeypatch.setattr("app.utils.dataframe.save_dataframe", _fake_save)
+    monkeypatch.setattr("app.core.files.dataframe_io.save_dataframe", _fake_save)
 
     # Mock DB save
     saved_db_calls = []
@@ -85,7 +85,7 @@ def test_save_pipeline_result_gpkg_no_file_in_data_dir_temp(monkeypatch, tmp_pat
     df = pd.DataFrame({"a": [1, 2, 3]})
     result = save_pipeline_result(
         project_id="p1", df=df, output_format="gpkg",
-        filename_stem="report", rows_count=3,
+        filename_stem="report", rows_count=3, group_id="grp",
     )
 
     # Contract dict shape
@@ -126,7 +126,7 @@ def test_save_pipeline_result_gpkg_uses_temporary_directory_prefix(monkeypatch, 
         out = Path(str(output_path)).with_suffix(f".{fmt}")
         out.write_bytes(b"x")
         return out
-    monkeypatch.setattr("app.utils.dataframe.save_dataframe", _spy_save)
+    monkeypatch.setattr("app.core.files.dataframe_io.save_dataframe", _spy_save)
 
     monkeypatch.setattr(result_store, "uuid",
                         SimpleNamespace(uuid4=lambda: "res-1"))
@@ -139,7 +139,7 @@ def test_save_pipeline_result_gpkg_uses_temporary_directory_prefix(monkeypatch, 
     df = pd.DataFrame({"a": [1]})
     save_pipeline_result(
         project_id="p1", df=df, output_format="gpkg",
-        filename_stem="r", rows_count=1,
+        filename_stem="r", rows_count=1, group_id="grp",
     )
 
     assert len(captured_paths) == 1
@@ -171,7 +171,7 @@ def test_save_pipeline_result_gpkg_cleans_tmp_dir_on_upload_failure(monkeypatch,
         out.write_bytes(b"content")
         captured_tmp_dirs.append(out.parent)
         return out
-    monkeypatch.setattr("app.utils.dataframe.save_dataframe", _spy_save)
+    monkeypatch.setattr("app.core.files.dataframe_io.save_dataframe", _spy_save)
 
     # save_result_row (DB) solleva
     monkeypatch.setattr(result_store, "uuid",
@@ -186,7 +186,7 @@ def test_save_pipeline_result_gpkg_cleans_tmp_dir_on_upload_failure(monkeypatch,
     with pytest.raises(Exception):
         save_pipeline_result(
             project_id="p1", df=df, output_format="gpkg",
-            filename_stem="r", rows_count=1,
+            filename_stem="r", rows_count=1, group_id="grp",
         )
 
     # Tmp dir usata da TemporaryDirectory rimossa dal context exit

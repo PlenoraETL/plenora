@@ -239,7 +239,7 @@ class SourceLoader:
         expected_group_id: str,
         is_superadmin: bool = False,
     ) -> Any:
-        from app.utils.dataframe import load_dataframe_from_file
+        from app.core.files.dataframe_io import load_dataframe_from_file
 
         try:
             materialized = self._resolver.materialize_latest(

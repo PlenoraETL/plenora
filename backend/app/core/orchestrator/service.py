@@ -6,7 +6,7 @@ Keeps this module's responsibility explicit and isolated from adjacent code.
 
 from typing import Dict, Any, Optional
 
-from app.shared.models import CanvasState
+from app.core.projects.canvas_models import CanvasState
 from app.core.projects.service import ProjectService
 from app.db.query_executor import QueryExecutor
 from app.core.estrai.query_generator import QueryGenerator

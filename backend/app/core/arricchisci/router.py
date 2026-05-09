@@ -141,7 +141,7 @@ class FetchSchemaRequest(BaseModel):
 
 def _validate_external_url(url: str) -> None:
     """Anti-SSRF: wrapper che converte ValueError in HTTPException."""
-    from app.shared.api_utils import validate_external_url
+    from app.core.security.outbound_url import validate_external_url
     try:
         validate_external_url(url)
     except ValueError as e:

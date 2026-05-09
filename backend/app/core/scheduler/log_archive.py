@@ -11,7 +11,7 @@ import json
 from datetime import datetime, timezone
 from typing import Callable, Literal, TypedDict
 
-from app.shared.cloud_backends import ObjectStorage
+from app.infrastructure.storage.cloud_backends import ObjectStorage
 
 
 # Canonical NDJSON shapes (O-ARC §5.1

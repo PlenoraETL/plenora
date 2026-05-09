@@ -16,7 +16,7 @@ from app.config import settings
 from app.utils.logger import get_logger
 from app.shared import error_codes
 from app.shared.error_envelope import raise_typed_http
-from app.shared.models import ExecuteRequest
+from app.core.projects.canvas_models import ExecuteRequest
 from app.core.orchestrator.task_service import (
     CaricaTaskPayload,
     EnrichmentTaskPayload,

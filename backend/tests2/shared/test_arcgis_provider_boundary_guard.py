@@ -45,6 +45,7 @@ _ARCGIS_REST_MECHANICS_ALLOWED_FILES = {
     _BACKEND_DIR / "app" / "core" / "features" / "arcgis_read.py",
     _BACKEND_DIR / "app" / "core" / "features" / "arcgis_rest_write.py",
     _BACKEND_DIR / "app" / "core" / "features" / "arcgis_service_discovery.py",
+    _BACKEND_DIR / "app" / "core" / "features" / "arcgis_service_lifecycle.py",
 }
 _LEGACY_ARCGIS_ADAPTER_MODULE = ".".join(
     ("app.core.features", "arcgis_connection_adapter")
@@ -94,9 +95,26 @@ _IMDF_UPLOADER_COMPAT_ALLOWED_FILES: set[Path] = set()
 # Each entry is (filename -> exact imported modules). The guard is strict
 # on all other files and on any new module inside known-bad files.
 # Remove an entry only when the cross-domain import is gone.
-_KNOWN_VIOLATIONS: dict[str, set[str]] = {}
+_KNOWN_VIOLATIONS: dict[str, set[str]] = {
+    "service_discovery.py": {"app.core.features"},
+    "service_lifecycle.py": {"app.core.features"},
+    "sql_helpers.py": {"app.core.features"},
+}
 
-_KNOWN_VIOLATION_REASONS: dict[str, str] = {}
+_KNOWN_VIOLATION_REASONS: dict[str, str] = {
+    "service_discovery.py": (
+        "KEEP_COMPAT: IMDF keeps policy wrappers while generic ArcGIS "
+        "discovery helpers live in app.core.features."
+    ),
+    "service_lifecycle.py": (
+        "KEEP_COMPAT: IMDF keeps lifecycle timing policy while generic ArcGIS "
+        "delete orchestration lives in app.core.features."
+    ),
+    "sql_helpers.py": (
+        "KEEP_COMPAT: IMDF publish keeps private wrapper names while generic "
+        "ArcGIS SQL helpers live in app.core.features."
+    ),
+}
 
 
 def _imdf_python_files() -> list[Path]:

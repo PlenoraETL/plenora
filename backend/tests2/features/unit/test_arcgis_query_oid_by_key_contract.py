@@ -5,6 +5,11 @@ from __future__ import annotations
 import pytest
 
 from app.core.features.arcgis_client import ArcGISClient
+from app.core.features.arcgis_sql_helpers import (
+    chunked,
+    query_oid_by_key,
+    quote_sql_value,
+)
 from app.shared.connections.arcgis_connection import ArcGISConnectionInfo
 
 
@@ -145,3 +150,21 @@ def test_query_oid_by_key_returns_partial_mapping_with_batch_errors() -> None:
     assert oid_by_key == {"A": 1}
     assert errors == ["query OBJECTID batch 2: timeout"]
     assert len(http.get_calls) == 2
+
+
+def test_arcgis_sql_helpers_expose_generic_sql_and_oid_boundary() -> None:
+    http = FakeHttpClient([{"features": [{"attributes": {"code": "A", "OBJECTID": 7}}]}])
+    client = ArcGISClient(http_client=http)
+
+    oid_by_key, errors = query_oid_by_key(
+        client,
+        _public_conn(),
+        "https://example.test/layer/0",
+        "code",
+        ["A"],
+    )
+
+    assert quote_sql_value("A'1") == "'A''1'"
+    assert list(chunked([1, 2, 3], 2)) == [[1, 2], [3]]
+    assert oid_by_key == {"A": 7}
+    assert errors == []

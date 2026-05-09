@@ -97,7 +97,7 @@ def _delete_run(
     with transaction_boundary() as conn:
         with conn.cursor() as cur:
             if pending_specs:
-                from app.shared.storage_reconciliation import record_pending
+                from app.core.resources.storage_reconciliation import record_pending
 
                 for node_id, storage_key, kind in pending_specs:
                     ref = record_pending(
@@ -117,7 +117,7 @@ def _delete_run(
 
     if pending_refs:
         from app.shared.storage_compensation import compensating_delete
-        from app.shared.storage_reconciliation import (
+        from app.core.resources.storage_reconciliation import (
             mark_done,
             mark_failed_attempt,
         )

@@ -883,7 +883,7 @@ class PlenoraBeatScheduler(Scheduler):
             return  # retention disabilitata (0 o negativo
 
         try:
-            from app.shared.cloud_backends import get_log_archive_storage
+            from app.infrastructure.storage.cloud_backends import get_log_archive_storage
             from app.core.scheduler.log_archive import LogArchiveWriter
             from app.db.pg_connection import fetchall, transaction
 
@@ -1053,7 +1053,7 @@ class PlenoraBeatScheduler(Scheduler):
             return  # retention disabilitata (0 o negativo
 
         try:
-            from app.shared.cloud_backends import get_log_archive_storage
+            from app.infrastructure.storage.cloud_backends import get_log_archive_storage
             from app.core.scheduler.log_archive import LogArchiveWriter
             from app.db.pg_connection import fetchall, transaction
 
@@ -1202,7 +1202,7 @@ class PlenoraBeatScheduler(Scheduler):
             backoff_base = 60
 
         try:
-            from app.shared import storage_reconciliation as _recon
+            from app.core.resources import storage_reconciliation as _recon
             from app.shared.storage_compensation import compensating_delete
         except Exception as e:
             logger.warning(

@@ -177,7 +177,7 @@ def persist_full_artifact(
     # ambienti unit-test ridotti. La snapshot path resta safe: in caso
     # di import error registriamo "failed" e proseguiamo
     try:
-        from app.shared.cloud_backends import (
+        from app.infrastructure.storage.cloud_backends import (
             ObjectStorageDisabledError,
             get_runtime_object_storage,
         )

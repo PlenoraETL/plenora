@@ -51,11 +51,16 @@ def tac_env(api_service):
             svc=api_service,
             session=session,
             shared_session=_p(
-                "app.shared.api_utils.get_shared_session", return_value=session
+                "app.infrastructure.http.session.get_shared_session",
+                return_value=session,
             ),
-            ssrf=_p("app.shared.api_utils.validate_external_url", return_value=None),
+            ssrf=_p(
+                "app.core.security.outbound_url.validate_external_url",
+                return_value=None,
+            ),
             arcgis_token=_p(
-                "app.shared.api_utils.get_arcgis_token", return_value="ag-tok-xyz"
+                "app.shared.connections.oauth.get_arcgis_token",
+                return_value="ag-tok-xyz",
             ),
             prep_headers=_po("_prepare_headers", return_value={"X": "y"}),
         )

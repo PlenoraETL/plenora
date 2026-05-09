@@ -12,7 +12,7 @@ from typing import Dict, Any, List, Callable, Optional, Union
 import pandas as pd
 import geopandas as gpd
 
-from app.shared.models import Node
+from app.core.projects.canvas_models import Node
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)

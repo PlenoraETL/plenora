@@ -115,7 +115,7 @@ def test_save_dataframe_to_bytes_roundtrip(fmt):
 
     Senza touchare il filesystem.
     """
-    from app.utils.dataframe import save_dataframe_to_bytes
+    from app.core.files.dataframe_io import save_dataframe_to_bytes
 
     df = pd.DataFrame({
         "id": [1, 2, 3],
@@ -148,7 +148,7 @@ def test_save_dataframe_to_bytes_roundtrip(fmt):
 def test_save_dataframe_to_bytes_geojson():
     """GeoJSON serialization in-memory via geopandas."""
     pytest.importorskip("geopandas")
-    from app.utils.dataframe import save_dataframe_to_bytes
+    from app.core.files.dataframe_io import save_dataframe_to_bytes
     from shapely.geometry import Point
 
     df = pd.DataFrame({
@@ -166,7 +166,7 @@ def test_save_dataframe_to_bytes_rejects_filesystem_only_formats():
     """gpkg e shp richiedono filesystem (tool binari / multi-file zip) →
     il nuovo API NON li accetta in-memory. Il caller fa fallback al
     path-based save_dataframe se serve questi formati."""
-    from app.utils.dataframe import save_dataframe_to_bytes
+    from app.core.files.dataframe_io import save_dataframe_to_bytes
 
     df = pd.DataFrame({"id": [1]})
     for fs_only in ("gpkg", "shp"):

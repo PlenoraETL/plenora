@@ -7,7 +7,7 @@ Keeps API enrichment behavior isolated from orchestration callers.
 import time as _time
 from typing import Dict, Any, Optional
 
-from app.shared.models import CanvasState
+from app.core.projects.canvas_models import CanvasState
 from app.config import settings
 from app.utils.logger import get_logger, append_step
 from app.core.arricchisci.api_connector import api_connection_service
@@ -124,7 +124,7 @@ class EnrichExecutor:
             import pandas as pd
             from app.core.arricchisci.enrichment_service import EnrichmentExecutor
             from app.core.arricchisci.models import EnrichmentOptions
-            from app.utils.dataframe import sanitize_for_json
+            from app.core.files.dataframe_io import sanitize_for_json
 
             canvas_dict = canvas.model_dump()
             nodes = canvas_dict.get("nodes", [])

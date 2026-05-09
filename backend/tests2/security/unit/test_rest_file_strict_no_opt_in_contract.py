@@ -73,7 +73,7 @@ def test_validate_external_url_still_honors_loopback_opt_in_in_dev(monkeypatch):
     Senza questo guard, un futuro refactor potrebbe accidentalmente
     forzare strict anche sul wrapper raise, rompendo i test funzionali
     B-2 che dipendono dall'opt-in via 127.0.0.1."""
-    from app.shared.api_utils import validate_external_url
+    from app.core.security.outbound_url import validate_external_url
 
     monkeypatch.setenv("PLENORA_ALLOW_LOOPBACK_OUTBOUND", "1")
     monkeypatch.setenv("ENVIRONMENT", "development")

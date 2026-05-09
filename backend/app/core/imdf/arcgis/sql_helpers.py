@@ -6,12 +6,9 @@ Cluster SQL_HELPERS — quoting valori SQL ArcGIS-safe + chunking generico
 
 from typing import Dict, List, Sequence, Tuple
 
+from app.core.features import arcgis_sql_helpers as _arcgis_sql_helpers
 from app.shared.connections.arcgis_connection import ArcGISConnectionInfo
 from app.shared.connections.arcgis_provider import ArcGISReadProviderProtocol
-from app.shared.connections.arcgis_sql import (
-    chunk_arcgis_values,
-    quote_arcgis_sql_value,
-)
 
 
 def _quote_sql_value(v) -> str:
@@ -29,7 +26,7 @@ def _quote_sql_value(v) -> str:
     `isinstance(v, (int, float))` NON riconosce, con il risultato di passarli
     per il branch string producendo letterali tipo 'np.int64(123)'.
     """
-    return quote_arcgis_sql_value(v)
+    return _arcgis_sql_helpers.quote_sql_value(v)
 
 
 def _chunked(seq, size):
@@ -39,7 +36,7 @@ def _chunked(seq, size):
         ValueError: se size <= 0 (eviterebbe un infinite loop con buf
             che non raggiunge mai la condizione `len(buf) >= size`).
     """
-    yield from chunk_arcgis_values(seq, size)
+    yield from _arcgis_sql_helpers.chunked(seq, size)
 
 
 def _query_oid_by_key(
@@ -61,4 +58,10 @@ def _query_oid_by_key(
     Thin IMDF adapter for publish call sites. ArcGIS mechanics belong in the
     canonical provider method.
     """
-    return client.query_oid_by_key(conn, layer_url, match_col, values)
+    return _arcgis_sql_helpers.query_oid_by_key(
+        client,
+        conn,
+        layer_url,
+        match_col,
+        values,
+    )

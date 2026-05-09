@@ -20,7 +20,7 @@ from unittest.mock import patch
 
 import pytest
 
-from app.shared.storage_reconciliation import (
+from app.core.resources.storage_reconciliation import (
     PendingReconciliationRow,
     compute_next_retry_at,
     fetch_due_pending_deletes,

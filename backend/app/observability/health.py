@@ -85,7 +85,9 @@ def check_postgres() -> CheckOutcome:
         try:
             with conn.cursor() as cur:
                 cur.execute(set_local_sql)
-                cur.execute("SELECT 1 AS v")
+                cur.execute(
+                    "SELECT 1 AS v, current_schema() AS current_schema"
+                )
                 row = cur.fetchone()
             conn.commit()
         except Exception:
@@ -97,7 +99,15 @@ def check_postgres() -> CheckOutcome:
         finally:
             put_connection(conn)
         if row and int(row.get("v", 0)) == 1:
-            return True, "ok"
+            expected_schema = settings.get("DB_SCHEMA", "plenora")
+            current_schema = row.get("current_schema")
+            if current_schema != expected_schema:
+                return (
+                    False,
+                    f"schema mismatch: current={current_schema!r} "
+                    f"expected={expected_schema!r}",
+                )
+            return True, f"ok schema={current_schema}"
         return False, f"SELECT 1 ha restituito: {row!r}"
     except Exception as e:
         return False, f"{type(e).__name__}: {e}"
@@ -211,7 +221,7 @@ def check_object_storage() -> CheckOutcome:
     """Verifica raggiungibilita' object storage runtime.
 
     consumer dei boundary capability + factory esistenti in
-    `app.shared.cloud_backends`. NON importa boto3 / S3 SDK
+    `app.infrastructure.storage.cloud_backends`. NON importa boto3 / S3 SDK
     direttamente; la SDK e' incapsulata dentro `cloud_backends`.
 
     Strategia (in ordine):
@@ -236,7 +246,7 @@ def check_object_storage() -> CheckOutcome:
     credentials).
     """
     try:
-        from app.shared.cloud_backends import (
+        from app.infrastructure.storage.cloud_backends import (
             ObjectStorageDisabledError,
             get_runtime_object_storage,
             object_storage_enabled,
@@ -327,7 +337,7 @@ def check_reconciliation_backlog() -> CheckOutcome:
     DB-side state della reconciliation.
     """
     try:
-        from app.shared.storage_reconciliation import (
+        from app.core.resources.storage_reconciliation import (
             count_active_by_state_domain,
             count_pending_by_operation,
         )

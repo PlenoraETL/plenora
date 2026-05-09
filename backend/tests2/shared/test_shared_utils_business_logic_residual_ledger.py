@@ -142,6 +142,20 @@ def test_production_runtime_does_not_import_app_utils_geo() -> None:
     assert offenders == []
 
 
+def test_app_utils_dataframe_compat_module_is_removed() -> None:
+    assert not (_BACKEND_ROOT / "app" / "utils" / "dataframe.py").exists()
+
+
+def test_production_runtime_does_not_import_app_utils_dataframe() -> None:
+    offenders: list[str] = []
+    for path in (_BACKEND_ROOT / "app").rglob("*.py"):
+        text = path.read_text(encoding="utf-8")
+        if "app.utils.dataframe" in text or "from app.utils import dataframe" in text:
+            offenders.append(path.relative_to(_BACKEND_ROOT).as_posix())
+
+    assert offenders == []
+
+
 def test_visibility_policy_runtime_imports_are_auth_owned() -> None:
     offenders: list[str] = []
     for path in (_BACKEND_ROOT / "app").rglob("*.py"):
@@ -173,6 +187,21 @@ def test_production_runtime_does_not_import_shared_sharing() -> None:
             continue
         text = path.read_text(encoding="utf-8")
         if "app.shared.sharing" in text:
+            offenders.append(path.relative_to(_BACKEND_ROOT).as_posix())
+
+    assert offenders == []
+
+
+def test_production_runtime_does_not_import_shared_storage_reconciliation() -> None:
+    offenders: list[str] = []
+    for path in (_BACKEND_ROOT / "app").rglob("*.py"):
+        if path.parts[-3:] == ("app", "shared", "storage_reconciliation.py"):
+            continue
+        text = path.read_text(encoding="utf-8")
+        if (
+            "app.shared.storage_reconciliation" in text
+            or "from app.shared import storage_reconciliation" in text
+        ):
             offenders.append(path.relative_to(_BACKEND_ROOT).as_posix())
 
     assert offenders == []

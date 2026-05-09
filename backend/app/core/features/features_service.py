@@ -631,7 +631,7 @@ class FeaturesService:
         """
         Salvataggio di fallback (formati base).
         
-        In produzione viene sostituito da app.utils.dataframe.save_dataframe
+        In produzione viene sostituito da app.core.files.dataframe_io.save_dataframe
         che supporta anche formati geospaziali (geojson, gpkg, shp).
         """
         final_path = output_path.with_suffix(f".{format}")
