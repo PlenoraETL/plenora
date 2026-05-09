@@ -20,7 +20,6 @@ load_backend_dotenv(logging.getLogger("app.config_env_loader"))
 
 from app.config import settings
 from app.utils.logger import get_logger
-from app.core.files.dataframe_io import save_dataframe
 from app.shared import error_codes
 from app.shared.error_envelope import (
     build_error_envelope_body,
@@ -32,6 +31,10 @@ from app.shared.error_envelope import (
 from app.bootstrap import bootstrap as _bootstrap, teardown as _teardown
 _bootstrap()
 
+# `from app.core.*` imports MUST come after `_bootstrap()`: the
+# dependency-graph lock (`test_main_py_bootstrap_runs_before_router_imports`)
+# enforces routers/core load only against an initialised app.
+from app.core.files.dataframe_io import save_dataframe
 from app.core.projects.exceptions import CanvasCorruptedError
 from app.core.resources.exceptions import MemoryLimitExceededError
 from app.middleware_stack import install_middleware_stack

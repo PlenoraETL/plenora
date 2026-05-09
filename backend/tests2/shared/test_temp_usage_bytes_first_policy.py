@@ -424,6 +424,15 @@ _TEMP_INVENTORY: dict[tuple[str, int], tuple[str, str]] = {
         "recurse into load_dataframe_from_file (which dispatches "
         "by extension).",
     ),
+    ("app/core/files/source_blob.py", 153): (
+        "PATH_REQUIRED_FILE",
+        "FileSource blob materialization: writes the in-memory "
+        "blob to a NamedTemporaryFile so downstream parsers that "
+        "require a path (geopandas/fiona for SHP/GDB, plus "
+        "format-specific readers via dataframe_io) can open it. "
+        "Bytes API not available for these drivers; tempfile is "
+        "the structural adapter at the source-loading boundary.",
+    ),
     ("app/core/files/geospatial_io.py", 231): (
         "DIR_MULTIFILE",
         "Shapefile WRITE: gdf.to_file emits multi-file shapefile "

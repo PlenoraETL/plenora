@@ -69,7 +69,9 @@ def _make_executor_with_result(fake_result):
 def test_execute_streaming_to_file_writes_csv_chunks(tmp_path, monkeypatch):
     import app.config
 
-    monkeypatch.setattr(app.config.settings, "ESTRAI_MAX_ROWS", 10_000, raising=False)
+    # `ESTRAI_MAX_ROWS` is a `@property` reading via `_int_setting(...)`,
+    # so it has no setter. Override the underlying env var instead.
+    monkeypatch.setenv("ESTRAI_MAX_ROWS", "10000")
 
     fake_result = _FakeResult(
         columns=["id", "name"],
@@ -108,7 +110,9 @@ def test_execute_streaming_to_file_writes_parquet_chunks(tmp_path, monkeypatch):
     pq = pytest.importorskip("pyarrow.parquet")
     import app.config
 
-    monkeypatch.setattr(app.config.settings, "ESTRAI_MAX_ROWS", 10_000, raising=False)
+    # `ESTRAI_MAX_ROWS` is a `@property` reading via `_int_setting(...)`,
+    # so it has no setter. Override the underlying env var instead.
+    monkeypatch.setenv("ESTRAI_MAX_ROWS", "10000")
 
     fake_result = _FakeResult(
         columns=["id", "name"],

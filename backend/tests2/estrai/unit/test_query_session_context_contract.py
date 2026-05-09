@@ -97,7 +97,7 @@ def test_query_executor_builds_execution_context_from_settings(monkeypatch):
     from app.db.query_session import ExecutionContext
     import app.config
 
-    monkeypatch.setattr(app.config.settings, "DB_QUERY_TIMEOUT", 9, raising=False)
+    monkeypatch.setenv("DB_QUERY_TIMEOUT", "9")
 
     executor = QueryExecutor(engine_factory=MagicMock(), logger=MagicMock())
     connection = MagicMock()
@@ -123,7 +123,7 @@ def test_execute_raw_uses_session_context_and_keeps_engine_factory_api(monkeypat
     from app.db.query_executor import QueryExecutor
     import app.config
 
-    monkeypatch.setattr(app.config.settings, "DB_QUERY_TIMEOUT", 12, raising=False)
+    monkeypatch.setenv("DB_QUERY_TIMEOUT", "12")
     fake_result = _FakeResult()
     factory, fake_conn = _make_engine_factory(fake_result)
 
@@ -152,7 +152,7 @@ def test_execute_raw_uses_session_context_for_mssql_without_session_statement(mo
     from app.db.query_executor import QueryExecutor
     import app.config
 
-    monkeypatch.setattr(app.config.settings, "DB_QUERY_TIMEOUT", 12, raising=False)
+    monkeypatch.setenv("DB_QUERY_TIMEOUT", "12")
     fake_result = _FakeResult()
     factory, fake_conn = _make_engine_factory(fake_result, [fake_result])
 
@@ -179,7 +179,7 @@ def test_execute_raw_uses_session_context_for_oracle_timeout_and_columns(monkeyp
     from app.db.query_executor import QueryExecutor
     import app.config
 
-    monkeypatch.setattr(app.config.settings, "DB_QUERY_TIMEOUT", 7, raising=False)
+    monkeypatch.setenv("DB_QUERY_TIMEOUT", "7")
     fake_result = _FakeResult(columns=["ID", "NAME"], chunks=[[(1, "alice")], []])
     factory, fake_conn = _make_engine_factory(fake_result, [MagicMock(), fake_result])
     raw = _RawOracleConnection()

@@ -90,7 +90,7 @@ _project_service = None
 _api_connection_service = None
 
 
-def init_arricchisci(project_service, api_connection_service):
+def init_arricchisci(project_service, api_connection_service) -> None:
     """Inizializza il modulo. Chiamare da main.py dopo setup."""
     global _project_service, _api_connection_service
     _project_service = project_service

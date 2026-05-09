@@ -107,10 +107,7 @@ def test_stage_swap_happy_path_replaces_target(monkeypatch):
     stg_table = f"{table}__stg"
     bak_table = f"{table}__bak"
     try:
-        monkeypatch.setattr(
-            "app.core.carica.database_writer.settings.CARICA_STAGE_SWAP_THRESHOLD",
-            3, raising=False,
-        )
+        monkeypatch.setenv("CARICA_STAGE_SWAP_THRESHOLD", "3")
 
         engine = _engine()
         w_create = _make_writer(engine, table, WriteMode.CREATE)
@@ -145,10 +142,7 @@ def test_stage_swap_cleans_orphan_shadow_from_prior_crash(monkeypatch):
     stg_table = f"{table}__stg"
     bak_table = f"{table}__bak"
     try:
-        monkeypatch.setattr(
-            "app.core.carica.database_writer.settings.CARICA_STAGE_SWAP_THRESHOLD",
-            3, raising=False,
-        )
+        monkeypatch.setenv("CARICA_STAGE_SWAP_THRESHOLD", "3")
 
         engine = _engine()
         w_create = _make_writer(engine, table, WriteMode.CREATE)
@@ -190,10 +184,7 @@ def test_stage_swap_insert_failure_preserves_target_data(monkeypatch):
     stg_table = f"{table}__stg"
     bak_table = f"{table}__bak"
     try:
-        monkeypatch.setattr(
-            "app.core.carica.database_writer.settings.CARICA_STAGE_SWAP_THRESHOLD",
-            3, raising=False,
-        )
+        monkeypatch.setenv("CARICA_STAGE_SWAP_THRESHOLD", "3")
 
         engine = _engine()
         w_create = _make_writer(engine, table, WriteMode.CREATE)
@@ -239,10 +230,7 @@ def test_below_threshold_uses_atomic_not_stage_swap(monkeypatch):
     stg_table = f"{table}__stg"
     bak_table = f"{table}__bak"
     try:
-        monkeypatch.setattr(
-            "app.core.carica.database_writer.settings.CARICA_STAGE_SWAP_THRESHOLD",
-            10_000, raising=False,
-        )
+        monkeypatch.setenv("CARICA_STAGE_SWAP_THRESHOLD", "10000")
 
         engine = _engine()
         w_create = _make_writer(engine, table, WriteMode.CREATE)

@@ -10,16 +10,35 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Any, Mapping, Optional
+from typing import Annotated, Any, Mapping, Optional
 
 from pydantic import (
     BaseModel,
+    BeforeValidator,
     ConfigDict,
     StrictBool,
     StrictInt,
     StrictStr,
     TypeAdapter,
 )
+
+
+def _coerce_timestamp_to_str(value: Any) -> Any:
+    """Accept psycopg2 datetime values for TIMESTAMPTZ columns.
+
+    The custom psycopg2 typecasters (TSTZ_AS_TEXT etc.) were removed by
+    the PostgreSQL boundary hardening (commit 8c51836), so the driver
+    now returns ``datetime`` objects directly. Hydration models keep
+    the row shape as strings (legacy contract), so we normalise here:
+    ``datetime`` -> ISO-8601 string, anything else passes through to
+    StrictStr validation untouched.
+    """
+    if isinstance(value, datetime):
+        return value.isoformat()
+    return value
+
+
+_TimestampStr = Annotated[StrictStr, BeforeValidator(_coerce_timestamp_to_str)]
 
 from app.db.pg_connection import execute, fetchall, fetchone
 from app.db.sql_safety import safe_set_clause
@@ -70,16 +89,16 @@ class _UserRowHydration(_HydrationModel):
     group_id: StrictStr = ""
     role: StrictStr = ""
     is_active: StrictBool = True
-    created_at: StrictStr = ""
-    updated_at: StrictStr = ""
+    created_at: _TimestampStr = ""
+    updated_at: _TimestampStr = ""
 
 
 class _GroupRowHydration(_HydrationModel):
     id: StrictStr
     name: StrictStr = ""
     description: StrictStr | None = ""
-    created_at: StrictStr = ""
-    updated_at: StrictStr = ""
+    created_at: _TimestampStr = ""
+    updated_at: _TimestampStr = ""
 
 
 class _GroupSummaryRowHydration(_HydrationModel):

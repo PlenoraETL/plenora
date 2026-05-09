@@ -91,8 +91,12 @@ def test_scenario_2_standby_promoted_after_leader_ttl_expiration(monkeypatch):
 def test_scenario_3_redis_down_fail_closed_then_recovers(monkeypatch):
     """Redis down durante un tick: default fail-closed (beat standby).
     Recovery: Redis torna su → il beat riacquisisce pulitamente."""
+    # `SCHEDULE_BEAT_LEADER_FAIL_OPEN` lives in DEFAULTS dict only;
+    # consumer uses `getattr(settings, key, False)`. raising=False lets
+    # monkeypatch inject the attribute and remove it at teardown.
     monkeypatch.setattr(
-        "app.config.settings.SCHEDULE_BEAT_LEADER_FAIL_OPEN", False
+        "app.config.settings.SCHEDULE_BEAT_LEADER_FAIL_OPEN", False,
+        raising=False,
     )
     shared_redis = fakeredis.FakeRedis()
     beat = _make_scheduler("pid-1@host-a", shared_redis)
@@ -121,7 +125,8 @@ def test_scenario_3b_redis_down_fail_open_stays_leader(monkeypatch):
     """Con flag SCHEDULE_BEAT_LEADER_FAIL_OPEN=True (behavior legacy),
     Redis down → il beat continua come leader single-instance."""
     monkeypatch.setattr(
-        "app.config.settings.SCHEDULE_BEAT_LEADER_FAIL_OPEN", True
+        "app.config.settings.SCHEDULE_BEAT_LEADER_FAIL_OPEN", True,
+        raising=False,
     )
     beat = _make_scheduler("pid-1@host-a", None)
 
