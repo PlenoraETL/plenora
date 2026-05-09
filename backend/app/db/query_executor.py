@@ -14,7 +14,12 @@ from sqlalchemy import text
 from sqlalchemy.engine import Engine
 
 from app.db.query_engines import DefaultEngineFactory
-from app.db.query_session import ExecutionContext, apply_session_context
+from app.db.query_session import (
+    ExecutionContext,
+    apply_session_context,
+    build_execution_context,
+    normalize_result_columns,
+)
 from app.db.query_streaming import execute_streaming_to_file
 from app.utils.logger import get_logger
 
@@ -262,21 +267,11 @@ class QueryExecutor:
         params: Optional[Dict[str, Any]],
     ) -> ExecutionContext:
         """Build typed execution/session metadata for one query."""
-        try:
-            from app.config import settings
-            timeout_seconds = int(settings.DB_QUERY_TIMEOUT)
-        except Exception as e:
-            timeout_seconds = 0
-            logger.debug(
-                "lettura DB_QUERY_TIMEOUT fallita, timeout sessione disabilitato: %s: %s",
-                type(e).__name__,
-                e,
-            )
-        return ExecutionContext.for_query(
+        return build_execution_context(
             connection=connection,
             sql=sql,
             params=params,
-            timeout_seconds=timeout_seconds,
+            logger=logger,
         )
 
     # ESECUZIONE RAW (metodo unificato
@@ -320,11 +315,10 @@ class QueryExecutor:
             result = conn.execute(text(execution.sql), dict(execution.params))
 
             # Estrazione nomi colonne dal cursor nativo del database
-            columns = [desc[0] for desc in result.cursor.description]
-
-            # Oracle: normalizza nomi colonne da UPPERCASE a lowercase
-            if execution.session.provider == "oracle":
-                columns = [c.lower() for c in columns]
+            columns = normalize_result_columns(
+                (desc[0] for desc in result.cursor.description),
+                execution.session,
+            )
 
             # Materializza righe in blocchi
             # C11: hard cap (ESTRAI_MAX_ROWS) per evitare OOM. Pre-fix il

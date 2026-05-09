@@ -21,7 +21,7 @@ from app.core.orchestrator.task_service import (
     TaskSubmitRequest,
     TaskType,
 )
-from app.core.orchestrator.router import _task_info_to_dict, _task_result_to_dict
+from app.core.orchestrator.router_mappers import task_info_to_dict, task_result_to_dict
 
 
 pytestmark = [
@@ -57,7 +57,7 @@ def test_get_task_status_uses_typed_result_payload_inside_core():
     assert task_info.project_id == "project-1"
     assert task_info.result.result_id == "result-1"
 
-    compat_payload = _task_info_to_dict(task_info)
+    compat_payload = task_info_to_dict(task_info)
     assert compat_payload["result"] == celery_meta
     assert compat_payload["status"] == "success"
 
@@ -80,7 +80,7 @@ def test_task_result_payload_normalizes_success_metadata_without_raw_mapping():
     assert payload.output_file == "out.csv"
     assert payload.rows_count == 42
     assert not hasattr(payload, "payload")
-    assert _task_result_to_dict(payload) == celery_meta
+    assert task_result_to_dict(payload) == celery_meta
 
 
 def test_task_result_payload_keeps_malformed_fields_non_fatal_and_typed():
@@ -99,7 +99,7 @@ def test_task_result_payload_keeps_malformed_fields_non_fatal_and_typed():
     assert payload.result_id is None
     assert payload.rows_count is None
     assert payload.error == "boom"
-    assert _task_result_to_dict(payload)["error"] == "boom"
+    assert task_result_to_dict(payload)["error"] == "boom"
 
 
 def test_task_info_result_contract_is_typed_payload():
@@ -140,7 +140,7 @@ def test_router_serializes_typed_task_result_payload_at_edge():
         result=payload,
     )
 
-    serialized = _task_info_to_dict(task_info)
+    serialized = task_info_to_dict(task_info)
 
     assert serialized["result"] == {
         "success": True,
@@ -239,7 +239,7 @@ def test_get_task_result_returns_typed_payload():
 
     assert isinstance(result, TaskResultPayload)
     assert result.project_id == "project-1"
-    assert _task_result_to_dict(result) == celery_result
+    assert task_result_to_dict(result) == celery_result
 
 
 def test_submit_task_launches_celery_and_returns_pending_task_info():

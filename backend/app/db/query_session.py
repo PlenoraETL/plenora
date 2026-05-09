@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from types import MappingProxyType
-from typing import Any, Dict, Mapping, Optional, Protocol
+from typing import Any, Dict, Iterable, List, Mapping, Optional, Protocol
 
 from sqlalchemy import text
 
@@ -104,6 +104,33 @@ class ExecutionContext:
         return cls(session=session, sql=sql, params=frozen_params)
 
 
+def build_execution_context(
+    *,
+    connection: QueryConnection,
+    sql: str,
+    params: Optional[Dict[str, Any]],
+    logger: SessionLogger,
+) -> ExecutionContext:
+    """Build typed execution/session metadata from runtime settings."""
+    try:
+        from app.config import settings
+
+        timeout_seconds = int(settings.DB_QUERY_TIMEOUT)
+    except Exception as e:
+        timeout_seconds = 0
+        logger.debug(
+            "lettura DB_QUERY_TIMEOUT fallita, timeout sessione disabilitato: %s: %s",
+            type(e).__name__,
+            e,
+        )
+    return ExecutionContext.for_query(
+        connection=connection,
+        sql=sql,
+        params=params,
+        timeout_seconds=timeout_seconds,
+    )
+
+
 def apply_session_context(
     sqlalchemy_conn: Any,
     context: SessionContext,
@@ -147,3 +174,13 @@ def apply_session_context(
                 type(e).__name__,
                 e,
             )
+
+
+def normalize_result_columns(
+    columns: Iterable[str],
+    context: SessionContext,
+) -> List[str]:
+    """Return result column names with provider-specific normalization."""
+    if context.provider == "oracle":
+        return [column.lower() for column in columns]
+    return list(columns)

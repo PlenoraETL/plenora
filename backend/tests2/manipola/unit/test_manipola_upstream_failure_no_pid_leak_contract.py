@@ -88,7 +88,7 @@ def test_upstream_failure_does_not_leak_source_project_id():
          patch("app.core.intermediate.db.create_run"), \
          patch("app.core.intermediate.writer.close_run"), \
          patch("app.utils.logger.close_run"), \
-         patch("app.core.manipola.executor.get_upstream_run_context",
+         patch("app.core.manipola.project_source_runtime.get_upstream_run_context",
                return_value=_UPSTREAM_CONTEXT):
         result = executor._carica_sorgenti_progetto(
             canvas, dataframes, force_recalculate=True,
@@ -125,7 +125,7 @@ def test_upstream_failure_result_is_wrappable_without_pid_mismatch():
          patch("app.core.intermediate.db.create_run"), \
          patch("app.core.intermediate.writer.close_run"), \
          patch("app.utils.logger.close_run"), \
-         patch("app.core.manipola.executor.get_upstream_run_context",
+         patch("app.core.manipola.project_source_runtime.get_upstream_run_context",
                return_value=_UPSTREAM_CONTEXT):
         result = executor._carica_sorgenti_progetto(
             canvas, dataframes, force_recalculate=True,
@@ -167,7 +167,7 @@ def test_upstream_failure_message_includes_source_project_id():
          patch("app.core.intermediate.db.create_run"), \
          patch("app.core.intermediate.writer.close_run"), \
          patch("app.utils.logger.close_run"), \
-         patch("app.core.manipola.executor.get_upstream_run_context",
+         patch("app.core.manipola.project_source_runtime.get_upstream_run_context",
                return_value=_UPSTREAM_CONTEXT):
         result = executor._carica_sorgenti_progetto(
             canvas, dataframes, force_recalculate=True,
@@ -223,14 +223,14 @@ def test_upstream_success_path_unchanged():
          patch("app.core.intermediate.db.create_run"), \
          patch("app.core.intermediate.writer.close_run"), \
          patch("app.utils.logger.close_run"), \
-         patch("app.core.manipola.executor.get_upstream_run_context",
+         patch("app.core.manipola.project_source_runtime.get_upstream_run_context",
                return_value=_UPSTREAM_CONTEXT), patch(
              "app.core.artifacts.ArtifactResolver"
          ) as MockResolver, patch(
              "app.core.manipola.executor.load_dataframe_from_file",
              return_value=fake_df,
          ), patch(
-             "app.core.manipola.executor.Path"
+             "app.core.manipola.project_source_runtime.Path"
          ) as MockPath:
         # Path("...").exists() -> False -> fallback a materialize_latest
         instance_path = MagicMock()

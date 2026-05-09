@@ -383,7 +383,7 @@ _LEDGER: tuple[BoundaryEntry, ...] = (
         "app/core/orchestrator/task_service.py",
         "TaskInfo.to_dict",
         "REMOVED",
-        "task info serialization is owned by app.core.orchestrator.router._task_info_to_dict",
+        "task info serialization is owned by app.core.orchestrator.router_mappers.task_info_to_dict",
     ),
     BoundaryEntry(
         "app/core/orchestrator/task_service.py",
@@ -392,8 +392,8 @@ _LEDGER: tuple[BoundaryEntry, ...] = (
         "completed-task Celery results are normalized into TaskResultPayload",
     ),
     BoundaryEntry(
-        "app/core/orchestrator/router.py",
-        "_task_info_to_dict",
+        "app/core/orchestrator/router_mappers.py",
+        "task_info_to_dict",
         "KEEP_PUBLIC_COMPAT",
         "task status dict serialization is kept at the router/API boundary",
     ),

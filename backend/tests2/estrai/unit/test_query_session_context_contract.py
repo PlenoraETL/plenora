@@ -11,18 +11,25 @@ pytestmark = [pytest.mark.unit, pytest.mark.estrai, pytest.mark.contract]
 
 
 class _FakeResult:
-    def __init__(self):
+    def __init__(self, columns=None, chunks=None):
         self.cursor = MagicMock()
-        self.cursor.description = [("id",)]
-        self._chunks = [[(1,)], []]
+        self.cursor.description = [(column,) for column in (columns or ["id"])]
+        self._chunks = list(chunks or [[(1,)], []])
 
     def fetchmany(self, size):
         return self._chunks.pop(0)
 
 
-def _make_engine_factory(fake_result):
+class _RawOracleConnection:
+    def __init__(self):
+        self.callTimeout = 0
+
+
+def _make_engine_factory(fake_result, execute_side_effects=None):
     fake_conn = MagicMock()
-    fake_conn.execute.side_effect = [MagicMock(), fake_result]
+    if execute_side_effects is None:
+        execute_side_effects = [MagicMock(), fake_result]
+    fake_conn.execute.side_effect = execute_side_effects
 
     fake_ctx = MagicMock()
     fake_ctx.__enter__.return_value = fake_conn
@@ -51,6 +58,38 @@ def test_session_context_carries_provider_timeout_metadata():
     assert context.statement_timeout_sql == "SET statement_timeout = :t"
     assert context.uses_native_call_timeout is False
     assert context.oracle_open_cursors is None
+
+
+def test_session_context_carries_mssql_noop_session_metadata():
+    from app.db.query_session import SessionContext
+
+    connection = MagicMock()
+    connection.type = "mssql"
+
+    context = SessionContext.for_connection(connection, timeout_seconds=12)
+
+    assert context.provider == "mssql"
+    assert context.timeout_seconds == 12
+    assert context.timeout_milliseconds == 12_000
+    assert context.statement_timeout_sql is None
+    assert context.uses_native_call_timeout is False
+    assert context.oracle_open_cursors is None
+
+
+def test_session_context_carries_oracle_native_timeout_metadata():
+    from app.db.query_session import SessionContext
+
+    connection = MagicMock()
+    connection.type = "oracle"
+
+    context = SessionContext.for_connection(connection, timeout_seconds=12)
+
+    assert context.provider == "oracle"
+    assert context.timeout_seconds == 12
+    assert context.timeout_milliseconds == 12_000
+    assert context.statement_timeout_sql is None
+    assert context.uses_native_call_timeout is True
+    assert context.oracle_open_cursors == 32767
 
 
 def test_query_executor_builds_execution_context_from_settings(monkeypatch):
@@ -107,3 +146,61 @@ def test_execute_raw_uses_session_context_and_keeps_engine_factory_api(monkeypat
     assert calls[0].args[1] == {"t": 12_000}
     assert str(calls[1].args[0]) == "SELECT :limit"
     assert calls[1].args[1] == {"limit": 1}
+
+
+def test_execute_raw_uses_session_context_for_mssql_without_session_statement(monkeypatch):
+    from app.db.query_executor import QueryExecutor
+    import app.config
+
+    monkeypatch.setattr(app.config.settings, "DB_QUERY_TIMEOUT", 12, raising=False)
+    fake_result = _FakeResult()
+    factory, fake_conn = _make_engine_factory(fake_result, [fake_result])
+
+    executor = QueryExecutor(engine_factory=factory, logger=MagicMock())
+    connection = MagicMock()
+    connection.type = "mssql"
+
+    rows, columns = executor.execute_raw(
+        connection,
+        "SELECT :limit",
+        {"limit": 1},
+    )
+
+    factory.create_engine.assert_called_once_with(connection)
+    assert rows == [(1,)]
+    assert columns == ["id"]
+
+    fake_conn.execute.assert_called_once()
+    assert str(fake_conn.execute.call_args.args[0]) == "SELECT :limit"
+    assert fake_conn.execute.call_args.args[1] == {"limit": 1}
+
+
+def test_execute_raw_uses_session_context_for_oracle_timeout_and_columns(monkeypatch):
+    from app.db.query_executor import QueryExecutor
+    import app.config
+
+    monkeypatch.setattr(app.config.settings, "DB_QUERY_TIMEOUT", 7, raising=False)
+    fake_result = _FakeResult(columns=["ID", "NAME"], chunks=[[(1, "alice")], []])
+    factory, fake_conn = _make_engine_factory(fake_result, [MagicMock(), fake_result])
+    raw = _RawOracleConnection()
+    fake_conn.connection.dbapi_connection = raw
+
+    executor = QueryExecutor(engine_factory=factory, logger=MagicMock())
+    connection = MagicMock()
+    connection.type = "oracle"
+
+    rows, columns = executor.execute_raw(
+        connection,
+        "SELECT :name FROM dual",
+        {"name": "alice"},
+    )
+
+    factory.create_engine.assert_called_once_with(connection)
+    assert raw.callTimeout == 7_000
+    assert rows == [(1, "alice")]
+    assert columns == ["id", "name"]
+
+    calls = fake_conn.execute.call_args_list
+    assert str(calls[0].args[0]) == "ALTER SESSION SET OPEN_CURSORS = 32767"
+    assert str(calls[1].args[0]) == "SELECT :name FROM dual"
+    assert calls[1].args[1] == {"name": "alice"}

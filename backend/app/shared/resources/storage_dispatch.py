@@ -1,5 +1,5 @@
 """
-Pure decision boundary: DB vs object storage payload target.
+Pure resource decision boundary: DB vs object storage payload target.
 
 Source-of-truth per la decisione "questo payload va in DB BYTEA o su
 """

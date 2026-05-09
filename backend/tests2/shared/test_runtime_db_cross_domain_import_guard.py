@@ -96,13 +96,6 @@ _ALLOWED_RUNTIME_DB_IMPORTS: tuple[AllowedRuntimeDbImport, ...] = (
         "KEEP_COMPAT_WITH_REMOVAL_CONDITION: remove after IMDF project access and bundle listing consume projects-owned read/visibility services instead of the raw project DB leaf",
     ),
     AllowedRuntimeDbImport(
-        "app/core/manipola/executor.py",
-        "app.core.intermediate",
-        "db",
-        "HIGH",
-        "KEEP_COMPAT_WITH_REMOVAL_CONDITION: remove after upstream run lifecycle creation is routed through an intermediate run service used by Manipola",
-    ),
-    AllowedRuntimeDbImport(
         "workers/tasks/pipeline_task.py",
         "app.core.intermediate",
         "db",

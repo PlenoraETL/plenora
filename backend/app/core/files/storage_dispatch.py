@@ -42,7 +42,7 @@ def dispatch_blob_storage(
     DB row for an absent blob.
     """
     from app.config import settings
-    from app.shared.storage_dispatch import resolve_payload_target
+    from app.shared.resources.storage_dispatch import resolve_payload_target
 
     size = len(raw_data)
     policy = (settings.get("STORAGE_POLICY", "hybrid") or "hybrid").strip().lower()

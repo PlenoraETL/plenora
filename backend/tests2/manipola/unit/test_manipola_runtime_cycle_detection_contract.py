@@ -9,6 +9,7 @@ import inspect
 import pytest
 
 from app.core.manipola import executor as manipola_executor
+from app.core.manipola import project_source_runtime
 
 
 pytestmark = [pytest.mark.unit, pytest.mark.manipola, pytest.mark.contract]
@@ -45,15 +46,12 @@ def _references_any(callable_or_module, names):
 
 
 def test_carica_sorgenti_progetto_has_cycle_detection_guard():
-    """`_carica_sorgenti_progetto` deve referenziare i symbol di cycle
-    detection (ProjectLineageCycleError / visited / project_lineage).
+    """The extracted project-source runtime owns recursive cycle detection.
 
-    Replacement R-04b di `inspect.getsource(...) + markers in source`:
-    bytecode probe (ricorsivo per closures). Refactor-resilient:
-    cattura la presenza dei callee/exception identifier nel bytecode
-    invece della stringa nel source.
+    The executor method is now a compatibility delegator; the guard must stay
+    in the runtime helper that actually invokes the pipeline dispatcher.
     """
-    method = manipola_executor.ManipolaExecutor._carica_sorgenti_progetto
+    method = project_source_runtime.load_project_sources
     markers = [
         "ProjectLineageCycleError",
         "_assert_no_lineage_cycle_on_chain",
@@ -75,10 +73,19 @@ def test_carica_sorgenti_progetto_has_cycle_detection_guard():
         return False
 
     assert _walk(code), (
-        "_carica_sorgenti_progetto NON contiene cycle detection. "
+        "project_source_runtime.load_project_sources NON contiene cycle detection. "
         f"Markers cercati: {markers}. "
         "Un canvas legacy con ciclo A->B->A fa stack overflow."
     )
+
+
+def test_executor_project_source_loader_is_thin_delegator():
+    """The public executor method remains, but runtime ownership is extracted."""
+    method = manipola_executor.ManipolaExecutor._carica_sorgenti_progetto
+
+    assert "load_project_sources" in method.__code__.co_names
+    assert "pipeline_dispatcher" in method.__code__.co_names
+    assert "_assert_no_lineage_cycle_on_chain" not in method.__code__.co_names
 
 
 def test_executor_module_imports_project_lineage_symbols():

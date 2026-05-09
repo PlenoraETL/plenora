@@ -577,72 +577,41 @@ class FileSourceService:
 
 
     def get_file_source(self, file_id: str) -> Optional[FileSource]:
-        """Ottieni file source specifico dal DB."""
-        try:
-            import app.core.files.db as db
-            row = db.get_file_source(file_id, include_data=False)
-            if not row:
-                return None
-            metadata = row.get("metadata") or {}
-            if isinstance(metadata, str):
-                metadata = json.loads(metadata)
-            # Inietta group_id e created_by dal record DB (colonne separate
-            metadata["group_id"] = row.get("group_id", "")
-            metadata["created_by"] = row.get("created_by")
-            if _USE_APP_MODELS:
-                return FileSource.model_validate(metadata)
-            else:
-                return FileSource.from_json(json.dumps(metadata))
-        except Exception as e:
-            self._logger.error(f"[GESTITO] Errore get_file_source {file_id}: {e}")
-            return None
+        """Delegate to `source_metadata.get_file_source`."""
+        from app.core.files.source_metadata import get_file_source
+        import app.core.files.db as db
+        return get_file_source(
+            file_id,
+            db_get_file_source=db.get_file_source,
+            file_source_model=FileSource,
+            use_app_models=_USE_APP_MODELS,
+            logger=self._logger,
+        )
 
     def delete_file_source(self, file_id: str) -> bool:
-        """Elimina file source dal DB."""
-        try:
-            import app.core.files.db as db
-            if not db.get_file_source(file_id):
-                return False
-            db.delete_file_source(file_id)
-            self._logger.info(f"FileSource eliminato: {file_id}")
-            return True
-        except Exception as e:
-            self._logger.error(f"[GESTITO] Errore delete_file_source {file_id}: {e}")
-            return False
+        """Delegate to `source_metadata.delete_file_source`."""
+        from app.core.files.source_metadata import delete_file_source
+        import app.core.files.db as db
+        return delete_file_source(
+            file_id,
+            db_get_file_source=db.get_file_source,
+            db_delete_file_source=db.delete_file_source,
+            logger=self._logger,
+        )
 
     def list_file_sources(self, group_id: str = None) -> Any:
-        """Lista file source dal DB.
-
-        - group_id=None → no filter (usato dal superadmin per vedere tutti i gruppi)
-        - group_id="X" → solo file del gruppo X
-        """
-        try:
-            import app.core.files.db as db
-            # NB: NON applicare DEFAULT_GROUP come fallback. Se group_id è None
-            # significa "no filter" (superadmin); altrimenti il superadmin vedrebbe
-            # solo i file del gruppo default invece di tutti
-            rows = db.list_file_sources(group_id)
-            files = []
-            for row in rows:
-                fs = self.get_file_source(row["id"])
-                if fs:
-                    files.append(fs)
-            if _USE_APP_MODELS:
-                try:
-                    from app.core.files.models import FileSourceList
-                    return FileSourceList(files=files)
-                except ImportError:
-                    pass
-            return files
-        except Exception as e:
-            self._logger.error(f"[GESTITO] Errore list_file_sources: {e}")
-            if _USE_APP_MODELS:
-                try:
-                    from app.core.files.models import FileSourceList
-                    return FileSourceList(files=[])
-                except ImportError:
-                    pass
-            return []
+        """Delegate to `source_metadata.list_file_sources`."""
+        from app.core.files.source_metadata import list_file_sources
+        import app.core.files.db as db
+        file_source_list_model = FileSourceList if _USE_APP_MODELS else None
+        return list_file_sources(
+            group_id,
+            db_list_file_sources=db.list_file_sources,
+            get_file_source_by_id=self.get_file_source,
+            file_source_list_model=file_source_list_model,
+            use_app_models=_USE_APP_MODELS,
+            logger=self._logger,
+        )
 
     def create_from_upload(
         self,
@@ -818,52 +787,25 @@ class FileSourceService:
         )
 
     def update_file_source(self, file_id: str, data: Any) -> Optional[FileSource]:
-        """Aggiorna file source nel DB."""
+        """Delegate to `source_metadata.update_file_source`."""
+        from app.config import settings
+        from app.core.files.source_metadata import update_file_source
         import app.core.files.db as db
-        file_source = self.get_file_source(file_id)
-        if not file_source:
-            return None
-        update_data = data.model_dump(exclude_unset=True) if hasattr(data, 'model_dump') else data
-        for field_name, value in update_data.items():
-            setattr(file_source, field_name, value)
-        if 'layer' in update_data or 'sheet' in update_data:
-            try:
-                # N1: update interno — il file e' appena stato recuperato
-                # e il caller (router) ha gia' validato l'ownership
-                # Passiamo il group_id reale del file come "expected" per
-                # il fail-closed del helper
-                df, gdf = self.load_dataframe(
-                    file_id, expected_group_id=file_source.group_id,
-                )
-                raw_cols = self._column_builder.from_dataframe(df, gdf)
-                file_source.columns = [
-                    {"name": c.name, "type": c.type} if not isinstance(c, dict) else c
-                    for c in raw_cols
-                ]
-                file_source.row_count = len(df)
-            except Exception as e:
-                self._logger.warning(f"Errore aggiornamento colonne: {e}")
-        file_source.updated_at = self._time.now()
-        metadata = file_source.model_dump(mode='json') if _USE_APP_MODELS else {}
-        try:
-            db.update_file_source_metadata(file_id, metadata)
-        except Exception:
-            # Fallback: riscrivi il record completo
-            # Recupera il group_id originale dal DB invece di usare "default"
-            from app.config import settings
-            existing_row = db.get_file_source(file_id, include_data=False) or {}
-            db.save_file_source(
-                file_id=file_id,
-                group_id=existing_row.get("group_id") or settings.DEFAULT_GROUP,
-                name=file_source.name,
-                original_filename=file_source.original_filename,
-                fmt=file_source.format,
-                data=self._get_blob_from_db(
-                    file_id, expected_group_id=file_source.group_id,
-                ) or b"",
-                metadata=metadata,
-            )
-        return file_source
+        return update_file_source(
+            file_id,
+            data,
+            get_file_source_by_id=self.get_file_source,
+            load_dataframe=self.load_dataframe,
+            column_builder_from_dataframe=self._column_builder.from_dataframe,
+            get_blob_from_db=self._get_blob_from_db,
+            time_now=self._time.now,
+            db_update_file_source_metadata=db.update_file_source_metadata,
+            db_get_file_source=db.get_file_source,
+            db_save_file_source=db.save_file_source,
+            default_group=settings.DEFAULT_GROUP,
+            use_app_models=_USE_APP_MODELS,
+            logger=self._logger,
+        )
 
     def get_layers_info(
         self, file_id: str, expected_group_id: str = None,

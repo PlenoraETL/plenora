@@ -225,7 +225,7 @@ def test_explicit_group_id_is_forwarded_to_resolver():
         "app.core.artifacts.ArtifactResolver",
         return_value=_StubResolver(),
     ), patch(
-        "app.core.manipola.executor.find_latest_output_file",
+        "app.core.manipola.project_source_runtime.find_latest_output_file",
         return_value=None,
     ):
         executor._carica_sorgenti_progetto(

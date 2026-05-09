@@ -33,6 +33,7 @@ _WAVE_A_TARGETS: tuple[str, ...] = (
     "app/core/features/arcgis_writer_boundary.py",
     "app/core/features/features_service.py",
     "app/core/orchestrator/task_service.py",
+    "app/core/orchestrator/router_mappers.py",
     "app/core/orchestrator/router.py",
 )
 
@@ -70,8 +71,8 @@ _EXPECTED_WAVE_A_BROAD_DICT_RETURNS: frozenset[BroadDictReturn] = frozenset(
         BroadDictReturn("app/core/orchestrator/task_service.py", "CaricaTaskPayload.to_task_kwargs", "dict[str, JsonValue]"),
         BroadDictReturn("app/core/orchestrator/task_service.py", "PipelineTaskPayload.to_task_kwargs", "dict[str, JsonValue]"),
         BroadDictReturn("app/core/orchestrator/task_service.py", "PreviewTaskPayload.to_task_kwargs", "dict[str, JsonValue]"),
-        BroadDictReturn("app/core/orchestrator/router.py", "_task_result_to_dict", "Dict[str, Any]"),
-        BroadDictReturn("app/core/orchestrator/router.py", "_task_info_to_dict", "Dict[str, Any]"),
+        BroadDictReturn("app/core/orchestrator/router_mappers.py", "task_result_to_dict", "Dict[str, Any]"),
+        BroadDictReturn("app/core/orchestrator/router_mappers.py", "task_info_to_dict", "Dict[str, Any]"),
         BroadDictReturn("app/core/orchestrator/router.py", "_rest_carica_parser_input", "Dict[str, Any]"),
         BroadDictReturn("app/core/orchestrator/router.py", "execute_project_pipeline", "Dict[str, Any]"),
         BroadDictReturn("app/core/orchestrator/router.py", "preview_project", "Dict[str, Any]"),
@@ -94,7 +95,11 @@ _ALLOWED_CLASSIFICATIONS = frozenset(
 WAVE_A_BROAD_DICT_CLASSIFICATIONS: dict[BroadDictReturn, str] = {
     residual: (
         "KEEP_PUBLIC_COMPAT"
-        if residual.file == "app/core/orchestrator/router.py"
+        if residual.file
+        in {
+            "app/core/orchestrator/router.py",
+            "app/core/orchestrator/router_mappers.py",
+        }
         or residual.qualname.endswith(("to_dict", "write_features_from_df", "create_service_from_df"))
         else "KEEP_COMPAT_WITH_REMOVAL_CONDITION"
     )

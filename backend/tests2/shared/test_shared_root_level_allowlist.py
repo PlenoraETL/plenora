@@ -39,7 +39,6 @@ _ALLOWED_ROOT_MODULES: frozenset[str] = frozenset(
         "file_helpers",            # pandas-backed file inspection helpers
         "memory_guard",            # per-tenant memory allocation guard
         "storage_compensation",    # object-storage failure compensation helpers
-        "storage_dispatch",        # storage backend routing
         "storage_reconciliation",  # stale-blob reconciliation helpers
         "columns_metadata",       # column-level metadata helpers
         "models",                 # shared Pydantic base models
@@ -69,7 +68,6 @@ _ROOT_MODULE_CLASSIFICATIONS: dict[str, str] = {
     "file_helpers": "HEAVY_ROOT_UTILITY",
     "memory_guard": "MOVE_TO_EXECUTION_CANDIDATE",
     "storage_compensation": "MOVE_TO_RESOURCES_CANDIDATE",
-    "storage_dispatch": "MOVE_TO_RESOURCES_CANDIDATE",
     "storage_reconciliation": "HEAVY_ROOT_UTILITY",
     "columns_metadata": "MOVE_TO_RESOURCES_CANDIDATE",
     "models": "HEAVY_ROOT_UTILITY",

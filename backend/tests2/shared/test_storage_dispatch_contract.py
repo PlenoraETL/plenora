@@ -1,5 +1,5 @@
 """
-Contract test per `app.shared.storage_dispatch.resolve_payload_target`.
+Contract test per `app.shared.resources.storage_dispatch.resolve_payload_target`.
 
 Verifica:
 """
@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import pytest
 
-from app.shared.storage_dispatch import (
+from app.shared.resources.storage_dispatch import (
     POLICY_DB,
     POLICY_HYBRID,
     POLICY_OBJECT_STORAGE,
@@ -135,7 +135,13 @@ def test_module_has_no_settings_or_services_imports():
     modulo da `app.services.*` / `app.db.*` / `app.utils.*`. Pure
     module = nessun side-effect, nessun env read."""
     from pathlib import Path
-    src = Path(__file__).parent.parent.parent / "app" / "shared" / "storage_dispatch.py"
+    src = (
+        Path(__file__).parent.parent.parent
+        / "app"
+        / "shared"
+        / "resources"
+        / "storage_dispatch.py"
+    )
     text = src.read_text(encoding="utf-8")
     forbidden = [
         "from app.config",

@@ -195,3 +195,34 @@ def test_arcgis_service_discovery_cluster_stays_split_from_client() -> None:
     assert issubclass(ArcGISClient, ArcGISServiceDiscoveryMixin)
     assert not (client_local_methods & extracted_methods)
     assert extracted_methods <= set(ArcGISServiceDiscoveryMixin.__dict__)
+
+
+def test_arcgis_auth_cluster_stays_split_from_client() -> None:
+    import ast
+    from pathlib import Path
+
+    from app.core.features.arcgis_auth import ArcGISAuthMixin
+
+    extracted_methods = {
+        "_request_with_token",
+        "authenticate",
+        "_authenticate_oauth2",
+        "_authenticate_token",
+        "_resolve_token_url",
+        "_discover_token_url",
+    }
+
+    client_path = Path(inspect.getsourcefile(ArcGISClient) or "")
+    tree = ast.parse(client_path.read_text(encoding="utf-8"))
+    client_class = next(
+        node
+        for node in tree.body
+        if isinstance(node, ast.ClassDef) and node.name == "ArcGISClient"
+    )
+    client_local_methods = {
+        node.name for node in client_class.body if isinstance(node, ast.FunctionDef)
+    }
+
+    assert issubclass(ArcGISClient, ArcGISAuthMixin)
+    assert not (client_local_methods & extracted_methods)
+    assert extracted_methods <= set(ArcGISAuthMixin.__dict__)

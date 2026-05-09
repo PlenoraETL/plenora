@@ -5,31 +5,30 @@ Keeps transformation behavior isolated from orchestration callers.
 """
 
 import re
-import threading
 import time as _time
 import pandas as pd
-from pathlib import Path
 from typing import Dict, Any, List, Optional
 
 from app.shared.models import CanvasState, Edge, Node
 from app.config import settings
-from app.core.projects.lineage import ProjectLineageCycleError
-from app.core.projects.execution_context import (
-    get_project_group_id,
-    get_upstream_run_context,
-)
+from app.core.projects.execution_context import get_project_group_id
 from app.shared.execution.canvas_graph import CanvasGraph
 from app.shared.execution.executor_protocol import PipelineDispatcherProtocol
 from app.shared.execution.graph import kahn_topological_order
 from app.utils.logger import get_logger, append_step
 from app.utils.result_store import save_pipeline_result_outcome
 from app.utils.dataframe import (
-    load_dataframe_from_file, filter_visible_columns,
-    sanitize_for_json, find_latest_output_file,
+    load_dataframe_from_file, sanitize_for_json,
 )
 from app.utils.geo import detect_geometry_column
 from .plugin_executor import get_executor
-from .source_loading import load_file_sources, load_project_source_artifact
+from .source_loading import load_file_sources
+from .project_source_runtime import (
+    ProjectLineageCycleError,
+    load_project_sources,
+    _push_to_execution_chain,
+    _pop_from_execution_chain,
+)
 
 
 logger = get_logger(__name__)
@@ -85,45 +84,6 @@ def _estimate_merge_output_rows(
         return matched_rows + right_unmatched_rows
     return matched_rows + left_unmatched_rows + right_unmatched_rows
 
-
-# C3 round 3 fix 3: cycle detection runtime cross-project
-# Thread-local chain di project_id attualmente in esecuzione. Usata come
-# defense-in-depth contro cicli nei project_source: se _carica_sorgenti_progetto
-# sta per invocare pipeline_dispatcher su un progetto gia' presente nella
-# chain, stiamo chiudendo un ciclo A→B→A → ProjectLineageCycleError con chain
-# readable
-# Why threading.local: ogni worker Celery gira i suoi task in thread/processo
-# separato; il chain e' per-thread cosi' due esecuzioni parallele non si
-# vedono a vicenda
-# Why runtime check in aggiunta al save-time check: ProjectService.update_canvas
-# blocca la creazione di canvas ciclici, ma non copre canvas legacy creati
-# prima del fix, bypass del service (direct DB edit), o race save-vs-execute
-_manipola_execution_chain = threading.local()
-
-
-def _get_execution_chain() -> List[str]:
-    if not hasattr(_manipola_execution_chain, "projects"):
-        _manipola_execution_chain.projects = []
-    return _manipola_execution_chain.projects
-
-
-def _push_to_execution_chain(project_id: str) -> None:
-    _get_execution_chain().append(project_id)
-
-
-def _pop_from_execution_chain(project_id: str) -> None:
-    chain = _get_execution_chain()
-    if chain and chain[-1] == project_id:
-        chain.pop()
-
-
-def _assert_no_lineage_cycle_on_chain(source_project_id: str) -> None:
-    """Solleva ProjectLineageCycleError se source_project_id e' gia'
-    nella chain di esecuzione corrente (stiamo chiudendo un ciclo)."""
-    chain = _get_execution_chain()
-    if source_project_id in chain:
-        cycle_chain = chain[chain.index(source_project_id):] + [source_project_id]
-        raise ProjectLineageCycleError(cycle_chain)
 
 def _nf(node: Node, key: str, default: Any = None) -> Any:
     """Legge un campo flat dal nodo Pydantic, con fallback su node.data (backward compat)."""
@@ -469,237 +429,16 @@ class ManipolaExecutor:
         ricevono il ``group_id`` da ``_init_security_context`` e lo
         propagano esplicitamente.
         """
-        source_nodes = [n for n in canvas.nodes if n.type == "project_source"]
-
-        # Ctx-strict: no singleton fallback. Il group_id deve provenire
-        # da _init_security_context via execute/preview. Se manca
-        # fail-closed immediato senza toccare il resolver
-        executing_group_id = group_id
-        if not executing_group_id:
-            logger.error(
-                "[SECURITY] manipola._carica_sorgenti_progetto: "
-                "group_id esplicito mancante (ctx-strict), fail-closed"
-            )
-            return {
-                "success": False,
-                "message": "Contesto di sicurezza non determinabile (group_id mancante)",
-            }
-
-        from app.core.artifacts import (
-            ArtifactResolver,
-            ArtifactResolutionError,
-            LatestProjectArtifactRef,
-            MaterializedArtifact,
+        return load_project_sources(
+            canvas,
+            dataframes,
+            force_recalculate=force_recalculate,
+            pipeline_dispatcher=self.pipeline_dispatcher,
+            results_base_dir=self.results_base_dir,
+            run_id=run_id,
+            group_id=group_id,
+            logger=logger,
         )
-
-        for node in source_nodes:
-            source_project_id = _nf(node, 'source_project_id')
-            if not source_project_id:
-                logger.warning(f"Nodo {node.id}: source_project_id mancante")
-                continue
-
-            # Cross-tenant isolation delegata a `ArtifactResolver
-            # materialize_latest`: il check fail-closed solleva
-            # `ArtifactResolutionError` per progetto inesistente / gruppo
-            # diverso / errore DB. NON catturare con warn "non bloccante"
-            # sarebbe fail-OPEN, l'errore deve risalire al caller
-            if not force_recalculate:
-                try:
-                    materialized = ArtifactResolver().materialize_latest(
-                        LatestProjectArtifactRef(project_id=source_project_id),
-                        expected_group_id=executing_group_id,
-                    )
-                except ArtifactResolutionError as _sec_err:
-                    logger.error(
-                        f"[SECURITY] Cross-tenant access blocked: "
-                        f"progetto sorgente {source_project_id} non risolvibile "
-                        f"per group={executing_group_id}: {_sec_err}",
-                        op="execute",
-                    )
-                    return {
-                        "success": False,
-                        "message": (
-                            f"Accesso negato: il progetto sorgente "
-                            f"'{source_project_id}' appartiene a un gruppo diverso."
-                        ),
-                    }
-
-                if materialized is None:
-                    output_dir = self.results_base_dir / source_project_id
-                    fs_file = find_latest_output_file(output_dir)
-                    if fs_file:
-                        logger.warning(
-                            f"[COMPAT-RESIDUE] manipola._carica_sorgenti_progetto: "
-                            f"filesystem fallback scattato per "
-                            f"source_project={source_project_id} file={fs_file} — "
-                            f"progetto upstream senza blob DB, pre-migrazione"
-                        )
-                        materialized = MaterializedArtifact(
-                            path=Path(fs_file), is_temporary=False
-                        )
-
-                if materialized is not None:
-                    try:
-                        node_columns = _nf(node, 'columns', [])
-                        with materialized as m:
-                            loaded = load_project_source_artifact(
-                                m.path,
-                                node_columns,
-                                source_project_id=source_project_id,
-                                group_id=executing_group_id,
-                            )
-                        dataframes[node.id] = loaded.data
-                        continue
-                    except Exception as e:
-                        logger.warning(f"Errore cache: {e}, procedo con ricalcolo")
-
-            if not self.pipeline_dispatcher:
-                return {"success": False, "message": "Pipeline dispatcher non configurato"}
-
-            # C3 round 3 fix 3: cycle detection PRIMA di riesegue upstream
-            # Se source_project_id e' gia' nella chain di esecuzione, stiamo
-            # per chiudere un ciclo A→B→A invocando pipeline_dispatcher
-            # ricorsivamente. Senza questo check, stack overflow garantito
-            # su canvas legacy con dipendenze circolari che il check al save
-            # di update_canvas non ha intercettato
-            _assert_no_lineage_cycle_on_chain(source_project_id)
-
-            # Genera un run_id fresco per il progetto upstream (ESTRAI
-            # così i suoi dati intermedi vengono tracciati in intermediate.db
-            import uuid as _uuid
-            upstream_run_id = str(_uuid.uuid4())
-            try:
-                from app.utils.logger import open_run
-                from app.core.intermediate import db as idb
-                upstream_context = get_upstream_run_context(
-                    source_project_id,
-                    default_retention_n=idb.DEFAULT_RUNS_RETENTION,
-                )
-                upstream_group_id = upstream_context.group_id
-                open_run(
-                    run_id=upstream_run_id,
-                    project_id=source_project_id,
-                    group_id=upstream_group_id,
-                    module=upstream_context.project_type,
-                    triggered_by="cascade",
-                )
-                idb.create_run(
-                    run_id=upstream_run_id,
-                    canvas_id=source_project_id,
-                    group_id=upstream_group_id,
-                )
-                upstream_retention_n = upstream_context.retention_n
-            except Exception as _oe:
-                logger.warning(f"Apertura run upstream {source_project_id} fallita (non bloccante): {_oe}")
-                upstream_run_id = None
-                upstream_retention_n = None
-
-            # `pipeline_dispatcher` implementa PipelineDispatcherProtocol
-            # ed e' normalmente `OrchestratorService.execute_pipeline`.
-            # Ritorna `PipelineArtifact`
-            # — dict-subclass con typed property. Usiamo le proprieta'
-            # tipizzate (`upstream.success`/`upstream.message`/
-            # `upstream.rows_count`/`upstream.output_path`) invece di `.get`
-            # raw per coerenza con il modello artifact unificato
-            upstream = self.pipeline_dispatcher(
-                source_project_id,
-                force_recalculate=True,
-                run_id=upstream_run_id,
-            )
-
-            # Chiudi run upstream
-            if upstream_run_id:
-                try:
-                    from app.utils.logger import close_run
-                    from app.core.intermediate.writer import close_run as idb_close_run
-                    status = "success" if upstream.success else "failure"
-                    close_run(
-                        run_id=upstream_run_id,
-                        status=status,
-                        rows_out=upstream.rows_count or 0,
-                        duration_ms=0,
-                        steps=[],
-                        error_message=upstream.message if not upstream.success else None,
-                    )
-                    idb_close_run(
-                        run_id=upstream_run_id, input_hash="", output_hash="",
-                        total_exec_time=0.0, success=upstream.success,
-                        retention_n=upstream_retention_n,
-                    )
-                except Exception as _ce:
-                    logger.warning(f"Chiusura run upstream {source_project_id} fallita (non bloccante): {_ce}")
-            if not upstream.success:
-                # FIXME: #25 (2026-04-28): pre-fix `return upstream`
-                # propagava un PipelineArtifact con project_id=
-                # source_project_id (canvas upstream). Saliva fino
-                # a `OrchestratorService.execute_pipeline` che lo
-                # passa a `PipelineArtifact.from_executor_result
-                # result, project_id=<corrente>)`. Il safety net
-                # rilevava il mismatch e sollevava ValueError
-                # "from_executor_result: project_id mismatch ..."
-                # — fuorviante: nascondeva la vera causa upstream
-                # es. SSO scaduto) dietro un errore di consistenza
-                # Post-fix: ritorniamo un dict locale senza
-                # project_id, con messaggio diagnostico che cita il
-                # source_project_id colpevole + il messaggio
-                # upstream. `from_executor_result` populera' il
-                # project_id col valore corrente (caller-side
-                return {
-                    "success": False,
-                    "message": (
-                        f"Errore caricamento sorgente upstream "
-                        f"'{source_project_id}': "
-                        f"{upstream.message or 'errore non specificato'}"
-                    ),
-                }
-
-            # Legge il risultato upstream via ArtifactResolver
-            # Tenant binding fail-closed con expected_group_id: il check
-            # cross-tenant viene applicato anche post-recompute, non solo
-            # nel ramo cached del primo blocco
-            materialized = None
-            raw_output_path = upstream.output_path or ""
-            if raw_output_path and Path(raw_output_path).exists():
-                materialized = MaterializedArtifact(
-                    path=Path(raw_output_path), is_temporary=False
-                )
-            if materialized is None:
-                try:
-                    materialized = ArtifactResolver().materialize_latest(
-                        LatestProjectArtifactRef(project_id=source_project_id),
-                        expected_group_id=executing_group_id,
-                    )
-                except ArtifactResolutionError as _sec_err:
-                    logger.error(
-                        f"[SECURITY] Cross-tenant access blocked post-recompute: "
-                        f"{source_project_id} per group={executing_group_id}: {_sec_err}",
-                        op="execute",
-                    )
-                    return {
-                        "success": False,
-                        "message": (
-                            f"Accesso negato: il progetto sorgente "
-                            f"'{source_project_id}' appartiene a un gruppo diverso."
-                        ),
-                    }
-
-            if materialized is None or materialized.path is None:
-                return {"success": False, "message": f"Risultato upstream non trovato per: {source_project_id}"}
-
-            try:
-                node_columns = _nf(node, 'columns', [])
-                with materialized as m:
-                    loaded = load_project_source_artifact(
-                        m.path,
-                        node_columns,
-                        source_project_id=source_project_id,
-                        group_id=executing_group_id,
-                    )
-                dataframes[node.id] = loaded.data
-            except Exception as e:
-                return {"success": False, "message": f"Errore progetto {source_project_id}: {e}"}
-
-        return None
 
     def _carica_sorgenti_file(
         self,
