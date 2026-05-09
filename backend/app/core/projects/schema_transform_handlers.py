@@ -5,15 +5,19 @@ from __future__ import annotations
 import re
 from typing import Callable, Dict, List
 
+from app.core.projects.schema_formula_handlers import FormulaSchemaHandlers
 from app.core.projects.schema_geo_handlers import GeoSchemaHandlers
 from app.core.projects.schema_join_handlers import JoinSchemaHandlers
 from app.core.projects.schema_reshape_handlers import ReshapeSchemaHandlers
+from app.core.projects.schema_table_handlers import TableSchemaHandlers
 
 
 class TransformSchemaHandlers(
     JoinSchemaHandlers,
     GeoSchemaHandlers,
     ReshapeSchemaHandlers,
+    FormulaSchemaHandlers,
+    TableSchemaHandlers,
 ):
     """Owns transform_op dispatch and transform schema implementations."""
 
@@ -168,99 +172,6 @@ class TransformSchemaHandlers(
             edges_by_target,
         )
 
-    def _schema_aggregate(
-        self, 
-        input_schemas: List[List[ColumnSchema]], 
-        config: dict,
-        node_id: str
-    ) -> List[ColumnSchema]:
-        """
-        Aggregate: group_by columns + aggregated columns
-        """
-        if not input_schemas:
-            return []
-        
-        input_schema = input_schemas[0]
-        input_by_name = {col.name: col for col in input_schema}
-        
-        group_by = config.get("group_by", [])
-        aggs = config.get("aggs", {})  # {"col": "sum", "col2": "count"}
-        
-        result = []
-        
-        # Colonne group by (mantengono tipo originale
-        for col_name in group_by:
-            if col_name in input_by_name:
-                col = input_by_name[col_name]
-                result.append(self._column_schema_cls(
-                    name=col_name,
-                    type=col.type,
-                    source_node=node_id,
-                    is_calculated=False
-                ))
-        
-        # Colonne aggregate
-        for col_name, agg_func in aggs.items():
-            orig_col = input_by_name.get(col_name)
-            
-            # Determina tipo output basato su funzione
-            if agg_func in ("count", "nunique", "size"):
-                out_type = "int"
-            elif agg_func in ("sum", "mean", "std", "var", "min", "max"):
-                out_type = orig_col.type if orig_col else "real"
-                # Sum/mean su int -> real
-                if agg_func in ("mean", "std", "var"):
-                    out_type = "real"
-            elif agg_func == "first" or agg_func == "last":
-                out_type = orig_col.type if orig_col else "str"
-            else:
-                out_type = "str"
-            
-            result.append(self._column_schema_cls(
-                name=col_name,
-                type=out_type,
-                source_node=node_id,
-                is_calculated=True
-            ))
-        
-        return result
-    
-    def _schema_formula(
-        self, 
-        input_schemas: List[List[ColumnSchema]], 
-        config: dict,
-        node_id: str
-    ) -> List[ColumnSchema]:
-        """
-        Formula: input + nuova colonna calcolata
-        """
-        if not input_schemas:
-            return []
-        
-        # Copia schema input
-        result = [self._column_schema_cls(
-            name=col.name,
-            type=col.type,
-            source_node=node_id,
-            is_calculated=col.is_calculated
-        ) for col in input_schemas[0]]
-        
-        # Aggiungi nuova colonna
-        new_col = config.get("new_column", "calculated")
-        output_type = config.get("output_type", "real")  # Default numerico
-        
-        # Verifica che non esista già
-        existing_names = {col.name for col in result}
-        if new_col and new_col not in existing_names:
-            result.append(self._column_schema_cls(
-                name=new_col,
-                type=output_type,
-                source_node=node_id,
-                is_calculated=True
-            ))
-        
-        return result
-    
     def _schema_filter(
         self, 
         input_schemas: List[List[ColumnSchema]],
@@ -270,59 +181,6 @@ class TransformSchemaHandlers(
         Filter: stesso schema (filtra righe, non colonne)
         """
         return self._schema_passthrough(input_schemas, node_id)
-    
-    def _schema_concat(
-        self, 
-        input_schemas: List[List[ColumnSchema]], 
-        config: dict,
-        node_id: str
-    ) -> List[ColumnSchema]:
-        """
-        Concat: unione colonne (outer) o intersezione (inner)
-        """
-        if not input_schemas:
-            return []
-        
-        join_mode = config.get("join", "outer")
-        
-        if join_mode == "inner":
-            # Solo colonne comuni a tutti gli input
-            common_cols = None
-            for schema in input_schemas:
-                col_names = {col.name for col in schema}
-                if common_cols is None:
-                    common_cols = col_names
-                else:
-                    common_cols &= col_names
-            
-            if not common_cols:
-                return []
-            
-            # Prendi tipi dal primo schema
-            result = []
-            for col in input_schemas[0]:
-                if col.name in common_cols:
-                    result.append(self._column_schema_cls(
-                        name=col.name,
-                        type=col.type,
-                        source_node=node_id,
-                        is_calculated=col.is_calculated
-                    ))
-            return result
-        
-        else:  # outer
-            # Tutte le colonne da tutti gli input
-            seen = {}
-            for schema in input_schemas:
-                for col in schema:
-                    if col.name not in seen:
-                        seen[col.name] = self._column_schema_cls(
-                            name=col.name,
-                            type=col.type,
-                            source_node=node_id,
-                            is_calculated=col.is_calculated
-                        )
-            return list(seen.values())
     
     def _schema_sort(
         self, 
@@ -334,24 +192,6 @@ class TransformSchemaHandlers(
         """
         return self._schema_passthrough(input_schemas, node_id)
     
-    def _schema_distinct(
-        self, 
-        input_schemas: List[List[ColumnSchema]],
-        config: dict,
-        node_id: str
-    ) -> List[ColumnSchema]:
-        """
-        Distinct: stesso schema dell'input (rimuove solo righe duplicate)
-        """
-        if not input_schemas:
-            return []
-
-        return [self._column_schema_cls(
-            name=col.name,
-            type=col.type,
-            source_node=node_id,
-            is_calculated=col.is_calculated
-        ) for col in input_schemas[0]]
     def _schema_rename(
         self, 
         input_schemas: List[List[ColumnSchema]], 
@@ -551,36 +391,6 @@ class TransformSchemaHandlers(
                     source_node=node_id,
                     is_calculated=col.is_calculated
                 ))
-        
-        return result
-    
-    def _schema_conditional(
-        self,
-        input_schemas: List[List[ColumnSchema]],
-        config: dict,
-        node_id: str
-    ) -> List[ColumnSchema]:
-        """Conditional: input + nuova colonna output (str)"""
-        if not input_schemas:
-            return []
-        
-        output_col = config.get("output_column", "result")
-        
-        result = [self._column_schema_cls(
-            name=col.name,
-            type=col.type,
-            source_node=node_id,
-            is_calculated=col.is_calculated
-        ) for col in input_schemas[0]]
-        
-        existing_names = {col.name for col in result}
-        if output_col not in existing_names:
-            result.append(self._column_schema_cls(
-                name=output_col,
-                type="str",
-                source_node=node_id,
-                is_calculated=True
-            ))
         
         return result
     
@@ -936,180 +746,6 @@ class TransformSchemaHandlers(
                 source_node=node_id,
                 is_calculated=True,
             ))
-        return result
-
-
-    # BE-PHASE2-SCHEMA-INFER-005
-    # Handler dedicato per il riordino colonne (`reorder_columns`).
-    # Gli handler geospatial dello stesso batch vivono in
-    # `schema_geo_handlers.py`.
-
-    def _schema_reorder_columns(
-        self,
-        input_schemas: List[List[ColumnSchema]],
-        config: dict,
-        node_id: str,
-    ) -> List[ColumnSchema]:
-        """reorder_columns: stesso column-set, ordine ricalcolato.
-
-        Runtime: `op_reorder_columns` (columns.py).
-        - Se `columns` valorizzata (lista non vuota): le colonne valide
-          vengono messe in testa nell'ordine specificato; le rimanenti
-          seguono nell'ordine input originale.
-        - Se `columns` vuota e `sort_alphabetical=True`: ordine
-          alfabetico.
-        - Default (entrambe vuote/false): passthrough.
-
-        Le colonne in `columns` ma non presenti nell'input vengono
-        ignorate (allineato al filtro runtime
-        `[c for c in columns if c in result.columns]`).
-        """
-        if not input_schemas:
-            return []
-        input_schema = input_schemas[0]
-        by_name = {c.name: c for c in input_schema}
-
-        cols_cfg = config.get("columns") or []
-        sort_alpha = bool(config.get("sort_alphabetical", False))
-
-        if cols_cfg:
-            valid = [name for name in cols_cfg if name in by_name]
-            remaining = [c.name for c in input_schema if c.name not in valid]
-            ordered = valid + remaining
-        elif sort_alpha:
-            ordered = sorted(by_name.keys())
-        else:
-            ordered = [c.name for c in input_schema]
-
-        return [self._column_schema_cls(
-            name=by_name[name].name,
-            type=by_name[name].type,
-            source_node=node_id,
-            is_calculated=by_name[name].is_calculated,
-        ) for name in ordered if name in by_name]
-
-
-    def _schema_statistics(
-        self,
-        input_schemas: List[List[ColumnSchema]],
-        config: dict,
-        node_id: str,
-    ) -> List[ColumnSchema]:
-        """statistics: input + 1 colonna per ogni stat valida.
-
-        Runtime: `op_statistics` (analysis.py).
-        - prefix default = `f"{column}_"` (se `output_prefix` vuoto)
-        - col name = `f"{prefix}{stat}"`
-        - Tipo:
-          - `count` → `int` (count pandas)
-          - tutti gli altri (`min`, `max`, `sum`, `mean`, `median`,
-            `std`, `var`, `q25`, `q75`) → `real` (numerici).
-        - Stats unknown ignorate (allineato al `if stat_name in
-          stat_funcs` runtime).
-        - `column` mancante / non in input → schema invariato (no-op
-          + warning runtime).
-        - Default `stats = ["count","min","max","mean","median","std"]`.
-        """
-        if not input_schemas:
-            return []
-        result = self._copy_schema(input_schemas[0], node_id)
-        column = config.get("column") or ""
-        if not column:
-            return result
-        existing = {c.name for c in result}
-        if column not in existing:
-            return result
-
-        raw_stats = config.get("stats")
-        if raw_stats is None:
-            stats = ["count", "min", "max", "mean", "median", "std"]
-        elif isinstance(raw_stats, str):
-            stats = [s.strip() for s in raw_stats.split(",") if s.strip()]
-        elif isinstance(raw_stats, list):
-            stats = [str(s).strip() for s in raw_stats if str(s).strip()]
-        else:
-            stats = ["count", "min", "max", "mean", "median", "std"]
-
-        valid_stats = {
-            "count", "min", "max", "sum", "mean", "median",
-            "std", "var", "q25", "q75",
-        }
-        prefix = config.get("output_prefix") or f"{column}_"
-
-        for stat in stats:
-            if stat not in valid_stats:
-                continue
-            col_name = f"{prefix}{stat}"
-            if col_name in existing:
-                continue
-            stat_type = "int" if stat == "count" else "real"
-            result.append(self._column_schema_cls(
-                name=col_name,
-                type=stat_type,
-                source_node=node_id,
-                is_calculated=True,
-            ))
-            existing.add(col_name)
-        return result
-
-    def _schema_window_function(
-        self,
-        input_schemas: List[List[ColumnSchema]],
-        config: dict,
-        node_id: str,
-    ) -> List[ColumnSchema]:
-        """window_function: input + 1 colonna `output_column`.
-
-        Runtime: `op_window_function` (aggregation.py).
-        - `output_column` default = `f"{column}_{function}"`.
-        - Funzioni valide: rank, dense_rank, cumsum, cumcount, lag,
-          lead, pct_change, running_mean. Funzione unknown → no-op
-          (passthrough).
-        - Tipo output by function:
-          - `rank`, `dense_rank`, `pct_change`, `running_mean`
-            → `real` (pandas float64);
-          - `cumcount` → `int`;
-          - `cumsum`, `lag`, `lead` → preserva il tipo della colonna
-            sorgente (approssimazione: lag/lead di int possono
-            promuovere a float per NaN ma mantengono la semantica
-            del dtype originale).
-        - `column` mancante / non in input → schema invariato.
-        """
-        if not input_schemas:
-            return []
-        result = self._copy_schema(input_schemas[0], node_id)
-        column = config.get("column") or ""
-        if not column:
-            return result
-        by_name = {c.name: c for c in result}
-        if column not in by_name:
-            return result
-
-        function = config.get("function") or "rank"
-        valid_functions = {
-            "rank", "dense_rank", "cumsum", "cumcount",
-            "lag", "lead", "pct_change", "running_mean",
-        }
-        if function not in valid_functions:
-            return result  # mirror runtime warning + return df
-
-        output_col = config.get("output_column") or f"{column}_{function}"
-        if output_col in by_name:
-            return result
-
-        if function in ("rank", "dense_rank", "pct_change", "running_mean"):
-            out_type = "real"
-        elif function == "cumcount":
-            out_type = "int"
-        else:  # cumsum, lag, lead
-            out_type = by_name[column].type
-
-        result.append(self._column_schema_cls(
-            name=output_col,
-            type=out_type,
-            source_node=node_id,
-            is_calculated=True,
-        ))
         return result
 
     def _normalize_str_list(self, raw) -> List[str]:

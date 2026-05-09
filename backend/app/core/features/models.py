@@ -91,13 +91,7 @@ class ArcGISTestResult(BaseModel):
 # MODELLI PER SCRITTURA
 
 class FeatureWriteRequest(BaseModel):
-    """Parametri legacy per la scrittura su un Feature Service.
-
-    KEEP_COMPAT: this service_url + layer_id shape is no longer used by the
-    live /features/write route, but ADR-0017 keeps the public features API
-    available for possible external callers. Do not remove without an external
-    API deprecation pass.
-    """
+    """Parametri pubblici per la scrittura su un Feature Service."""
     connection_id: str
     service_url: str
     layer_id: int = 0

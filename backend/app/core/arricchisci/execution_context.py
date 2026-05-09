@@ -23,12 +23,13 @@ __all__ = [
 
 @dataclass(frozen=True)
 class ArricchisciExecutionContext(CanvasExecutionContext):
-    """KEEP_COMPAT thin subclass of `CanvasExecutionContext`.
+    """Arricchisci-named adapter over `CanvasExecutionContext`.
 
-    Adds no new fields. Exists solely to preserve the
-    `ArricchisciExecutionContext.__name__` contract for existing
-    tests and call sites while the shared base type is used for
-    typed dispatch and future Go rewrite mapping.
+    KEEP_COMPAT_WITH_REMOVAL_CONDITION: remove after arricchisci
+    production modules and tests type against
+    `app.shared.execution.context.CanvasExecutionContext` directly.
+    Owner: TRANSFORMATION_ENGINE. Canonical target:
+    `CanvasExecutionContext`.
 
     See `app.shared.execution.context.CanvasExecutionContext` for
     field documentation.

@@ -288,7 +288,16 @@ def test_task_service_create_methods_stay_lifecycle_only():
         if name.startswith("create_") and name.endswith("_task")
     }
 
-    assert create_methods == {"create_pipeline_task", "create_preview_task"}
+    assert create_methods == {
+        "create_carica_task",
+        "create_enrichment_task",
+        "create_pipeline_task",
+        "create_preview_task",
+    }
+
+
+def test_task_service_has_no_magic_getattr_compat_layer():
+    assert "__getattr__" not in TaskService.__dict__
 
 
 def test_preview_router_builds_typed_submit_request_directly(monkeypatch):
@@ -347,6 +356,54 @@ def test_preview_router_builds_typed_submit_request_directly(monkeypatch):
 @pytest.mark.parametrize(
     ("method_name", "call_kwargs", "expected_task_type", "expected_message", "expected_kwargs"),
     [
+        (
+            "create_enrichment_task",
+            {
+                "project_id": "project-1",
+                "canvas": {"nodes": [], "edges": []},
+                "output_format": "csv",
+                "force_recalculate": True,
+                "cleanup_file_source_ids": ["source-1"],
+                "is_eseguibile": True,
+                "user_id": "user-1",
+                "intermediate_mode_override": "save",
+            },
+            TaskType.ENRICHMENT,
+            "Task in coda...",
+            {
+                "project_id": "project-1",
+                "canvas": {"nodes": [], "edges": []},
+                "output_format": "csv",
+                "force_recalculate": True,
+                "cleanup_file_source_ids": ["source-1"],
+                "is_eseguibile": True,
+                "user_id": "user-1",
+                "intermediate_mode_override": "save",
+            },
+        ),
+        (
+            "create_carica_task",
+            {
+                "project_id": "project-1",
+                "canvas": {"nodes": [], "edges": []},
+                "carica_node_data": {"id": "carica-1", "dest_type": "pg"},
+                "output_format": "geojson",
+                "force_recalculate": True,
+                "triggered_by": "cron",
+                "user_id": "user-1",
+            },
+            TaskType.CARICA,
+            "Task CARICA in coda...",
+            {
+                "project_id": "project-1",
+                "canvas": {"nodes": [], "edges": []},
+                "carica_node_data": {"id": "carica-1", "dest_type": "pg"},
+                "output_format": "geojson",
+                "force_recalculate": True,
+                "triggered_by": "cron",
+                "user_id": "user-1",
+            },
+        ),
         (
             "create_pipeline_task",
             {

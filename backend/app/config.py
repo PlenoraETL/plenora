@@ -615,12 +615,6 @@ class Settings:
         """Set in-memory (runtime only)."""
         os.environ[key] = str(value)
 
-    def __getattr__(self, name: str) -> Any:
-        if name.startswith("_"):
-            return super().__getattribute__(name)
-        return self.get(name)
-
-
     def _directory(self, sottopercorso: str, base: Path = None, create: bool = True) -> Path:
         if base is None:
             base = Path(self.get("DATA_DIR"))
@@ -629,11 +623,121 @@ class Settings:
             percorso.mkdir(parents=True, exist_ok=True)
         return percorso
 
+    def _int_setting(self, key: str, default: int) -> int:
+        try:
+            return int(self.get(key, default))
+        except (TypeError, ValueError):
+            return default
+
+    def _str_setting(self, key: str, default: str) -> str:
+        value = self.get(key, default)
+        return default if value is None else str(value)
+
     @property
     def CORS_ORIGINS_LIST(self) -> list:
         """Restituisce la lista delle origini CORS da stringa CSV."""
         raw = self.get("CORS_ORIGINS", "")
         return [o.strip() for o in raw.split(",") if o.strip()]
+
+    @property
+    def LOG_DB_FILE(self) -> str:
+        return self._str_setting("LOG_DB_FILE", "log.db")
+
+    @property
+    def LOG_DB_MAX_ROWS(self) -> int:
+        return self._int_setting("LOG_DB_MAX_ROWS", 100_000)
+
+    @property
+    def RUNS_PAGE_SIZE(self) -> int:
+        return self._int_setting("RUNS_PAGE_SIZE", 50)
+
+    @property
+    def RUNS_LOG_LIMIT(self) -> int:
+        return self._int_setting("RUNS_LOG_LIMIT", 200)
+
+    @property
+    def DB_QUERY_TIMEOUT(self) -> int:
+        return self._int_setting("DB_QUERY_TIMEOUT", 30)
+
+    @property
+    def API_TIMEOUT(self) -> int:
+        return self._int_setting("API_TIMEOUT", 30)
+
+    @property
+    def CELERY_BROKER_URL(self) -> str:
+        return self._str_setting("CELERY_BROKER_URL", "redis://localhost:6379/0")
+
+    @property
+    def CELERY_RESULT_BACKEND(self) -> str:
+        return self._str_setting("CELERY_RESULT_BACKEND", "redis://localhost:6379/0")
+
+    @property
+    def CELERY_TASK_TIMEOUT(self) -> int:
+        return self._int_setting("CELERY_TASK_TIMEOUT", 3600)
+
+    @property
+    def CELERY_TASK_HARD_LIMIT(self) -> int:
+        return self._int_setting("CELERY_TASK_HARD_LIMIT", 3900)
+
+    @property
+    def CELERY_PREVIEW_TIMEOUT(self) -> int:
+        return self._int_setting("CELERY_PREVIEW_TIMEOUT", 300)
+
+    @property
+    def CELERY_PREVIEW_HARD_LIMIT(self) -> int:
+        return self._int_setting("CELERY_PREVIEW_HARD_LIMIT", 360)
+
+    @property
+    def CELERY_SCHEDULE_TIMEOUT(self) -> int:
+        return self._int_setting("CELERY_SCHEDULE_TIMEOUT", 3500)
+
+    @property
+    def CELERY_RESULT_EXPIRES(self) -> int:
+        return self._int_setting("CELERY_RESULT_EXPIRES", 86400)
+
+    @property
+    def CELERY_MAX_RETRIES(self) -> int:
+        return self._int_setting("CELERY_MAX_RETRIES", 3)
+
+    @property
+    def MAX_PREVIEW_ROWS(self) -> int:
+        return self._int_setting("MAX_PREVIEW_ROWS", 1000)
+
+    @property
+    def CELERY_SCHEDULE_HARD_LIMIT(self) -> int:
+        return self._int_setting("CELERY_SCHEDULE_HARD_LIMIT", 3600)
+
+    @property
+    def SCHEDULE_LOCK_TTL_SECONDS(self) -> int:
+        return self._int_setting("SCHEDULE_LOCK_TTL_SECONDS", 600)
+
+    @property
+    def SCHEDULE_LOCK_HEARTBEAT_INTERVAL_SECONDS(self) -> int:
+        return self._int_setting("SCHEDULE_LOCK_HEARTBEAT_INTERVAL_SECONDS", 180)
+
+    @property
+    def API_DEFAULT_RATE_LIMIT(self) -> int:
+        return self._int_setting("API_DEFAULT_RATE_LIMIT", 5)
+
+    @property
+    def DEFAULT_GROUP(self) -> str:
+        return self._str_setting("DEFAULT_GROUP", "default")
+
+    @property
+    def MAX_FILE_SIZE(self) -> int:
+        return self._int_setting("MAX_FILE_SIZE", 100 * 1024 * 1024)
+
+    @property
+    def LOAD_FILE_MAX_BYTES(self) -> int:
+        return self._int_setting("LOAD_FILE_MAX_BYTES", 200 * 1024 * 1024)
+
+    @property
+    def CARICA_STAGE_SWAP_THRESHOLD(self) -> int:
+        return self._int_setting("CARICA_STAGE_SWAP_THRESHOLD", 500_000)
+
+    @property
+    def ESTRAI_MAX_ROWS(self) -> int:
+        return self._int_setting("ESTRAI_MAX_ROWS", 5_000_000)
 
     @property
     def DATA_DIR(self) -> Path:

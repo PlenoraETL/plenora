@@ -1004,9 +1004,9 @@ def test_auth_engine_017_migrated_router_does_not_import_dependencies_from_facad
 # ``get_current_user`` from ``app.core.auth.dependencies`` and
 # ``_check_ownership`` from ``app.core.auth.ownership`` without cycles.
 #
-# ``auth.py`` keeps KEEP_COMPAT re-exports for all three callables so
-# that any remaining legacy ``from app.core.auth.auth import
-# require_project_owner`` keeps working with identity preserved.
+# ``auth.py`` keeps explicit public re-exports for all three callables so
+# that existing ``from app.core.auth.auth import require_project_owner``
+# call sites keep working with identity preserved.
 #
 # ``projects/router.py`` was also migrated off all five standard facade
 # deps to ``app.core.auth.dependencies`` in this same batch.

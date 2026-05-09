@@ -39,8 +39,12 @@ _ARCGIS_REST_MECHANICS_ROOTS = (
     _BACKEND_DIR / "workers",
 )
 _ARCGIS_REST_MECHANICS_ALLOWED_FILES = {
+    _BACKEND_DIR / "app" / "core" / "features" / "arcgis_auth.py",
     _BACKEND_DIR / "app" / "core" / "features" / "arcgis_client.py",
+    _BACKEND_DIR / "app" / "core" / "features" / "arcgis_feature_write_methods.py",
+    _BACKEND_DIR / "app" / "core" / "features" / "arcgis_read.py",
     _BACKEND_DIR / "app" / "core" / "features" / "arcgis_rest_write.py",
+    _BACKEND_DIR / "app" / "core" / "features" / "arcgis_service_discovery.py",
 }
 _LEGACY_ARCGIS_ADAPTER_MODULE = ".".join(
     ("app.core.features", "arcgis_connection_adapter")

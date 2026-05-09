@@ -240,8 +240,8 @@ def test_validator_symbols_remain_module_level():
     assert callable(validator._coarse_type_from_dtype)
 
 
-def test_esri_type_mapper_backward_compat_via_arcgis_client():
-    """arcgis_client.py keeps a KEEP_COMPAT re-export for legacy imports."""
+def test_esri_type_mapper_public_reexport_via_arcgis_client():
+    """arcgis_client.py keeps a public re-export for existing imports."""
     from app.core.features.arcgis_client import EsriTypeMapper as FromClient
     from app.shared.connections.esri_types import EsriTypeMapper as FromShared
 

@@ -175,7 +175,7 @@ def test_auth_module_record_clear_aliases_are_module_functions():
 
 
 def test_auth_check_wrapper_converts_triggered_to_disclosure(fresh_store):
-    """Il wrapper KEEP_COMPAT in `auth.py` cattura
+    """L'adapter auth-level in `auth.py` cattura
     `RateLimitFallbackTriggered` e raise via
     `disclosure.raise_disclosure(disclosure.rate_limit_exceeded(...))`.
     Il risultato visibile al caller e' una `HTTPException(429)` con

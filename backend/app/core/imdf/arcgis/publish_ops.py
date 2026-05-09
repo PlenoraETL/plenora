@@ -28,13 +28,13 @@ def _add_layer_to_service(
 
     BE-IMDF-006B: implementation promoted to the provider
     `add_layer_to_service` method. This module-level symbol remains as a
-    thin `KEEP_COMPAT` wrapper to:
+    thin IMDF adapter to:
 
     1. preservare il dict shape `{success, feature_count, errors}`
        atteso dai caller IMDF (`upload_imdf_layers`);
-    2. mantenere temporaneamente i consumer legacy fuori dal dominio IMDF.
+    2. keep provider mechanics outside the IMDF publish flow.
 
-    Guardrail: keep this as delegation plus legacy result conversion only.
+    Guardrail: keep this as delegation plus IMDF result-shape conversion only.
     """
     return client.add_layer_to_service(
         conn, service_url, gdf, layer_name, layer_id, srid,

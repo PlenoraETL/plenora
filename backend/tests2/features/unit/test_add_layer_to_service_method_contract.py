@@ -58,12 +58,12 @@ def test_add_layer_result_equality_by_value():
     assert hash(a) == hash(b)
 
 
-# to_compat_dict — KEEP_COMPAT bridge
+# to_compat_dict — public dict adapter
 
 
 def test_to_compat_dict_returns_legacy_shape():
     """Conversione al dict legacy preserva shape `{success,
-    feature_count, errors: list}`. KEEP_COMPAT per IMDF wrapper."""
+    feature_count, errors: list}` per il wrapper IMDF."""
     r = AddLayerResult(success=True, feature_count=3, errors=("e1",))
     d = r.to_compat_dict()
     assert d == {"success": True, "feature_count": 3, "errors": ["e1"]}

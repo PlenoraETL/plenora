@@ -21,6 +21,7 @@ pytestmark = [pytest.mark.unit, pytest.mark.contract]
 
 _BACKEND_ROOT = Path(__file__).resolve().parent.parent.parent
 _APP_ROOT = _BACKEND_ROOT / "app"
+_PROD_ROOTS = (_BACKEND_ROOT / "app", _BACKEND_ROOT / "workers")
 
 
 @dataclass(frozen=True)
@@ -82,19 +83,6 @@ _KEEP_COMPAT_WRAPPERS: tuple[KeepCompatWrapper, ...] = (
             "CanvasExecutionContext directly"
         ),
     ),
-    KeepCompatWrapper(
-        rel_path="app/core/auth/auth.py",
-        wrapper="_check_rate_limit_in_memory",
-        owner="AUTH_SECURITY_ENGINE",
-        canonical_target=(
-            "app.core.auth.rate_limit_fallback."
-            "RateLimitFallbackStore.check"
-        ),
-        removal_condition=(
-            "after auth tests patch RateLimitFallbackStore.check directly "
-            "instead of the auth facade helper"
-        ),
-    ),
 )
 
 _REMOVED_ZERO_CONSUMER_WRAPPERS: frozenset[str] = frozenset(
@@ -121,6 +109,20 @@ _REMOVED_ZERO_CONSUMER_WRAPPERS: frozenset[str] = frozenset(
 )
 
 _MODULE_COMPAT_ALIASES: tuple[tuple[str, str], ...] = ()
+_PLAIN_KEEP_COMPAT_PRODUCTION_ALLOWLIST: frozenset[str] = frozenset()
+_LEGACY_DB_FACADE_CONSUMER_ALLOWLIST = {
+    "app.db.tickets_db_service": frozenset(
+        {
+            "app/core/admin_system_status/tickets_metrics.py",
+            "app/core/tickets/db.py",
+        }
+    ),
+    "app.db.log_runs_db_service": frozenset(
+        {
+            "app/core/orchestrator/log_cleanup.py",
+        }
+    ),
+}
 
 
 def _source(rel_path: str) -> str:
@@ -131,8 +133,64 @@ def _parse(rel_path: str) -> ast.AST:
     return ast.parse(_source(rel_path))
 
 
+def _parse_path(path: Path) -> ast.AST:
+    return ast.parse(path.read_text(encoding="utf-8-sig"))
+
+
 def _module_docstring(rel_path: str) -> str:
     return ast.get_docstring(_parse(rel_path)) or ""
+
+
+def _iter_prod_python() -> list[Path]:
+    paths: list[Path] = []
+    for root in _PROD_ROOTS:
+        if root.exists():
+            paths.extend(root.rglob("*.py"))
+    return sorted(paths)
+
+
+def _rel(path: Path) -> str:
+    return path.relative_to(_BACKEND_ROOT).as_posix()
+
+
+def _plain_keep_compat_production_markers() -> set[str]:
+    markers: set[str] = set()
+    for path in _iter_prod_python():
+        try:
+            lines = path.read_text(encoding="utf-8-sig").splitlines()
+        except (OSError, UnicodeDecodeError):
+            continue
+        for line in lines:
+            stripped = line.strip()
+            if "KEEP_COMPAT" not in stripped:
+                continue
+            if "KEEP_COMPAT_WITH_REMOVAL_CONDITION" in stripped:
+                continue
+            markers.add(f"{_rel(path)}::{stripped}")
+    return markers
+
+
+def _import_edges(tree: ast.AST) -> set[str]:
+    edges: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            edges.update(alias.name for alias in node.names)
+            continue
+        if isinstance(node, ast.ImportFrom) and node.module:
+            edges.add(node.module)
+            edges.update(f"{node.module}.{alias.name}" for alias in node.names)
+    return edges
+
+
+def _class_method_names(rel_path: str, class_name: str) -> set[str]:
+    tree = _parse(rel_path)
+    return {
+        child.name
+        for node in ast.walk(tree)
+        if isinstance(node, ast.ClassDef) and node.name == class_name
+        for child in node.body
+        if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef))
+    }
 
 
 def _active_service_compat_wrappers() -> set[str]:
@@ -273,6 +331,74 @@ def test_app_services_keep_compat_wrappers_have_live_test_or_runtime_consumers()
         "`app.services` compatibility wrappers without test/runtime "
         "consumers must stay deleted and listed as tombstones.\n"
         f"Stale wrappers: {sorted(stale_wrappers)}"
+    )
+
+
+def test_final_state_has_no_unregistered_plain_keep_compat_markers():
+    current = _plain_keep_compat_production_markers()
+
+    assert current == _PLAIN_KEEP_COMPAT_PRODUCTION_ALLOWLIST, (
+        "Final compatibility state allows only explicitly registered plain "
+        "KEEP_COMPAT production markers. Prefer "
+        "`KEEP_COMPAT_WITH_REMOVAL_CONDITION: remove after ...` for live "
+        "compatibility debt.\n"
+        f"Unexpected: {sorted(current - _PLAIN_KEEP_COMPAT_PRODUCTION_ALLOWLIST)}\n"
+        f"Stale allowlist rows: {sorted(_PLAIN_KEEP_COMPAT_PRODUCTION_ALLOWLIST - current)}"
+    )
+
+
+def test_final_state_has_no_package_getattr_legacy_bridges():
+    package_getattrs = [
+        _rel(path)
+        for path in _iter_prod_python()
+        if path.name == "__init__.py"
+        and any(
+            isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+            and node.name == "__getattr__"
+            for node in ast.walk(_parse_path(path))
+        )
+    ]
+
+    assert not package_getattrs, (
+        "Package-level __getattr__ bridges are legacy import compatibility "
+        f"surfaces and must stay removed. Violations: {package_getattrs}"
+    )
+
+
+def test_final_state_task_and_schema_services_have_no_getattr_bridge():
+    service_classes = (
+        ("app/core/orchestrator/task_service.py", "TaskService"),
+        ("app/core/projects/schema_inference.py", "SchemaInferenceService"),
+    )
+    violations = [
+        f"{rel_path}::{class_name}.__getattr__"
+        for rel_path, class_name in service_classes
+        if "__getattr__" in _class_method_names(rel_path, class_name)
+    ]
+
+    assert not violations, (
+        "TaskService and SchemaInferenceService must expose explicit typed "
+        f"methods, not __getattr__ compatibility bridges. Violations: {violations}"
+    )
+
+
+def test_final_state_legacy_app_services_and_db_facade_consumers_are_closed():
+    violations: list[tuple[str, str]] = []
+    for path in _iter_prod_python():
+        rel_path = _rel(path)
+        edges = _import_edges(_parse_path(path))
+        for edge in edges:
+            if edge == "app.services" or edge.startswith("app.services."):
+                violations.append((rel_path, edge))
+        for facade, allowed_paths in _LEGACY_DB_FACADE_CONSUMER_ALLOWLIST.items():
+            if any(edge == facade or edge.startswith(f"{facade}.") for edge in edges):
+                if rel_path not in allowed_paths:
+                    violations.append((rel_path, facade))
+
+    assert not violations, (
+        "Legacy app.services and ticket/log_runs DB facade consumers must stay "
+        "closed outside their explicit domain-boundary allowlist. "
+        f"Violations: {violations}"
     )
 
 

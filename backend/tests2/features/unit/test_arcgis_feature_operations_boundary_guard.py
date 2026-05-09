@@ -14,6 +14,7 @@ _BACKEND_DIR = Path(__file__).parents[3]
 _OPERATIONS_PATH = (
     _BACKEND_DIR / "app" / "core" / "features" / "arcgis_feature_operations.py"
 )
+_FEATURES_INIT_PATH = _BACKEND_DIR / "app" / "core" / "features" / "__init__.py"
 _CLIENT_PATH = _BACKEND_DIR / "app" / "core" / "features" / "arcgis_client.py"
 _WRITER_PATH = _BACKEND_DIR / "app" / "core" / "features" / "arcgis_feature_writer.py"
 _WRITE_METHODS_PATH = (
@@ -31,6 +32,10 @@ def _parse_writer() -> ast.Module:
 
 def _parse_client() -> ast.Module:
     return ast.parse(_CLIENT_PATH.read_text(encoding="utf-8"))
+
+
+def _parse_features_init() -> ast.Module:
+    return ast.parse(_FEATURES_INIT_PATH.read_text(encoding="utf-8"))
 
 
 def _parse_write_methods() -> ast.Module:
@@ -153,6 +158,24 @@ def test_arcgis_client_no_longer_defines_feature_write_methods_directly() -> Non
         "arcgis_feature_write_methods.py instead of defining them directly. "
         f"Violations: {violations}"
     )
+
+
+def test_features_package_uses_explicit_public_imports() -> None:
+    """Package exports should be normal imports, not a module __getattr__ bridge."""
+    tree = _parse_features_init()
+    defined_functions = {
+        node.name for node in ast.walk(tree) if isinstance(node, ast.FunctionDef)
+    }
+    imported = {
+        alias.name
+        for node in ast.walk(tree)
+        if isinstance(node, ast.ImportFrom)
+        and node.module == "app.core.features.features_service"
+        for alias in node.names
+    }
+
+    assert "__getattr__" not in defined_functions
+    assert {"FeaturesService", "create_features_service"} <= imported
 
 
 def test_arcgis_feature_write_methods_does_not_import_concrete_client() -> None:

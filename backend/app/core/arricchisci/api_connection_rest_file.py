@@ -775,10 +775,9 @@ class ApiConnectionRestFileMixin:
         Se è un file_source, trova il file originale nel file system.
         Se è un project_source, trova l'ultimo output del progetto.
 
-         accetta `ctx` come
-        kwarg opzionale; il `group_id` viene letto da `ctx` se
-        fornito , altrimenti fallback a singleton state
-        (KEEP_COMPAT).
+        `ctx` e' il solo boundary di sicurezza per il group_id.
+        Se il contesto manca, i branch file_source/project_source
+        falliscono chiusi invece di consultare singleton legacy.
         """
         # Trova edge in ingresso
         input_edge = next((e for e in edges if e['target'] == target_node_id), None)

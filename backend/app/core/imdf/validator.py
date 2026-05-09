@@ -25,7 +25,7 @@ def _count_features_where_via_post(
     Ritorna il count. Solleva `RuntimeError` su errore — il chiamante
     gestisce il fallback.
 
-    KEEP_COMPAT: this module-level symbol remains as a thin wrapper for:
+    This module-level symbol remains as a thin IMDF validation adapter for:
     1. preservare il path di monkeypatch usato dai test
        (`tests2/imdf/unit/test_validate_publish_issue_categories.py`
        patcha `validator_mod._count_features_where_via_post`);

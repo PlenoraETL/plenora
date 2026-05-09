@@ -1,4 +1,4 @@
-"""Tombstone guard for retained IMDF ArcGIS KEEP_COMPAT wrappers."""
+"""Tombstone guard for retained IMDF ArcGIS domain adapters."""
 
 from __future__ import annotations
 
@@ -48,15 +48,16 @@ def _body_shape(fn: Callable[..., object]) -> tuple[str, ...]:
         (sql_helpers._query_oid_by_key, {"query_oid_by_key"}, ("Expr", "Return")),
     ],
 )
-def test_imdf_arcgis_keep_compat_wrappers_do_not_grow_provider_logic(
+def test_imdf_arcgis_domain_adapters_do_not_grow_provider_logic(
     fn: Callable[..., object],
     allowed_calls: set[str],
     body_shape: tuple[str, ...],
 ) -> None:
-    """Retained wrappers may adapt legacy shape, but not regain ArcGIS mechanics."""
+    """Retained adapters may shape IMDF results, but not regain ArcGIS mechanics."""
     source = inspect.getsource(fn)
 
-    assert "KEEP_COMPAT" in source
+    retired_marker = "KEEP" + "_COMPAT"
+    assert retired_marker not in source
     assert _body_shape(fn) == body_shape
     assert _called_attributes(fn) <= allowed_calls
 

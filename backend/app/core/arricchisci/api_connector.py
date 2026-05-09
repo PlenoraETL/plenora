@@ -4,7 +4,7 @@ Servizio gestione connessioni API esterne per arricchimento dati.
 Keeps API enrichment behavior isolated from orchestration callers.
 """
 
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, TYPE_CHECKING
 
 from app.config import settings
 from app.utils.logger import get_logger
@@ -95,6 +95,9 @@ from app.core.arricchisci.api_connection_generator_enricher import (
 
 logger = get_logger(__name__)
 
+if TYPE_CHECKING:
+    from app.core.arricchisci.execution_context import ArricchisciExecutionContext
+
 
 class ApiConnectionService(
     ApiConnectionManagementMixin,
@@ -130,13 +133,13 @@ class ApiConnectionService(
                           force_recalculate: bool = False, preview_limit: int = None,
                           run_id: str = None,
                           intermediate_mode_override: Optional[str] = None) -> Dict:
-        """KEEP_COMPAT wrapper: delega a
-        `canvas_orchestrator.execute_canvas_enrichment(self, ...)`.
+        """Compatibility adapter for legacy `ApiConnectionService` callers.
 
-        L'implementazione reale vive in
-        `app.core.arricchisci.canvas_orchestrator`. Stesso contratto
-        observable byte-per-byte (return shape, error boundary,
-        side-effects sul canvas).
+        KEEP_COMPAT_WITH_REMOVAL_CONDITION: remove after runtime callers
+        invoke `app.core.arricchisci.canvas_orchestrator.
+        execute_canvas_enrichment` directly with an explicit service
+        instance. Owner: TRANSFORMATION_ENGINE. Canonical target:
+        `canvas_orchestrator.execute_canvas_enrichment(self, ...)`.
         """
         from app.core.arricchisci.canvas_orchestrator import (
             execute_canvas_enrichment,
@@ -154,22 +157,20 @@ class ApiConnectionService(
 
 
     def _init_execution_context(self, project_id: str,
-                                preview_limit: Optional[int]) -> None:
-        """KEEP_COMPAT wrapper: delega a
-        `canvas_orchestrator.init_execution_context(self, ...)`.
+                                preview_limit: Optional[int]
+                                ) -> "ArricchisciExecutionContext":
+        """Compatibility adapter for legacy execution-context callers.
 
-        Lock test
-        (`tests2/arricchisci/unit/test_init_execution_context_fail_closed.py`,
-        `tests2/arricchisci/unit/test_enrichment_task_tenant_binding_lock.py`)
-        chiamano `api_service._init_execution_context(...)` direttamente.
-        Behavior preservato byte-per-byte: `_preview_limit` settato,
-        `_current_group_id` azzerato prima del path che puo' fallire,
-        `psycopg2.Error` re-raised come `ExecutionContextError`.
+        KEEP_COMPAT_WITH_REMOVAL_CONDITION: remove after arricchisci
+        tests and runtime callers construct execution context through
+        `app.core.arricchisci.canvas_orchestrator.init_execution_context`
+        directly. Owner: TRANSFORMATION_ENGINE. Canonical target:
+        `canvas_orchestrator.init_execution_context(self, ...)`.
         """
         from app.core.arricchisci.canvas_orchestrator import (
             init_execution_context,
         )
-        init_execution_context(self, project_id, preview_limit)
+        return init_execution_context(self, project_id, preview_limit)
 
     def _prepare_headers(self, auth: Dict, custom_headers: Dict = None) -> Dict:
         """Prepara headers HTTP per chiamata API. Delegato a shared/api_utils."""

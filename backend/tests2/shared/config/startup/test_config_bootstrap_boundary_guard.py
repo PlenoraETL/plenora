@@ -65,6 +65,20 @@ def test_settings_startup_methods_are_not_present():
     )
 
 
+def test_settings_has_no_magic_getattr_fallback():
+    tree = ast.parse(_CONFIG.read_text(encoding="utf-8"))
+    method_names = _class_method_names(tree, "Settings")
+
+    assert "__getattr__" not in method_names
+
+
+def test_unknown_settings_attribute_fails_loud():
+    from app.config import Settings
+
+    with pytest.raises(AttributeError):
+        Settings().PLENORA_UNKNOWN_CONFIG_ATTRIBUTE
+
+
 def test_startup_validation_owns_redis_and_filesystem_bootstrap_work():
     text = _STARTUP_VALIDATION.read_text(encoding="utf-8")
 

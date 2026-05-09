@@ -108,6 +108,32 @@ def test_api_connection_service_execute_enrichment_is_thin_wrapper():
     assert "step_node_ids" not in src
 
 
+def test_arricchisci_owned_files_do_not_use_plain_keep_compat_markers():
+    """Plain compatibility markers are not allowed in the arricchisci
+    orchestration boundary. Remaining adapters must state an explicit
+    removal condition in source.
+    """
+    owned = [
+        _BACKEND_ROOT / "app" / "core" / "arricchisci" / "api_connector.py",
+        _BACKEND_ROOT / "app" / "core" / "arricchisci" / "execution_context.py",
+        _BACKEND_ROOT / "app" / "core" / "arricchisci" / "canvas_orchestrator.py",
+    ]
+    offenders = []
+    for path in owned:
+        for lineno, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+            if "KEEP_COMPAT" not in line:
+                continue
+            if "KEEP_COMPAT_WITH_REMOVAL_CONDITION" in line:
+                continue
+            offenders.append(f"{path.relative_to(_BACKEND_ROOT).as_posix()}:{lineno}")
+
+    assert not offenders, (
+        "Plain KEEP_COMPAT markers must be removed or upgraded to "
+        "KEEP_COMPAT_WITH_REMOVAL_CONDITION. Offenders: "
+        + ", ".join(offenders)
+    )
+
+
 # 5. No re-export maze
 
 

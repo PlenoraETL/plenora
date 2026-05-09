@@ -108,10 +108,9 @@ def init_execution_context(
 
       l'implementazione era spezzata in due step espliciti:
       `build_execution_context(...)` (costruzione del typed
-      immutabile) + `apply_to_legacy_state(svc, ctx)` (mirror
-      KEEP_COMPAT su `svc._current_group_id` /
-      `svc._preview_limit` per i mixin che ancora leggevano dal
-      singleton).
+      immutabile) + `apply_to_legacy_state(svc, ctx)` (legacy
+      mirror su `svc._current_group_id` / `svc._preview_limit`
+      per i mixin che ancora leggevano dal singleton).
 
       026/030B + ORCHESTRATION-ENGINE-009/010**: tutti i mixin
       reader site sono stati migrati a CTX-STRICT
@@ -128,9 +127,11 @@ def init_execution_context(
       nessuno leggeva. Removed. Il `svc` parametro non e' piu'
       mutato; `init_execution_context` e' ora una thin wrapper
       che delega a `build_execution_context` + ritorna il typed
-      ctx. La firma con `svc` resta per KEEP_COMPAT con il
-      wrapper `ApiConnectionService._init_execution_context` che
-      lo passa esplicitamente.
+      ctx. La firma con `svc` resta per
+      KEEP_COMPAT_WITH_REMOVAL_CONDITION: remove after
+      `ApiConnectionService._init_execution_context` is deleted and
+      all callers use `build_execution_context(project_id,
+      preview_limit)` or this module-level adapter directly.
 
     Behavior post-011:
     - Pure delegation: nessun side effect su `svc`. Il typed
@@ -195,7 +196,9 @@ def execute_canvas_enrichment(
     Estratta byte-per-byte da
     `ApiConnectionService.execute_enrichment` (BE-portable-
     TRANSFORMATION-ENGINE-011). Il metodo originale resta sulla
-    classe come wrapper thin per KEEP_COMPAT.
+    classe come wrapper thin per
+    KEEP_COMPAT_WITH_REMOVAL_CONDITION: remove after callers use
+    this module-level orchestrator directly.
 
     Flusso:
     1. Carica tutte le API connections configurate (decifrate).

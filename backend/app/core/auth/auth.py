@@ -27,7 +27,7 @@ from app.shared.error_envelope import raise_typed_http
 from app.utils.logger import get_logger
 
 
-from app.core.auth.roles import (  # noqa: F401 (public compat compatibility export
+from app.core.auth.roles import (  # noqa: F401 (explicit public auth API)
     VALID_ROLES,
     ROLES_ABOVE_VIEWER,
     ROLES_ADMIN_OR_ABOVE,
@@ -49,7 +49,7 @@ logger = get_logger(__name__)
 # modulo estratto. Lo store in-memory e' canonico in
 # `app.core.auth.rate_limit_fallback._STORE`.
 
-# `InMemoryRateLimitFallback` compatibility export removed (proven dead — zero
+# `InMemoryRateLimitFallback` public export removed (proven dead — zero
 # callsites in `backend/app`, `backend/workers`, `backend/tests2`
 # verified by exhaustive grep + AST scan). The class remains the
 # canonical implementation in `app.core.auth.rate_limit_fallback`
@@ -72,12 +72,12 @@ LOGIN_LOCKOUT_SECONDS = int(_settings.get("LOGIN_LOCKOUT_SECONDS"))
 
 
 def _check_rate_limit_in_memory(ip: str):
-    """KEEP_COMPAT wrapper: legge le tre costanti monkeypatch-ate a
-    livello di `auth.py` e delega al fallback estratto. Cattura
-    `RateLimitFallbackTriggered` e converte in disclosure
-    (`disclosure.rate_limit_exceeded(retry_after)`) preservando byte
-    per byte il comportamento legacy (incl. clamp >=1 al
-    Retry-After, che vive in `disclosure.rate_limit_exceeded`).
+    """Auth-level in-memory rate-limit adapter.
+
+    Legge le tre costanti monkeypatch-ate a livello di `auth.py`,
+    delega al fallback estratto, cattura `RateLimitFallbackTriggered`
+    e converte in disclosure (`disclosure.rate_limit_exceeded`).
+    Il clamp `Retry-After >= 1` vive in `disclosure`.
     """
     try:
         _rate_limit_fallback_store.check(
@@ -127,14 +127,14 @@ def _clear_failed_logins(ip: str):
 
 # CONFIGURAZIONE JWT + UTILS
 # STRUCT-005 Seam D: la logica vive in `app.shared.jwt_token`
-# Qui restano i compatibility export per backward-compat con i test
-# `auth_mod.SECRET_KEY`, `auth_mod.create_access_token`, ...) e con
-# i consumer legacy che importano ancora JWT helpers dalla compatibility module
+# Qui restano gli export pubblici espliciti per `auth_mod.SECRET_KEY`,
+# `auth_mod.create_access_token`, ... e per i consumer che usano ancora
+# il modulo auth come superficie API aggregata.
 # Payload contract invariato: sub/username/group_id/role/exp/iat/jti
 # Algoritmo: HS256. Policy SECRET_KEY invariata (RuntimeError prod/staging
 # random dev). Nessun cambio comportamentale
 
-from app.shared.jwt_token import (  # noqa: F401 (compatibility export pubblico)
+from app.shared.jwt_token import (  # noqa: F401 (explicit public auth API)
     ALGORITHM,
     ACCESS_TOKEN_EXPIRE_HOURS,
     SECRET_KEY,
@@ -143,7 +143,7 @@ from app.shared.jwt_token import (  # noqa: F401 (compatibility export pubblico)
 )
 
 
-from app.core.auth.models import (  # noqa: F401 (compatibility export pubblico)
+from app.core.auth.models import (  # noqa: F401 (explicit public auth API)
     LoginRequest,
     TokenResponse,
     CurrentUser,
@@ -169,7 +169,7 @@ def _user_response_payload(user: db.UserRow) -> dict[str, object]:
     }
 
 
-from app.shared.password_hashing import (  # noqa: F401 (compatibility export pubblico)
+from app.shared.password_hashing import (  # noqa: F401 (explicit public auth API)
     _ph,
     hash_password,
     verify_password,
@@ -179,10 +179,11 @@ from app.shared.password_hashing import (  # noqa: F401 (compatibility export pu
 
 # DEPENDENCIES FASTAPI
 #
-# Compatibility exports for legacy callers. New code should import
-# FastAPI auth dependencies from `app.core.auth.dependencies` directly.
+# Public auth API exports for existing callers. Domain modules should
+# import FastAPI auth dependencies from `app.core.auth.dependencies`
+# directly.
 
-from app.core.auth.dependencies import (  # noqa: F401 (compatibility export pubblico)
+from app.core.auth.dependencies import (  # noqa: F401 (explicit public auth API)
     _bearer_scheme,
     get_current_user,
     require_admin,
@@ -191,10 +192,11 @@ from app.core.auth.dependencies import (  # noqa: F401 (compatibility export pub
     require_user_or_above,
 )
 
-# Owner dependencies remain available here for compatibility. New code
-# should import them from `app.core.auth.owner_dependencies` directly.
+# Owner dependencies remain part of the explicit auth API. Domain
+# modules should import them from `app.core.auth.owner_dependencies`
+# directly.
 
-from app.core.auth.owner_dependencies import (  # noqa: F401 (compatibility export KEEP_COMPAT)
+from app.core.auth.owner_dependencies import (  # noqa: F401 (explicit public auth API)
     require_file_owner,
     require_project_owner,
     require_schedule_owner,

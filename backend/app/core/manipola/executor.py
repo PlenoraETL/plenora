@@ -4,12 +4,11 @@ Executor del modulo MANIPOLA - pipeline di trasformazione dati.
 Keeps transformation behavior isolated from orchestration callers.
 """
 
-import re
 import time as _time
 import pandas as pd
 from typing import Dict, Any, List, Optional
 
-from app.shared.models import CanvasState, Edge, Node
+from app.shared.models import CanvasState, Node
 from app.config import settings
 from app.core.projects.execution_context import get_project_group_id
 from app.shared.execution.canvas_graph import CanvasGraph
@@ -35,6 +34,7 @@ from .project_source_runtime import (
     _push_to_execution_chain,
     _pop_from_execution_chain,
 )
+from .transform_ordering import sorted_incoming_edges
 
 
 logger = get_logger(__name__)
@@ -571,40 +571,10 @@ class ManipolaExecutor:
         current_df = None
         graph = canvas_graph or CanvasGraph.from_canvas(canvas)
 
-        # Helper per estrarre targetHandle dall'edge (da attributo o da ID
-        def get_target_handle(edge: Edge) -> Optional[str]:
-            # Prima prova attributo diretto
-            handle = getattr(edge, 'targetHandle', None)
-            if handle:
-                return handle
-            # Estrai da ID: "...targetNodeIdinput-0" → "input-0"
-            edge_id = getattr(edge, 'id', '') or ''
-            match = re.search(r'(input-\d+)$', edge_id)
-            if match:
-                return match.group(1)
-            return None
-
         for node in sorted_nodes:
             # Trova input per questo nodo - ORDINA per targetHandle o posizione Y
-            incoming = [e for e in canvas.edges if e.target == node.id]
+            incoming = sorted_incoming_edges(canvas.edges, node.id, graph)
 
-            # Ordina edges per garantire ordine consistente left/right
-            def edge_sort_key(edge: Edge) -> tuple[int, object]:
-                # Prima prova targetHandle (da attributo o ID
-                handle = get_target_handle(edge)
-                if handle:
-                    return (0, handle)
-                # Fallback: posizione Y del nodo sorgente via CanvasGraph raw lookup
-                # graph.raw returns a plain dict (model_dump at intake), so
-                # position is always a dict — no isinstance dual-path needed
-                _raw_src = graph.raw(edge.source)
-                if _raw_src:
-                    pos = _raw_src.get("position") or {}
-                    if isinstance(pos, dict):
-                        return (1, pos.get("y", 0))
-                return (2, edge.source)
-            
-            incoming.sort(key=edge_sort_key)
             inputs = [dataframes[e.source] for e in incoming if e.source in dataframes]
 
             if not inputs:

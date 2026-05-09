@@ -37,6 +37,15 @@ def test_rest_file_uses_files_boundary_for_file_source_path_materialization() ->
     assert "app.core.files.db" not in imports
 
 
+def test_rest_file_has_no_plain_keep_compat_marker() -> None:
+    source = (_ARRICCHISCI_ROOT / "api_connection_rest_file.py").read_text(
+        encoding="utf-8-sig",
+    )
+
+    marker = "KEEP" + "_COMPAT"
+    assert marker not in source
+
+
 def test_rest_file_path_resolver_remains_ctx_adapter_only() -> None:
     from app.core.arricchisci.api_connection_rest_file import (
         ApiConnectionRestFileMixin,

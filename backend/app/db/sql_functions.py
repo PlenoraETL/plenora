@@ -10,6 +10,7 @@ from dataclasses import dataclass
 
 from app.db.sql_date_functions import SqlDateFunctionMixin
 from app.db.sql_numeric_functions import SqlNumericFunctionMixin
+from app.db.sql_spatial_functions import SqlSpatialFunctionMixin
 from app.db.sql_string_functions import SqlStringFunctionMixin
 
 
@@ -640,6 +641,7 @@ FUNCTION_CATALOG: Dict[str, FunctionDef] = {
 class SqlFunctionTranslator(
     SqlDateFunctionMixin,
     SqlNumericFunctionMixin,
+    SqlSpatialFunctionMixin,
     SqlStringFunctionMixin,
 ):
     """
@@ -742,131 +744,6 @@ class SqlFunctionTranslator(
         if table_alias:
             return f"{table_alias}.{column}"
         return column
-
-    # FUNZIONI GEOMETRICHE
-
-    def _translate_centroid(self, params: Dict, table_alias: str = None) -> str:
-        """Centroide — centro geometrico della geometria."""
-        col = self._qualify_column(params["column"], table_alias)
-
-        traduzioni = {
-            DbType.POSTGRES: f"ST_Centroid({col})",
-            DbType.MSSQL: f"{col}.STCentroid()",
-            DbType.MYSQL: f"ST_Centroid({col})",
-            DbType.ORACLE: f"SDO_GEOM.SDO_CENTROID({col}, 0.005)",
-            DbType.SQLITE: f"Centroid({col})",
-        }
-        return self._ottieni_traduzione(traduzioni, "CENTROID")
-
-    def _translate_buffer(self, params: Dict, table_alias: str = None) -> str:
-        """Buffer — area di distanza attorno alla geometria."""
-        col = self._qualify_column(params["column"], table_alias)
-        # N2: cast float per rifiutare payload tipo "1); DROP TABLE x;--"
-        distanza = _safe_number(params["distance"], "float")
-
-        traduzioni = {
-            DbType.POSTGRES: f"ST_Buffer({col}, {distanza})",
-            DbType.MSSQL: f"{col}.STBuffer({distanza})",
-            DbType.MYSQL: f"ST_Buffer({col}, {distanza})",
-            DbType.ORACLE: f"SDO_GEOM.SDO_BUFFER({col}, {distanza}, 0.005)",
-            DbType.SQLITE: f"Buffer({col}, {distanza})",
-        }
-        return self._ottieni_traduzione(traduzioni, "BUFFER")
-
-    def _translate_transform(self, params: Dict, table_alias: str = None) -> str:
-        """Riproiezione — trasforma la geometria in un altro CRS."""
-        col = self._qualify_column(params["column"], table_alias)
-        # N2: SRID e' sempre un intero (EPSG code), cast strict int
-        srid = _safe_number(params["srid"], "int")
-
-        traduzioni = {
-            DbType.POSTGRES: f"ST_Transform({col}, {srid})",
-            DbType.MSSQL: f"{col}.STTransform({srid})",  # Richiede estensione
-            DbType.MYSQL: f"ST_Transform({col}, {srid})",  # MySQL 8.0+
-            DbType.ORACLE: f"SDO_CS.TRANSFORM({col}, {srid})",
-            DbType.SQLITE: f"Transform({col}, {srid})",
-        }
-        return self._ottieni_traduzione(traduzioni, "TRANSFORM")
-
-    def _translate_area(self, params: Dict, table_alias: str = None) -> str:
-        """Area — superficie del poligono."""
-        col = self._qualify_column(params["column"], table_alias)
-
-        traduzioni = {
-            DbType.POSTGRES: f"ST_Area({col})",
-            DbType.MSSQL: f"{col}.STArea()",
-            DbType.MYSQL: f"ST_Area({col})",
-            DbType.ORACLE: f"SDO_GEOM.SDO_AREA({col}, 0.005)",
-            DbType.SQLITE: f"Area({col})",
-        }
-        return self._ottieni_traduzione(traduzioni, "AREA")
-
-    def _translate_length(self, params: Dict, table_alias: str = None) -> str:
-        """Lunghezza — lunghezza della linea."""
-        col = self._qualify_column(params["column"], table_alias)
-
-        traduzioni = {
-            DbType.POSTGRES: f"ST_Length({col})",
-            DbType.MSSQL: f"{col}.STLength()",
-            DbType.MYSQL: f"ST_Length({col})",
-            DbType.ORACLE: f"SDO_GEOM.SDO_LENGTH({col}, 0.005)",
-            DbType.SQLITE: f"GLength({col})",  # SpatiaLite usa GLength
-        }
-        return self._ottieni_traduzione(traduzioni, "LENGTH")
-
-    def _translate_perimeter(self, params: Dict, table_alias: str = None) -> str:
-        """Perimetro — lunghezza del contorno del poligono."""
-        col = self._qualify_column(params["column"], table_alias)
-
-        traduzioni = {
-            DbType.POSTGRES: f"ST_Perimeter({col})",
-            DbType.MSSQL: f"{col}.STBoundary().STLength()",  # MSSQL non ha STPerimeter
-            DbType.MYSQL: f"ST_Length(ST_ExteriorRing({col}))",  # MySQL non ha ST_Perimeter
-            DbType.ORACLE: f"SDO_GEOM.SDO_LENGTH({col}, 0.005)",  # SDO_LENGTH su polygon = perimetro
-            DbType.SQLITE: f"Perimeter({col})",
-        }
-        return self._ottieni_traduzione(traduzioni, "PERIMETER")
-
-    def _translate_simplify(self, params: Dict, table_alias: str = None) -> str:
-        """Semplificazione — riduce i vertici della geometria."""
-        col = self._qualify_column(params["column"], table_alias)
-        # N2: float strict — tolerance e' una distanza
-        tolleranza = _safe_number(params["tolerance"], "float")
-
-        traduzioni = {
-            DbType.POSTGRES: f"ST_Simplify({col}, {tolleranza})",
-            DbType.MSSQL: f"{col}.Reduce({tolleranza})",
-            DbType.MYSQL: f"ST_Simplify({col}, {tolleranza})",
-            DbType.ORACLE: f"SDO_UTIL.SIMPLIFY({col}, {tolleranza})",
-            DbType.SQLITE: f"Simplify({col}, {tolleranza})",
-        }
-        return self._ottieni_traduzione(traduzioni, "SIMPLIFY")
-
-    def _translate_convex_hull(self, params: Dict, table_alias: str = None) -> str:
-        """Inviluppo convesso — poligono convesso minimo che contiene la geometria."""
-        col = self._qualify_column(params["column"], table_alias)
-
-        traduzioni = {
-            DbType.POSTGRES: f"ST_ConvexHull({col})",
-            DbType.MSSQL: f"{col}.STConvexHull()",
-            DbType.MYSQL: f"ST_ConvexHull({col})",
-            DbType.ORACLE: f"SDO_GEOM.SDO_CONVEXHULL({col}, 0.005)",
-            DbType.SQLITE: f"ConvexHull({col})",
-        }
-        return self._ottieni_traduzione(traduzioni, "CONVEX_HULL")
-
-    def _translate_envelope(self, params: Dict, table_alias: str = None) -> str:
-        """Bounding Box — rettangolo di delimitazione minimo (MBR)."""
-        col = self._qualify_column(params["column"], table_alias)
-
-        traduzioni = {
-            DbType.POSTGRES: f"ST_Envelope({col})",
-            DbType.MSSQL: f"{col}.STEnvelope()",
-            DbType.MYSQL: f"ST_Envelope({col})",
-            DbType.ORACLE: f"SDO_GEOM.SDO_MBR({col})",
-            DbType.SQLITE: f"Envelope({col})",
-        }
-        return self._ottieni_traduzione(traduzioni, "ENVELOPE")
 
     # FUNZIONI CONDIZIONALI (nuove
 

@@ -58,7 +58,7 @@ def _query_oid_by_key(
 
     Returns (oid_by_key, errors).
 
-    KEEP_COMPAT: thin IMDF wrapper for legacy publish call sites. New
-    ArcGIS mechanics belong in the canonical provider method.
+    Thin IMDF adapter for publish call sites. ArcGIS mechanics belong in the
+    canonical provider method.
     """
     return client.query_oid_by_key(conn, layer_url, match_col, values)
