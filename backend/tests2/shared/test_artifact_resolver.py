@@ -100,6 +100,46 @@ def _result_row(
     )
 
 
+def _patch_result_row(monkeypatch, row):
+    import app.core.results.db as _rdb
+
+    monkeypatch.setattr(_rdb, "get_result_row", lambda rid: row(id=rid))
+
+
+def _patch_latest_result_row(monkeypatch, row):
+    import app.core.results.db as _rdb
+
+    monkeypatch.setattr(
+        _rdb,
+        "get_latest_result_row",
+        lambda pid: row(project_id=pid),
+    )
+
+
+def _patch_registry(monkeypatch, registry):
+    import app.core.artifacts.resolver as resolver_mod
+
+    monkeypatch.setattr(resolver_mod, "default_registry", lambda: registry)
+
+
+def _assert_single_blob_call(
+    captured,
+    *,
+    mode: str,
+    result_id: str = "res-1",
+    project_id: str = "proj-1",
+    group_id: str = "grp-1",
+):
+    assert len(captured) == 1
+    ref_passed, mode_passed = captured[0]
+    assert ref_passed.kind == "result_blob"
+    assert ref_passed.result_id == result_id
+    assert ref_passed.expected_group_id == group_id
+    assert ref_passed.expected_project_id == project_id
+    assert mode_passed == mode
+    return ref_passed
+
+
 def _project_detail_row(
     *,
     id: str = "proj-1",
@@ -144,20 +184,11 @@ def test_materialize_run_result_id_beats_output_path(resolver, monkeypatch):
     (format, group_id, project_id) is still fetched via
     ``app.core.results.db.get_result_row``.
     """
-    import app.core.results.db as _rdb
-    import app.core.artifacts.resolver as resolver_mod
-
-    monkeypatch.setattr(
-        _rdb,
-        "get_result_row",
-        lambda rid: _result_row(id=rid, format="csv"),
-    )
+    _patch_result_row(monkeypatch, lambda **kw: _result_row(format="csv", **kw))
     captured, fake_registry = _fake_registry_returning_blob(
         b"id\n1\n", suffix=".csv",
     )
-    monkeypatch.setattr(
-        resolver_mod, "default_registry", lambda: fake_registry,
-    )
+    _patch_registry(monkeypatch, fake_registry)
 
     ref = RunArtifactRef(
         project_id="proj-1",
@@ -173,15 +204,7 @@ def test_materialize_run_result_id_beats_output_path(resolver, monkeypatch):
         assert m.path.read_bytes() == b"id\n1\n"
     # cleanup automatico via context manager
     assert not m.path.exists()
-    # Delegation contract: exactly one registry call with the
-    # canonical typed ResourceRef + path mode.
-    assert len(captured) == 1
-    ref_passed, mode_passed = captured[0]
-    assert ref_passed.kind == "result_blob"
-    assert ref_passed.result_id == "res-1"
-    assert ref_passed.expected_group_id == "grp-1"
-    assert ref_passed.expected_project_id == "proj-1"
-    assert mode_passed == "path"
+    _assert_single_blob_call(captured, mode="path")
 
 
 def test_materialize_run_rejects_cross_tenant_result_id(resolver, monkeypatch):
@@ -189,13 +212,11 @@ def test_materialize_run_rejects_cross_tenant_result_id(resolver, monkeypatch):
     call; the loader is never invoked. Tripwire mock on the
     registry would AssertionError if the resolver delegated past
     the cross-tenant gate."""
-    import app.core.results.db as _rdb
     import app.core.artifacts.resolver as resolver_mod
 
-    monkeypatch.setattr(
-        _rdb,
-        "get_result_row",
-        lambda rid: _result_row(id=rid, project_id="proj-2", format="csv"),
+    _patch_result_row(
+        monkeypatch,
+        lambda **kw: _result_row(project_id="proj-2", format="csv", **kw),
     )
 
     def _tripwire():
@@ -232,22 +253,13 @@ def test_materialize_run_missing_blob_is_hard_fail(resolver, monkeypatch):
     the canonical Italian operator string -- preserved verbatim
     from the pre-019 surface so log greps / tests downstream do
     not regress."""
-    import app.core.results.db as _rdb
-    import app.core.artifacts.resolver as resolver_mod
-
-    monkeypatch.setattr(
-        _rdb,
-        "get_result_row",
-        lambda rid: _result_row(id=rid, format="csv"),
-    )
+    _patch_result_row(monkeypatch, lambda **kw: _result_row(format="csv", **kw))
     fake_registry = _fake_registry_raising(
         FileNotFoundError(
             "ResultBlobLoader.load: result_id='res-1' not found"
         )
     )
-    monkeypatch.setattr(
-        resolver_mod, "default_registry", lambda: fake_registry,
-    )
+    _patch_registry(monkeypatch, fake_registry)
 
     ref = RunArtifactRef(project_id="proj-1", result_id="res-1")
     with pytest.raises(ArtifactResolutionError, match="senza blob"):
@@ -261,13 +273,11 @@ def test_materialize_run_missing_group_id_is_hard_fail(resolver, monkeypatch):
     ResourceRef -- the engine's typed contract requires a non-empty
     ``expected_group_id``, and the resolver gives a clearer
     operator message than the raw ResourceRef ValueError."""
-    import app.core.results.db as _rdb
     import app.core.artifacts.resolver as resolver_mod
 
-    monkeypatch.setattr(
-        _rdb,
-        "get_result_row",
-        lambda rid: _result_row(id=rid, group_id=None, format="csv"),
+    _patch_result_row(
+        monkeypatch,
+        lambda **kw: _result_row(group_id=None, format="csv", **kw),
     )
 
     def _tripwire():
@@ -292,15 +302,9 @@ def test_materialize_run_propagates_loader_oversize_unchanged(
     413 handler, NOT be translated into the generic resolver
     ``ArtifactResolutionError(senza blob dati)``. This test
     pins that distinction."""
-    import app.core.results.db as _rdb
-    import app.core.artifacts.resolver as resolver_mod
     from app.core.resources.exceptions import MemoryLimitExceededError
 
-    monkeypatch.setattr(
-        _rdb,
-        "get_result_row",
-        lambda rid: _result_row(id=rid, format="csv"),
-    )
+    _patch_result_row(monkeypatch, lambda **kw: _result_row(format="csv", **kw))
     fake_registry = _fake_registry_raising(
         MemoryLimitExceededError(
             observed_bytes=999_999_999,
@@ -309,9 +313,7 @@ def test_materialize_run_propagates_loader_oversize_unchanged(
             stage="result_blob_oversize",
         )
     )
-    monkeypatch.setattr(
-        resolver_mod, "default_registry", lambda: fake_registry,
-    )
+    _patch_registry(monkeypatch, fake_registry)
 
     ref = RunArtifactRef(project_id="proj-1", result_id="res-1")
     # Resolver has a dedicated ``except MemoryLimitExceededError:
@@ -474,20 +476,14 @@ def test_materialize_latest_writes_tempfile_with_format_suffix(
     materialization to ``default_registry().get(ref, mode='path')``.
     Row metadata (group_id, format) still comes from
     ``app.core.results.db.get_latest_result_row``."""
-    import app.core.results.db as _rdb
-    import app.core.artifacts.resolver as resolver_mod
-
-    monkeypatch.setattr(
-        _rdb,
-        "get_latest_result_row",
-        lambda pid: _result_row(project_id=pid, format="parquet"),
+    _patch_latest_result_row(
+        monkeypatch,
+        lambda **kw: _result_row(format="parquet", **kw),
     )
     captured, fake_registry = _fake_registry_returning_blob(
         b"PAR1", suffix=".parquet",
     )
-    monkeypatch.setattr(
-        resolver_mod, "default_registry", lambda: fake_registry,
-    )
+    _patch_registry(monkeypatch, fake_registry)
 
     ref = LatestProjectArtifactRef(project_id="proj-1")
     with resolver.materialize_latest(ref) as m:
@@ -495,15 +491,7 @@ def test_materialize_latest_writes_tempfile_with_format_suffix(
         assert m.path.suffix == ".parquet"
         assert m.path.read_bytes() == b"PAR1"
         assert m.is_temporary is True
-    # Delegation contract: exactly one registry call with the
-    # latest-row's group_id + path mode.
-    assert len(captured) == 1
-    ref_passed, mode_passed = captured[0]
-    assert ref_passed.kind == "result_blob"
-    assert ref_passed.result_id == "res-1"
-    assert ref_passed.expected_group_id == "grp-1"
-    assert ref_passed.expected_project_id == "proj-1"
-    assert mode_passed == "path"
+    _assert_single_blob_call(captured, mode="path")
 
 
 def test_materialize_latest_enforces_group_binding(resolver, monkeypatch):
@@ -558,44 +546,25 @@ def test_fetch_run_blob_returns_data_filename_format(resolver, monkeypatch):
     ``db_service.get_result_data``. Row metadata (filename / format /
     project_id / group_id) still comes from ``app.core.results.db.get_result_row``.
     """
-    import app.core.results.db as _rdb
-    import app.core.artifacts.resolver as resolver_mod
-
-    monkeypatch.setattr(
-        _rdb,
-        "get_result_row",
-        lambda rid: _result_row(id=rid, filename="out.csv", format="csv"),
+    _patch_result_row(
+        monkeypatch,
+        lambda **kw: _result_row(filename="out.csv", format="csv", **kw),
     )
     captured, fake_registry = _fake_registry_returning_bytes(b"id\n1\n")
-    monkeypatch.setattr(
-        resolver_mod, "default_registry", lambda: fake_registry,
-    )
+    _patch_registry(monkeypatch, fake_registry)
 
     blob = resolver.fetch_run_blob(result_id="res-1", expected_project_id="proj-1")
     assert blob.data == b"id\n1\n"
     assert blob.filename == "out.csv"
     assert blob.format == "csv"
     assert blob.project_id == "proj-1"
-    # Verify the resolver delegated to the registry with bytes mode
-    # (no path/temp materialization for the HTTP download path).
-    assert len(captured) == 1
-    _ref, _mode = captured[0]
-    assert _mode == "bytes"
-    assert _ref.kind == "result_blob"
-    assert _ref.result_id == "res-1"
-    assert _ref.expected_group_id == "grp-1"
-    assert _ref.expected_project_id == "proj-1"
+    _assert_single_blob_call(captured, mode="bytes")
 
 
 def test_fetch_run_blob_rejects_cross_tenant(resolver, monkeypatch):
-    import app.core.results.db as _rdb
-
-    monkeypatch.setattr(
-        _rdb,
-        "get_result_row",
-        lambda rid: _result_row(
-            id=rid, project_id="proj-2", filename="x", format="csv"
-        ),
+    _patch_result_row(
+        monkeypatch,
+        lambda **kw: _result_row(project_id="proj-2", filename="x", format="csv", **kw),
     )
     with pytest.raises(ArtifactResolutionError, match="non appartiene"):
         resolver.fetch_run_blob(result_id="res-1", expected_project_id="proj-1")
@@ -614,22 +583,15 @@ def test_fetch_run_blob_translates_loader_filenotfound_to_typed_error(resolver, 
     cross-tenant SQL filter / blob unavailable) the resolver
     translates it to the canonical Italian message used by
     existing operator log greps."""
-    import app.core.results.db as _rdb
-    import app.core.artifacts.resolver as resolver_mod
-
-    monkeypatch.setattr(
-        _rdb,
-        "get_result_row",
-        lambda rid: _result_row(id=rid, filename="out.csv", format="csv"),
+    _patch_result_row(
+        monkeypatch,
+        lambda **kw: _result_row(filename="out.csv", format="csv", **kw),
     )
 
     def _get(ref, *, mode):  # noqa: ARG001
         raise FileNotFoundError("loader fail-closed")
 
-    monkeypatch.setattr(
-        resolver_mod, "default_registry",
-        lambda: SimpleNamespace(get=_get),
-    )
+    _patch_registry(monkeypatch, SimpleNamespace(get=_get))
 
     with pytest.raises(ArtifactResolutionError, match="senza blob dati"):
         resolver.fetch_run_blob(result_id="res-1", expected_project_id="proj-1")
@@ -638,14 +600,9 @@ def test_fetch_run_blob_translates_loader_filenotfound_to_typed_error(resolver, 
 def test_fetch_run_blob_row_without_group_id_is_hard_fail(resolver, monkeypatch):
     """A row without `group_id` is data corruption (or a
     pre-tenant-binding row); fail-closed before any registry call."""
-    import app.core.results.db as _rdb
-
-    monkeypatch.setattr(
-        _rdb,
-        "get_result_row",
-        lambda rid: _result_row(
-            id=rid, group_id=None, filename="out.csv", format="csv"
-        ),
+    _patch_result_row(
+        monkeypatch,
+        lambda **kw: _result_row(group_id=None, filename="out.csv", format="csv", **kw),
     )
     with pytest.raises(ArtifactResolutionError, match="senza group_id"):
         resolver.fetch_run_blob(result_id="res-1", expected_project_id="proj-1")
@@ -655,9 +612,7 @@ def test_materialize_latest_passes_when_group_matches(resolver, monkeypatch):
     """BE-GO-READY-RESOURCE-ENGINE-021: when the upstream project
     group check passes, the resolver delegates to the registry
     with ``is_superadmin=False`` and the latest-row's group_id."""
-    import app.core.results.db as _rdb
     import app.core.projects.db as _projects_leaf
-    import app.core.artifacts.resolver as resolver_mod
 
     def _tenant_scoped_project(pid, group_id=None):
         assert pid == "proj-1"
@@ -669,17 +624,14 @@ def test_materialize_latest_passes_when_group_matches(resolver, monkeypatch):
         "get_project_row",
         _tenant_scoped_project,
     )
-    monkeypatch.setattr(
-        _rdb,
-        "get_latest_result_row",
-        lambda pid: _result_row(project_id=pid, group_id="grp-mine"),
+    _patch_latest_result_row(
+        monkeypatch,
+        lambda **kw: _result_row(group_id="grp-mine", **kw),
     )
     captured, fake_registry = _fake_registry_returning_blob(
         b"id\n1\n", suffix=".csv",
     )
-    monkeypatch.setattr(
-        resolver_mod, "default_registry", lambda: fake_registry,
-    )
+    _patch_registry(monkeypatch, fake_registry)
 
     ref = LatestProjectArtifactRef(project_id="proj-1")
     m = resolver.materialize_latest(ref, expected_group_id="grp-mine")
@@ -689,10 +641,12 @@ def test_materialize_latest_passes_when_group_matches(resolver, monkeypatch):
     finally:
         m.cleanup()
     # Non-superadmin path: ResourceRef carries is_superadmin=False
-    assert len(captured) == 1
-    ref_passed, _mode = captured[0]
+    ref_passed = _assert_single_blob_call(
+        captured,
+        mode="path",
+        group_id="grp-mine",
+    )
     assert ref_passed.is_superadmin is False
-    assert ref_passed.expected_group_id == "grp-mine"
 
 
 def test_materialize_latest_superadmin_bypass_cross_tenant(resolver, monkeypatch):
@@ -707,26 +661,21 @@ def test_materialize_latest_superadmin_bypass_cross_tenant(resolver, monkeypatch
     threads ``is_superadmin=True`` through to the ResourceRef so
     the loader's audit-bypass log entry mirrors the upstream
     project bypass."""
-    import app.core.results.db as _rdb
     import app.core.projects.db as _projects_leaf
-    import app.core.artifacts.resolver as resolver_mod
 
     monkeypatch.setattr(
         _projects_leaf,
         "get_project_row",
         lambda pid: _project_detail_row(id=pid, group_id="gruppo_ania"),
     )
-    monkeypatch.setattr(
-        _rdb,
-        "get_latest_result_row",
-        lambda pid: _result_row(project_id=pid, group_id="gruppo_ania"),
+    _patch_latest_result_row(
+        monkeypatch,
+        lambda **kw: _result_row(group_id="gruppo_ania", **kw),
     )
     captured, fake_registry = _fake_registry_returning_blob(
         b"id\n1\n", suffix=".csv",
     )
-    monkeypatch.setattr(
-        resolver_mod, "default_registry", lambda: fake_registry,
-    )
+    _patch_registry(monkeypatch, fake_registry)
 
     ref = LatestProjectArtifactRef(project_id="proj-cross")
     m = resolver.materialize_latest(
@@ -742,10 +691,13 @@ def test_materialize_latest_superadmin_bypass_cross_tenant(resolver, monkeypatch
     # Superadmin path: ResourceRef carries is_superadmin=True so
     # the loader records the audit-bypass log entry symmetrically
     # with the resolver-level project bypass.
-    assert len(captured) == 1
-    ref_passed, _mode = captured[0]
+    ref_passed = _assert_single_blob_call(
+        captured,
+        mode="path",
+        project_id="proj-cross",
+        group_id="gruppo_ania",
+    )
     assert ref_passed.is_superadmin is True
-    assert ref_passed.expected_group_id == "gruppo_ania"
 
 
 def test_materialize_latest_non_superadmin_blocks_cross_tenant(resolver, monkeypatch):
@@ -791,22 +743,13 @@ def test_materialize_latest_returns_none_on_loader_filenotfound(
     is preserved as the legacy ``return None`` semantic. The
     router/UI treats None as "no latest result"; raising would
     500 the request."""
-    import app.core.results.db as _rdb
-    import app.core.artifacts.resolver as resolver_mod
-
-    monkeypatch.setattr(
-        _rdb,
-        "get_latest_result_row",
-        lambda pid: _result_row(project_id=pid, format="csv"),
-    )
+    _patch_latest_result_row(monkeypatch, lambda **kw: _result_row(format="csv", **kw))
     fake_registry = _fake_registry_raising(
         FileNotFoundError(
             "ResultBlobLoader.load: result_id='res-1' blob unavailable"
         )
     )
-    monkeypatch.setattr(
-        resolver_mod, "default_registry", lambda: fake_registry,
-    )
+    _patch_registry(monkeypatch, fake_registry)
 
     ref = LatestProjectArtifactRef(project_id="proj-1")
     assert resolver.materialize_latest(ref) is None
@@ -821,13 +764,11 @@ def test_materialize_latest_missing_group_id_is_hard_fail(
     Resolver fail-closes BEFORE constructing the ref so the
     operator sees a clearer message than the raw ResourceRef
     ValueError."""
-    import app.core.results.db as _rdb
     import app.core.artifacts.resolver as resolver_mod
 
-    monkeypatch.setattr(
-        _rdb,
-        "get_latest_result_row",
-        lambda pid: _result_row(project_id=pid, group_id=None, format="csv"),
+    _patch_latest_result_row(
+        monkeypatch,
+        lambda **kw: _result_row(group_id=None, format="csv", **kw),
     )
 
     def _tripwire():
@@ -854,15 +795,9 @@ def test_materialize_latest_propagates_loader_oversize_unchanged(
     "ArtifactResolutionError" path. Pinned because the legacy
     `if not blob: return None` pattern would have masked oversize
     as `None`; the registry migration must NOT regress to that."""
-    import app.core.results.db as _rdb
-    import app.core.artifacts.resolver as resolver_mod
     from app.core.resources.exceptions import MemoryLimitExceededError
 
-    monkeypatch.setattr(
-        _rdb,
-        "get_latest_result_row",
-        lambda pid: _result_row(project_id=pid, format="csv"),
-    )
+    _patch_latest_result_row(monkeypatch, lambda **kw: _result_row(format="csv", **kw))
     fake_registry = _fake_registry_raising(
         MemoryLimitExceededError(
             observed_bytes=999_999_999,
@@ -871,9 +806,7 @@ def test_materialize_latest_propagates_loader_oversize_unchanged(
             stage="result_blob_oversize",
         )
     )
-    monkeypatch.setattr(
-        resolver_mod, "default_registry", lambda: fake_registry,
-    )
+    _patch_registry(monkeypatch, fake_registry)
 
     ref = LatestProjectArtifactRef(project_id="proj-1")
     with pytest.raises(MemoryLimitExceededError) as exc_info:
@@ -894,14 +827,7 @@ def test_materialize_latest_translates_other_loader_faults(
     fallita") with [GESTITO] log + chained cause. Mirrors the
     019 broad-except contract on `_materialize_from_result_id`."""
     import logging
-    import app.core.results.db as _rdb
-    import app.core.artifacts.resolver as resolver_mod
-
-    monkeypatch.setattr(
-        _rdb,
-        "get_latest_result_row",
-        lambda pid: _result_row(project_id=pid, format="csv"),
-    )
+    _patch_latest_result_row(monkeypatch, lambda **kw: _result_row(format="csv", **kw))
 
     class _PgConnectionDrop(RuntimeError):
         pass
@@ -909,9 +835,7 @@ def test_materialize_latest_translates_other_loader_faults(
     fake_registry = _fake_registry_raising(
         _PgConnectionDrop("psycopg2.OperationalError: server closed")
     )
-    monkeypatch.setattr(
-        resolver_mod, "default_registry", lambda: fake_registry,
-    )
+    _patch_registry(monkeypatch, fake_registry)
 
     # Capture the resolver's logger directly (StructuredLogger has
     # propagate=False).

@@ -564,9 +564,18 @@ def test_null_on_non_nullable_error_in_append(
 # 6. MISSING_CAPABILITIES (top_issues)
 
 
-def test_missing_capabilities_for_append(imdf_bundle_dir, patch_collaborators):
-    """Append richiede capability 'create'. Senza → error
-    MISSING_CAPABILITIES."""
+@pytest.mark.parametrize(
+    ("mode", "capabilities", "feature_count", "missing_capability"),
+    [
+        ("append", "Query", 0, "create"),
+        ("upsert", "Query,Create", 1, "delete"),
+    ],
+)
+def test_missing_capabilities(
+    imdf_bundle_dir, patch_collaborators,
+    mode, capabilities, feature_count, missing_capability,
+):
+    """Mode mutativi senza capability richieste -> MISSING_CAPABILITIES."""
     knobs = patch_collaborators
     knobs.bundle_layers = {
         "Localita": _make_bundle_gdf([{"SITE_ID": "S1"}]),
@@ -579,71 +588,52 @@ def test_missing_capabilities_for_append(imdf_bundle_dir, patch_collaborators):
                 {"name": "SITE_ID", "field_type": "esriFieldTypeString",
                  "length": 50, "nullable": True},
             ],
-            capabilities="Query",  # NO Create
+            capabilities=capabilities,
         ),
     }
+    knobs.count_features_return = feature_count
 
     report = validator_mod.validate_publish(
         bundle_task_id=imdf_bundle_dir,
         connection_id="conn-1",
         fs_name="LO_TEST",
-        mode="append",
+        mode=mode,
     )
     issue = _find_issue(report["top_issues"], "MISSING_CAPABILITIES")
     assert issue is not None
     assert issue["severity"] == "error"
-    assert "create" in issue["message"].lower()
-
-
-def test_missing_capabilities_for_upsert(imdf_bundle_dir, patch_collaborators):
-    """Upsert richiede 'create' E 'delete'."""
-    knobs = patch_collaborators
-    knobs.bundle_layers = {
-        "Localita": _make_bundle_gdf([{"SITE_ID": "S1"}]),
-    }
-    knobs.fs_url = "https://arc.test"
-    knobs.list_layers_return = [_make_layer_info("Localita", feature_count=10)]
-    knobs.layer_schema_return = {
-        "Localita": _make_fs_schema(
-            fields=[
-                {"name": "SITE_ID", "field_type": "esriFieldTypeString",
-                 "length": 50, "nullable": True},
-            ],
-            capabilities="Query,Create",  # missing delete
-        ),
-    }
-    knobs.count_features_return = 1
-
-    report = validator_mod.validate_publish(
-        bundle_task_id=imdf_bundle_dir,
-        connection_id="conn-1",
-        fs_name="LO_TEST",
-        mode="upsert",
-    )
-    issue = _find_issue(report["top_issues"], "MISSING_CAPABILITIES")
-    assert issue is not None
-    assert issue["severity"] == "error"
-    assert "delete" in issue["message"].lower()
+    assert missing_capability in issue["message"].lower()
 
 
 # 7. FOLDER_MISMATCH (top_issues)
 
 
-def test_folder_mismatch_warning_when_request_differs(
+@pytest.mark.parametrize(
+    ("fs_folder", "user_folders", "expect_warning"),
+    [
+        (
+            "id-other",
+            [
+                {"id": "id-other", "title": "other_folder"},
+                {"id": "id-target", "title": "target_folder"},
+            ],
+            True,
+        ),
+        ("id-target", [{"id": "id-target", "title": "target_folder"}], False),
+    ],
+)
+def test_folder_mismatch_issue(
     imdf_bundle_dir, patch_collaborators,
+    fs_folder, user_folders, expect_warning,
 ):
-    """User chiede folder='target_folder', FS esistente vive in
-    'other_folder' → warning FOLDER_MISMATCH."""
+    """Folder richiesto diverso dal folder FS -> FOLDER_MISMATCH."""
     knobs = patch_collaborators
     knobs.bundle_layers = {
         "Localita": _make_bundle_gdf([{"SITE_ID": "S1"}]),
     }
     knobs.fs_url = "https://arc.test"
-    knobs.fs_folder = "id-other"  # folder id sul FS esistente
-    knobs.user_folders = [
-        {"id": "id-other", "title": "other_folder"},
-        {"id": "id-target", "title": "target_folder"},
-    ]
+    knobs.fs_folder = fs_folder
+    knobs.user_folders = user_folders
     knobs.list_layers_return = [_make_layer_info("Localita", feature_count=1)]
     knobs.layer_schema_return = {
         "Localita": _make_fs_schema(fields=[
@@ -660,46 +650,22 @@ def test_folder_mismatch_warning_when_request_differs(
         folder="target_folder",
     )
     issue = _find_issue(report["top_issues"], "FOLDER_MISMATCH")
-    assert issue is not None
-    assert issue["severity"] == "warning"
-
-
-def test_folder_match_no_warning(imdf_bundle_dir, patch_collaborators):
-    """Folder coincide (via title resolve) → nessun FOLDER_MISMATCH."""
-    knobs = patch_collaborators
-    knobs.bundle_layers = {
-        "Localita": _make_bundle_gdf([{"SITE_ID": "S1"}]),
-    }
-    knobs.fs_url = "https://arc.test"
-    knobs.fs_folder = "id-target"
-    knobs.user_folders = [
-        {"id": "id-target", "title": "target_folder"},
-    ]
-    knobs.list_layers_return = [_make_layer_info("Localita", feature_count=1)]
-    knobs.layer_schema_return = {
-        "Localita": _make_fs_schema(fields=[
-            {"name": "SITE_ID", "field_type": "esriFieldTypeString",
-             "length": 50, "nullable": True},
-        ]),
-    }
-
-    report = validator_mod.validate_publish(
-        bundle_task_id=imdf_bundle_dir,
-        connection_id="conn-1",
-        fs_name="LO_TEST",
-        mode="replace",
-        folder="target_folder",
-    )
-    assert not _has_top_issue(report, "FOLDER_MISMATCH")
+    if expect_warning:
+        assert issue is not None
+        assert issue["severity"] == "warning"
+    else:
+        assert issue is None
 
 
 # 8. CRS_MISMATCH (top_issues)
 
 
-def test_crs_mismatch_warning_when_bundle_and_fs_differ(
-    imdf_bundle_dir, patch_collaborators,
-):
-    """Bundle EPSG:4326, FS EPSG:3857 → warning CRS_MISMATCH."""
+@pytest.mark.parametrize(
+    ("fs_wkid", "expect_warning"),
+    [(3857, True), (4326, False)],
+)
+def test_crs_mismatch_issue(imdf_bundle_dir, patch_collaborators, fs_wkid, expect_warning):
+    """Bundle/FS con CRS diverso -> CRS_MISMATCH."""
     knobs = patch_collaborators
     knobs.bundle_layers = {
         "Localita": _make_bundle_gdf(
@@ -715,7 +681,7 @@ def test_crs_mismatch_warning_when_bundle_and_fs_differ(
                 {"name": "SITE_ID", "field_type": "esriFieldTypeString",
                  "length": 50, "nullable": True},
             ],
-            wkid=3857,  # different SRS
+            wkid=fs_wkid,
         ),
     }
 
@@ -726,39 +692,13 @@ def test_crs_mismatch_warning_when_bundle_and_fs_differ(
         mode="replace",
     )
     issue = _find_issue(report["top_issues"], "CRS_MISMATCH")
-    assert issue is not None
-    assert issue["severity"] == "warning"
-    assert "4326" in issue["message"]
-    assert "3857" in issue["message"]
-
-
-def test_crs_match_no_warning(imdf_bundle_dir, patch_collaborators):
-    knobs = patch_collaborators
-    knobs.bundle_layers = {
-        "Localita": _make_bundle_gdf(
-            [{"SITE_ID": "S1"}],
-            crs_epsg=4326,
-        ),
-    }
-    knobs.fs_url = "https://arc.test"
-    knobs.list_layers_return = [_make_layer_info("Localita", feature_count=1)]
-    knobs.layer_schema_return = {
-        "Localita": _make_fs_schema(
-            fields=[
-                {"name": "SITE_ID", "field_type": "esriFieldTypeString",
-                 "length": 50, "nullable": True},
-            ],
-            wkid=4326,
-        ),
-    }
-
-    report = validator_mod.validate_publish(
-        bundle_task_id=imdf_bundle_dir,
-        connection_id="conn-1",
-        fs_name="LO_TEST",
-        mode="replace",
-    )
-    assert not _has_top_issue(report, "CRS_MISMATCH")
+    if expect_warning:
+        assert issue is not None
+        assert issue["severity"] == "warning"
+        assert "4326" in issue["message"]
+        assert str(fs_wkid) in issue["message"]
+    else:
+        assert issue is None
 
 
 # Sentinel: report-level invariants comuni a tutti i test

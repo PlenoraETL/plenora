@@ -403,9 +403,25 @@ def test_canvas_put_superadmin_can_save_any_ref():
 # `arcgis_connection: <ids>` non validi.
 
 
-def test_canvas_put_rejects_arcgis_connection_not_visible_to_owner_group():
-    """Nodo `carica_arcgis` con `arcgis_connection_id` di altro gruppo
-    (riferimento stantio post rebrand) -> 400 con id nel messaggio."""
+@pytest.mark.parametrize(
+    ("node_type", "field_name", "bad_id"),
+    [
+        (
+            "carica_arcgis",
+            "arcgis_connection_id",
+            "arcgis_Arcgis_Online_Urby_OLD",
+        ),
+        (
+            "imdf_publisher",
+            "imdf_arcgis_connection_id",
+            "arcgis_Arcgis_Online_Urby_IMDF_OLD",
+        ),
+    ],
+)
+def test_canvas_put_rejects_arcgis_connection_not_visible_to_owner_group(
+    node_type, field_name, bad_id,
+):
+    """ArcGIS connection refs non visibili al gruppo owner -> 400."""
     from fastapi import HTTPException
 
     from app.core.projects.router import CanvasWithPlugins, update_project_canvas
@@ -415,13 +431,13 @@ def test_canvas_put_rejects_arcgis_connection_not_visible_to_owner_group():
         nodes=[
             Node(id="src", type="source", position={"x": 0, "y": 0}, columns=[]),
             Node(
-                id="carica_ag",
-                type="carica_arcgis",
+                id="arcgis_ref",
+                type=node_type,
                 position={"x": 200, "y": 0},
-                arcgis_connection_id="arcgis_Arcgis_Online_Urby_OLD",
+                **{field_name: bad_id},
             ),
         ],
-        edges=[Edge(id="e1", source="src", target="carica_ag")],
+        edges=[Edge(id="e1", source="src", target="arcgis_ref")],
     )
 
     fake_svc = _rb4_make_svc(owner_group_id="g1")
@@ -439,47 +455,7 @@ def test_canvas_put_rejects_arcgis_connection_not_visible_to_owner_group():
             update_project_canvas("p1", body, _RB4User())
 
     assert excinfo.value.status_code == 400
-    detail = excinfo.value.detail
-    assert "arcgis_connection: arcgis_Arcgis_Online_Urby_OLD" in detail
-    fake_svc.update_canvas.assert_not_called()
-
-
-def test_canvas_put_rejects_imdf_arcgis_connection_not_visible_to_owner_group():
-    """Nodo `imdf_publisher` con `imdf_arcgis_connection_id` di altro
-    gruppo -> 400 con id nel messaggio."""
-    from fastapi import HTTPException
-
-    from app.core.projects.router import CanvasWithPlugins, update_project_canvas
-    from app.shared.models import Edge, Node
-
-    body = CanvasWithPlugins(
-        nodes=[
-            Node(id="src", type="source", position={"x": 0, "y": 0}, columns=[]),
-            Node(
-                id="imdf_pub",
-                type="imdf_publisher",
-                position={"x": 200, "y": 0},
-                imdf_arcgis_connection_id="arcgis_Arcgis_Online_Urby_IMDF_OLD",
-            ),
-        ],
-        edges=[Edge(id="e1", source="src", target="imdf_pub")],
-    )
-
-    fake_svc = _rb4_make_svc(owner_group_id="g1")
-
-    def _fake_visible(resource_table, group_id, is_superadmin=False):
-        if resource_table == "arcgis_connections":
-            return {"arcgis_Arcgis_Online_Plenora_IMDF_NEW"}
-        return set()
-
-    with patch("app.core.projects.router._project_service", fake_svc), patch(
-        "app.core.auth.visibility.visible_resource_ids", side_effect=_fake_visible
-    ):
-        with pytest.raises(HTTPException) as excinfo:
-            update_project_canvas("p1", body, _RB4User())
-
-    assert excinfo.value.status_code == 400
-    assert "arcgis_connection: arcgis_Arcgis_Online_Urby_IMDF_OLD" in excinfo.value.detail
+    assert f"arcgis_connection: {bad_id}" in excinfo.value.detail
     fake_svc.update_canvas.assert_not_called()
 
 
@@ -724,16 +700,20 @@ def test_edge_accepts_reactflow_handle_fields():
     assert edge.targetHandle == "in-1"
 
 
-def test_edge_rejects_empty_id_source_target():
+@pytest.mark.parametrize(
+    "kwargs",
+    [
+        {"id": "", "source": "n1", "target": "n2"},
+        {"id": "e1", "source": "", "target": "n2"},
+        {"id": "e1", "source": "n1", "target": ""},
+    ],
+)
+def test_edge_rejects_empty_id_source_target(kwargs):
     """id/source/target sono obbligatori e non-vuoti (min_length=1)."""
     from app.shared.models import Edge
 
     with pytest.raises(ValidationError):
-        Edge(id="", source="n1", target="n2")
-    with pytest.raises(ValidationError):
-        Edge(id="e1", source="", target="n2")
-    with pytest.raises(ValidationError):
-        Edge(id="e1", source="n1", target="")
+        Edge(**kwargs)
 
 
 # C11-nit: CROSS JOIN esplicito

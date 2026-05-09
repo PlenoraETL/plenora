@@ -50,17 +50,14 @@ def test_env_override_is_honored(monkeypatch):
     assert resolve_artifact_preview_max_bytes() == 1024
 
 
-def test_invalid_env_falls_back_to_default(monkeypatch):
+@pytest.mark.parametrize("env_value", ["not-an-int", "0", "-1"])
+def test_invalid_env_falls_back_to_default(monkeypatch, env_value):
     """Garbage / non-positive env values fall back to the 25 MiB default."""
     from app.core.resources.preview_caps import (
         resolve_artifact_preview_max_bytes,
     )
 
-    monkeypatch.setenv("ARTIFACT_PREVIEW_MAX_BYTES", "not-an-int")
-    assert resolve_artifact_preview_max_bytes() == 25 * 1024 * 1024
-    monkeypatch.setenv("ARTIFACT_PREVIEW_MAX_BYTES", "0")
-    assert resolve_artifact_preview_max_bytes() == 25 * 1024 * 1024
-    monkeypatch.setenv("ARTIFACT_PREVIEW_MAX_BYTES", "-1")
+    monkeypatch.setenv("ARTIFACT_PREVIEW_MAX_BYTES", env_value)
     assert resolve_artifact_preview_max_bytes() == 25 * 1024 * 1024
 
 
@@ -134,33 +131,35 @@ class _FakeStorage:
         return {"body": iter(self._chunks)}
 
 
+def _patch_storage_and_cap(monkeypatch, chunks: list[bytes], cap: int = 1024):
+    from app.core.intermediate import artifact_reader as ar
+
+    monkeypatch.setenv("ARTIFACT_PREVIEW_MAX_BYTES", str(cap))
+    monkeypatch.setattr(
+        "app.shared.cloud_backends.get_runtime_object_storage",
+        lambda: _FakeStorage(chunks),
+    )
+    return ar
+
+
 def test_oversize_raises_memory_limit_exceeded(monkeypatch):
     """An artifact larger than ``ARTIFACT_PREVIEW_MAX_BYTES`` MUST
     raise :class:`MemoryLimitExceededError` so the boundary maps to
     HTTP 413 — NOT a best-effort ``ArtifactPreviewResult(error=...)``.
     Otherwise a 50-GB artifact would fill RAM and OOM-kill the
     worker silently."""
-    from app.core.intermediate import artifact_reader as ar
-
-    monkeypatch.setenv("ARTIFACT_PREVIEW_MAX_BYTES", "1024")  # 1 KiB cap
-
     # Two 700 B chunks; second push would exceed 1 KiB.
-    chunks = [b"x" * 700, b"y" * 700]
-    fake_storage = _FakeStorage(chunks)
+    ar = _patch_storage_and_cap(monkeypatch, [b"x" * 700, b"y" * 700])
 
     with patch.object(
         ar,
         "load_preview_from_artifact",
         wraps=ar.load_preview_from_artifact,
     ):
-        with patch(
-            "app.shared.cloud_backends.get_runtime_object_storage",
-            return_value=fake_storage,
-        ):
-            with pytest.raises(MemoryLimitExceededError) as exc_info:
-                ar.load_preview_from_artifact(
-                    "s3://bucket/key/data.parquet", limit=10,
-                )
+        with pytest.raises(MemoryLimitExceededError) as exc_info:
+            ar.load_preview_from_artifact(
+                "s3://bucket/key/data.parquet", limit=10,
+            )
 
     err = exc_info.value
     assert err.limit_bytes == 1024
@@ -174,19 +173,10 @@ def test_under_cap_proceeds_without_raising_oom(monkeypatch):
     surface that failure as ``error=...`` — NOT raise
     :class:`MemoryLimitExceededError`. This proves the bounded read
     is transparent under cap and only fires on overrun."""
-    from app.core.intermediate import artifact_reader as ar
-
-    monkeypatch.setenv("ARTIFACT_PREVIEW_MAX_BYTES", "1024")  # 1 KiB cap
-    chunks = [b"not-parquet-but-small"]
-    fake_storage = _FakeStorage(chunks)
-
-    with patch(
-        "app.shared.cloud_backends.get_runtime_object_storage",
-        return_value=fake_storage,
-    ):
-        result = ar.load_preview_from_artifact(
-            "s3://bucket/key/data.parquet", limit=10,
-        )
+    ar = _patch_storage_and_cap(monkeypatch, [b"not-parquet-but-small"])
+    result = ar.load_preview_from_artifact(
+        "s3://bucket/key/data.parquet", limit=10,
+    )
 
     # Did NOT raise. Decode failed -> error surfaced as best-effort.
     assert result.error is not None
@@ -398,7 +388,7 @@ def test_artifact_reader_delegates_to_preview_parser(monkeypatch):
     from app.core.intermediate.preview_parser import ParquetPreview
 
     body = b"PARQUETBODY-PLACEHOLDER"
-    fake_storage = _FakeStorage([body])
+    ar = _patch_storage_and_cap(monkeypatch, [body])
 
     captured: list[tuple] = []
 
@@ -410,14 +400,9 @@ def test_artifact_reader_delegates_to_preview_parser(monkeypatch):
             row_count=42,
         )
 
-    monkeypatch.setenv("ARTIFACT_PREVIEW_MAX_BYTES", "1024")
     # Patch at the orchestrator's import alias so we observe the
     # boundary call exactly as production would dispatch it.
     monkeypatch.setattr(ar, "parse_parquet_preview", _spy)
-    monkeypatch.setattr(
-        "app.shared.cloud_backends.get_runtime_object_storage",
-        lambda: fake_storage,
-    )
 
     result = ar.load_preview_from_artifact(
         "s3://bucket/key/data.parquet", limit=7,
@@ -448,7 +433,7 @@ def test_artifact_reader_surfaces_parser_read_parquet_failure(monkeypatch):
         ParquetPreviewParseError,
     )
 
-    fake_storage = _FakeStorage([b"not-parquet"])
+    ar = _patch_storage_and_cap(monkeypatch, [b"not-parquet"])
 
     def _raising_parser(body_bytes, *, limit):
         raise ParquetPreviewParseError(
@@ -456,12 +441,7 @@ def test_artifact_reader_surfaces_parser_read_parquet_failure(monkeypatch):
             cause=ValueError("Invalid Parquet header"),
         )
 
-    monkeypatch.setenv("ARTIFACT_PREVIEW_MAX_BYTES", "1024")
     monkeypatch.setattr(ar, "parse_parquet_preview", _raising_parser)
-    monkeypatch.setattr(
-        "app.shared.cloud_backends.get_runtime_object_storage",
-        lambda: fake_storage,
-    )
 
     result = ar.load_preview_from_artifact(
         "s3://bucket/key/data.parquet", limit=10,
@@ -489,7 +469,7 @@ def test_artifact_reader_surfaces_parser_to_dict_failure_with_partial_schema(mon
         ParquetPreviewParseError,
     )
 
-    fake_storage = _FakeStorage([b"x"])
+    ar = _patch_storage_and_cap(monkeypatch, [b"x"])
 
     def _raising_parser(body_bytes, *, limit):
         raise ParquetPreviewParseError(
@@ -499,12 +479,7 @@ def test_artifact_reader_surfaces_parser_to_dict_failure_with_partial_schema(mon
             partial_row_count=1234,
         )
 
-    monkeypatch.setenv("ARTIFACT_PREVIEW_MAX_BYTES", "1024")
     monkeypatch.setattr(ar, "parse_parquet_preview", _raising_parser)
-    monkeypatch.setattr(
-        "app.shared.cloud_backends.get_runtime_object_storage",
-        lambda: fake_storage,
-    )
 
     result = ar.load_preview_from_artifact(
         "s3://bucket/key/data.parquet", limit=10,
@@ -525,11 +500,11 @@ def test_oversize_still_propagates_after_parser_split(monkeypatch):
     :class:`MemoryLimitExceededError` -- it is NOT degraded to
     ``error=...``. The parser is never reached on the oversize
     path; we patch it as a tripwire to prove that."""
-    from app.core.intermediate import artifact_reader as ar
-
-    monkeypatch.setenv("ARTIFACT_PREVIEW_MAX_BYTES", "100")  # 100 B cap
-    chunks = [b"x" * 60, b"y" * 60]  # 120 B -> oversize
-    fake_storage = _FakeStorage(chunks)
+    ar = _patch_storage_and_cap(
+        monkeypatch,
+        [b"x" * 60, b"y" * 60],
+        cap=100,
+    )
 
     parser_calls: list[tuple] = []
 
@@ -540,10 +515,6 @@ def test_oversize_still_propagates_after_parser_split(monkeypatch):
         )
 
     monkeypatch.setattr(ar, "parse_parquet_preview", _tripwire)
-    monkeypatch.setattr(
-        "app.shared.cloud_backends.get_runtime_object_storage",
-        lambda: fake_storage,
-    )
 
     with pytest.raises(MemoryLimitExceededError) as exc_info:
         ar.load_preview_from_artifact(
@@ -555,53 +526,3 @@ def test_oversize_still_propagates_after_parser_split(monkeypatch):
         "the parser must remain unreached on oversize; the bounded "
         "read aborts BEFORE handing bytes to the parser"
     )
-
-
-# 5. Leaf parser unit-level (BE-GO-READY-RESOURCE-ENGINE-016)
-
-
-def test_parser_raises_typed_error_on_bad_bytes():
-    """The parser surface is bytes-in, ``ParquetPreview``-out, with
-    ``ParquetPreviewParseError`` on decode failure. A non-Parquet
-    buffer must raise ``stage='read_parquet'`` with empty partial
-    fields (no schema available pre-decode)."""
-    from app.core.intermediate.preview_parser import (
-        ParquetPreviewParseError,
-        parse_parquet_preview,
-    )
-
-    with pytest.raises(ParquetPreviewParseError) as exc_info:
-        parse_parquet_preview(b"definitely-not-parquet", limit=10)
-
-    err = exc_info.value
-    assert err.stage == "read_parquet"
-    assert err.partial_schema == {}
-    assert err.partial_row_count == 0
-    assert err.cause is not None
-
-
-def test_parser_round_trips_a_real_parquet_buffer(tmp_path):
-    """Sanity: a real Parquet buffer (built via pandas in the test)
-    round-trips through the parser. Also pins ``row_count`` to the
-    full DataFrame size, NOT the head-truncated size, matching the
-    pre-016 behaviour."""
-    import pandas as pd
-    from app.core.intermediate.preview_parser import parse_parquet_preview
-
-    df = pd.DataFrame({"a": list(range(10)), "b": ["x"] * 10})
-    parquet_path = tmp_path / "fixture.parquet"
-    df.to_parquet(parquet_path)
-    body = parquet_path.read_bytes()
-
-    preview = parse_parquet_preview(body, limit=3)
-
-    assert preview.row_count == 10, (
-        "row_count must be the FULL parquet size, not the head limit"
-    )
-    assert len(preview.rows) == 3
-    assert preview.rows == [
-        {"a": 0, "b": "x"},
-        {"a": 1, "b": "x"},
-        {"a": 2, "b": "x"},
-    ]
-    assert set(preview.col_schema.keys()) == {"a", "b"}

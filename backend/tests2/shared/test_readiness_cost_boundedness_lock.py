@@ -6,6 +6,7 @@ BE-GO-READY-OBSERVABILITY-ENGINE-025-READINESS-COST-BOUNDEDNESS-AUDIT.
 
 from __future__ import annotations
 
+from contextlib import ExitStack
 from pathlib import Path
 from unittest.mock import patch
 
@@ -21,6 +22,37 @@ _REPO_ROOT = Path(__file__).resolve().parents[3]
 _HEALTH_PY = (
     _REPO_ROOT / "backend" / "app" / "observability" / "health.py"
 )
+
+_READINESS_CHECKS_OK = {
+    "check_postgres": (True, "ok"),
+    "check_redis": (True, "ok"),
+    "check_pool_headroom": (True, "ok"),
+    "check_migrations_aligned": (True, "ok"),
+    "check_object_storage": (True, "ok"),
+    "check_reconciliation_backlog": (True, "ok"),
+    "check_beat_heartbeat": (True, "ok"),
+    "check_bootstrap_complete": (True, "ok"),
+}
+
+_READINESS_EXPECTED_ORDER = [
+    "postgres",
+    "redis",
+    "pool_headroom",
+    "migrations",
+    "object_storage",
+    "reconciliation_backlog",
+    "beat_heartbeat",
+    "bootstrap_complete",
+]
+
+
+def _patch_readiness_checks(h, **overrides):
+    outcomes = _READINESS_CHECKS_OK.copy()
+    outcomes.update(overrides)
+    stack = ExitStack()
+    for check_name, outcome in outcomes.items():
+        stack.enter_context(patch.object(h, check_name, return_value=outcome))
+    return stack
 
 
 # 1. Default-disabled posture for opt-in checks
@@ -149,9 +181,10 @@ def test_beat_heartbeat_default_threshold_skip_returns_true():
 # BE_INSTALLATION_AUDIT.md).
 
 
-def test_gather_readiness_keyset_is_exactly_8():
+def test_gather_readiness_keyset_is_exactly_8_in_canonical_order():
     """Adding a 9th check MUST be paired with an audit update.
     This guard prevents silent expansion of the readiness surface.
+    The 8 keys must also keep their stable insertion order.
 
     If you are adding a 9th check, ALSO update:
       - `.agent-temp/BE_INSTALLATION_AUDIT.md` §19 (cost classification);
@@ -163,14 +196,7 @@ def test_gather_readiness_keyset_is_exactly_8():
     # Stub all current checks to OK so the test does not depend on
     # local state. Any new check added without updating this stub
     # list would fail the assertion below.
-    with patch.object(h, "check_postgres", return_value=(True, "ok")), \
-         patch.object(h, "check_redis", return_value=(True, "ok")), \
-         patch.object(h, "check_pool_headroom", return_value=(True, "ok")), \
-         patch.object(h, "check_migrations_aligned", return_value=(True, "ok")), \
-         patch.object(h, "check_object_storage", return_value=(True, "ok")), \
-         patch.object(h, "check_reconciliation_backlog", return_value=(True, "ok")), \
-         patch.object(h, "check_beat_heartbeat", return_value=(True, "ok")), \
-         patch.object(h, "check_bootstrap_complete", return_value=(True, "ok")):
+    with _patch_readiness_checks(h):
         payload = h.gather_readiness()
 
     assert len(payload.body["checks"]) == 8, (
@@ -179,38 +205,9 @@ def test_gather_readiness_keyset_is_exactly_8():
         "9th check, see the audit guidance in the docstring above."
     )
 
-
-def test_gather_readiness_keyset_canonical_order():
-    """The 8 keys are inserted in a stable order (Python 3.7+ dict
-    preserves insertion order). The ordering matters for operators
-    grepping `curl /ready | jq -r '.checks | keys[]'` — flipping
-    e.g. `bootstrap_complete` BEFORE `beat_heartbeat` would make
-    a stale dashboard alert fire on the wrong key."""
-    from app.observability import health as h
-
-    with patch.object(h, "check_postgres", return_value=(True, "ok")), \
-         patch.object(h, "check_redis", return_value=(True, "ok")), \
-         patch.object(h, "check_pool_headroom", return_value=(True, "ok")), \
-         patch.object(h, "check_migrations_aligned", return_value=(True, "ok")), \
-         patch.object(h, "check_object_storage", return_value=(True, "ok")), \
-         patch.object(h, "check_reconciliation_backlog", return_value=(True, "ok")), \
-         patch.object(h, "check_beat_heartbeat", return_value=(True, "ok")), \
-         patch.object(h, "check_bootstrap_complete", return_value=(True, "ok")):
-        payload = h.gather_readiness()
-
-    expected_order = [
-        "postgres",
-        "redis",
-        "pool_headroom",
-        "migrations",
-        "object_storage",
-        "reconciliation_backlog",
-        "beat_heartbeat",
-        "bootstrap_complete",
-    ]
     actual_order = list(payload.body["checks"].keys())
-    assert actual_order == expected_order, (
-        f"Readiness key order changed: expected {expected_order}, "
+    assert actual_order == _READINESS_EXPECTED_ORDER, (
+        f"Readiness key order changed: expected {_READINESS_EXPECTED_ORDER}, "
         f"got {actual_order}. Reorder the gather_readiness() body or "
         "update this assertion + the audit document explicitly."
     )

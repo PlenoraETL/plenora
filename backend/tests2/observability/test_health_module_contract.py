@@ -6,6 +6,7 @@ Lock the new boundary `app/observability/health.py`:
 
 from __future__ import annotations
 
+from contextlib import ExitStack
 from pathlib import Path
 from unittest.mock import patch
 
@@ -13,6 +14,33 @@ import pytest
 
 
 pytestmark = [pytest.mark.unit, pytest.mark.observability, pytest.mark.contract]
+
+
+_READINESS_CHECKS_OK = {
+    "check_postgres": (True, "ok"),
+    "check_redis": (True, "ok"),
+    "check_pool_headroom": (True, "1/12 in uso, 11 free"),
+    "check_migrations_aligned": (True, "aligned"),
+    "check_object_storage": (True, "ok"),
+    "check_reconciliation_backlog": (True, "pending=0 lost=0"),
+    "check_beat_heartbeat": (True, "skipped: disabled (threshold=0)"),
+    "check_bootstrap_complete": (True, "ok"),
+}
+
+_READINESS_KEYS = {
+    "postgres", "redis", "pool_headroom", "migrations",
+    "object_storage", "reconciliation_backlog",
+    "beat_heartbeat", "bootstrap_complete",
+}
+
+
+def _patch_readiness_checks(h, **overrides):
+    outcomes = _READINESS_CHECKS_OK.copy()
+    outcomes.update(overrides)
+    stack = ExitStack()
+    for check_name, outcome in outcomes.items():
+        stack.enter_context(patch.object(h, check_name, return_value=outcome))
+    return stack
 
 
 # Autouse fixture for BE-GO-READY-BOOTSTRAP-ENGINE-015 — default-True
@@ -404,29 +432,12 @@ def test_gather_readiness_returns_200_when_all_8_ok():
     disabled so this test stubs it as OK)."""
     import app.observability.health as h
 
-    with (
-        patch.object(h, "check_postgres", return_value=(True, "ok")),
-        patch.object(h, "check_redis", return_value=(True, "ok")),
-        patch.object(h, "check_pool_headroom", return_value=(True, "1/12 in uso, 11 free")),
-        patch.object(h, "check_migrations_aligned", return_value=(True, "aligned")),
-        patch.object(h, "check_object_storage", return_value=(True, "ok")),
-        patch.object(h, "check_reconciliation_backlog", return_value=(True, "pending=0 lost=0")),
-        patch.object(
-            h, "check_beat_heartbeat",
-            return_value=(True, "skipped: disabled (threshold=0)"),
-        ),
-        patch.object(h, "check_bootstrap_complete", return_value=(True, "ok")),
-    ):
+    with _patch_readiness_checks(h):
         payload = h.gather_readiness()
 
     assert payload.status_code == 200
     assert payload.body["status"] == "ready"
-    assert set(payload.body["checks"].keys()) == {
-        "postgres", "redis", "pool_headroom", "migrations",
-        "object_storage", "reconciliation_backlog",
-        "beat_heartbeat",
-        "bootstrap_complete",
-    }
+    assert set(payload.body["checks"].keys()) == _READINESS_KEYS
 
 
 def test_gather_readiness_returns_200_when_object_storage_skipped_capability_disabled():
@@ -435,16 +446,9 @@ def test_gather_readiness_returns_200_when_object_storage_skipped_capability_dis
     `object_storage` ritorna `(True, "skipped: capability disabled")`."""
     import app.observability.health as h
 
-    with (
-        patch.object(h, "check_postgres", return_value=(True, "ok")),
-        patch.object(h, "check_redis", return_value=(True, "ok")),
-        patch.object(h, "check_pool_headroom", return_value=(True, "ok")),
-        patch.object(h, "check_migrations_aligned", return_value=(True, "aligned")),
-        patch.object(
-            h, "check_object_storage",
-            return_value=(True, "skipped: capability disabled"),
-        ),
-        patch.object(h, "check_reconciliation_backlog", return_value=(True, "pending=0 lost=0")),
+    with _patch_readiness_checks(
+        h,
+        check_object_storage=(True, "skipped: capability disabled"),
     ):
         payload = h.gather_readiness()
 
@@ -457,13 +461,9 @@ def test_gather_readiness_returns_200_when_object_storage_skipped_capability_dis
 def test_gather_readiness_returns_503_on_pool_saturo():
     import app.observability.health as h
 
-    with (
-        patch.object(h, "check_postgres", return_value=(True, "ok")),
-        patch.object(h, "check_redis", return_value=(True, "ok")),
-        patch.object(h, "check_pool_headroom", return_value=(False, "pool saturo")),
-        patch.object(h, "check_migrations_aligned", return_value=(True, "aligned")),
-        patch.object(h, "check_object_storage", return_value=(True, "ok")),
-        patch.object(h, "check_reconciliation_backlog", return_value=(True, "pending=0 lost=0")),
+    with _patch_readiness_checks(
+        h,
+        check_pool_headroom=(False, "pool saturo"),
     ):
         payload = h.gather_readiness()
 
@@ -475,13 +475,9 @@ def test_gather_readiness_returns_503_on_pool_saturo():
 def test_gather_readiness_returns_503_on_pending_migrations():
     import app.observability.health as h
 
-    with (
-        patch.object(h, "check_postgres", return_value=(True, "ok")),
-        patch.object(h, "check_redis", return_value=(True, "ok")),
-        patch.object(h, "check_pool_headroom", return_value=(True, "ok")),
-        patch.object(h, "check_migrations_aligned", return_value=(False, "1 pending")),
-        patch.object(h, "check_object_storage", return_value=(True, "ok")),
-        patch.object(h, "check_reconciliation_backlog", return_value=(True, "pending=0 lost=0")),
+    with _patch_readiness_checks(
+        h,
+        check_migrations_aligned=(False, "1 pending"),
     ):
         payload = h.gather_readiness()
 
@@ -495,16 +491,9 @@ def test_gather_readiness_returns_503_on_object_storage_failure():
     check fallisce (bucket assente / credenziali / network) -> 503."""
     import app.observability.health as h
 
-    with (
-        patch.object(h, "check_postgres", return_value=(True, "ok")),
-        patch.object(h, "check_redis", return_value=(True, "ok")),
-        patch.object(h, "check_pool_headroom", return_value=(True, "ok")),
-        patch.object(h, "check_migrations_aligned", return_value=(True, "aligned")),
-        patch.object(
-            h, "check_object_storage",
-            return_value=(False, "EndpointConnectionError: timeout"),
-        ),
-        patch.object(h, "check_reconciliation_backlog", return_value=(True, "pending=0 lost=0")),
+    with _patch_readiness_checks(
+        h,
+        check_object_storage=(False, "EndpointConnectionError: timeout"),
     ):
         payload = h.gather_readiness()
 
@@ -519,15 +508,11 @@ def test_gather_readiness_returns_503_on_reconciliation_backlog_over_threshold()
     sopra threshold porta /ready a 503."""
     import app.observability.health as h
 
-    with (
-        patch.object(h, "check_postgres", return_value=(True, "ok")),
-        patch.object(h, "check_redis", return_value=(True, "ok")),
-        patch.object(h, "check_pool_headroom", return_value=(True, "ok")),
-        patch.object(h, "check_migrations_aligned", return_value=(True, "aligned")),
-        patch.object(h, "check_object_storage", return_value=(True, "ok")),
-        patch.object(
-            h, "check_reconciliation_backlog",
-            return_value=(False, "lost=42 over 10 (pending=0 lost=42)"),
+    with _patch_readiness_checks(
+        h,
+        check_reconciliation_backlog=(
+            False,
+            "lost=42 over 10 (pending=0 lost=42)",
         ),
     ):
         payload = h.gather_readiness()
@@ -601,17 +586,9 @@ def test_gather_readiness_returns_503_when_bootstrap_not_complete():
     fails, /ready returns 503 with `bootstrap_complete.ok=False`."""
     import app.observability.health as h
 
-    with (
-        patch.object(h, "check_postgres", return_value=(True, "ok")),
-        patch.object(h, "check_redis", return_value=(True, "ok")),
-        patch.object(h, "check_pool_headroom", return_value=(True, "ok")),
-        patch.object(h, "check_migrations_aligned", return_value=(True, "aligned")),
-        patch.object(h, "check_object_storage", return_value=(True, "ok")),
-        patch.object(h, "check_reconciliation_backlog", return_value=(True, "pending=0 lost=0")),
-        patch.object(
-            h, "check_bootstrap_complete",
-            return_value=(False, "bootstrap not complete"),
-        ),
+    with _patch_readiness_checks(
+        h,
+        check_bootstrap_complete=(False, "bootstrap not complete"),
     ):
         payload = h.gather_readiness()
 
@@ -632,14 +609,7 @@ def test_gather_readiness_includes_bootstrap_complete_key():
 
     # Use the default autouse fixture (is_bootstrapped → True)
     # plus stub the other 6 to avoid real DB/Redis/S3 I/O.
-    with (
-        patch.object(h, "check_postgres", return_value=(True, "ok")),
-        patch.object(h, "check_redis", return_value=(True, "ok")),
-        patch.object(h, "check_pool_headroom", return_value=(True, "ok")),
-        patch.object(h, "check_migrations_aligned", return_value=(True, "aligned")),
-        patch.object(h, "check_object_storage", return_value=(True, "ok")),
-        patch.object(h, "check_reconciliation_backlog", return_value=(True, "pending=0 lost=0")),
-    ):
+    with _patch_readiness_checks(h):
         payload = h.gather_readiness()
 
     assert "bootstrap_complete" in payload.body["checks"]

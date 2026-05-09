@@ -124,6 +124,12 @@ EXPECTED_GLOBAL_CODES: Set[str] = {
     "validation_error",
 }
 
+_GLOBAL_CONSTANT_NAMES = {
+    "INTERNAL_ERROR",
+    "CANVAS_CORRUPTED",
+    "VALIDATION_ERROR",
+}
+
 
 def test_known_domain_codes_matches_expected_lock():
     """Il `frozenset` esposto dal catalog deve combaciare
@@ -142,7 +148,8 @@ def test_catalog_count_domain_fiftytwo():
     1 BE-GO-READY-ERROR-CODES-013 service_not_initialized +
     1 BE-GO-READY-ERROR-CODES-014 access_denied +
     27 BE-GO-READY-AUTH-DOMAIN-PROMOTION-001 auth family)."""
-    assert len(error_codes.KNOWN_DOMAIN_CODES) == 52
+    assert len(EXPECTED_DOMAIN_CODES) == 52
+    assert len(error_codes.KNOWN_DOMAIN_CODES) == len(EXPECTED_DOMAIN_CODES)
 
 
 def test_catalog_domain_and_global_disjoint():
@@ -157,65 +164,13 @@ def test_catalog_constants_match_set_values():
     valore equivalente nel `frozenset` (no drift fra dichiarazione
     e set)."""
     domain_constants = {
-        # batch 006
-        error_codes.CONNECTION_IN_USE,
-        error_codes.API_CONNECTION_IN_USE,
-        error_codes.PROJECT_HAS_DEPENDENCIES,
-        error_codes.PROJECT_CLEANUP_PARTIAL,
-        error_codes.DATASOURCE_IN_USE,
-        error_codes.OBJECT_STORAGE_DISABLED,
-        error_codes.AWS_CRT_MISSING,
-        error_codes.AWS_CREDENTIALS_EXPIRED,
-        error_codes.CARICA_LAUNCH_FAILED,
-        error_codes.CARICA_SCHEDULER_FAILED,
-        error_codes.SCHEDULE_EXECUTION_FATAL,
-        # batch 009 — Not-Found family
-        error_codes.PROJECT_NOT_FOUND,
-        error_codes.TASK_NOT_FOUND,
-        error_codes.SCHEDULE_NOT_FOUND,
-        error_codes.RUN_NOT_FOUND,
-        error_codes.BUNDLE_NOT_FOUND,
-        error_codes.CONNECTION_NOT_FOUND,
-        error_codes.API_CONNECTION_NOT_FOUND,
-        error_codes.FILE_SOURCE_NOT_FOUND,
-        error_codes.DATASOURCE_NOT_FOUND,
-        error_codes.TICKET_NOT_FOUND,
-        # batch 010 — External-Service family
-        error_codes.EXTERNAL_SERVICE_UNREACHABLE,
-        # BE-GO-READY-MEMORY-OOM-001 — Memory/OOM family
-        error_codes.MEMORY_LIMIT_EXCEEDED,
-        # BE-GO-READY-ERROR-CODES-013 — Service initialization family
-        error_codes.SERVICE_NOT_INITIALIZED,
-        # BE-GO-READY-ERROR-CODES-014 — Access Denied family
-        error_codes.ACCESS_DENIED,
-        # BE-GO-READY-AUTH-DOMAIN-PROMOTION-001 — Auth family
-        error_codes.AUTH_TOKEN_MISSING,
-        error_codes.AUTH_TOKEN_INVALID,
-        error_codes.AUTH_TOKEN_REVOKED,
-        error_codes.AUTH_USER_NOT_FOUND_OR_DISABLED,
-        error_codes.AUTH_INVALID_CREDENTIALS,
-        error_codes.AUTH_MFA_INVALID,
-        error_codes.AUTH_ACCOUNT_DISABLED,
-        error_codes.AUTH_MFA_REQUIRED,
-        error_codes.AUTH_ROLE_INSUFFICIENT_FOR_WRITE,
-        error_codes.AUTH_ROLE_KIOSK_ONLY,
-        error_codes.AUTH_ROLE_ADMIN_REQUIRED,
-        error_codes.AUTH_ROLE_SUPERADMIN_REQUIRED,
-        error_codes.AUTH_ROLE_CREATE_PRIVILEGE_REQUIRED,
-        error_codes.AUTH_FIELD_ROLE_RESTRICTED,
-        error_codes.AUTH_SELF_MODIFY_DENIED,
-        error_codes.AUTH_SELF_DISABLE_DENIED,
-        error_codes.AUTH_HIERARCHICAL_OWNER_REQUIRED,
-        error_codes.AUTH_OWNER_ONLY,
-        error_codes.USER_NOT_FOUND,
-        error_codes.GROUP_NOT_FOUND,
-        error_codes.USERNAME_ALREADY_EXISTS,
-        error_codes.GROUP_ID_ALREADY_EXISTS,
-        error_codes.GROUP_DEFAULT_NOT_DELETABLE,
-        error_codes.AUTH_MFA_CODE_INVALID,
-        error_codes.AUTH_SELF_DELETE_DENIED,
-        error_codes.AUTH_RATE_LIMIT_EXCEEDED,
-        error_codes.AUTH_REVOCATION_UNAVAILABLE,
+        value
+        for name, value in vars(error_codes).items()
+        if (
+            name.isupper()
+            and name not in _GLOBAL_CONSTANT_NAMES
+            and isinstance(value, str)
+        )
     }
     assert domain_constants == set(error_codes.KNOWN_DOMAIN_CODES)
 
@@ -769,7 +724,7 @@ def _scan_value_error_str_e_callsites() -> Dict[str, int]:
 
 
 # Lock per-file (BE-GO-READY-ERROR-CODES-015 closure).
-# 41 call site totali in 10 file, classificati `KEEP_DYNAMIC_VALIDATION_COMPAT`
+# 42 call site totali in 11 file, classificati `KEEP_DYNAMIC_VALIDATION_COMPAT`
 # (vedi rationale in `error_codes.py::ACCEPTED_HTTP_FALLBACK_PATTERNS`).
 # Aggiunte/rimozioni richiedono aggiornamento esplicito del lock e
 # classificazione del nuovo sito (KEEP_DYNAMIC_VALIDATION_COMPAT,
@@ -784,6 +739,7 @@ EXPECTED_VALUE_ERROR_STR_E_COUNTS: Dict[str, int] = {
     "backend/app/core/estrai/router.py": 1,
     "backend/app/core/features/routes.py": 9,
     "backend/app/core/files/router.py": 10,
+    "backend/app/core/orchestrator/router.py": 1,
     "backend/app/core/projects/router.py": 1,
     "backend/app/core/tickets/router.py": 1,
 }
@@ -820,10 +776,10 @@ def test_value_error_str_e_callsite_lock():
 
 
 def test_value_error_str_e_total_count_lock():
-    """Sanity check: somma per-file == 41. Lock indipendente che
+    """Sanity check: somma per-file == 42. Lock indipendente che
     cattura desync fra `EXPECTED_VALUE_ERROR_STR_E_COUNTS` e somma
     intesa nel commit message."""
-    assert sum(EXPECTED_VALUE_ERROR_STR_E_COUNTS.values()) == 41
+    assert sum(EXPECTED_VALUE_ERROR_STR_E_COUNTS.values()) == 42
 
 
 def test_value_error_str_e_pattern_in_accepted_fallback():
