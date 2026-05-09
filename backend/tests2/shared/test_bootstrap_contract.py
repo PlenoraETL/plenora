@@ -18,7 +18,6 @@ os.environ.setdefault(
 import re
 from pathlib import Path
 from typing import List
-from unittest.mock import patch
 
 import pytest
 
@@ -61,13 +60,17 @@ def _patch_settings(monkeypatch, fake_settings) -> None:
     monkeypatch.setattr(config_module, "settings", fake_settings)
 
 
+def _patch_startup_validation(monkeypatch, validate_startup) -> None:
+    monkeypatch.setattr("app.startup_validation.validate_startup", validate_startup)
+
+
 def test_bootstrap_invokes_four_steps_in_canonical_order(monkeypatch):
     """validate_startup → validate_storage_config → init_all_dbs →
     _repair_psycopg2_ssl_env. Drift = the comment-encoded contract
     from `main.py` is broken."""
     calls: List[str] = []
 
-    def _record_settings_validate():
+    def _record_startup_validate(_settings):
         calls.append("validate_startup")
 
     def _record_storage_validate():
@@ -80,10 +83,9 @@ def test_bootstrap_invokes_four_steps_in_canonical_order(monkeypatch):
         calls.append("_repair_psycopg2_ssl_env")
 
     # Patch the symbols that `bootstrap()` imports lazily.
-    fake_settings = type(
-        "S", (), {"validate_startup": staticmethod(_record_settings_validate)}
-    )
+    fake_settings = type("S", (), {})()
     _patch_settings(monkeypatch, fake_settings)
+    _patch_startup_validation(monkeypatch, _record_startup_validate)
     monkeypatch.setattr(
         "app.shared.cloud_backends.validate_storage_config",
         _record_storage_validate,
@@ -110,8 +112,9 @@ def test_bootstrap_signature_returns_none(monkeypatch):
     parameters. Caller must not depend on a return."""
     _patch_settings(
         monkeypatch,
-        type("S", (), {"validate_startup": staticmethod(lambda: None)}),
+        type("S", (), {})(),
     )
+    _patch_startup_validation(monkeypatch, lambda _settings: None)
     monkeypatch.setattr(
         "app.shared.cloud_backends.validate_storage_config", lambda: None
     )
@@ -157,8 +160,9 @@ def test_ssl_env_cleanup_runs_after_init_all_dbs(monkeypatch):
 
     _patch_settings(
         monkeypatch,
-        type("S", (), {"validate_startup": staticmethod(lambda: None)}),
+        type("S", (), {})(),
     )
+    _patch_startup_validation(monkeypatch, lambda _settings: None)
     monkeypatch.setattr(
         "app.shared.cloud_backends.validate_storage_config", lambda: None
     )
@@ -240,10 +244,11 @@ def test_bootstrap_is_idempotent(monkeypatch):
             counts[name] += 1
         return _inner
 
-    fake_settings = type(
-        "S", (), {"validate_startup": staticmethod(_bump("validate_startup"))}
-    )
+    fake_settings = type("S", (), {})()
     _patch_settings(monkeypatch, fake_settings)
+    _patch_startup_validation(
+        monkeypatch, lambda _settings: _bump("validate_startup")()
+    )
     monkeypatch.setattr(
         "app.shared.cloud_backends.validate_storage_config",
         _bump("validate_storage_config"),
@@ -275,13 +280,14 @@ def test_bootstrap_propagates_validate_startup_systemexit(monkeypatch):
     """validate_startup exits with SystemExit(1) when DATA_DIR is
     unwritable or Redis is unreachable on server. `bootstrap()` must
     not swallow it."""
-    def _exit_one():
+    def _exit_one(_settings):
         raise SystemExit(1)
 
     _patch_settings(
         monkeypatch,
-        type("S", (), {"validate_startup": staticmethod(_exit_one)}),
+        type("S", (), {})(),
     )
+    _patch_startup_validation(monkeypatch, _exit_one)
     # Following steps would raise too; we want to assert they don't
     # run (because the first step raised).
     other_called = {"flag": False}
@@ -312,8 +318,9 @@ def test_bootstrap_propagates_storage_config_error(monkeypatch):
 
     _patch_settings(
         monkeypatch,
-        type("S", (), {"validate_startup": staticmethod(lambda: None)}),
+        type("S", (), {})(),
     )
+    _patch_startup_validation(monkeypatch, lambda _settings: None)
     monkeypatch.setattr(
         "app.shared.cloud_backends.validate_storage_config", _bad_storage
     )
@@ -346,8 +353,9 @@ def test_bootstrap_propagates_init_all_dbs_error(monkeypatch):
 
     _patch_settings(
         monkeypatch,
-        type("S", (), {"validate_startup": staticmethod(lambda: None)}),
+        type("S", (), {})(),
     )
+    _patch_startup_validation(monkeypatch, lambda _settings: None)
     monkeypatch.setattr(
         "app.shared.cloud_backends.validate_storage_config", lambda: None
     )
@@ -478,9 +486,8 @@ def test_bootstrap_module_does_not_import_main():
 
 
 def test_bootstrap_module_uses_lazy_imports_for_heavy_modules():
-    """The four heavy collaborators (settings, validate_storage_config,
-    init_all_dbs) should be imported lazily inside `bootstrap()` so
-    that `import app.bootstrap` itself remains cheap and side-effect
+    """Heavy collaborators should be imported lazily inside `bootstrap()`
+    so that `import app.bootstrap` itself remains cheap and side-effect
     free."""
     text = _read(_BOOTSTRAP_PY)
     # Ensure the imports do NOT appear at module top level (above
@@ -488,6 +495,7 @@ def test_bootstrap_module_uses_lazy_imports_for_heavy_modules():
     head, _, _ = text.partition("def bootstrap")
     for forbidden in (
         "from app.config import settings",
+        "from app.startup_validation import validate_startup",
         "from app.shared.cloud_backends import validate_storage_config",
         "from app.core.runtime.db_init import init_all_dbs",
     ):

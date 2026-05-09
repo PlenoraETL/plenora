@@ -1,5 +1,5 @@
 from app.shared import api_utils
-from app.shared.json_path import extract_json_value, geojson_to_wkt
+from app.shared.resources.json_path import extract_json_value, geojson_to_wkt
 
 
 def test_json_path_extracts_nested_filter_with_dotted_key():

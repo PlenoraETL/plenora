@@ -13,6 +13,7 @@ import sys
 import pytest
 
 from app.config import Settings
+from app.startup_validation import ensure_redis, wsl_redis_fallback_allowed
 
 
 pytestmark = [pytest.mark.unit, pytest.mark.shared, pytest.mark.contract]
@@ -88,7 +89,7 @@ def _patch_platform_env(
 )
 def test_wsl_fallback_gating(monkeypatch, platform, environment, expected):
     _patch_platform_env(monkeypatch, platform=platform, environment=environment)
-    assert Settings._wsl_redis_fallback_allowed() is expected
+    assert wsl_redis_fallback_allowed() is expected
 
 
 def test_wsl_fallback_gating_env_fallback_to_env_var(monkeypatch):
@@ -96,7 +97,7 @@ def test_wsl_fallback_gating_env_fallback_to_env_var(monkeypatch):
     monkeypatch.setattr(sys, "platform", "win32")
     monkeypatch.delenv("ENVIRONMENT", raising=False)
     monkeypatch.setenv("ENV", "production")
-    assert Settings._wsl_redis_fallback_allowed() is False
+    assert wsl_redis_fallback_allowed() is False
 
 
 def test_wsl_fallback_gating_default_dev(monkeypatch):
@@ -104,10 +105,10 @@ def test_wsl_fallback_gating_default_dev(monkeypatch):
     monkeypatch.setattr(sys, "platform", "win32")
     monkeypatch.delenv("ENVIRONMENT", raising=False)
     monkeypatch.delenv("ENV", raising=False)
-    assert Settings._wsl_redis_fallback_allowed() is True
+    assert wsl_redis_fallback_allowed() is True
 
 
-# _ensure_redis: server path (no WSL, operational message)
+# ensure_redis: server path (no WSL, operational message)
 
 
 @pytest.mark.parametrize(
@@ -132,7 +133,7 @@ def test_server_path_no_wsl_attempt(monkeypatch, platform, environment):
     settings = Settings()
     errors: list = []
     warnings: list = []
-    settings._ensure_redis(errors, warnings)
+    ensure_redis(settings, errors, warnings)
 
     assert popen_calls == [], (
         f"server path deve evitare subprocess.Popen WSL; chiamate: {popen_calls}"
@@ -157,14 +158,14 @@ def test_server_path_uses_default_url_when_unset(monkeypatch):
     settings = Settings()
     errors: list = []
     warnings: list = []
-    settings._ensure_redis(errors, warnings)
+    ensure_redis(settings, errors, warnings)
 
     assert len(errors) == 1
     assert "redis://localhost:6379/0" in errors[0]
     assert "wsl" not in errors[0].lower()
 
 
-# _ensure_redis: dev Windows path (WSL fallback preserved)
+# ensure_redis: dev Windows path (WSL fallback preserved)
 
 
 def test_dev_windows_path_invokes_wsl(monkeypatch):
@@ -175,7 +176,7 @@ def test_dev_windows_path_invokes_wsl(monkeypatch):
     settings = Settings()
     errors: list = []
     warnings: list = []
-    settings._ensure_redis(errors, warnings)
+    ensure_redis(settings, errors, warnings)
 
     # Esattamente un tentativo WSL: il fake Popen solleva
     # FileNotFoundError, gestito come errore "WSL non disponibile".
@@ -187,7 +188,7 @@ def test_dev_windows_path_invokes_wsl(monkeypatch):
     assert any("wsl" in e.lower() for e in errors)
 
 
-# _ensure_redis: Redis raggiungibile -> nessun side effect
+# ensure_redis: Redis raggiungibile -> nessun side effect
 
 
 @pytest.mark.parametrize(
@@ -205,7 +206,7 @@ def test_redis_reachable_no_side_effects(monkeypatch, platform, environment):
     settings = Settings()
     errors: list = []
     warnings: list = []
-    settings._ensure_redis(errors, warnings)
+    ensure_redis(settings, errors, warnings)
 
     assert errors == []
     assert warnings == []

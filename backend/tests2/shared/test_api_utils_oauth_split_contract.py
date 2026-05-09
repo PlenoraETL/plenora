@@ -23,7 +23,8 @@ def _defined_functions(path: Path) -> set[str]:
 
 def test_oauth_token_implementation_lives_outside_api_utils():
     api_utils_path = APP_SHARED / "api_utils.py"
-    oauth_path = APP_SHARED / "oauth.py"
+    oauth_path = APP_SHARED / "connections" / "oauth.py"
+    root_oauth_path = APP_SHARED / "oauth.py"
 
     api_utils_functions = _defined_functions(api_utils_path)
     oauth_functions = _defined_functions(oauth_path)
@@ -39,6 +40,7 @@ def test_oauth_token_implementation_lives_outside_api_utils():
 
     assert token_impl_functions.isdisjoint(api_utils_functions)
     assert token_impl_functions.issubset(oauth_functions)
+    assert not root_oauth_path.exists()
 
     api_utils_src = api_utils_path.read_text(encoding="utf-8")
     assert "_OAUTH2_TOKEN_CACHE" not in api_utils_src

@@ -11,8 +11,8 @@ from typing import Dict, Optional
 import requests
 from requests.adapters import HTTPAdapter
 
-from app.shared import oauth as _oauth
-from app.shared.oauth import (
+from app.shared.connections import oauth as _oauth
+from app.shared.connections.oauth import (
     get_arcgis_token,
     get_cached_oauth2_token,
     invalidate_oauth2_token,

@@ -11,21 +11,15 @@ from urllib.parse import quote_plus
 from sqlalchemy import create_engine, text
 from sqlalchemy.engine import Engine
 
+from app.db.query_session import QueryConnection
 from app.utils.logger import get_logger
 
 
 logger = get_logger(__name__)
 
 
-class EngineConnection(Protocol):
+class EngineConnection(QueryConnection, Protocol):
     """Connection shape required by DefaultEngineFactory."""
-
-    type: str
-    host: str
-    port: int
-    database: str
-    username: str
-    password: str
 
 
 class DefaultEngineFactory:

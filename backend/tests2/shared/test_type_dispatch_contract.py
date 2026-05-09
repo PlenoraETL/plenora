@@ -1,7 +1,7 @@
 """
 Contract test — dispatch dei tipi colonna (post-refactor C).
 
-Dopo la centralizzazione in `app.shared.resources.column_types`, il vocabolario
+Dopo la centralizzazione in `app.core.resources.column_types`, il vocabolario
 """
 
 from __future__ import annotations
@@ -138,7 +138,7 @@ def _extract_auto_mapping_body_source() -> str:
 
 
 @pytest.mark.parametrize("alias,expected_dtype", [
-    # Alias map post-refactor C: sorgente unica in app.shared.resources.column_types
+    # Alias map post-refactor C: sorgente unica in app.core.resources.column_types
     ("int",     "int64"),
     ("integer", "int64"),
     ("real",    "float64"),
@@ -156,10 +156,10 @@ def _extract_auto_mapping_body_source() -> str:
 def test_canvas_type_to_pandas_dtype_behavior(alias, expected_dtype):
     """Behavior contract del dispatch canvas-type -> pandas-dtype.
 
-    Post refactor C la dispatch vive in `app.shared.resources.column_types.canvas_type_to_pandas_dtype`.
+    Post refactor C la dispatch vive in `app.core.resources.column_types.canvas_type_to_pandas_dtype`.
     I test restano sul comportamento osservabile (input->output), non sull'impl.
     """
-    from app.shared.resources.column_types import canvas_type_to_pandas_dtype
+    from app.core.resources.column_types import canvas_type_to_pandas_dtype
     assert canvas_type_to_pandas_dtype(alias) == expected_dtype
 
 

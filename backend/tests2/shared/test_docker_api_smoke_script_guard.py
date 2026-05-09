@@ -113,6 +113,24 @@ def test_docker_api_smoke_script_requires_seeded_credentials():
         )
 
 
+def test_docker_api_smoke_script_serializes_json_payloads_safely():
+    text = _SCRIPT.read_text(encoding="utf-8")
+    for marker in (
+        "login_payload_json",
+        "project_payload_json",
+        "json.dumps",
+    ):
+        assert marker in text, (
+            f"scripts/docker-api-smoke.sh must keep safe JSON serialization "
+            f"marker {marker!r} for env-provided smoke credentials and "
+            "generated project names."
+        )
+    assert '\\"username\\":\\"${SMOKE_USERNAME}\\"' not in text, (
+        "scripts/docker-api-smoke.sh must not interpolate env credentials "
+        "directly into JSON strings."
+    )
+
+
 def test_docker_api_smoke_script_does_not_leave_full_acceptance_pending():
     text = _SCRIPT.read_text(encoding="utf-8")
     offenders = [

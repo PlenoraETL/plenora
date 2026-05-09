@@ -14,7 +14,7 @@ import requests
 from app.shared.api_utils import (
     get_shared_session,
 )
-from app.shared.log_sanitization import (
+from app.observability.log_sanitization import (
     sanitize_for_log,
     sanitize_url_for_log,
 )

@@ -795,38 +795,6 @@ class Settings:
         return self._directory(task_id, base=self.TASKS_DIR)
 
 
-    def _ensure_redis(self, errors: list, warnings: list) -> None:
-        """Compatibility shim; operational logic lives in startup_validation."""
-        from app.startup_validation import ensure_redis
-
-        ensure_redis(self, errors, warnings)
-        return
-
-    @staticmethod
-    def _wsl_redis_fallback_allowed() -> bool:
-        """Compatibility shim; operational logic lives in startup_validation."""
-        from app.startup_validation import wsl_redis_fallback_allowed
-
-        return wsl_redis_fallback_allowed()
-
-    def _ensure_redis_wsl_fallback(
-        self, redis_ping, errors: list, warnings: list
-    ) -> None:
-        """Compatibility shim; operational logic lives in startup_validation."""
-        from app.startup_validation import ensure_redis_wsl_fallback
-
-        ensure_redis_wsl_fallback(redis_ping, errors, warnings)
-
-
-    def validate_startup(self) -> None:
-        """Compatibility shim; operational logic lives in startup_validation."""
-        from app.startup_validation import validate_startup
-
-        validate_startup(self)
-        return
-
-
-
     def print_config(self):
         from app.config_display import print_config
 

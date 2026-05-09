@@ -1,16 +1,18 @@
 """
-Test per app/shared/column_types.py — adapter fra list[{name,type}] e dict{name:type}
+Test per app/core/resources/column_types.py - adapter fra list[{name,type}] e dict{name:type}
 
 + dispatch table canvas-type <-> pandas-dtype <-> canonical (fase C).
 """
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import numpy as np
 import pandas as pd
 import pytest
 
-from app.shared.resources.column_types import (
+from app.core.resources.column_types import (
     CANONICAL_BASE_TYPES,
     TYPE_ALIASES,
     canvas_type_to_pandas_dtype,
@@ -24,6 +26,21 @@ from app.shared.resources.column_types import (
 
 
 pytestmark = [pytest.mark.unit, pytest.mark.shared]
+
+
+def test_shared_column_types_is_compatibility_facade_only():
+    shared_module = (
+        Path(__file__).resolve().parents[2]
+        / "app"
+        / "shared"
+        / "resources"
+        / "column_types.py"
+    )
+    source = shared_module.read_text(encoding="utf-8")
+
+    assert "from app.core.resources.column_types import" in source
+    assert "\ndef " not in source
+    assert "\nclass " not in source
 
 
 # metadata_to_dict

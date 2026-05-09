@@ -21,7 +21,7 @@ from app.core.estrai.sql_errors import (
     is_user_error_message as _is_user_error_message,
     translate_sql_error as _traduci_errore_sql,
 )
-from app.shared.resources.column_types import (
+from app.core.resources.column_types import (
     lookup_canvas_column_type,
     pandas_series_to_canvas_type,
 )

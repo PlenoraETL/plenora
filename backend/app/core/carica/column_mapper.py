@@ -269,20 +269,20 @@ class ColumnMapper:
     def _infer_type_from_canvas(self, canvas_type: str) -> str:
         """Converte tipo canvas PLENORA in tipo interno per il mapping.
 
-        Delega a `app.shared.resources.column_types.normalize_canvas_type` — fonte
+        Delega a `app.core.resources.column_types.normalize_canvas_type` — fonte
         unica del vocabolario canonico (refactor C).
         """
-        from app.shared.resources.column_types import normalize_canvas_type
+        from app.core.resources.column_types import normalize_canvas_type
         return normalize_canvas_type(canvas_type)
 
     def _infer_type_from_pandas(self, series: pd.Series) -> str:
         """Converte dtype Pandas in tipo interno PLENORA (include euristica N11).
 
-        Delega a `app.shared.resources.column_types.pandas_series_to_canvas_type` —
+        Delega a `app.core.resources.column_types.pandas_series_to_canvas_type` —
         fonte unica della dispatch pandas->canonical (refactor C). Vedi il
         modulo per policy N11 e trade-off sui float-all-integer.
         """
-        from app.shared.resources.column_types import pandas_series_to_canvas_type
+        from app.core.resources.column_types import pandas_series_to_canvas_type
         return pandas_series_to_canvas_type(series)
 
     # MATCHING E SANITIZZAZIONE

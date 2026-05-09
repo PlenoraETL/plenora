@@ -42,8 +42,6 @@ _KNOWN_PLAIN_KEEP_COMPAT_MARKERS = frozenset(
         "app/core/arricchisci/execution_context.py::\"\"\"KEEP_COMPAT thin subclass of `CanvasExecutionContext`.",
         "app/core/auth/auth.py::\"\"\"KEEP_COMPAT wrapper: legge le tre costanti monkeypatch-ate a",
         "app/core/auth/auth.py::from app.core.auth.owner_dependencies import (  # noqa: F401 (compatibility export KEEP_COMPAT)",
-        "app/core/features/arcgis_client.py::`{success, feature_count, errors}` (KEEP_COMPAT per",
-        "app/core/features/arcgis_client.py::delegate `KEEP_COMPAT` per i caller `upload_imdf_layers` che",
         "app/core/features/models.py::KEEP_COMPAT: this service_url + layer_id shape is no longer used by the",
         "app/core/imdf/arcgis/publish_ops.py::thin `KEEP_COMPAT` wrapper to:",
         "app/core/imdf/arcgis/service_discovery.py::\"\"\"KEEP_COMPAT: IMDF wrapper over the generic ArcGIS folder boundary.",

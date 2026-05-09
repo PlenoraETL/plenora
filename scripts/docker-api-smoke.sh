@@ -173,6 +173,35 @@ print(data)
 PY
 }
 
+login_payload_json() {
+    python - "$SMOKE_USERNAME" "$SMOKE_PASSWORD" <<'PY'
+import json
+import sys
+
+print(json.dumps(
+    {"username": sys.argv[1], "password": sys.argv[2]},
+    separators=(",", ":"),
+))
+PY
+}
+
+project_payload_json() {
+    local project_name="$1"
+    python - "$project_name" <<'PY'
+import json
+import sys
+
+print(json.dumps(
+    {
+        "name": sys.argv[1],
+        "description": "Docker API smoke",
+        "project_type": "estrai",
+    },
+    separators=(",", ":"),
+))
+PY
+}
+
 curl_json() {
     local method="$1"
     local path="$2"
@@ -223,9 +252,11 @@ require_full_flow_credentials() {
 
 login_smoke_user() {
     local body_file
+    local payload
+    payload="$(login_payload_json)"
     body_file="$(
         curl_json "POST" "/api/auth/login" \
-            "{\"username\":\"${SMOKE_USERNAME}\",\"password\":\"${SMOKE_PASSWORD}\"}" \
+            "$payload" \
             "" "200"
     )"
     TOKEN="$(json_get "$body_file" "access_token")"
@@ -243,11 +274,13 @@ check_auth_me() {
 
 create_smoke_project() {
     local body_file
+    local payload
     local project_name
     project_name="docker-smoke-$(date +%s)"
+    payload="$(project_payload_json "$project_name")"
     body_file="$(
         curl_json "POST" "/api/projects" \
-            "{\"name\":\"${project_name}\",\"description\":\"Docker API smoke\",\"project_type\":\"estrai\"}" \
+            "$payload" \
             "$TOKEN" "201"
     )"
     PROJECT_ID="$(json_get "$body_file" "metadata.id")"

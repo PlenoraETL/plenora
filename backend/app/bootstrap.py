@@ -76,11 +76,12 @@ def bootstrap() -> None:
     from app.config import settings
     from app.core.runtime.db_init import init_all_dbs
     from app.shared.cloud_backends import validate_storage_config
+    from app.startup_validation import validate_startup
 
     # 1. Verifica prerequisiti di sistema (DATA_DIR scrivibile, ecc
     # Interrompe l'avvio con messaggio chiaro se la configurazione e'
     # incompleta
-    settings.validate_startup()
+    validate_startup(settings)
 
     # 2. Coerenza STORAGE_POLICY + provider + bucket + soglie
     # Fail-fast qui evita che un task Celery scopra al primo upload

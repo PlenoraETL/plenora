@@ -17,25 +17,29 @@ _CONFIG_DISPLAY = _REPO_ROOT / "backend" / "app" / "config_display.py"
 _STARTUP_VALIDATION = _REPO_ROOT / "backend" / "app" / "startup_validation.py"
 
 
-def _class_method(tree: ast.AST, class_name: str, method_name: str) -> ast.FunctionDef:
+def _class_method_names(tree: ast.AST, class_name: str) -> set[str]:
     for node in ast.walk(tree):
         if isinstance(node, ast.ClassDef) and node.name == class_name:
-            for item in node.body:
-                if isinstance(item, ast.FunctionDef) and item.name == method_name:
-                    return item
-    raise AssertionError(f"{class_name}.{method_name} not found")
+            return {
+                item.name for item in node.body if isinstance(item, ast.FunctionDef)
+            }
+    raise AssertionError(f"{class_name} not found")
 
 
-def test_settings_validate_startup_is_only_a_compatibility_shim():
+def test_settings_does_not_own_startup_methods():
     tree = ast.parse(_CONFIG.read_text(encoding="utf-8"))
-    method = _class_method(tree, "Settings", "validate_startup")
-    names = {node.id for node in ast.walk(method) if isinstance(node, ast.Name)}
+    method_names = _class_method_names(tree, "Settings")
 
-    assert "validate_startup" in names
-    forbidden = {"shutil", "subprocess", "socket", "stat", "os"}
-    assert not (names & forbidden), (
-        "Settings.validate_startup must not own operational behavior; "
-        "filesystem cleanup and Redis probing belong in app.startup_validation."
+    assert method_names.isdisjoint(
+        {
+            "_ensure_redis",
+            "_ensure_redis_wsl_fallback",
+            "_wsl_redis_fallback_allowed",
+            "validate_startup",
+        }
+    ), (
+        "Settings must remain data/config only; startup validation and "
+        "Redis probing belong in app.startup_validation."
     )
 
 

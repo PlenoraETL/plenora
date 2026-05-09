@@ -34,7 +34,7 @@ def enrich_canvas_types_from_metadata(
     from app.utils.logger import get_logger
     logger = get_logger(__name__)
 
-    from app.shared.resources.column_types import metadata_to_dict
+    from app.core.resources.column_types import metadata_to_dict
 
     node_column_types = carica_node_data.get("canvas_types", {}) or {}
 

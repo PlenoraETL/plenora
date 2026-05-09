@@ -14,6 +14,7 @@ from sqlalchemy import text
 from sqlalchemy.engine import Engine
 
 from app.db.query_engines import DefaultEngineFactory
+from app.db.query_session import ExecutionContext, apply_session_context
 from app.db.query_streaming import execute_streaming_to_file
 from app.utils.logger import get_logger
 
@@ -77,10 +78,10 @@ class EngineFactoryProtocol(Protocol):
 
 class LoggerProtocol(Protocol):
     """Protocollo per il logger — iniettabile per test silenziosi."""
-    def info(self, msg: str) -> None: ...
-    def error(self, msg: str) -> None: ...
-    def debug(self, msg: str) -> None: ...
-    def warning(self, msg: str) -> None: ...
+    def info(self, msg: str, *args: Any) -> None: ...
+    def error(self, msg: str, *args: Any) -> None: ...
+    def debug(self, msg: str, *args: Any) -> None: ...
+    def warning(self, msg: str, *args: Any) -> None: ...
 
 
 class SaveFunctionProtocol(Protocol):
@@ -96,10 +97,10 @@ class SaveFunctionProtocol(Protocol):
 
 class NullLogger:
     """Logger silenzioso per test — non produce output."""
-    def info(self, msg: str) -> None: pass
-    def error(self, msg: str) -> None: pass
-    def debug(self, msg: str) -> None: pass
-    def warning(self, msg: str) -> None: pass
+    def info(self, msg: str, *args: Any) -> None: pass
+    def error(self, msg: str, *args: Any) -> None: pass
+    def debug(self, msg: str, *args: Any) -> None: pass
+    def warning(self, msg: str, *args: Any) -> None: pass
 
 
 
@@ -254,6 +255,30 @@ class QueryExecutor:
         """Directory risultati (per compatibilità con codice esistente)."""
         return self._results_dir
 
+    def _build_execution_context(
+        self,
+        connection: DatabaseConnection,
+        sql: str,
+        params: Optional[Dict[str, Any]],
+    ) -> ExecutionContext:
+        """Build typed execution/session metadata for one query."""
+        try:
+            from app.config import settings
+            timeout_seconds = int(settings.DB_QUERY_TIMEOUT)
+        except Exception as e:
+            timeout_seconds = 0
+            logger.debug(
+                "lettura DB_QUERY_TIMEOUT fallita, timeout sessione disabilitato: %s: %s",
+                type(e).__name__,
+                e,
+            )
+        return ExecutionContext.for_query(
+            connection=connection,
+            sql=sql,
+            params=params,
+            timeout_seconds=timeout_seconds,
+        )
+
     # ESECUZIONE RAW (metodo unificato
 
     def execute_raw(
@@ -285,58 +310,20 @@ class QueryExecutor:
                 - righe: lista di tuple con i valori
                 - colonne: lista di nomi delle colonne
         """
-        engine = self._engine_factory.create_engine(connection)
+        execution = self._build_execution_context(connection, sql, params)
+        engine = self._engine_factory.create_engine(execution.connection)
 
         with engine.connect() as conn:
-            # Propaga DB_QUERY_TIMEOUT come statement_timeout per ogni DB che lo supporta
-            try:
-                from app.config import settings
-                timeout_s  = settings.DB_QUERY_TIMEOUT          # secondi (es. 30
-                # SECURITY: cast a int per prevenire injection se config contaminata
-                timeout_ms = int(timeout_s) * 1000
-
-                if connection.type in ("postgres", "postgresql"):
-                    # PostgreSQL: statement_timeout in ms — parametrizzato
-                    conn.execute(text("SET statement_timeout = :t"), {"t": timeout_ms})
-
-                elif connection.type == "mysql":
-                    # MySQL 5.7.8+: max_execution_time in ms (solo SELECT) — parametrizzato
-                    conn.execute(text("SET SESSION max_execution_time = :t"), {"t": timeout_ms})
-
-                elif connection.type == "oracle":
-                    # Oracle: callTimeout in ms sull'oggetto connessione nativo
-                    raw = conn.connection.dbapi_connection
-                    if hasattr(raw, "callTimeout"):
-                        raw.callTimeout = timeout_ms
-
-            except Exception as e:
-                # Non bloccante — il timeout di default di Celery fa da fallback
-                logger.debug(
-                    "set timeout di sessione fallito (db=%s), uso fallback Celery: %s: %s",
-                    connection.type,
-                    type(e).__name__,
-                    e,
-                )
-            # Oracle: aumenta limite cursori aperti per funzioni SDO_UTIL/SDO_GEOM
-            if connection.type == "oracle":
-                try:
-                    conn.execute(text("ALTER SESSION SET OPEN_CURSORS = 32767"))
-                except Exception as e:
-                    # Prosegui con il default se non ha i permessi
-                    logger.debug(
-                        "ALTER SESSION OPEN_CURSORS fallito (probabili permessi), uso default: %s: %s",
-                        type(e).__name__,
-                        e,
-                    )
+            apply_session_context(conn, execution.session, logger)
 
             # Esecuzione query con parametri preparati (sicurezza SQL injection
-            result = conn.execute(text(sql), params or {})
+            result = conn.execute(text(execution.sql), dict(execution.params))
 
             # Estrazione nomi colonne dal cursor nativo del database
             columns = [desc[0] for desc in result.cursor.description]
 
             # Oracle: normalizza nomi colonne da UPPERCASE a lowercase
-            if connection.type == "oracle":
+            if execution.session.provider == "oracle":
                 columns = [c.lower() for c in columns]
 
             # Materializza righe in blocchi

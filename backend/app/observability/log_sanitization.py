@@ -1,4 +1,4 @@
-"""Shared helpers for redacting sensitive values before logging."""
+"""Helpers for redacting sensitive values before logging."""
 
 from __future__ import annotations
 

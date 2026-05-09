@@ -11,7 +11,7 @@ from typing import Any, Dict, List
 
 import pandas as pd
 
-from app.shared.json_path import (
+from app.shared.resources.json_path import (
     extract_json_value as _shared_extract_json_value,
     geojson_to_wkt as _shared_geojson_to_wkt,
 )

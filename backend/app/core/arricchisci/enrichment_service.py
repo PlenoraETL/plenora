@@ -33,7 +33,7 @@ from app.shared.api_utils import (
     prepare_headers as _shared_prepare_headers,
     get_cached_oauth2_token as _shared_get_cached_oauth2_token,
 )
-from app.shared.log_sanitization import (
+from app.observability.log_sanitization import (
     sanitize_for_log,
     sanitize_url_for_log,
 )

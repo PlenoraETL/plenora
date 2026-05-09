@@ -18,24 +18,13 @@ _CONFIG = _REPO_ROOT / "backend" / "app" / "config.py"
 _STARTUP_VALIDATION = _REPO_ROOT / "backend" / "app" / "startup_validation.py"
 
 
-def _class_method(tree: ast.AST, class_name: str, method_name: str) -> ast.FunctionDef:
+def _class_method_names(tree: ast.AST, class_name: str) -> set[str]:
     for node in ast.walk(tree):
         if isinstance(node, ast.ClassDef) and node.name == class_name:
-            for item in node.body:
-                if isinstance(item, ast.FunctionDef) and item.name == method_name:
-                    return item
-    raise AssertionError(f"{class_name}.{method_name} not found")
-
-
-def _called_names(node: ast.AST) -> set[str]:
-    names: set[str] = set()
-    for call in [n for n in ast.walk(node) if isinstance(n, ast.Call)]:
-        func = call.func
-        if isinstance(func, ast.Name):
-            names.add(func.id)
-        elif isinstance(func, ast.Attribute):
-            names.add(func.attr)
-    return names
+            return {
+                item.name for item in node.body if isinstance(item, ast.FunctionDef)
+            }
+    raise AssertionError(f"{class_name} not found")
 
 
 def test_importing_config_does_not_import_bootstrap_or_startup_validation():
@@ -59,35 +48,21 @@ def test_importing_config_does_not_import_bootstrap_or_startup_validation():
                 sys.modules[name] = module
 
 
-def test_settings_startup_methods_are_compatibility_delegates_only():
+def test_settings_startup_methods_are_not_present():
     tree = ast.parse(_CONFIG.read_text(encoding="utf-8"))
+    method_names = _class_method_names(tree, "Settings")
 
-    expected_delegates = {
-        "_ensure_redis": "ensure_redis",
-        "_ensure_redis_wsl_fallback": "ensure_redis_wsl_fallback",
-        "_wsl_redis_fallback_allowed": "wsl_redis_fallback_allowed",
-        "validate_startup": "validate_startup",
-    }
-    forbidden_calls = {
-        "chmod",
-        "create_connection",
-        "iterdir",
-        "mkdir",
-        "Popen",
-        "rmtree",
-        "touch",
-        "unlink",
-    }
-
-    for method_name, delegate_name in expected_delegates.items():
-        method = _class_method(tree, "Settings", method_name)
-        calls = _called_names(method)
-
-        assert delegate_name in calls
-        assert calls.isdisjoint(forbidden_calls), (
-            f"Settings.{method_name} must delegate startup behavior to "
-            "app.startup_validation instead of owning operational side effects."
-        )
+    assert method_names.isdisjoint(
+        {
+            "_ensure_redis",
+            "_ensure_redis_wsl_fallback",
+            "_wsl_redis_fallback_allowed",
+            "validate_startup",
+        }
+    ), (
+        "Settings must remain data/config only; startup validation and "
+        "Redis probing belong in app.startup_validation."
+    )
 
 
 def test_startup_validation_owns_redis_and_filesystem_bootstrap_work():
