@@ -71,8 +71,8 @@ def _run_execute_with_patches(manager, schedule_id, monkeypatch):
         lambda _seconds: None,
     )
     with patch(
-        "app.core.scheduler.db.get_schedule",
-        return_value={"id": schedule_id, "group_id": "grp-A"},
+        "app.core.scheduler.db.get_schedule_row",
+        return_value=SimpleNamespace(id=schedule_id, group_id="grp-A"),
     ), patch(
         "app.core.projects.service.ProjectService"
     ) as project_service_cls, patch(
@@ -199,8 +199,8 @@ def test_release_retry_backoff_exponential_with_jitter(schedule_config, monkeypa
         lambda s: sleep_calls.append(s),
     )
 
-    with patch("app.core.scheduler.db.get_schedule",
-               return_value={"id": "s-backoff", "group_id": "grp-A"}), \
+    with patch("app.core.scheduler.db.get_schedule_row",
+               return_value=SimpleNamespace(id="s-backoff", group_id="grp-A")), \
         patch("app.core.projects.service.ProjectService") as psc, \
         patch("app.core.scheduler.execution_manager.open_run"), \
         patch("app.core.scheduler.execution_manager.set_run_context"), \
@@ -248,8 +248,8 @@ def test_release_retry_budget_total_10s_interrupts(schedule_config, monkeypatch)
         lambda _: None,
     )
 
-    with patch("app.core.scheduler.db.get_schedule",
-               return_value={"id": "s-timebudget", "group_id": "grp-A"}), \
+    with patch("app.core.scheduler.db.get_schedule_row",
+               return_value=SimpleNamespace(id="s-timebudget", group_id="grp-A")), \
         patch("app.core.projects.service.ProjectService") as psc, \
         patch("app.core.scheduler.execution_manager.open_run"), \
         patch("app.core.scheduler.execution_manager.set_run_context"), \

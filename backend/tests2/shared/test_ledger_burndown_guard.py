@@ -49,7 +49,7 @@ def _active_counts(entries: Iterable[object]) -> Counter[str]:
     return Counter(
         _ledger_domain(entry)
         for entry in entries
-        if getattr(entry, "status") != "REMOVED"
+        if getattr(entry, "status") not in {"DONE", "REMOVED"}
     )
 
 
@@ -82,10 +82,11 @@ _BURN_DOWN_TARGETS: tuple[BurnDownTarget, ...] = (
         active_ceilings={
             "app/core/arricchisci": 1,
             "app/core/auth": 2,
-            "app/shared/sharing.py": 1,
             "app/utils/geo.py": 1,
         },
-        removed_ceilings={},
+        removed_ceilings={
+            "app/shared/sharing.py": 1,
+        },
     ),
 )
 

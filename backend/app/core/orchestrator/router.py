@@ -369,15 +369,17 @@ def download_project_result(
         # Fallback post-R#1: i result blob vivono nel DB, il file temp è
         # già stato cancellato da `save_result_blob`. Recupera l'ultimo
         # result dal service DB e ritorna i bytes inline
-        latest = results_db.get_latest_result(project_id)
+        latest = results_db.get_latest_result_row(project_id)
         if not latest:
             raise HTTPException(404, f"Nessun risultato trovato per progetto '{project_id}'")
+        if not latest.id:
+            raise HTTPException(404, f"Metadata risultato non valide per progetto '{project_id}'")
 
-        blob = results_blob.get_result_data(latest["id"])
+        blob = results_blob.get_result_data(latest.id)
         if blob is None:
             raise HTTPException(404, f"Blob risultato non disponibile per progetto '{project_id}'")
 
-        filename = latest.get("filename") or f"{project_id}.{latest.get('format', 'csv')}"
+        filename = latest.filename or f"{project_id}.{latest.format or 'csv'}"
         return Response(
             content=blob,
             media_type=_mime_for_filename(filename),

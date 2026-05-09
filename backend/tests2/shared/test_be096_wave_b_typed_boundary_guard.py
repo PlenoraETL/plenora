@@ -43,27 +43,10 @@ _WAVE_B_TARGETS: tuple[str, ...] = (
 
 _EXPECTED_WAVE_B_BROAD_DICT_RETURNS: frozenset[BroadDictReturn] = frozenset(
     {
-        BroadDictReturn("app/core/eseguibili/service.py", "analyze_file_upload", "Dict[str, Any]"),
-        BroadDictReturn("app/core/eseguibili/service.py", "execute", "Dict[str, Any]"),
-        BroadDictReturn("app/core/eseguibili/router.py", "_summary_response", "dict"),
-        BroadDictReturn("app/core/eseguibili/router.py", "_details_response", "dict"),
-        BroadDictReturn("app/core/eseguibili/router.py", "_load_upload_meta", "Optional[dict]"),
-        BroadDictReturn("app/core/eseguibili/router.py", "_load_task_owner", "Optional[dict]"),
-        BroadDictReturn("app/core/eseguibili/router.py", "_to_details", "dict"),
-        BroadDictReturn("app/core/admin_system_status/router.py", "get_system_status", "dict[str, object]"),
-        BroadDictReturn("app/core/results/db.py", "_metadata_compat_payload", "dict[str, object]"),
-        BroadDictReturn("app/core/results/db.py", "save_result", "Optional[dict[str, object]]"),
-        BroadDictReturn("app/core/results/db.py", "get_result", "Optional[dict[str, object]]"),
-        BroadDictReturn("app/core/results/db.py", "get_latest_result", "Optional[dict[str, object]]"),
-        BroadDictReturn("app/core/results/db.py", "list_results", "list[dict[str, object]]"),
         BroadDictReturn("app/core/projects/service.py", "ProjectService.get_project", "Optional[dict]"),
         BroadDictReturn("app/core/projects/service.py", "ProjectService._find_dependent_projects", "List[dict]"),
         BroadDictReturn("app/core/projects/service.py", "ProjectService.get_latest_result", "Optional[dict]"),
         BroadDictReturn("app/core/projects/service.py", "ProjectService.list_results", "List[dict]"),
-        BroadDictReturn("app/core/projects/db.py", "_detail_compat_payload", "dict[str, object]"),
-        BroadDictReturn("app/core/projects/db.py", "get_project", "dict[str, object] | None"),
-        BroadDictReturn("app/core/projects/db.py", "create_project", "dict[str, object]"),
-        BroadDictReturn("app/core/projects/db.py", "update_project", "dict[str, object] | None"),
     }
 )
 
@@ -112,9 +95,14 @@ WAVE_B_BROAD_DICT_CLASSIFICATIONS.update(
 _DONE_ZERO_BROAD_DICT_MODULES: frozenset[str] = frozenset(
     {
         "app/core/admin_system_status/service.py",
+        "app/core/admin_system_status/router.py",
         "app/core/connections/db.py",
         "app/core/connections/service.py",
         "app/core/eseguibili/db.py",
+        "app/core/eseguibili/router.py",
+        "app/core/eseguibili/service.py",
+        "app/core/projects/db.py",
+        "app/core/results/db.py",
     }
 )
 

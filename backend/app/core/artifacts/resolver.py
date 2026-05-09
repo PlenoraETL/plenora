@@ -93,7 +93,7 @@ class ArtifactResolver:
 
         NB: a differenza di `file_sources`, la tabella `projects` non
         e' "shareable" via allowed_groups (vedi `_validate_table` in
-        `app/shared/sharing.py`). L'unico bypass legittimo del check
+        `app.core.auth.visibility`). L'unico bypass legittimo del check
         owner-only e' quindi il ruolo superadmin.
 
         Ritorna `None` se il progetto esiste ma non ha alcun risultato

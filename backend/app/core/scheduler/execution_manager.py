@@ -161,8 +161,8 @@ class ExecutionManager:
         from app.core.projects.service import ProjectService
         project_service = ProjectService()
 
-        schedule_row = scheduler_db.get_schedule(schedule_id)
-        schedule_group_id = schedule_row.get("group_id") if schedule_row else None
+        schedule_row = scheduler_db.get_schedule_row(schedule_id)
+        schedule_group_id = schedule_row.group_id if schedule_row else None
 
         project_meta = project_service.get_project_metadata(project_id)
         if not project_meta:

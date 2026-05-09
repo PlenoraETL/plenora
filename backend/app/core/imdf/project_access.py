@@ -4,14 +4,17 @@ from __future__ import annotations
 
 from typing import Any
 
-from app.core.projects import db as projects_db
+from app.core.projects.access_context import (
+    list_project_ids_visible_to_group as _list_project_ids_visible_to_group,
+    load_project_visibility_resource,
+)
 
 
 def get_project_for_bundle(project_id: str) -> Any:
     """Read project metadata needed to authorize an IMDF bundle."""
-    return projects_db.get_project_row(project_id)
+    return load_project_visibility_resource(project_id)
 
 
 def list_project_ids_visible_to_group(group_id: str) -> set[str]:
     """Read project ids visible to a group for IMDF bundle filtering."""
-    return projects_db.list_project_ids_for_group(group_id)
+    return _list_project_ids_visible_to_group(group_id)

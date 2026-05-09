@@ -7,12 +7,17 @@ Operazioni principali:
 import copy
 import json
 import uuid
-from typing import Any, Dict, List, Optional
+from typing import Mapping, Optional, Sequence
 from datetime import datetime, timezone
 
 from app.utils.logger import get_logger
 
 from . import db as eseguibili_db
+from .models import (
+    AnalyzeFileUploadResult,
+    DetectedUploadColumn,
+    EseguibileExecutionResult,
+)
 from .scanner import extract_expected_columns
 
 logger = get_logger(__name__)
@@ -110,7 +115,7 @@ def analyze_file_upload(
     eseguibile: eseguibili_db.EseguibileRow,
     file_path: str,
     filename: str,
-) -> Dict[str, Any]:
+) -> AnalyzeFileUploadResult:
     """Carica un file temporaneo e ritorna colonne rilevate + auto-mapping.
 
     Non crea ancora il FileSource definitivo nel DB; il file è su disco temp.
@@ -131,7 +136,7 @@ def analyze_file_upload(
         raise ValueError("Il file caricato è vuoto o non è stato possibile leggerlo")
 
     # Detect colonne
-    detected = []
+    detected: list[DetectedUploadColumn] = []
     for col in df.columns:
         dtype_str = str(df[col].dtype)
         if dtype_str.startswith("int"):
@@ -145,18 +150,20 @@ def analyze_file_upload(
         else:
             col_type = "str"
         sample_values = df[col].dropna().head(3).astype(str).tolist()
-        detected.append({
-            "name": col,
-            "type": col_type,
-            "sample_values": sample_values,
-        })
+        detected.append(
+            DetectedUploadColumn(
+                name=str(col),
+                type=col_type,
+                sample_values=sample_values,
+            )
+        )
 
     # Auto-mapping euristico: match case-insensitive
     expected_columns = eseguibile.get("expected_columns") or []
     expected_names = [c.get("name") for c in expected_columns if c.get("name")]
     file_cols_lower = {c.lower(): c for c in df.columns}
 
-    auto_mapping: Dict[str, str] = {}
+    auto_mapping: dict[str, str] = {}
     for exp_name in expected_names:
         if not exp_name:
             continue
@@ -179,7 +186,7 @@ def analyze_file_upload(
     preview_df = df.head(10)
     # Converti a dict JSON-safe: NaN → None
     import math
-    preview_rows = []
+    preview_rows: list[dict[str, object]] = []
     for row in preview_df.to_dict(orient="records"):
         clean = {}
         for k, v in row.items():
@@ -191,15 +198,15 @@ def analyze_file_upload(
 
     file_id = f"esec_upload_{uuid.uuid4().hex[:12]}"
 
-    return {
-        "file_id": file_id,
-        "file_path": file_path,  # interno, non esposto al frontend
-        "filename": filename,
-        "detected_columns": detected,
-        "row_count": int(len(df)),
-        "auto_mapping": auto_mapping,
-        "preview_rows": preview_rows,
-    }
+    return AnalyzeFileUploadResult(
+        file_id=file_id,
+        file_path=file_path,
+        filename=filename,
+        detected_columns=detected,
+        row_count=int(len(df)),
+        auto_mapping=auto_mapping,
+        preview_rows=preview_rows,
+    )
 
 
 # EXECUTE — sostituisce sorgente nel canvas e lancia task
@@ -207,10 +214,10 @@ def analyze_file_upload(
 def execute(
     eseguibile: eseguibili_db.EseguibileRow,
     file_path: str,
-    column_mapping: List[Dict[str, str]],
+    column_mapping: Sequence[Mapping[str, str]],
     output_format: Optional[str] = None,
     output_name: Optional[str] = None,
-) -> Dict[str, Any]:
+) -> EseguibileExecutionResult:
     """Esegue un eseguibile: rinomina colonne, crea FileSource temp, sostituisce
     il nodo sorgente nel canvas clonato, lancia execute_enrichment_task.
 
@@ -237,7 +244,7 @@ def execute(
 
     # 2. Rinomina colonne secondo il mapping (solo quelle presenti
     # column_mapping è [{chain_column, file_column}]: inverto in {file_col: chain_col}
-    rename_map: Dict[str, str] = {}
+    rename_map: dict[str, str] = {}
     for m in column_mapping:
         chain_col = m.get("chain_column")
         file_col = m.get("file_column")
@@ -365,10 +372,12 @@ def execute(
         op="eseguibili_execute"
     )
 
-    return {
-        "async": True,
-        "task_id": task_info.task_id,
-        "project_id": eseguibile["id"],
-        "temp_file_source_id": temp_file_source_id,
-        "message": "Esecuzione avviata. Usa GET /api/tasks/{task_id} per il progresso.",
-    }
+    return EseguibileExecutionResult(
+        **{
+            "async": True,
+            "task_id": task_info.task_id,
+            "project_id": eseguibile["id"],
+            "temp_file_source_id": temp_file_source_id,
+            "message": "Esecuzione avviata. Usa GET /api/tasks/{task_id} per il progresso.",
+        }
+    )

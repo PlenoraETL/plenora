@@ -45,31 +45,35 @@ def test_pipeline_worker_uses_project_runtime_context_boundary():
     )
 
 
-def test_pipeline_worker_closes_intermediate_via_cleanup_boundary():
+def test_pipeline_worker_uses_intermediate_run_lifecycle_boundary():
     tree = _pipeline_task_tree()
 
-    direct_close_imports = []
-    cleanup_close_imports = []
+    direct_db_imports = []
+    lifecycle_imports = []
     for node in ast.walk(tree):
         if not isinstance(node, ast.ImportFrom):
             continue
         imported_names = {alias.name for alias in node.names}
-        if node.module == "app.core.intermediate.db" and "close_connection" in imported_names:
-            direct_close_imports.append(node.lineno)
+        if node.module == "app.core.intermediate.db":
+            direct_db_imports.append(node.lineno)
         if (
-            node.module == "app.core.intermediate.cleanup"
-            and "close_worker_connection" in imported_names
+            node.module == "app.core.intermediate.run_lifecycle"
+            and (
+                "close_worker_connection" in imported_names
+                or "close_run" in imported_names
+                or "get_default_runs_retention" in imported_names
+            )
         ):
-            cleanup_close_imports.append(node.lineno)
+            lifecycle_imports.append(node.lineno)
 
-    assert not direct_close_imports, (
-        "pipeline_task must close worker intermediate connections through "
-        "app.core.intermediate.cleanup; direct db.close_connection import "
-        f"found at lines {direct_close_imports}"
+    assert not direct_db_imports, (
+        "pipeline_task must use app.core.intermediate.run_lifecycle for "
+        "intermediate run lifecycle operations; direct db import found at "
+        f"lines {direct_db_imports}"
     )
-    assert cleanup_close_imports, (
-        "pipeline_task should import close_worker_connection from "
-        "app.core.intermediate.cleanup"
+    assert lifecycle_imports, (
+        "pipeline_task should import intermediate run lifecycle helpers from "
+        "app.core.intermediate.run_lifecycle"
     )
 
 

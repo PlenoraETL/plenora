@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Mapping
+
 from fastapi import APIRouter, Depends
 
 from app.core.admin_system_status import service
@@ -15,7 +17,7 @@ router = APIRouter(prefix="/admin/system-status", tags=["admin-system-status"])
 @router.get("", summary="Aggregato stato sistema per dashboard admin")
 def get_system_status(
     _user: CurrentUser = Depends(require_superadmin),
-) -> dict[str, object]:
+) -> Mapping[str, object]:
     """Ritorna un JSON con metriche aggregate per il dashboard admin:
 
     - `backup`: stato ultimo dump S3 (soglie 26h/48h)

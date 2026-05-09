@@ -188,7 +188,7 @@ async def get_schedule(schedule_id: str, current_user: CurrentUser = Depends(req
     from app.core.scheduler.schedule_service import ScheduleService
     try:
         service = ScheduleService()
-        row = scheduler_db.get_schedule(schedule_id)
+        row = scheduler_db.get_schedule_row(schedule_id)
         if not row:
             raise HTTPException(
                 status_code=404,
@@ -416,7 +416,7 @@ async def download_schedule_output(
             )
 
         # SECURITY: verifica che lo schedule appartenga al gruppo dell'utente
-        _sched_row = scheduler_db.get_schedule(schedule_id)
+        _sched_row = scheduler_db.get_schedule_row(schedule_id)
         if _sched_row:
             assert_group_access(_sched_row, current_user, f"Schedule '{schedule_id}'")
 
@@ -505,7 +505,7 @@ async def list_schedule_runs(schedule_id: str, current_user: CurrentUser = Depen
             )
 
         # SECURITY: group isolation check
-        _sched_row = scheduler_db.get_schedule(schedule_id)
+        _sched_row = scheduler_db.get_schedule_row(schedule_id)
         if _sched_row:
             assert_group_access(_sched_row, current_user, f"Schedule '{schedule_id}'")
 

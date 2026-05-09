@@ -42,13 +42,12 @@ _LEDGER: tuple[SharedUtilsBusinessLogicEntry, ...] = (
         removal_condition="Arricchisci API-generator parser now has a domain-owned canonical module.",
     ),
     SharedUtilsBusinessLogicEntry(
-        path="app/utils/geo.py",
+        path="app/core/manipola/transforms/spatial_helpers.py",
         symbol="get_utm_crs_for_geometry",
-        status="KEEP_COMPAT_WITH_REMOVAL_CONDITION",
+        status="DONE",
         owner="TRANSFORMATION_ENGINE",
         removal_condition=(
-            "Move after Estrai, Manipola, and dataframe IO share a typed geospatial "
-            "conversion/CRS contract."
+            "Manipola spatial transforms own metric CRS selection for spatial operations."
         ),
     ),
     SharedUtilsBusinessLogicEntry(
@@ -72,11 +71,11 @@ _LEDGER: tuple[SharedUtilsBusinessLogicEntry, ...] = (
     SharedUtilsBusinessLogicEntry(
         path="app/shared/sharing.py",
         symbol="module",
-        status="KEEP_PUBLIC_COMPAT",
+        status="REMOVED",
         owner="AUTH_SECURITY_ENGINE",
         removal_condition=(
-            "External compatibility imports should switch to app.core.auth.visibility "
-            "or app.core.auth.shares."
+            "Removed compatibility re-export; callers must use app.core.auth.visibility "
+            "or app.core.auth.shares directly."
         ),
     ),
 )
@@ -99,7 +98,11 @@ def test_c2_shared_utils_business_logic_entries_have_removal_conditions() -> Non
 
 def test_c2_shared_utils_business_logic_ledger_points_at_existing_files() -> None:
     for entry in _LEDGER:
-        assert (_BACKEND_ROOT / entry.path).exists(), entry.path
+        path = _BACKEND_ROOT / entry.path
+        if entry.status == "REMOVED":
+            assert not path.exists(), entry.path
+            continue
+        assert path.exists(), entry.path
 
 
 def test_static_parameter_processing_is_not_template_variables_business_logic() -> None:
@@ -115,6 +118,14 @@ def test_static_parameter_processing_is_not_template_variables_business_logic() 
             offenders.append(path.relative_to(_BACKEND_ROOT).as_posix())
 
     assert offenders == []
+
+
+def test_utm_crs_selection_is_not_owned_by_app_utils_geo() -> None:
+    geo_utils = (_BACKEND_ROOT / "app" / "utils" / "geo.py").read_text(
+        encoding="utf-8-sig"
+    )
+
+    assert "def get_utm_crs_for_geometry" not in geo_utils
 
 
 def test_visibility_policy_runtime_imports_are_auth_owned() -> None:
@@ -135,6 +146,10 @@ def test_visibility_policy_runtime_imports_are_auth_owned() -> None:
                 break
 
     assert offenders == []
+
+
+def test_shared_sharing_compat_module_is_removed() -> None:
+    assert not (_BACKEND_ROOT / "app" / "shared" / "sharing.py").exists()
 
 
 def test_production_runtime_does_not_import_shared_sharing() -> None:

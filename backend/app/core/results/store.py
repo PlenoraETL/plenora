@@ -9,6 +9,23 @@ from app.core.results import db as results_db
 ResultMetadataRow = results_db.ResultMetadataRow
 
 
+def _metadata_public_payload(row: ResultMetadataRow) -> dict[str, object]:
+    """Serialize result metadata at the legacy result-store boundary."""
+    values: dict[str, object] = {
+        "id": row.id,
+        "project_id": row.project_id,
+        "group_id": row.group_id,
+        "filename": row.filename,
+        "format": row.format,
+        "size_bytes": row.size_bytes,
+        "rows_count": row.rows_count,
+        "created_at": row.created_at,
+        "storage_key": row.storage_key,
+    }
+    selected_keys = row._selected_keys or tuple(values)
+    return {key: values[key] for key in selected_keys if key in values}
+
+
 def resolve_group_id_for_result(
     project_id: str,
     group_id: Optional[str] = None,
@@ -68,7 +85,7 @@ def save_result(
     size_bytes: Optional[int] = None,
 ) -> Optional[dict[str, object]]:
     """Persist result metadata through the results domain boundary."""
-    return results_db.save_result(
+    row = results_db.save_result_row(
         result_id=result_id,
         project_id=project_id,
         group_id=group_id,
@@ -80,6 +97,7 @@ def save_result(
         storage_key=storage_key,
         size_bytes=size_bytes,
     )
+    return _metadata_public_payload(row) if row else None
 
 
 def list_result_rows(project_id: str) -> list[ResultMetadataRow]:
@@ -100,12 +118,13 @@ def get_latest_result(
     group_id: Optional[str] = None,
 ) -> Optional[dict[str, object]]:
     """Return latest result metadata for a project as a legacy dict."""
-    return results_db.get_latest_result(project_id, group_id=group_id)
+    row = results_db.get_latest_result_row(project_id, group_id=group_id)
+    return _metadata_public_payload(row) if row else None
 
 
 def list_results(project_id: str) -> list[dict[str, object]]:
     """Return result metadata rows for a project as legacy dicts."""
-    return results_db.list_results(project_id)
+    return [_metadata_public_payload(row) for row in results_db.list_result_rows(project_id)]
 
 
 def get_result_data(result_id: str, group_id: Optional[str] = None) -> Optional[bytes]:

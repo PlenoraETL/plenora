@@ -17,6 +17,8 @@ if TYPE_CHECKING:
 
 logger = get_logger(__name__)
 
+CaricaArcGISTaskResult = Mapping[str, object]
+
 
 @dataclass(frozen=True)
 class ArcGISFeatureWriteResult:
@@ -92,7 +94,7 @@ class CaricaArcGISWriteOutcome:
     error: str = ""
     error_message: str = ""
 
-    def to_task_result(self) -> dict:
+    def to_task_result(self) -> CaricaArcGISTaskResult:
         """Serialize the outcome for the existing Celery/API result shape."""
         if not self.success:
             return {

@@ -34,6 +34,14 @@ _EXPECTED_TO_LEGACY_DICT_CALL_SITES = frozenset(
     }
 )
 _DB_FACADE_BOUNDARY_ALLOWLIST: dict[str, frozenset[str]] = {}
+_DONE_NON_ROW_BOUNDARY_CLASSES: frozenset[tuple[str, str]] = frozenset(
+    {
+        (
+            "app/core/features/arcgis_feature_operations.py",
+            "ArcGISFeatureOperations",
+        ),
+    }
+)
 
 
 @dataclass(frozen=True)
@@ -95,36 +103,6 @@ _LEDGER: tuple[BoundaryEntry, ...] = (
     ),
     BoundaryEntry(
         "app/core/results/db.py",
-        "_serialize_result_metadata_row",
-        "KEEP_PUBLIC_COMPAT",
-        "legacy result metadata serialization stays in an explicit private helper for public compatibility wrappers",
-    ),
-    BoundaryEntry(
-        "app/core/results/db.py",
-        "get_result",
-        "KEEP_PUBLIC_COMPAT",
-        "legacy metadata wrapper returns dict at public edge",
-    ),
-    BoundaryEntry(
-        "app/core/results/db.py",
-        "get_latest_result",
-        "KEEP_PUBLIC_COMPAT",
-        "legacy metadata wrapper returns dict at public edge",
-    ),
-    BoundaryEntry(
-        "app/core/results/db.py",
-        "list_results",
-        "KEEP_PUBLIC_COMPAT",
-        "legacy metadata wrapper returns dict list at public edge",
-    ),
-    BoundaryEntry(
-        "app/core/results/db.py",
-        "save_result",
-        "KEEP_PUBLIC_COMPAT",
-        "public save helper still returns legacy metadata dict",
-    ),
-    BoundaryEntry(
-        "app/core/results/db.py",
         "save_result_row",
         "DONE",
         "result metadata writes hydrate ResultMetadataRow at the core DB boundary",
@@ -134,18 +112,6 @@ _LEDGER: tuple[BoundaryEntry, ...] = (
         "ScheduleRow",
         "DONE",
         "schedule DB reads and post-write reads use immutable scheduler-owned row contracts",
-    ),
-    BoundaryEntry(
-        "app/core/scheduler/db.py",
-        "get_schedule",
-        "KEEP_PUBLIC_COMPAT",
-        "legacy schedule dict wrapper remains at the scheduler DB boundary for public compatibility callers",
-    ),
-    BoundaryEntry(
-        "app/core/scheduler/db.py",
-        "list_schedules",
-        "KEEP_PUBLIC_COMPAT",
-        "legacy schedule dict list wrapper remains at the scheduler DB boundary for public compatibility callers",
     ),
     BoundaryEntry(
         "app/core/connections/db.py",
@@ -281,33 +247,9 @@ _LEDGER: tuple[BoundaryEntry, ...] = (
     ),
     BoundaryEntry(
         "app/core/orchestrator/task_service.py",
-        "TaskLaunchPayload.to_task_kwargs",
-        "KEEP_COMPAT_WITH_REMOVAL_CONDITION",
-        "remove after Celery task launch accepts typed payload objects without kwargs expansion",
-    ),
-    BoundaryEntry(
-        "app/core/orchestrator/task_service.py",
-        "EnrichmentTaskPayload.to_task_kwargs",
-        "KEEP_COMPAT_WITH_REMOVAL_CONDITION",
-        "remove after Celery enrichment launch accepts typed payload objects without kwargs expansion",
-    ),
-    BoundaryEntry(
-        "app/core/orchestrator/task_service.py",
-        "CaricaTaskPayload.to_task_kwargs",
-        "KEEP_COMPAT_WITH_REMOVAL_CONDITION",
-        "remove after Celery Carica launch accepts typed payload objects without kwargs expansion",
-    ),
-    BoundaryEntry(
-        "app/core/orchestrator/task_service.py",
-        "PipelineTaskPayload.to_task_kwargs",
-        "KEEP_COMPAT_WITH_REMOVAL_CONDITION",
-        "remove after Celery pipeline launch accepts typed payload objects without kwargs expansion",
-    ),
-    BoundaryEntry(
-        "app/core/orchestrator/task_service.py",
-        "PreviewTaskPayload.to_task_kwargs",
-        "KEEP_COMPAT_WITH_REMOVAL_CONDITION",
-        "remove after Celery preview launch accepts typed payload objects without kwargs expansion",
+        "task_payload_to_celery_kwargs",
+        "DONE",
+        "typed task launch payloads are adapted to Celery kwargs at one explicit launch boundary",
     ),
     BoundaryEntry(
         "app/core/orchestrator/task_service.py",
@@ -330,32 +272,32 @@ _LEDGER: tuple[BoundaryEntry, ...] = (
     BoundaryEntry(
         "app/core/orchestrator/router_mappers.py",
         "task_info_to_dict",
-        "KEEP_PUBLIC_COMPAT",
-        "task status dict serialization is kept at the router/API boundary",
+        "DONE",
+        "task status serialization is an explicit router/API boundary mapper",
     ),
     BoundaryEntry(
         "workers/tasks/carica_task.py",
         "_execute_arcgis_write",
-        "KEEP_PUBLIC_COMPAT",
-        "Carica worker delegates ArcGIS writes to the domain boundary but still returns public Celery result dict shape",
+        "DONE",
+        "Carica worker returns the typed ArcGIS task-result alias produced by the domain outcome serializer",
     ),
     BoundaryEntry(
         "app/core/features/arcgis_feature_operations.py",
         "ArcGISFeatureOperations",
-        "KEEP_COMPAT_WITH_REMOVAL_CONDITION",
-        "provider operation methods still return public ArcGIS dict shapes until response models cover writes/reads",
+        "DONE",
+        "ArcGIS provider read/discovery payloads are typed as explicit provider-result mappings at the domain boundary",
     ),
     BoundaryEntry(
         "app/core/features/features_service.py",
         "FeaturesService.write_features_from_df",
-        "KEEP_PUBLIC_COMPAT",
-        "public FeaturesService write seam delegates to ArcGISFeatureOperations and preserves API dict shape",
+        "DONE",
+        "FeaturesService write seam returns the explicit ArcGIS public write-result alias from the writer boundary",
     ),
     BoundaryEntry(
         "app/core/features/features_service.py",
         "FeaturesService.create_service_from_df",
-        "KEEP_PUBLIC_COMPAT",
-        "public FeaturesService create-service seam delegates to ArcGISFeatureOperations and preserves API dict shape",
+        "DONE",
+        "FeaturesService create-service seam returns the explicit ArcGIS public write-result alias from the writer boundary",
     ),
     BoundaryEntry(
         "app/core/eseguibili/db.py",
@@ -384,14 +326,14 @@ _LEDGER: tuple[BoundaryEntry, ...] = (
     BoundaryEntry(
         "app/core/eseguibili/service.py",
         "analyze_file_upload",
-        "KEEP_COMPAT_WITH_REMOVAL_CONDITION",
-        "remove after upload analysis returns a typed payload model and the router serializes the response",
+        "DONE",
+        "upload analysis returns a typed payload model and the router serializes the public response",
     ),
     BoundaryEntry(
         "app/core/eseguibili/service.py",
         "execute",
-        "KEEP_COMPAT_WITH_REMOVAL_CONDITION",
-        "remove after eseguibile execution returns a typed task-launch payload and the router serializes the response",
+        "DONE",
+        "eseguibile execution returns a typed task-launch payload and the router serializes the public response",
     ),
     BoundaryEntry(
         "app/core/admin_system_status/models.py",
@@ -408,8 +350,8 @@ _LEDGER: tuple[BoundaryEntry, ...] = (
     BoundaryEntry(
         "app/core/admin_system_status/router.py",
         "get_system_status",
-        "KEEP_PUBLIC_COMPAT",
-        "admin status endpoint preserves the public dashboard JSON shape",
+        "DONE",
+        "admin status service returns SystemStatusPayload and the router explicitly serializes the public dashboard JSON shape",
     ),
 )
 
@@ -684,6 +626,8 @@ def test_done_row_contracts_are_present_and_frozen():
         frozen_flags = _dataclass_frozen_flags(tree)
         pydantic_forbid_classes = _pydantic_forbid_classes(tree)
         for symbol in symbols:
+            if (rel_path, symbol) in _DONE_NON_ROW_BOUNDARY_CLASSES:
+                continue
             assert symbol in classes
             assert frozen_flags.get(symbol) is True or symbol in pydantic_forbid_classes
 

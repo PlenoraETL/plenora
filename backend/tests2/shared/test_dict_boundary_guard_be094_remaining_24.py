@@ -36,97 +36,17 @@ class BroadDictReturn(NamedTuple):
     annotation: str
 
 
-# Count report: 17 remaining broad dict-return residuals across the selected
+# Count report: 1 remaining broad dict-return residual across the selected
 # BE094 core/db boundary modules. Future batches should remove entries here
 # as they replace compatibility dict wrappers with typed contracts.
-EXPECTED_BROAD_DICT_RETURN_RESIDUALS_BE094_REMAINING_17: frozenset[
+EXPECTED_BROAD_DICT_RETURN_RESIDUALS_BE094_REMAINING_1: frozenset[
     BroadDictReturn
 ] = frozenset(
     {
         BroadDictReturn(
-            "app/core/projects/db.py",
-            "_detail_compat_payload",
-            "dict[str, object]",
-        ),
-        BroadDictReturn(
-            "app/core/projects/db.py",
-            "get_project",
-            "dict[str, object] | None",
-        ),
-        BroadDictReturn(
-            "app/core/projects/db.py",
-            "create_project",
-            "dict[str, object]",
-        ),
-        BroadDictReturn(
-            "app/core/projects/db.py",
-            "update_project",
-            "dict[str, object] | None",
-        ),
-        BroadDictReturn(
-            "app/core/results/db.py",
-            "_metadata_compat_payload",
-            "dict[str, object]",
-        ),
-        BroadDictReturn(
-            "app/core/results/db.py",
-            "save_result",
-            "Optional[dict[str, object]]",
-        ),
-        BroadDictReturn(
-            "app/core/results/db.py",
-            "get_result",
-            "Optional[dict[str, object]]",
-        ),
-        BroadDictReturn(
-            "app/core/results/db.py",
-            "get_latest_result",
-            "Optional[dict[str, object]]",
-        ),
-        BroadDictReturn(
-            "app/core/results/db.py",
-            "list_results",
-            "list[dict[str, object]]",
-        ),
-        BroadDictReturn(
-            "app/core/scheduler/db.py",
-            "get_schedule",
-            "Optional[dict[str, object]]",
-        ),
-        BroadDictReturn(
-            "app/core/scheduler/db.py",
-            "list_schedules",
-            "list[dict[str, object]]",
-        ),
-        BroadDictReturn(
             "app/core/orchestrator/task_service.py",
             "ActiveTaskInfo.to_dict",
             "Dict[str, str]",
-        ),
-        BroadDictReturn(
-            "app/core/orchestrator/task_service.py",
-            "TaskLaunchPayload.to_task_kwargs",
-            "dict[str, JsonValue]",
-        ),
-        BroadDictReturn(
-            "app/core/orchestrator/task_service.py",
-            "EnrichmentTaskPayload.to_task_kwargs",
-            "dict[str, JsonValue]",
-        ),
-        BroadDictReturn(
-            "app/core/orchestrator/task_service.py",
-            "CaricaTaskPayload.to_task_kwargs",
-            "dict[str, JsonValue]",
-        ),
-        BroadDictReturn(
-            "app/core/orchestrator/task_service.py",
-            "PipelineTaskPayload.to_task_kwargs",
-            "dict[str, JsonValue]",
-        ),
-        BroadDictReturn(
-            "app/core/orchestrator/task_service.py",
-            "PreviewTaskPayload.to_task_kwargs",
-            "dict[str, JsonValue]",
         ),
     }
 )
@@ -138,7 +58,7 @@ BROAD_DICT_RETURN_CLASSIFICATIONS_BE094: dict[BroadDictReturn, str] = {
         if residual.qualname.endswith(("to_legacy_dict", "to_dict"))
         else "KEEP_COMPAT_WITH_REMOVAL_CONDITION"
     )
-    for residual in EXPECTED_BROAD_DICT_RETURN_RESIDUALS_BE094_REMAINING_17
+    for residual in EXPECTED_BROAD_DICT_RETURN_RESIDUALS_BE094_REMAINING_1
 }
 
 TYPED_ZERO_COUNT_MODULES_BE094_DONE: frozenset[str] = frozenset(
@@ -146,6 +66,9 @@ TYPED_ZERO_COUNT_MODULES_BE094_DONE: frozenset[str] = frozenset(
         "app/core/connections/db.py",
         "app/core/connections/service.py",
         "app/core/connections/arcgis_connection_resolver.py",
+        "app/core/projects/db.py",
+        "app/core/results/db.py",
+        "app/core/scheduler/db.py",
     }
 )
 
@@ -216,7 +139,7 @@ def _scan_broad_dict_returns(paths: Iterable[str]) -> frozenset[BroadDictReturn]
     return frozenset(hits)
 
 
-def test_be094_selected_boundary_broad_dict_returns_match_remaining_17() -> None:
+def test_be094_selected_boundary_broad_dict_returns_match_remaining_1() -> None:
     """Ratchet selected core/db boundary broad-dict returns.
 
     Extra entries mean new broad dict returns crossed one of the selected
@@ -224,7 +147,7 @@ def test_be094_selected_boundary_broad_dict_returns_match_remaining_17() -> None
     residuals and should lower the ``REMAINING_21`` baseline.
     """
     found = _scan_broad_dict_returns(_TARGET_BOUNDARY_MODULES_BE094)
-    expected = EXPECTED_BROAD_DICT_RETURN_RESIDUALS_BE094_REMAINING_17
+    expected = EXPECTED_BROAD_DICT_RETURN_RESIDUALS_BE094_REMAINING_1
 
     extra = sorted(found - expected)
     missing = sorted(expected - found)
@@ -236,8 +159,8 @@ def test_be094_selected_boundary_broad_dict_returns_match_remaining_17() -> None
     )
     assert not missing, (
         "Broad dict return residuals were removed from selected BE094 "
-        f"boundary modules: {missing}. Ratchet the count below 17 by "
-        "updating EXPECTED_BROAD_DICT_RETURN_RESIDUALS_BE094_REMAINING_17."
+        f"boundary modules: {missing}. Ratchet the count below 1 by "
+        "updating EXPECTED_BROAD_DICT_RETURN_RESIDUALS_BE094_REMAINING_1."
     )
 
 

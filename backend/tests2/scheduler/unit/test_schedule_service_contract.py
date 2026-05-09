@@ -69,10 +69,6 @@ def test_get_schedule_consumes_typed_schedule_row(schedule_config, monkeypatch):
         "app.core.scheduler.schedule_service.db.get_schedule_row",
         lambda schedule_id: row,
     )
-    monkeypatch.setattr(
-        "app.core.scheduler.schedule_service.db.get_schedule",
-        lambda schedule_id: pytest.fail("legacy schedule dict wrapper should not be used"),
-    )
 
     result = service.get_schedule(schedule_config.id)
 
@@ -97,10 +93,6 @@ def test_list_schedules_consumes_typed_schedule_rows(schedule_config, monkeypatc
     monkeypatch.setattr(
         "app.core.scheduler.schedule_service.db.list_schedule_rows",
         lambda group_id: [row],
-    )
-    monkeypatch.setattr(
-        "app.core.scheduler.schedule_service.db.list_schedules",
-        lambda group_id: pytest.fail("legacy schedule dict wrapper should not be used"),
     )
 
     result = service.list_schedules(group_id="grp-1")

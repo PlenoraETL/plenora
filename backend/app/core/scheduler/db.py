@@ -52,21 +52,6 @@ def _decode_schedule_config(row: dict[str, object]) -> None:
         row["config"] = json.loads(cast(str, row["config"]))
 
 
-def _schedule_legacy_payload(row: ScheduleRow):
-    return {
-        "id": row.id,
-        "group_id": row.group_id,
-        "project_id": row.project_id,
-        "name": row.name,
-        "cron_expression": row.cron_expression,
-        "is_enabled": row.is_enabled,
-        "config": row.config,
-        "created_at": row.created_at,
-        "updated_at": row.updated_at,
-        "created_by": row.created_by,
-    }
-
-
 def _schedule_rows(rows: Iterable[Mapping[str, object]]) -> list[ScheduleRow]:
     return [ScheduleRow.from_mapping(row) for row in rows]
 
@@ -86,15 +71,6 @@ def list_schedule_rows(group_id: str) -> list[ScheduleRow]:
     for row in rows:
         _decode_schedule_config(row)
     return _schedule_rows(rows)
-
-
-def get_schedule(schedule_id: str) -> Optional[dict[str, object]]:
-    row = get_schedule_row(schedule_id)
-    return _schedule_legacy_payload(row) if row else None
-
-
-def list_schedules(group_id: str) -> list[dict[str, object]]:
-    return [_schedule_legacy_payload(row) for row in list_schedule_rows(group_id)]
 
 
 def save_schedule(

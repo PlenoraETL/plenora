@@ -20,6 +20,7 @@ from app.core.orchestrator.task_service import (
     TaskStatus,
     TaskSubmitRequest,
     TaskType,
+    task_payload_to_celery_kwargs,
 )
 from app.core.orchestrator.router_mappers import task_info_to_dict, task_result_to_dict
 
@@ -281,6 +282,11 @@ def test_submit_task_launches_celery_and_returns_pending_task_info():
     assert service._task_project_cache["task-submit-1"] == "project-1"
 
 
+def test_task_payload_to_celery_kwargs_rejects_unknown_payload():
+    with pytest.raises(TypeError, match="Unsupported task launch payload"):
+        task_payload_to_celery_kwargs(object())  # type: ignore[arg-type]
+
+
 def test_task_service_create_methods_stay_lifecycle_only():
     create_methods = {
         name
@@ -344,7 +350,7 @@ def test_preview_router_builds_typed_submit_request_directly(monkeypatch):
     assert request.task_type is TaskType.PREVIEW
     assert request.project_id == "project-1"
     assert isinstance(request.payload, PreviewTaskPayload)
-    assert request.payload.to_task_kwargs() == {
+    assert dict(task_payload_to_celery_kwargs(request.payload)) == {
         "project_id": "project-1",
         "limit": 42,
         "user_id": "user-1",
@@ -461,7 +467,7 @@ def test_create_task_wrappers_delegate_to_generic_submit(
     request = captured_requests[0]
     assert request.task_type is expected_task_type
     assert request.project_id == "project-1"
-    assert request.payload.to_task_kwargs() == expected_kwargs
+    assert dict(task_payload_to_celery_kwargs(request.payload)) == expected_kwargs
     assert request.queued_message == expected_message
     assert hasattr(request.celery_task, "delay")
     assert task_info.task_type is expected_task_type
@@ -510,7 +516,7 @@ def test_create_task_router_builds_enrichment_submit_payload(monkeypatch):
     assert request.celery_task is execute_enrichment_task
     assert request.task_type is TaskType.ENRICHMENT
     assert isinstance(request.payload, EnrichmentTaskPayload)
-    assert request.payload.to_task_kwargs() == {
+    assert dict(task_payload_to_celery_kwargs(request.payload)) == {
         "project_id": "project-1",
         "canvas": {"nodes": [], "edges": []},
         "output_format": "csv",
@@ -567,7 +573,7 @@ def test_create_task_router_builds_carica_submit_payload(monkeypatch):
     assert request.celery_task is execute_carica_task
     assert request.task_type is TaskType.CARICA
     assert isinstance(request.payload, CaricaTaskPayload)
-    assert request.payload.to_task_kwargs() == {
+    assert dict(task_payload_to_celery_kwargs(request.payload)) == {
         "project_id": "project-1",
         "canvas": {"nodes": [], "edges": []},
         "carica_node_data": {"id": "carica-1", "dest_type": "pg"},

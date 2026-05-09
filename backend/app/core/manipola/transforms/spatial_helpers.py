@@ -9,7 +9,6 @@ from typing import Optional
 
 import geopandas as gpd
 
-from app.utils.geo import get_utm_crs_for_geometry
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -58,6 +57,44 @@ def _ensure_active_geometry(gdf: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
         logger.info(f"Geometria attiva impostata su: {gdf.geometry.name}")
 
     return gdf
+
+
+def get_utm_crs_for_geometry(gdf: gpd.GeoDataFrame) -> str:
+    """Calcola la zona UTM appropriata per un GeoDataFrame."""
+    if gdf.empty:
+        return "EPSG:32632"
+
+    try:
+        centroide = gdf.geometry.unary_union.centroid
+        lon, lat = centroide.x, centroide.y
+
+        bounds = gdf.total_bounds
+        lon_range = bounds[2] - bounds[0]
+        if lon_range > 6:
+            logger.warning(
+                "UTM zone guard CRITICAL: bbox copre %.2f gradi di longitudine "
+                "(>6). La zona UTM scelta distorce le geometrie ai bordi. "
+                "Considera CRS custom (es. Lambert conformico) per operazioni "
+                "metriche accurate.",
+                lon_range,
+            )
+        elif lon_range > 3:
+            logger.warning(
+                "UTM zone guard: bbox copre %.2f gradi di longitudine (>3). "
+                "Accuratezza metrica marginale per geometrie ai bordi della zona.",
+                lon_range,
+            )
+
+        zona_utm = int((lon + 180) / 6) + 1
+        if lat >= 0:
+            return f"EPSG:326{zona_utm:02d}"
+        return f"EPSG:327{zona_utm:02d}"
+    except Exception as e:
+        logger.warning(
+            "get_utm_crs_for_geometry: calcolo UTM fallito, uso default EPSG:32632: %s",
+            e,
+        )
+        return "EPSG:32632"
 
 
 def _resolve_metric_crs(

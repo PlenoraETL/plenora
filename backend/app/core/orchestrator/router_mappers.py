@@ -4,9 +4,23 @@ from __future__ import annotations
 
 from decimal import Decimal
 import math
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, TypedDict, cast
 
 from app.core.orchestrator.task_service import TaskInfo, TaskResultPayload
+
+
+class TaskInfoPublicPayload(TypedDict):
+    task_id: str
+    task_type: str
+    project_id: str
+    status: str
+    progress: int
+    message: str
+    result: Dict[str, Any] | None
+    error: str | None
+    created_at: str | None
+    started_at: str | None
+    completed_at: str | None
 
 
 def task_result_to_dict(result: object) -> Dict[str, Any]:
@@ -20,12 +34,12 @@ def task_result_to_dict(result: object) -> Dict[str, Any]:
     return {}
 
 
-def task_info_to_dict(task_info: TaskInfo) -> Dict[str, Any]:
+def task_info_to_dict(task_info: TaskInfo) -> TaskInfoPublicPayload:
     """Serialize typed task info at the HTTP boundary."""
     if not isinstance(task_info, TaskInfo):
         legacy_to_dict = getattr(task_info, "to_dict", None)
         if callable(legacy_to_dict):
-            return dict(legacy_to_dict())
+            return cast(TaskInfoPublicPayload, dict(legacy_to_dict()))
     return {
         "task_id": task_info.task_id,
         "task_type": task_info.task_type.value,

@@ -56,6 +56,14 @@ def load_project_owner_context(project_id: str) -> Optional[ProjectOwnerContext]
     )
 
 
+def load_project_visibility_resource(project_id: str) -> dict[str, object] | None:
+    """Load the project resource shape consumed by shared visibility checks."""
+    context = load_project_owner_context(project_id)
+    if context is None:
+        return None
+    return context.ownership_resource()
+
+
 def load_project_publish_context(project_id: str) -> Optional[ProjectPublishContext]:
     """Load the project fields required to publish an eseguibile."""
     row = project_db.get_project_row(project_id)
@@ -67,3 +75,8 @@ def load_project_publish_context(project_id: str) -> Optional[ProjectPublishCont
         project_type=row.project_type,
         canvas=row.canvas,
     )
+
+
+def list_project_ids_visible_to_group(group_id: str) -> set[str]:
+    """Return project IDs owned by a group for project-only visibility checks."""
+    return project_db.list_project_ids_for_group(group_id)

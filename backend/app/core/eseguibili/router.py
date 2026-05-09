@@ -9,7 +9,7 @@ import tempfile
 from pathlib import Path
 from fastapi import APIRouter, HTTPException, Depends, UploadFile, File, Form, BackgroundTasks
 from fastapi.responses import FileResponse
-from typing import List, Optional
+from typing import List, Mapping, Optional
 
 from app.core.auth.dependencies import (
     get_current_user,
@@ -58,7 +58,7 @@ def _check_visible(eseguibile: object, user: CurrentUser) -> None:
 def _summary_response(
     record: eseguibili_db.EseguibileSummaryRow,
     user: CurrentUser,
-) -> dict:
+) -> Mapping[str, object]:
     """Serialize summary row at the API edge."""
     data = {
         "id": record.id,
@@ -81,7 +81,7 @@ def _summary_response(
 def _details_response(
     record: eseguibili_db.EseguibileRow,
     user: CurrentUser,
-) -> dict:
+) -> Mapping[str, object]:
     """Serialize detail row at the API edge."""
     data = _to_details(record)
     data["can_edit"] = compute_can_edit(record, user)
@@ -222,7 +222,7 @@ def _save_upload_meta(file_id: str, meta: dict) -> None:
     path.write_text(_json.dumps(meta), encoding="utf-8")
 
 
-def _load_upload_meta(file_id: str) -> Optional[dict]:
+def _load_upload_meta(file_id: str) -> Optional[Mapping[str, object]]:
     """Carica metadata di un upload da disco. Ritorna None se non esiste."""
     path = _upload_meta_path(file_id)
     if not path.exists():
@@ -273,7 +273,7 @@ def _save_task_owner(task_id: str, eseguibile_id: str, user_id: str) -> None:
     }), encoding="utf-8")
 
 
-def _load_task_owner(task_id: str) -> Optional[dict]:
+def _load_task_owner(task_id: str) -> Optional[Mapping[str, object]]:
     path = _task_owner_path(task_id)
     if not path.exists():
         return None
@@ -388,16 +388,14 @@ async def analyze_upload(
             )
 
         # Salva metadata su disco (multi-worker safe: visibile a tutti i worker uvicorn
-        _save_upload_meta(result["file_id"], {
-            "path": result["file_path"],
-            "filename": result["filename"],
+        _save_upload_meta(result.file_id, {
+            "path": result.file_path,
+            "filename": result.filename,
             "eseguibile_id": eseguibile_id,
             "user_id": current_user.user_id,
         })
 
-        # Rimuovi il file_path dal response (non serve al frontend
-        result.pop("file_path", None)
-        return result
+        return result.to_api_dict()
 
     except HTTPException:
         raise
@@ -454,10 +452,7 @@ def execute_eseguibile(
         # scaricare l'output di un'esecuzione non sua
         try:
             _task_id = None
-            if isinstance(result, dict):
-                _task_id = result.get("task_id") or (result.get("task") or {}).get("task_id")
-            elif hasattr(result, "task_id"):
-                _task_id = getattr(result, "task_id")
+            _task_id = result.task_id
             if _task_id:
                 _save_task_owner(_task_id, eseguibile_id, current_user.user_id)
         except Exception as _me:
@@ -479,7 +474,7 @@ def execute_eseguibile(
             )
         _delete_upload_meta(payload.file_id)
 
-    return result
+    return result.to_api_dict()
 
 
 # DOWNLOAD OUTPUT
@@ -640,7 +635,7 @@ def _detect_file_based_output(canvas: dict) -> tuple:
     return True, ext
 
 
-def _to_details(record: eseguibili_db.EseguibileRow) -> dict:
+def _to_details(record: eseguibili_db.EseguibileRow) -> Mapping[str, object]:
     """Converte un record DB in EseguibileDetails response."""
     canvas = record.canvas
     is_file_based, inferred_ext = _detect_file_based_output(canvas)

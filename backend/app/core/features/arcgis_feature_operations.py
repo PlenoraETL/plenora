@@ -7,13 +7,16 @@ FeaturesService public surface.
 
 from __future__ import annotations
 
-from typing import List, Tuple
+from typing import List, Mapping, Tuple
 
 from app.shared.connections.arcgis_connection import ArcGISConnectionInfo
 from app.shared.connections.arcgis_provider import ArcGISProviderProtocol
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
+
+ArcGISProviderResult = Mapping[str, object]
+ArcGISProviderResultList = List[ArcGISProviderResult]
 
 
 class ArcGISFeatureOperations:
@@ -22,13 +25,13 @@ class ArcGISFeatureOperations:
     def __init__(self, client: ArcGISProviderProtocol) -> None:
         self._client = client
 
-    def test_connection(self, conn_info: ArcGISConnectionInfo) -> dict:
+    def test_connection(self, conn_info: ArcGISConnectionInfo) -> ArcGISProviderResult:
         return self._client.test_connection(conn_info)
 
-    def list_services(self, conn_info: ArcGISConnectionInfo) -> List[dict]:
+    def list_services(self, conn_info: ArcGISConnectionInfo) -> ArcGISProviderResultList:
         return self._client.list_services(conn_info)
 
-    def list_folders(self, conn_info: ArcGISConnectionInfo) -> List[dict]:
+    def list_folders(self, conn_info: ArcGISConnectionInfo) -> ArcGISProviderResultList:
         return self._client.list_folders(conn_info)
 
     def search_services(
@@ -36,7 +39,7 @@ class ArcGISFeatureOperations:
         conn_info: ArcGISConnectionInfo,
         query: str = "",
         scope: str = "user",
-    ) -> List[dict]:
+    ) -> ArcGISProviderResultList:
         if self._client.is_arcgis_online(conn_info):
             return self._client.search_services_online(conn_info, query=query, scope=scope)
         return self._client.list_services(conn_info)
@@ -45,14 +48,14 @@ class ArcGISFeatureOperations:
         self,
         conn_info: ArcGISConnectionInfo,
         service_url: str,
-    ) -> List[dict]:
+    ) -> ArcGISProviderResultList:
         return self._client.list_layers(conn_info, service_url)
 
     def get_layer_schema(
         self,
         conn_info: ArcGISConnectionInfo,
         layer_url: str,
-    ) -> dict:
+    ) -> ArcGISProviderResult:
         return self._client.get_layer_schema(conn_info, layer_url)
 
     def query_features(

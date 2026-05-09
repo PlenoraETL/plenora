@@ -102,8 +102,8 @@ def _patches():
     """Patch context comuni per arrivare al success path di execute()."""
     return (
         patch(
-            "app.core.scheduler.db.get_schedule",
-            return_value={"id": "sch-1", "group_id": "grp-A"},
+            "app.core.scheduler.db.get_schedule_row",
+            return_value=SimpleNamespace(id="sch-1", group_id="grp-A"),
         ),
         patch("app.core.projects.service.ProjectService"),
         patch("app.core.scheduler.execution_manager.open_run"),

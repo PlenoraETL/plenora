@@ -17,6 +17,7 @@ ArcGISRawColumnMapping = Union[ArcGISColumnMapping, Mapping[str, object]]
 ArcGISColumnMappingsInput = Optional[
     Union[ArcGISWriteMappingContract, Sequence[ArcGISRawColumnMapping]]
 ]
+ArcGISFeatureWritePublicResult = Mapping[str, object]
 
 
 class ArcGISFeatureWriter(Protocol):
@@ -32,7 +33,7 @@ class ArcGISFeatureWriter(Protocol):
         source_srid: Optional[int] = None,
         folder_id: str = "",
         column_mappings: ArcGISColumnMappingsInput = None,
-    ) -> dict:
+    ) -> ArcGISFeatureWritePublicResult:
         """Create a feature service from an in-memory DataFrame."""
         ...
 
@@ -47,7 +48,7 @@ class ArcGISFeatureWriter(Protocol):
         batch_size: Optional[int] = None,
         match_column: str = "",
         column_mappings: ArcGISColumnMappingsInput = None,
-    ) -> dict:
+    ) -> ArcGISFeatureWritePublicResult:
         """Write features to an existing feature layer from an in-memory DataFrame."""
         ...
 

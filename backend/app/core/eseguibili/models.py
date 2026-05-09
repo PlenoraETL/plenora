@@ -3,7 +3,7 @@ Modelli Pydantic per il modulo ESEGUIBILI.
 """
 
 from typing import List, Optional, Dict, Any
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class ExpectedColumn(BaseModel):
@@ -90,5 +90,55 @@ class AnalyzeUploadResponse(BaseModel):
     file_id: str                           # id del FileSource temp
     detected_columns: List[Dict[str, Any]] # {name, type, sample_values}
     row_count: int
-    auto_mapping: Dict[str, str] = {}      # {chain_col: file_col} — suggerimento euristico
-    preview_rows: List[Dict[str, Any]] = []  # prime 10 righe
+    auto_mapping: Dict[str, str] = Field(default_factory=dict)      # {chain_col: file_col} — suggerimento euristico
+    preview_rows: List[Dict[str, Any]] = Field(default_factory=list)  # prime 10 righe
+
+
+class DetectedUploadColumn(BaseModel):
+    """Colonna rilevata durante l'analisi upload interna."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    name: str
+    type: str
+    sample_values: list[str] = Field(default_factory=list)
+
+
+class AnalyzeFileUploadResult(BaseModel):
+    """Payload interno del service; il router decide cosa esporre."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    file_id: str
+    file_path: str
+    filename: str
+    detected_columns: list[DetectedUploadColumn]
+    row_count: int
+    auto_mapping: dict[str, str] = Field(default_factory=dict)
+    preview_rows: list[dict[str, object]] = Field(default_factory=list)
+
+    def to_api_dict(self) -> dict[str, object]:
+        return {
+            "file_id": self.file_id,
+            "detected_columns": [
+                column.model_dump() for column in self.detected_columns
+            ],
+            "row_count": self.row_count,
+            "auto_mapping": self.auto_mapping,
+            "preview_rows": self.preview_rows,
+        }
+
+
+class EseguibileExecutionResult(BaseModel):
+    """Payload interno per il lancio task di un eseguibile."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    async_: bool = Field(alias="async")
+    task_id: str
+    project_id: str
+    temp_file_source_id: str
+    message: str
+
+    def to_api_dict(self) -> dict[str, object]:
+        return self.model_dump(by_alias=True)

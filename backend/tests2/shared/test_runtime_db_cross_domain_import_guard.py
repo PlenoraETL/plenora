@@ -87,22 +87,7 @@ class RemovedRuntimeDbImport:
     reason: str
 
 
-_ALLOWED_RUNTIME_DB_IMPORTS: tuple[AllowedRuntimeDbImport, ...] = (
-    AllowedRuntimeDbImport(
-        "app/core/imdf/project_access.py",
-        "app.core.projects",
-        "db",
-        "MEDIUM",
-        "KEEP_COMPAT_WITH_REMOVAL_CONDITION: remove after IMDF project access and bundle listing consume projects-owned read/visibility services instead of the raw project DB leaf",
-    ),
-    AllowedRuntimeDbImport(
-        "workers/tasks/pipeline_task.py",
-        "app.core.intermediate",
-        "db",
-        "HIGH",
-        "KEEP_COMPAT_WITH_REMOVAL_CONDITION: remove after pipeline task run lifecycle creation is routed through an intermediate run service",
-    ),
-)
+_ALLOWED_RUNTIME_DB_IMPORTS: tuple[AllowedRuntimeDbImport, ...] = ()
 _REMOVED_RUNTIME_DB_IMPORTS: tuple[RemovedRuntimeDbImport, ...] = (
     RemovedRuntimeDbImport(
         "app/core/arricchisci/api_connection_rest_file.py",
@@ -145,6 +130,18 @@ _REMOVED_RUNTIME_DB_IMPORTS: tuple[RemovedRuntimeDbImport, ...] = (
         "app.core.results",
         "db",
         "REMOVED: project result helpers now consume the results-owned store boundary",
+    ),
+    RemovedRuntimeDbImport(
+        "app/core/imdf/project_access.py",
+        "app.core.projects",
+        "db",
+        "REMOVED: IMDF project access now consumes the projects-owned access_context boundary",
+    ),
+    RemovedRuntimeDbImport(
+        "workers/tasks/pipeline_task.py",
+        "app.core.intermediate",
+        "db",
+        "REMOVED: pipeline task run lifecycle now consumes the intermediate-owned run_lifecycle boundary",
     ),
 )
 

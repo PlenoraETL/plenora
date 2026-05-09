@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from types import MappingProxyType
 from typing import Dict, Mapping, Optional, List, Protocol, TypeAlias
 from datetime import datetime, timezone
 from enum import Enum
@@ -50,13 +51,6 @@ class CeleryLaunchTask(Protocol):
         ...
 
 
-class TaskLaunchPayload(Protocol):
-    """Typed payload contract for arguments passed through the submit seam."""
-
-    def to_task_kwargs(self) -> dict[str, JsonValue]:
-        ...
-
-
 @dataclass(frozen=True)
 class EnrichmentTaskPayload:
     project_id: str
@@ -67,18 +61,6 @@ class EnrichmentTaskPayload:
     is_eseguibile: bool = False
     user_id: Optional[str] = None
     intermediate_mode_override: Optional[str] = None
-
-    def to_task_kwargs(self) -> dict[str, JsonValue]:
-        return {
-            "project_id": self.project_id,
-            "canvas": self.canvas,
-            "output_format": self.output_format,
-            "force_recalculate": self.force_recalculate,
-            "cleanup_file_source_ids": self.cleanup_file_source_ids,
-            "is_eseguibile": self.is_eseguibile,
-            "user_id": self.user_id,
-            "intermediate_mode_override": self.intermediate_mode_override,
-        }
 
 
 @dataclass(frozen=True)
@@ -91,17 +73,6 @@ class CaricaTaskPayload:
     triggered_by: str = "manual"
     user_id: Optional[str] = None
 
-    def to_task_kwargs(self) -> dict[str, JsonValue]:
-        return {
-            "project_id": self.project_id,
-            "canvas": self.canvas,
-            "carica_node_data": self.carica_node_data,
-            "output_format": self.output_format,
-            "force_recalculate": self.force_recalculate,
-            "triggered_by": self.triggered_by,
-            "user_id": self.user_id,
-        }
-
 
 @dataclass(frozen=True)
 class PipelineTaskPayload:
@@ -111,15 +82,6 @@ class PipelineTaskPayload:
     user_id: Optional[str] = None
     intermediate_mode_override: Optional[str] = None
 
-    def to_task_kwargs(self) -> dict[str, JsonValue]:
-        return {
-            "project_id": self.project_id,
-            "force_recalculate": self.force_recalculate,
-            "triggered_by": self.triggered_by,
-            "user_id": self.user_id,
-            "intermediate_mode_override": self.intermediate_mode_override,
-        }
-
 
 @dataclass(frozen=True)
 class PreviewTaskPayload:
@@ -127,12 +89,10 @@ class PreviewTaskPayload:
     limit: int = 100
     user_id: Optional[str] = None
 
-    def to_task_kwargs(self) -> dict[str, JsonValue]:
-        return {
-            "project_id": self.project_id,
-            "limit": self.limit,
-            "user_id": self.user_id,
-        }
+
+TaskLaunchPayload: TypeAlias = (
+    EnrichmentTaskPayload | CaricaTaskPayload | PipelineTaskPayload | PreviewTaskPayload
+)
 
 
 @dataclass(frozen=True)
@@ -145,6 +105,58 @@ class TaskSubmitRequest:
     payload: TaskLaunchPayload
     queued_message: str
     log_label: str
+
+
+def task_payload_to_celery_kwargs(
+    payload: TaskLaunchPayload,
+) -> Mapping[str, JsonValue]:
+    """Adapt typed task payloads to Celery's keyword-argument launch API."""
+
+    if isinstance(payload, EnrichmentTaskPayload):
+        return MappingProxyType(
+            {
+                "project_id": payload.project_id,
+                "canvas": payload.canvas,
+                "output_format": payload.output_format,
+                "force_recalculate": payload.force_recalculate,
+                "cleanup_file_source_ids": payload.cleanup_file_source_ids,
+                "is_eseguibile": payload.is_eseguibile,
+                "user_id": payload.user_id,
+                "intermediate_mode_override": payload.intermediate_mode_override,
+            }
+        )
+    if isinstance(payload, CaricaTaskPayload):
+        return MappingProxyType(
+            {
+                "project_id": payload.project_id,
+                "canvas": payload.canvas,
+                "carica_node_data": payload.carica_node_data,
+                "output_format": payload.output_format,
+                "force_recalculate": payload.force_recalculate,
+                "triggered_by": payload.triggered_by,
+                "user_id": payload.user_id,
+            }
+        )
+    if isinstance(payload, PipelineTaskPayload):
+        return MappingProxyType(
+            {
+                "project_id": payload.project_id,
+                "force_recalculate": payload.force_recalculate,
+                "triggered_by": payload.triggered_by,
+                "user_id": payload.user_id,
+                "intermediate_mode_override": payload.intermediate_mode_override,
+            }
+        )
+    if isinstance(payload, PreviewTaskPayload):
+        return MappingProxyType(
+            {
+                "project_id": payload.project_id,
+                "limit": payload.limit,
+                "user_id": payload.user_id,
+            }
+        )
+
+    raise TypeError(f"Unsupported task launch payload: {type(payload).__name__}")
 
 
 @dataclass(frozen=True)
@@ -308,7 +320,9 @@ class TaskService:
     def submit_task(self, request: TaskSubmitRequest) -> TaskInfo:
         """Launch a Celery task and record the pending task metadata."""
 
-        result = request.celery_task.delay(**request.payload.to_task_kwargs())
+        result = request.celery_task.delay(
+            **task_payload_to_celery_kwargs(request.payload)
+        )
 
         logger.info(
             f"Creato task {request.log_label}: {result.id} "

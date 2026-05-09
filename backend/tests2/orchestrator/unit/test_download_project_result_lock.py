@@ -15,6 +15,7 @@ from fastapi.testclient import TestClient
 from app.shared.contracts.auth import CurrentUser
 from app.core.auth.auth import require_not_esecutore, get_current_user
 from app.core.orchestrator.router import pipeline_router
+from app.core.results.db import ResultMetadataRow
 
 
 pytestmark = [
@@ -67,14 +68,14 @@ def test_download_project_result_falls_back_to_db_blob(pipeline_client, tmp_path
     ), patch(
         "app.core.orchestrator.router._assert_project_group"
     ), patch(
-        "app.core.results.db.get_latest_result",
-        return_value={
-            "id": "res-latest",
-            "project_id": project_id,
-            "filename": "out.csv",
-            "format": "csv",
-            "size_bytes": len(blob_bytes),
-        },
+        "app.core.results.db.get_latest_result_row",
+        return_value=ResultMetadataRow(
+            id="res-latest",
+            project_id=project_id,
+            filename="out.csv",
+            format="csv",
+            size_bytes=len(blob_bytes),
+        ),
     ), patch(
         "app.core.results.blob.get_result_data",
         return_value=blob_bytes,
@@ -107,7 +108,7 @@ def test_download_project_result_filesystem_wins_over_blob_when_present(
     ), patch(
         "app.core.orchestrator.router._assert_project_group"
     ), patch(
-        "app.core.results.db.get_latest_result"
+        "app.core.results.db.get_latest_result_row"
     ) as mock_latest:
         response = pipeline_client.get(f"/api/projects/{project_id}/download")
 
@@ -128,7 +129,7 @@ def test_download_project_result_404_when_nothing_exists(pipeline_client, tmp_pa
     ), patch(
         "app.core.orchestrator.router._assert_project_group"
     ), patch(
-        "app.core.results.db.get_latest_result",
+        "app.core.results.db.get_latest_result_row",
         return_value=None,
     ):
         response = pipeline_client.get(f"/api/projects/{project_id}/download")
@@ -149,14 +150,14 @@ def test_download_project_result_blob_fallback_preserves_mime_type(
     ), patch(
         "app.core.orchestrator.router._assert_project_group"
     ), patch(
-        "app.core.results.db.get_latest_result",
-        return_value={
-            "id": "res-geo",
-            "project_id": project_id,
-            "filename": "layer.geojson",
-            "format": "geojson",
-            "size_bytes": len(blob_bytes),
-        },
+        "app.core.results.db.get_latest_result_row",
+        return_value=ResultMetadataRow(
+            id="res-geo",
+            project_id=project_id,
+            filename="layer.geojson",
+            format="geojson",
+            size_bytes=len(blob_bytes),
+        ),
     ), patch(
         "app.core.results.blob.get_result_data",
         return_value=blob_bytes,

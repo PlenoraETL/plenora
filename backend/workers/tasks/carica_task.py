@@ -17,6 +17,7 @@ from app.utils.logger import get_logger, open_run, close_run, set_run_context, a
 from app.config import settings
 from app.core.carica.arcgis_write_boundary import (
     CaricaArcGISWriteRequest,
+    CaricaArcGISTaskResult,
     create_default_arcgis_feature_writer,
     execute_carica_arcgis_write,
 )
@@ -518,7 +519,7 @@ def _execute_arcgis_write(
     carica_node_data: Dict[str, Any],
     project_id: str,
     task_id: str,
-) -> Dict[str, Any]:
+) -> CaricaArcGISTaskResult:
     """Coordinate ArcGIS write progress while the domain owns provider writes."""
     _update_progress(task, 15, "Preparazione scrittura ArcGIS...")
 

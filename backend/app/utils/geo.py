@@ -386,62 +386,6 @@ def ensure_same_crs(
     return gdf1, gdf2
 
 
-def get_utm_crs_for_geometry(gdf: gpd.GeoDataFrame) -> str:
-    """
-    Calcola la zona UTM appropriata per un GeoDataFrame.
-
-    Utile per operazioni che richiedono unità metriche (buffer, area, length).
-    Calcola il centroide dell'unione di tutte le geometrie e determina
-    la zona UTM corrispondente.
-
-    Args:
-        gdf: GeoDataFrame da analizzare (deve avere CRS geografico).
-
-    Returns:
-        Codice EPSG della zona UTM (es. "EPSG:32632" per UTM zona 32N).
-        Default: "EPSG:32632" (Italia centro-nord) in caso di errore.
-    """
-    if gdf.empty:
-        return "EPSG:32632"
-
-    try:
-        centroide = gdf.geometry.unary_union.centroid
-        lon, lat = centroide.x, centroide.y
-
-        # Guard multi-zona: bbox che copre molto longitudine segnala che
-        # la singola zona UTM scelta sul centroide e' inaccurata ai bordi
-        # Soglie: 3 gradi = zona nominale ±1 zona adiacente (circa 0.04%
-        # distorsione scala); 6 gradi = fuori zona garantito
-        bounds = gdf.total_bounds  # minx, miny, maxx, maxy
-        lon_range = bounds[2] - bounds[0]
-        if lon_range > 6:
-            logger.warning(
-                "UTM zone guard CRITICAL: bbox copre %.2f gradi di longitudine "
-                "(>6). La zona UTM scelta distorce le geometrie ai bordi. "
-                "Considera CRS custom (es. Lambert conformico) per operazioni "
-                "metriche accurate.",
-                lon_range,
-            )
-        elif lon_range > 3:
-            logger.warning(
-                "UTM zone guard: bbox copre %.2f gradi di longitudine (>3). "
-                "Accuratezza metrica marginale per geometrie ai bordi della zona.",
-                lon_range,
-            )
-
-        # Formula: zona UTM = floor((lon + 180) / 6) + 1
-        zona_utm = int((lon + 180) / 6) + 1
-
-        # Emisfero Nord (326xx) o Sud (327xx
-        if lat >= 0:
-            return f"EPSG:326{zona_utm:02d}"
-        else:
-            return f"EPSG:327{zona_utm:02d}"
-    except Exception as e:
-        logger.warning("get_utm_crs_for_geometry: calcolo UTM fallito, uso default EPSG:32632: %s", e)
-        return "EPSG:32632"
-
-
 def extract_srid_from_column_type(col_type: str) -> Optional[int]:
     """
     Estrae il codice SRID dal formato tipo colonna "geometry:subtype:srid".

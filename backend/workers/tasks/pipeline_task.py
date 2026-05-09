@@ -77,12 +77,12 @@ def _get_project_info(project_id: str) -> Dict[str, Any]:
 
 def _resolve_intermediate_retention_n(project_id: str) -> int | None:
     try:
-        from app.core.intermediate import db as idb
+        from app.core.intermediate.run_lifecycle import get_default_runs_retention
         from app.core.projects.retention import resolve_runs_retention_n
 
         return resolve_runs_retention_n(
             project_id,
-            default=idb.DEFAULT_RUNS_RETENTION,
+            default=get_default_runs_retention(),
         )
     except Exception as e:
         logger.debug(f"retention policy lookup fallito: {type(e).__name__}: {e}")
@@ -190,11 +190,15 @@ def execute_pipeline_task(
 
     set_run_context(run_id=run_id, project_id=project_id)
 
-    # Apri run su intermediate storage (PostgreSQL via
-    # `app.core.intermediate.db` module — non bloccante
+    # Apri run su intermediate storage tramite boundary di lifecycle.
     try:
-        from app.core.intermediate import db as idb
-        idb.create_run(run_id=run_id, canvas_id=project_id, group_id=group_id, user_id=user_id)
+        from app.core.intermediate import run_lifecycle as intermediate_run_lifecycle
+        intermediate_run_lifecycle.create_run(
+            run_id=run_id,
+            canvas_id=project_id,
+            group_id=group_id,
+            user_id=user_id,
+        )
     except Exception as _ie:
         logger.warning(f"Intermediate: apertura run fallita (non bloccante): {_ie}")
 
@@ -313,10 +317,10 @@ def execute_pipeline_task(
             steps=get_steps(),
         )
 
-        # Chiudi run intermediate storage (PostgreSQL via writer module
+        # Chiudi run intermediate storage tramite boundary di lifecycle.
         try:
-            from app.core.intermediate.writer import close_run as idb_close_run
-            idb_close_run(
+            from app.core.intermediate.run_lifecycle import close_run as close_intermediate_run
+            close_intermediate_run(
                 run_id=run_id, input_hash="", output_hash="",
                 total_exec_time=_time.time() - _run_start, success=True,
                 retention_n=retention_n,
@@ -376,10 +380,10 @@ def execute_pipeline_task(
             debug_payload=debug_payload,
         )
 
-        # Chiudi run intermediate storage (PostgreSQL via writer module
+        # Chiudi run intermediate storage tramite boundary di lifecycle.
         try:
-            from app.core.intermediate.writer import close_run as idb_close_run
-            idb_close_run(
+            from app.core.intermediate.run_lifecycle import close_run as close_intermediate_run
+            close_intermediate_run(
                 run_id=run_id, input_hash="", output_hash="",
                 total_exec_time=_time.time() - _run_start, success=False,
                 retention_n=retention_n,
@@ -391,7 +395,7 @@ def execute_pipeline_task(
         # ogni task lascia aperto un handle che si accumula nel pool
         # Pattern ereditato dalla migrazione SQLite -> PG.
         try:
-            from app.core.intermediate.cleanup import close_worker_connection
+            from app.core.intermediate.run_lifecycle import close_worker_connection
             close_worker_connection()
         except Exception as e:
             logger.debug(f"close_connection intermediate fallito post-crash: {type(e).__name__}: {e}")

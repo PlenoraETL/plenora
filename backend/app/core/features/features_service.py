@@ -29,6 +29,7 @@ from app.core.features.arcgis_feature_operations import ArcGISFeatureOperations
 from app.core.features.arcgis_feature_writer import ArcGISFeatureWriteService
 from app.core.features.arcgis_writer_boundary import (
     ArcGISColumnMappingsInput,
+    ArcGISFeatureWritePublicResult,
 )
 from app.shared.connections.arcgis_connection import ArcGISConnectionInfo
 from app.shared.connections.arcgis_provider import ArcGISProviderProtocol
@@ -724,7 +725,7 @@ class FeaturesService:
         batch_size: Optional[int] = None,
         match_column: str = "",
         column_mappings: ArcGISColumnMappingsInput = None,
-    ) -> dict:
+    ) -> ArcGISFeatureWritePublicResult:
         """
         Scrive features su un layer ArcGIS partendo da un DataFrame.
         Alternativa a write_features che evita il round-trip su file.
@@ -802,7 +803,7 @@ class FeaturesService:
         source_srid: Optional[int] = None,
         folder_id: str = "",
         column_mappings: ArcGISColumnMappingsInput = None,
-    ) -> dict:
+    ) -> ArcGISFeatureWritePublicResult:
         """Crea un nuovo Feature Service da un DataFrame (senza file intermedio)."""
         conn_info = self._resolve_write_connection(connection_id)
 
@@ -835,7 +836,7 @@ class FeaturesService:
         match_column: str,
         column_mappings: ArcGISColumnMappingsInput,
     ) -> dict:
-        """KEEP_PUBLIC_COMPAT: delegate shared write orchestration to write boundary."""
+        """Shared private write boundary for file-backed and DataFrame-backed writes."""
         return self._writer.write_features_df_core(
             conn_info=conn_info,
             layer_url=layer_url,
@@ -846,26 +847,6 @@ class FeaturesService:
             batch_size=batch_size,
             match_column=match_column,
             column_mappings=column_mappings,
-        )
-
-    @staticmethod
-    def _write_result(action: str, result: dict, count_key: str, total: int) -> dict:
-        """KEEP_PUBLIC_COMPAT: delegate provider write result shape."""
-        return ArcGISFeatureWriteService.write_result(action, result, count_key, total)
-
-    def _split_upsert_features(
-        self,
-        conn_info: ArcGISConnectionInfo,
-        layer_url: str,
-        features: List[dict],
-        match_column: str,
-    ) -> Tuple[List[dict], List[dict]]:
-        """KEEP_PUBLIC_COMPAT: delegate upsert split to write boundary."""
-        return self._writer.split_upsert_features(
-            conn_info,
-            layer_url,
-            features,
-            match_column,
         )
 
     def _resolve_objectids_for_update(

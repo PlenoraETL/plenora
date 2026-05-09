@@ -9,6 +9,7 @@ from pathlib import Path
 import pytest
 
 from app.core.results import db as results_db
+from app.core.results import store as results_store
 
 
 pytestmark = [pytest.mark.unit, pytest.mark.contract]
@@ -47,7 +48,7 @@ def test_result_metadata_sql_lives_in_core_results_db(monkeypatch):
 
     assert isinstance(saved_row, results_db.ResultMetadataRow)
     assert saved_row.id == "res-1"
-    assert results_db.save_result(
+    assert results_store.save_result(
         result_id="res-1",
         project_id="proj-1",
         group_id="grp-1",
@@ -100,12 +101,18 @@ def test_result_metadata_reads_use_core_sql(monkeypatch):
     monkeypatch.setattr(results_db, "fetchone", _fetchone)
     monkeypatch.setattr(results_db, "fetchall", _fetchall)
 
-    assert results_db.get_result("res-1") == {"id": "latest"}
-    assert results_db.get_latest_result("proj-1", group_id="grp-1") == {
-        "id": "latest"
-    }
-    assert results_db.get_latest_result("proj-1") == {"id": "latest"}
-    assert results_db.list_results("proj-1") == [{"id": "latest"}]
+    result_row = results_db.get_result_row("res-1")
+    latest_group_row = results_db.get_latest_result_row("proj-1", group_id="grp-1")
+    latest_row = results_db.get_latest_result_row("proj-1")
+    result_rows = results_db.list_result_rows("proj-1")
+
+    assert isinstance(result_row, results_db.ResultMetadataRow)
+    assert result_row.id == "latest"
+    assert isinstance(latest_group_row, results_db.ResultMetadataRow)
+    assert latest_group_row.id == "latest"
+    assert isinstance(latest_row, results_db.ResultMetadataRow)
+    assert latest_row.id == "latest"
+    assert result_rows == [results_db.ResultMetadataRow(id="latest", _selected_keys=("id",))]
 
     assert "FROM results WHERE id = %s" in calls[0][1]
     assert calls[0][2] == ("res-1",)
@@ -142,17 +149,6 @@ def test_result_metadata_row_is_typed_read_only_boundary(monkeypatch):
     assert row.storage_key == "results/proj-1/res-1.bin"
     assert not hasattr(row, "to_legacy_dict")
     assert not hasattr(row, "get")
-    assert results_db.get_result("res-1") == {
-        "id": "res-1",
-        "project_id": "proj-1",
-        "group_id": "grp-1",
-        "filename": "out.csv",
-        "format": "csv",
-        "size_bytes": 12,
-        "rows_count": 2,
-        "created_at": "2026-05-08T10:00:00+00:00",
-        "storage_key": "results/proj-1/res-1.bin",
-    }
 
     with pytest.raises(FrozenInstanceError):
         row.id = "mutated"
@@ -160,7 +156,7 @@ def test_result_metadata_row_is_typed_read_only_boundary(monkeypatch):
         row["id"]  # type: ignore[index]
 
 
-def test_results_metadata_legacy_serialization_is_explicit_boundary() -> None:
+def test_results_metadata_legacy_serialization_is_explicit_store_boundary() -> None:
     row = results_db.ResultMetadataRow(
         id="res-1",
         project_id="proj-1",
@@ -173,7 +169,7 @@ def test_results_metadata_legacy_serialization_is_explicit_boundary() -> None:
         storage_key="results/proj-1/res-1.bin",
     )
 
-    assert results_db._serialize_result_metadata_row(row) == {
+    assert results_store._metadata_public_payload(row) == {
         "id": "res-1",
         "project_id": "proj-1",
         "group_id": "grp-1",
@@ -243,7 +239,11 @@ def test_core_results_metadata_rows_are_not_dict_accessed_after_hydration() -> N
 
 
 def test_result_metadata_exports_live_only_at_canonical_boundary():
-    assert results_db.save_result.__module__ == "app.core.results.db"
-    assert results_db.get_result.__module__ == "app.core.results.db"
-    assert results_db.get_latest_result.__module__ == "app.core.results.db"
-    assert results_db.list_results.__module__ == "app.core.results.db"
+    assert results_db.save_result_row.__module__ == "app.core.results.db"
+    assert results_db.get_result_row.__module__ == "app.core.results.db"
+    assert results_db.get_latest_result_row.__module__ == "app.core.results.db"
+    assert results_db.list_result_rows.__module__ == "app.core.results.db"
+    assert not hasattr(results_db, "save_result")
+    assert not hasattr(results_db, "get_result")
+    assert not hasattr(results_db, "get_latest_result")
+    assert not hasattr(results_db, "list_results")

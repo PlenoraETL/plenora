@@ -20,7 +20,7 @@ def geo_caplog(caplog):
     """caplog non cattura `app.utils.geo` perche' il logger custom ha
     propagate=False. Aggancia l'handler di caplog direttamente al target.
     """
-    target = logging.getLogger("app.utils.geo")
+    target = logging.getLogger("app.core.manipola.transforms.spatial_helpers")
     target.addHandler(caplog.handler)
     original_level = target.level
     target.setLevel(logging.WARNING)
@@ -46,11 +46,11 @@ def _gdf_from_lon_range(lon_min: float, lon_max: float, lat: float = 44.0):
     (7.00, 10.00),    # Italia NW: 3 gradi esatti (soglia inclusiva)
 ])
 def test_utm_guard_silent_for_compact_datasets(lon_min, lon_max, geo_caplog):
-    from app.utils.geo import get_utm_crs_for_geometry
+    from app.core.manipola.transforms.spatial_helpers import get_utm_crs_for_geometry
 
     caplog = geo_caplog
     gdf =_gdf_from_lon_range(lon_min, lon_max)
-    with caplog.at_level(logging.WARNING, logger="app.utils.geo"):
+    with caplog.at_level(logging.WARNING, logger="app.core.manipola.transforms.spatial_helpers"):
         epsg = get_utm_crs_for_geometry(gdf)
 
     assert epsg.startswith("EPSG:326") or epsg.startswith("EPSG:327")
@@ -66,11 +66,11 @@ def test_utm_guard_silent_for_compact_datasets(lon_min, lon_max, geo_caplog):
     (6.00, 12.00),    # Italia W-E: 6 gradi esatti (dentro soglia standard)
 ])
 def test_utm_guard_warns_for_multizone_moderate(lon_min, lon_max, geo_caplog):
-    from app.utils.geo import get_utm_crs_for_geometry
+    from app.core.manipola.transforms.spatial_helpers import get_utm_crs_for_geometry
 
     caplog = geo_caplog
     gdf =_gdf_from_lon_range(lon_min, lon_max)
-    with caplog.at_level(logging.WARNING, logger="app.utils.geo"):
+    with caplog.at_level(logging.WARNING, logger="app.core.manipola.transforms.spatial_helpers"):
         epsg = get_utm_crs_for_geometry(gdf)
 
     assert epsg.startswith("EPSG:326") or epsg.startswith("EPSG:327")
@@ -90,11 +90,11 @@ def test_utm_guard_warns_for_multizone_moderate(lon_min, lon_max, geo_caplog):
     (-10.00, 25.00),  # Europa occidentale: 35 gradi
 ])
 def test_utm_guard_warns_critical_for_multizone_wide(lon_min, lon_max, geo_caplog):
-    from app.utils.geo import get_utm_crs_for_geometry
+    from app.core.manipola.transforms.spatial_helpers import get_utm_crs_for_geometry
 
     caplog = geo_caplog
     gdf =_gdf_from_lon_range(lon_min, lon_max)
-    with caplog.at_level(logging.WARNING, logger="app.utils.geo"):
+    with caplog.at_level(logging.WARNING, logger="app.core.manipola.transforms.spatial_helpers"):
         epsg = get_utm_crs_for_geometry(gdf)
 
     assert epsg.startswith("EPSG:326") or epsg.startswith("EPSG:327")
@@ -109,10 +109,10 @@ def test_utm_guard_warns_critical_for_multizone_wide(lon_min, lon_max, geo_caplo
 
 
 def test_utm_guard_empty_gdf_returns_default_no_warning(caplog):
-    from app.utils.geo import get_utm_crs_for_geometry
+    from app.core.manipola.transforms.spatial_helpers import get_utm_crs_for_geometry
 
     gdf = gpd.GeoDataFrame(geometry=[], crs="EPSG:4326")
-    with caplog.at_level(logging.WARNING, logger="app.utils.geo"):
+    with caplog.at_level(logging.WARNING, logger="app.core.manipola.transforms.spatial_helpers"):
         epsg = get_utm_crs_for_geometry(gdf)
 
     assert epsg == "EPSG:32632"
@@ -121,10 +121,10 @@ def test_utm_guard_empty_gdf_returns_default_no_warning(caplog):
 
 
 def test_utm_guard_single_point_no_warning(caplog):
-    from app.utils.geo import get_utm_crs_for_geometry
+    from app.core.manipola.transforms.spatial_helpers import get_utm_crs_for_geometry
 
     gdf = gpd.GeoDataFrame(geometry=[Point(11.34, 44.49)], crs="EPSG:4326")
-    with caplog.at_level(logging.WARNING, logger="app.utils.geo"):
+    with caplog.at_level(logging.WARNING, logger="app.core.manipola.transforms.spatial_helpers"):
         epsg = get_utm_crs_for_geometry(gdf)
 
     assert epsg == "EPSG:32632"

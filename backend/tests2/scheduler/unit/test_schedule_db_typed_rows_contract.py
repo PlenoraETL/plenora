@@ -80,31 +80,13 @@ def test_list_schedule_rows_returns_typed_rows(monkeypatch):
     ]
 
 
-def test_get_schedule_keeps_legacy_dict_wrapper(monkeypatch):
+def test_scheduler_db_exposes_typed_read_api_only():
     from app.core.scheduler import db as schedule_db
 
-    monkeypatch.setattr(
-        schedule_db,
-        "get_schedule_row",
-        lambda *args, **kwargs: schedule_db.ScheduleRow(
-            id="schedule-1",
-            group_id="grp-1",
-            project_id="project-1",
-            name="Morning load",
-            cron_expression="0 6 * * *",
-            is_enabled=True,
-            config={"id": "schedule-1"},
-            created_at=None,
-            updated_at=None,
-            created_by=None,
-        ),
-    )
-
-    row = schedule_db.get_schedule("schedule-1")
-
-    assert isinstance(row, dict)
-    assert row["id"] == "schedule-1"
-    assert row["config"] == {"id": "schedule-1"}
+    assert hasattr(schedule_db, "get_schedule_row")
+    assert hasattr(schedule_db, "list_schedule_rows")
+    assert not hasattr(schedule_db, "get_schedule")
+    assert not hasattr(schedule_db, "list_schedules")
 
 
 def test_schedule_row_does_not_own_legacy_dict_serialization():
@@ -130,11 +112,6 @@ def test_save_schedule_returns_typed_schedule_row(monkeypatch):
     )
     monkeypatch.setattr(schedule_db, "execute", lambda *args, **kwargs: None)
     monkeypatch.setattr(schedule_db, "get_schedule_row", lambda schedule_id: persisted)
-    monkeypatch.setattr(
-        schedule_db,
-        "get_schedule",
-        lambda schedule_id: pytest.fail("save_schedule should return ScheduleRow directly"),
-    )
 
     row = schedule_db.save_schedule(
         schedule_id="schedule-1",
@@ -172,11 +149,6 @@ def test_update_schedule_returns_typed_schedule_row(monkeypatch):
     )
     monkeypatch.setattr(schedule_db, "execute", lambda *args, **kwargs: None)
     monkeypatch.setattr(schedule_db, "get_schedule_row", lambda schedule_id: persisted)
-    monkeypatch.setattr(
-        schedule_db,
-        "get_schedule",
-        lambda schedule_id: pytest.fail("update_schedule should return ScheduleRow directly"),
-    )
 
     row = schedule_db.update_schedule("schedule-1", cron_expression="0 7 * * *")
 
