@@ -118,12 +118,11 @@ def test_apply_results_retention_uses_typed_result_rows(monkeypatch):
         lambda pid, *, default: 2,
     )
     monkeypatch.setattr(results_store, "list_result_rows", lambda pid: rows)
-    monkeypatch.setattr(
-        results_db,
-        "list_results",
-        lambda pid: (_ for _ in ()).throw(
-            AssertionError("legacy result dict wrapper should not be used")
-        ),
+    # Sentinel residuo: il legacy `list_results` (dict wrapper) e' stato
+    # rimosso dal modulo - se qualcuno lo reintroducesse, questo assert
+    # fallirebbe perche' la lookup tornerebbe truthy.
+    assert not hasattr(results_db, "list_results"), (
+        "legacy result dict wrapper should stay removed"
     )
     monkeypatch.setattr(results_cleanup, "delete_result", deleted.append)
 

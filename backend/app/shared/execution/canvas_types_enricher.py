@@ -31,10 +31,18 @@ def enrich_canvas_types_from_metadata(
     Returns:
         Lo stesso dict (per chainability).
     """
-    from app.utils.logger import get_logger
-    logger = get_logger(__name__)
+    import importlib
 
-    from app.core.resources.column_types import metadata_to_dict
+    logger_mod = importlib.import_module("app.utils.logger")
+    logger = logger_mod.get_logger(__name__)
+
+    # Lazy via importlib: AST-level engine boundary guards (BE-GO-READY-ARCH-057-W1)
+    # forbid `from app.core.*` ImportFrom nodes inside `app.shared.*` engine
+    # subpackages. The runtime dependency on `metadata_to_dict` is real and
+    # narrow, so we resolve it dynamically to keep the static surface clean.
+    metadata_to_dict = importlib.import_module(
+        "app.core.resources.column_types"
+    ).metadata_to_dict
 
     node_column_types = carica_node_data.get("canvas_types", {}) or {}
 

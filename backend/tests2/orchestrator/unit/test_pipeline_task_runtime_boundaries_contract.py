@@ -12,7 +12,8 @@ import pytest
 pytestmark = [pytest.mark.unit, pytest.mark.orchestrator, pytest.mark.contract]
 
 
-_PIPELINE_TASK = Path("backend/workers/tasks/pipeline_task.py")
+_BACKEND_ROOT = Path(__file__).resolve().parents[3]
+_PIPELINE_TASK = _BACKEND_ROOT / "workers" / "tasks" / "pipeline_task.py"
 
 
 def _pipeline_task_tree() -> ast.AST:

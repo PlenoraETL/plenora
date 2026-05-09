@@ -81,7 +81,7 @@ class PendingReconciliationRow:
 
 
 _INSERT_PENDING_SQL = (
-    "INSERT INTO storage_reconciliation_log "
+    "INSERT INTO plenora.storage_reconciliation_log "
     "(domain, storage_key, operation, state, reason, extras) "
     "VALUES (%s, %s, %s, 'pending', %s, %s::jsonb) "
     "RETURNING id"
@@ -180,7 +180,7 @@ def mark_done(reconciliation_id: str) -> None:
     raises.
     """
     _autocommit_update(
-        "UPDATE storage_reconciliation_log "
+        "UPDATE plenora.storage_reconciliation_log "
         "SET state = 'done', updated_at = now() "
         "WHERE id = %s",
         (reconciliation_id,),
@@ -196,7 +196,7 @@ def mark_orphan_deleted(reconciliation_id: str) -> None:
     successful catch-up delete. Best-effort: never raises.
     """
     _autocommit_update(
-        "UPDATE storage_reconciliation_log "
+        "UPDATE plenora.storage_reconciliation_log "
         "SET state = 'orphan_deleted', updated_at = now() "
         "WHERE id = %s",
         (reconciliation_id,),
@@ -227,7 +227,7 @@ def mark_failed_attempt(
             column stays NULL (reconciler picks it up immediately).
     """
     _autocommit_update(
-        "UPDATE storage_reconciliation_log "
+        "UPDATE plenora.storage_reconciliation_log "
         "SET attempts = attempts + 1, "
         "    last_error = %s, "
         "    next_retry_at = %s, "
@@ -259,7 +259,7 @@ def mark_lost(reconciliation_id: str, *, error: str) -> None:
             `mark_failed_attempt.error`.
     """
     _autocommit_update(
-        "UPDATE storage_reconciliation_log "
+        "UPDATE plenora.storage_reconciliation_log "
         "SET state = 'lost', "
         "    last_error = %s, "
         "    updated_at = now() "
@@ -275,7 +275,7 @@ def mark_lost(reconciliation_id: str, *, error: str) -> None:
 
 _FETCH_DUE_PENDING_DELETES_SQL = (
     "SELECT id, domain, storage_key, operation, attempts "
-    "FROM storage_reconciliation_log "
+    "FROM plenora.storage_reconciliation_log "
     "WHERE state = 'pending' "
     "  AND operation = 'delete' "
     "  AND (next_retry_at IS NULL OR next_retry_at <= %s) "
@@ -450,7 +450,7 @@ class ReconciliationStateCount:
 
 _COUNT_ACTIVE_BY_STATE_DOMAIN_SQL = (
     "SELECT state, domain, COUNT(*) AS count "
-    "FROM storage_reconciliation_log "
+    "FROM plenora.storage_reconciliation_log "
     "WHERE state IN ('pending', 'lost') "
     "GROUP BY state, domain "
     "ORDER BY state ASC, domain ASC"
@@ -506,9 +506,9 @@ def count_active_by_state_domain() -> list["ReconciliationStateCount"]:
 
 
 _PRUNE_TERMINAL_SQL = (
-    "DELETE FROM storage_reconciliation_log "
+    "DELETE FROM plenora.storage_reconciliation_log "
     "WHERE id IN ("
-    "    SELECT id FROM storage_reconciliation_log "
+    "    SELECT id FROM plenora.storage_reconciliation_log "
     "    WHERE state IN ('done', 'orphan_deleted') "
     "      AND updated_at < %s "
     "    ORDER BY updated_at ASC "
@@ -594,7 +594,7 @@ def prune_terminal_older_than(
 
 
 _INSERT_UPLOAD_INTENT_SQL = (
-    "INSERT INTO storage_reconciliation_log "
+    "INSERT INTO plenora.storage_reconciliation_log "
     "(domain, storage_key, operation, state, reason, extras) "
     "VALUES (%s, %s, 'upload_intent', 'pending', %s, %s::jsonb) "
     "RETURNING id"
@@ -697,7 +697,7 @@ def record_upload_intent(
 
 _FETCH_DUE_STALE_UPLOAD_INTENTS_SQL = (
     "SELECT id, domain, storage_key, operation, attempts "
-    "FROM storage_reconciliation_log "
+    "FROM plenora.storage_reconciliation_log "
     "WHERE state = 'pending' "
     "  AND operation = 'upload_intent' "
     "  AND created_at < %s "
@@ -796,7 +796,7 @@ def fetch_due_stale_upload_intents(
 
 
 _FILE_SOURCE_STORAGE_KEY_REF_SQL = (
-    "SELECT 1 FROM file_sources "
+    "SELECT 1 FROM plenora.file_sources "
     "WHERE storage_key = %s LIMIT 1"
 )
 
@@ -871,7 +871,7 @@ def is_storage_key_referenced(storage_key: str) -> Optional[bool]:
 
 _COUNT_PENDING_BY_OPERATION_SQL = (
     "SELECT operation, COUNT(*) AS count "
-    "FROM storage_reconciliation_log "
+    "FROM plenora.storage_reconciliation_log "
     "WHERE state = 'pending' "
     "GROUP BY operation "
     "ORDER BY operation ASC"

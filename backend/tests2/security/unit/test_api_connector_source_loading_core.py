@@ -126,7 +126,7 @@ def test_load_source_project_blocks_cross_tenant_via_loader():
 
     svc = _make_service_no_singleton()
     svc._current_group_id = "stale-grp-LEAK"
-    with patch.object(projects_db, "get_project", return_value=None), \
+    with patch.object(projects_db, "get_project_row", return_value=None), \
          patch.object(results_db, "get_latest_result_row", return_value=None):
         with pytest.raises(ValueError, match="Accesso negato: progetto sorgente 'proj-99'"):
             svc._load_source_project(
@@ -150,7 +150,7 @@ def test_load_source_project_does_not_leak_cross_tenant_detail_in_message():
 
     svc = _make_service_no_singleton()
     svc._current_group_id = "stale-grp-LEAK"
-    with patch.object(projects_db, "get_project", return_value=None), \
+    with patch.object(projects_db, "get_project_row", return_value=None), \
          patch.object(results_db, "get_latest_result_row", return_value=None):
         with pytest.raises(ValueError) as exc_info:
             svc._load_source_project(
@@ -177,7 +177,7 @@ def test_load_source_project_distinguishes_project_not_found_from_cross_tenant()
 
     svc = _make_service_no_singleton()
     svc._current_group_id = "stale-grp-LEAK"
-    with patch.object(projects_db, "get_project", return_value=None):
+    with patch.object(projects_db, "get_project_row", return_value=None):
         with pytest.raises(ValueError) as exc_info:
             svc._load_source_project(
                 {"source_project_id": "proj-ghost"},
@@ -252,7 +252,7 @@ def test_resolve_file_source_path_blocks_cross_tenant_project_source():
     ]
     edges = [{"source": "src-1", "target": "tgt-1"}]
 
-    with patch.object(projects_db, "get_project", return_value=None), \
+    with patch.object(projects_db, "get_project_row", return_value=None), \
          patch.object(results_db, "get_latest_result_row", return_value=None):
         with pytest.raises(ValueError, match="Accesso negato: progetto sorgente 'proj-other'"):
             svc._resolve_file_source_path(

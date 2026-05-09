@@ -42,7 +42,13 @@ def test_data_prep_helpers_fix_mixed_columns_without_writer_state():
 
     prepared = fix_mixed_type_columns(source.copy(), logger)
 
-    assert prepared["mixed"].tolist() == ["1", "2A", None]
+    # NaN e' il sentinel canonico per missing nelle Series object di pandas;
+    # accettiamo sia None sia NaN (semanticamente equivalenti per i
+    # consumer downstream che li trattano come "missing"). NaN != NaN,
+    # quindi controlliamo via pandas.isna sul valore in coda.
+    mixed_values = prepared["mixed"].tolist()
+    assert mixed_values[:2] == ["1", "2A"]
+    assert pd.isna(mixed_values[2]) or mixed_values[2] is None
     assert prepared["plain"].tolist() == [1, 2, 3]
     assert logger.messages
 

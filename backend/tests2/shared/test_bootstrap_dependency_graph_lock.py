@@ -77,7 +77,7 @@ def test_bootstrap_py_canonical_order_in_source():
     body = m.group(1)
 
     canonical_markers = [
-        "settings.validate_startup()",
+        "validate_startup(settings)",
         "validate_storage_config()",
         "init_all_dbs()",
         "_repair_psycopg2_ssl_env()",
@@ -230,8 +230,7 @@ def test_is_bootstrapped_flips_to_true_after_successful_bootstrap(
     stubbed to no-ops), `is_bootstrapped()` returns True."""
     # Stub the four steps to no-ops to avoid real DB/Redis/FS I/O.
     monkeypatch.setattr(
-        "app.config.settings",
-        type("S", (), {"validate_startup": staticmethod(lambda: None)}),
+        "app.startup_validation.validate_startup", lambda settings: None,
     )
     monkeypatch.setattr(
         "app.shared.cloud_backends.validate_storage_config", lambda: None,
@@ -253,8 +252,7 @@ def test_is_bootstrapped_stays_false_when_step_raises(
     is not "complete" — only an end-to-end successful run flips
     the flag."""
     monkeypatch.setattr(
-        "app.config.settings",
-        type("S", (), {"validate_startup": staticmethod(lambda: None)}),
+        "app.startup_validation.validate_startup", lambda settings: None,
     )
     monkeypatch.setattr(
         "app.shared.cloud_backends.validate_storage_config", lambda: None,
@@ -284,8 +282,7 @@ def test_is_bootstrapped_recovers_to_true_on_retry_after_transient_failure(
     bootstrap is re-runnable and that the flag tracks the latest
     successful boundary crossing."""
     monkeypatch.setattr(
-        "app.config.settings",
-        type("S", (), {"validate_startup": staticmethod(lambda: None)}),
+        "app.startup_validation.validate_startup", lambda settings: None,
     )
     monkeypatch.setattr(
         "app.shared.cloud_backends.validate_storage_config", lambda: None,

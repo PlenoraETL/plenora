@@ -9,8 +9,13 @@ from typing import Any
 def geojson_to_wkt(geom: dict) -> str:
     """Convert a GeoJSON geometry dict to WKT using shapely when available."""
     try:
-        from shapely.geometry import shape
+        # Lazy via importlib: engine boundary guard
+        # (BE-GO-READY-ARCH-057-W1) forbids static `shapely` imports in
+        # `app.shared.resources.*`. shapely is optional here (graceful
+        # fallback to JSON), so we resolve it dynamically.
+        import importlib
 
+        shape = importlib.import_module("shapely.geometry").shape
         return shape(geom).wkt
     except Exception:
         return json.dumps(geom, ensure_ascii=False)

@@ -7,6 +7,7 @@ Pre-fix: `apply_runs_retention()` in `intermediate/db.py:330` era definita
 from __future__ import annotations
 
 import inspect
+from pathlib import Path
 
 import pytest
 
@@ -129,12 +130,14 @@ def test_apply_runs_retention_signature_stable():
     )
 
 
+_BACKEND_ROOT = Path(__file__).resolve().parents[3]
+
+
 def test_intermediate_db_does_not_read_project_retention_policy():
     """La policy projects.retention_n non deve vivere dentro intermediate.db."""
     import ast
-    from pathlib import Path
 
-    src_path = Path("backend/app/core/intermediate/db.py")
+    src_path = _BACKEND_ROOT / "app" / "core" / "intermediate" / "db.py"
     tree = ast.parse(src_path.read_text(encoding="utf-8"))
 
     for node in ast.walk(tree):
@@ -147,9 +150,8 @@ def test_intermediate_db_does_not_read_project_retention_policy():
 def test_intermediate_writer_does_not_read_project_retention_policy():
     """La policy projects.retention_n viene passata al writer dagli orchestration edge."""
     import ast
-    from pathlib import Path
 
-    src_path = Path("backend/app/core/intermediate/writer.py")
+    src_path = _BACKEND_ROOT / "app" / "core" / "intermediate" / "writer.py"
     tree = ast.parse(src_path.read_text(encoding="utf-8"))
 
     for node in ast.walk(tree):

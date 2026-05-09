@@ -78,7 +78,7 @@ _BREADCRUMB_CONTEXTS = [
      "DebugPayloadBuilder fallito (enrichment)"),
     ("workers/tasks/enrichment_task.py",
      "group_id metadata lookup fallito"),
-    ("app/core/scheduler/execution_manager.py",
+    ("app/core/scheduler/scheduler_execution_runtime.py",
      "DebugPayloadBuilder fallito (scheduler)"),
 ]
 
@@ -118,8 +118,8 @@ def test_silent_assignment_fallback_values_preserved():
          "_debug_payload = None"),
         ("workers/tasks/enrichment_task.py",
          "group_id = None"),
-        ("app/core/scheduler/execution_manager.py",
-         "_debug_payload = None"),
+        ("app/core/scheduler/scheduler_execution_runtime.py",
+         "debug_payload = None"),
     ]
 
     missing = []

@@ -30,10 +30,12 @@ def test_require_schedule_owner_uses_scheduler_ownership_context(monkeypatch):
     context = SimpleNamespace(ownership_resource=lambda: resource)
     checked: list[tuple[dict[str, object], str, CurrentUser]] = []
 
-    monkeypatch.setattr(
-        scheduler_db,
-        "get_schedule",
-        lambda _schedule_id: pytest.fail("auth must not call scheduler.db"),
+    # Sentinel: il legacy `get_schedule` (dict wrapper) e' stato rimosso
+    # dal modulo. Verifichiamo che resti rimosso, cosi' nessuno puo'
+    # reintrodurlo come scorciatoia per leggere lo schedule da auth.
+    assert not hasattr(scheduler_db, "get_schedule"), (
+        "auth must not call legacy scheduler.db.get_schedule "
+        "(rimosso post-typed-row migration)"
     )
     monkeypatch.setattr(
         scheduler_ownership,

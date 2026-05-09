@@ -18,8 +18,11 @@ def test_query_executor_reexports_default_engine_factory_for_compatibility():
     assert PublicFactory is ExtractedFactory
 
 
+_BACKEND_ROOT = Path(__file__).resolve().parents[3]
+
+
 def test_query_executor_keeps_engine_factory_out_of_orchestrator_source():
-    source = Path("backend/app/db/query_executor.py").read_text(encoding="utf-8")
+    source = (_BACKEND_ROOT / "app" / "db" / "query_executor.py").read_text(encoding="utf-8")
 
     assert "from app.db.query_engines import DefaultEngineFactory" in source
     assert "class DefaultEngineFactory" not in source

@@ -13,8 +13,11 @@ from app.utils.debug_payload_builder import DebugPayloadBuilder
 pytestmark = [pytest.mark.unit, pytest.mark.contract]
 
 
+_BACKEND_ROOT = Path(__file__).resolve().parents[2]
+
+
 def test_debug_payload_builder_uses_project_debug_context_boundary() -> None:
-    path = Path("backend/app/utils/debug_payload_builder.py")
+    path = _BACKEND_ROOT / "app" / "utils" / "debug_payload_builder.py"
     tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
 
     raw_project_db_imports: list[str] = []

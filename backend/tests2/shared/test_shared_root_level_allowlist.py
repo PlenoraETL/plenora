@@ -32,7 +32,6 @@ _ALLOWED_ROOT_MODULES: frozenset[str] = frozenset(
         "jwt_token",          # JWT encode/decode helpers
         "login_rate_limiter", # per-user login throttle
         "password_hashing",   # bcrypt password helpers
-        "sharing",            # resource sharing primitives
         "token_blacklist",    # JWT revocation store
         "upload_guards",      # upload size / MIME type enforcement
         "cloud_backends",          # object storage backend registry
@@ -61,7 +60,6 @@ _ROOT_MODULE_CLASSIFICATIONS: dict[str, str] = {
     "jwt_token": "MOVE_TO_SECURITY_PACKAGE_LATER",
     "login_rate_limiter": "MOVE_TO_SECURITY_PACKAGE_LATER",
     "password_hashing": "MOVE_TO_SECURITY_PACKAGE_LATER",
-    "sharing": "MOVE_TO_SECURITY_PACKAGE_LATER",
     "token_blacklist": "MOVE_TO_SECURITY_PACKAGE_LATER",
     "upload_guards": "MOVE_TO_SECURITY_PACKAGE_LATER",
     "cloud_backends": "HEAVY_ROOT_UTILITY",

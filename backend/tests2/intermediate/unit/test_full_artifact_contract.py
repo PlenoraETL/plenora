@@ -92,7 +92,7 @@ def _patch_run_meta(canvas_id: str = "proj-1", group_id: str = "grp-1"):
 
 def test_default_persistence_mode_is_metadata_only():
     from app.config import settings
-    assert settings.INTERMEDIATE_PERSISTENCE_MODE == "metadata_only"
+    assert settings.get("INTERMEDIATE_PERSISTENCE_MODE") == "metadata_only"
 
 
 # B. mode=full_artifact: parquet + manifest + meta

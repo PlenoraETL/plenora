@@ -140,7 +140,7 @@ def _short_error(msg: Any, limit: int = 500) -> Optional[str]:
 # WRITE FAIL-OPEN
 
 _INSERT_SQL = (
-    "INSERT INTO audit_actions "
+    "INSERT INTO plenora.audit_actions "
     "(user_id, action, target, status, ip_address, error_message) "
     "VALUES (%s, %s, %s, %s, %s, %s)"
 )
