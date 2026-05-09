@@ -12,7 +12,7 @@ os.environ.setdefault(
 )
 
 import time
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 

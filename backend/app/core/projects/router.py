@@ -4,7 +4,6 @@ Router API per il modulo Projects.
 Endpoint CRUD progetti, gestione canvas, e inferenza schema.
 """
 
-from datetime import datetime, timezone
 from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
 from typing import Any, List, Optional
@@ -21,7 +20,6 @@ from app.core.projects.exceptions import (
     ProjectLineageCycleError,
 )
 from app.core.auth.dependencies import (
-    get_current_user,
     require_not_esecutore,
     require_user_or_above,
     require_superadmin,

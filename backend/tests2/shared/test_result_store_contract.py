@@ -279,7 +279,6 @@ def test_save_result_blob_aws_credentials_expired_raises_operational_message(
     all'operatore di rinnovare le credenziali. Niente fallback a DB."""
     from botocore.exceptions import LoginRefreshRequired
 
-    import app.utils.result_store as result_store
 
     _force_object_storage(monkeypatch, tmp_path)
 

@@ -4,12 +4,10 @@ Bench formalizzato: `op_concat_columns` nuovo impl vs legacy vs naive apply.
 
 from __future__ import annotations
 
-import hashlib  # noqa: F401  (reserved — md5 bench usera' stesso harness)
 import statistics
 import time
 from typing import Callable, List
 
-import numpy as np
 import pandas as pd
 import pytest
 

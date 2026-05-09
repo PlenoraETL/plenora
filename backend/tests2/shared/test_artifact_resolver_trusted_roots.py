@@ -7,7 +7,6 @@ Audit Batch 8 §3.1 S5 / fix F5: `resolver._materialize_from_output_path`
 from __future__ import annotations
 
 import logging
-from pathlib import Path
 from types import SimpleNamespace
 
 import pytest

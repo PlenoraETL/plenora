@@ -10,8 +10,8 @@ from __future__ import annotations
 import argparse
 import sys
 from dataclasses import dataclass
-from datetime import datetime, timedelta
-from typing import Optional, Tuple
+from datetime import datetime
+from typing import Optional
 
 
 # Soglie — copiate VERBATIM da kickoff.md §9.2 / §9.3 (non reinterpretare)

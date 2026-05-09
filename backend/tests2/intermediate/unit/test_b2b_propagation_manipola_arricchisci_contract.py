@@ -7,7 +7,7 @@ Estende il contract di PR-B2 (estrai-final) ai 3 call-site rimasti:
 from __future__ import annotations
 
 from types import SimpleNamespace
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 
 import pandas as pd
 import pytest
@@ -92,7 +92,6 @@ class TestManipolaCheckpointPropagation:
         Bytecode-level check (non source-string fragile): l'argomento
         passato e' la variabile locale `intermediate_mode_override`.
         """
-        import inspect
         from app.core.manipola.executor import ManipolaExecutor
 
         # Co_varnames contiene la variabile locale del nome atteso.

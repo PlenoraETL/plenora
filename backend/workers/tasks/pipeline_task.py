@@ -40,7 +40,6 @@ def _build_orchestrator() -> Any:
     from app.db.query_executor import create_executor
     from app.core.orchestrator.service import OrchestratorService
     from app.core.files.dataframe_io import save_dataframe
-    from app.config import settings
 
     project_service = ProjectService()
     connection_service = ConnectionService()

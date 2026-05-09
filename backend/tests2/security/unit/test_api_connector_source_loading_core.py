@@ -11,11 +11,7 @@ import pytest
 
 from app.core.arricchisci.api_connector import ApiConnectionService
 from app.core.arricchisci.execution_context import ArricchisciExecutionContext
-from app.core.artifacts import (
-    LatestProjectArtifactRef,
-    MaterializedArtifact,
-    SourceLoadingError,
-)
+from app.core.artifacts import LatestProjectArtifactRef
 
 
 pytestmark = [

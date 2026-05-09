@@ -4,7 +4,6 @@ Retry policy del carica_task (C4).
 Contract: `carica_task` scrive su DB cliente. Un retry automatico
 """
 
-import inspect
 
 import pytest
 

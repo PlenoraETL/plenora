@@ -4,12 +4,10 @@ Implementazione DatabaseWriter per il modulo CARICA.
 Keeps database loading behavior isolated from orchestration callers.
 """
 
-from app.utils.logger import get_logger, get_request_id, get_user_id
+from app.utils.logger import get_logger
 import logging
-import math
-import time
 from datetime import datetime, timezone
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from typing import Callable, List, Optional, Tuple
 
 import pandas as pd
 from sqlalchemy import text
@@ -19,7 +17,6 @@ from app.core.carica.models import (
     BatchProgress,
     ColumnMapping,
     ConflictPolicy,
-    ConflictReport,
     TransactionMode,
     WriteConfig,
     WriteMode,
@@ -28,7 +25,6 @@ from app.core.carica.models import (
 )
 from app.core.carica.writer_base import DestinationWriter
 from app.core.carica.ddl_generator import DDLGenerator
-from app.core.carica.conflict_checker import ConflictChecker
 from app.core.carica.writer_data_prep import DataPrepMixin
 from app.core.carica.writer_introspection import SchemaIntrospectionMixin
 from app.core.carica.writer_transaction_exec import TransactionExecutionMixin

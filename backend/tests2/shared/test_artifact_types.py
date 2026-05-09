@@ -4,16 +4,10 @@ Tests the artifact types behavior.
 Locks backend contracts and regression boundaries for the current architecture.
 """
 
-from pathlib import Path
 
 import pytest
 
-from app.core.artifacts.types import (
-    ArtifactResolutionError,
-    LatestProjectArtifactRef,
-    MaterializedArtifact,
-    RunArtifactRef,
-)
+from app.core.artifacts.types import LatestProjectArtifactRef, MaterializedArtifact, RunArtifactRef
 
 
 pytestmark = [pytest.mark.unit, pytest.mark.contract]

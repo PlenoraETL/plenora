@@ -13,12 +13,11 @@ from app.shared import error_codes
 from app.shared.error_envelope import raise_typed_http
 from app.shared.audit_action import audit_action
 from app.core.auth.dependencies import (
-    get_current_user,
     require_not_esecutore,
     require_user_or_above,
     require_admin,
 )
-from app.shared.contracts.auth import CurrentUser, group_filter
+from app.shared.contracts.auth import CurrentUser
 from app.core.auth.ownership import (
     assert_group_access,
     assert_resource_visible,

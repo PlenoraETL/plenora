@@ -4,7 +4,6 @@ Ispettore di schema per database relazionali.
 Keeps this module's responsibility explicit and isolated from adjacent code.
 """
 
-from abc import ABC, abstractmethod
 from typing import Dict, List, Optional, TypedDict, Protocol, Callable, Any, Tuple
 from dataclasses import dataclass
 

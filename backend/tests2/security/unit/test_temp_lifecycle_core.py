@@ -119,7 +119,6 @@ def test_temp_file_for_cleans_up_tmp_dir_when_zip_extraction_fails(tmp_path):
     di safe_extractall lasciava la tmp dir su disco. Ora cleanup
     garantito su entrambi i path errore (exception + nessun shp/gdb
     trovato)."""
-    import tempfile as _tf
     from app.core.files.service import FileSourceService
     from app.config import settings
 
@@ -161,7 +160,6 @@ def test_temp_file_for_cleans_up_tmp_dir_when_no_shp_inside_valid_zip(tmp_path):
     """Caso edge: zip valido ma senza .shp/.gdb dentro â†’ return None
     e cleanup. Pre-fix: il fall-through al `return None` lasciava la
     tmp_dir creata."""
-    import tempfile as _tf
     import zipfile as _zipfile
     import io
     from app.core.files.service import FileSourceService

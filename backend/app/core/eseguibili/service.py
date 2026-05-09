@@ -8,7 +8,6 @@ import copy
 import json
 import uuid
 from typing import Mapping, Optional, Sequence
-from datetime import datetime, timezone
 
 from app.utils.logger import get_logger
 
@@ -235,7 +234,6 @@ def execute(
     from app.core.files.dataframe_io import load_dataframe_from_file
     from app.core.files.service import file_source_service
     from app.core.orchestrator.task_service import task_service
-    from app.config import settings
 
     # 1. Carica DataFrame originale
     df = load_dataframe_from_file(file_path)

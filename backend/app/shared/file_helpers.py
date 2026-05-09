@@ -23,12 +23,14 @@ _logger = logging.getLogger(__name__)
 # ColumnInfo: modello condiviso canonico, con fallback dataclass per test
 # standalone che importano il modulo senza l'app completa.
 try:
-    from app.core.projects.canvas_models import ColumnInfo  # noqa: F401
+    from app.core.projects.canvas_models import ColumnInfo as _AppColumnInfo
     _USE_APP_MODELS = True
 except ImportError:  # pragma: no cover
     _USE_APP_MODELS = False
 
-if not _USE_APP_MODELS:
+if _USE_APP_MODELS:
+    ColumnInfo = _AppColumnInfo
+else:
     @dataclass
     class ColumnInfo:  # type: ignore[no-redef
         """Informazioni su una colonna (fallback dataclass)."""

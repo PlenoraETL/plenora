@@ -22,7 +22,6 @@ from app.core.resources.types import (
     ResourceRef,
 )
 from app.core.resources.loaders._shared import (
-    _short_key,
     _download_object_storage_impl,
 )
 

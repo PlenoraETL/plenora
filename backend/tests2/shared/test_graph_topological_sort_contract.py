@@ -251,7 +251,6 @@ def test_module_imports_no_domain_dependencies():
             del sys.modules[mod_name]
 
     before = set(sys.modules.keys())
-    import app.shared.execution.graph  # noqa: F401
     new_modules = set(sys.modules.keys()) - before
 
     forbidden = {

@@ -4,7 +4,6 @@ Regression guards per `_resolve_file_source_id_path` fail-closed su
 errori tecnici (DB lookup + scrittura FS cache).
 """
 
-from unittest.mock import patch
 
 import psycopg2
 import pytest

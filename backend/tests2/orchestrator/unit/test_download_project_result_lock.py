@@ -4,7 +4,6 @@ Lock tests per `GET /api/projects/{project_id}/download`.
 Regression guard + scaglione 0 per il bug segnalato: l'endpoint
 """
 
-from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 

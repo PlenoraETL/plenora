@@ -6,7 +6,6 @@ Blinda il fix del reperto #27: prima di get_client_ip, TUTTI i login
 
 from __future__ import annotations
 
-from unittest.mock import patch
 
 import pytest
 from fastapi import FastAPI

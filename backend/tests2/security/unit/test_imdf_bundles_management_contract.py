@@ -4,14 +4,12 @@ test_imdf_bundles_management_contract.py
 Contract test per la gestione storico bundle IMDF:
 """
 import json
+import importlib
 import pytest
-from pathlib import Path
 
 # Pre-import per evitare che il monkeypatch di settings rompa init-time reads.
-import app.utils.logger  # noqa: F401
-import app.core.features.features_service  # noqa: F401
-import app.core.auth.auth  # noqa: F401
-import app.core.imdf.router as imdf_router  # noqa: F401
+importlib.import_module("app.utils.logger")
+imdf_router = importlib.import_module("app.core.imdf.router")
 
 from app.shared.contracts.auth import CurrentUser
 

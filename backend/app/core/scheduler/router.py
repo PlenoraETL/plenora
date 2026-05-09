@@ -5,10 +5,10 @@ Owns the HTTP boundary and delegates business logic to services or helpers.
 """
 
 from fastapi import APIRouter, HTTPException, Query, Depends
+from datetime import datetime
 from typing import Optional
 from app.utils.logger import get_logger
 from app.core.auth.dependencies import (
-    get_current_user,
     require_not_esecutore,
     require_admin,
 )

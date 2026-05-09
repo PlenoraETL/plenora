@@ -21,11 +21,6 @@ def _extract_group_and_id(resource):
     return getattr(resource, "group_id", None), getattr(resource, "id", None)
 
 
-# `group_filter` lives in the pure shared auth contract. This module
-# keeps a compatibility export while DB-bound ownership helpers remain here.
-from app.shared.contracts.auth import group_filter  # noqa: F401
-
-
 def assert_group_access(
     resource: dict | object | None,
     current_user: CurrentUser,

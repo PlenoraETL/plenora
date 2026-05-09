@@ -1,4 +1,4 @@
-﻿"""
+"""
 Contract test — ticket RBAC + state transitions.
 
 Copre le regole descritte in app/core/tickets/service.py:
@@ -6,7 +6,7 @@ Copre le regole descritte in app/core/tickets/service.py:
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 from fastapi import HTTPException

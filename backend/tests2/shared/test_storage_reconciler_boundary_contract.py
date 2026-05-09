@@ -13,9 +13,7 @@ os.environ.setdefault(
     "DATABASE_URL", "postgresql://test:test@127.0.0.1:5432/test"
 )
 
-import logging
 from datetime import datetime, timedelta, timezone
-from typing import Any, List, Tuple
 from unittest.mock import patch
 
 import pytest

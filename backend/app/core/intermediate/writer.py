@@ -5,7 +5,7 @@ Intermediate Writer — logica di scrittura nello storage intermediate
 """
 
 import hashlib
-from typing import Dict, List, Any, Optional
+from typing import Dict, List
 
 from app.utils.logger import get_logger
 from app.core.intermediate import db

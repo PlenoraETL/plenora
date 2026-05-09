@@ -14,7 +14,6 @@ os.environ.setdefault(
     "DATABASE_URL", "postgresql://test:test@127.0.0.1:5432/test"
 )
 
-from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest

@@ -11,7 +11,6 @@ import dis
 import pytest
 
 # Import fixture come simbolo locale per discovery pytest senza conftest.
-from tests2._helpers.celery_eager import celery_eager  # noqa: F401
 
 
 pytestmark = [

@@ -9,13 +9,11 @@ from pydantic import BaseModel, Field
 from typing import Dict, Optional, List
 
 from app.core.auth.dependencies import (
-    get_current_user,
     require_not_esecutore,
     require_admin,
 )
-from app.shared.contracts.auth import CurrentUser, group_filter
+from app.shared.contracts.auth import CurrentUser
 from app.core.auth.ownership import (
-    assert_group_access,
     assert_resource_visible,
     assert_can_modify,
     compute_can_edit,

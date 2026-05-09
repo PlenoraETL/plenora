@@ -15,7 +15,6 @@ os.environ.setdefault(
 
 import re
 from pathlib import Path
-from typing import Tuple
 
 import pytest
 from fastapi import HTTPException

@@ -3,14 +3,14 @@ test_imdf_validate_publish_robustness_contract.py
 
 Contract test per i check "robustezza pre-publish" aggiunti a
 """
+import importlib
+
 import pytest
 
-import app.utils.logger  # noqa: F401
-import app.core.features.features_service  # noqa: F401
-import app.core.features.arcgis_client  # noqa: F401
-import app.core.imdf.loader  # noqa: F401
-import app.core.imdf.arcgis.service_discovery  # noqa: F401
-import app.core.imdf.validator  # noqa: F401
+importlib.import_module("app.utils.logger")
+importlib.import_module("app.core.features.features_service")
+importlib.import_module("app.core.features.arcgis_client")
+importlib.import_module("app.core.imdf.loader")
 
 pytestmark = [pytest.mark.unit, pytest.mark.contract, pytest.mark.regression]
 
@@ -29,7 +29,6 @@ class _FakeCrs:
 class _FakeGDF:
     """Wrapper minimale attorno a un pandas DataFrame. GeoDataFrame-like."""
     def __init__(self, df, crs_epsg=4326):
-        import pandas as pd  # noqa: F401
         self._df = df
         self.crs = _FakeCrs(crs_epsg) if crs_epsg else None
     @property

@@ -5,7 +5,6 @@ Scopo: congelare il contratto osservabile di `_execute_rest_file` prima
 """
 
 from contextlib import ExitStack
-from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 

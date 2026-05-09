@@ -4,7 +4,6 @@ Core-level test per Refactor #5 Step A: ScheduleArtifactStore.
 Sostituisce la logica `_archive_output` di `ExecutionManager` come
 """
 
-from datetime import datetime
 from pathlib import Path
 
 import pytest

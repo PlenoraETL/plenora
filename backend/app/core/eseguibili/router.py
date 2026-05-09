@@ -7,17 +7,15 @@ Endpoint:
 import os
 import tempfile
 from pathlib import Path
-from fastapi import APIRouter, HTTPException, Depends, UploadFile, File, Form, BackgroundTasks
-from fastapi.responses import FileResponse
+from fastapi import APIRouter, HTTPException, Depends, UploadFile, File, BackgroundTasks
 from typing import List, Mapping, Optional
 
 from app.core.auth.dependencies import (
     get_current_user,
     require_admin,
 )
-from app.shared.contracts.auth import CurrentUser, group_filter
+from app.shared.contracts.auth import CurrentUser
 from app.core.auth.ownership import (
-    assert_group_access,
     assert_resource_visible,
     assert_can_modify,
     compute_can_edit,
@@ -35,7 +33,7 @@ from . import db as eseguibili_db
 from . import service as eseguibili_service
 from .models import (
     EseguibileCreate, EseguibileUpdate, EseguibileSummary, EseguibileDetails,
-    ExecuteRequest, ExpectedColumn, AnalyzeUploadResponse,
+    ExecuteRequest, AnalyzeUploadResponse,
 )
 
 logger = get_logger(__name__)

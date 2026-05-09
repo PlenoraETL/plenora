@@ -11,7 +11,6 @@ import statistics
 import time
 from typing import Callable, List
 
-import numpy as np
 import pandas as pd
 import pytest
 

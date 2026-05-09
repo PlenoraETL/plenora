@@ -4,7 +4,6 @@ Servizio CRUD per connessioni ArcGIS Feature Service.
 Keeps provider-specific behavior behind a narrow integration boundary.
 """
 
-import json
 import uuid
 import time
 from pathlib import Path

@@ -7,7 +7,6 @@ Reperto coperto: revoca token JWT lato server. Pre-feature, l'unica
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
-from typing import Optional
 
 import pytest
 from fastapi import FastAPI

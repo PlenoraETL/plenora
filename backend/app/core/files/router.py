@@ -99,14 +99,12 @@ from app.shared import error_codes
 from app.shared.error_envelope import raise_typed_http
 from app.shared.audit_action import audit_action
 from app.core.auth.dependencies import (
-    get_current_user,
     require_not_esecutore,
     require_user_or_above,
 )
 from app.core.auth.owner_dependencies import require_file_owner
-from app.shared.contracts.auth import CurrentUser, group_filter
+from app.shared.contracts.auth import CurrentUser
 from app.core.auth.ownership import (
-    assert_group_access,
     assert_resource_visible,
     compute_can_edit,
 )
@@ -115,7 +113,6 @@ from app.shared.resources.path_policy import assert_path_within as _core_assert
 from .models import (
     FileSource,
     FileSourceList,
-    FileSourceUpdate,
     FileSourceLayersResponse,
     FileSourcePreview,
 )
@@ -231,8 +228,7 @@ def upload_file(
     current_user: CurrentUser = Depends(require_user_or_above),
 ):
     """Upload un nuovo file e crea un File Source. Viewer non può creare."""
-    import json, uuid
-    from datetime import datetime
+    import json
     try:
         # Sanitizza filename con helper centralizzato (path traversal, NUL
         # nomi riservati ".."/"."/""

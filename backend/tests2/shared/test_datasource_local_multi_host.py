@@ -69,7 +69,7 @@ def _make_local_datasource(tmp_path):
 
 def test_test_connection_advisory_on_local_path(tmp_path, monkeypatch):
     """Un path locale (tmp_path = /tmp/... o C:\\...) produce advisory."""
-    from app.core.datasources.local import LocalDataSource, _classify_path_for_multi_host
+    from app.core.datasources.local import LocalDataSource
     from app.core.datasources.interface import BackendConfig
 
     # Forziamo sempre "local" per isolare il test dalla heuristic del path reale

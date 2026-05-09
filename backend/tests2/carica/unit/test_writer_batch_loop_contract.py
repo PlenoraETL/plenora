@@ -20,7 +20,7 @@ from typing import List, Tuple
 import pandas as pd
 import pytest
 
-from app.core.carica.models import BatchProgress, WriteResult, WriteStatus
+from app.core.carica.models import BatchProgress, WriteResult
 from app.core.carica.writer_batch_loop import run_batched_inserts
 
 

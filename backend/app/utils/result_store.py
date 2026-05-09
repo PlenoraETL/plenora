@@ -19,6 +19,13 @@ logger = get_logger(__name__)
 # Numero default di risultati da conservare per progetto.
 # Compatibility export; implementation lives in app.core.results.retention.
 
+__all__ = [
+    "DEFAULT_RESULTS_RETENTION",
+    "PipelineResultSave",
+    "save_pipeline_result",
+    "save_pipeline_result_outcome",
+]
+
 
 @dataclass(frozen=True)
 class PipelineResultSave:

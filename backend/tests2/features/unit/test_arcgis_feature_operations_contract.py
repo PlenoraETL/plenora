@@ -8,7 +8,6 @@ from unittest.mock import MagicMock
 import pandas as pd
 import pytest
 
-from app.core.features.arcgis_feature_operations import ArcGISFeatureOperations
 from app.core.features.arcgis_feature_writer import ArcGISFeatureWriteService
 from app.core.features.features_service import FeaturesService
 from app.shared.connections.arcgis_connection import ArcGISConnectionInfo

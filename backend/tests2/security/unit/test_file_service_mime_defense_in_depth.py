@@ -7,7 +7,7 @@ Difesa secondaria: i 3 metodi di FileSourceService che ricevono blob
 from __future__ import annotations
 
 import io
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 

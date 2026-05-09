@@ -6,7 +6,7 @@ Quando un client fa `POST /auth/logout`, il suo `jti` viene scritto
 
 from __future__ import annotations
 
-import os
+import importlib
 import threading
 import time
 from typing import Any, Dict, Optional
@@ -210,7 +210,7 @@ def get_blacklist_status(stale_threshold_seconds: int = 1800) -> Dict[str, Any]:
     client = _get_client()
     if client is None:
         try:
-            import redis  # type: ignore # noqa: F401
+            importlib.import_module("redis")
             message = "Client Redis non inizializzato"
         except ImportError:
             message = "redis-py non installato — blacklist disabilitata"

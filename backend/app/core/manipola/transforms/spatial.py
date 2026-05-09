@@ -913,8 +913,6 @@ def op_geo_voronoi(
     """
     try:
         from shapely.geometry import MultiPoint
-        from shapely.ops import unary_union
-
         gdf = df if isinstance(df, gpd.GeoDataFrame) else to_geodataframe(df, geom_column)
 
         if not HAS_VORONOI:

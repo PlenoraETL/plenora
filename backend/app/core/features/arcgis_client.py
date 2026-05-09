@@ -9,7 +9,6 @@ import time  # noqa: F401 (legacy monkeypatch compatibility for auth backoff)
 from typing import Dict, List, Mapping, Optional, Sequence, Tuple
 
 import requests
-import pandas as pd
 
 from app.shared.connections.arcgis_provider_results import (
     DeleteFeatureServiceItemsResult,
@@ -40,6 +39,20 @@ from app.core.features.arcgis_rest_write import (
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
+
+__all__ = [
+    "AddLayerResult",
+    "ArcGISClient",
+    "ArcGISConnectionInfo",
+    "DefaultHttpClient",
+    "EsriJsonConverter",
+    "EsriTypeMapper",
+    "HttpClientProtocol",
+    "_chunked_values",
+    "_mask_secret",
+    "_quote_arcgis_sql_value",
+    "time",
+]
 
 
 # TIPI E PROTOCOLLI
@@ -179,8 +192,6 @@ class ArcGISClient(
         Supporta Point, MultiPoint, LineString, MultiLineString,
         Polygon, MultiPolygon.
         """
-        from shapely.geometry import mapping
-        
         geom_type = geom.geom_type
         
         if geom_type == "Point":
@@ -354,8 +365,6 @@ class ArcGISClient(
         Returns:
             {success, service_url, layer_url, feature_count}
         """
-        import pandas as pd
-        
         token = self.authenticate(conn)
         username = conn.username
         

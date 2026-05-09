@@ -981,7 +981,7 @@ class PlenoraBeatScheduler(Scheduler):
             days = int(getattr(settings, "LOG_RETENTION_DAYS", 30) or 30)
             if days <= 0:
                 return  # retention disabilitata
-            from app.db.pg_connection import execute, fetchall
+            from app.db.pg_connection import fetchall
             # Niente schema hard-coded `plenora.`: il pool apre le
             # connessioni con `search_path=<_DB_SCHEMA>,public`, quindi
             # ci riferiamo alla tabella `logs` senza prefisso e PostgreSQL

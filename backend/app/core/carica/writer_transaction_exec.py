@@ -15,7 +15,6 @@ from sqlalchemy import text
 from sqlalchemy.engine import Connection
 
 from app.core.carica.models import (
-    BatchProgress,
     ColumnMapping,
     TransactionMode,
     WriteResult,

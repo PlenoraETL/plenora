@@ -6,7 +6,7 @@ Keeps API enrichment behavior isolated from orchestration callers.
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional
+from typing import Dict, Optional
 
 import pandas as pd
 
@@ -243,8 +243,6 @@ class ApiConnectionSourceLoadingMixin:
             SourceLoadingError,
             SourceRef,
         )
-        from app.core.files.dataframe_io import load_dataframe_from_file
-
         # RB.#19 Step A: timing log totale del source project load
         # Aggrega tutti i sub-step (DB lookup, S3/blob fetch, temp write
         # parse) gia' loggati individualmente downstream

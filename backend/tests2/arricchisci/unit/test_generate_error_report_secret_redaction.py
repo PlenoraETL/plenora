@@ -9,7 +9,6 @@ import csv
 import json
 from pathlib import Path
 
-import pytest
 
 from app.core.arricchisci.enrichment_service import generate_error_report
 from app.core.arricchisci.models import RowError, RowStatus

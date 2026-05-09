@@ -7,7 +7,6 @@ Verifica i due helper consolidati:
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, List, Tuple
 
 import pytest
 

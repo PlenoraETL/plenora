@@ -218,7 +218,6 @@ def test_check_uses_quoted_names_in_select_for_postgres(monkeypatch):
     We mock the engine.connect() call to capture the issued SQL and
     return zero conflicting values."""
     import pandas as pd
-    from sqlalchemy import text as _text
 
     captured_sql = []
 

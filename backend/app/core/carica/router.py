@@ -10,7 +10,7 @@ from typing import Any, Dict, List, Optional
 from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
 
-from app.core.auth.dependencies import get_current_user, require_not_esecutore
+from app.core.auth.dependencies import require_not_esecutore
 from app.shared.contracts.auth import CurrentUser
 from app.core.auth.ownership import assert_resource_visible
 from app.core.carica.executor import CaricaExecutor, _dict_to_conn_obj

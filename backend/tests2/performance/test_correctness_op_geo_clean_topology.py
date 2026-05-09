@@ -9,7 +9,7 @@ from __future__ import annotations
 import geopandas as gpd
 import numpy as np
 import pytest
-from shapely.geometry import Point, Polygon
+from shapely.geometry import Polygon
 from shapely.ops import unary_union
 
 from app.core.manipola.transforms.spatial import op_geo_clean_topology

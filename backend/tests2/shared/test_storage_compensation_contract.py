@@ -7,7 +7,7 @@ helper unificato `app.shared.storage_compensation.compensating_delete`.
 from __future__ import annotations
 
 import logging
-from typing import Any, List
+from typing import List
 from unittest.mock import MagicMock
 
 import pytest

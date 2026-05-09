@@ -5,7 +5,7 @@ Contract: se carica_task viene invocato con un `run_id` esplicito che
 """
 
 import inspect
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 

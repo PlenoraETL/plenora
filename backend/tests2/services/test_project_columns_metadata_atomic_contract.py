@@ -7,7 +7,6 @@ Reperto coperto: il vecchio `update_project_columns_metadata` faceva
 from __future__ import annotations
 
 import json
-from unittest.mock import MagicMock
 
 import pytest
 

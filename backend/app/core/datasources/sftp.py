@@ -23,10 +23,10 @@ from app.utils.logger import get_logger
 logger = get_logger(__name__)
 
 if TYPE_CHECKING:
-    import paramiko
+    import paramiko as paramiko_types
 
 
-def _import_paramiko():
+def _import_paramiko() -> "paramiko_types | None":
     try:
         import paramiko
         return paramiko

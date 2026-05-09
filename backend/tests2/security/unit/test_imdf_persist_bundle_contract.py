@@ -9,8 +9,6 @@ from pathlib import Path
 
 import pytest
 
-import app.utils.logger  # noqa: F401
-import app.core.imdf.loader  # noqa: F401
 
 pytestmark = [pytest.mark.unit, pytest.mark.security, pytest.mark.contract, pytest.mark.regression]
 

@@ -81,7 +81,6 @@ import re
 import sys
 import traceback
 from datetime import datetime, timezone
-from pathlib import Path
 from threading import Lock
 
 from app.config import settings

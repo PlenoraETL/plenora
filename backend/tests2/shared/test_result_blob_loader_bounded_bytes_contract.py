@@ -7,9 +7,7 @@ BE-GO-READY-RESOURCE-ENGINE-010-RESULT-BLOB-BOUNDED-BYTES.
 from __future__ import annotations
 
 import os
-import sys
 from pathlib import Path
-from unittest.mock import patch
 
 import pytest
 

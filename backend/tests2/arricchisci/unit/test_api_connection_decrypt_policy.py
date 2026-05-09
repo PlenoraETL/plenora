@@ -6,7 +6,7 @@ Blinda il contratto: quando un campo auth cifrato e' non decriptabile
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 

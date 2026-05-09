@@ -102,7 +102,6 @@ def parse_parquet_preview(
     # invokes the parser does not pay the import cost. The
     # sibling module under ``app/core/intermediate/`` references
     # pyarrow/pandas anymore
-    import pandas as pd
     import pyarrow as pa
     import pyarrow.parquet as pq
 

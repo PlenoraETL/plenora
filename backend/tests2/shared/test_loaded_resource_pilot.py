@@ -6,7 +6,7 @@ BE-GO-READY-ARCH-058-W1 / BE-GO-READY-ARCH-059-W1.
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pandas as pd
 import pytest
@@ -62,7 +62,7 @@ def test_loaded_resource_is_frozen_dataclass():
 
 
 def test_load_with_metadata_returns_loaded_resource():
-    from app.core.artifacts import SourceLoader, SourceRef
+    from app.core.artifacts import SourceLoader
     from app.shared.resources.metadata import LoadedResource
 
     df = pd.DataFrame({"id": [1], "geometry": ["POINT (0 0)"]})
@@ -90,7 +90,7 @@ def test_load_with_metadata_returns_loaded_resource():
 
 def test_load_with_metadata_populates_resource_metadata():
     from app.core.artifacts import SourceLoader
-    from app.shared.resources.metadata import LoadedResource, ResourceMetadata
+    from app.shared.resources.metadata import ResourceMetadata
 
     df = pd.DataFrame({"id": [1]})
     ref = _make_file_ref()

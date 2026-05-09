@@ -7,7 +7,6 @@ Runs background execution while preserving backend runtime contracts.
 import csv as csv_mod
 import json
 import json as json_mod
-import os
 import shutil as _shutil
 import tempfile as _tf
 import threading
@@ -21,9 +20,8 @@ from typing import Dict, Any, Optional, List
 from workers.celery_app import celery_app
 from app.config import settings
 from app.utils.logger import get_logger, open_run, close_run, set_run_context, append_step
-from app.config import settings
 from app.core.arricchisci.enrichment_service import EnrichmentExecutor, generate_error_report
-from app.core.arricchisci.models import EnrichmentOptions, EnrichmentResult
+from app.core.arricchisci.models import EnrichmentOptions
 
 logger = get_logger(__name__)
 

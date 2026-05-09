@@ -384,7 +384,6 @@ def test_artifact_reader_delegates_to_preview_parser(monkeypatch):
     called exactly once with the streamed bytes + the caller's
     ``limit``. The parser's return value is propagated verbatim
     into ``ArtifactPreviewResult``."""
-    from app.core.intermediate import artifact_reader as ar
     from app.core.intermediate.preview_parser import ParquetPreview
 
     body = b"PARQUETBODY-PLACEHOLDER"
@@ -428,7 +427,6 @@ def test_artifact_reader_surfaces_parser_read_parquet_failure(monkeypatch):
     fallito: ...')`` -- byte-for-byte the same operator string the
     pre-016 inline parsing produced. The envelope is the public
     contract; router/UI consumers must not see a behaviour change."""
-    from app.core.intermediate import artifact_reader as ar
     from app.core.intermediate.preview_parser import (
         ParquetPreviewParseError,
     )
@@ -464,7 +462,6 @@ def test_artifact_reader_surfaces_parser_to_dict_failure_with_partial_schema(mon
     row_count populated and the ``to_dict fallito: ...`` error
     string. The pre-016 inline path also preserved partial
     metadata; the boundary split keeps that property end-to-end."""
-    from app.core.intermediate import artifact_reader as ar
     from app.core.intermediate.preview_parser import (
         ParquetPreviewParseError,
     )

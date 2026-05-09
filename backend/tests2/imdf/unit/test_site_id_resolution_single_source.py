@@ -5,6 +5,7 @@ Invariant architetturale (d3_imdf_boundaries.md §3.1 + §4.1 + R3 + R4):
 """
 from __future__ import annotations
 
+import importlib
 import json
 from pathlib import Path
 from types import SimpleNamespace
@@ -13,10 +14,8 @@ from unittest.mock import MagicMock
 import pytest
 
 # Pre-import per evitare rotture da monkeypatch di settings.
-import app.utils.logger  # noqa: F401
-import app.core.features.features_service  # noqa: F401
-import app.core.auth.auth  # noqa: F401
-import app.core.imdf.router as imdf_router  # noqa: F401
+importlib.import_module("app.utils.logger")
+imdf_router = importlib.import_module("app.core.imdf.router")
 
 from app.shared.contracts.auth import CurrentUser
 

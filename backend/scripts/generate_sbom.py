@@ -6,6 +6,7 @@ T-05 Phase 3 Batch D — baseline SBOM ripetibile.
 
 from __future__ import annotations
 
+import importlib.util
 import subprocess
 import sys
 from pathlib import Path
@@ -26,9 +27,7 @@ def main() -> int:
     sbom_out.parent.mkdir(parents=True, exist_ok=True)
 
     # pip-audit deve essere importabile: fail-loud se manca.
-    try:
-        import pip_audit  # noqa: F401
-    except ImportError:
+    if importlib.util.find_spec("pip_audit") is None:
         print(
             "ERROR: pip-audit non installato. Installa con:\n"
             "  pip install -r backend/requirements-dev.txt\n"

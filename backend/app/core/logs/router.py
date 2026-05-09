@@ -6,7 +6,6 @@ import json
 from typing import Optional
 
 from fastapi import APIRouter, Depends, Query
-from app.config import settings
 # the FastAPI auth dependency callables (`get_current_user`
 # `require_not_esecutore`) are consumed from the canonical
 # leaf `app.core.auth.dependencies` instead of the
@@ -16,10 +15,9 @@ from app.config import settings
 # dependency without dragging the whole login + MFA + JWT
 # omnibus
 from app.core.auth.dependencies import (
-    get_current_user,
     require_not_esecutore,
 )
-from app.shared.contracts.auth import CurrentUser, group_filter
+from app.shared.contracts.auth import CurrentUser
 from app.db.pg_connection import fetchone as _fetchone, fetchall as _fetchall
 from app.shared.authz_helpers import assert_project_visible
 from app.utils.logger import get_logger

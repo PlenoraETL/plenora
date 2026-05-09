@@ -5,9 +5,7 @@ HTTP client async condiviso basato su httpx.AsyncClient.
 """
 
 import asyncio
-import os
 import random
-import time
 from typing import Optional, Dict, Any
 
 import httpx

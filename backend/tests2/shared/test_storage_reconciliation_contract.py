@@ -7,9 +7,8 @@ Contract test BE-GO-READY-STORAGE-ENGINE-005 — typed boundary
 from __future__ import annotations
 
 import json
-import sys
 from datetime import datetime, timezone
-from typing import Any, List, Tuple
+from typing import List, Tuple
 from unittest.mock import MagicMock
 
 import pytest
@@ -253,7 +252,6 @@ def test_module_is_leaf_no_fastapi_boto3_settings():
     in isolation. Asserted on actual import statements only (the
     docstring mentions these names rhetorically and must not trigger
     a false positive)."""
-    import re
 
     import app.core.resources.storage_reconciliation  # noqa: F401
 

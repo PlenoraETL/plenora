@@ -315,7 +315,6 @@ def test_policy_all_records_every_transform_including_noncritical():
 def test_result_node_uses_record_final_snapshot():
     """Il path result chiama `record_final_snapshot` con
     module='manipola' e node_type='result'."""
-    from app.core.manipola.executor import ManipolaExecutor
 
     executor = _executor()
     final_spy = MagicMock(return_value=MagicMock(recorded=True))

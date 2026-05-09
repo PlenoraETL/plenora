@@ -4,7 +4,6 @@ Servizio di esecuzione arricchimento dati via API esterne.
 Keeps API enrichment behavior isolated from orchestration callers.
 """
 
-import os
 import json
 import pandas as pd
 import threading

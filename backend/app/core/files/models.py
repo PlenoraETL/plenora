@@ -5,7 +5,7 @@ Gestione file sorgente (CSV, Excel, GeoJSON, GeoPackage, Shapefile, FileGDB).
 """
 
 from pydantic import BaseModel
-from typing import List, Optional, Literal
+from typing import List, Optional
 from datetime import datetime
 
 from app.core.projects.canvas_models import ColumnInfo

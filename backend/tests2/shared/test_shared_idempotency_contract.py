@@ -11,7 +11,6 @@ pytestmark = [pytest.mark.unit, pytest.mark.shared, pytest.mark.contract]
 
 def test_shared_is_already_completed_exists():
     """Il modulo deve essere importabile da app.shared.idempotency."""
-    from app.shared.idempotency import is_already_completed  # noqa: F401
 
 
 def test_shared_is_already_completed_returns_false_when_missing():

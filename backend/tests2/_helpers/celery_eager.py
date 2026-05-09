@@ -6,9 +6,8 @@ Phase 1 Test Reliability Batch (PR test/phase-1-test-reliability):
 
 from __future__ import annotations
 
-import threading
 from dataclasses import dataclass, field
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Dict, List, Optional
 from unittest.mock import MagicMock
 
 import pytest

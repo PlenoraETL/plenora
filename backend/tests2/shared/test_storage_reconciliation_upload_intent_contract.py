@@ -7,7 +7,7 @@ Lock the upload_intent self-clearing lifecycle that closes R-021.1:
 from __future__ import annotations
 
 import time
-from datetime import datetime, timedelta, timezone
+from datetime import datetime
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 

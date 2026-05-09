@@ -8,12 +8,9 @@ from __future__ import annotations
 import json
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import MagicMock
 
 import pytest
 
-import app.utils.logger  # noqa: F401
-import app.core.imdf.loader  # noqa: F401
 
 pytestmark = [pytest.mark.unit, pytest.mark.contract, pytest.mark.regression]
 
@@ -221,7 +218,6 @@ def test_init_module_docstring_mentions_real_modules_and_d3():
     """Regression: __init__.py cita i moduli reali e D3 come boundary-of-truth.
     Pre-commit (D3 commit 5): citava `processor` fantasma (Fase 1C TODO) e
     `arcgis_upload` (nome scorretto, il modulo reale e' `arcgis_uploader`)."""
-    from app.core.imdf import __init__ as imdf_init  # noqa
     import app.core.imdf as imdf_pkg
 
     doc = imdf_pkg.__doc__ or ""

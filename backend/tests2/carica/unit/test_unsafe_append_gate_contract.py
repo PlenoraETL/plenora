@@ -12,12 +12,7 @@ import pandas as pd
 import pytest
 
 from app.core.carica.database_writer import DatabaseWriter
-from app.core.carica.models import (
-    ConflictPolicy,
-    TransactionMode,
-    WriteConfig,
-    WriteMode,
-)
+from app.core.carica.models import TransactionMode, WriteConfig, WriteMode
 
 
 pytestmark = [

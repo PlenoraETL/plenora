@@ -14,7 +14,7 @@ from app.db.sql_functions import (
     get_function_catalog,
     translate_calculated_column,
 )
-from app.core.auth.dependencies import get_current_user, require_not_esecutore
+from app.core.auth.dependencies import require_not_esecutore
 from app.shared.contracts.auth import CurrentUser
 from app.utils.logger import get_logger
 

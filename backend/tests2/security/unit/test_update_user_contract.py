@@ -7,7 +7,6 @@ Endpoint `update_user` (auth.py:721) NON deve:
 from __future__ import annotations
 
 from types import SimpleNamespace
-from unittest.mock import MagicMock
 
 import pytest
 from fastapi import HTTPException

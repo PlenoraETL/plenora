@@ -7,7 +7,7 @@ Keeps this module's responsibility explicit and isolated from adjacent code.
 import json
 import threading
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from typing import Dict, List, Optional
 
 from app.config import settings
@@ -75,7 +75,6 @@ from app.core.scheduler.models import (
     SchedulePipeline,
     ScheduleFrequency,
     ScheduleExecution,
-    ScheduleDestination,
     ScheduleConcurrency,
     SchedulePreCheck,
     ScheduleErrorPolicy,

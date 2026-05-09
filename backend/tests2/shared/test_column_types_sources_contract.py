@@ -7,7 +7,6 @@ I "tipi canvas delle colonne" vivono in 3 viste parallele dentro lo
 from __future__ import annotations
 
 import inspect
-from unittest.mock import MagicMock
 
 import pytest
 

@@ -4,26 +4,21 @@ PLENORA-ETL — Autenticazione JWT
 Modello RBAC:
 """
 
-import os
-import uuid
 from datetime import datetime, timezone
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi.security import HTTPAuthorizationCredentials
 
 # Import esplicito di app.config per side effect: garantisce che backend/.env
 # sia stato caricato via python-dotenv PRIMA che leggiamo JWT_SECRET_KEY a
 # livello di modulo. Senza questo, se auth.py venisse importato prima di
 # app.config, la lettura di os.getenv("JWT_SECRET_KEY") sotto sarebbe fatta
 # su un environment in cui il .env non è ancora stato applicato
-import app.config  # noqa: F401
 from app.config import settings as _settings
 from app.core.auth import db
 from app.core.auth import disclosure as _disclosure
-from app.shared import error_codes
 from app.shared.audit_action import audit_action
-from app.shared.error_envelope import raise_typed_http
 from app.utils.logger import get_logger
 
 
@@ -402,3 +397,53 @@ from app.core.auth.users_router import users_router  # noqa: F401
 
 
 from app.core.auth.groups_router import groups_router  # noqa: F401
+
+
+__all__ = [
+    "ACCESS_TOKEN_EXPIRE_HOURS",
+    "ALGORITHM",
+    "ChangePasswordRequest",
+    "CurrentUser",
+    "GroupResponse",
+    "LOGIN_LOCKOUT_SECONDS",
+    "LOGIN_MAX_ATTEMPTS",
+    "LOGIN_WINDOW_SECONDS",
+    "LoginRequest",
+    "MFADisableRequest",
+    "MFAEnrollResponse",
+    "MFAStatusResponse",
+    "MFAVerifyRequest",
+    "ROLES_ABOVE_VIEWER",
+    "ROLES_ADMIN_OR_ABOVE",
+    "ROLES_KIOSK_ONLY",
+    "SECRET_KEY",
+    "TokenResponse",
+    "UserResponse",
+    "VALID_ROLES",
+    "_DUMMY_PASSWORD_HASH",
+    "_bearer_scheme",
+    "_check_rate_limit",
+    "_check_rate_limit_in_memory",
+    "_clear_failed_logins",
+    "_ph",
+    "_record_failed_login",
+    "create_access_token",
+    "decode_token",
+    "get_current_user",
+    "get_me",
+    "groups_router",
+    "hash_password",
+    "login",
+    "logout",
+    "needs_rehash",
+    "require_admin",
+    "require_file_owner",
+    "require_not_esecutore",
+    "require_project_owner",
+    "require_schedule_owner",
+    "require_superadmin",
+    "require_user_or_above",
+    "router",
+    "users_router",
+    "verify_password",
+]

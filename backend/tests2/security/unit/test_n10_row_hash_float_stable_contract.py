@@ -7,7 +7,6 @@ Pre-fix scenario:
 from __future__ import annotations
 
 import decimal
-import math
 
 import pytest
 

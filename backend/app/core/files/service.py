@@ -6,7 +6,6 @@ preview delegation.
 
 import json
 import os
-import re
 import warnings
 from dataclasses import dataclass
 from datetime import datetime
@@ -52,14 +51,10 @@ except ImportError:
 
 try:
     from app.core.files.models import (
-        FileSource,
-        FileSourceCreate,
-        FileSourceUpdate,
+        FileSource as _AppFileSource,
         FileSourceList,
-        FileSourceLayersResponse,
-        FileSourcePreview,
     )
-    from app.core.projects.canvas_models import ColumnInfo
+    from app.core.projects.canvas_models import ColumnInfo as _AppColumnInfo
     _USE_APP_MODELS = True
 except ImportError:
     _USE_APP_MODELS = False
@@ -67,7 +62,10 @@ except ImportError:
 
 # Usate solo quando i modelli canonici non sono disponibili (test standalone)
 
-if not _USE_APP_MODELS:
+if _USE_APP_MODELS:
+    FileSource = _AppFileSource
+    ColumnInfo = _AppColumnInfo
+else:
     @dataclass
     class ColumnInfo:
         """Informazioni su una colonna"""

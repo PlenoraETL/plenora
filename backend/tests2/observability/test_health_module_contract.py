@@ -82,16 +82,7 @@ def test_module_does_not_import_fastapi_or_starlette():
 
 
 def test_module_exposes_public_api():
-    from app.observability.health import (
-        CheckOutcome,
-        HealthPayload,
-        check_postgres,
-        check_redis,
-        check_pool_headroom,
-        check_migrations_aligned,
-        gather_liveness,
-        gather_readiness,
-    )
+    from app.observability.health import HealthPayload, check_postgres, check_redis, check_pool_headroom, check_migrations_aligned, gather_liveness, gather_readiness
     # CheckOutcome e' un type alias (non testabile come instance);
     # la sua presenza nel namespace e' il lock.
     assert callable(check_postgres)

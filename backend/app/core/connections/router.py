@@ -8,13 +8,11 @@ from fastapi import APIRouter, HTTPException, Depends
 
 from app.utils.logger import get_logger
 from app.core.auth.dependencies import (
-    get_current_user,
     require_not_esecutore,
     require_admin,
 )
-from app.shared.contracts.auth import CurrentUser, group_filter
+from app.shared.contracts.auth import CurrentUser
 from app.core.auth.ownership import (
-    assert_group_access,
     assert_resource_visible,
     assert_can_modify,
     compute_can_edit,

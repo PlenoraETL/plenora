@@ -7,9 +7,8 @@ Chiude il residuo di N15: i cron "normali" (beat_scheduler.py:502, 522)
 from __future__ import annotations
 
 import inspect
-import re
 from datetime import datetime, timezone
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 

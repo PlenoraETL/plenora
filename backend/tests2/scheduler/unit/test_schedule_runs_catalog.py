@@ -4,16 +4,11 @@ Core-level test per Refactor #5 Step B: ScheduleRunsCatalog.
 Sostituisce la logica di lookup runs sparsa fra `download_schedule_output`
 """
 
-from datetime import datetime
 from pathlib import Path
 
 import pytest
 
-from app.core.scheduler.runs_catalog import (
-    RunFileInfo,
-    RunInfo,
-    ScheduleRunsCatalog,
-)
+from app.core.scheduler.runs_catalog import RunFileInfo, ScheduleRunsCatalog
 
 
 pytestmark = [

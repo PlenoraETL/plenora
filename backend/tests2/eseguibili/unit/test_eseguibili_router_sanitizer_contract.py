@@ -6,8 +6,6 @@ di ``eseguibili/router.py`` (Batch Fix 6.2).
 
 from __future__ import annotations
 
-import io
-from unittest.mock import MagicMock
 
 import pytest
 from fastapi import FastAPI

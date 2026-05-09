@@ -16,7 +16,6 @@ from sqlalchemy import text
 
 from app.config import settings
 from app.core.carica.models import (
-    BatchProgress,
     ColumnMapping,
     WriteResult,
     WriteStatus,

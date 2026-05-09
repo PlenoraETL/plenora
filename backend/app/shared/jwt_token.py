@@ -6,10 +6,6 @@ Keeps this module's responsibility explicit and isolated from adjacent code.
 
 from __future__ import annotations
 
-# Side-effect: caricamento di backend/.env via python-dotenv. Importato
-# prima di leggere JWT_SECRET_KEY/JWT_EXPIRE_HOURS qui sotto
-import app.config  # noqa: F401
-
 import os
 import uuid
 from datetime import datetime, timedelta, timezone
@@ -23,9 +19,8 @@ ALGORITHM = "HS256"
 # Override env `JWT_EXPIRE_HOURS` continua a funzionare via type coercion
 # `int` in `Settings._converti_tipo_env`. Lettura a import-time: la
 # costante e' parte del contratto modulo (consumata da `auth.auth` e
-# da test-contract `test_jwt_token_module_contract`). `app.config` e'
-# gia' importato sopra dalla catena `app/main.py` -> `app/config.py`
-# dotenv loaded), quindi `settings.get` qui legge gli override env
+# da test-contract `test_jwt_token_module_contract`). Importare settings
+# inizializza app.config prima delle letture env sottostanti.
 from app.config import settings as _settings
 ACCESS_TOKEN_EXPIRE_HOURS = int(_settings.get("JWT_EXPIRE_HOURS"))
 

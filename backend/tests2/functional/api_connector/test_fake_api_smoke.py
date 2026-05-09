@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import json
 import uuid
-from pathlib import Path
 from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 

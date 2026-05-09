@@ -1,4 +1,4 @@
-﻿"""
+"""
 Contract test — upload/delete allegati ticket.
 
 Copre il flusso `/api/tickets/{id}/attachments`:
@@ -6,7 +6,6 @@ Copre il flusso `/api/tickets/{id}/attachments`:
 
 from __future__ import annotations
 
-import io
 from unittest.mock import MagicMock, patch
 
 import pytest

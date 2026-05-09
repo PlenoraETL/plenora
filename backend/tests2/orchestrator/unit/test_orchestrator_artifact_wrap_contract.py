@@ -10,11 +10,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from app.core.artifacts.types import (
-    PipelineArtifact,
-    ArtifactResolutionError,
-    RunArtifactRef,
-)
+from app.core.artifacts.types import PipelineArtifact, RunArtifactRef
 
 
 pytestmark = [pytest.mark.unit, pytest.mark.contract]

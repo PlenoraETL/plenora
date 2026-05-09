@@ -5,7 +5,7 @@ Coprono: configurazioni CRUD, risultati operazioni, scan_state per scheduler.
 """
 
 from pydantic import BaseModel
-from typing import List, Optional, Literal, Any
+from typing import List, Optional, Literal
 from datetime import datetime
 
 

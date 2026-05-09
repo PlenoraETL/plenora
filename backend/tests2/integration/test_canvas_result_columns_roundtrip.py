@@ -6,13 +6,12 @@ Pre-C9 bug: il PUT /canvas salvava `result_node.columns` as-is dal
 
 from __future__ import annotations
 
-from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import pytest
 
 from app.core.projects.router import update_project_canvas
-from app.core.projects.canvas_models import CanvasState, Node, Edge, Position, Column
+from app.core.projects.canvas_models import Node, Edge, Position, Column
 
 
 pytestmark = [pytest.mark.integration, pytest.mark.contract]

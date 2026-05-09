@@ -51,7 +51,6 @@ pytestmark.append(
 
 
 def _engine():
-    import os
     # oracledb thick mode richiede Oracle Instant Client: usiamo thin (default)
     url = (
         f"oracle+oracledb://{ORACLE_USER}:{ORACLE_PASSWORD}@"

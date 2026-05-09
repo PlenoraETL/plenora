@@ -88,7 +88,7 @@ def test_metadata_map_not_populated_on_load_error():
     """If the node load raises SourceLoadingError, metadata_map stays empty
     and the function returns the fail-closed dict."""
     from app.core.manipola import source_loading as sl
-    from app.core.artifacts import SourceLoadingError, SourceRef
+    from app.core.artifacts import SourceLoadingError
 
     class _FailLoader:
         def load_with_metadata(self, ref, *, expected_group_id, columns_metadata=None, is_superadmin=False):
@@ -185,7 +185,6 @@ def test_metadata_map_uses_alias_as_column_name():
     with geometry_column set to the alias (the actual DataFrame column name
     after filter_visible_columns)."""
     from app.core.manipola import source_loading as sl
-    from app.shared.resources.metadata import ResourceMetadata
 
     df = pd.DataFrame({"id": [1], "geom_alias": ["POINT (0 0)"]})
     node = _Node(columns=[

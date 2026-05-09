@@ -4,7 +4,7 @@ Funzione pura `detect_missed_run` — rileva se uno schedule ha
 un run mancante da recuperare (C3 fix 3: missed runs catchup).
 """
 
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 
 import pytest
 

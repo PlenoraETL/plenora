@@ -14,13 +14,12 @@ os.environ.setdefault(
 )
 
 from contextlib import contextmanager
-from typing import Any, List, Tuple
+from typing import List, Tuple
 from unittest.mock import MagicMock
 
 import pytest
 
 from app.core.results import cleanup as results_cleanup
-from app.core.resources.storage_reconciliation import ReconciliationEntryRef
 
 
 pytestmark = [pytest.mark.unit, pytest.mark.contract, pytest.mark.shared]

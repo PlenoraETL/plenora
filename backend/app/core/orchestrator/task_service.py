@@ -9,7 +9,6 @@ from enum import Enum
 from dataclasses import dataclass
 from celery.result import AsyncResult
 from workers.celery_app import celery_app
-from app.config import settings
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)

@@ -13,7 +13,6 @@ from app.config import settings
 # login + MFA + JWT compatibility module just to consume the FastAPI Depends
 # callables
 from app.core.auth.dependencies import (
-    get_current_user,
     require_not_esecutore,
 )
 from app.shared.contracts.auth import CurrentUser

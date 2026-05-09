@@ -7,7 +7,6 @@ Verifica end-to-end che il nuovo _request_with_token funzioni contro
 from __future__ import annotations
 
 import os
-from typing import Optional
 
 import pytest
 

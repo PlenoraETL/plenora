@@ -6,7 +6,7 @@ Audit Batch 8 §3.1 S3 / fix F3: `intermediate/writer.py:close_run` pre-fix
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 

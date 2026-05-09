@@ -4,7 +4,6 @@ Core-level test per Refactor #4 Step A: assert_path_within.
 Helper minimale che centralizza il pattern path validation duplicato
 """
 
-from pathlib import Path
 
 import pytest
 

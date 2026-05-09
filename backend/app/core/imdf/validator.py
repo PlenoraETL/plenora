@@ -5,7 +5,7 @@ Esegue un controllo read-only (senza side effect su ArcGIS) prima della
 """
 
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, Optional
 
 from app.utils.logger import get_logger
 from app.shared.connections.arcgis_connection import ArcGISConnectionInfo

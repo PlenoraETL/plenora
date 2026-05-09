@@ -4,7 +4,7 @@ Servizio gestione connessioni API esterne per arricchimento dati.
 Keeps API enrichment behavior isolated from orchestration callers.
 """
 
-from typing import Dict, List, Optional
+from typing import Dict, Optional
 
 from app.config import settings
 from app.utils.logger import get_logger

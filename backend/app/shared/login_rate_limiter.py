@@ -6,7 +6,6 @@ Sostituisce/affianca il limiter in-memory in `app.core.auth.auth` (R-01).
 
 from __future__ import annotations
 
-import os
 import threading
 import time
 import uuid

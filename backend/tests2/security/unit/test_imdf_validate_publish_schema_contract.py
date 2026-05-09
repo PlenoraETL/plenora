@@ -3,17 +3,17 @@ test_imdf_validate_publish_schema_contract.py
 
 Contract test per la schema-compat logic di validate_publish:
 """
+import importlib
+
 import pytest
 
 # Pre-importa i moduli che leggono `settings` al top-level. Se lasciamo
 # che siano importati dopo il monkeypatch di settings (SimpleNamespace),
 # l'init-time read fallisce con AttributeError (es. LOG_DB_FILE).
-import app.utils.logger  # noqa: F401
-import app.core.features.features_service  # noqa: F401
-import app.core.features.arcgis_client  # noqa: F401
-import app.core.imdf.loader  # noqa: F401
-import app.core.imdf.arcgis.service_discovery  # noqa: F401
-import app.core.imdf.validator  # noqa: F401
+importlib.import_module("app.utils.logger")
+importlib.import_module("app.core.features.features_service")
+importlib.import_module("app.core.features.arcgis_client")
+importlib.import_module("app.core.imdf.loader")
 
 pytestmark = [pytest.mark.unit, pytest.mark.contract, pytest.mark.regression]
 

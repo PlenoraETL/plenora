@@ -7,7 +7,6 @@ sanitizzare NaN / +Inf / -Inf prima di restituire JSON.
 from __future__ import annotations
 
 import json
-import math
 from unittest.mock import patch
 
 import pytest

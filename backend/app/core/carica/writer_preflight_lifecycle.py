@@ -17,7 +17,6 @@ from app.core.carica.models import (
     ColumnMapping,
     ConflictReport,
     TransactionMode,
-    WriteConfig,  # noqa: F401 (used in type docs
     WriteMode,
     WriteResult,
 )

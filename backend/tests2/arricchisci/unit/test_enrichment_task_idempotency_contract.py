@@ -12,7 +12,6 @@ import pytest
 
 from workers.tasks.enrichment_task import execute_enrichment_task
 # Import fixture come simbolo locale per discovery pytest senza conftest.
-from tests2._helpers.celery_eager import celery_eager  # noqa: F401
 
 
 pytestmark = [pytest.mark.unit, pytest.mark.arricchisci, pytest.mark.contract]

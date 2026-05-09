@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import ast
 import inspect
-from unittest.mock import MagicMock
 
 import pytest
 

@@ -14,7 +14,7 @@ from fastapi import APIRouter, Depends, FastAPI, HTTPException
 from fastapi.testclient import TestClient
 
 from app.shared.contracts.auth import CurrentUser, ROLES_KIOSK_ONLY, VALID_ROLES
-from app.core.auth.auth import get_current_user, require_admin, require_not_esecutore, require_superadmin, require_user_or_above
+from app.core.auth.auth import get_current_user, require_admin, require_not_esecutore, require_user_or_above
 from app.core.eseguibili.db import EseguibileRow, EseguibileSummaryRow
 
 

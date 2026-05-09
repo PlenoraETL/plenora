@@ -7,9 +7,6 @@ Prima di FS-5, `_resolve_input_path_for_file_processor` creava un
 from __future__ import annotations
 
 import io
-import tempfile
-from pathlib import Path
-from unittest.mock import MagicMock, patch
 
 import pandas as pd
 import pytest

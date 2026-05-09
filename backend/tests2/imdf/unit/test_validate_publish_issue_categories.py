@@ -6,7 +6,7 @@ emesse da `core/imdf/validator.validate_publish`.
 
 from __future__ import annotations
 
-from pathlib import Path
+import importlib
 from types import SimpleNamespace
 from typing import Any, Dict, List, Optional
 from unittest.mock import MagicMock
@@ -15,10 +15,8 @@ import pytest
 
 # Pre-import che il validator e i collaborator usano a runtime, cosi'
 # eventuali side-effect di import sono noti prima dei monkeypatch.
-import app.core.imdf.loader  # noqa: F401
-import app.core.imdf.arcgis.service_discovery  # noqa: F401
-import app.core.features.features_service  # noqa: F401
-import app.core.features.arcgis_client  # noqa: F401
+importlib.import_module("app.core.imdf.loader")
+importlib.import_module("app.core.imdf.arcgis.service_discovery")
 import app.core.imdf.validator as validator_mod
 
 

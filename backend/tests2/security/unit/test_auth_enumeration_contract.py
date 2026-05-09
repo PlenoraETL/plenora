@@ -7,7 +7,6 @@ Scenari:
 from __future__ import annotations
 
 from types import SimpleNamespace
-from unittest.mock import patch, MagicMock
 
 import pytest
 from fastapi import HTTPException

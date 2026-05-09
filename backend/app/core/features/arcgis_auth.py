@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import time
-from typing import Any, Dict, Optional, Protocol
+from typing import Any, Optional, Protocol
 
 import requests
 

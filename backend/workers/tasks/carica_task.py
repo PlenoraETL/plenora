@@ -6,7 +6,6 @@ Runs background execution while preserving backend runtime contracts.
 
 import io
 import os
-import sys
 import time as _time
 import traceback
 import uuid as _uuid
@@ -613,8 +612,6 @@ def _load_upstream_data(
     2. Se force_recalculate o non trova → riesegui la pipeline
     3. Dopo ricalcolo rilegge l'artefatto specifico della run
     """
-    import pandas as pd
-
     try:
         from app.core.files.dataframe_io import load_dataframe_from_file
         from app.core.artifacts import (

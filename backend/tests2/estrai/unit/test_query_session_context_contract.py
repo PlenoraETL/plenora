@@ -95,7 +95,6 @@ def test_session_context_carries_oracle_native_timeout_metadata():
 def test_query_executor_builds_execution_context_from_settings(monkeypatch):
     from app.db.query_executor import QueryExecutor
     from app.db.query_session import ExecutionContext
-    import app.config
 
     monkeypatch.setenv("DB_QUERY_TIMEOUT", "9")
 
@@ -121,7 +120,6 @@ def test_query_executor_builds_execution_context_from_settings(monkeypatch):
 
 def test_execute_raw_uses_session_context_and_keeps_engine_factory_api(monkeypatch):
     from app.db.query_executor import QueryExecutor
-    import app.config
 
     monkeypatch.setenv("DB_QUERY_TIMEOUT", "12")
     fake_result = _FakeResult()
@@ -150,7 +148,6 @@ def test_execute_raw_uses_session_context_and_keeps_engine_factory_api(monkeypat
 
 def test_execute_raw_uses_session_context_for_mssql_without_session_statement(monkeypatch):
     from app.db.query_executor import QueryExecutor
-    import app.config
 
     monkeypatch.setenv("DB_QUERY_TIMEOUT", "12")
     fake_result = _FakeResult()
@@ -177,7 +174,6 @@ def test_execute_raw_uses_session_context_for_mssql_without_session_statement(mo
 
 def test_execute_raw_uses_session_context_for_oracle_timeout_and_columns(monkeypatch):
     from app.db.query_executor import QueryExecutor
-    import app.config
 
     monkeypatch.setenv("DB_QUERY_TIMEOUT", "7")
     fake_result = _FakeResult(columns=["ID", "NAME"], chunks=[[(1, "alice")], []])

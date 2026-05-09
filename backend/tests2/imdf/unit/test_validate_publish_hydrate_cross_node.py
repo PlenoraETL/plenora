@@ -5,6 +5,7 @@ Contract test D3 commit 2 — validate_publish_endpoint hydrata cache locale.
 """
 from __future__ import annotations
 
+import importlib
 import json
 from types import SimpleNamespace
 from unittest.mock import MagicMock
@@ -12,10 +13,8 @@ from unittest.mock import MagicMock
 import pytest
 
 # Pre-import per evitare che monkeypatch di settings rompa init-time reads.
-import app.utils.logger  # noqa: F401
-import app.core.features.features_service  # noqa: F401
-import app.core.auth.auth  # noqa: F401
-import app.core.imdf.router as imdf_router
+importlib.import_module("app.utils.logger")
+imdf_router = importlib.import_module("app.core.imdf.router")
 
 from app.shared.contracts.auth import CurrentUser
 

@@ -67,7 +67,6 @@ def _make_executor_with_result(fake_result):
 
 
 def test_execute_streaming_to_file_writes_csv_chunks(tmp_path, monkeypatch):
-    import app.config
 
     # `ESTRAI_MAX_ROWS` is a `@property` reading via `_int_setting(...)`,
     # so it has no setter. Override the underlying env var instead.
@@ -108,7 +107,6 @@ def test_execute_streaming_to_file_writes_csv_chunks(tmp_path, monkeypatch):
 def test_execute_streaming_to_file_writes_parquet_chunks(tmp_path, monkeypatch):
     pa = pytest.importorskip("pyarrow")
     pq = pytest.importorskip("pyarrow.parquet")
-    import app.config
 
     # `ESTRAI_MAX_ROWS` is a `@property` reading via `_int_setting(...)`,
     # so it has no setter. Override the underlying env var instead.

@@ -7,12 +7,10 @@ Endpoints:
 from __future__ import annotations
 
 import io
-import os
 from dataclasses import asdict
-from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Response, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, Response, UploadFile
 from pydantic import BaseModel, Field
 
 from app.core.auth.dependencies import get_current_user

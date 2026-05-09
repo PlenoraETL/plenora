@@ -17,7 +17,7 @@ from app.shared.execution.graph import kahn_topological_order
 from app.utils.logger import get_logger, append_step
 from app.utils.result_store import save_pipeline_result_outcome
 from app.core.files.dataframe_io import (
-    load_dataframe_from_file, sanitize_for_json,
+    sanitize_for_json,
 )
 from app.core.features.geo_utils import detect_geometry_column
 from .plugin_executor import get_executor

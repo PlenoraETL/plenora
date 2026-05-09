@@ -5,9 +5,8 @@ Locks backend contracts and regression boundaries for the current architecture.
 """
 
 from contextlib import ExitStack
-from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 
 import pandas as pd
 import pytest

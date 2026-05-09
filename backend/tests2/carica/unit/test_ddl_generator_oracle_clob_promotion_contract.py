@@ -4,7 +4,6 @@ Auto-promote VARCHAR2(4000)→CLOB su Oracle per colonne lunghe (C5 fix 2).
 Motivazione
 """
 
-from unittest.mock import MagicMock
 
 import pytest
 

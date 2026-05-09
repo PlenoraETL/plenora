@@ -4,7 +4,7 @@ Generatore DDL multi-database per il modulo CARICA.
 Keeps database loading behavior isolated from orchestration callers.
 """
 
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple
 
 from app.core.carica.models import ColumnMapping
 

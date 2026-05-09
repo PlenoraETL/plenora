@@ -12,8 +12,6 @@ from unittest.mock import MagicMock
 
 import pytest
 
-import app.utils.logger  # noqa: F401
-import app.core.imdf.loader  # noqa: F401
 
 pytestmark = [pytest.mark.unit, pytest.mark.contract, pytest.mark.regression]
 
@@ -110,7 +108,6 @@ def test_persist_module_does_not_import_storage():
     namespace di persist_mod, indipendente dalla forma sintattica
     dell'import (from / as / re-export).
     """
-    import sys
     from app.core.imdf import persist as persist_mod
 
     # 1. Il namespace modulo non deve esporre `storage` o un suo simbolo top-level.

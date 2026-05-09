@@ -8,14 +8,6 @@ from types import MappingProxyType
 from typing import Any, Callable, Mapping, Optional
 
 from app.db.pg_connection import execute, fetchall, fetchone
-from app.core.intermediate.retention import (
-    DEFAULT_RUNS_RETENTION,
-    _delete_run,
-    apply_runs_retention,
-    delete_all_runs_for_canvas,
-)
-
-
 @dataclass(frozen=True, slots=True)
 class RunRow:
     """Typed representation of a row from intermediate.runs."""

@@ -11,7 +11,6 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 
 from app.core.auth.dependencies import (
-    get_current_user,
     require_not_esecutore,
 )
 from app.shared.contracts.auth import CurrentUser, group_filter

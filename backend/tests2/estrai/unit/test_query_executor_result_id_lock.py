@@ -7,7 +7,6 @@ Lock tests per `QueryExecutor.execute_query` → `ResultBuilder.success`
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-import pandas as pd
 import pytest
 
 

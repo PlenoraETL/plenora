@@ -24,15 +24,7 @@ from app.core.carica.models import (
     WriteStatus,
 )
 from tests2.integration.harness.db import make_it_id
-from tests2.integration.harness.postgres_ext import (
-    PG_EXT_DATABASE,
-    PG_EXT_HOST,
-    PG_EXT_PASSWORD,
-    PG_EXT_PORT,
-    PG_EXT_USER,
-    postgres_ext_conn,
-    postgres_ext_sqlalchemy_url,
-)
+from tests2.integration.harness.postgres_ext import PG_EXT_DATABASE, PG_EXT_HOST, PG_EXT_PASSWORD, PG_EXT_PORT, PG_EXT_USER, postgres_ext_sqlalchemy_url
 from tests2.integration.harness.reconciliation import (
     assert_reconciliation_match,
     compute_checksums,

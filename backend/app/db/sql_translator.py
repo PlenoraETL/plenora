@@ -7,7 +7,7 @@ Keeps persistence access isolated from service and router layers.
 import json
 import re
 from pathlib import Path
-from typing import Dict, List, Any, Optional, Union
+from typing import Dict, List, Any, Optional
 
 from app.utils.logger import get_logger
 

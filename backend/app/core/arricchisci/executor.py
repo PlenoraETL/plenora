@@ -120,8 +120,6 @@ class EnrichExecutor:
         """
         logger.info(f"Preview ARRICCHISCI: {project_id} (limit={limit})", op="preview", project_id=project_id)
         try:
-            import copy
-            import pandas as pd
             from app.core.arricchisci.enrichment_service import EnrichmentExecutor
             from app.core.arricchisci.models import EnrichmentOptions
             from app.core.files.dataframe_io import sanitize_for_json

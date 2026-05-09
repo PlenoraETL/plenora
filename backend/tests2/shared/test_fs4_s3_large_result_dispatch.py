@@ -7,7 +7,6 @@ Prima di FS-4, `save_result_blob_from_bytes` sollevava ResultSaveError
 from __future__ import annotations
 
 from types import SimpleNamespace
-from unittest.mock import MagicMock, patch
 
 import pytest
 

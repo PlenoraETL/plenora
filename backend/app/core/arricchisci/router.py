@@ -19,16 +19,14 @@ from app.core.auth.ownership import (
     compute_can_edit,
 )
 from pydantic import BaseModel
-from typing import Dict, Any, List, Literal, Optional
+from typing import Dict, List, Literal, Optional
 
-from app.config import settings
 from app.utils.logger import get_logger
 from app.utils.router_utils import require_service
 from app.shared import error_codes
 from app.shared.error_envelope import raise_typed_http
 from app.shared.audit_action import audit_action
 from app.core.projects.exceptions import CanvasCorruptedError
-from app.shared.resources.path_policy import assert_path_within
 from app.core.artifacts import (
     LatestProjectArtifactRef,
     SourceLoader,

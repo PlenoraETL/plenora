@@ -4,7 +4,7 @@ Router admin backups — endpoint REST per la gestione backup PG -> S3.
 Tutti gli endpoint richiedono ruolo superadmin.
 """
 
-from typing import Any, Dict, List
+from typing import Any, Dict
 
 from fastapi import APIRouter, Depends, HTTPException
 

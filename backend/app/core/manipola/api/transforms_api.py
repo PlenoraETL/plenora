@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends
 from typing import Dict, Any
 
 from app.core.manipola.plugin_executor import get_executor
-from app.core.auth.dependencies import get_current_user, require_not_esecutore
+from app.core.auth.dependencies import require_not_esecutore
 from app.shared.contracts.auth import CurrentUser
 
 router = APIRouter(prefix="/transforms", tags=["transforms"])
