@@ -8,6 +8,7 @@ from typing import Dict, List, Optional, Any
 from enum import Enum
 from dataclasses import dataclass
 
+from app.db.sql_date_functions import SqlDateFunctionMixin
 from app.db.sql_string_functions import SqlStringFunctionMixin
 
 
@@ -635,7 +636,7 @@ FUNCTION_CATALOG: Dict[str, FunctionDef] = {
 
 # TRADUTTORE SQL MULTI-DATABASE
 
-class SqlFunctionTranslator(SqlStringFunctionMixin):
+class SqlFunctionTranslator(SqlDateFunctionMixin, SqlStringFunctionMixin):
     """
     Traduce funzioni astratte nel dialetto SQL specifico del database.
 
@@ -900,44 +901,6 @@ class SqlFunctionTranslator(SqlStringFunctionMixin):
         col = self._qualify_column(params["column"], table_alias)
         return f"FLOOR({col})"
 
-    # FUNZIONI DATA
-
-    def _translate_year(self, params: Dict, table_alias: str = None) -> str:
-        """Estrazione anno — PostgreSQL/Oracle: EXTRACT, MSSQL/MySQL: YEAR(), SQLite: STRFTIME."""
-        col = self._qualify_column(params["column"], table_alias)
-        traduzioni = {
-            DbType.POSTGRES: f"EXTRACT(YEAR FROM {col})",
-            DbType.MSSQL: f"YEAR({col})",
-            DbType.MYSQL: f"YEAR({col})",
-            DbType.ORACLE: f"EXTRACT(YEAR FROM {col})",
-            DbType.SQLITE: f"CAST(STRFTIME('%Y', {col}) AS INTEGER)",
-        }
-        return self._ottieni_traduzione(traduzioni, "YEAR")
-
-    def _translate_month(self, params: Dict, table_alias: str = None) -> str:
-        """Estrazione mese — stessi dialetti di YEAR."""
-        col = self._qualify_column(params["column"], table_alias)
-        traduzioni = {
-            DbType.POSTGRES: f"EXTRACT(MONTH FROM {col})",
-            DbType.MSSQL: f"MONTH({col})",
-            DbType.MYSQL: f"MONTH({col})",
-            DbType.ORACLE: f"EXTRACT(MONTH FROM {col})",
-            DbType.SQLITE: f"CAST(STRFTIME('%m', {col}) AS INTEGER)",
-        }
-        return self._ottieni_traduzione(traduzioni, "MONTH")
-
-    def _translate_day(self, params: Dict, table_alias: str = None) -> str:
-        """Estrazione giorno — stessi dialetti di YEAR."""
-        col = self._qualify_column(params["column"], table_alias)
-        traduzioni = {
-            DbType.POSTGRES: f"EXTRACT(DAY FROM {col})",
-            DbType.MSSQL: f"DAY({col})",
-            DbType.MYSQL: f"DAY({col})",
-            DbType.ORACLE: f"EXTRACT(DAY FROM {col})",
-            DbType.SQLITE: f"CAST(STRFTIME('%d', {col}) AS INTEGER)",
-        }
-        return self._ottieni_traduzione(traduzioni, "DAY")
-
     # OPERAZIONE MATEMATICA
 
     def _translate_math(self, params: Dict, table_alias: str = None) -> str:
@@ -1053,141 +1016,6 @@ class SqlFunctionTranslator(SqlStringFunctionMixin):
         if self.db_type == DbType.SQLITE:
             return f"MIN({', '.join(valori_q)})"
         return f"LEAST({', '.join(valori_q)})"
-
-    # FUNZIONI DATA (nuove
-
-    def _translate_now(self, params: Dict, table_alias: str = None) -> str:
-        """Data/ora corrente — sintassi specifica per ogni database."""
-        traduzioni = {
-            DbType.POSTGRES: "NOW()",
-            DbType.MSSQL: "GETDATE()",
-            DbType.MYSQL: "NOW()",
-            DbType.ORACLE: "SYSDATE",
-            DbType.SQLITE: "datetime('now')",
-        }
-        return self._ottieni_traduzione(traduzioni, "NOW")
-
-    def _translate_current_date(self, params: Dict, table_alias: str = None) -> str:
-        """Data corrente — sintassi specifica per ogni database."""
-        traduzioni = {
-            DbType.POSTGRES: "CURRENT_DATE",
-            DbType.MSSQL: "CAST(GETDATE() AS DATE)",
-            DbType.MYSQL: "CURDATE()",
-            DbType.ORACLE: "TRUNC(SYSDATE)",
-            DbType.SQLITE: "date('now')",
-        }
-        return self._ottieni_traduzione(traduzioni, "CURRENT_DATE")
-
-    def _translate_date_diff(self, params: Dict, table_alias: str = None) -> str:
-        """Differenza tra date in giorni."""
-        col1 = self._qualify_column(params["column"], table_alias)
-        col2 = self._qualify_column(params["column2"], table_alias)
-        traduzioni = {
-            DbType.POSTGRES: f"({col1}::date - {col2}::date)",
-            DbType.MSSQL: f"DATEDIFF(day, {col2}, {col1})",
-            DbType.MYSQL: f"DATEDIFF({col1}, {col2})",
-            DbType.ORACLE: f"({col1} - {col2})",
-            DbType.SQLITE: f"CAST(julianday({col1}) - julianday({col2}) AS INTEGER)",
-        }
-        return self._ottieni_traduzione(traduzioni, "DATE_DIFF")
-
-    def _translate_date_add(self, params: Dict, table_alias: str = None) -> str:
-        """Aggiunta intervallo a data — sintassi molto diversa per ogni DB."""
-        col = self._qualify_column(params["column"], table_alias)
-        # Validazione: intervallo deve essere numerico, unita deve essere in whitelist
-        _VALID_UNITS = {"year", "month", "day", "hour", "minute", "second", "week"}
-        try:
-            intervallo = int(params["interval"])
-        except (ValueError, TypeError):
-            raise ValueError(f"DATE_ADD: interval deve essere numerico, ricevuto: {params.get('interval')}")
-        unita = str(params.get("unit", "day")).lower()
-        if unita not in _VALID_UNITS:
-            raise ValueError(f"DATE_ADD: unit '{unita}' non valida. Valide: {_VALID_UNITS}")
-        traduzioni = {
-            DbType.POSTGRES: f"{col} + INTERVAL '{intervallo} {unita}'",
-            DbType.MSSQL: f"DATEADD({unita}, {intervallo}, {col})",
-            DbType.MYSQL: f"DATE_ADD({col}, INTERVAL {intervallo} {unita})",
-            DbType.ORACLE: f"{col} + INTERVAL '{intervallo}' {unita}",
-            DbType.SQLITE: f"datetime({col}, '+{intervallo} {unita}')",
-        }
-        return self._ottieni_traduzione(traduzioni, "DATE_ADD")
-
-    def _translate_date_trunc(self, params: Dict, table_alias: str = None) -> str:
-        """Tronca data a unita — sintassi molto diversa per ogni DB."""
-        col = self._qualify_column(params["column"], table_alias)
-        unita = str(params["unit"]).lower()
-        _VALID_TRUNC_UNITS = {"year", "month", "week", "day", "hour", "minute", "second"}
-        if unita not in _VALID_TRUNC_UNITS:
-            raise ValueError(f"DATE_TRUNC: unit '{unita}' non valida. Valide: {_VALID_TRUNC_UNITS}")
-        # Mappa unita per Oracle TRUNC
-        oracle_fmt = {"year": "YYYY", "month": "MM", "week": "IW", "day": "DD"}.get(unita, "MM")
-        # Mappa unita per SQLite strftime
-        sqlite_fmt = {"year": "%Y-01-01", "month": "%Y-%m-01", "week": "%Y-%m-%d", "day": "%Y-%m-%d"}.get(unita, "%Y-%m-01")
-        traduzioni = {
-            DbType.POSTGRES: f"DATE_TRUNC('{unita}', {col})",
-            DbType.MSSQL: f"DATETRUNC({unita}, {col})",
-            DbType.MYSQL: f"DATE_FORMAT({col}, '{{'%Y' if unita == 'year' else '%Y-%m' if unita == 'month' else '%Y-%m-%d'}}-01')" if False else self._mysql_date_trunc(col, unita),
-            DbType.ORACLE: f"TRUNC({col}, '{oracle_fmt}')",
-            DbType.SQLITE: f"date({col}, 'start of {unita}')" if unita in ("year", "month", "day") else f"date({col})",
-        }
-        return self._ottieni_traduzione(traduzioni, "DATE_TRUNC")
-
-    def _mysql_date_trunc(self, col: str, unita: str) -> str:
-        """Helper MySQL per DATE_TRUNC — MySQL non ha DATE_TRUNC nativo."""
-        formati = {
-            "year": f"DATE_FORMAT({col}, '%Y-01-01')",
-            "month": f"DATE_FORMAT({col}, '%Y-%m-01')",
-            "week": f"DATE(DATE_SUB({col}, INTERVAL WEEKDAY({col}) DAY))",
-            "day": f"DATE({col})",
-        }
-        return formati.get(unita, f"DATE({col})")
-
-    def _translate_date_format(self, params: Dict, table_alias: str = None) -> str:
-        """Formatta data come stringa — ogni DB ha il suo sistema di formattazione."""
-        col = self._qualify_column(params["column"], table_alias)
-        fmt = params["format"]
-        # Validazione: solo caratteri alfanumerici e separatori comuni per evitare injection
-        import re as _re
-        if not _re.match(r"^[A-Za-z0-9\-_/:\s\.]+$", fmt):
-            raise ValueError(f"DATE_FORMAT: format '{fmt}' contiene caratteri non permessi")
-        # Converte formato generico DD/MM/YYYY nei formati specifici per DB
-        pg_fmt = fmt.replace("DD", "DD").replace("MM", "MM").replace("YYYY", "YYYY").replace("YY", "YY").replace("HH", "HH24").replace("mm", "MI").replace("ss", "SS")
-        mysql_fmt = fmt.replace("YYYY", "%Y").replace("YY", "%y").replace("MM", "%m").replace("DD", "%d").replace("HH", "%H").replace("mm", "%i").replace("ss", "%s")
-        mssql_fmt = fmt  # MSSQL FORMAT accetta formati .NET simili
-        sqlite_fmt = fmt.replace("YYYY", "%Y").replace("YY", "%y").replace("MM", "%m").replace("DD", "%d").replace("HH", "%H").replace("mm", "%M").replace("ss", "%S")
-        traduzioni = {
-            DbType.POSTGRES: f"TO_CHAR({col}, '{pg_fmt}')",
-            DbType.MSSQL: f"FORMAT({col}, '{mssql_fmt}')",
-            DbType.MYSQL: f"DATE_FORMAT({col}, '{mysql_fmt}')",
-            DbType.ORACLE: f"TO_CHAR({col}, '{pg_fmt}')",
-            DbType.SQLITE: f"STRFTIME('{sqlite_fmt}', {col})",
-        }
-        return self._ottieni_traduzione(traduzioni, "DATE_FORMAT")
-
-    def _translate_extract(self, params: Dict, table_alias: str = None) -> str:
-        """Estrazione parte da data — generalizzazione di YEAR/MONTH/DAY."""
-        col = self._qualify_column(params["column"], table_alias)
-        # N2: whitelist su `part` — finiva raw in EXTRACT({part} FROM
-        ammesse = {"year", "month", "day", "hour", "minute", "second"}
-        raw = params.get("part")
-        if not isinstance(raw, str) or raw.lower() not in ammesse:
-            raise ValueError(
-                f"EXTRACT: part '{raw}' non valida. Ammesse: {sorted(ammesse)}"
-            )
-        parte = raw.lower()
-        sqlite_format_map = {
-            "year": "%Y", "month": "%m", "day": "%d",
-            "hour": "%H", "minute": "%M", "second": "%S"
-        }
-        sqlite_fmt = sqlite_format_map[parte]
-        traduzioni = {
-            DbType.POSTGRES: f"EXTRACT({parte} FROM {col})",
-            DbType.MSSQL: f"DATEPART({parte}, {col})",
-            DbType.MYSQL: f"EXTRACT({parte} FROM {col})",
-            DbType.ORACLE: f"EXTRACT({parte} FROM {col})",
-            DbType.SQLITE: f"CAST(STRFTIME('{sqlite_fmt}', {col}) AS INTEGER)",
-        }
-        return self._ottieni_traduzione(traduzioni, "EXTRACT")
 
     # FUNZIONI CONDIZIONALI (nuove
 

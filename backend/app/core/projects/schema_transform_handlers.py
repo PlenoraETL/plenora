@@ -6,9 +6,10 @@ import re
 from typing import Callable, Dict, List
 
 from app.core.projects.schema_geo_handlers import GeoSchemaHandlers
+from app.core.projects.schema_join_handlers import JoinSchemaHandlers
 
 
-class TransformSchemaHandlers(GeoSchemaHandlers):
+class TransformSchemaHandlers(JoinSchemaHandlers, GeoSchemaHandlers):
     """Owns transform_op dispatch and transform schema implementations."""
 
     def __init__(self, column_schema_cls: type):
@@ -133,60 +134,20 @@ class TransformSchemaHandlers(GeoSchemaHandlers):
     # conoscere le colonne output PRIMA dell'esecuzione della pipeline
     
     def _schema_join(
-        self, 
-        input_schemas: List[List[ColumnSchema]], 
+        self,
+        input_schemas: List[List[ColumnSchema]],
         config: dict,
         node_id: str,
-        edges_by_target: dict
+        edges_by_target: dict,
     ) -> List[ColumnSchema]:
-        """
-        Join: merge colonne sinistra + destra con suffissi _L e _R
-        """
-        if len(input_schemas) < 2:
-            return input_schemas[0] if input_schemas else []
-        
-        left_schema = input_schemas[0]
-        right_schema = input_schemas[1]
-        
-        left_on = config.get("left_on", "")
-        right_on = config.get("right_on", "")
-        
-        result = []
-        
-        # Colonne da sinistra con suffisso _L
-        for col in left_schema:
-            new_name = f"{col.name}_L" if col.name != left_on else col.name
-            result.append(self._column_schema_cls(
-                name=new_name,
-                type=col.type,
-                source_node=node_id,
-                is_calculated=col.is_calculated
-            ))
-        
-        # Colonne da destra con suffisso _R, ESCLUSA la join key
-        # se left_on == right_on: la join key di destra e' un duplicato
-        # della sinistra (gia' inclusa senza suffisso) → skip
-        # se left_on != right_on: la join key di destra resta nel
-        # risultato col suo nome originale (senza _R) — e' una colonna
-        # significativa, non un attributo collaterale
-        # Pre-fix bug: la condizione ternaria aveva entrambi i rami uguali
-        # `f"{col.name}_R" if ... else f"{col.name}_R"`), quindi la join
-        # key di destra finiva sempre come `id_right_R`, confondendo il
-        # downstream sul nome reale della colonna
-        for col in right_schema:
-            if col.name == right_on and left_on == right_on:
-                continue  # Skip duplicato join key
-            new_name = col.name if col.name == right_on else f"{col.name}_R"
-            result.append(self._column_schema_cls(
-                name=new_name,
-                type=col.type,
-                source_node=node_id,
-                is_calculated=col.is_calculated
-            ))
-        
-        return result
-    
-    
+        return JoinSchemaHandlers._schema_join(
+            self,
+            input_schemas,
+            config,
+            node_id,
+            edges_by_target,
+        )
+
     def _schema_aggregate(
         self, 
         input_schemas: List[List[ColumnSchema]], 
@@ -1007,225 +968,6 @@ class TransformSchemaHandlers(GeoSchemaHandlers):
             is_calculated=by_name[name].is_calculated,
         ) for name in ordered if name in by_name]
 
-
-    def _schema_cross_join(
-        self,
-        input_schemas: List[List[ColumnSchema]],
-        node_id: str,
-    ) -> List[ColumnSchema]:
-        """cross_join: prodotto cartesiano LEFT × RIGHT.
-
-        Runtime: `op_cross_join` (joins.py) usa `pd.merge(how="cross")`.
-        Pandas applica i suffissi default `('_x', '_y')` in caso di
-        collisione: ENTRAMBE le colonne in collisione vengono
-        suffissate (LEFT → `_x`, RIGHT → `_y`); le colonne non in
-        collisione restano col nome originale.
-        """
-        if len(input_schemas) < 2:
-            return input_schemas[0] if input_schemas else []
-
-        left_schema = input_schemas[0]
-        right_schema = input_schemas[1]
-        left_names = {c.name for c in left_schema}
-        right_names = {c.name for c in right_schema}
-        collisions = left_names & right_names
-
-        result: List[ColumnSchema] = []
-        for col in left_schema:
-            new_name = f"{col.name}_x" if col.name in collisions else col.name
-            result.append(self._column_schema_cls(
-                name=new_name,
-                type=col.type,
-                source_node=node_id,
-                is_calculated=col.is_calculated,
-            ))
-        for col in right_schema:
-            new_name = f"{col.name}_y" if col.name in collisions else col.name
-            result.append(self._column_schema_cls(
-                name=new_name,
-                type=col.type,
-                source_node=node_id,
-                is_calculated=col.is_calculated,
-            ))
-        return result
-
-
-    def _schema_lookup(
-        self,
-        input_schemas: List[List[ColumnSchema]],
-        config: dict,
-        node_id: str,
-    ) -> List[ColumnSchema]:
-        """lookup: single-input value-mapping.
-
-        Runtime: `op_lookup` (analysis.py). NB: dispetto la guidance
-        nel prompt outgoing, il registry classifica `inputs: single`
-        e il runtime e' un value-map (non un join multi-input).
-
-        Schema delta:
-        - `column` o `mapping` mancante / `column` non in input →
-          schema invariato (mirror runtime no-op + warning).
-        - `output_column` vuoto o uguale a `column`: in-place
-          overwrite. Schema-set invariato. Tipo della sorgente
-          preservato (i `fillna(default|original)` mantengono il
-          tipo dominante; un eventuale shift e' approssimazione
-          accettabile).
-        - `output_column` valorizzata e diversa da `column`: aggiunge
-          una nuova colonna con tipo = tipo della sorgente
-          (approssimazione: i valori del `mapping` ereditano la
-          tipologia che il runtime `pd.Series.map` produce sul
-          dtype originale).
-        - `output_column` collide con un'altra colonna esistente
-          (non `column`): nessuna nuova colonna, schema invariato.
-        """
-        if not input_schemas:
-            return []
-        result = self._copy_schema(input_schemas[0], node_id)
-        column = config.get("column") or ""
-        mapping = config.get("mapping")
-        if not column or not mapping:
-            return result
-        existing = {c.name for c in result}
-        if column not in existing:
-            return result
-
-        out_col_cfg = config.get("output_column")
-        target = out_col_cfg if out_col_cfg else column
-        if target == column:
-            return result
-        if target in existing:
-            return result
-
-        src_col = next(c for c in result if c.name == column)
-        result.append(self._column_schema_cls(
-            name=target,
-            type=src_col.type,
-            source_node=node_id,
-            is_calculated=True,
-        ))
-        return result
-
-
-    def _schema_table_diff(
-        self,
-        input_schemas: List[List[ColumnSchema]],
-        config: dict,
-        node_id: str,
-    ) -> List[ColumnSchema]:
-        """table_diff: confronto LEFT vs RIGHT con metadati diff.
-
-        Runtime: `op_table_diff` (reshape.py) e' multi-input. Output:
-        - `key_cols` (= `left_keys`, types da LEFT)
-        - `common_value_cols` (intersezione di non-key cols
-          dopo key-rename RIGHT→LEFT; types da LEFT; filtrate
-          opzionalmente da `compare_columns`)
-        - `only_old_cols` (LEFT non-key not in RIGHT post-rename;
-          types da LEFT)
-        - `only_new_cols` (RIGHT non-key post-rename not in LEFT;
-          types da RIGHT)
-        - `_diff_status` (str), `_diff_columns` (str),
-          `_diff_old_values` (str)
-
-        Fallback runtime → passthrough di LEFT:
-        - `left_keys`/`right_keys` mancanti o lunghezze diverse;
-        - una key non esiste in LEFT/RIGHT.
-        """
-        if not input_schemas:
-            return []
-        if len(input_schemas) < 2:
-            return self._copy_schema(input_schemas[0], node_id)
-
-        left_schema = input_schemas[0]
-        right_schema = input_schemas[1]
-
-        left_keys = self._normalize_str_list(config.get("left_keys"))
-        right_keys = self._normalize_str_list(config.get("right_keys"))
-
-        if (
-            not left_keys
-            or not right_keys
-            or len(left_keys) != len(right_keys)
-        ):
-            return self._copy_schema(left_schema, node_id)
-
-        left_by_name = {c.name: c for c in left_schema}
-        right_by_name = {c.name: c for c in right_schema}
-        if not all(k in left_by_name for k in left_keys):
-            return self._copy_schema(left_schema, node_id)
-        if not all(k in right_by_name for k in right_keys):
-            return self._copy_schema(left_schema, node_id)
-
-        # Apply key-rename to RIGHT (rk → lk where lk != rk
-        key_rename = {
-            rk: lk for lk, rk in zip(left_keys, right_keys) if lk != rk
-        }
-        right_post: List[ColumnSchema] = []
-        for col in right_schema:
-            new_name = key_rename.get(col.name, col.name)
-            right_post.append(self._column_schema_cls(
-                name=new_name,
-                type=col.type,
-                source_node=col.source_node,
-                is_calculated=col.is_calculated,
-            ))
-        right_post_by_name = {c.name: c for c in right_post}
-
-        key_cols = list(left_keys)
-        key_set = set(key_cols)
-        left_non_key = [c.name for c in left_schema if c.name not in key_set]
-        right_non_key = [c.name for c in right_post if c.name not in key_set]
-
-        common_value_cols = [c for c in left_non_key if c in right_non_key]
-        compare_cols = self._normalize_str_list(config.get("compare_columns"))
-        if compare_cols:
-            common_value_cols = [
-                c for c in compare_cols if c in common_value_cols
-            ]
-
-        only_old_cols = [c for c in left_non_key if c not in right_non_key]
-        only_new_cols = [c for c in right_non_key if c not in left_non_key]
-
-        result: List[ColumnSchema] = []
-        for k in key_cols:
-            col = left_by_name[k]
-            result.append(self._column_schema_cls(
-                name=k,
-                type=col.type,
-                source_node=node_id,
-                is_calculated=False,
-            ))
-        for c in common_value_cols:
-            col = left_by_name[c]
-            result.append(self._column_schema_cls(
-                name=c,
-                type=col.type,
-                source_node=node_id,
-                is_calculated=False,
-            ))
-        for c in only_old_cols:
-            col = left_by_name[c]
-            result.append(self._column_schema_cls(
-                name=c,
-                type=col.type,
-                source_node=node_id,
-                is_calculated=False,
-            ))
-        for c in only_new_cols:
-            col = right_post_by_name[c]
-            result.append(self._column_schema_cls(
-                name=c,
-                type=col.type,
-                source_node=node_id,
-                is_calculated=False,
-            ))
-        for fixed in ("_diff_status", "_diff_columns", "_diff_old_values"):
-            result.append(self._column_schema_cls(
-                name=fixed,
-                type="str",
-                source_node=node_id,
-                is_calculated=True,
-            ))
-        return result
 
     def _schema_melt(
         self,

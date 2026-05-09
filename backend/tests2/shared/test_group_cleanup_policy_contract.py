@@ -37,8 +37,29 @@ def _imports_module(tree: ast.AST, module_name: str) -> bool:
     return False
 
 
-def test_no_central_group_cleanup_god_helper_exists():
-    assert not (_APP / "db" / "group_cleanup.py").exists()
+def test_group_cleanup_helper_uses_table_allowlist():
+    helper_path = _APP / "db" / "group_cleanup.py"
+    src = helper_path.read_text(encoding="utf-8")
+    tree = ast.parse(src)
+
+    assert "_DELETE_GROUP_ROWS_SQL" in src
+    assert "delete_group_rows_for_table" in src
+    assert "format(" not in src
+    assert "f\"" not in src
+    assert "f'" not in src
+
+    delete_literals = [
+        node.value
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Constant)
+        and isinstance(node.value, str)
+        and node.value.startswith("DELETE FROM ")
+    ]
+    assert sorted(delete_literals) == sorted(
+        f"DELETE FROM {table_name} WHERE group_id = ?"
+        for table_name in _KNOWN_GROUP_TABLES
+        if table_name not in {"log_runs", "schedules"}
+    )
 
 
 def test_group_cleanup_remains_domain_owned_and_registry_driven():
@@ -53,13 +74,18 @@ def test_group_cleanup_remains_domain_owned_and_registry_driven():
         assert dotted in registry_src
 
 
-def test_domain_cleanup_modules_own_static_sql_and_use_low_level_primitive():
+def test_domain_cleanup_modules_keep_public_boundaries_and_use_table_helper():
     for cleanup_path in _DOMAIN_CLEANUPS:
         src = cleanup_path.read_text(encoding="utf-8")
         tree = ast.parse(src)
 
-        assert _imports_module(tree, "app.db.cleanup_sql")
-        assert "delete_group_rows(" in src
+        if cleanup_path.parts[-2] == "scheduler":
+            assert _imports_module(tree, "app.db.cleanup_sql")
+            assert "delete_group_rows(" in src
+            continue
+
+        assert _imports_module(tree, "app.db.group_cleanup")
+        assert "delete_group_rows_for_table(" in src
         assert "app.db.pg_connection" not in src
 
         delete_literals = [
@@ -69,8 +95,7 @@ def test_domain_cleanup_modules_own_static_sql_and_use_low_level_primitive():
             and isinstance(node.value, str)
             and node.value.startswith("DELETE FROM ")
         ]
-        assert delete_literals, f"{cleanup_path} must own its static DELETE SQL"
-        assert all("WHERE group_id = ?" in sql for sql in delete_literals)
+        assert not delete_literals, f"{cleanup_path} must delegate DELETE SQL to helper"
 
 
 def test_low_level_cleanup_primitive_does_not_know_domain_tables():
