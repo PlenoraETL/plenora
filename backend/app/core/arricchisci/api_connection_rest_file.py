@@ -74,6 +74,7 @@ def _extract_file_source_group_id(
     passare `ctx=` riceve un fail-closed pulito invece di un
     silent fallback su stato di un'altra run.
     """
+    _ = self_obj  # compatibility arity; security logic is ctx-strict
     if ctx is None:
         return None
     return ctx.group_id
@@ -122,6 +123,7 @@ def _extract_project_source_group_id(
     alla run corretta E impedisce qualsiasi leak da una run
     precedente nello stesso processo worker.
     """
+    _ = self_obj  # compatibility arity; security logic is ctx-strict
     if ctx is None:
         return None
     return ctx.group_id

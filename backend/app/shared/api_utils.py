@@ -21,6 +21,16 @@ from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
 
+__all__ = [
+    "get_shared_session",
+    "get_arcgis_token",
+    "get_cached_oauth2_token",
+    "invalidate_oauth2_token",
+    "prepare_headers",
+    "validate_external_url",
+    "validate_external_url_silent",
+]
+
 
 _shared_session: Optional[requests.Session] = None
 _shared_session_lock = threading.Lock()

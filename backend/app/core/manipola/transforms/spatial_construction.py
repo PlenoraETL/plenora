@@ -8,7 +8,7 @@ import geopandas as gpd
 import pandas as pd
 from shapely.geometry import LineString, Polygon
 
-from app.utils.geo import to_geodataframe
+from app.core.features.geo_utils import to_geodataframe
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)

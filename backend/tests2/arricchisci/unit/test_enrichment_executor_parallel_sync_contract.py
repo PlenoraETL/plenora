@@ -1,7 +1,8 @@
 """
 Contract test per il path parallelo sync di EnrichmentExecutor.
 
-Il dispatcher production usa ThreadPoolExecutor quando parallel_workers > 1.
+Il dispatcher production usa ThreadPoolExecutor solo quando la guardia
+_should_use_parallel_engine consente il motore throughput-only.
 """
 
 import threading
@@ -114,6 +115,26 @@ def test_parallel_sync_single_group_makes_one_api_call():
     executor._execute_parallel(df)
 
     assert call_count[0] == 1
+
+
+def test_parallel_sync_preexisting_cache_hit_does_not_count_api_call():
+    df = pd.DataFrame({"q": ["same", "same", "same"]})
+    executor = _make_executor()
+    cache_key = executor._make_cache_key({"q": "same"})
+    executor._cache[cache_key] = [{"result": "cached"}]
+
+    def fake_call(params, row_index):
+        raise AssertionError("preexisting cache hit must not call the API")
+
+    _install_fake_call(executor, fake_call)
+
+    result_df, stats, errors = executor._execute_parallel(df)
+
+    assert list(result_df["result"]) == ["cached", "cached", "cached"]
+    assert stats.api_calls_made == 0
+    assert stats.cached == 3
+    assert stats.errors == 0
+    assert errors == []
 
 
 def test_parallel_sync_rate_limiter_invoked_per_api_call():
@@ -254,3 +275,29 @@ def test_parallel_sync_guard_delegates_to_serial_for_early_stop_contract():
     assert list(result_df["result"]) == ["serial", "serial"]
     assert stats.success == 2
     assert errors == []
+
+
+def test_execute_dispatch_uses_parallel_guard_not_worker_count_only():
+    df = pd.DataFrame({"q": ["a", "b"]})
+    executor = _make_executor(stop_on_error_threshold=1)
+    called = []
+
+    def fake_internal(input_df):
+        called.append(input_df)
+        result_df = input_df.copy()
+        result_df["result"] = "serial"
+        return result_df, EnrichmentStats(total_rows=len(input_df), success=len(input_df)), []
+
+    def fake_parallel(input_df):
+        raise AssertionError("execute must not dispatch to parallel for serial-only options")
+
+    executor._execute_internal = fake_internal
+    executor._execute_parallel = fake_parallel
+
+    result_df, result = executor.execute(df)
+
+    assert executor._should_use_parallel_engine() is False
+    assert len(called) == 1
+    assert list(result_df["result"]) == ["serial", "serial"]
+    assert result.success is True
+    assert result.stats.success == 2

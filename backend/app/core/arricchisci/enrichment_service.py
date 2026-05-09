@@ -5,27 +5,20 @@ Keeps API enrichment behavior isolated from orchestration callers.
 """
 
 import os
-import time
-import hashlib
 import json
-import re
-import requests
-from app.shared.api_utils import get_shared_session
 import pandas as pd
 import threading
 import urllib3
-from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Dict, Any, Optional, List, Tuple, Callable
 from datetime import datetime, timezone
-from collections import defaultdict, deque
+from collections import deque
 
 # Disabilita SSL warnings (fix Windows
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 from app.core.arricchisci.models import (
-    RowStatus, RowError, EnrichmentStats, EnrichmentOptions,
-    EnrichmentResult, PreviewResult, EnrichmentValidationResult,
-    BatchConfig, BatchInputFormat
+    RowError, EnrichmentStats, EnrichmentOptions,
+    EnrichmentResult, BatchConfig
 )
 from app.utils.logger import get_logger
 from app.core.arricchisci._rate_limiter import RateLimiter as _RateLimiter
@@ -35,7 +28,6 @@ from app.shared.api_utils import (
 )
 from app.observability.log_sanitization import (
     sanitize_for_log,
-    sanitize_url_for_log,
 )
 
 from app.core.arricchisci.enrichment_template_params import (
@@ -197,7 +189,7 @@ class EnrichmentExecutor(
 
         if self.batch_config.enabled:
             result_df, stats, errors = self._execute_batch_native(df)
-        elif self.options.parallel_workers > 1:
+        elif self._should_use_parallel_engine():
             result_df, stats, errors = self._execute_parallel(df)
         else:
             result_df, stats, errors = self._execute_internal(df)

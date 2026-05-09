@@ -275,6 +275,7 @@ class TransactionExecutionMixin:
         Returns:
             Numero di righe elaborate con successo.
         """
+        _ = (target_table, target_schema)  # compatibility parameters; sql already carries the target
         if len(batch_df) == 0:
             return 0
 

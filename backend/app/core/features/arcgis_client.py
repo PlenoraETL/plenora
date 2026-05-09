@@ -501,7 +501,6 @@ class ArcGISClient(
                 geom_series = df[geometry_column].dropna()
                 if len(geom_series) > 0:
                     geoms = [_wkt.loads(str(g)) for g in geom_series.head(1000)]
-                    from shapely.geometry import box as _box
                     from shapely.ops import unary_union as _union
                     combined = _union(geoms)
                     b = combined.bounds  # minx, miny, maxx, maxy

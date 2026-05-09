@@ -19,7 +19,7 @@ from app.utils.result_store import save_pipeline_result_outcome
 from app.utils.dataframe import (
     load_dataframe_from_file, sanitize_for_json,
 )
-from app.utils.geo import detect_geometry_column
+from app.core.features.geo_utils import detect_geometry_column
 from .plugin_executor import get_executor
 from .source_loading import load_file_sources
 from .canvas_schema_runtime import (
@@ -119,7 +119,7 @@ def _applica_crs_da_colonne(
     the legacy fallback path (callers that do not supply ``meta``).
     """
     import geopandas as gpd
-    from app.utils.geo import to_geodataframe
+    from app.core.features.geo_utils import to_geodataframe
 
     if isinstance(df, gpd.GeoDataFrame):
         return df  # già GeoDataFrame, non toccare

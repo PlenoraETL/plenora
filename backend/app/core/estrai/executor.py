@@ -14,7 +14,7 @@ from typing import Dict, Any, List, Mapping, MutableMapping, Optional, Protocol,
 from app.shared.models import CanvasState, Node
 from app.utils.logger import get_logger, append_step
 from app.utils.dataframe import load_dataframe_from_file, sanitize_for_json
-from app.utils.geo import extract_srid_from_column_type
+from app.core.features.geo_utils import extract_srid_from_column_type
 from app.shared.crypto import CredentialUnavailableError
 from app.shared.resources.metadata import ResourceMetadata, SourceKind
 from app.core.estrai.sql_errors import (

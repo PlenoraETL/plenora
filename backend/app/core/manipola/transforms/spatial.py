@@ -9,7 +9,7 @@ import geopandas as gpd
 from typing import List, Optional, Union
 
 from app.utils.logger import get_logger
-from app.utils.geo import (
+from app.core.features.geo_utils import (
     to_geodataframe,
     ensure_same_crs,
 )
@@ -23,6 +23,19 @@ from app.core.manipola.transforms.spatial_construction import (
     op_geo_polygon_builder,
 )
 from app.core.manipola.transforms.spatial_overlay import (
+    op_geo_clip,
+    op_geo_count_points_in_polygons,
+    op_geo_difference,
+    op_geo_intersection,
+    op_geo_overlay,
+    op_geo_symmetric_difference,
+    op_geo_union,
+    op_sjoin,
+)
+
+_SPATIAL_OVERLAY_COMPAT_EXPORTS = (
+    op_geo_line_builder,
+    op_geo_polygon_builder,
     op_geo_clip,
     op_geo_count_points_in_polygons,
     op_geo_difference,

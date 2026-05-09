@@ -26,7 +26,6 @@ from app.core.features.models import (
     ArcGISUpdate,
     ArcGISList,
     ArcGISTestResult,
-    FeatureWriteRequest,
     WriteFeaturesResponse,
     CreateServiceResponse,
     BrowseServicesResponse,

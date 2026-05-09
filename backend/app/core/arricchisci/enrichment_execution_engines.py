@@ -102,7 +102,10 @@ class EnrichmentExecutionEnginesMixin:
         processed = [0]  # Lista per permettere modifica in closure
         processed_lock = threading.Lock()
 
-        def process_group(cache_key: str, row_indices: List[int]) -> Tuple[str, List[int], Optional[Dict], Optional[RowError]]:
+        def process_group(
+            cache_key: str,
+            row_indices: List[int],
+        ) -> Tuple[str, List[int], Optional[Dict], Optional[RowError], bool]:
             """Worker function per processare un gruppo.
 
             Double-checked locking per evitare cache stampede:
@@ -122,19 +125,19 @@ class EnrichmentExecutionEnginesMixin:
                     status=RowStatus.SKIPPED,
                     error_message="Parametri nulli",
                     error_type="null_params"
-                )
+                ), False
 
             if self.options.enable_deduplication:
                 # Prima lettura cache (senza lock — fast path
                 if cache_key in self._cache:
-                    return cache_key, row_indices, self._cache[cache_key], None
+                    return cache_key, row_indices, self._cache[cache_key], None, False
 
                 # Segna come "in volo" con lock, per evitare che un secondo worker
                 # faccia la stessa chiamata mentre il primo è in attesa della risposta
                 with self._cache_lock:
                     if cache_key in self._cache:
                         # Altro worker ha già completato mentre attendevamo il lock
-                        return cache_key, row_indices, self._cache[cache_key], None
+                        return cache_key, row_indices, self._cache[cache_key], None, False
                     # Placeholder: indica che questo worker sta elaborando il gruppo
                     self._cache[cache_key] = "__in_flight__"
 
@@ -158,7 +161,7 @@ class EnrichmentExecutionEnginesMixin:
                         # Rimuovi placeholder: un retry futuro potrà riprovare
                         self._cache.pop(cache_key, None)
 
-            return cache_key, row_indices, api_result, error
+            return cache_key, row_indices, api_result, error, True
 
         # Esegui in parallelo
         with ThreadPoolExecutor(max_workers=self.options.parallel_workers) as executor:
@@ -169,7 +172,7 @@ class EnrichmentExecutionEnginesMixin:
 
             for future in as_completed(futures):
                 try:
-                    cache_key, row_indices, api_result, error = future.result()
+                    cache_key, row_indices, api_result, error, api_called = future.result()
 
                     if error and error.status == RowStatus.SKIPPED:
                         # Righe saltate
@@ -193,7 +196,8 @@ class EnrichmentExecutionEnginesMixin:
                                 stats.retry_exhausted += len(row_indices)
                             else:
                                 stats.errors += len(row_indices)
-                            stats.api_calls_made += 1
+                            if api_called:
+                                stats.api_calls_made += 1
                     else:
                         # Successo - api_result dovrebbe essere List[Dict] ma alcune
                         # API restituiscono direttamente un dict (singolo risultato
@@ -212,15 +216,20 @@ class EnrichmentExecutionEnginesMixin:
                             self._apply_result(result_df, idx, first_row)
 
                         with self._stats_lock:
-                            # Se era in cache, conta come cached
-                            if cache_key in self._cache and len(row_indices) > 0:
+                            if not api_called:
+                                stats.cached += len(row_indices)
+                            # Se era in cache dopo una chiamata appena fatta,
+                            # conta la prima riga come success e le duplicate
+                            # come cache/dedup intra-run.
+                            elif cache_key in self._cache and len(row_indices) > 0:
                                 # Prima riga = successo da API, resto = cached
                                 stats.success += 1
                                 stats.cached += len(row_indices) - 1
                                 stats.api_calls_saved += len(row_indices) - 1
                             else:
                                 stats.success += len(row_indices)
-                            stats.api_calls_made += 1
+                            if api_called:
+                                stats.api_calls_made += 1
 
                     # Update progress
                     with processed_lock:

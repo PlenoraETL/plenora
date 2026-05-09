@@ -579,6 +579,7 @@ class Settings:
 
     def set(self, key: str, value: Any, auto_save: bool = True):
         """Set in-memory (runtime only)."""
+        _ = auto_save  # retained for compatibility with the historical setter signature
         os.environ[key] = str(value)
 
     def _directory(self, sottopercorso: str, base: Path = None, create: bool = True) -> Path:

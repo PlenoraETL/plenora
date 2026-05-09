@@ -12,7 +12,7 @@ import geopandas as gpd
 import pandas as pd
 
 from app.core.manipola.transforms.spatial_helpers import _ensure_active_geometry
-from app.utils.geo import ensure_same_crs, to_geodataframe as _to_geodataframe
+from app.core.features.geo_utils import ensure_same_crs, to_geodataframe as _to_geodataframe
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)

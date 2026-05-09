@@ -18,6 +18,13 @@ from argon2.exceptions import (
 
 _ph = PasswordHasher()
 
+__all__ = [
+    "HashingError",
+    "hash_password",
+    "verify_password",
+    "needs_rehash",
+]
+
 
 def hash_password(password: str) -> str:
     return _ph.hash(password)

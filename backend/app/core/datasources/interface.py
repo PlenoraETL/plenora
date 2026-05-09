@@ -84,6 +84,7 @@ class DataSourceInterface(ABC):
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
+        _ = (exc_val, exc_tb)
         self.disconnect()
         return False
 

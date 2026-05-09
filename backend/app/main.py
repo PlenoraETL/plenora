@@ -32,10 +32,6 @@ from app.shared.error_envelope import (
 from app.bootstrap import bootstrap as _bootstrap, teardown as _teardown
 _bootstrap()
 
-# Auth JWT
-from app.core.auth.auth import router as auth_router
-from app.core.auth.users_router import users_router
-from app.core.auth.groups_router import groups_router
 from app.core.projects.exceptions import CanvasCorruptedError
 from app.core.resources.exceptions import MemoryLimitExceededError
 from app.middleware_stack import install_middleware_stack
@@ -273,30 +269,7 @@ api_connection_service = _runtime_services.api_connection_service
 datasource_service = _runtime_services.datasource_service
 
 
-from app.core.connections.router import router as connections_router
-from app.core.projects.router import router as projects_router
-from app.core.files.router import router as files_router
-from app.core.estrai.router import functions_router
-from app.core.manipola.api.transforms_api import router as transforms_router
-from app.core.arricchisci.router import (
-    enrichment_router, api_connections_router, templates_router,
-    enrich_router,
-)
-from app.core.carica.router import router as carica_router
-from app.core.features.routes import router as features_router
-from app.core.scheduler.router import router as schedules_router
-from app.core.orchestrator.router import pipeline_router, tasks_router
-from app.core.logs.router import router as logs_router
-from app.core.logs.runs_router import router as runs_router
-from app.core.datasources.router import router as datasources_router
-from app.core.intermediate.router import router as intermediate_router
-from app.core.eseguibili.router import router as eseguibili_router
-from app.core.imdf.router import router as imdf_router
-from app.core.auth.shares_router import router as shares_router
-from app.core.admin_backups.router import router as admin_backups_router
-from app.core.admin_system_status.router import router as admin_system_status_router
-from app.core.tickets.router import router as tickets_router
-
+from app.core.api import api_router
 from app.runtime.router_registry import (
     bind_router_services,
     ARRICCHISCI_BINDING,
@@ -314,69 +287,7 @@ bind_router_services(_runtime_services, CARICA_BINDING)
 bind_router_services(_runtime_services, ORCHESTRATOR_BINDING)
 # Features usa lazy init interno.
 
-
-# Auth.
-app.include_router(auth_router, prefix="/api")
-app.include_router(users_router, prefix="/api")
-app.include_router(groups_router, prefix="/api")
-app.include_router(shares_router, prefix="/api")
-
-# Connections.
-app.include_router(connections_router, prefix="/api")
-
-# Projects: CRUD, canvas e schema.
-app.include_router(projects_router, prefix="/api")
-
-# Files
-app.include_router(files_router, prefix="/api")
-
-# Estrai: catalogo funzioni e traduzione query.
-app.include_router(functions_router, prefix="/api")
-
-# Manipola: registry trasformazioni.
-app.include_router(transforms_router, prefix="/api")
-
-# Arricchisci: enrichment, api-connections e template.
-app.include_router(enrichment_router, prefix="/api")
-app.include_router(api_connections_router, prefix="/api")
-app.include_router(templates_router, prefix="/api")
-app.include_router(enrich_router, prefix="/api")
-
-# Carica
-app.include_router(carica_router, prefix="/api")
-
-# Features: ArcGIS Feature Service, browse, query e write.
-app.include_router(features_router, prefix="/api")
-
-# Scheduler
-app.include_router(schedules_router, prefix="/api")
-
-# Orchestrator: execute, preview, download e task.
-app.include_router(pipeline_router, prefix="/api")
-app.include_router(tasks_router, prefix="/api")
-
-# Logs: consultazione dal frontend.
-app.include_router(logs_router, prefix="/api")
-app.include_router(runs_router, prefix="/api")
-
-# Datasources
-app.include_router(datasources_router, prefix="/api")
-app.include_router(intermediate_router, prefix="/api")
-
-# Eseguibili: catene on-demand.
-app.include_router(eseguibili_router, prefix="/api")
-
-# IMDF: publish async su ArcGIS.
-app.include_router(imdf_router, prefix="/api")
-
-# Admin Backups: superadmin only.
-app.include_router(admin_backups_router, prefix="/api")
-
-# Admin System Status dashboard: superadmin only.
-app.include_router(admin_system_status_router, prefix="/api")
-
-# Tickets: tech debt e user support, RBAC nel router.
-app.include_router(tickets_router, prefix="/api")
+app.include_router(api_router, prefix="/api")
 
 
 @app.get("/")

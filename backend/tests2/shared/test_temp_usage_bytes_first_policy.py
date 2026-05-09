@@ -407,24 +407,24 @@ _TEMP_INVENTORY: dict[tuple[str, int], tuple[str, str]] = {
         "callers should prefer mode='bytes'.",
     ),
 
-    ("app/utils/dataframe.py", 264): (
+    ("app/core/files/dataframe_io.py", 181): (
         "DIR_MULTIFILE",
         "Shapefile zip extraction: SHP is multi-file (shp+shx+"
         "dbf+prj+cpg). geopandas.read_file requires a directory "
         "with all sidecars present.",
     ),
-    ("app/utils/dataframe.py", 277): (
+    ("app/core/files/dataframe_io.py", 193): (
         "DIR_MULTIFILE",
         "FileGDB zip extraction: GDB is a directory artifact. "
         "Path required by GDAL/OGR driver.",
     ),
-    ("app/utils/dataframe.py", 286): (
+    ("app/core/files/dataframe_io.py", 201): (
         "DIR_MULTIFILE",
         "Single-file ZIP recursive load: extract to dir then "
         "recurse into load_dataframe_from_file (which dispatches "
         "by extension).",
     ),
-    ("app/utils/dataframe.py", 749): (
+    ("app/core/files/geospatial_io.py", 231): (
         "DIR_MULTIFILE",
         "Shapefile WRITE: gdf.to_file emits multi-file shapefile "
         "into tempdir, then zipfile packages into single .zip. "
@@ -449,7 +449,7 @@ _TEMP_INVENTORY: dict[tuple[str, int], tuple[str, str]] = {
         "Preview-temp ZIP extraction: same multi-file pattern as "
         "the regular SHP/GDB upload paths.",
     ),
-    ("app/core/arricchisci/api_connection_rest_file.py", 553): (
+    ("app/core/arricchisci/api_connection_rest_file.py", 555): (
         "STAGING_INGESTION",
         "REST file processor: tempdir hosting multipart upload "
         "staging + binary response buffer for the outbound HTTP "

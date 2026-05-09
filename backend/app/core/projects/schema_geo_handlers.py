@@ -289,6 +289,7 @@ class GeoSchemaHandlers:
         Overlay operations (intersection, union, difference): 
         Combina colonne da entrambi gli input + geometria risultante
         """
+        _ = overlay_type
         if len(input_schemas) < 2:
             return input_schemas[0] if input_schemas else []
         

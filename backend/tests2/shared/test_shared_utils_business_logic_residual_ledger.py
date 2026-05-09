@@ -121,11 +121,25 @@ def test_static_parameter_processing_is_not_template_variables_business_logic() 
 
 
 def test_utm_crs_selection_is_not_owned_by_app_utils_geo() -> None:
-    geo_utils = (_BACKEND_ROOT / "app" / "utils" / "geo.py").read_text(
+    geo_utils = (_BACKEND_ROOT / "app" / "core" / "features" / "geo_utils.py").read_text(
         encoding="utf-8-sig"
     )
 
     assert "def get_utm_crs_for_geometry" not in geo_utils
+
+
+def test_app_utils_geo_compat_module_is_removed() -> None:
+    assert not (_BACKEND_ROOT / "app" / "utils" / "geo.py").exists()
+
+
+def test_production_runtime_does_not_import_app_utils_geo() -> None:
+    offenders: list[str] = []
+    for path in (_BACKEND_ROOT / "app").rglob("*.py"):
+        text = path.read_text(encoding="utf-8")
+        if "app.utils.geo" in text:
+            offenders.append(path.relative_to(_BACKEND_ROOT).as_posix())
+
+    assert offenders == []
 
 
 def test_visibility_policy_runtime_imports_are_auth_owned() -> None:

@@ -150,16 +150,23 @@ def test_groups_router_prefix_and_tags():
     assert "groups" in groups_router.tags
 
 
-# 5. Mount in main.py (source-bound)
+# 5. Mount in API composition root (source-bound)
 
 
-def test_main_mounts_groups_router_with_api_prefix():
-    """Source-bound check: `main.py` include il nuovo router con
-    prefix `/api`, mantenendo i path effettivi
+def test_api_composition_mounts_groups_router():
+    """Source-bound check: `api.py` include il nuovo router e `main.py`
+    monta l'api_router con prefix `/api`, mantenendo i path effettivi
     `/api/auth/groups*` invariati rispetto al pre-batch."""
-    src = (_BACKEND_ROOT / "app" / "main.py").read_text(encoding="utf-8")
-    assert "from app.core.auth.groups_router import groups_router" in src
-    assert 'app.include_router(groups_router, prefix="/api")' in src
+    api_src = (_BACKEND_ROOT / "app" / "core" / "api.py").read_text(
+        encoding="utf-8"
+    )
+    main_src = (_BACKEND_ROOT / "app" / "main.py").read_text(
+        encoding="utf-8"
+    )
+    assert "from app.core.auth.groups_router import groups_router" in api_src
+    assert "api_router.include_router(groups_router)" in api_src
+    assert "from app.core.api import api_router" in main_src
+    assert 'app.include_router(api_router, prefix="/api")' in main_src
 
 
 # 6. No circular import (top-level imports)

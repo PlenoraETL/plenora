@@ -34,18 +34,27 @@ PROJECT_ID=""
 TOKEN=""
 TMP_FILES=""
 
-cleanup_tmp_files() {
+cleanup_smoke_project_on_exit() {
     if [ -n "$PROJECT_ID" ] && [ -n "$TOKEN" ]; then
         curl -sS --max-time "$CURL_MAX_TIME_SECONDS" \
             -X DELETE "${BASE_URL}/api/projects/${PROJECT_ID}" \
             -H "Authorization: Bearer ${TOKEN}" \
             >/dev/null 2>&1 || true
+        PROJECT_ID=""
     fi
+}
+
+cleanup_tmp_files() {
     for file in $TMP_FILES; do
         rm -f "$file"
     done
 }
-trap cleanup_tmp_files EXIT
+
+cleanup_on_exit() {
+    cleanup_smoke_project_on_exit
+    cleanup_tmp_files
+}
+trap cleanup_on_exit EXIT
 
 usage() {
     cat <<'USAGE'
@@ -276,7 +285,7 @@ create_smoke_project() {
     local body_file
     local payload
     local project_name
-    project_name="docker-smoke-$(date +%s)"
+    project_name="docker-smoke-$(date +%s)-$$"
     payload="$(project_payload_json "$project_name")"
     body_file="$(
         curl_json "POST" "/api/projects" \

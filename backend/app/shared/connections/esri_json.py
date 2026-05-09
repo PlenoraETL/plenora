@@ -158,6 +158,7 @@ class EsriJsonConverter:
         Returns:
             Lista di features nel formato Esri JSON
         """
+        _ = object_id_field
         features = []
 
         for idx, row in gdf.iterrows():

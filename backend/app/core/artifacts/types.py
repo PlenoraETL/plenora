@@ -384,4 +384,5 @@ class MaterializedArtifact:
         return self
 
     def __exit__(self, exc_type, exc, tb) -> None:
+        _ = tb
         self.cleanup()

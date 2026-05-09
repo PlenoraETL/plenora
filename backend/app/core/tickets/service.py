@@ -77,7 +77,7 @@ class TicketNotifier(Protocol):
         self,
         ticket: tdb.TicketRow,
         old_status: str,
-        new_status: str,
+        _new_status: str,
         actor: CurrentUser,
     ) -> None:
         ...
@@ -94,7 +94,7 @@ class TicketNotifier(Protocol):
         self,
         ticket: tdb.TicketRow,
         old_assignee: Optional[str],
-        new_assignee: Optional[str],
+        _new_assignee: Optional[str],
         actor: CurrentUser,
     ) -> None:
         ...
@@ -110,7 +110,7 @@ class NoopTicketNotifier:
         self,
         ticket: tdb.TicketRow,
         old_status: str,
-        new_status: str,
+        _new_status: str,
         actor: CurrentUser,
     ) -> None:
         pass
@@ -127,7 +127,7 @@ class NoopTicketNotifier:
         self,
         ticket: tdb.TicketRow,
         old_assignee: Optional[str],
-        new_assignee: Optional[str],
+        _new_assignee: Optional[str],
         actor: CurrentUser,
     ) -> None:
         pass

@@ -1,0 +1,247 @@
+"""Geospatial DataFrame export helpers."""
+
+import json
+import re
+import tempfile
+import zipfile
+from pathlib import Path
+from typing import Optional
+
+import pandas as pd
+
+from app.utils.logger import get_logger
+
+logger = get_logger(__name__)
+
+
+def _geo_helpers():
+    from app.core.features.geo_utils import detect_geometry_column, to_geodataframe
+
+    return to_geodataframe, detect_geometry_column
+
+
+def save_geospatial_dataframe(
+    df: pd.DataFrame,
+    base_path: Path,
+    formato: str,
+    geom_column: Optional[str],
+    crs: str,
+) -> Path:
+    """Save a DataFrame in a geospatial filesystem format."""
+    to_geodataframe, detect_geometry_column = _geo_helpers()
+    return _salva_formato_geo(
+        df,
+        base_path,
+        formato,
+        geom_column,
+        crs,
+        to_geodataframe,
+        detect_geometry_column,
+    )
+
+
+def geospatial_dataframe_to_bytes(
+    df: pd.DataFrame,
+    formato: str,
+    geom_column: Optional[str],
+    crs: str,
+) -> bytes:
+    """Serialize a DataFrame to bytes for supported geospatial formats."""
+    if formato != "geojson":
+        if formato in ("gpkg", "shp"):
+            raise ValueError(
+                f"Formato '{formato}' richiede filesystem (tool binari / multi-file). "
+                f"Usa save_dataframe(path-based) invece di save_dataframe_to_bytes."
+            )
+        raise ValueError(f"Formato '{formato}' non supportato")
+
+    to_geodataframe, detect_geometry_column = _geo_helpers()
+    if geom_column is None:
+        geom_column = detect_geometry_column(df)
+    try:
+        import geopandas as gpd
+    except ImportError:
+        raise ValueError("geopandas non installato: formato geojson non disponibile")
+    if not isinstance(df, gpd.GeoDataFrame):
+        if not geom_column:
+            raise ValueError("geojson: serve una colonna geometria")
+        gdf = to_geodataframe(df, geom_column, crs)
+    else:
+        gdf = df
+        if geom_column and gdf.geometry.name != geom_column:
+            gdf = gdf.set_geometry(geom_column)
+    return gdf.to_json().encode("utf-8")
+
+
+def _sanitize_layer_name(name: str) -> str:
+    """Sanitize an OGR/GPKG layer name."""
+    sanitized = re.sub(r"[^A-Za-z0-9_]", "_", name)
+    if sanitized and sanitized[0].isdigit():
+        sanitized = "_" + sanitized
+    return sanitized or "layer"
+
+
+def _salva_formato_geo(
+    df: pd.DataFrame,
+    base_path: Path,
+    formato: str,
+    geom_column: Optional[str],
+    crs: str,
+    to_geodataframe,
+    detect_geometry_column,
+) -> Path:
+    """Save a DataFrame as GeoJSON, GPKG, or zipped Shapefile."""
+    import geopandas as gpd
+
+    if len(df) == 0:
+        logger.warning(f"DataFrame vuoto, creazione {formato} vuoto")
+        return _salva_geo_vuoto(df, base_path, formato)
+
+    if isinstance(df, gpd.GeoDataFrame):
+        gdf = df.copy()
+
+        if geom_column and geom_column != gdf.geometry.name and geom_column in gdf.columns:
+            gdf = _switch_colonna_geometria(gdf, geom_column)
+
+        gdf = _converti_geometrie_secondarie_in_wkt(gdf)
+
+        if gdf.crs is None:
+            gdf = gdf.set_crs(crs)
+
+    else:
+        if geom_column is None:
+            geom_column = detect_geometry_column(df)
+
+        if geom_column is None:
+            lat_col = next((c for c in df.columns if c.lower() in ("lat", "latitude", "lat_wgs84")), None)
+            lon_col = next(
+                (c for c in df.columns if c.lower() in ("lon", "lng", "longitude", "long", "lon_wgs84")),
+                None,
+            )
+            if lat_col and lon_col:
+                from shapely.geometry import Point
+
+                df = df.copy()
+                lons = pd.to_numeric(df[lon_col], errors="coerce")
+                lats = pd.to_numeric(df[lat_col], errors="coerce")
+                valid = lons.notna() & lats.notna()
+                df["geometry"] = [
+                    Point(lon, lat) if v else None
+                    for lon, lat, v in zip(lons, lats, valid)
+                ]
+                geom_column = "geometry"
+                logger.info(
+                    f"Auto-creata colonna geometry da lat='{lat_col}' lon='{lon_col}' "
+                    f"per salvataggio {formato}"
+                )
+            else:
+                raise ValueError(
+                    f"Nessuna colonna geometria trovata per formato {formato}. "
+                    f"Colonne disponibili: {list(df.columns)}. "
+                    f"Usa CSV o JSON per dati non spaziali."
+                )
+
+        gdf = to_geodataframe(df, geom_column, crs=crs)
+
+    if formato == "geojson":
+        final_path = base_path.with_suffix(".geojson")
+        gdf.to_file(final_path, driver="GeoJSON")
+    elif formato == "gpkg":
+        final_path = base_path.with_suffix(".gpkg")
+        layer_name = _sanitize_layer_name(base_path.stem)
+        gdf.to_file(final_path, driver="GPKG", layer=layer_name)
+    elif formato == "shp":
+        final_path = _salva_shapefile_zippato(gdf, base_path, df.columns)
+    else:
+        raise ValueError(f"Formato '{formato}' non supportato")
+
+    return final_path
+
+
+def _switch_colonna_geometria(gdf, geom_column: str):
+    """Set a different column as active GeoDataFrame geometry."""
+    from shapely import wkt
+
+    col_data = gdf[geom_column]
+    if col_data.dtype == "object":
+        _non_null = col_data.dropna()
+        primo_valido = _non_null.iloc[0] if not _non_null.empty else None
+        if primo_valido and isinstance(primo_valido, str):
+            gdf[geom_column] = col_data.apply(
+                lambda x: wkt.loads(x) if pd.notna(x) and isinstance(x, str) else x
+            )
+
+    return gdf.set_geometry(geom_column)
+
+
+def _converti_geometrie_secondarie_in_wkt(gdf):
+    """Convert non-active geometry columns to WKT for file export."""
+    from shapely.geometry.base import BaseGeometry
+
+    nome_geometria_attiva = gdf.geometry.name
+
+    for col in gdf.columns:
+        if col == nome_geometria_attiva:
+            continue
+
+        col_data = gdf[col].dropna()
+        if col_data.empty:
+            continue
+
+        primo_valido = col_data.iloc[0]
+        if isinstance(primo_valido, BaseGeometry):
+            gdf[col] = col_data.apply(lambda x: x.wkt if isinstance(x, BaseGeometry) else x)
+
+    return gdf
+
+
+def _salva_geo_vuoto(df: pd.DataFrame, base_path: Path, formato: str) -> Path:
+    """Create an empty but structurally valid geospatial output."""
+    import geopandas as gpd
+
+    if formato == "geojson":
+        final_path = base_path.with_suffix(".geojson")
+        geojson_vuoto = {"type": "FeatureCollection", "features": []}
+        with open(final_path, "w", encoding="utf-8") as f:
+            json.dump(geojson_vuoto, f)
+        return final_path
+
+    gdf_vuoto = gpd.GeoDataFrame(
+        {col: [] for col in df.columns},
+        geometry=[],
+        crs="EPSG:4326",
+    )
+
+    if formato == "gpkg":
+        final_path = base_path.with_suffix(".gpkg")
+        layer_name = _sanitize_layer_name(base_path.stem)
+        gdf_vuoto.to_file(final_path, driver="GPKG", layer=layer_name)
+    elif formato == "shp":
+        final_path = _salva_shapefile_zippato(gdf_vuoto, base_path, df.columns)
+    else:
+        raise ValueError(f"Formato '{formato}' non supportato")
+
+    return final_path
+
+
+def _salva_shapefile_zippato(gdf, base_path: Path, colonne_originali) -> Path:
+    """Save a GeoDataFrame as zipped Shapefile."""
+    nome_shp = base_path.stem
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        shp_path = Path(tmpdir) / f"{nome_shp}.shp"
+        gdf.to_file(shp_path, driver="ESRI Shapefile")
+
+        zip_path = base_path.with_suffix(".zip")
+        with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
+            for f in Path(tmpdir).glob(f"{nome_shp}.*"):
+                zf.write(f, f.name)
+
+        colonne_lunghe = [c for c in colonne_originali if len(str(c)) > 10]
+        if colonne_lunghe:
+            logger.warning(
+                f"Shapefile: {len(colonne_lunghe)} colonne con nomi > 10 caratteri "
+                f"saranno troncate: {colonne_lunghe[:5]}..."
+            )
+
+    return zip_path

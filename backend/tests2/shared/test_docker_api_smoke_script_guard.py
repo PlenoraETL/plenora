@@ -108,6 +108,47 @@ def test_docker_api_smoke_script_serializes_json_payloads_safely():
     )
 
 
+def test_docker_api_smoke_script_registers_api_cleanup_trap():
+    text = _script_text()
+    cleanup_body = _shell_function_body(text, "cleanup_smoke_project_on_exit")
+
+    for marker in (
+        'if [ -n "$PROJECT_ID" ] && [ -n "$TOKEN" ]; then',
+        '-X DELETE "${BASE_URL}/api/projects/${PROJECT_ID}"',
+        '-H "Authorization: Bearer ${TOKEN}"',
+        ">/dev/null 2>&1 || true",
+        'PROJECT_ID=""',
+    ):
+        assert marker in cleanup_body
+
+    exit_body = _shell_function_body(text, "cleanup_on_exit")
+    project_cleanup_idx = exit_body.index("cleanup_smoke_project_on_exit")
+    tmp_cleanup_idx = exit_body.index("cleanup_tmp_files")
+    assert project_cleanup_idx < tmp_cleanup_idx, (
+        "EXIT cleanup must attempt API project deletion before removing temp "
+        "files so failure paths after project creation stay idempotent."
+    )
+    assert "trap cleanup_on_exit EXIT" in text
+
+
+def test_docker_api_smoke_script_explicit_delete_clears_project_id():
+    body = _shell_function_body(_script_text(), "delete_smoke_project")
+    delete_idx = body.index('curl_json "DELETE" "/api/projects/${PROJECT_ID}"')
+    clear_idx = body.index('PROJECT_ID=""')
+    assert delete_idx < clear_idx, (
+        "Explicit project delete must clear PROJECT_ID after the API delete, "
+        "preventing the EXIT trap from retrying successful cleanup."
+    )
+
+
+def test_docker_api_smoke_project_names_are_collision_resistant():
+    body = _shell_function_body(_script_text(), "create_smoke_project")
+    assert 'project_name="docker-smoke-$(date +%s)-$$"' in body, (
+        "Smoke project names must include timestamp and shell pid so repeated "
+        "CI runs are unlikely to collide before cleanup executes."
+    )
+
+
 def test_docker_api_smoke_script_does_not_leave_full_acceptance_pending():
     text = _script_text()
     offenders = [
@@ -176,3 +217,11 @@ def _strip_shell_comments_and_heredocs(source: str) -> str:
 def _script_main_block() -> str:
     text = _script_text()
     return text[text.index('echo "Docker API smoke target: ${BASE_URL}"') :]
+
+
+def _shell_function_body(source: str, name: str) -> str:
+    start_marker = f"{name}() {{"
+    start = source.index(start_marker)
+    body_start = start + len(start_marker)
+    end = source.index("\n}", body_start)
+    return source[body_start:end]
