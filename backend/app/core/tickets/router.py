@@ -16,6 +16,7 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, Response, Upl
 from pydantic import BaseModel, Field
 
 from app.core.auth.dependencies import get_current_user
+from app.core.files import db as files_db
 from app.shared.contracts.auth import CurrentUser
 from app.core.tickets import db as tdb
 from app.core.tickets import service as svc
@@ -406,8 +407,7 @@ def download_attachment_endpoint(
         raise HTTPException(404, "Blob allegato non disponibile")
 
     # Recupera metadata del file_source per filename + format
-    from app.core.files.db import get_file_source as _get_file_source
-    fs_row = _get_file_source(attachment.file_source_id, include_data=False)
+    fs_row = files_db.get_file_source(attachment.file_source_id, include_data=False)
     if not fs_row:
         raise HTTPException(404, "File source non trovato")
 

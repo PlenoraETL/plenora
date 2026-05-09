@@ -73,6 +73,10 @@ def bootstrap() -> None:
     # work until the function is actually invoked). Important for
     # test ergonomics: tests can `import app.bootstrap` without
     # paying for the full settings/storage/db graph
+    from app.config_env_loader import load_backend_dotenv
+
+    load_backend_dotenv()
+
     from app.config import settings
     from app.core.runtime.db_init import init_all_dbs
     from app.shared.cloud_backends import validate_storage_config

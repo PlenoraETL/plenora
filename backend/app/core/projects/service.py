@@ -21,6 +21,7 @@ from app.shared.models import (
 )
 
 from app.core.auth import db as _groups
+from app.core.eseguibili.db import list_eseguibili_by_source
 from app.core.projects import db as project_db
 from app.db import pg_connection
 from app.core.results import store as results_store
@@ -442,7 +443,6 @@ class ProjectService:
         # Blocco: non eliminare progetti con eseguibili collegati o progetti
         # downstream che lo usano come sorgente. Si raccolgono entrambi e si
         # solleva un'unica eccezione per dare all'utente il quadro completo
-        from app.core.eseguibili.db import list_eseguibili_by_source
         linked_eseguibili = list_eseguibili_by_source(project_id)
         dependent_projects = self._find_dependent_projects(
             project_id, group_id=row.group_id

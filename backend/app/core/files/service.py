@@ -18,6 +18,7 @@ from typing import Any, BinaryIO, Dict, List, Optional, Tuple
 
 import pandas as pd
 
+import app.core.files.db as files_db
 from app.core.files.storage_dispatch import BlobDispatchResult
 from app.core.files.service_deps import (  # noqa: F401 (public domain export)
     LoggerProtocol,
@@ -503,12 +504,11 @@ class FileSourceService:
         from app.core.files.upload import mkdtemp_writable
         from app.shared.resources.file_cleanup import rmtree_safe
         from app.utils.zip_safe import safe_extractall
-        import app.core.files.db as db
 
         # Metadata fetch (no blob): we need ``format`` +
         # ``original_filename`` to choose extension / separation mode
         try:
-            row_meta = db.get_file_source(file_id, include_data=False)
+            row_meta = files_db.get_file_source(file_id, include_data=False)
         except Exception as e:
             self._logger.warning(
                 f"[GESTITO] _temp_file_for {file_id}: fetch metadata fallito: {e}"
@@ -579,10 +579,9 @@ class FileSourceService:
     def get_file_source(self, file_id: str) -> Optional[FileSource]:
         """Delegate to `source_metadata.get_file_source`."""
         from app.core.files.source_metadata import get_file_source
-        import app.core.files.db as db
         return get_file_source(
             file_id,
-            db_get_file_source=db.get_file_source,
+            db_get_file_source=files_db.get_file_source,
             file_source_model=FileSource,
             use_app_models=_USE_APP_MODELS,
             logger=self._logger,
@@ -591,22 +590,20 @@ class FileSourceService:
     def delete_file_source(self, file_id: str) -> bool:
         """Delegate to `source_metadata.delete_file_source`."""
         from app.core.files.source_metadata import delete_file_source
-        import app.core.files.db as db
         return delete_file_source(
             file_id,
-            db_get_file_source=db.get_file_source,
-            db_delete_file_source=db.delete_file_source,
+            db_get_file_source=files_db.get_file_source,
+            db_delete_file_source=files_db.delete_file_source,
             logger=self._logger,
         )
 
     def list_file_sources(self, group_id: str = None) -> Any:
         """Delegate to `source_metadata.list_file_sources`."""
         from app.core.files.source_metadata import list_file_sources
-        import app.core.files.db as db
         file_source_list_model = FileSourceList if _USE_APP_MODELS else None
         return list_file_sources(
             group_id,
-            db_list_file_sources=db.list_file_sources,
+            db_list_file_sources=files_db.list_file_sources,
             get_file_source_by_id=self.get_file_source,
             file_source_list_model=file_source_list_model,
             use_app_models=_USE_APP_MODELS,
@@ -636,7 +633,6 @@ class FileSourceService:
         from app.config import settings
         from app.shared.resources.file_cleanup import rmtree_safe
         from app.utils.zip_safe import safe_extractall, ZipSlipError
-        import app.core.files.db as db
         return _impl(
             file_content, filename, name, description,
             layer, sheet, selected_columns, srid, group_id,
@@ -648,7 +644,7 @@ class FileSourceService:
             load_by_format=self._load_by_format,
             column_builder_from_df=self._column_builder.from_dataframe,
             dispatch_blob_storage=self._dispatch_blob_storage,
-            db_save_file_source=db.save_file_source,
+            db_save_file_source=files_db.save_file_source,
             build_file_source=lambda **kw: FileSource(**kw),
             cleanup=rmtree_safe,
             safe_extractall=safe_extractall,
@@ -676,13 +672,12 @@ class FileSourceService:
         """
         from app.core.files.raw_upload import create_raw_from_upload as _impl
         from app.config import settings
-        import app.core.files.db as db
         return _impl(
             file_content, filename, name, description, group_id,
             generate_file_id=self._generate_file_id,
             time_now=self._time.now,
             dispatch_blob_storage=self._dispatch_blob_storage,
-            db_save_file_source=db.save_file_source,
+            db_save_file_source=files_db.save_file_source,
             default_group=settings.DEFAULT_GROUP,
             build_file_source=lambda **kw: FileSource(**kw),
             logger=self._logger,
@@ -719,7 +714,6 @@ class FileSourceService:
         from app.config import settings
         from app.shared.resources.file_cleanup import rmtree_safe
         from app.utils.zip_safe import safe_extractall, ZipSlipError
-        import app.core.files.db as db
 
         # BE-HARDEN-001C E3: callback `delete_blob` per cleanup compensativo
         # del shared storage_key se la transazione Lazy
@@ -752,7 +746,7 @@ class FileSourceService:
             load_by_format=self._load_by_format,
             column_builder_from_df=self._column_builder.from_dataframe,
             dispatch_blob_storage=self._dispatch_blob_storage,
-            db_save_file_sources_batch=db.save_file_sources_batch,
+            db_save_file_sources_batch=files_db.save_file_sources_batch,
             delete_blob=_delete_blob,
             build_file_source=lambda **kw: FileSource(**kw),
             cleanup_dir=rmtree_safe,
@@ -790,7 +784,6 @@ class FileSourceService:
         """Delegate to `source_metadata.update_file_source`."""
         from app.config import settings
         from app.core.files.source_metadata import update_file_source
-        import app.core.files.db as db
         return update_file_source(
             file_id,
             data,
@@ -799,9 +792,9 @@ class FileSourceService:
             column_builder_from_dataframe=self._column_builder.from_dataframe,
             get_blob_from_db=self._get_blob_from_db,
             time_now=self._time.now,
-            db_update_file_source_metadata=db.update_file_source_metadata,
-            db_get_file_source=db.get_file_source,
-            db_save_file_source=db.save_file_source,
+            db_update_file_source_metadata=files_db.update_file_source_metadata,
+            db_get_file_source=files_db.get_file_source,
+            db_save_file_source=files_db.save_file_source,
             default_group=settings.DEFAULT_GROUP,
             use_app_models=_USE_APP_MODELS,
             logger=self._logger,

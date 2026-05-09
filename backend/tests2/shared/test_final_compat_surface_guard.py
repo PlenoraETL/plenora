@@ -23,7 +23,14 @@ _ALLOWED_KEEP_COMPAT_MARKERS: frozenset[str] = frozenset()
 _ALLOWED_GETATTR_BRIDGES: frozenset[str] = frozenset()
 _ALLOWED_CORE_DB_FACADE_IMPORTS: frozenset[str] = frozenset()
 
-_LEGACY_CORE_DB_FACADES: frozenset[str] = frozenset()
+_LEGACY_CORE_DB_FACADES: frozenset[str] = frozenset(
+    {
+        "app.db.config_db_service",
+        "app.db.log_runs_db_service",
+        "app.db.results_db_service",
+        "app.db.tickets_db_service",
+    }
+)
 
 
 def _rel(path: Path) -> str:
@@ -52,6 +59,15 @@ def _import_edges(tree: ast.AST) -> set[str]:
             edges.add(node.module)
             edges.update(f"{node.module}.{alias.name}" for alias in node.names)
     return edges
+
+
+def _expr_name(node: ast.AST) -> str | None:
+    if isinstance(node, ast.Name):
+        return node.id
+    if isinstance(node, ast.Attribute):
+        parent = _expr_name(node.value)
+        return f"{parent}.{node.attr}" if parent else node.attr
+    return None
 
 
 def _keep_compat_markers() -> set[str]:
@@ -96,6 +112,45 @@ def _getattr_bridges() -> set[str]:
     return bridges
 
 
+def _sys_modules_proxy_assignments() -> set[str]:
+    assignments: set[str] = set()
+    for path in _iter_prod_python():
+        tree = _parse(path)
+        for node in ast.walk(tree):
+            targets: list[ast.AST] = []
+            if isinstance(node, ast.Assign):
+                targets = list(node.targets)
+            elif isinstance(node, ast.AnnAssign):
+                targets = [node.target]
+
+            for target in targets:
+                if not isinstance(target, ast.Subscript):
+                    continue
+                if _expr_name(target.value) == "sys.modules":
+                    assignments.add(f"{_rel(path)}:{node.lineno}:sys.modules[...]")
+    return assignments
+
+
+def _legacy_dict_methods() -> set[str]:
+    methods: set[str] = set()
+    for path in _iter_prod_python():
+        tree = _parse(path)
+        for node in ast.walk(tree):
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name == "to_legacy_dict":
+                methods.add(f"{_rel(path)}:{node.lineno}:to_legacy_dict")
+    return methods
+
+
+def _project_schema_handler_multi_inheritance() -> set[str]:
+    violations: set[str] = set()
+    for path in sorted((_APP_ROOT / "core" / "projects").glob("schema_*_handlers.py")):
+        tree = _parse(path)
+        for node in ast.walk(tree):
+            if isinstance(node, ast.ClassDef) and len(node.bases) > 1:
+                violations.add(f"{_rel(path)}:{node.lineno}:{node.name}")
+    return violations
+
+
 def test_final_state_has_no_productive_keep_compat_markers():
     current = _keep_compat_markers()
 
@@ -132,6 +187,25 @@ def test_final_state_has_no_app_services_imports_in_production_code():
     )
 
 
+def test_final_state_has_no_sys_modules_proxy_assignments():
+    violations = _sys_modules_proxy_assignments()
+
+    assert not violations, (
+        "Production code must not use sys.modules assignment as a "
+        "compatibility/proxy redirect.\n"
+        f"Violations: {sorted(violations)}"
+    )
+
+
+def test_final_state_has_no_to_legacy_dict_methods():
+    violations = _legacy_dict_methods()
+
+    assert not violations, (
+        "Production code must not reintroduce legacy dict serializer hooks.\n"
+        f"Violations: {sorted(violations)}"
+    )
+
+
 def test_final_state_has_no_ticket_or_log_run_db_facades_in_core():
     violations = {
         f"{_rel(path)} -> {edge}"
@@ -145,4 +219,14 @@ def test_final_state_has_no_ticket_or_log_run_db_facades_in_core():
         "legacy app.db tickets/log_runs facades.\n"
         f"Unexpected: {sorted(violations - _ALLOWED_CORE_DB_FACADE_IMPORTS)}\n"
         f"Stale allowlist rows: {sorted(_ALLOWED_CORE_DB_FACADE_IMPORTS - violations)}"
+    )
+
+
+def test_project_schema_handlers_do_not_use_multiple_inheritance():
+    violations = _project_schema_handler_multi_inheritance()
+
+    assert not violations, (
+        "Project schema handlers must use explicit composition, not "
+        "multiple-inheritance mixin chains.\n"
+        f"Violations: {sorted(violations)}"
     )

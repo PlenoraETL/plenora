@@ -11,45 +11,11 @@ from typing import Any, Optional
 
 logger = logging.getLogger(__name__)
 
-# Env names che disabilitano il caricamento di backend/.env dal disco
-# In questi ambienti i secret devono arrivare da env var di sistema o
-# da un secret manager, mai da un file sul filesystem che potrebbe
-# essere sopravvissuto a un rollback, finire in un backup, o essere
-# stato copiato per errore dal deploy
-_DOTENV_DISABLED_ENVS = ("production", "prod", "staging", "stage")
-
-
-def _should_load_dotenv() -> bool:
-    """True se l'ambiente corrente consente la lettura di backend/.env dal disco.
-
-    L'ambiente è letto da `ENVIRONMENT` (fallback `ENV`, default `development`).
-    Ambienti in `_DOTENV_DISABLED_ENVS` restituiscono False.
-    """
-    env_name = os.getenv("ENVIRONMENT", os.getenv("ENV", "development")).lower()
-    return env_name not in _DOTENV_DISABLED_ENVS
-
-
 # Carica backend/.env il prima possibile, prima di qualunque os.getenv del
 # resto dell'app. Tutti i moduli che leggono variabili d'ambiente (incluso
 # app.shared.crypto) vedranno così le variabili definite nel .env. Senza
 # questo, l'app userebbe la chiave di cifratura di default e fallirebbe a
 # decifrare qualsiasi record salvato con la chiave reale
-try:
-    from dotenv import load_dotenv
-    _env_path = Path(__file__).resolve().parent.parent / ".env"
-    if _env_path.exists():
-        if _should_load_dotenv():
-            load_dotenv(_env_path)
-        else:
-            logger.warning(
-                "backend/.env presente ma ENVIRONMENT indica prod/staging: "
-                "file ignorato. I secret devono arrivare da env var di sistema."
-            )
-except ImportError:
-    # python-dotenv non installato — l'app continua a funzionare con le sole
-    # variabili d'ambiente esportate dal sistema
-    pass
-
 # CLASSE SETTINGS
 
 class Settings:
@@ -271,7 +237,7 @@ class Settings:
         # pre-return in `get_result_data` / `_dispatch_by_id`) e'
         # deferita: il loader stesso non importa `app.config` per
         # anti-god-engine; il guard vivra' a livello caller (es
-        # `results_db_service` o `cloud_backends`). Vedi
+        # repository risultati o `cloud_backends`). Vedi
         # `.agent-temp/BE_INSTALLATION_AUDIT.md` (BE-INSTALL-006) e
         # `.agent-temp/BE_MEMORY_OOM_AUDIT.md` (MEMORY-ENGINE-005
         "RESOURCE_MAX_BYTES": 200 * 1024 * 1024,

@@ -4,6 +4,15 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+try:
+    from app.core.tickets.service import TICKET_STATUSES_ACTIVE
+    from app.core.tickets import db as tickets_db
+    _TICKETS_IMPORT_ERROR: Exception | None = None
+except Exception as exc:  # pragma: no cover - exercised through import-failure contracts
+    TICKET_STATUSES_ACTIVE = ()
+    tickets_db = None
+    _TICKETS_IMPORT_ERROR = exc
+
 
 @dataclass(frozen=True)
 class ActiveTicketMetrics:
@@ -17,11 +26,8 @@ class TicketsMetricsUnavailable(RuntimeError):
 
 def get_active_ticket_metrics() -> ActiveTicketMetrics:
     """Return cross-group active ticket counters for the superadmin dashboard."""
-    try:
-        from app.core.tickets.service import TICKET_STATUSES_ACTIVE
-        from app.core.tickets import db as tickets_db
-    except Exception as exc:
-        raise TicketsMetricsUnavailable(str(exc)) from exc
+    if _TICKETS_IMPORT_ERROR is not None or tickets_db is None:
+        raise TicketsMetricsUnavailable(str(_TICKETS_IMPORT_ERROR)) from _TICKETS_IMPORT_ERROR
 
     active_statuses = list(TICKET_STATUSES_ACTIVE)
     total_active = tickets_db.count_tickets(status_in=active_statuses)

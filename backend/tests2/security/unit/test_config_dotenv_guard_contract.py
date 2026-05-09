@@ -8,7 +8,7 @@ import logging
 
 import pytest
 
-from app.config import _should_load_dotenv
+from app.config_env_loader import should_load_dotenv
 
 
 pytestmark = [pytest.mark.unit, pytest.mark.security, pytest.mark.contract]
@@ -21,40 +21,40 @@ def _clear_env(monkeypatch):
 
 
 def test_default_environment_loads_dotenv():
-    assert _should_load_dotenv() is True
+    assert should_load_dotenv() is True
 
 
 def test_explicit_development_loads_dotenv(monkeypatch):
     monkeypatch.setenv("ENVIRONMENT", "development")
 
-    assert _should_load_dotenv() is True
+    assert should_load_dotenv() is True
 
 
 @pytest.mark.parametrize("env_value", ["production", "prod", "staging", "stage"])
 def test_prod_and_staging_skip_dotenv(monkeypatch, env_value):
     monkeypatch.setenv("ENVIRONMENT", env_value)
 
-    assert _should_load_dotenv() is False
+    assert should_load_dotenv() is False
 
 
 @pytest.mark.parametrize("env_value", ["Production", "PROD", "Staging", "STAGE"])
 def test_prod_and_staging_are_case_insensitive(monkeypatch, env_value):
     monkeypatch.setenv("ENVIRONMENT", env_value)
 
-    assert _should_load_dotenv() is False
+    assert should_load_dotenv() is False
 
 
 def test_env_fallback_is_honored_when_environment_is_unset(monkeypatch):
     monkeypatch.setenv("ENV", "production")
 
-    assert _should_load_dotenv() is False
+    assert should_load_dotenv() is False
 
 
 def test_environment_wins_over_env_when_both_set(monkeypatch):
     monkeypatch.setenv("ENVIRONMENT", "development")
     monkeypatch.setenv("ENV", "production")
 
-    assert _should_load_dotenv() is True
+    assert should_load_dotenv() is True
 
 
 def test_unknown_environment_loads_dotenv_fail_open_on_dev_like_names():
@@ -63,7 +63,7 @@ def test_unknown_environment_loads_dotenv_fail_open_on_dev_like_names():
     import os
     os.environ["ENVIRONMENT"] = "canary"
     try:
-        assert _should_load_dotenv() is True
+        assert should_load_dotenv() is True
     finally:
         del os.environ["ENVIRONMENT"]
 
@@ -75,11 +75,11 @@ def test_config_module_does_not_crash_when_loaded_in_production(monkeypatch, cap
     # Ricarico il modulo per far rieseguire il blocco dotenv con il nuovo env.
     import importlib
 
-    import app.config
+    app_config = importlib.import_module("app.config")
 
     with caplog.at_level(logging.WARNING, logger="app.config"):
-        importlib.reload(app.config)
+        app_config = importlib.reload(app_config)
 
     # Non crasha. Il warning potrebbe non essere catturato se .env non esiste
     # sull'host corrente — non lo asseriamo, vogliamo solo la robustezza.
-    assert app.config.Settings is not None
+    assert app_config.Settings is not None

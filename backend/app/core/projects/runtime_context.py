@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from app.core.projects.db import get_project_row
+
 
 @dataclass(frozen=True)
 class ProjectRuntimeContext:
@@ -16,8 +18,6 @@ class ProjectRuntimeContext:
 
 def get_project_runtime_context(project_id: str) -> ProjectRuntimeContext | None:
     """Return the persisted project fields workers need at task runtime."""
-    from app.core.projects.db import get_project_row
-
     row = get_project_row(project_id)
     if row is None:
         return None

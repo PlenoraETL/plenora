@@ -4,7 +4,9 @@ from __future__ import annotations
 
 from typing import Optional
 
-from app.core.results.db import ResultMetadataRow
+from app.core.results import db as results_db
+
+ResultMetadataRow = results_db.ResultMetadataRow
 
 
 def resolve_group_id_for_result(
@@ -38,8 +40,6 @@ def save_result_row(
     size_bytes: Optional[int] = None,
 ) -> Optional[ResultMetadataRow]:
     """Persist result metadata through the results domain boundary."""
-    from app.core.results import db as results_db
-
     return results_db.save_result_row(
         result_id=result_id,
         project_id=project_id,
@@ -68,8 +68,6 @@ def save_result(
     size_bytes: Optional[int] = None,
 ) -> Optional[dict[str, object]]:
     """Persist result metadata through the results domain boundary."""
-    from app.core.results import db as results_db
-
     return results_db.save_result(
         result_id=result_id,
         project_id=project_id,
@@ -86,8 +84,6 @@ def save_result(
 
 def list_result_rows(project_id: str) -> list[ResultMetadataRow]:
     """Return result metadata rows for a project, newest first."""
-    from app.core.results import db as results_db
-
     return results_db.list_result_rows(project_id)
 
 
@@ -96,8 +92,6 @@ def get_latest_result_row(
     group_id: Optional[str] = None,
 ) -> Optional[ResultMetadataRow]:
     """Return latest typed result metadata for a project."""
-    from app.core.results import db as results_db
-
     return results_db.get_latest_result_row(project_id, group_id=group_id)
 
 
@@ -106,15 +100,11 @@ def get_latest_result(
     group_id: Optional[str] = None,
 ) -> Optional[dict[str, object]]:
     """Return latest result metadata for a project as a legacy dict."""
-    from app.core.results import db as results_db
-
     return results_db.get_latest_result(project_id, group_id=group_id)
 
 
 def list_results(project_id: str) -> list[dict[str, object]]:
     """Return result metadata rows for a project as legacy dicts."""
-    from app.core.results import db as results_db
-
     return results_db.list_results(project_id)
 
 

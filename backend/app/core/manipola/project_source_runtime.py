@@ -7,6 +7,8 @@ from typing import Any, Dict, List, Optional
 import threading
 import uuid as _uuid
 
+from app.core.intermediate import db as idb
+from app.core.intermediate.writer import close_run as idb_close_run
 from app.core.projects.execution_context import get_upstream_run_context
 from app.core.projects.lineage import ProjectLineageCycleError
 from app.shared.execution.executor_protocol import PipelineDispatcherProtocol
@@ -75,7 +77,6 @@ def _open_upstream_run(
     upstream_run_id = str(_uuid.uuid4())
     try:
         from app.utils.logger import open_run
-        from app.core.intermediate import db as idb
 
         upstream_context = get_upstream_run_context(
             source_project_id,
@@ -108,7 +109,6 @@ def _close_upstream_run(upstream_run_id: Optional[str], upstream, retention_n, l
         return
     try:
         from app.utils.logger import close_run
-        from app.core.intermediate.writer import close_run as idb_close_run
 
         status = "success" if upstream.success else "failure"
         close_run(

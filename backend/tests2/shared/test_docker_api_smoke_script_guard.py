@@ -44,6 +44,29 @@ def test_docker_api_smoke_script_keeps_targeting_existing_backend():
     )
 
 
+def test_docker_api_smoke_script_keeps_full_flow_ordered_after_infra_checks():
+    text = _script_main_block()
+    ordered_markers = (
+        'run_get_check "/health"',
+        'run_get_check "/ready"',
+        "if [ \"$INFRASTRUCTURE_ONLY\" -eq 1 ]; then",
+        "require_full_flow_credentials",
+        "login_smoke_user",
+        "check_auth_me",
+        "create_smoke_project",
+        "list_smoke_projects",
+        "delete_smoke_project",
+        "logout_smoke_user",
+        'echo "Full Docker API smoke passed."',
+    )
+    positions = [text.index(marker) for marker in ordered_markers]
+    assert positions == sorted(positions), (
+        "docker-api-smoke.sh must keep the full acceptance flow ordered as "
+        "health -> ready -> credentials -> login -> me -> create -> list -> "
+        "delete -> logout."
+    )
+
+
 def test_docker_api_smoke_script_polls_with_bounded_timeouts():
     text = _script_text()
     for marker in (
@@ -66,6 +89,14 @@ def test_docker_api_smoke_script_requires_seeded_credentials():
         "require_full_flow_credentials",
     ):
         assert marker in text
+
+
+def test_docker_api_smoke_script_allows_infrastructure_only_without_credentials():
+    text = _script_main_block()
+    infra_exit = text.index("Infrastructure-only Docker API smoke checks passed.")
+    credential_gate = text.index("require_full_flow_credentials")
+    login_call = text.index("login_smoke_user")
+    assert infra_exit < credential_gate < login_call
 
 
 def test_docker_api_smoke_script_serializes_json_payloads_safely():
@@ -140,3 +171,8 @@ def _strip_shell_comments_and_heredocs(source: str) -> str:
             continue
         out.append(line)
     return "\n".join(out)
+
+
+def _script_main_block() -> str:
+    text = _script_text()
+    return text[text.index('echo "Docker API smoke target: ${BASE_URL}"') :]

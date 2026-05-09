@@ -4,6 +4,7 @@ Entry point dell'applicazione FastAPI PLENORA-ETL.
 Compone bootstrap, middleware, dependency wiring, router e health endpoints.
 """
 
+import logging
 import os
 from contextlib import asynccontextmanager
 
@@ -12,6 +13,10 @@ from fastapi import Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
+
+from app.config_env_loader import load_backend_dotenv
+
+load_backend_dotenv(logging.getLogger("app.config_env_loader"))
 
 from app.config import settings
 from app.utils.logger import get_logger

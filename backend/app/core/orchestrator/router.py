@@ -37,6 +37,9 @@ from app.shared.contracts.auth import CurrentUser
 from app.core.auth.ownership import assert_group_access
 from app.shared.execution.canvas_graph import CanvasGraph
 from app.shared.execution.canvas_types_enricher import enrich_canvas_types_from_metadata
+from app.core.eseguibili import db as eseguibili_db
+from app.core.results import blob as results_blob
+from app.core.results import db as results_db
 
 # ── Content-Type per formato file ─────────────────────────────────────────
 _MIME_TYPES = {
@@ -170,7 +173,6 @@ def _assert_task_group(task_id: str, current_user: CurrentUser) -> None:
     elif project_id.startswith("exec_"):
         # Task da eseguibile: il project_id è un eseguibile_id, non un project_id
         # Verifica accesso tramite la tabella eseguibili (owned + shared
-        from app.core.eseguibili import db as eseguibili_db
         from app.core.eseguibili.router import _check_visible
         record = eseguibili_db.get_eseguibile(project_id)
         if record:
@@ -367,9 +369,6 @@ def download_project_result(
         # Fallback post-R#1: i result blob vivono nel DB, il file temp è
         # già stato cancellato da `save_result_blob`. Recupera l'ultimo
         # result dal service DB e ritorna i bytes inline
-        from app.core.results import blob as results_blob
-        from app.core.results import db as results_db
-
         latest = results_db.get_latest_result(project_id)
         if not latest:
             raise HTTPException(404, f"Nessun risultato trovato per progetto '{project_id}'")

@@ -13,6 +13,7 @@ from typing import Any, Callable, Optional
 
 import psycopg2
 
+import app.core.files.db as file_sources_db
 from app.core.files.exceptions import FileSourceResolutionError
 from app.utils.logger import get_logger
 
@@ -28,8 +29,6 @@ def _default_get_file_source(
     file_source_id: str,
     include_data: bool = False,
 ) -> Optional[dict[str, Any]]:
-    import app.core.files.db as file_sources_db
-
     return file_sources_db.get_file_source(
         file_source_id,
         include_data=include_data,

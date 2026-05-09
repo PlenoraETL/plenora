@@ -12,17 +12,31 @@ from app.core.projects.schema_reshape_handlers import ReshapeSchemaHandlers
 from app.core.projects.schema_table_handlers import TableSchemaHandlers
 
 
-class TransformSchemaHandlers(
-    JoinSchemaHandlers,
-    GeoSchemaHandlers,
-    ReshapeSchemaHandlers,
-    FormulaSchemaHandlers,
-    TableSchemaHandlers,
-):
+class TransformSchemaHandlers:
     """Owns transform_op dispatch and transform schema implementations."""
 
     def __init__(self, column_schema_cls: type):
         self._column_schema_cls = column_schema_cls
+        self._join_handlers = JoinSchemaHandlers()
+        self._geo_handlers = GeoSchemaHandlers()
+        self._reshape_handlers = ReshapeSchemaHandlers()
+        self._formula_handlers = FormulaSchemaHandlers()
+        self._table_handlers = TableSchemaHandlers()
+        for handler in (
+            self._join_handlers,
+            self._geo_handlers,
+            self._reshape_handlers,
+            self._formula_handlers,
+            self._table_handlers,
+        ):
+            self._configure_handler(handler)
+
+    def _configure_handler(self, handler: object) -> None:
+        """Give composed handlers the shared schema-construction helpers."""
+        handler._column_schema_cls = self._column_schema_cls
+        handler._copy_schema = self._copy_schema
+        handler._normalize_str_list = self._normalize_str_list
+        handler._schema_passthrough = self._schema_passthrough
 
     def build_transform_handlers(
         self,
@@ -71,13 +85,13 @@ class TransformSchemaHandlers(
             # DISPATCH-REGISTRY:start
             # base
             "join": lambda i, c, n: self._schema_join(i, c, n, edges_by_target),
-            "sjoin": lambda i, c, n: self._schema_sjoin(i, c, n),
-            "aggregate": lambda i, c, n: self._schema_aggregate(i, c, n),
-            "formula": lambda i, c, n: self._schema_formula(i, c, n),
+            "sjoin": lambda i, c, n: self._geo_handlers._schema_sjoin(i, c, n),
+            "aggregate": lambda i, c, n: self._table_handlers._schema_aggregate(i, c, n),
+            "formula": lambda i, c, n: self._formula_handlers._schema_formula(i, c, n),
             "filter": lambda i, c, n: self._schema_filter(i, n),
-            "concat": lambda i, c, n: self._schema_concat(i, c, n),
+            "concat": lambda i, c, n: self._table_handlers._schema_concat(i, c, n),
             "sort": lambda i, c, n: self._schema_sort(i, n),
-            "distinct": lambda i, c, n: self._schema_distinct(i, c, n),
+            "distinct": lambda i, c, n: self._table_handlers._schema_distinct(i, c, n),
             "rename": lambda i, c, n: self._schema_rename(i, c, n),
             "drop": lambda i, c, n: self._schema_drop(i, c, n),
             "drop_columns": lambda i, c, n: self._schema_drop(i, c, n),
@@ -85,70 +99,70 @@ class TransformSchemaHandlers(
             "replace": pt,
             "split_column": lambda i, c, n: self._schema_split_column(i, c, n),
             # geo
-            "geo_buffer": lambda i, c, n: self._schema_geo_buffer(i, c, n),
-            "geo_centroid": lambda i, c, n: self._schema_geo_centroid(i, c, n),
-            "geo_area": lambda i, c, n: self._schema_geo_area(i, c, n),
-            "geo_clip": lambda i, c, n: self._schema_geo_clip(i, c, n),
-            "geo_dissolve": lambda i, c, n: self._schema_geo_dissolve(i, c, n),
+            "geo_buffer": lambda i, c, n: self._geo_handlers._schema_geo_buffer(i, c, n),
+            "geo_centroid": lambda i, c, n: self._geo_handlers._schema_geo_centroid(i, c, n),
+            "geo_area": lambda i, c, n: self._geo_handlers._schema_geo_area(i, c, n),
+            "geo_clip": lambda i, c, n: self._geo_handlers._schema_geo_clip(i, c, n),
+            "geo_dissolve": lambda i, c, n: self._geo_handlers._schema_geo_dissolve(i, c, n),
             "geo_simplify": pt,
-            "geo_convex_hull": lambda i, c, n: self._schema_geo_convex_hull(i, c, n),
+            "geo_convex_hull": lambda i, c, n: self._geo_handlers._schema_geo_convex_hull(i, c, n),
             "geo_reproject": pt,
-            "geo_intersection": lambda i, c, n: self._schema_geo_overlay(i, c, n, "intersection"),
-            "geo_union": lambda i, c, n: self._schema_geo_overlay(i, c, n, "union"),
-            "geo_difference": lambda i, c, n: self._schema_geo_overlay(i, c, n, "difference"),
+            "geo_intersection": lambda i, c, n: self._geo_handlers._schema_geo_overlay(i, c, n, "intersection"),
+            "geo_union": lambda i, c, n: self._geo_handlers._schema_geo_overlay(i, c, n, "union"),
+            "geo_difference": lambda i, c, n: self._geo_handlers._schema_geo_overlay(i, c, n, "difference"),
             "geo_to_crs": pt,
             # privacy
             "md5_hash": lambda i, c, n: self._schema_md5_hash(i, c, n),
             "mask_data": lambda i, c, n: self._schema_mask_data(i, c, n),
             # base aggiuntive
             "type_cast": lambda i, c, n: self._schema_type_cast(i, c, n),
-            "conditional": lambda i, c, n: self._schema_conditional(i, c, n),
+            "conditional": lambda i, c, n: self._formula_handlers._schema_conditional(i, c, n),
             "text_normalize": lambda i, c, n: self._schema_text_normalize(i, c, n),
             # passthrough espliciti
             "concat_columns": pt,
             "pivot": pt,
             "geo_envelope": pt,
             # spatial
-            "geo_from_coords": lambda i, c, n: self._schema_geo_from_coords(i, c, n),
+            "geo_from_coords": lambda i, c, n: self._geo_handlers._schema_geo_from_coords(i, c, n),
             "add_row_number": lambda i, c, n: self._schema_add_row_number(i, c, n),
             "uuid_generator": lambda i, c, n: self._schema_uuid_generator(i, c, n),
             "string_length": lambda i, c, n: self._schema_string_length(i, c, n),
             "date_extract": lambda i, c, n: self._schema_date_extract(i, c, n),
-            "geo_distance": lambda i, c, n: self._schema_geo_distance(i, c, n),
-            "geo_to_wkt": lambda i, c, n: self._schema_geo_to_wkt(i, c, n),
-            "geo_length": lambda i, c, n: self._schema_geo_length(i, c, n),
-            "geo_perimeter": lambda i, c, n: self._schema_geo_perimeter(i, c, n),
-            "geo_vertex_count": lambda i, c, n: self._schema_geo_vertex_count(i, c, n),
+            "geo_distance": lambda i, c, n: self._geo_handlers._schema_geo_distance(i, c, n),
+            "geo_to_wkt": lambda i, c, n: self._geo_handlers._schema_geo_to_wkt(i, c, n),
+            "geo_length": lambda i, c, n: self._geo_handlers._schema_geo_length(i, c, n),
+            "geo_perimeter": lambda i, c, n: self._geo_handlers._schema_geo_perimeter(i, c, n),
+            "geo_vertex_count": lambda i, c, n: self._geo_handlers._schema_geo_vertex_count(i, c, n),
             "string_extract": lambda i, c, n: self._schema_string_extract(i, c, n),
             "bin": lambda i, c, n: self._schema_bin(i, c, n),
             "string_pad": lambda i, c, n: self._schema_string_pad(i, c, n),
-            "geo_bounds_extractor": lambda i, c, n: self._schema_geo_bounds_extractor(i, c, n),
-            "geo_count_points_in_polygons": lambda i, c, n: self._schema_geo_count_points_in_polygons(i, c, n),
-            "geo_line_builder": lambda i, c, n: self._schema_geo_line_builder(i, c, n),
-            "geo_polygon_builder": lambda i, c, n: self._schema_geo_polygon_builder(i, c, n),
-            "geo_point_on_surface": lambda i, c, n: self._schema_geo_point_on_surface(i, c, n),
-            "geo_boundary": lambda i, c, n: self._schema_geo_boundary(i, c, n),
-            "reorder_columns": lambda i, c, n: self._schema_reorder_columns(i, c, n),
-            "geo_voronoi": lambda i, c, n: self._schema_geo_voronoi(i, c, n),
-            "cross_join": lambda i, c, n: self._schema_cross_join(i, n),
-            "geo_within": lambda i, c, n: self._schema_geo_within(i, n),
-            "geo_overlay": lambda i, c, n: self._schema_geo_overlay(
+            "geo_bounds_extractor": lambda i, c, n: self._geo_handlers._schema_geo_bounds_extractor(i, c, n),
+            "geo_count_points_in_polygons": lambda i, c, n: self._geo_handlers._schema_geo_count_points_in_polygons(i, c, n),
+            "geo_line_builder": lambda i, c, n: self._geo_handlers._schema_geo_line_builder(i, c, n),
+            "geo_polygon_builder": lambda i, c, n: self._geo_handlers._schema_geo_polygon_builder(i, c, n),
+            "geo_point_on_surface": lambda i, c, n: self._geo_handlers._schema_geo_point_on_surface(i, c, n),
+            "geo_boundary": lambda i, c, n: self._geo_handlers._schema_geo_boundary(i, c, n),
+            "reorder_columns": lambda i, c, n: self._table_handlers._schema_reorder_columns(i, c, n),
+            "geo_voronoi": lambda i, c, n: self._geo_handlers._schema_geo_voronoi(i, c, n),
+            "cross_join": lambda i, c, n: self._join_handlers._schema_cross_join(i, n),
+            "geo_within": lambda i, c, n: self._geo_handlers._schema_geo_within(i, n),
+            "geo_overlay": lambda i, c, n: self._geo_handlers._schema_geo_overlay(
                 i, c, n, c.get("how", "intersection"),
             ),
-            "geo_symmetric_difference": lambda i, c, n: self._schema_geo_overlay(
+            "geo_symmetric_difference": lambda i, c, n: self._geo_handlers._schema_geo_overlay(
                 i, c, n, "symmetric_difference",
             ),
-            "geo_nearest": lambda i, c, n: self._schema_geo_nearest(i, c, n),
-            "lookup": lambda i, c, n: self._schema_lookup(i, c, n),
-            "table_diff": lambda i, c, n: self._schema_table_diff(i, c, n),
-            "melt": lambda i, c, n: self._schema_melt(i, c, n),
-            "statistics": lambda i, c, n: self._schema_statistics(i, c, n),
-            "window_function": lambda i, c, n: self._schema_window_function(i, c, n),
+            "geo_nearest": lambda i, c, n: self._geo_handlers._schema_geo_nearest(i, c, n),
+            "lookup": lambda i, c, n: self._join_handlers._schema_lookup(i, c, n),
+            "table_diff": lambda i, c, n: self._join_handlers._schema_table_diff(i, c, n),
+            "melt": lambda i, c, n: self._reshape_handlers._schema_melt(i, c, n),
+            "statistics": lambda i, c, n: self._table_handlers._schema_statistics(i, c, n),
+            "window_function": lambda i, c, n: self._table_handlers._schema_window_function(i, c, n),
             # —
             # config-explicit schema contracts; safe deterministic
             # fallback (passthrough) when `output_columns` is absent
-            "flatten_json": lambda i, c, n: self._schema_flatten_json(i, c, n),
-            "transpose": lambda i, c, n: self._schema_transpose(i, c, n),
+            "flatten_json": lambda i, c, n: self._reshape_handlers._schema_flatten_json(i, c, n),
+            "transpose": lambda i, c, n: self._reshape_handlers._schema_transpose(i, c, n),
             # DISPATCH-REGISTRY:end
         }
     
@@ -164,8 +178,7 @@ class TransformSchemaHandlers(
         node_id: str,
         edges_by_target: dict,
     ) -> List[ColumnSchema]:
-        return JoinSchemaHandlers._schema_join(
-            self,
+        return self._join_handlers._schema_join(
             input_schemas,
             config,
             node_id,

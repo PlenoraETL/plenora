@@ -26,6 +26,7 @@ from app.core.scheduler.scheduler_execution_runtime import (
     stop_lock_heartbeat,
 )
 from app.core.scheduler.scheduler_preflight import pre_check_destination_connection
+from app.core.scheduler import db as scheduler_db
 
 
 class ExecutionManager:
@@ -158,10 +159,9 @@ class ExecutionManager:
         # per sempre (orphan run che sporca la dashboard e inquina il
         # check di task bloccate
         from app.core.projects.service import ProjectService
-        from app.core.scheduler.db import get_schedule
         project_service = ProjectService()
 
-        schedule_row = get_schedule(schedule_id)
+        schedule_row = scheduler_db.get_schedule(schedule_id)
         schedule_group_id = schedule_row.get("group_id") if schedule_row else None
 
         project_meta = project_service.get_project_metadata(project_id)

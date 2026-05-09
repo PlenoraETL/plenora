@@ -5,6 +5,7 @@ Motivazione
 """
 
 from app.utils.logger import get_logger
+from app.core.intermediate import db as idb
 
 logger = get_logger(__name__)
 
@@ -16,7 +17,6 @@ def is_already_completed(run_id: str) -> bool:
     if not run_id:
         return False
     try:
-        from app.core.intermediate import db as idb
         row = idb.get_run(run_id)
         if not row:
             return False

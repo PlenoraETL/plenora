@@ -5,6 +5,9 @@ from __future__ import annotations
 
 def init_all_dbs() -> None:
     """Initialize runtime database surfaces in the historical order."""
+    # Intentional bootstrap boundary imports: tests and startup guards patch
+    # these module functions before calling init_all_dbs. Binding them at
+    # import time would bypass the patch and can open a real DB connection.
     from app.db.pg_connection import init_db as pg_init
 
     pg_init()
@@ -16,4 +19,3 @@ def init_all_dbs() -> None:
     from app.db.migrations_runner import apply_pending_migrations
 
     apply_pending_migrations()
-

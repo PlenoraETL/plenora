@@ -72,7 +72,11 @@ def test_value_error_str_e_lock_exists_in_catalog_test():
 # Allowlist per `os.getenv` in `backend/app/`.
 #
 # Razionale per file (ADR-0021 + BE_RULES sez. 6 "Config boundary"):
-# - `app/config.py`: Settings.DEFAULTS infrastructure entry point.
+# - `app/config.py`: Settings.DEFAULTS infrastructure entry point. The only
+#   direct read left here is `Settings.get`, so runtime config overrides keep
+#   one typed path.
+# - `app/config_env_loader.py`: dotenv/bootstrap env loading boundary. It owns
+#   the raw `ENVIRONMENT`/`ENV` distinction needed before Settings exists.
 # - `app/main.py`: startup boot, env diagnostics.
 # - `app/startup_validation.py`: explicit bootstrap validation boundary.
 # - `app/db/migrations_runner.py`: bootstrap migrations runner
@@ -101,7 +105,8 @@ def test_value_error_str_e_lock_exists_in_catalog_test():
 # - `app/core/auth/smoke_seed.py`: docker smoke seed boundary; deve
 #   distinguere variabili esplicitamente settate dal default runtime.
 ALLOWLIST_GETENV_COUNTS: Dict[str, int] = {
-    "app/config.py": 3,
+    "app/config.py": 1,
+    "app/config_env_loader.py": 2,
     "app/main.py": 2,
     "app/startup_validation.py": 2,
     "app/db/migrations_runner.py": 1,

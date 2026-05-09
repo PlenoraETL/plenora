@@ -12,7 +12,7 @@ import os
 from pathlib import Path
 from typing import Any, Callable
 
-from app.config import _DOTENV_DISABLED_ENVS
+from app.config_env_loader import DOTENV_DISABLED_ENVS
 
 
 logger = logging.getLogger(__name__)
@@ -23,7 +23,7 @@ def wsl_redis_fallback_allowed() -> bool:
     import sys
 
     env_name = os.getenv("ENVIRONMENT", os.getenv("ENV", "development")).lower()
-    is_dev = env_name not in _DOTENV_DISABLED_ENVS
+    is_dev = env_name not in DOTENV_DISABLED_ENVS
     is_windows = sys.platform.startswith("win")
     return is_dev and is_windows
 
