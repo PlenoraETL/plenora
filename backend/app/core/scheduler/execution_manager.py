@@ -224,6 +224,26 @@ class ExecutionManager:
             module=config.pipeline.project_type if config else "scheduler",
             triggered_by=triggered_by,
         )
+        # Apri run anche su intermediate storage. `open_run` (sopra)
+        # popola `log_runs` per la dashboard, ma il `node_meta` inserito
+        # dal `intermediate.snapshot.record_*_snapshot` ha una FK su
+        # `runs.id`. Senza questo create, ogni write produce
+        # `node_meta_run_id_fkey` violation (catturato come bug nel
+        # commit 6d600650). Mirror del pattern usato in
+        # `workers/tasks/pipeline_task.py:189` per i task non-schedule.
+        try:
+            from app.core.intermediate import run_lifecycle as intermediate_run_lifecycle
+            intermediate_run_lifecycle.create_run(
+                run_id=run_id,
+                canvas_id=project_id,
+                group_id=_group_id,
+                user_id=None,  # cron / scheduled: no user umano
+            )
+        except Exception as _ie:
+            logger.warning(
+                f"Intermediate: apertura run fallita (non bloccante): {_ie}",
+                op="execution_manager.create_intermediate_run",
+            )
         set_run_context(run_id=run_id, project_id=project_id)
         
         lock_result = self.concurrency.try_acquire(

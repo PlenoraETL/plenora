@@ -92,31 +92,79 @@ class ScheduleRunsCatalog:
     ) -> List[RunInfo]:
         """Lista tutte le runs archiviate di uno schedule, dal piu' recente.
 
-        Ritorna lista vuota se la directory delle runs non esiste o
-        non contiene sottocartelle. Non solleva — il caller decide
-        come rappresentare lo stato vuoto (di solito JSON con
-        `runs: []`).
-        """
-        runs_root = self.runs_root_for(project_id, schedule_id)
-        if not runs_root.exists() or not runs_root.is_dir():
-            return []
+        Storico ibrido (post refactor blob→DB):
+          1. Filesystem: cartelle archiviate da `ScheduleArtifactStore`
+             quando il progetto produce file (estrai csv/xlsx, manipola
+             output_file, ecc.). Backward-compat con il pre-refactor.
+          2. DB: entries in `schedule_logs` filtrate per `schedule_id`
+             ed event PIPELINE_COMPLETED / PIPELINE_PARTIAL. Coprono i
+             run "blob-only" che il refactor ha spostato in `results`
+             senza materializzare file su disco — senza questa lettura
+             il catalog ritornava sempre `runs_count: 0` per quei run.
 
+        Le entry FS hanno priorita' (mostrano i file scaricabili);
+        quelle DB-only sono restituite con `files=()` e `path=None`-like
+        (path placeholder: `runs_root_for(...)` non resolved). Non
+        solleva — il caller decide come rappresentare lo stato vuoto.
+        """
         runs: List[RunInfo] = []
-        for run_folder in sorted(runs_root.iterdir(), reverse=True):
-            if not run_folder.is_dir():
-                continue
-            files = tuple(
-                RunFileInfo(name=f.name, size_bytes=f.stat().st_size)
-                for f in run_folder.iterdir()
-                if f.is_file()
+        seen_timestamps: set[str] = set()
+
+        runs_root = self.runs_root_for(project_id, schedule_id)
+        if runs_root.exists() and runs_root.is_dir():
+            for run_folder in sorted(runs_root.iterdir(), reverse=True):
+                if not run_folder.is_dir():
+                    continue
+                files = tuple(
+                    RunFileInfo(name=f.name, size_bytes=f.stat().st_size)
+                    for f in run_folder.iterdir()
+                    if f.is_file()
+                )
+                runs.append(
+                    RunInfo(
+                        timestamp=run_folder.name,
+                        path=run_folder,
+                        files=files,
+                    )
+                )
+                seen_timestamps.add(run_folder.name)
+
+        # DB fallback per run blob-only (no file su disco). Best-effort:
+        # se la query fallisce o la tabella non c'e' (test isolato), ci
+        # accontentiamo del solo storico filesystem.
+        try:
+            from app.core.scheduler import db as scheduler_db
+            db_entries = scheduler_db.list_schedule_logs(
+                schedule_id=schedule_id,
+                events=("PIPELINE_COMPLETED", "PIPELINE_PARTIAL"),
             )
+        except Exception as e:
+            logger.debug(
+                "list_runs: DB fallback skipped (%s: %s)",
+                type(e).__name__, e,
+            )
+            db_entries = []
+
+        for entry in db_entries:
+            ts = entry.get("timestamp_str") or entry.get("timestamp")
+            if ts is None:
+                continue
+            if not isinstance(ts, str):
+                # datetime → YYYYMMDD_HHMMSS (mirror della convenzione
+                # filesystem cosi' i caller possono trattare uniforme).
+                ts = ts.strftime("%Y%m%d_%H%M%S")
+            if ts in seen_timestamps:
+                continue
+            seen_timestamps.add(ts)
             runs.append(
                 RunInfo(
-                    timestamp=run_folder.name,
-                    path=run_folder,
-                    files=files,
+                    timestamp=ts,
+                    path=runs_root / ts,
+                    files=(),
                 )
             )
+
+        runs.sort(key=lambda r: r.timestamp, reverse=True)
         return runs
 
     # API: lookup specifico

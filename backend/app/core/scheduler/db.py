@@ -125,3 +125,59 @@ def update_schedule(
 def delete_schedule(schedule_id: str) -> bool:
     cur = execute("DELETE FROM schedules WHERE id = %s", (schedule_id,))
     return cur.rowcount > 0
+
+
+def list_schedule_logs(
+    *,
+    schedule_id: str,
+    events: Optional[Iterable[str]] = None,
+    limit: int = 200,
+) -> list[dict]:
+    """Lista entries di `schedule_logs` per uno schedule.
+
+    Usato da `ScheduleRunsCatalog.list_runs` per popolare lo storico
+    runs anche quando il filesystem non ha cartelle archiviate (post
+    refactor blob→DB i risultati vivono in `results`, non come file).
+
+    Args:
+        schedule_id: filtro obbligatorio.
+        events: tupla di event-type da includere (es. PIPELINE_COMPLETED).
+            Se None, tutti gli event.
+        limit: cap conservativo per evitare scan illimitati su schedule
+            molto attivi.
+
+    Returns:
+        Lista di dict con almeno `timestamp`, `event`, `level`,
+        `total_duration_ms`, `pipeline_info`, `execution_info`. Il
+        chiamante puo' costruire il proprio shape di output.
+    """
+    if events:
+        placeholders = ",".join(["%s"] * len(list(events)))
+        rows = fetchall(
+            f"SELECT log_id, schedule_id, timestamp, level, event, "
+            f"triggered_by, total_duration_ms, error_message, "
+            f"pipeline_info, execution_info "
+            f"FROM schedule_logs "
+            f"WHERE schedule_id = %s AND event IN ({placeholders}) "
+            f"ORDER BY timestamp DESC LIMIT %s",
+            (schedule_id, *events, limit),
+        )
+    else:
+        rows = fetchall(
+            "SELECT log_id, schedule_id, timestamp, level, event, "
+            "triggered_by, total_duration_ms, error_message, "
+            "pipeline_info, execution_info "
+            "FROM schedule_logs WHERE schedule_id = %s "
+            "ORDER BY timestamp DESC LIMIT %s",
+            (schedule_id, limit),
+        )
+    out: list[dict] = []
+    for r in rows:
+        d = dict(r)
+        # Convenienza per i caller filesystem-style: stringa
+        # YYYYMMDD_HHMMSS dal timestamp DB.
+        ts = d.get("timestamp")
+        if isinstance(ts, datetime):
+            d["timestamp_str"] = ts.strftime("%Y%m%d_%H%M%S")
+        out.append(d)
+    return out

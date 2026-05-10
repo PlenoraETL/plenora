@@ -168,25 +168,32 @@ def test_sch_001_schedule_manual_run(
             f"SCH-001 task result.success != True: {result}"
         )
 
-        # NB BUG NOTI scoperti durante questo smoke (lasciati come
-        # follow-up, non bloccanti per l'asserzione `success`):
-        #
-        # 1. `app.core.intermediate.writer` produce
-        #    "node_meta_run_id_fkey violation": il write su
-        #    `node_meta` viene tentato prima che la riga
-        #    corrispondente in `runs` sia committata. Race condition
-        #    tra il task scheduler e il intermediate writer.
-        #
-        # 2. `GET /schedules/{id}/runs` (ScheduleRunsCatalog) cerca
-        #    output materializzato in `/data/results/<project_id>`
-        #    ma dal refactor blob → DB la cartella non viene piu'
-        #    creata; `runs_count` resta 0 anche per run riuscite.
-        #    Il catalog filesystem-based va aggiornato per
-        #    interrogare la tabella `results` o rimosso.
-        #
-        # Quando entrambi sono fixati riattivare l'asserzione su
-        # `runs_count >= 1` (commit history: vedi versione
-        # precedente di questo test).
+        # 6. Verifica runs catalog: dopo il completamento ci deve
+        # essere almeno una entry. Il `ScheduleRunsCatalog.list_runs`
+        # fa fallback su `schedule_logs` (event PIPELINE_COMPLETED)
+        # quando il filesystem e' vuoto — necessario post refactor
+        # blob→DB. Il `node_meta_run_id_fkey` race precedentemente
+        # presente e' fixato da `execution_manager` chiamando
+        # `intermediate.run_lifecycle.create_run` prima dello
+        # `execute_pipeline`.
+        deadline = time.monotonic() + 10
+        runs_count = 0
+        last_body: dict[str, Any] = {}
+        while time.monotonic() < deadline:
+            r_runs = http_client.get(
+                f"{API_PREFIX}/schedules/{schedule_id}/runs",
+                headers=auth_headers,
+            )
+            if r_runs.status_code == 200:
+                last_body = r_runs.json()
+                runs_count = last_body.get("runs_count") or 0
+                if runs_count >= 1:
+                    break
+            time.sleep(1)
+        assert runs_count >= 1, (
+            f"SCH-001 atteso >=1 run nel catalogo, ottenuto "
+            f"runs_count={runs_count}. Body: {last_body}"
+        )
     finally:
         if schedule_id:
             http_client.delete(
