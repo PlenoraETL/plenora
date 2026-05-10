@@ -5,6 +5,7 @@ Catalogo: backend/test-e2e/catalog/load.yaml
 
 from __future__ import annotations
 
+import os
 import time
 import uuid
 from typing import Any, Iterator
@@ -208,10 +209,31 @@ def test_load_001_carica_postgres_target(
             f"rows_written={rows_written!r}. Carica result: {c_result}"
         )
     finally:
-        # Cleanup: drop tabella target via SQL (Plenora non espone
-        # endpoint per drop di tabelle non-Plenora).
-        # Il cleanup non e' critico se fallisce — il prossimo run usa
-        # un suffix uuid diverso e non collide.
+        # Cleanup: Plenora non espone HTTP DROP TABLE per tabelle
+        # non-Plenora-managed. Drop via psycopg2 diretto sul seed
+        # postgres usando le stesse env vars della fixture
+        # `postgres_conn_id`. Best-effort: il prossimo run usa un
+        # suffix uuid diverso e non collide se questo cleanup fallisce.
+        try:
+            import psycopg2
+            conn = psycopg2.connect(
+                host=os.getenv("PLENORA_E2E_PG_HOST", "plenora-e2e-postgres"),
+                port=int(os.getenv("PLENORA_E2E_PG_PORT", "5432")),
+                user=os.getenv("PLENORA_E2E_PG_USER", "plenora"),
+                password=os.getenv("PLENORA_E2E_PG_PWD", "plenora_test_pwd"),
+                dbname=os.getenv("PLENORA_E2E_PG_DB", "plenora_test"),
+            )
+            conn.autocommit = True
+            with conn.cursor() as cur:
+                # Identifier safe: target_table e' generato col uuid hex
+                # (no caratteri speciali); evitiamo SQL injection via
+                # quote_ident equivalent.
+                cur.execute(
+                    f'DROP TABLE IF EXISTS "{target_table}" CASCADE'
+                )
+            conn.close()
+        except Exception as e:
+            print(f"[LOAD-001 cleanup] drop fallito: {e}")
         http_client.delete(
             f"{API_PREFIX}/projects/{project_id}", headers=auth_headers,
         )
