@@ -48,6 +48,7 @@ import './DataSourceNode.css';
 const DataSourceNode = memo(({ id, data }) => {
   const updateNodeData = useCanvasStore(s => s.updateNodeData);
   const deleteNode     = useCanvasStore(s => s.deleteNode);
+  const handleSaveQuiet = useCanvasStore(s => s.handleSaveQuiet);
 const [datasources, setDatasources]         = useState([]);
   const [loadingDs, setLoadingDs]             = useState(false);
   const [browserFiles, setBrowserFiles]       = useState([]);
@@ -114,50 +115,80 @@ const fetchSchema = useCallback(async (filePath, opts = {}) => {
     setLoadingSchema(true);
     setSchemaError(null);
     try {
-      // `getFileSchema` accetta sheet/layer opzionali. La PRIMA call
-      // (post-selezione file) li omette: il backend ritorna in quel
-      // caso l'inventario `schema.sheets` / `schema.layers` cosi'
-      // possiamo popolare il select. Le call successive (cambio
-      // sheet/layer) li passano per ottenere le `columns` di quel
-      // foglio/layer specifico.
-      const schema = await getFileSchema(dsId, filePath, opts);
-      const sheets = Array.isArray(schema.sheets) ? schema.sheets : [];
-      const layers = Array.isArray(schema.layers) ? schema.layers : [];
+      // Step 1 (sempre): chiama lo schema senza sheet/layer per
+      // discoverare l'inventario `sheets` / `layers` del file remoto.
+      // Per i file single-sheet/layer (csv/json/parquet/geojson/shp)
+      // il backend ritorna gia' `columns` qui — niente seconda call.
+      const base = await getFileSchema(dsId, filePath);
+      const sheets = Array.isArray(base.sheets) ? base.sheets : [];
+      const layers = Array.isArray(base.layers) ? base.layers : [];
       setAvailableSheets(sheets);
       setAvailableLayers(layers);
-      // Se il file ha piu' sheet/layer e l'utente non ne ha ancora
-      // scelto uno, default al primo. Il backend restituisce columns=[]
-      // finche' non specifichiamo lo sheet — quindi facciamo subito
-      // una seconda fetch col primo sheet per popolare le colonne.
+
+      // Sheet/layer effettivo: explicit > already-persisted > primo
+      // dell'inventario (solo se multi). Se single-sheet/layer non
+      // serve scegliere — `base.columns` e' gia' valido.
       const po = data.parse_options || {};
-      const needsSheet  = sheets.length > 1 && !po.sheet  && !opts.sheet;
-      const needsLayer  = layers.length > 1 && !po.layer  && !opts.layer;
-      if (needsSheet || needsLayer) {
-        const newPo = { ...po };
-        if (needsSheet) newPo.sheet = sheets[0];
-        if (needsLayer) newPo.layer = layers[0];
-        upd({
-          columns: schema.columns || [],
-          format:  schema.format  || data.format,
-          parse_options: newPo,
+      const effSheet = opts.sheet ?? po.sheet ?? (sheets.length > 1 ? sheets[0] : null);
+      const effLayer = opts.layer ?? po.layer ?? (layers.length > 1 ? layers[0] : null);
+
+      // Step 2 (solo multi-sheet/layer): re-fetch con il sheet/layer
+      // scelto per ottenere le `columns` di quel foglio/layer
+      // specifico (il backend ritorna `columns=[]` quando lo schema
+      // e' chiesto senza sheet su un workbook multi-sheet).
+      let cols = base.columns || [];
+      const needsDetail =
+        (effSheet && sheets.length > 1) ||
+        (effLayer && layers.length > 1);
+      if (needsDetail) {
+        const detail = await getFileSchema(dsId, filePath, {
+          sheet: effSheet || undefined,
+          layer: effLayer || undefined,
         });
-        // Re-fetch con sheet/layer scelto per ottenere le columns reali
-        await fetchSchema(filePath, {
-          sheet: needsSheet ? sheets[0] : po.sheet,
-          layer: needsLayer ? layers[0] : po.layer,
-        });
-      } else {
-        upd({
-          columns: schema.columns || [],
-          format:  schema.format  || data.format,
-        });
+        cols = detail.columns || [];
       }
+
+      // Persist sheet/layer scelto se mancante in parse_options.
+      const updates = {
+        columns: cols,
+        format:  base.format || data.format,
+      };
+      const poChanged =
+        (sheets.length > 1 && !po.sheet && effSheet) ||
+        (layers.length > 1 && !po.layer && effLayer);
+      if (poChanged) {
+        const newPo = { ...po };
+        if (sheets.length > 1 && !po.sheet && effSheet) newPo.sheet = effSheet;
+        if (layers.length > 1 && !po.layer && effLayer) newPo.layer = effLayer;
+        updates.parse_options = newPo;
+      }
+      upd(updates);
+      // Persisti immediatamente: senza un save automatico le columns
+      // restano solo nel React state e il primo reload mostra
+      // "Nessuna colonna rilevata" finche' fetchSchema riparte.
+      // Allineato al pattern di altri update colonne in
+      // ManipolaEditor (`handleUpdateFileSourceColumns`).
+      setTimeout(() => { handleSaveQuiet().catch(() => {}); }, 100);
     } catch {
       // Schema opzionale — non blocca l'uso del nodo
+      setSchemaError(true);
     } finally {
       setLoadingSchema(false);
     }
-  }, [dsId, upd, data.format, data.parse_options]);
+  }, [dsId, upd, data.format, data.parse_options, handleSaveQuiet]);
+
+  // Auto-fetch dello schema al mount (ed a ogni cambio di file).
+  // Il fetchSchema riusa `data.parse_options.sheet/layer` se gia'
+  // persistiti, quindi il reload di un nodo con multi-sheet
+  // selezionato ricarica le colonne del foglio giusto. Senza
+  // questo effect, le columns appaiono solo dopo che l'utente
+  // riapre Sfoglia o cambia sheet — il reload mostrava "Nessuna
+  // colonna rilevata" anche con file_path persistito.
+  useEffect(() => {
+    if (!dsId || !data.file_path) return;
+    fetchSchema(data.file_path);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dsId, data.file_path]);
 const BreadCrumb = () => {
     const parts = browserPath.split('/').filter(Boolean);
     return (
@@ -369,36 +400,58 @@ return (
                 </div>
               )}
 
-              {/* Schema colonne */}
-              {loadingSchema && (
-                <div className="dsn__loading-inline">⏳ Rilevamento schema...</div>
-              )}
-              {schemaError && (
-                <div className="dsn__warning">⚠️ Schema non disponibile</div>
-              )}
-              {data.columns && data.columns.length > 0 && (
+              {/* Schema colonne — sempre visibile per dare feedback
+                  stabile (vedi gh#... ux): l'header c'è anche con 0
+                  colonne, lo stato interno ruota tra:
+                    - loading
+                    - errore di fetch
+                    - elenco colonne
+                    - placeholder "Seleziona file"
+                    - placeholder "Schema non rilevato"
+                  La sezione era condizionata a `columns.length > 0`
+                  e spariva al reload se la fetch automatica falliva
+                  o se il file_mode era dynamic. */}
+              {(mode === 'source') && (
                 <div className="dsn__columns">
                   <div className="dsn__columns-header">
-                    <span>Colonne ({data.columns.length})</span>
+                    <span>Colonne{data.columns?.length ? ` (${data.columns.length})` : ''}</span>
                     {data.format && <span className="dsn__format-badge">{data.format.toUpperCase()}</span>}
+                    {data.file_path && !loadingSchema && (
+                      <button
+                        type="button"
+                        className="dsn__columns-refresh"
+                        onClick={() => fetchSchema(data.file_path, data.parse_options || {})}
+                        title="Ricarica schema dal file"
+                        aria-label="Ricarica schema"
+                      >🔄</button>
+                    )}
                   </div>
                   <div className="dsn__columns-list nowheel">
-                    {data.columns.map((col, i) => (
-                      <div key={i} className="dsn__column">
-                        <span className="dsn__column-name">{col.name}</span>
-                        <span className={`dsn__column-type dsn__column-type--${col.type?.split(':')[0] || 'str'}`}>
-                          {col.type || 'str'}
-                        </span>
+                    {loadingSchema ? (
+                      <div className="dsn__columns-empty">⏳ Rilevamento schema...</div>
+                    ) : schemaError ? (
+                      <div className="dsn__columns-empty dsn__columns-empty--err">
+                        ⚠️ Schema non disponibile
                       </div>
-                    ))}
+                    ) : data.columns?.length > 0 ? (
+                      data.columns.map((col, i) => (
+                        <div key={i} className="dsn__column">
+                          <span className="dsn__column-name">{col.name}</span>
+                          <span className={`dsn__column-type dsn__column-type--${col.type?.split(':')[0] || 'str'}`}>
+                            {col.type || 'str'}
+                          </span>
+                        </div>
+                      ))
+                    ) : !data.file_path ? (
+                      <div className="dsn__columns-empty">
+                        Seleziona un file per rilevare le colonne
+                      </div>
+                    ) : (
+                      <div className="dsn__columns-empty">
+                        Nessuna colonna rilevata — usa 🔄 per riprovare
+                      </div>
+                    )}
                   </div>
-                </div>
-              )}
-
-              {/* Nessun file configurato ma DS selezionato */}
-              {!data.file_path && fileMode === 'fixed' && !data.columns?.length && (
-                <div className="dsn__hint-box">
-                  💡 Sfoglia e seleziona un file per configurare la sorgente
                 </div>
               )}
             </>
