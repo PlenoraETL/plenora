@@ -34,7 +34,7 @@ def test_backup_status_when_list_backups_raises_returns_unknown():
     from app.core.admin_system_status import service
 
     with patch(
-        "app.core.admin_backups.service.list_backups",
+        "app.core.admin_system_status.service.list_backups",
         side_effect=RuntimeError("boto3 explode"),
     ):
         out = service.get_backup_status()
@@ -47,7 +47,7 @@ def test_backup_status_when_list_backups_raises_returns_unknown():
 def test_backup_status_when_bucket_empty_returns_error():
     from app.core.admin_system_status import service
 
-    with patch("app.core.admin_backups.service.list_backups", return_value=[]):
+    with patch("app.core.admin_system_status.service.list_backups", return_value=[]):
         out = service.get_backup_status()
 
     assert out["status"] == "error"
@@ -59,7 +59,7 @@ def test_backup_status_age_over_error_threshold():
     from app.core.admin_system_status import service
 
     with patch(
-        "app.core.admin_backups.service.list_backups",
+        "app.core.admin_system_status.service.list_backups",
         return_value=[_fake_backup(age_hours=60.0)],
     ):
         out = service.get_backup_status()
@@ -74,7 +74,7 @@ def test_backup_status_age_in_warn_band():
     from app.core.admin_system_status import service
 
     with patch(
-        "app.core.admin_backups.service.list_backups",
+        "app.core.admin_system_status.service.list_backups",
         return_value=[_fake_backup(age_hours=30.0)],
     ):
         out = service.get_backup_status()
@@ -86,7 +86,7 @@ def test_backup_status_age_fresh_under_one_hour():
     from app.core.admin_system_status import service
 
     with patch(
-        "app.core.admin_backups.service.list_backups",
+        "app.core.admin_system_status.service.list_backups",
         return_value=[_fake_backup(age_hours=0.3)],
     ):
         out = service.get_backup_status()
@@ -100,7 +100,7 @@ def test_backup_status_age_unparseable_returns_unknown():
     from app.core.admin_system_status import service
 
     with patch(
-        "app.core.admin_backups.service.list_backups",
+        "app.core.admin_system_status.service.list_backups",
         return_value=[{
             "key": "x.dump",
             "size_bytes": 1,
@@ -120,7 +120,7 @@ def test_backup_status_null_last_modified_returns_typed_unknown():
     from app.core.admin_system_status.models import AdminStatusBlock
 
     with patch(
-        "app.core.admin_backups.service.list_backups",
+        "app.core.admin_system_status.service.list_backups",
         return_value=[{
             "key": "x.dump",
             "size_bytes": 1,

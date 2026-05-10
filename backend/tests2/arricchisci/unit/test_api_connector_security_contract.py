@@ -59,14 +59,14 @@ def test_assert_file_source_group_access_fails_closed_without_context(api_servic
 
 def test_assert_file_source_group_access_blocks_invisible_resource(api_service):
     # BE-GO-READY-TRANSFORMATION-ENGINE-022: typed ctx typed context contract.
-    with patch("app.core.auth.visibility.is_resource_visible", return_value=False):
+    with patch("app.core.files.source_loading.is_resource_visible", return_value=False):
         with pytest.raises(ValueError, match="Accesso negato"):
             api_service._assert_file_source_group_access("fs-1", ctx=_ctx())
 
 
 def test_assert_file_source_group_access_wraps_visibility_backend_errors(api_service):
     # BE-GO-READY-TRANSFORMATION-ENGINE-022: typed ctx typed context contract.
-    with patch("app.core.auth.visibility.is_resource_visible", side_effect=RuntimeError("db error")):
+    with patch("app.core.files.source_loading.is_resource_visible", side_effect=RuntimeError("db error")):
         with pytest.raises(ValueError, match="Errore verifica accesso file_source"):
             api_service._assert_file_source_group_access("fs-1", ctx=_ctx())
 
@@ -105,7 +105,7 @@ def test_resolve_file_source_id_path_no_longer_falls_back_to_current_group_id(ap
         visibility_called["count"] += 1
         return True  # se mai chiamata, autorizzerebbe — ma non DEVE essere chiamata.
 
-    with patch("app.core.auth.visibility.is_resource_visible", side_effect=_spy):
+    with patch("app.core.files.source_loading.is_resource_visible", side_effect=_spy):
         with pytest.raises(ValueError, match="Contesto di sicurezza non determinabile"):
             api_service._resolve_file_source_id_path("fs-1")
 
@@ -142,7 +142,7 @@ def test_assert_file_source_group_access_ctx_wins_over_stale_singleton(api_servi
         # `winner-grp-B` ha visibilita' sulla risorsa.
         return group_id == "winner-grp-B"
 
-    with patch("app.core.auth.visibility.is_resource_visible", side_effect=_capture_visibility):
+    with patch("app.core.files.source_loading.is_resource_visible", side_effect=_capture_visibility):
         # Niente raise: la visibility check passa con ctx.group_id.
         api_service._assert_file_source_group_access("fs-1", ctx=ctx_winner)
 
@@ -174,7 +174,7 @@ def test_assert_file_source_group_access_ctx_with_none_group_does_not_fall_back_
         visibility_called["count"] += 1
         return True  # se mai chiamato, sarebbe gia' un bug
 
-    with patch("app.core.auth.visibility.is_resource_visible", side_effect=_track_visibility):
+    with patch("app.core.files.source_loading.is_resource_visible", side_effect=_track_visibility):
         with pytest.raises(ValueError, match="Contesto di sicurezza non determinabile"):
             api_service._assert_file_source_group_access("fs-1", ctx=ctx_unknown)
 
@@ -192,7 +192,9 @@ def test_resolve_file_source_id_path_ctx_wins_over_stale_singleton(api_service, 
     `is_resource_visible` per ritornare True solo per
     winner-grp-B, e mock del DB blob per evitare I/O reale."""
     import app.config as config_mod
-    import app.core.auth.visibility as sharing_mod
+    # source_loading e' il consumer reale di is_resource_visible: per
+    # patcharlo serve il binding sul consumer, non sull'origine.
+    import app.core.files.source_loading as sharing_mod
     import app.core.files.db as file_sources_db
 
     # Stato legacy stale.
@@ -271,8 +273,10 @@ def test_resolve_file_source_path_project_source_ctx_wins_over_stale_singleton(a
     # import ... SourceLoader`). _resolve_file_source_path importa
     # `SourceLoader` direttamente nel body, quindi patch sul module
     # `app.core.artifacts`.
-    import app.core.artifacts as artifacts_mod
-    monkeypatch.setattr(artifacts_mod, "SourceLoader", _FakeLoader)
+    # api_connection_rest_file fa `from app.core.artifacts import SourceLoader`,
+    # quindi il binding va patchato sul consumer.
+    import app.core.arricchisci.api_connection_rest_file as rest_file_mod
+    monkeypatch.setattr(rest_file_mod, "SourceLoader", _FakeLoader)
 
     # Ctx esplicito con il group "winner".
     result = api_service._resolve_file_source_path(
@@ -315,8 +319,10 @@ def test_resolve_file_source_path_project_source_ctx_with_none_group_does_not_fa
             loader_called["count"] += 1
             return "/tmp/should-never-be-returned"
 
-    import app.core.artifacts as artifacts_mod
-    monkeypatch.setattr(artifacts_mod, "SourceLoader", _FakeLoader)
+    # api_connection_rest_file fa `from app.core.artifacts import SourceLoader`,
+    # quindi il binding va patchato sul consumer.
+    import app.core.arricchisci.api_connection_rest_file as rest_file_mod
+    monkeypatch.setattr(rest_file_mod, "SourceLoader", _FakeLoader)
 
     # Ctx esplicito con group_id=None (ramo dati legittimo).
     with pytest.raises(ValueError, match="Contesto di sicurezza non determinabile"):
@@ -334,7 +340,9 @@ def test_resolve_file_source_path_project_source_ctx_with_none_group_does_not_fa
 def test_resolve_file_source_id_path_requires_visibility_before_materializing_blob(api_service, monkeypatch, tmp_path):
     # BE-GO-READY-TRANSFORMATION-ENGINE-022: typed ctx typed context contract.
     import app.config as config_mod
-    import app.core.auth.visibility as sharing_mod
+    # source_loading e' il consumer reale di is_resource_visible: per
+    # patcharlo serve il binding sul consumer, non sull'origine.
+    import app.core.files.source_loading as sharing_mod
     import app.core.files.db as file_sources_db
 
     monkeypatch.setattr(

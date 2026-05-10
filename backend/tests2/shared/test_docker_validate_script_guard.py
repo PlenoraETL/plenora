@@ -227,9 +227,10 @@ def test_validate_script_schema_postcondition_is_select_only(
 ):
     """The schema postcondition is an observer, not a bootstrapper."""
     start = validate_script_text.find("run_schema_postcondition() {")
-    end = validate_script_text.find(
-        "\n}\n\n# ---------------------------------------------------------------------------", start
-    )
+    # Cerca la chiusura della funzione: `\n}\n` seguito da una riga
+    # vuota e da un commento bash (qualunque sia il separatore
+    # successivo, non solo l'antico `# ----`).
+    end = validate_script_text.find("\n}\n\n# ", start)
     assert start != -1 and end != -1, (
         "Could not isolate `run_schema_postcondition`; keep the helper "
         "standalone so its read-only contract remains auditable."

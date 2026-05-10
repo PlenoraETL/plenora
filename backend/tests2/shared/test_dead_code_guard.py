@@ -11,7 +11,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from backend.tests2.shared.dead_code_allowlist import is_allowed_vulture_finding
+from tests2.shared.dead_code_allowlist import is_allowed_vulture_finding
 
 
 REPO_ROOT = Path(__file__).resolve().parents[3]

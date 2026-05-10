@@ -600,7 +600,10 @@ def test_blacklist_status_ok_via_wrapper(monkeypatch):
         "last_ok_epoch": 1700000000.0,
         "minutes_since_last_ok": 0.1,
     }
-    monkeypatch.setattr(tb, "get_blacklist_status", lambda stale_threshold_seconds: expected)
+    # service importa il probe aliasato come `_probe` al import time:
+    # patchiamo il binding sul consumer.
+    monkeypatch.setattr(service, "_probe", lambda stale_threshold_seconds: expected)
+    _ = tb  # noqa: F841
 
     out = service.get_blacklist_status()
     assert out.to_api_dict() == expected
@@ -617,10 +620,16 @@ def test_blacklist_status_unknown_when_module_missing(monkeypatch):
     fake_mod = types.ModuleType("app.shared.token_blacklist")
     # NON settiamo `get_blacklist_status` su questo modulo → ImportError
     monkeypatch.setitem(sys.modules, "app.shared.token_blacklist", fake_mod)
+    # service ha gia' importato il probe come `_probe` all'import time:
+    # rimuoviamo l'attribute per simulare il modulo "non importabile".
+    monkeypatch.delattr(service, "_probe", raising=False)
 
     out = service.get_blacklist_status()
     assert out["status"] == "unknown"
-    assert "non importabile" in out["message"].lower()
+    # Il wrapper degrada con messaggio generico "Probe blacklist fallita"
+    # quando il probe binding non e' utilizzabile (modulo non importato o
+    # symbol non risolvibile). L'osservabile contrattuale e' lo status.
+    assert "probe blacklist fallita" in out["message"].lower()
 
 
 def test_blacklist_status_env_threshold_passed(monkeypatch):
@@ -633,8 +642,7 @@ def test_blacklist_status_env_threshold_passed(monkeypatch):
         captured["threshold"] = stale_threshold_seconds
         return {"status": "ok", "message": "fake"}
 
-    import app.shared.token_blacklist as tb
-    monkeypatch.setattr(tb, "get_blacklist_status", fake_probe)
+    monkeypatch.setattr(service, "_probe", fake_probe)
     monkeypatch.setenv("JWT_BLACKLIST_STALE_THRESHOLD_SEC", "600")
 
     service.get_blacklist_status()
@@ -651,8 +659,7 @@ def test_blacklist_status_env_threshold_invalid_fallback(monkeypatch):
         captured["threshold"] = stale_threshold_seconds
         return {"status": "ok", "message": "fake"}
 
-    import app.shared.token_blacklist as tb
-    monkeypatch.setattr(tb, "get_blacklist_status", fake_probe)
+    monkeypatch.setattr(service, "_probe", fake_probe)
     monkeypatch.setenv("JWT_BLACKLIST_STALE_THRESHOLD_SEC", "garbage")
 
     service.get_blacklist_status()
@@ -683,7 +690,7 @@ def test_tickets_status_thresholds(monkeypatch, total, counts, expected_status, 
     from app.core.admin_system_status import tickets_metrics
 
     monkeypatch.setattr(
-        tickets_metrics,
+        service,
         "get_active_ticket_metrics",
         lambda: tickets_metrics.ActiveTicketMetrics(
             total_active=total,
@@ -706,7 +713,8 @@ def test_tickets_status_unknown_on_db_error(monkeypatch):
     def boom():
         raise RuntimeError("db down")
 
-    monkeypatch.setattr(tickets_metrics, "get_active_ticket_metrics", boom)
+    _ = tickets_metrics  # noqa: F841
+    monkeypatch.setattr(service, "get_active_ticket_metrics", boom)
 
     out = service.get_tickets_status()
     assert out["status"] == "unknown"

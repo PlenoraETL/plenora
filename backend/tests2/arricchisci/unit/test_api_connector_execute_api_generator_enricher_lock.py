@@ -59,11 +59,16 @@ def gen_env(api_service):
             svc=api_service,
             session=session,
             shared_session=_p(
-                "app.infrastructure.http.session.get_shared_session",
+                "app.core.arricchisci.api_connection_generator_enricher."
+                "get_shared_session",
                 return_value=session,
             ),
+            # `api_connection_generator_enricher` fa `from ... import
+            # validate_external_url`, quindi il binding e' locale al modulo
+            # consumer: patch dell'origine non basta.
             ssrf=_p(
-                "app.core.security.outbound_url.validate_external_url",
+                "app.core.arricchisci.api_connection_generator_enricher."
+                "validate_external_url",
                 return_value=None,
             ),
             prep_headers=_po(

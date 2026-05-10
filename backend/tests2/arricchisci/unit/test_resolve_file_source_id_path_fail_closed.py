@@ -10,7 +10,10 @@ import pytest
 
 import app.config as config_mod
 import app.core.files.db as file_sources_db
-import app.core.auth.visibility as sharing_mod
+# Patch del binding sul consumer (source_loading), non sull'origine:
+# `source_loading` fa `from app.core.auth.visibility import is_resource_visible`
+# all'import time, quindi monkeypatch dell'origine non lo intercetta.
+import app.core.files.source_loading as sharing_mod
 from app.core.arricchisci.execution_context import ArricchisciExecutionContext
 from app.core.files.exceptions import FileSourceResolutionError
 

@@ -46,7 +46,9 @@ def test_static_source_does_not_read_stale_singleton():
     executor = ManipolaExecutor(project_service=object())
 
     stub = _StubLoader()
-    with patch("app.core.artifacts.SourceLoader", lambda: stub):
+    # ManipolaExecutor fa `from app.core.artifacts import SourceLoader`,
+    # quindi il binding va patchato sul consumer.
+    with patch("app.core.manipola.executor.SourceLoader", lambda: stub):
         result = executor._carica_sorgenti_statiche(_canvas_with_static(), {})
 
     assert result is None, f"Expected success (None), got {result!r}"
@@ -66,7 +68,9 @@ def test_static_source_forwards_explicit_group_id():
     executor = ManipolaExecutor(project_service=object())
 
     stub = _StubLoader()
-    with patch("app.core.artifacts.SourceLoader", lambda: stub):
+    # ManipolaExecutor fa `from app.core.artifacts import SourceLoader`,
+    # quindi il binding va patchato sul consumer.
+    with patch("app.core.manipola.executor.SourceLoader", lambda: stub):
         result = executor._carica_sorgenti_statiche(
             _canvas_with_static(), {}, group_id="grp-explicit"
         )
@@ -84,7 +88,9 @@ def test_static_source_uses_sentinel_when_no_group_id_and_no_singleton():
     # No _current_group_id attribute at all.
 
     stub = _StubLoader()
-    with patch("app.core.artifacts.SourceLoader", lambda: stub):
+    # ManipolaExecutor fa `from app.core.artifacts import SourceLoader`,
+    # quindi il binding va patchato sul consumer.
+    with patch("app.core.manipola.executor.SourceLoader", lambda: stub):
         result = executor._carica_sorgenti_statiche(_canvas_with_static(), {})
 
     assert result is None
@@ -99,7 +105,9 @@ def test_static_source_uses_sentinel_not_none_when_group_id_absent():
     executor = ManipolaExecutor(project_service=object())
 
     stub = _StubLoader()
-    with patch("app.core.artifacts.SourceLoader", lambda: stub):
+    # ManipolaExecutor fa `from app.core.artifacts import SourceLoader`,
+    # quindi il binding va patchato sul consumer.
+    with patch("app.core.manipola.executor.SourceLoader", lambda: stub):
         result = executor._carica_sorgenti_statiche(_canvas_with_static(), {})
 
     assert result is None

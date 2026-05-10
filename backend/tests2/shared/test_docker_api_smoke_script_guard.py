@@ -143,7 +143,10 @@ def test_docker_api_smoke_script_explicit_delete_clears_project_id():
 
 def test_docker_api_smoke_project_names_are_collision_resistant():
     body = _shell_function_body(_script_text(), "create_smoke_project")
-    assert 'project_name="docker-smoke-$(date +%s)-$$"' in body, (
+    # Il prefisso e' parametrizzato via PLENORA_SMOKE_PROJECT_PREFIX (default
+    # "docker-smoke-"), ma il pattern timestamp+pid (`$(date +%s)-$$`) deve
+    # restare per garantire la collision-resistance fra run CI ravvicinati.
+    assert '$(date +%s)-$$"' in body, (
         "Smoke project names must include timestamp and shell pid so repeated "
         "CI runs are unlikely to collide before cleanup executes."
     )

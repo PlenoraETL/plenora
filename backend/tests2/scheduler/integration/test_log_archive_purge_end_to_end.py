@@ -339,7 +339,9 @@ def test_end_to_end_archive_and_purge_logs_real_pg(test_marker):
     assert obs["op"] == "log_archive"
     assert "Archive logs: 50 righe" in obs["msg"]
 
-    details = json.loads(obs["details"])
+    # JSONB column auto-decodificato a dict da psycopg2 (RealDictCursor),
+    # niente json.loads
+    details = obs["details"]
     assert details["table"] == "logs"
     assert details["archived_rows"] == 50
     assert details["batch_runs"] == 1
@@ -395,7 +397,7 @@ def test_end_to_end_archive_and_purge_audit_actions_real_pg(test_marker):
     assert len(obs_rows) == 1
     obs = obs_rows[0]
     assert "Archive audit_actions: 15 righe" in obs["msg"]
-    details = json.loads(obs["details"])
+    details = obs["details"]
     assert details["table"] == "audit_actions"
     assert details["archived_rows"] == 15
 
@@ -507,8 +509,8 @@ def test_re_run_same_day_idempotent_empty_batch(test_marker):
     )
     # 2 righe osservabilita' (run 1 con 20 righe, run 2 con 0 righe)
     assert len(obs_rows) == 2
-    details_run1 = json.loads(obs_rows[0]["details"])
-    details_run2 = json.loads(obs_rows[1]["details"])
+    details_run1 = obs_rows[0]["details"]
+    details_run2 = obs_rows[1]["details"]
     assert details_run1["archived_rows"] == 20
     assert details_run1["batch_runs"] == 1
     assert details_run2["archived_rows"] == 0

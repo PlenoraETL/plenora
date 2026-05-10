@@ -48,7 +48,7 @@ def test_write_features_checks_project_visibility_before_loading_project_output(
     with patch("app.core.features.routes._check_arcgis_access"), \
          patch("app.core.features.routes.get_service", return_value=service), \
          patch("app.core.features.routes._resolve_input_path", return_value=_fake_materialized("/tmp/result.parquet")), \
-         patch("app.shared.authz_helpers.assert_project_visible") as assert_project_visible:
+         patch("app.core.features.routes.assert_project_visible") as assert_project_visible:
         response = client.post(
             "/api/features/write",
             json={
@@ -72,7 +72,7 @@ def test_write_features_skips_project_visibility_for_explicit_input_path(client)
     with patch("app.core.features.routes._check_arcgis_access"), \
          patch("app.core.features.routes.get_service", return_value=service), \
          patch("app.core.features.routes._resolve_input_path", return_value=_fake_materialized("/tmp/result.parquet")), \
-         patch("app.shared.authz_helpers.assert_project_visible") as assert_project_visible:
+         patch("app.core.features.routes.assert_project_visible") as assert_project_visible:
         response = client.post(
             "/api/features/write",
             json={
@@ -139,7 +139,7 @@ def test_create_service_checks_project_visibility_before_loading_project_output(
     with patch("app.core.features.routes._check_arcgis_access"), \
          patch("app.core.features.routes.get_service", return_value=service), \
          patch("app.core.features.routes._resolve_input_path", return_value=_fake_materialized("/tmp/result.parquet")), \
-         patch("app.shared.authz_helpers.assert_project_visible") as assert_project_visible:
+         patch("app.core.features.routes.assert_project_visible") as assert_project_visible:
         response = client.post(
             "/api/features/create-service",
             json={

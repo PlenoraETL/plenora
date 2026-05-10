@@ -31,7 +31,6 @@ _ALLOWED_ROOT_MODULES: frozenset[str] = frozenset(
         "memory_guard",            # per-tenant memory allocation guard
         "columns_metadata",       # column-level metadata helpers
         "clock",                       # wall-clock abstraction for testability
-        "idempotency",                 # idempotency key helpers
     }
 )
 
@@ -48,7 +47,6 @@ _ROOT_MODULE_CLASSIFICATIONS: dict[str, str] = {
     "memory_guard": "MOVE_TO_EXECUTION_CANDIDATE",
     "columns_metadata": "MOVE_TO_RESOURCES_CANDIDATE",
     "clock": "KEEP_ROOT_CROSS_CUTTING",
-    "idempotency": "MOVE_TO_EXECUTION_CANDIDATE",
 }
 
 _CLASSIFICATION_BUCKETS: frozenset[str] = frozenset(

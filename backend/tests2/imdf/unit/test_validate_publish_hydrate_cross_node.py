@@ -52,8 +52,8 @@ def fake_validator(monkeypatch, fake_settings):
     BUNDLE_MISSING. Altrimenti report base ok=True. Permette di verificare
     in modo isolato l'effetto di hydrate sul check exists() downstream.
     """
-    import app.core.imdf.validator as validator_mod
-
+    # `imdf_router` fa `from app.core.imdf.validator import validate_publish`,
+    # quindi il binding va patchato sul consumer.
     def _fake(bundle_task_id, **kwargs):
         bundle_dir = fake_settings / bundle_task_id
         report = {
@@ -71,7 +71,7 @@ def fake_validator(monkeypatch, fake_settings):
             })
         return report
 
-    monkeypatch.setattr(validator_mod, "validate_publish", _fake)
+    monkeypatch.setattr(imdf_router, "validate_publish", _fake)
     return _fake
 
 

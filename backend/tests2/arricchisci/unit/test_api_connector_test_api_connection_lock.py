@@ -51,15 +51,21 @@ def tac_env(api_service):
             svc=api_service,
             session=session,
             shared_session=_p(
-                "app.infrastructure.http.session.get_shared_session",
+                "app.core.arricchisci.api_connection_management."
+                "get_shared_session",
                 return_value=session,
             ),
+            # `api_connection_management` fa `from ... import
+            # validate_external_url`, quindi il binding e' locale al modulo
+            # consumer: patch dell'origine non basta.
             ssrf=_p(
-                "app.core.security.outbound_url.validate_external_url",
+                "app.core.arricchisci.api_connection_management."
+                "validate_external_url",
                 return_value=None,
             ),
             arcgis_token=_p(
-                "app.shared.connections.oauth.get_arcgis_token",
+                "app.core.arricchisci.api_connection_management."
+                "get_arcgis_token",
                 return_value="ag-tok-xyz",
             ),
             prep_headers=_po("_prepare_headers", return_value={"X": "y"}),

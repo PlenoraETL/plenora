@@ -42,8 +42,8 @@ def test_validate_checks_project_and_file_source_visibility(client, current_user
 
     with patch("app.core.arricchisci.api_connector.api_connection_service.get_api_connection", return_value=api_conn), \
          patch("app.core.arricchisci.router.assert_resource_visible"), \
-         patch("app.shared.authz_helpers.assert_project_visible") as assert_project_visible, \
-         patch("app.shared.authz_helpers.assert_file_source_access") as assert_file_source_access, \
+         patch("app.core.arricchisci.router.assert_project_visible") as assert_project_visible, \
+         patch("app.core.arricchisci.router.assert_file_source_access") as assert_file_source_access, \
          patch("app.core.arricchisci.router._load_request_data", return_value=None):
         response = client.post(
             "/api/enrichment/validate",
@@ -65,8 +65,8 @@ def test_estimate_checks_project_and_file_source_visibility(client, current_user
 
     with patch("app.core.arricchisci.api_connector.api_connection_service.get_api_connection", return_value=api_conn), \
          patch("app.core.arricchisci.router.assert_resource_visible"), \
-         patch("app.shared.authz_helpers.assert_project_visible") as assert_project_visible, \
-         patch("app.shared.authz_helpers.assert_file_source_access") as assert_file_source_access, \
+         patch("app.core.arricchisci.router.assert_project_visible") as assert_project_visible, \
+         patch("app.core.arricchisci.router.assert_file_source_access") as assert_file_source_access, \
          patch("app.core.arricchisci.router._load_request_data", return_value=None):
         response = client.post(
             "/api/enrichment/estimate",
@@ -93,8 +93,8 @@ def test_validate_passes_through_source_loader_with_user_group_id(client, curren
 
     with patch("app.core.arricchisci.api_connector.api_connection_service.get_api_connection", return_value=api_conn), \
          patch("app.core.arricchisci.router.assert_resource_visible"), \
-         patch("app.shared.authz_helpers.assert_project_visible"), \
-         patch("app.shared.authz_helpers.assert_file_source_access"), \
+         patch("app.core.arricchisci.router.assert_project_visible"), \
+         patch("app.core.arricchisci.router.assert_file_source_access"), \
          patch("app.core.arricchisci.router.SourceLoader") as loader_cls:
         loader_cls.return_value.load.return_value = None
         client.post(
@@ -117,8 +117,8 @@ def test_estimate_passes_through_source_loader_with_user_group_id(client, curren
 
     with patch("app.core.arricchisci.api_connector.api_connection_service.get_api_connection", return_value=api_conn), \
          patch("app.core.arricchisci.router.assert_resource_visible"), \
-         patch("app.shared.authz_helpers.assert_project_visible"), \
-         patch("app.shared.authz_helpers.assert_file_source_access"), \
+         patch("app.core.arricchisci.router.assert_project_visible"), \
+         patch("app.core.arricchisci.router.assert_file_source_access"), \
          patch("app.core.arricchisci.router.SourceLoader") as loader_cls:
         loader_cls.return_value.load.return_value = None
         client.post(

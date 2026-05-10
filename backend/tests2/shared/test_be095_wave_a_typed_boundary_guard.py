@@ -51,7 +51,8 @@ _EXPECTED_WAVE_A_BROAD_DICT_RETURNS: frozenset[BroadDictReturn] = frozenset(
         BroadDictReturn("app/core/features/features_service.py", "FeaturesService.write_features", "dict"),
         BroadDictReturn("app/core/features/features_service.py", "FeaturesService.create_service", "dict"),
         BroadDictReturn("app/core/features/features_service.py", "FeaturesService._write_features_df_core", "dict"),
-        BroadDictReturn("app/core/features/features_service.py", "FeaturesService._resolve_objectids_for_update", "List[dict]"),
+        # _resolve_objectids_for_update rimosso dal cleanup features_service:
+        # ratchet sceso. Mantenere fuori per evitare drift inverso.
         BroadDictReturn("app/core/orchestrator/task_service.py", "ActiveTaskInfo.to_dict", "Dict[str, str]"),
         BroadDictReturn("app/core/orchestrator/router_mappers.py", "task_result_to_dict", "Dict[str, Any]"),
         BroadDictReturn("app/core/orchestrator/router.py", "_rest_carica_parser_input", "Dict[str, Any]"),

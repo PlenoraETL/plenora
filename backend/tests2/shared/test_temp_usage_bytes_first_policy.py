@@ -344,20 +344,20 @@ _TEMP_INVENTORY: dict[tuple[str, int], tuple[str, str]] = {
     # Removed: ("app/core/files/service.py", 571) — current contract/093 moved
     # the SHP/GDB tempfile materialization into `app/core/files/source_blob.py`
     # (inventoried below). The original line is no longer a tempfile call site.
-    ("app/core/files/multi_layer_upload.py", 97): (
+    ("app/core/files/multi_layer_upload.py", 90): (
         "STAGING_INGESTION",
         "Multi-layer file probe: writes HTTP-body chunks to disk "
         "then opens with fiona to enumerate layers (GDB/GPKG). "
         "fiona requires a path; bytes API not available.",
     ),
-    ("app/core/files/preview_temp.py", 92): (
+    ("app/core/files/preview_temp.py", 94): (
         "STAGING_INGESTION",
         "Preview render: writes uploaded body to a temp before "
         "format-aware preview reader picks it up (CSV / Excel / "
         "geo). Multi-format dispatch easier with path than with "
         "MIME-sniffed BytesIO.",
     ),
-    ("app/core/files/upload.py", 82): (
+    ("app/core/files/upload.py", 79): (
         "STAGING_INGESTION",
         "File upload landing zone: writes chunked HTTP body to "
         "disk before persisting to DB BYTEA / object storage. "
@@ -368,27 +368,27 @@ _TEMP_INVENTORY: dict[tuple[str, int], tuple[str, str]] = {
     # was deleted as dead code. R-021.1 is closed; the typed
     # replacement is `ResultBlobLoader._materialize_to_temp_path`,
     # already inventoried below as PATH_REQUIRED_FILE.
-    ("app/core/eseguibili/router.py", 330): (
+    ("app/core/eseguibili/router.py", 326): (
         "PATH_REQUIRED_FILE",
         "Eseguibile output materialization: temp path written to "
         "FastAPI StreamingResponse via FileResponse. Path "
         "structurally required by FileResponse contract.",
     ),
-    ("app/core/imdf/storage.py", 96): (
+    ("app/core/imdf/storage.py", 94): (
         "DIR_MULTIFILE",
         "IMDF bundle download: temp path is the local cache "
         "destination for multi-file IMDF zip (then extracted to "
         "directory). Path required by ZipFile API + extract dir.",
     ),
-    ("app/core/imdf/storage.py", 119): (
+    ("app/core/imdf/storage.py", 117): (
         "DIR_MULTIFILE",
         "IMDF bundle re-cache: same multi-file pattern.",
     ),
-    ("app/core/imdf/storage.py", 167): (
+    ("app/core/imdf/storage.py", 165): (
         "DIR_MULTIFILE",
         "IMDF bundle re-cache fallback: same multi-file pattern.",
     ),
-    ("app/core/resources/loaders/result_blob.py", 343): (
+    ("app/core/resources/loaders/result_blob.py", 342): (
         "PATH_REQUIRED_FILE",
         "ResultBlobLoader._materialize_to_temp_path (mode='path'): "
         "the ENGINE'S OWN path-mode tempfile. Caller-owned "
@@ -399,24 +399,24 @@ _TEMP_INVENTORY: dict[tuple[str, int], tuple[str, str]] = {
         "callers should prefer mode='bytes'.",
     ),
 
-    ("app/core/files/dataframe_io.py", 183): (
+    ("app/core/files/dataframe_io.py", 184): (
         "DIR_MULTIFILE",
         "Shapefile zip extraction: SHP is multi-file (shp+shx+"
         "dbf+prj+cpg). geopandas.read_file requires a directory "
         "with all sidecars present.",
     ),
-    ("app/core/files/dataframe_io.py", 195): (
+    ("app/core/files/dataframe_io.py", 196): (
         "DIR_MULTIFILE",
         "FileGDB zip extraction: GDB is a directory artifact. "
         "Path required by GDAL/OGR driver.",
     ),
-    ("app/core/files/dataframe_io.py", 203): (
+    ("app/core/files/dataframe_io.py", 204): (
         "DIR_MULTIFILE",
         "Single-file ZIP recursive load: extract to dir then "
         "recurse into load_dataframe_from_file (which dispatches "
         "by extension).",
     ),
-    ("app/core/files/source_blob.py", 153): (
+    ("app/core/files/source_blob.py", 151): (
         "PATH_REQUIRED_FILE",
         "FileSource blob materialization: writes the in-memory "
         "blob to a NamedTemporaryFile so downstream parsers that "
@@ -425,38 +425,38 @@ _TEMP_INVENTORY: dict[tuple[str, int], tuple[str, str]] = {
         "Bytes API not available for these drivers; tempfile is "
         "the structural adapter at the source-loading boundary.",
     ),
-    ("app/core/files/geospatial_io.py", 231): (
+    ("app/core/files/geospatial_io.py", 230): (
         "DIR_MULTIFILE",
         "Shapefile WRITE: gdf.to_file emits multi-file shapefile "
         "into tempdir, then zipfile packages into single .zip. "
         "OGR driver requires path; multi-file zip not "
         "expressible as bytes-only.",
     ),
-    ("workers/tasks/enrichment_task.py", 1018): (
+    ("workers/tasks/enrichment_task.py", 978): (
         "PATH_REQUIRED_FILE",
         "Enrichment task gpkg/shp output (eseguibile): same "
         "OGR-driver-requires-path constraint as "
         "result_store.save_pipeline_result.",
     ),
 
-    ("app/core/files/upload.py", 22): (
+    ("app/core/files/upload.py", 19): (
         "DIR_MULTIFILE",
         "mkdtemp_writable helper for upload/service ZIP extraction "
         "tempdirs. Current callers use it for SHP/GDB/GPKG multi-file "
         "artifacts whose sidecars require a directory path.",
     ),
-    ("app/core/files/preview_temp.py", 105): (
+    ("app/core/files/preview_temp.py", 106): (
         "DIR_MULTIFILE",
         "Preview-temp ZIP extraction: same multi-file pattern as "
         "the regular SHP/GDB upload paths.",
     ),
-    ("app/core/arricchisci/api_connection_rest_file.py", 555): (
+    ("app/core/arricchisci/api_connection_rest_file.py", 563): (
         "STAGING_INGESTION",
         "REST file processor: tempdir hosting multipart upload "
         "staging + binary response buffer for the outbound HTTP "
         "POST + download.",
     ),
-    ("app/core/imdf/loader.py", 125): (
+    ("app/core/imdf/loader.py", 119): (
         "DIR_MULTIFILE",
         "IMDF zip extraction: bundle is a multi-file artifact "
         "(manifest + GDB + IFC + renderers). Path required by "

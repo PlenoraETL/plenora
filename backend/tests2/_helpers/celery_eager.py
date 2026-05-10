@@ -267,6 +267,12 @@ def install_enrichment_task_mocks(
     else:
         stub = _types.ModuleType(lifecycle_name)
         stub.create_run = _fake_create_run
+        # enrichment_task importa sia `create_run` che
+        # `get_default_runs_retention` dallo stesso modulo (linea 202-205).
+        # Senza il secondo simbolo l'import fallisce e il `try` esterno
+        # cattura tutto, lasciando `_group_id = ""` → ctx.group_id=None
+        # → fail-closed sul primo loader.
+        stub.get_default_runs_retention = lambda: None
         monkeypatch.setitem(sys.modules, lifecycle_name, stub)
 
     # 9. result persistence (lazy)
@@ -322,6 +328,16 @@ def install_enrichment_task_mocks(
     )
     monkeypatch.setattr(
         et_mod, "_cleanup_temp_file_sources", lambda *a, **kw: None,
+    )
+
+    # 13. update_task_progress no-op default. La call site sottostante
+    # `task.update_state` parlerebbe col backend Celery (Redis), che in
+    # ambiente unit-test eager non e' disponibile. I test che vogliono
+    # osservare le call possono ridichiararla via
+    # `install_update_task_progress_spy` (chiamata DOPO questo helper),
+    # che sovrascrive questo no-op.
+    monkeypatch.setattr(
+        et_mod, "update_task_progress", lambda *a, **kw: None,
     )
 
     return spies

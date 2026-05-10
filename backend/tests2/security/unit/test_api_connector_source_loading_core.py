@@ -71,7 +71,9 @@ def test_load_source_project_propagates_group_id_via_source_loader():
         captured["group_id"] = expected_group_id
         return pd.DataFrame({"x": [1]})
 
-    with patch("app.core.artifacts.SourceLoader") as loader_cls:
+    with patch(
+        "app.core.arricchisci.api_connection_source_loading.SourceLoader",
+    ) as loader_cls:
         loader_cls.return_value.load.side_effect = _fake_load
         df = svc._load_source_project(
             {"source_project_id": "proj-1", "columns": []},
@@ -212,7 +214,11 @@ def test_resolve_file_source_path_project_branch_passes_through_source_loader():
     ]
     edges = [{"source": "src-1", "target": "tgt-1"}]
 
-    with patch("app.core.artifacts.SourceLoader") as loader_cls:
+    # _resolve_file_source_path lives in api_connection_rest_file —
+    # patch the SourceLoader symbol there.
+    with patch(
+        "app.core.arricchisci.api_connection_rest_file.SourceLoader",
+    ) as loader_cls:
         loader_cls.return_value.resolve_project_path.return_value = "/tmp/output.csv"
         result = svc._resolve_file_source_path(
             nodes, edges, "tgt-1",
@@ -301,7 +307,7 @@ def test_load_file_source_preserves_geodataframe():
     gdf.columns = ["id"]
     gdf.__getitem__ = lambda self, key: pd.Series([1])
 
-    with patch("app.core.auth.visibility.is_resource_visible", return_value=True), \
+    with patch("app.core.artifacts.source_loader.is_resource_visible", return_value=True), \
          patch("app.core.files.service.file_source_service") as svc_fs, \
          patch("app.core.files.dataframe_io.filter_visible_columns",
                side_effect=lambda d, _cols: d):
@@ -339,7 +345,7 @@ def test_load_file_source_falls_back_to_df_when_no_gdf():
     svc._current_group_id = "stale-grp-LEAK"
     df = pd.DataFrame({"id": [1, 2]})
 
-    with patch("app.core.auth.visibility.is_resource_visible", return_value=True), \
+    with patch("app.core.artifacts.source_loader.is_resource_visible", return_value=True), \
          patch("app.core.files.service.file_source_service") as svc_fs, \
          patch("app.core.files.dataframe_io.filter_visible_columns",
                side_effect=lambda d, _cols: d):
@@ -363,7 +369,7 @@ def test_load_file_source_blocks_cross_tenant_via_loader():
     svc = _make_service_no_singleton()
     svc._current_group_id = "stale-grp-LEAK"
 
-    with patch("app.core.auth.visibility.is_resource_visible", return_value=False), \
+    with patch("app.core.artifacts.source_loader.is_resource_visible", return_value=False), \
          patch("app.core.files.service.file_source_service") as svc_fs:
         with pytest.raises(ValueError, match="non appartiene al tuo gruppo"):
             svc._load_file_source(

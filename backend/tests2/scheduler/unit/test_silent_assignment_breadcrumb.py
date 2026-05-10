@@ -1,7 +1,11 @@
 """
 7.f-bis — breadcrumb su silent-assignment fallback.
 
-Residual sweep ε del punto 1 — 5 siti `except Exception: <assignment>`
+Residual sweep ε del punto 1 — 4 siti `except Exception: <assignment>`
+(originariamente 5: il sito enrichment_task `_trigger_carica_if_present`
+con context "group_id metadata lookup fallito" e' stato rimosso come
+dead code in commit 4236403a "Clean Python hygiene residuals" — la
+variabile `group_id` non era piu' usata dopo il cleanup).
 """
 
 from __future__ import annotations
@@ -74,15 +78,13 @@ _BREADCRUMB_CONTEXTS = [
      "DebugPayloadBuilder fallito"),
     ("workers/tasks/enrichment_task.py",
      "DebugPayloadBuilder fallito (enrichment)"),
-    ("workers/tasks/enrichment_task.py",
-     "group_id metadata lookup fallito"),
     ("app/core/scheduler/scheduler_execution_runtime.py",
      "DebugPayloadBuilder fallito (scheduler)"),
 ]
 
 
 def test_silent_assignment_sites_have_debug_breadcrumb():
-    """Per ciascuno dei 5 siti, verifica presenza di `logger.debug(f"<context>:
+    """Per ciascuno dei 4 siti, verifica presenza di `logger.debug(f"<context>:
     {type(e).__name__}: ...")` col context unico attribuito in ε. Il
     breadcrumb puo' essere su una singola riga o split su piu' righe
     (concatenazione f-string implicita): cerchiamo entrambi i frammenti
@@ -110,7 +112,7 @@ def test_silent_assignment_sites_have_debug_breadcrumb():
 
 def test_silent_assignment_fallback_values_preserved():
     """Il fix ε e' additivo: aggiunge `as e:` + `logger.debug(...)` ma non
-    cambia il valore di fallback assegnato. Verifica che i 5 fallback
+    cambia il valore di fallback assegnato. Verifica che i 4 fallback
     canonici siano ancora presenti Current contract."""
     # (file, fallback statement pattern atteso)
     fallback_patterns = [
@@ -120,8 +122,6 @@ def test_silent_assignment_fallback_values_preserved():
          "debug_payload = None"),
         ("workers/tasks/enrichment_task.py",
          "_debug_payload = None"),
-        ("workers/tasks/enrichment_task.py",
-         "group_id = None"),
         ("app/core/scheduler/scheduler_execution_runtime.py",
          "debug_payload = None"),
     ]

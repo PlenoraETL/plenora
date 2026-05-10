@@ -191,7 +191,7 @@ def test_load_file_blocks_invisible_resource():
     loader = SourceLoader()
     ref = SourceRef(file_source_id="fs-99")
 
-    with patch("app.core.auth.visibility.is_resource_visible", return_value=False) as visibility, \
+    with patch("app.core.artifacts.source_loader.is_resource_visible", return_value=False) as visibility, \
          patch("app.core.files.service.file_source_service") as svc:
         with pytest.raises(SourceLoadingError, match="non appartiene al tuo gruppo"):
             loader.load(ref, expected_group_id="grp-1")
@@ -212,7 +212,7 @@ def test_load_file_visibility_check_exception_is_fail_closed():
     def _boom(*_a, **_kw):
         raise RuntimeError("DB down")
 
-    with patch("app.core.auth.visibility.is_resource_visible", side_effect=_boom):
+    with patch("app.core.artifacts.source_loader.is_resource_visible", side_effect=_boom):
         with pytest.raises(SourceLoadingError, match="Verifica visibilita'"):
             loader.load(ref, expected_group_id="grp-1")
 
@@ -229,7 +229,7 @@ def test_load_file_returns_geodataframe_when_available():
     df = pd.DataFrame({"id": [1]})
     gdf = object()  # sentinella, non importa il tipo concreto
 
-    with patch("app.core.auth.visibility.is_resource_visible", return_value=True), \
+    with patch("app.core.artifacts.source_loader.is_resource_visible", return_value=True), \
          patch("app.core.files.service.file_source_service") as svc:
         svc.load_dataframe.return_value = (df, gdf)
         out = loader.load(ref, expected_group_id="grp-1")
@@ -243,7 +243,7 @@ def test_load_file_returns_dataframe_when_no_geodataframe():
     ref = SourceRef(file_source_id="fs-flat")
     df = pd.DataFrame({"id": [1, 2]})
 
-    with patch("app.core.auth.visibility.is_resource_visible", return_value=True), \
+    with patch("app.core.artifacts.source_loader.is_resource_visible", return_value=True), \
          patch("app.core.files.service.file_source_service") as svc:
         svc.load_dataframe.return_value = (df, None)
         out = loader.load(ref, expected_group_id="grp-1")
@@ -285,7 +285,7 @@ def test_load_static_does_not_touch_db_or_http():
     loader = SourceLoader()
     ref = SourceRef(static_fields=tuple([{"name": "x", "value": "1"}]))
 
-    with patch("app.core.auth.visibility.is_resource_visible") as visibility, \
+    with patch("app.core.artifacts.source_loader.is_resource_visible") as visibility, \
          patch("app.core.files.service.file_source_service") as svc, \
          patch("app.core.artifacts.db_boundary.get_project_for_artifact") as get_project:
         loader.load(ref, expected_group_id="grp-1")

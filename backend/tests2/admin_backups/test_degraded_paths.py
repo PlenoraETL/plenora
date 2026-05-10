@@ -26,7 +26,7 @@ def test_list_backups_when_boto3_missing_returns_empty():
     fake_storage.list_objects.side_effect = ImportError("No module named 'boto3'")
 
     with patch(
-        "app.infrastructure.storage.cloud_backends.get_backup_object_storage",
+        "app.core.admin_backups.service.get_backup_object_storage",
         return_value=fake_storage,
     ):
         out = service.list_backups()
@@ -42,7 +42,7 @@ def test_list_backups_when_client_error_returns_empty():
     fake_storage.list_objects.side_effect = RuntimeError("AccessDenied simulato")
 
     with patch(
-        "app.infrastructure.storage.cloud_backends.get_backup_object_storage",
+        "app.core.admin_backups.service.get_backup_object_storage",
         return_value=fake_storage,
     ):
         out = service.list_backups()
@@ -64,7 +64,7 @@ def test_list_backups_raises_on_missing_dependency():
     )
 
     with patch(
-        "app.infrastructure.storage.cloud_backends.get_backup_object_storage",
+        "app.core.admin_backups.service.get_backup_object_storage",
         return_value=fake_storage,
     ):
         with pytest.raises(AdminBackupDependencyError) as exc_info:
@@ -90,7 +90,7 @@ def test_list_backups_raises_on_aws_credentials_expired():
     fake_storage.list_objects.side_effect = LoginRefreshRequired()
 
     with patch(
-        "app.infrastructure.storage.cloud_backends.get_backup_object_storage",
+        "app.core.admin_backups.service.get_backup_object_storage",
         return_value=fake_storage,
     ):
         with pytest.raises(AdminBackupCredentialsError) as exc_info:
@@ -125,7 +125,7 @@ def test_list_backups_aws_credentials_logs_warning_without_traceback():
     spy_error = MagicMock()
 
     with patch(
-        "app.infrastructure.storage.cloud_backends.get_backup_object_storage",
+        "app.core.admin_backups.service.get_backup_object_storage",
         return_value=fake_storage,
     ), patch.object(
         service.logger, "warning", spy_warning
@@ -171,7 +171,7 @@ def test_list_backups_raises_on_access_denied_refresh_token():
     )
 
     with patch(
-        "app.infrastructure.storage.cloud_backends.get_backup_object_storage",
+        "app.core.admin_backups.service.get_backup_object_storage",
         return_value=fake_storage,
     ):
         with pytest.raises(AdminBackupCredentialsError):
@@ -185,7 +185,7 @@ def test_list_backups_empty_bucket_returns_empty():
     fake_storage.list_objects.return_value = []
 
     with patch(
-        "app.infrastructure.storage.cloud_backends.get_backup_object_storage",
+        "app.core.admin_backups.service.get_backup_object_storage",
         return_value=fake_storage,
     ):
         out = service.list_backups()
@@ -214,7 +214,7 @@ def test_list_backups_sorts_newest_first():
     ]
 
     with patch(
-        "app.infrastructure.storage.cloud_backends.get_backup_object_storage",
+        "app.core.admin_backups.service.get_backup_object_storage",
         return_value=fake_storage,
     ):
         out = service.list_backups()

@@ -79,10 +79,12 @@ def test_close_run_invokes_retention_with_correct_args(monkeypatch):
     def spy_retention(canvas_id, group_id, *, retention_n=None):
         calls.append(("apply_runs_retention", canvas_id, group_id, retention_n))
 
-    monkeypatch.setattr(wr.db, "list_node_meta", spy_list_node_meta)
-    monkeypatch.setattr(wr.db, "update_run", spy_update_run)
-    monkeypatch.setattr(wr.db, "get_run", spy_get_run)
-    monkeypatch.setattr(wr.db, "apply_runs_retention", spy_retention)
+    # writer ha smesso di usare il facade `db`: ora importa
+    # `node_snapshots_db`, `runs_db`, `retention` come moduli distinti.
+    monkeypatch.setattr(wr.node_snapshots_db, "list_node_meta", spy_list_node_meta)
+    monkeypatch.setattr(wr.runs_db, "update_run", spy_update_run)
+    monkeypatch.setattr(wr.runs_db, "get_run", spy_get_run)
+    monkeypatch.setattr(wr.retention, "apply_runs_retention", spy_retention)
     monkeypatch.setattr(wr, "_resolve_runs_retention_n", lambda retention_n=None: 7)
 
     wr.close_run(run_id="r1", input_hash="a", output_hash="b",
@@ -105,13 +107,16 @@ def test_retention_failure_does_not_propagate(monkeypatch):
     cleanup fallito non deve rompere il task."""
     from app.core.intermediate import writer as wr
 
-    monkeypatch.setattr(wr.db, "list_node_meta", lambda run_id: [])
-    monkeypatch.setattr(wr.db, "update_run", lambda *a, **k: None)
-    monkeypatch.setattr(wr.db, "get_run", lambda rid: {"canvas_id": "p", "group_id": "g"})
+    monkeypatch.setattr(wr.node_snapshots_db, "list_node_meta", lambda run_id: [])
+    monkeypatch.setattr(wr.runs_db, "update_run", lambda *a, **k: None)
+    monkeypatch.setattr(
+        wr.runs_db, "get_run",
+        lambda rid: {"canvas_id": "p", "group_id": "g"},
+    )
 
     def boom(*a, **k):
         raise RuntimeError("DB lock during retention")
-    monkeypatch.setattr(wr.db, "apply_runs_retention", boom)
+    monkeypatch.setattr(wr.retention, "apply_runs_retention", boom)
 
     # Non deve sollevare — il fallimento e' loggato come warning
     wr.close_run(run_id="r1", input_hash="a", output_hash="b",

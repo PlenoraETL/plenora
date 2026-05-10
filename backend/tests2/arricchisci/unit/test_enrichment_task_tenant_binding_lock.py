@@ -10,7 +10,11 @@ import dis
 
 import pytest
 
-# Import fixture come simbolo locale per discovery pytest senza conftest.
+# Import fixture come simbolo locale per discovery pytest senza conftest:
+# pytest scopre fixture per nome solo se sono visibili al top-level del file
+# di test (o tramite conftest.py). Senza questa import, i test che usano
+# `celery_eager` come parametro falliscono con `fixture not found`.
+from tests2._helpers.celery_eager import celery_eager  # noqa: F401
 
 
 pytestmark = [

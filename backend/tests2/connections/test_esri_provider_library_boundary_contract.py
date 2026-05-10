@@ -50,16 +50,16 @@ def _rel(path: Path) -> str:
 # entries here are refactored away (and so should be trimmed).
 _ACCEPTED_REST_DEBT: dict[str, set[tuple[int, str]]] = {
     "app/core/features/arcgis_auth.py": {
-        (151, "._http"),
-        (155, "._http"),
-        (273, "/sharing/rest"),
-        (283, "._http"),
-        (352, "._http"),
-        (420, "/sharing/rest"),
-        (427, "/sharing/rest"),
-        (428, "/sharing/rest"),
-        (443, "/sharing/rest"),
-        (481, "._http"),
+        (150, "._http"),
+        (154, "._http"),
+        (271, "/sharing/rest"),
+        (281, "._http"),
+        (350, "._http"),
+        (417, "/sharing/rest"),
+        (423, "/sharing/rest"),
+        (424, "/sharing/rest"),
+        (439, "/sharing/rest"),
+        (477, "._http"),
     },
     "app/core/features/arcgis_feature_write_methods.py": {
         (251, "/rest/admin"),
@@ -70,11 +70,11 @@ _ACCEPTED_REST_DEBT: dict[str, set[tuple[int, str]]] = {
         (328, "._http"),
     },
     "app/core/features/arcgis_service_discovery.py": {
-        (199, "/sharing/rest"),
+        (200, "/sharing/rest"),
         (375, "/sharing/rest"),
-        (439, "/sharing/rest"),
-        (461, "createFolder"),
-        (493, "/sharing/rest"),
+        (438, "/sharing/rest"),
+        (460, "createFolder"),
+        (491, "/sharing/rest"),
     },
 }
 
@@ -156,6 +156,11 @@ def test_imdf_uses_arcgis_provider_protocol_or_resolver_only(src_file: Path) -> 
         "app/core/imdf/arcgis/service_discovery.py": {"app.core.features"},
         "app/core/imdf/arcgis/service_lifecycle.py": {"app.core.features"},
         "app/core/imdf/arcgis/sql_helpers.py": {"app.core.features"},
+        # publish_ops orchestra il replay/append/upsert su layer ArcGIS
+        # esistenti delegando a `arcgis_publish_modes.publish_existing_layer_mode`,
+        # che vive in `app.core.features` insieme agli altri ArcGIS helpers
+        # generici. Stessa rationale KEEP_COMPAT degli altri 3 wrapper IMDF.
+        "app/core/imdf/arcgis/publish_ops.py": {"app.core.features.arcgis_publish_modes"},
     }
 
     allowed_connections_imports = {

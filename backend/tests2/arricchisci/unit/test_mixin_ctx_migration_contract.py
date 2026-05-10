@@ -121,7 +121,10 @@ def test_load_static_values_ignores_stale_singleton_with_explicit_ctx(api_servic
             captured["group_id"] = expected_group_id
             return pd.DataFrame()
 
-    with patch("app.core.artifacts.SourceLoader", return_value=_FakeSL()):
+    with patch(
+        "app.core.arricchisci.api_connection_source_loading.SourceLoader",
+        return_value=_FakeSL(),
+    ):
         api_service._load_static_values(
             {"id": "sv1", "type": "staticValues", "fields": []},
             ctx=ctx,
@@ -154,7 +157,10 @@ def test_load_static_values_uses_static_sentinel_when_ctx_none(api_service):
             captured["group_id"] = expected_group_id
             return pd.DataFrame()
 
-    with patch("app.core.artifacts.SourceLoader", return_value=_FakeSL()):
+    with patch(
+        "app.core.arricchisci.api_connection_source_loading.SourceLoader",
+        return_value=_FakeSL(),
+    ):
         api_service._load_static_values(
             {"id": "sv1", "type": "staticValues", "fields": []},
         )  # NO ctx kwarg
@@ -206,7 +212,10 @@ def test_load_file_source_ignores_stale_preview_limit_when_ctx_preview_none(api_
         def load(self, ref, expected_group_id):
             return df_source.copy()
 
-    with patch("app.core.artifacts.SourceLoader", return_value=_FakeSL()), \
+    with patch(
+        "app.core.arricchisci.api_connection_source_loading.SourceLoader",
+        return_value=_FakeSL(),
+    ), \
          patch.object(mod, "filter_visible_columns",
                       side_effect=lambda df, cols: df):
         result = api_service._load_file_source(
@@ -251,7 +260,10 @@ def test_load_file_source_ctx_preview_limit_wins_over_stale_singleton(api_servic
         def load(self, ref, expected_group_id):
             return df_source.copy()
 
-    with patch("app.core.artifacts.SourceLoader", return_value=_FakeSL()), \
+    with patch(
+        "app.core.arricchisci.api_connection_source_loading.SourceLoader",
+        return_value=_FakeSL(),
+    ), \
          patch.object(mod, "filter_visible_columns",
                       side_effect=lambda df, cols: df):
         result = api_service._load_file_source(

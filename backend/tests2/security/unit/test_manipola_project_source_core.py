@@ -169,7 +169,8 @@ def test_load_file_sources_reapplies_crs_from_node_columns_metadata():
         captured["meta"] = meta
         return d  # sentinella, non importa il return
 
-    with patch("app.core.auth.visibility.is_resource_visible", return_value=True), \
+    # source_loader e' il consumer reale di is_resource_visible
+    with patch("app.core.artifacts.source_loader.is_resource_visible", return_value=True), \
          patch("app.core.files.service.file_source_service") as svc, \
          patch("app.core.manipola.executor._applica_crs_da_colonne",
                side_effect=_fake_apply_crs):
@@ -221,8 +222,10 @@ def test_explicit_group_id_is_forwarded_to_resolver():
                 "stub: capture expected_group_id and abort"
             )
 
+    # project_source_runtime fa `from app.core.artifacts import ArtifactResolver`,
+    # quindi il binding va patchato sul consumer.
     with patch(
-        "app.core.artifacts.ArtifactResolver",
+        "app.core.manipola.project_source_runtime.ArtifactResolver",
         return_value=_StubResolver(),
     ), patch(
         "app.core.manipola.project_source_runtime.find_latest_output_file",
