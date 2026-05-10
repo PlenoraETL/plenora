@@ -149,7 +149,7 @@ const EnrichmentConfirmModal = ({
                   le righe vengono prodotte dalla chiamata REST stessa,
                   non da un dataframe upstream. Il backend segnala il
                   caso via warning "Estrazione REST". */}
-              {isValid && totalRows === 0 && !(warnings || []).some(w =>
+              {isValid && totalRows === 0 && !(validation?.warnings || []).some(w =>
                 String(w).toLowerCase().includes('estrazione rest')
               ) && (
                 <div className="enrichment-confirm-section enrichment-confirm-section--info">
