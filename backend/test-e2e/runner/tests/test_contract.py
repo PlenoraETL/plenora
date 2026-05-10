@@ -78,7 +78,7 @@ def _maybe_id(body: Any) -> str | None:
     if not isinstance(body, dict):
         return None
     for key in ("id", "connection_id", "datasource_id", "project_id",
-                "api_id", "api_connection_id"):
+                "api_id", "api_connection_id", "task_id"):
         value = body.get(key)
         if value:
             return str(value)
@@ -546,13 +546,9 @@ def test_ct_006_project_execute_shape(
         exec_body = r_exec.json()
         assert isinstance(exec_body, dict), f"execute body non è dict: {type(exec_body)}"
 
-        task_id = (
-            exec_body.get("task_id")
-            or exec_body.get("id")
-            or (exec_body.get("task") or {}).get("task_id")
-            if isinstance(exec_body.get("task"), dict)
-            else None
-        )
+        task_id = exec_body.get("task_id") or exec_body.get("id")
+        if not task_id and isinstance(exec_body.get("task"), dict):
+            task_id = exec_body["task"].get("task_id")
         assert task_id, (
             f"execute body senza task_id riconoscibile. "
             f"Keys: {sorted(exec_body.keys())}. Body: {str(exec_body)[:300]}"

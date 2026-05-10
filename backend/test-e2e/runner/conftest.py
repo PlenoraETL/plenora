@@ -472,7 +472,13 @@ def api_conn_apikey_id(
     auth_headers: dict[str, str],
     group_id: str,
 ) -> Iterator[str]:
-    """api_connection REST con autenticazione api_key in header."""
+    """api_connection REST con autenticazione api_key in header.
+
+    Schema payload backend (vedi `api_connection_management.create_api_connection`):
+    - `url` top-level (mappato in `endpoint.url`); NON `base_url`.
+    - `auth` annidato `{type, location, key_name, key_value}` (vedi
+      `app.shared.connections.oauth.prepare_headers`).
+    """
     base_url = os.getenv(
         "PLENORA_E2E_FAKE_REST_URL", "http://plenora-e2e-fake-rest:8080"
     )
@@ -480,11 +486,16 @@ def api_conn_apikey_id(
         "name": f"e2e-rest-apikey-{uuid.uuid4().hex[:6]}",
         "description": "e2e REST api_key fixture",
         "connection_type": "rest",
-        "base_url": base_url,
-        "auth_type": "api_key",
-        "api_key": os.getenv("PLENORA_E2E_FAKE_REST_KEY", "PLENORA_TEST_KEY"),
-        "key_location": "header",
-        "key_name": "X-API-Key",
+        "url": f"{base_url}/health",
+        "method": "GET",
+        "auth": {
+            "type": "api_key",
+            "location": "header",
+            "key_name": "X-API-Key",
+            "key_value": os.getenv(
+                "PLENORA_E2E_FAKE_REST_KEY", "PLENORA_TEST_KEY"
+            ),
+        },
     }
     cid = _create_api_connection(http_client, auth_headers, payload)
     yield cid
