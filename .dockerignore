@@ -53,13 +53,16 @@ frontend/node_modules/
 frontend/dist/
 frontend/.vite/
 
-# Backend pytest temp dirs (left behind by tests on Windows)
-backend/.pytest-basetemp*/
+# Backend pytest temp dirs (left behind by tests)
+backend/.pytest-run/
 backend/.pytest-run-*/
+backend/.pytest-basetemp*/
 backend/.pytest-b*/
 backend/.pytest-local*/
 backend/.agent-pytest-tmproot/
 backend/pytesttmp-*/
+backend/tests2-runs/
+backend/tests2/.pytest_cache/
 pytesttmp-*/
 
 # Local DB / data

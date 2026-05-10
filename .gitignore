@@ -61,10 +61,15 @@ cover/
 .env
 .env.local
 .env.production
+.env.docker
 backend/tests2/integration/provider_config.local.toml
 .venv/
 venv/
 env/
+
+# Local docker compose overrides (network plumbing E2E, ecc.)
+docker-compose.override.yml
+docker-compose.override.yaml
 ENV/
 env.bak/
 venv.bak/

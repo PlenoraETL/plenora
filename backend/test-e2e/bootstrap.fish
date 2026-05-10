@@ -167,34 +167,33 @@ echo "    docker exec -i plenora-postgres-1 psql -U plenora -d plenora < $SEED_S
 # ── 6. Riepilogo + comandi successivi ───────────────────────────────────
 _step "6. Prossimi passi (eseguire manualmente)"
 
-cat <<EOF
-  a) Avvia stack app plenora:
-       cd $REPO_ROOT
-       docker compose up -d
-
-  b) Avvia stack fixture e2e:
-       cd $E2E_DIR/docker
-       docker compose up -d            # profilo "core" (default)
-       # oppure: docker compose --profile full up -d   per tutto
-
-  c) Verifica healthcheck:
-       docker compose -f $E2E_COMPOSE ps
-
-  d) Crea l'utente test (una volta):
-       docker exec -i plenora-postgres-1 psql -U plenora -d plenora < $SEED_SQL
-
-  e) Lancia i 6 contract test:
-       cd $RUNNER_DIR
-       source .venv/bin/activate.fish
-       pytest -m contract -v
-
-  f) Se i contract sono verdi → 50 must:
-       pytest -m "smoke or (profile_core and requires_app)" -v
-
-  g) Tear-down (quando hai finito):
-       cd $E2E_DIR/docker  &&  docker compose down
-       cd $REPO_ROOT       &&  docker compose down
-EOF
+printf '%s\n' \
+    "  a) Avvia stack app plenora:" \
+    "       cd $REPO_ROOT" \
+    "       docker compose up -d" \
+    "" \
+    "  b) Avvia stack fixture e2e:" \
+    "       cd $E2E_DIR/docker" \
+    "       docker compose up -d            # profilo \"core\" (default)" \
+    "       # oppure: docker compose --profile full up -d   per tutto" \
+    "" \
+    "  c) Verifica healthcheck:" \
+    "       docker compose -f $E2E_COMPOSE ps" \
+    "" \
+    "  d) Crea l'utente test (una volta):" \
+    "       docker exec -i plenora-postgres-1 psql -U plenora -d plenora < $SEED_SQL" \
+    "" \
+    "  e) Lancia i 6 contract test:" \
+    "       cd $RUNNER_DIR" \
+    "       source .venv/bin/activate.fish" \
+    "       pytest -m contract -v" \
+    "" \
+    "  f) Se i contract sono verdi → 50 must:" \
+    "       pytest -m \"smoke or (profile_core and requires_app)\" -v" \
+    "" \
+    "  g) Tear-down (quando hai finito):" \
+    "       cd $E2E_DIR/docker  &&  docker compose down" \
+    "       cd $REPO_ROOT       &&  docker compose down"
 
 echo ""
 echo "Bootstrap completato (no container avviato, no test eseguito)."
