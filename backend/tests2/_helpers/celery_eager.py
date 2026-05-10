@@ -31,7 +31,7 @@ def celery_eager(monkeypatch):
 
     monkeypatch.setattr(celery_app.conf, "task_always_eager", True)
     monkeypatch.setattr(celery_app.conf, "task_eager_propagates", True)
-    monkeypatch.setattr(celery_app.conf, "task_store_eager_result", True)
+    monkeypatch.setattr(celery_app.conf, "task_store_eager_result", False)
     return celery_app
 
 
@@ -183,7 +183,7 @@ def install_enrichment_task_mocks(
             side-effect senza arrivare al ramo finale.
         final_file_result: idem per il ramo file_result (`is_file_result=True`).
         is_already_completed_returns: forza il return di
-            `app.shared.idempotency.is_already_completed`.
+            `app.core.intermediate.run_idempotency.is_already_completed`.
         revoked_payload: se non None, `recheck_user_authorized` ritorna
             questo dict (simula utente revocato).
     """
@@ -191,7 +191,7 @@ def install_enrichment_task_mocks(
 
     # 1. Idempotency
     monkeypatch.setattr(
-        "app.shared.idempotency.is_already_completed",
+        "app.core.intermediate.run_idempotency.is_already_completed",
         lambda run_id: is_already_completed_returns,
     )
 

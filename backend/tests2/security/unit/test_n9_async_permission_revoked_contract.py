@@ -143,7 +143,7 @@ def _patch_pipeline_eager_success(monkeypatch):
     monkeypatch.setattr(celery_app.conf, "task_eager_propagates", True)
     monkeypatch.setattr(pt.execute_pipeline_task, "update_state", lambda *a, **kw: None)
     monkeypatch.setattr(
-        "app.shared.idempotency.is_already_completed",
+        "app.core.intermediate.run_idempotency.is_already_completed",
         lambda run_id: False,
     )
     monkeypatch.setattr(

@@ -17,14 +17,14 @@ pytestmark = [pytest.mark.unit, pytest.mark.carica, pytest.mark.contract]
 
 
 def test_is_already_completed_returns_false_when_run_does_not_exist():
-    from app.shared.idempotency import is_already_completed
+    from app.core.intermediate.run_idempotency import is_already_completed
 
     with patch("app.core.intermediate.runs_db.get_run", return_value=None):
         assert is_already_completed("run-missing") is False
 
 
 def test_is_already_completed_returns_true_for_completed_run():
-    from app.shared.idempotency import is_already_completed
+    from app.core.intermediate.run_idempotency import is_already_completed
 
     with patch(
         "app.core.intermediate.runs_db.get_run",
@@ -35,7 +35,7 @@ def test_is_already_completed_returns_true_for_completed_run():
 
 def test_is_already_completed_returns_false_for_failed_run():
     """Status 'failed' deve consentire retry, NON essere treated come completed."""
-    from app.shared.idempotency import is_already_completed
+    from app.core.intermediate.run_idempotency import is_already_completed
 
     with patch(
         "app.core.intermediate.runs_db.get_run",
@@ -47,7 +47,7 @@ def test_is_already_completed_returns_false_for_failed_run():
 def test_is_already_completed_returns_false_for_running_run():
     """Status 'running' e' una race rara — non blocchiamo un retry
     manuale dell'operatore su un task che sembra bloccato."""
-    from app.shared.idempotency import is_already_completed
+    from app.core.intermediate.run_idempotency import is_already_completed
 
     with patch(
         "app.core.intermediate.runs_db.get_run",
@@ -59,7 +59,7 @@ def test_is_already_completed_returns_false_for_running_run():
 def test_is_already_completed_swallows_db_error_returning_false():
     """Se la query DB fallisce, fallback a False (meglio re-eseguire
     un task gia' fatto che skippare legittimo). Mai sollevare."""
-    from app.shared.idempotency import is_already_completed
+    from app.core.intermediate.run_idempotency import is_already_completed
 
     with patch(
         "app.core.intermediate.runs_db.get_run",

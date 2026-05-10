@@ -70,7 +70,7 @@ def test_pipeline_task_emits_skipped_idempotent_status_on_hit(monkeypatch):
     monkeypatch.setattr(celery_app.conf, "task_eager_propagates", True)
 
     monkeypatch.setattr(
-        "app.shared.idempotency.is_already_completed",
+        "app.core.intermediate.run_idempotency.is_already_completed",
         lambda run_id: True,
     )
 
@@ -113,7 +113,7 @@ def test_pipeline_task_uses_passed_run_id_when_provided(monkeypatch):
         return True  # short-circuit per ridurre lo stub chain
 
     monkeypatch.setattr(
-        "app.shared.idempotency.is_already_completed",
+        "app.core.intermediate.run_idempotency.is_already_completed",
         spy_is_already_completed,
     )
 

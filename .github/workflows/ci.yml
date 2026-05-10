@@ -83,6 +83,12 @@ jobs:
           pip install -r requirements.txt
           pip install -r requirements-dev.txt
 
+      - name: Validate OpenAPI frontend contract manifest
+        run: python backend/scripts/export_openapi_manifest.py --output frontend/src/api/openapi-contract.manifest.json
+
+      - name: Ensure OpenAPI frontend contract manifest is committed
+        run: git diff --exit-code -- frontend/src/api/openapi-contract.manifest.json
+
       - name: Run pytest
         working-directory: backend
         # -c puntando al file dedicato di tests2/. Niente coverage gate in

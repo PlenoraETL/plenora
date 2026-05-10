@@ -7,10 +7,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, Optional
 
+from app.config import settings
 from app.core.results.blob_writer import save_result_blob_from_bytes
 from app.core.results.temp_paths import make_pipeline_fs_temp_dir
-
-settings = None
 
 
 @dataclass(frozen=True)
@@ -73,11 +72,7 @@ def save_pipeline_result_outcome(
     filename = f"{filename_stem}.{fmt_lower}"
 
     if fmt_lower in ("gpkg", "shp"):
-        active_settings = settings
-        if active_settings is None:
-            from app.config import settings as active_settings
-
-        tmp_dir = make_pipeline_fs_temp_dir(Path(active_settings.DATA_DIR))
+        tmp_dir = make_pipeline_fs_temp_dir(Path(settings.DATA_DIR))
         try:
             tmp_path = tmp_dir / filename
             saved_path = save_dataframe(df, tmp_path, output_format, geom_column, crs)

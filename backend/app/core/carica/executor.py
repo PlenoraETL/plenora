@@ -4,14 +4,14 @@ Entry point per l'esecuzione del modulo CARICA.
 Keeps database loading behavior isolated from orchestration callers.
 """
 
-from urllib.parse import quote_plus as _qp
-
 import json
-from app.utils.logger import get_logger
 from typing import Any, Callable, Dict, List, Optional
+from urllib.parse import quote_plus as _qp
 
 import pandas as pd
 
+from app.core.carica.column_mapper import ColumnMapper
+from app.core.carica.database_writer import DatabaseWriter
 from app.core.carica.models import (
     AuditRecord,
     ColumnMapping,
@@ -19,11 +19,10 @@ from app.core.carica.models import (
     WriteResult,
     WriteStatus,
 )
-from app.core.carica.database_writer import DatabaseWriter
-from app.core.carica.column_mapper import ColumnMapper
 from app.core.connections.service import _decrypt_password
+from app.core.intermediate import run_idempotency
 from app.db.query_executor import DefaultEngineFactory
-from app.shared.idempotency import is_already_completed
+from app.utils.logger import get_logger
 from app.utils.logger import get_logger as _get_logger
 
 
@@ -149,7 +148,7 @@ class CaricaExecutor:
         """
         if run_id:
             try:
-                if is_already_completed(run_id):
+                if run_idempotency.is_already_completed(run_id):
                     logger.info(
                         f"[IDEMPOTENCY] CARICA run_id {run_id} gia' completato, skip.",
                         op="execute", project_id=project_id,

@@ -10,8 +10,8 @@ import inspect
 
 import pytest
 
+from tests2._helpers.celery_eager import celery_eager
 from workers.tasks.enrichment_task import execute_enrichment_task
-# Import fixture come simbolo locale per discovery pytest senza conftest.
 
 
 pytestmark = [pytest.mark.unit, pytest.mark.arricchisci, pytest.mark.contract]
@@ -34,6 +34,7 @@ def test_enrichment_task_invokes_idempotency_check_when_run_id_passed(
     `is_already_completed(run_id)` PRIMA di qualsiasi altra logica."""
     from tests2._helpers.celery_eager import (
         install_enrichment_task_mocks, invoke_enrichment_task,
+        install_update_task_progress_spy,
     )
 
     # Spy custom su is_already_completed
@@ -44,7 +45,8 @@ def test_enrichment_task_invokes_idempotency_check_when_run_id_passed(
         return False  # non-completato → task prosegue (e fallira' su altro)
 
     install_enrichment_task_mocks(monkeypatch)
-    monkeypatch.setattr("app.shared.idempotency.is_already_completed", _spy)
+    install_update_task_progress_spy(monkeypatch)
+    monkeypatch.setattr("app.core.intermediate.run_idempotency.is_already_completed", _spy)
 
     # Canvas vuoto → il task fallira' su "Nessun nodo nel canvas" o simile
     # ma DOPO l'idempotency check.

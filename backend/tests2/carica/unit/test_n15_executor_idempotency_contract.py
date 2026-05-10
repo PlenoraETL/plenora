@@ -47,7 +47,7 @@ def test_execute_short_circuits_when_run_id_already_completed(monkeypatch):
     executor = CaricaExecutor(connection_service=MagicMock())
 
     # Force is_already_completed -> True
-    import app.shared.idempotency as idem_mod
+    import app.core.intermediate.run_idempotency as idem_mod
     monkeypatch.setattr(idem_mod, "is_already_completed", lambda rid: True)
 
     # Se il guard funziona, _get_connection NON deve essere chiamato
@@ -75,7 +75,7 @@ def test_execute_short_circuit_result_has_idempotent_flag():
     """WriteResult dello skip deve essere distinguibile da un success."""
     executor = CaricaExecutor(connection_service=MagicMock())
 
-    with patch("app.shared.idempotency.is_already_completed", return_value=True):
+    with patch("app.core.intermediate.run_idempotency.is_already_completed", return_value=True):
         result = executor.execute(
             df=pd.DataFrame({"x": [1]}),
             node_data={"connection_id": "c", "table_name": "t"},
@@ -96,7 +96,7 @@ def test_execute_proceeds_when_run_id_not_completed(monkeypatch):
     non imita tutto lo stack)."""
     executor = CaricaExecutor(connection_service=MagicMock())
 
-    with patch("app.shared.idempotency.is_already_completed", return_value=False):
+    with patch("app.core.intermediate.run_idempotency.is_already_completed", return_value=False):
         # Mock _get_connection cosi' vediamo che viene chiamato
         conn_calls = []
         monkeypatch.setattr(
@@ -134,7 +134,7 @@ def test_execute_without_run_id_skips_guard(monkeypatch):
 
     check_calls = []
     monkeypatch.setattr(
-        "app.shared.idempotency.is_already_completed",
+        "app.core.intermediate.run_idempotency.is_already_completed",
         lambda rid: check_calls.append(rid) or True
     )
     monkeypatch.setattr(executor, "_get_connection", lambda cid: {"type": "postgres"})
@@ -165,7 +165,7 @@ def test_execute_proceeds_when_idempotency_check_raises(monkeypatch):
     def _boom(_run_id):
         raise RuntimeError("intermediate db corrupt")
 
-    monkeypatch.setattr("app.shared.idempotency.is_already_completed", _boom)
+    monkeypatch.setattr("app.core.intermediate.run_idempotency.is_already_completed", _boom)
 
     conn_calls = []
     monkeypatch.setattr(
@@ -203,7 +203,7 @@ def test_execute_calls_is_already_completed_when_run_id_present():
         calls.append(run_id)
         return True  # forza short-circuit cosi' non dobbiamo mockare il resto
 
-    with patch("app.shared.idempotency.is_already_completed", side_effect=_spy):
+    with patch("app.core.intermediate.run_idempotency.is_already_completed", side_effect=_spy):
         executor.execute(
             df=pd.DataFrame({"x": [1]}),
             node_data={"connection_id": "c", "table_name": "t"},

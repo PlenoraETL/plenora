@@ -82,7 +82,7 @@ def execute_carica_task(
     """
     task_id = self.request.id
     if run_id is not None:
-        from app.shared.idempotency import is_already_completed
+        from app.core.intermediate.run_idempotency import is_already_completed
         if is_already_completed(run_id):
             logger.info(
                 f"[IDEMPOTENCY] Task CARICA {task_id}: run_id {run_id} "
