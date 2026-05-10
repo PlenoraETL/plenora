@@ -36,7 +36,7 @@ self-evident.
 Every change should answer these questions:
 
 - Does it move the system toward the horizontal engine structure?
-- Does it remove or reduce a legacy path instead of adding a new one?
+- Does it remove or reduce an obsolete path instead of adding a new one?
 - Does it preserve tenant and group isolation?
 - Does it avoid large in-memory payloads and temp-file leaks?
 - Does it keep frontend and backend contracts aligned?
@@ -46,7 +46,7 @@ Every change should answer these questions:
 
 - Do not mix frontend and backend changes unless the work is explicitly
   full-stack.
-- Do not add new business features during architecture cleanup batches.
+- Do not add new business features during architecture cleanup work.
 - Do not introduce new global state or request context magic.
 - Do not add broad helpers at `app.shared` root. Use a thematic package.
 - Do not add new error codes unless an existing class cannot express the
@@ -125,7 +125,7 @@ tests that only pin implementation noise.
 
 ## Documentation
 
-Update docs in the same batch when behavior, installation, architecture, or
+Update docs in the same change when behavior, installation, architecture, or
 public contracts change.
 
 Use:
@@ -135,5 +135,5 @@ Use:
 - `docs/development/` for developer workflow.
 - `docs/ops/` for installation, runtime, backup, and cleanroom notes.
 
-ADRs are historical records. Add a new ADR or superseding note instead of
-rewriting old decisions as if they never happened.
+ADRs record accepted decisions. Add a new ADR or superseding note when the
+decision changes.

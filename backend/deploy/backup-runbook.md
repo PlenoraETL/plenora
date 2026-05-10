@@ -1,4 +1,4 @@
-# Backup & Restore Runbook
+﻿# Backup & Restore Runbook
 
 Procedure operative essenziali per il sistema di backup Postgres -> S3.
 Pensato per l'operatore di turno: comandi diretti, niente teoria.
@@ -18,12 +18,12 @@ Pensato per l'operatore di turno: comandi diretti, niente teoria.
 | **Schedulazione test restore** | `plenora-backup-test.timer`, weekly Sun 03:00 UTC + 10 min jitter |
 | **Scope dump** | Solo schema `plenora` (~12 MB compresso), non l'intero DB |
 | **Bucket S3** | `plenora-backup-112011134642-eu-south-1-an` (eu-south-1) |
-| **Retention** | Standard 30 gg → Standard-IA (lifecycle rule AWS) → delete 365 gg |
+| **Retention** | Standard 30 gg â†’ Standard-IA (lifecycle rule AWS) â†’ delete 365 gg |
 | **IAM role** | `plenora-backup-role` attached all'istanza EC2 |
-| **Credenziali** | Via IAM role metadata — nessuna key statica |
+| **Credenziali** | Via IAM role metadata â€” nessuna key statica |
 
 Il test restore settimanale verifica che l'ultimo dump su S3 sia
-**effettivamente ripristinabile** — non solo sintatticamente valido
+**effettivamente ripristinabile** â€” non solo sintatticamente valido
 (`pg_restore --list`). Crea un DB `plenora_restore_test_<ts>`, ci fa
 pg_restore completo, query di sanity su 4 tabelle core, dropd il DB.
 Senza di questo, un dump corrotto silenziosamente passa il check TOC
@@ -77,7 +77,7 @@ sudo journalctl -u plenora-backup --since '1 minute ago'
 ### Via UI (superadmin only)
 
 - Login nell'app come superadmin
-- Sidebar → **Backup DB**
+- Sidebar â†’ **Backup DB**
 - Clicca **"Esegui backup ora"**
 - La lista si ricarica dopo ~5 secondi
 
@@ -90,7 +90,7 @@ curl -X POST https://<host>/api/admin/backups/trigger \
 
 ## 3. Restore manuale (da S3)
 
-**⚠️ Operazione distruttiva se fatta sul DB di produzione**. Esegui
+**âš ï¸ Operazione distruttiva se fatta sul DB di produzione**. Esegui
 sempre su un DB target separato (es. `plenora_restore_test`) e verifica
 prima di puntare il backend.
 
@@ -121,7 +121,7 @@ c.download_file('plenora-backup-112011134642-eu-south-1-an', 'plenora_<timestamp
 ```
 
 Se il dump e' in Glacier Deep Archive (>30 gg): serve prima un restore
-request (12-48h attesa) via `aws s3api restore-object` — vedi AWS docs.
+request (12-48h attesa) via `aws s3api restore-object` â€” vedi AWS docs.
 
 ### Verifica integrita' del dump
 
@@ -146,7 +146,7 @@ DATABASE_URL=$(aws ssm get-parameter \
 #    con un nome temporaneo (`plenora_restore_test`). Host/user/password restano.
 TARGET_URL="${DATABASE_URL%/*}/plenora_restore_test"
 
-# 3. Crea il DB target (serve CREATEDB sull'utente — vedi test_restore.py)
+# 3. Crea il DB target (serve CREATEDB sull'utente â€” vedi test_restore.py)
 ADMIN_URL="${DATABASE_URL%/*}/postgres"
 psql "$ADMIN_URL" -c 'CREATE DATABASE plenora_restore_test'
 
@@ -197,9 +197,9 @@ sudo journalctl -u plenora-backup --since '24 hours ago' --no-pager | tail -30
 ```
 
 Cause tipiche:
-- **pg_dump version mismatch** con server Postgres → reinstalla client giusto
+- **pg_dump version mismatch** con server Postgres â†’ reinstalla client giusto
   (vedi docstring di `scripts/backup_db.py` per repo PGDG)
-- **DATABASE_URL mancante o invalida** → il service lo legge da AWS SSM
+- **DATABASE_URL mancante o invalida** â†’ il service lo legge da AWS SSM
   (`/plenora/prod/DATABASE_URL`), NON da `.env`. Verifica con:
   ```bash
   aws ssm get-parameter --name /plenora/prod/DATABASE_URL \
@@ -208,7 +208,7 @@ Cause tipiche:
   Se ritorna `ParameterNotFound`: popola (vedi `deploy/iam/README.md`).
   Se `AccessDeniedException`: il role EC2 non ha la policy SSM read
   (vedi `deploy/iam/plenora-backup-ssm-read.json`).
-- **S3 upload 403** → IAM role detached o policy modificata; riattacca
+- **S3 upload 403** â†’ IAM role detached o policy modificata; riattacca
   `plenora-backup-role` all'istanza in AWS Console
 
 ### pg_dump fallisce per version mismatch
@@ -233,11 +233,11 @@ pg_dump --version   # atteso: 17.x
 
 Se il backup e l'API UI ricevono 403 su S3:
 
-1. Console AWS → EC2 → Instance → Actions → Security → Modify IAM role
+1. Console AWS â†’ EC2 â†’ Instance â†’ Actions â†’ Security â†’ Modify IAM role
 2. Riattacca `plenora-backup-role`
 3. Se il role e' stato cancellato: ricrealo con:
    - policy SSM read: `deploy/iam/plenora-backup-ssm-read.json`
-   - policy S3 (PutObject/GetObject/ListBucket sul bucket backup —
+   - policy S3 (PutObject/GetObject/ListBucket sul bucket backup â€”
      non committata nel repo, scrivi a mano in Console limitata al
      bucket specifico)
 4. Se i permessi sono insufficienti sul bucket (es. policy bucket
@@ -248,13 +248,12 @@ Se il backup e l'API UI ricevono 403 su S3:
 Se il bucket S3 viene rinominato/sostituito:
 
 1. Aggiorna `BACKUP_BUCKET` (cross-provider) nei systemd unit
-   `deploy/systemd/plenora-backup*.service`. `BACKUP_S3_BUCKET` resta
-   come legacy fallback accettato dalla factory in `cloud_backends.py`.
+   `deploy/systemd/plenora-backup*.service`.
 2. Aggiorna policy IAM del role per il nuovo ARN
 3. Ridistribuisci lifecycle rule sul nuovo bucket
 4. Verifica con `sudo systemctl start plenora-backup.service`
 
-## 5. Follow-up noti (non critici)
+## 5. Miglioramenti opzionali
 
 - **Alerting su fallimento**: oggi nessuno viene avvertito se il backup
   fallisce (solo log journalctl). Da chiudere: systemd `OnFailure=`
@@ -262,7 +261,7 @@ Se il bucket S3 viene rinominato/sostituito:
   serve una unit notification (es. `plenora-backup-notify.service` che
   fa `curl` su webhook Slack/SMTP) e decommentare gli `OnFailure=`.
 - **UI admin: trigger restore test + history**: oggi la pagina Backup
-  DB admin mostra solo lo storico backup. Aggiungere button "Verifica
+  DB admin mostra lo storico backup. Aggiungere button "Verifica
   ultimo backup (test restore)" + ultima verifica status. Pattern
   equivalente a "Esegui backup ora" esistente. Stima ~2.5h (vedi nota
   in chat del 2026-04-17 opzioni A/B/C).
@@ -271,13 +270,3 @@ Se il bucket S3 viene rinominato/sostituito:
   `load_secrets.py` su SSM) per eliminare `.env` completamente dal
   server. Stima ~2-3h.
 
-### Implementati (storico)
-
-- ✅ **Test restore reale weekly** (#25-R1, 2026-04-17): `scripts/test_restore.py`
-  crea DB `plenora_restore_test_<ts>`, pg_restore completo, sanity count,
-  dropdb in finally. Systemd timer `plenora-backup-test.timer` domenica
-  03:00 UTC. Prerequisito CREATEDB verificato in prod.
-- ✅ **Secret in SSM** (C1, 2026-04-17): backup + test-restore non
-  dipendono piu' da `backend/.env`. Wrapper `scripts/load_secrets.py`
-  fetcha da `/plenora/prod/*` via `cloud_backends.py` (astrazione
-  cloud-agnostic).

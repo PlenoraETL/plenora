@@ -1,205 +1,55 @@
-# ADR-0020: Source-bound test KEEP list (post R-04 / R-04b modernization)
+# ADR-0020: Source-Bound Test Keep List
 
-**Status**: Accepted — Categoria 3 superata da TR-002 (2026-05-01, vedi Update sotto)
+**Status**: Accepted
+
 **Date**: 2026-05-01
-**Deciders**: @CloudIA
 
 ## Context
 
-Le PR R-04 (#44) e R-04b (#46) hanno modernizzato 10 file di contract test
-da source-bound (`inspect.getsource` + substring scan) a behavior-bound
-(bytecode probe / spy / SQL capture / TestClient / eager-mode harness).
+Most tests should verify runtime behavior. A small number of architecture
+tests intentionally inspect source or AST shape because the property being
+tested is structural rather than behavioral.
 
-Post-modernizzazione restano **7 occorrenze** di `inspect.getsource` in 6
-file `tests2/`. Questa ADR documenta che sono **scelte intenzionali**, non
-debito residuo, classificate per categoria di pattern legittimo.
-
-Lo scopo del documento e':
-
-1. Evitare che future iterazioni di "audit source-bound" le trattino come
-   debito da chiudere.
-2. Documentare i criteri sotto cui un `inspect.getsource` resta accettabile
-   (anche raccomandato) anche dopo R-04.
-3. Fissare un baseline che le PR future possono usare come riferimento
-   prima di aggiungere nuovi `inspect.getsource`.
+Without a policy, those tests are easy to misclassify as brittle leftovers.
 
 ## Decision
 
-I 7 `inspect.getsource` residui sono **KEEP** se rientrano in una delle 3
-categorie sotto. Nuove istanze sono ammesse solo se rientrano nelle stesse
-categorie.
+`inspect.getsource` and AST/source-shape tests are allowed only when they fit
+one of these categories:
 
-### Categoria 1 — Static-analysis policy enforcement
+1. **Static policy enforcement**: the test scans code to enforce a codebase
+   rule, such as audit coverage or required warning placement.
+2. **AST structural sentinel**: the test verifies a structural property that
+   is the contract, such as a call not being nested under a guard.
+3. **Temporary integration gap**: allowed only with a named owner and a
+   conversion path. No open cases should be added without review.
 
-L'uso di `inspect.getsource` e' parte di un *linter custom* che impone
-una policy a livello codebase, non e' un test fragile dello stato di una
-funzione specifica.
+When a behavior-bound test can enforce the same contract with reasonable
+setup, prefer the behavior-bound test.
 
-**Files in questa categoria**:
+## Current Keep Rules
 
-| File:line | Symbol | Policy enforced |
-|---|---|---|
-| `tests2/carica/unit/test_database_writer_log_consistency_contract.py:299` | `DatabaseWriter._truncate_insert_oracle_redef`, `_replace_atomic`, `_truncate_insert` (vari cleanup-guard methods) | Ogni context-string di cleanup guard deve apparire ENTRO ~80 char da `logger.warning` (non `logger.debug`). Pattern simile a `test_audit_action_coverage_contract.py` che enumera endpoint con `@audit_action`. |
-
-**Perche' KEEP**: rimuoverlo significherebbe rinunciare al check di policy
-"i cleanup guard sono loggati a livello WARNING". Sostituirlo con un eager
-test richiederebbe stub di tutto il chain DatabaseWriter (oltre +200 LOC
-per metodo, oltre soglia ragionevole). Lo scan AST/source-string e'
-**il pattern adatto** per questa policy.
-
-### Categoria 2 — AST flow-control sentinel
-
-L'uso di `inspect.getsource` e' input per `ast.parse` che valida
-**proprieta' strutturali del codice** (es. una call non e' DENTRO un
-certo `if`, un decorator e' applicato, un campo Pydantic esiste).
-L'AST e' refactor-resilient (sopravvive a rinames di variabili e
-riformattazioni), e source-string-only solo nel senso che opera sul
-*codice* invece che sul *runtime*.
-
-**Files in questa categoria**:
-
-| File:line | Symbol | Invariant strutturale |
-|---|---|---|
-| `tests2/carica/unit/test_n13_alias_resolution_contract.py:193` | `CaricaExecutor.execute` | La call `_resolve_aliases_in_mappings(...)` NON deve essere DENTRO un `if not config.column_mappings`. Sentinel anti-regression Gap 2. |
-| `tests2/shared/test_type_dispatch_contract.py:153` | `carica_router` modulo | Estrae body di `auto_mapping` via `ast.parse`, valida dispatch alias->dtype (int->int64, real->float64, ...). |
-| `tests2/imdf/unit/test_persist_storage_decoupling.py:218` (1 occorrenza residua) | `enrichment_task` modulo | Verifica testo verbatim del `logger.warning` "imdf storage upload fallito (non-fatal, bundle disponibile solo sul nodo corrente)". E' un **contract verso ops** (alert/dashboard fanno grep su quella stringa esatta), non un dettaglio implementativo. |
-
-**Perche' KEEP**: pattern legittimo di static analysis basato su AST.
-Stesso paradigma di `test_audit_action_coverage_contract.py:120`,
-`test_csv_encoding_explicit_contract.py:64,91`,
-`test_datetime_utc_aware_contract.py:80,112,122`,
-`test_mfa_totp_contract.py:65,70` — gia' tutti riconosciuti come
-"static-analysis scanner pattern" (vedi audit Phase 1 conclusioni).
-
-### Categoria 3 — Scheduler integration deferred  ✅ SUPERSEDED da TR-002 (2026-05-01)
-
-> **Update 2026-05-01 (TR-002)**: i 3 casi originali listati qui sono
-> stati migrati a behavior-bound. Il contenuto sotto e' mantenuto per
-> tracciabilita' storica del ragionamento pre-TR-002, ma **non e' piu'
-> autoritativo**. Vedi sezione "Update — TR-002 closure" in fondo al
-> documento per lo stato corrente. Nuovi `inspect.getsource` non
-> rientrano piu' sotto la Categoria 3: vanno modernizzati direttamente.
-
-L'uso di `inspect.getsource` e' un compromesso pragmatico per testare
-proprieta' di un task body senza richiedere full integration eager con
-`Scheduler` + `DB` + `Beat` worker. La sostituzione e' tecnicamente
-possibile ma richiede infrastruttura test pesante (database test
-isolato, scheduler mock harness, ecc.) fuori scope dei batch test-only.
-
-**Files in questa categoria** (storico, ora migrati):
-
-| File:line (storico) | Symbol | Body property |
-|---|---|---|
-| `tests2/scheduler/unit/test_execution_manager_scheduled_for_persist_contract.py:28,43` ✅ migrato | `ExecutionManager.execute` | `scheduled_for` kwarg e' usato nel body oltre la signature (≥3 occorrenze) e arriva a logger / log entry / open_run. |
-| `tests2/scheduler/unit/test_schedule_task_scheduled_for_contract.py:35` ✅ migrato | `schedule_pipeline_task` | `scheduled_for` propagato dal beat al task. |
-
-**Perche' KEEP per ora** (storico): convertire richiede:
-- Setup DB scheduler test (intermediate.runs + log_runs + scheduled_for column).
-- Mock harness per `ExecutionManager` + `BeatScheduler` integrazione.
-- Eager mode propagation di `scheduled_for` con stub di run lifecycle.
-
-Effort stimato: 1 PR dedicata di tipo "scheduler test infrastructure",
-analoga a PR #37 che ha chiuso la stessa cosa per `enrichment_task`.
-
-**Quando convertire** (storico): appena viene aperto un batch "scheduler test
-reliability" mirato, riusando il pattern `_helpers/celery_eager.py`
-esteso a `ExecutionManager`. — Risolto da TR-002.
-
-## Rationale
-
-### Perche' non convertire forzatamente i 7
-
-- **Categoria 1 e 2 sono pattern raccomandati** in test che fanno
-  policy enforcement / AST sentinel. Convertirli a behavior-bound
-  ridurrebbe la qualita' dei test (perdita di robustezza static-analysis).
-- **Categoria 3** richiede infrastruttura dedicata; convertire 3
-  occorrenze isolate senza l'harness produce test deboli.
-
-### Perche' documentare invece di lasciare implicito
-
-- Future PR di audit potrebbero re-flaggare questi 7 come "debito" senza
-  contesto. L'ADR fornisce il riferimento per chiudere la discussione
-  velocemente.
-- Le categorie definite stabiliscono criteri oggettivi: nuove istanze di
-  `inspect.getsource` devono rientrare nelle 3 categorie, altrimenti
-  vanno modernizzate.
-
-## Alternatives considered
-
-- **Alt 1: forzare la conversione di tutti i 7**. Rifiutato perche'
-  Categoria 1 e 2 sono **legittime** e Categoria 3 richiede infrastruttura
-  dedicata fuori scope.
-- **Alt 2: lasciare implicito (no ADR)**. Rifiutato perche' produce
-  audit-loop futuri che ri-flaggano gli stessi residui.
-- **Alt 3: aggiungere un `# noqa` marker custom (es. `# source-bound: keep`)
-  e linter che enforcano le 3 categorie**. Considerato ma non implementato
-  in questa ADR: aggiungere un linter custom richiede tooling e
-  mantenimento; i 7 residui sono pochi e il documento serve come
-  reference sufficiente. Se in futuro emergessero >20 residui legittimi
-  un linter custom diventa giustificato.
+- Keep source-shape tests narrow and named after the policy they enforce.
+- Prefer AST parsing over substring matching when testing structure.
+- Do not use source scans to pin incidental implementation order or formatting.
+- Every new source-bound test must state which category it belongs to.
+- Scheduler and Celery propagation behavior should be tested through harnesses
+  where practical.
 
 ## Consequences
 
-- **Positive**:
-  - Future iterazioni di audit hanno un riferimento chiaro per non
-    re-flaggare i 7 residui.
-  - Criteri di Categoria 1/2/3 stabiliscono il "vocabolario" condiviso
-    per accettazione di nuovi `inspect.getsource`.
-  - Categoria 3 ha un trigger preciso ("scheduler test infrastructure
-    PR") per la futura conversione.
+Positive:
 
-- **Negative**:
-  - Nessuna conversione effettiva: i 7 restano source-bound.
-    Mitigato dal fatto che Categoria 1 e 2 sono semanticamente diversi
-    da source-bound fragile.
+- Legitimate architecture guards remain available.
+- Reviews have an objective rule for accepting or rejecting new source scans.
+- Runtime correctness tests remain the default.
 
-- **Neutral**:
-  - Se uno dei 7 file viene refactor-ato in modo che il pattern
-    Categoria 1/2/3 non si applica piu', la conversione behavior-bound
-    diventa naturale al refactor.
+Negative:
+
+- Source-shape tests still need periodic pruning when behavior harnesses become
+  cheap enough.
 
 ## References
 
-- **PR #44** (`commit 3c25ea5`): R-04 N9 source-bound -> behavior-bound
-  (11 inspect.getsource modernizzati).
-- **PR #46** (`commit 8eeb1b3`): R-04b non-auth source-bound batch
-  modernization (9 file, +/-23 occorrenze).
-- **PR #37** (`commit 981508f`): foundation harness `_helpers/celery_eager.py`
-  per task Celery (riusabile da Categoria 3 future PR).
-- Pattern KEEP gia' riconosciuti come legittimi in audit Phase 1:
-  `test_audit_action_coverage_contract.py`, `test_csv_encoding_explicit_contract.py`,
-  `test_datetime_utc_aware_contract.py`, `test_mfa_totp_contract.py`.
-- Related: ADR-0007 (Protocol vs ABC) — analogia con scelte di test
-  pattern che hanno trade-off documentati.
-
-## Update — TR-002 closure (2026-05-01)
-
-I 3 casi originariamente classificati Categoria 3 (scheduler integration
-deferred) sono stati migrati a behavior-bound nel batch TR-002:
-
-| File | Cambio |
-|---|---|
-| `tests2/scheduler/unit/test_execution_manager_scheduled_for_persist_contract.py` | 2 test source-bound rimpiazzati con 3 test behavior-bound che invocano `ExecutionManager.execute(scheduled_for=...)` con dipendenze stubbate e asseriscono che il valore raggiunga `log_service.create_log_entry` (`schedule_info` + `execution_info`) e `_execute_carica` (kwarg). |
-| `tests2/scheduler/unit/test_schedule_task_scheduled_for_contract.py` | Test source-bound `count("scheduled_for") >= 2` rimpiazzato con behavior-bound che asserisce propagazione del kwarg a `ExecutionManager.execute`. Il check di signature resta invariato. |
-
-**Pattern usato**: `ExecutionManager.__new__` + `MagicMock` per le
-dipendenze (riuso di `test_execution_manager_contract.py::_make_manager`
-e `test_execution_manager_orphan_and_release_contract.py`).
-**Niente helper condiviso esportato** — l'estrazione di
-`_helpers/scheduler_harness.py` non e' stata necessaria per 3
-migrazioni e sarebbe stato premature abstraction.
-
-**Stato Categoria 3 post-TR-002**: chiusa. Nessun `inspect.getsource`
-residuo riconducibile a "scheduler integration deferred" rientra piu'
-sotto questa categoria. Eventuali future occorrenze in scheduler test
-devono essere modernizzate al pattern behavior-bound usato in TR-002,
-non aggiunte come nuove voci Categoria 3.
-
-**Categorie 1 e 2 restano valide** e autoritative.
-
-**Nota**: l'unica residua `inspect.getsource` in `tests2/scheduler/`
-(in `test_n15b_scheduled_for_always_set_contract.py:40`) NON era nello
-scope ADR-0020/TR-002 originale: e' un sentinel "fallback computation"
-per il task ed e' gia' coperta behavior-bound nello stesso file. Se in
-futuro si vuole modernizzarla, rientra in Categoria 2 (AST-style sentinel)
-o va modernizzata come pattern TR-002.
+- [Architecture Invariants](../invariants.md)
+- `backend/tests2/`

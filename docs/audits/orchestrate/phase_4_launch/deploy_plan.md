@@ -1,3 +1,0 @@
-# Deploy Plan
-
-Status: draft.

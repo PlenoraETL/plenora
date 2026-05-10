@@ -69,4 +69,4 @@ La chiamata e' obbligatoria **prima** di `eval()`: `op_formula` invoca `_validat
 - Source: `backend/app/core/manipola/transforms/base.py:483-...` — `op_formula`, sito di chiamata
 - Commit introduttivo: `df35930` (2026-04-10) — "Security audit: 63 backend fixes + 10 frontend fixes + 258 unit tests"
 - Invariants: `docs/architecture/invariants.md` §1.6 (policy errore modulo `manipola` execute = fail-fast), §4.1 (layer business dato critico = fail-fast)
-- Related: nessun ADR correlato in questo batch (ADR-0002 e ADR-0003 coprono SQL injection e crypto at-rest, aree adiacenti ma indipendenti dal parser formula)
+- Related: ADR-0002 e ADR-0003 coprono SQL injection e crypto at-rest, aree adiacenti ma indipendenti dal parser formula.

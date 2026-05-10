@@ -1,4 +1,4 @@
-# IAM policies — plenora-backup-role
+﻿# IAM policies â€” plenora-backup-role
 
 Policy JSON committate per disaster recovery e per documentare le permission
 assegnate al ruolo EC2 dell'istanza di produzione (`plenora-backup-role`,
@@ -6,7 +6,7 @@ account `112011134642`).
 
 ## File
 
-- `plenora-backup-ssm-read.json` — permette al ruolo di leggere i secret
+- `plenora-backup-ssm-read.json` â€” permette al ruolo di leggere i secret
   da AWS SSM Parameter Store su path `/plenora/prod/*` e decifrarli
   (condizione `kms:ViaService: ssm.eu-south-1`). Consumato da
   `scripts/load_secrets_from_ssm.py` via `ExecStartPre=` nei systemd
@@ -14,7 +14,7 @@ account `112011134642`).
 
 ## Applicare una policy (una tantum, ruolo EC2 gia' esistente)
 
-Serve un profilo AWS con permessi `iam:PutRolePolicy` — tipicamente
+Serve un profilo AWS con permessi `iam:PutRolePolicy` â€” tipicamente
 l'admin account, non l'istanza EC2 (che non puo' modificare il proprio
 role per design).
 
@@ -38,11 +38,12 @@ aws iam get-role-policy \
 
 ## Popolare SSM (prima volta)
 
-Dopo aver applicato la policy, popola i secret su Parameter Store. Valori
-da leggere dal `backend/.env` legacy (da rimuovere dopo la migrazione).
+Dopo aver applicato la policy, popola i secret su Parameter Store usando
+la fonte sicura approvata per l'ambiente. Non committare valori reali e
+non copiarli in file locali persistenti.
 
 ```bash
-# DATABASE_URL — SecureString con default KMS (alias/aws/ssm)
+# DATABASE_URL â€” SecureString con default KMS (alias/aws/ssm)
 aws ssm put-parameter \
   --name /plenora/prod/DATABASE_URL \
   --value 'postgresql://user:pass@host:5432/db' \
@@ -57,9 +58,8 @@ aws ssm get-parameter \
   --region eu-south-1
 ```
 
-## Post-migrazione
+## Stato operativo
 
-Una volta che i servizi leggono da SSM con successo, `backend/.env`
-puo' essere rimosso dal server (tenere una copia offline di emergenza).
-I servizi `plenora-backup.service` e `plenora-backup-test.service` non
-dipendono piu' dal file.
+I servizi `plenora-backup.service` e `plenora-backup-test.service`
+leggono `DATABASE_URL` da SSM tramite `scripts/load_secrets.py`; non
+dipendono da `backend/.env`.

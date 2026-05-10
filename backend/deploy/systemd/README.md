@@ -1,4 +1,4 @@
-# systemd unit files
+﻿# systemd unit files
 
 Unit file systemd per il backup automatico del DB su S3 + verifica
 restore settimanale. Specchio di quelli installati su
@@ -12,48 +12,40 @@ riportano il servizio allo stato live senza riscriverli a memoria.
 > La sezione "Install su nuovo server" qui sotto resta come
 > riferimento focalizzato sui soli unit file systemd.
 
-## Rebrand urby-* → plenora-* (completato 2026-04-18)
+## Stato operativo 1.0
 
-Migrazione server eseguita via `deploy/migrations/2026-04-18_rename-urby-to-plenora.sh`:
-- Directory: `/home/ubuntu/urby-etl` → `/home/ubuntu/plenora-etl`
-- Unit installate: `plenora-backend`, `plenora-celery`, `plenora-beat`,
-  `plenora-backup{,.timer}`, `plenora-backup-test{,.timer}`
-- Backup dei vecchi unit file: `/etc/systemd/system/*.pre-plenora-rename.bak`
-  (rimossi dopo periodo di stabilita')
-- Venv shebangs aggiornati (19 script + `pyvenv.cfg`)
+I servizi runtime installati usano solo naming `plenora-*`:
+`plenora-backend`, `plenora-celery`, `plenora-beat`,
+`plenora-backup{,.timer}` e `plenora-backup-test{,.timer}`.
 
-Stato post-migration (verificato via probe SSH read-only 2026-04-27):
-- `plenora-beat.service` invoca `PlenoraBeatScheduler` (la classe e' definita
-  in `workers/beat_scheduler.py`).
-- `Description=` nei 3 unit installati sul server: "PLENORA-ETL ...".
-- I file unit installati su `/etc/systemd/system/` sono allineati a quelli
-  in `deploy/systemd/` del repo (verifica `systemctl cat <unit>`).
-- Residui legacy `urby-*.service`/`*.timer` lasciati `disabled` in
-  `/etc/systemd/system/` per consultazione storica; safe da rimuovere
-  in una finestra di manutenzione futura insieme al cutover server.
+Per verificare l'allineamento con il repo:
+
+```bash
+systemctl cat plenora-backend plenora-celery plenora-beat
+systemctl cat plenora-backup plenora-backup-test
+```
 
 ## Modello credenziali (C1) + astrazione cloud
 
 I service **oneshot di backup** (`plenora-backup`, `plenora-backup-test`)
 NON dipendono da `backend/.env`. I secret (`DATABASE_URL`) vivono in un
 SecretsBackend configurabile:
-  - AWS SSM Parameter Store su `/plenora/prod/*` (SecureString) — default
+  - AWS SSM Parameter Store su `/plenora/prod/*` (SecureString) â€” default
   - Azure Key Vault (future, `CLOUD_PROVIDER=azure`)
   - GCP Secret Manager (future, `CLOUD_PROVIDER=gcp`)
 
-Il dispatch e' nella factory `app/shared/cloud_backends.py` — i consumer
+Il dispatch e' nella factory `app.infrastructure.storage.cloud_backends`:
+i consumer
 (`backup_db.py`, `test_restore.py`, `load_secrets.py`) parlano solo al
 Protocol `SecretsBackend` / `ObjectStorage`, mai direttamente a boto3.
 
 I service **long-running** (`plenora-backend`, `plenora-celery`,
 `plenora-beat`) INVECE usano `EnvironmentFile=/home/ubuntu/plenora-etl/backend/.env`
-per la configurazione runtime — inclusa `PLENORA_ENCRYPTION_KEY`.
+per la configurazione runtime â€” inclusa `PLENORA_ENCRYPTION_KEY`.
 In produzione cloud lo stesso `.env` deve contenere anche
 `STORAGE_POLICY=object_storage`, `OBJECT_STORAGE_ENABLED=true`,
 `OBJECT_STORAGE_BUCKET` e `PLENORA_ARTIFACT_BUCKET`; il bucket runtime
 deve essere distinto dal bucket backup.
-Migrazione SSM anche per questi service = scope futuro (vedi ADR-0003
-§Consequences e `runtime_config_audit.md §4`).
 Migrazione cross-cloud: aggiungi una classe nel file `cloud_backends.py`
 + aggiorna la IAM policy del nuovo cloud, zero change negli altri file.
 
@@ -73,22 +65,22 @@ one-shot in `backend/deploy/iam/`.
 
 ## File
 
-- `plenora-backend.service` — long-running uvicorn (FastAPI), porta 5004
+- `plenora-backend.service` â€” long-running uvicorn (FastAPI), porta 5004
   locale. Restart=always.
-- `plenora-celery.service` — long-running Celery worker, concurrency=4.
-- `plenora-beat.service` — Celery beat scheduler (schedule dal DB).
-- `plenora-backup.service` — oneshot. Invoca `backup_db.py` via wrapper
+- `plenora-celery.service` â€” long-running Celery worker, concurrency=4.
+- `plenora-beat.service` â€” Celery beat scheduler (schedule dal DB).
+- `plenora-backup.service` â€” oneshot. Invoca `backup_db.py` via wrapper
   SSM. Timeout 2h.
-- `plenora-backup.timer` — schedula il service ogni giorno alle 02:00 UTC
+- `plenora-backup.timer` â€” schedula il service ogni giorno alle 02:00 UTC
   con `RandomizedDelaySec=300` (jitter 5 min). `Persistent=true`
   recupera il run al boot se il server era spento.
-- `plenora-backup-test.service` — oneshot. Invoca `test_restore.py` via
+- `plenora-backup-test.service` â€” oneshot. Invoca `test_restore.py` via
   wrapper SSM (stesso modello credenziali): download ultimo dump,
   `CREATE DATABASE` usa-e-getta, `pg_restore` completo, sanity count
   su tabelle core, `DROP DATABASE`. Timeout 2h. Senza questo, il
   backup nightly verifica solo il TOC del dump e non prova un restore
   reale (#25-R1 / "un backup mai ripristinato non e' un backup").
-- `plenora-backup-test.timer` — weekly domenica 03:00 UTC, dopo che il
+- `plenora-backup-test.timer` â€” weekly domenica 03:00 UTC, dopo che il
   dump delle 02:00 UTC e' su S3. `Persistent=true`,
   `RandomizedDelaySec=600`.
 
@@ -152,7 +144,7 @@ psql "$DATABASE_URL" -c "SELECT rolcreatedb FROM pg_roles WHERE rolname = curren
 # Output atteso: rolcreatedb = t
 ```
 
-Se manca, `GRANT CREATE` su DB non basta — serve attributo ruolo:
+Se manca, `GRANT CREATE` su DB non basta â€” serve attributo ruolo:
 ```sql
 ALTER ROLE <username> CREATEDB;
 ```
@@ -169,9 +161,9 @@ sudo systemctl start plenora-backup-test.service
 sudo journalctl -u plenora-backup-test.service --since '5 minutes ago' --no-pager
 ```
 
-Output atteso (backup): SSM fetch → pg_dump → integrity ok → upload ok → exit 0.
-Output atteso (test-restore): SSM fetch → download → createdb → pg_restore ok →
-sanity ok → dropdb → exit 0.
+Output atteso (backup): SSM fetch â†’ pg_dump â†’ integrity ok â†’ upload ok â†’ exit 0.
+Output atteso (test-restore): SSM fetch â†’ download â†’ createdb â†’ pg_restore ok â†’
+sanity ok â†’ dropdb â†’ exit 0.
 
 ## Modifiche future
 

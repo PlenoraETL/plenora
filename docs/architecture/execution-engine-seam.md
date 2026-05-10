@@ -5,7 +5,7 @@ Status reviewed: 2026-05-07.
 This page describes the boundary between the shared execution layer and the
 domain-specific engines that still execute Plenora canvases.
 
-It is a live architecture guide, not a historical batch report.
+It is a live architecture guide.
 
 ## Current Shape
 
@@ -78,7 +78,7 @@ Shared execution code must not know about:
 | Seam | Current state | Direction |
 |---|---|---|
 | Source loading | Manipola and Arricchisci still have separate source-loading flows. | Move toward a resource-aware dispatcher only if it stays small and context-explicit. |
-| Metadata travel | Manipola now consumes `LoadedResource.metadata` in parts, but legacy reconstruction still exists. | Loader should produce metadata once; executors should consume it. |
+| Metadata travel | Manipola consumes `LoadedResource.metadata` in parts, but some executors still rebuild metadata from canvas dictionaries. | Loader should produce metadata once; executors should consume it. |
 | Result return type | Some paths still convert typed results back to dictionaries. | Let orchestrator and callers consume `ExecutionResult` natively. |
 | Canvas parsing | Some loops still instantiate node wrappers near use sites. | Parse once at the boundary into `CanvasGraph` where practical. |
 | Payload typing | `ArtifactPayload` exists; other payloads may still be generic. | Add typed payloads only for stable recurring shapes. |
@@ -105,7 +105,7 @@ Shared execution code must not know about:
 
 3. **Metadata travel**
    Finish moving source metadata production into loaders and stop rebuilding
-   metadata from legacy column dictionaries in executors.
+   metadata from column dictionaries in executors.
 
 4. **Source loading convergence**
    Consolidate only the parts that are actually common: source references,

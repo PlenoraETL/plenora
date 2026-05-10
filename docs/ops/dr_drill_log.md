@@ -19,7 +19,7 @@ Vedi [`dr_drill_playbook.md §4`](dr_drill_playbook.md) per il razionale.
 
 ---
 
-## Storico esecuzioni
+## Esecuzioni
 
 _(nessun drill eseguito ancora — la prima entry sarà aggiunta dopo la
 prima esecuzione del playbook. Vedi `dr_drill_playbook.md` per i passi.)_

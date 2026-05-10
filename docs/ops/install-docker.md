@@ -1,14 +1,6 @@
 # Clean Install, Docker
 
-This is the canonical Docker validation path for Plenora.
-
-## Status
-
-BE-GO-READY-INSTALL-011-FIRST-DOCKER-SCAFFOLD
-
-Docker scaffold exists for backend services plus the frontend static image.
-Full product Docker readiness is not closed until the full stack is validated
-on a real Linux host.
+This is the canonical Docker install and validation path for Plenora.
 
 Current compose scope:
 
@@ -19,13 +11,9 @@ Current compose scope:
 - Celery beat;
 - frontend static bundle served by nginx.
 
-Known gap:
-
-- full-stack Docker has not been validated on a real Linux host yet;
-- Docker compose CI is wired for `docker compose config`,
-  `docker compose build backend frontend`, backend readiness, and a real
-  API smoke flow: seeded login, `/auth/me`, project create/list/delete,
-  and logout.
+CI covers compose config/build, backend readiness, seeded login,
+`/auth/me`, project create/list/delete, and logout. A release operator should
+still run the acceptance gate below on the target Linux host.
 
 ## Files
 
@@ -57,11 +45,7 @@ Docker validation is green only when:
 - logs show no startup error;
 - the full sequence is validated on a real Linux host.
 
-## Validation pack for the Linux PC test
-
-Stream: `BE-GO-READY-INSTALL-012-DOCKER-LINUX-VALIDATION-PACK`
-
-Status: **FIRST SCAFFOLD, NOT YET VALIDATED**.
+## Validation Pack
 
 Preferred runner:
 
@@ -229,7 +213,7 @@ FRONTEND_VITE_API_URL=http://localhost:5004 docker compose build frontend
 ```
 
 If `FRONTEND_VITE_API_URL` is omitted, compose uses
-`http://localhost:5004`, matching the backend port published by this scaffold.
+`http://localhost:5004`, matching the backend port published by compose.
 Compose passes that value to the frontend Docker build as the Vite build arg
 `VITE_API_URL`; `frontend/Dockerfile` exports it as `ENV VITE_API_URL`, and
 `frontend/src/api/config.js` reads `import.meta.env.VITE_API_URL`.
@@ -245,11 +229,9 @@ FRONTEND_VITE_API_URL=http://<linux-host-ip-or-dns>:5004 docker compose build fr
 docker compose up -d --wait frontend
 ```
 
-## 11. Known scaffold limitations
+## 11. Validation Status
 
-BE-GO-READY-INSTALL-018-DOCKER-FE-GAP-AUDIT
-
-What ships today vs what does NOT:
+Current Docker coverage:
 
 | Area | Status |
 |---|---|
@@ -257,7 +239,7 @@ What ships today vs what does NOT:
 | Frontend image | Ships. |
 | Compose frontend service | Ships. |
 | Docker compose CI lane | Ships for config/build plus seeded backend API smoke. |
-| Real Linux host validation report | Not complete yet. |
+| Real Linux host validation report | Required before relying on Docker for release operations. |
 
 When can the Docker path be called "validated"? When the validation pack,
 including frontend build and static delivery checks, is green on a real Linux

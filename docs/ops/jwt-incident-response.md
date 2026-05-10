@@ -24,9 +24,10 @@ Se `/auth/logout` risponde 503 → Redis down (vedi "Blacklist inoperante" più 
 
 ---
 
-## Scenario B — token compromesso in finestra legacy pre-jti
+## Scenario B — token compromesso senza `jti`
 
-Dopo il rollout del claim `jti` (commit `f183234`, 2026-04-18), tutti i token emessi sono revocabili singolarmente. Ma i token emessi **prima** del rollout non hanno `jti` → non possono essere messi in blacklist.
+I token senza claim `jti` non possono essere messi in blacklist
+singolarmente.
 
 Se scopriamo che uno di questi token è stato leakato e il suo `exp` è ancora nel futuro, la sola via è **invalidare la `JWT_SECRET_KEY`**: tutti i token firmati con la vecchia chiave falliscono la verifica, indipendentemente da contenuto/scadenza.
 

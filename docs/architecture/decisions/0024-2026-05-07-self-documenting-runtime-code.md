@@ -6,10 +6,8 @@
 
 ## Context
 
-The backend cleanup removed historical batch notes, migration breadcrumbs, and
-verbose comments from Python runtime modules. That made the repository easier to
-scan, but it also reduced the amount of explanatory text near dynamic Python
-code.
+The backend should rely on names, types, module boundaries, and current docs
+instead of long comments that describe past implementation steps.
 
 Python modules that move data through pandas, geospatial libraries, Celery, and
 storage providers cannot rely on prose comments as the primary contract. After
@@ -25,7 +23,7 @@ Runtime Python code follows a self-documenting policy:
   dependencies, or bootstrap/runtime boundaries;
 - type hints and return annotations are expected on new or touched functions;
 - weak throwaway names are treated as refactor debt in runtime modules;
-- comments explain why, not historical implementation steps.
+- comments explain why, not past implementation steps.
 
 The repository enforces this by baseline guard tests instead of a big-bang
 rewrite. Existing debt is allowed to remain temporarily, but new changes must
@@ -39,7 +37,7 @@ than missing prose comments do. Baseline guards make the direction measurable:
 the numbers can only stay flat or go down.
 
 This is safer than requiring full typing immediately. The backend still contains
-large legacy modules and dynamic data paths; forcing every function to be typed
+large runtime modules and dynamic data paths; forcing every function to be typed
 in one change would create noisy annotations and risky churn.
 
 ## Alternatives considered

@@ -13,7 +13,7 @@ generic `http_<status>` codes instead of stable auth-domain codes, so it could
 not branch cleanly on token revoked, MFA required, role denied, user missing,
 or revocation infrastructure unavailable.
 
-The migration must preserve user-visible behavior exactly:
+The change must preserve user-visible behavior exactly:
 
 - same status codes;
 - same Italian messages;

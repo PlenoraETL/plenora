@@ -94,11 +94,11 @@ The resource layer owns:
 - size caps and bounded reads;
 - artifact references and metadata;
 - object storage access;
-- compatibility with legacy consumers while old paths are removed.
+- compatibility reads for stored data written by older runtime paths.
 
 Loaders should return bytes, streams, paths, or metadata only when the
 capability explicitly requires it. Temporary file materialization is a
-legacy escape hatch, not the preferred path.
+fallback path, not the preferred path.
 
 ## Auth And Tenancy
 
@@ -121,12 +121,13 @@ Clean installation work has two tracks:
 The release target is not only "starts locally"; it must be reproducible on
 a clean machine.
 
-## Non-Goals For This Phase
+## Non-Goals
 
 - No new business features during architecture cleanup.
 - No speculative mega-engine that replaces small focused capabilities.
 - No new compatibility facade without a removal plan.
-- No broad documentation rewrites of historical ADRs.
+- No broad rewrite of accepted ADRs unless the recorded decision is wrong or
+  no longer operative.
 
 ## References
 

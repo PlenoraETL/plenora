@@ -197,9 +197,7 @@ sudo systemctl stop redis-server
 
 Do not delete the database unless this is an intentional reset.
 
-## 10. Report
-
-Use [first-pc-validation-report-template.md](first-pc-validation-report-template.md).
+## 10. Validation Report
 
 Paste:
 

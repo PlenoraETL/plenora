@@ -137,8 +137,8 @@ acceptable short-term because:
 **Positive**:
 - Explicit boundary: developers know ArcGIS is a provider, not an IMDF subdomain.
 - Import guard prevents accidental IMDF → Features coupling.
-- Classification table makes it clear who owns what for future refactors.
-- No code move risk in this batch.
+- Classification table makes it clear who owns what for later refactors.
+- The decision avoids immediate code-move risk.
 
 **Negative**:
 - Token / retry logic remains duplicated between `ArcGISClient` and IMDF adapter.

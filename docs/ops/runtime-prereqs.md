@@ -8,9 +8,8 @@ Scopo: evitare diagnosi sbagliate ("il dashboard dice `unknown`, il codice e' ro
 > [install-non-docker.md](install-non-docker.md). Quel runbook è la
 > source-of-truth per la procedura passo-passo (host prereq,
 > Postgres, Redis, object storage, secrets, systemd, frontend, smoke
-> test). Questo documento elenca solo il **contratto runtime** — non
-> la procedura di install. Il path Docker non è ancora implementato:
-> vedi [install-docker.md](install-docker.md).
+> test). Questo documento elenca solo il **contratto runtime**, non la
+> procedura di install. Per Docker vedi [install-docker.md](install-docker.md).
 
 ---
 
@@ -71,7 +70,7 @@ Lette da `.env` via systemd unit wrapper o SSM secrets (vedi `deploy/iam/README.
 | `STORAGE_POLICY` | `hybrid` (`object_storage` raccomandato in prod cloud) | `app/utils/result_store.py`, `app/shared/cloud_backends.py` |
 | `OBJECT_STORAGE_ENABLED` | `true` | Gate capability object storage runtime; con `STORAGE_POLICY=object_storage` deve essere true |
 | `OBJECT_STORAGE_BUCKET` | -- (obbligatoria in `object_storage`) | Bucket runtime per result, file sources e artifact intermedi |
-| `PLENORA_ARTIFACT_BUCKET` | alias di `OBJECT_STORAGE_BUCKET` | Alias legacy/operativo per artifact runtime |
+| `PLENORA_ARTIFACT_BUCKET` | alias di `OBJECT_STORAGE_BUCKET` | Alias operativo per artifact runtime |
 | `BACKUP_BUCKET` | `plenora-backup-112011134642-eu-south-1-an` | Nome canonico bucket backup |
 | `DATABASE_URL` | — (obbligatoria) | `scripts/backup_db.py`, `scripts/test_restore.py`, `app/db/*` |
 | `BACKUP_S3_BUCKET` | `plenora-backup-112011134642-eu-south-1-an` | `admin_backups.service`, `scripts/backup_db.py` |
@@ -149,7 +148,7 @@ Se un giorno servisse separare la blacklist su un'altra istanza/DB (es. Redis de
 | Check | `get_current_user` consulta `EXISTS` prima della query DB |
 | Fail policy write (`/logout`) | 503 se Redis down — il client deve sapere se la revoca è effettiva |
 | Fail policy read (`get_current_user`) | Allow (JWT `exp`+signature restano enforced) — evita blast radius se Redis flappa |
-| Backward compat | Token pre-rollout senza jti → `is_jti_blacklisted(None)` → False → passa normalmente |
+| Token senza `jti` | `is_jti_blacklisted(None)` → False → passa normalmente |
 | Health check | `admin_system_status.get_blacklist_status()` → card "JWT Blacklist" dashboard (EXISTS sentinel + contatori + alert "inoperante da X min") |
 | Env `JWT_BLACKLIST_REDIS_TIMEOUT_SEC` | Timeout connessione/socket Redis del client blacklist (default `1` sec; alzare con Redis remoto) |
 | Env `JWT_BLACKLIST_STALE_THRESHOLD_SEC` | Soglia alert "blacklist inoperante" se nessuna op reale riesce da X sec (default `1800` = 30 min) |

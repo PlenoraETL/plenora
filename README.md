@@ -5,12 +5,7 @@ ETL platform for geospatial and tabular data pipelines.
 Backend: FastAPI, Celery, PostgreSQL, Redis. Frontend: React, Vite,
 ReactFlow-based pipeline canvas.
 
-> Status: backend structural hardening and horizontalization are in progress.
-> The current focus is go-ready architecture, clean installation, Docker
-> validation, and documentation cleanup before a stable 1.0 freeze.
-
-> Brand note: `Plenora-ETL` is the canonical product and repository name.
-> Historical audit/ADR material may mention older names, but live runtime
+> `Plenora-ETL` is the canonical product and repository name. Runtime
 > configuration uses `PLENORA_*`.
 
 ---
@@ -50,7 +45,7 @@ Extended setup:
 - Backend setup: [docs/development/backend.md](docs/development/backend.md)
 - Frontend setup: [docs/development/frontend.md](docs/development/frontend.md)
 - Clean install, non-Docker: [docs/ops/install-non-docker.md](docs/ops/install-non-docker.md)
-- Clean install, Docker scaffold: [docs/ops/install-docker.md](docs/ops/install-docker.md)
+- Clean install, Docker: [docs/ops/install-docker.md](docs/ops/install-docker.md)
 
 ---
 
@@ -58,7 +53,7 @@ Extended setup:
 
 All canonical documentation lives under [docs/](docs/).
 
-- Product: [overview](docs/product/overview.md), [release 1.0 readiness](docs/product/release-1.0.md), [roadmap](docs/product/roadmap.md)
+- Product: [overview](docs/product/overview.md), [release 1.0 readiness](docs/product/release-1.0.md)
 - Architecture: [overview](docs/architecture/overview.md), [macro components](docs/architecture/macro-components.md), [horizontal engines](docs/architecture/horizontal-engines.md), [ADRs](docs/architecture/decisions/)
 - Development: [onboarding](docs/development/onboarding.md), [backend](docs/development/backend.md), [frontend](docs/development/frontend.md), [contributing](docs/development/contributing.md), [code map](docs/development/code-map.md)
 - Ops: [install non-Docker](docs/ops/install-non-docker.md), [install Docker](docs/ops/install-docker.md), [runbook](docs/ops/runbook.md), [backup/restore](docs/ops/backup-restore.md), [incident response](docs/ops/incident_response.md)

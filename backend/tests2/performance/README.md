@@ -1,36 +1,31 @@
-# tests2/performance — stream-perf (Fase 1)
+﻿# Performance Tests
 
-Benchmark e correctness test per le ottimizzazioni PERF di Fase 1.
+Test di correttezza e benchmark controllati per i percorsi dati sensibili.
 
-## Struttura
+## Esecuzione
 
-- `conftest.py` — fixture di generazione dataset sintetici (df/gdf), helper di timing
-- `test_baseline_*.py` — baseline measurement dello stato attuale (previous implementation)
-- `test_bench_*.py` — benchmark post-refactor (speedup vs baseline, target >=3x)
-- `test_correctness_*.py` — invariant preservation (output identico pre/post)
+Correctness test, adatti alla CI:
 
-## Marker pytest
+```powershell
+cd backend
+python -m pytest tests2/performance -c tests2/pytest.ini -m perf_correctness
+```
 
-- `perf_baseline` — run slow baseline; skip di default, attiva con `-m perf_baseline`
-- `perf_bench` — benchmark post-optimization; skip di default, attiva con `-m perf_bench`
-- `perf_correctness` — test correttezza, eseguiti in CI
+Benchmark manuali:
 
-## Timing
+```powershell
+python -m pytest tests2/performance -c tests2/pytest.ini -m perf_bench -s
+```
 
-Non dipendiamo da `pytest-benchmark` in Batch 0: usiamo `time.perf_counter`. La dep
-`pytest-benchmark` sara' richiesta via `STREAM_REPORT.md` per Batch 1+ quando serve
-stat-significance su run multipli.
+## Marker
 
-## DB integration
+- `perf_correctness`: invarianti di output, eseguibili in CI.
+- `perf_bench`: benchmark locali, sensibili alla macchina.
+- `perf_baseline`: misure comparative da eseguire solo quando servono.
 
-I baseline bulk (COPY vs executemany) funzionano in-memory:
-- la parte CSV-serialization e params-list-construction e' misurabile senza DB
-- la parte network+DB e' gated da `PERF_PG_TEST_URL` env var; skip se assente
+## Regole
 
-## Dataset synthetics
-
-I generatori vivono in `conftest.py`:
-- `make_pandas_df(n)` — DataFrame con colonne int/str/float/date
-- `make_geo_points_gdf(n)` — GeoDataFrame di punti (EPSG:3857)
-- `make_geo_polygons_gdf(n)` — GeoDataFrame di poligoni con overlap parziali
-- `make_diff_inputs(n, changed_ratio)` — coppia (old, new) per op_table_diff
+- I correctness test devono essere deterministici.
+- I benchmark non devono essere usati come unica prova di correttezza.
+- Se una libreria nativa rende instabile un path di benchmark, isolare il benchmark o marcarlo con skip motivato.
+- Le soglie devono essere conservative e giustificate da un rischio operativo reale.

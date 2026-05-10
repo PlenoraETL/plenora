@@ -4,8 +4,7 @@ React 18 + Vite + ReactFlow + Zustand. The frontend is the canvas and
 operations UI for Plenora: project editors, execution controls, run
 history, connection management, administration pages, and task polling.
 
-This page documents the current development contract. Historical notes
-live in ADRs and older reports; this file should stay practical.
+This page documents the current development contract.
 
 ## Setup
 
@@ -59,7 +58,7 @@ err.code
 err.details
 ```
 
-Avoid new direct reads of legacy backend payloads such as
+Avoid new direct reads of retired backend payloads such as
 `err.response.data.detail`. The few remaining exception paths must be
 intentional compatibility code and covered by targeted tests.
 

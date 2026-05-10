@@ -44,10 +44,10 @@ Current references:
 - `backend/app/core/estrai/executor.py`
 - `backend/tests2/estrai/unit/test_preview_dedup_columns_contract.py`
 
-### #7 - Legacy canvas rebrand resource IDs
+### #7 - Compatibility coverage for older canvas resource IDs
 
-Some historical canvases still contain old `urby-*` resource identifiers and
-need compatibility coverage while access checks and annotations remain strict.
+Some saved canvases still contain `urby-*` resource identifiers and need
+compatibility coverage while access checks and annotations remain strict.
 
 Current references:
 - `backend/tests2/projects/test_get_project_access_denied_annotation.py`
@@ -115,8 +115,8 @@ Current references:
 
 ### #25 - Manipola upstream fallback behavior
 
-Manipola schema/execution fallback must avoid returning upstream state in the
-old pre-fix path when node transformation handling fails.
+Manipola schema/execution fallback must avoid returning upstream state when
+node transformation handling fails.
 
 Current references:
 - `backend/app/core/manipola/executor.py`

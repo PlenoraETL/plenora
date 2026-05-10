@@ -13,7 +13,7 @@ Per scenari specifici vedi:
 > **Bus factor 1**: oggi tutti i ruoli sono coperti da Marco Bonamente
 > (vedi `backup-restore.md:381`). Questo è un rischio noto da chiudere
 > aggiungendo almeno una seconda persona con accesso SSH + IAM secondario
-> AWS. Tracciato in TRIAGE Phase 3 come gap residuo (P0.5 audit ops).
+> AWS. Tracciarlo come follow-up operativo finche' non esiste un backup owner.
 
 ---
 
@@ -252,7 +252,7 @@ e le HH:MM". Se zero, dichiararlo esplicitamente con criterio di verifica.>
 ## Lessons learned
 
 <Cosa cambia nel modo di operare. Update ai runbook se necessario,
-tracking nel TRIAGE Phase 3+.>
+tracking operativo.>
 ```
 
 ---
@@ -274,4 +274,4 @@ tracking nel TRIAGE Phase 3+.>
 - [ ] Status check post-fix per > 30 min senza ricorrenza
 - [ ] Comms di chiusura inviata al cliente (se notificato)
 - [ ] Post-mortem aperto in `docs/ops/postmortems/`
-- [ ] Follow-up tracciati (TRIAGE Phase 3+ o successivi)
+- [ ] Follow-up tracciati

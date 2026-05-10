@@ -87,7 +87,7 @@ Da eseguire in ordine. Dopo ogni step, segnare data + responsabile in `dr_drill_
 - [ ] 2nd operator legge `runbook.md` end-to-end
 - [ ] 2nd operator legge `incident_response.md` end-to-end
 - [ ] 2nd operator esegue `./deploy.sh backend --check-only` (no side-effect) → verifica output coerente
-- [ ] (Quando staging esisterà — vedi roadmap B17) 2nd operator esegue deploy reale su staging come prima esercitazione
+- [ ] Quando staging esiste, il secondo operatore esegue un deploy reale su staging come prima esercitazione
 
 ### 3.7 Tabletop incident exercise
 
@@ -132,7 +132,7 @@ Quando bus_factor_1 è in assenza pianificata (>1 settimana):
 - Vault sharing process è manuale (no automation)
 - AWS IAM user lifecycle: ad-hoc creation, no IaC dedicato
 - DB read-only role provisioning: ad-hoc, non in migrations
-- Staging environment: non esiste (rinviato a B17 roadmap), quindi training reale impossibile finché staging non è in piedi
+- Staging environment: non esiste; il training di deploy reale resta bloccato finche' staging non e' disponibile
 
 Questi gap sono accettabili al livello attuale (post-MVP, pre-scale).
 Documentati per non perdere visibilità durante la maturazione operativa.

@@ -2,9 +2,7 @@
 
 Status reviewed: 2026-05-07.
 
-These are the live engineering rules for Plenora. They are intentionally
-shorter than the historical invariant reports. Historical detail remains in
-audits and ADRs.
+These are the live engineering rules for Plenora.
 
 ## 1. Tenant And Auth
 
@@ -12,7 +10,7 @@ audits and ADRs.
 - Do not store request-specific group/user context in mutable singletons.
 - Frontend authorization is UX only; backend authorization is authoritative.
 - Superadmin bypasses must be explicit, narrow, and auditable.
-- Auth dependencies should import focused contracts/helpers, not broad legacy
+- Auth dependencies should import focused contracts and helpers, not broad
   facades.
 
 ## 2. Resource Handling
@@ -65,7 +63,7 @@ audits and ADRs.
 ## 7. Configuration
 
 - Runtime configuration should have one canonical name.
-- Legacy aliases may be documented historically but must not silently return as
+- Retired aliases may be documented in ADRs but must not silently return as
   runtime fallbacks.
 - Secrets are not normal config and must not be logged.
 - Memory/resource caps must be centralized or follow a documented split.
@@ -83,17 +81,17 @@ audits and ADRs.
 
 - Contract tests are valuable when they enforce architecture.
 - Avoid tests that only pin implementation noise.
-- AST/source-shape tests are acceptable as guardrails for high-risk legacy
+- AST/source-shape tests are acceptable as guardrails for high-risk
   regressions, but should not become the main design mechanism.
 - Prefer behavior tests for runtime correctness.
 
 ## 10. Documentation
 
 - Canonical docs describe current reality.
-- ADRs are append-only.
-- Historical audits are read-only.
-- If a batch changes an engine boundary, installation behavior, security
-  contract, or resource contract, update docs in the same batch.
+- ADRs record accepted decisions. Supersede them explicitly when a decision
+  changes.
+- If a change affects an engine boundary, installation behavior, security
+  contract, or resource contract, update docs with the code change.
 
 ## Release Gate
 
@@ -101,6 +99,6 @@ Before 1.0, these invariants must be true in production paths:
 
 - no known mutable singleton tenant context;
 - no known unbounded resource read in hot paths;
-- no active frontend dependency on legacy backend error payloads;
+- no active frontend dependency on retired backend error payloads;
 - no hidden install requirement outside the install docs;
 - no canonical doc that contradicts the current architecture.

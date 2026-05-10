@@ -1,8 +1,7 @@
 # Horizontal Engines
 
-This is the active backend boundary map. It is intentionally shorter than
-the historical inventory documents and should be kept current as the codebase
-is horizontalized.
+This is the active backend boundary map. Keep it current when code moves
+between engines.
 
 ---
 
@@ -161,8 +160,7 @@ Current state:
 - Docker scaffold exists for backend, worker, beat, Postgres, and Redis.
 - Frontend Docker image is still a known gap until explicitly added and
   validated.
-- First-PC Linux validation is still required before calling the install path
-  stable.
+- Linux validation is required before calling the install path stable.
 
 Rules:
 

@@ -5,8 +5,7 @@ This is the documentation entry point for the current Plenora product.
 The rule is simple:
 
 - Canonical docs describe how the system works now.
-- ADRs explain why durable architecture decisions were made.
-- Audits are historical evidence and must not be treated as live guidance.
+- ADRs explain durable architecture decisions.
 
 ## Start Here
 
@@ -25,8 +24,6 @@ The rule is simple:
 
 - [Product overview](product/overview.md)
 - [Release 1.0 readiness](product/release-1.0.md)
-- [Roadmap](product/roadmap.md)
-- [Residual register](product/residual-register.md)
 
 ## Canonical Architecture Docs
 
@@ -37,8 +34,7 @@ The rule is simple:
 - [Invariants](architecture/invariants.md)
 - [ADR registry](architecture/decisions/README.md)
 
-`architecture/inventory_report.md` is historical inventory evidence. Use it
-for archaeology, not for the current architecture map.
+Use the architecture overview and ADR registry for current architecture.
 
 ## Canonical Development Docs
 
@@ -54,7 +50,6 @@ for archaeology, not for the current architecture map.
 
 - [Clean install, non-Docker](ops/install-non-docker.md)
 - [Clean install, Docker](ops/install-docker.md)
-- [First PC validation report template](ops/first-pc-validation-report-template.md)
 - [Runtime prerequisites](ops/runtime-prereqs.md)
 - [Runbook](ops/runbook.md)
 - [Deploy checklist](ops/deploy-checklist.md)
@@ -66,9 +61,6 @@ for archaeology, not for the current architecture map.
 - [Tickets](ops/tickets.md)
 - [Handoff](ops/handoff.md)
 
-Operational checklists that mention first-PC validation are executable test
-packs, not product architecture.
-
 ## Compliance Docs
 
 - [Secrets management](compliance/secrets-management.md)
@@ -79,14 +71,6 @@ packs, not product architecture.
 Compliance documents are working evidence. They need product-owner review
 before being used in an external audit.
 
-## Historical Audits
-
-- [Audits index](audits/README.md)
-- [Orchestrate audit snapshot](audits/orchestrate/README.md)
-
-The audit tree is read-only history. If an old audit still contains useful
-truth, promote that truth into a canonical doc or a new ADR.
-
 ## Inventory Policy
 
 The repository intentionally still contains many Markdown files, but they
@@ -96,11 +80,9 @@ fall into distinct classes:
 - canonical product, architecture, development, operations, and compliance
   docs under `docs/`;
 - ADRs, which are append-only;
-- historical audits, which are read-only evidence;
 - local README files next to backend, deploy, script, and test packages.
 
-Unlinked roadmap notes or stale audit leftovers should be deleted or moved
-under `docs/audits/`, not left beside canonical documentation.
+Unlinked planning notes should be deleted or promoted into a canonical doc.
 
 ## Documentation Rules
 
@@ -108,5 +90,5 @@ under `docs/audits/`, not left beside canonical documentation.
   file (`README.md`, `CONTRIBUTING.md`, `CHANGELOG.md`, `CODE_MAP.md`).
 - Do not add broad "notes" files. Pick product, architecture, development,
   ops, or compliance.
-- Do not rewrite ADR history. Add a new ADR or a superseding note.
+- Do not rewrite ADRs. Add a new ADR or a superseding note.
 - Keep live docs short enough to read and current enough to trust.

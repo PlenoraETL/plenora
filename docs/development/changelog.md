@@ -9,7 +9,7 @@ truth for exact changes.
 - Live install docs were rewritten around executable acceptance gates.
 - Release 1.0 readiness was promoted to a product document.
 - Compliance docs were shortened into current working evidence.
-- Historical audit material was explicitly marked as read-only.
+- Closed audit material was removed from the canonical architecture set.
 
 ## Current Development Themes
 
@@ -27,7 +27,7 @@ truth for exact changes.
 - Install, non-Docker: [`../ops/install-non-docker.md`](../ops/install-non-docker.md)
 - Install, Docker: [`../ops/install-docker.md`](../ops/install-docker.md)
 
-For exact commit-by-commit history, use:
+For exact commit-by-commit detail, use:
 
 ```bash
 git log --oneline --decorate --graph

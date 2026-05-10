@@ -1,4 +1,4 @@
-# Code Map
+﻿# Code Map
 
 Bibbia operativa del repo. Una sezione per modulo: dove entrare,
 responsabilita', file principali con funzioni/classi reali, keywords per
@@ -6,8 +6,7 @@ responsabilita', file principali con funzioni/classi reali, keywords per
 
 Questo file descrive **lo stato corrente del codice** e i confini
 operativi dei moduli. Cronologia e decisioni temporali vivono in
-`docs/development/changelog.md`, `docs/product/roadmap.md`,
-`docs/product/residual-register.md` e negli ADR.
+`docs/development/changelog.md` e negli ADR.
 
 Formato per sezione:
 - `Entry-point`: dove entra il flusso runtime o API.
@@ -21,7 +20,7 @@ Formato per sezione:
 
 Indice rapido:
 - Backend core: [admin_backups](#admin_backups), [admin_system_status](#admin_system_status), [arricchisci](#arricchisci), [artifacts](#artifacts), [auth](#auth), [carica](#carica), [connections](#connections), [datasources](#datasources), [eseguibili](#eseguibili), [estrai](#estrai), [features](#features), [files](#files), [imdf](#imdf), [intermediate](#intermediate), [logs](#logs), [manipola](#manipola), [orchestrator](#orchestrator), [projects](#projects), [scheduler](#scheduler), [tickets](#tickets)
-- Backend shared: [shared/crypto](#sharedcrypto), [shared/storage-results](#sharedstorageresults)
+- Backend shared/infrastructure: [security/crypto](#securitycrypto), [storage-results](#sharedstorageresults)
 - Frontend: [pages](#frontendpages), [api](#frontendapi), [store](#frontendstore), [components](#frontendcomponents)
 
 Nota: file in ASCII puro (no accenti, no caratteri Unicode speciali) per evitare mojibake su viewer non-UTF8.
@@ -111,7 +110,7 @@ Punti di intervento tipici:
 - nuovo grouping/dedup helper -> `enrichment_grouping.py`
 - modifiche a `execute()` o `__init__` -> `enrichment_service.py` (orchestrator core)
 
-Intervento/confini: I/O dataset solo via `intermediate`. Auth API solo cifrata via `shared/crypto.py`. Nuove regole di parallelizzazione/`execute_if` vanno in `parallel.py`, non duplicarle nel router.
+Intervento/confini: I/O dataset solo via `intermediate`. Auth API solo cifrata via `infrastructure/security/crypto.py`. Nuove regole di parallelizzazione/`execute_if` vanno in `parallel.py`, non duplicarle nel router.
 
 **Mixin layout - enrichment runtime**:
 ```text
@@ -206,7 +205,7 @@ Responsabilita: governa login, JWT, MFA, rate-limit IP, dipendenze RBAC e middle
 
 Keywords: `JWTMiddleware`, `RequestIdMiddleware`, `MFAEnrollment`, `verify_code`, `_check_rate_limit`, `require_admin`, `shares_router`
 
-Intervento/confini: segreti solo via `shared/crypto.py` (mai env diretta). Nuovi router devono passare per `JWTMiddleware`; le dipendenze RBAC sono `require_*`, non saltarle. Niente fetch credenziali in chiaro.
+Intervento/confini: segreti solo via `infrastructure/security/crypto.py` (mai env diretta). Nuovi router devono passare per `JWTMiddleware`; le dipendenze RBAC sono `require_*`, non saltarle. Niente fetch credenziali in chiaro.
 
 ---
 
@@ -250,7 +249,7 @@ Punti di intervento tipici:
 - nuovo write mode helper -> `writer_batch_dispatch.py` (`BatchDispatchMixin`)
 - modifiche a `_dispatch_write_mode` o `write` -> `database_writer.py` (orchestrator core)
 
-Intervento/confini: leggere dataset solo da `intermediate`. Credenziali via `connections`+`shared/crypto`. Preservare `ConflictPolicy` e idempotency keys; nuovi writer estendono `writer_base.DestinationWriter`. Non bypassare `ConflictChecker` quando policy != overwrite.
+Intervento/confini: leggere dataset solo da `intermediate`. Credenziali via `connections` + `infrastructure/security/crypto.py`. Preservare `ConflictPolicy` e idempotency keys; nuovi writer estendono `writer_base.DestinationWriter`. Non bypassare `ConflictChecker` quando policy != overwrite.
 
 **Mixin layout - writer**:
 ```text
@@ -286,7 +285,7 @@ Responsabilita: governa configurazione connessioni DB e credenziali cifrate; esp
 
 Keywords: `DatabaseConnection`, `ConnectionCreate`, `ConnectionTestResult`, `test_connection`, `connection_id`
 
-Intervento/confini: intervenire su router/models per contratto API. Non leggere credenziali in chiaro; passare da `backend/app/shared/crypto.py`. Non duplicare logica datasource.
+Intervento/confini: intervenire su router/models per contratto API. Non leggere credenziali in chiaro; passare da `backend/app/infrastructure/security/crypto.py`. Non duplicare logica datasource.
 
 ---
 
@@ -310,7 +309,7 @@ Responsabilita: governa adapter per local/FTP/SFTP/SharePoint dietro un'interfac
 
 Keywords: `DataSourceInterface`, `create_backend`, `BackendConfig`, `FTPDataSource`, `SFTPDataSource`, `SharePointDataSource`, `LocalDataSource`
 
-Intervento/confini: nuovi adapter implementano `DataSourceInterface` e si registrano in `factory.create_backend`. FS solo via `path_policy`; credenziali via `connections`+`shared/crypto`. Errori adapter devono usare `DataSourceError*`.
+Intervento/confini: nuovi adapter implementano `DataSourceInterface` e si registrano in `factory.create_backend`. FS solo via `path_policy`; credenziali via `connections` + `infrastructure/security/crypto.py`. Errori adapter devono usare `DataSourceError*`.
 
 ---
 
@@ -369,7 +368,7 @@ Responsabilita: governa servizi ArcGIS Feature: CRUD connessioni, browse service
 
 Keywords: `FeaturesService`, `ArcGISClient`, `WriteFeaturesResponse`, `CreateServiceResponse`, `ArcGISConnection`, `EsriTypeMapper`, `browse_layers`
 
-Intervento/confini: rispettare contratto `WriteFeaturesResponse`/`CreateServiceResponse` (consumati dai test e dal frontend). Token come `?token=` query param, non header. Secret via `shared/crypto`; serializzazione output va sempre via `_mask_secrets`.
+Intervento/confini: rispettare contratto `WriteFeaturesResponse`/`CreateServiceResponse` (consumati dai test e dal frontend). Token come `?token=` query param, non header. Secret via `infrastructure/security/crypto.py`; serializzazione output va sempre via `_mask_secrets`.
 
 ---
 
@@ -510,10 +509,10 @@ Punti di intervento tipici:
 - nuova trasformazione tabellare -> selezionare il cluster `transforms/<cluster>.py` per dominio (joins/strings/columns/cleansing/aggregation/filtering/analysis/reshape/security/geo/utility/formula) + entry in `transforms_registry.json` con prefisso `"base.<func>"` (il facade in `base.py` re-exporta tutti i public ops dei figli, quindi il dispatcher `getattr(base, func)` continua a risolvere)
 - nuova trasformazione spaziale -> `transforms/spatial.py` (nuovo `op_geo_*`) + entry in `transforms_registry.json`
 - estensione formula language -> `transforms/formula.py`: `op_formula` + `_validate_formula_ast` (mai allargare l'AST whitelist senza test)
-- nuovo tipo di mascheramento PII -> `transforms/security.py`: estendere `MASK_FUNCTIONS` (NON sostituire il dict object — il test contract `test_op_mask_data_fail_closed.py` patcha via `patch.dict` con identita' preservata)
+- nuovo tipo di mascheramento PII -> `transforms/security.py`: estendere `MASK_FUNCTIONS` (NON sostituire il dict object â€” il test contract `test_op_mask_data_fail_closed.py` patcha via `patch.dict` con identita' preservata)
 - ciclo lineage tra progetti -> `executor.py` (`_assert_no_lineage_cycle_on_chain`)
 
-Intervento/confini: I/O via `intermediate`. Nuove trasformazioni: aggiungere `op_*` nel cluster `transforms/<cluster>.py` appropriato (oppure `spatial.py`) e registrare in `transforms_registry.json` come `"base.<func>"`, mai hardcoded nel router. Il facade `base.py` re-exporta tutti i public op dei figli — preservare i `from .<cluster> import op_*` non rimuoverli. Preservare AST validation in `op_formula` (`_validate_formula_ast`). Logger naming: tutti i moduli figli usano esplicitamente `get_logger("app.core.manipola.transforms.base")` (NOT `__name__`) per non spostare il name dei record.
+Intervento/confini: I/O via `intermediate`. Nuove trasformazioni: aggiungere `op_*` nel cluster `transforms/<cluster>.py` appropriato (oppure `spatial.py`) e registrare in `transforms_registry.json` come `"base.<func>"`, mai hardcoded nel router. Il facade `base.py` re-exporta tutti i public op dei figli â€” preservare i `from .<cluster> import op_*` non rimuoverli. Preservare AST validation in `op_formula` (`_validate_formula_ast`). Logger naming: tutti i moduli figli usano esplicitamente `get_logger("app.core.manipola.transforms.base")` (NOT `__name__`) per non spostare il name dei record.
 
 ---
 
@@ -604,9 +603,9 @@ Intervento/confini: tenere separato dalla pipeline runtime. Non usare i ticket c
 
 ---
 
-## `backend/app/shared/crypto.py` <a id="sharedcrypto"></a>
+## `backend/app/infrastructure/security/crypto.py` <a id="securitycrypto"></a>
 
-Entry-point: `backend/app/shared/crypto.py`
+Entry-point: `backend/app/infrastructure/security/crypto.py`
 
 Responsabilita: governa encryption-at-rest (Fernet) per credenziali e segreti applicativi (DB conn, API conn auth, datasource auth, MFA secrets).
 
@@ -624,12 +623,12 @@ Intervento/confini: unico punto di encrypt/decrypt - non reimplementare crypto a
 
 Entry-point: `backend/app/utils/result_store.py`, `backend/app/db/results_db_service.py`, `backend/app/shared/cloud_backends.py`
 
-Responsabilita: salva e legge result finali, separando catalogo DB e payload runtime. In `STORAGE_POLICY=object_storage` i nuovi result devono andare sempre su runtime object storage; il fallback BYTEA resta solo per legacy read.
+Responsabilita: salva e legge result finali, separando catalogo DB e payload runtime. In `STORAGE_POLICY=object_storage` i nuovi result devono andare sempre su runtime object storage; il fallback BYTEA resta solo per compatibility read.
 
 | file | funzioni/classi chiave | cosa guardare |
 |---|---|---|
 | `app/utils/result_store.py` | `save_result_blob`, `save_result_blob_from_bytes`, `ResultSaveError`, `_storage_policy`, `_should_use_object_storage`, `_apply_results_retention` | writer result policy-aware |
-| `app/db/results_db_service.py` | `save_result`, `get_latest_result`, `get_result_data`, `delete_results_for_project`, `_s3_download_bytes`, `_s3_delete_best_effort` | catalogo result + reader compat legacy |
+| `app/db/results_db_service.py` | `save_result`, `get_latest_result`, `get_result_data`, `delete_results_for_project`, `_s3_download_bytes`, `_s3_delete_best_effort` | catalogo result + reader compatibility |
 | `app/shared/cloud_backends.py` | `ObjectStorage`, `ObjectStorageDisabledError`, `object_storage_enabled`, `get_runtime_object_storage`, `get_backup_object_storage`, `get_log_archive_storage`, `validate_storage_config` | factory e gate object storage |
 | `app/config/storage_config.py` | `StoragePolicy`, `StorageProvider`, `get_storage_policy`, `get_storage_provider` | policy storage dichiarativa |
 
@@ -637,7 +636,7 @@ Keywords: `STORAGE_POLICY`, `OBJECT_STORAGE_BUCKET`, `PLENORA_ARTIFACT_BUCKET`, 
 
 Intervento/confini:
 - Nuovi result in `STORAGE_POLICY=object_storage`: `storage_key` valorizzato, `data=NULL`, nessun fallback BYTEA su errore upload/capability off/bucket mancante.
-- Reader invariato compat: `get_result_data` legge `storage_key` da object storage oppure `data` BYTEA legacy; logga `backend=object_storage` o `backend=db_legacy`.
+- Reader invariato compat: `get_result_data` legge `storage_key` da object storage oppure `data` BYTEA di record esistenti; logga `backend=object_storage` o `backend=db_legacy`.
 - `validate_storage_config` deve fallire al boot se `STORAGE_POLICY=object_storage` non ha `OBJECT_STORAGE_ENABLED=true` e bucket runtime esplicito (`OBJECT_STORAGE_BUCKET` o alias `PLENORA_ARTIFACT_BUCKET`). Non usare `BACKUP_BUCKET` come fallback runtime in questa policy.
 - Non chiamare `boto3.client("s3")` dai moduli business: passare dalle factory `cloud_backends`.
 - `RESULT_S3_THRESHOLD_BYTES` resta solo per `hybrid`; non usarlo per decidere i nuovi result in policy `object_storage`.
@@ -730,11 +729,12 @@ Sintesi trasversale dei confini operativi piu' importanti del repo. Toccarli sen
 
 
 - **`backend/app/core/intermediate/`** = contratto dati tra step pipeline. Estrai/Manipola/Arricchisci/Carica scambiano dataset *solo* tramite intermediate. Cambiare lo schema `RunSummary`/`node_meta` o il formato di `write_node`/`compute_row_hash` significa rompere tutti gli step a valle.
-- **Storage result/runtime object storage**: in `STORAGE_POLICY=object_storage`, i nuovi result non vanno mai in BYTEA. Il DB conserva metadata + `storage_key`; `data` BYTEA e' solo legacy read path. Runtime artifacts/result usano `OBJECT_STORAGE_BUCKET`/`PLENORA_ARTIFACT_BUCKET`, non `BACKUP_BUCKET`.
-- **`backend/app/shared/crypto.py`** = unico punto di crypto-at-rest. Env canonica unica `PLENORA_ENCRYPTION_KEY` (gli alias legacy sono rimossi dal 2026-04-23). Qualsiasi nuovo segreto persistito passa da `encrypt`/`decrypt`/`encrypt_dict_fields`. Mai reimplementare Fernet altrove ne reintrodurre fallback runtime.
+- **Storage result/runtime object storage**: in `STORAGE_POLICY=object_storage`, i nuovi result non vanno mai in BYTEA. Il DB conserva metadata + `storage_key`; `data` BYTEA e' solo compatibility read path. Runtime artifacts/result usano `OBJECT_STORAGE_BUCKET`/`PLENORA_ARTIFACT_BUCKET`, non `BACKUP_BUCKET`.
+- **`backend/app/infrastructure/security/crypto.py`** = unico punto di crypto-at-rest. Env canonica unica `PLENORA_ENCRYPTION_KEY` (gli alias ritirati sono rimossi dal 2026-04-23). Qualsiasi nuovo segreto persistito passa da `encrypt`/`decrypt`/`encrypt_dict_fields`. Mai reimplementare Fernet altrove ne reintrodurre fallback runtime.
 - **`frontend/src/api/`** = unico punto HTTP del frontend. Pagine, componenti e store NON chiamano `fetch`/`axios` direttamente; auth/header/error globali vivono in `client.js`/`http.js`/`errors.js`.
 - **`backend/app/core/orchestrator/`** coordina, non duplica logica step. Nuovi pezzi di pipeline vanno nel modulo step (`estrai`/`manipola`/`arricchisci`/`carica` + executor dedicato), non in `OrchestratorService`. Cancel/cleanup task devono restare idempotenti.
 - **`backend/app/core/scheduler/`** passa sempre da `orchestrator` per eseguire la pipeline. Mai eseguire step direttamente dallo scheduler. `concurrency_manager` e `policy_engine` non vanno bypassati: nuovi tipi di policy vanno la' dentro, non nel router.
 - **`backend/app/core/features/`** governa il contratto ArcGIS. I response model `WriteFeaturesResponse` e `CreateServiceResponse` sono consumati da test e frontend: cambiarne shape e' un breaking change. Token come `?token=` query param, mai header. Output sempre via `_mask_secrets` per non leakare credenziali.
-- **`backend/app/core/auth/` + RBAC** non si bypassa. Tutte le route nuove devono passare per `JWTMiddleware`; protezioni di ruolo via `require_admin`/`require_user_or_above`/`require_not_esecutore`/`require_*_owner`. Niente lettura segreti in chiaro: passare da `shared/crypto`.
+- **`backend/app/core/auth/` + RBAC** non si bypassa. Tutte le route nuove devono passare per `JWTMiddleware`; protezioni di ruolo via `require_admin`/`require_user_or_above`/`require_not_esecutore`/`require_*_owner`. Niente lettura segreti in chiaro: passare da `infrastructure/security/crypto.py`.
 - **`backend/app/core/manipola/transforms_registry.json`** e' la fonte unica delle trasformazioni esposte. Nuove `op_*` devono essere registrate li'; il frontend (`api/transforms.js` -> `transforms_api.get_registry`) consuma quel file. Mai hardcodare trasformazioni nel router o in `executor.py`.
+
