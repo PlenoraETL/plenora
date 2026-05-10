@@ -226,3 +226,79 @@ def test_auth_001_group_cleanup_cascade(
         f"AUTH-001 user ancora autenticabile dopo cascade: "
         f"HTTP {r_relogin.status_code}"
     )
+
+
+# ── AUTH-004 — JWT scaduto → 401 ──────────────────────────────────────
+
+
+@pytest.mark.profile_core
+@pytest.mark.requires_app
+@pytest.mark.smoke
+def test_auth_004_jwt_expired_returns_401(
+    http_client: httpx.Client,
+    auth_headers: dict[str, str],
+) -> None:
+    """AUTH-004 — Un token JWT con `exp` nel passato deve essere
+    rifiutato con 401 da qualsiasi endpoint protetto. Catalog
+    `auth.yaml` assertion: "re-login richiesto".
+
+    Plenora usa HS256 con `JWT_SECRET_KEY` (vedi
+    `app/core/auth/jwt_token.py:create_access_token`). Forgiamo
+    un token con la stessa shape del create-time
+    (`sub`, `username`, `group_id`, `role`, `exp`, `iat`, `jti`)
+    ma `exp` = `now - 10s`. La libreria PyJWT considera scaduto
+    qualsiasi token con `exp <= now` (default `leeway=0`).
+
+    Skip-safe: se la `JWT_SECRET_KEY` non e' disponibile come env
+    var (CI esterno), il test si salta. Default lookup:
+    `PLENORA_E2E_JWT_SECRET` -> `JWT_SECRET_KEY` (env del runner).
+    """
+    import os
+    import jwt as _jwt
+    from datetime import datetime, timezone, timedelta
+
+    secret = (
+        os.getenv("PLENORA_E2E_JWT_SECRET")
+        or os.getenv("JWT_SECRET_KEY")
+    )
+    if not secret:
+        pytest.skip(
+            "JWT_SECRET_KEY non configurata nel runner; non posso "
+            "forgiare un token scaduto per testare il 401."
+        )
+
+    # Estrai shape del payload da un token valido in modo da non
+    # hardcodare username / group_id / role
+    r_me = http_client.get(f"{API_PREFIX}/auth/me", headers=auth_headers)
+    assert r_me.status_code == 200, (
+        f"GET /auth/me: {r_me.status_code} — {r_me.text[:200]}"
+    )
+    me = r_me.json()
+    user_id = me.get("user_id") or me.get("sub") or me.get("id")
+    username = me.get("username")
+    group_id = me.get("group_id")
+    role = me.get("role")
+    assert all((user_id, username, group_id, role)), (
+        f"AUTH-004 /auth/me payload incompleto: {me}"
+    )
+
+    expired_payload = {
+        "sub": user_id,
+        "username": username,
+        "group_id": group_id,
+        "role": role,
+        "iat": datetime.now(timezone.utc) - timedelta(hours=2),
+        "exp": datetime.now(timezone.utc) - timedelta(seconds=10),
+        "jti": uuid.uuid4().hex,
+    }
+    expired_token = _jwt.encode(expired_payload, secret, algorithm="HS256")
+    bad_headers = {"Authorization": f"Bearer {expired_token}"}
+
+    # Tre endpoint diversi per coprire il dependency `require_*`
+    # senza indipendenza dal payload del singolo endpoint.
+    for path in ("/auth/me", "/connections", "/projects"):
+        r = http_client.get(f"{API_PREFIX}{path}", headers=bad_headers)
+        assert r.status_code == 401, (
+            f"AUTH-004 endpoint {path}: atteso 401 con token scaduto, "
+            f"ottenuto {r.status_code} — {r.text[:200]}"
+        )
