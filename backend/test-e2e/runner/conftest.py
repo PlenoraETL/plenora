@@ -591,7 +591,14 @@ def ftp_datasource_id(
         "port": int(os.getenv("PLENORA_E2E_FTP_PORT", "21")),
         "username": os.getenv("PLENORA_E2E_FTP_USER", "tester"),
         "password": os.getenv("PLENORA_E2E_FTP_PWD", "plenora_ftp_pwd"),
-        "root_path": os.getenv("PLENORA_E2E_FTP_ROOT", "/fixtures"),
+        # Default `/home/tester/fixtures`: `delfer/alpine-ftp-server`
+        # non chrootifica la home, quindi `/fixtures` come absolute
+        # path fallisce con `550 Failed to change directory`. Vedi
+        # docker/docker-compose.yml ftp service: il volume monta
+        # `../files:/home/tester/fixtures:ro`.
+        "root_path": os.getenv(
+            "PLENORA_E2E_FTP_ROOT", "/home/tester/fixtures"
+        ),
         "passive": True,
         "tls": False,
     }

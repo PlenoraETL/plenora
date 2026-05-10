@@ -338,3 +338,88 @@ def test_ext_021_estrai_rest_apikey_query(
         http_client.delete(
             f"{API_PREFIX}/projects/{project_id}", headers=auth_headers,
         )
+
+
+# ── EXT-028 — Estrai FTP file CSV ─────────────────────────────────────
+
+
+@pytest.mark.requires_app
+@pytest.mark.smoke
+def test_ext_028_estrai_ftp_csv(
+    http_client: httpx.Client,
+    auth_headers: dict[str, str],
+    ftp_datasource_id: str,
+) -> None:
+    """EXT-028 — Download di `csv/customers_basic.csv` via FTP e parse.
+
+    Catalog `ext.yaml`: dataset `ftp://tester@ftp:21/fixtures/csv/
+    customers_basic.csv`, assertion `download + parse csv`. Il file
+    contiene 12 customer (header escluso).
+
+    Plenora **non** esegue file remoti FTP/SFTP nel flow ESTRAI:
+    `core/estrai/executor.py` richiede `default_connection_id` e
+    accetta solo source database/ArcGIS. Il modulo MANIPOLA carica
+    `file_source` (file gestiti localmente) e `project_source` ma
+    non `datasource_node` come source — `manipola/source_loading.py`
+    riconosce solo `n.type == "file_source"`. Il path documentato
+    per FTP e' usare gli endpoint `GET /datasources/{id}/files`
+    (list) e `GET /datasources/{id}/files/download` (raw bytes),
+    poi materializzare in un FileSource via upload o consumarli
+    inline. Il commento di `download_file` lo conferma: "Il
+    parsing (CSV, GeoJSON, ecc.) e' responsabilita' di MANIPOLA".
+
+    Per lo smoke catalog EXT-028 verifichiamo i tre step
+    contrattuali del path FTP supportato:
+      1. `POST /datasources/{id}/test` → success
+      2. `GET /datasources/{id}/files?path=csv` → fixture presente
+      3. `GET /datasources/{id}/files/download` → bytes parsabili
+         come CSV con 12 righe dati (header escluso).
+
+    Profilo `files` richiesto — `ftp_datasource_id` skipa se assente.
+    """
+    # 1) test connessione
+    r_test = http_client.post(
+        f"{API_PREFIX}/datasources/{ftp_datasource_id}/test",
+        headers=auth_headers,
+    )
+    assert r_test.status_code == 200, (
+        f"FTP test: {r_test.status_code} — {r_test.text[:200]}"
+    )
+    test_body = r_test.json()
+    # DataSourceTestResult { success: bool, message: str, details? }
+    assert test_body.get("success") is True, (
+        f"FTP test fallito: {test_body}"
+    )
+
+    # 2) list csv/ → fixture presente
+    r_list = http_client.get(
+        f"{API_PREFIX}/datasources/{ftp_datasource_id}/files",
+        params={"path": "csv"}, headers=auth_headers,
+    )
+    assert r_list.status_code == 200, (
+        f"list_files: {r_list.status_code} — {r_list.text[:200]}"
+    )
+    files = r_list.json()
+    names = [f.get("name") for f in files]
+    assert "customers_basic.csv" in names, (
+        f"customers_basic.csv non trovato in csv/: {names}"
+    )
+
+    # 3) download bytes + parse
+    r_dl = http_client.get(
+        f"{API_PREFIX}/datasources/{ftp_datasource_id}/files/download",
+        params={"path": "csv/customers_basic.csv"}, headers=auth_headers,
+    )
+    assert r_dl.status_code == 200, (
+        f"download: {r_dl.status_code} — {r_dl.text[:200]}"
+    )
+    text = r_dl.content.decode("utf-8")
+    lines = [l for l in text.splitlines() if l.strip()]
+    assert len(lines) == 13, (
+        f"EXT-028 atteso 13 righe (header + 12 dati), ottenuto "
+        f"{len(lines)}. Sample: {lines[:3]}"
+    )
+    header = lines[0].split(",")
+    assert {"id", "full_name", "email"}.issubset(set(header)), (
+        f"header inatteso: {header}"
+    )
