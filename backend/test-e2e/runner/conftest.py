@@ -302,6 +302,51 @@ def group_id(login_payload: dict[str, Any]) -> str:
     return str(gid)
 
 
+# ── Superadmin headers (per gli smoke che richiedono `superadmin`,
+#    es. AUTH-001 cleanup cascade group). Default: `admin_plenora` /
+#    pwd letta da `PLENORA_E2E_SUPERADMIN_PWD`. Se non disponibile, la
+#    fixture skipa il test invece di fallire — nei CI esterni il
+#    superadmin di norma non e' disponibile.
+
+@pytest.fixture(scope="session")
+def superadmin_headers(http_client: httpx.Client) -> dict[str, str]:
+    """Bearer headers per un account con ruolo `superadmin`.
+
+    Le credenziali sono lette da:
+      - PLENORA_E2E_SUPERADMIN_USER (default: ``admin_plenora``)
+      - PLENORA_E2E_SUPERADMIN_PWD  (no default: skip se mancante)
+
+    Skip-safe: i test che ne dipendono vengono saltati se le
+    credenziali non sono disponibili o il login fallisce.
+    """
+    user = os.getenv("PLENORA_E2E_SUPERADMIN_USER", "admin_plenora")
+    pwd = os.getenv("PLENORA_E2E_SUPERADMIN_PWD")
+    if not pwd:
+        pytest.skip(
+            "PLENORA_E2E_SUPERADMIN_PWD non configurata; "
+            "richiesto per smoke che esercitano endpoint superadmin "
+            "(es. AUTH-001 group cascade delete)."
+        )
+    r = http_client.post(
+        f"{API_PREFIX}/auth/login",
+        json={"username": user, "password": pwd},
+    )
+    if r.status_code != 200:
+        pytest.skip(
+            f"Login superadmin {user!r} fallito: HTTP {r.status_code} — "
+            f"{r.text[:200]}"
+        )
+    body = r.json()
+    if (body.get("role") or "") != "superadmin":
+        pytest.skip(
+            f"User {user!r} non e' superadmin (role={body.get('role')!r})"
+        )
+    tok = body.get("access_token")
+    if not tok:
+        pytest.skip(f"Login superadmin senza access_token: {body}")
+    return {"Authorization": f"Bearer {tok}"}
+
+
 # ── DB connections ──────────────────────────────────────────────────────
 
 def _create_db_connection(

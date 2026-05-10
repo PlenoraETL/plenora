@@ -156,7 +156,7 @@ def test_factories_canvas_geojson_with_geo_filter() -> None:
 @pytest.mark.smoke
 def test_factories_canvas_aggregate() -> None:
     canvas = F.canvas_aggregate_sum_per_region(connection_id="cid")
-    agg_nodes = [n for n in canvas["nodes"] if n["transform_op"] == "aggregate"]
+    agg_nodes = [n for n in canvas["nodes"] if n.get("transform_op") == "aggregate"]
     assert agg_nodes
     assert agg_nodes[0]["aggregations"][0]["function"] == "SUM"
 
