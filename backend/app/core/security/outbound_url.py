@@ -92,18 +92,26 @@ def check_outbound_address(
             ip = ipaddress.ip_address(addr)
         except ValueError:
             continue
-        if allow_loopback and ip.is_loopback:
-            continue
-        if allow_private and ip.is_private:
-            continue
-        if (
-            ip.is_private
-            or ip.is_loopback
-            or ip.is_link_local
-            or ip.is_reserved
-            or ip.is_multicast
-            or ip.is_unspecified
-        ):
+        # Python `ipaddress.is_private` returns True ALSO for loopback,
+        # link-local, multicast, reserved (IPv6 ::1) and unspecified —
+        # not just RFC 1918. The two opt-ins must therefore be applied
+        # narrowly:
+        #   - allow_loopback only grants loopback
+        #   - allow_private only grants the RFC 1918 / RFC 4193 ranges
+        #     (IPv4 10/8, 172.16/12, 192.168/16; IPv6 fc00::/7),
+        #     never the categories above.
+        # Ordering matters: if loopback is allowed we must NOT fall
+        # through to the private-but-not-loopback gate (every loopback
+        # is also is_private).
+        if ip.is_loopback:
+            if allow_loopback:
+                continue
+            return f"URL bloccato: l'host risolve a un IP privato/interno ({addr})"
+        if ip.is_link_local or ip.is_multicast or ip.is_reserved or ip.is_unspecified:
+            return f"URL bloccato: l'host risolve a un IP privato/interno ({addr})"
+        if ip.is_private:
+            if allow_private:
+                continue
             return f"URL bloccato: l'host risolve a un IP privato/interno ({addr})"
     return None
 
