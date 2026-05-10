@@ -206,8 +206,13 @@ function extractSourceColumns(node) {
 function computeOutputColumns(node, inputColumns) {
   const nodeType = node.type;
   
-  // Nodi sorgente: usano le loro colonne salvate
-  if (nodeType === 'project_source' || nodeType === 'file_source' || nodeType === 'staticValues') {
+  // Nodi sorgente: usano le loro colonne salvate. `datasourceNode`
+  // (FTP/SFTP/SharePoint) deve apparire qui — senza, propagateColumns
+  // (fired 300ms dopo il mount in ManipolaEditor) cadrebbe nel
+  // default `[...inputColumns]`, che per un nodo radice e' [], e
+  // svuoterebbe le colonne appena rilevate via fetchSchema.
+  if (nodeType === 'project_source' || nodeType === 'file_source'
+      || nodeType === 'staticValues' || nodeType === 'datasourceNode') {
     return extractSourceColumns(node);
   }
   
