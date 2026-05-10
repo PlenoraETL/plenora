@@ -402,9 +402,21 @@ class ScheduleService:
             logger.warning(f"Trovati {len(orphaned)} schedule orfani: {orphaned}")
         return orphaned
 
-    def get_schedules_for_project(self, project_id: str) -> List[ScheduleConfig]:
-        """Lista tutti gli schedule di un progetto specifico."""
-        return self.list_schedules(project_id=project_id).schedules
+    def get_schedules_for_project(
+        self, project_id: str, group_id: Optional[str] = None,
+    ) -> List[ScheduleConfig]:
+        """Lista tutti gli schedule di un progetto specifico.
+
+        `group_id`: tenant in cui cercare. None => fallback a
+        `DEFAULT_GROUP` (legacy default per chiamanti che non
+        conoscono il tenant). I caller che servono progetti di
+        tenant non-default DEVONO passare `group_id` esplicito,
+        altrimenti gli schedule cross-tenant sono invisibili e
+        un cascade-cleanup li lascia indietro come orfani.
+        """
+        return self.list_schedules(
+            project_id=project_id, group_id=group_id,
+        ).schedules
 
     # AGGIORNAMENTO RUNTIME
 

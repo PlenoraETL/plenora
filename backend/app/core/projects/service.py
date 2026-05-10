@@ -451,7 +451,16 @@ class ProjectService:
         try:
             from app.core.scheduler.schedule_service import ScheduleService
             schedule_service = ScheduleService()
-            project_schedules = schedule_service.get_schedules_for_project(project_id)
+            # Tenant fix: senza `group_id` esplicito,
+            # `get_schedules_for_project` (-> `list_schedules`) ricade
+            # su `DEFAULT_GROUP='default'`, quindi gli schedule di
+            # progetti di altri gruppi non vengono mai marcati orphan
+            # e restano `idle` referenziando un project_id ormai
+            # cancellato. Passiamo `row.group_id` per cercare nel
+            # tenant corretto.
+            project_schedules = schedule_service.get_schedules_for_project(
+                project_id, group_id=row.group_id,
+            )
             orphaned_count = 0
             for sched in project_schedules:
                 if sched.runtime.status != "orphan":
