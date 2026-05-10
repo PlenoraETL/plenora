@@ -69,6 +69,23 @@ def check_outbound_address(
     except socket.gaierror:
         return f"Host non risolvibile: {host}"
 
+    # Opt-in PLENORA_ALLOW_PRIVATE_NETWORK_OUTBOUND=1 per scenari di
+    # test/E2E: gli host del compose risolvono a IP privati (172.16/12,
+    # 192.168/16) — senza questo opt-in, ogni chiamata a un fake server
+    # interno (es. plenora-e2e-fake-rest) verrebbe bloccata. NEVER set
+    # in production: serve a fingere che la rete docker interna sia
+    # "esterna" per i test SSRF positivi e per chiamate a fixture.
+    env_name = os.environ.get(
+        "ENVIRONMENT", os.environ.get("ENV", "development")
+    ).lower()
+    is_prod_like = env_name in ("production", "prod", "staging", "stage")
+    allow_private = (
+        not is_prod_like
+        and os.environ.get(
+            "PLENORA_ALLOW_PRIVATE_NETWORK_OUTBOUND", ""
+        ).strip() == "1"
+    )
+
     addr_list = list({info[4][0] for info in infos})
     for addr in addr_list:
         try:
@@ -76,6 +93,8 @@ def check_outbound_address(
         except ValueError:
             continue
         if allow_loopback and ip.is_loopback:
+            continue
+        if allow_private and ip.is_private:
             continue
         if (
             ip.is_private

@@ -57,11 +57,22 @@ def create_connection(
 ):
     """Crea nuova connessione database. Solo admin/superadmin."""
     require_service(_connection_service, "ConnectionService")
-    conn = _connection_service.create_connection(
-        data,
-        group_id=current_user.group_id,
-        created_by=current_user.user_id,
-    )
+    try:
+        conn = _connection_service.create_connection(
+            data,
+            group_id=current_user.group_id,
+            created_by=current_user.user_id,
+        )
+    except connection_errors.ConnectionDuplicateNameError as e:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "error": connection_errors.CONNECTION_DUPLICATE_NAME,
+                "message": str(e),
+                "name": e.name,
+                "group_id": e.group_id,
+            },
+        )
     conn.can_edit = compute_can_edit(conn, current_user)
     return conn
 

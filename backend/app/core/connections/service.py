@@ -122,7 +122,19 @@ class ConnectionService:
         group_id: str | None = None,
         created_by: str | None = None,
     ) -> DatabaseConnection:
+        from app.core.connections.errors import ConnectionDuplicateNameError
+
         group_id = group_id or self.DEFAULT_GROUP
+        # Unicita' (name, group_id): pre-check applicativo prima del DB
+        # insert. Senza, due connections con stesso name nello stesso
+        # gruppo coesistono e la lookup-by-name diventa ambigua per
+        # tooling/diagnosi (e per il contract test E2E CT-002).
+        existing = connection_db.list_connection_configs(group_id)
+        if any(r.name == data.name for r in existing):
+            raise ConnectionDuplicateNameError(
+                name=data.name, group_id=group_id,
+            )
+
         connection_id = self._generate_connection_id(data.name)
         extra = {"description": getattr(data, "description", "")}
         row = connection_db.create_connection(
