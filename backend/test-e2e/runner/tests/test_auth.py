@@ -302,3 +302,57 @@ def test_auth_004_jwt_expired_returns_401(
             f"AUTH-004 endpoint {path}: atteso 401 con token scaduto, "
             f"ottenuto {r.status_code} — {r.text[:200]}"
         )
+
+
+# ── SEC-005 — Token blacklist post-logout ─────────────────────────────
+
+
+@pytest.mark.profile_core
+@pytest.mark.requires_app
+@pytest.mark.smoke
+def test_sec_005_token_blacklist_post_logout(
+    http_client: httpx.Client,
+) -> None:
+    """SEC-005 — Catalog: dopo `POST /auth/logout`, il token usato
+    nella sessione deve essere in blacklist (jti registrato in
+    Redis o equivalente). Una richiesta successiva con lo stesso
+    token DEVE restituire 401.
+
+    Reference: `app/shared/token_blacklist.py`. Il blacklist
+    storage e' Redis-backed; il check via `decode_token` non
+    basta — serve il dependency `require_*` che esamina il jti.
+    """
+    import os
+    user = os.getenv("PLENORA_E2E_USER", "tester")
+    pwd = os.getenv("PLENORA_E2E_PASSWORD", "plenora_test_pwd")
+    r_login = http_client.post(
+        f"{API_PREFIX}/auth/login",
+        json={"username": user, "password": pwd},
+    )
+    assert r_login.status_code == 200, (
+        f"SEC-005 login fallito: {r_login.status_code} — "
+        f"{r_login.text[:200]}"
+    )
+    token = r_login.json()["access_token"]
+    h = {"Authorization": f"Bearer {token}"}
+
+    # Pre-logout: token valido, /auth/me 200
+    r_me_pre = http_client.get(f"{API_PREFIX}/auth/me", headers=h)
+    assert r_me_pre.status_code == 200, (
+        f"SEC-005 token non valido pre-logout: {r_me_pre.status_code}"
+    )
+
+    # Logout
+    r_logout = http_client.post(f"{API_PREFIX}/auth/logout", headers=h)
+    assert r_logout.status_code in (200, 204), (
+        f"SEC-005 logout fallito: {r_logout.status_code} — "
+        f"{r_logout.text[:200]}"
+    )
+
+    # Post-logout: stesso token DEVE essere rifiutato 401
+    r_me_post = http_client.get(f"{API_PREFIX}/auth/me", headers=h)
+    assert r_me_post.status_code == 401, (
+        f"SEC-005 token ancora valido post-logout: "
+        f"{r_me_post.status_code} — {r_me_post.text[:200]}. "
+        f"Blacklist non funzionante."
+    )

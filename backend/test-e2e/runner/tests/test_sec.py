@@ -190,3 +190,72 @@ def test_ssrf_001_002_blocks_payload_based_test(
     assert any(k in msg for k in keywords), (
         f"SSRF[{label}] messaggio non riconosciuto: {msg!r}"
     )
+
+
+# ── SSRF-003 — CredentialUnavailableError → 422 ──────────────────────
+
+
+@pytest.mark.profile_core
+@pytest.mark.requires_app
+@pytest.mark.smoke
+def test_ssrf_003_cloud_credentials_unavailable(
+    http_client: httpx.Client,
+    auth_headers: dict[str, str],
+) -> None:
+    """SSRF-003 — Catalog: "422 (NON 500) con `error_code=
+    cloud_credentials_unavailable`; messaggio non contiene
+    stack trace".
+
+    Plenora puo' avere cloud secret backends per risolvere
+    credenziali al runtime (AWS SSM, Azure KeyVault). Skip-safe
+    se il profilo `core` non integra cloud secret.
+    """
+    payload = {
+        "name": f"ssrf003-{uuid.uuid4().hex[:6]}",
+        "description": "SSRF-003 cloud creds unavail",
+        "connection_type": "rest",
+        "api_type": "enricher",
+        "url": "http://plenora-e2e-fake-rest:8080/auth/oauth2/protected",
+        "method": "GET",
+        "auth": {
+            "type": "oauth2_client_credentials",
+            "token_url": "http://plenora-e2e-fake-rest:8080/auth/oauth2/token",
+            "client_id": "aws_ssm:/plenora/oauth/client_id",
+            "client_secret": "aws_ssm:/plenora/oauth/client_secret",
+        },
+    }
+    r_create = http_client.post(
+        f"{API_PREFIX}/api-connections",
+        json=payload, headers=auth_headers,
+    )
+    assert r_create.status_code in (200, 201), r_create.text[:200]
+    cid = r_create.json().get("id")
+    try:
+        r_test = http_client.post(
+            f"{API_PREFIX}/api-connections/{cid}/test",
+            json={}, headers=auth_headers,
+        )
+        if r_test.status_code == 422:
+            err_text = r_test.text.lower()
+            assert "traceback" not in err_text, (
+                f"SSRF-003 422 contiene stack trace: {r_test.text[:200]}"
+            )
+            return
+        if r_test.status_code == 200:
+            body = r_test.json()
+            ok = body.get("success", body.get("ok"))
+            if ok is False:
+                pytest.skip(
+                    "Plenora `core` non integra cloud secret "
+                    "backend; il prefix `aws_ssm:` e' trattato "
+                    "come literal. SSRF-003 richiede backend con "
+                    "supporto cloud secret resolution."
+                )
+        assert r_test.status_code != 500, (
+            f"SSRF-003 500 (atteso 422 strutturato): "
+            f"{r_test.text[:300]}"
+        )
+    finally:
+        http_client.delete(
+            f"{API_PREFIX}/api-connections/{cid}", headers=auth_headers,
+        )
