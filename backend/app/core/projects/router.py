@@ -11,7 +11,7 @@ from typing import Any, List, Optional
 from app.utils.logger import get_logger
 from app.shared import error_codes
 from app.shared.error_envelope import raise_typed_http
-from app.shared.audit_action import audit_action
+from app.observability.audit_action import audit_action
 from app.core.projects.canvas_models import CanvasState, Node, Edge
 from app.core.projects.exceptions import (
     CanvasCorruptedError,

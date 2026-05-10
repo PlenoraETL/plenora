@@ -15,7 +15,7 @@ from app.core.auth.models import (
 )
 from app.shared.contracts.auth import CurrentUser
 from app.shared import error_codes
-from app.shared.audit_action import audit_action
+from app.observability.audit_action import audit_action
 from app.shared.error_envelope import raise_typed_http
 from app.utils.logger import get_logger
 

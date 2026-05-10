@@ -13,7 +13,7 @@ from typing import Optional
 
 import pandas as pd
 
-from app.utils.result_store import (
+from app.core.results.result_store import (
     get_temp_output_path,
     save_pipeline_result_outcome,
     save_result_blob,

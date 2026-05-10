@@ -884,7 +884,7 @@ def execute_enrichment_task(
                 logger.info(f"[Task {task_id}] Output eseguibile su storage: eseguibili-outputs/{task_id}/{_output_filename}")
             else:
                 # Flusso arricchisci standard: salva nel DB
-                from app.utils.result_store import save_result_blob
+                from app.core.results.result_store import save_result_blob
                 result_id = save_result_blob(
                     project_id=project_id,
                     path=src_path,
@@ -988,7 +988,7 @@ def execute_enrichment_task(
             logger.info(f"[Task {task_id}] Output eseguibile (df) su storage: eseguibili-outputs/{task_id}/{final_filename}")
         else:
             # Arricchisci standard: single entry-point save_pipeline_result
-            from app.utils.result_store import save_pipeline_result
+            from app.core.results.result_store import save_pipeline_result
             saved = save_pipeline_result(
                 project_id=project_id,
                 df=final_df,

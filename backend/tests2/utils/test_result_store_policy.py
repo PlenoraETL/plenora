@@ -10,7 +10,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from app.utils.result_store import (
+from app.core.results.result_store import (
     ResultSaveError,
     save_result_blob_from_bytes,
 )
@@ -46,7 +46,7 @@ def stub_storage(monkeypatch):
 @pytest.fixture
 def mock_db(monkeypatch):
     import app.core.results.store as results_store
-    import app.utils.result_store as result_store
+    import app.core.results.result_store as result_store
 
     saved: list[dict] = []
 

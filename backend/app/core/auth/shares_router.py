@@ -21,7 +21,7 @@ from app.core.auth.shares import (
     remove_resource_share,
 )
 from app.shared.contracts.auth import CurrentUser
-from app.shared.audit_action import audit_action
+from app.observability.audit_action import audit_action
 
 router = APIRouter(prefix="/shares", tags=["shares"])
 

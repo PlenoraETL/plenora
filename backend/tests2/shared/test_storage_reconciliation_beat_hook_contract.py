@@ -299,7 +299,7 @@ def _run_reconcile_storage(
         "app.core.resources.storage_reconciliation.fetch_due_pending_deletes",
         lambda **kw: rows,
     ), patch(
-        "app.shared.storage_compensation.compensating_delete",
+        "app.infrastructure.storage.compensation.compensating_delete",
         _comp,
     ), patch(
         "app.core.resources.storage_reconciliation.mark_orphan_deleted",

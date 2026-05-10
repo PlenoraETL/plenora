@@ -20,9 +20,9 @@ from app.shared.connections.oauth import (
 # separation (`_save_and_build_dataframe_response` +
 # `_build_file_result_response` vivono nel SupportMixin con import
 # lazy diversi). Test ora patchano solo il source canonico
-# `app.utils.result_store.save_result_blob_from_bytes` per il code path
+# `app.core.results.result_store.save_result_blob_from_bytes` per il code path
 # in-memory; eventuali test path-based futuri devono patchare il
-# canonical `app.utils.result_store.save_result_blob`, NON l'alias
+# canonical `app.core.results.result_store.save_result_blob`, NON l'alias
 # api_connector ormai rimosso
 
 

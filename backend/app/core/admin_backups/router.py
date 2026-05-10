@@ -17,7 +17,7 @@ from app.core.admin_backups.service import (
     AdminBackupDisabledError,
 )
 from app.shared import error_codes
-from app.shared.audit_action import audit_action
+from app.observability.audit_action import audit_action
 
 router = APIRouter(prefix="/admin/backups", tags=["admin-backups"])
 

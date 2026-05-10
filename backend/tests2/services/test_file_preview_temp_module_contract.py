@@ -39,7 +39,7 @@ def fake_fs():
 @pytest.fixture
 def real_helpers():
     """Restituisce i veri FormatDetector + ColumnInfoBuilder (sono pure)."""
-    from app.shared.file_helpers import ColumnInfoBuilder, FormatDetector
+    from app.core.files.helpers import ColumnInfoBuilder, FormatDetector
     return FormatDetector, ColumnInfoBuilder
 
 
@@ -200,7 +200,7 @@ def test_file_source_service_preview_delegates_with_service_collaborators(
     svc._fs = MagicMock()
     svc._loader = MagicMock()
     svc._loader.load_csv = MagicMock(return_value=pd.DataFrame({"k": [1, 2]}))
-    from app.shared.file_helpers import ColumnInfoBuilder, FormatDetector
+    from app.core.files.helpers import ColumnInfoBuilder, FormatDetector
     svc._format_detector = FormatDetector
     svc._column_builder = ColumnInfoBuilder
     svc._logger = MagicMock()

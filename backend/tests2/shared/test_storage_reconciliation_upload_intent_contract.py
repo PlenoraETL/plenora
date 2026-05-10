@@ -503,7 +503,7 @@ def _run_upload_intent_reconcile(
                return_value=[]), \
          patch("app.core.resources.storage_reconciliation.prune_terminal_older_than",
                return_value=0), \
-         patch("app.shared.storage_compensation.compensating_delete",
+         patch("app.infrastructure.storage.compensation.compensating_delete",
                side_effect=lambda *a, **kw: calls["delete"].append((a, kw)) or "ok"):
         sched._reconcile_storage()
 
@@ -594,7 +594,7 @@ def test_reconcile_upload_intent_disabled_when_grace_zero(monkeypatch):
                return_value=[]), \
          patch("app.core.resources.storage_reconciliation.prune_terminal_older_than",
                return_value=0), \
-         patch("app.shared.storage_compensation.compensating_delete",
+         patch("app.infrastructure.storage.compensation.compensating_delete",
                return_value="ok"):
         sched._reconcile_storage()
 

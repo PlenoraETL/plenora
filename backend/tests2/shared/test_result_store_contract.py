@@ -10,7 +10,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from app.utils.result_store import (
+from app.core.results.result_store import (
     PipelineResultSave,
     ResultSaveError,
     save_pipeline_result,
@@ -32,7 +32,7 @@ def test_save_result_blob_removes_temp_file_only_after_success(monkeypatch, tmp_
     saved = {}
 
     import app.core.results.store as results_store
-    import app.utils.result_store as result_store
+    import app.core.results.result_store as result_store
 
     monkeypatch.setattr(
         result_store,
@@ -75,7 +75,7 @@ def test_save_result_blob_keeps_temp_file_when_db_save_fails(monkeypatch, tmp_pa
     result_file.write_text("id\n1\n", encoding="utf-8")
 
     import app.core.results.store as results_store
-    import app.utils.result_store as result_store
+    import app.core.results.result_store as result_store
 
     monkeypatch.setattr(
         result_store,
@@ -133,7 +133,7 @@ def test_apply_results_retention_uses_typed_result_rows(monkeypatch):
 
 def test_result_store_retention_wrapper_delegates_to_results_domain(monkeypatch):
     import app.core.results.retention as results_retention
-    import app.utils.result_store as result_store
+    import app.core.results.result_store as result_store
 
     called: list[str] = []
     monkeypatch.setattr(
@@ -149,9 +149,9 @@ def test_result_store_retention_wrapper_delegates_to_results_domain(monkeypatch)
 
 def test_result_store_uses_results_boundary_not_row_modules():
     backend_root = Path(__file__).resolve().parents[2]
-    source = (backend_root / "app" / "utils" / "result_store.py").read_text(
-        encoding="utf-8"
-    )
+    source = (
+        backend_root / "app" / "core" / "results" / "result_store.py"
+    ).read_text(encoding="utf-8")
 
     assert "from app.core.results.db import" not in source
     assert "from app.core.results.blob import" not in source
@@ -163,7 +163,6 @@ def test_result_store_slice_has_no_row_owned_to_legacy_dict():
     """Result-store dict compatibility belongs at explicit public edges."""
     backend_root = Path(__file__).resolve().parents[2]
     files = [
-        backend_root / "app" / "utils" / "result_store.py",
         *sorted((backend_root / "app" / "core" / "results").glob("*.py")),
     ]
 
@@ -193,7 +192,7 @@ def test_result_store_slice_has_no_row_owned_to_legacy_dict():
 
 
 def test_save_pipeline_result_outcome_is_typed_internal_boundary(monkeypatch):
-    import app.utils.result_store as result_store
+    import app.core.results.result_store as result_store
 
     calls: dict[str, object] = {}
 
@@ -228,7 +227,7 @@ def test_save_pipeline_result_outcome_is_typed_internal_boundary(monkeypatch):
 
 
 def test_save_pipeline_result_public_wrapper_is_explicit_legacy_dict(monkeypatch):
-    import app.utils.result_store as result_store
+    import app.core.results.result_store as result_store
 
     monkeypatch.setattr(
         result_store,
@@ -254,7 +253,7 @@ def test_save_pipeline_result_public_wrapper_is_explicit_legacy_dict(monkeypatch
 def _force_object_storage(monkeypatch, tmp_path):
     """Setup minimo per portare save_result_blob nel ramo object_storage."""
     import app.core.results.store as results_store
-    import app.utils.result_store as result_store
+    import app.core.results.result_store as result_store
     from types import SimpleNamespace
 
     monkeypatch.setattr(
@@ -394,7 +393,7 @@ def _wire_object_storage_writer(monkeypatch, *, fake_storage, saved):
     Forza policy=object_storage, mock di db.save_result con cattura kwargs,
     e installa un fake runtime object storage che registra gli upload."""
     import app.core.results.store as results_store
-    import app.utils.result_store as result_store
+    import app.core.results.result_store as result_store
 
     monkeypatch.setattr(
         result_store,

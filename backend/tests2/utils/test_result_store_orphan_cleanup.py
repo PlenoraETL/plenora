@@ -12,7 +12,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from app.utils.result_store import (
+from app.core.results.result_store import (
     ResultSaveError,
     save_result_blob,
     save_result_blob_from_bytes,
@@ -71,7 +71,7 @@ def stub_storage_factory(monkeypatch):
 @pytest.fixture
 def mock_db_save_ok(monkeypatch):
     import app.core.results.store as results_store
-    import app.utils.result_store as result_store
+    import app.core.results.result_store as result_store
 
     saved: list[dict] = []
     monkeypatch.setattr(
@@ -94,7 +94,7 @@ def mock_db_save_fails(monkeypatch):
     """Configura `db.save_result` perche' sollevi RuntimeError simulando
     una row DB rifiutata (vincolo FK, connection, ecc.)."""
     import app.core.results.store as results_store
-    import app.utils.result_store as result_store
+    import app.core.results.result_store as result_store
 
     monkeypatch.setattr(
         result_store, "uuid", SimpleNamespace(uuid4=lambda: "res-orph")
@@ -130,11 +130,11 @@ def caplog_app(caplog):
     """`app.utils.logger.get_logger("app")` setta `propagate=False` quindi
     caplog di default non vede i log applicativi. Ci attacchiamo
     direttamente al logger del modulo per catturare i record."""
-    from app.utils import result_store as _rs
+    from app.core.results import result_store as _rs
     handler_logger = _rs.logger
     # Risolvi il logger stdlib sotto lo StructuredLogger wrapper.
     stdlib_logger = getattr(handler_logger, "_logger", None) or logging.getLogger(
-        "app.utils.result_store"
+        "app.core.results.result_store"
     )
     stdlib_logger.addHandler(caplog.handler)
     prev_level = stdlib_logger.level

@@ -8,8 +8,8 @@ from __future__ import annotations
 
 from typing import Any, Optional, TypedDict
 
-from app.core.resources.storage_reconciliation import mark_done, record_upload_intent
-from app.infrastructure.storage.cloud_backends import get_runtime_object_storage
+from app.core.resources import storage_reconciliation as reconciliation
+from app.infrastructure.storage import cloud_backends
 from app.shared.resources.storage_dispatch import resolve_payload_target
 from app.shared.resources.storage_layout import FILE_SOURCES_PREFIX
 
@@ -64,7 +64,7 @@ def dispatch_blob_storage(
 
     intent_id: Optional[str] = None
     try:
-        intent_id = record_upload_intent(
+        intent_id = reconciliation.record_upload_intent(
             domain="file_source",
             storage_key=storage_key,
             reason="upload_intent_pre_dispatch",
@@ -76,7 +76,7 @@ def dispatch_blob_storage(
         )
 
     try:
-        storage = get_runtime_object_storage()
+        storage = cloud_backends.get_runtime_object_storage()
         storage.upload_bytes(raw_data, storage_key)
     except Exception as e:
         logger.error(
@@ -85,7 +85,7 @@ def dispatch_blob_storage(
         )
         if intent_id is not None:
             try:
-                mark_done(intent_id)
+                reconciliation.mark_done(intent_id)
             except Exception:
                 pass
         raise

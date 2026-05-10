@@ -1169,7 +1169,7 @@ class PlenoraBeatScheduler(Scheduler):
 
         try:
             from app.core.resources import storage_reconciliation as _recon
-            from app.shared.storage_compensation import compensating_delete
+            from app.infrastructure.storage.compensation import compensating_delete
         except Exception as e:
             logger.warning(
                 f"Reconcile storage: import fallito: {e}", exc_info=True

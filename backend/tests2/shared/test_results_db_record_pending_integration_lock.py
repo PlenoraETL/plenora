@@ -55,19 +55,18 @@ def _slice_function(source: str, marker: str) -> str:
 
 
 def test_delete_result_calls_record_pending_inside_transaction():
-    body = _slice_function(
-        _read_source(_RESULTS_CLEANUP), "def delete_result("
-    )
+    source = _read_source(_RESULTS_CLEANUP)
+    body = _slice_function(source, "def delete_result(")
 
     assert "with transaction() as conn:" in body, (
         "delete_result must run inside a `with transaction()` block — "
         "record_pending and DELETE row must commit atomically."
     )
-    assert "from app.core.resources.storage_reconciliation import (" in body, (
+    assert "from app.core.resources import storage_reconciliation as reconciliation" in source, (
         "delete_result must import record_pending from the typed "
         "boundary module."
     )
-    assert "record_pending(" in body, (
+    assert "reconciliation.record_pending(" in body, (
         "delete_result must call record_pending. Without it the W1 "
         "race window has no application-side trail."
     )
@@ -87,7 +86,7 @@ def test_delete_result_record_pending_precedes_delete_statement():
         _read_source(_RESULTS_CLEANUP), "def delete_result("
     )
 
-    record_pending_pos = body.find("record_pending(")
+    record_pending_pos = body.find("reconciliation.record_pending(")
     delete_pos = body.find("DELETE FROM results WHERE id = %s")
 
     assert record_pending_pos != -1, (
@@ -110,20 +109,18 @@ def test_delete_result_record_pending_precedes_delete_statement():
 
 
 def test_delete_results_for_project_calls_record_pending_inside_transaction():
-    body = _slice_function(
-        _read_source(_RESULTS_CLEANUP),
-        "def delete_results_for_project(",
-    )
+    source = _read_source(_RESULTS_CLEANUP)
+    body = _slice_function(source, "def delete_results_for_project(")
 
     assert "with transaction() as conn:" in body, (
         "delete_results_for_project must run inside a `with "
         "transaction()` block."
     )
-    assert "from app.core.resources.storage_reconciliation import (" in body, (
+    assert "from app.core.resources import storage_reconciliation as reconciliation" in source, (
         "delete_results_for_project must import record_pending from "
         "the typed boundary module."
     )
-    assert "record_pending(" in body, (
+    assert "reconciliation.record_pending(" in body, (
         "delete_results_for_project must call record_pending per row "
         "with a non-NULL storage_key."
     )
@@ -143,7 +140,7 @@ def test_delete_results_for_project_record_pending_precedes_bulk_delete():
         "def delete_results_for_project(",
     )
 
-    record_pending_pos = body.find("record_pending(")
+    record_pending_pos = body.find("reconciliation.record_pending(")
     delete_pos = body.find("DELETE FROM results WHERE project_id = %s")
 
     assert record_pending_pos != -1, (
@@ -169,13 +166,13 @@ def test_delete_result_paths_wire_compensating_delete_and_mark_outcomes():
         body = _slice_function(source, fn)
 
         assert (
-            "from app.shared.storage_compensation import compensating_delete"
-            in body
+            "from app.infrastructure.storage import compensation as storage_compensation"
+            in source
         ), (
             f"{fn} must import compensating_delete from the unified "
             "helper module."
         )
-        assert "compensating_delete(" in body, (
+        assert "storage_compensation.compensating_delete(" in body, (
             f"{fn} must invoke compensating_delete after the commit."
         )
         assert 'domain="result_blob"' in body, (
@@ -183,12 +180,12 @@ def test_delete_result_paths_wire_compensating_delete_and_mark_outcomes():
             "so logs and reconciler routing are consistent with "
             "record_pending."
         )
-        assert "mark_done" in body, (
+        assert "reconciliation.mark_done" in body, (
             f"{fn} must call mark_done on outcome ok/skipped — "
             "without it pending rows accumulate forever even on the "
             "happy path."
         )
-        assert "mark_failed_attempt" in body, (
+        assert "reconciliation.mark_failed_attempt" in body, (
             f"{fn} must call mark_failed_attempt on outcome failed — "
             "without it the reconciler beat hook never re-tries."
         )

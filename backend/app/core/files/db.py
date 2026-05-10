@@ -5,13 +5,9 @@ from datetime import datetime, timezone
 import json
 from typing import Any, Dict, List, Optional, TypedDict
 
-from app.core.resources.storage_reconciliation import (
-    mark_done,
-    mark_failed_attempt,
-    record_pending,
-)
+from app.core.resources import storage_reconciliation as reconciliation
 from app.db.pg_connection import fetchone, fetchall, execute, transaction
-from app.shared.storage_compensation import compensating_delete
+from app.infrastructure.storage import compensation as storage_compensation
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -323,7 +319,7 @@ def delete_file_source(file_id: str) -> bool:
                     # process death follows the commit before the
                     # post-commit storage call, the pending row is
                     # the only application-side trace of the orphan
-                    reconciliation_ref = record_pending(
+                    reconciliation_ref = reconciliation.record_pending(
                         cur,
                         domain="file_source",
                         storage_key=storage_key,
@@ -342,7 +338,7 @@ def delete_file_source(file_id: str) -> bool:
     # delegato all'helper unificato
     # outcome -> reconciliation transition
     if storage_key_to_clean:
-        outcome = compensating_delete(
+        outcome = storage_compensation.compensating_delete(
             storage_key_to_clean,
             domain="file_source",
             reason="row_delete_post_commit",
@@ -351,9 +347,9 @@ def delete_file_source(file_id: str) -> bool:
         )
         if reconciliation_ref is not None:
             if outcome in ("ok", "skipped"):
-                mark_done(reconciliation_ref.id)
+                reconciliation.mark_done(reconciliation_ref.id)
             else:
-                mark_failed_attempt(
+                reconciliation.mark_failed_attempt(
                     reconciliation_ref.id,
                     error=f"compensating_delete_outcome={outcome}",
                 )

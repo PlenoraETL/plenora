@@ -285,10 +285,10 @@ def install_enrichment_task_mocks(
         return "fake-result-id-file"
 
     monkeypatch.setattr(
-        "app.utils.result_store.save_pipeline_result", _fake_save_pipeline_result,
+        "app.core.results.result_store.save_pipeline_result", _fake_save_pipeline_result,
     )
     monkeypatch.setattr(
-        "app.utils.result_store.save_result_blob", _fake_save_result_blob,
+        "app.core.results.result_store.save_result_blob", _fake_save_result_blob,
     )
 
     # 10. columns_metadata

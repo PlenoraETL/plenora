@@ -25,7 +25,7 @@ def mock_db(monkeypatch):
     """Mock db_service minimale per save_result_blob* flows."""
     import app.core.projects.runtime_context as project_runtime_context
     import app.core.results.db as results_db
-    import app.utils.result_store as result_store
+    import app.core.results.result_store as result_store
 
     saved: dict = {}
 
@@ -56,7 +56,7 @@ def mock_db(monkeypatch):
 
 def test_regression_path_based_save_preserves_bytes_exactly(mock_db, tmp_path):
     """Il blob salvato su DB deve essere byte-identico al file temp."""
-    from app.utils.result_store import save_result_blob
+    from app.core.results.result_store import save_result_blob
 
     f = tmp_path / "r.csv"
     f.write_bytes(b"id,name\n1,alice\n2,bob\n")
@@ -69,10 +69,10 @@ def test_regression_path_based_save_preserves_bytes_exactly(mock_db, tmp_path):
 
 def test_regression_path_based_save_keeps_temp_on_db_error(monkeypatch, tmp_path):
     """Se il DB fallisce, il temp file NON deve essere cancellato (retry-friendly)."""
-    from app.utils.result_store import save_result_blob, ResultSaveError
+    from app.core.results.result_store import save_result_blob, ResultSaveError
     import app.core.projects.runtime_context as project_runtime_context
     import app.core.results.db as results_db
-    import app.utils.result_store as result_store
+    import app.core.results.result_store as result_store
 
     def _boom(**kwargs):
         raise RuntimeError("DB down")
@@ -174,7 +174,7 @@ def test_save_dataframe_to_bytes_rejects_filesystem_only_formats():
 
 def test_save_result_blob_from_bytes_happy_path(mock_db):
     """Bytes → DB blob direttamente, zero disk."""
-    from app.utils.result_store import save_result_blob_from_bytes
+    from app.core.results.result_store import save_result_blob_from_bytes
 
     payload = b"id,name\n1,alice\n"
     result_id = save_result_blob_from_bytes(
@@ -208,9 +208,9 @@ def test_save_result_blob_from_bytes_no_artificial_hard_cap(monkeypatch):
 
 def test_get_result_as_bytes_returns_raw_blob(monkeypatch):
     """get_result_as_bytes: DB blob -> bytes direttamente, zero tempfile."""
-    from app.utils import result_store
+    from app.core.results import result_store
+    from app.core.results import store as results_store
     import app.core.results.db as results_db
-    import app.core.results.blob as result_blob
 
     expected = b"col1,col2\n1,a\n2,b\n"
     monkeypatch.setattr(
@@ -218,7 +218,7 @@ def test_get_result_as_bytes_returns_raw_blob(monkeypatch):
         "get_latest_result_row",
         lambda pid, group_id=None: results_db.ResultMetadataRow(id="r1", format="csv"),
     )
-    monkeypatch.setattr(result_blob, "get_result_data",
+    monkeypatch.setattr(results_store, "get_result_data",
                         lambda rid: expected)
 
     result = result_store.get_result_as_bytes("proj-1")
@@ -226,7 +226,7 @@ def test_get_result_as_bytes_returns_raw_blob(monkeypatch):
 
 
 def test_get_result_as_bytes_returns_none_when_missing(monkeypatch):
-    from app.utils import result_store
+    from app.core.results import result_store
     import app.core.results.db as results_db
     monkeypatch.setattr(
         results_db,
@@ -247,8 +247,8 @@ def test_save_result_blob_from_bytes_creates_no_files_on_disk(
     Mock settings.DATA_DIR a tmp_path e verifica che dopo la call
     la dir resti vuota.
     """
-    import app.utils.result_store as result_store
-    from app.utils.result_store import save_result_blob_from_bytes
+    import app.core.results.result_store as result_store
+    from app.core.results.result_store import save_result_blob_from_bytes
 
     # Crea la dir per aver qualcosa da enumerare
     temp_dir = tmp_path / "temp"
@@ -281,9 +281,9 @@ def test_get_result_as_bytes_creates_no_files_on_disk(
     monkeypatch, tmp_path
 ):
     """Stesso sentinel per la direzione di lettura."""
-    from app.utils import result_store
+    from app.core.results import result_store
+    from app.core.results import store as results_store
     import app.core.results.db as results_db
-    import app.core.results.blob as result_blob
 
     temp_dir = tmp_path / "temp"
     temp_dir.mkdir()
@@ -297,7 +297,7 @@ def test_get_result_as_bytes_creates_no_files_on_disk(
         "get_latest_result_row",
         lambda pid, group_id=None: results_db.ResultMetadataRow(id="r1", format="csv"),
     )
-    monkeypatch.setattr(result_blob, "get_result_data",
+    monkeypatch.setattr(results_store, "get_result_data",
                         lambda rid: b"payload")
 
     result_store.get_result_as_bytes("proj-1")

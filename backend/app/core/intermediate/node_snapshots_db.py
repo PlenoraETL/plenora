@@ -26,8 +26,10 @@ def upsert_node_meta(
     exec_time: float = None,
     status: str = None,
     error_msg: str = None,
+    *,
+    execute_func=execute,
 ) -> None:
-    execute(
+    execute_func(
         """INSERT INTO node_meta
            (run_id, node_id, node_type, row_count, col_schema, exec_time, status, error_msg)
            VALUES (%s,%s,%s,%s,%s,%s,%s,%s)
@@ -86,9 +88,10 @@ def upsert_node_meta_extended(
     artifact_format: Optional[str] = None,
     artifact_status: Optional[str] = None,
     artifact_error: Optional[str] = None,
+    execute_func=execute,
 ) -> None:
     """UPSERT node_meta with the current snapshot persistence schema."""
-    execute(
+    execute_func(
         _SQL_UPSERT_NODE_META_EXT,
         (
             run_id,
@@ -131,6 +134,8 @@ def write_node_snapshot_atomic(
     artifact_format: Optional[str] = None,
     artifact_status: Optional[str] = None,
     artifact_error: Optional[str] = None,
+    transaction_func=transaction,
+    execute_values_func=execute_values,
 ) -> None:
     """Atomically write `node_rows` plus extended `node_meta`."""
     records = _build_node_row_records(run_id, node_id, rows_to_persist or [])
@@ -138,10 +143,10 @@ def write_node_snapshot_atomic(
     if row_count is None:
         row_count = persisted_rows_count
 
-    with transaction() as conn:
+    with transaction_func() as conn:
         with conn.cursor() as cur:
             cur.execute(_SQL_DELETE_NODE_ROWS, (run_id, node_id))
-            _bulk_insert_node_rows(cur, records)
+            _bulk_insert_node_rows(cur, records, execute_values_func=execute_values_func)
             cur.execute(
                 _SQL_UPSERT_NODE_META_EXT,
                 (
@@ -166,8 +171,13 @@ def write_node_snapshot_atomic(
             )
 
 
-def get_node_meta(run_id: str, node_id: str) -> Optional[Dict]:
-    row = fetchone(
+def get_node_meta(
+    run_id: str,
+    node_id: str,
+    *,
+    fetchone_func=fetchone,
+) -> Optional[Dict]:
+    row = fetchone_func(
         "SELECT * FROM node_meta WHERE run_id = %s AND node_id = %s",
         (run_id, node_id),
     )
@@ -179,8 +189,8 @@ def get_node_meta(run_id: str, node_id: str) -> Optional[Dict]:
     return row
 
 
-def list_node_meta(run_id: str) -> List[Dict]:
-    rows = fetchall("SELECT * FROM node_meta WHERE run_id = %s", (run_id,))
+def list_node_meta(run_id: str, *, fetchall_func=fetchall) -> List[Dict]:
+    rows = fetchall_func("SELECT * FROM node_meta WHERE run_id = %s", (run_id,))
     for row in rows:
         if row.get("col_schema"):
             col_schema = row["col_schema"]
@@ -266,10 +276,15 @@ _SQL_INSERT_NODE_ROWS_HEAD = (
 _INSERT_NODE_ROW_TEMPLATE = "(%s, %s, %s, %s, %s::jsonb)"
 
 
-def _bulk_insert_node_rows(cur, records: List[tuple]) -> None:
+def _bulk_insert_node_rows(
+    cur,
+    records: List[tuple],
+    *,
+    execute_values_func=execute_values,
+) -> None:
     if not records:
         return
-    execute_values(
+    execute_values_func(
         cur,
         _SQL_INSERT_NODE_ROWS_HEAD,
         records,
@@ -319,14 +334,17 @@ def insert_node_rows(
     node_id: str,
     rows: List[Dict],
     col_schema: dict,
+    *,
+    transaction_func=transaction,
+    execute_values_func=execute_values,
 ) -> None:
     """Idempotently bulk insert node rows for one run/node pair."""
     records = _build_node_row_records(run_id, node_id, rows)
 
-    with transaction() as conn:
+    with transaction_func() as conn:
         with conn.cursor() as cur:
             cur.execute(_SQL_DELETE_NODE_ROWS, (run_id, node_id))
-            _bulk_insert_node_rows(cur, records)
+            _bulk_insert_node_rows(cur, records, execute_values_func=execute_values_func)
 
 
 def write_node_atomic(
@@ -339,6 +357,8 @@ def write_node_atomic(
     exec_time: Optional[float] = None,
     status: Optional[str] = None,
     error_msg: Optional[str] = None,
+    transaction_func=transaction,
+    execute_values_func=execute_values,
 ) -> None:
     """Atomically write legacy `node_rows` plus base `node_meta`."""
     records = _build_node_row_records(run_id, node_id, rows or [])
@@ -353,10 +373,10 @@ def write_node_atomic(
         error_msg,
     )
 
-    with transaction() as conn:
+    with transaction_func() as conn:
         with conn.cursor() as cur:
             cur.execute(_SQL_DELETE_NODE_ROWS, (run_id, node_id))
-            _bulk_insert_node_rows(cur, records)
+            _bulk_insert_node_rows(cur, records, execute_values_func=execute_values_func)
             cur.execute(_SQL_UPSERT_NODE_META, meta_params)
 
 
@@ -365,12 +385,15 @@ def get_node_table_rows(
     node_id: str,
     group_id: Optional[str],
     limit: int = None,
+    *,
+    fetchone_func=fetchone,
+    fetchall_func=fetchall,
 ) -> List[Dict]:
     """Read persisted node rows after verifying run ownership."""
     if group_id is None:
-        run = fetchone("SELECT run_id FROM runs WHERE run_id = %s", (run_id,))
+        run = fetchone_func("SELECT run_id FROM runs WHERE run_id = %s", (run_id,))
     else:
-        run = fetchone(
+        run = fetchone_func(
             "SELECT run_id FROM runs WHERE run_id = %s AND group_id = %s",
             (run_id, group_id),
         )
@@ -386,7 +409,7 @@ def get_node_table_rows(
         sql += " LIMIT %s"
         params = params + (int(limit),)
 
-    raw_rows = fetchall(sql, params)
+    raw_rows = fetchall_func(sql, params)
     result = []
     for row in raw_rows:
         row_data = row.get("row_data") or {}

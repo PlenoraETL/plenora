@@ -43,8 +43,8 @@ ALLOWED_VULTURE_PATTERNS: tuple[re.Pattern[str], ...] = (
 
     # Explicit compat/deprecation/test-support surfaces covered by contract tests.
     re.compile(r"backend[\\/]+app[\\/]+infrastructure[\\/]+storage[\\/]cloud_backends\.py:\d+: unused function 'get_object_storage' "),
-    re.compile(r"backend[\\/]+app[\\/]+utils[\\/]result_store\.py:\d+: unused function 'get_result_(as_bytes|as_tempfile|info)' "),
-    re.compile(r"backend[\\/]+app[\\/]+shared[\\/]+(audit_action|crypto|login_rate_limiter|token_blacklist)\.py:\d+: unused function '_.+_for_tests' "),
+    re.compile(r"backend[\\/]+app[\\/]+core[\\/]+results[\\/]result_store\.py:\d+: unused function 'get_result_(as_bytes|as_tempfile|info)' "),
+    re.compile(r"backend[\\/]+app[\\/]+(observability[\\/]audit_action|shared[\\/]+(crypto|login_rate_limiter|token_blacklist))\.py:\d+: unused function '_.+_for_tests' "),
 
     # Public helper surfaces with direct unit/contract coverage.
     re.compile(r"backend[\\/]+app[\\/]+core[\\/]+arricchisci[\\/]api_connection_rest_file\.py:\d+: unused method '_assert_file_source_group_access' "),
@@ -83,7 +83,7 @@ ALLOWED_VULTURE_PATTERNS: tuple[re.Pattern[str], ...] = (
     re.compile(r"backend[\\/]+app[\\/]+shared[\\/]clock\.py:\d+: unused method "),
     re.compile(r"backend[\\/]+app[\\/]+shared[\\/]async_http\.py:\d+: unused function 'get_async_client' "),
     re.compile(r"backend[\\/]+app[\\/]+shared[\\/]error_codes\.py:\d+: unused function 'http_status_code' "),
-    re.compile(r"backend[\\/]+app[\\/]+shared[\\/]file_helpers\.py:\d+: unused method "),
+    re.compile(r"backend[\\/]+app[\\/]+core[\\/]+files[\\/]helpers\.py:\d+: unused method "),
     re.compile(r"backend[\\/]+app[\\/]+shared[\\/]connections[\\/]esri_json\.py:\d+: unused method "),
     re.compile(r"backend[\\/]+app[\\/]+shared[\\/]connections[\\/]oauth\.py:\d+: unused function 'invalidate_oauth2_token' "),
     re.compile(r"backend[\\/]+app[\\/]+shared[\\/]resources[\\/]external_artifact_processor\.py:\d+: unused method 'process' "),

@@ -27,7 +27,7 @@ from app.core.datasources.interface import DataSourceInterface
 from app.core.datasources import db as datasource_db
 from app.core.files.preview_temp import preview_file_temp
 from app.core.files.service_deps import DefaultDataLoader, DefaultFileSystem
-from app.shared.file_helpers import ColumnInfoBuilder, FormatDetector
+from app.core.files.helpers import ColumnInfoBuilder, FormatDetector
 
 logger = get_logger(__name__)
 

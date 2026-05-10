@@ -136,19 +136,10 @@ _from_jsonable_value = _node_snapshots_db._from_jsonable_value
 _SPECIAL_FLOAT_KEY = _node_snapshots_db._SPECIAL_FLOAT_KEY
 
 
-def _sync_node_snapshot_boundaries() -> None:
-    _node_snapshots_db.execute = execute
-    _node_snapshots_db.fetchall = fetchall
-    _node_snapshots_db.fetchone = fetchone
-    _node_snapshots_db.transaction = transaction
-    _node_snapshots_db.execute_values = execute_values
-
-
 def upsert_node_meta(run_id: str, node_id: str, node_type: str = None,
                      row_count: int = None, col_schema: dict = None,
                      exec_time: float = None, status: str = None,
                      error_msg: str = None) -> None:
-    _sync_node_snapshot_boundaries()
     return _node_snapshots_db.upsert_node_meta(
         run_id,
         node_id,
@@ -158,6 +149,7 @@ def upsert_node_meta(run_id: str, node_id: str, node_type: str = None,
         exec_time=exec_time,
         status=status,
         error_msg=error_msg,
+        execute_func=execute,
     )
 
 
@@ -181,7 +173,6 @@ def upsert_node_meta_extended(
     artifact_status: Optional[str] = None,
     artifact_error: Optional[str] = None,
 ) -> None:
-    _sync_node_snapshot_boundaries()
     return _node_snapshots_db.upsert_node_meta_extended(
         run_id,
         node_id,
@@ -200,6 +191,7 @@ def upsert_node_meta_extended(
         artifact_format=artifact_format,
         artifact_status=artifact_status,
         artifact_error=artifact_error,
+        execute_func=execute,
     )
 
 
@@ -223,7 +215,6 @@ def write_node_snapshot_atomic(
     artifact_status: Optional[str] = None,
     artifact_error: Optional[str] = None,
 ) -> None:
-    _sync_node_snapshot_boundaries()
     return _node_snapshots_db.write_node_snapshot_atomic(
         run_id,
         node_id,
@@ -242,17 +233,21 @@ def write_node_snapshot_atomic(
         artifact_format=artifact_format,
         artifact_status=artifact_status,
         artifact_error=artifact_error,
+        transaction_func=transaction,
+        execute_values_func=execute_values,
     )
 
 
 def get_node_meta(run_id: str, node_id: str) -> Optional[Dict]:
-    _sync_node_snapshot_boundaries()
-    return _node_snapshots_db.get_node_meta(run_id, node_id)
+    return _node_snapshots_db.get_node_meta(
+        run_id,
+        node_id,
+        fetchone_func=fetchone,
+    )
 
 
 def list_node_meta(run_id: str) -> List[Dict]:
-    _sync_node_snapshot_boundaries()
-    return _node_snapshots_db.list_node_meta(run_id)
+    return _node_snapshots_db.list_node_meta(run_id, fetchall_func=fetchall)
 
 
 def insert_node_rows(
@@ -261,8 +256,14 @@ def insert_node_rows(
     rows: List[Dict],
     col_schema: dict,
 ) -> None:
-    _sync_node_snapshot_boundaries()
-    return _node_snapshots_db.insert_node_rows(run_id, node_id, rows, col_schema)
+    return _node_snapshots_db.insert_node_rows(
+        run_id,
+        node_id,
+        rows,
+        col_schema,
+        transaction_func=transaction,
+        execute_values_func=execute_values,
+    )
 
 
 def write_node_atomic(
@@ -276,7 +277,6 @@ def write_node_atomic(
     status: Optional[str] = None,
     error_msg: Optional[str] = None,
 ) -> None:
-    _sync_node_snapshot_boundaries()
     return _node_snapshots_db.write_node_atomic(
         run_id,
         node_id,
@@ -286,6 +286,8 @@ def write_node_atomic(
         exec_time=exec_time,
         status=status,
         error_msg=error_msg,
+        transaction_func=transaction,
+        execute_values_func=execute_values,
     )
 
 
@@ -295,12 +297,13 @@ def get_node_table_rows(
     group_id: Optional[str],
     limit: int = None,
 ) -> List[Dict]:
-    _sync_node_snapshot_boundaries()
     return _node_snapshots_db.get_node_table_rows(
         run_id,
         node_id,
         group_id,
         limit=limit,
+        fetchone_func=fetchone,
+        fetchall_func=fetchall,
     )
 
 # RETENTION POLICY

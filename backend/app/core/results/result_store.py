@@ -143,7 +143,7 @@ def _cleanup_uploaded_result_blob(
     row DB orfana lato opposto). Senza questo cleanup, il blob resta
     su object storage senza piu' alcuna row che lo punti -> orphan.
 
-    `app.shared.storage_compensation.compensating_delete` per
+    `app.infrastructure.storage.compensation.compensating_delete` per
     unificare log shape + capability handling con gli altri 3
     callsite. Mantiene la signature legacy (caller gia' ha
     `storage`); l'helper riusa l'istanza fornita ed evita un
@@ -152,7 +152,7 @@ def _cleanup_uploaded_result_blob(
     Mai solleva: il caller sta gia' propagando un altro errore (DB
     save) e non deve essere mascherato.
     """
-    from app.shared.storage_compensation import compensating_delete
+    from app.infrastructure.storage.compensation import compensating_delete
     compensating_delete(
         storage_key,
         domain="result",

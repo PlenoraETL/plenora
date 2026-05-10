@@ -30,7 +30,7 @@ class _ListHandler(logging.Handler):
         self.records.append(record)
 
 
-_AUDIT_LOGGER = "app.shared.audit_action"
+_AUDIT_LOGGER = "app.observability.audit_action"
 
 
 # Fixture: cattura chiamate a pg_connection.execute via monkeypatch
@@ -50,7 +50,7 @@ def audit_writes(monkeypatch):
     Ritorna una lista di tuple (sql, params). Azzera anche le metriche
     in-process per garantire isolamento cross-test.
     """
-    from app.shared import audit_action as audit_mod
+    from app.observability import audit_action as audit_mod
 
     audit_mod._reset_metrics_for_tests()
 
@@ -74,7 +74,7 @@ def audit_write_raises(monkeypatch):
     Usato nel test di fail-open. Ritorna un MagicMock spy del logger di
     modulo cosi' il test puo' verificare che il warning sia stato emesso.
     """
-    from app.shared import audit_action as audit_mod
+    from app.observability import audit_action as audit_mod
 
     audit_mod._reset_metrics_for_tests()
 
@@ -115,7 +115,7 @@ def test_success_path_writes_audit_row_with_status_200(audit_writes):
     con il user_id corretto, action specificata, target estratto dal kwarg
     indicato, status=200 e error_message=NULL.
     """
-    from app.shared.audit_action import audit_action, get_metrics
+    from app.observability.audit_action import audit_action, get_metrics
 
     @audit_action(action="project.delete", target_param="project_id")
     def delete_project(
@@ -157,7 +157,7 @@ def test_http_exception_is_audited_with_status_and_reraised(audit_writes):
     status=404 e error_message dal detail. L'HTTPException viene
     ri-sollevata al chiamante (mai swallowed).
     """
-    from app.shared.audit_action import audit_action
+    from app.observability.audit_action import audit_action
 
     @audit_action(action="project.delete", target_param="project_id")
     def delete_project(project_id, current_user=None):
@@ -185,7 +185,7 @@ def test_generic_exception_is_audited_as_500_and_reraised(audit_writes):
     """Eccezione non-HTTP → audit status=500 + message type-prefixed,
     eccezione ri-sollevata. Copre il ramo 'crash' del decorator.
     """
-    from app.shared.audit_action import audit_action
+    from app.observability.audit_action import audit_action
 
     @audit_action(action="datasource.create")
     def create_datasource(payload, current_user=None):
@@ -215,7 +215,7 @@ def test_audit_write_failure_does_not_break_business_path(audit_write_raises):
       - emettere un logger.warning con contesto diagnostico
       - incrementare la metrica write_fail
     """
-    from app.shared.audit_action import audit_action, get_metrics
+    from app.observability.audit_action import audit_action, get_metrics
 
     @audit_action(action="user.logout")
     def logout(current_user=None):
@@ -253,7 +253,7 @@ def test_audit_write_failure_does_not_mask_business_exception(audit_write_raises
     deve uscire l'eccezione di business (non quella di audit, che resta
     confinata al warning).
     """
-    from app.shared.audit_action import audit_action
+    from app.observability.audit_action import audit_action
 
     @audit_action(action="project.delete", target_param="project_id")
     def delete_project(project_id, current_user=None):
@@ -282,7 +282,7 @@ def test_anonymous_action_writes_null_user_id(audit_writes):
     sentinel stringa tipo 'anonymous' o '' — cosi' le query di forensics
     possono filtrare `WHERE user_id IS NULL` per isolare azioni di sistema.
     """
-    from app.shared.audit_action import audit_action
+    from app.observability.audit_action import audit_action
 
     @audit_action(action="auth.login")
     def login(username: str):
@@ -308,7 +308,7 @@ def test_current_user_explicit_none_writes_null_user_id(audit_writes):
     regressioni dove `kwargs.get('current_user')` fosse sostituito da
     `kwargs['current_user'].user_id` (KeyError su None).
     """
-    from app.shared.audit_action import audit_action
+    from app.observability.audit_action import audit_action
 
     @audit_action(action="system.cleanup")
     def cleanup_task(current_user=None):
@@ -329,7 +329,7 @@ def test_async_function_success_writes_audit(audit_writes):
     """
     import asyncio
 
-    from app.shared.audit_action import audit_action
+    from app.observability.audit_action import audit_action
 
     @audit_action(action="file.upload", target_param="file_id")
     async def upload_file(file_id, current_user=None):
@@ -355,7 +355,7 @@ def test_async_function_http_exception_audited_and_reraised(audit_writes):
     """Branch failure su async: HTTPException re-raised, audit con status."""
     import asyncio
 
-    from app.shared.audit_action import audit_action
+    from app.observability.audit_action import audit_action
 
     @audit_action(action="file.upload")
     async def upload_file(current_user=None):
@@ -377,7 +377,7 @@ def test_async_function_http_exception_audited_and_reraised(audit_writes):
 
 def test_target_extraction_int_is_stringified(audit_writes):
     """target_param='id' con valore int → audit registra str(id)."""
-    from app.shared.audit_action import audit_action
+    from app.observability.audit_action import audit_action
 
     @audit_action(action="ticket.update", target_param="id")
     def update_ticket(id: int, current_user=None):
@@ -395,7 +395,7 @@ def test_target_extraction_rejects_non_scalar_types(audit_writes):
     audit di una risorsa complessa, deve passare l'id come kwarg
     dedicato (es. project_id separato dal payload).
     """
-    from app.shared.audit_action import audit_action
+    from app.observability.audit_action import audit_action
 
     @audit_action(action="project.update", target_param="payload")
     def update_project(payload: dict, current_user=None):
@@ -411,7 +411,7 @@ def test_target_param_none_writes_null_target(audit_writes):
     """Decorator senza target_param → colonna target sempre NULL,
     indipendentemente dagli altri kwargs.
     """
-    from app.shared.audit_action import audit_action
+    from app.observability.audit_action import audit_action
 
     @audit_action(action="session.refresh")
     def refresh(current_user=None):
@@ -427,7 +427,7 @@ def test_target_param_none_writes_null_target(audit_writes):
 def test_decorator_rejects_empty_action():
     """`action` vuota o non stringa → TypeError a decoration-time,
     cosi' l'errore si vede al boot e non in produzione."""
-    from app.shared.audit_action import audit_action
+    from app.observability.audit_action import audit_action
 
     with pytest.raises(TypeError, match="action"):
         audit_action(action="")
@@ -437,7 +437,7 @@ def test_decorator_rejects_empty_action():
 
 
 def test_decorator_rejects_non_string_target_param():
-    from app.shared.audit_action import audit_action
+    from app.observability.audit_action import audit_action
 
     with pytest.raises(TypeError, match="target_param"):
         audit_action(action="x.y", target_param=123)  # type: ignore[arg-type]

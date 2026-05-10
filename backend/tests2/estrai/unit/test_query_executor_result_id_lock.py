@@ -118,7 +118,7 @@ class TestQueryExecutorEndToEnd:
         with patch.object(
             executor, "execute_raw", return_value=(fake_rows, fake_columns)
         ), patch(
-            "app.utils.result_store.save_result_blob_from_bytes",
+            "app.core.results.result_store.save_result_blob_from_bytes",
             return_value="res-generated-id",
         ) as mock_save_blob:
             conn = MagicMock()

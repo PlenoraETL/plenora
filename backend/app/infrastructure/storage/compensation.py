@@ -101,7 +101,7 @@ def compensating_delete(
         extras: campi opzionali per il log (`project_id`,
             `result_id`, `file_id`, `batch_id`, ...). Non interpretati.
         logger: logger custom. Se `None`, viene usato il logger del
-            modulo `app.shared.storage_compensation` (caller perde
+            modulo `app.infrastructure.storage.compensation` (caller perde
             la propria attribution, ma il log resta strutturato e
             filtrabile via `event=`/`domain=`).
 

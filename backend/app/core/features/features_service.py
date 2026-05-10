@@ -14,7 +14,7 @@ import pandas as pd
 
 from app.config import settings
 from app.utils.logger import get_logger
-from app.utils.result_store import save_pipeline_result_outcome
+from app.core.results.result_store import save_pipeline_result_outcome
 from app.core.files.dataframe_io import _read_csv_safe
 from app.core.features.models import (
     ArcGISConnection,

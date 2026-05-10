@@ -21,7 +21,7 @@ from app.utils.router_utils import require_service
 from app.shared import error_codes
 from app.shared.crypto import CredentialUnavailableError
 from app.shared.error_envelope import raise_typed_http
-from app.shared.audit_action import audit_action
+from app.observability.audit_action import audit_action
 from app.core.auth.visibility import visible_resource_ids
 from app.core.projects import usage as project_usage
 from .models import (

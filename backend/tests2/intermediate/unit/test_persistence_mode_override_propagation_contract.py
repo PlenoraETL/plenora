@@ -257,7 +257,7 @@ class TestQueryExecutorPropagation:
     bypassa lo streaming e produce un DataFrame. Mockiamo i 4 punti
     esterni:
       - QueryExecutor.execute_raw -> (rows, columns)
-      - save_pipeline_result -> dict {result_id, output_filename}
+      - save_pipeline_result_outcome -> typed result
       - record_final_snapshot -> spy che cattura mode_override
       - settings via _read_settings (default metadata_only)
 
@@ -302,7 +302,7 @@ class TestQueryExecutorPropagation:
         )
 
         # Patch chain esterno:
-        #   - save_pipeline_result (utils.result_store) -> dict atteso
+        #   - save_pipeline_result_outcome -> typed result atteso
         #   - record_final_snapshot (snapshot) -> spy
         #   - _read_settings (policy) -> mode dal test
         kwargs = {"run_id": "r-1", "node_id": "n-1"}
@@ -310,8 +310,11 @@ class TestQueryExecutorPropagation:
             kwargs["intermediate_mode_override"] = override
 
         with _patch_settings(_make_cfg(mode=settings_mode)), \
-             patch("app.utils.result_store.save_pipeline_result",
-                   return_value={"result_id": "r-1", "output_filename": "out.json"}), \
+             patch("app.db.query_result_persistence.save_pipeline_result_outcome",
+                   return_value=SimpleNamespace(
+                       result_id="r-1",
+                       output_filename="out.json",
+                   )), \
              patch("app.core.intermediate.snapshot.record_final_snapshot",
                    side_effect=spy_record_final_snapshot):
             result = executor.execute_query(
@@ -402,8 +405,11 @@ class TestQueryExecutorPropagation:
         )
 
         with _patch_settings(_make_cfg(mode="metadata_only")), \
-             patch("app.utils.result_store.save_pipeline_result",
-                   return_value={"result_id": "r-1", "output_filename": "out.json"}), \
+             patch("app.db.query_result_persistence.save_pipeline_result_outcome",
+                   return_value=SimpleNamespace(
+                       result_id="r-1",
+                       output_filename="out.json",
+                   )), \
              patch("app.core.intermediate.snapshot.record_final_snapshot",
                    side_effect=spy):
             executor.execute_query(
@@ -459,8 +465,11 @@ class TestQueryExecutorPropagation:
         # sollevare IntermediateSettingsError perche' override "INVALID"
         # non passa la validation di resolve_intermediate_mode.
         with _patch_settings(_make_cfg(mode="metadata_only")), \
-             patch("app.utils.result_store.save_pipeline_result",
-                   return_value={"result_id": "r-1", "output_filename": "out.json"}):
+             patch("app.db.query_result_persistence.save_pipeline_result_outcome",
+                   return_value=SimpleNamespace(
+                       result_id="r-1",
+                       output_filename="out.json",
+                   )):
             result = executor.execute_query(
                 connection=fake_conn, sql="S",
                 project_id="p", output_filename="o",
@@ -493,8 +502,11 @@ class TestQueryExecutorPropagation:
 
         writer_spy = MagicMock()
         with _patch_settings(_make_cfg(mode="metadata_only")), \
-             patch("app.utils.result_store.save_pipeline_result",
-                   return_value={"result_id": "r-1", "output_filename": "out.json"}), \
+             patch("app.db.query_result_persistence.save_pipeline_result_outcome",
+                   return_value=SimpleNamespace(
+                       result_id="r-1",
+                       output_filename="out.json",
+                   )), \
              patch.object(_db, "write_node_snapshot_atomic", writer_spy):
             executor.execute_query(
                 connection=fake_conn, sql="S",

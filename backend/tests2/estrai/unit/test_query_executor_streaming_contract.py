@@ -26,7 +26,7 @@ def test_query_executor_delegates_streaming_mechanics_to_query_streaming_module(
     source = (_BACKEND_ROOT / "app" / "db" / "query_executor.py").read_text(encoding="utf-8")
 
     assert "from app.db.query_streaming import execute_streaming_to_file" in source
-    assert "from app.utils.result_store import save_result_blob" not in source
+    assert "from app.core.results.result_store import save_result_blob" not in source
     assert "csv.writer" not in source
     assert "ParquetWriter" not in source
     assert "pyarrow" not in source

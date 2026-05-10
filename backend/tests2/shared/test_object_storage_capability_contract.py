@@ -195,7 +195,7 @@ def test_results_db_service_s3_delete_silent_when_disabled():
     `delete_result` / `delete_results_for_project`, e questo test
     verifica lo stesso invariante capability-off chiamando il
     boundary canonico)."""
-    from app.shared.storage_compensation import compensating_delete
+    from app.infrastructure.storage.compensation import compensating_delete
 
     # No raise, outcome="skipped" su capability off; pass smoke.
     with _patch_capability(False, "s3"):

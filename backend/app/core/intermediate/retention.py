@@ -4,13 +4,9 @@ from __future__ import annotations
 
 from typing import Callable, Dict, List
 
-from app.core.resources.storage_reconciliation import (
-    mark_done,
-    mark_failed_attempt,
-    record_pending,
-)
+from app.core.resources import storage_reconciliation as reconciliation
 from app.db.pg_connection import fetchall, transaction
-from app.shared.storage_compensation import compensating_delete
+from app.infrastructure.storage import compensation as storage_compensation
 from app.utils.logger import get_logger
 
 
@@ -104,7 +100,7 @@ def _delete_run(
         with conn.cursor() as cur:
             if pending_specs:
                 for node_id, storage_key, kind in pending_specs:
-                    ref = record_pending(
+                    ref = reconciliation.record_pending(
                         cur,
                         domain="intermediate_artifact",
                         storage_key=storage_key,
@@ -121,7 +117,7 @@ def _delete_run(
 
     if pending_refs:
         for storage_key, ref in pending_refs:
-            outcome = compensating_delete(
+            outcome = storage_compensation.compensating_delete(
                 storage_key,
                 domain="intermediate_artifact",
                 reason="run_delete_cascade",
@@ -132,9 +128,9 @@ def _delete_run(
                 logger=log,
             )
             if outcome in ("ok", "skipped"):
-                mark_done(ref.id)
+                reconciliation.mark_done(ref.id)
             else:
-                mark_failed_attempt(
+                reconciliation.mark_failed_attempt(
                     ref.id,
                     error=f"compensating_delete_outcome={outcome}",
                 )

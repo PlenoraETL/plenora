@@ -15,7 +15,7 @@ from app.config import settings as _settings
 from app.core.auth import db
 from app.core.auth import disclosure as _disclosure
 from app.shared import login_rate_limiter as _rl
-from app.shared.audit_action import audit_action
+from app.observability.audit_action import audit_action
 from app.shared.request_utils import get_client_ip
 from app.shared.token_blacklist import blacklist_jti
 from app.utils.logger import get_logger

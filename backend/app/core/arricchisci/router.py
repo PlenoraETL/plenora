@@ -25,7 +25,7 @@ from app.utils.logger import get_logger
 from app.utils.router_utils import require_service
 from app.shared import error_codes
 from app.shared.error_envelope import raise_typed_http
-from app.shared.audit_action import audit_action
+from app.observability.audit_action import audit_action
 from app.shared.authz_helpers import assert_file_source_access, assert_project_visible
 from app.shared.crypto import CredentialUnavailableError
 from app.core.arricchisci.api_connector import api_connection_service

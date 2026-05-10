@@ -416,7 +416,7 @@ def _stub_audit_action_write(request, monkeypatch):
         return
 
     try:
-        from app.shared import audit_action as _audit_mod
+        from app.observability import audit_action as _audit_mod
     except Exception:
         # Se l'import fallisce, lasciamo che il test fallisca col suo
         # errore naturale invece di nascondere il problema con un yield muto.

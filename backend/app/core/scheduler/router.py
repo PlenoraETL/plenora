@@ -19,7 +19,7 @@ from app.shared.contracts.auth import CurrentUser, group_filter
 from app.core.auth.ownership import assert_group_access
 from app.shared import error_codes
 from app.shared.error_envelope import raise_typed_http
-from app.shared.audit_action import audit_action
+from app.observability.audit_action import audit_action
 from app.shared.authz_helpers import assert_project_access
 from app.core.scheduler import db as scheduler_db
 

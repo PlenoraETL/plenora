@@ -45,14 +45,14 @@ from app.core.files.service_deps import (  # noqa: F401 (public domain export)
     DefaultFileSystem,
     DefaultDataLoader,
 )
-from app.shared.file_helpers import (  # noqa: F401 (public domain export)
+from app.core.files.helpers import (  # noqa: F401 (public domain export)
     FormatDetector,
     TypeInferrer,
     FileIdGenerator,
     ColumnInfoBuilder,
 )
 from app.shared.resources.file_cleanup import rmtree_safe
-from app.shared.storage_compensation import compensating_delete
+from app.infrastructure.storage import compensation as storage_compensation
 from app.utils.zip_safe import ZipSlipError, safe_extractall
 
 # Non-blocking GDAL compatibility warning for newer GeoPackage user_version.
@@ -440,7 +440,7 @@ class FileSourceService:
         # Object-storage rollback cleanup is best-effort; BYTEA mode has no
         # storage_key and never calls this callback.
         def _delete_blob(storage_key: str) -> None:
-            compensating_delete(
+            storage_compensation.compensating_delete(
                 storage_key,
                 domain="file_source_multi_layer",
                 reason="batch_save_rollback",

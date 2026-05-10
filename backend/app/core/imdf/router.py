@@ -19,7 +19,7 @@ from app.shared.contracts.auth import CurrentUser
 from app.core.auth.ownership import assert_resource_visible
 from app.shared import error_codes
 from app.shared.error_envelope import raise_typed_http
-from app.shared.audit_action import audit_action
+from app.observability.audit_action import audit_action
 from app.shared.resources.path_policy import validate_imdf_task_id
 from app.core.imdf import project_access
 from app.core.imdf import storage as _imdf_storage

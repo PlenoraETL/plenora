@@ -17,7 +17,7 @@ pytestmark = [pytest.mark.unit, pytest.mark.contract]
 
 
 def test_file_helpers_module_exposes_four_helpers():
-    from app.shared import file_helpers as fh
+    from app.core.files import helpers as fh
 
     for name in ("FormatDetector", "TypeInferrer", "FileIdGenerator", "ColumnInfoBuilder"):
         cls = getattr(fh, name, None)
@@ -32,7 +32,7 @@ def test_core_file_service_uses_shared_helper_objects_by_identity():
     `from app.core.files.service import FileIdGenerator` continua a
     comportarsi identicamente."""
     from app.core.files import service as fs_mod
-    from app.shared import file_helpers as fh
+    from app.core.files import helpers as fh
 
     assert fs_mod.FormatDetector is fh.FormatDetector
     assert fs_mod.TypeInferrer is fh.TypeInferrer
@@ -44,7 +44,7 @@ def test_core_file_service_uses_shared_helper_objects_by_identity():
 
 
 def test_format_detector_csv_xlsx_gpkg_unknown():
-    from app.shared.file_helpers import FormatDetector
+    from app.core.files.helpers import FormatDetector
 
     assert FormatDetector.detect("data.csv") == "csv"
     assert FormatDetector.detect("data.CSV") == "csv"  # case-insensitive
@@ -60,7 +60,7 @@ def test_format_detector_csv_xlsx_gpkg_unknown():
 
 
 def test_format_detector_geo_vs_tabular():
-    from app.shared.file_helpers import FormatDetector
+    from app.core.files.helpers import FormatDetector
 
     for geo in ("geojson", "gpkg", "shp", "gdb"):
         assert FormatDetector.is_geospatial(geo) is True
@@ -75,7 +75,7 @@ def test_format_detector_geo_vs_tabular():
 
 
 def test_type_inferrer_int_float_bool_datetime():
-    from app.shared.file_helpers import TypeInferrer
+    from app.core.files.helpers import TypeInferrer
 
     assert TypeInferrer.infer_column_type(pd.Series([1, 2, 3])) == "int"
     assert TypeInferrer.infer_column_type(pd.Series([1.1, 2.2])) == "real"
@@ -87,7 +87,7 @@ def test_type_inferrer_int_float_bool_datetime():
 
 
 def test_type_inferrer_str_default_and_short_strings():
-    from app.shared.file_helpers import TypeInferrer
+    from app.core.files.helpers import TypeInferrer
 
     # Stringhe brevi non-WKT, non-date -> str
     assert TypeInferrer.infer_column_type(pd.Series(["foo", "bar"])) == "str"
@@ -96,7 +96,7 @@ def test_type_inferrer_str_default_and_short_strings():
 
 
 def test_type_inferrer_wkt_geometry_detection():
-    from app.shared.file_helpers import TypeInferrer
+    from app.core.files.helpers import TypeInferrer
 
     # WKT prefix riconosciuto -> geometry
     s = pd.Series(["POINT (1 2)", "POINT (3 4)"])
@@ -104,7 +104,7 @@ def test_type_inferrer_wkt_geometry_detection():
 
 
 def test_type_inferrer_iso_date_detection():
-    from app.shared.file_helpers import TypeInferrer
+    from app.core.files.helpers import TypeInferrer
 
     # ISO date string -> date (cascade _DATE_FORMATS, threshold 80%)
     s = pd.Series(["2025-01-01", "2025-02-01", "2025-03-01"])
@@ -112,7 +112,7 @@ def test_type_inferrer_iso_date_detection():
 
 
 def test_type_inferrer_italian_date_detection():
-    from app.shared.file_helpers import TypeInferrer
+    from app.core.files.helpers import TypeInferrer
 
     # IT format dd/mm/yyyy -> date
     s = pd.Series(["01/03/2025", "15/03/2025", "30/03/2025"])
@@ -120,7 +120,7 @@ def test_type_inferrer_italian_date_detection():
 
 
 def test_type_inferrer_detect_geometry_type_mapping():
-    from app.shared.file_helpers import TypeInferrer
+    from app.core.files.helpers import TypeInferrer
 
     assert TypeInferrer.detect_geometry_type(["Point"]) == "geometry:point"
     assert TypeInferrer.detect_geometry_type(["MultiPolygon"]) == "geometry:multipolygon"
@@ -132,7 +132,7 @@ def test_type_inferrer_detect_geometry_type_mapping():
 
 
 def test_file_id_generator_opaque_format():
-    from app.shared.file_helpers import FileIdGenerator
+    from app.core.files.helpers import FileIdGenerator
 
     # Post-N1: il formato e' `file_<uuid>`, name/timestamp ignorati.
     out = FileIdGenerator.generate(name="my_file", timestamp="20250101_120000", uuid_part="abc123")
@@ -142,7 +142,7 @@ def test_file_id_generator_opaque_format():
 
 
 def test_file_id_generator_sanitize_name():
-    from app.shared.file_helpers import FileIdGenerator
+    from app.core.files.helpers import FileIdGenerator
 
     # Sanitize: caratteri non alfanumerici e spazi -> underscore, max_length applicato
     assert FileIdGenerator.sanitize_name("Hello World") == "Hello_World"
@@ -155,7 +155,7 @@ def test_file_id_generator_sanitize_name():
 
 
 def test_column_info_builder_from_simple_dataframe():
-    from app.shared.file_helpers import ColumnInfoBuilder
+    from app.core.files.helpers import ColumnInfoBuilder
 
     df = pd.DataFrame({
         "id": [1, 2, 3],

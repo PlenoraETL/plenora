@@ -28,8 +28,8 @@ def test_check_conflicts_checks_project_visibility_before_loading_project_output
     with patch("app.core.carica.router._get_connection", return_value={"type": "postgres"}), \
          patch("app.core.carica.router._create_engine", return_value=object()), \
          patch("app.core.carica.conflict_checker.ConflictChecker", return_value=SimpleNamespace(check=lambda *args, **kwargs: report)), \
-         patch("app.shared.authz_helpers.assert_project_visible") as assert_project_visible, \
-         patch("app.core.artifacts.SourceLoader", return_value=fake_loader):
+         patch("app.core.carica.router.assert_project_visible") as assert_project_visible, \
+         patch("app.core.carica.router.SourceLoader", return_value=fake_loader):
         response = client.post(
             "/api/carica/check-conflicts",
             json={
@@ -56,7 +56,7 @@ def test_load_upstream_data_does_not_fallback_to_latest_project_result_after_fai
     # "progetto non trovato in pre-cache" -> il flow procede come previsto
     # dal test (fail-closed su _project_group_id, execute via orchestrator
     # stub).
-    with patch("app.utils.result_store.get_result_as_tempfile", return_value=None), \
+    with patch("app.core.results.result_store.get_result_as_tempfile", return_value=None), \
          patch("app.core.projects.runtime_context.get_project_runtime_context", return_value=None), \
          patch("app.core.projects.service.ProjectService", return_value=object()), \
          patch("app.core.connections.service.ConnectionService", return_value=object()), \

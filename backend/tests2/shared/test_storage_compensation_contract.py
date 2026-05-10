@@ -1,7 +1,7 @@
 """
 Contract test BE-GO-READY-STORAGE-ENGINE-002 — compensating-delete
 
-helper unificato `app.shared.storage_compensation.compensating_delete`.
+helper unificato `app.infrastructure.storage.compensation.compensating_delete`.
 """
 
 from __future__ import annotations
@@ -12,7 +12,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from app.shared.storage_compensation import compensating_delete
+from app.infrastructure.storage.compensation import compensating_delete
 
 
 pytestmark = [pytest.mark.unit, pytest.mark.shared, pytest.mark.contract]
@@ -41,7 +41,7 @@ def caplog_helper(caplog):
     """Attach `caplog` al logger del modulo helper. Helper non setta
     `propagate=False` (e' uno stdlib `logging.getLogger`), ma
     rendiamo esplicito per stabilita'."""
-    helper_logger = logging.getLogger("app.shared.storage_compensation")
+    helper_logger = logging.getLogger("app.infrastructure.storage.compensation")
     prev_level = helper_logger.level
     helper_logger.setLevel(logging.DEBUG)
     helper_logger.addHandler(caplog.handler)

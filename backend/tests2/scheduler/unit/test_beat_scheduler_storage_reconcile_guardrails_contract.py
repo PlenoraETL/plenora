@@ -79,7 +79,7 @@ def test_summary_log_emitted_when_active_rows_exist(caplog):
                return_value=counts), \
          patch("app.core.resources.storage_reconciliation.prune_terminal_older_than",
                return_value=0), \
-         patch("app.shared.storage_compensation.compensating_delete"), \
+         patch("app.infrastructure.storage.compensation.compensating_delete"), \
          caplog.at_level("INFO", logger="workers.beat_scheduler"):
         sched._reconcile_storage()
 
@@ -105,7 +105,7 @@ def test_summary_log_skipped_when_no_active_rows(caplog):
                return_value=[]), \
          patch("app.core.resources.storage_reconciliation.prune_terminal_older_than",
                return_value=0), \
-         patch("app.shared.storage_compensation.compensating_delete"), \
+         patch("app.infrastructure.storage.compensation.compensating_delete"), \
          caplog.at_level("INFO", logger="workers.beat_scheduler"):
         sched._reconcile_storage()
 
@@ -130,7 +130,7 @@ def test_summary_log_emits_even_when_fetch_fails(caplog):
                return_value=counts), \
          patch("app.core.resources.storage_reconciliation.prune_terminal_older_than",
                return_value=0), \
-         patch("app.shared.storage_compensation.compensating_delete"), \
+         patch("app.infrastructure.storage.compensation.compensating_delete"), \
          caplog.at_level("INFO", logger="workers.beat_scheduler"):
         sched._reconcile_storage()
 
@@ -152,7 +152,7 @@ def test_summary_failure_does_not_crash_tick(caplog):
                side_effect=RuntimeError("count blew up")), \
          patch("app.core.resources.storage_reconciliation.prune_terminal_older_than",
                return_value=0), \
-         patch("app.shared.storage_compensation.compensating_delete"):
+         patch("app.infrastructure.storage.compensation.compensating_delete"):
         # Must NOT raise.
         sched._reconcile_storage()
 
@@ -175,7 +175,7 @@ def test_prune_invoked_with_settings_values():
                return_value=[]), \
          patch("app.core.resources.storage_reconciliation.prune_terminal_older_than",
                prune_spy), \
-         patch("app.shared.storage_compensation.compensating_delete"):
+         patch("app.infrastructure.storage.compensation.compensating_delete"):
         sched._reconcile_storage()
 
     prune_spy.assert_called_once()
@@ -201,7 +201,7 @@ def test_prune_skipped_when_retention_days_le_zero():
                return_value=[]), \
          patch("app.core.resources.storage_reconciliation.prune_terminal_older_than",
                prune_spy), \
-         patch("app.shared.storage_compensation.compensating_delete"):
+         patch("app.infrastructure.storage.compensation.compensating_delete"):
         sched._reconcile_storage()
 
     prune_spy.assert_not_called()
@@ -221,7 +221,7 @@ def test_prune_skipped_when_prune_batch_size_le_zero():
                return_value=[]), \
          patch("app.core.resources.storage_reconciliation.prune_terminal_older_than",
                prune_spy), \
-         patch("app.shared.storage_compensation.compensating_delete"):
+         patch("app.infrastructure.storage.compensation.compensating_delete"):
         sched._reconcile_storage()
 
     prune_spy.assert_not_called()
@@ -238,7 +238,7 @@ def test_prune_log_emitted_when_rows_pruned(caplog):
                return_value=[]), \
          patch("app.core.resources.storage_reconciliation.prune_terminal_older_than",
                return_value=42), \
-         patch("app.shared.storage_compensation.compensating_delete"), \
+         patch("app.infrastructure.storage.compensation.compensating_delete"), \
          caplog.at_level("INFO", logger="workers.beat_scheduler"):
         sched._reconcile_storage()
 
@@ -260,7 +260,7 @@ def test_prune_log_skipped_when_zero_pruned(caplog):
                return_value=[]), \
          patch("app.core.resources.storage_reconciliation.prune_terminal_older_than",
                return_value=0), \
-         patch("app.shared.storage_compensation.compensating_delete"), \
+         patch("app.infrastructure.storage.compensation.compensating_delete"), \
          caplog.at_level("INFO", logger="workers.beat_scheduler"):
         sched._reconcile_storage()
 
@@ -279,7 +279,7 @@ def test_prune_failure_does_not_crash_tick():
                return_value=[]), \
          patch("app.core.resources.storage_reconciliation.prune_terminal_older_than",
                side_effect=RuntimeError("prune blew up")), \
-         patch("app.shared.storage_compensation.compensating_delete"):
+         patch("app.infrastructure.storage.compensation.compensating_delete"):
         # Must NOT raise.
         sched._reconcile_storage()
 
@@ -315,7 +315,7 @@ def test_existing_transitions_still_run_alongside_guardrails():
                prune_spy), \
          patch("app.core.resources.storage_reconciliation.mark_orphan_deleted",
                mark_orphan_deleted), \
-         patch("app.shared.storage_compensation.compensating_delete",
+         patch("app.infrastructure.storage.compensation.compensating_delete",
                return_value="ok"):
         sched._reconcile_storage()
 

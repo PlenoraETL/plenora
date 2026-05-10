@@ -25,7 +25,6 @@ _ALLOWED_ROOT_MODULES: frozenset[str] = frozenset(
         "error_codes",        # shared error code registry
         "error_envelope",     # standard error response envelope
         "error_sanitizer",    # strip sensitive data from error messages
-        "audit_action",       # audit log action registry
         "authz_helpers",      # authorization predicate helpers
         "crypto",             # cryptographic primitives (fernet, hashing)
         "jwt_token",          # JWT encode/decode helpers
@@ -33,9 +32,7 @@ _ALLOWED_ROOT_MODULES: frozenset[str] = frozenset(
         "password_hashing",   # bcrypt password helpers
         "token_blacklist",    # JWT revocation store
         "upload_guards",      # upload size / MIME type enforcement
-        "file_helpers",            # pandas-backed file inspection helpers
         "memory_guard",            # per-tenant memory allocation guard
-        "storage_compensation",    # object-storage failure compensation helpers
         "columns_metadata",       # column-level metadata helpers
         "clock",                       # wall-clock abstraction for testability
         "idempotency",                 # idempotency key helpers
@@ -49,7 +46,6 @@ _ROOT_MODULE_CLASSIFICATIONS: dict[str, str] = {
     "error_codes": "KEEP_ROOT_CROSS_CUTTING",
     "error_envelope": "KEEP_ROOT_CROSS_CUTTING",
     "error_sanitizer": "KEEP_ROOT_CROSS_CUTTING",
-    "audit_action": "MOVE_TO_SECURITY_PACKAGE_LATER",
     "authz_helpers": "MOVE_TO_SECURITY_PACKAGE_LATER",
     "crypto": "MOVE_TO_SECURITY_PACKAGE_LATER",
     "jwt_token": "MOVE_TO_SECURITY_PACKAGE_LATER",
@@ -57,9 +53,7 @@ _ROOT_MODULE_CLASSIFICATIONS: dict[str, str] = {
     "password_hashing": "MOVE_TO_SECURITY_PACKAGE_LATER",
     "token_blacklist": "MOVE_TO_SECURITY_PACKAGE_LATER",
     "upload_guards": "MOVE_TO_SECURITY_PACKAGE_LATER",
-    "file_helpers": "HEAVY_ROOT_UTILITY",
     "memory_guard": "MOVE_TO_EXECUTION_CANDIDATE",
-    "storage_compensation": "MOVE_TO_RESOURCES_CANDIDATE",
     "columns_metadata": "MOVE_TO_RESOURCES_CANDIDATE",
     "clock": "KEEP_ROOT_CROSS_CUTTING",
     "idempotency": "MOVE_TO_EXECUTION_CANDIDATE",

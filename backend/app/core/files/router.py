@@ -99,7 +99,7 @@ from app.config import settings
 from app.utils.logger import get_logger
 from app.shared import error_codes
 from app.shared.error_envelope import raise_typed_http
-from app.shared.audit_action import audit_action
+from app.observability.audit_action import audit_action
 from app.core.auth.dependencies import (
     require_not_esecutore,
     require_user_or_above,

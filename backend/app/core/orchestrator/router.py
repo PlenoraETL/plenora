@@ -31,7 +31,7 @@ from app.core.orchestrator.router_mappers import (
     task_result_to_dict as _task_result_to_dict,
 )
 from app.utils.router_utils import require_service
-from app.shared.audit_action import audit_action
+from app.observability.audit_action import audit_action
 from app.core.auth.dependencies import get_current_user, require_not_esecutore
 from app.shared.contracts.auth import CurrentUser
 from app.core.auth.ownership import assert_group_access

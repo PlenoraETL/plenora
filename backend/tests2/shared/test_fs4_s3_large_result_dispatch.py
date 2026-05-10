@@ -55,7 +55,7 @@ def mock_db(monkeypatch):
     """DB mock che registra save_result_row calls."""
     import app.core.projects.runtime_context as project_runtime_context
     from app.core.results import db as results_db
-    import app.utils.result_store as result_store
+    import app.core.results.result_store as result_store
 
     saved = []
 
@@ -79,7 +79,7 @@ def mock_db(monkeypatch):
 
 def test_small_file_goes_to_db_blob(mock_db, stub_storage, monkeypatch):
     """Sotto threshold -> DB blob, S3 non toccato."""
-    from app.utils.result_store import save_result_blob_from_bytes
+    from app.core.results.result_store import save_result_blob_from_bytes
     import app.config as app_config
 
     # Threshold piccolo ma dato ancora piu' piccolo -> DB
@@ -102,7 +102,7 @@ def test_small_file_goes_to_db_blob(mock_db, stub_storage, monkeypatch):
 
 def test_large_file_goes_to_s3(mock_db, stub_storage, monkeypatch):
     """Sopra threshold -> S3 upload + DB row con storage_key (data None)."""
-    from app.utils.result_store import save_result_blob_from_bytes
+    from app.core.results.result_store import save_result_blob_from_bytes
     import app.config as app_config
 
     # Threshold basso per isolare il test
@@ -135,7 +135,7 @@ def test_no_hard_cap_any_size_goes_to_s3(mock_db, stub_storage, monkeypatch):
     """Post FS-4+multipart: nessun hard cap. upload_bytes auto-chunking
     delega al provider (S3 multipart, Azure block, GCS resumable).
     Il limite reale e' RAM del processo, non artificialmente imposto."""
-    from app.utils.result_store import save_result_blob_from_bytes
+    from app.core.results.result_store import save_result_blob_from_bytes
     import app.config as app_config
 
     def _fake_get(key, default=None):
@@ -167,7 +167,7 @@ def test_no_hard_cap_any_size_goes_to_s3(mock_db, stub_storage, monkeypatch):
 
 def test_s3_upload_failure_no_db_row_orphan(mock_db, stub_storage, monkeypatch):
     """Se S3 upload solleva, non crea row DB orfana."""
-    from app.utils.result_store import save_result_blob_from_bytes, ResultSaveError
+    from app.core.results.result_store import save_result_blob_from_bytes, ResultSaveError
     import app.config as app_config
 
     def _fake_get(key, default=None):
@@ -192,11 +192,10 @@ def test_s3_upload_failure_no_db_row_orphan(mock_db, stub_storage, monkeypatch):
 
 def test_get_result_data_from_db_blob(monkeypatch):
     """storage_key=None -> ritorna data BYTEA."""
-    import app.core.resources.loaders.result_blob as result_blob
     from app.core.results import blob as results_blob
 
     monkeypatch.setattr(
-        result_blob,
+        results_blob,
         "_dispatch_by_id",
         lambda result_id, group_id_filter=None, project_id_filter=None: (
             b"blob content",
@@ -210,11 +209,10 @@ def test_get_result_data_from_db_blob(monkeypatch):
 
 def test_get_result_data_from_s3(monkeypatch, stub_storage):
     """storage_key set -> scarica da S3 via stub."""
-    import app.core.resources.loaders.result_blob as result_blob
     from app.core.results import blob as results_blob
 
     monkeypatch.setattr(
-        result_blob,
+        results_blob,
         "_dispatch_by_id",
         lambda result_id, group_id_filter=None, project_id_filter=None: (
             b"big data from s3",
@@ -229,11 +227,10 @@ def test_get_result_data_from_s3(monkeypatch, stub_storage):
 def test_get_result_data_s3_download_failure_returns_none(monkeypatch):
     """Se S3 download fallisce, get_result_data ritorna None + log
     (non solleva: semantica invariata col path-based su errore)."""
-    import app.core.resources.loaders.result_blob as result_blob
     from app.core.results import blob as results_blob
 
     monkeypatch.setattr(
-        result_blob,
+        results_blob,
         "_dispatch_by_id",
         lambda result_id, group_id_filter=None, project_id_filter=None: (
             None,
@@ -313,7 +310,7 @@ def test_delete_result_s3_backed_triggers_s3_delete(monkeypatch, stub_storage):
 
     calls = []
     monkeypatch.setattr(
-        "app.shared.storage_compensation.compensating_delete",
+        "app.infrastructure.storage.compensation.compensating_delete",
         lambda key, **_: calls.append(key) or "ok",
     )
     monkeypatch.setattr(
@@ -344,7 +341,7 @@ def test_delete_result_db_backed_does_not_touch_s3(monkeypatch):
 
     s3_calls = []
     monkeypatch.setattr(
-        "app.shared.storage_compensation.compensating_delete",
+        "app.infrastructure.storage.compensation.compensating_delete",
         lambda key, **_: s3_calls.append(key),
     )
 
@@ -357,7 +354,7 @@ def test_delete_result_db_backed_does_not_touch_s3(monkeypatch):
 
 def test_save_result_blob_path_small_goes_to_db_blob(mock_db, stub_storage, monkeypatch, tmp_path):
     """Path-based: file < threshold -> DB BYTEA, NO storage.upload."""
-    from app.utils.result_store import save_result_blob
+    from app.core.results.result_store import save_result_blob
     import app.config as app_config
 
     def _fake_get(key, default=None):
@@ -386,7 +383,7 @@ def test_save_result_blob_path_small_goes_to_db_blob(mock_db, stub_storage, monk
 
 def test_save_result_blob_path_large_goes_to_s3(mock_db, stub_storage, monkeypatch, tmp_path):
     """Path-based: file >= threshold -> S3 via storage.upload(path) (streaming)."""
-    from app.utils.result_store import save_result_blob
+    from app.core.results.result_store import save_result_blob
     import app.config as app_config
 
     def _fake_get(key, default=None):
@@ -419,7 +416,7 @@ def test_save_result_blob_path_large_goes_to_s3(mock_db, stub_storage, monkeypat
 
 def test_save_result_blob_path_s3_upload_failure_no_db_row(mock_db, stub_storage, monkeypatch, tmp_path):
     """Path-based: se S3 upload solleva, no row DB orfana; file temp resta."""
-    from app.utils.result_store import save_result_blob, ResultSaveError
+    from app.core.results.result_store import save_result_blob, ResultSaveError
     import app.config as app_config
 
     def _fake_get(key, default=None):
@@ -498,7 +495,7 @@ def test_delete_results_for_project_cleans_all_s3_keys(monkeypatch):
 
     calls = []
     monkeypatch.setattr(
-        "app.shared.storage_compensation.compensating_delete",
+        "app.infrastructure.storage.compensation.compensating_delete",
         lambda key, **_: calls.append(key) or "ok",
     )
     monkeypatch.setattr(

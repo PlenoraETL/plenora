@@ -6,12 +6,8 @@ from collections.abc import Callable, Iterable
 from typing import Protocol
 
 from app.db.pg_connection import fetchall, transaction
-from app.core.resources.storage_reconciliation import (
-    mark_done,
-    mark_failed_attempt,
-    record_pending,
-)
-from app.shared.storage_compensation import compensating_delete
+from app.core.resources import storage_reconciliation as reconciliation
+from app.infrastructure.storage import compensation as storage_compensation
 from app.utils.logger import get_logger
 
 
@@ -78,7 +74,7 @@ def delete_result(result_id: str) -> bool:
                 storage_key_to_clean = storage_key
                 # record cleanup intent inside the same transaction as
                 # the DELETE. Commit advances both atomically.
-                reconciliation_ref = record_pending(
+                reconciliation_ref = reconciliation.record_pending(
                     cur,
                     domain="result_blob",
                     storage_key=storage_key,
@@ -91,7 +87,7 @@ def delete_result(result_id: str) -> bool:
             deleted = cur.rowcount > 0
 
     if deleted and storage_key_to_clean:
-        outcome = compensating_delete(
+        outcome = storage_compensation.compensating_delete(
             storage_key_to_clean,
             domain="result_blob",
             reason="row_delete_post_commit",
@@ -100,9 +96,9 @@ def delete_result(result_id: str) -> bool:
         )
         if reconciliation_ref is not None:
             if outcome in ("ok", "skipped"):
-                mark_done(reconciliation_ref.id)
+                reconciliation.mark_done(reconciliation_ref.id)
             else:
-                mark_failed_attempt(
+                reconciliation.mark_failed_attempt(
                     reconciliation_ref.id,
                     error=f"compensating_delete_outcome={outcome}",
                 )
@@ -146,7 +142,7 @@ def delete_results_for_project(project_id: str) -> int:
         with conn.cursor() as cur:
             if rows:
                 for r in rows:
-                    ref = record_pending(
+                    ref = reconciliation.record_pending(
                         cur,
                         domain="result_blob",
                         storage_key=r["storage_key"],
@@ -168,7 +164,7 @@ def delete_results_for_project(project_id: str) -> int:
 
     if pending_cleanups:
         for storage_key, result_id, reconciliation_id in pending_cleanups:
-            outcome = compensating_delete(
+            outcome = storage_compensation.compensating_delete(
                 storage_key,
                 domain="result_blob",
                 reason="row_delete_post_commit",
@@ -179,9 +175,9 @@ def delete_results_for_project(project_id: str) -> int:
                 logger=logger,
             )
             if outcome in ("ok", "skipped"):
-                mark_done(reconciliation_id)
+                reconciliation.mark_done(reconciliation_id)
             else:
-                mark_failed_attempt(
+                reconciliation.mark_failed_attempt(
                     reconciliation_id,
                     error=f"compensating_delete_outcome={outcome}",
                 )

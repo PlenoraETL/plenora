@@ -46,8 +46,8 @@ def _route_stdlib_temp_to_tmp_path(monkeypatch, tmp_path):
 
 def test_save_pipeline_result_gpkg_no_file_in_data_dir_temp(monkeypatch, tmp_path):
     """Sentinel: DATA_DIR/temp/ resta vuota dopo save_pipeline_result(gpkg)."""
-    from app.utils.result_store import save_pipeline_result
-    import app.utils.result_store as result_store
+    from app.core.results.result_store import save_pipeline_result
+    import app.core.results.result_store as result_store
     import app.core.projects.db as projects_db
     import app.core.results.db as results_db
 
@@ -106,8 +106,8 @@ def test_save_pipeline_result_gpkg_no_file_in_data_dir_temp(monkeypatch, tmp_pat
 def test_save_pipeline_result_gpkg_uses_temporary_directory_prefix(monkeypatch, tmp_path):
     """Sentinel: il path passato a save_dataframe e' dentro tempfile.TemporaryDirectory
     con prefix urby_gpkg_shp_ (non DATA_DIR/temp/urby_<pid>_<hash>/)."""
-    from app.utils.result_store import save_pipeline_result
-    import app.utils.result_store as result_store
+    from app.core.results.result_store import save_pipeline_result
+    import app.core.results.result_store as result_store
     import app.core.projects.db as projects_db
     import app.core.results.db as results_db
 
@@ -152,8 +152,8 @@ def test_save_pipeline_result_gpkg_uses_temporary_directory_prefix(monkeypatch, 
 
 def test_save_pipeline_result_gpkg_cleans_tmp_dir_on_upload_failure(monkeypatch, tmp_path):
     """Su upload failure, il context exit pulisce comunque la tmp_dir."""
-    from app.utils.result_store import save_pipeline_result
-    import app.utils.result_store as result_store
+    from app.core.results.result_store import save_pipeline_result
+    import app.core.results.result_store as result_store
     import app.core.projects.db as projects_db
     import app.core.results.db as results_db
 

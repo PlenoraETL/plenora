@@ -136,7 +136,7 @@ def test_delete_result_records_pending_inside_transaction_and_marks_done(
     mark_done_calls = []
     mark_failed_calls = []
     monkeypatch.setattr(
-        "app.shared.storage_compensation.compensating_delete", _fake_comp
+        "app.infrastructure.storage.compensation.compensating_delete", _fake_comp
     )
     monkeypatch.setattr(
         "app.core.resources.storage_reconciliation.mark_done",
@@ -199,7 +199,7 @@ def test_delete_result_failed_compensation_marks_failed_attempt(monkeypatch):
     mark_done_calls = []
     mark_failed_calls = []
     monkeypatch.setattr(
-        "app.shared.storage_compensation.compensating_delete",
+        "app.infrastructure.storage.compensation.compensating_delete",
         lambda *a, **kw: "failed",
     )
     monkeypatch.setattr(
@@ -236,7 +236,7 @@ def test_delete_result_skipped_outcome_marks_done(monkeypatch):
     mark_done_calls = []
     mark_failed_calls = []
     monkeypatch.setattr(
-        "app.shared.storage_compensation.compensating_delete",
+        "app.infrastructure.storage.compensation.compensating_delete",
         lambda *a, **kw: "skipped",
     )
     monkeypatch.setattr(
@@ -267,7 +267,7 @@ def test_delete_result_legacy_bytea_row_skips_reconciliation(monkeypatch):
 
     comp_called = MagicMock()
     monkeypatch.setattr(
-        "app.shared.storage_compensation.compensating_delete", comp_called
+        "app.infrastructure.storage.compensation.compensating_delete", comp_called
     )
 
     deleted = results_cleanup.delete_result("r-legacy")
@@ -293,7 +293,7 @@ def test_delete_result_row_not_found_skips_reconciliation(monkeypatch):
 
     comp_called = MagicMock()
     monkeypatch.setattr(
-        "app.shared.storage_compensation.compensating_delete", comp_called
+        "app.infrastructure.storage.compensation.compensating_delete", comp_called
     )
 
     deleted = results_cleanup.delete_result("r-gone")
@@ -336,7 +336,7 @@ def test_delete_results_for_project_records_pending_per_key_in_one_tx(
 
     mark_done_calls = []
     monkeypatch.setattr(
-        "app.shared.storage_compensation.compensating_delete", _fake_comp
+        "app.infrastructure.storage.compensation.compensating_delete", _fake_comp
     )
     monkeypatch.setattr(
         "app.core.resources.storage_reconciliation.mark_done",
@@ -400,7 +400,7 @@ def test_delete_results_for_project_no_s3_rows_skips_reconciliation(
 
     comp_called = MagicMock()
     monkeypatch.setattr(
-        "app.shared.storage_compensation.compensating_delete", comp_called
+        "app.infrastructure.storage.compensation.compensating_delete", comp_called
     )
 
     rowcount = results_cleanup.delete_results_for_project("p-empty")
@@ -438,7 +438,7 @@ def test_delete_results_for_project_per_key_failure_isolates_others(
     mark_done_calls = []
     mark_failed_calls = []
     monkeypatch.setattr(
-        "app.shared.storage_compensation.compensating_delete", _comp_dispatch
+        "app.infrastructure.storage.compensation.compensating_delete", _comp_dispatch
     )
     monkeypatch.setattr(
         "app.core.resources.storage_reconciliation.mark_done",

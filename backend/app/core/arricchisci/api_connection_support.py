@@ -15,7 +15,7 @@ from typing import Any, Dict, List, Optional
 import pandas as pd
 
 from app.utils.logger import get_logger
-from app.utils.result_store import save_pipeline_result_outcome, save_result_blob
+from app.core.results.result_store import save_pipeline_result_outcome, save_result_blob
 
 # Stesso logger name di `api_connector.py` (`__name__` valuta a
 # `"app.core.arricchisci.api_connector"`). Singleton stdlib per nome →
@@ -234,7 +234,7 @@ class ApiConnectionSupportMixin:
         Il dict ritornato espone `result_id` (riferimento canonico al
         blob nel DB results) e `output_filename` per display, ma NON
         `output_path`/`output_file`: dopo `save_result_blob` il file
-        temp non esiste piu' (vedi `app/utils/result_store.py:80`),
+        temp non esiste piu' (vedi `app/core/results/result_store.py:80`),
         quindi qualunque path emesso sarebbe stale. I consumer
         downstream usano `result_id` via `PipelineArtifact.artifact_kind
         == "blob"` e l'ArtifactResolver per materializzare dal DB.
@@ -292,7 +292,7 @@ class ApiConnectionSupportMixin:
         Il dict ritornato espone `result_id` (riferimento canonico al
         blob nel DB results) e `output_filename` per display, ma NON
         `output_path`/`output_file`: dopo `save_result_blob` il file
-        temp non esiste piu' (vedi `app/utils/result_store.py:80`),
+        temp non esiste piu' (vedi `app/core/results/result_store.py:80`),
         quindi qualunque path emesso sarebbe stale. I consumer
         downstream usano `result_id` via `PipelineArtifact.artifact_kind
         == "blob"` e l'ArtifactResolver per materializzare dal DB.

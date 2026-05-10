@@ -215,8 +215,8 @@ def test_eseguibili_download_cleanup_runs_even_if_delete_by_task_raises():
 
 def test_save_pipeline_result_dict_shape(monkeypatch):
     """save_pipeline_result ritorna sempre {result_id, output_filename}."""
-    from app.utils.result_store import save_pipeline_result
-    import app.utils.result_store as result_store
+    from app.core.results.result_store import save_pipeline_result
+    import app.core.results.result_store as result_store
     import app.core.results.store as results_store
     import app.core.results.db as results_db
     from types import SimpleNamespace
@@ -249,7 +249,7 @@ def test_save_pipeline_result_dict_shape(monkeypatch):
 
 def test_save_pipeline_result_rejects_unknown_format():
     """Formato non supportato â†’ ValueError dalla serializzazione."""
-    from app.utils.result_store import save_pipeline_result
+    from app.core.results.result_store import save_pipeline_result
 
     df = pd.DataFrame({"a": [1]})
     with pytest.raises(ValueError):
@@ -262,8 +262,8 @@ def test_save_pipeline_result_rejects_unknown_format():
 def test_save_pipeline_result_fs_only_fallback_to_filesystem(monkeypatch, tmp_path):
     """Per gpkg/shp il dispatch interno usa tempfile + save_result_blob.
     Deve comunque ritornare la stessa shape dict."""
-    from app.utils.result_store import save_pipeline_result
-    import app.utils.result_store as result_store
+    from app.core.results.result_store import save_pipeline_result
+    import app.core.results.result_store as result_store
     import app.core.results.store as results_store
     import app.core.results.db as results_db
     from types import SimpleNamespace
