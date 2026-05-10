@@ -8,7 +8,7 @@ import io
 import socket
 import stat
 from datetime import datetime
-from typing import Optional, TYPE_CHECKING
+from typing import Any, Optional
 
 from app.core.datasources.interface import (
     BackendConfig,
@@ -22,11 +22,7 @@ from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
 
-if TYPE_CHECKING:
-    import paramiko as paramiko_types
-
-
-def _import_paramiko() -> "paramiko_types | None":
+def _import_paramiko() -> Optional[Any]:
     try:
         import paramiko
         return paramiko
