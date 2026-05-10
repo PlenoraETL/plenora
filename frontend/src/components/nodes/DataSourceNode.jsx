@@ -59,6 +59,12 @@ const [datasources, setDatasources]         = useState([]);
   const [browserError, setBrowserError]       = useState(null);
   const [loadingSchema, setLoadingSchema]     = useState(false);
   const [schemaError, setSchemaError]         = useState(null);
+  // Liste sheets/layers rilevate dal file remoto (XLSX/GPKG/GDB).
+  // Servono al select di selezione foglio/layer, popolato dopo il
+  // primo `getFileSchema` senza sheet/layer (il backend ritorna
+  // l'inventario disponibile in `schema.sheets` / `schema.layers`).
+  const [availableSheets, setAvailableSheets] = useState([]);
+  const [availableLayers, setAvailableLayers] = useState([]);
   const [isExpanded, setIsExpanded]           = useState(true);
 
   const mode         = data.mode || 'source';
@@ -103,21 +109,55 @@ const openBrowser = useCallback(async (path = '') => {
     // Dopo selezione file chiedi schema al backend
     fetchSchema(file.path);
   }, [upd, openBrowser]);
-const fetchSchema = useCallback(async (filePath) => {
+const fetchSchema = useCallback(async (filePath, opts = {}) => {
     if (!dsId || !filePath) return;
     setLoadingSchema(true);
     setSchemaError(null);
     try {
-      // Chiama endpoint datasource read_file per ottenere schema
-      // Il backend MANIPOLA può ricevere {datasource_id, file_path} e restituire colonne
-      const schema = await getFileSchema(dsId, filePath);
-      upd({ columns: schema.columns || [], format: schema.format || data.format });
+      // `getFileSchema` accetta sheet/layer opzionali. La PRIMA call
+      // (post-selezione file) li omette: il backend ritorna in quel
+      // caso l'inventario `schema.sheets` / `schema.layers` cosi'
+      // possiamo popolare il select. Le call successive (cambio
+      // sheet/layer) li passano per ottenere le `columns` di quel
+      // foglio/layer specifico.
+      const schema = await getFileSchema(dsId, filePath, opts);
+      const sheets = Array.isArray(schema.sheets) ? schema.sheets : [];
+      const layers = Array.isArray(schema.layers) ? schema.layers : [];
+      setAvailableSheets(sheets);
+      setAvailableLayers(layers);
+      // Se il file ha piu' sheet/layer e l'utente non ne ha ancora
+      // scelto uno, default al primo. Il backend restituisce columns=[]
+      // finche' non specifichiamo lo sheet — quindi facciamo subito
+      // una seconda fetch col primo sheet per popolare le colonne.
+      const po = data.parse_options || {};
+      const needsSheet  = sheets.length > 1 && !po.sheet  && !opts.sheet;
+      const needsLayer  = layers.length > 1 && !po.layer  && !opts.layer;
+      if (needsSheet || needsLayer) {
+        const newPo = { ...po };
+        if (needsSheet) newPo.sheet = sheets[0];
+        if (needsLayer) newPo.layer = layers[0];
+        upd({
+          columns: schema.columns || [],
+          format:  schema.format  || data.format,
+          parse_options: newPo,
+        });
+        // Re-fetch con sheet/layer scelto per ottenere le columns reali
+        await fetchSchema(filePath, {
+          sheet: needsSheet ? sheets[0] : po.sheet,
+          layer: needsLayer ? layers[0] : po.layer,
+        });
+      } else {
+        upd({
+          columns: schema.columns || [],
+          format:  schema.format  || data.format,
+        });
+      }
     } catch {
       // Schema opzionale — non blocca l'uso del nodo
     } finally {
       setLoadingSchema(false);
     }
-  }, [dsId, upd, data.format]);
+  }, [dsId, upd, data.format, data.parse_options]);
 const BreadCrumb = () => {
     const parts = browserPath.split('/').filter(Boolean);
     return (
@@ -284,6 +324,49 @@ return (
                     <span className="dsn__hint">0 = più recente &nbsp;·&nbsp; 1 = ieri &nbsp;·&nbsp; 2 = 2 giorni fa</span>
                   </div>
                 </>
+              )}
+
+              {/* Selezione sheet (XLSX multi-foglio) o layer (GPKG/GDB
+                  multi-layer). availableSheets/Layers viene popolato
+                  dalla prima `getFileSchema` (senza sheet/layer)
+                  dopo che l'utente ha scelto il file via Sfoglia. */}
+              {fileMode === 'fixed' && availableSheets.length > 1 && (
+                <div className="dsn__field">
+                  <label className="dsn__label">Foglio (sheet)</label>
+                  <select
+                    className="dsn__select"
+                    value={data.parse_options?.sheet || availableSheets[0]}
+                    onChange={e => {
+                      const sheet = e.target.value;
+                      const po = { ...(data.parse_options || {}), sheet };
+                      upd({ parse_options: po });
+                      fetchSchema(data.file_path, { sheet });
+                    }}
+                  >
+                    {availableSheets.map(s => (
+                      <option key={s} value={s}>{s}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+              {fileMode === 'fixed' && availableLayers.length > 1 && (
+                <div className="dsn__field">
+                  <label className="dsn__label">Layer</label>
+                  <select
+                    className="dsn__select"
+                    value={data.parse_options?.layer || availableLayers[0]}
+                    onChange={e => {
+                      const layer = e.target.value;
+                      const po = { ...(data.parse_options || {}), layer };
+                      upd({ parse_options: po });
+                      fetchSchema(data.file_path, { layer });
+                    }}
+                  >
+                    {availableLayers.map(l => (
+                      <option key={l} value={l}>{l}</option>
+                    ))}
+                  </select>
+                </div>
               )}
 
               {/* Schema colonne */}

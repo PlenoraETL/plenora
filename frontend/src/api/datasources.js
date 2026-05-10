@@ -47,10 +47,11 @@ export const listFiles = async (id, { path = '', pattern = null, include_hash = 
  * @param {string} path - path del file dentro il data source
  * @returns {Promise<{columns: Array<Object>, format?: string}>}
  */
-export const getFileSchema = async (id, path) => {
-  const res = await http.get(`/datasources/${id}/files/schema`, {
-    params: { path },
-  });
+export const getFileSchema = async (id, path, { sheet = null, layer = null } = {}) => {
+  const params = { path };
+  if (sheet) params.sheet = sheet;
+  if (layer) params.layer = layer;
+  const res = await http.get(`/datasources/${id}/files/schema`, { params });
   return res.data;
 };
 
