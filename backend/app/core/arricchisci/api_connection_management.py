@@ -231,11 +231,23 @@ class ApiConnectionManagementMixin:
             # client (es. password mascherata non modificata) mantengono
             # il valore esistente nel DB. I campi inviati come "***"
             # dal client sono mascherati e vanno IGNORATI, altrimenti
-            # sovrascriviamo il valore reale con la maschera
+            # sovrascriviamo il valore reale con la maschera. Stessa
+            # logica per stringa vuota: il FE puo' inviare
+            # `key_value: ""` se l'utente non ha toccato il campo
+            # (input non controllato), e svuotarla equivarrebbe a
+            # cancellare la credenziale → 401 al prossimo /test.
+            # Filtriamo stringa vuota SOLO per i campi sensibili
+            # (`key_value`, `password`, `client_secret`, `token`):
+            # per gli altri (es. `key_name`, `location`) "" puo'
+            # essere un reset legittimo.
+            _SENSITIVE_AUTH = {
+                "key_value", "password", "client_secret", "token",
+            }
             existing_auth = config.get("auth", {})
             incoming_auth = {
                 k: v for k, v in (data["auth"] or {}).items()
                 if v != "***"
+                and not (k in _SENSITIVE_AUTH and v == "")
             }
             config["auth"] = {**existing_auth, **incoming_auth}
         config["updated_at"] = datetime.now(timezone.utc).isoformat()

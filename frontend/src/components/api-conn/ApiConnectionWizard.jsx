@@ -21,6 +21,7 @@ import {
   createApiConnection,
   updateApiConnection,
   testApiConfig,
+  testApiConnection,
 } from '../../api/apiConnections';
 import Step0ChooseType from './wizard-steps/Step0ChooseType';
 import Step1BasicInfo from './wizard-steps/Step1BasicInfo';
@@ -247,6 +248,24 @@ const getCustomHeadersObject = () => {
   const handleTest = async () => {
     setTesting(true); setTestResult(null); setTestRawResponse(null);
     try {
+      // In edit mode: se l'auth ha credenziali sensibili mascherate
+      // ("***") o vuote, il payload del form non puo' fare /test
+      // (il backend useremmo l'auth del payload, e fallirebbe 401).
+      // Usa l'endpoint by-id che decifra dal DB. Skippa se l'utente
+      // ha esplicitamente cambiato la chiave nel form (valore non
+      // mascherato e non vuoto).
+      const auth = formData.auth || {};
+      const sensitive = auth.key_value ?? auth.password ?? auth.client_secret ?? auth.token;
+      const sensitiveIsPlaceholder = sensitive === '***' || sensitive === '' || sensitive == null;
+      if (editingApi?.id && auth.type && auth.type !== 'none' && sensitiveIsPlaceholder) {
+        const result = await testApiConnection(editingApi.id, {
+          test_params: { ...formData.static_parameters, ...testParams },
+          include_raw: true,
+        });
+        setTestResult(result);
+        if (result.raw_response) setTestRawResponse(result.raw_response);
+        return;
+      }
       const batch = formData.batch;
       let testPayload;
       if (batch?.enabled) {
