@@ -67,19 +67,48 @@ def op_md5_hash(
         # list-comp su numpy arrays: zip itera in C, separator.join/
         # hashlib.md5/encode sono tutti C-impl nativi. Speedup tipico ~10x
         # su 10k righe vs il legacy "agg+map"
+        #
+        # Hot-path stabilizzato: lavoro su np.ndarray + Python puro per
+        # bypassare il path pandas/pyarrow di `s.map(lambda)` /
+        # `.astype(str)`, riprodottosi instabile (SIGFPE/SIGSEGV
+        # intermittente sotto pytest in presenza di pandas+pyarrow+shapely
+        # caricati, ~30-70% dei run del bucket performance). La forma a
+        # list-comp ha la stessa semantica osservabile (NaN→"", Wkt per
+        # geometrie shapely, str altrove) ma evita il dispatch interno
+        # di pandas verso le extension che hanno l'interaction bug.
         col_arrs: List[np.ndarray] = []
         for col in valid_columns:
             s = result[col]
-            if s.dtype == object:
-                col_str = s.map(
-                    lambda v: "" if pd.isna(v) else (v.wkt if hasattr(v, "wkt") else str(v))
-                )
-            else:
-                col_str = s.astype(object).where(s.notna(), "").astype(str)
-                col_str = col_str.where(s.notna(), "")
+            # `.tolist()` materializza scalari Python/pandas autentici
+            # (es. `pd.Timestamp` per datetime64, Python int per int64,
+            # `pd.NaT` per missing datetime). Bypassa il path pandas/
+            # pyarrow di `s.map(lambda)` / `.astype(str)` che si e'
+            # rivelato instabile (SIGFPE/SIGSEGV intermittente sotto
+            # pytest in presenza di pandas+pyarrow+shapely caricati,
+            # ~30-70% dei run del bucket performance). Stringificazione
+            # uguale al legacy: `str(Timestamp(...))` ritorna sempre
+            # `"YYYY-MM-DD HH:MM:SS"` come `astype(str)` faceva.
+            values = s.tolist()
+            n_arr = len(values)
+            buf = [""] * n_arr
+            for i in range(n_arr):
+                v = values[i]
+                # pd.NaT / np.nan / None: skip → ""
+                if v is None:
+                    continue
+                try:
+                    if v != v:  # NaN/NaT idiom
+                        continue
+                except TypeError:
+                    pass
+                if hasattr(v, "wkt"):
+                    buf[i] = v.wkt
+                else:
+                    buf[i] = str(v)
             if normalize:
-                col_str = col_str.str.strip().str.lower()
-            col_arrs.append(col_str.to_numpy())
+                for i in range(n_arr):
+                    buf[i] = buf[i].strip().lower()
+            col_arrs.append(np.array(buf, dtype=object))
 
         n = len(result)
         if n == 0:
