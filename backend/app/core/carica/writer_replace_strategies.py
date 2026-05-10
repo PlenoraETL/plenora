@@ -532,8 +532,8 @@ class ReplaceStrategiesMixin:
                         conn.execute(text(restore_sql))
                         conn.commit()
                     logger.info(
-                        f"[REPLACE ATOMIC] recovery Oracle: backup "
-                        f"ripristinato come target"
+                        "[REPLACE ATOMIC] recovery Oracle: backup "
+                        "ripristinato come target"
                     )
                 except Exception as re_err:
                     logger.error(

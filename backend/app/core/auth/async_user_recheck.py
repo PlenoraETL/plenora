@@ -13,7 +13,7 @@ from fastapi import HTTPException
 from app.utils.logger import get_logger
 from app.core.auth.db import get_user
 from app.shared.contracts.auth import CurrentUser
-from app.shared.authz_helpers import assert_project_access
+from app.core.auth.resource_access import assert_project_access
 
 logger = get_logger(__name__)
 

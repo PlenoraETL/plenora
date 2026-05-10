@@ -10,14 +10,6 @@ from typing import Any, Dict, Optional, Protocol, runtime_checkable
 
 from app.shared.execution.payloads import ArtifactPayload, _check_payload_safe
 
-# `CanvasState` would normally be imported under `if TYPE_CHECKING:` for
-# annotation purposes, but `BE-GO-READY-ARCH-057-W1` (the engine boundary
-# guard) walks the AST and forbids any `from app.core.*` ImportFrom inside
-# `app.shared.*` engine subpackages — even gated. We keep the shape
-# documented in the executor protocols below via a `"CanvasState"` string
-# forward reference that the runtime never resolves; static type-checkers
-# can still pick it up by other means (stubs / project-wide TYPE_CHECKING
-# dispatch) without violating the boundary scan.
 
 
 __all__ = [
@@ -158,7 +150,7 @@ class CanvasExecutorProtocol(Protocol):
     def execute(
         self,
         project_id: str,
-        canvas: "CanvasState",
+        canvas: Any,
         run_id: Optional[str] = None,
         intermediate_mode_override: Optional[str] = None,
     ) -> "ExecutionResult | Dict[str, Any]":
@@ -177,7 +169,7 @@ class CanvasExecutorProtocol(Protocol):
     def preview(
         self,
         project_id: str,
-        canvas: "CanvasState",
+        canvas: Any,
         limit: int,
     ) -> Dict[str, Any]:
         """Run the pipeline without persisting. Truncate output to ``limit`` rows.

@@ -19,7 +19,7 @@ from app.core.arricchisci.enrichment_service import EnrichmentExecutor
 from app.core.arricchisci.models import EnrichmentOptions
 from app.core.arricchisci.parallel import should_execute_node
 from app.core.files.dataframe_io import sanitize_for_json
-from app.shared.columns_metadata import save_columns_metadata_with_retry
+from app.core.projects.columns_metadata import save_columns_metadata_with_retry
 
 logger = get_logger(__name__)
 
@@ -92,7 +92,7 @@ class EnrichExecutor:
                 # Allinea columns_metadata del progetto allo schema reale del DataFrame finale
                 # Fix desincronizzazione UI/DB del nodo result — il file xlsx era già corretto
                 # ma columns_metadata restava stale e rompeva il riuso come project_source
-                # Helper condiviso: retry transient + raise non-transient (vedi shared/columns_metadata.py
+                # Helper condiviso: retry transient + raise non-transient (vedi core/projects/columns_metadata.py
                 cm = result.get("columns_metadata") or []
                 if cm:
                     save_columns_metadata_with_retry(

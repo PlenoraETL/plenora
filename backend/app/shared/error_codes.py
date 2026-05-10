@@ -26,6 +26,17 @@ from app.core.tickets.errors import (
     TICKET_NOT_FOUND,
 )
 
+_DOMAIN_REEXPORT_CODES = (
+    AWS_CREDENTIALS_EXPIRED,
+    AWS_CRT_MISSING,
+    OBJECT_STORAGE_DISABLED,
+    CONNECTION_IN_USE,
+    CONNECTION_NOT_FOUND,
+    DATASOURCE_IN_USE,
+    DATASOURCE_NOT_FOUND,
+    TICKET_NOT_FOUND,
+)
+
 
 # Generic / framework-level
 

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import ast
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -103,6 +104,31 @@ def test_c2_shared_utils_business_logic_ledger_points_at_existing_files() -> Non
             assert not path.exists(), entry.path
             continue
         assert path.exists(), entry.path
+
+
+def _top_level_symbols(path: Path) -> set[str]:
+    tree = ast.parse(path.read_text(encoding="utf-8-sig"))
+    symbols: set[str] = set()
+    for node in tree.body:
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            symbols.add(node.name)
+        elif isinstance(node, ast.Assign):
+            for target in node.targets:
+                if isinstance(target, ast.Name):
+                    symbols.add(target.id)
+        elif isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
+            symbols.add(node.target.id)
+    return symbols
+
+
+def test_c2_shared_utils_business_logic_ledger_symbols_stay_real() -> None:
+    for entry in _LEDGER:
+        if entry.status == "REMOVED" or entry.symbol == "module":
+            continue
+        path = _BACKEND_ROOT / entry.path
+        assert entry.symbol in _top_level_symbols(path), (
+            f"{entry.path} no longer exposes ledger symbol {entry.symbol!r}"
+        )
 
 
 def test_static_parameter_processing_is_not_template_variables_business_logic() -> None:

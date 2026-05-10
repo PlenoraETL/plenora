@@ -27,7 +27,7 @@ from app.core.intermediate.snapshot import (
     record_final_snapshot,
 )
 from app.core.resources.exceptions import MemoryLimitExceededError
-from app.shared.columns_metadata import save_columns_metadata_with_retry
+from app.core.projects.columns_metadata import save_columns_metadata_with_retry
 from app.shared.resources.metadata import ResourceMetadata
 from .plugin_executor import get_executor
 from .source_loading import load_file_sources

@@ -36,7 +36,7 @@ from app.core.features.features_service import FeaturesService
 from app.shared import error_codes
 from app.shared.error_envelope import raise_typed_http
 from app.observability.audit_action import audit_action
-from app.shared.authz_helpers import assert_project_visible
+from app.core.auth.resource_access import assert_project_visible
 from app.shared.resources.path_policy import assert_path_within
 from app.shared.error_sanitizer import sanitize_http_detail
 from app.core.artifacts import ArtifactResolver, LatestProjectArtifactRef

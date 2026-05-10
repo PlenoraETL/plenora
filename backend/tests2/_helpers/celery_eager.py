@@ -299,7 +299,7 @@ def install_enrichment_task_mocks(
         spies.columns_metadata_saves.append(kwargs)
 
     monkeypatch.setattr(
-        "app.shared.columns_metadata.save_columns_metadata_with_retry",
+        "app.core.projects.columns_metadata.save_columns_metadata_with_retry",
         _fake_save_cols,
     )
 

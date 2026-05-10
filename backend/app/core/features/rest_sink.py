@@ -227,14 +227,14 @@ class RestFeatureSink:
         mapping = self._config.body_mapping
         payload: dict[str, RestJsonValue] = dict(record) if mapping.include_unmapped else {}
 
-        for field in mapping.fields:
-            value = record.get(field.source, field.default)
-            if field.required and value is None:
-                raise ValueError(f"REST sink missing required field: {field.source}")
-            if value is not None or field.target in payload or field.default is not None:
-                payload[field.target] = value
-            if field.source != field.target:
-                payload.pop(field.source, None)
+        for body_field in mapping.fields:
+            value = record.get(body_field.source, body_field.default)
+            if body_field.required and value is None:
+                raise ValueError(f"REST sink missing required field: {body_field.source}")
+            if value is not None or body_field.target in payload or body_field.default is not None:
+                payload[body_field.target] = value
+            if body_field.source != body_field.target:
+                payload.pop(body_field.source, None)
 
         return payload
 

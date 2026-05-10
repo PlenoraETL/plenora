@@ -439,7 +439,7 @@ def create_task(
     conoscendone l'id (cross-tenant data exfil).
     """
     from app.core.orchestrator.task_service import task_service
-    from app.shared.authz_helpers import (
+    from app.core.auth.resource_access import (
         assert_project_access, assert_canvas_resources_access,
     )
 
@@ -718,7 +718,7 @@ def cleanup_task_completely(
             except ValueError:
                 # Path traversal guard: file fuori da RESULTS_DIR, skip sicuro
                 # non contato in failed_steps: e' una safety skip, non un fallimento
-                logger.warning(f"cleanup: output_file fuori da RESULTS_DIR, skip")
+                logger.warning("cleanup: output_file fuori da RESULTS_DIR, skip")
     except Exception as e:
         logger.warning(f"cleanup: errore rimozione output_file: {e}", exc_info=True)
         failed_steps.append("unlink_output_file")

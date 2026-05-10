@@ -20,7 +20,7 @@ from app.core.auth.ownership import assert_group_access
 from app.shared import error_codes
 from app.shared.error_envelope import raise_typed_http
 from app.observability.audit_action import audit_action
-from app.shared.authz_helpers import assert_project_access
+from app.core.auth.resource_access import assert_project_access
 from app.core.scheduler import db as scheduler_db
 
 logger = get_logger(__name__)

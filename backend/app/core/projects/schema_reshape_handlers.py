@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
-from typing import Dict, List
+from typing import TYPE_CHECKING, Dict, List
+
+if TYPE_CHECKING:
+    from app.core.projects.schema_inference import ColumnSchema
 
 
 class ReshapeSchemaHandlers:

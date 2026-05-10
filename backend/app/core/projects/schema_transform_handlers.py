@@ -3,13 +3,16 @@
 from __future__ import annotations
 
 import re
-from typing import Callable, Dict, List
+from typing import TYPE_CHECKING, Callable, Dict, List
 
 from app.core.projects.schema_formula_handlers import FormulaSchemaHandlers
 from app.core.projects.schema_geo_handlers import GeoSchemaHandlers
 from app.core.projects.schema_join_handlers import JoinSchemaHandlers
 from app.core.projects.schema_reshape_handlers import ReshapeSchemaHandlers
 from app.core.projects.schema_table_handlers import TableSchemaHandlers
+
+if TYPE_CHECKING:
+    from app.core.projects.schema_inference import ColumnSchema
 
 
 class TransformSchemaHandlers:

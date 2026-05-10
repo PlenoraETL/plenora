@@ -16,7 +16,7 @@ pytestmark = [pytest.mark.unit, pytest.mark.contract]
 def test_manipola_propagates_save_error(monkeypatch):
     """Se il save fallisce in modo permanente, ManipolaExecutor deve
     NON swalloware l'errore — il task Celery lo intercetta e marca FAILED."""
-    import app.shared.columns_metadata as _cm
+    import app.core.projects.columns_metadata as _cm
     monkeypatch.setattr(_cm, "_BACKOFF_SEC", (0.01, 0.01, 0.01))
 
     from app.core.projects.exceptions import ColumnsMetadataSaveError
@@ -37,7 +37,7 @@ def test_manipola_propagates_save_error(monkeypatch):
 
     monkeypatch.setattr(_cm, "save_columns_metadata_with_retry", fake_helper)
     # Il modulo manipola importa il helper — patchiamo anche lì per
-    # l'import `from app.shared.columns_metadata import ...` lazy.
+    # l'import `from app.core.projects.columns_metadata import ...` lazy.
     import app.core.manipola.executor as mexec
     # Se l'import e' inline nella funzione (lazy), il patch su _cm
     # sopra copre; altrimenti esporta l'alias.
@@ -48,7 +48,7 @@ def test_manipola_propagates_save_error(monkeypatch):
 
     # Verifica che l'import path esista (il call-site sara' esercitato
     # dal full-stack test downstream; qui verifichiamo la firma importabile).
-    from app.shared.columns_metadata import save_columns_metadata_with_retry
+    from app.core.projects.columns_metadata import save_columns_metadata_with_retry
     assert callable(save_columns_metadata_with_retry)
 
 

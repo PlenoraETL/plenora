@@ -494,8 +494,8 @@ def test_create_task_router_builds_enrichment_submit_payload(monkeypatch):
     def fail_legacy_wrapper(**kwargs):
         raise AssertionError("router used create_enrichment_task wrapper")
 
-    monkeypatch.setattr("app.shared.authz_helpers.assert_project_access", lambda *a, **kw: None)
-    monkeypatch.setattr("app.shared.authz_helpers.assert_canvas_resources_access", lambda *a, **kw: None)
+    monkeypatch.setattr("app.core.auth.resource_access.assert_project_access", lambda *a, **kw: None)
+    monkeypatch.setattr("app.core.auth.resource_access.assert_canvas_resources_access", lambda *a, **kw: None)
     monkeypatch.setattr(task_service, "create_enrichment_task", fail_legacy_wrapper)
     monkeypatch.setattr(task_service, "submit_task", fake_submit_task)
 
@@ -548,8 +548,8 @@ def test_create_task_router_builds_carica_submit_payload(monkeypatch):
     def fail_legacy_wrapper(**kwargs):
         raise AssertionError("router used create_carica_task wrapper")
 
-    monkeypatch.setattr("app.shared.authz_helpers.assert_project_access", lambda *a, **kw: None)
-    monkeypatch.setattr("app.shared.authz_helpers.assert_canvas_resources_access", lambda *a, **kw: None)
+    monkeypatch.setattr("app.core.auth.resource_access.assert_project_access", lambda *a, **kw: None)
+    monkeypatch.setattr("app.core.auth.resource_access.assert_canvas_resources_access", lambda *a, **kw: None)
     monkeypatch.setattr(router_mod, "enrich_canvas_types_from_metadata", lambda *a, **kw: None)
     monkeypatch.setattr(task_service, "create_carica_task", fail_legacy_wrapper)
     monkeypatch.setattr(task_service, "submit_task", fake_submit_task)

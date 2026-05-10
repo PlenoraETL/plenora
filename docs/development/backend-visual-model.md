@@ -1,11 +1,18 @@
 # Backend Visual Model
 
-Modello visuale del backend Plenora/URBY ETL, aggiornato dallo stato reale di
-`backend/app`, `backend/workers`, `backend/tests2` e dal wiring runtime.
+Modello visuale del backend Plenora/URBY ETL, ricostruito staticamente da
+`backend/app`, `backend/workers`, `backend/tests2` e dal wiring runtime
+osservabile.
 
 Scopo: aiutare a leggere l'architettura, capire se il codice si sta
 orizzontalizzando, individuare moduli sparsi e separare capability verticali
 da engine tecnici condivisi.
+
+Nota: questa e' una mappa statica di orientamento, derivata dalla struttura del
+repository al momento dell'analisi. Non e' un contratto runtime, una specifica
+normativa o una fonte unica di verita': quando una decisione dipende dal
+comportamento effettivo, va verificata sul codice, sui test o sull'ambiente in
+esecuzione.
 
 Questo file usa solo diagrammi ASCII per evitare problemi di rendering.
 
@@ -26,8 +33,8 @@ Il backend e' ibrido:
                   PostgreSQL / Redis / object storage / providers
 ```
 
-La direzione e' chiara: i moduli di prodotto restano verticali, mentre i
-contratti condivisi scendono in engine orizzontali.
+La lettura statica suggerisce questa direzione: i moduli di prodotto tendono a
+restare verticali, mentre i contratti condivisi scendono in engine orizzontali.
 
 ```text
 Vertical capabilities
@@ -118,13 +125,13 @@ sui singoli blocchi.
     results/logs         result backend blobs/artifacts     temp files       SFTP/SharePoint
 ```
 
-Reading rule:
+Reading heuristic:
 
 ```text
-routers should stay thin
+routers are expected to stay thin
 vertical modules own product behavior
 horizontal engines own reusable technical rules
-shared/db/runtime are the stable cross-module surfaces
+shared/db/runtime appear to be the main cross-module surfaces
 external systems sit behind provider/resource/task boundaries
 ```
 
@@ -475,7 +482,7 @@ pyodbc
 But SQL Server also needs system ODBC drivers, for example Microsoft ODBC
 Driver 18. Python package installation alone is not enough.
 
-Provider integration tests must distinguish:
+Provider integration tests should distinguish:
 
 ```text
 driver Python installed
@@ -566,9 +573,10 @@ app.shared.resources.column_types
     column type helper bridge surface used by execution/resource code
 ```
 
-This is one of the strongest horizontalization areas. It is also one of the
-most sensitive: inventories for blob consumers, temp materialization and
-storage reconciliation must match the code or the guard tests correctly go red.
+This appears to be one of the strongest horizontalization areas. It is also one
+of the most sensitive: inventories for blob consumers, temp materialization and
+storage reconciliation are expected to track the code closely, otherwise guard
+tests may fail.
 
 ### EXECUTION_ORCHESTRATION_ENGINE
 
@@ -643,8 +651,8 @@ run logs
 archive visibility
 ```
 
-Watch point: readiness must remain cheap and bounded. No heavy top-level
-imports or unbounded network work in health paths.
+Watch point: readiness is expected to remain cheap and bounded. Avoid heavy
+top-level imports or unbounded network work in health paths.
 
 ### DEPLOYMENT_RUNTIME_ENGINE
 
@@ -864,20 +872,21 @@ arricchisci
     response parsing, merge and schema inference all meet there.
 
 security / ownership
-    Must stay centralized. Literal privileged bypasses or cross-tenant
+    Intended to stay centralized. Literal privileged bypasses or cross-tenant
     special cases should remain heavily guarded.
 
 resource/storage inventories
-    Blob/temp/materialization inventories must match the code. These guard
-    tests are noisy when stale, but valuable.
+    Blob/temp/materialization inventories are expected to match the code. These
+    guard tests are noisy when stale, but valuable.
 
 documentation guard lane
     Doc guards are opt-in. They should protect true
     operator contracts, not incidental wording.
 
 optional provider integrations
-    Drivers and system dependencies must be installable, but provider tests
-    must skip cleanly when the provider is disabled or unreachable.
+    Drivers and system dependencies need to be installable for enabled
+    providers, while provider tests should skip cleanly when the provider is
+    disabled or unreachable.
 
 ArcGIS concrete-client ownership
     Provider contracts live in app.shared.connections and provider creation /
@@ -1262,14 +1271,14 @@ Celery beat
             retry / mark failed / eventually lost
 ```
 
-Critical invariants:
+Critical expectations:
 
 ```text
-DB row is the source of truth for result metadata
+DB row is treated as the primary persisted result-metadata record
 storage_key means payload lives outside DB
-large reads must go through bounded readers/caps
+large reads are expected to go through bounded readers/caps
 temp materialization is explicit and inventoried
-object-storage deletes must be compensating and observable
+object-storage deletes are expected to be compensating and observable
 ```
 
 ## 14. Multi-Tenant Security Flow
@@ -1355,9 +1364,9 @@ Watch points:
 
 ```text
 no literal is_superadmin=True in product code outside allowlists
-no router should construct privileged ResourceRef casually
+routers should avoid constructing privileged ResourceRef casually
 cross-tenant failures should be 403/404 style, not leaked 500 details
-async tasks must not trust stale group context blindly
+async tasks should recheck stale group context before trusting it
 ```
 
 ## 15. Canvas Execution DAG
@@ -2176,7 +2185,7 @@ Conflict resolution runtime     Not present beyond local write-mode policies.
 External state tracking         Not present.
 ```
 
-The clearest design signal is CARICA's task policy:
+A strong design signal in this snapshot is CARICA's task policy:
 
 ```text
 carica.execute
@@ -2187,8 +2196,9 @@ Reason:
     partial failure. The task fails visibly instead of retrying silently.
 ```
 
-That is correct for ETL safety, and it also marks the runtime boundary: this is
-not a sync engine. A sync runtime needs durable operation ids,
+That is a conservative ETL-safety choice, and it helps mark the runtime
+boundary in this snapshot: the observed implementation does not behave like a
+general sync engine. A sync runtime would typically need durable operation ids,
 idempotent provider-level writes, retry state, replay, and reconciliation.
 
 ### 17.5 Event And Webhook Support
@@ -2247,7 +2257,8 @@ REST write sink:
     RestFeatureSink.write_records(records)
 ```
 
-This means connectors are not purely read-only. There are concrete write paths.
+This indicates that connectors are not purely read-only in the observed code.
+There are concrete write paths.
 
 But the model is not yet a full provider-neutral sync connector system:
 
@@ -2377,7 +2388,7 @@ external API/database/source synchronization
 
 ```text
 A) ETL/read-and-publish platform
-    Mostly true.
+    Mostly true in this snapshot.
     Strong evidence: extract -> transform/enrich -> result blob -> CARICA DB/
     datasource/REST/ArcGIS publish/write paths.
 
@@ -2388,12 +2399,12 @@ B) bidirectional integration platform
     Missing: generic connector sync contracts.
 
 C) operational sync runtime
-    Not true.
+    Not observed as a general runtime.
     Missing: durable remote checkpoints, external operation ledger, event intake,
     dead-letter/replay, reconciliation and conflict resolution runtime.
 
 D) hybrid architecture
-    Best classification.
+    Best-fit classification for this static map.
     The architecture has real write/publish capability and some horizontal
     provider/resource boundaries, but the runtime behaves primarily as
     ETL/read-and-publish.

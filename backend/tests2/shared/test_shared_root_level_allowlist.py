@@ -6,6 +6,7 @@ BE-GO-READY-ARCH-059-W5: Prevents ``app.shared`` from becoming a junk drawer
 
 from __future__ import annotations
 
+import ast
 from pathlib import Path
 
 import pytest
@@ -23,13 +24,10 @@ _ALLOWED_ROOT_MODULES: frozenset[str] = frozenset(
         "error_codes",        # shared error code registry
         "error_envelope",     # standard error response envelope
         "error_sanitizer",    # strip sensitive data from error messages
-        "authz_helpers",      # authorization predicate helpers
         "login_rate_limiter", # per-user login throttle
         "password_hashing",   # bcrypt password helpers
         "token_blacklist",    # JWT revocation store
         "upload_guards",      # upload size / MIME type enforcement
-        "memory_guard",            # per-tenant memory allocation guard
-        "columns_metadata",       # column-level metadata helpers
         "clock",                       # wall-clock abstraction for testability
     }
 )
@@ -39,13 +37,10 @@ _ROOT_MODULE_CLASSIFICATIONS: dict[str, str] = {
     "error_codes": "KEEP_ROOT_CROSS_CUTTING",
     "error_envelope": "KEEP_ROOT_CROSS_CUTTING",
     "error_sanitizer": "KEEP_ROOT_CROSS_CUTTING",
-    "authz_helpers": "MOVE_TO_SECURITY_PACKAGE_LATER",
     "login_rate_limiter": "MOVE_TO_SECURITY_PACKAGE_LATER",
     "password_hashing": "MOVE_TO_SECURITY_PACKAGE_LATER",
     "token_blacklist": "MOVE_TO_SECURITY_PACKAGE_LATER",
     "upload_guards": "MOVE_TO_SECURITY_PACKAGE_LATER",
-    "memory_guard": "MOVE_TO_EXECUTION_CANDIDATE",
-    "columns_metadata": "MOVE_TO_RESOURCES_CANDIDATE",
     "clock": "KEEP_ROOT_CROSS_CUTTING",
 }
 
@@ -65,6 +60,17 @@ _KNOWN_SUBPACKAGES: frozenset[str] = frozenset(
     {"execution", "connections", "resources", "contracts"}
 )
 
+_ALLOWED_UPWARD_IMPORTS: dict[str, frozenset[str]] = {
+    "error_codes": frozenset(
+        {
+            "app.core.admin_backups.errors",
+            "app.core.connections.errors",
+            "app.core.datasources.errors",
+            "app.core.tickets.errors",
+        }
+    ),
+}
+
 
 def _actual_root_modules() -> set[str]:
     """Return stem names of all *.py files at the root of app/shared/."""
@@ -73,6 +79,18 @@ def _actual_root_modules() -> set[str]:
         for p in _SHARED_DIR.glob("*.py")
         if p.stem != "__init__"
     }
+
+
+def _import_edges(path: Path) -> set[str]:
+    tree = ast.parse(path.read_text(encoding="utf-8-sig"))
+    edges: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            edges.update(alias.name for alias in node.names)
+            continue
+        if isinstance(node, ast.ImportFrom) and node.module:
+            edges.add(node.module)
+    return edges
 
 
 def test_no_new_root_level_modules_without_allowlist_entry() -> None:
@@ -128,4 +146,29 @@ def test_known_subpackages_present() -> None:
     assert not missing, (
         f"Engine subpackage(s) missing from app/shared/: {missing}\n"
         "These must not be deleted or flattened back into root level."
+    )
+
+
+def test_shared_root_modules_do_not_import_domain_or_infrastructure_code() -> None:
+    """Root shared modules must stay leaf-like unless explicitly transitional."""
+    violations: list[str] = []
+    for path in sorted(_SHARED_DIR.glob("*.py")):
+        if path.stem == "__init__":
+            continue
+        allowed = _ALLOWED_UPWARD_IMPORTS.get(path.stem, frozenset())
+        for edge in sorted(_import_edges(path)):
+            if not (
+                edge.startswith("app.core.")
+                or edge.startswith("app.infrastructure.")
+                or edge.startswith("app.db.")
+            ):
+                continue
+            if edge in allowed:
+                continue
+            violations.append(f"{path.name} -> {edge}")
+
+    assert violations == [], (
+        "Root-level app.shared modules must not depend upward on domain, "
+        "infrastructure, or DB modules. Move that code to the owning domain "
+        f"or add a narrow transitional exception. Violations: {violations}"
     )

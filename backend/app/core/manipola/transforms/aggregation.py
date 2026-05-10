@@ -108,7 +108,7 @@ def op_aggregate(
                 agg_dict[col] = pandas_func
 
         if not agg_dict:
-            logger.warning(f"agg_dict vuoto dopo parsing aggregazioni! Fallback a count")
+            logger.warning("agg_dict vuoto dopo parsing aggregazioni! Fallback a count")
             result = df.groupby(group_by, dropna=False).size().reset_index(name='count')
         else:
             logger.info(f"agg_dict finale: {agg_dict}")

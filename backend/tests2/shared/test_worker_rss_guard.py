@@ -21,7 +21,7 @@ pytestmark = [pytest.mark.unit, pytest.mark.contract]
 def test_memory_guard_module_does_not_import_fastapi():
     """memory_guard.py must be pure — no FastAPI/starlette imports."""
     src = (Path(__file__).resolve().parent.parent.parent
-           / "app" / "shared" / "memory_guard.py")
+           / "app" / "core" / "resources" / "memory_guard.py")
     text = src.read_text(encoding="utf-8")
     assert "from fastapi" not in text
     assert "from starlette" not in text
@@ -32,9 +32,9 @@ def test_memory_guard_module_does_not_import_fastapi():
 
 def test_check_worker_rss_raises_when_above_cap():
     """RSS above cap -> MemoryLimitExceededError."""
-    from app.shared.memory_guard import check_worker_rss
+    from app.core.resources.memory_guard import check_worker_rss
 
-    with patch("app.shared.memory_guard.get_current_rss_bytes", return_value=2_000_000_000):
+    with patch("app.core.resources.memory_guard.get_current_rss_bytes", return_value=2_000_000_000):
         with pytest.raises(MemoryLimitExceededError) as exc_info:
             check_worker_rss(cap_bytes=1_500_000_000, stage="pipeline_execute")
 
@@ -46,16 +46,16 @@ def test_check_worker_rss_raises_when_above_cap():
 
 def test_check_worker_rss_passes_when_below_cap():
     """RSS below cap -> no exception."""
-    from app.shared.memory_guard import check_worker_rss
+    from app.core.resources.memory_guard import check_worker_rss
 
-    with patch("app.shared.memory_guard.get_current_rss_bytes", return_value=500_000_000):
+    with patch("app.core.resources.memory_guard.get_current_rss_bytes", return_value=500_000_000):
         check_worker_rss(cap_bytes=1_500_000_000, stage="pipeline_execute")
         # No exception = pass
 
 
 def test_check_worker_rss_disabled_when_cap_zero():
     """Cap <= 0 -> guard skipped, no exception even with high RSS."""
-    from app.shared.memory_guard import check_worker_rss
+    from app.core.resources.memory_guard import check_worker_rss
     # Should not raise regardless of RSS
     check_worker_rss(cap_bytes=0, stage="pipeline_execute")
     check_worker_rss(cap_bytes=-1, stage="pipeline_execute")
@@ -63,9 +63,9 @@ def test_check_worker_rss_disabled_when_cap_zero():
 
 def test_check_worker_rss_skips_when_psutil_unavailable():
     """If psutil is not available, guard is silently skipped."""
-    from app.shared.memory_guard import check_worker_rss
+    from app.core.resources.memory_guard import check_worker_rss
 
-    with patch("app.shared.memory_guard.get_current_rss_bytes", return_value=None):
+    with patch("app.core.resources.memory_guard.get_current_rss_bytes", return_value=None):
         # Should not raise
         check_worker_rss(cap_bytes=1, stage="pipeline_execute")
 
@@ -93,9 +93,9 @@ def test_rss_stage_maps_to_503_in_handler_source_bound():
 def test_rss_exception_carries_worker_process_resource():
     """MemoryLimitExceededError from RSS guard uses 'worker_process'
     as path_basename."""
-    from app.shared.memory_guard import check_worker_rss
+    from app.core.resources.memory_guard import check_worker_rss
 
-    with patch("app.shared.memory_guard.get_current_rss_bytes", return_value=2_000_000_000):
+    with patch("app.core.resources.memory_guard.get_current_rss_bytes", return_value=2_000_000_000):
         with pytest.raises(MemoryLimitExceededError) as exc_info:
             check_worker_rss(cap_bytes=1, stage="pipeline_execute")
 

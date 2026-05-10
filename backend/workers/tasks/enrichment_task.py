@@ -349,7 +349,7 @@ def execute_enrichment_task(
             node_data = {**node_flat, **(node.get("data") or {})}
 
             if node_type == "project_source":
-                update_task_progress(self, node_progress, f"Caricamento sorgente dati...", task_id=task_id)
+                update_task_progress(self, node_progress, "Caricamento sorgente dati...", task_id=task_id)
                 result = api_connection_service._load_source_project(
                     node_data, force_recalculate, ctx=ctx,
                 )
@@ -374,13 +374,13 @@ def execute_enrichment_task(
                             break
 
                 if is_for_file_processor:
-                    update_task_progress(self, node_progress, f"File source (passthrough per file processor)...", task_id=task_id)
+                    update_task_progress(self, node_progress, "File source (passthrough per file processor)...", task_id=task_id)
                     node_results[node_id] = {
                         "_passthrough_file_source": True,
                         "file_source_id": node_data.get("file_source_id")
                     }
                 else:
-                    update_task_progress(self, node_progress, f"Caricamento file...", task_id=task_id)
+                    update_task_progress(self, node_progress, "Caricamento file...", task_id=task_id)
                     result = api_connection_service._load_file_source(
                         node_data, ctx=ctx,
                     )
@@ -388,7 +388,7 @@ def execute_enrichment_task(
                 return
 
             if node_type == "staticValues":
-                update_task_progress(self, node_progress, f"Processamento valori statici...", task_id=task_id)
+                update_task_progress(self, node_progress, "Processamento valori statici...", task_id=task_id)
                 result = api_connection_service._load_static_values(
                     node_data, ctx=ctx,
                 )
@@ -1013,7 +1013,7 @@ def execute_enrichment_task(
             # esterno di Celery che marca il task FAILED — pre-fix il warning
             # silenzioso lasciava il task SUCCESS con metadata stale
             from app.core.projects.service import ProjectService as _ProjSvc
-            from app.shared.columns_metadata import save_columns_metadata_with_retry
+            from app.core.projects.columns_metadata import save_columns_metadata_with_retry
             _col_meta = [{"name": col, "type": str(final_df[col].dtype)} for col in final_df.columns]
             save_columns_metadata_with_retry(
                 project_service=_ProjSvc(),

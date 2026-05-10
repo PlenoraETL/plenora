@@ -672,7 +672,7 @@ class EstraiExecutor:
         canvas e output (es. Oracle restituisce nomi UPPERCASE).
 
         La logica retry+backoff+raise vive in
-        `app.shared.columns_metadata.save_columns_metadata_with_retry`:
+        `app.core.projects.columns_metadata.save_columns_metadata_with_retry`:
         unica fonte di verita' condivisa con manipola/arricchisci/
         enrichment_task. Vedi quel modulo per la classificazione delle
         eccezioni transient vs non-transient.
@@ -681,7 +681,7 @@ class EstraiExecutor:
         → downstream riceveva tipi fallback `str`, numeri/date diventavano
         testo nel CARICA target, nessun segnale all'utente.
         """
-        from app.shared.columns_metadata import save_columns_metadata_with_retry
+        from app.core.projects.columns_metadata import save_columns_metadata_with_retry
 
         canvas_type_map = self._build_canvas_type_map(canvas)
 

@@ -17,7 +17,7 @@ pytestmark = [pytest.mark.unit, pytest.mark.contract]
 @pytest.fixture
 def fast_backoff(monkeypatch):
     """Accelera i backoff per test veloci."""
-    import app.shared.columns_metadata as _cm
+    import app.core.projects.columns_metadata as _cm
     monkeypatch.setattr(_cm, "_BACKOFF_SEC", (0.01, 0.01, 0.01))
     return _cm
 
@@ -28,7 +28,7 @@ def mock_logger():
 
 
 def _call_helper(project_service, logger, project_id="p1", columns=None):
-    from app.shared.columns_metadata import save_columns_metadata_with_retry
+    from app.core.projects.columns_metadata import save_columns_metadata_with_retry
     save_columns_metadata_with_retry(
         project_service=project_service,
         project_id=project_id,
@@ -133,7 +133,7 @@ def test_all_backoff_values_used_on_full_failure(fast_backoff, mock_logger, monk
     """Regression: Previous behavior c'era un off-by-one che faceva scartare
     l'ultimo valore del backoff array."""
     # Ripristina i backoff reali per il test
-    import app.shared.columns_metadata as _cm
+    import app.core.projects.columns_metadata as _cm
     monkeypatch.setattr(_cm, "_BACKOFF_SEC", (0.2, 0.5, 1.0))
     monkeypatch.setattr(_cm, "_MAX_ATTEMPTS", 4)
 

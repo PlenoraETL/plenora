@@ -117,7 +117,7 @@ def validate_imdf_task_id(bundle_task_id: str, root: Path) -> Path:
     """
     if not bundle_task_id or not _IMDF_TASK_ID_RE.match(bundle_task_id):
         raise ValueError(
-            f"bundle_task_id non valido (ammessi solo [A-Za-z0-9_-], "
+            "bundle_task_id non valido (ammessi solo [A-Za-z0-9_-], "
             "primo char alfanumerico, max 128 char)"
         )
     return assert_path_within(root / bundle_task_id, [root])

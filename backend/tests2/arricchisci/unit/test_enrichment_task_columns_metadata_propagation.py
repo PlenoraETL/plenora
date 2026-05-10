@@ -32,7 +32,7 @@ def test_enrichment_task_save_error_propagates_to_celery(monkeypatch):
     """Smoke: errore non-transient → ColumnsMetadataSaveError sollevato
     dal helper → Celery marca FAILED."""
     from unittest.mock import MagicMock
-    import app.shared.columns_metadata as _cm
+    import app.core.projects.columns_metadata as _cm
     from app.core.projects.exceptions import ColumnsMetadataSaveError
 
     monkeypatch.setattr(_cm, "_BACKOFF_SEC", (0.01, 0.01, 0.01))

@@ -39,8 +39,8 @@ def executor_with_mocks(monkeypatch):
     )
 
     # Accelera i backoff del helper per test veloci (post-refactor la
-    # logica retry vive in app.shared.columns_metadata, patchiamo lì).
-    import app.shared.columns_metadata as _cm_helper
+    # logica retry vive in app.core.projects.columns_metadata, patchiamo lì).
+    import app.core.projects.columns_metadata as _cm_helper
     monkeypatch.setattr(_cm_helper, "_BACKOFF_SEC", (0.01, 0.01, 0.01))
 
     return executor, project_service
@@ -233,7 +233,7 @@ def test_happy_path_does_not_sleep(executor_with_mocks, monkeypatch):
     res = _make_res()
 
     sleep_calls = []
-    import app.shared.columns_metadata as _cm_helper
+    import app.core.projects.columns_metadata as _cm_helper
     monkeypatch.setattr(_cm_helper._time, "sleep", lambda s: sleep_calls.append(s))
 
     executor._salva_tipi_colonne_da_canvas("proj-1", canvas, res)
@@ -247,7 +247,7 @@ def test_happy_path_does_not_sleep(executor_with_mocks, monkeypatch):
 def test_backoff_applied_between_retries(executor_with_mocks, monkeypatch):
     executor, project_service = executor_with_mocks
     # Ripristina i backoff reali (la fixture li accelera a 0.01s)
-    import app.shared.columns_metadata as _cm_helper
+    import app.core.projects.columns_metadata as _cm_helper
     monkeypatch.setattr(_cm_helper, "_BACKOFF_SEC", (0.2, 0.5, 1.0))
     monkeypatch.setattr(_cm_helper, "_MAX_ATTEMPTS", 4)
 
@@ -259,7 +259,7 @@ def test_backoff_applied_between_retries(executor_with_mocks, monkeypatch):
     project_service.update_project_columns_metadata.side_effect = [err, err, err, err]
 
     sleep_calls = []
-    import app.shared.columns_metadata as _cm_helper
+    import app.core.projects.columns_metadata as _cm_helper
     monkeypatch.setattr(_cm_helper._time, "sleep", lambda s: sleep_calls.append(s))
 
     from app.core.projects.exceptions import ColumnsMetadataSaveError
@@ -318,7 +318,7 @@ def test_fullstack_transient_db_error_triggers_retry(monkeypatch):
         connection_service=MagicMock(),
         features_service=MagicMock(),
     )
-    import app.shared.columns_metadata as _cm_helper
+    import app.core.projects.columns_metadata as _cm_helper
     monkeypatch.setattr(_cm_helper, "_BACKOFF_SEC", (0.01, 0.01, 0.01))
 
     canvas = _make_canvas()
@@ -358,7 +358,7 @@ def test_fullstack_transient_db_error_all_fail_raises_explicit(monkeypatch):
         connection_service=MagicMock(),
         features_service=MagicMock(),
     )
-    import app.shared.columns_metadata as _cm_helper
+    import app.core.projects.columns_metadata as _cm_helper
     monkeypatch.setattr(_cm_helper, "_BACKOFF_SEC", (0.01, 0.01, 0.01))
 
     canvas = _make_canvas()
@@ -402,7 +402,7 @@ def test_fullstack_project_deleted_during_run_raises(monkeypatch):
         connection_service=MagicMock(),
         features_service=MagicMock(),
     )
-    import app.shared.columns_metadata as _cm_helper
+    import app.core.projects.columns_metadata as _cm_helper
     monkeypatch.setattr(_cm_helper, "_BACKOFF_SEC", (0.01, 0.01, 0.01))
 
     canvas = _make_canvas()
@@ -440,7 +440,7 @@ def test_fullstack_non_transient_error_no_retry(monkeypatch):
         connection_service=MagicMock(),
         features_service=MagicMock(),
     )
-    import app.shared.columns_metadata as _cm_helper
+    import app.core.projects.columns_metadata as _cm_helper
     monkeypatch.setattr(_cm_helper, "_BACKOFF_SEC", (0.01, 0.01, 0.01))
 
     canvas = _make_canvas()

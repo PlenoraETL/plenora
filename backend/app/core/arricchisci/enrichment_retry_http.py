@@ -124,7 +124,7 @@ class EnrichmentRetryHttpMixin:
                     last_error = RowError(
                         row_index=row_index,
                         status=RowStatus.ERROR,
-                        error_message=f"Rate limited (429)",
+                        error_message="Rate limited (429)",
                         error_type="rate_limit",
                         http_status=429,
                         retry_count=attempt

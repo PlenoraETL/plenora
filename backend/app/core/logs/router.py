@@ -19,7 +19,7 @@ from app.core.auth.dependencies import (
 )
 from app.shared.contracts.auth import CurrentUser, group_filter
 from app.db.pg_connection import fetchone as _fetchone, fetchall as _fetchall
-from app.shared.authz_helpers import assert_project_visible
+from app.core.auth.resource_access import assert_project_visible
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)

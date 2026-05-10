@@ -646,7 +646,7 @@ def test_auth_engine_013_facade_reexports_dependencies_from_leaf():
 # consume ownership helpers (files / arricchisci / features /
 # connections / datasources / eseguibili) already import from the
 # leaf `app.core.auth.ownership` (Phase-7/8 contract fan-out
-# completed). `app.shared.authz_helpers` likewise imports from the
+# completed). `app.core.auth.resource_access` likewise imports from the
 # leaf.
 #
 # The remaining ownership re-export on the facade is documented:

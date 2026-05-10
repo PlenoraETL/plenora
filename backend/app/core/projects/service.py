@@ -574,7 +574,7 @@ class ProjectService:
         se il progetto non esiste.
 
         **NON** cattura eccezioni DB/transient: queste propagano al caller.
-        Motivazione: il helper `app.shared.columns_metadata
+        Motivazione: il helper `app.core.projects.columns_metadata
         .save_columns_metadata_with_retry` fa retry selettivo sulle
         eccezioni transient (OperationalError, DeadlockDetected, ecc.) e,
         dopo i retry, solleva `ColumnsMetadataSaveError` esplicito per far

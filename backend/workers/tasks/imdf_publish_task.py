@@ -132,7 +132,7 @@ def execute_imdf_publish_task(
                 "elapsed_time": round(time.time() - started_at, 2),
             }
 
-        _update_progress(self, 8, f"Caricamento layer IMDF dal GDB...")
+        _update_progress(self, 8, "Caricamento layer IMDF dal GDB...")
 
         from app.core.imdf.loader import load_imdf_layers
         gdf_layers = load_imdf_layers(gdb_path)
@@ -216,7 +216,7 @@ def execute_imdf_publish_task(
             "message": (
                 f"Pubblicazione IMDF completata: {fs_name}"
                 if publish_result.get("success")
-                else f"Pubblicazione IMDF con errori"
+                else "Pubblicazione IMDF con errori"
             ),
             "elapsed_time": elapsed,
             "completed_at": datetime.now(timezone.utc).isoformat(),

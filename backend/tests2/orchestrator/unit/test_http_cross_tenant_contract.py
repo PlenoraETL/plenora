@@ -30,7 +30,7 @@ def _build_client():
 def test_create_task_rejects_cross_tenant_project_before_task_creation():
     client = _build_client()
 
-    with patch("app.shared.authz_helpers.assert_project_access", side_effect=HTTPException(status_code=403, detail="Accesso negato")), \
+    with patch("app.core.auth.resource_access.assert_project_access", side_effect=HTTPException(status_code=403, detail="Accesso negato")), \
          patch("app.core.orchestrator.task_service.task_service.submit_task") as submit_task:
         response = client.post(
             "/api/tasks",
@@ -75,8 +75,8 @@ def test_create_task_parses_canvas_graph_once_before_resource_authz():
         }
     )
 
-    with patch("app.shared.authz_helpers.assert_project_access"), \
-         patch("app.shared.authz_helpers.assert_file_source_access") as assert_file_source_access, \
+    with patch("app.core.auth.resource_access.assert_project_access"), \
+         patch("app.core.auth.resource_access.assert_file_source_access") as assert_file_source_access, \
          patch("app.core.orchestrator.router.CanvasGraph.from_canvas", side_effect=_from_canvas_once), \
          patch("app.core.orchestrator.task_service.task_service.submit_task", return_value=task_info) as submit_task:
         response = client.post(
@@ -98,8 +98,8 @@ def test_create_task_parses_canvas_graph_once_before_resource_authz():
 def test_create_carica_rest_task_rejects_bad_url_before_task_creation():
     client = _build_client()
 
-    with patch("app.shared.authz_helpers.assert_project_access"), \
-         patch("app.shared.authz_helpers.assert_canvas_resources_access"), \
+    with patch("app.core.auth.resource_access.assert_project_access"), \
+         patch("app.core.auth.resource_access.assert_canvas_resources_access"), \
          patch("app.core.orchestrator.task_service.task_service.submit_task") as submit_task:
         response = client.post(
             "/api/tasks",
@@ -124,8 +124,8 @@ def test_create_carica_rest_task_rejects_bad_url_before_task_creation():
 def test_create_carica_rest_task_rejects_bad_method_before_task_creation():
     client = _build_client()
 
-    with patch("app.shared.authz_helpers.assert_project_access"), \
-         patch("app.shared.authz_helpers.assert_canvas_resources_access"), \
+    with patch("app.core.auth.resource_access.assert_project_access"), \
+         patch("app.core.auth.resource_access.assert_canvas_resources_access"), \
          patch("app.core.orchestrator.task_service.task_service.submit_task") as submit_task:
         response = client.post(
             "/api/tasks",

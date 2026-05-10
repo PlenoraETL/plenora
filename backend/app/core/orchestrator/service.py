@@ -121,7 +121,7 @@ class OrchestratorService:
         # early con 503 invece di avviare una pipeline pesante che farebbe
         # OOM kernel SIGKILL. Guard disabilitabile via cap <= 0
         try:
-            from app.shared.memory_guard import check_worker_rss
+            from app.core.resources.memory_guard import check_worker_rss
             from app.config import settings as _settings
             _rss_cap = int(_settings.get("WORKER_RSS_MAX_BYTES", 1_500_000_000))
             check_worker_rss(cap_bytes=_rss_cap, stage="pipeline_execute")

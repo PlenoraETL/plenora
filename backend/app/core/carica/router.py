@@ -36,7 +36,7 @@ from app.core.resources.column_types import (
 )
 from app.db.query_executor import DefaultEngineFactory
 from app.shared import error_codes
-from app.shared.authz_helpers import assert_project_visible
+from app.core.auth.resource_access import assert_project_visible
 from app.shared.error_envelope import raise_typed_http
 
 

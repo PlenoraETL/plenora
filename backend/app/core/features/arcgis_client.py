@@ -600,7 +600,7 @@ class ArcGISClient(
             )
             upd_result = response.json()
             if upd_result.get("success"):
-                logger.debug(f"Extent aggiornato sul servizio")
+                logger.debug("Extent aggiornato sul servizio")
             else:
                 logger.warning(f"updateDefinition extent non riuscito: {upd_result}")
         except Exception as _e:
