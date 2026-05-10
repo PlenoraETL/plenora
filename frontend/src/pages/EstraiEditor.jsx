@@ -252,16 +252,10 @@ function EstraiEditor() {
       label: 'Carica ArcGIS', animated: true, style: { stroke: '#2DD4BF', strokeWidth: 2 }, data: { join_type: 'carica_arcgis' } }));
   }, [nodes, setNodes, setEdges]);
 
-  const handleAddDataSourceNode = useCallback((initialMode = 'source') => {
-    const pos = getViewportCenter(reactFlowInstance);
-    setNodes(nds => nds.concat({
-      id: `ds_${Date.now()}`, type: 'datasourceNode', position: { x: pos.x, y: pos.y },
-      data: { mode: initialMode, datasource_id: '', datasource_name: '',
-        file_mode: 'fixed', file_path: '', folder_path: '',
-        dynamic_rule: 'latest', pattern: '', format: '', columns: [],
-        parse_options: {}, dest_folder: '', dest_filename: '', dest_format: 'csv' }
-    }));
-  }, [setNodes, getViewportCenter, reactFlowInstance]);
+  // `handleAddDataSourceNode` rimosso: ESTRAI non gestisce
+  // `datasource_node` come source (richiede SQL backend). Il flow
+  // file → trasform vive in MANIPOLA dove abbiamo il loader
+  // `manipola/datasource_node_loading.py`.
 
   const handleAddStaticValuesNode = useCallback(() => {
     const pos = getViewportCenter(reactFlowInstance);
@@ -303,17 +297,14 @@ function EstraiEditor() {
       return;
     }
 
+    // Drop di un DataSource dalla palette laterale ignorato in
+    // ESTRAI: il backend non puo' eseguire datasource_node come
+    // source SQL. Lasciamo il payload `datasourceData` per
+    // compatibilita' col data-transfer dei vecchi browser ma non
+    // creiamo il nodo. (In MANIPOLA il drop e' supportato.)
     const datasourceRaw = event.dataTransfer.getData('datasourceData');
     if (datasourceRaw) {
-      try {
-        const ds = JSON.parse(datasourceRaw);
-        setNodes(nds => nds.concat({
-          id: `ds_${Date.now()}`, type: 'datasourceNode', position,
-          data: { mode: 'source', datasource_id: ds.id, datasource_name: ds.name,
-            file_mode: 'fixed', file_path: '', folder_path: '', dynamic_rule: 'latest',
-            pattern: '', format: '', columns: [], parse_options: {}, dest_folder: '', dest_filename: '', dest_format: 'csv' }
-        }));
-      } catch { /* noop */ }
+      try { JSON.parse(datasourceRaw); } catch { /* noop */ }
       return;
     }
 
@@ -435,10 +426,14 @@ function EstraiEditor() {
                 style={{ borderColor: 'rgba(45,212,191,0.4)', color: '#2DD4BF' }}>
                 🌐 Carica ArcGIS
               </button>
-              <button type="button" className="estrai-toolbar__btn estrai-toolbar__btn--datasource"
-                onClick={() => handleAddDataSourceNode('source')}>
-                📂 Data Source
-              </button>
+              {/* Bottone "Data Source" rimosso intenzionalmente:
+                  ESTRAI e' SQL-based e richiede `default_connection_id`
+                  + `source` (DB tabelle) o `feature_source` (ArcGIS).
+                  Un `datasource_node` (FTP/SFTP/SharePoint) nel canvas
+                  ESTRAI viene rifiutato a runtime con "Il progetto non
+                  ha una connessione associata" (vedi
+                  `core/estrai/executor.py:300`). Il flow file → trasform
+                  vive in MANIPOLA. */}
 
               <div className="estrai-toolbar__sep" />
             </>
