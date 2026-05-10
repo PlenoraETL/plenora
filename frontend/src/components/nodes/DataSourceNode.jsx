@@ -12,6 +12,7 @@ import { Handle, Position } from 'reactflow';
 import useCanvasStore from '../../store/useCanvasStore';
 import { listDataSources, listFiles, getFileSchema } from '../../api/datasources';
 import useDialogFocus from '../../hooks/useDialogFocus';
+import ModalWrapper from '../common/ModalWrapper';
 import './DataSourceNode.css';
 
 /**
@@ -376,50 +377,41 @@ return (
         </div>
       )}
 {showBrowser && (
-        <div className="dsn__browser-overlay" onMouseDown={e => e.stopPropagation()}>
-          <div
-            ref={browserDialogRef}
-            className="dsn__browser"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="dsn-browser-title"
-            tabIndex={-1}
-          >
-            <div className="dsn__browser-header">
-              <span id="dsn-browser-title">📂 Sfoglia file</span>
-              <div style={{ display: 'flex', gap: 6 }}>
-                <button type="button" className="dsn__browser-refresh" onClick={() => openBrowser(browserPath)} aria-label="Aggiorna elenco file">🔄</button>
-                <button type="button" className="dsn__browser-close" onClick={() => setShowBrowser(false)} aria-label="Chiudi">✕</button>
+        <ModalWrapper
+          isOpen={showBrowser}
+          onClose={() => setShowBrowser(false)}
+          title="Sfoglia file"
+          icon="📂"
+          size="lg"
+          subtitle={browserPath ? `/${browserPath}` : '/'}
+        >
+          {browserPath && <BreadCrumb />}
+          <div className="dsn__browser-body dsn__browser-body--modal">
+            {browserLoading && <div className="dsn__browser-status">⏳ Caricamento...</div>}
+            {browserError  && <div className="dsn__browser-status dsn__browser-status--err">❌ {browserError}</div>}
+            {!browserLoading && !browserError && browserFiles.length === 0 && (
+              <div className="dsn__browser-status">Cartella vuota</div>
+            )}
+            {!browserLoading && !browserError && browserFiles.map(f => (
+              <div
+                key={f.path}
+                className={`dsn__browser-item ${f.type === 'folder' ? 'dsn__browser-item--folder' : ''}`}
+                onClick={() => handleSelectFile(f)}
+              >
+                <span className="dsn__browser-icon">
+                  {f.type === 'folder' ? '📁' :
+                   f.type === 'csv'    ? '📄' :
+                   f.type === 'xlsx'   ? '📗' :
+                   f.type === 'geojson' || f.type === 'gpkg' ? '🗺️' : '📄'}
+                </span>
+                <span className="dsn__browser-name">{f.name}</span>
+                {f.type !== 'folder' && (
+                  <span className="dsn__browser-type">{f.type.toUpperCase()}</span>
+                )}
               </div>
-            </div>
-            {browserPath && <BreadCrumb />}
-            <div className="dsn__browser-body">
-              {browserLoading && <div className="dsn__browser-status">⏳ Caricamento...</div>}
-              {browserError  && <div className="dsn__browser-status dsn__browser-status--err">❌ {browserError}</div>}
-              {!browserLoading && !browserError && browserFiles.length === 0 && (
-                <div className="dsn__browser-status">Cartella vuota</div>
-              )}
-              {!browserLoading && !browserError && browserFiles.map(f => (
-                <div
-                  key={f.path}
-                  className={`dsn__browser-item ${f.type === 'folder' ? 'dsn__browser-item--folder' : ''}`}
-                  onClick={() => handleSelectFile(f)}
-                >
-                  <span className="dsn__browser-icon">
-                    {f.type === 'folder' ? '📁' :
-                     f.type === 'csv'    ? '📄' :
-                     f.type === 'xlsx'   ? '📗' :
-                     f.type === 'geojson' || f.type === 'gpkg' ? '🗺️' : '📄'}
-                  </span>
-                  <span className="dsn__browser-name">{f.name}</span>
-                  {f.type !== 'folder' && (
-                    <span className="dsn__browser-type">{f.type.toUpperCase()}</span>
-                  )}
-                </div>
-              ))}
-            </div>
+            ))}
           </div>
-        </div>
+        </ModalWrapper>
       )}
 
       {/* Handle output (solo SORGENTE) */}
