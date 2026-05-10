@@ -190,6 +190,20 @@ class SFTPDataSource(DataSourceInterface):
 
         results = []
         for entry in entries:
+            # Le subdirectory sono navigabili nel browser FE: convenzione
+            # `type='folder'` (mirror di `local`/`ftp`).
+            if stat.S_ISDIR(entry.st_mode):
+                if entry.filename in (".", ".."):
+                    continue
+                results.append(FileInfo(
+                    name=entry.filename,
+                    path=self._join_path(path, entry.filename),
+                    size=0,
+                    modified_date=datetime.fromtimestamp(entry.st_mtime or 0),
+                    type="folder",
+                    hash=None,
+                ))
+                continue
             if not stat.S_ISREG(entry.st_mode):
                 continue
             if not self._matches_pattern(entry.filename, pattern):

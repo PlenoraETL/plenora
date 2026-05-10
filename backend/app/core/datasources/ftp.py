@@ -150,7 +150,26 @@ class FTPDataSource(DataSourceInterface):
         try:
             entries = list(self._ftp.mlsd(remote, facts=["size", "modify", "type"]))
             for name, facts in entries:
-                if facts.get("type") != "file":
+                entry_type = facts.get("type")
+                # Le subdirectory sono navigabili: il browser FE le
+                # mostra come cartelle (mirror del backend `local`,
+                # che usa `type='folder'`). Saltiamo le sentinel `.`
+                # e `..` (`cdir`/`pdir` in MLSD).
+                if entry_type == "dir":
+                    if name in (".", ".."):
+                        continue
+                    results.append(FileInfo(
+                        name=name,
+                        path=self._join_path(path, name),
+                        size=0,
+                        modified_date=self._parse_mlsd_time(
+                            facts.get("modify", "")
+                        ),
+                        type="folder",
+                        hash=None,
+                    ))
+                    continue
+                if entry_type != "file":
                     continue
                 if not self._matches_pattern(name, pattern):
                     continue
@@ -184,19 +203,51 @@ class FTPDataSource(DataSourceInterface):
             raise DataSourceFileNotFoundError(f"Path non trovato: {path!r}") from e
 
         results = []
+        # Salviamo il pwd corrente cosi' il probe-via-cwd e' reversibile
+        # senza rompere lo stato della connessione condivisa.
+        try:
+            saved_pwd = self._ftp.pwd()
+        except ftplib.all_errors:
+            saved_pwd = None
         for full_name in names:
             name = full_name.split("/")[-1]
-            if not self._matches_pattern(name, pattern):
+            if name in (".", ".."):
                 continue
             try:
                 size = self._ftp.size(full_name) or 0
                 mdtm = self._ftp.sendcmd(f"MDTM {full_name}")
                 modified_date = self._parse_mdtm(mdtm)
             except ftplib.all_errors as e:
-                logger.debug(
-                    "ftp list_nlst: skip entry %r (metadata unavailable): %s: %s",
-                    full_name, type(e).__name__, e,
-                )
+                # NLST non discrimina file/directory. Se SIZE/MDTM
+                # falliscono, proviamo a entrare nel path: success =
+                # directory. Lasciamo il pwd com'era prima al termine
+                # del probe.
+                is_dir = False
+                try:
+                    self._ftp.cwd(full_name)
+                    is_dir = True
+                finally:
+                    if is_dir and saved_pwd:
+                        try:
+                            self._ftp.cwd(saved_pwd)
+                        except ftplib.all_errors:
+                            pass
+                if is_dir:
+                    results.append(FileInfo(
+                        name=name,
+                        path=self._join_path(path, name),
+                        size=0,
+                        modified_date=datetime.now(),
+                        type="folder",
+                        hash=None,
+                    ))
+                else:
+                    logger.debug(
+                        "ftp list_nlst: skip entry %r (metadata unavailable): %s: %s",
+                        full_name, type(e).__name__, e,
+                    )
+                continue
+            if not self._matches_pattern(name, pattern):
                 continue
             file_path = self._join_path(path, name)
             hash_val = self._maybe_hash(file_path, include_hash)

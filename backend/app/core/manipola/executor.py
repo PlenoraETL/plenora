@@ -365,6 +365,9 @@ class ManipolaExecutor:
             self._carica_sorgenti_file(
                 canvas, dataframes, group_id=executing_group_id,
             )
+            self._carica_sorgenti_datasource(
+                canvas, dataframes, group_id=executing_group_id,
+            )
             self._carica_sorgenti_statiche(
                 canvas, dataframes, group_id=executing_group_id,
             )
