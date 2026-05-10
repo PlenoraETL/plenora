@@ -19,11 +19,11 @@ BEGIN;
 -- 1. Gruppo di test
 -- ────────────────────────────────────────────────────────────────────
 
-INSERT INTO groups (id, name, created_at)
+INSERT INTO plenora.groups (id, name, description)
 VALUES (
     'e2e-test-group',
     'E2E Test Group',
-    NOW()
+    'Gruppo isolato per i test end-to-end'
 )
 ON CONFLICT (id) DO NOTHING;
 
@@ -42,29 +42,35 @@ ON CONFLICT (id) DO NOTHING;
 --
 -- Sostituisci `<HASH_QUI>` sotto con l'output.
 
-INSERT INTO users (
+-- Schema reale (vedi `\d plenora.users`):
+--   id text PRIMARY KEY, username text UNIQUE NOT NULL,
+--   password_hash text NOT NULL, email text NULL,
+--   group_id text NOT NULL FK groups, role text DEFAULT 'user',
+--   is_active boolean DEFAULT true,
+--   created_at timestamptz DEFAULT now(), updated_at timestamptz DEFAULT now()
+-- NB: niente colonna `mfa_enabled` (rimossa); UNIQUE su `username`, NON su `email`.
+INSERT INTO plenora.users (
     id,
     email,
     username,
     password_hash,
     group_id,
     role,
-    mfa_enabled,
-    is_active,
-    created_at
+    is_active
 )
 VALUES (
     'e2e-test-user',
     'tester@plenora.test',
     'tester',
-    '<HASH_QUI>',  -- <-- SOSTITUIRE col bcrypt/argon2 hash di `plenora_test_pwd`
+    '<HASH_QUI>',  -- <-- SOSTITUITO a runtime con argon2 hash di `plenora_test_pwd`
     'e2e-test-group',
     'user',                 -- ruolo: user (smoke) | admin | superadmin
-    FALSE,                  -- MFA disabilitato per i test smoke
-    TRUE,
-    NOW()
+    TRUE
 )
-ON CONFLICT (email) DO NOTHING;
+ON CONFLICT (username) DO UPDATE SET
+    password_hash = EXCLUDED.password_hash,
+    role = EXCLUDED.role,
+    is_active = EXCLUDED.is_active;
 
 COMMIT;
 
@@ -78,8 +84,7 @@ SELECT
     u.username,
     u.role,
     u.is_active,
-    u.mfa_enabled,
     g.name AS group_name
-FROM users u
-LEFT JOIN groups g ON g.id = u.group_id
-WHERE u.email = 'tester@plenora.test';
+FROM plenora.users u
+LEFT JOIN plenora.groups g ON g.id = u.group_id
+WHERE u.username = 'tester';
