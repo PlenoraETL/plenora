@@ -323,7 +323,7 @@ def test_execute_enrichment_task_eseguibile_branch_fetches_group_id(
     deve recuperare il `_group_id` dalla tabella `eseguibili` e
     propagarlo nel `ctx.group_id` passato ai 4 mixin callsite.
 
-    Pre-fix: `_group_id = ""` rimaneva vuoto, propagato come None,
+    Previous behavior: `_group_id = ""` rimaneva vuoto, propagato come None,
     facendo fallire il primo loader con 'group_id mancante'.
 
     BE-GO-READY-TRANSFORMATION-ENGINE-030A: post-migrazione il valore

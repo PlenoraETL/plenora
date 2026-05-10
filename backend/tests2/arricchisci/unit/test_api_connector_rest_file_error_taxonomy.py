@@ -30,7 +30,7 @@ def service(monkeypatch):
     # BE-GO-READY-TRANSFORMATION-ENGINE-022: rimossa la singleton
     # mutation `svc._current_group_id = "default"`. I 6 callsite
     # `service._execute_rest_file(...)` ricevono `ctx=ctx_default`
-    # esplicito (typed boundary Phase 2). Lo state legacy resta
+    # esplicito (typed boundary typed context contract). Lo state legacy resta
     # `None` di default — coerente col contract: il passaggio
     # esplicito del ctx vince sul fallback singleton.
     # Bypass SSRF guard per i test: usiamo hostname fittizi che non
@@ -118,7 +118,7 @@ def test_file_source_forbidden_returns_structured_error_kind(service, minimal_ap
 
     def _raise_forbidden(fs_id, **_kwargs):
         # BE-GO-READY-TRANSFORMATION-ENGINE-019: il chiamante passa
-        # `ctx=...` come kwarg dopo Phase 2; accettiamo `**_kwargs`
+        # `ctx=...` come kwarg dopo typed context contract; accettiamo `**_kwargs`
         # per preservare la firma flessibile del side_effect.
         raise ValueError(
             f"Accesso negato: il file sorgente '{fs_id}' non appartiene al tuo gruppo"
@@ -162,7 +162,7 @@ def test_remote_processor_http_error_returns_structured_error_kind(
     fake_response = MagicMock()
     fake_response.status_code = 503
 
-    # B3-B.5a modernization: patch su source canonico `requests.post`
+    # B3-B.5a current contract: patch su source canonico `requests.post`
     # invece dell'alias `app.core.arricchisci.api_connector.requests.post`.
     # `requests.post is requests.api.post` (re-export); il patch sulla
     # binding del modulo `requests` intercetta TUTTI i lookup
@@ -202,7 +202,7 @@ def test_remote_processor_timeout_returns_structured_error_kind(
         },
     }
 
-    # B3-B.5a modernization: vedi commento sopra.
+    # B3-B.5a current contract: vedi commento sopra.
     with patch.object(service, "_resolve_file_source_id_path", return_value=str(fake_excel)), \
          patch("requests.post", side_effect=requests.Timeout("upstream timeout")):
 

@@ -6,15 +6,10 @@ import { vi } from 'vitest';
 import RunsTab from '../../src/components/logviewer/RunsTab';
 
 /**
- * Contract test per RunsTab (LogViewer subcomponent).
- * Pre-batch: nessun test (222 LOC, mai esercitato).
+ * Contract tests for the LogViewer RunsTab subcomponent.
  *
- * Aree coperte:
- *   1. load + render: tabella popolata con run rows
- *   2. status filter via select dropdown: reload con `status` param
- *   3. stat card click ("Completate"): toggle filterStatus='success' + reload
- *   4. pagination "Successivi →": offset += PAGE (30)
- *   5. load error: toast.error + tabella vuota ("Nessuna esecuzione trovata")
+ * Covers table rendering, status filtering, stat-card filtering, pagination,
+ * and load-error behavior.
  */
 
 const { getLogRunsMock, toastMock } = vi.hoisted(() => ({
@@ -26,7 +21,7 @@ vi.mock('../../src/api/logRuns', () => ({
   getLogRuns: getLogRunsMock,
 }));
 vi.mock('../../src/hooks/useToast', () => ({ useToast: () => toastMock }));
-// Stub RunDetail: il batch testa RunsTab, non il dettaglio.
+// Stub RunDetail so these tests stay focused on RunsTab behavior.
 vi.mock('../../src/components/logviewer/RunDetail', () => ({
   default: () => null,
 }));
@@ -70,7 +65,6 @@ describe('RunsTab', () => {
     });
   });
 
-  // ── 1. Load + render ─────────────────────────────────────────────────
 
   it('loads and renders run rows with status + trigger badges', async () => {
     render(<RunsTab refreshTick={0} />);
@@ -92,7 +86,6 @@ describe('RunsTab', () => {
     expect(params.module).toBeUndefined();
   });
 
-  // ── 2. Status filter via select ─────────────────────────────────────
 
   it('changes the status filter via select and reloads with the status param', async () => {
     render(<RunsTab refreshTick={0} />);
@@ -111,7 +104,6 @@ describe('RunsTab', () => {
     });
   });
 
-  // ── 3. Stat card click toggles status filter ────────────────────────
 
   it('clicking the "Completate" stat card toggles filterStatus="success" and reloads', async () => {
     render(<RunsTab refreshTick={0} />);
@@ -129,7 +121,6 @@ describe('RunsTab', () => {
     expect(statCard.classList.contains('lv__stat--active')).toBe(true);
   });
 
-  // ── 4. Pagination "Successivi →" ────────────────────────────────────
 
   it('clicks "Successivi →" and reloads with the next offset (PAGE=30)', async () => {
     getLogRunsMock.mockResolvedValueOnce({
@@ -153,7 +144,6 @@ describe('RunsTab', () => {
     });
   });
 
-  // ── 5. Load error: toast + empty table ──────────────────────────────
 
   it('expands a failure row on click showing the error_message banner', async () => {
     render(<RunsTab refreshTick={0} />);

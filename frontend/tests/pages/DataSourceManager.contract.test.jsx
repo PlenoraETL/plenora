@@ -6,20 +6,10 @@ import { vi } from 'vitest';
 import DataSourceManager from '../../src/pages/DataSourceManager';
 
 /**
- * Batch 7 di FE-TEST-001: contract page-level per DataSourceManager.
- * Pre-batch: nessun test per `pages/DataSourceManager.jsx` (480 LOC).
+ * Page-level contract for DataSourceManager workflows.
  *
- * Aree:
- *   1. load + render: lista cards con nome, type label, host
- *   2. empty state: CTA "+ Nuovo Data Source" presente per chi puo' creare
- *   3. create validation: nome vuoto -> formError "Il nome e' obbligatorio"
- *   4. test connection success: badge "✓" + messaggio sul card
- *   5. delete cascade 409: handleCascade409 + formatCascadeDependencies
- *      + toast.error TTL 10s; il modale confirm resta aperto sul fail
- *   6. role gating: viewer NON vede "+ Nuovo Data Source"
- *
- * Pattern di mocking allineato ai batch precedenti; hoisted authState
- * mutabile per role override.
+ * Covers load/render, empty-state creation entry points, create validation,
+ * test-connection status, cascade-delete handling, and viewer role gating.
  */
 
 const {
@@ -83,14 +73,13 @@ const sampleDs = {
   can_edit: true,
 };
 
-describe('DataSourceManager — batch 7', () => {
+describe('DataSourceManager contract', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     authState.user = { role: 'admin', username: 'tester', group_id: 'grp-1' };
     listDataSourcesMock.mockResolvedValue({ datasources: [] });
   });
 
-  // ── 1. Load + render ─────────────────────────────────────────────────
 
   it('loads data sources and renders a card with name, type label and meta', async () => {
     listDataSourcesMock.mockResolvedValueOnce({ datasources: [sampleDs] });
@@ -105,7 +94,6 @@ describe('DataSourceManager — batch 7', () => {
     expect(screen.getByText(/svc/)).toBeInTheDocument();
   });
 
-  // ── 2. Empty state CTA ───────────────────────────────────────────────
 
   it('shows the empty state with the create CTA when no data sources exist', async () => {
     render(<DataSourceManager />);
@@ -120,7 +108,6 @@ describe('DataSourceManager — batch 7', () => {
     expect(ctas.length).toBeGreaterThanOrEqual(1);
   });
 
-  // ── 3. Create validation: nome vuoto ────────────────────────────────
 
   it('blocks save with an empty name and surfaces the inline form error', async () => {
     render(<DataSourceManager />);
@@ -144,7 +131,6 @@ describe('DataSourceManager — batch 7', () => {
     expect(createDataSourceMock).not.toHaveBeenCalled();
   });
 
-  // ── 4. Test connection success ───────────────────────────────────────
 
   it('renders the success badge inline after a successful test connection', async () => {
     listDataSourcesMock.mockResolvedValueOnce({ datasources: [sampleDs] });
@@ -166,7 +152,6 @@ describe('DataSourceManager — batch 7', () => {
     expect(await screen.findByText(/✓ Connessione OK/)).toBeInTheDocument();
   });
 
-  // ── 5. Delete cascade 409 ────────────────────────────────────────────
 
   it('shows formatted cascade dependencies on 409 delete (no reload)', async () => {
     listDataSourcesMock.mockResolvedValueOnce({ datasources: [sampleDs] });
@@ -206,7 +191,6 @@ describe('DataSourceManager — batch 7', () => {
     expect(listDataSourcesMock).toHaveBeenCalledTimes(1);
   });
 
-  // ── 6. Role gating viewer ────────────────────────────────────────────
 
   it('hides "+ Nuovo Data Source" for viewer role', async () => {
     authState.user = { role: 'viewer', username: 'v', group_id: 'grp-1' };

@@ -1,7 +1,7 @@
 """
 Contract test BE-REST-001A — `ExternalArtifactProcessor` Protocol.
 
-Audit/test-first batch (lane C di BE-PHASE2-PARALLEL-PACK-001).
+Contract tests for the external artifact processor boundary.
 """
 
 from __future__ import annotations

@@ -4,7 +4,6 @@
 --   backend/app/db/results_db_service.py (marker [PERF] s3_download).
 --
 -- Sorgente marker: app/db/results_db_service.py, line ~106 (op=get_bytes).
--- Origine: orchestrate/phase_0_consolidation/performance_baseline_0_5f.md §5.1
 --
 -- Finestra: ultimi 7 giorni (modificare INTERVAL per range diversi).
 -- Read-only: SELECT puro su `logs.details` JSONB.

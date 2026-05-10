@@ -97,7 +97,6 @@ def _layer(report, name="Locale"):
     return next(l for l in report["layers"] if l["name"] == name)
 
 
-# ── 1. STRING_TRUNCATION ─────────────────────────────────────────────
 def test_string_truncation_warning_when_bundle_exceeds_fs_length(fake_bundle, monkeypatch):
     import pandas as pd
     df = pd.DataFrame({
@@ -143,7 +142,6 @@ def test_string_truncation_no_warning_when_fits(fake_bundle, monkeypatch):
     assert trunc == []
 
 
-# ── 2. NULL_ON_NON_NULLABLE ──────────────────────────────────────────
 def test_null_on_non_nullable_error_in_append(fake_bundle, monkeypatch):
     import pandas as pd
     df = pd.DataFrame({
@@ -194,7 +192,6 @@ def test_null_on_non_nullable_warning_in_replace(fake_bundle, monkeypatch):
     assert nn[0]["severity"] == "warning"
 
 
-# ── 3. CRS_MISMATCH ──────────────────────────────────────────────────
 def test_crs_mismatch_warning(fake_bundle, monkeypatch):
     import pandas as pd
     df = pd.DataFrame({"UNIT_ID": ["U-1"], "geometry": [None]})
@@ -231,7 +228,6 @@ def test_crs_match_no_warning(fake_bundle, monkeypatch):
     assert "CRS_MISMATCH" not in codes
 
 
-# ── 4. MISSING_CAPABILITIES ──────────────────────────────────────────
 def test_missing_capabilities_error_on_append_without_create(fake_bundle, monkeypatch):
     import pandas as pd
     df = pd.DataFrame({"UNIT_ID": ["U-1"], "geometry": [None]})
@@ -265,7 +261,6 @@ def test_capabilities_ok_no_error(fake_bundle, monkeypatch):
     assert "MISSING_CAPABILITIES" not in codes
 
 
-# ── 5. Case-insensitive field matching ───────────────────────────────
 def test_field_name_case_insensitive_no_false_positives(fake_bundle, monkeypatch):
     """Il bundle ha 'Site_Id', il FS ha 'SITE_ID'. ArcGIS è case-insensitive
     sui nomi campo, quindi NON deve generare FIELD_MISSING_*."""

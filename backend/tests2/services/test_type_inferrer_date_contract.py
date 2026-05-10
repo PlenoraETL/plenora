@@ -63,7 +63,7 @@ def test_infer_us_mm_dd_yyyy_with_day_gt_12_is_not_date():
 
 def test_infer_pseudo_numeric_with_dashes_is_not_date():
     """Stringhe semi-numeriche tipo `"42-3-1"` non matchano nessun formato
-    esplicito (anno troppo corto, ambiguita`). Pre-fix dateutil le
+    esplicito (anno troppo corto, ambiguita`). Previous behavior dateutil le
     parsava liberalmente come date -> falso positivo eliminato."""
     series = pd.Series(["42-3-1"] * 10)
     assert TypeInferrer._infer_from_values(series) == 'str'
@@ -83,8 +83,8 @@ def test_infer_below_threshold_is_not_date():
 
 
 def test_no_pandas_user_warning_emitted_during_inference():
-    """Pre-fix: pandas 3.x emetteva `UserWarning: Could not infer format ...`
-    ad ogni invocazione. Post-fix: cascata di formati espliciti + `errors=coerce`
+    """Previous behavior: pandas 3.x emetteva `UserWarning: Could not infer format ...`
+    ad ogni invocazione. Current contract: cascata di formati espliciti + `errors=coerce`
     -> nessun warning emesso, ne' su date valide ne' su input non-date."""
     series_date = pd.Series(["15/03/2025"] * 10)
     series_garbage = pd.Series(["42-3-1"] * 10)

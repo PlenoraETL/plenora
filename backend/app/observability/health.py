@@ -43,9 +43,6 @@ class HealthPayload:
     body: dict
 
 
-# Single dependency checks — preservato verbatim da main.py:502-559
-
-
 def check_postgres() -> CheckOutcome:
     """SELECT 1 sul pool PG con statement_timeout bounded.
 
@@ -78,10 +75,8 @@ def check_postgres() -> CheckOutcome:
         if timeout <= 0:
             timeout = 2
         timeout_ms = timeout * 1000
-        # Build the SET LOCAL statement via concatenation (timeout_ms is
-        # an int, so no SQL injection surface). f-string interpolation
-        # would push the literal into a tokenizer FSTRING_MIDDLE token
-        # keeping it as a plain string keeps the lock honest
+        # Concatenation keeps this visible to the static SQL sentinel; the
+        # interpolated value is an int derived from bounded settings.
         set_local_sql = "SET LOCAL statement_timeout = " + str(timeout_ms)
         conn = get_connection()
         try:
@@ -213,9 +208,7 @@ def check_pool_headroom() -> CheckOutcome:
             f"{headroom.in_use}/{headroom.max} in uso, {headroom.free} free",
         )
     except Exception as e:
-        # Se non riusciamo a ispezionare, non falliamo /ready —
-        # un SELECT 1 e' gia' successo sopra. Behavior pre-batch-010
-        # preservato byte-per-byte
+        # This is diagnostic only; the upstream SELECT 1 already validated PG.
         return True, f"introspection skipped: {type(e).__name__}"
 
 
@@ -274,14 +267,8 @@ def check_object_storage() -> CheckOutcome:
     except Exception as e:
         return False, f"{type(e).__name__}: {e}"
 
-    # passa per `readiness_probe(timeout_seconds=...)` che costruisce
-    # un client boto3 one-shot con `connect_timeout`+`read_timeout`+
-    # `retries.max_attempts=1`. Senza bound, list_objects userebbe i
-    # default boto3 (60s+60s con 3 retry = ~360s worst case), ben
-    # oltre la finestra "load-balancer-friendly" di /ready
-    # Cap <= 0 ricade sul fallback hardcoded di 3s (parallelo al
-    # `READINESS_REDIS_TIMEOUT_SECONDS`/`READINESS_PG_TIMEOUT_SECONDS`
-    # 2s; +1s per assorbire la latenza S3 regionale
+    # Keep object-storage readiness bounded; boto3 defaults can exceed the
+    # load-balancer-friendly /ready window by minutes.
     from app.config import settings
     try:
         timeout = int(
@@ -310,18 +297,9 @@ def check_reconciliation_backlog() -> CheckOutcome:
       - `lost_total > STORAGE_RECONCILE_BACKLOG_LOST_503_THRESHOLD`
     -> outcome `(False, "<state>=<count> over <thr>: ...")`.
 
-    additivo, due cambi:
-      1. il detail string ora include il breakdown per-operation
-         (es. `"pending=15 (delete=12 upload_intent=3) lost=0"`) cosi'
-         le ops possono distinguere W1 backlog (delete) da W2
-         backlog (upload_intent self-clearing pattern). Il
-         breakdown e' stampato solo se il counter per-operation
-         e' non vuoto (best-effort: errore di lettura non blocca);
-      2. opt-in `STORAGE_RECONCILE_BACKLOG_UPLOAD_INTENT_503_THRESHOLD`
-         (default 0 = disabled): quando > 0 e il pending count
-         per `operation='upload_intent'` lo supera, il check va
-         a 503 con un over-marker dedicato. Permette agli operatori
-         di flaggare il W2 backlog separatamente dal W1.
+    Include il breakdown per-operation quando disponibile e supporta
+    `STORAGE_RECONCILE_BACKLOG_UPLOAD_INTENT_503_THRESHOLD` per
+    segnalare separatamente backlog `upload_intent`.
 
     Cap <= 0 su un threshold disabilita SOLO quel branch (escape
     hatch ops). Se tutti disabilitati il check resta sempre OK
@@ -410,9 +388,7 @@ def check_beat_heartbeat() -> CheckOutcome:
     """Verifica che il beat scheduler abbia scritto un heartbeat
     recente in `plenora.beat_heartbeat`.
 
-    chiude la R-023.1 (silent accumulation gap su upload_intent
-    backlog quando il reconciler beat non gira). Lo heartbeat
-    e' gia' scritto ad ogni tick da
+    Lo heartbeat e' scritto ad ogni tick da
     `PlenoraBeatScheduler._write_heartbeat` (INSERT ... ON
     CONFLICT su `plenora.beat_heartbeat WHERE id='beat'`); questo
     helper lo legge e verifica che `now - ts` non superi un
@@ -501,9 +477,8 @@ def check_bootstrap_complete() -> CheckOutcome:
     """Verifica che il boundary canonico `app.bootstrap.bootstrap()`
     sia stato attraversato dal processo web.
 
-    consumer del flag tipato `app.bootstrap.is_bootstrapped`
-    introdotto nel . Il flag flippa a
-    True solo dopo che i 4 step canonici (`validate_startup`,
+    consumer del flag tipato `app.bootstrap.is_bootstrapped`. Il flag
+    flippa a True solo dopo che i 4 step canonici (`validate_startup`,
     `validate_storage_config`, `init_all_dbs`,
     `_repair_psycopg2_ssl_env`) sono completati senza eccezioni.
 
@@ -564,9 +539,6 @@ def check_bootstrap_complete() -> CheckOutcome:
     return False, "bootstrap not complete"
 
 
-# Payload composition — gather_liveness / gather_readiness
-
-
 def gather_liveness() -> HealthPayload:
     """Compose /health body. Liveness = process responds.
 
@@ -593,12 +565,6 @@ def gather_readiness() -> HealthPayload:
     capability/threshold), 503 altrimenti. Body shape:
     `{"status": "ready"|"not_ready", "checks": {...8 keys...}}`.
 
-     aggiunto check `object_storage`
-    come additivo.
-     aggiunto `reconciliation_backlog`.
-     aggiunto `bootstrap_complete`
-    come additivo.
-     aggiunto `beat_heartbeat`.
     Default opt-in disabled (`READINESS_BEAT_HEARTBEAT_MAX_AGE_SECONDS=0`)
     cosi' dev/test senza beat scheduler attivo NON triggerano 503.
 

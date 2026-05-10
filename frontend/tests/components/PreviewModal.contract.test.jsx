@@ -1,5 +1,5 @@
 /**
- * Contract test per PreviewModal — Batch 1B (post estrazione PreviewTable).
+ * Contract tests for PreviewModal.
  *
  * Invarianti che il refactor deve preservare:
  *   1. Struttura render baseline (100 righe): thead con colonne,
@@ -179,9 +179,7 @@ describe('PreviewModal — contract (post split PreviewTable)', () => {
 });
 
 
-// =============================================================================
-// PR-cleanup UX Tier 1: permission_revoked banner inline
-// =============================================================================
+// Permission-revoked responses render an inline banner.
 
 describe('PreviewModal — permission_revoked banner', () => {
   it('rende <PermissionRevokedBanner> quando permissionRevoked=true e niente errore generico', () => {

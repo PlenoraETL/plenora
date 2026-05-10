@@ -1,8 +1,4 @@
-"""
-columns_metadata.py — Helper condiviso per salvare `columns_metadata`
-
-sul canvas di un progetto, con retry su errori transient e raise su
-"""
+"""Helper condiviso per salvare `columns_metadata` con retry transient."""
 
 from __future__ import annotations
 
@@ -11,8 +7,6 @@ from typing import Any, List, Optional
 
 from app.core.projects.exceptions import ColumnsMetadataSaveError
 
-
-# Costanti retry/backoff
 
 # 4 tentativi totali, 3 sleep tra i retry. Sequenza copre transient
 # DB fino a ~1.7s di recovery — oltre, non e' transient
@@ -42,9 +36,6 @@ def _get_transient_exceptions() -> tuple:
             # Dev env senza psycopg2: solo TimeoutError
             _TRANSIENT_EXCEPTIONS = (TimeoutError,)
     return _TRANSIENT_EXCEPTIONS
-
-
-# API pubblica
 
 
 def save_columns_metadata_with_retry(
@@ -133,7 +124,6 @@ def save_columns_metadata_with_retry(
                 result_already_persisted=True,
             )
 
-        # Successo
         if attempt > 1:
             logger.info(
                 f"Save columns_metadata riuscito al tentativo "
@@ -142,7 +132,6 @@ def save_columns_metadata_with_retry(
             )
         return
 
-    # Tutti i retry transient sono falliti
     logger.error(
         f"Save columns_metadata fallito dopo {_MAX_ATTEMPTS} tentativi "
         f"per {project_id}: {type(last_error).__name__}: {last_error}",

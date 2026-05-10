@@ -1,7 +1,7 @@
 """
-[phase-2-err][batch9] C2 — narrow canvas JSON parser in project_service.
+C2 — narrow canvas JSON parser in project_service.
 
-Audit Batch 9 §3.2 S6 / fix F6.6-F6.7: due metodi di ProjectService
+Audit finding: due metodi di ProjectService
 """
 
 from __future__ import annotations

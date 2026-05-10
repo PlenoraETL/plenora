@@ -1,8 +1,4 @@
-"""
-Clock seam for time-dependent code (R-05).
-
-Production: `WALL_CLOCK` (singleton `WallClock`) avvolge
-"""
+"""Clock abstractions for time-dependent code."""
 
 from __future__ import annotations
 
@@ -13,7 +9,7 @@ from typing import Protocol, runtime_checkable
 
 @runtime_checkable
 class Clock(Protocol):
-    """Interfaccia minima del seam clock."""
+    """Interfaccia minima del clock."""
 
     def now(self) -> float:
         ...  # pragma: no cover
@@ -37,7 +33,6 @@ class WallClock:
         return stop_event.wait(timeout)
 
 
-# Singleton di produzione. Importato come default da chi adotta il seam
 WALL_CLOCK = WallClock()
 
 
@@ -49,9 +44,9 @@ class FakeClock:
         fc = FakeClock
         hb = LockHeartbeat(..., interval=10.0, clock=fc)
         hb.start
-        fc.wait_for_pending_waiters(1) # thread parked al primo wait
-        fc.advance(11.0) # libera il wait -> il loop ticka
-        fc.wait_for_pending_waiters(1) # thread parked di nuovo
+        fc.wait_for_pending_waiters(1)
+        fc.advance(11.0)
+        fc.wait_for_pending_waiters(1)
         hb.stop
 
     Semantica:

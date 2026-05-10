@@ -17,9 +17,7 @@
  * - column_order: drag & drop riordinamento colonne
  * - pivot_mapping: builder pivot
  *
- * I sub-component sono stati estratti in `parameter-inputs/` da
- * `FE-PHASE2-SPLIT-002A`. Questo file resta dispatcher su
- * `param.type`. Behavior e props pubbliche invariate.
+ * Questo file resta dispatcher su `param.type`.
  *
  * Posizione: /components/transforms/ParameterInput.jsx
  */
@@ -35,10 +33,6 @@ import ColumnOrderInput from './parameter-inputs/ColumnOrderInput';
 import RenameListInput from './parameter-inputs/RenameListInput';
 import MaskingListInput from './parameter-inputs/MaskingListInput';
 import ConditionListInput from './parameter-inputs/ConditionListInput';
-
-// ============================================================================
-// MAIN COMPONENT (dispatcher)
-// ============================================================================
 
 const ParameterInput = ({
   param,

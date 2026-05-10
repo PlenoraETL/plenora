@@ -1,5 +1,5 @@
 """
-Contract test — op_geo_reproject source_crs safety (B2 Phase 4).
+Contract test — op_geo_reproject source_crs safety (B2 current contract).
 
 Background:
 """

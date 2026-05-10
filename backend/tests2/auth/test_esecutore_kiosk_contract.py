@@ -1,8 +1,4 @@
-"""
-Contract tests — ruolo `esecutore` (kiosk-only).
-
-Il ruolo `esecutore` e' stato aggiunto come 5o ruolo (post audit RBAC
-"""
+"""Contract tests for the kiosk-only `esecutore` role."""
 
 from __future__ import annotations
 
@@ -20,8 +16,6 @@ from app.core.eseguibili.db import EseguibileRow, EseguibileSummaryRow
 
 pytestmark = [pytest.mark.unit, pytest.mark.contract, pytest.mark.security]
 
-
-# Helpers
 
 
 def _user(role: str, group_id: str = "g1", user_id: str = "u1") -> CurrentUser:
@@ -60,8 +54,6 @@ def _build_dummy_app() -> FastAPI:
     return app
 
 
-# Sez. D — Dependency-direct tests
-
 
 def test_valid_roles_includes_esecutore():
     assert "esecutore" in VALID_ROLES
@@ -85,8 +77,6 @@ def test_require_not_esecutore_passes_for_non_kiosk_roles(role: str):
     out = require_not_esecutore(current_user=_user(role))
     assert out.role == role
 
-
-# Sez. B — Negative parametric (dummy endpoints + smoke router reale)
 
 
 @pytest.fixture
@@ -142,8 +132,6 @@ def test_esecutore_smoke_blocked_on_real_connections_router():
     assert resp.status_code == 403
 
 
-# Sez. A — Positive eseguibili (mock minimi)
-
 
 @pytest.fixture
 def eseguibili_app_as_esecutore() -> Tuple[TestClient, MagicMock]:
@@ -192,7 +180,6 @@ def test_esecutore_can_list_eseguibili(
     assert resp.status_code == 200, resp.text
     body = resp.json()
     assert isinstance(body, list)
-    # mock ritorna un solo record visibile
     assert len(body) == 1
     assert body[0]["id"] == "e1"
 
@@ -263,8 +250,6 @@ def test_esecutore_cannot_get_eseguibile_cross_tenant(
     assert resp.status_code in (403, 404), resp.text
 
 
-# Sez. C — Eseguibili admin-mutativo bloccato per esecutore
-
 
 def test_esecutore_blocked_on_create_eseguibile(
     eseguibili_app_as_esecutore: Tuple[TestClient, MagicMock],
@@ -295,8 +280,6 @@ def test_esecutore_blocked_on_delete_eseguibile(
     resp = client.delete("/api/eseguibili/e1")
     assert resp.status_code == 403
 
-
-# Sez. E — auth/me consentito
 
 
 def test_esecutore_can_access_auth_me():

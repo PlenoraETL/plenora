@@ -267,7 +267,6 @@ describe('ManipolaEditor', () => {
     });
   });
 
-  // ── Loading / error / save-failure branches ─────────────────────────
 
   it('renders the loading overlay while useEditorData reports loading', () => {
     currentEditorData = { ...currentEditorData, loading: true };

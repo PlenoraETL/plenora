@@ -8,7 +8,7 @@
  *  - Toggle "struttura dati complessa" -> ResponseConfigBuilder.
  *  - Selezione campi output (toggleOutputField/updateOutputColumn).
  *
- * Estratto in `FE-PHASE2-SPLIT-001B`. Presentational + callbacks.
+ * Presentational + callbacks.
  */
 import React from 'react';
 import ResponseConfigBuilder from '../../panels/ResponseConfigBuilder';

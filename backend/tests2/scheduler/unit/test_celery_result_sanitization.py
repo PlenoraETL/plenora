@@ -1,7 +1,7 @@
 """
-[phase-2-err][batch7] 7.c — sanitize str(e) in Celery task result dict.
+7.c — sanitize str(e) in Celery task result dict.
 
-Audit Batch 7 §3.1 "Boundary top-level che espone str(e) nel result dict":
+Audit finding:
 """
 
 from __future__ import annotations
@@ -35,7 +35,7 @@ def test_schedule_task_return_dict_no_longer_interpolates_str_e():
     """La vecchia stringa `f"Errore fatale: {str(e)}"` non deve piu' essere
     presente come value di `message` in alcun return dict."""
     src = _read("workers/tasks/schedule_task.py")
-    # Pattern pre-fix: `"message": f"Errore fatale: {str(e)}"`
+    # Pattern Previous behavior: `"message": f"Errore fatale: {str(e)}"`
     assert 'f"Errore fatale: {str(e)}"' not in src
     assert "f'Errore fatale: {str(e)}'" not in src
 
@@ -82,13 +82,13 @@ def test_carica_task_datasource_no_str_e_in_return():
     """Il vecchio `'error_message': str(e)` non deve piu' esistere nel return
     dict del branch DataSource write."""
     src = _read("workers/tasks/carica_task.py")
-    # Pattern pre-fix: `'error_message': str(e),` — verificare assenza.
+    # Pattern Previous behavior: `'error_message': str(e),` — verificare assenza.
     # Il canale `DebugPayloadBuilder(failure={..., "error_message": str(e)})`
     # resta legittimo (keyword arg nested dict, non return dict).
     # Distinguiamo cercando specifico pattern "linea-intera" del return.
     pattern = re.compile(r"^\s*'error_message': str\(e\),\s*$", re.MULTILINE)
     assert not pattern.search(src), (
-        "Trovata 'error_message': str(e) come linea top-level — pre-fix pattern"
+        "Trovata 'error_message': str(e) come linea top-level — Previous behavior pattern"
     )
 
 
@@ -136,11 +136,11 @@ def test_execution_manager_execute_carica_has_canonical_token():
 
 def test_execution_manager_execute_carica_no_bare_str_e_return():
     """Il vecchio `return {"success": False, "error": str(e)}` del branch
-    broad `except Exception` (linee 883-885 pre-fix) non deve piu' comparire.
+    broad `except Exception` (linee 883-885 Previous behavior) non deve piu' comparire.
     Il catch `except ArtifactResolutionError` (linea 802) resta fuori scope
     7.c come da audit §2.4 (boundary-classe-nota, candidato futuro)."""
     src = _read("app/core/scheduler/execution_manager.py")
-    # Conta occorrenze: post-fix solo la 802 (ArtifactResolutionError branch)
+    # Conta occorrenze: Current contract solo la 802 (ArtifactResolutionError branch)
     # deve restare, mai piu' di 1.
     count = src.count('return {"success": False, "error": str(e)}')
     assert count <= 1, (

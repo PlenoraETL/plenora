@@ -7,7 +7,7 @@ from typing import Optional
 
 
 def build_project_id(name: str, generated_at: datetime, unique_token: str) -> str:
-    """Return the legacy readable project id for a project name."""
+    """Return a readable project id for a project name."""
     timestamp = generated_at.strftime("%Y%m%d_%H%M%S")
     safe_name = "".join(c for c in name if c.isalnum() or c in (" ", "_")).strip()
     safe_name = safe_name.replace(" ", "_")[:30]

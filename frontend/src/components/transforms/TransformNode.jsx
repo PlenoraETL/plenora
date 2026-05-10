@@ -95,7 +95,6 @@ const TransformNode = memo(({ data, id }) => {
     }
   }, [transform_op, transformConfig]);
 
-  // ========== COLONNE - LEGGI DA data.inputColumns ==========
   // useColumnPropagation popola data.inputColumns, noi le leggiamo e basta
   const inputColumns = useMemo(() => {
     return data.inputColumns || [];
@@ -178,8 +177,6 @@ const TransformNode = memo(({ data, id }) => {
       }));
   }, [registry, activeTab]);
 
-  // === HANDLERS ===
-  
   const handleTabChange = (newTab) => {
     setActiveTab(newTab);
     
@@ -220,8 +217,6 @@ const TransformNode = memo(({ data, id }) => {
   const KNOWN_MULTI_INPUT_OPS = ['join', 'concat', 'sjoin', 'geo_clip', 'geo_intersection', 'geo_union', 'geo_difference', 'table_diff'];
   const isMultiInput = transformConfig?.inputs === 'multi' || KNOWN_MULTI_INPUT_OPS.includes(transform_op);
 
-  // === RENDER ===
-  
   if (loading) {
     // Anche in loading, mostra dual handles se è operazione multi-input nota
     const showDualHandles = KNOWN_MULTI_INPUT_OPS.includes(transform_op);

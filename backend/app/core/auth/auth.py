@@ -1,8 +1,4 @@
-"""
-PLENORA-ETL — Autenticazione JWT
-
-Modello RBAC:
-"""
+"""JWT authentication router and public auth-domain exports."""
 
 from datetime import datetime, timezone
 from typing import Optional
@@ -34,24 +30,8 @@ from app.core.auth.roles import (  # noqa: F401 (explicit public auth API)
 
 logger = get_logger(__name__)
 
-# RATE LIMITING
-# R-01: backend Redis-backed cluster-safe con fallback in-memory
-# La logica Redis vive in `app.shared.login_rate_limiter`; qui restano
-# i wrapper che il login chiama. Lo store + algoritmo del fallback
-# in-memory vivono in `app.core.auth.rate_limit_fallback`
-# Le costanti LOGIN_MAX_ATTEMPTS / LOGIN_WINDOW_SECONDS / LOGIN_LOCKOUT_SECONDS
-# restano modulo-level e vengono lette al volo dai wrapper, cosi' i test
-# possono ancora monkeypatcharle (vedi tests2/security/unit/test_login_rate_limit_per_ip.py
-# `_check_rate_limit_in_memory`, `_record_failed_login_in_memory`
-# `_clear_failed_logins_in_memory` restano qui come thin pointer al
-# modulo estratto. Lo store in-memory e' canonico in
-# `app.core.auth.rate_limit_fallback._STORE`.
-
-# `InMemoryRateLimitFallback` public export removed (proven dead — zero
-# callsites in `backend/app`, `backend/workers`, `backend/tests2`
-# verified by exhaustive grep + AST scan). The class remains the
-# canonical implementation in `app.core.auth.rate_limit_fallback`
-# importers should pull it from there if they ever need the type
+# Login rate-limit constants stay module-level because security tests
+# monkeypatch them directly through this public auth facade.
 from app.core.auth.rate_limit_fallback import (
     RateLimitFallbackTriggered,
     _STORE as _rate_limit_fallback_store,
@@ -59,11 +39,6 @@ from app.core.auth.rate_limit_fallback import (
     clear_failed_logins_in_memory as _clear_failed_logins_in_memory,
 )
 
-# BE-CONFIG-001C: default tipati in `Settings.DEFAULTS` (10 / 60 / 300
-# Override env continua a funzionare via `Settings._converti_tipo_env`
-# coercion `int`). Le costanti restano modulo-level perche' i test
-# `tests2/security/unit/test_login_rate_limit_per_ip.py` le
-# monkeypatch-ano direttamente
 LOGIN_MAX_ATTEMPTS    = int(_settings.get("LOGIN_MAX_ATTEMPTS"))
 LOGIN_WINDOW_SECONDS  = int(_settings.get("LOGIN_WINDOW_SECONDS"))
 LOGIN_LOCKOUT_SECONDS = int(_settings.get("LOGIN_LOCKOUT_SECONDS"))
@@ -120,15 +95,7 @@ def _clear_failed_logins(ip: str):
     )
 
 
-# CONFIGURAZIONE JWT + UTILS
-# STRUCT-005 Seam D: la logica vive in `app.shared.jwt_token`
-# Qui restano gli export pubblici espliciti per `auth_mod.SECRET_KEY`,
-# `auth_mod.create_access_token`, ... e per i consumer che usano ancora
-# il modulo auth come superficie API aggregata.
-# Payload contract invariato: sub/username/group_id/role/exp/iat/jti
-# Algoritmo: HS256. Policy SECRET_KEY invariata (RuntimeError prod/staging
-# random dev). Nessun cambio comportamentale
-
+# Keep these as explicit public auth facade exports for existing callers.
 from app.shared.jwt_token import (  # noqa: F401 (explicit public auth API)
     ALGORITHM,
     ACCESS_TOKEN_EXPIRE_HOURS,
@@ -172,11 +139,8 @@ from app.shared.password_hashing import (  # noqa: F401 (explicit public auth AP
     _DUMMY_PASSWORD_HASH,
 )
 
-# DEPENDENCIES FASTAPI
-#
-# Public auth API exports for existing callers. Domain modules should
-# import FastAPI auth dependencies from `app.core.auth.dependencies`
-# directly.
+# Public auth API exports for existing callers; new domain imports should use
+# `app.core.auth.dependencies` directly.
 
 from app.core.auth.dependencies import (  # noqa: F401 (explicit public auth API)
     _bearer_scheme,
@@ -197,8 +161,6 @@ from app.core.auth.owner_dependencies import (  # noqa: F401 (explicit public au
     require_schedule_owner,
 )
 
-# ROUTER AUTH
-
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 
@@ -210,11 +172,7 @@ def login(data: LoginRequest, request: Request):
     _check_rate_limit(client_ip)
 
     user = db.get_user_by_username(data.username)
-    # C10: timing parity — verify_password SEMPRE, con dummy_hash se user
-    # non esiste. Evita short-circuit che permetterebbe a un attaccante
-    # di enumerare gli username misurando il tempo di risposta (bcrypt
-    # richiede ~200-400ms; la differenza con la risposta 401 immediata
-    # rendeva banale l'enumeration
+    # Always verify against a real hash to avoid username-enumeration timing leaks.
     password_hash = user.password_hash if user else _DUMMY_PASSWORD_HASH
     password_ok = verify_password(data.password, password_hash)
     if not user or not password_ok:
@@ -223,11 +181,8 @@ def login(data: LoginRequest, request: Request):
     if not user.is_active:
         _disclosure.raise_disclosure(_disclosure.account_disabled())
 
-    # MFA opt-in: se l'utente ha MFA attiva, il codice TOTP e' richiesto
-    # Se MFA non e' attiva, il comportamento e' invariato (nessun impatto
-    # Trade-off noto (vedi mfa.py): 403 mfa_required dopo password OK
-    # differisce da 401 password errata, quindi rivela "utente con MFA
-    # attiva". Mitigazione: rate limit su client_ip (gia' attivo
+    # MFA challenge happens only after password verification; IP rate limiting
+    # bounds the known disclosure that an account has MFA enabled.
     from app.core.auth import mfa as _mfa
     if _mfa.is_enabled(user.id):
         if not data.mfa_code:
@@ -238,8 +193,7 @@ def login(data: LoginRequest, request: Request):
 
     _clear_failed_logins(client_ip)
 
-    # Rehash progressivo bcrypt → Argon2id (best-effort: un fallimento del DB
-    # non deve negare il login, al prossimo login riproveremo
+    # Password hash upgrades are best-effort and must not deny a valid login.
     if needs_rehash(user.password_hash):
         try:
             db.update_user_password(user.id, hash_password(data.password))
@@ -292,8 +246,6 @@ def logout(
     now_ts = int(datetime.now(timezone.utc).timestamp())
     ttl = int(exp) - now_ts
     if ttl <= 0:
-        # Token gia' scaduto: nessuna revoca serve (decode_token l'avrebbe
-        # gia' rifiutato, ma tecnicamente potrebbe accadere in race
         return {"ok": True, "blacklisted": False}
 
     if not blacklist_jti(jti, ttl):

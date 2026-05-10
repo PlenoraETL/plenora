@@ -18,9 +18,6 @@ import AppSidebar from '../components/AppSidebar';
 import ModalWrapper, { ModalButton } from '../components/common/ModalWrapper';
 import { can, role } from '../utils/permissions';
 import '../styles/UserManager.css';
-
-
-// ── Role badge ─────────────────────────────────────────────────────────────────
 function RoleBadge({ role }) {
   const labels = {
     superadmin: '👑 superadmin',
@@ -30,8 +27,6 @@ function RoleBadge({ role }) {
   };
   return <span className={`um__badge um__badge--${role}`}>{labels[role] || role}</span>;
 }
-
-// ── Status badge ───────────────────────────────────────────────────────────────
 function StatusBadge({ active }) {
   return (
     <span className={`um__badge um__badge--${active ? 'active' : 'inactive'}`}>
@@ -39,8 +34,6 @@ function StatusBadge({ active }) {
     </span>
   );
 }
-
-// ── Avatar ─────────────────────────────────────────────────────────────────────
 function UserAvatar({ username, role }) {
   return (
     <div className={`um__avatar um__avatar--${role}`}>
@@ -48,10 +41,7 @@ function UserAvatar({ username, role }) {
     </div>
   );
 }
-
-// ─────────────────────────────────────────────────────────────────────────────
 // MODAL — Crea/Modifica Utente
-// ─────────────────────────────────────────────────────────────────────────────
 function UserModal({ user, groups, currentUser, onClose, onSave }) {
   const isEdit = !!user;
   const [form, setForm] = useState({
@@ -173,10 +163,7 @@ function UserModal({ user, groups, currentUser, onClose, onSave }) {
     </ModalWrapper>
   );
 }
-
-// ─────────────────────────────────────────────────────────────────────────────
 // MODAL — Reset Password
-// ─────────────────────────────────────────────────────────────────────────────
 function ResetPasswordModal({ user, onClose, onSave }) {
   const [newPassword, setNewPassword] = useState('');
   const [loading, setLoading]         = useState(false);
@@ -216,10 +203,7 @@ function ResetPasswordModal({ user, onClose, onSave }) {
     </ModalWrapper>
   );
 }
-
-// ─────────────────────────────────────────────────────────────────────────────
 // MODAL — Crea Gruppo
-// ─────────────────────────────────────────────────────────────────────────────
 function GroupModal({ onClose, onSave }) {
   const [form, setForm] = useState({ group_id: '', name: '', description: '' });
   const [loading, setLoading] = useState(false);
@@ -269,10 +253,7 @@ function GroupModal({ onClose, onSave }) {
     </ModalWrapper>
   );
 }
-
-// ─────────────────────────────────────────────────────────────────────────────
 // MODAL — Conferma eliminazione
-// ─────────────────────────────────────────────────────────────────────────────
 function ConfirmDeleteModal({ title, message, onClose, onConfirm }) {
   const [loading, setLoading] = useState(false);
   const handleConfirm = async () => {
@@ -300,10 +281,7 @@ function ConfirmDeleteModal({ title, message, onClose, onConfirm }) {
     </ModalWrapper>
   );
 }
-
-// ─────────────────────────────────────────────────────────────────────────────
 // MODAL — Conferma eliminazione gruppo (cascade)
-// ─────────────────────────────────────────────────────────────────────────────
 function ConfirmDeleteGroupModal({ group, onClose, onConfirm }) {
   const [summary, setSummary]   = useState(null);
   const [loading, setLoading]   = useState(true);
@@ -391,9 +369,6 @@ function ConfirmGroupNameInput({ groupId, onValid, deleting }) {
     </div>
   );
 }
-
-
-// ─────────────────────────────────────────────────────────────────────────────
 export default function UserManager() {
   const navigate    = useNavigate();
   const { user: currentUser } = useAuth();
@@ -461,11 +436,8 @@ export default function UserManager() {
 
   return (
     <div className="um">
-      {/* ── SIDEBAR (condivisa) ── */}
-      <AppSidebar />
-
-      {/* ── MAIN ── */}
-      <main className="um__main">
+<AppSidebar />
+<main className="um__main">
         <div className="um__topbar">
           {/* Tab switcher Utenti / Gruppi (sostituisce le voci nella sidebar) */}
           <div className="um__tabs">
@@ -504,8 +476,7 @@ export default function UserManager() {
         </div>
 
         <div className="um__content">
-          {/* ── TAB UTENTI ── */}
-          {tab === 'users' && (
+{tab === 'users' && (
             <div className="um__table-wrap">
               <table className="um__table">
                 <thead>
@@ -549,9 +520,7 @@ export default function UserManager() {
               </table>
             </div>
           )}
-
-          {/* ── TAB GRUPPI ── */}
-          {tab === 'groups' && (
+{tab === 'groups' && (
             <div className="um__groups-grid">
               {groups.length === 0 ? (
                 <div className="um__empty um__empty--full"><div className="um__empty-icon">🏢</div><div className="um__empty-text">Nessun gruppo trovato</div></div>
@@ -581,9 +550,7 @@ export default function UserManager() {
           )}
         </div>
       </main>
-
-      {/* ── MODALI ── */}
-      {(modalUser === 'new' || (modalUser && typeof modalUser === 'object')) && (
+{(modalUser === 'new' || (modalUser && typeof modalUser === 'object')) && (
         <UserModal user={modalUser === 'new' ? null : modalUser} groups={groups} currentUser={currentUser}
           onClose={() => setModalUser(null)}
           onSave={async (data) => { if (modalUser === 'new') await handleCreateUser(data); else await handleUpdateUser(modalUser.id, data); }} />

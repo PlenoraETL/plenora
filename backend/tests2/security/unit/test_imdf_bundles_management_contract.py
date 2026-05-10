@@ -82,7 +82,6 @@ def bundles_dir(tmp_path, monkeypatch):
     return root
 
 
-# ── 1. LIST arricchito: counts da plenora_metadata.json ────────────
 def test_list_bundles_returns_counts_from_metadata(bundles_dir, superadmin):
     result = imdf_router.list_bundles(project_id=None, current_user=superadmin)
     assert len(result) >= 2
@@ -121,7 +120,6 @@ def test_list_bundles_handles_missing_manifest_gracefully(tmp_path, monkeypatch,
         assert empty.unit_count is None
 
 
-# ── 2. DELETE endpoint ─────────────────────────────────────────────
 def test_delete_bundle_removes_directory(bundles_dir, superadmin):
     # superadmin bypass del group-access check → delete success
     before = (bundles_dir / "task-aaa").exists()

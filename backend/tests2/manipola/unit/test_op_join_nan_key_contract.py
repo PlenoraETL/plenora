@@ -1,5 +1,5 @@
 """
-Contract test — op_join NaN key handling (C1 Phase 4).
+Contract test — op_join NaN key handling (C1 current contract).
 
 Background:
 """

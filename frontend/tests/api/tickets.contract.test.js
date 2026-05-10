@@ -14,7 +14,7 @@ vi.mock('../../src/api/http', () => ({
 }));
 
 /**
- * Contract test — tickets api (B3 Phase 4).
+ * Contract tests for the tickets API.
  *
  * Coverage focalizzata su uploadAttachment dopo il fix B3:
  *   - oversize bloccato client-side (UploadTooLargeError, no roundtrip)
@@ -53,8 +53,7 @@ describe('tickets api contract', () => {
     const { UploadTooLargeError } = await import('../../src/api/uploadGuards');
 
     // Caso reale del bug: file 20MB -> sotto cap generale (100MB) ma sopra
-    // cap ticket (10MB). Pre-fix il client lo accettava e poi prendeva 413
-    // dal backend; post-fix viene rifiutato pre-flight.
+    // cap ticket (10MB): il client deve rifiutarlo pre-flight.
     const file = new File(['stub'], 'big.log', { type: 'text/plain' });
     Object.defineProperty(file, 'size', { value: 20 * 1024 * 1024 });
 

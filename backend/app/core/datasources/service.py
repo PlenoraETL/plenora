@@ -1,8 +1,4 @@
-"""
-PLENORA-ETL — Data Source Service
-
-CRUD configurazioni Data Source -> PostgreSQL via app.core.datasources.db.
-"""
+"""Data source configuration service and runtime file operations."""
 
 import json
 import uuid
@@ -35,9 +31,7 @@ from app.shared.file_helpers import ColumnInfoBuilder, FormatDetector
 
 logger = get_logger(__name__)
 
-# Campi sensibili. Usati sia per la redaction in UI (_to_model) sia per la
-# cifratura at-rest (encrypt_dict_fields/decrypt_dict_fields). encrypt_dict_fields
-# vuole una list, _to_model itera sul set: list lo accetta entrambi
+# Keep redaction and at-rest encryption field lists in sync.
 _SENSITIVE_FIELDS = ["password", "private_key", "private_key_passphrase", "client_secret"]
 
 
@@ -48,14 +42,9 @@ class DataSourceService:
     """
 
     def __init__(self) -> None:
-        # Solo per scan_state (runtime
         self._scan_dir: Path = settings.DATA_DIR / "datasources_scan"
 
-    # ── CRUD ──────────────────────────────────────────────────────────────
-
     def list_datasources(self, group_id: Optional[str] = None) -> DataSourceList:
-        # group_id=None → no filter (superadmin o path allowed_groups
-        # Fix N+1: fetch tutte le row in una query, parse config in memoria
         rows = datasource_db.list_datasources(group_id)
         result = []
         for row in rows:
@@ -80,9 +69,7 @@ class DataSourceService:
         config = dict(row.config or {})
         if not isinstance(config, dict):
             return None
-        # Decifra campi sensibili at-rest
         _decrypt_dict_fields(config, _SENSITIVE_FIELDS, strict=strict)
-        # Inietta group_id e created_by dal record DB (stesso logic di _get_full_config
         config["group_id"] = row.group_id
         config["created_by"] = row.created_by
         return config
@@ -128,9 +115,7 @@ class DataSourceService:
         }
         config = {k: v for k, v in config.items() if v is not None}
 
-        # Cifra at-rest i campi sensibili (password, private_key, ...) prima del save
-        # NOTA: passiamo una COPIA per non mutare il dict che restituiamo al caller
-        # _to_model si aspetta plaintext per fare redaction, non valori cifrati
+        # Preserve plaintext in-memory for response redaction; only the DB copy is encrypted.
         config_to_save = dict(config)
         _encrypt_dict_fields(config_to_save, _SENSITIVE_FIELDS)
 
@@ -143,8 +128,6 @@ class DataSourceService:
             created_by=created_by,
         )
 
-        # Inietta created_by nel config in-memory per il _to_model che popola
-        # la response (il re-read dal DB avrebbe lo stesso effetto, ma costa un round trip
         config["group_id"] = group_id or settings.DEFAULT_GROUP
         config["created_by"] = created_by
 
@@ -152,23 +135,19 @@ class DataSourceService:
         return self._to_model(config, redact=True)
 
     def update_datasource(self, ds_id: str, data: DataSourceUpdate) -> Optional[DataSource]:
-        config = self._get_full_config(ds_id)  # già decifrato
+        config = self._get_full_config(ds_id)
         if not config:
             return None
 
         updates = data.model_dump(exclude_none=True)
-        # Filtra i campi sensibili mascherati: il client invia "***" per i
-        # campi non modificati e quel valore non deve sovrascrivere il reale
+        # The client sends "***" for unchanged secrets; never persist that mask.
         for sf in _SENSITIVE_FIELDS:
             if sf in updates and updates[sf] == "***":
                 del updates[sf]
         config.update(updates)
         config["updated_at"] = datetime.now(timezone.utc).isoformat()
 
-        # Re-cifra i campi sensibili prima di salvare. Lavoro su una copia
-        # per non mutare il dict che _to_model deve usare per la redaction
-        # Rimuovi group_id/created_by dal blob config: sono colonne DB separate
-        # non vanno duplicate nel JSON
+        # DB-owned columns must not be duplicated inside the encrypted JSON config.
         config_to_save = dict(config)
         config_to_save.pop("group_id", None)
         config_to_save.pop("created_by", None)
@@ -181,19 +160,15 @@ class DataSourceService:
         if not datasource_db.get_datasource(ds_id):
             return False
         datasource_db.delete_datasource(ds_id)
-        # Pulizia scan_state su filesystem
         scan_path = self._scan_state_path(ds_id)
         if scan_path.exists():
             scan_path.unlink()
         logger.info(f"Data Source eliminato: {ds_id}")
         return True
 
-    # ── Test connessione ──────────────────────────────────────────────────
-
     def test_connection(self, ds_id: str) -> DataSourceTestResult:
-        # FIXME: #2 (2026-04-23): strict=True → se un campo auth cifrato non e'
-        # decifrabile, CredentialUnavailableError propagato al router per
-        # HTTP 422. Evita 200-OK fasullo con secret silent-None
+        # FIXME: strict=True surfaces broken encrypted credentials as HTTP 422
+        # instead of a false-success connection test.
         config = self._get_full_config(ds_id, strict=True)
         if not config:
             return DataSourceTestResult(
@@ -208,10 +183,7 @@ class DataSourceService:
                 message=result.get("message", ""),
                 details=result.get("details"),
             )
-        # intent: boundary / outcome: fail-closed (success=False sanitizzato
-        # Non propagare str(e) nella response: gli SDK di provider (Office365
-        # paramiko, ftplib) possono includere URL autenticati, token OAuth
-        # credenziali parziali o path interni. Stacktrace preservato lato log
+        # Provider exceptions can include URLs, tokens, credentials, or internal paths.
         except Exception as e:
             logger.error(
                 f"[GESTITO] Errore test connessione {ds_id}: {e}",
@@ -221,8 +193,6 @@ class DataSourceService:
                 success=False,
                 message="Impossibile testare la connessione: riprova piu' tardi",
             )
-
-    # ── Operazioni file ───────────────────────────────────────────────────
 
     def list_files(
         self,
@@ -307,8 +277,6 @@ class DataSourceService:
         with backend as ds:
             return ds.file_exists(path)
 
-    # ── Scan State (filesystem — dati runtime) ────────────────────────────
-
     def get_scan_state(self, ds_id: str) -> ScanState:
         path = self._scan_state_path(ds_id)
         if not path.exists():
@@ -317,13 +285,8 @@ class DataSourceService:
             data = json.loads(path.read_text(encoding="utf-8"))
             return ScanState(**data)
         except Exception as e:
-            # Prima: warning + fallback silenzioso → ogni chiamata successiva
-            # ritrova il file corrotto e ritorna ScanState vuoto, ma il file
-            # corrotto NON viene mai sostituito → "scan rotto fino al reset
-            # manuale dell'admin"
-            # Ora: log a ERROR + rinomina il file corrotto in `.broken.<ts>`
-            # così la prossima chiamata vede "no scan state" e riparte pulita
-            # L'admin trova il file corrotto sul disco se vuole investigare
+            # Rename corrupt scan state so the next scan can start cleanly while
+            # preserving the broken file for investigation.
             ts = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
             broken_path = path.with_name(f"{path.name}.broken.{ts}")
             try:
@@ -361,7 +324,7 @@ class DataSourceService:
             state.processed.append(ProcessedEntry(
                 name=filename, processed_at=now, pipeline_id=pipeline_id,
             ))
-        # intent: optional feature / outcome: fail-open (snapshot entry derivata, non critica
+        # Snapshot metadata is advisory; processing status must still be recorded.
         try:
             snapshot_file_info = self.file_info(ds_id, filename)
             if filename not in snapshot_names:
@@ -378,8 +341,6 @@ class DataSourceService:
 
         self.save_scan_state(ds_id, state)
         logger.info(f"File processato: {filename} (ds={ds_id}, pipeline={pipeline_id})")
-
-    # ── Helpers privati ───────────────────────────────────────────────────
 
     def _get_full_config(self, ds_id: str, *, strict: bool = False) -> Optional[dict[str, object]]:
         """Recupera la config completa (con credenziali) dal DB.
@@ -444,5 +405,4 @@ class DataSourceService:
         })
 
 
-# Singleton
 datasource_service = DataSourceService()

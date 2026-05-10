@@ -229,8 +229,8 @@ def test_corrupted_error_str_includes_project_id(service_with_fake_db):
 
 
 def test_corrupted_canvas_never_returns_empty_silently(service_with_fake_db):
-    """Regressione diretta del reperto: pre-fix, questi input restituivano
-    un CanvasState() vuoto senza sollevare. Post-fix, tutti devono
+    """Regressione diretta del reperto: Previous behavior, questi input restituivano
+    un CanvasState() vuoto senza sollevare. Current contract, tutti devono
     sollevare CanvasCorruptedError."""
     from app.core.projects.exceptions import CanvasCorruptedError
 
@@ -251,5 +251,5 @@ def test_corrupted_canvas_never_returns_empty_silently(service_with_fake_db):
             # significherebbe che il fallback silenzioso e' tornato.
             pytest.fail(
                 f"Canvas corrotto {bad!r} NON ha sollevato — regressione "
-                f"al pre-fix comportamento silent-fallback. Got: {result!r}"
+                f"al Previous behavior comportamento silent-fallback. Got: {result!r}"
             )

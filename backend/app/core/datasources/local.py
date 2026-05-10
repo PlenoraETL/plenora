@@ -1,8 +1,4 @@
-"""
-PLENORA-ETL — Data Source Backend: Cartella Locale / Rete
-
-Supporta path locali e UNC evitando assunzioni sul filesystem del worker.
-"""
+"""Local and mounted-network folder data source backend."""
 
 from pathlib import Path as _Path
 
@@ -76,8 +72,6 @@ class LocalDataSource(DataSourceInterface):
         super().__init__(config)
         self._connected = False
 
-    # ── Lifecycle ──────────────────────────────────────────────────────────
-
     def connect(self) -> None:
         root = self.config.root_path
         if not os.path.exists(root):
@@ -99,10 +93,7 @@ class LocalDataSource(DataSourceInterface):
             except PermissionError:
                 file_count = None
 
-            # Multi-host advisory: avvisa se il path sembra local-only
-            # Non blocca — solo informativo. Utile in setup con Celery
-            # worker distribuiti: su un nodo diverso questo path NON sara'
-            # raggiungibile e task che usano questo datasource falliranno
+            # Local paths are valid but risky when Celery workers run on other hosts.
             path_class = _classify_path_for_multi_host(root)
             advisory = None
             if path_class == "local":
@@ -132,8 +123,6 @@ class LocalDataSource(DataSourceInterface):
         finally:
             self.disconnect()
 
-    # ── Le 6 operazioni ────────────────────────────────────────────────────
-
     def list_files(
         self,
         path: str = "",
@@ -148,15 +137,12 @@ class LocalDataSource(DataSourceInterface):
         results = []
         try:
             if recursive:
-                # Ricorsivo: os.walk scende in tutte le sottocartelle
                 for dirpath, dirnames, filenames in os.walk(full_path):
-                    # Salta cartelle nascoste
                     dirnames[:] = [d for d in dirnames if not d.startswith('.')]
                     for filename in filenames:
                         if not self._matches_pattern(filename, pattern):
                             continue
                         entry_path = os.path.join(dirpath, filename)
-                        # intent: optional feature / outcome: fail-open (entry skip su stat inaccessibile
                         try:
                             st = os.stat(entry_path)
                         except OSError as e:
@@ -181,14 +167,11 @@ class LocalDataSource(DataSourceInterface):
                             hash=hash_val,
                         ))
             else:
-                # Non ricorsivo: mostra file E sottocartelle del livello corrente
                 with os.scandir(full_path) as it:
                     for entry in it:
                         if entry.name.startswith('.'):
                             continue
                         if entry.is_dir(follow_symlinks=True):
-                            # Aggiungi cartella
-                            # intent: optional feature / outcome: fail-open (folder skip su stat inaccessibile
                             try:
                                 st = entry.stat(follow_symlinks=True)
                             except OSError as e:
@@ -209,7 +192,6 @@ class LocalDataSource(DataSourceInterface):
                         elif entry.is_file(follow_symlinks=True):
                             if not self._matches_pattern(entry.name, pattern):
                                 continue
-                            # intent: optional feature / outcome: fail-open (file skip su stat inaccessibile
                             try:
                                 st = entry.stat(follow_symlinks=True)
                             except OSError as e:
@@ -220,7 +202,6 @@ class LocalDataSource(DataSourceInterface):
                                 continue
                             hash_val = None
                             if include_hash:
-                                # intent: optional feature / outcome: fail-open (hash opzionale
                                 try:
                                     hash_val = self._compute_hash(self._raw_read(entry.path))
                                 except OSError as e:
@@ -240,10 +221,8 @@ class LocalDataSource(DataSourceInterface):
         except PermissionError as e:
             raise DataSourcePermissionError(f"Accesso negato: {full_path}") from e
 
-        # Cartelle prima, poi file per data decrescente
         results.sort(key=lambda f: (0 if f.type == 'folder' else 1, f.modified_date), reverse=False)
         results.sort(key=lambda f: f.modified_date if f.type != 'folder' else datetime.max, reverse=True)
-        # Riordina: cartelle in cima, file per data decrescente
         folders = [r for r in results if r.type == 'folder']
         files   = [r for r in results if r.type != 'folder']
         files.sort(key=lambda f: f.modified_date, reverse=True)
@@ -299,8 +278,6 @@ class LocalDataSource(DataSourceInterface):
 
     def file_exists(self, path: str) -> bool:
         return os.path.isfile(self._abs(path))
-
-    # ── Helpers privati ─────────────────────────────────────────────────────
 
     def _abs(self, relative: str) -> str:
         """Path assoluto = root + relativo, validato contro path traversal.

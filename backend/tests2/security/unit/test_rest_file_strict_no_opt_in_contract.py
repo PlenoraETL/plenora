@@ -1,7 +1,7 @@
 """
-Contract test PR-#35 P1-C — REST_FILE shim strict-no-opt-in.
+Contract test the lock-heartbeat contract P1-C — REST_FILE shim strict-no-opt-in.
 
-Scope: blinda la decisione di design dietro PR-#35 (SSRF single-source):
+Scope: blinda la decisione di design dietro the lock-heartbeat contract (SSRF single-source):
 """
 
 from __future__ import annotations
@@ -66,7 +66,7 @@ def test_rest_file_shim_blocks_ipv6_loopback_even_with_env_opt_in(monkeypatch):
 def test_validate_external_url_still_honors_loopback_opt_in_in_dev(monkeypatch):
     """Guard test contro regressione del wrapper raise pubblico.
 
-    Il refactor PR-#35 NON deve cambiare il behavior di
+    Il refactor the lock-heartbeat contract NON deve cambiare il behavior di
     `validate_external_url` (raise wrapper): in dev, con env opt-in
     settata, loopback DEVE essere permesso (non solleva).
 

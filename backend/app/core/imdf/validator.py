@@ -124,16 +124,11 @@ def validate_publish(
         elif sev == "warning":
             report["summary"]["warnings"] += 1
 
-    # ── 0. Validazioni base ────────────────────────────────────────
     if mode not in PUBLISH_MODES:
         _add_top_issue("error", "INVALID_MODE", f"Modalita' '{mode}' non supportata")
         return report
 
-    # Validazione bundle_task_id contro path traversal. Il router chiama gia'
-    # `_safe_bundle_dir`, ma difesa in profondita' nel modulo validator
-    # Utility condivisa in app.shared.resources.path_policy (D3 commit 1): regex +
-    # path-traversal guard centralizzati. Il validator traduce ValueError
-    # in un issue con code INVALID_BUNDLE_ID (shape report preservata
+    # Defense in depth: validator also enforces the shared path policy.
     _root = settings.IMDF_BUNDLES_DIR.resolve()
     try:
         bundle_dir: Path = validate_imdf_task_id(bundle_task_id, _root)
@@ -145,7 +140,6 @@ def validate_publish(
         )
         return report
 
-    # ── 1. Bundle su disco ────────────────────────────────────────
     if not bundle_dir.exists() or not bundle_dir.is_dir():
         _add_top_issue(
             "error", "BUNDLE_MISSING",
@@ -154,7 +148,6 @@ def validate_publish(
         )
         return report
 
-    # Trova il .gdb
     gdb_path = None
     for p in bundle_dir.rglob("*.gdb"):
         if p.is_dir():
@@ -164,7 +157,6 @@ def validate_publish(
         _add_top_issue("error", "GDB_MISSING", f"Nessun .gdb trovato in {bundle_dir}")
         return report
 
-    # Carica layer dal GDB
     try:
         bundle_layers = load_imdf_layers(gdb_path)
     except Exception as e:
@@ -186,7 +178,6 @@ def validate_publish(
         return report
     conn, client = _resolved
 
-    # ── 3. Cerca FS esistente globalmente ──────────────────────────
     try:
         existing_url, existing_item, existing_folder = _find_existing_service(
             client, conn, fs_name
@@ -219,10 +210,7 @@ def validate_publish(
                 _cur_title = _by_id.get(_cur_id)
             except Exception as e:
                 logger.warning(f"_list_user_folders fallita nel validator: {e}")
-        # Rappresentazione user-friendly: preferiamo il title se disponibile
         _cur_display = _cur_title or _cur_id
-        # Confronto: se il title risolto coincide con la request → match
-        # Altrimenti fallback al confronto con l'id raw (retrocompat
         _match = (_cur_title is not None and _cur_title == _req) or (_cur_id == _req)
         if not _match:
             _add_top_issue(
@@ -308,10 +296,7 @@ def validate_publish(
                 existing_schema_by_layer[name] = {}
                 existing_layer_meta[name] = {"capabilities": "", "wkid": None}
 
-    # ── CRS check: bundle è già in EPSG:4326 dopo load_imdf_layers
-    # Se il FS è in un SRS diverso, ArcGIS fa una reprojezione server-side
-    # al publish. Di solito fila, ma per sistemi molto anisotropi (es
-    # proiezioni locali) può causare shift visibili. Warning informativo
+    # ArcGIS can reproject at publish time; warn on differing WKIDs.
     try:
         _sample_gdf = next(iter(bundle_layers.values()), None)
         _bundle_wkid = None
@@ -320,7 +305,6 @@ def validate_publish(
                 _bundle_wkid = _sample_gdf.crs.to_epsg()
             except Exception:
                 _bundle_wkid = None
-        # Se il bundle ha wkid e il FS ha wkid, confronta (primo layer FS
         if _bundle_wkid and existing_layer_meta:
             _fs_wkid = next(
                 (m.get("wkid") for m in existing_layer_meta.values() if m.get("wkid")),
@@ -336,8 +320,6 @@ def validate_publish(
     except Exception as e:
         logger.warning(f"CRS check fallito: {e}")
 
-    # ── Capabilities check: per mode che modificano FS esistente serve
-    # il capability corrispondente. Se manca è un errore bloccante
     if existing_url and mode in ("append", "upsert", "update") and existing_layer_meta:
         _caps_sample = next(iter(existing_layer_meta.values())).get("capabilities", "")
         _caps_set = {c.strip().lower() for c in _caps_sample.split(",") if c.strip()}
@@ -356,7 +338,6 @@ def validate_publish(
                 f"Contatta l'owner per abilitare Edit."
             )
 
-    # ── 4. Per-layer report ────────────────────────────────────────
     for name in layers_present:
         gdf = bundle_layers[name]
         bundle_count = len(gdf)

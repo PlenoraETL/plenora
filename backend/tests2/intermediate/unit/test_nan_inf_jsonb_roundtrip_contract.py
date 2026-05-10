@@ -22,7 +22,7 @@ pytestmark = [
 # 1. Forward: _to_jsonable produce dict-sentinel namespaced
 
 def test_to_jsonable_nan_returns_sentinel_dict_not_none():
-    """NaN -> dict-sentinel namespaced, NON None come pre-fix e
+    """NaN -> dict-sentinel namespaced, NON None come Previous behavior e
     NON la stringa "__nan__" che colliderebbe con valori utente."""
     from app.core.intermediate.db import _to_jsonable, _SPECIAL_FLOAT_KEY
 
@@ -56,7 +56,7 @@ def test_to_jsonable_finite_floats_unchanged():
 
 
 def test_to_jsonable_none_stays_none():
-    """None resta None: nessuna confusione tra null pre-fix e sentinel."""
+    """None resta None: nessuna confusione tra null Previous behavior e sentinel."""
     from app.core.intermediate.db import _to_jsonable
 
     assert _to_jsonable(None) is None
@@ -211,9 +211,9 @@ def test_compute_row_hash_matches_after_jsonb_roundtrip():
     """L'invariante chiave di F-DATA-01: hash dei dati ricostruiti
     da JSONB deve eguagliare l'hash dei dati originali.
 
-    Pre-fix: NaN -> None alla scrittura, hash recompute usava None
+    Previous behavior: NaN -> None alla scrittura, hash recompute usava None
     invece di "nan", digest divergente.
-    Post-fix: NaN -> dict-sentinel -> NaN, hash recompute identico.
+    Current contract: NaN -> dict-sentinel -> NaN, hash recompute identico.
     """
     from app.core.intermediate.db import _to_jsonable, _from_jsonable_value
     from app.core.intermediate.writer import compute_row_hash
@@ -230,7 +230,7 @@ def test_compute_row_hash_matches_after_jsonb_roundtrip():
     hash_original = compute_row_hash(original_row, col_names_sorted)
 
     # Simula il roundtrip JSONB: ser via _to_jsonable (come `insert_node_rows`),
-    # poi deser via _from_jsonable_value (come `get_node_table_rows` post-fix).
+    # poi deser via _from_jsonable_value (come `get_node_table_rows` Current contract).
     serialized = {k: _to_jsonable(v) for k, v in original_row.items()}
     reconstructed = {k: _from_jsonable_value(v) for k, v in serialized.items()}
     hash_reconstructed = compute_row_hash(reconstructed, col_names_sorted)
@@ -243,7 +243,7 @@ def test_compute_row_hash_matches_after_jsonb_roundtrip():
 
 
 def test_compute_row_hash_diverges_pre_fix_with_none():
-    """Documenta il bug pre-fix come regression-guard.
+    """Documenta il bug Previous behavior come regression-guard.
 
     Se qualcuno ripristina il vecchio comportamento (NaN -> None alla
     scrittura), il digest dei dati riletti diverge dall'originale. Il
@@ -256,26 +256,26 @@ def test_compute_row_hash_diverges_pre_fix_with_none():
     col_names_sorted = sorted(original_row.keys())
     hash_original = compute_row_hash(original_row, col_names_sorted)
 
-    # Comportamento pre-fix: NaN -> None alla persistenza.
+    # Comportamento Previous behavior: NaN -> None alla persistenza.
     pre_fix_reconstructed = {"id": 1, "ratio": None}
     hash_pre_fix = compute_row_hash(pre_fix_reconstructed, col_names_sorted)
 
     assert hash_original != hash_pre_fix, (
-        "REGRESSIONE: il digest sui dati riletti pre-fix doveva differire "
+        "REGRESSIONE: il digest sui dati riletti Previous behavior doveva differire "
         "dall'originale. Se il fix sentinel viene rimosso, P1-04 si riapre."
     )
 
 
-# 6. Compat con dati pre-fix
+# 6. Compat con dati Previous behavior
 
 def test_legacy_null_jsonb_stays_none_after_reverse_mapping():
-    """Run vecchie hanno NaN persistiti come `null` (pre-fix). Il reverse
+    """Run vecchie hanno NaN persistiti come `null` (Previous behavior). Il reverse
     mapping NON deve trasformarli in NaN per retro-compat — solo i
     dict-sentinel canonici vengono ricostruiti come float.
     """
     from app.core.intermediate.db import _from_jsonable_value
 
-    # row_data come arriverebbe da una run pre-fix
+    # row_data come arriverebbe da una run Previous behavior
     legacy_row_data = {"ratio_was_nan": None, "amount": 99.5}
     out = {k: _from_jsonable_value(v) for k, v in legacy_row_data.items()}
 

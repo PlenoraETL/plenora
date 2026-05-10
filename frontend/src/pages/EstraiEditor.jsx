@@ -61,23 +61,17 @@ function EstraiEditor() {
   const toast = useToast();
 
   useHexCanvas(hexCanvasRef);
-
-  // ===== CANVAS CORE =====
   const {
     nodes, edges, setNodes, setEdges, onNodesChange, onEdgesChange,
     nodesRef, edgesRef, updateNodeData, deleteNode,
     handleSaveQuiet, dataNodes, getViewportCenter,
     isReadOnly, readOnlyProps
   } = useCanvasCore(projectId, { mode: 'estrai' });
-
-  // ===== DATA LOADING =====
   const {
     project, connections, loading, error: loadError,
     catalog, views, projectConnection, sourceType,
     reload: reloadData,
   } = useEditorData(projectId, { withCatalog: true });
-
-  // ===== STATE =====
   const TABLES_PAGE_SIZE = 15;
 
   const [saving, setSaving] = useState(false);
@@ -92,8 +86,6 @@ function EstraiEditor() {
   // Reset visible count when search changes
   useEffect(() => { setVisibleTableCount(TABLES_PAGE_SIZE); }, [searchQuery]);
   useEffect(() => { setVisibleViewCount(TABLES_PAGE_SIZE);  }, [viewSearchQuery]);
-
-  // ===== HOOKS =====
   const preview    = usePreview(projectId, handleSaveQuiet);
   const execution  = useExecution(projectId, { onBeforeExecute: handleSaveQuiet });
   const caricarica = useCaricarica(projectId, {
@@ -102,8 +94,6 @@ function EstraiEditor() {
   });
   const validation = useCanvasValidation(dataNodes, edges, { validateOnChange: true, debounceMs: 300 });
   const edgeHandlers = useEdgeHandlers(nodes, setEdges, { resultNodeType: 'resultNode' });
-
-  // ===== EFFECTS =====
   useEffect(() => {
     if (!project?.canvas?.nodes || loading) return;
     const canvasKey = `${projectId}::${projectConnection?.id ?? 'none'}`;
@@ -141,8 +131,6 @@ function EstraiEditor() {
       return node;
     }));
   }, [dataNodes, edges, setNodes]);
-
-  // ===== FEATURE LAYER HANDLERS =====
   const handleUpdateFeatureWhere  = useCallback((nodeId, v)      => updateNodeData(nodeId, { where: v }), [updateNodeData]);
   const handleFeatureSchemaLoaded = useCallback((nodeId, schema) => {
     setNodes(nds => nds.map(node => {
@@ -220,8 +208,6 @@ function EstraiEditor() {
   }, [preview.handlePreview, execution.prepareExecute, caricarica.handleExecute, handleAddRelatedLayer]);
 
   useEffect(() => { useCanvasStore.getState().setConnections(connections); }, [connections]);
-
-  // ===== ADD NODE HANDLERS =====
   const handleAddResultNode = useCallback(() => {
     if (nodes.some(n => n.type === 'resultNode')) { toast.warning('Puoi avere solo un nodo risultato per progetto'); return; }
     setNodes(nds => nds.concat({
@@ -289,8 +275,6 @@ function EstraiEditor() {
       style: { width: 250, height: 150 },
       data: { level: '', label: '', title: '', color: '#fbbf24' } }));
   }, [setNodes, getViewportCenter, reactFlowInstance]);
-
-  // ===== SAVE =====
   const handleSave = async () => {
     if (saving) return;
     if (!validation.isValid) {
@@ -302,8 +286,6 @@ function EstraiEditor() {
     catch (err) { console.error('Errore salvataggio:', err); toast.error('Errore salvataggio progetto'); }
     finally { setSaving(false); }
   };
-
-  // ===== DRAG & DROP =====
   const onDrop = useCallback((event) => {
     event.preventDefault();
     if (!reactFlowInstance) return;
@@ -350,8 +332,6 @@ function EstraiEditor() {
     event.preventDefault();
     event.dataTransfer.dropEffect = 'move';
   }, []);
-
-  // ===== DERIVED STATE =====
   const handleBack              = () => navigate('/');
   const filteredTables          = Object.keys(catalog).filter(t => t.toLowerCase().includes(searchQuery.toLowerCase()));
   const sourceNodes             = nodes.filter(n => n.type === 'tableNode' || n.type === 'source');
@@ -378,8 +358,7 @@ function EstraiEditor() {
   // topbar slot
   const topbar = (
     <>
-      {/* ── Topbar ── */}
-      <div className="estrai-toolbar">
+<div className="estrai-toolbar">
 
         {/* Logo */}
         <div className="estrai-toolbar__logo">

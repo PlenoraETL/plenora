@@ -144,8 +144,8 @@ def test_load_dataframe_passes_when_group_matches_owner(svc):
 
 def test_file_id_generator_produces_32_hex_uuid():
     """N1: file_id oggi contiene uuid_part = uuid.uuid4().hex (32 char).
-    Pre-fix: [:8] = ~10^9 combinazioni â†’ brute-force fattibile.
-    Post-fix: 2^128 â†’ infeasible.
+    Previous behavior: [:8] = ~10^9 combinazioni â†’ brute-force fattibile.
+    Current contract: 2^128 â†’ infeasible.
     """
     from app.core.files.service import DefaultTimeProvider
     tp = DefaultTimeProvider()

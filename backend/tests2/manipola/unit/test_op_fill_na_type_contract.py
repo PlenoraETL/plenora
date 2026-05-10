@@ -1,5 +1,5 @@
 """
-Contract test — op_fill_na type compatibility (C2 Phase 4).
+Contract test — op_fill_na type compatibility (C2 current contract).
 
 Background:
 """

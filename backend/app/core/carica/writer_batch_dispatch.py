@@ -14,10 +14,7 @@ from sqlalchemy import text
 from app.core.carica.models import ColumnMapping, WriteResult
 from app.utils.logger import get_logger
 
-# Stesso logger name di `database_writer.py`: i record sono
-# indistinguibili dai consumer che attaccano handler / filtrano per
-# "app.core.carica.writer". Il `StructuredLogger` wrapper delega a
-# `_logger.log(...)` sul logger stdlib omonimo (singleton per nome
+# Stesso logger name di `database_writer.py` per handler e filtri condivisi.
 logger = get_logger("app.core.carica.writer")
 
 
@@ -52,7 +49,6 @@ class BatchDispatchMixin:
         result: WriteResult,
     ) -> WriteResult:
         """Aggiorna righe in batch."""
-        # Filtra colonne da aggiornare
         if self.config.update_columns:
             update_cols = [c for c in columns
                          if c.dest_column in self.config.update_columns
@@ -79,8 +75,7 @@ class BatchDispatchMixin:
         result: WriteResult,
     ) -> WriteResult:
         """Esegue UPSERT in batch."""
-        # B-BE-61: verifica che esista un UNIQUE/PK constraint sulle match_columns
-        # Se non esiste, lo crea automaticamente (CREATE UNIQUE INDEX IF NOT EXISTS
+        # PostgreSQL UPSERT richiede un vincolo UNIQUE/PK sulle match_columns.
         if self.db_type == 'postgres' and self.config.match_columns:
             with self.engine.begin() as check_conn:
                 for mc in self.config.match_columns:
@@ -99,7 +94,6 @@ class BatchDispatchMixin:
                     """)
                     constraint_count = check_conn.execute(check_sql, {"schema": schema, "table": table, "col": mc}).scalar()
                     if not constraint_count:
-                        # Crea indice UNIQUE automaticamente
                         idx_name = f"uq_{table}_{mc}"
                         create_idx = text(
                             f'CREATE UNIQUE INDEX IF NOT EXISTS "{idx_name}" '

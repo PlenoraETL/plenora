@@ -1,5 +1,5 @@
 """
-Contract test PR-#36 - LockHeartbeat class API (R-05 deterministic).
+Contract test the lock-heartbeat contract - LockHeartbeat class API (R-05 deterministic).
 
 Scope: blinda l'API pubblica della class estratta in
 """
@@ -192,7 +192,7 @@ def test_refresh_exception_does_not_propagate_or_set_lock_lost(
 
 
 def test_state_dict_includes_external_hb_key_when_wrapper_injects_it():
-    """Finding H (PR-#36): il wrapper compat `_start_lock_heartbeat` in
+    """Finding H (the lock-heartbeat contract): il wrapper compat `_start_lock_heartbeat` in
     `execution_manager` aggiunge la chiave `_hb` al dict ritornato da
     `get_state_dict()`. Poiche' il dict E' la stessa reference dello
     `_state` interno, l'iniezione muta anche `LockHeartbeat._state`.

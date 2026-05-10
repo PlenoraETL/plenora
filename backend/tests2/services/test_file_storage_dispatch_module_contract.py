@@ -1,5 +1,5 @@
 """
-Smoke contract - STRUCT-001 Seam C: estrazione storage dispatch.
+Smoke contract: estrazione storage dispatch.
 
 Verifica le invarianti minime del policy dispatch:
 """

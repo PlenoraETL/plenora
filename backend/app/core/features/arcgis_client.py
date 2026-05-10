@@ -146,11 +146,6 @@ class ArcGISClient(
         for idx, row in df.iterrows():
             feature = {"attributes": {}}
             
-            # Attributi (tutto tranne geometria e campi auto-generati da ArcGIS
-            # Per update/delete: OBJECTID serve come chiave, non va escluso
-            # BE-IMDF-001: il subset OID/GLOBALID e' canonizzato in
-            # `app.shared.connections.esri_system_fields.ESRI_OID_FIELDS_LITERAL`
-            # 5 varianti casing). Behavior bit-per-bit invariato
             skip_cols = {geometry_column, "geometry"}
             if operation in ("add", "create_service"):
                 skip_cols.update(ESRI_OID_FIELDS_LITERAL)
@@ -158,7 +153,6 @@ class ArcGISClient(
                 if col in skip_cols:
                     continue
                 attribute_value = row[col]
-                # Converti tipi numpy/pandas a tipi Python nativi
                 if pd.isna(attribute_value):
                     feature["attributes"][col] = None
                 elif hasattr(attribute_value, 'item'):  # numpy scalar
@@ -166,7 +160,6 @@ class ArcGISClient(
                 else:
                     feature["attributes"][col] = attribute_value
             
-            # Geometria
             if has_geometry:
                 geom = None
                 if is_geodataframe:
@@ -335,8 +328,6 @@ class ArcGISClient(
             }
         }
 
-    # CREAZIONE FEATURE SERVICE (ArcGIS Online
-
     def create_service(
         self,
         conn: ArcGISConnectionInfo,
@@ -377,7 +368,6 @@ class ArcGISClient(
         base_url = f"{parsed.scheme}://{parsed.netloc}/sharing/rest"
         
         
-        # Unita basate su SRID
         units = "esriDecimalDegrees" if srid == 4326 else "esriMeters"
 
         create_params = {
@@ -469,7 +459,6 @@ class ArcGISClient(
             pass
         
         if not geom_type.startswith("esri") and geometry_column in df.columns:
-            # Prova dal WKT
             from shapely import wkt
             sample = df[geometry_column].dropna().iloc[0] if len(df) > 0 else None
             if sample:
@@ -479,7 +468,6 @@ class ArcGISClient(
                 except Exception as _e:
                     logger.debug(f"Impossibile inferire geom_type da WKT sample: {_e}")
         
-        # Costruisci definizione campi
         fields = [
             {"name": "OBJECTID", "type": "esriFieldTypeOID", "alias": "OBJECTID", "editable": False},
         ]
@@ -627,8 +615,6 @@ class ArcGISClient(
             "errors": write_result.get("errors", []),
         }
 
-    # TEST CONNESSIONE
-    
     def test_connection(self, conn: ArcGISConnectionInfo) -> dict:
         """
         Testa la connessione ArcGIS.
@@ -642,7 +628,6 @@ class ArcGISClient(
             {success, message, details}
         """
         try:
-            # Step 1: Autenticazione
             if conn.auth_type != "public":
                 token = self.authenticate(conn)
                 if not token:
@@ -651,7 +636,6 @@ class ArcGISClient(
                         "message": "Autenticazione fallita: nessun token ricevuto",
                     }
             
-            # Step 2: Accesso catalogo
             services = self.list_services(conn)
             
             return {
@@ -677,8 +661,6 @@ class ArcGISClient(
             }
 
 
-    # STILI / RENDERER
-
     def _renderer_update_result(
         self,
         conn: ArcGISConnectionInfo,
@@ -699,10 +681,8 @@ class ArcGISClient(
         self.authenticate(conn)
         referer_headers = {"Referer": conn.server_url}
 
-        # Ricava admin URL dal layer URL
         admin_url = layer_url.replace("/rest/services/", "/rest/admin/services/")
 
-        # Estrai layer ID dall'URL (ultimo segmento numerico
         parts = layer_url.rstrip("/").split("/")
         layer_id = int(parts[-1]) if parts[-1].isdigit() else 0
 
@@ -713,7 +693,6 @@ class ArcGISClient(
             }]
         }
 
-        # L'admin URL è il service, non il layer
         service_admin_url = "/".join(admin_url.split("/")[:-1]) if parts[-1].isdigit() else admin_url
 
         data = {
@@ -812,8 +791,6 @@ class ArcGISClient(
             layer_url,
             drawing_info,
         ).to_compat_dict()
-
-    # SERVICE / ITEM LIFECYCLE
 
     def _portal_sharing_base_url(self, conn: ArcGISConnectionInfo) -> str:
         """Return the portal sharing REST base for an ArcGIS connection."""

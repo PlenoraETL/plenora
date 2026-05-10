@@ -86,9 +86,7 @@ const ImdfPublisherNode = memo(({ data, id }) => {
 
   // Esito ultimo publish (letto reattivamente dallo store).
   const lastResult = imdfStore?.publish || null;
-
-  // ── Carica connessioni ArcGIS ───────────────────────────────────
-  useEffect(() => {
+useEffect(() => {
     let cancelled = false;
     (async () => {
       setLoadingConns(true);
@@ -103,9 +101,7 @@ const ImdfPublisherNode = memo(({ data, id }) => {
     })();
     return () => { cancelled = true; };
   }, []);
-
-  // ── Carica folder quando cambia connessione ────────────────────
-  useEffect(() => {
+useEffect(() => {
     // RB.7.C: skip API call quando la connection e' marcata access_denied
     // dal backend (eviterebbe 404 a vuoto su listFolders).
     if (isAccessDenied) { setFolders([]); return; }
@@ -129,9 +125,7 @@ const ImdfPublisherNode = memo(({ data, id }) => {
 
   const isValid = !isAccessDenied && connectionId && (fsNameTemplate || '').trim().length > 0;
   const canPublish = isValid && !!bundleTaskId && !publishing;
-
-  // ── Avvia pubblicazione ──────────────────────────────────────────
-  const handlePublish = async () => {
+const handlePublish = async () => {
     if (!canPublish) return;
     setPublishing(true);
     setPublishProgress(0);
@@ -210,9 +204,7 @@ const ImdfPublisherNode = memo(({ data, id }) => {
   const publishTooltip = disabledReasons.length > 0
     ? `Manca: ${disabledReasons.join(', ')}`
     : `Pubblica su ArcGIS (${publishMode})`;
-
-  // ── Apri modal validazione e lancia la call ─────────────────────
-  const handleValidate = async () => {
+const handleValidate = async () => {
     if (!canPublish) return;
     setValidateOpen(true);
     setValidateLoading(true);

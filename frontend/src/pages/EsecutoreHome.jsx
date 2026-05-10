@@ -26,8 +26,6 @@ import EseguibileExecuteWizard from '../components/eseguibili/EseguibileExecuteW
 import ChangePasswordModal from '../components/ChangePasswordModal';
 import { useTheme } from '../hooks/useTheme';
 import './EsecutoreHome.css';
-
-// ── Logo Plenora (compact, theme-aware) ──────────────────────────────────
 function Logo() {
   const { theme } = useTheme();
   const isDark = theme !== 'light';
@@ -41,8 +39,6 @@ function Logo() {
     </svg>
   );
 }
-
-// ── Card di un eseguibile ─────────────────────────────────────────────────
 function EseguibileCard({ item, onRun }) {
   return (
     <div className="esh__card" onClick={() => onRun(item)}>
@@ -69,8 +65,6 @@ function EseguibileCard({ item, onRun }) {
     </div>
   );
 }
-
-// ── Main ─────────────────────────────────────────────────────────────────
 function EsecutoreHome() {
   const navigate = useNavigate();
   const toast = useToast();
@@ -127,8 +121,7 @@ function EsecutoreHome() {
   return (
     <div className="esh">
       <canvas ref={canvasRef} className="esh__hex-bg" />
-      {/* ── TOP BAR minimale ── */}
-      <header className="esh__topbar">
+<header className="esh__topbar">
         <div className="esh__topbar-left">
           <Logo />
         </div>
@@ -154,18 +147,14 @@ function EsecutoreHome() {
           </button>
         </div>
       </header>
-
-      {/* ── HERO ── */}
-      <div className="esh__hero">
+<div className="esh__hero">
         <h1 className="esh__hero-title">Le tue azioni disponibili</h1>
         <p className="esh__hero-subtitle">
           Seleziona un'azione per caricare i tuoi dati e ottenere il risultato.
           I file caricati ed elaborati non vengono conservati sulla piattaforma.
         </p>
       </div>
-
-      {/* ── LISTA ── */}
-      <main className="esh__main">
+<main className="esh__main">
         {loading ? (
           <div className="esh__loading">Caricamento azioni disponibili…</div>
         ) : items.length === 0 ? (
@@ -219,18 +208,14 @@ function EsecutoreHome() {
           </>
         )}
       </main>
-
-      {/* ── Wizard di esecuzione (modal) ── */}
-      {selectedItem && (
+{selectedItem && (
         <EseguibileExecuteWizard
           eseguibileId={selectedItem.id}
           onClose={() => setSelectedItem(null)}
           onAfterDownload={handleAfterDownload}
         />
       )}
-
-      {/* ── Cambio password (modal) ── */}
-      {showPwdModal && (
+{showPwdModal && (
         <ChangePasswordModal onClose={() => setShowPwdModal(false)} />
       )}
     </div>

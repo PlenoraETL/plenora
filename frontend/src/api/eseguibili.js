@@ -59,9 +59,6 @@ export const deleteEseguibile = async (id) => {
  * @returns {Promise<{file_id, detected_columns, row_count, auto_mapping, preview_rows}>}
  */
 export const analyzeUpload = async (eseguibileId, file) => {
-  // B3 Phase 4: pre-check size lato client; il backend cappa a
-  // settings.MAX_FILE_SIZE (B1 Phase 4 ha esteso il guard a
-  // analyze-upload via app.shared.upload_guards).
   assertFileSize(file);
 
   const fd = new FormData();

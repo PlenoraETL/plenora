@@ -41,10 +41,6 @@ import {
  *   P1 - nessuna colonna visibile (SOURCE_NO_VISIBLE_COLUMNS)
  */
 
-// ============================================================
-// HELPERS
-// ============================================================
-
 function getNodesConnectedToResult(resultId, edges) {
   const connected = new Set();
   const queue = [resultId];
@@ -86,10 +82,6 @@ function hasGeometryInPath(connectedIds, nodes) {
   }
   return false;
 }
-
-// ============================================================
-// VALIDATORI PER CATEGORIA
-// ============================================================
 
 function validateStructure(nodes, edges) {
   const issues = [];
@@ -461,10 +453,6 @@ function validateOrphans(nodes, edges, connectedToResult, registry = null) {
 
   return issues;
 }
-
-// ============================================================
-// FUNZIONE PRINCIPALE
-// ============================================================
 
 /**
  * Valida il canvas MANIPOLA.

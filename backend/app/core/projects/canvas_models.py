@@ -269,11 +269,11 @@ class Edge(BaseModel):
     Rappresenta una relazione JOIN tra tabelle o il collegamento verso
     il nodo di output.
 
-    C11: id/source/target sono obbligatori e stringhe non-vuote.
+    id/source/target sono obbligatori e stringhe non-vuote.
     sourceHandle/targetHandle sono metadata ReactFlow opzionali
     tollerati (il frontend li invia a volte con l'edge grezzo).
 
-    Nota design (C11-nit): mantieniamo deliberatamente il default
+    Manteniamo deliberatamente il default
     Pydantic `extra="ignore"` invece di `extra="forbid"` raccomandato
     dal finding. Motivo: il serializer frontend al
     `frontend/src/utils/canvasSerializer.js:227` ritorna il raw edge
@@ -288,11 +288,6 @@ class Edge(BaseModel):
     id: str = Field(..., min_length=1)
     source: str = Field(..., min_length=1)
     target: str = Field(..., min_length=1)
-    # C11-nit: "cross" aggiunto. Il query_generator rifiuta CROSS JOIN
-    # impliciti (edge mancante) ma suggerisce all'utente di esplicitarlo
-    # via join_type="cross" — che senza questo valore nella Literal
-    # sarebbe impossibile da configurare (ValidationError a costruzione
-    # dell'Edge). Ora il contract runtime-message e' coerente col model
     join_type: Optional[Literal[
         "left", "inner", "right", "outer", "cross",
         "output", "carica", "carica_arcgis", "imdf_publisher",
@@ -300,9 +295,6 @@ class Edge(BaseModel):
     source_column: Optional[str] = ""
     target_column: Optional[str] = ""
 
-    # C11: metadata ReactFlow tipicamente presenti negli edge del frontend
-    # Dichiariamoli esplicitamente (invece di lasciarli come extra silent-dropped
-    # cosi' passano la validazione typed senza perdite informative
     sourceHandle: Optional[str] = None
     targetHandle: Optional[str] = None
 

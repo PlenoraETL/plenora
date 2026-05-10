@@ -71,7 +71,6 @@ describe('projects api contract', () => {
     expect(result).toEqual({ success: true });
   });
 
-  // ─── C3.4 Phase 4: per-file download (boundary helper for ExecutionModal) ──
 
   it('downloadProjectFile GETs /projects/:id/download?file=... with responseType blob', async () => {
     const blob = new Blob(['error data']);

@@ -1,7 +1,7 @@
 """
 S2 — introspection fail-fast su DatabaseWriter.
 
-Pre-fix: le 4 funzioni `table_exists`, `get_existing_columns`,
+Previous behavior: le 4 funzioni `table_exists`, `get_existing_columns`,
 """
 
 from __future__ import annotations
@@ -62,8 +62,8 @@ def _boom() -> OperationalError:
 
 
 def test_table_exists_propagates_engine_error():
-    """Pre-fix: restituiva False (confuso con 'tabella non esiste').
-    Post-fix: alza OperationalError."""
+    """Previous behavior: restituiva False (confuso con 'tabella non esiste').
+    Current contract: alza OperationalError."""
     writer = _make_writer()
     writer.engine.connect.side_effect = _boom()
 
@@ -72,8 +72,8 @@ def test_table_exists_propagates_engine_error():
 
 
 def test_get_existing_columns_propagates_engine_error():
-    """Pre-fix: restituiva [] (confuso con 'tabella senza colonne').
-    Post-fix: alza OperationalError."""
+    """Previous behavior: restituiva [] (confuso con 'tabella senza colonne').
+    Current contract: alza OperationalError."""
     writer = _make_writer()
     writer.engine.connect.side_effect = _boom()
 
@@ -82,8 +82,8 @@ def test_get_existing_columns_propagates_engine_error():
 
 
 def test_get_schemas_propagates_engine_error():
-    """Pre-fix: restituiva [] (confuso con 'DB senza schemi').
-    Post-fix: alza OperationalError."""
+    """Previous behavior: restituiva [] (confuso con 'DB senza schemi').
+    Current contract: alza OperationalError."""
     writer = _make_writer()
     writer.engine.connect.side_effect = _boom()
 
@@ -92,8 +92,8 @@ def test_get_schemas_propagates_engine_error():
 
 
 def test_get_tables_propagates_engine_error():
-    """Pre-fix: restituiva [] (confuso con 'schema vuoto').
-    Post-fix: alza OperationalError."""
+    """Previous behavior: restituiva [] (confuso con 'schema vuoto').
+    Current contract: alza OperationalError."""
     writer = _make_writer()
     writer.engine.connect.side_effect = _boom()
 
@@ -108,7 +108,7 @@ def test_validate_reports_table_exists_failure_as_false_with_reason():
     """La raise di table_exists() dentro validate() non deve fuoriuscire:
     validate() cattura e ritorna (False, messaggio di verifica fallita).
 
-    Distingue il messaggio post-fix da quello pre-fix: pre-fix diceva
+    Distingue il messaggio Current contract da quello Previous behavior: Previous behavior diceva
     'la tabella non esiste', ora deve dichiarare esplicitamente che
     la *verifica* e' fallita (cosi' il client non confonde i due casi).
     """
@@ -128,7 +128,7 @@ def test_validate_reports_table_exists_failure_as_false_with_reason():
 def test_validate_reports_get_columns_failure_as_false_with_reason():
     """Se la tabella esiste ma la lettura colonne fallisce, validate()
     deve ritornare (False, motivo) e non mascherare l'errore come
-    'mapping non valido' (che era il comportamento pre-fix: columns=[]
+    'mapping non valido' (che era il comportamento Previous behavior: columns=[]
     faceva saltare il check 'if existing_col_names:' silenziosamente).
     """
     writer = _make_writer(write_mode=WriteMode.APPEND)

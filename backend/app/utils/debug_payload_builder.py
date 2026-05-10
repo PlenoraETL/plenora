@@ -34,7 +34,7 @@ class DebugPayloadBuilder:
                 "traceback": traceback_str,
                 "occurred_at_ms": elapsed_ms,
             },
-            input_sample=input_sample, # opzionale
+            input_sample=input_sample,
         )
     """
 
@@ -78,8 +78,6 @@ class DebugPayloadBuilder:
 
         return payload
 
-    # PIPELINE CONTEXT
-
     def _build_pipeline_context(self, project_id: str, steps: list) -> dict:
         """
         Legge metadata e canvas dal DB config (PG) e costruisce il contesto pipeline.
@@ -115,7 +113,6 @@ class DebugPayloadBuilder:
             return "non disponibile"
 
         try:
-            # canvas_raw può essere un dict o un oggetto CanvasState
             if hasattr(canvas_raw, "nodes"):
                 nodes = canvas_raw.nodes
                 edges = canvas_raw.edges
@@ -125,7 +122,6 @@ class DebugPayloadBuilder:
             else:
                 return "non disponibile"
 
-            # Mappa id → label leggibile
             node_labels = {}
             for n in nodes:
                 nid = n.id if hasattr(n, "id") else n.get("id", "")
@@ -134,22 +130,18 @@ class DebugPayloadBuilder:
                 label = (data or {}).get("label") or ntype or nid
                 node_labels[nid] = label
 
-            # Ordina i nodi seguendo gli edge (topological order approssimativo
             edge_map = {}
             for e in edges:
                 src = e.source if hasattr(e, "source") else e.get("source", "")
                 tgt = e.target if hasattr(e, "target") else e.get("target", "")
                 edge_map[src] = tgt
 
-            # Trova il nodo radice (nessuno punta a lui
             targets = set(edge_map.values())
             sources = set(edge_map.keys())
             roots = sources - targets
             if not roots:
-                # Fallback: lista nomi dei nodi nell'ordine in cui compaiono
                 return " → ".join(node_labels.values())
 
-            # Traversa la catena
             chain = []
             current = next(iter(roots))
             visited = set()
@@ -163,8 +155,6 @@ class DebugPayloadBuilder:
         except Exception as e:
             logger.warning(f"DebugPayloadBuilder: errore canvas summary: {e}")
             return "non disponibile"
-
-    # FAILING NODE CONFIG
 
     def _extract_node_config(self, project_id: str, node_id: Optional[str]) -> dict:
         """

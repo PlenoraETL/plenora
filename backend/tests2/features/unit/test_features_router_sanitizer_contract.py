@@ -1,7 +1,7 @@
 """
 Integration contract test: sanitizer applicato sui 7 punti HIGH RISK
 
-di ``features/routes.py`` (Batch Fix 6.2).
+di ``features/routes.py`` ().
 """
 
 from __future__ import annotations

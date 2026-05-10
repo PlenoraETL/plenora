@@ -100,7 +100,7 @@ def test_disclosure_promotion_constant_and_message(
 ) -> None:
     """Per ogni decisione di policy auth-domain: la costante catalog
     appare e il messaggio italiano user-facing e' preservato in
-    `disclosure.py` (il policy boundary post-batch 018)."""
+    `disclosure.py` (il policy boundary Current contract 018)."""
     text = _read(_DISCLOSURE_PY)
     assert f"error_codes.{const_name}" in text, (
         f"Costante `error_codes.{const_name}` non referenziata in "
@@ -116,7 +116,7 @@ def test_disclosure_promotion_constant_and_message(
 
 
 _OWNERSHIP_PY_DISCLOSURE_LOCKS: List[Tuple[str, str]] = [
-    # ACCESS_DENIED gia' migrato (batch 014); ownership.py ora delega
+    # ACCESS_DENIED gia' migrato (current contract); ownership.py ora delega
     # via `disclosure.access_denied()`.
     ("access_denied", "Accesso negato"),
     # AUTH_HIERARCHICAL_OWNER_REQUIRED (audit 24, assert_can_modify
@@ -245,7 +245,7 @@ def test_invariant_admin_reset_delete_uniform_403_access_denied() -> None:
     `access_denied` (403). Solo superadmin riceve un 404 distinto.
 
     The dispatch is encoded in `disclosure.admin_target_not_visible`.
-    Il caller (auth.py pre-batch 020, ora `users_router.py` post
+    Il caller (auth.py Previous contract 020, ora `users_router.py` post
     BE-GO-READY-AUTH-ENGINE-003) deve invocare il dispatcher in
     ENTRAMBI reset_password e delete_user — non puo' inline-splittare
     fra USER_NOT_FOUND e ACCESS_DENIED."""

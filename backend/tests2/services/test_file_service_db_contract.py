@@ -271,7 +271,7 @@ def test_read_blob_from_s3_downloads_and_cleans_temp(monkeypatch, tmp_path):
     file creato.
 
     BE-GO-READY-RESOURCE-ENGINE-006 (R-005.1 closure): il branch S3
-    e' bytes-first puro post-batch â€” niente piu' tempfile roundtrip
+    e' bytes-first puro Current contract â€” niente piu' tempfile roundtrip
     (`download(key, tmp_path)` + `read_bytes()` + `unlink`). Il test
     verifica anche che NESSUN tempfile venga creato durante la
     chiamata.
@@ -342,7 +342,7 @@ def test_read_blob_from_s3_downloads_and_cleans_temp(monkeypatch, tmp_path):
     import app.db.pg_connection as _pg
     monkeypatch.setattr(_pg, "fetchone", _fake_fetchone)
 
-    # Spy su tempfile.NamedTemporaryFile: post-batch il branch S3
+    # Spy su tempfile.NamedTemporaryFile: Current contract il branch S3
     # non DEVE creare alcun tempfile (regression guard R-005.1).
     created_temps: list[Path] = []
     real_named = tempfile.NamedTemporaryFile
@@ -442,8 +442,8 @@ def test_read_blob_from_s3_cleanup_temp_on_download_exception(monkeypatch):
     assert out is None
 
     # Post-RESOURCE-ENGINE-006: il branch S3 NON crea piu' tempfile,
-    # neanche su exception path. Pre-batch il test verificava che il
-    # temp creato fosse poi unlink-ato; post-batch zero tempfile esiste.
+    # neanche su exception path. Previous contract il test verificava che il
+    # temp creato fosse poi unlink-ato; Current contract zero tempfile esiste.
     assert not created_temps, (
         f"Regressione R-005.1: tempfile creato sull'exception path "
         f"({created_temps}) â€” il branch storage_key e' bytes-first."

@@ -1,8 +1,4 @@
-"""
-load_secrets.py — wrapper exec che popola os.environ da secrets backend.
-
-Chiude C1-residuo: i systemd unit del backup/test-restore non dipendono
-"""
+"""Wrapper exec che popola os.environ da secrets backend."""
 
 from __future__ import annotations
 
@@ -13,9 +9,7 @@ from pathlib import Path
 from typing import Dict
 
 
-# Script standalone (invocato da systemd o CLI): aggiungi backend root
-# a sys.path cosi' `app.*` e' importabile come package normale.
-# Un unico hack al top del modulo, non scattered nelle funzioni.
+# Standalone script: add backend root so `app.*` imports work from systemd/CLI.
 _BACKEND_ROOT = Path(__file__).resolve().parent.parent
 if str(_BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(_BACKEND_ROOT))

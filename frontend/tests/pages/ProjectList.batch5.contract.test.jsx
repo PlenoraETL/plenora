@@ -5,26 +5,6 @@ import { vi } from 'vitest';
 
 import ProjectList from '../../src/pages/ProjectList';
 
-/**
- * Batch 5 di FE-TEST-001 su ProjectList — gap ad alto valore non
- * coperti dal contract test esistente (ProjectList.contract.test.jsx,
- * focalizzato su create-estrai e routing card → editor).
- *
- * Aree:
- *   1. delete success path (confirm + deleteProject + reload)
- *   2. delete cascade 409 (handleCascade409 + formatCascadeDependencies
- *      + toast.error TTL 10s) — integrazione page-level, non testata
- *      altrove
- *   3. delete 500 project_cleanup_partial (branch dedicato — toast con
- *      "Ritenta o contatta admin", invariante project_preserved:true)
- *   4. create validation blocks empty name
- *   5. search filter restringe la lista per nome
- *   6. role gating: viewer NON vede "+ Nuovo Progetto" ne' "+ Nuovo"
- *      di sezione (can.createProject = isUserOrAbove)
- *
- * Nessun refactor della pagina, nessun touch a useTheme/ThemeToggle,
- * nessuna modifica backend/docs/audits.
- */
 
 const { apiMock, featureMock, filesMock, schedulesMock, datasourcesMock,
         httpMock, toastMock, navigateMock, authState } = vi.hoisted(() => ({
@@ -105,14 +85,11 @@ const sampleProject = {
   last_status: 'success',
 };
 
-describe('ProjectList — batch 5', () => {
+describe('ProjectList contract', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     authState.user = { role: 'admin', username: 'tester', group_id: 'grp-1' };
   });
-
-  // ── 1. Delete success ────────────────────────────────────────────────
-
   it('deletes a project after confirm and reloads the dashboard data', async () => {
     mockDashboardData({
       projects: [sampleProject],
@@ -122,10 +99,7 @@ describe('ProjectList — batch 5', () => {
 
     render(<ProjectList />);
     await screen.findByText('Orders ETL');
-
-    // Trash icon su ProjectCard.
     await userEvent.click(screen.getByRole('button', { name: '🗑' }));
-    // ConfirmDialog button "Elimina" (confirmText nel componente).
     await userEvent.click(
       await screen.findByRole('button', { name: 'Elimina' }),
     );
@@ -133,13 +107,9 @@ describe('ProjectList — batch 5', () => {
     await waitFor(() =>
       expect(apiMock.deleteProject).toHaveBeenCalledWith('proj-1'),
     );
-    // Reload: listProjects chiamata 2 volte (initial + dopo delete).
     expect(apiMock.listProjects).toHaveBeenCalledTimes(2);
     expect(toastMock.error).not.toHaveBeenCalled();
   });
-
-  // ── 2. Delete cascade 409 ────────────────────────────────────────────
-
   it('shows formatted cascade dependencies on 409 delete (eseguibili + downstream projects)', async () => {
     mockDashboardData({
       projects: [sampleProject],
@@ -180,9 +150,6 @@ describe('ProjectList — batch 5', () => {
     // No reload triggered (handleDeleteProject early return).
     expect(apiMock.listProjects).toHaveBeenCalledTimes(1);
   });
-
-  // ── 3. Delete 500 project_cleanup_partial ────────────────────────────
-
   it('shows the cleanup_partial recovery message on 500 project_cleanup_partial', async () => {
     mockDashboardData({
       projects: [sampleProject],
@@ -218,9 +185,6 @@ describe('ProjectList — batch 5', () => {
     // Reload non triggered: il branch fa early return dopo toast.
     expect(apiMock.listProjects).toHaveBeenCalledTimes(1);
   });
-
-  // ── 4. Create validation: empty name ─────────────────────────────────
-
   it('blocks createProject with an empty name and warns the user', async () => {
     mockDashboardData({
       connections: [{ id: 'conn-1', name: 'Main DB', database: 'urby' }],
@@ -231,7 +195,6 @@ describe('ProjectList — batch 5', () => {
     await userEvent.click(
       await screen.findByRole('button', { name: /nuovo progetto/i }),
     );
-    // Modal aperto: clicca "Crea Progetto" senza compilare il nome.
     await userEvent.click(
       await screen.findByRole('button', { name: /crea progetto/i }),
     );
@@ -239,9 +202,6 @@ describe('ProjectList — batch 5', () => {
     expect(toastMock.warning).toHaveBeenCalledWith('Inserisci un nome');
     expect(apiMock.createProject).not.toHaveBeenCalled();
   });
-
-  // ── 5. Search filter ─────────────────────────────────────────────────
-
   it('filters the project list by the search input', async () => {
     mockDashboardData({
       projects: [
@@ -261,9 +221,6 @@ describe('ProjectList — batch 5', () => {
     expect(screen.getByText('Apple Pipeline')).toBeInTheDocument();
     expect(screen.queryByText('Banana Pipeline')).not.toBeInTheDocument();
   });
-
-  // ── 6. Role gating: viewer ───────────────────────────────────────────
-
   it('hides "+ Nuovo Progetto" and section "+ Nuovo" buttons for viewer role', async () => {
     authState.user = { role: 'viewer', username: 'v', group_id: 'grp-1' };
     mockDashboardData({
@@ -282,7 +239,6 @@ describe('ProjectList — batch 5', () => {
     expect(
       screen.queryByRole('button', { name: /^＋\s*Nuovo$/ }),
     ).not.toBeInTheDocument();
-    // Sanity: il viewer puo' comunque vedere card e bottoni Apri.
     expect(screen.getByText('Orders ETL')).toBeInTheDocument();
     expect(
       screen.getByRole('button', { name: /apri/i }),

@@ -1,7 +1,7 @@
 """
-[phase-2-err][batch9] C1 â€” sanitize str(e) in _execute_carica_if_present.
+C1 â€” sanitize str(e) in _execute_carica_if_present.
 
-Fix S3 / F1 dell'audit Batch 9: il boundary `OrchestratorService._execute_carica_if_present`
+Fix S3 / F1 dell'Audit finding: il boundary `OrchestratorService._execute_carica_if_present`
 """
 
 from __future__ import annotations

@@ -22,7 +22,7 @@ def mock_pg_conn(monkeypatch):
     """Sostituisce `transaction()` con un mock che registra l'ordine
     delle SQL eseguite sul cursor.
 
-    BE Batch 098: la funzione atomica e' esercitata attraverso il boundary
+    BE current contract: la funzione atomica e' esercitata attraverso il boundary
     project-domain `app.core.projects.db`."""
     from app.core.projects import db as project_db
     from contextlib import contextmanager
@@ -251,13 +251,13 @@ def test_project_service_propagates_atomic_exception(monkeypatch):
     """Se la funzione atomica solleva (canvas corrotto, DB error, ecc.),
     il service deve PROPAGARE al caller, non ingoiare con `return False`.
 
-    Regressione diretta del baco: pre-fix, `update_project_columns_metadata`
+    Regressione diretta del baco: Previous behavior, `update_project_columns_metadata`
     aveva un try/except Exception â†’ ritornava False. L'executor ESTRAI
     non vedeva l'eccezione, il retry su transient non partiva, nessun
     `ColumnsMetadataSaveError` veniva mai sollevato, e `res` risultava
     scritto come se fosse successo (falso positivo).
 
-    Post-fix il service propaga: i caller (ESTRAI executor con retry,
+    Current contract il service propaga: i caller (ESTRAI executor con retry,
     oppure altri caller con try/except locale) decidono cosa fare.
     """
     from app.core.projects.service import ProjectService
@@ -276,7 +276,7 @@ def test_project_service_propagates_atomic_exception(monkeypatch):
 
 def test_project_service_propagates_transient_db_error(monkeypatch):
     """OperationalError (transient) propagato al caller â†’ il retry
-    dell'executor ESTRAI puo' agire. Pre-fix veniva ingoiato."""
+    dell'executor ESTRAI puo' agire. Previous behavior veniva ingoiato."""
     from app.core.projects.service import ProjectService
     from app.core.projects import db as project_db
     import psycopg2

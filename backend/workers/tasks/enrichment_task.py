@@ -40,14 +40,8 @@ def _merge_batch_parallel_node_results(
     il merge column-by-column non e' applicabile e produrrebbe corruption
     silenziosa.
 
-    RB.#14 (2026-04-27): pre-fix il merge era avvolto da try/except generico
-    che catturava il ValueError pandas (`Length of values (X) does not match
-    length of index (Y)`), emetteva warning, e proseguiva senza le colonne
-    arricchite del nodo problematico. Il task chiudeva success=True con
-    `rows_processed=0` (PDF generato senza arricchimenti). Post-fix il guard
-    fail-hard solleva RuntimeError diagnostico -> global handler chiude
-    `close_run(success=False)`. Meglio task fallito visibile che success
-    silente con dati persi.
+    Il guard fail-hard evita successi silenziosi con colonne arricchite
+    mancanti quando un nodo cambia cardinalita'.
 
     Args:
         common_input_df: DataFrame di input condiviso dai nodi del batch.
@@ -106,7 +100,7 @@ def execute_enrichment_task(
     """
     Task asincrono per eseguire l'arricchimento dati.
 
-    Idempotency (C4 round 3): se `run_id` viene passato dall'esterno
+    Idempotency: se `run_id` viene passato dall'esterno
     (scheduler, retry-handler UI) e in intermediate.runs esiste gia'
     un record con status='completed' per quel run_id, il task SKIPPA
     l'esecuzione e ritorna un risultato cached. Stesso pattern del
@@ -137,9 +131,6 @@ def execute_enrichment_task(
     """
     task_id = self.request.id
 
-    # C4 round 3: idempotency guard. Se run_id e' passato dall'esterno
-    # scheduler con schedule_run_id, UI retry-handler) ed e' gia'
-    # completato in intermediate.runs, skip senza ri-eseguire
     if run_id is not None:
         from app.shared.idempotency import is_already_completed
         if is_already_completed(run_id):
@@ -157,7 +148,6 @@ def execute_enrichment_task(
 
     start_time = time.time()
 
-    # N9: re-check permessi user al pickup (helper condiviso
     # Per is_eseguibile, skip: gli eseguibili hanno flusso di auth
     # separato (token eseguibile) e non passano per user_id interattivo
     if not is_eseguibile:
@@ -329,10 +319,9 @@ def execute_enrichment_task(
             Parametri:
                 input_override: se non None, il nodo api_enrich lo usa come
                     input_df invece di leggere node_results[input_edge.source].
-                    Serve nel caso dei dove tutti i nodi del
-                    lo stesso input (il predecessore comune
-                    del batch), anche se topologicamente nel canvas sono
-                    concatenati (pattern pass-through).
+                    Serve quando tutti i nodi del batch condividono lo
+                    stesso input (il predecessore comune), anche se
+                    topologicamente nel canvas sono concatenati.
 
             Early termination: solleva _EarlyTaskReturn(payload) per errori
             bloccanti (API mancante, continue_on_error=False con errori,
@@ -440,7 +429,6 @@ def execute_enrichment_task(
                     "error_report": error_report_file,
                 })
 
-            # ── execute_if: skip condizionale ──
             _input_edge_check = next((e for e in edges if e["target"] == node_id), None)
             _input_df_check = node_results.get(_input_edge_check["source"]) if _input_edge_check else None
             if not should_execute_node(node_data, _input_df_check):
@@ -449,7 +437,6 @@ def execute_enrichment_task(
                 node_results[node_id] = _input_df_check
                 return
 
-            # ── REST FILE: invia file a servizio HTTP remoto, riceve binario ──
             if api_config.get("connection_type") == "rest_file":
                 api_name = api_config.get("name", api_id)
                 update_task_progress(self, node_progress, f"Esecuzione {api_name} (REST file)...", task_id=task_id)
@@ -478,7 +465,6 @@ def execute_enrichment_task(
                     result = api_connection_service._execute_api_generator(api_config, input_df)
                     node_results[node_id] = result
                 else:
-                    # Enricher
                     input_edge = next((e for e in edges if e["target"] == node_id), None)
 
                     node_parameters = node_data.get("parameters") or api_config.get("parameters") or []
@@ -490,9 +476,8 @@ def execute_enrichment_task(
                     if not input_edge and needs_input and input_override is None:
                         raise ValueError(f"Nodo {node_id} non ha input")
 
-                    # Se il chiamante ha fornito un input_override (esecuzione
-                    # in ), lo usiamo come input del nodo
-                    # invece di leggere da node_results[input_edge.source
+                    # Se il chiamante ha fornito un input_override, lo usa
+                    # invece di leggere da node_results[input_edge.source].
                     # Questo e' il meccanismo con cui i nodi di un batch
                     # condividono lo stesso DataFrame di partenza anche quando
                     # topologicamente nel canvas sono concatenati
@@ -596,7 +581,6 @@ def execute_enrichment_task(
                                 "error_report": error_report_file,
                             })
 
-                        # ── AUTO-SCHEMA ──
                         if not api_config_local.get("output_mapping") and executor.detected_column_types:
                             detected = executor.detected_column_types
                             new_schema = [
@@ -663,9 +647,8 @@ def execute_enrichment_task(
 
             # Parallel: N nodi api_enrich indipendenti
             # Modello "fan-out artificiale": anche se topologicamente nel
-            # canvas i nodi del essere concatenati (es
-            # A→B→C pass-through), logicamente consumano colonne gia'
-            # prodotte *prima* del aggiungono colonne disgiunte
+            # canvas i nodi possono essere concatenati, logicamente consumano
+            # colonne gia' prodotte a monte e aggiungono colonne disgiunte.
             # Per eseguirli in parallelo devono tutti vedere lo stesso
             # input_df: quello del predecessore del PRIMO nodo del batch
             first_node_id = node_ids[0]
@@ -754,24 +737,20 @@ def execute_enrichment_task(
         if final_result is None:
             raise ValueError("Nessun risultato finale")
         
-        # ── EXECUTABLE FILE RESULT ──
         if isinstance(final_result, dict) and final_result.get("is_file_result"):
 
             src_path = Path(final_result["output_path"]).resolve()
             elapsed_time = time.time() - start_time
             update_task_progress(self, 100, "Completato!", task_id=task_id)
 
-            # Rinomina il file con il nome dal nodo result (se specificato
             src_ext = src_path.suffix  # es. .csv
             if output_filename and output_filename != "output":
-                # Assicura che l'estensione sia coerente
                 named = Path(output_filename)
                 final_name = named.stem + (named.suffix or src_ext)
                 renamed_path = src_path.parent / final_name
                 src_path.rename(renamed_path)
                 src_path = renamed_path
 
-            # B-BE-38: valida output in base all'estensione
             ext = src_path.suffix.lower()
             rows_count = 0
             try:
@@ -804,20 +783,10 @@ def execute_enrichment_task(
                     features = data.get('features', []) if isinstance(data, dict) else []
                     rows_count = len(features)
 
-                # Per zip, bin, altri: solo controllo dimensione (già fatto sopra
-
             except (UnicodeDecodeError, ValueError, Exception) as val_err:
                 src_path.unlink(missing_ok=True)
                 raise ValueError(f"Output non valido ({ext}): {val_err}") from val_err
 
-            # NOTA: la pubblicazione automatica su ArcGIS (chiamata a
-            # upload_imdf_layers dal modulo `app.core.imdf`) qui era stata
-            # cablata in modo provvisorio leggendo i campi `imdf_*` dal nodo
-            # result. E' stata rimossa: la pubblicazione su ArcGIS sara'
-            # gestita da un nodo dedicato (publisher) in una fase futura
-            # Il modulo `app.core.imdf` resta disponibile per quel reuse
-
-            # ── ESTRAZIONE METADATI IMDF ─────────────────────────────────
             # Se nel canvas c'e' almeno un nodo api_enrich con
             # output_kind='imdf', il file zip prodotto e' un IMDF: estraiamo
             # manifest.json + validation.json e li includiamo inline nel task
@@ -836,7 +805,6 @@ def execute_enrichment_task(
                     from app.core.imdf.persist import persist_imdf_bundle_to_disk
                     bundle = extract_imdf_zip(str(src_path))
 
-                    # ── Persisti il bundle su disco ────────────────────
                     # NON serializziamo piu' geojson/manifest/validation/renderers
                     # nel task result: restano tutti sul filesystem in
                     # IMDF_BUNDLES_DIR/{task_id}/, il frontend li carica
@@ -856,14 +824,6 @@ def execute_enrichment_task(
                         )
                         # cleanup già eseguito dal finally interno di persist
 
-                    # ── Push S3 (R2 multi-host) ──────────────────────────
-                    # D3 commit 4 (R2): orchestrazione esplicita persist ->
-                    # storage. Pre-commit la chiamata viveva inline dentro
-                    # persist (inversione di dep loader/persist <- storage
-                    # Post-commit il worker e' l'orchestratore. Best-effort
-                    # identico al pre-commit: failure logga warning ma non
-                    # blocca il task (il bundle e' comunque servibile dal
-                    # nodo corrente via local cache fino a TTL
                     if bundle_persisted_path:
                         try:
                             from app.core.imdf import storage as _imdf_storage
@@ -876,7 +836,6 @@ def execute_enrichment_task(
                                 f"bundle disponibile solo sul nodo corrente): {_save_e}"
                             )
 
-                    # ── Task result SLIM ──────────────────────────────
                     # Solo informazioni minime che servono al frontend
                     # per sapere "esiste un bundle IMDF" + link per fetch
                     # lazy. I dettagli vengono da GET /api/imdf/bundles/{id}
@@ -965,7 +924,6 @@ def execute_enrichment_task(
             
             logger.info(f"[Task {task_id}] Executable completato in {elapsed_time:.2f}s - {src_path.name}")
 
-            # ── CARICA anche nel branch file-result (saltato per eseguibili pubblicati) ──
             if not is_eseguibile:
                 try:
                     carica_info = _trigger_carica_if_present(
@@ -984,13 +942,10 @@ def execute_enrichment_task(
             _cleanup_temp_file_sources(cleanup_file_source_ids, task_id)
             return result
         
-        # ── DATAFRAME RESULT (flusso standard) ──
         final_df = final_result
         
         if final_df is None:
             raise ValueError("Nessun risultato finale")
-        # N14: df vuoto (0 righe) è un risultato valido — non crashare
-        # salva un file con solo l'header
         if hasattr(final_df, "empty") and final_df.empty:
             logger.info(f"[Task {task_id}] DataFrame vuoto (0 righe) — salvo output con solo header")
         
@@ -1045,7 +1000,6 @@ def execute_enrichment_task(
             saved_path = Path(saved["output_filename"])
             logger.info(f"[Task {task_id}] Risultato persistito: {result_id}")
 
-            # B-BE-39: salva columns_metadata nel progetto per uso come project_source
             # Helper condiviso (retry transient + raise non-transient): se fallisce
             # in modo permanente, ColumnsMetadataSaveError propaga al try/except
             # esterno di Celery che marca il task FAILED — pre-fix il warning
@@ -1088,17 +1042,6 @@ def execute_enrichment_task(
 
         logger.info(f"[Task {task_id}] Completato in {elapsed_time:.2f}s - {len(final_df)} righe", project_id=_log_pid)
 
-        # Snapshot result node ARRICCHISCI
-        # passa per `record_final_snapshot`
-        # con module="arricchisci". La policy globale
-        # `INTERMEDIATE_PERSISTENCE_MODE` decide il dimensionamento
-        # default `preview_only` -> 500 righe + hash + meta
-        # Pre-fix: thread daemon che materializzava `final_df.to_dict(full)`
-        # nel thread principale prima del dispatch -> double memory peak
-        # sui DataFrame grandi
-        # Post-fix: chiamata sync. Hash via pandas_hash_v1 senza
-        # materializzare. Lo skip-path o il preview-cap rendono il
-        # costo trascurabile rispetto al df.to_dict(full) precedente
         if _run_id and result_node and not is_eseguibile:
             try:
                 from app.core.intermediate.snapshot import record_final_snapshot
@@ -1145,7 +1088,6 @@ def execute_enrichment_task(
                 duration_ms=_elapsed_ms,
             )
 
-        # ── CARICA: lancia task carica se presenti nodi collegati all'output ──
         # Stessa logica di OrchestratorService._execute_carica_if_present ma qui
         # perché execute_enrichment_task non passa per l'orchestrator
         try:
@@ -1163,7 +1105,6 @@ def execute_enrichment_task(
                 project_id=project_id, exc_info=True
             )
 
-        # ── Cleanup risorse temporanee (es. file source dell'eseguibile) ──
         _cleanup_temp_file_sources(cleanup_file_source_ids, task_id)
 
         return result
@@ -1245,7 +1186,6 @@ def execute_enrichment_task(
         except Exception as e_prog:
             logger.debug(f"progress update fallito: {type(e_prog).__name__}: {e_prog}")
 
-        # ── Cleanup risorse temporanee anche in caso di errore ──
         _cleanup_temp_file_sources(cleanup_file_source_ids, task_id)
 
         # Ritorna dict con errore (serializzabile
@@ -1259,9 +1199,6 @@ def execute_enrichment_task(
             "enrichment_stats": enrichment_stats,
             "error_report": error_report_file,
         }
-
-
-# FUNZIONI HELPER PER IL TASK
 
 
 def _cleanup_temp_file_sources(file_source_ids: Optional[List[str]], task_id: str) -> None:

@@ -6,8 +6,7 @@
  *    (file_fields / static_fields / timeout / output_extension).
  *  - Variant standard: lista parametri + paginazione (per generator).
  *
- * Estratto in `FE-PHASE2-SPLIT-001B`. Presentational + riceve callback
- * di CRUD parametri dal wizard.
+ * Presentational + riceve callback di CRUD parametri dal wizard.
  */
 import React from 'react';
 
@@ -26,9 +25,7 @@ export default function Step2Params({
           <span>⚠️</span><span>{wizardStepError}</span>
         </div>
       )}
-
-      {/* ── REST FILE PROCESSOR: campi multipart + risposta binaria ── */}
-      {formData.connection_type==='rest_file' ? (
+{formData.connection_type==='rest_file' ? (
         <>
           <div className="acm__info-box">📦 Configura i campi multipart che invierai al servizio REST e il formato del file di output.</div>
 

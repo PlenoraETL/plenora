@@ -1,7 +1,7 @@
 """
 Contract test N6 — /api/logs fail-closed su project_id cross-tenant.
 
-Scenario pre-fix:
+Scenario Previous behavior:
 """
 
 from __future__ import annotations

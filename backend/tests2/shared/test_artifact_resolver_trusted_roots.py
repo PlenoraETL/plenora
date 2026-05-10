@@ -1,7 +1,7 @@
 """
-[phase-2-err][batch8] C4 — trusted_roots build fail-closed + breadcrumb.
+C4 — trusted_roots build fail-closed + breadcrumb.
 
-Audit Batch 8 §3.1 S5 / fix F5: `resolver._materialize_from_output_path`
+Audit finding: `resolver._materialize_from_output_path`
 """
 
 from __future__ import annotations
@@ -18,7 +18,7 @@ from app.core.artifacts.types import ArtifactResolutionError, RunArtifactRef
 pytestmark = [pytest.mark.unit, pytest.mark.contract, pytest.mark.regression]
 
 
-# PR #34 P1-B: pattern B2.0 modernization. Sostituisce
+# PR #34 P1-B: pattern B2.0 current contract. Sostituisce
 # `with patch("app.core.artifacts.resolver.logger") as mock_logger`
 # (test logger-bound fragile) con un handler stdlib agganciato al
 # logger reale. `StructuredLogger` ha `propagate=False`, quindi

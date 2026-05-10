@@ -38,7 +38,7 @@ def test_execute_enrichment_no_longer_inline_in_api_connector():
         _BACKEND_ROOT / "app" / "core" / "arricchisci" / "api_connector.py"
     ).read_text(encoding="utf-8")
     forbidden = [
-        # Body markers tipici dell'orchestrator pre-batch.
+        # Body markers tipici dell'orchestrator Previous contract.
         "step_node_ids[0]",
         "compute_parallel_groups(",
         "execute_parallel_enrichers(",

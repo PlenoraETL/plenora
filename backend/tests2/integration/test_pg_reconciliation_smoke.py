@@ -1,7 +1,7 @@
 """
 Reconciliation E2E smoke — PG source -> DatabaseWriter -> PG dest.
 
-T-08 / D2 Phase 3: chiude il gap F-DATA-09 dell'audit data ("nessun
+T-08 / D2 typed context closure: chiude il gap F-DATA-09 dell'audit data ("nessun
 """
 
 from __future__ import annotations

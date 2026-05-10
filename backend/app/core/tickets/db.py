@@ -1,8 +1,4 @@
-"""
-DB service layer — tickets + comments + attachments.
-
-Tabelle in `plenora.*`:
-"""
+"""Database helpers for tickets, comments, and attachments."""
 
 from __future__ import annotations
 
@@ -17,9 +13,6 @@ from app.db.pg_connection import (
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
-
-
-# TICKETS — CRUD
 
 
 @dataclass(frozen=True)
@@ -363,9 +356,6 @@ def counts_by_severity(
     return out
 
 
-# COMMENTS
-
-
 def add_comment(ticket_id: str, author_id: str, body: str) -> CommentRow:
     """Aggiunge un commento + tocca updated_at del ticket."""
     cid = str(uuid.uuid4())
@@ -403,9 +393,6 @@ def list_comments(ticket_id: str) -> List[CommentRow]:
     ]
 
 
-# ATTACHMENTS
-
-
 def link_attachment(
     ticket_id: str,
     file_source_id: str,
@@ -420,7 +407,6 @@ def link_attachment(
         "VALUES (%s, %s, %s, %s, %s)",
         (aid, ticket_id, file_source_id, uploaded_by, now),
     )
-    # Touch ticket updated_at
     execute(
         "UPDATE tickets SET updated_at = %s WHERE id = %s",
         (now, ticket_id),
@@ -465,9 +451,6 @@ def get_attachment(attachment_id: str) -> AttachmentRow | None:
         "SELECT * FROM ticket_attachments WHERE id = %s", (attachment_id,)
     )
     return attachment_row_from_db(row) if row else None
-
-
-# DELETE TICKET (cascade su comments/attachments via FK ON DELETE CASCADE
 
 
 def soft_delete_ticket(ticket_id: str) -> bool:

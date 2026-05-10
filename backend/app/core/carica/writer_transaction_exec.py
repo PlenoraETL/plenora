@@ -23,11 +23,7 @@ from app.core.carica.models import (
 from app.core.carica.writer_batch_loop import run_batched_inserts
 from app.utils.logger import get_logger
 
-# Stesso logger name di `database_writer.py`: i record sono
-# indistinguibili dai consumer che attaccano handler / filtrano per
-# "app.core.carica.writer". Il `StructuredLogger` wrapper delega a
-# `_logger.log(...)` sul logger stdlib omonimo (singleton per nome
-# quindi handler agganciati nei test B2.0 catturano gli emit dal mixin
+# Stesso logger name di `database_writer.py` per handler e filtri condivisi.
 logger = get_logger("app.core.carica.writer")
 
 
@@ -165,15 +161,11 @@ class TransactionExecutionMixin:
     ) -> WriteResult:
         """Esecuzione con commit per batch.
 
-        Prima: apriva una nuova connessione ad ogni batch → pool exhaustion
-        con molti batch. Ora riusa UNA connessione e fa commit dopo ogni
-        batch. Se un , fa rollback e continua sul successivo
-        con una connessione fresca.
+        Riusa una connessione e fa commit dopo ogni batch. Se un batch
+        fallisce, fa rollback e continua sul successivo con una connessione
+        fresca.
         """
-        # Mutable holder: la connection viene chiusa+riaperta dopo
-        # ogni
-        # Lista a 1 elemento per consentire mutation dal closure
-        # senza `nonlocal` esplicito
+        # Lista a 1 elemento per consentire mutation dal closure.
         conn_holder: List[Connection] = [self.engine.connect()]
         try:
             if self.db_type == "oracle":
@@ -196,7 +188,6 @@ class TransactionExecutionMixin:
                             type(rb_err).__name__,
                             rb_err,
                         )
-                    # Chiudi e riapri la connessione dopo errore
                     try:
                         conn_holder[0].close()
                     except Exception as cl_err:
@@ -233,7 +224,6 @@ class TransactionExecutionMixin:
                     cl_err,
                 )
 
-        # Stato finale
         if result.rows_failed == 0:
             result.status = WriteStatus.SUCCESS
         elif result.rows_written > 0:

@@ -1,7 +1,7 @@
 """
 Bench formalizzato: `op_md5_hash` nuovo impl vs legacy vs naive apply.
 
-L'impl pre-Batch-2B di `op_md5_hash` costruisce un parts_df colonna-per-colonna
+L'impl previous implementation di `op_md5_hash` costruisce un parts_df colonna-per-colonna
 """
 
 from __future__ import annotations
@@ -25,7 +25,7 @@ from .conftest import make_pandas_df
 def _legacy_op_md5_hash(
     df, columns, output_column="md5_hash", normalize=True
 ):
-    """Copia verbatim dell'impl pre-Batch-2B. Target da battere."""
+    """Copia verbatim dell'impl previous implementation Target da battere."""
     if not columns:
         return df
     valid_columns = [c for c in columns if c in df.columns]

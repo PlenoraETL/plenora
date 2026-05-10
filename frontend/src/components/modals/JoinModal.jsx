@@ -110,8 +110,6 @@ function JoinModal({ edge, sourceNode, targetNode, onSave, onCancel, isEditing =
       }
     }
   }, [joinMode, sourceColumns, targetColumns, sourceGeomColumns, targetGeomColumns]);
-
-  // --- Gestione condizioni multiple ---
   const updateCondition = useCallback((index, field, value) => {
     setJoinConditions(prev => {
       const updated = [...prev];
@@ -130,8 +128,6 @@ function JoinModal({ edge, sourceNode, targetNode, onSave, onCancel, isEditing =
       return prev.filter((_, i) => i !== index);
     });
   }, []);
-
-  // --- Gestione filtri ON aggiuntivi ---
   // Tutte le colonne della tabella target (non solo visibili)
   const allTargetColumns = targetNode?.data?.columns || [];
 

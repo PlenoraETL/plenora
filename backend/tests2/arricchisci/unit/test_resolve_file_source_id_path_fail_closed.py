@@ -63,11 +63,11 @@ def _bypass_security(monkeypatch, api_service, tmp_path):
 def test_returns_none_on_missing_metadata(api_service, monkeypatch, tmp_path):
     """Regression guard (vincolo 7 del checkpoint): file_source
     inesistente in DB -> return None. E' ramo dati legittimo, non
-    errore. Se Fix-A trasformasse questo caso in eccezione, il caller
+    errore. Se the fail-closed resolver contract trasformasse questo caso in eccezione, il caller
     `_build_rest_file_multipart` ramo extra_input `required=False`
     inizierebbe a fallire su condizioni normali ("extra file
     opzionale assente"), cambiando comportamento silenziosamente
-    rispetto al pre-fix.
+    rispetto al Previous behavior.
     """
     _bypass_security(monkeypatch, api_service, tmp_path)
     monkeypatch.setattr(file_sources_db, "get_file_source", lambda *a, **kw: None)
@@ -196,9 +196,9 @@ def test_raises_on_filesystem_materialization_error(
 def test_fails_closed_without_security_context_still_short_circuits(api_service):
     """Regression guard del pre-check: il security check
     `_assert_file_source_group_access` resta FUORI dal try (come
-    pre-fix), quindi `_current_group_id=None` continua a produrre
+    Previous behavior), quindi `_current_group_id=None` continua a produrre
     `ValueError("Contesto di sicurezza non determinabile")` PRIMA
-    di qualsiasi lookup. Fix-A non deve aver spostato il check
+    di qualsiasi lookup. the fail-closed resolver contract non deve aver spostato il check
     dentro un try che lo wrapperebbe in `FileSourceResolutionError`.
     """
     api_service._current_group_id = None

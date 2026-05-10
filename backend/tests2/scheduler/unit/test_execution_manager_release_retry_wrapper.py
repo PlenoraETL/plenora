@@ -1,7 +1,5 @@
 """
-[phase-2-err][batch7] 7.b â€” retry wrapper classified su release lock.
-
-Audit Batch 7 Â§3.3 [ALTA] pseudo-retry cieco su `concurrency.release` in
+Contract: release-lock retry wrapper classifies transient failures.
 """
 
 from __future__ import annotations
@@ -22,9 +20,6 @@ pytestmark = [pytest.mark.unit, pytest.mark.scheduler, pytest.mark.contract]
 BACKEND_ROOT = Path(__file__).resolve().parents[3]
 
 
-# â”€â”€â”€ Helpers (pattern identico a test_execution_manager_orphan_and_release_contract.py) â”€
-
-
 def _make_manager() -> ExecutionManager:
     manager = ExecutionManager.__new__(ExecutionManager)
     manager.schedule_service = MagicMock()
@@ -43,7 +38,7 @@ def _project_meta(group_id):
 
 def _make_manager_for_retry_test(schedule_config) -> ExecutionManager:
     """Manager configurato per arrivare al finally dopo errore deterministico
-    downstream. `_get_orchestrator` solleva â†’ il body di try fallisce â†’ va
+    downstream. `_get_orchestrator` solleva Ã¢â€ â€™ il body di try fallisce Ã¢â€ â€™ va
     al finally dove vogliamo osservare il retry wrapper."""
     manager = _make_manager()
     manager.schedule_service.get_schedule = MagicMock(return_value=schedule_config)
@@ -87,11 +82,10 @@ def _run_execute_with_patches(manager, schedule_id, monkeypatch):
         return manager.execute(schedule_id)
 
 
-# TEST 1 â€” Budget N=3 esaurito su transient PG continui
 
 
 def test_release_retry_budget_n3_on_all_transient(schedule_config, monkeypatch):
-    """Tutti i 3 tentativi sollevano OperationalError â†’ release chiamato
+    """Tutti i 3 tentativi sollevano OperationalError Ã¢â€ â€™ release chiamato
     N=3 volte, log [CRITICO] emesso con exc_info preservato (last_transient_err)."""
     manager = _make_manager_for_retry_test(schedule_config)
     manager.concurrency.release = MagicMock(
@@ -122,11 +116,10 @@ def test_release_retry_budget_n3_on_all_transient(schedule_config, monkeypatch):
     assert isinstance(result, dict)
 
 
-# TEST 2 â€” Exit early sul primo success (no retry inutili)
 
 
 def test_release_retry_exits_early_on_success(schedule_config, monkeypatch):
-    """Side effect `[OperationalError, None, ...]` â†’ 2 chiamate, il loop
+    """Side effect `[OperationalError, None, ...]` Ã¢â€ â€™ 2 chiamate, il loop
     esce al primo success. Nessun warning [CRITICO] finale."""
     manager = _make_manager_for_retry_test(schedule_config)
     manager.concurrency.release = MagicMock(
@@ -148,11 +141,10 @@ def test_release_retry_exits_early_on_success(schedule_config, monkeypatch):
     assert critico_errors == []
 
 
-# TEST 3 â€” Non-transient errors NOT retried + log non-transient CRITICO
 
 
 def test_release_retry_non_transient_does_not_retry(schedule_config, monkeypatch):
-    """RuntimeError (non-transient, non-PG) â†’ solo 1 chiamata, log [CRITICO]
+    """RuntimeError (non-transient, non-PG) Ã¢â€ â€™ solo 1 chiamata, log [CRITICO]
     non-transient emesso, NO propagazione (contratto Celery)."""
     manager = _make_manager_for_retry_test(schedule_config)
     manager.concurrency.release = MagicMock(
@@ -177,12 +169,11 @@ def test_release_retry_non_transient_does_not_retry(schedule_config, monkeypatch
     assert isinstance(result, dict)
 
 
-# TEST 4 â€” Backoff esponenziale con jitter Â±20%
 
 
 def test_release_retry_backoff_exponential_with_jitter(schedule_config, monkeypatch):
     """Tra i 3 tentativi (2 intervalli), time.sleep e' chiamato con valori
-    che rispettano backoff esponenziale (0.5s, 1.0s) con jitter Â±20%."""
+    che rispettano backoff esponenziale (0.5s, 1.0s) con jitter Ã‚Â±20%."""
     manager = _make_manager_for_retry_test(schedule_config)
     manager.concurrency.release = MagicMock(
         side_effect=[
@@ -207,25 +198,24 @@ def test_release_retry_backoff_exponential_with_jitter(schedule_config, monkeypa
         psc.return_value.get_project_metadata.return_value = _project_meta("grp-A")
         manager.execute("s-backoff")
 
-    # 3 tentativi = 2 intervalli sleep (tra tentativo 1-2 e 2-3; dopo il 3Â°
+    # 3 tentativi = 2 intervalli sleep (tra tentativo 1-2 e 2-3; dopo il 3Ã‚Â°
     # si esce dal budget senza sleep)
     assert len(sleep_calls) == 2
-    # 1Â° interval: base=0.5 * 2^0 = 0.5, jitter Â±20% â†’ [0.4, 0.6]
+    # 1Ã‚Â° interval: base=0.5 * 2^0 = 0.5, jitter Ã‚Â±20% Ã¢â€ â€™ [0.4, 0.6]
     assert 0.4 <= sleep_calls[0] <= 0.6, (
-        f"1Â° backoff deve essere 0.5s Â±20%, ottenuto {sleep_calls[0]}"
+        f"1Ã‚Â° backoff deve essere 0.5s Ã‚Â±20%, ottenuto {sleep_calls[0]}"
     )
-    # 2Â° interval: base=0.5 * 2^1 = 1.0, jitter Â±20% â†’ [0.8, 1.2]
+    # 2Ã‚Â° interval: base=0.5 * 2^1 = 1.0, jitter Ã‚Â±20% Ã¢â€ â€™ [0.8, 1.2]
     assert 0.8 <= sleep_calls[1] <= 1.2, (
-        f"2Â° backoff deve essere 1.0s Â±20%, ottenuto {sleep_calls[1]}"
+        f"2Ã‚Â° backoff deve essere 1.0s Ã‚Â±20%, ottenuto {sleep_calls[1]}"
     )
 
 
-# TEST 5 â€” Budget T=10s interrompe il retry anche se N non raggiunto
 
 
 def test_release_retry_budget_total_10s_interrupts(schedule_config, monkeypatch):
-    """time.monotonic simulato tale che `elapsed >= 10s` dopo il 1Â° retry â†’
-    il loop interrompe prima di raggiungere N=3. 2 release call (1Â° attempt
+    """time.monotonic simulato tale che `elapsed >= 10s` dopo il 1Ã‚Â° retry Ã¢â€ â€™
+    il loop interrompe prima di raggiungere N=3. 2 release call (1Ã‚Â° attempt
     + 1 retry) prima del budget esaurito."""
     manager = _make_manager_for_retry_test(schedule_config)
     manager.concurrency.release = MagicMock(
@@ -236,7 +226,7 @@ def test_release_retry_budget_total_10s_interrupts(schedule_config, monkeypatch)
         ]
     )
     # Sequenza time.monotonic: primo call = retry_start = 0.0; successivi
-    # simulano elapsed crescente. Elapsed > 10s al 2Â° check per far break.
+    # simulano elapsed crescente. Elapsed > 10s al 2Ã‚Â° check per far break.
     monotonic_seq = iter([0.0, 1.0, 15.0, 15.0, 15.0, 15.0])
     monkeypatch.setattr(
         "app.core.scheduler.scheduler_release.time.monotonic",
@@ -256,19 +246,18 @@ def test_release_retry_budget_total_10s_interrupts(schedule_config, monkeypatch)
         psc.return_value.get_project_metadata.return_value = _project_meta("grp-A")
         manager.execute("s-timebudget")
 
-    # retry_start + 1Â° check: elapsed=1s OK, prosegue.
-    # 2Â° check: elapsed=15s > 10s â†’ break budget totale.
-    # Tentativi effettuati: 2 (1Â° + 2Â°). 3Â° non viene mai tentato.
+    # retry_start + 1Ã‚Â° check: elapsed=1s OK, prosegue.
+    # 2Ã‚Â° check: elapsed=15s > 10s Ã¢â€ â€™ break budget totale.
+    # Tentativi effettuati: 2 (1Ã‚Â° + 2Ã‚Â°). 3Ã‚Â° non viene mai tentato.
     assert manager.concurrency.release.call_count == 2
 
 
-# TEST 6 â€” Warning [GESTITO] per ogni tentativo transient che fallisce
 
 
 def test_release_retry_log_warning_per_attempt(schedule_config, monkeypatch):
     """Ogni retry transient (non finale) emette `logger.warning('[GESTITO]
-    release lock ... transient (tentativo N/M): ...')`. Su 3 failure â†’ 2
-    warning (i primi 2 retry; il 3Â° e' terminal e logga [CRITICO])."""
+    release lock ... transient (tentativo N/M): ...')`. Su 3 failure Ã¢â€ â€™ 2
+    warning (i primi 2 retry; il 3Ã‚Â° e' terminal e logga [CRITICO])."""
     manager = _make_manager_for_retry_test(schedule_config)
     manager.concurrency.release = MagicMock(
         side_effect=[
@@ -283,7 +272,7 @@ def test_release_retry_log_warning_per_attempt(schedule_config, monkeypatch):
     ) as mock_logger:
         _run_execute_with_patches(manager, "s-attempts", monkeypatch)
 
-    # NOTE: emessi sui tentativi 1 e 2 (prima del sleep). Il 3Â° non
+    # NOTE: emessi sui tentativi 1 e 2 (prima del sleep). Il 3Ã‚Â° non
     # emette warning perche' il budget e' esaurito e si va al log CRITICO.
     transient_warnings = [
         c for c in mock_logger.warning.call_args_list

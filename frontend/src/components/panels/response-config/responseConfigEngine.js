@@ -1,7 +1,5 @@
 /**
  * responseConfigEngine.js — Pure helpers per il response-config builder
- *
- * Estratto da `panels/ResponseConfigBuilder.jsx` in `FE-SPLIT-003B`.
  * Contiene solo funzioni pure (no React, no DOM, no API, no global
  * state) per:
  *  - analizzare la struttura JSON di una risposta sample;
@@ -13,10 +11,7 @@
  *    prefix / suffix).
  *
  * Tutti gli helper sono esportati come named exports per consumo
- * esplicito da `ResponseConfigBuilder.jsx`. Il behavior e' invariato
- * rispetto al codice originale: stessi `AbstractJsonNode` shape,
- * stesse stringhe di path (con notazione `[idx]` / `[*]`), stesso
- * mapping output e identici switch case sui transform.
+ * esplicito da `ResponseConfigBuilder.jsx`.
  */
 
 /**

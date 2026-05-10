@@ -32,13 +32,10 @@ import {
  * 5. Preview del risultato
  */
 
-// Operazioni di trasformazione disponibili
 // `TRANSFORM_OPERATIONS` (lista UI delle 12 operazioni di transform)
 // vive co-locata in `response-config/TransformsPanel.jsx`
-// (`FE-SPLIT-003C`). Il dispatch effettivo dei case e' in
-// `responseConfigEngine.applyTransforms`.
+// Il dispatch effettivo dei case e' in `responseConfigEngine.applyTransforms`.
 
-// Preset predefiniti
 const PRESETS = [
   { id: '', label: '-- Nessun preset --' },
   { id: 'italiameteo_observations', label: '🌡️ ItaliaMeteo Observations' },
@@ -400,15 +397,5 @@ function ResponseConfigBuilder({
     </div>
   );
 }
-
-// ============================================================================
-// Note: tutti gli helper puri del response-config engine
-// (analyzeJsonStructure / collectPaths / collectScalarFields /
-//  extractRowsFromConfig / recursiveIterate / extractRow /
-//  navigatePath / applyTransforms) vivono ora in
-// `response-config/responseConfigEngine.js` (estratti in
-// `FE-SPLIT-003B`). Il renderer del JSON tree e' in
-// `response-config/JsonTreeNode.jsx` (`FE-SPLIT-003A`).
-// ============================================================================
 
 export default ResponseConfigBuilder;

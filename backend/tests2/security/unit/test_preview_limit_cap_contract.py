@@ -1,7 +1,7 @@
 """
 Contract test N5 — preview endpoint ha cap esplicito su limit.
 
-Pre-fix: `limit: int = 100` senza Query validation.
+Previous behavior: `limit: int = 100` senza Query validation.
 """
 
 from __future__ import annotations

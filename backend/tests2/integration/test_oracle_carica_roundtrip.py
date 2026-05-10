@@ -166,8 +166,8 @@ def test_oracle_truncate_insert_rolls_back_on_insert_failure():
             except Exception:
                 pass  # expected
 
-        # Con TRUNCATE TABLE (pre-fix): la tabella sarebbe vuota qui
-        # Con DELETE FROM (post-fix): rollback, tabella popolata come prima
+        # Con TRUNCATE TABLE (Previous behavior): la tabella sarebbe vuota qui
+        # Con DELETE FROM (Current contract): rollback, tabella popolata come prima
         count_after = _count(table)
         assert count_after == 5, (
             f"C5 fix 1 regressione: tabella ha {count_after} righe "

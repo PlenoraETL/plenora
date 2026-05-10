@@ -1,5 +1,5 @@
 """
-Cross-tenant leak regression — cascade 409 detail (PR-δ).
+Cross-tenant leak regression — cascade 409 detail (hidden-count contract).
 
 Bug 2026-04-30 (Auth/RBAC fase 2 hardening):
 """

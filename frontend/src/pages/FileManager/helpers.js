@@ -1,8 +1,7 @@
 /**
  * FileManager/helpers.js — costanti/helper condivisi tra FileManager.jsx
  * (page orchestrator) e i subcomponents (FileCard, UploadModal, LayerModal,
- * PreviewModal). Estratti durante FE-PHASE1-CLOSURE-3 senza cambio
- * comportamentale.
+ * PreviewModal).
  */
 
 export const FORMAT_CONFIG = {

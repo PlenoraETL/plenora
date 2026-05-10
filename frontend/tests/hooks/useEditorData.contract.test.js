@@ -1,5 +1,5 @@
 /**
- * Contract test per useEditorData — Batch 3 step 2 (hooks cleanup FE).
+ * Contract tests for useEditorData editor state behavior.
  *
  * Invarianti da preservare dopo il refactor cancellation-flag:
  *   1. Happy path: getProject + listConnections popolano project/connections,

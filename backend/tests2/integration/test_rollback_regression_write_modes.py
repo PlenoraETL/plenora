@@ -166,7 +166,6 @@ def _partial_fail_mock():
     return mock
 
 
-# Oracle scenarios
 
 
 @pytest.mark.skipif(not _oracle_reachable(), reason="Oracle non raggiungibile")
@@ -268,7 +267,6 @@ class TestOracleRollbackRegression:
             _oracle_drop(table)
 
 
-# Postgres scenarios
 
 
 @pytest.mark.skipif(not _pg_reachable(), reason="Postgres non raggiungibile")

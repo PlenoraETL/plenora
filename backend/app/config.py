@@ -52,14 +52,14 @@ class Settings:
         "CELERY_PREVIEW_HARD_LIMIT":    360,
         "CELERY_SCHEDULE_TIMEOUT":      3500,
         "CELERY_SCHEDULE_HARD_LIMIT":   3600,
-        # C3 fix 4: TTL corto + heartbeat periodico dal worker durante
-        # l'esecuzione. Se il worker muore SIGKILL il lock scade in
+        # Scheduler locks use a short TTL plus worker heartbeat. If the worker
+        # dies by SIGKILL, the lock expires in
         # SCHEDULE_LOCK_TTL_SECONDS invece di restare appeso fino al
         # hard limit Celery. HEARTBEAT_INTERVAL << TTL/2 per margine
         "SCHEDULE_LOCK_TTL_SECONDS":                600,
         "SCHEDULE_LOCK_HEARTBEAT_INTERVAL_SECONDS": 180,
-        # C3 follow-up: leader election fail-closed di default
-        # Se Redis e' unavailable il beat va in standby invece di
+        # Leader election is fail-closed by default: if Redis is unavailable,
+        # beat goes standby instead of
         # diventare leader by default (evita doppio enqueue in caso
         # di flap Redis con due beat attivi). Override a True per
         # deployment single-instance dove nessun altro beat gira mai
@@ -68,13 +68,9 @@ class Settings:
         "TASK_PROGRESS_POLL_INTERVAL":  1,
         "CELERY_RESULT_EXPIRES":        86400,
 
-        # Durata del token JWT in ore. Migrato a Settings da `BE-CONFIG-001B`
-        # era direct `os.getenv` in `app.shared.jwt_token`). Override env
-        # `JWT_EXPIRE_HOURS` continua a funzionare via type coercion `int`
+        # Durata del token JWT in ore. Override env via type coercion `int`.
         "JWT_EXPIRE_HOURS": 8,
-        # Login rate limit (R-01 + ADR-0021). Migrati a Settings da
-        # `BE-CONFIG-001C` (erano direct `os.getenv` import-time in
-        # `app/core/auth/auth.py`). Default identici al pre-001C: 10
+        # Login rate limit (R-01 + ADR-0021): 10
         # tentativi falliti in 60s -> lockout 300s. I test esistenti
         # `tests2/security/unit/test_login_rate_limit_per_ip.py`
         # monkeypatch-ano i moduli `LOGIN_*` symbol; preservato
@@ -84,18 +80,15 @@ class Settings:
         # Timeout Redis per i lookup di rate limit / blacklist. Default 1s
         # single-host) — ops puo' alzarlo per Redis remoto/latente. Su
         # timeout: fallback in-memory (login RL) o fail-open (blacklist
-        # read, ADR-0009). Migrati a Settings da `BE-CONFIG-001C`
+        # read, ADR-0009).
         "LOGIN_RL_REDIS_TIMEOUT_SEC": 1,
         "JWT_BLACKLIST_REDIS_TIMEOUT_SEC": 1,
         # Soglia "stale" per la blacklist JWT mostrata nella dashboard
         # admin (`admin_system_status/service.py`). Sopra questa soglia
         # l'ultima sync e' considerata stantia e segnalata come warning
-        # Default 1800s (30 min). Migrato a Settings da `BE-CONFIG-001C`
+        # Default 1800s (30 min).
         "JWT_BLACKLIST_STALE_THRESHOLD_SEC": 1800,
 
-        # Migrati da direct `os.getenv` in `BE-CONFIG-001D`. Default
-        # tipati identici al pre-001D. Override env funziona via
-        # `Settings._converti_tipo_env`
         # `MSSQL_FAST_EXECUTEMANY` accetta on|off|true|false|0|1|...; il
         # caller fa il match insensitive. Default `"on"` = abilita
         # `fast_executemany` per pyodbc/MSSQL
@@ -131,7 +124,6 @@ class Settings:
         # TTL in ore per i file temp orfani sotto `DATA_DIR/temp/`
         # Beat scheduler (`workers/beat_scheduler:_cleanup_temp_orphans`
         # rimuove le directory piu' vecchie di N ore. Default 24h
-        # Migrato a Settings da `BE-CONFIG-001B`
         "TEMP_ORPHAN_CLEANUP_HOURS": 24,
 
         "STORAGE_POLICY": "hybrid",
@@ -139,12 +131,11 @@ class Settings:
         # Default 500 MB: limite pratico di un BYTEA PG senza toast tuning
         # Sopra cap: ResultSaveError al save (caller deve failare
         "RESULT_DB_HARD_CAP_BYTES": 500 * 1024 * 1024,
-        # Soglie dispatch DB-vs-object-storage in policy=hybrid (ADR-0011 + 0015
-        # Per-dominio (intenzionalmente separate, vedi ADR-0011 + ADR-0021
+        # Soglie dispatch DB-vs-object-storage in policy=hybrid.
+        # Per-dominio (intenzionalmente separate):
         # ops puo' tunare result e file_source in modo indipendente perche'
         # la distribuzione di size differisce. Default 50 MB per entrambi
         # = break-even empirico DB BYTEA vs roundtrip object storage
-        # Migrato a Settings da `BE-CONFIG-001B` (era direct `os.getenv`
         "RESULT_S3_THRESHOLD_BYTES": 50 * 1024 * 1024,
         "FILE_SOURCE_S3_THRESHOLD_BYTES": 50 * 1024 * 1024,
         # MinIO provider (A1-B2, ADR-0015). Required-if CLOUD_PROVIDER=minio
@@ -159,9 +150,7 @@ class Settings:
         # auto-derivazione <env>: ops override esplicito in .env per separare
         # prod/staging/dev (ADR-0014 §A2). Formato: "" oppure endswith "/"
         "LOG_ARCHIVE_KEY_PREFIX": "logs-archive/",
-        # Righe per SELECT->upload->DELETE del writer. Cap
-        # pratico RAM per batch. Nome canonico (ADR-0014 §A1): supersede
-        # LOG_ARCHIVE_BATCH_SIZE citato nell'ADR originale Consequences/Neutral
+        # Righe per SELECT->upload->DELETE del writer. Cap pratico RAM per batch.
         "LOG_ARCHIVE_BATCH_ROWS": 10_000,
         "AUDIT_RETENTION_DAYS": 365,
         # NB: LOG_ARCHIVE_BUCKET e' intenzionalmente fuori da DEFAULTS —
@@ -227,19 +216,13 @@ class Settings:
         # cap non puo' eccedere quello che il path di upload sincrono
         # gia' tollera. Sotto `WORKER_RSS_MAX_BYTES` (1.5 GB) di un
         # ordine di grandezza, quindi N download concorrenti restano
-        # nel budget RSS del worker anche su host piccoli. Pre-005 il
-        # default era 500 MB, basato sull'idea "ricoperchio sopra
-        # LOAD_FILE_MAX_BYTES" che pero' permetteva a un solo blob di
-        # consumare 1/3 del budget RSS del worker; correggere il
-        # default e' piu' sicuro che chiedere all'operatore l'override
-        # post-installazione. Cap <= 0 disabilita il guard. Override
-        # via env `RESOURCE_MAX_BYTES`. La wiring consumer-side (cap
+        # nel budget RSS del worker anche su host piccoli. Cap <= 0
+        # disabilita il guard. Override via env `RESOURCE_MAX_BYTES`.
+        # La wiring consumer-side (cap
         # pre-return in `get_result_data` / `_dispatch_by_id`) e'
         # deferita: il loader stesso non importa `app.config` per
         # anti-god-engine; il guard vivra' a livello caller (es
-        # repository risultati o `cloud_backends`). Vedi
-        # `.agent-temp/BE_INSTALLATION_AUDIT.md` (BE-INSTALL-006) e
-        # `.agent-temp/BE_MEMORY_OOM_AUDIT.md` (MEMORY-ENGINE-005
+        # repository risultati o `cloud_backends`).
         "RESOURCE_MAX_BYTES": 200 * 1024 * 1024,
         # cap dedicato
         # per la preview HTTP di intermediate artifacts (Parquet) e
@@ -313,8 +296,7 @@ class Settings:
         "STORAGE_RECONCILE_TERMINAL_RETENTION_DAYS": 30,
         "STORAGE_RECONCILE_PRUNE_BATCH_SIZE": 500,
         # Tunables del reconciler beat hook per il branch
-        # `operation='upload_intent'` (W2 race coverage: chiude
-        # R-021.1 lasciato aperto da STORAGE-021
+        # `operation='upload_intent'`.
         # STORAGE_RECONCILE_UPLOAD_INTENT_GRACE_SECONDS: finestra
         # tra `created_at` e ora corrente prima che un upload_intent
         # sia considerato stantio. Deve essere >= max realistic
@@ -365,8 +347,6 @@ class Settings:
         # production setano un valore > 0 (es. 180-300s) per alertare
         # quando il reconciler beat non e' running. Cap <= 0 disabilita
         # il branch (escape hatch ops
-        # Closes R-023.1 (silent accumulation gap su upload_intent
-        # backlog quando il reconciler beat non gira
         "READINESS_BEAT_HEARTBEAT_MAX_AGE_SECONDS": 0,
 
         # Timeout (secondi) per la PING Redis dentro check_redis
@@ -415,17 +395,16 @@ class Settings:
         # manca il writer fa fallback automatico ad atomic con WARNING
         "CARICA_STAGE_SWAP_THRESHOLD": 500_000,
 
-        # C11: hard cap righe ritornate da una query ESTRAI. Se un
+        # Hard cap righe ritornate da una query ESTRAI. Se un
         # chunk_fetchmany porta il totale oltre questo limite, la
         # query fallisce loud con suggerimento (aggiungi WHERE, usa
         # LIMIT, oppure alza il cap). Protezione anti-OOM: fino a
-        # C11 il chunking era cosmetico (fetchmany ma poi accumulo
-        # in memoria + DataFrame intero). Default 5M: ragionevole per
+        # Default 5M: ragionevole per
         # ETL tipico PLENORA-ETL (centinaia-migliaia di righe), lascia
         # margine per operazioni admin occasionali da 1-5M
         "ESTRAI_MAX_ROWS": 5_000_000,
 
-        # C11: cap righe serializzate in intermediate.runs snapshot
+        # Cap righe serializzate in intermediate.runs snapshot.
         # Sopra questa soglia il writer scrive solo metadata (no
         # df.to_dict rows) per evitare double-materialization della
         # query output nell'intermediate DB. Default 100k: l'intermediate
@@ -440,8 +419,7 @@ class Settings:
         # "preview_only": metadata + hash + prime
         # INTERMEDIATE_PREVIEW_ROWS righe in node_rows. Default
         # consigliato in produzione
-        # "full_pg": comportamento legacy, tutte le righe in
-        # node_rows. Compat/debug temporaneo
+        # "full_pg": tutte le righe in node_rows per compat/debug.
         # Mode "full_artifact": persiste data.parquet + manifest.json
         # su runtime object storage (richiede OBJECT_STORAGE_ENABLED=true
         # + OBJECT_STORAGE_BUCKET configurato). Zero `node_rows`
@@ -450,7 +428,7 @@ class Settings:
         # `app/core/intermediate/policy.validate_intermediate_settings`
         # Default produzione: metadata_only (storage
         # intermedi, 2026-04-28). Postgres resta catalogo leggero
-        # Per audit/debug: preview_only (legacy) o full_artifact
+        # Per audit/debug: preview_only o full_artifact
         "INTERMEDIATE_PERSISTENCE_MODE": "metadata_only",
         # Numero righe persistite quando MODE=preview_only. Tagliato
         # dalle prime N (df.head). UI mostra "preview NN su YYY"
@@ -461,7 +439,7 @@ class Settings:
         # per supporto multi-formato senza schema change
         "INTERMEDIATE_FULL_ARTIFACT_FORMAT": "parquet",
 
-        # FIXME: #24 (perf, 2026-04-28): mode di calcolo del node_hash
+        # TODO: tune node_hash calculation mode if exact run diffs become required.
         # del DataFrame al checkpoint/final snapshot
         # "sample": hash di (schema, len(df), df.head(N)). Costo
         # ~10-20 ms anche su DataFrame da 275k righe (vs 1.0-1.5 s
@@ -503,8 +481,7 @@ class Settings:
         # Bucket dedicato runtime artifact intermedi (full_artifact
         # Separato da BACKUP_BUCKET (IAM boundary distinto) e dal
         # terraform-state. Required quando MODE=full_artifact +
-        # OBJECT_STORAGE_ENABLED=true. Funziona come fallback retro
-        # compat dietro a OBJECT_STORAGE_BUCKET in
+        # OBJECT_STORAGE_ENABLED=true. Used as fallback behind OBJECT_STORAGE_BUCKET in
         # `cloud_backends._resolve_runtime_bucket`. None ammesso se
         # OBJECT_STORAGE_BUCKET e' settato
         "PLENORA_ARTIFACT_BUCKET": None,
@@ -536,10 +513,9 @@ class Settings:
         # Bucket runtime per result/file_source/eseguibili/IMDF. Distinto
         # da BACKUP_BUCKET per design (lifecycle, IAM boundary diverso
         # Se None, fallback su PLENORA_ARTIFACT_BUCKET; se anche quello
-        # None, fallback retro-compat su BACKUP_BUCKET (con warning) per
-        # non rompere deployment legacy. Configurazione canonica futura
-        # OBJECT_STORAGE_BUCKET per runtime, BACKUP_BUCKET per backup
-        # LOG_ARCHIVE_BUCKET per log archive
+        # None, fallback con warning su BACKUP_BUCKET per installazioni
+        # non ancora separate. Configurazione canonica: OBJECT_STORAGE_BUCKET
+        # per runtime, BACKUP_BUCKET per backup, LOG_ARCHIVE_BUCKET per log.
         "OBJECT_STORAGE_BUCKET": None,
     }
 
@@ -797,10 +773,7 @@ class Settings:
     def LOG_ARCHIVE_KEY_PREFIX(self) -> str:
         return self.get("LOG_ARCHIVE_KEY_PREFIX", "logs-archive/") or "logs-archive/"
 
-    # Righe per SELECT->upload->DELETE del writer
-    # LogArchiveWriter. Cap pratico RAM per batch. Nome canonico
-    # ADR-0014 §A1): supersede LOG_ARCHIVE_BATCH_SIZE citato nell'ADR
-    # originale. Consumato dal beat in per istanziare il writer
+    # Righe per SELECT->upload->DELETE del LogArchiveWriter. Cap RAM pratico.
     @property
     def LOG_ARCHIVE_BATCH_ROWS(self) -> int:
         try:

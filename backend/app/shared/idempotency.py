@@ -1,8 +1,4 @@
-"""
-Idempotency guard condiviso tra i task asincroni (C4 round 3).
-
-Motivazione
-"""
+"""Idempotency guard condiviso tra i task asincroni."""
 
 from app.utils.logger import get_logger
 from app.core.intermediate import db as idb

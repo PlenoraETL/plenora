@@ -2,31 +2,29 @@
  * ResultNodeStandardView — view del ResultNode per il ramo NON-IMDF
  * (upstream qualsiasi diverso da api_enrich con output_kind='imdf').
  *
- * Estratto da ResultNode.jsx (Batch 2 step 3 split FE). Il componente si
- * monta solo quando isImdfMode=false (ramo ternario del parent); non ha
- * una prop isImdfMode perche' la sua presenza nel tree lo implica.
+ * Il componente si monta solo quando isImdfMode=false (ramo ternario
+ * del parent); non ha una prop isImdfMode perche' la sua presenza nel
+ * tree lo implica.
  *
  * Owna:
- *   - dispatch a `OutputSettingsPanel` (filename + format + geo + distinct + limit)
- *     dopo l'estrazione `FE-SPLIT-005A`;
+ *   - dispatch a `OutputSettingsPanel` (filename + format + geo + distinct + limit);
  *   - preview colonne output con expand (columnsExpanded), passata come children
  *     al panel per preservare l'ordine visivo;
- *   - dispatch a `GroupOrderHavingPanel` (GROUP BY + aggregazioni + ORDER BY + HAVING)
- *     dopo l'estrazione `FE-SPLIT-005B`;
+ *   - dispatch a `GroupOrderHavingPanel` (GROUP BY + aggregazioni + ORDER BY + HAVING);
  *   - dispatch a `ExecuteActionsPanel` (execution mode + bottoni Valida/Preview/
- *     Esegui + footer cronologia + RunHistoryModal) dopo l'estrazione `FE-SPLIT-005C`;
+ *     Esegui + footer cronologia + RunHistoryModal);
  *   - deriva localmente nodeVariant/executeLabel da data.isManipulate/isArricchisci.
  *
  * NON owna:
- *   - editor filename + scelta formato + DISTINCT + LIMIT: estratti in
- *     `OutputSettingsPanel` (FE-SPLIT-005A); il parent passa i flag derivati
+ *   - editor filename + scelta formato + DISTINCT + LIMIT: gestiti da
+ *     `OutputSettingsPanel`; il parent passa i flag derivati
  *     `isGeoFormat`, `availableGeomColumns`, `hasGeometryColumns` come props;
  *   - GROUP BY / ORDER BY / HAVING + relativi handler su updateNodeData:
- *     estratti in `GroupOrderHavingPanel` (FE-SPLIT-005B); il parent
+ *     gestiti da `GroupOrderHavingPanel`; il parent
  *     passa `availableColumns`, `manipolaColumns`, `isEstrai`, `isManipulate`
  *     come props;
- *   - executionMode + isRunHistoryOpen useState + RunHistoryModal: estratti in
- *     `ExecuteActionsPanel` (FE-SPLIT-005C); il parent passa `nodeVariant`,
+ *   - executionMode + isRunHistoryOpen useState + RunHistoryModal: gestiti da
+ *     `ExecuteActionsPanel`; il parent passa `nodeVariant`,
  *     `executeLabel`, `hasExecutionOptions`, `isArricchisci` + le 3 callback;
  *   - ValidationModal: stato del parent, triggerata sia da qui sia da IMDF view;
  *   - logica runValidation/onExecute/onPreview: ricevute come callback;
@@ -148,13 +146,6 @@ const ResultNodeStandardView = memo(({
     arricchisci: { executeLabel: 'Esegui Arricchimento' },
   };
   const { executeLabel } = config[nodeVariant];
-
-  // ── Handlers ─────────────────────────────────────────────────────────
-  // I 5 handler output-settings (handleSaveFileName / handleChangeFormat /
-  // handleChangeGeomColumn / handleToggleDistinct / handleUpdateLimit)
-  // sono migrati dentro `OutputSettingsPanel` con `FE-SPLIT-005A`.
-  // I 14 handler GROUP BY / ORDER BY / HAVING + la const `aggregateFunctions`
-  // sono migrati dentro `GroupOrderHavingPanel` con `FE-SPLIT-005B`.
 
   return (
     <>

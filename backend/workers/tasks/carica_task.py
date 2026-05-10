@@ -33,12 +33,8 @@ if TYPE_CHECKING:
     bind=True,
     base=BaseTaskWithRetry,
     name="carica.execute",
-    # C4: fail-fast su write verso DB cliente, NO retry automatico
-    # Motivazione: in modalita' append + per_batch (senza unique
-    # constraints) un retry dopo fallimento parziale duplica le
-    # righe gia' scritte. Meglio task fallito visibile che duplica
-    # silenziosa — l'operatore verifica il e rilancia
-    # manualmente. Allineato a pipeline_task.max_retries=0 per coerenza
+    # Database writes are fail-fast: automatic retries can duplicate partial
+    # append+per_batch writes when no unique constraint is present.
     max_retries=0,
     soft_time_limit=settings.CELERY_TASK_TIMEOUT,
     time_limit=settings.CELERY_TASK_HARD_LIMIT,
@@ -63,7 +59,7 @@ def execute_carica_task(
     idempotent. Gli errori transient di rete non sono retryati —
     sollevano eccezione visibile che viene persistita nei log.
 
-    Idempotency (C4 round 2): se `run_id` viene passato dall'esterno
+    Idempotency: se `run_id` viene passato dall'esterno
     (scheduler, retry-handler UI) e in intermediate.runs esiste gia'
     un record con status='completed' per quel run_id, il task SKIPPA
     l'esecuzione e ritorna un risultato cached. Copre il caso di
@@ -85,8 +81,6 @@ def execute_carica_task(
         o status='skipped_idempotent' se il run_id era gia' completo.
     """
     task_id = self.request.id
-    # C4 round 2: idempotency guard. Se run_id e' passato e gia'
-    # completato, ritorna subito senza ri-eseguire (no duplicate writes
     if run_id is not None:
         from app.shared.idempotency import is_already_completed
         if is_already_completed(run_id):
@@ -108,7 +102,6 @@ def execute_carica_task(
 
     logger.info(f"Task CARICA {task_id} avviato per progetto {project_id} (run_id={run_id})")
 
-    # N9: re-check permessi user al pickup (helper condiviso
     from app.shared.async_user_recheck import recheck_user_authorized
     _revoked = recheck_user_authorized(
         user_id=user_id, project_id=project_id,
@@ -403,7 +396,7 @@ def _execute_db_write(task, df, carica_node_data, project_id, task_id, triggered
         project_id=project_id,
         progress_callback=progress_callback,
         triggered_by=triggered_by,
-        run_id=run_id,  # N15: defense-in-depth (task-level guard gia' corto-circuita prima, ma questo protegge sync caller futuri
+        run_id=run_id,
     )
 
     result_dict = result.to_dict()
@@ -749,4 +742,3 @@ def _load_upstream_data(
             exc_info=True,
         )
         return None
-

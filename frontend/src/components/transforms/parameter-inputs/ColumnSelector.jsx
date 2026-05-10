@@ -1,7 +1,5 @@
 /**
  * ColumnSelector.jsx — Selettore colonna (singola o multipla)
- *
- * Estratto da `ParameterInput.jsx` in `FE-PHASE2-SPLIT-002A`.
  * Usato dal dispatcher per i tipi `column`, `geometry_column`,
  * `columns`. Supporta filtro per tipo (geometry/numeric/text) e
  * label di sorgente (es. "⬅ SX" / "➡ DX" per join).

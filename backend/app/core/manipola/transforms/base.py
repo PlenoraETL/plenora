@@ -15,27 +15,9 @@ logger = get_logger(__name__)
 DataFrame = Union[pd.DataFrame, gpd.GeoDataFrame]
 
 
-# JOIN — Unione tabelle per colonna chiave
-# Supporta: inner, left, right, outer, cross. Gestisce suffissi per colonne omonime
-
 from .joins import op_join, op_union, op_cross_join  # noqa: F401 (compatibility export, consumato via getattr
 
 op_concat = op_union
-
-
-# B1.11 boundary: cluster SECURITY (op_md5_hash + op_mask_data
-# + 5 helper privati `_mask_*` + dict `MASK_FUNCTIONS`) spostato in
-# `app.core.manipola.transforms.security`. compatibility export in coda al file
-# via compatibility module. I 5 helper privati restano single-source nel nuovo
-# NOTE: — patch.dict identita' oggetto
-# `MASK_FUNCTIONS` e' compatibility export da `base.py` via `from .security
-# import MASK_FUNCTIONS` (NON ribindato): il test contract
-# `tests2/manipola/unit/test_op_mask_data_fail_closed.py:69,110`
-# patcha `"app.core.manipola.transforms.base.MASK_FUNCTIONS"` con
-# `patch.dict` (mutazione in-place). Poiche' base e security puntano
-# allo stesso dict object, la mutazione e' visibile da `op_mask_data`
-# in security.py) che legge il dict via module-level lookup. Vedi
-# docstring `transforms/security.py` sezione "Coupling"
 
 
 from .strings import (  # noqa: F401 (compatibility export
@@ -59,17 +41,8 @@ from .columns import (  # noqa: F401 (compatibility export
     op_split_column,
 )
 
-# B1.5 boundary: cluster FORMULA spostato in
-# `app.core.manipola.transforms.formula`. compatibility export di entrambi i nomi
-# pubblici esistenti — il prefix-underscore `_validate_formula_ast` e'
-# **intenzionalmente** compatibility export perche' il test contract N4
-# `tests2/security/unit/test_n4_formula_validator_contract.py`) lo
-# importa direttamente da `base` (3 occorrenze
-# `from app.core.manipola.transforms.base import op_formula`
-# `from app.core.manipola.transforms.base import _validate_formula_ast`
-# `from app.core.manipola.transforms import op_formula` (via __init__
-# `transforms_registry.json` entry "base.op_formula" risolta via
-# `getattr(<base module>, "op_formula")`
+# Compatibility export: registry entries and security contract tests import
+# formula helpers from this module.
 from .formula import (  # noqa: F401 (compatibility export
     op_formula,
     _validate_formula_ast,
@@ -109,28 +82,8 @@ from .reshape import (  # noqa: F401 (compatibility export
     op_transpose,
 )
 
-# B1.11 boundary: cluster SECURITY (op_md5_hash, op_mask_data
-# + 5 helper privati `_mask_*` + dict `MASK_FUNCTIONS`) spostato in
-# `app.core.manipola.transforms.security`. compatibility export delle 2 funzioni
-# pubbliche + del dict `MASK_FUNCTIONS`
-# `from app.core.manipola.transforms.base import op_md5_hash` /
-# `op_mask_data`
-# `from app.core.manipola.transforms import op_md5_hash` /
-# `op_mask_data` — `__init__.py` resta `from .base import ...`
-# e cattura il compatibility module
-# `transforms_registry.json` entries "base.op_md5_hash" /
-# "base.op_mask_data" risolte via `getattr(<base>, "<func>")`
-# `MASK_FUNCTIONS` compatibility export (NON ribindato) per preservare
-# l'identita' del dict object: `base.MASK_FUNCTIONS is
-# security.MASK_FUNCTIONS` → True. Il test
-# `tests2/manipola/unit/test_op_mask_data_fail_closed.py:69,110`
-# usa `patch.dict("...base.MASK_FUNCTIONS", ...)` che muta in-place
-# la mutazione e' visibile da `op_mask_data` (in security.py) che
-# legge il dict via module-level lookup. NON sostituire con un
-# nuovo dict ne' con MappingProxyType: il contract di patch
-# richiede identita' preservata
-# I 5 helper `_mask_*` NON compatibility export (verificato: zero consumer
-# esterni). Restano single-source in security.py
+# Compatibility export: `MASK_FUNCTIONS` must remain the same dict object as
+# `security.MASK_FUNCTIONS` because tests patch it in-place through this module.
 from .security import (  # noqa: F401 (compatibility export
     op_md5_hash,
     op_mask_data,

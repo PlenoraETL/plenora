@@ -1,5 +1,5 @@
 """
-Smoke contract - STRUCT-001 Seam D-B: estrazione load_by_format.
+Smoke contract: estrazione load_by_format.
 
 Verifica le invarianti minime del refactor:
 """

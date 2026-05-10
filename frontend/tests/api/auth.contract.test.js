@@ -13,18 +13,6 @@ vi.mock('../../src/api/http', () => ({
   default: httpMock,
 }));
 
-/**
- * Contract test — api/auth.js (C3.3 Phase 4).
- *
- * Pre-C3.3 le chiamate /auth/login e /auth/logout vivevano inline in
- * context/AuthContext.jsx. C3.3 le ha consolidate in api/auth.js
- * preservando bit-per-bit:
- *   - lo shape del payload login (axios POST /auth/login con
- *     { username, password })
- *   - il pattern fire-and-forget di logout (la funzione NON e' async,
- *     ritorna il Promise grezzo cosi' il caller puo' .catch() senza
- *     await prima di clearare lo stato locale).
- */
 describe('api/auth contract', () => {
   beforeEach(() => {
     // resetAllMocks (non clearAllMocks) per pulire ANCHE le code di
@@ -84,9 +72,6 @@ describe('api/auth contract', () => {
       httpMock.post.mockResolvedValueOnce({ data: { ok: true } });
 
       const { logout } = await import('../../src/api/auth');
-      // Aspetta la promise per garantire che httpMock.post sia stato
-      // invocato prima dell'assertion (e per silenziare il warning
-      // "unhandled promise rejection" anche in caso di future regressioni).
       await logout('jwt-x');
 
       expect(httpMock.post).toHaveBeenCalledWith(
@@ -97,13 +82,6 @@ describe('api/auth contract', () => {
     });
 
     it('returns the raw Promise (not awaited) for fire-and-forget pattern', async () => {
-      // Contratto critico: AuthContext.logout fa
-      //   const p = apiLogout(token);
-      //   if (p && typeof p.then === 'function') p.catch(() => {});
-      // poi prosegue immediatamente al clear locale SENZA await. Se
-      // qualcuno trasforma logout in async function, il caller dovrebbe
-      // attenderlo (latency su UX) o cambiare pattern. Blindiamo il
-      // contratto qui.
       httpMock.post.mockResolvedValueOnce({ data: {} });
 
       const { logout } = await import('../../src/api/auth');
@@ -111,17 +89,14 @@ describe('api/auth contract', () => {
 
       expect(p).toBeDefined();
       expect(typeof p.then).toBe('function');
-      // Sanity: il consumer puo' attaccare .catch senza errori.
       expect(() => p.catch(() => {})).not.toThrow();
-      await p; // chiusura pulita per evitare unhandled promise warning.
+      await p;
     });
 
     it('does NOT swallow rejections internally (caller handles via .catch)', async () => {
       httpMock.post.mockRejectedValueOnce(new Error('network down'));
 
       const { logout } = await import('../../src/api/auth');
-      // La rejection deve propagarsi: AuthContext la silenzia con .catch
-      // ma la funzione di per se' non e' supposta nascondere errori.
       await expect(logout('jwt-x')).rejects.toThrow('network down');
     });
   });

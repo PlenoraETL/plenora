@@ -5,25 +5,6 @@ import { vi } from 'vitest';
 
 import ConnectionManager from '../../src/pages/ConnectionManager';
 
-/**
- * Batch 6 di FE-TEST-001 su ConnectionManager — gap ad alto valore non
- * coperti dal contract test esistente (ConnectionManager.contract.test.jsx,
- * focalizzato sul solo flusso create-DB con payload shape).
- *
- * Aree:
- *   1. delete success (confirm + deleteConnection + reload)
- *   2. delete cascade 409 (handleCascade409 + formatCascadeDependencies
- *      + toast.error TTL 10s) — page-level mai testato
- *   3. test connection success: status badge "OK" sulla riga
- *   4. test connection error: badge "Errore" + banner cm__test-error
- *      con il messaggio del backend
- *   5. create validation: nome vuoto -> toast.warning, no createConnection
- *   6. edit flow: clic Modifica -> updateConnection con id + payload,
- *      titolo modale "Modifica Connessione" + "Salva Modifiche"
- *
- * Nessun refactor della pagina, nessun touch a useTheme/ThemeToggle,
- * nessuna modifica backend/docs/audits.
- */
 
 const {
   navigateMock,
@@ -104,16 +85,13 @@ const sampleConn = {
   can_edit: true,
 };
 
-describe('ConnectionManager — batch 6', () => {
+describe('ConnectionManager contract', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     authState.user = { role: 'superadmin', username: 'sa' };
     listConnectionsMock.mockResolvedValue({ connections: [sampleConn] });
     listFeatureConnectionsMock.mockResolvedValue({ connections: [] });
   });
-
-  // ── 1. Delete success ────────────────────────────────────────────────
-
   it('deletes a database connection after confirm and reloads the list', async () => {
     deleteConnectionMock.mockResolvedValueOnce({ ok: true });
 
@@ -131,9 +109,6 @@ describe('ConnectionManager — batch 6', () => {
     expect(listConnectionsMock).toHaveBeenCalledTimes(2); // initial + reload
     expect(toastMock.error).not.toHaveBeenCalled();
   });
-
-  // ── 2. Delete cascade 409 ────────────────────────────────────────────
-
   it('shows formatted cascade dependencies on 409 delete and skips reload', async () => {
     deleteConnectionMock.mockRejectedValueOnce({
       response: {
@@ -167,16 +142,11 @@ describe('ConnectionManager — batch 6', () => {
     // Reload non triggered dopo cascade 409.
     expect(listConnectionsMock).toHaveBeenCalledTimes(1);
   });
-
-  // ── 3. Test connection success ───────────────────────────────────────
-
   it('shows the OK status badge after a successful test connection', async () => {
     testConnectionMock.mockResolvedValueOnce({ success: true, message: 'ok' });
 
     render(<ConnectionManager />);
     await screen.findByText('Warehouse DB');
-
-    // Pre-test: stato "Non testata".
     expect(screen.getByText('Non testata')).toBeInTheDocument();
 
     await userEvent.click(screen.getByRole('button', { name: /🔌 Test/i }));
@@ -187,9 +157,6 @@ describe('ConnectionManager — batch 6', () => {
     expect(await screen.findByText('OK')).toBeInTheDocument();
     expect(screen.queryByText('Non testata')).not.toBeInTheDocument();
   });
-
-  // ── 4. Test connection error ─────────────────────────────────────────
-
   it('shows the error badge and inline error banner when test fails', async () => {
     testConnectionMock.mockResolvedValueOnce({
       success: false,
@@ -205,14 +172,10 @@ describe('ConnectionManager — batch 6', () => {
       expect(testConnectionMock).toHaveBeenCalledWith('conn-1'),
     );
     expect(await screen.findByText('Errore')).toBeInTheDocument();
-    // Banner con messaggio del backend (cm__test-error block).
     expect(
       await screen.findByText(/Connection refused: 5432/),
     ).toBeInTheDocument();
   });
-
-  // ── 5. Create validation: nome vuoto ────────────────────────────────
-
   it('blocks createConnection when the name is empty and warns the user', async () => {
     render(<ConnectionManager />);
     await screen.findByText('Warehouse DB');
@@ -220,7 +183,6 @@ describe('ConnectionManager — batch 6', () => {
     await userEvent.click(
       screen.getByRole('button', { name: /Nuova Connessione/i }),
     );
-    // Click "Crea Connessione" senza compilare il nome.
     await userEvent.click(
       await screen.findByRole('button', { name: /Crea Connessione/i }),
     );
@@ -230,9 +192,6 @@ describe('ConnectionManager — batch 6', () => {
     );
     expect(createConnectionMock).not.toHaveBeenCalled();
   });
-
-  // ── 6. Edit flow: updateConnection ──────────────────────────────────
-
   it('opens the edit modal prefilled and updates the connection on save', async () => {
     updateConnectionMock.mockResolvedValueOnce({ id: 'conn-1' });
 
@@ -242,8 +201,6 @@ describe('ConnectionManager — batch 6', () => {
     await userEvent.click(
       screen.getByRole('button', { name: /✏️ Modifica/i }),
     );
-
-    // Modal aperto con titolo "Modifica Connessione" e nome precompilato.
     expect(
       await screen.findByText('Modifica Connessione'),
     ).toBeInTheDocument();
@@ -270,9 +227,6 @@ describe('ConnectionManager — batch 6', () => {
     // createConnection NON deve essere chiamata sul branch edit.
     expect(createConnectionMock).not.toHaveBeenCalled();
   });
-
-  // ── 7. Validation: DB richiede host + database ──────────────────────
-
   it('warns when DB connection submit lacks host or database', async () => {
     render(<ConnectionManager />);
     await screen.findByText('Warehouse DB');
@@ -280,8 +234,6 @@ describe('ConnectionManager — batch 6', () => {
     await userEvent.click(
       screen.getByRole('button', { name: /Nuova Connessione/i }),
     );
-    // Compila SOLO il nome — host + database restano vuoti (default DB
-    // postgres). Tipo postgres rimane attivo: branch !isArcgis.
     await userEvent.type(
       await screen.findByPlaceholderText(/Archibus ICSC/i),
       'Halfway DB',
@@ -297,9 +249,6 @@ describe('ConnectionManager — batch 6', () => {
     expect(createConnectionMock).not.toHaveBeenCalled();
     expect(createFeatureConnectionMock).not.toHaveBeenCalled();
   });
-
-  // ── 8. Validation: ArcGIS richiede server_url ───────────────────────
-
   it('warns when ArcGIS connection submit lacks server_url', async () => {
     render(<ConnectionManager />);
     await screen.findByText('Warehouse DB');
@@ -307,8 +256,6 @@ describe('ConnectionManager — batch 6', () => {
     await userEvent.click(
       screen.getByRole('button', { name: /Nuova Connessione/i }),
     );
-
-    // Switch type a ArcGIS Server cliccando il bottone tipo.
     await userEvent.click(
       await screen.findByRole('button', { name: /ArcGIS Server/i }),
     );
@@ -316,7 +263,6 @@ describe('ConnectionManager — batch 6', () => {
       screen.getByPlaceholderText(/Archibus ICSC/i),
       'ArcGIS Test',
     );
-    // server_url volutamente NON compilato.
 
     await userEvent.click(
       screen.getByRole('button', { name: /Crea Connessione/i }),
@@ -328,9 +274,6 @@ describe('ConnectionManager — batch 6', () => {
     expect(createFeatureConnectionMock).not.toHaveBeenCalled();
     expect(createConnectionMock).not.toHaveBeenCalled();
   });
-
-  // ── 9. ArcGIS branch: createFeatureConnection invece di createConnection ─
-
   it('routes ArcGIS submit to createFeatureConnection (not createConnection)', async () => {
     createFeatureConnectionMock.mockResolvedValueOnce({ id: 'arc-1' });
 
@@ -367,7 +310,6 @@ describe('ConnectionManager — batch 6', () => {
       server_url: 'https://arcgis.example.test/rest/services',
       auth_type: 'public',
     });
-    // Nessuna chiamata al branch DB.
     expect(createConnectionMock).not.toHaveBeenCalled();
   });
 });

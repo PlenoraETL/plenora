@@ -37,7 +37,7 @@ def _join(left, right, *, left_on, right_on):
 
 def test_different_keys_right_join_key_keeps_original_name():
     """left_on != right_on: la chiave destra DEVE restare 'id_right',
-    non 'id_right_R' (questo era il bug pre-fix)."""
+    non 'id_right_R' (questo era il bug Previous behavior)."""
     left = [_col("id_left"), _col("name_l")]
     right = [_col("id_right"), _col("name_r")]
     result = _join(left, right, left_on="id_left", right_on="id_right")

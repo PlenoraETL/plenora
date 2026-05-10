@@ -34,14 +34,6 @@ import { nd } from './nodeHelpers';
  *   const edges = canvas.edges.map(e => createEdgeFromData(e, nodes));
  */
 
-// =============================================================================
-// HELPER INTERNO
-// =============================================================================
-
-// =============================================================================
-// EDGE
-// =============================================================================
-
 /**
  * Ricostruisce un oggetto edge ReactFlow a partire dai dati serializzati.
  *
@@ -93,10 +85,6 @@ export function createEdgeFromData(edge, loadedNodes) {
     },
   };
 }
-
-// =============================================================================
-// NODI ESTRAI
-// =============================================================================
 
 /**
  * Crea un nodo tabella DB da dati backend.
@@ -158,10 +146,6 @@ function createFeatureLayerNode(node) {
     },
   };
 }
-
-// =============================================================================
-// NODI CONDIVISI (tutti e tre gli editor)
-// =============================================================================
 
 /**
  * Crea il nodo Output/Result da dati backend.
@@ -383,10 +367,6 @@ function createDataSourceNode(node) {
   };
 }
 
-// =============================================================================
-// NODI MANIPOLA + ARRICCHISCI
-// =============================================================================
-
 /**
  * Crea un nodo Project Source (sorgente da altro progetto URBY) da dati backend.
  *
@@ -421,10 +401,6 @@ function createFileSourceNode(node) {
   };
 }
 
-// =============================================================================
-// NODI MANIPOLA
-// =============================================================================
-
 /**
  * Crea un nodo Transform (operazione di trasformazione dati) da dati backend.
  *
@@ -443,10 +419,6 @@ function createTransformNode(node) {
     },
   };
 }
-
-// =============================================================================
-// NODI ARRICCHISCI
-// =============================================================================
 
 /**
  * Crea un nodo API Enrichment (chiamata a connettore esterno) da dati backend.
@@ -489,10 +461,6 @@ function createApiEnrichNode(node) {
   };
 }
 
-// =============================================================================
-// DISPATCHER — deserializza un intero array di nodi raw
-// =============================================================================
-
 /**
  * Converte un array di nodi raw dal backend in nodi ReactFlow pronti al render.
  *
@@ -517,15 +485,11 @@ export function deserializeNodes(rawNodes, options = {}) {
 
   return rawNodes.map(node => {
     switch (node.type) {
-
-      // ── Estrai ──────────────────────────────────────────────────────────────
       case 'source':
         return createTableNode(node, connection);
 
       case 'feature_source':
         return createFeatureLayerNode(node);
-
-      // ── Condivisi (tutti gli editor) ────────────────────────────────────────
       case 'result':
         return createResultNode(node, { isManipulate, isArricchisci });
 
@@ -547,19 +511,13 @@ export function deserializeNodes(rawNodes, options = {}) {
       case 'datasource_node':
       case 'datasourceNode':
         return createDataSourceNode(node);
-
-      // ── Manipola + Arricchisci ───────────────────────────────────────────────
       case 'project_source':
         return createProjectSourceNode(node);
 
       case 'file_source':
         return createFileSourceNode(node);
-
-      // ── Manipola ─────────────────────────────────────────────────────────────
       case 'transform':
         return createTransformNode(node);
-
-      // ── Arricchisci ──────────────────────────────────────────────────────────
       case 'api_enrich':
         return createApiEnrichNode(node);
 

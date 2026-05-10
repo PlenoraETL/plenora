@@ -6,12 +6,6 @@
  * Registra authBus.onUnauthorized per ricevere gli eventi 401 da axios.
  *
  * Uso: const { user, token, login, logout } = useAuth();
- *
- * C3.3 Phase 4: le chiamate a /auth/login e /auth/logout passano ora per
- * `api/auth.js`. Rimosso anche l'helper `authFetch` (wrapper di
- * `fetch()`) perche' non aveva consumer in src/ e violava il contratto
- * "src/api/ unico punto HTTP". Se in futuro serve un wrapper di fetch
- * con auth, esporlo da `api/`.
  */
 
 import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
@@ -52,9 +46,6 @@ export function AuthProvider({ children }) {
     const currentToken = sessionStorage.getItem(TOKEN_KEY);
     if (currentToken) {
       try {
-        // apiLogout NON e' async: ritorna il Promise grezzo cosi' il
-        // pattern fire-and-forget (no await) e' preservato bit-per-bit
-        // dal comportamento pre-C3.3.
         const p = apiLogout(currentToken);
         if (p && typeof p.then === 'function') {
           p.catch(() => {});

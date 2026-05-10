@@ -195,11 +195,9 @@ def _assert_task_group(task_id: str, current_user: CurrentUser) -> None:
         )
 
 
-# Due router: uno per pipeline (prefix projects) e uno per tasks
 pipeline_router = APIRouter(prefix="/projects", tags=["orchestrator"])
 tasks_router = APIRouter(prefix="/tasks", tags=["tasks"])
 
-# Servizi inizializzati da main.py
 _orchestrator = None
 
 
@@ -254,7 +252,7 @@ def execute_project_pipeline(
         task_info = task_service.create_pipeline_task(
             project_id=project_id,
             force_recalculate=force_recalculate,
-            user_id=current_user.user_id,  # N9: re-check permessi al pickup
+            user_id=current_user.user_id,
             intermediate_mode_override=intermediate_mode,
         )
         result = _task_info_to_dict(task_info)
@@ -292,7 +290,7 @@ def preview_project(
                 payload=PreviewTaskPayload(
                     project_id=project_id,
                     limit=limit,
-                    user_id=current_user.user_id,  # N9
+                    user_id=current_user.user_id,
                 ),
                 queued_message="Preview in coda...",
                 log_label="preview",
@@ -471,7 +469,7 @@ def create_task(
                         canvas=request.canvas,
                         output_format=request.output_format,
                         force_recalculate=request.force_recalculate,
-                        user_id=current_user.user_id,  # N9
+                        user_id=current_user.user_id,
                     ),
                     queued_message="Task in coda...",
                     log_label="enrichment",
@@ -481,7 +479,6 @@ def create_task(
             if not request.carica_node_data:
                 raise HTTPException(status_code=400, detail="carica_node_data è obbligatorio per task CARICA")
             _validate_rest_carica_task_payload(request.carica_node_data)
-            # N11: arricchisci canvas_types da project columns_metadata
             from app.core.projects.service import ProjectService
 
             enrich_canvas_types_from_metadata(
@@ -503,7 +500,7 @@ def create_task(
                         output_format=request.output_format,
                         force_recalculate=request.force_recalculate,
                         triggered_by=request.triggered_by,
-                        user_id=current_user.user_id,  # N9
+                        user_id=current_user.user_id,
                     ),
                     queued_message="Task CARICA in coda...",
                     log_label="carica",
@@ -637,7 +634,6 @@ def cleanup_task_completely(
     from app.core.orchestrator.task_service import task_service
     from app.core.results.cleanup import delete_result
 
-    # 1. Estrai project_id + result_id dal task (se presenti
     project_id = None
     task_result_payload: Dict[str, Any] = {}
     try:
@@ -650,14 +646,11 @@ def cleanup_task_completely(
     except Exception as e:
         logger.warning(f"cleanup: impossibile leggere task_info: {e}")
 
-    # 2. Tenant check: senza project_id non possiamo verificare ownership
     if not project_id:
         raise HTTPException(
             status_code=404,
             detail="Task non trovato o senza progetto associato — cleanup non eseguibile",
         )
-    # intent: boundary tenant-check / outcome: fail-open solo per progetto-gia-eliminato
-    # breadcrumb: DB transient vs progetto genuinamente mancante distinguibile in log
     try:
         from app.core.projects.service import ProjectService
         _meta = ProjectService().get_project_metadata(project_id)
@@ -793,8 +786,6 @@ def download_task_result(
         if task_info.status.value != "success":
             raise HTTPException(status_code=400, detail=f"Task non completato (stato: {task_info.status.value})")
 
-        # ── FAST-PATH ESEGUIBILE: streaming da object storage (S3) ──
-        # Sanitizza task_id contro path traversal / injection in prefix
         safe_task_id = "".join(c for c in task_id if c.isalnum() or c in "-_")
         if safe_task_id == task_id:
             from app.core.eseguibili import storage as _eseg_storage
@@ -811,7 +802,6 @@ def download_task_result(
                 # convention: un solo output per task eseguibile
                 storage_key = storage_keys[0]
                 storage_filename = storage_key.rsplit("/", 1)[-1]
-                # intent: boundary broad→HTTP500 / outcome: fail-closed
                 try:
                     storage_stream = _eseg_storage.open_stream(storage_key)
                 except Exception as storage_error:
@@ -844,7 +834,6 @@ def download_task_result(
                     headers=response_headers,
                 )
 
-        # ── FALLBACK: lettura dal result persistito (DB BYTEA o S3) ──
         # Ogni task_id ha il proprio result_id nel payload Celery. Usiamo
         # quello per leggere ESATTAMENTE il result generato da questo task
         # NON `get_latest_result(project_id)`: due task sullo stesso

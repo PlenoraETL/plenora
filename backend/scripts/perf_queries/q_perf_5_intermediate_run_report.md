@@ -17,7 +17,6 @@ in:
 - size in bytes del JSONB (`jsonb_bytes`)
 - numero di nodi snapshot-ati
 
-Riferimento: `orchestrate/phase_0_consolidation/performance_baseline_0_5f.md §5.1`
 
 ## Esecuzione
 

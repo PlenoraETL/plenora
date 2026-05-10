@@ -1,7 +1,4 @@
-"""
-Auth shared contract — pure types + pure policy.
-
-"""
+"""Auth shared contract: pure types and pure policy."""
 
 from __future__ import annotations
 
@@ -40,7 +37,7 @@ __all__ = [
     "ROLES_KIOSK_ONLY",
     # Pure policy
     "group_filter",
-    # Auth DTOs (Phase-10): pure pydantic request/response payloads
+    # Auth DTOs
     "LoginRequest",
     "TokenResponse",
     "UserCreate",

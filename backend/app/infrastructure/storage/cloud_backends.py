@@ -433,10 +433,6 @@ def get_secrets_backend() -> SecretsBackend:
             region=os.getenv("AWS_REGION", "eu-south-1"),
         )
     if provider == "minio":
-        # MinIO e' solo object storage: non fornisce un secrets backend
-        # Il decoupling di secrets e object storage provider (SECRETS_PROVIDER
-        # separato da CLOUD_PROVIDER) e' follow-up fuori A1-B2 (vedi
-        # a1_storage_policy.md §7.3). Per ora: errore esplicito
         raise ValueError(
             "CLOUD_PROVIDER=minio non supporta SecretsBackend. MinIO e' "
             "solo object storage; secrets richiedono CLOUD_PROVIDER=aws. "
@@ -445,25 +441,6 @@ def get_secrets_backend() -> SecretsBackend:
     # TODO: add Azure Key Vault / GCP Secret Manager backends when those
     # providers are supported by deployment profiles
     raise ValueError(f"CLOUD_PROVIDER non supportato: {provider!r}")
-
-
-# Object storage capability
-# Tre factory pubbliche, una per dominio
-# get_runtime_object_storage: result/file_source/eseguibili/IMDF/intermediate
-# Bucket = OBJECT_STORAGE_BUCKET / PLENORA_ARTIFACT_BUCKET / BACKUP_BUCKET (legacy
-# get_backup_object_storage: admin_backups + scripts/backup_db.py
-# Bucket = BACKUP_BUCKET (o legacy BACKUP_S3_BUCKET
-# get_log_archive_storage: log archive pipeline (gia' separato
-# Bucket = LOG_ARCHIVE_BUCKET
-# Capability globale `OBJECT_STORAGE_ENABLED=false`
-# object_storage_enabled -> False
-# get_runtime_object_storage / get_backup_object_storage sollevano
-# ObjectStorageDisabledError con messaggio operativo
-# I caller con fallback locale (IMDF list_bundles cache, file_sources
-# delete) controllano `object_storage_enabled` PRIMA di chiamare la
-# factory, oppure catturano l'eccezione e degradano
-# `get_object_storage` legacy resta come wrapper deprecato verso
-# `get_runtime_object_storage` per non rompere callsite gia' migrati
 
 
 class ObjectStorageDisabledError(RuntimeError):
@@ -491,7 +468,7 @@ def _read_object_storage_capability() -> dict:
     """
     enabled_raw = os.getenv("OBJECT_STORAGE_ENABLED")
     if enabled_raw is None:
-        enabled = True  # Default DEFAULTS["OBJECT_STORAGE_ENABLED"
+        enabled = True
     else:
         enabled = str(enabled_raw).strip().lower() in ("true", "1", "yes")
 
@@ -528,7 +505,7 @@ def _resolve_runtime_bucket() -> "str | None":
 
     Priorita':
       1. OBJECT_STORAGE_BUCKET (canonical, distinto da BACKUP_BUCKET)
-      2. PLENORA_ARTIFACT_BUCKET (alias, prep)
+      2. PLENORA_ARTIFACT_BUCKET
       3. BACKUP_BUCKET / BACKUP_S3_BUCKET (retro-compat con WARNING:
          deployment legacy che usavano lo stesso bucket per backup e
          runtime artifact)
@@ -605,7 +582,7 @@ def get_runtime_object_storage() -> ObjectStorage:
 
     Bucket:
       - OBJECT_STORAGE_BUCKET (canonical)
-      - PLENORA_ARTIFACT_BUCKET (alias, )
+      - PLENORA_ARTIFACT_BUCKET
       - BACKUP_BUCKET (legacy fallback con warning)
     """
     if not object_storage_enabled():
@@ -672,9 +649,8 @@ def _warn_get_object_storage_deprecated_once() -> None:
 def get_object_storage() -> ObjectStorage:
     """[DEPRECATED] Alias di `get_runtime_object_storage`.
 
-    Mantenuto come compat shim per i callsite gia' migrati nei batch
-    precedenti che non distinguevano runtime vs backup. Da
-    in poi i nuovi callsite devono usare `get_runtime_object_storage`
+    Mantenuto come compat shim per i callsite che non distinguevano runtime
+    vs backup. I nuovi callsite devono usare `get_runtime_object_storage`
     o `get_backup_object_storage` esplicitamente. Behavior identico
     a `get_runtime_object_storage` (capability check + runtime bucket
     resolution con fallback BACKUP_BUCKET legacy).

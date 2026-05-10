@@ -66,7 +66,7 @@ const TableNode = memo(({ data, id }) => {
   const allVisible = visibleCount === columns.length;
   const noneVisible = visibleCount === 0;
 
-  // ─── Store actions (subscription selettiva: non causa re-render se altre parti dello store cambiano) ───
+  // Selective subscription avoids re-renders when unrelated store state changes.
   const updateNodeData       = useCanvasStore(s => s.updateNodeData);
   const deleteNode           = useCanvasStore(s => s.deleteNode);
   const confirm              = useConfirm();
@@ -75,8 +75,6 @@ const TableNode = memo(({ data, id }) => {
   const updateColumnAlias    = useCanvasStore(s => s.updateColumnAlias);
   const addCalculatedColumn  = useCanvasStore(s => s.addCalculatedColumn);
   const removeCalculatedColumn = useCanvasStore(s => s.removeCalculatedColumn);
-
-  // === HANDLERS ===
 
   const handleSaveAlias = () => {
     updateNodeData(id, { alias: tempAlias.trim() || null, label: tempAlias.trim() || data.table_name });

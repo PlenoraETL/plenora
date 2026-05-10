@@ -1,10 +1,7 @@
 /**
  * ApiConnectionWizard.jsx — Orchestrator del wizard ApiConnection
  *
- * Estratto da `pages/ApiConnectionManager.jsx` in
- * `FE-PHASE2-SPLIT-001A`. Sub-PR `FE-PHASE2-SPLIT-001B` ha estratto i
- * 6 step in componenti presentational separati sotto
- * `wizard-steps/Step{0..5}*.jsx`. Questo file ora possiede:
+ * Owna:
  *
  *  - lo stato wizard-owned (formData, wizardStep, wizardStepError,
  *    customHeadersList, testParams, testResult, testRawResponse,
@@ -15,9 +12,7 @@
  *  - la step bar, il body dispatcher per i 6 step e il footer
  *    Indietro / Avanti / Salva con la validazione.
  *
- * UX e CSS invariati: stesse classi `acm__*`, stesso `acm__overlay`,
- * stesso `acm-wizard-title` aria-labelledby (i contract test ACM
- * continuano a passare).
+ * Mantiene il contratto dialog `aria-labelledby="acm-wizard-title"`.
  */
 import React, { useState, useEffect, useRef } from 'react';
 import useDialogFocus from '../../hooks/useDialogFocus';
@@ -42,7 +37,7 @@ export const EMPTY_FORM = {
   pagination:{ type:'', page_size:100, max_rows:10000, offset_param:'offset', limit_param:'limit', cursor_param:'cursor', cursor_path:'next_cursor', link_path:'next', start_page:0 },
   options:{ rate_limit:5, timeout:30, retry_on_error:true, retry_max:3 },
   batch:{ enabled:false, max_size:100, input_key:'items', input_format:'array', endpoint_override:'', method_override:'' },
-  // ── REST File Processor (connection_type='rest_file') ──
+  // REST file processor fields use connection_type='rest_file'.
   // file_fields: campi multipart che ricevono un file. Per ora solo source='node_input'
   //   (file in input al nodo del canvas).
   // static_fields: campi multipart con valore fisso (es. JSON inline per styles/mapping).
@@ -131,9 +126,7 @@ function buildFormFromTemplate(tpl) {
 
 export default function ApiConnectionWizard({ isOpen, seed, onClose, onSaved }) {
   const toast = useToast();
-
-  // ── State (wizard-owned) ─────────────────────────────────────────────
-  const [editingApi, setEditingApi] = useState(null);
+const [editingApi, setEditingApi] = useState(null);
   const [wizardStep, setWizardStep] = useState(0);
   const [wizardStepError, setWizardStepError] = useState(null);
   const [formData, setFormData] = useState(EMPTY_FORM);
@@ -144,12 +137,10 @@ export default function ApiConnectionWizard({ isOpen, seed, onClose, onSaved }) 
   const [testing, setTesting] = useState(false);
   const [showAdvancedConfig, setShowAdvancedConfig] = useState(false);
 
-  // ── Dialog focus management (a11y) ───────────────────────────────────
+  // Dialog focus management (a11y).
   const wizardDialogRef = useRef(null);
   useDialogFocus(isOpen, onClose, wizardDialogRef);
-
-  // ── Setup quando il seed cambia (open / edit / template) ─────────────
-  useEffect(() => {
+useEffect(() => {
     if (!isOpen) return;
     if (!seed || seed.kind === 'new') {
       setEditingApi(null);
@@ -196,9 +187,7 @@ export default function ApiConnectionWizard({ isOpen, seed, onClose, onSaved }) 
   }, [isOpen, seed]);
 
   if (!isOpen) return null;
-
-  // ── Helpers / handlers ──────────────────────────────────────────────
-  const getCustomHeadersObject = () => {
+const getCustomHeadersObject = () => {
     const h = {};
     customHeadersList.forEach(x => { if (x.key?.trim()) h[x.key.trim()] = x.value || ''; });
     return h;
@@ -338,9 +327,7 @@ export default function ApiConnectionWizard({ isOpen, seed, onClose, onSaved }) 
       }));
     }
   };
-
-  // ── Footer next/back validation logic ───────────────────────────────
-  const onClickNext = () => {
+const onClickNext = () => {
     // Validazione step Parametri:
     // - rest_file: serve almeno un campo file
     // - enricher "tradizionale": serve almeno un parametro mappato a colonna
@@ -377,7 +364,6 @@ export default function ApiConnectionWizard({ isOpen, seed, onClose, onSaved }) 
           <button type="button" className="acm__modal-close" onClick={onClose} aria-label="Chiudi">✕</button>
         </div>
 
-        {/* Step bar */}
         <div className="acm__wizard-steps">
           {WIZARD_STEPS.map((s, i) => (
             <div key={i} className={`acm__wstep${wizardStep === i ? ' acm__wstep--active' : ''}${wizardStep > i ? ' acm__wstep--done' : ''}`} onClick={() => setWizardStep(i)}>

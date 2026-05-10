@@ -300,7 +300,7 @@ def test_group_cleanup_registry_execute_calls_do_not_use_dynamic_sql():
 def test_delete_group_cascade_failure_is_logged_then_raised_as_500(monkeypatch):
     """S5: quando delete_group_cascade solleva, il route handler DEVE
     loggare l'errore (con exc_info) e poi sollevare HTTPException 500.
-    Il fallback pre-fix catturava `Exception as e` ma non usava mai `e`:
+    Il fallback Previous behavior catturava `Exception as e` ma non usava mai `e`:
     il log diagnostico non veniva emesso → regressione di osservabilita'.
     """
     # BE-GO-READY-AUTH-ENGINE-021-USERS-GROUPS-REEXPORT-REMOVAL:

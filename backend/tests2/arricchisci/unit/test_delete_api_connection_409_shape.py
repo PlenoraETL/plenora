@@ -1,7 +1,7 @@
 """
 Contract test per shape 409 canonica su DELETE /api/api-connections/{id}.
 
-Invariante blindato (Batch Fix 6.1 — error-handling-governance):
+Invariante blindato (— error-handling-governance):
 """
 
 from __future__ import annotations
@@ -56,7 +56,7 @@ def client(current_user: CurrentUser, monkeypatch) -> TestClient:
     fake_project_list = SimpleNamespace(
         projects=[
             SimpleNamespace(
-                # PR-δ: aggiunto `group_id` (visibile a current_user grp-1)
+                # hidden-count contract: aggiunto `group_id` (visibile a current_user grp-1)
                 # cosi' il filtro cross-tenant non scarta la dipendenza.
                 model_dump=lambda: {
                     "project_id": "proj-arr-1",
@@ -96,7 +96,7 @@ def test_delete_api_connection_409_shape_has_canonical_dependencies_field(client
     assert response.status_code == 409
     detail = response.json()["detail"]
 
-    # Pre-fix NON aveva ``error``. Post 6.1 lo espone sempre.
+    # Previous behavior NON aveva ``error``. Post 6.1 lo espone sempre.
     assert detail["error"] == "api_connection_in_use"
     assert isinstance(detail["message"], str) and detail["message"]
     assert isinstance(detail["dependencies"], list)
@@ -117,7 +117,7 @@ def test_delete_api_connection_409_shape_has_canonical_dependencies_field(client
 
 def test_delete_api_connection_happy_path_returns_204(client, monkeypatch):
     """F2-B1 (2026-04-24): DELETE /api/api-connections/{id} risponde 204
-    No Content con body vuoto. Pre-fix ritornava 200 + dict
+    No Content con body vuoto. Previous behavior ritornava 200 + dict
     {"status": "deleted", "api_id": X}."""
     # Canvas senza match → niente dipendenze, happy path.
     empty_list = SimpleNamespace(projects=[])

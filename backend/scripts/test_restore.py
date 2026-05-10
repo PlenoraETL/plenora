@@ -1,8 +1,4 @@
-"""
-test_restore.py — Verifica restore settimanale del backup su DB usa-e-getta.
-
-Chiude #25-R1 (memory `backup_test_restore_weekly_pending`). Il backup
-"""
+"""Verifica restore settimanale del backup su DB usa-e-getta."""
 
 from __future__ import annotations
 
@@ -17,13 +13,11 @@ from typing import Tuple
 from urllib.parse import urlparse, urlunparse
 
 
-# Script standalone: aggiungi backend root a sys.path per `app.*` imports.
+# Standalone script: add backend root so `app.*` imports work from cron/systemd.
 _BACKEND_ROOT = Path(__file__).resolve().parent.parent
 if str(_BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(_BACKEND_ROOT))
 
-
-# ── Configurazione ──────────────────────────────────────────────────────────
 
 SCHEMA = os.getenv("BACKUP_SCHEMA", "plenora")
 
@@ -39,8 +33,6 @@ PG_RESTORE_TIMEOUT_SEC = int(os.getenv("BACKUP_RESTORE_TIMEOUT_SEC", "3600"))
 TEST_DB_PATTERN = re.compile(r"^plenora_restore_test_\d{8}_\d{6}$")
 
 
-# ── Helpers ─────────────────────────────────────────────────────────────────
-
 
 _LOG_BUFFER: list[str] = []
 _LOG_TAIL_LINES = 30
@@ -53,8 +45,7 @@ def log(level: str, msg: str) -> None:
     _LOG_BUFFER.append(line)
 
 
-# ── DB run tracking (plenora.verify_runs) ────────────────────────────────────
-# Vedi commento analogo in scripts/backup_db.py. Tabella sorella con shape
+# Tabella sorella di backup_runs con shape
 # ridotta (niente bucket_key/size: il verify non produce output persistente).
 
 
@@ -150,8 +141,6 @@ def make_target_url(admin_url: str, test_db: str) -> str:
     return urlunparse(parsed._replace(path=f"/{test_db}"))
 
 
-# ── Step 1: trova l'ultimo dump su S3 ───────────────────────────────────────
-
 
 def _storage():
     """Lazy import + factory del backend object storage (backup bucket)."""
@@ -193,8 +182,6 @@ def download_dump(key: str, dest: Path) -> None:
     size_mb = dest.stat().st_size / (1024 * 1024)
     log("INFO", f"download ok: {dest.name} ({size_mb:.1f} MB)")
 
-
-# ── Step 2: createdb / dropdb via psql ──────────────────────────────────────
 
 
 def _run_psql(url: str, sql: str, timeout: int = 60) -> subprocess.CompletedProcess:
@@ -239,8 +226,6 @@ def dropdb(admin_url: str, test_db: str) -> None:
         log("WARN", f"dropdb {test_db} eccezione (non-fatal): {e}")
 
 
-# ── Step 3: pg_restore ──────────────────────────────────────────────────────
-
 
 def pg_restore(target_url: str, dump_file: Path) -> None:
     cmd = [
@@ -268,8 +253,6 @@ def pg_restore(target_url: str, dump_file: Path) -> None:
     log("INFO", "pg_restore ok")
 
 
-# ── Step 4: sanity check tabelle ────────────────────────────────────────────
-
 
 def sanity_check_tables(target_url: str) -> None:
     for table in SANITY_TABLES:
@@ -294,8 +277,6 @@ def sanity_check_tables(target_url: str) -> None:
         log("INFO", f"  {SCHEMA}.{table}: {count} rows")
     log("INFO", f"sanity ok su {len(SANITY_TABLES)} tabelle")
 
-
-# ── Main ────────────────────────────────────────────────────────────────────
 
 
 def main() -> None:
@@ -340,7 +321,6 @@ def main() -> None:
         raise SystemExit(1)
 
     finally:
-        # Cleanup garantito (file locale + DB di test).
         if db_created:
             try:
                 dropdb(admin_url, test_db)

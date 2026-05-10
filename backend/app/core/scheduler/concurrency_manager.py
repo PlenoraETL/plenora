@@ -16,7 +16,6 @@ from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
 
-# TTL del lock scheduler (C3 fix 4
 # Strategia heartbeat: il lock ha TTL breve (10 min default), ma
 # ExecutionManager.execute avvia un thread daemon che refresha il
 # TTL ogni HEARTBEAT_INTERVAL secondi finche' la pipeline e' attiva
@@ -75,7 +74,6 @@ class ConcurrencyManager:
         )
         if not row:
             return None
-        # Verifica scadenza
         if row["expires_at"]:
             try:
                 exp = datetime.fromisoformat(row["expires_at"])
@@ -100,13 +98,10 @@ class ConcurrencyManager:
         "queued" misleading (pre-fix: qualsiasi errore -> False silent ->
         coda corrotta su DB down).
         """
-        # Prima pulisci eventuali lock scaduti
         self._get(key)  # side effect: cancella se scaduto
         expires_at = None
         if ttl_seconds:
             expires_at = (datetime.now(timezone.utc) + timedelta(seconds=ttl_seconds)).isoformat()
-        # intent: exception-as-control-flow tipizzata (UNIQUE -> False
-        # outcome: fail-closed sugli errori non-UNIQUE (propagano
         try:
             db.execute(
                 "INSERT INTO scheduler_locks (key, value, expires_at) VALUES (%s,%s,%s)",
@@ -131,7 +126,6 @@ class ConcurrencyManager:
         Prima: SELECT + INSERT OR REPLACE non atomici → due thread che
         leggevano value=2 sovrascrivevano entrambi a value=3 invece di 4.
         """
-        # PostgreSQL: usa pool connection con cursor esplicito
         from app.db.pg_connection import get_connection, put_connection
         conn = get_connection()
         try:
@@ -228,7 +222,7 @@ class ConcurrencyManager:
         return "queued"
 
     def refresh_lock(self, schedule_id: str, ttl_seconds: int = None) -> bool:
-        """Estende il TTL del lock (C3 fix 4, heartbeat da ExecutionManager).
+        """Estende il TTL del lock durante heartbeat da ExecutionManager.
 
         Usato dal thread daemon di heartbeat durante l'esecuzione di una
         pipeline lunga: il TTL base e' corto (10 min) per permettere

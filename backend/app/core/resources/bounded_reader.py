@@ -15,7 +15,7 @@ __all__ = ["read_stream_bounded"]
 
 # Bytes-like types accepted as chunks. `memoryview` and `bytearray`
 # are accepted because requests / object-storage backends can
-# return either; we normalize via `bytes(chunk)` on append
+# yield either; append normalizes with `bytes(chunk)`.
 _BYTES_LIKE = (bytes, bytearray, memoryview)
 
 

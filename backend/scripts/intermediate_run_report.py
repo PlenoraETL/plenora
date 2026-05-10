@@ -1,9 +1,5 @@
 #!/usr/bin/env python3
-"""
-intermediate_run_report.py — Report read-only per UNA `run_id`.
-
-Scope (Phase 6, post-Batch 3):
-"""
+"""Report read-only per una `run_id`."""
 
 from __future__ import annotations
 

@@ -1,5 +1,5 @@
 /**
- * ConfirmContext.test.jsx — Contract test (PR-B canvas confirm).
+ * Contract tests for ConfirmContext canvas confirmation behavior.
  *
  * Invariante:
  *   - useConfirm() outside <ConfirmProvider> -> throw helpful error

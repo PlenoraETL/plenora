@@ -1,7 +1,7 @@
 """
-Contract test R-25 PR-B2.b â€” propagation manipola + arricchisci.
+Contract test R-25 propagation contract â€” propagation manipola + arricchisci.
 
-Estende il contract di PR-B2 (estrai-final) ai 3 call-site rimasti:
+Estende il contract di propagation contract (estrai-final) ai 3 call-site rimasti:
 """
 
 from __future__ import annotations

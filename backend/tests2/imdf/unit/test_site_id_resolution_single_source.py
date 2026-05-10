@@ -1,5 +1,5 @@
 """
-Contract test D3 commit 3 — site_id single-source (loader autoritativo).
+Contract test — current IMDF site_id single-source (loader autoritativo).
 
 Invariant architetturale (d3_imdf_boundaries.md §3.1 + §4.1 + R3 + R4):
 """
@@ -22,7 +22,6 @@ from app.shared.contracts.auth import CurrentUser
 pytestmark = [pytest.mark.unit, pytest.mark.contract, pytest.mark.regression]
 
 
-# ── Fixtures ────────────────────────────────────────────────────────────
 
 
 @pytest.fixture
@@ -52,7 +51,6 @@ def _write_meta(bundle_dir: Path, site_id, project_id: str = "proj-1", **extra):
     )
 
 
-# ── 1. get_bundle_metadata: legge site_id da meta (non da scan) ─────────
 
 
 def test_get_bundle_metadata_reads_site_id_from_meta(fake_settings, superadmin, monkeypatch):
@@ -65,7 +63,7 @@ def test_get_bundle_metadata_reads_site_id_from_meta(fake_settings, superadmin, 
     (bundle_dir / "DIFFERENT_SITE").mkdir()
     (bundle_dir / "DIFFERENT_SITE" / "manifest.json").write_text("{}", encoding="utf-8")
 
-    # Mock _hydrate_local_cache (commit 2) perche' non vogliamo side effect S3
+    # Mock _hydrate_local_cache perche' non vogliamo side effect S3.
     import app.core.imdf.storage as storage_mod
     monkeypatch.setattr(storage_mod, "ensure_local_bundle", MagicMock(return_value=bundle_dir))
 
@@ -82,7 +80,7 @@ def test_get_bundle_metadata_returns_null_site_id_when_meta_missing_field(
     della sottodir."""
     bundle_dir = fake_settings / "task-no-site-id"
     _write_meta(bundle_dir, site_id=None)  # Meta senza site_id
-    # Sottodir candidata che pre-fix sarebbe stata rilevata come site_id
+    # Sottodir candidata che la vecchia scansione avrebbe rilevato come site_id.
     (bundle_dir / "SCAN_CANDIDATE").mkdir()
     (bundle_dir / "SCAN_CANDIDATE" / "manifest.json").write_text("{}", encoding="utf-8")
 
@@ -94,7 +92,6 @@ def test_get_bundle_metadata_returns_null_site_id_when_meta_missing_field(
     assert result["site_id"] is None
 
 
-# ── 2. list_bundles: usa solo meta per site_id ──────────────────────────
 
 
 def test_list_bundles_uses_only_meta_for_site_id(fake_settings, superadmin, monkeypatch):
@@ -123,7 +120,6 @@ def test_list_bundles_uses_only_meta_for_site_id(fake_settings, superadmin, monk
     assert by_tid["task-b"].site_id is None
 
 
-# ── 3. R4: loader invariant — ImdfBundle.site_id mai None ───────────────
 
 
 def test_loader_site_id_invariant_never_none(tmp_path):
@@ -152,7 +148,6 @@ def test_loader_site_id_invariant_never_none(tmp_path):
     assert isinstance(bundle_b.site_id, str)
 
 
-# ── 4. Single-source: persist scrive bundle.site_id byte-identico ───────
 
 
 def test_persist_writes_loader_site_id_unchanged(tmp_path, monkeypatch):
@@ -162,8 +157,7 @@ def test_persist_writes_loader_site_id_unchanged(tmp_path, monkeypatch):
     """
     from app.core.imdf.persist import persist_imdf_bundle_to_disk
 
-    # Mock storage.save_bundle per isolare dal path S3 (commit 4 lo sposta,
-    # ma oggi persist lo chiama inline).
+    # Mock storage.save_bundle per isolare dal path S3; persist oggi lo chiama inline.
     import app.core.imdf.storage as storage_mod
     monkeypatch.setattr(storage_mod, "save_bundle", MagicMock())
 

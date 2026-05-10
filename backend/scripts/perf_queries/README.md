@@ -6,11 +6,6 @@ nella tabella `logs` (PostgreSQL JSONB).
 Tutte read-only (SELECT-only). Nessuna scrittura, nessuna DDL, niente
 funzioni custom, niente extension. Compatibili PG 12+.
 
-## Origine
-
-Le 6 query corrispondono a `Q-PERF-1..6` proposte in
-`orchestrate/phase_0_consolidation/performance_baseline_0_5f.md §5.1`.
-
 I marker `[PERF]` sono già emessi dal backend in 7 file:
 - `app/utils/dataframe.py`
 - `app/utils/result_store.py`
@@ -51,8 +46,7 @@ psql -d <database> -f q_perf_1_s3_download_p50_p95.sql
 ### Esecuzione via tool BI (Grafana SQL panel / Metabase question)
 
 Copia-incolla il contenuto del file. Il sink (Grafana / Metabase /
-DBeaver shared workspace) NON è ancora deciso — è oggetto del batch
-A2 separato.
+DBeaver shared workspace) non è imposto da queste query.
 
 ### Personalizzazione finestra temporale
 
@@ -78,7 +72,7 @@ diverse:
 esistente `backend/scripts/intermediate_run_report.py`. Vedi
 `q_perf_5_intermediate_run_report.md` per dettagli.
 
-## Out-of-scope (A2, separato)
+## Out-of-scope
 
 - Setup dashboard infra (Grafana / Metabase)
 - Esecuzione queries su prod DB
@@ -87,7 +81,6 @@ esistente `backend/scripts/intermediate_run_report.py`. Vedi
 
 ## Riferimenti
 
-- `orchestrate/phase_0_consolidation/performance_baseline_0_5f.md` (origine queries)
 - `backend/app/utils/logger.py` (PostgresLogHandler + whitelist details)
 - `backend/scripts/perf_bulk_verdict.py` (template verdict-on-rates)
 - `backend/scripts/intermediate_run_report.py` (drift detection)

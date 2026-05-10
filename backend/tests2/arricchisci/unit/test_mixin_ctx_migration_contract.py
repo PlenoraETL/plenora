@@ -1,7 +1,7 @@
 """
-Contract test BE-GO-READY-TRANSFORMATION-ENGINE-019 - Phase 2 mixin ctx migration.
+Contract test BE-GO-READY-TRANSFORMATION-ENGINE-019 - typed context contract mixin ctx migration.
 
-Lock i 6 invariant della Phase 2:
+Lock i 6 invariant della typed context contract:
 """
 
 from __future__ import annotations
@@ -21,7 +21,7 @@ pytestmark = [pytest.mark.unit, pytest.mark.arricchisci, pytest.mark.contract]
 _BACKEND_ROOT = Path(__file__).resolve().parent.parent.parent.parent
 
 
-# 1. Signature Phase 2 - `ctx` as kwarg on all 6 reader sites
+# 1. Signature typed context contract - `ctx` as kwarg on all 6 reader sites
 
 
 def test_load_source_project_accepts_ctx_kwarg():
@@ -159,10 +159,10 @@ def test_load_static_values_uses_static_sentinel_when_ctx_none(api_service):
             {"id": "sv1", "type": "staticValues", "fields": []},
         )  # NO ctx kwarg
 
-    # Post-batch -023: lo static branch usa il sentinel e ignora
+    # Current contract -023: lo static branch usa il sentinel e ignora
     # lo stale singleton state.
     assert captured["group_id"] == "_static_", (
-        f"REGRESSIONE Phase 5 slice: `_load_static_values` ha letto "
+        f"REGRESSIONE typed context closure slice: `_load_static_values` ha letto "
         f"`_current_group_id={api_service._current_group_id!r}` invece "
         f"del sentinel `_static_` quando ctx=None. Stale-state leak "
         f"cross-execution e' tornato disponibile."
@@ -181,7 +181,7 @@ def test_load_file_source_ignores_stale_preview_limit_when_ctx_preview_none(api_
     Regression guard contro stale-state cross-execution leak: un
     `_preview_limit=3` lasciato da T1 non deve truncare
     silenziosamente l'output di T2 che passa un ctx con
-    `preview_limit=None`. Pre-batch -025 questo era un fail-soft
+    `preview_limit=None`. Previous contract -025 questo era un fail-soft
     behavior che dipendeva dall'ordine di esecuzione sul singleton.
 
     Il test passa ctx con `group_id` valido + `preview_limit=None`
@@ -215,7 +215,7 @@ def test_load_file_source_ignores_stale_preview_limit_when_ctx_preview_none(api_
         )
 
     assert len(result) == 10, (
-        f"REGRESSIONE Phase 5 slice -025: stale `_preview_limit=3` "
+        f"REGRESSIONE typed context closure slice -025: stale `_preview_limit=3` "
         f"sul singleton ha truncato l'output ({len(result)} righe) "
         f"anche con ctx.preview_limit=None. Cross-execution leak "
         f"ripristinato."
@@ -268,7 +268,7 @@ def test_load_file_source_ctx_preview_limit_wins_over_stale_singleton(api_servic
 
 
 def test_load_source_project_fails_closed_when_ctx_group_id_none(api_service):
-    """Phase 2: ctx con `group_id=None` (progetto inesistente)
+    """typed context contract: ctx con `group_id=None` (progetto inesistente)
     deve fail-closed senza consultare il singleton."""
     from app.core.arricchisci.execution_context import (
         ArricchisciExecutionContext,
@@ -292,7 +292,7 @@ def test_load_source_project_fails_closed_when_ctx_group_id_none(api_service):
 def test_assert_file_source_group_access_fails_closed_with_ctx_none_group(
     api_service,
 ):
-    """Phase 2: stesso fail-closed semantico per il rest_file
+    """typed context contract: stesso fail-closed semantico per il rest_file
     mixin."""
     from app.core.arricchisci.execution_context import (
         ArricchisciExecutionContext,
@@ -355,7 +355,7 @@ def test_canvas_orchestrator_passes_ctx_to_mixin_callsites():
         # All call sites for these 4 targets must pass `ctx=`.
         for lineno, has_ctx in found[name]:
             assert has_ctx, (
-                f"REGRESSIONE Phase 2: chiamata a `svc.{name}(...)` "
+                f"REGRESSIONE typed context contract: chiamata a `svc.{name}(...)` "
                 f"in canvas_orchestrator.py:{lineno} non passa `ctx=...`. "
                 f"Senza il kwarg, il reader non usa il typed boundary."
             )
@@ -416,7 +416,7 @@ def test_te029_source_loading_migratable_tests_use_ctx_and_stale_singleton():
 
     Senza questa coverage, un futuro refactor potrebbe rollback i 6
     test al pattern singleton-source-of-truth, indebolendo la
-    Phase-2 ctx coverage in source loading.
+    typed-context ctx coverage in source loading.
 
     I 6 test target (in `test_api_connector_source_loading_core.py`):
       - `test_load_source_project_propagates_group_id_via_source_loader`
@@ -517,7 +517,7 @@ def test_te030b_source_loading_callsites_use_strict_helper():
 
 
 def test_arricchisci_project_access_uses_local_boundary_not_projects_db_get_project():
-    """Batch 104 W5 guard: tenant binding uses arricchisci.project_access."""
+    """current contract W5 guard: tenant binding uses arricchisci.project_access."""
     owned = [
         _BACKEND_ROOT / "app" / "core" / "arricchisci" / "execution_context.py",
         _BACKEND_ROOT / "app" / "core" / "arricchisci" / "api_connection_source_loading.py",

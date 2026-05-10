@@ -104,7 +104,7 @@ def test_request_strips_token_from_params_if_legacy_caller_passes_it():
 
 
 def test_post_data_has_token_in_header_not_body():
-    """POST case: token nel body data pre-C12. Post-fix: header."""
+    """POST case: token nel body data pre-C12. Current contract: header."""
     from app.core.features.arcgis_client import ArcGISClient
 
     mock_http = MagicMock()
@@ -311,25 +311,25 @@ def test_request_uses_exponential_backoff_when_retry_after_is_malformed(monkeypa
 
 
 def test_write_batch_refreshes_token_mid_batch_on_498(monkeypatch):
-    """Scenario C12 critico: batch 1 OK, batch 2 ritorna 498 (token
-    scaduto mid-batch), batch 2 retry con token nuovo ok, batch 3 ok.
-    Pre-C12 batch 2 e 3 fallivano tutti."""
+    """Scenario C12 critico: current contract OK, current contract ritorna 498 (token
+    scaduto mid-batch), current contract retry con token nuovo ok, current contract ok.
+    Pre-C12 current contract e 3 fallivano tutti."""
     from app.core.features.arcgis_client import ArcGISClient
 
     mock_http = MagicMock()
     # Pre-auth call (_authenticate_token genera token)
     mock_http.post.side_effect = [
-        # batch 1: success
+        # current contract: success
         _make_response(status=200, json_body={
             "addResults": [{"success": True}] * 2,
         }),
-        # batch 2: 498 (token scaduto)
+        # current contract: 498 (token scaduto)
         _make_response(status=200, json_body={"error": {"code": 498}}),
-        # batch 2 retry: success
+        # current contract retry: success
         _make_response(status=200, json_body={
             "addResults": [{"success": True}] * 2,
         }),
-        # batch 3: success
+        # current contract: success
         _make_response(status=200, json_body={
             "addResults": [{"success": True}] * 2,
         }),
@@ -343,7 +343,7 @@ def test_write_batch_refreshes_token_mid_batch_on_498(monkeypatch):
     }
 
     # authenticate() viene chiamato una volta per HTTP request + 1 retry
-    # post-498. tok-1 scade al batch 2, poi tok-2 subentra.
+    # post-498. tok-1 scade al current contract, poi tok-2 subentra.
     _token_state = {"current": "tok-1"}
 
     def _simulated_auth(c):
@@ -371,7 +371,7 @@ def test_write_batch_refreshes_token_mid_batch_on_498(monkeypatch):
         batch_size=2,
     )
 
-    # 3 batch attesi + 1 retry del batch 2 = 4 HTTP calls
+    # 3 batch attesi + 1 retry del current contract = 4 HTTP calls
     assert mock_http.post.call_count == 4, (
         f"Attese 4 HTTP calls (3 batch + 1 refresh retry). "
         f"Effettive: {mock_http.post.call_count}"

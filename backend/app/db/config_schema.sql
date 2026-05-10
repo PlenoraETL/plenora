@@ -1,8 +1,8 @@
 -- ============================================================
--- PLENORA — Schema legacy (storico, ex-SQLite #1 / config.db)
+-- PLENORA — Historical SQLite config schema reference
 -- ============================================================
 --
--- LEGACY HISTORICAL REFERENCE — NON ESEGUITO A RUNTIME.
+-- HISTORICAL REFERENCE — NON ESEGUITO A RUNTIME.
 --
 -- Questo file documenta la struttura tabellare originaria del
 -- "config.db" SQLite pre-migrazione PostgreSQL. Le tabelle
@@ -14,7 +14,7 @@
 -- `init_db()` in `app/db/pg_connection.py` NON carica questo file
 -- (verifica solo che le tabelle esistano nello schema applicativo).
 --
--- Mantenuto come reference storico per:
+-- Mantenuto come reference per:
 -- - chi legge `app/core/eseguibili/db.py:4` ("La tabella e'
 --   definita in app/db/config_schema.sql"): documentazione del
 --   layout originale, non dichiarazione esecutiva;
@@ -103,7 +103,7 @@ CREATE TABLE IF NOT EXISTS file_sources (
     name              TEXT NOT NULL,
     original_filename TEXT NOT NULL,
     format            TEXT NOT NULL,
-    -- Dispatch threshold (FS-B1-large): file < FILE_SOURCE_S3_THRESHOLD_BYTES
+    -- Dispatch threshold: file < FILE_SOURCE_S3_THRESHOLD_BYTES
     -- vivono qui (BLOB); file >= threshold hanno data=NULL e storage_key
     -- puntato a S3 via cloud_backends. Il reader file_service risolve
     -- trasparente al caller.
@@ -118,8 +118,8 @@ CREATE TABLE IF NOT EXISTS file_sources (
 
 CREATE INDEX IF NOT EXISTS idx_file_sources_group ON file_sources(group_id);
 
--- BE-HARDEN-001C E4 (BE-DELETE-002): partial index su storage_key per
--- accelerare la sibling refcount lookup e SELECT FOR UPDATE durante
+-- Partial index su storage_key per accelerare la sibling refcount lookup
+-- e SELECT FOR UPDATE durante
 -- delete_file_source quando il blob e' shared (multi-layer upload).
 -- Partial perche' BYTEA rows hanno storage_key=NULL e non vengono mai
 -- interrogate by key.
@@ -193,9 +193,8 @@ CREATE INDEX IF NOT EXISTS idx_schedules_group      ON schedules(group_id);
 CREATE INDEX IF NOT EXISTS idx_schedules_enabled    ON schedules(is_enabled);
 CREATE INDEX IF NOT EXISTS idx_schedules_created_by ON schedules(created_by);
 
--- Audit log catchup run emessi dal beat (C3 fix 3). Vedi
--- migrations/2026-04-16_add_schedule_catchup_history.sql per contesto
--- e per il cap anti-runaway consultato al momento dell'emit.
+-- Audit log dei catchup run emessi dal beat. Usato anche dal cap
+-- anti-runaway consultato al momento dell'emit.
 CREATE TABLE IF NOT EXISTS schedule_catchup_history (
     id              BIGSERIAL PRIMARY KEY,
     schedule_id     TEXT NOT NULL,

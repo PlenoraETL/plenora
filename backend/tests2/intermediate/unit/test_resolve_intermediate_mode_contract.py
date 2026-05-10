@@ -1,5 +1,5 @@
 """
-Contract test R-25 PR-B1 — resolve_intermediate_mode.
+Contract test R-25 mode-resolution contract — resolve_intermediate_mode.
 
 `resolve_intermediate_mode(default_mode, override_mode=None)` e' una pure
 """
@@ -31,7 +31,7 @@ pytestmark = [pytest.mark.unit, pytest.mark.intermediate, pytest.mark.contract]
 def test_override_none_returns_default(default_mode):
     """Override None deve essere bit-compatible col default-path pre-PR.
 
-    Caller esistenti (pre-PR-B2) chiamano senza override_mode; il
+    Caller esistenti (pre-propagation contract) chiamano senza override_mode; il
     risultato deve essere identico al default globale, altrimenti la PR
     introduce regression sul path produzione.
     """

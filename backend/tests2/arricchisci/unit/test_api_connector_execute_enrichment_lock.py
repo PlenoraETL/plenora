@@ -151,7 +151,7 @@ class TestExecuteEnrichmentBasics:
         assert "Nessun nodo nel canvas" in result["error"]
 
     def test_top_level_exception_returns_safe_error_dict(self, env):
-        # CONTRATTO Fix-C [phase-2-err]: una Exception non-ValueError al
+        # Contract: una Exception non-ValueError al
         # top-level NON deve leakare il messaggio raw al caller (FE/UI).
         # Il dettaglio tecnico resta nei log; il caller riceve un messaggio
         # generico e `user_error=False` per distinguerlo da errori di
@@ -168,7 +168,7 @@ class TestExecuteEnrichmentBasics:
         assert result["error"] == "Errore interno durante l'arricchimento"
 
     def test_top_level_value_error_propagates_message_as_user_error(self, env):
-        # CONTRATTO Fix-C [phase-2-err]: un ValueError sollevato dentro
+        # Contract: un ValueError sollevato dentro
         # api_connector porta un messaggio gia' user-safe (es. "Accesso
         # negato:", "URL bloccato:", validazione param). Va propagato
         # invariato al caller con `user_error=True`.
@@ -518,7 +518,7 @@ class TestExecuteEnrichmentFinalResult:
 
 
 class TestExecuteEnrichmentIntermediateSnapshot:
-    """Phase 6 Batch 3B: l'arricchisci snapshot per i nodi `api_enrich`
+    """Contract: l'arricchisci snapshot per i nodi `api_enrich`
     passa per `record_checkpoint_snapshot(module="arricchisci")` invece
     di `write_node` legacy. La policy globale
     `ARRICCHISCI_INTERMEDIATE_CHECKPOINTS=final_only` decide poi lo

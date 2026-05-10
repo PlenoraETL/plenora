@@ -18,17 +18,10 @@ from app.shared.resources.json_path import (
 from app.core.arricchisci.response_type_detector import ResponseTypeDetector
 from app.utils.logger import get_logger
 
-# Stesso logger name di `enrichment_service.py` (`__name__` valuta a
-# `"app.core.arricchisci.enrichment_service"`). Singleton stdlib per
-# nome → record indistinguibili dai consumer che attaccano handler /
-# filtrano per nome canonico
+# Keep the canonical enrichment logger name for existing log consumers.
 logger = get_logger("app.core.arricchisci.enrichment_service")
 
 
-# Wrapper bit-per-bit del `_geojson_to_wkt` di `enrichment_service.py`
-# delega a `_shared_geojson_to_wkt`. Importato qui direttamente per
-# evitare import circolare mixin → service → mixin. Behavior identico
-# il wrapper enrichment_service e' 1-line di delega
 def _geojson_to_wkt(geom: dict) -> str:
     """Converte un dict geometry GeoJSON in WKT."""
     return _shared_geojson_to_wkt(geom)
@@ -65,11 +58,9 @@ class EnrichmentResponseProcessingMixin:
         if not self.output_mapping:
             return self._auto_flatten(data)
 
-        # Normalizza [*] → [] per uniformare la logica multi-row
         def _norm(path: str) -> str:
             return path.replace("[*]", "[]") if path else path
 
-        # Trova il path più profondo (max numero di
         max_depth = 0
         normalized_mappings = []
         for mapping in self.output_mapping:
@@ -82,7 +73,6 @@ class EnrichmentResponseProcessingMixin:
                 "depth": depth,
             })
 
-        # ── SINGLE-ROW: nessun path usa [] ──
         if max_depth == 0:
             result = {}
             for m in normalized_mappings:
@@ -102,9 +92,6 @@ class EnrichmentResponseProcessingMixin:
                 )
             return [result]
 
-        # ── MULTI-ROW: esplora ricorsivamente i livelli di [] e costruisce righe ──
-        # Per ogni livello k (1..max_depth) raccoglie il "contesto" (elemento corrente
-        # a quel livello), poi per ogni mapping estrae il valore dal contesto giusto
         rows = []
         self._explode_rows(data, normalized_mappings, contexts=[data], rows=rows, current_depth=0, max_depth=max_depth)
         return rows if rows else [{}]
@@ -129,13 +116,10 @@ class EnrichmentResponseProcessingMixin:
             for m in mappings:
                 path = m["path"]
                 depth = m["depth"]
-                # Il contesto da cui leggere il valore è contexts[depth
-                # Il suffix è la porzione del path dopo l'ultimo
                 if depth == 0:
                     suffix = path
                     ctx = contexts[0]
                 else:
-                    # Dopo il depth-esimo [], quello che resta è il suffix
                     parts = path.split("[]", depth)
                     suffix = parts[-1].lstrip(".") if len(parts) > depth else ""
                     ctx = contexts[depth]
@@ -143,21 +127,16 @@ class EnrichmentResponseProcessingMixin:
             rows.append(row)
             return
 
-        # Trova la base del prossimo livello: prefix fino al (current_depth+1)-esimo
-        # Usa il primo mapping che ha almeno quella profondità
         next_base = None
         for m in mappings:
             if m["depth"] > current_depth:
                 parts = m["path"].split("[]", current_depth + 1)
-                # parts[0..current_depth] sono i prefix separati da
-                # Il segmento da applicare al contesto corrente è parts[current_depth
                 next_base = parts[current_depth].rstrip(".")
                 break
 
         if next_base is None:
             return
 
-        # Estrai la lista al livello corrente
         items = self._extract_json_value(current_data, next_base) if next_base else current_data
         if not isinstance(items, list):
             return

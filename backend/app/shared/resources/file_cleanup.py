@@ -1,8 +1,4 @@
-"""
-Filesystem cleanup helpers (STRUCT-001 Seam D-C
-
-Keeps this module's responsibility explicit and isolated from adjacent code.
-"""
+"""Filesystem cleanup helpers."""
 
 from __future__ import annotations
 
@@ -64,8 +60,7 @@ def rmtree_safe(
                         os.chmod(fpath, stat.S_IWRITE)
                         func(fpath)
                     except Exception as e:
-                        # Callback onerror di shutil.rmtree: non deve raisare
-                        # contratto API). Debug log per visibilita' su permessi
+                        # shutil.rmtree onerror callbacks must not raise.
                         log.debug(
                             f"rmtree_safe onerror chmod fallito per {fpath}: {e}"
                         )

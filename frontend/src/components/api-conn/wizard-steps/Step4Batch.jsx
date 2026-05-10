@@ -4,7 +4,7 @@
  * Configurazione batch mode (max righe / chiave array / formato input
  * / endpoint+method override).
  *
- * Estratto in `FE-PHASE2-SPLIT-001B`. Presentational.
+ * Presentational.
  */
 import React from 'react';
 

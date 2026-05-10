@@ -1,7 +1,7 @@
 """
-Phase 4 P0-01: secret redaction in generate_error_report CSV.
+Contract: secret redaction in generate_error_report CSV.
 
-Pre-fix `generate_error_report` faceva `json.dumps(error.input_params)` senza
+Previous behavior `generate_error_report` faceva `json.dumps(error.input_params)` senza
 """
 from __future__ import annotations
 

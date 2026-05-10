@@ -1,10 +1,6 @@
 /**
  * auth.js — API per login/logout JWT
  *
- * Pre-C3.3 Phase 4 queste chiamate vivevano direttamente in
- * `context/AuthContext.jsx` come `http.post(...)`. C3.3 le ha consolidate
- * qui per ripristinare il contratto "frontend/src/api/ unico punto HTTP".
- *
  * Lasciato fuori da questo modulo: tutto il flow MFA/utente/gruppi che
  * vive gia' in `api/users.js`. Qui solo i due endpoint del flow di
  * sessione.
@@ -35,8 +31,7 @@ export const login = async (username, password, mfaCode = null) => {
  *
  * **Non e' `async`**: ritorna il Promise grezzo di `http.post`. Cosi' il
  * caller puo' fare fire-and-forget (`logout(t).catch(() => {})`) senza
- * attendere la rete prima di clearare lo stato locale. Pattern preservato
- * 1:1 dall'AuthContext pre-C3.3.
+ * attendere la rete prima di clearare lo stato locale.
  *
  * Il token va passato come Authorization header esplicito perche' il
  * caller puo' aver gia' rimosso il token da sessionStorage al momento

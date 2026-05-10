@@ -1,7 +1,7 @@
 /**
  * nodeHelpers.js — Helper condivisi per la lettura dei nodi canvas
  *
- * Estratto da canvasSerializer.js e nodeFactories.js dove era duplicato.
+ * Helper condivisi da canvasSerializer.js e nodeFactories.js.
  *
  * Importato da:
  *   - utils/canvasSerializer.js

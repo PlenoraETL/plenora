@@ -311,21 +311,15 @@ class QueryExecutor:
         with engine.connect() as conn:
             apply_session_context(conn, execution.session, logger)
 
-            # Esecuzione query con parametri preparati (sicurezza SQL injection
             result = conn.execute(text(execution.sql), dict(execution.params))
 
-            # Estrazione nomi colonne dal cursor nativo del database
             columns = normalize_result_columns(
                 (desc[0] for desc in result.cursor.description),
                 execution.session,
             )
 
-            # Materializza righe in blocchi
-            # C11: hard cap (ESTRAI_MAX_ROWS) per evitare OOM. Pre-fix il
-            # chunking era cosmetico (fetchmany ma accumulo totale in
-            # memoria), quindi una query mal filtrata da 100M righe
-            # crashava il worker. Ora se il cumulativo supera il cap la
-            # query fallisce loud con suggerimento operativo
+            # Hard cap prevents unbounded result materialization from taking
+            # down the worker on under-filtered queries.
             from app.config import settings as _s
             _max_rows = int(getattr(_s, "ESTRAI_MAX_ROWS", 5_000_000) or 0)
             CHUNK_SIZE = 10_000
@@ -346,8 +340,6 @@ class QueryExecutor:
 
             return rows, columns
 
-    # C11: STREAMING CSV / PARQUET (zero full-materialization
-
     def _execute_streaming_to_file(
         self,
         connection: DatabaseConnection,
@@ -365,8 +357,6 @@ class QueryExecutor:
             output_path=Path(output_path),
             output_format=output_format,
         )
-
-    # ESECUZIONE COMPLETA (con salvataggio file
 
     def execute_query(
         self,
@@ -415,19 +405,15 @@ class QueryExecutor:
         timings = {}
         inizio_totale = time.time()
 
-        # C11: path streaming per CSV/Parquet (zero full-materialization
-        # Attivato solo se non c'e' geometria (export geospaziale richiede
+        # Streaming is enabled only without geometry; geospatial export requires
         # trasformazioni WKT/WKB sulla colonna geom che non si prestano al
-        # chunk-write minimal). Per gli altri formati (xlsx, geojson, gpkg
-        # shp, json): path legacy in-memory coperto dal cap
-        # ESTRAI_MAX_ROWS
+        # chunk-write minimal. Other formats remain capped by ESTRAI_MAX_ROWS.
         _streamable = output_format in ("csv", "parquet") and not geom_column
 
         try:
             self._logger.info(f"Esecuzione query per progetto {project_id}")
 
             if _streamable:
-                # STREAMING PATH (CSV / Parquet senza geometria
                 t_query = time.time()
                 output_path = self._result_persistence.streaming_output_path(
                     output_filename,
@@ -441,8 +427,6 @@ class QueryExecutor:
                     output_format=output_format,
                 )
                 saved_path = output_path
-                # df resta None: in streaming non costruiamo DataFrame
-                # risparmia un'intera pass di memoria pari al result set
                 df = None
                 timings["query_total"] = time.time() - t_query
                 timings["dataframe"] = 0.0
@@ -453,7 +437,6 @@ class QueryExecutor:
                     f"(peak memory ~= 1 chunk, non il result set intero)"
                 )
             else:
-                # NOTE: fallback fetch -> DataFrame -> save, capped da ESTRAI_MAX_ROWS.
                 t_query = time.time()
                 rows, columns = self.execute_raw(connection, sql, params)
                 timings["query_total"] = time.time() - t_query
@@ -469,12 +452,6 @@ class QueryExecutor:
 
                 row_count = len(rows)
 
-            # Salva risultato
-            # Streaming path: il file esiste gia' su disco, usiamo
-            # il persistence collaborator path-based che lo legge e lo cancella
-            # Fallback path: delegamo a save_pipeline_result (single
-            # entry-point che fa in-memory per formati serializzabili
-            # e fallback FS trasparente per gpkg/shp
             t_save = time.time()
             if _streamable:
                 persisted = self._result_persistence.persist_streamed_file(

@@ -55,7 +55,7 @@ def test_rate_limit_triggers_after_max_attempts_per_ip(integration_backend_serve
 def test_rate_limit_isolated_per_forwarded_ip(integration_backend_server):
     """Bucket separato per XFF IP. Se saturano "A", "B" resta libero.
 
-    Regressione diretta del reperto #27: pre-fix, TUTTI i peer diventavano
+    Regressione diretta del reperto #27: Previous behavior, TUTTI i peer diventavano
     `127.0.0.1` (peer nginx/uvicorn locale) e condividevano il bucket.
     """
     base_url = integration_backend_server["base_url"]

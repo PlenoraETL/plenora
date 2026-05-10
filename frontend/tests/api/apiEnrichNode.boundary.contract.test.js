@@ -4,7 +4,7 @@ import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 /**
- * Contract test — ApiEnrichNode FE/API boundary (C3.1 + C3.4 Phase 4).
+ * Contract tests for the ApiEnrichNode FE/API boundary.
  *
  * Pre-C3.1 ApiEnrichNode.jsx faceva DUE chiamate dirette al client http
  * fuori dal boundary api/:
@@ -59,7 +59,6 @@ describe('ApiEnrichNode boundary contract (C3.1)', () => {
     expect(pattern.test(SOURCE)).toBe(true);
   });
 
-  // ─── C3.4 Phase 4: ultimo residual boundary chiuso ────────────────────
 
   it('does NOT import http directly from api/http (C3.4)', () => {
     // C3.4 ha rimosso `import http from '../../api/http'`: l'unica

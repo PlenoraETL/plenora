@@ -22,7 +22,7 @@ from .conftest import make_pandas_df
 def _legacy_op_concat_columns(
     df, columns, output_column="concatenated", separator=" ", skip_null=True
 ):
-    """Copia verbatim pre-Batch-2. Target da battere."""
+    """Copia verbatim previous implementation Target da battere."""
     if not columns:
         return df
     valid_cols = [c for c in columns if c in df.columns]
@@ -114,7 +114,7 @@ _MIN_THROUGHPUT_ROWS_PER_SEC = 150_000  # naive era ~180k; il nuovo deve almeno 
 @pytest.mark.parametrize("n", [10_000, 50_000])
 def test_bench_concat_columns_speedup_vs_legacy(n):
     """Il nuovo op_concat_columns deve essere >= 3x piu' veloce del
-    legacy su 10k/50k righe. Il legacy pre-Batch-2 era ~25k rows/s.
+    legacy su 10k/50k righe. Il legacy previous implementation era ~25k rows/s.
     """
     df = make_pandas_df(n)
     kwargs = dict(

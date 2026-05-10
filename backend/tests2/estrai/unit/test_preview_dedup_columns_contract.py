@@ -84,8 +84,8 @@ def test_dedup_dataframe_no_duplicates_returns_same_frame_no_warnings():
 
 def test_dedup_dataframe_with_duplicates_preserves_all_columns():
     """Caso reale (BUG.md #6): JOIN SQL senza alias produce due colonne 'id'.
-    Pre-fix: df.to_dict scartava la seconda silenziosamente.
-    Post-fix: tutte le 3 colonne preservate, warning visibile."""
+    Previous behavior: df.to_dict scartava la seconda silenziosamente.
+    Current contract: tutte le 3 colonne preservate, warning visibile."""
     # Costruisco DataFrame con 2 colonne 'id' (impossibile con dict literal,
     # serve il costruttore via columns=)
     df = pd.DataFrame([[1, "alice", 99], [2, "bob", 100]], columns=["id", "nome", "id"])
@@ -110,7 +110,7 @@ def test_dedup_dataframe_with_duplicates_preserves_all_columns():
     assert list(out_df["nome"]) == ["alice", "bob"]
 
     # Sanity: il df dedupato puo' essere serializzato senza warning pandas
-    # (pre-fix emetteva UserWarning + scartava colonne).
+    # (Previous behavior emetteva UserWarning + scartava colonne).
     rows = out_df.to_dict(orient="records")
     assert rows[0] == {"id": 1, "nome": "alice", "id_2": 99}
     assert rows[1] == {"id": 2, "nome": "bob", "id_2": 100}

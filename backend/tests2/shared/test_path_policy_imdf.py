@@ -1,5 +1,5 @@
 """
-Contract test — app/shared/resources/path_policy.validate_imdf_task_id (D3 commit 1).
+Contract test — app/shared/resources/path_policy.validate_imdf_task_id (current IMDF contract).
 
 Centralizza la validazione formato bundle_task_id + path traversal guard
 """

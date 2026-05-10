@@ -9,9 +9,9 @@ import {
 } from '../../src/api/uploadGuards';
 
 /**
- * Contract test — uploadGuards (B3 Phase 4).
+ * Contract tests for uploadGuards.
  *
- * Coverage richiesta dal batch:
+ * Coverage:
  *   1. file troppo grande viene rifiutato client-side (assertFileSize)
  *   2. 413 backend resta leggibile/propagato (extract413Message,
  *      throwIfUploadTooLarge)

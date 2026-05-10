@@ -341,8 +341,6 @@ class TaskService:
             created_at=datetime.now(timezone.utc).isoformat(),
         )
     
-    # CREAZIONE TASK
-    
     def create_enrichment_task(
         self,
         project_id: str,
@@ -408,9 +406,6 @@ class TaskService:
                 log_label="carica",
             )
         )
-    
-    # RECUPERA STATO E PROGRESSO
-    
     def create_pipeline_task(
         self,
         project_id: str,
@@ -500,8 +495,8 @@ class TaskService:
 
         # Se è un dict con i nostri dati custom
         if isinstance(meta, dict):
-            # "progress" è la chiave standard (round 4+). "percent" è il fallback
-            # per task avviati prima della normalizzazione e ancora in Redis
+            # "progress" e' la chiave standard. "percent" resta fallback
+            # per task avviati prima della normalizzazione e ancora in Redis.
             # Cast esplicito a int: il worker può salvare float (es. 5.0 da processed/total*100
             progress = int(meta.get("progress", meta.get("percent", 0)))
             message = meta.get("message", "")

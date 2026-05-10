@@ -1,5 +1,5 @@
 """
-Smoke contract - STRUCT-001 Seam D-A: estrazione preview_file_temp.
+Smoke contract: estrazione preview_file_temp.
 
 Verifica le invarianti minime del refactor:
 """
@@ -211,13 +211,13 @@ def test_file_source_service_preview_delegates_with_service_collaborators(
     assert {c["name"] for c in out["columns"]} == {"k"}
 
 
-# 6. parser dispatch (Seam D-B: load_by_format e' ora condivisa)
+# 6. parser dispatch (load-dispatch boundary: load_by_format e' ora condivisa)
 
 
 def test_load_by_format_unsupported_raises(fake_logger, tmp_path):
     """load_by_format con format non riconosciuto -> ValueError esplicito.
 
-    Post Seam D-B: la funzione vive in `app.core.files.load_dispatch`
+    Post load-dispatch boundary: la funzione vive in `app.core.files.load_dispatch`
     (modulo condiviso tra FileSourceService e file_preview_temp).
     """
     from app.core.files.load_dispatch import load_by_format

@@ -117,7 +117,6 @@ def upload_imdf_layers(
         "errors": [],
     }
 
-    # ── 1. Carica connection ──────────────────────────────────────────
     _resolved = resolve_arcgis_connection(connection_id)
     if _resolved is None:
         result["errors"].append(f"Connessione ArcGIS '{connection_id}' non trovata")
@@ -127,12 +126,10 @@ def upload_imdf_layers(
         result["errors"].append("La connection ArcGIS non ha username (richiesto per createService)")
         return result
 
-    # Total steps for progress: folder + delete + N layers + (renderers?
     layers_present_preview = [n for n in LAYER_ORDER if n in layers and len(layers[n]) > 0]
     total_steps = 1 + 1 + len(layers_present_preview) + (1 if apply_renderers and renderers_data else 0)
     step = 0
 
-    # ── 2. Folder: trova o crea ───────────────────────────────────────
     _emit("folder", step, total_steps, f"Preparazione folder '{folder_name or '(root)'}'...")
     folder_id = ""
     if folder_name:
@@ -147,10 +144,6 @@ def upload_imdf_layers(
             return result
     step += 1
 
-    # ── 3. Dispatch per modalita' ─────────────────────────────────────
-    # replace → cancella FS esistente e procede col path create_service
-    # append/upsert → trova FS esistente e delega a funzione dedicata
-    # ritornando qui con il risultato gia' pronto
     if mode in ("append", "upsert"):
         _emit("find_service", step, total_steps,
               f"Ricerca FS esistente '{fs_name}'...")
@@ -177,7 +170,6 @@ def upload_imdf_layers(
             result=result, emit=_emit, step=step, total_steps=total_steps,
         )
 
-    # ── Modalita' replace: cancella eventuale FS esistente con stesso nome ──
     _emit("cleanup", step, total_steps, f"Verifica FS esistente '{fs_name}'...")
     del_attempted, del_succeeded = 0, 0
     try:
@@ -239,7 +231,6 @@ def upload_imdf_layers(
                     )
                     return result
 
-    # ── 4. Verifica che i layer richiesti siano tutti presenti ───────
     missing = [n for n in LAYER_ORDER if n not in layers or len(layers[n]) == 0]
     if missing:
         # Non e' un errore bloccante: alcuni siti potrebbero non avere
@@ -251,7 +242,6 @@ def upload_imdf_layers(
         result["errors"].append("Nessun layer IMDF popolato da caricare")
         return result
 
-    # ── 5. Crea il Feature Service col primo layer (Localita di norma) ──
     first_name = layers_present[0]
     first_gdf = layers[first_name]
     _emit("create_service", step, total_steps,
@@ -287,7 +277,6 @@ def upload_imdf_layers(
     logger.info(f"Layer 0 ({first_name}) creato: {first_result.get('feature_count')} features")
     step += 1
 
-    # ── 6. Aggiungi i layer 1..N ───────────────────────────────────────
     for idx, name in enumerate(layers_present[1:], start=1):
         gdf = layers[name]
         _emit("add_layer", step, total_steps,
@@ -322,8 +311,6 @@ def upload_imdf_layers(
             result["errors"].append(f"Layer {name}: {e}")
             step += 1
 
-    # ── 7. Applica renderers (opzionale) ───────────────────────────────
-    # — Esri ritorna success=True ma in pratica non aggiorna nulla. Usiamo
     # IMDF decides which renderer to apply; the ArcGIS provider owns the
     # layer-level updateDefinition mechanics.
     if apply_renderers and renderers_data:
@@ -349,7 +336,6 @@ def upload_imdf_layers(
         step += 1
 
     _emit("done", total_steps, total_steps, "Upload completato")
-    # ── 8. Esito finale ────────────────────────────────────────────────
     total_loaded = sum(l["feature_count"] for l in result["layers"])
     result["success"] = total_loaded > 0 and not any(l["errors"] for l in result["layers"])
     logger.info(

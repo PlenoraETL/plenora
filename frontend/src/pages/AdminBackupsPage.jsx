@@ -21,9 +21,6 @@ import AppSidebar from '../components/AppSidebar';
 import ConfirmDialog from '../components/common/ConfirmDialog';
 import { useConfirmModal } from '../hooks/useConfirmModal';
 import '../styles/AdminBackupsPage.css';
-
-
-// ── Helpers di error handling ────────────────────────────────────────────
 //
 // RB.#9: il backend (RB.2 / admin_backups.router) ora ritorna 503 con
 //        body strutturato `{detail: {error, message}}` quando le credenziali
@@ -58,9 +55,6 @@ function extractErrorCode(err) {
   }
   return null;
 }
-
-
-// ── Helpers di formattazione ─────────────────────────────────────────────
 function fmtDate(iso) {
   if (!iso) return '—';
   try {
@@ -98,9 +92,6 @@ function StorageBadge({ cls }) {
     </span>
   );
 }
-
-
-// ── Card: stato ultimo run ───────────────────────────────────────────────
 function StatusCard({ status }) {
   if (!status) return <div className="ab__card ab__card--status">Caricamento...</div>;
 
@@ -134,9 +125,6 @@ function StatusCard({ status }) {
     </div>
   );
 }
-
-
-// ── Card: schedulazione ──────────────────────────────────────────────────
 function ScheduleCard({ schedule }) {
   if (!schedule) return <div className="ab__card ab__card--schedule">Caricamento...</div>;
 
@@ -152,9 +140,6 @@ function ScheduleCard({ schedule }) {
     </div>
   );
 }
-
-
-// ── Pagina principale ────────────────────────────────────────────────────
 export default function AdminBackupsPage() {
   const toast = useToast();
   const confirmModal = useConfirmModal();

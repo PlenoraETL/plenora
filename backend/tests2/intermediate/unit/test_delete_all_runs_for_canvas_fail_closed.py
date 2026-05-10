@@ -1,7 +1,7 @@
 """
-[phase-2-err][batch8] C5 — delete_all_runs_for_canvas fail-closed outer.
+C5 — delete_all_runs_for_canvas fail-closed outer.
 
-Audit Batch 8 §3.1 S4 / fix F4: `intermediate/db.py:delete_all_runs_for_canvas`
+Audit finding: `intermediate/db.py:delete_all_runs_for_canvas`
 """
 
 from __future__ import annotations
@@ -80,7 +80,7 @@ def test_delete_all_runs_inner_fail_continues_and_logs_warning():
 
 def test_delete_all_runs_outer_fail_raises_not_returns_zero():
     """fetchall solleva (DB down) → la funzione **solleva** l'eccezione
-    originale invece di ritornare 0 (pre-fix behavior). Fail-closed esplicito
+    originale invece di ritornare 0 (Previous behavior behavior). Fail-closed esplicito
     permette al caller `project_service.delete_project` di riconoscere lo
     step 2 critical come fallito e sollevare ProjectCleanupPartialError."""
     from app.core.intermediate import db as idb
@@ -99,7 +99,7 @@ def test_delete_all_runs_outer_fail_raises_not_returns_zero():
 def test_delete_all_runs_outer_fail_logs_crash_with_exc_info():
     """Sullo stesso scenario, verifica che prima del raise venga emesso
     `logger.error('[CRASH] ...', exc_info=True)` con canvas_id nel messaggio,
-    coerente col pattern diagnostico Batch 9 C5 su step critical."""
+    coerente col pattern diagnostico current contract C5 su step critical."""
     from app.core.intermediate import db as idb
 
     with patch.object(

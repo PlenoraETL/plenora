@@ -5,25 +5,6 @@ import { vi } from 'vitest';
 
 import ScheduleList from '../../src/pages/ScheduleList';
 
-/**
- * Batch 3 di FE-TEST-001 su ScheduleList — gap ad alto valore non
- * coperti dal contract test esistente (ScheduleList.contract.test.jsx,
- * focalizzato su run-now + log expand + beat-down banner).
- *
- * Aree:
- *   1. delete: success path + reload, error path con toast formattato
- *   2. toggle enable/disable: success path + reload
- *   3. run-now error: cleanup di runningManual + toast
- *   4. runs panel: listScheduleRuns + download per-run
- *   5. permission gating: "+ Nuovo Schedule" nascosto per viewer
- *
- * Nessun refactor della pagina, nessun touch a useTheme/ThemeToggle,
- * nessuna modifica backend/docs/audits.
- *
- * `api/schedules.contract.test.js` copre gia' il boundary HTTP
- * (downloadScheduleOutput → blob, getScheduleLogs query params,
- * getDownloadUrl). I test qui sono page-level, non duplicano.
- */
 
 const { schedulesMock, toastMock, navigateMock, searchParamsMock, authState } =
   vi.hoisted(() => ({
@@ -41,7 +22,6 @@ const { schedulesMock, toastMock, navigateMock, searchParamsMock, authState } =
     navigateMock: globalThis.__frontendTestHelpers.createNavigateMock(vi),
     searchParamsMock:
       globalThis.__frontendTestHelpers.createSearchParamsMock(vi),
-    // Mutabile: i test possono cambiare role prima del render (default admin).
     authState: {
       user: { role: 'admin', username: 'tester', group_id: 'grp-1' },
     },
@@ -88,15 +68,12 @@ const sampleSchedule = {
   destination: null,
 };
 
-describe('ScheduleList — batch 3', () => {
+describe('ScheduleList contract', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     authState.user = { role: 'admin', username: 'tester', group_id: 'grp-1' };
     schedulesMock.getBeatHealthcheck.mockResolvedValue({ status: 'ok' });
   });
-
-  // ── 1a. Delete success ────────────────────────────────────────────────
-
   it('deletes a schedule after confirm and reloads the list', async () => {
     schedulesMock.listSchedules
       .mockResolvedValueOnce({ schedules: [sampleSchedule] })
@@ -107,7 +84,6 @@ describe('ScheduleList — batch 3', () => {
     await screen.findByText('Nightly Import');
 
     await userEvent.click(screen.getByRole('button', { name: /Elimina schedule/i }));
-    // ConfirmDialog button has text "Elimina" (confirmText nel componente).
     await userEvent.click(
       await screen.findByRole('button', { name: 'Elimina' }),
     );
@@ -120,9 +96,6 @@ describe('ScheduleList — batch 3', () => {
     );
     expect(toastMock.error).not.toHaveBeenCalled();
   });
-
-  // ── 1b. Delete error ──────────────────────────────────────────────────
-
   it('surfaces backend detail message via toast on delete error', async () => {
     schedulesMock.listSchedules.mockResolvedValueOnce({
       schedules: [sampleSchedule],
@@ -147,9 +120,6 @@ describe('ScheduleList — batch 3', () => {
     // Reload non scatta dopo errore (deleteSchedule throw → loadData skipped).
     expect(schedulesMock.listSchedules).toHaveBeenCalledTimes(1);
   });
-
-  // ── 2. Toggle enable/disable ─────────────────────────────────────────
-
   it('toggles a schedule from enabled to disabled and reloads', async () => {
     schedulesMock.listSchedules
       .mockResolvedValueOnce({ schedules: [sampleSchedule] })
@@ -174,16 +144,12 @@ describe('ScheduleList — batch 3', () => {
     await userEvent.click(toggleInput);
 
     await waitFor(() =>
-      // current=true → toggleSchedule(id, !current) === toggleSchedule(id, false)
       expect(schedulesMock.toggleSchedule).toHaveBeenCalledWith('sch-1', false),
     );
     await waitFor(() =>
       expect(schedulesMock.listSchedules).toHaveBeenCalledTimes(2),
     );
   });
-
-  // ── 3. Run Now error path ────────────────────────────────────────────
-
   it('clears runningManual and toasts when runScheduleNow rejects', async () => {
     schedulesMock.listSchedules.mockResolvedValueOnce({
       schedules: [sampleSchedule],
@@ -213,9 +179,6 @@ describe('ScheduleList — batch 3', () => {
       screen.getByRole('button', { name: /esegui ora/i }),
     ).toBeInTheDocument();
   });
-
-  // ── 4. Runs panel + per-run download ─────────────────────────────────
-
   it('expands the runs panel and downloads a specific archived run', async () => {
     schedulesMock.listSchedules.mockResolvedValueOnce({
       schedules: [sampleSchedule],
@@ -232,9 +195,6 @@ describe('ScheduleList — batch 3', () => {
 
     render(<ScheduleList />);
     await screen.findByText('Nightly Import');
-
-    // Bottone "📥 Download" e' visibile solo se schedule.runtime.last_execution
-    // e' valorizzato (sampleSchedule lo ha).
     await userEvent.click(screen.getByRole('button', { name: /📥 Download/ }));
 
     await waitFor(() =>
@@ -242,10 +202,6 @@ describe('ScheduleList — batch 3', () => {
     );
     expect(await screen.findByText('output.csv')).toBeInTheDocument();
     expect(screen.getByText(/Storico esecuzioni/i)).toBeInTheDocument();
-
-    // Click sul bottone download del run specifico (l'unico "📥" rimasto
-    // dopo che il toggle ha cambiato testo in "📥 Chiudi" — il run entry
-    // ha solo l'icona).
     const runDownloadBtn = screen.getByRole('button', {
       name: /Scarica output di questa esecuzione/i,
     });
@@ -256,9 +212,6 @@ describe('ScheduleList — batch 3', () => {
       '20260415T030000',
     );
   });
-
-  // ── 5. Permission gating: viewer non vede "+ Nuovo Schedule" ─────────
-
   it('hides the "+ Nuovo Schedule" button for viewer role', async () => {
     authState.user = { role: 'viewer', username: 'v', group_id: 'grp-1' };
     schedulesMock.listSchedules.mockResolvedValueOnce({
@@ -272,7 +225,5 @@ describe('ScheduleList — batch 3', () => {
     expect(
       screen.queryByRole('button', { name: /Nuovo Schedule/i }),
     ).not.toBeInTheDocument();
-    // Sanity: un admin invece la vede (testato implicitamente dagli altri
-    // test di questo file).
   });
 });

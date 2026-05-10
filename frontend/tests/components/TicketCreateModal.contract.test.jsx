@@ -47,9 +47,7 @@ describe('TicketCreateModal', () => {
     });
   });
 
-  // ──────────────────────────────────────────────────────────────────────
   // RBAC: opzione "Debito tecnico" visibile solo agli admin
-  // ──────────────────────────────────────────────────────────────────────
 
   it('utente non-admin NON vede il dropdown Tipo', () => {
     render(
@@ -59,7 +57,6 @@ describe('TicketCreateModal', () => {
       />,
     );
     // Solo i campi base (titolo, descrizione, severity, categoria)
-    // — nessun "Tipo" select
     expect(screen.queryByText(/^tipo$/i)).not.toBeInTheDocument();
     expect(
       screen.queryByRole('option', { name: /debito tecnico/i }),
@@ -88,9 +85,7 @@ describe('TicketCreateModal', () => {
     expect(screen.getByRole('option', { name: /debito tecnico/i })).toBeInTheDocument();
   });
 
-  // ──────────────────────────────────────────────────────────────────────
   // Validazione: titolo min 3 caratteri
-  // ──────────────────────────────────────────────────────────────────────
 
   it('titolo < 3 caratteri → toast errore + niente API call', async () => {
     const user = userEvent.setup();
@@ -136,9 +131,7 @@ describe('TicketCreateModal', () => {
     expect(createTicketMock).not.toHaveBeenCalled();
   });
 
-  // ──────────────────────────────────────────────────────────────────────
   // Submit happy path
-  // ──────────────────────────────────────────────────────────────────────
 
   it('submit valido chiama createTicket col payload e poi onCreated', async () => {
     const user = userEvent.setup();
@@ -226,9 +219,7 @@ describe('TicketCreateModal', () => {
     expect(onCreated).not.toHaveBeenCalled();
   });
 
-  // ──────────────────────────────────────────────────────────────────────
   // Close
-  // ──────────────────────────────────────────────────────────────────────
 
   it('click su X chiama onClose', async () => {
     const onClose = vi.fn();
@@ -240,7 +231,7 @@ describe('TicketCreateModal', () => {
       />,
     );
 
-    // Il bottone X ha aria-label="Chiudi" (a11y batch 5).
+    // Il bottone X ha aria-label="Chiudi".
     await user.click(screen.getByRole('button', { name: /Chiudi/i }));
     expect(onClose).toHaveBeenCalled();
   });
@@ -259,9 +250,7 @@ describe('TicketCreateModal', () => {
     expect(onClose).toHaveBeenCalled();
   });
 
-  // ──────────────────────────────────────────────────────────────────────
   // Severity / Category dropdowns popolati da meta
-  // ──────────────────────────────────────────────────────────────────────
 
   it('le severity e categorie nel dropdown vengono da meta', () => {
     render(

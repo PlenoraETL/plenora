@@ -5,22 +5,6 @@ import { vi } from 'vitest';
 
 import FileManager from '../../src/pages/FileManager';
 
-/**
- * Batch 7 di FE-TEST-001 su FileManager — gap ad alto valore non
- * coperti dal contract test esistente (FileManager.contract.test.jsx,
- * focalizzato su preview happy path).
- *
- * Aree:
- *   1. delete success: confirm + deleteFile + reload
- *   2. search filter restringe la lista per nome/original_filename
- *   3. filter tab "csv" mostra solo i file CSV
- *   4. preview 404 fallback: toast.error + reload (RB.5 race condition)
- *   5. role gating: viewer NON vede "↑ Carica File" ne' la drop zone
- *
- * Pattern di mocking allineato ai batch precedenti; useConfirmModal
- * mockato con Promise auto-resolve (test esistente lo lasciava
- * incompleto, ma il preview path non lo invocava).
- */
 
 const {
   navigateMock,
@@ -104,16 +88,13 @@ const sampleXlsx = {
   can_edit: true,
 };
 
-describe('FileManager — batch 7', () => {
+describe('FileManager contract', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     authState.user = { role: 'admin', username: 'tester', group_id: 'grp-1' };
     confirmState.result = true;
     getFilesMock.mockResolvedValue({ files: [] });
   });
-
-  // ── 1. Delete success ────────────────────────────────────────────────
-
   it('deletes a file after confirm and reloads the list', async () => {
     getFilesMock
       .mockResolvedValueOnce({ files: [sampleCsv] })
@@ -122,20 +103,14 @@ describe('FileManager — batch 7', () => {
 
     render(<FileManager />);
     await screen.findByText('Cities');
-
-    // Trash icon su FileCard.
     await userEvent.click(screen.getByRole('button', { name: /Elimina file/i }));
 
     await waitFor(() =>
       expect(deleteFileMock).toHaveBeenCalledWith('file-1'),
     );
-    // Reload: getFiles chiamato 2 volte (initial + post-delete).
     expect(getFilesMock).toHaveBeenCalledTimes(2);
     expect(toastMock.error).not.toHaveBeenCalled();
   });
-
-  // ── 2. Search filter ────────────────────────────────────────────────
-
   it('filters file cards by the search input (name or original_filename)', async () => {
     getFilesMock.mockResolvedValueOnce({ files: [sampleCsv, sampleXlsx] });
 
@@ -149,26 +124,18 @@ describe('FileManager — batch 7', () => {
     expect(screen.getByText('Orders')).toBeInTheDocument();
     expect(screen.queryByText('Cities')).not.toBeInTheDocument();
   });
-
-  // ── 3. Filter tab CSV ───────────────────────────────────────────────
-
   it('shows only CSV files when the CSV filter tab is active', async () => {
     getFilesMock.mockResolvedValueOnce({ files: [sampleCsv, sampleXlsx] });
 
     render(<FileManager />);
     await screen.findByText('Cities');
     expect(screen.getByText('Orders')).toBeInTheDocument();
-
-    // Click sul tab "CSV" (FILTER_TABS).
     const csvTab = screen.getByRole('button', { name: /^CSV/i });
     await userEvent.click(csvTab);
 
     expect(screen.getByText('Cities')).toBeInTheDocument();
     expect(screen.queryByText('Orders')).not.toBeInTheDocument();
   });
-
-  // ── 4. Preview 404 fallback ─────────────────────────────────────────
-
   it('refreshes the list and toasts when getFilePreview returns 404 (RB.5)', async () => {
     // Initial list has the file; reload after 404 returns empty.
     getFilesMock
@@ -191,9 +158,6 @@ describe('FileManager — batch 7', () => {
     // Reload triggered after 404.
     expect(getFilesMock).toHaveBeenCalledTimes(2);
   });
-
-  // ── 5. Role gating viewer ───────────────────────────────────────────
-
   it('hides upload button and drop zone for viewer role', async () => {
     authState.user = { role: 'viewer', username: 'v', group_id: 'grp-1' };
     getFilesMock.mockResolvedValueOnce({ files: [sampleCsv] });
@@ -209,7 +173,6 @@ describe('FileManager — batch 7', () => {
     expect(
       screen.queryByText(/Trascina i file qui/i),
     ).not.toBeInTheDocument();
-    // Sanity: il viewer puo' comunque vedere le card e fare preview.
     expect(screen.getByText('Cities')).toBeInTheDocument();
     expect(
       screen.getByRole('button', { name: /preview/i }),

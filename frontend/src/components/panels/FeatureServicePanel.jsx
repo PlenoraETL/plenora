@@ -23,10 +23,6 @@ import {
 } from '../../api/features';
 import './FeatureServicePanel.css';
 
-// ============================================================
-// Icone e helper
-// ============================================================
-
 const GEOM_ICONS = {
   'geometry:point': '📍',
   'geometry:multipoint': '📍',
@@ -48,10 +44,6 @@ function getGeomLabel(geomType) {
   if (!geomType) return 'Tabella';
   return geomType.replace('geometry:', '').replace('geometry', 'geometria');
 }
-
-// ============================================================
-// COMPONENTE PRINCIPALE
-// ============================================================
 
 function FeatureServicePanel({ onLayerReady, layersInCanvas = new Set(), lockedConnection = null }) {
   // State navigazione: connections → services → layers
@@ -90,10 +82,6 @@ function FeatureServicePanel({ onLayerReady, layersInCanvas = new Set(), lockedC
   // Error
   const [error, setError] = useState('');
 
-  // ============================================================
-  // LOAD CONNECTIONS
-  // ============================================================
-  
   useEffect(() => {
     if (lockedConnection) {
       // Connessione bloccata dal progetto: carica servizi direttamente
@@ -116,10 +104,6 @@ function FeatureServicePanel({ onLayerReady, layersInCanvas = new Set(), lockedC
     }
   };
 
-  // ============================================================
-  // BROWSE SERVICES
-  // ============================================================
-  
   const handleSelectConnection = async (conn) => {
     setSelectedConnection(conn);
     setView('services');
@@ -137,10 +121,6 @@ function FeatureServicePanel({ onLayerReady, layersInCanvas = new Set(), lockedC
     }
   };
 
-  // ============================================================
-  // BROWSE LAYERS
-  // ============================================================
-  
   const handleSelectService = async (service) => {
     setSelectedService(service);
     setView('layers');
@@ -158,10 +138,6 @@ function FeatureServicePanel({ onLayerReady, layersInCanvas = new Set(), lockedC
     }
   };
 
-  // ============================================================
-  // LAYER SCHEMA (on-demand, cached)
-  // ============================================================
-  
   const loadLayerSchema = useCallback(async (layer) => {
     const cacheKey = layer.url;
     if (layerSchemas[cacheKey]) return layerSchemas[cacheKey];
@@ -176,10 +152,6 @@ function FeatureServicePanel({ onLayerReady, layersInCanvas = new Set(), lockedC
     }
   }, [selectedConnection, layerSchemas]);
 
-  // ============================================================
-  // DRAG START → passa dati layer per il canvas
-  // ============================================================
-  
   const handleDragStart = useCallback((e, layer) => {
     const dragData = {
       type: 'featureLayer',
@@ -196,10 +168,6 @@ function FeatureServicePanel({ onLayerReady, layersInCanvas = new Set(), lockedC
     e.dataTransfer.effectAllowed = 'move';
   }, [selectedConnection, selectedService]);
 
-  // ============================================================
-  // NUOVA CONNESSIONE
-  // ============================================================
-  
   const handleCreateConnection = async () => {
     if (!newConnForm.name.trim() || !newConnForm.server_url.trim()) {
       setNewConnError('Nome e URL sono obbligatori');
@@ -219,10 +187,6 @@ function FeatureServicePanel({ onLayerReady, layersInCanvas = new Set(), lockedC
     }
   };
 
-  // ============================================================
-  // NAVIGAZIONE INDIETRO
-  // ============================================================
-  
   const handleBack = () => {
     setError('');
     setSearchQuery('');
@@ -237,10 +201,6 @@ function FeatureServicePanel({ onLayerReady, layersInCanvas = new Set(), lockedC
     }
   };
 
-  // ============================================================
-  // FILTERING
-  // ============================================================
-  
   const filterItems = (items, nameKey = 'name') => {
     if (!searchQuery) return items;
     const q = searchQuery.toLowerCase();
@@ -248,10 +208,6 @@ function FeatureServicePanel({ onLayerReady, layersInCanvas = new Set(), lockedC
       (item[nameKey] || '').toLowerCase().includes(q)
     );
   };
-
-  // ============================================================
-  // RENDER
-  // ============================================================
 
   return (
     <div className="fs-panel">
@@ -334,7 +290,6 @@ function FeatureServicePanel({ onLayerReady, layersInCanvas = new Set(), lockedC
         )}
       </div>
 
-      {/* Errore */}
       {error && (
         <div className="fs-panel__error">
           ⚠️ {error}
@@ -343,7 +298,6 @@ function FeatureServicePanel({ onLayerReady, layersInCanvas = new Set(), lockedC
 
       {/* Contenuto */}
       <div className="fs-panel__list">
-        {/* === CONNECTIONS VIEW === */}
         {view === 'connections' && (
           loadingConnections ? (
             <div className="fs-panel__loading">Caricamento connessioni...</div>
@@ -377,7 +331,6 @@ function FeatureServicePanel({ onLayerReady, layersInCanvas = new Set(), lockedC
           )
         )}
 
-        {/* === SERVICES VIEW === */}
         {view === 'services' && (
           loadingServices ? (
             <div className="fs-panel__loading">Caricamento servizi...</div>
@@ -405,7 +358,6 @@ function FeatureServicePanel({ onLayerReady, layersInCanvas = new Set(), lockedC
           )
         )}
 
-        {/* === LAYERS VIEW === */}
         {view === 'layers' && (
           <>
             {loadingLayers ? (

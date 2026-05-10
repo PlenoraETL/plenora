@@ -79,7 +79,7 @@ def test_list_backups_raises_on_aws_credentials_expired():
     vuota silenziosa. Il router traduce in HTTP 503 con
     detail.error='aws_credentials_expired'.
 
-    Batch 1.5: list_backups passa per `get_backup_object_storage()` invece
+    current contract: list_backups passa per `get_backup_object_storage()` invece
     di `boto3.client` diretto, quindi mockiamo l'ObjectStorage."""
     from botocore.exceptions import LoginRefreshRequired
 
@@ -107,8 +107,8 @@ def test_list_backups_aws_credentials_logs_warning_without_traceback():
     dal router. Il backend NON deve emettere traceback botocore completo per
     ogni 503: rumoreggia il journal e nasconde i bug veri.
 
-    Pre-fix: `logger.error + exc_info=True` -> traceback ad ogni client call.
-    Post-fix: `logger.warning` conciso con tipo eccezione + messaggio.
+    Previous behavior: `logger.error + exc_info=True` -> traceback ad ogni client call.
+    Current contract: `logger.warning` conciso con tipo eccezione + messaggio.
     Errori NON classificati continuano a usare logger.error + exc_info=True
     (test successivo `test_list_backups_when_client_error_returns_empty`
     indirettamente).
@@ -336,8 +336,8 @@ def test_last_run_status_running_has_no_duration():
 def test_last_run_status_duration_with_iso_string_timestamps():
     """Bug runtime-bugs #3 (2026-04-27): il driver PG puo' restituire
     started_at/finished_at come stringhe ISO TZ-aware invece che datetime.
-    Pre-fix: TypeError sulla sottrazione str-str -> WARNING + duration_sec=None.
-    Post-fix: normalizzazione via _to_datetime -> duration_sec calcolato.
+    Previous behavior: TypeError sulla sottrazione str-str -> WARNING + duration_sec=None.
+    Current contract: normalizzazione via _to_datetime -> duration_sec calcolato.
 
     Telemetria osservata:
         Impossibile calcolare duration_sec
@@ -377,7 +377,7 @@ def test_last_run_status_duration_with_iso_string_timestamps():
 def test_last_run_status_duration_unparsable_iso_string_logs_warning():
     """Difesa: stringa non-ISO (es. driver custom corrotto) NON deve far
     crashare get_last_run_status. Cade nell'except (ValueError) -> warning
-    + duration_sec=None, coerente con il pre-fix per altri tipi inattesi."""
+    + duration_sec=None, coerente con il Previous behavior per altri tipi inattesi."""
     from app.core.admin_backups import service
 
     row = {

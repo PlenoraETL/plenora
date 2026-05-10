@@ -11,7 +11,6 @@
 import { describe, it, expect } from 'vitest';
 import { validateEstraiCanvas } from '../../src/utils/validateEstraiCanvas';
 
-// ── Helpers fixture ─────────────────────────────────────────────────
 const tableNode = (id, overrides = {}) => ({
   id, type: 'tableNode',
   data: { table_name: id, alias: id, columns: [{ name: 'col1', visible: true }], ...overrides.data },

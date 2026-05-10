@@ -14,7 +14,6 @@
  * Ora basta:
  *   const data = useEditorData(projectId, { withSources: true });
  *
- * ─── Cancellation (lifecycle async) ───────────────────────────────────────────
  *
  * Il bootstrap e' un grafo di fetch in cascata (getProject → listConnections →
  * optionally loadCatalog/loadSources). Due race da evitare:
@@ -30,7 +29,6 @@
  * da cancelled del nuovo run (closure fresh), quindi i due run non si
  * pestano.
  *
- * ─── Opzioni disponibili ──────────────────────────────────────────────────────
  *
  *   withSources  (bool, default false)
  *     Carica listProjects() + getFiles() per popolare la sidebar sorgenti.
@@ -42,7 +40,6 @@
  *     Se la connessione è ArcGIS carica i feature layer invece delle tabelle.
  *     Usato da: EstraiEditor.
  *
- * ─── Valori restituiti ────────────────────────────────────────────────────────
  *
  *   Sempre disponibili:
  *     project       {Object|null}   — dati del progetto
@@ -95,28 +92,20 @@ export function useEditorData(projectId, options = {}) {
     // Joinata stringa intenzionale: stabilizza l'identità in deps, altrimenti
     // un array literal nuovo ad ogni render rifirerebbe l'effect a vuoto.
   }, [sourceTypes?.join(',')]);
-
-  // ── Stato comune ─────────────────────────────────────────────────────────
-  const [project,     setProject]     = useState(null);
+const [project,     setProject]     = useState(null);
   const [connections, setConnections] = useState([]);
   const [loading,     setLoading]     = useState(true);
   const [error,       setError]       = useState(null);
-
-  // ── Stato sorgenti (withSources) ──────────────────────────────────────────
-  const [availableSources, setAvailableSources] = useState([]);
+const [availableSources, setAvailableSources] = useState([]);
   const [availableFiles,   setAvailableFiles]   = useState([]);
-
-  // ── Stato catalogo (withCatalog) ──────────────────────────────────────────
-  const [catalog,           setCatalog]           = useState({});
+const [catalog,           setCatalog]           = useState({});
   const [views,             setViews]             = useState({});
   const [projectConnection, setProjectConnection] = useState(null);
   const [sourceType,        setSourceType]        = useState(null);
 
   // Tick per reload: bump → useEffect rigirato, cleanup cancella il run precedente.
   const [reloadTick, setReloadTick] = useState(0);
-
-  // ── Effect di bootstrap con cancellation ──────────────────────────────────
-  useEffect(() => {
+useEffect(() => {
     if (!projectId) return;
     let cancelled = false;
 

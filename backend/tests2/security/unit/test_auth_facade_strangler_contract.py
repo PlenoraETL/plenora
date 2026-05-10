@@ -18,19 +18,19 @@ _APP = _BACKEND_ROOT / "app"
 _FACADE_MODULE = "app.core.auth.auth"
 
 
-# Phase-1: full facade ban — no ImportFrom(app.core.auth.auth) at all.
+# facade baseline: full facade ban — no ImportFrom(app.core.auth.auth) at all.
 _PHASE1_FILES = (
     _APP / "core" / "auth" / "auth_middleware.py",
     _APP / "core" / "auth" / "ownership.py",
     _APP / "shared" / "authz_helpers.py",
-    # Phase-2 also forbids facade entirely for these (CurrentUser-only
+    # typed-context also forbids facade entirely for these (CurrentUser-only
     # imports — nothing else was being pulled from the facade).
     _APP / "shared" / "async_user_recheck.py",
     _APP / "core" / "tickets" / "service.py",
 )
 
 
-# Phase-2: per-name facade ban. Facade ImportFrom is allowed but it
+# typed-context: per-name facade ban. Facade ImportFrom is allowed but it
 # may NOT carry these names (every name in the set has a leaf source).
 _PHASE2_PER_NAME_BAN: dict[Path, frozenset[str]] = {
     _APP / "core" / "admin_backups" / "router.py":
@@ -47,7 +47,7 @@ _PHASE2_PER_NAME_BAN: dict[Path, frozenset[str]] = {
 
 
 # Phase-3: per-name facade ban for the next coherent router group.
-# Same pattern as Phase-2: facade may keep FastAPI Depends and
+# Same pattern as typed-context: facade may keep FastAPI Depends and
 # `group_filter` (which still lives in auth.py:295), but `CurrentUser`
 # and ownership leaves must come from their leaf modules.
 _PHASE3_PER_NAME_BAN: dict[Path, frozenset[str]] = {
@@ -100,7 +100,7 @@ _PHASE4_PER_NAME_BAN: dict[Path, frozenset[str]] = {
 }
 
 
-# Phase-5: same facade ban for files / intermediate / projects /
+# typed-context: same facade ban for files / intermediate / projects /
 # scheduler.
 _PHASE5_PER_NAME_BAN: dict[Path, frozenset[str]] = {
     _APP / "core" / "files" / "router.py":
@@ -160,7 +160,7 @@ def _imports_facade(path: Path) -> list[tuple[int, str]]:
     ids=lambda p: str(p.relative_to(_BACKEND_ROOT)).replace("\\", "/"),
 )
 def test_phase1_migrated_file_does_not_import_from_facade(path: Path):
-    """Phase-1 contract: each migrated file imports directly from
+    """facade baseline contract: each migrated file imports directly from
     leaf modules (`app.shared.jwt_token`, `app.core.auth.roles`,
     `app.core.auth.models`, `app.core.auth.ownership`) — NOT from
     the facade `app.core.auth.auth` at all."""
@@ -202,14 +202,14 @@ def _per_name_ban_violations(
 def test_phase2_migrated_file_does_not_import_banned_names_from_facade(
     path: Path, banned_names: frozenset[str]
 ):
-    """Phase-2 contract: the file is still allowed to import FastAPI
+    """typed-context contract: the file is still allowed to import FastAPI
     Depends (`get_current_user`, `require_*`, `require_superadmin`)
     from the facade, but it MUST NOT pull `CurrentUser` or ownership
     helpers from the facade — those have leaf sources."""
     assert path.exists(), f"migrated file missing: {path}"
     violations = _per_name_ban_violations(path, banned_names)
     assert violations == [], (
-        f"{path.relative_to(_BACKEND_ROOT)} pulls Phase-2 banned "
+        f"{path.relative_to(_BACKEND_ROOT)} pulls typed-context banned "
         f"names from the facade:\n"
         + "\n".join(f"  line {ln}: {nm}" for ln, nm in violations)
         + f"\nLeaf sources: CurrentUser ← app.core.auth.models; "
@@ -230,7 +230,7 @@ def test_phase2_migrated_file_does_not_import_banned_names_from_facade(
 def test_phase3_migrated_file_does_not_import_banned_names_from_facade(
     path: Path, banned_names: frozenset[str]
 ):
-    """Phase-3 contract: extends Phase-2 to a second router group.
+    """Phase-3 contract: extends typed-context to a second router group.
     The file may keep `get_current_user`, `require_*`, and
     `group_filter` on the facade. Banned names: `CurrentUser` and (for
     `features/routes.py`) the 4 ownership helpers."""
@@ -258,7 +258,7 @@ def test_phase3_migrated_file_does_not_import_banned_names_from_facade(
 def test_phase4_migrated_file_does_not_import_banned_names_from_facade(
     path: Path, banned_names: frozenset[str]
 ):
-    """Phase-4 contract: applies the Phase-2/3 split pattern to the
+    """Phase-4 contract: applies the typed-context/3 split pattern to the
     arricchisci/carica/connections/datasources/eseguibili router group.
     Facade may keep `get_current_user`, `require_*`,
     `require_not_esecutore`, `require_admin`, `require_user_or_above`,
@@ -288,8 +288,8 @@ def test_phase4_migrated_file_does_not_import_banned_names_from_facade(
 def test_phase5_migrated_file_does_not_import_banned_names_from_facade(
     path: Path, banned_names: frozenset[str]
 ):
-    """Phase-5 contract: contract-boundary prep on
-    files/intermediate/projects/scheduler. Same split as Phase-2/3/4.
+    """typed-context contract: contract-boundary prep on
+    files/intermediate/projects/scheduler. Same split as typed-context/3/4.
     Facade may keep FastAPI Depends (`get_current_user`,
     `require_*`, `require_*_owner`, `require_admin`,
     `require_user_or_above`, `require_superadmin`,
@@ -299,7 +299,7 @@ def test_phase5_migrated_file_does_not_import_banned_names_from_facade(
     assert path.exists(), f"migrated file missing: {path}"
     violations = _per_name_ban_violations(path, banned_names)
     assert violations == [], (
-        f"{path.relative_to(_BACKEND_ROOT)} pulls Phase-5 banned "
+        f"{path.relative_to(_BACKEND_ROOT)} pulls typed-context banned "
         f"names from the facade:\n"
         + "\n".join(f"  line {ln}: {nm}" for ln, nm in violations)
         + f"\nLeaf sources: CurrentUser ← app.core.auth.models; "
@@ -339,13 +339,13 @@ def test_auth_middleware_imports_decode_token_from_jwt_leaf():
     text = path.read_text(encoding="utf-8")
     assert "from app.shared.jwt_token import decode_token" in text, (
         "auth_middleware.py must import decode_token from app.shared.jwt_token "
-        "(strangler Phase-1)."
+        "(strangler facade baseline)."
     )
 
 
 def test_ownership_imports_roles_from_leaf_module():
     """Lock the eager top-level import of `ROLES_ADMIN_OR_ABOVE` from
-    `app.core.auth.roles`. Pre-Phase-1 this was a lazy import from the
+    `app.core.auth.roles`. Pre-facade baseline this was a lazy import from the
     facade inside `_check_ownership`."""
     path = _APP / "core" / "auth" / "ownership.py"
     text = path.read_text(encoding="utf-8")
@@ -386,7 +386,7 @@ def test_authz_helpers_imports_models_and_ownership_leaves():
     assert "assert_resource_visible" in text
 
 
-# Phase-2 leaf-import presence assertions
+# typed-context leaf-import presence assertions
 
 
 def test_phase2_orchestrator_imports_assert_group_access_from_ownership():
@@ -411,7 +411,7 @@ def test_phase2_imdf_lazy_assert_resource_visible_migrated_to_leaf():
     surface (`app.core.imdf.router.assert_resource_visible`)
     instead of the facade.
 
-    This lock supersedes the prior Phase-2 residual contract
+    This lock supersedes the prior typed-context residual contract
     (`test_phase2_imdf_lazy_assert_resource_visible_kept_on_facade_residual`):
     the lazy facade import MUST NOT reappear, and the leaf import
     MUST be present.
@@ -635,7 +635,7 @@ def test_auth_engine_013_facade_reexports_dependencies_from_leaf():
     )
 
 
-# Phase-13 (BE-GO-READY-AUTH-ENGINE-019) ownership re-export removal
+# facade baseline3 (BE-GO-READY-AUTH-ENGINE-019) ownership re-export removal
 #
 # Stream 019 removed 4 ownership helper re-exports from the facade
 # (`app.core.auth.auth`):
@@ -801,7 +801,7 @@ def test_phase13_facade_does_not_expose_removed_ownership_names():
 #
 # Positive lock: each router must import at least one dep callable
 # from the leaf.  Negative lock: no dep callable may be pulled via
-# the facade in these files.  The Phase-2/3/4 per-name bans on
+# the facade in these files.  The typed-context/3/4 per-name bans on
 # `CurrentUser` etc. are still in force (vacuously satisfied now, but
 # kept as regression guards).
 

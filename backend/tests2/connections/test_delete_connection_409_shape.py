@@ -1,7 +1,7 @@
 """
 Contract test per shape 409 canonica su DELETE /api/connections/{id}.
 
-Invariante blindato (Batch Fix 6.1 — error-handling-governance):
+Invariante blindato (— error-handling-governance):
 """
 
 from __future__ import annotations
@@ -62,7 +62,7 @@ def test_delete_connection_409_shape_has_canonical_dependencies_field(client, mo
     monkeypatch.setattr(
         projects_usage,
         "list_projects_using_connection",
-        # PR-δ: la SELECT include `group_id` per consentire filtro
+        # hidden-count contract: la SELECT include `group_id` per consentire filtro
         # cross-tenant in fase di costruzione del 409 detail. Per non
         # rompere lo shape test, entrambi i progetti appartengono al
         # gruppo di current_user (grp-1) → tutti visibili, hidden=0.
@@ -93,7 +93,7 @@ def test_delete_connection_409_shape_has_canonical_dependencies_field(client, mo
 
 def test_delete_connection_happy_path_returns_204(client, monkeypatch):
     """F2-B1 (2026-04-24): DELETE /api/connections/{id} risponde 204 No
-    Content con body vuoto. Pre-fix ritornava 200 + dict
+    Content con body vuoto. Previous behavior ritornava 200 + dict
     {"status": "deleted", "connection_id": X} (ridondante — ID gia' noto
     al client che ha chiamato DELETE)."""
     import app.core.projects.usage as projects_usage

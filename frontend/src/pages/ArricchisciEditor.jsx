@@ -104,14 +104,12 @@ const ArricchisciEditorContent = () => {
   const { user, logout } = useAuth();
   const { screenToFlowPosition } = useReactFlow();
 
-  // ===== THEME =====
   const { theme, setTheme } = useTheme();
   const hexCanvasRef = useRef(null);
   useHexCanvas(hexCanvasRef);
 
   const toast = useToast();
 
-  // ===== CANVAS CORE =====
   const {
     nodes, edges, setNodes, setEdges, onNodesChange, onEdgesChange,
     nodesRef, edgesRef, updateNodeData, deleteNode,
@@ -119,8 +117,6 @@ const ArricchisciEditorContent = () => {
     isReadOnly, readOnlyProps
   } = useCanvasCore(projectId, { mode: 'arricchisci' });
 
-  // ===== STATE SPECIFICO ARRICCHISCI =====
-  // ===== DATA LOADING (centralizzato) =====
   const {
     project, connections, loading, error: loadError,
     availableSources, availableFiles,
@@ -130,7 +126,6 @@ const ArricchisciEditorContent = () => {
     sourceTypes: ARRICCHISCI_SOURCE_TYPES,
   });
 
-  // ===== STATE SPECIFICO ARRICCHISCI =====
   const [saving, setSaving] = useState(false);
   const [exportFormat, setExportFormat]         = useState('csv');
   const [showConfirmModal, setShowConfirmModal] = useState(false);
@@ -138,7 +133,6 @@ const ArricchisciEditorContent = () => {
 
   const modals = useMultiModal(['template', 'openapi', 'manual', 'datasource']);
 
-  // ===== HOOKS SPECIFICI ARRICCHISCI =====
   const enrichmentValidation = useEnrichmentValidation();
   const preview   = usePreview(projectId, handleSaveQuiet);
   const execution = useExecution(projectId, {
@@ -146,7 +140,7 @@ const ArricchisciEditorContent = () => {
     // Tutti i guard (CANVAS_EMPTY, ARRICCHISCI_NO_SOURCES, ARRICCHISCI_NO_ENRICHER)
     // sono coperti da `validateArricchisciCanvas` (chiamato da `ResultNode.
     // handleExecuteWithValidation` prima di `onExecute`). onBeforeExecute
-    // raggiunto solo a validation-passed (FE-PHASE2-VALIDATION-003).
+    // raggiunto solo a validation-passed.
     onBeforeExecute: () => handleSaveQuiet(),
   });
   const caricarica = useCaricarica(projectId, {
@@ -154,9 +148,6 @@ const ArricchisciEditorContent = () => {
     getCanvas: () => ({ nodes: nodesRef.current, edges: edgesRef.current })
   });
 
-  // ===== EFFECTS =====
-
-  // ===== EFFECT: carica nodi nel canvas quando il progetto e pronto =====
   useEffect(() => {
     if (!project?.canvas?.nodes || loading) return;
 
@@ -222,13 +213,9 @@ const ArricchisciEditorContent = () => {
     // setNodes (snapshot React aggiornato) per evitare il loop nodes->effect.
   }, [setNodes]);
 
-  // ===== NODE HANDLERS =====
-
   // NOTA: le colonne dei nodi source vengono aggiornate direttamente
   // dai nodi stessi tramite useCanvasStore.getState().updateNodeData
   // Non servono handler passati come prop.
-
-  // ===== ENRICHMENT CONFIRM FLOW =====
 
   const getEnrichmentConfig = useCallback(() => {
     const currentNodes  = nodesRef.current;
@@ -310,7 +297,6 @@ const ArricchisciEditorContent = () => {
     useCanvasStore.getState().setConnections(connections);
   }, [connections]);
 
-  // ===== POST-VALIDATION NODE HIGHLIGHTS (FE-PHASE3-VALIDATION-UX-002) =====
   // Dopo che ResultNode esegue validation (manuale, execute, preview), lo store
   // contiene i nodeId con issue. Applichiamo un outline amber ai nodi coinvolti.
   const validationHighlights = useCanvasStore(s => s.validationHighlights);
@@ -333,15 +319,11 @@ const ArricchisciEditorContent = () => {
     })));
   }, [validationHighlights, setNodes]);
 
-  // ===== SAVE =====
-
   const handleSaveCanvas = useCallback(async () => {
     try { setSaving(true); await handleSaveQuiet(); }
     catch (err) { console.error('[ArricchisciEditor] Errore salvataggio:', err); toast.error('Errore durante il salvataggio'); }
     finally { setSaving(false); }
   }, [handleSaveQuiet]);
-
-  // ===== ADD NODE HANDLERS =====
 
   const getPos = () => getViewportCenter({ screenToFlowPosition });
 
@@ -447,8 +429,6 @@ const ArricchisciEditorContent = () => {
     }));
   }, [setNodes, setEdges, toast]);
 
-  // ===== EDGE & DRAG HANDLERS =====
-
   const onConnect = useCallback((params) => {
     // Normalizza handles: undefined → 'input'/'output'
     const cleanParams = { ...params };
@@ -480,16 +460,12 @@ const ArricchisciEditorContent = () => {
     if (newNode) setNodes(nds => nds.concat(newNode));
   }, [screenToFlowPosition, setNodes]);
 
-  // ===== RENDER =====
-
   const handleBack     = () => navigate('/');
   const hasResultNode  = nodes.some(n => n.type === 'result');
   const hasCaricanNode = nodes.some(n => n.type === 'carica');
   const hasCaricanArcGISNode = nodes.some(n => n.type === 'carica_arcgis' || n.type === 'caricaArcgis');
   const hasImdfEnrich        = nodes.some(n => n.type === 'api_enrich' && n.data?.output_kind === 'imdf');
   const hasImdfPublisherNode = nodes.some(n => n.type === 'imdf_publisher');
-
-  // Guard branches gestiti da EditorShell (FE-SPLIT-004).
 
   // beforeCanvas slot
   const accessDeniedBanner = <AccessDeniedBanner nodes={nodes} />;

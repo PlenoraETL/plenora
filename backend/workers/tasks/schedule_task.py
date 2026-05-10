@@ -36,7 +36,7 @@ def schedule_pipeline_task(
     - Celery Beat (cron) → triggered_by="cron"
     - API "Esegui Ora" → triggered_by="manual"
     - PolicyEngine (retry) → triggered_by originale, retry_attempt > 0
-    - Beat catchup (C3 fix 3) → triggered_by="catchup" + scheduled_for
+    - Beat catchup → triggered_by="catchup" + scheduled_for
 
     Args:
         schedule_id: ID dello schedule da eseguire
@@ -52,14 +52,9 @@ def schedule_pipeline_task(
     Returns:
         Dict con risultato esecuzione
     """
-    # N15b: se il caller non ha valorizzato scheduled_for (cron normali
-    # manual "Esegui Ora"), lo computiamo qui al task entry. Questo
-    # garantisce che la chiave idempotency di CARICA sia sempre stabile
-    # attraverso retry dello stesso tick — il retry propaga scheduled_for
-    # via _handle_failure (cfr. execution_manager N15
-    # Invocazioni distinte (tick cron diversi, click Esegui Ora multipli
-    # producono ISO diversi (microsecondi) -> run_id distinti -> ognuna
-    # eseguita separatamente come intended
+    # Stable scheduled_for values keep CARICA idempotency keys stable across
+    # retries of the same scheduler tick. Independent manual runs get fresh
+    # timestamps and therefore distinct run_ids.
     if scheduled_for is None:
         scheduled_for = datetime.now(timezone.utc).isoformat()
 

@@ -5,8 +5,7 @@
  * lastTaskResult.imdf.manifest) + `publish` (risultato dell'upload ArcGIS
  * eventualmente prodotto da un nodo imdf_publisher nel canvas).
  *
- * Tema scuro cyan: usa lo shell condiviso `imdf-modal.css`
- * (FE-PHASE2-IMDF-MODAL-SHELL-001) per overlay/panel/header/body/footer.
+ * Tema scuro cyan: usa lo shell condiviso `imdf-modal.css`.
  * Le palette dinamiche (per-stato pub, per-severity validation) restano
  * inline runtime via le CSS vars `--imdf-modal-*`.
  */
@@ -195,8 +194,6 @@ export default function ImdfManifestModal({ isOpen, onClose, manifest, siteId, p
     </div>
   ), document.body);
 }
-
-// ── Sub-components ──────────────────────────────────────────────────────
 function Section({ title, children }) {
   return (
     <div>

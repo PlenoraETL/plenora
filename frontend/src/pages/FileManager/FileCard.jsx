@@ -1,7 +1,5 @@
 /**
  * FileManager/FileCard.jsx — card riepilogo file singolo nella griglia.
- * Estratto da FileManager.jsx (FE-PHASE1-CLOSURE-3) senza cambio
- * comportamentale.
  */
 
 import React from 'react';

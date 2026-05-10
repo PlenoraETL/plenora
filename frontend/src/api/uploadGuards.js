@@ -1,16 +1,15 @@
 /**
  * uploadGuards.js — guard client-side per upload file.
  *
- * Background (B3 Phase 4):
- *  Il backend Phase 3 (T-04) ha cappato gli upload via
- *  `app.shared.upload_guards.enforce_upload_size_limit` che restituisce 413
+ * Il backend restituisce 413 tramite
+ *  `app.shared.upload_guards.enforce_upload_size_limit`
  *  con messaggio "File troppo grande (NMB). Limite massimo: NMB.". Per UX
  *  meno fragile (niente round-trip per file ovviamente troppo grandi,
  *  niente messaggi axios generici tipo "Network Error" su 413 con body
  *  troncato), facciamo una pre-check lato client e normalizziamo gli
  *  errori 413 propagati dal backend.
  *
- * Contratto (mirato al batch B3, no UI):
+ * Contratto:
  *   - assertFileSize(file): rifiuta sincronamente con UploadTooLargeError
  *     se file.size > MAX_UPLOAD_SIZE_BYTES.
  *   - extract413Message(error): se error e' un AxiosError 413, ritorna il

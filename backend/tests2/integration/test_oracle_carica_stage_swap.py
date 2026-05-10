@@ -160,7 +160,7 @@ def test_stage_swap_happy_path_replaces_target(monkeypatch):
 
 def test_stage_swap_cleans_orphan_interim_from_prior_crash(monkeypatch):
     """C6: Oracle usa DBMS_REDEFINITION path (non stage+swap). L'orfana
-    di riferimento e' `{table}__RDF`, non `{table}__STG`. La Phase 1
+    di riferimento e' `{table}__RDF`, non `{table}__STG`. La pulizia iniziale
     del metodo redef droppa l'interim orfana prima di procedere."""
     table = make_it_id("ora_swap_orf").upper()
     # Tabella con PK per far attivare DBMS_REDEFINITION
@@ -199,7 +199,7 @@ def test_stage_swap_cleans_orphan_interim_from_prior_crash(monkeypatch):
         assert result.rows_written == 3
         assert _count(table) == 3, "Target non aggiornato"
         assert not _table_exists(interim_table), (
-            "L'interim orfana __RDF non e' stata droppata dal Phase 1 "
+            "L'interim orfana __RDF non e' stata droppata dalla pulizia iniziale "
             "del metodo _truncate_insert_oracle_redef"
         )
     finally:

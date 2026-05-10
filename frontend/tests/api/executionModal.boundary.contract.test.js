@@ -4,11 +4,10 @@ import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 /**
- * Contract test — ExecutionModal FE/API boundary (C3.4 Phase 4).
+ * Contract tests for the ExecutionModal FE/API boundary.
  *
- * Pre-C3.4 ExecutionModal.jsx (componente UI in components/modals/) faceva
- *   const { default: http } = await import('../../api/http');
- *   const r = await http.get(url, { responseType: 'blob' });
+ * The previous ExecutionModal.jsx implementation (componente UI in
+ * components/modals/) created its own HTTP client inside the click handler.
  * dentro l'onClick del bottone "Scarica Report Errori". Doppia
  * violazione del contratto "frontend/src/api/ unico punto HTTP":
  *   1. dynamic import('../../api/http') dentro un componente UI
@@ -17,8 +16,8 @@ import { fileURLToPath } from 'node:url';
  *   2. http.get diretto su un URL costruito con API_ENDPOINT a mano,
  *      bypassando i client per-modulo di api/.
  *
- * C3.4 fix: il download passa per `api/projects.downloadProjectFile`,
- * il dynamic import sparisce, l'import di API_ENDPOINT non serve piu'.
+ * Ora il download passa per `api/projects.downloadProjectFile`: niente
+ * dynamic import e niente API_ENDPOINT nel componente.
  *
  * Test source-level (regex su sorgente JSX letta via node:fs): niente
  * render React, nessuna dipendenza da jsdom.
@@ -31,10 +30,8 @@ const SOURCE_PATH = resolve(
 );
 const SOURCE = readFileSync(SOURCE_PATH, 'utf-8');
 
-describe('ExecutionModal boundary contract (C3.4)', () => {
+describe('ExecutionModal boundary contract', () => {
   it('does NOT dynamic-import api/http inside any handler', () => {
-    // Regression: pre-C3.4 era
-    //   const { default: http } = await import('../../api/http');
     // Cattura sia path relativi (../../api/http) sia varianti col solo
     // suffisso. Non matcha la stringa 'api/http' dentro commenti che
     // NON contengono un'invocazione `import(...)` come token attivo.
@@ -46,7 +43,7 @@ describe('ExecutionModal boundary contract (C3.4)', () => {
       if (!dynamicImport.test(line)) return false;
       const idx = line.indexOf('import(');
       const commentIdx = line.indexOf('//');
-      // import( prima del commento, oppure non c'e' commento -> live.
+      // Violazione se il token dinamico appare prima di un eventuale commento.
       return commentIdx === -1 || idx < commentIdx;
     });
     expect(isLiveViolation).toBe(false);
@@ -63,9 +60,8 @@ describe('ExecutionModal boundary contract (C3.4)', () => {
   });
 
   it('does NOT import API_ENDPOINT (no manual URL building)', () => {
-    // L'unico consumer di API_ENDPOINT in questo file era
-    // getErrorReportUrl(): URL costruita a mano con concatenazione
-    // template. Post-C3.4 il boundary api/projects gestisce tutto.
+    // Il boundary api/projects gestisce l'URL; il componente non deve
+    // costruirlo a mano con API_ENDPOINT.
     expect(/\bAPI_ENDPOINT\b/.test(SOURCE)).toBe(false);
   });
 

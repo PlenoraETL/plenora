@@ -53,10 +53,7 @@ __all__ = [
     "load_dataframe_from_file",
 ]
 
-# stage identifier per il guard OOM pre-merge del multi-join
-# Estende la family `manipola_*` (cross-join: `manipola_cross_join`
-# Il handler in app/main.py riconosce questo stage come row-count
-# stage e produce messaggio + suggested_action row-count-aware
+# Stage id consumed by the global OOM handler for row-count-aware messaging.
 MULTI_JOIN_STAGE = "manipola_multi_join"
 
 
@@ -233,10 +230,6 @@ class ManipolaExecutor:
         executing_group_id = self._init_security_context(project_id, strict=True)
         canvas_graph = CanvasGraph.from_canvas(canvas)
 
-        # C3 round 3 fix 3: push del project_id sulla chain di
-        # esecuzione corrente. _carica_sorgenti_progetto verifica la
-        # chain prima di chiamare pipeline_dispatcher per rilevare
-        # cicli A → B → A (defense-in-depth contro canvas legacy
         _push_to_execution_chain(project_id)
 
         _step_start = _time.time()
@@ -304,14 +297,6 @@ class ManipolaExecutor:
 
         current_df = self._applica_group_by(current_df, result_node)
 
-        # Snapshot intermediate.db per il nodo result
-        # passa per `record_final_snapshot`
-        # che applica la policy globale `INTERMEDIATE_PERSISTENCE_MODE`
-        # default `preview_only` -> prime 500 righe + hash + meta
-        # Pre-fix: cap fisso a 10.000 righe + write_node legacy che
-        # materializzava `df.head(10k).to_dict(records)` sempre
-        # Post-fix: niente df.to_dict(full); l'hash del DataFrame e' calcolato
-        # via pandas_hash_v1 senza materializzare; preview cap dalla policy
         if run_id and current_df is not None:
             try:
                 record_final_snapshot(
@@ -332,13 +317,8 @@ class ManipolaExecutor:
             project_id, result_node, current_df, canvas, canvas_graph=canvas_graph
         )
 
-        # Allinea columns_metadata del progetto allo schema reale del
-        # DataFrame finale: senza, l'output file resta corretto ma il
-        # metadata stale rompe il riuso come project_source
-        # Usa l'helper condiviso (retry transient + raise non-transient
-        # i fallimenti propagano a Celery che marca FAILED. Pre-fix il
-        # try/except warning rendeva impossibile distinguere "tutto ok"
-        # da "ok ma metadata stale" downstream
+        # Keep project_source reuse aligned with the actual persisted schema.
+        # Non-transient metadata failures propagate so Celery marks the run failed.
         if save_result.get("success"):
             _col_meta = [
                 {"name": c, "type": str(current_df[c].dtype)} for c in current_df.columns

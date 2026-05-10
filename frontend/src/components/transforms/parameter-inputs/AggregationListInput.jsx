@@ -1,7 +1,5 @@
 /**
  * AggregationListInput.jsx — Builder lista aggregazioni
- *
- * Estratto da `ParameterInput.jsx` in `FE-PHASE2-SPLIT-002A`.
  * Usato dal dispatcher per il tipo `aggregation_list`. Selezione
  * colonna + funzione (count/sum/mean/min/max/first/last/concat) +
  * parametri extra per `concat` (separator/distinct/skip_null).
@@ -59,7 +57,6 @@ const AggregationListInput = ({ value, onChange, columns }) => {
               <option key={fn} value={fn}>{fn}</option>
             ))}
           </select>
-          {/* Parametri extra per concat */}
           {agg.function === 'concat' && (
             <div className="aggregation-list-input__concat-params">
               <input

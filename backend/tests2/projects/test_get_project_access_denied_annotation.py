@@ -153,7 +153,7 @@ def test_get_project_annotates_inaccessible_project_source_node():
 
 def test_get_project_does_not_annotate_clean_canvas():
     """Regression: canvas con tutti i ref visibili -> nessun nodo viene
-    marcato con access_denied. Response identica al pre-fix (a meno di
+    marcato con access_denied. Response identica al Previous behavior (a meno di
     `data` field potenzialmente popolato da `model_dump()` con default)."""
     metadata = _make_metadata(group_id="g1")
     canvas = _make_clean_canvas()

@@ -372,7 +372,7 @@ def test_no_executable_blocks_empty_file():
 
 
 def test_detect_mime_raises_explicit_if_filetype_missing(monkeypatch):
-    """Pre-fix: if `filetype` import fallisce, ritornava None (fail-open).
+    """Previous behavior: if `filetype` import fallisce, ritornava None (fail-open).
     L'effetto era che validate_upload non sniffava nulla e accettava
     qualsiasi binary su estensione testuale. Ora deve raise con messaggio
     operativo che indica come sistemare."""

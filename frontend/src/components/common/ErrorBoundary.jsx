@@ -25,8 +25,6 @@
 import React from 'react';
 import './ErrorBoundary.css';
 
-// ─── Canvas Error Boundary ────────────────────────────────────────────────────
-
 export class CanvasErrorBoundary extends React.Component {
   constructor(props) {
     super(props);
@@ -78,8 +76,6 @@ export class CanvasErrorBoundary extends React.Component {
   }
 }
 
-// ─── App Error Boundary ───────────────────────────────────────────────────────
-
 export class AppErrorBoundary extends React.Component {
   constructor(props) {
     super(props);
@@ -125,8 +121,6 @@ export class AppErrorBoundary extends React.Component {
     return this.props.children;
   }
 }
-
-// ─── Modal Error Boundary ────────────────────────────────────────────────────
 
 export class ModalErrorBoundary extends React.Component {
   constructor(props) {

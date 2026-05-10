@@ -1,7 +1,7 @@
 """
-[phase-2-err][batch7] 7.f — breadcrumb coverage su cleanup except: pass.
+7.f — breadcrumb coverage su cleanup except: pass.
 
-Audit Batch 7 §3.4 [MEDIA] — 15 siti `except Exception: pass` cleanup nei
+Audit finding: pass` cleanup nei
 """
 
 from __future__ import annotations
@@ -31,7 +31,6 @@ def _read(relpath: str) -> str:
     return (_BACKEND_ROOT / relpath).read_text(encoding="utf-8")
 
 
-# TEST 1 — Zero bare `except Exception: pass` nei 5 file target
 
 
 def test_no_bare_except_pass_in_target_files():
@@ -60,13 +59,12 @@ def test_no_bare_except_pass_in_target_files():
     )
 
 
-# TEST 2 — Ogni sito ha logger.debug con type(e).__name__
 
 
 # Mapping (file, stringa-contesto-breadcrumb) dei siti attesi.
-# La stringa-contesto deve essere unica nel file post-fix per isolarla.
+# La stringa-contesto deve essere unica nel file Current contract per isolarla.
 #
-# Phase 6 Batch 3B (2026-04-28): rimossi 2 contesti che vivevano nel
+# Contract: rimossi 2 contesti che vivevano nel
 # pattern `_async_write` thread daemon di enrichment_task.py (api_enrich
 # snapshot + result snapshot). Quel pattern non esiste piu': il routing
 # passa per `record_*_snapshot` sync via la policy. I 2 contesti rimossi
@@ -125,18 +123,17 @@ def test_each_cleanup_site_has_logger_debug_breadcrumb():
     )
 
 
-# TEST 3 — Count aggregato: 15 siti trattati
 
 
 def test_cleanup_sites_count_matches_scope():
     """Sanity aggregata: conta quante occorrenze di `logger.debug(f"`
     con `type(e).__name__` esistono nei 5 file.
 
-    Phase 6 Batch 3B: soglia abbassata da 15 a 13 dopo la rimozione del
+    Contract: soglia abbassata da 15 a 13 dopo la rimozione del
     pattern `_async_write` thread daemon in enrichment_task.py (vedi
     `_BREADCRUMB_CONTEXTS` per il dettaglio). Restano i 13 siti
     cleanup non-async, piu' eventuali altri debug pre-esistenti dei
-    batch 7.c/7.b.
+    current contract.c/7.b.
     """
     # Pattern flessibile: accetta `type(e)`, `type(e_inner)`, `type(e_prog)`,
     # ecc. (alcuni siti nested usano variable name diverso per evitare shadow).
@@ -151,7 +148,7 @@ def test_cleanup_sites_count_matches_scope():
         per_file[rel] = count
         total_breadcrumbs += count
 
-    # Minimo atteso = 13 siti 7.f post-Batch 3B. Altri batch potrebbero
+    # Minimo atteso = 13 siti 7.f Current contract 3B. Altri batch potrebbero
     # averne aggiunti.
     assert total_breadcrumbs >= 13, (
         f"Atteso >=13 breadcrumb cleanup, ricevuto {total_breadcrumbs}.\n"

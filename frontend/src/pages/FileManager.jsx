@@ -43,8 +43,6 @@ const FILTER_TABS = [
   { key: 'geojson', label: 'GeoJSON' },
   { key: 'spatial', label: 'Spaziali' },
 ];
-
-// ── Main component ────────────────────────────────────────────────────────
 const FileManager = () => {
   const navigate     = useNavigate();
   const toast        = useToast();
@@ -101,9 +99,7 @@ const FileManager = () => {
   const [showPreviewModal, setShowPreviewModal] = useState(false);
   const [previewData,      setPreviewData]      = useState(null);
   const [previewFile,      setPreviewFile]      = useState(null);
-
-  // ── Load ────────────────────────────────────────────────────────────────
-  const loadFiles = useCallback(async () => {
+const loadFiles = useCallback(async () => {
     try {
       setLoading(true);
       const data = await getFiles();
@@ -117,9 +113,7 @@ const FileManager = () => {
   }, []);
 
   useEffect(() => { loadFiles(); }, [loadFiles]);
-
-  // ── Drag & drop ─────────────────────────────────────────────────────────
-  const handleDrag = (e) => {
+const handleDrag = (e) => {
     e.preventDefault(); e.stopPropagation();
     setDragActive(e.type === 'dragenter' || e.type === 'dragover');
   };
@@ -136,9 +130,7 @@ const FileManager = () => {
     setUploadName(file.name.replace(/\.[^/.]+$/, ''));
     setUploadError(null);
   };
-
-  // ── Column helpers ───────────────────────────────────────────────────────
-  const _loadColumnsForLayer = async (file, layerName, currentCols, currentSelected, isSheet = false) => {
+const _loadColumnsForLayer = async (file, layerName, currentCols, currentSelected, isSheet = false) => {
     setLoadingLayerCols(true);
     try {
       const preview = await previewFileTemp(file, isSheet ? null : layerName, isSheet ? layerName : null);
@@ -177,9 +169,7 @@ const FileManager = () => {
       return { ...prev, [layerName]: current.length === all.length ? [] : all };
     });
   };
-
-  // ── Multi-layer upload ───────────────────────────────────────────────────
-  const handleMultiLayerUpload = async () => {
+const handleMultiLayerUpload = async () => {
     const isSheet = ['xlsx','xls'].includes(uploadFile_?.name.split('.').pop().toLowerCase());
     const selectedLayers = Object.entries(checkedLayers)
       .filter(([, checked]) => checked)
@@ -195,9 +185,7 @@ const FileManager = () => {
       setUploadError(err.message || "Errore durante l'upload");
     } finally { setUploading(false); }
   };
-
-  // ── Next step ────────────────────────────────────────────────────────────
-  const handleNextStep = async () => {
+const handleNextStep = async () => {
     if (!uploadFile_ || !uploadName.trim()) { setUploadError('Seleziona un file e inserisci un nome'); return; }
     setLoadingColumns(true); setUploadError(null);
     try {
@@ -260,9 +248,7 @@ const FileManager = () => {
 
   const handleToggleColumn    = (col) => setSelectedColumns(prev => prev.includes(col) ? prev.filter(c => c !== col) : [...prev, col]);
   const handleSelectAllColumns = ()   => setSelectedColumns(selectedColumns.length === availableColumns.length ? [] : availableColumns.map(c => c.name));
-
-  // ── Upload ───────────────────────────────────────────────────────────────
-  const handleUpload = async () => {
+const handleUpload = async () => {
     if (!uploadFile_ || !uploadName.trim()) { setUploadError('Seleziona un file e inserisci un nome'); return; }
     if (selectedColumns.length === 0) { setUploadError('Seleziona almeno una colonna'); return; }
     setUploading(true); setUploadError(null);
@@ -284,9 +270,7 @@ const FileManager = () => {
   };
 
   const handleConfirmLayer = async () => { if (!pendingFile) return; await loadFiles(); resetLayerModal(); };
-
-  // ── Preview ──────────────────────────────────────────────────────────────
-  const handlePreview = async (file) => {
+const handlePreview = async (file) => {
     try {
       const preview = await getFilePreview(file.id, 50);
       setPreviewData(preview); setPreviewFile(file); setShowPreviewModal(true);
@@ -304,25 +288,19 @@ const FileManager = () => {
       toast.error('Errore nel caricamento della preview');
     }
   };
-
-  // ── Delete ───────────────────────────────────────────────────────────────
-  const handleDelete = async (fileId, fileName) => {
+const handleDelete = async (fileId, fileName) => {
     const ok = await confirmModal.confirm({ title: 'Elimina file', message: `Eliminare "${fileName}"?`, confirmText: 'Elimina', variant: 'danger' });
     if (!ok) return;
     try { await deleteFile(fileId); await loadFiles(); }
     catch { toast.error("Errore durante l'eliminazione"); }
   };
-
-  // ── Reset ────────────────────────────────────────────────────────────────
-  const resetUploadModal = () => {
+const resetUploadModal = () => {
     setShowUploadModal(false); setUploadFile(null); setUploadName(''); setUploadDescription('');
     setUploadLayer(''); setUploadSheet(''); setUploadError(null); setUploadStep(1);
     setAvailableColumns([]); setSelectedColumns([]); setDetectedSrid(null); setUserSrid(''); setHasGeometryColumn(false);
     setIsMultiLayerFile(false); setCheckedLayers({}); setLayerColumns({}); setLayerSelectedCols({}); setActiveLayerTab(null); setAvailableLayers([]);
   };
   const resetLayerModal = () => { setShowLayerModal(false); setPendingFile(null); setAvailableLayers([]); setAvailableSheets([]); setSelectedLayer(''); setSelectedSheet(''); };
-
-  // ── Filtered files ───────────────────────────────────────────────────────
   const filteredFiles = files.filter(f => {
     const matchSearch = !search || f.name.toLowerCase().includes(search.toLowerCase()) || f.original_filename?.toLowerCase().includes(search.toLowerCase());
     const matchTab =
@@ -344,12 +322,8 @@ const FileManager = () => {
     <>
     <ConfirmDialog {...confirmModal} />
     <div className="fm">
-
-      {/* ── SIDEBAR ── */}
-      <AppSidebar counts={{ files: files.length }} />
-
-      {/* ── MAIN ── */}
-      <div className="fm__main">
+<AppSidebar counts={{ files: files.length }} />
+<div className="fm__main">
         <header className="fm__topbar">
           <button type="button" className="fm__back-btn" onClick={() => navigate(-1)}>← Indietro</button>
           <div className="fm__page-title">File Manager</div>
@@ -456,9 +430,7 @@ const FileManager = () => {
           )}
         </div>
       </div>
-
-      {/* ── UPLOAD MODAL ── */}
-      {showUploadModal && (
+{showUploadModal && (
         <UploadModal
           step={uploadStep}
           uploadFile={uploadFile_}
@@ -500,9 +472,7 @@ const FileManager = () => {
           onToggleAllLayerCols={handleToggleAllLayerCols}
         />
       )}
-
-      {/* ── LAYER MODAL ── */}
-      {showLayerModal && (
+{showLayerModal && (
         <LayerModal
           pendingFile={pendingFile}
           availableLayers={availableLayers}
@@ -515,18 +485,14 @@ const FileManager = () => {
           onClose={resetLayerModal}
         />
       )}
-
-      {/* ── PREVIEW MODAL ── */}
-      {showPreviewModal && previewData && previewFile && (
+{showPreviewModal && previewData && previewFile && (
         <PreviewModal
           file={previewFile}
           data={previewData}
           onClose={() => setShowPreviewModal(false)}
         />
       )}
-
-      {/* ── SHARE MODAL (solo superadmin) ── */}
-      {sharingFile && (
+{sharingFile && (
         <ModalWrapper
           isOpen={true}
           onClose={() => setSharingFile(null)}

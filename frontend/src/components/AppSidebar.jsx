@@ -35,8 +35,6 @@ import { getTicketsCounts } from '../api/tickets';
 import ChangePasswordModal from './ChangePasswordModal';
 import { useTheme } from '../hooks/useTheme';
 import './AppSidebar.css';
-
-// ── Logo Plenora (dark/light aware) ─────────────────────────────────────
 function Logo() {
   const { theme } = useTheme();
   const isDark = theme !== 'light';
@@ -50,8 +48,6 @@ function Logo() {
     </svg>
   );
 }
-
-// ── Definizioni voci nav ────────────────────────────────────────────────
 // Le sezioni della dashboard (workspace) sono identificate da hash:
 //   /#estrai, /#manipola, /#arricchisci, /#eseguibili
 // ProjectList ascolta location.hash e scrolla all'id `pl-section-<hash>`.
@@ -73,8 +69,6 @@ const SYSTEM_ITEMS = [
   { key: 'logs',         label: 'Log Viewer',   path: '/logs' },
   { key: 'tickets',      label: 'Ticket',       path: '/tickets',             countKey: 'tickets' },
 ];
-
-// ── Componente principale ───────────────────────────────────────────────
 export default function AppSidebar({ counts = {} }) {
   const navigate = useNavigate();
   const location = useLocation();

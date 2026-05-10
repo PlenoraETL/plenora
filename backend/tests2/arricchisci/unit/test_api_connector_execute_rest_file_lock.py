@@ -149,15 +149,15 @@ class TestExecuteRestFileConfigValidation:
         assert "json_array" in result["error"]
 
     def test_auth_preparation_keyerror_returns_error_with_prefix(self, rf_env):
-        """Fix-D narrow #20: `KeyError` da `_prepare_headers` (campo
+        """Contract: `KeyError` da `_prepare_headers` (campo
         auth mancante, es. api_key non configurato) rientra nella
         tupla narrow `(KeyError, ValueError, requests.RequestException)`
         ed e' restituita con il prefisso `"Preparazione auth fallita:"`
         + il dettaglio di `str(e)`. I messaggi di KeyError qui sono
         nomi di campo config -- safe da esporre.
 
-        Pre-fix (broad `except Exception`) accettava qualsiasi classe:
-        dopo Fix-D narrow, `KeyError` resta catturato esplicitamente.
+        Previous behavior (broad `except Exception`) accettava qualsiasi classe:
+        dopo narrow error contract, `KeyError` resta catturato esplicitamente.
         """
         rf_env.prepare_headers.side_effect = KeyError("api_key")
         cfg = _api_config()
@@ -171,7 +171,7 @@ class TestExecuteRestFileConfigValidation:
     def test_auth_preparation_request_exception_returns_error_with_prefix(
         self, rf_env
     ):
-        """Fix-D narrow #20: `requests.RequestException` (es. timeout /
+        """Contract: `requests.RequestException` (es. timeout /
         connection error durante il fetch del token OAuth2) e' nella
         tupla narrow. Lock separato perche' e' la classe meno ovvia
         del trittico: non e' un errore di config ma di runtime HTTP
@@ -189,7 +189,7 @@ class TestExecuteRestFileConfigValidation:
         assert "oauth server unreachable" in result["error"]
 
     def test_input_resolve_value_error_returns_error_with_prefix(self, rf_env):
-        """Fix-D narrow #21 + F5 primo batch (2026-04-24): `ValueError`
+        """Contract: `ValueError`
         dalla catena di risoluzione input (`_resolve_file_source_path` ->
         ValueError domain con messaggi "Accesso negato:", "Contesto di
         sicurezza...", "Errore progetto sorgente...") viene catturato
@@ -218,7 +218,7 @@ class TestExecuteRestFileConfigValidation:
     def test_input_resolve_file_source_resolution_error_returns_error_with_prefix(
         self, rf_env
     ):
-        """Fix-D narrow #21: `FileSourceResolutionError` (Fix-A) dalla
+        """Contract: `FileSourceResolutionError` (the fail-closed resolver contract) dalla
         catena di risoluzione input e' nella tupla narrow. Il messaggio
         `__str__` della classe e' safe-by-construction (non include
         `str(original_error)`), quindi il prefisso + il testo esposto
@@ -247,11 +247,11 @@ class TestExecuteRestFileConfigValidation:
         )
 
     def test_main_flow_unknown_exception_returns_safe_message(self, rf_env):
-        """Fix-D safety-net #22c: eccezioni inattese dentro il main try
+        """Safety-net contract: eccezioni inattese dentro il main try
         di `_execute_rest_file` (post input resolve, durante build
         multipart / mkdtemp / download response / resto del path HTTP
         oltre Timeout e RequestException) cadono nel catch broad che
-        ora restituisce messaggio safe generico. Pre-fix ritornava
+        ora restituisce messaggio safe generico. Previous behavior ritornava
         `str(e)` leakando internals. Il dettaglio tecnico resta nel
         log (`logger.error [CRASH]` + `exc_info=True`).
 
@@ -272,18 +272,18 @@ class TestExecuteRestFileConfigValidation:
         )
 
     def test_auth_prep_unknown_exception_propagates_to_caller(self, rf_env):
-        """Contratto post-C4.3 (Fix-D narrow): un `RuntimeError` fuori
+        """Contract: un `RuntimeError` fuori
         dalla tupla narrow `(KeyError, ValueError, RequestException)`
         di #20 non e' catturato da `_execute_rest_file`. Il main try
         con il safety-net #22c e' STRUTTURALMENTE dopo il boundary
         auth (quindi non lo copre), percio' l'eccezione propaga al
         caller. La safety-net finale FE-facing per questo caso e' il
-        catch top-level di `execute_enrichment` (Fix-C, a10774f) che
+        catch top-level di `execute_enrichment` (the top-level catch) che
         produce `"Errore interno durante l'arricchimento"`.
 
         Lock del gap architetturale per documentarlo esplicitamente:
         un'eventuale estensione della safety-net locale al #20 e'
-        debito separato (fuori scope Commit 4, vincolo 2).
+        debito separato (outside this contract boundary).
         """
         rf_env.prepare_headers.side_effect = RuntimeError("oauth token expired")
         cfg = _api_config()
@@ -293,7 +293,7 @@ class TestExecuteRestFileConfigValidation:
             )
 
     def test_input_resolve_unknown_exception_propagates_to_caller(self, rf_env):
-        """Contratto post-C4.3 (Fix-D narrow): un `RuntimeError` fuori
+        """Contract: un `RuntimeError` fuori
         dalla tupla narrow `(ValueError, SourceLoadingError,
         FileSourceResolutionError)` di #21 non e' catturato da
         `_execute_rest_file` per lo stesso motivo strutturale del

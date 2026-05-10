@@ -18,9 +18,9 @@
  *     quindi i contract test esistenti (regex su message + severity + nodeId)
  *     restano verdi.
  *
- * Boundary FE/BE futuro:
+ * Boundary FE/BE:
  *   - `RULE_IDS` sono stringhe stabili enum-like; il backend potra' emettere
- *     issue con gli stessi `id` per l'handshake FE/BE in Phase 3.
+ *     issue con gli stessi `id` per l'handshake FE/BE.
  *   - `ValidationIssue.source` distingue origine ('frontend' | 'backend').
  */
 

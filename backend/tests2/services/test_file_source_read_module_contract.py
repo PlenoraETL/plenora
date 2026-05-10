@@ -1,5 +1,5 @@
 """
-Smoke contract - STRUCT-001 Seam D-D: file source read orchestration.
+Smoke contract: file source read orchestration.
 
 The module under test is go-ready: every side-effect/collaborator is passed
 """

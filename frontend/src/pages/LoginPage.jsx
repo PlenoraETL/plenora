@@ -16,8 +16,6 @@ import '../styles/LoginPage.css';
 // Helper: dove mandare l'utente dopo il login in base al ruolo.
 // Esecutore → /run (kiosk), tutti gli altri → / (dashboard normale).
 const landingPathFor = (user) => (role.isEsecutore(user) ? '/run' : '/');
-
-/* ── Hex canvas transition ─────────────────────────────────────────────── */
 function drawHexTransition(canvas) {
   if (!canvas) return;
 
@@ -85,8 +83,6 @@ function drawHexTransition(canvas) {
     }
   });
 }
-
-/* ── Componente ────────────────────────────────────────────────────────── */
 export default function LoginPage() {
   const { login, token, user } = useAuth();
   const navigate         = useNavigate();
@@ -150,14 +146,10 @@ export default function LoginPage() {
   return (
     <div className="lp">
       <canvas ref={canvasRef} className="lp__hex-canvas" />
-
-      {/* ── Theme toggle ── */}
-      <button className="lp__theme-toggle" onClick={toggleTheme} type="button" aria-label="Cambia tema">
+<button className="lp__theme-toggle" onClick={toggleTheme} type="button" aria-label="Cambia tema">
         {theme === 'dark' ? '☀️' : '🌙'}
       </button>
-
-      {/* ── Brand panel ── */}
-      <div className="lp__brand">
+<div className="lp__brand">
         <div className="lp__brand-inner">
 
           {/* Logo */}
@@ -202,9 +194,7 @@ export default function LoginPage() {
           </div>
         </div>
       </div>
-
-      {/* ── Form panel ── */}
-      <div className="lp__form-side">
+<div className="lp__form-side">
         <div className="lp__form-wrap">
           <div className="lp__form-header">
             <h2 className="lp__form-title">Accedi</h2>

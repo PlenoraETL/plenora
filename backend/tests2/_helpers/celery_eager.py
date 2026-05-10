@@ -1,7 +1,7 @@
 """
 Celery eager harness — test-only.
 
-Phase 1 Test Reliability Batch (PR test/phase-1-test-reliability):
+Test reliability helper contracts:
 """
 
 from __future__ import annotations

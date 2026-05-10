@@ -95,7 +95,6 @@ describe('eseguibili api contract', () => {
     expect(httpMock.delete).toHaveBeenCalledWith('/eseguibili/e-9');
   });
 
-  // ─── B3 Phase 4: client-side size guard + 413 propagation ────────────────
 
   it('analyzeUpload rejects oversized files client-side without calling backend', async () => {
     const { analyzeUpload } = await import('../../src/api/eseguibili');

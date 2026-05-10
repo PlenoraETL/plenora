@@ -1,5 +1,5 @@
 """
-Contract test Phase 6 Batch 3B — ARRICCHISCI snapshot routing.
+Contract test Current contract
 
 Verifica:
 """
@@ -70,7 +70,7 @@ def _bind_helper():
 
 
 def test_write_intermediate_snapshot_routes_through_record_checkpoint():
-    """Phase 6 Batch 3B: il helper `_write_intermediate_snapshot` non
+    """Contract: il helper `_write_intermediate_snapshot` non
     chiama piu' write_node legacy, ma record_checkpoint_snapshot con
     module='arricchisci'."""
     target = _bind_helper()
@@ -125,7 +125,7 @@ def test_write_intermediate_snapshot_noop_on_empty_or_none():
 
 def test_api_enrich_with_final_only_policy_does_not_reach_db():
     """End-to-end: `_write_intermediate_snapshot` chiamata sotto policy
-    `arricchisci_checkpoints=final_only` (default Batch 1) -> il resolver
+    `arricchisci_checkpoints=final_only` (default current contract) -> il resolver
     decide skip; il DB non viene mai scritto."""
     target = _bind_helper()
     df = pd.DataFrame({"a": [1, 2, 3]})

@@ -4,7 +4,7 @@
  * Nome / descrizione / URL endpoint / metodo + opzioni avanzate
  * (rate limit / timeout / retry / parallel workers).
  *
- * Estratto in `FE-PHASE2-SPLIT-001B`. Presentational.
+ * Presentational.
  */
 import React from 'react';
 

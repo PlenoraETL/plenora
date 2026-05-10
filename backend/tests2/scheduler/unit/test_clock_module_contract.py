@@ -1,7 +1,7 @@
 """
 Smoke contract - R-05: app.shared.clock.
 
-Verifica le invarianti minime del seam:
+Verifica le invarianti minime del boundary:
 """
 
 from __future__ import annotations

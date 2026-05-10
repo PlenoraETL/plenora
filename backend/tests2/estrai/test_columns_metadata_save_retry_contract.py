@@ -104,7 +104,6 @@ def test_save_retries_on_deadlock_succeeds_on_3rd(executor_with_mocks):
     res = _make_res()
 
     # DeadlockDetected ha un costruttore particolare (eredita da Error)
-    # — usiamo il parent OperationalError di psycopg2 per sicurezza
     import psycopg2
     project_service.update_project_columns_metadata.side_effect = [
         psycopg2.OperationalError("deadlock 1"),

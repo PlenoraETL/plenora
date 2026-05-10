@@ -59,8 +59,8 @@ def test_logs_clear_route_not_re_registered():
     assert not offending, (
         f"REGRESSIONE P-CLR: `@router.<verb>(\"/clear\")` re-introduced "
         f"in {_ROUTER_PATH.name}. Found {len(offending)} occurrence(s). "
-        "The /logs/clear endpoint was removed (commit 698ff9d, "
-        "2026-04-22) because the trigger plenora.block_log_modifications "
+        "The /logs/clear endpoint is removed because the trigger "
+        "plenora.block_log_modifications "
         "rejects every DELETE without the beat-worker bypass. Re-adding "
         "this endpoint -- even as a no-op or compat shim -- requires "
         "explicit team review and a paired O-ARC architecture decision. "

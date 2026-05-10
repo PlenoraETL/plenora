@@ -19,8 +19,8 @@ import ParameterInput from '../../../src/components/transforms/ParameterInput';
  *   6. columns (multiple) -> add via select + remove via × tag button
  *   7. string_list -> add via Enter + remove via × tag button
  *
- * PivotMappingBuilder NON e' testato in questo batch (sub-component
- * autonomo, candidato a batch separato se serve).
+ * PivotMappingBuilder NON e' testato (sub-component
+ * autonomo, covered by its own contract tests).
  */
 
 // PivotMappingBuilder e' importato top-level da ParameterInput; lo
@@ -32,7 +32,6 @@ vi.mock(
 );
 
 describe('ParameterInput — contract', () => {
-  // ── 1. string ──────────────────────────────────────────────────────
 
   it('string type: renders text input with placeholder default and propagates onChange', async () => {
     const user = userEvent.setup();
@@ -78,7 +77,6 @@ describe('ParameterInput — contract', () => {
     );
   });
 
-  // ── 2. number ──────────────────────────────────────────────────────
 
   it('number type: applies min/max/step and emits parseFloat or null on empty', async () => {
     const user = userEvent.setup();
@@ -106,12 +104,10 @@ describe('ParameterInput — contract', () => {
     expect(input).toHaveAttribute('step', '1');
 
     // user.clear svuota il campo: l'ultimo evento intermedio e' value=''
-    // → onChange(null) per il branch `val === '' ? null : parseFloat(val)`.
     await user.clear(input);
     expect(onChange).toHaveBeenLastCalledWith(null);
   });
 
-  // ── 3. boolean ─────────────────────────────────────────────────────
 
   it('boolean type: checkbox with inline label + onChange(checked)', async () => {
     const user = userEvent.setup();
@@ -132,7 +128,6 @@ describe('ParameterInput — contract', () => {
     expect(onChange).toHaveBeenLastCalledWith(true);
   });
 
-  // ── 4. select ─────────────────────────────────────────────────────
 
   it('select type: renders "-- Seleziona --" placeholder when not required and propagates choice', async () => {
     const user = userEvent.setup();
@@ -164,7 +159,6 @@ describe('ParameterInput — contract', () => {
     expect(onChange).toHaveBeenLastCalledWith('avg');
   });
 
-  // ── 5. column (single) + filter ───────────────────────────────────
 
   it('column single + filter="numeric": only numeric columns appear in dropdown', () => {
     render(
@@ -202,7 +196,6 @@ describe('ParameterInput — contract', () => {
     ).not.toBeInTheDocument();
   });
 
-  // ── 6. columns (multiple) ─────────────────────────────────────────
 
   it('columns multiple: select adds a tag, click × removes the tag', async () => {
     const user = userEvent.setup();
@@ -243,7 +236,6 @@ describe('ParameterInput — contract', () => {
     expect(onChange).toHaveBeenLastCalledWith([]);
   });
 
-  // ── 7. string_list ────────────────────────────────────────────────
 
   it('string_list: Enter adds a value, × removes a tag', async () => {
     const user = userEvent.setup();

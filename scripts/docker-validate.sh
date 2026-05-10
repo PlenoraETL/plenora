@@ -1,7 +1,5 @@
 #!/usr/bin/env bash
-# =============================================================================
-# Plenora-ETL — Docker validation pack runner (FIRST SCAFFOLD)
-# =============================================================================
+# Plenora-ETL — Docker validation pack runner
 #
 # BE-GO-READY-INSTALL-012-DOCKER-LINUX-VALIDATION-PACK.
 # BE-GO-READY-INSTALL-013-DOCKER-VALIDATE-LINUX-SAFETY (preflight +
@@ -11,9 +9,6 @@
 # docs/ops/install-docker.md "Validation pack for the Linux PC test"
 # in order, capturing each step's stdout/stderr inline so Marco can
 # paste the full transcript back.
-#
-# Status: FIRST SCAFFOLD, NOT YET VALIDATED. Every command in this
-# script is a hypothesis until run on a real Linux host.
 #
 # LF line endings (BE-GO-READY-INSTALL-013):
 #   This file MUST be checked out with LF line endings on every
@@ -51,7 +46,6 @@
 #        plugin / .env.docker, not in repo root).
 #   non-zero (other): the failing `docker compose` / `curl` / `python`
 #        sub-command's exit code, surfaced as-is.
-# =============================================================================
 
 set -uo pipefail
 
@@ -336,9 +330,7 @@ run_schema_postcondition() {
     echo "schema=plenora schema_migrations_rows=$value"
 }
 
-# ---------------------------------------------------------------------------
 # Docker path status report (BE-GO-READY-INSTALL-019-AUTOMATE-INSTALL-TRUTH-CHECKS)
-# ---------------------------------------------------------------------------
 # Checks the Docker artifacts that must exist before the Docker path can
 # be called validated. Non-blocking: emits WARN lines, does not exit.
 # Run before any docker step so gaps are visible upfront.

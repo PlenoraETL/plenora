@@ -25,10 +25,7 @@ logger = get_logger(__name__)
 
 
 def _sanitize_mssql_error(e: Exception) -> str:
-    """F5-B3 (2026-04-24): mappa eccezioni pyodbc/pymssql/socket a messaggi
-    canonici user-facing, SENZA esporre str(e) che puo' contenere hostname,
-    UID, driver version, SQLSTATE raw, TLS handshake details. Il dettaglio
-    tecnico resta nei log server-side (logger.warning/error con exc_info=True).
+    """Map MSSQL driver errors to sanitized user-facing messages.
 
     Pattern-match su str(e) per SQLSTATE: pyodbc non espone tipi distinti
     per ogni SQLSTATE (tutte cadono in pyodbc.Error / OperationalError),
@@ -90,13 +87,8 @@ class ConnectionService:
         if mask_password:
             display_password = "***"
         else:
-            # FIXME: #1 (2026-04-23): raise esplicito invece di propagare None
-            # a Pydantic (DatabaseConnection.password: str) → ValidationError → 500
-            # Due casi distinti, stessa classe CredentialUnavailableError
-            # password NULL nel DB (mai configurata / record legacy invalido
-            # prefisso enc: presente ma decrypt ritorna None (chiave
-            # mancante/sbagliata o token Fernet corrotto
-            # Il router traduce in HTTP 422
+            # FIXME: Return HTTP 422 for missing/corrupt credentials instead
+            # of letting Pydantic turn None passwords into a 500.
             if raw_password is None:
                 raise CredentialUnavailableError(
                     f"connection '{row.id}': password non configurata"
@@ -176,9 +168,7 @@ class ConnectionService:
             "username": "username", "password": "password",
         }
         db_fields = {field_map[k]: v for k, v in update_fields.items() if k in field_map}
-        # Bugfix: il frontend riceve la password mascherata "***" nelle list/get
-        # e la rispedisce inalterata se l'utente non la modifica. Skipparla per
-        # non sovrascrivere la vera password salvata
+        # The client can echo the password mask; never persist that placeholder.
         if "password" in db_fields:
             pwd = db_fields["password"]
             if pwd is None or pwd == "" or pwd == "***":
@@ -321,10 +311,10 @@ class ConnectionService:
                     finally:
                         c.close()
                 except Exception as e:
-                    # Filtra IM002 (driver non installato): non aiuta capire il problema
+                    # Missing-driver errors are skipped because attempts are
+                    # already filtered against pyodbc.drivers().
                     err_msg = str(e)
                     if "IM002" not in err_msg:
-                        # F5-B3: sanitize str(e) pyodbc — log server-side il raw
                         logger.warning(
                             f"[GESTITO] MS SQL driver={driver_name!r} fallito: "
                             f"{type(e).__name__}: {e}",
@@ -333,8 +323,7 @@ class ConnectionService:
                         errors.append(f"[{driver_name}] {_sanitize_mssql_error(e)}")
                     continue
 
-            # Fallback finale: pymssql (usa FreeTDS, più tollerante con server vecchi
-            # che hanno problemi di handshake TLS/TDS con i driver Microsoft moderni
+            # FreeTDS is often more tolerant of older SQL Server TLS/TDS setups.
             try:
                 import pymssql
                 try:
@@ -360,7 +349,6 @@ class ConnectionService:
                     finally:
                         c.close()
                 except Exception as e:
-                    # F5-B3: sanitize str(e) pymssql — log server-side il raw
                     logger.warning(
                         f"[GESTITO] MS SQL pymssql fallback fallito: "
                         f"{type(e).__name__}: {e}",
@@ -380,7 +368,6 @@ class ConnectionService:
                 details={"errors": errors},
             )
         except Exception as e:
-            # F5-B3: catch-all outer — sanitize invece di str(e) raw
             logger.error(
                 f"[GESTITO] MS SQL _test_mssql safety-net: "
                 f"{type(e).__name__}: {e}",

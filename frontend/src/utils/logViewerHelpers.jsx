@@ -7,9 +7,6 @@
  * Importato da: pages/LogViewer.jsx, components/logviewer/RunsTab.jsx,
  * components/logviewer/RunDetail.jsx.
  */
-
-// ── Formattazione ─────────────────────────────────────────────────────────
-
 /**
  * Formatta una durata in millisecondi in stringa leggibile.
  * @param {number|undefined} ms

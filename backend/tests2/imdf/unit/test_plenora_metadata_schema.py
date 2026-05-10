@@ -1,5 +1,5 @@
 """
-Contract test D3 commit 5 — schema plenora_metadata.json + invariant §9.6.
+Contract test current IMDF contract — schema plenora_metadata.json + invariant §9.6.
 
 Dichiara lo schema di `plenora_metadata.json` come contratto stabile e
 """
@@ -15,7 +15,6 @@ import pytest
 pytestmark = [pytest.mark.unit, pytest.mark.contract, pytest.mark.regression]
 
 
-# ── Helpers ─────────────────────────────────────────────────────────────
 
 
 def _fake_bundle(tmp_path: Path, site_id: str = "LO2244", *, with_geojson: bool = True):
@@ -78,7 +77,6 @@ def dest_dir(tmp_path, monkeypatch):
     return d
 
 
-# ── 1. Schema required fields ──────────────────────────────────────────
 
 
 def test_plenora_metadata_contains_required_fields(tmp_path, dest_dir):
@@ -113,7 +111,6 @@ def test_plenora_metadata_contains_required_fields(tmp_path, dest_dir):
     assert meta["has_renderers"] is False
 
 
-# ── 2. Schema optional counts present when geojson exists ───────────────
 
 
 def test_plenora_metadata_contains_optional_counts_when_geojson_present(
@@ -161,12 +158,11 @@ def test_plenora_metadata_counts_absent_when_no_geojson(tmp_path, dest_dir):
     assert "unit_count" not in meta
 
 
-# ── 3. Invariant §9.6: meta write failure -> rollback dest + raise ──────
 
 
 def test_meta_write_failure_cleans_up_dest_and_raises(tmp_path, dest_dir, monkeypatch):
     """Fix D3 §9.6: se `plenora_metadata.json` non riesce ad essere scritto,
-    persist esegue rollback della dest dir e solleva. Pre-fix: warning +
+    persist esegue rollback della dest dir e solleva. Previous behavior: warning +
     continue lasciava la dir orfana inaccessibile per ACL fail-closed.
 
     Simuliamo il failure con monkeypatch di Path.write_text: solleva
@@ -190,13 +186,13 @@ def test_meta_write_failure_cleans_up_dest_and_raises(tmp_path, dest_dir, monkey
     # Pre: dest dir non esiste
     assert not dest_path.exists()
 
-    # Act: persist solleva (post-fix §9.6)
+    # Act: persist solleva (Current contract §9.6)
     with pytest.raises(OSError, match="simulated disk full"):
         persist_imdf_bundle_to_disk(
             bundle, task_id="task-fail-meta", project_id="proj-1",
         )
 
-    # Post-fix: la dest dir NON esiste piu' (rollback via shutil.rmtree)
+    # Current contract: la dest dir NON esiste piu' (rollback via shutil.rmtree)
     assert not dest_path.exists(), (
         "§9.6: la dest dir deve essere rimossa quando il write meta "
         "fallisce. Una dir orfana senza meta e' inaccessibile per ACL "
@@ -211,12 +207,11 @@ def test_meta_write_failure_cleans_up_dest_and_raises(tmp_path, dest_dir, monkey
     )
 
 
-# ── 4. __init__.py static: no phantom modules, mentions real modules + D3 ─
 
 
 def test_init_module_docstring_mentions_real_modules_and_d3():
     """Regression: __init__.py cita i moduli reali e D3 come boundary-of-truth.
-    Pre-commit (D3 commit 5): citava `processor` fantasma (Fase 1C TODO) e
+    Previous contract: citava `processor` fantasma (Fase 1C TODO) e
     `arcgis_upload` (nome scorretto, il modulo reale e' `arcgis_uploader`)."""
     import app.core.imdf as imdf_pkg
 
@@ -230,7 +225,7 @@ def test_init_module_docstring_mentions_real_modules_and_d3():
 
 def test_init_module_docstring_does_not_mention_phantom_processor():
     """Regression guard: `processor` era un modulo dichiarato come TODO (Fase
-    1C) ma mai esistito. D3 commit 5 lo rimuove dalla docstring.
+    1C) ma mai esistito. current IMDF contract lo rimuove dalla docstring.
 
     Check esatto: non deve apparire la stringa `processor` (anche come
     regressione tipografica).
@@ -239,7 +234,7 @@ def test_init_module_docstring_does_not_mention_phantom_processor():
 
     doc = imdf_pkg.__doc__ or ""
     assert "processor" not in doc.lower(), (
-        "Regression D3 commit 5: modulo fantasma `processor` re-introdotto "
+        "Regression current IMDF contract: modulo fantasma `processor` re-introdotto "
         "in app/core/imdf/__init__.py. Non e' un modulo reale (era Fase 1C "
         "TODO mai realizzata)."
     )

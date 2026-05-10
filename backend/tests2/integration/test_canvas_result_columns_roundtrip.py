@@ -116,8 +116,8 @@ def test_put_canvas_injects_computed_columns_into_result_node():
     result_node = next((n for n in canvas.nodes if n.type == "result"), None)
     assert result_node is not None
 
-    # POST-FIX: result_node.columns NON deve essere vuoto.
-    # Pre-fix: era [] → bug UI.
+    # Current contract: result_node.columns NON deve essere vuoto.
+    # Previous behavior: era [] → bug UI.
     col_names = [c.name for c in (result_node.columns or [])]
     assert len(col_names) > 0, (
         f"REGRESSIONE C9: result_node.columns vuoto dopo PUT, "

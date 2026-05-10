@@ -26,8 +26,6 @@ import { useTheme } from '../hooks/useTheme';
 import ModalWrapper, { ModalButton } from '../components/common/ModalWrapper';
 import { can, role } from '../utils/permissions';
 import '../styles/ProjectList.css';
-
-// ── Main component ───────────────────────────────────────────────────────
 function ProjectList() {
   const toast    = useToast();
   const confirmModal = useConfirmModal();
@@ -165,8 +163,8 @@ function ProjectList() {
         );
         return;
       }
-      // 500 project_cleanup_partial (Batch 9 C6): cascade cleanup cross-DB
-      // fallita su step critici. Invariante: `project_preserved:true` → il
+      // Cascade cleanup cross-DB fallita su step critici.
+      // Invariante: `project_preserved:true` → il
       // progetto e' ancora presente, l'utente puo' ritentare.
       // Preferisce err.code (new envelope) con fallback a detail.error (legacy).
       const detail = err?.response?.data?.detail;
@@ -267,9 +265,7 @@ function ProjectList() {
 
   return (
     <div className="pl" data-theme-local={theme}>
-
-      {/* ── SIDEBAR ───────────────────────────────────────── */}
-      <AppSidebar
+<AppSidebar
         counts={{
           projects: projects.length,
           connections: connections.length + arcgisConnections.length,
@@ -279,9 +275,7 @@ function ProjectList() {
           schedules: activeSchedules.length,
         }}
       />
-
-      {/* ── MAIN ──────────────────────────────────────────── */}
-      <div className="pl__main">
+<div className="pl__main">
 
         {/* Topbar */}
         <header className="pl__topbar">
@@ -333,9 +327,7 @@ function ProjectList() {
               </div>
             ))}
           </div>
-
-          {/* ── ESTRAI ── */}
-          <ProjectSection
+<ProjectSection
             id="pl-section-estrai"
             chipClass="pl__chip--estrai"
             chipLabel="↓ Estrai"
@@ -367,9 +359,7 @@ function ProjectList() {
               );
             })}
           </ProjectSection>
-
-          {/* ── MANIPOLA ── */}
-          <ProjectSection
+<ProjectSection
             id="pl-section-manipola"
             chipClass="pl__chip--manipola"
             chipLabel="⚙ Manipola"
@@ -404,9 +394,7 @@ function ProjectList() {
               );
             })}
           </ProjectSection>
-
-          {/* ── ARRICCHISCI ── */}
-          <ProjectSection
+<ProjectSection
             id="pl-section-arricchisci"
             chipClass="pl__chip--arricchisci"
             chipLabel="◈ Arricchisci"
@@ -435,9 +423,7 @@ function ProjectList() {
               />
             ))}
           </ProjectSection>
-
-          {/* ── ESEGUIBILI ── */}
-          <section id="pl-section-eseguibili" className="pl__section">
+<section id="pl-section-eseguibili" className="pl__section">
             <div className="pl__section-header">
               <div className="pl__section-title-wrap">
                 <span className="pl__chip pl__chip--eseg">🚀 Eseguibili</span>
@@ -481,9 +467,7 @@ function ProjectList() {
 
         </div>{/* /content */}
       </div>{/* /main */}
-
-      {/* ── MODAL ──────────────────────────────────────────── */}
-      {showModal && (
+{showModal && (
         <ModalWrapper
           isOpen={true}
           onClose={() => setShowModal(false)}
@@ -586,9 +570,7 @@ function ProjectList() {
             )}
         </ModalWrapper>
       )}
-
-      {/* ── PUBLISH ESEGUIBILE MODAL ────────────────────────── */}
-      {publishProject && (
+{publishProject && (
         <PublishEseguibileModal
           project={publishProject}
           onClose={() => setPublishProject(null)}
@@ -598,17 +580,13 @@ function ProjectList() {
           }}
         />
       )}
-
-      {/* ── WIZARD ESECUZIONE ESEGUIBILE ─────────────────────── */}
-      {executeEseguibileId && (
+{executeEseguibileId && (
         <EseguibileExecuteWizard
           eseguibileId={executeEseguibileId}
           onClose={() => setExecuteEseguibileId(null)}
         />
       )}
-
-      {/* ── SELETTORE PROGETTO SORGENTE PER NUOVO ESEGUIBILE ── */}
-      {showEsegSelector && (
+{showEsegSelector && (
         <ModalWrapper
           isOpen={true}
           onClose={() => setShowEsegSelector(false)}
@@ -671,8 +649,6 @@ function ProjectList() {
     </div>
   );
 }
-
-// ── Section wrapper ──────────────────────────────────────────────────────
 function ProjectSection({ id, chipClass, chipLabel, subtitle, onNew, canCreate = true, empty, emptyIcon, emptyTitle, emptyText, children }) {
   return (
     <section id={id} className="pl__section">
@@ -699,8 +675,6 @@ function ProjectSection({ id, chipClass, chipLabel, subtitle, onNew, canCreate =
     </section>
   );
 }
-
-// ── Project card ─────────────────────────────────────────────────────────
 function ProjectCard({ project, accentClass, modLabel, meta, scheduleCount, onOpen, onDelete, onSchedule }) {
   const lastRun = project.last_run_at;
   const status  = project.last_status;
@@ -753,8 +727,6 @@ function ProjectCard({ project, accentClass, modLabel, meta, scheduleCount, onOp
     </div>
   );
 }
-
-// ── Eseguibile card ──────────────────────────────────────────────────────
 function EseguibileCard({ item, isAdmin, onExecute, onDelete }) {
   const fmt = (item.default_output_format || 'xlsx').toUpperCase();
   return (
@@ -794,8 +766,6 @@ function EseguibileCard({ item, isAdmin, onExecute, onDelete }) {
     </div>
   );
 }
-
-// ── Empty hex canvas ─────────────────────────────────────────────────────
 function useEmptyHexCanvases(theme) {
   useEffect(() => {
     const draw = (canvas) => {

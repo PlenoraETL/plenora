@@ -1,7 +1,7 @@
 """
-[phase-2-err][batch9] C2 â€” breadcrumb + detail fisso in orchestrator/router.
+C2 â€” breadcrumb + detail fisso in orchestrator/router.
 
-Audit Batch 9 Â§3.2 S4/S5/S8/S9 â€” fix F6.1-F6.5:
+Audit finding:
 """
 
 from __future__ import annotations

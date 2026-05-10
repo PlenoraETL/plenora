@@ -19,17 +19,13 @@
  *   schedules.js      → schedulazioni task
  */
 
-// ── Configurazione ────────────────────────────────────────────────────────────
 export { API_BASE_URL, API_ENDPOINT, API_TIMEOUT, DEFAULT_HEADERS } from './config';
 
-// ── Client HTTP (solo per casi eccezionali — preferire le funzioni specifiche) ─
 export { default as http } from './http';
 
-// ── Backward compatibility: 'api' come alias di http ─────────────────────────
 export { default as api }  from './http';
 export { default }         from './http';
 
-// ── Progetti ──────────────────────────────────────────────────────────────────
 export {
   createProject,
   listProjects,
@@ -42,7 +38,6 @@ export {
   downloadProjectOutput,
 } from './projects';
 
-// ── Connessioni DB ────────────────────────────────────────────────────────────
 export {
   createConnection,
   listConnections,
@@ -52,25 +47,21 @@ export {
   getConnectionTables,
 } from './connections';
 
-// ── Task Celery ───────────────────────────────────────────────────────────────
 export {
   getTaskStatus,
   cancelTask,
 } from './tasks';
 
-// ── Arricchisci ───────────────────────────────────────────────────────────────
 export {
   validateEnrichment,
   estimateEnrichment,
   executeEnrichmentAsync,
 } from './enrichment';
 
-// ── Connettori esterni ────────────────────────────────────────────────────────
 export {
   listApiConnections,
 } from './apiConnections';
 
-// ── File caricati ─────────────────────────────────────────────────────────────
 export {
   uploadFile,
   getFiles,
@@ -81,19 +72,15 @@ export {
   previewFileTemp,
 } from './files';
 
-// ── Feature Service ArcGIS ────────────────────────────────────────────────────
 export {
   listFeatureConnections,
   getLayerSchema,
 } from './features';
 
-// ── Data Sources ──────────────────────────────────────────────────────────────
 export * from './datasources';
 
-// ── Schedules ─────────────────────────────────────────────────────────────────
 export * from './schedules';
 
-// ── CARICA (scrittura su DB) ───────────────────────────────────────────────────
 export {
   getCaricaSchemas,
   getCaricaTables,
@@ -101,25 +88,21 @@ export {
   postCaricaAutoMapping,
 } from './carica';
 
-// ── Log di sistema ────────────────────────────────────────────────────────────
 export {
   getLogs,
   getLogsStats,
 } from './logs';
 
-// ── Trasformazioni e funzioni SQL ─────────────────────────────────────────────
 export {
   getTransformRegistry,
   getFunctionsCatalog,
   translateFunction,
 } from './transforms';
 
-// ── Template API ────────────────────────────────────────────────
 export {
   getTemplates,
 } from './templates';
 
-// ── Schema inference e validazione connessioni ────────────────────────────────
 export {
   getProjectSchemas,
   getNodeSchema,
@@ -127,10 +110,8 @@ export {
   validateAllProjectSources,
 } from './projects';
 
-// ── Task creation ─────────────────────────────────────────────────────────────
 export { createTask, downloadTaskOutput, cleanupTaskCompletely } from './tasks';
 
-// ── Eseguibili (catene on-demand) ─────────────────────────────────────────────
 export {
   listEseguibili,
   getEseguibile,
@@ -140,7 +121,6 @@ export {
   executeEseguibile,
 } from './eseguibili';
 
-// ── Shares (cross-group sharing / allowed_groups) ─────────────────────────────
 export {
   getShares,
   setShares,

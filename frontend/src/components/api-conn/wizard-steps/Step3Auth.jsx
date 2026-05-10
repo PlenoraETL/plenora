@@ -4,8 +4,7 @@
  * Autenticazione (none / api_key / basic_auth / oauth2_password /
  * oauth2_client_credentials / arcgis_token) + headers personalizzati.
  *
- * Estratto in `FE-PHASE2-SPLIT-001B`. Presentational + riceve
- * callback CRUD custom headers dal wizard.
+ * Presentational + riceve callback CRUD custom headers dal wizard.
  */
 import React from 'react';
 

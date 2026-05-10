@@ -19,7 +19,6 @@ import PivotMappingBuilder from '../../../src/components/transforms/PivotMapping
  */
 
 describe('PivotMappingBuilder — contract', () => {
-  // ── 1. Empty state ───────────────────────────────────────────────
 
   it('shows the hint and no header/rows when value is empty', () => {
     render(<PivotMappingBuilder value={{}} onChange={vi.fn()} />);
@@ -38,7 +37,6 @@ describe('PivotMappingBuilder — contract', () => {
     ).toBeInTheDocument();
   });
 
-  // ── 2. Render with dict value ───────────────────────────────────
 
   it('renders header and prefilled inputs when value is a non-empty dict', () => {
     render(
@@ -60,7 +58,6 @@ describe('PivotMappingBuilder — contract', () => {
     ).not.toBeInTheDocument();
   });
 
-  // ── 3. Add row ──────────────────────────────────────────────────
 
   it('adds a new empty row on "+ Aggiungi mapping" click and emits empty dict', async () => {
     const user = userEvent.setup();
@@ -77,7 +74,6 @@ describe('PivotMappingBuilder — contract', () => {
     expect(onChange).toHaveBeenLastCalledWith({});
   });
 
-  // ── 4. Auto-prefill val on key typing ───────────────────────────
 
   it('auto-prefills val when the user types key on a row with empty val', async () => {
     const user = userEvent.setup();
@@ -100,7 +96,6 @@ describe('PivotMappingBuilder — contract', () => {
     expect(onChange).toHaveBeenLastCalledWith({ canone: 'canone' });
   });
 
-  // ── 5. Remove row ───────────────────────────────────────────────
 
   it('removes a row on × click and emits the reduced dict', async () => {
     const user = userEvent.setup();

@@ -1,7 +1,5 @@
 /**
  * ConditionListInput.jsx — Builder condizioni Case-When
- *
- * Estratto da `ParameterInput.jsx` in `FE-PHASE2-SPLIT-002A`.
  * Usato dal dispatcher per il tipo `condition_list`. Operatori:
  * == != > >= < <= contains startswith endswith between isnull notnull.
  * Per `between` il valore e' "min,max"; per `isnull/notnull` il

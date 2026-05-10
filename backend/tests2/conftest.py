@@ -190,7 +190,7 @@ def _patch_pytest_windows_temp_dir_modes() -> None:
 
 _normalize_windows_temp_env()
 
-# A1: i test non usano un bucket reale. Di default la test session vive in
+# I test non usano un bucket reale. Di default la test session vive in
 # STORAGE_POLICY=db (= on-prem single-node), cosi' `app.main` boota senza
 # richiedere BACKUP_BUCKET. I test che esercitano il dispatch S3 impostano
 # esplicitamente STORAGE_POLICY via monkeypatch.
@@ -237,7 +237,7 @@ def pytest_collection_modifyitems(config, items):
             item.add_marker(skip_cleanroom_excluded)
 
 
-# DB-init isolation a session bootstrap (Phase 3 Batch B closeout, 3)
+# DB-init isolation at session bootstrap
 #
 # Problema: `app/main.py:51` chiama `init_all_dbs()` AL TOP-LEVEL del
 # modulo. Qualsiasi test (es. `test_c8_observability_contract.py`) che fa
@@ -247,9 +247,8 @@ def pytest_collection_modifyitems(config, items):
 #   -> migrations_runner.apply_pending_migrations -> psycopg2.connect
 # In unit-test env senza DB raggiungibile, psycopg2 puo' produrre un crash
 # nativo Windows (access violation) prima di qualsiasi catch Python.
-# Vedi report Batch B review: `test_c8_observability_contract.py`.
 #
-# Fix: stub a no-op delle 3 init function PRIMA che `app.main` venga
+# Approach: stub a no-op delle 3 init function PRIMA che `app.main` venga
 # importato da qualsiasi test. Necessario eseguirlo a livello modulo
 # conftest (collect time), non in fixture autouse, perche' `app.main`
 # fa l'init al top-level del proprio modulo: una volta importato finisce
@@ -302,9 +301,8 @@ if os.getenv("URBY_TEST_REAL_DB_INIT") != "1":
         _pg_conn.init_db = _noop_init_db
         _idb.init_db = _noop_init_db
         _mig_runner.apply_pending_migrations = _noop_apply_pending_migrations
-        # BE-GO-READY-BOOTSTRAP-ENGINE-002: stub aggiuntivo del nuovo
-        # boundary. `app.main` ora chiama `app.bootstrap.bootstrap()` al
-        # top-level invece dei 4 step inline. Lo stub a livello del
+        # `app.main` ora chiama `app.bootstrap.bootstrap()` al top-level
+        # invece dei 4 step inline. Lo stub a livello del
         # boundary copre il caso in cui un test importi `app.main` senza
         # PG/Redis raggiungibili. Gli stub piu' granulari sopra restano
         # in place per i test che importano direttamente i 4 helper
@@ -379,18 +377,17 @@ def backend_root() -> Path:
     return Path(__file__).resolve().parent.parent
 
 
-# Audit-action isolation per test unit/contract (Phase 3 Batch B closeout)
+# Audit-action isolation for unit/contract tests
 #
-# Problema: dopo Batch B, ~26 endpoint hanno `@audit_action(...)`. Sui test
+# Problema: gli endpoint decorati con `@audit_action(...)`, nei test
 # che chiamano gli endpoint via FastAPI TestClient (o invocano la view
 # function direttamente con kwarg `current_user` mockato), il decorator
 # tenta una INSERT su `plenora.audit_actions` via `psycopg2.connect`.
 # `audit_action` e' fail-open su `Exception` Python — ma una Windows
 # fatal access violation in psycopg2 (DB unreachable in unit-test env)
-# crasha il processo prima del catch (vedi report Batch B review:
-# `test_api_connection_executable_rejected_contract.py`).
+# crasha il processo prima del catch.
 #
-# Fix: fixture autouse che stub-a `_execute_write` a no-op per tutti i
+# Approach: fixture autouse che stub-a `_execute_write` a no-op per tutti i
 # test che NON sono marcati `integration`. Gli integration hanno DB live
 # disponibile (vedi `tests2/integration/conftest.py`) e devono esercitare
 # la write reale per validare lo schema append-only.
@@ -433,7 +430,7 @@ def _stub_audit_action_write(request, monkeypatch):
     yield
 
 
-# DB-logger isolation per test unit/contract (Phase 3 Batch B closeout, 2)
+# DB-logger isolation for unit/contract tests
 #
 # Problema simmetrico ad audit_action: `PostgresLogHandler.emit` (definito
 # in `app/utils/logger.py:323`) e' attaccato ai logger applicativi e fa
@@ -443,12 +440,10 @@ def _stub_audit_action_write(request, monkeypatch):
 # tenta `psycopg2.connect` su un DATABASE_URL non disponibile in unit-env.
 # L'eccezione e' catturata da `self.handleError` (vedi logger.py:393-394)
 # MA un'access violation nativa Windows in psycopg2 puo' crashare il
-# processo prima di arrivare al `try`. Vedi report Batch B review:
-# `test_api_connector_source_loading_core.py`.
+# processo prima di arrivare al `try`.
 #
-# Fix: stub `app.db.pg_connection.execute` a no-op nei test non-integration
-# (preferenza esplicita del reviewer Batch B). Pattern simmetrico a
-# `_stub_audit_action_write`. Compatibility:
+# Approach: stub `app.db.pg_connection.execute` a no-op nei test non-integration
+# Pattern simmetrico a `_stub_audit_action_write`. Compatibility:
 #   - Test che monkeypatchano `app.db.pg_connection.execute` con spy
 #     (es. `test_bulk_log_aggregation_contract.py::pg_execute_mock`,
 #     `test_log_service_db_contract.py::_install_fake_pg`,

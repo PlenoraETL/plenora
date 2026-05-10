@@ -1,9 +1,5 @@
 #!/usr/bin/env python3
-"""
-Batch 3.12 — calcolo verdetto post-osservazione su bulk MySQL / PG.
-
-Applica meccanicamente le soglie dichiarate in
-"""
+"""Calcola verdetti di osservazione su bulk MySQL / PG."""
 
 from __future__ import annotations
 
@@ -14,19 +10,15 @@ from datetime import datetime
 from typing import Optional
 
 
-# Soglie — copiate VERBATIM da kickoff.md §9.2 / §9.3 (non reinterpretare)
-
-# §9.2 MySQL LOAD DATA (decommission criterion)
+# Soglie di osservazione bulk. Non reinterpretare senza aggiornare i runbook.
 MYSQL_MIN_SAMPLE = 100
 MYSQL_RATE_PROPOSAL_DEPRECATION = 0.05   # rate < 5%  -> proposta deprecazione
 MYSQL_RATE_STRATIFICATION = 0.30         # 5% <= rate < 30% -> stratificazione
 
-# §9.3 PG COPY (keep-confirmed / regression-alert criterion)
 PG_MIN_SAMPLE = 1000
 PG_RATE_KEEP_CONFIRMED = 0.95            # rate >= 95% -> keep confermato
 PG_RATE_OBSERVATION = 0.90               # 90% <= rate < 95% -> osservazione
 
-# §9.2 stratificazione per-tenant: soglia di esclusione tenant micro
 STRATIFICATION_MIN_TENANT_SAMPLE = 10
 
 
@@ -82,9 +74,6 @@ QUERY_MYSQL_BY_TENANT = """
                           AND details->>'reason' = 'server_disable_local_infile')
     ) DESC
 """
-
-
-# Verdetti (funzioni pure, zero dipendenza DB).
 
 
 @dataclass
@@ -191,9 +180,6 @@ def mysql_needs_stratification(verdict: Verdict) -> bool:
     return verdict.code == "STRATIFICAZIONE PER-TENANT"
 
 
-# Output format
-
-
 def _format_header(title: str) -> str:
     return f"\n=== {title} ==="
 
@@ -285,9 +271,6 @@ def format_stratification_section(rows: list) -> str:
     return "\n".join(lines) + "\n"
 
 
-# Run (I/O: DB + stdout) — separato da logica pura per testabilita'
-
-
 def run(from_ts: str, to_ts: str) -> int:
     """Esegue le 3 query canoniche + eventuale stratificazione, stampa
     i verdetti, ritorna exit code."""
@@ -300,24 +283,20 @@ def run(from_ts: str, to_ts: str) -> int:
         return 1
 
     try:
-        # Query 1 — MySQL rate
         row = fetchone(QUERY_MYSQL_RATE, (from_ts, to_ts)) or {}
         mysql_success = int(row.get("n_success", 0) or 0)
         mysql_fallback = int(row.get("n_fallback_disabled", 0) or 0)
         mysql_verdict = compute_verdict_mysql(mysql_success, mysql_fallback)
 
-        # Query 2 — PG rate
         row = fetchone(QUERY_PG_RATE, (from_ts, to_ts)) or {}
         pg_success = int(row.get("n_success", 0) or 0)
         pg_fallback = int(row.get("n_fallback_operational", 0) or 0)
         pg_verdict = compute_verdict_pg(pg_success, pg_fallback)
 
-        # Query 3 — stage_swap MySQL
         row = fetchone(QUERY_STAGE_SWAP_MYSQL, (from_ts, to_ts)) or {}
         n_dispatched = int(row.get("n_dispatched", 0) or 0)
         n_distinct_users = int(row.get("n_distinct_users", 0) or 0)
 
-        # Query 4 (opzionale) — stratificazione per-tenant MySQL
         stratification_rows = []
         if mysql_needs_stratification(mysql_verdict):
             stratification_rows = fetchall(
@@ -328,7 +307,6 @@ def run(from_ts: str, to_ts: str) -> int:
         print(f"ERRORE query DB: {type(e).__name__}: {e}", file=sys.stderr)
         return 1
 
-    # Output
     print(format_mysql_section(
         from_ts, to_ts, mysql_success, mysql_fallback, mysql_verdict
     ))
@@ -342,15 +320,11 @@ def run(from_ts: str, to_ts: str) -> int:
     return 0
 
 
-# CLI
-
-
 def _parse_iso_date(s: str) -> str:
     """Valida che `s` sia una data ISO (YYYY-MM-DD o YYYY-MM-DDTHH:MM:SS).
     Ritorna la stringa originale (per passaggio diretto al DB come ts
     comparabile alla colonna ts in `logs`, che e' stringa ISO)."""
     try:
-        # Accetta entrambi i formati
         datetime.fromisoformat(s.replace("Z", "+00:00"))
     except ValueError as e:
         raise argparse.ArgumentTypeError(

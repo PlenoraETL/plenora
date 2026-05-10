@@ -3,9 +3,8 @@
  * Colonne → Conferma) con supporto multi-layer (gpkg/gdb/zip) e
  * multi-sheet (xlsx).
  *
- * Estratto da FileManager.jsx (FE-PHASE1-CLOSURE-3) senza cambio
- * comportamentale. Il caller possiede tutto lo stato e i callback;
- * il modale e' completamente controlled.
+ * Il caller possiede tutto lo stato e i callback; il modale e'
+ * completamente controlled.
  */
 
 import React, { useRef } from 'react';

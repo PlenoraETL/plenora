@@ -1,5 +1,5 @@
 """
-Contract test Phase 6 Batch 3A — ESTRAI snapshot routing.
+Contract test Current contract
 
 Verifica che `QueryExecutor.execute_query` salvi il final snapshot
 """
@@ -170,9 +170,9 @@ def test_estrai_metadata_only_writes_meta_and_hash_no_rows(monkeypatch):
 
 
 def test_estrai_preview_only_above_legacy_cap_caps_to_preview_rows(monkeypatch):
-    """Pre-Batch 3A: sopra `INTERMEDIATE_SNAPSHOT_MAX_ROWS` (default 100k)
+    """Previous contract 3A: sopra `INTERMEDIATE_SNAPSHOT_MAX_ROWS` (default 100k)
     ESTRAI saltava le righe scrivendo `status=ok_sampled` con rows=[].
-    Post-Batch 3A: la policy centrale (`preview_only` + 500) decide,
+    Current contract 3A: la policy centrale (`preview_only` + 500) decide,
     indipendentemente dal cap legacy. Verifica che il DB write riceva
     esattamente 500 righe e row_count reale."""
     executor = _build_executor()

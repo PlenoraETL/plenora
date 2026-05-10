@@ -1,5 +1,5 @@
 """
-Smoke contract - STRUCT-001 Seam A: helper pure per il dominio files.
+Smoke contract: helper pure per il dominio files.
 
 Verifica le invarianti minime del refactor:
 """

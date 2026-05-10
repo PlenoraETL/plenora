@@ -76,8 +76,7 @@ CREATE TABLE IF NOT EXISTS node_meta (
     exec_time   REAL,                    -- secondi impiegati dal nodo
     status      TEXT,                    -- ok / error / skipped
     error_msg   TEXT,                    -- messaggio di errore se status=error
-    -- Phase 6 Batch 1 (2026-04-28): policy persistenza intermedi.
-    -- Tutte nullable -> record legacy = full_pg.
+    -- Tutte nullable: record legacy = full_pg.
     node_hash             TEXT,           -- fingerprint DataFrame (es. SHA256)
     hash_algo             TEXT,           -- es. "pandas_hash_v1"
     persistence_mode      TEXT,           -- metadata_only | preview_only | full_pg | full_artifact
@@ -116,16 +115,14 @@ CREATE TABLE IF NOT EXISTS node_rows (
 );
 
 -- Lookup per-nodo di tutte le righe di una run.
--- Phase 4 A3 — idempotency invariant (no schema change required):
 -- `app/core/intermediate/db.py` garantisce che la coppia
 -- (DELETE FROM node_rows WHERE run_id=? AND node_id=?) + (INSERT bulk)
 -- sia atomica e venga ripetuta a ogni invocazione di insert_node_rows o
 -- write_node_atomic. Effetto: invocazioni N >= 2 sullo stesso
 -- (run_id, node_id) lasciano sempre solo l'ultima scrittura. Nessun
 -- vincolo UNIQUE aggiunto: dati legacy potrebbero contenere duplicati
--- da retry pre-fix, e una migration richiederebbe cleanup batch
--- documentato. L'idempotency e' applicata application-side senza schema
--- breaking change.
+-- da retry storici; l'idempotency e' applicata application-side senza
+-- schema breaking change.
 CREATE INDEX IF NOT EXISTS idx_node_rows_run_node
     ON node_rows(run_id, node_id);
 

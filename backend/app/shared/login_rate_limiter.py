@@ -1,7 +1,5 @@
 """
 Login rate limiter — Redis-backed sliding window con fallback in-memory.
-
-Sostituisce/affianca il limiter in-memory in `app.core.auth.auth` (R-01).
 """
 
 from __future__ import annotations
@@ -49,11 +47,7 @@ def _get_client() -> Optional[Any]:
         try:
             # Import locale per evitare import circolare con app.shared
             from app.config import settings
-            # BE-CONFIG-001C: default tipato in `Settings.DEFAULTS`
-            # `LOGIN_RL_REDIS_TIMEOUT_SEC=1`). `_converti_tipo_env`
-            # rifiuta env non numeriche tornando il default; il guard
-            # `<= 0` resta come safety per valori legali ma non sensati
-            # `0`, negativi
+            # Keep Redis failures from blocking auth handlers indefinitely.
             try:
                 timeout = int(settings.get("LOGIN_RL_REDIS_TIMEOUT_SEC"))
                 if timeout <= 0:
@@ -85,9 +79,6 @@ def _warn_fallback_once(reason: str) -> None:
             "attivo fallback in-memory (comportamento single-node preservato)",
             reason,
         )
-
-
-# Implementazione Redis
 
 
 def _redis_check(
@@ -146,9 +137,6 @@ def _redis_clear(ip: str) -> None:
     client.delete(_key(ip))
 
 
-# API pubblica usata da `app.core.auth.auth`
-
-
 def check_rate_limit(
     ip: str,
     *,
@@ -160,8 +148,7 @@ def check_rate_limit(
     """Solleva HTTPException(429) se `ip` ha superato il limite.
 
     Tenta Redis; in caso di errore/unavailable delega a `fallback(ip)`,
-    che e' la stessa logica in-memory pre-R-01 vivente nel modulo
-    chiamante (per backward-compat con i test che resettano `_failed_attempts`).
+    che mantiene operativo il login anche se Redis non e' disponibile.
     """
     try:
         limited, retry_after = _redis_check(
@@ -205,9 +192,6 @@ def clear_failed_logins(
     except Exception as e:
         _warn_fallback_once(str(e))
         fallback(ip)
-
-
-# Hooks test-only
 
 
 def _set_client_for_tests(client: Optional[Any]) -> None:

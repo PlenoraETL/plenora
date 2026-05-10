@@ -1,7 +1,5 @@
 /**
  * PreviewPanel.jsx — Tab "Preview" del ResponseConfigBuilder
- *
- * Estratto da `ResponseConfigBuilder.jsx` in `FE-SPLIT-003C`.
  * Componente presentational: niente fetch, niente API, niente
  * useState. Riceve `previewData`, `previewError`,
  * `generatedConfig`, `generatePreview`.

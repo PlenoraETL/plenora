@@ -1,7 +1,5 @@
 """
 Ownership / authorization helpers per risorse owned-by-group.
-
-Estratto verbatim da `app.core.auth.auth` (STRUCT-005 Seam B'). Contiene
 """
 
 from __future__ import annotations
@@ -30,10 +28,6 @@ def assert_group_access(
     """
     Helper centralizzato per il group ownership check (operazioni di SCRITTURA).
 
-    Sostituisce il pattern duplicato:
-        if current_user.role != "superadmin" and resource.group_id != current_user.group_id:
-            disclosure.raise_disclosure(disclosure.access_denied)
-
     - 404 se `resource` è None.
     - 403 se l'utente non è superadmin e il gruppo della risorsa non combacia.
     - Accetta sia dict che oggetti Pydantic.
@@ -48,7 +42,7 @@ def assert_group_access(
         raise HTTPException(status_code=404, detail=f"{label} non trovata")
 
     if current_user.role == "superadmin":
-        return  # superadmin bypassa
+        return
 
     resource_group, _ = _extract_group_and_id(resource)
     if resource_group != current_user.group_id:
@@ -75,13 +69,12 @@ def compute_can_edit(
     if current_user.role == "superadmin":
         return True
     if current_user.role != "admin":
-        return False  # user/viewer non possono modificare le risorse condivise
+        return False
 
     resource_group, _ = _extract_group_and_id(resource)
     if resource_group != current_user.group_id:
         return False
 
-    # admin del gruppo: ok solo se NON creata da un superadmin
     if isinstance(resource, dict):
         created_by = resource.get("created_by")
     else:
@@ -119,27 +112,24 @@ def assert_can_modify(
         raise HTTPException(status_code=404, detail=f"{label} non trovata")
 
     if current_user.role == "superadmin":
-        return  # superadmin bypassa sempre
+        return
 
     resource_group, _ = _extract_group_and_id(resource)
     if resource_group != current_user.group_id:
         _disclosure.raise_disclosure(_disclosure.access_denied())
 
-    # Hierarchical check: chi l'ha creata?
     if isinstance(resource, dict):
         created_by = resource.get("created_by")
     else:
         created_by = getattr(resource, "created_by", None)
 
     if created_by and created_by != current_user.user_id:
-        # Lookup live del ruolo del creator
         creator = _users_dal.get_user(created_by)
         if creator and creator.role == "superadmin":
             _disclosure.raise_disclosure(
                 _disclosure.hierarchical_owner_required(label)
             )
 
-    # Owned dal proprio gruppo, NON creato da un superadmin → ok
     return
 
 
@@ -170,11 +160,9 @@ def assert_resource_visible(
 
     resource_group, resource_id = _extract_group_and_id(resource)
 
-    # Owned dal proprio gruppo: ok subito (no DB query
     if resource_group == current_user.group_id:
         return
 
-    # Shared via *_shares?
     if resource_id:
         if is_shareable(table_name) and is_resource_visible(
             table_name,
@@ -206,15 +194,13 @@ def _check_ownership(
     is_super = current_user.role == "superadmin"
     is_admin_plus = current_user.role in ROLES_ADMIN_OR_ABOVE
 
-    # Filtro gruppo (superadmin bypassa
     if not is_super and resource.get("group_id") != current_user.group_id:
         _disclosure.raise_disclosure(_disclosure.access_denied())
 
-    # Owner check: created_by deve combaciare oppure admin/superadmin
     created_by = resource.get("created_by")
     if is_admin_plus:
-        return  # admin del gruppo (o superadmin) può sempre
+        return
     if created_by and created_by == current_user.user_id:
-        return  # sei tu l'owner
+        return
 
     _disclosure.raise_disclosure(_disclosure.owner_only_required(resource_label))

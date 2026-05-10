@@ -1,5 +1,5 @@
 """
-Contract test BE-PHASE3-SCHEMA-CONTRACTS-001-REGISTRY-METADATA —
+Contract test registry metadata schema contract —
 
 `output_columns` schema contract metadata in `transforms_registry.json`.
 """

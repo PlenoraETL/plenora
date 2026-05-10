@@ -4,7 +4,7 @@ import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 /**
- * Contract test — Auth boundary (C3.3 Phase 4).
+ * Contract tests for the Auth API boundary.
  *
  * Pre-C3.3 due file fuori da frontend/src/api/ avevano usage diretto del
  * client http o di fetch() per il flow di autenticazione:

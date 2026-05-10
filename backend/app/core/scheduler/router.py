@@ -306,7 +306,7 @@ async def update_schedule_catchup(
     current_user: CurrentUser = Depends(require_schedule_owner),
 ):
     """Abilita/disabilita il catchup dei missed run per uno schedule
-    e/o modifica la grace window (C3 fix 3). Solo owner o admin/superadmin."""
+    e/o modifica la grace window. Solo owner o admin/superadmin."""
     from app.core.scheduler.schedule_service import ScheduleService
     try:
         service = ScheduleService()

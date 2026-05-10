@@ -1,7 +1,5 @@
 /**
  * MappingsPanel.jsx — Tab "Mappings" del ResponseConfigBuilder
- *
- * Estratto da `ResponseConfigBuilder.jsx` in `FE-SPLIT-003C`.
  * Componente presentational: niente fetch, niente API, niente
  * useState. Riceve `iterateOn`, `mappings` + 4 callback.
  *

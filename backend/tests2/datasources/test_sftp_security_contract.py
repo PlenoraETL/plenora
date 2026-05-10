@@ -285,7 +285,6 @@ def test_connect_prefers_private_key_over_password_when_both_provided(
     )
 
 
-# ─── 6) AuthenticationException → ConnectionError "Autenticazione fallita" ─
 
 def test_connect_maps_auth_exception_to_connection_error_with_auth_message():
     """Blinda error mapping: ``paramiko.AuthenticationException`` →

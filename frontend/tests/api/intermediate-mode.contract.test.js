@@ -1,5 +1,5 @@
 /**
- * Contract test — R-25 PR-B5: param `intermediate_mode` opt-in superadmin.
+ * Contract tests for superadmin opt-in `intermediate_mode` API params.
  *
  * Garantisce che i due API client (executeProjectQuery, executeEnrichmentAsync)
  * serializzino il param SOLO se valorizzato. Senza il param i test esistenti

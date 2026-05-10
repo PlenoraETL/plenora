@@ -1,8 +1,4 @@
-"""
-Upload multi-layer/multi-sheet (STRUCT-001 Seam D-G).
-
-Keeps this module's responsibility explicit and isolated from adjacent code.
-"""
+"""Multi-layer and multi-sheet upload parsing."""
 
 from __future__ import annotations
 
@@ -69,8 +65,6 @@ def create_multi_layer_from_upload(
                     (E3): rollback DB + cleanup compensativo del shared
                     storage_key best-effort.
     """
-    # MIME validator default: lazy import per preservare "sempre attivo"
-    # del comportamento originale (NON opzionale come create_from_upload
     if mime_validate is None:
         mime_validate = validate_no_executable
 
@@ -80,7 +74,7 @@ def create_multi_layer_from_upload(
     file_content.seek(0)
     raw_data = file_content.read()
 
-    # MIME defense-in-depth: PRIMA di qualsiasi side effect
+    # MIME validation runs before temp files, blob dispatch, or DB writes.
     try:
         mime_validate(content=raw_data, filename=filename or name)
     except Exception as e:

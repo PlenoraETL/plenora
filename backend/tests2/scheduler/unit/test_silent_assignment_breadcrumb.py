@@ -1,5 +1,5 @@
 """
-[phase-2-err][residual ε] 7.f-bis — breadcrumb su silent-assignment fallback.
+7.f-bis — breadcrumb su silent-assignment fallback.
 
 Residual sweep ε del punto 1 — 5 siti `except Exception: <assignment>`
 """
@@ -30,14 +30,13 @@ def _read(relpath: str) -> str:
     return (_BACKEND_ROOT / relpath).read_text(encoding="utf-8")
 
 
-# TEST 1 — Zero bare silent-assignment nei 4 file target
 
 
 def test_no_bare_silent_assignment_in_target_files():
     """Scansione: nessun `except Exception:\\n    <identifier> = <...>` con
     assegnamento puro senza breadcrumb nei 4 file target (5 siti 7.f-bis).
 
-    Il pattern puro pre-fix era:
+    Il pattern puro Previous behavior era:
         except Exception:
             group_id = None
         (o return {}, = None, etc.)
@@ -66,7 +65,6 @@ def test_no_bare_silent_assignment_in_target_files():
     )
 
 
-# TEST 2 — Ogni sito ha logger.debug con type(e).__name__
 
 
 _BREADCRUMB_CONTEXTS = [
@@ -108,13 +106,12 @@ def test_silent_assignment_sites_have_debug_breadcrumb():
     )
 
 
-# TEST 3 — Fallback values preservati (breadcrumb additivo, non cambia fallback)
 
 
 def test_silent_assignment_fallback_values_preserved():
     """Il fix ε e' additivo: aggiunge `as e:` + `logger.debug(...)` ma non
     cambia il valore di fallback assegnato. Verifica che i 5 fallback
-    canonici siano ancora presenti post-fix."""
+    canonici siano ancora presenti Current contract."""
     # (file, fallback statement pattern atteso)
     fallback_patterns = [
         ("workers/tasks/pipeline_task.py",

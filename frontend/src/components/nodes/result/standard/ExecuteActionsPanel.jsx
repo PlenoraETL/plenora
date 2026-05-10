@@ -2,8 +2,6 @@
  * ExecuteActionsPanel.jsx — Coda finale del Result node:
  * execution mode + bottoni Valida/Preview/Esegui + footer cronologia
  * + `RunHistoryModal`.
- *
- * Estratto da `ResultNodeStandardView.jsx` in `FE-SPLIT-005C`.
  * Componente presentational locale: niente fetch, niente API,
  * niente global state. Le callback `onValidate`/`onPreview`/`onExecute`
  * sono ricevute dal parent (che le inoltra a sua volta dal grandparent
@@ -44,7 +42,6 @@ export default function ExecuteActionsPanel({
 
   return (
     <>
-      {/* Modalita' Esecuzione (Manipola/Arricchisci) */}
       {hasExecutionOptions && (
         <div className="result-node__execution-options">
           <div className="result-node__label">Esecuzione:</div>
@@ -95,7 +92,6 @@ export default function ExecuteActionsPanel({
         </div>
       )}
 
-      {/* Bottoni azione */}
       <div className="result-node__actions">
         <button type="button"
           onClick={onValidate}
@@ -127,7 +123,6 @@ export default function ExecuteActionsPanel({
         )}
       </div>
 
-      {/* Footer cronologia run */}
       <div className="result-node__footer">
         <button type="button"
           onClick={(e) => { e.stopPropagation(); setIsRunHistoryOpen(true); }}
@@ -140,7 +135,6 @@ export default function ExecuteActionsPanel({
         </button>
       </div>
 
-      {/* Modal cronologia run */}
       <RunHistoryModal
         isOpen={isRunHistoryOpen}
         onClose={() => setIsRunHistoryOpen(false)}

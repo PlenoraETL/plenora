@@ -1,7 +1,7 @@
 """
 Contract test Bug #24 — sampled fingerprint per checkpoint snapshots.
 
-Pre-fix: `compute_dataframe_fingerprint` faceva
+Previous behavior: `compute_dataframe_fingerprint` faceva
 """
 
 from __future__ import annotations

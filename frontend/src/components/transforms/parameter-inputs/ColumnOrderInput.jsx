@@ -1,7 +1,5 @@
 /**
  * ColumnOrderInput.jsx — Drag&drop riordinamento colonne
- *
- * Estratto da `ParameterInput.jsx` in `FE-PHASE2-SPLIT-002A`.
  * Usato dal dispatcher per il tipo `column_order`. Stato locale
  * `dragIdx` / `dragOverIdx` per il feedback drag (non vive nel
  * parent).

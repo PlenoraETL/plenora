@@ -2,9 +2,9 @@
  * ResultNodeImdfView — view del ResultNode quando upstream è api_enrich
  * con output_kind='imdf'.
  *
- * Estratto da ResultNode.jsx (Batch 2 step 2 split FE). Il componente si
- * monta solo quando isImdfMode=true (ramo ternario del parent); non ha
- * una prop isImdfMode perche' la sua presenza nel tree lo implica.
+ * Il componente si monta solo quando isImdfMode=true (ramo ternario
+ * del parent); non ha una prop isImdfMode perche' la sua presenza nel
+ * tree lo implica.
  *
  * Owna:
  *   - useImdfBundles (downloader: fetch/hydrate/select dei bundle)
@@ -70,7 +70,6 @@ const ResultNodeImdfView = memo(({
           )}
         </div>
 
-        {/* Card bundle attivo con switcher e link manager */}
         <BundleSlotCard
           loading={loadingBundles}
           bundle={selectedBundle}
@@ -157,7 +156,6 @@ const ResultNodeImdfView = memo(({
         validation={imdfData?.validation}
       />
 
-      {/* Modal gestione cronologia bundle */}
       <ImdfBundlesManagerModal
         isOpen={bundlesManagerOpen}
         onClose={() => setBundlesManagerOpen(false)}

@@ -1,8 +1,4 @@
-"""
-PLENORA-ETL — Data Source Backend: SFTP
-
-Connessione SSH/SFTP con autenticazione tramite password o chiave SSH privata.
-"""
+"""SFTP data source backend."""
 
 import io
 import socket
@@ -61,8 +57,6 @@ class SFTPDataSource(DataSourceInterface):
         super().__init__(config)
         self._ssh = None
         self._sftp = None
-
-    # ── Lifecycle ──────────────────────────────────────────────────────────
 
     def connect(self) -> None:
         paramiko = _import_paramiko()
@@ -143,7 +137,6 @@ class SFTPDataSource(DataSourceInterface):
     def disconnect(self) -> None:
         for obj in (self._sftp, self._ssh):
             if obj:
-                # intent: optional feature / outcome: fail-open (close best-effort
                 try:
                     obj.close()
                 except Exception as e:
@@ -171,8 +164,7 @@ class SFTPDataSource(DataSourceInterface):
                 },
             }
         except DataSourceConnectionError as e:
-            # F5-B2: `e` qui e' il nostro wrapper con messaggio gia' canonico
-            # vedi connect + _sanitize_sftp_error), quindi str(e) e' safe
+            # DataSourceConnectionError message is already sanitized by connect().
             logger.warning(
                 f"[GESTITO] SFTP test_connection fallita: {type(e).__name__}: {e} "
                 f"(cause: {type(e.__cause__).__name__ if e.__cause__ else 'none'})",
@@ -181,8 +173,6 @@ class SFTPDataSource(DataSourceInterface):
             return {"ok": False, "message": str(e), "details": {}}
         finally:
             self.disconnect()
-
-    # ── Le 6 operazioni ────────────────────────────────────────────────────
 
     def list_files(
         self,
@@ -208,7 +198,6 @@ class SFTPDataSource(DataSourceInterface):
             file_path = self._join_path(path, entry.filename)
             hash_val = None
             if include_hash:
-                # intent: optional feature / outcome: fail-open (hash opzionale
                 try:
                     hash_val = self._compute_hash(self.read_file(file_path))
                 except Exception as e:
@@ -285,8 +274,6 @@ class SFTPDataSource(DataSourceInterface):
         except IOError:
             return False
 
-    # ── Helpers privati ─────────────────────────────────────────────────────
-
     def _check(self):
         if self._sftp is None:
             raise DataSourceConnectionError("Non connesso. Usa il context manager 'with'.")
@@ -296,7 +283,6 @@ class SFTPDataSource(DataSourceInterface):
         current = ""
         for part in parts:
             current = f"{current}/{part}" if current else part
-            # intent: optional feature / outcome: fail-open (mkdir idempotent — dir esistente
             try:
                 self._sftp.mkdir(current)
             except IOError as e:

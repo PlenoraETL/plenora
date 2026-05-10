@@ -15,13 +15,11 @@ from pathlib import Path
 from typing import Optional
 
 
-# Script standalone: aggiungi backend root a sys.path per `app.*` imports.
+# Standalone script: add backend root so `app.*` imports work from cron/systemd.
 _BACKEND_ROOT = Path(__file__).resolve().parent.parent
 if str(_BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(_BACKEND_ROOT))
 
-
-# ── Configurazione ──────────────────────────────────────────────────────────
 
 # Scope del dump: default schema applicativo 'plenora'. Vuoto ("") -> intero DB.
 BACKUP_SCHEMA = os.getenv("BACKUP_SCHEMA", "plenora")
@@ -31,8 +29,6 @@ PG_DUMP_TIMEOUT_SEC = int(os.getenv("BACKUP_PG_DUMP_TIMEOUT_SEC", "3600"))
 _LOG_BUFFER: list[str] = []
 _LOG_TAIL_LINES = 30
 
-
-# ── Helpers ─────────────────────────────────────────────────────────────────
 
 
 def log(level: str, msg: str) -> None:
@@ -48,7 +44,6 @@ def log(level: str, msg: str) -> None:
     _LOG_BUFFER.append(line)
 
 
-# ── DB run tracking (plenora.backup_runs) ────────────────────────────────────
 # Scopo: sostituire l'osservabilita' basata su systemctl/journalctl (host-local)
 # con una fonte DB-based leggibile da qualsiasi istanza backend (container-safe).
 
@@ -140,8 +135,6 @@ def build_dump_filename() -> str:
     return f"plenora_{ts}.dump"
 
 
-# ── Step 1: pg_dump ─────────────────────────────────────────────────────────
-
 
 def run_pg_dump(database_url: str, out_file: Path) -> None:
     """Esegue pg_dump in formato custom con compressione massima.
@@ -184,8 +177,6 @@ def run_pg_dump(database_url: str, out_file: Path) -> None:
     log("INFO", f"pg_dump ok: {size_mb:.1f} MB")
 
 
-# ── Step 2: verifica integrita' del dump ────────────────────────────────────
-
 
 def verify_dump_integrity(dump_file: Path) -> None:
     """pg_restore --list legge il TOC del dump e lo stampa.
@@ -218,8 +209,6 @@ def verify_dump_integrity(dump_file: Path) -> None:
     log("INFO", f"integrita' ok: {len(toc_lines)} entry nel TOC")
 
 
-# ── Step 3: upload S3 ───────────────────────────────────────────────────────
-
 
 def upload_to_storage(dump_file: Path, key: str) -> None:
     """Upload via ObjectStorage backend (cloud-agnostic; default AWS S3).
@@ -246,8 +235,6 @@ def upload_to_storage(dump_file: Path, key: str) -> None:
     size_mb = dump_file.stat().st_size / (1024 * 1024)
     log("INFO", f"upload ok: {key} ({size_mb:.1f} MB)")
 
-
-# ── Main ────────────────────────────────────────────────────────────────────
 
 
 def main() -> None:

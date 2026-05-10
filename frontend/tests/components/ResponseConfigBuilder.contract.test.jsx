@@ -25,7 +25,6 @@ function lastConfig(onChange) {
 }
 
 describe('ResponseConfigBuilder — contract', () => {
-  // ── 1. Empty state ────────────────────────────────────────────────
 
   it('shows the empty state when sampleData is missing', () => {
     render(<ResponseConfigBuilder sampleData={null} onChange={vi.fn()} />);
@@ -36,7 +35,6 @@ describe('ResponseConfigBuilder — contract', () => {
     expect(screen.queryByRole('button', { name: /Struttura/i })).not.toBeInTheDocument();
   });
 
-  // ── 2. Render tree with sampleData ────────────────────────────────
 
   it('renders the JSON tree showing top-level fields from sampleData', () => {
     const onChange = vi.fn();
@@ -56,7 +54,6 @@ describe('ResponseConfigBuilder — contract', () => {
     expect(screen.getByText('name')).toBeInTheDocument();
   });
 
-  // ── 3. Click scalar checkbox → mappings ──────────────────────────
 
   it('checking a scalar field propagates a new mapping via onChange', async () => {
     const user = userEvent.setup();
@@ -89,7 +86,6 @@ describe('ResponseConfigBuilder — contract', () => {
     ]);
   });
 
-  // ── 4. Click array Esplodi → iterate_on ──────────────────────────
 
   it('toggling an array node populates iterate_on via onChange', async () => {
     const user = userEvent.setup();
@@ -117,7 +113,6 @@ describe('ResponseConfigBuilder — contract', () => {
     ]);
   });
 
-  // ── 5. Tab navigation: structure → mappings ──────────────────────
 
   it('switches to the Mappings tab and hides the structure toolbar', async () => {
     const user = userEvent.setup();
@@ -142,7 +137,6 @@ describe('ResponseConfigBuilder — contract', () => {
     expect(screen.queryByText(/Root path:/i)).not.toBeInTheDocument();
   });
 
-  // ── 6. Preset selection ───────────────────────────────────────────
 
   it('selecting a preset emits {response_preset} and shows the preset notice', async () => {
     const user = userEvent.setup();

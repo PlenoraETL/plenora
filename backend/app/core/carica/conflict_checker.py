@@ -26,18 +26,12 @@ class ConflictChecker:
         engine: SQLAlchemy engine per la connessione al DB destinazione
         db_type: tipo database ("postgres", "oracle", "mssql", "mysql")
         ddl: `DDLGenerator` boundary per quoting/qualified-name SQL.
-             il caller di solito
-            inietta `self.ddl` del writer (gia' istanziato in
-            `DatabaseWriter.__init__`) per evitare doppia istanza +
-            duplicazione delle policy di quoting/qualified-name.
-            Se `None`, viene costruito un `DDLGenerator(db_type)` ad
-            hoc — backward-compat per callsite esistenti
-            (`router.py`, test legacy che passano solo engine+db_type).
+            Il caller puo' iniettare `self.ddl` del writer per condividere
+            le policy di quoting/qualified-name.
+            Se `None`, viene costruito un `DDLGenerator(db_type)` locale.
     """
 
-    # Numero massimo di valori nella clausola IN per query
     MAX_IN_BATCH = 500
-    # Numero massimo di dettagli conflitto da restituire
     MAX_DETAILS = 100
 
     def __init__(
@@ -49,9 +43,6 @@ class ConflictChecker:
     ):
         self.engine = engine
         self.db_type = db_type.lower()
-        # consume `DDLGenerator` come boundary SQL/dialetto. La fallback
-        # locale al ddl=None preserva backward-compat per callsite
-        # esistenti che non passano `ddl=...`
         self.ddl = ddl if ddl is not None else DDLGenerator(self.db_type)
 
     def check(
@@ -78,7 +69,6 @@ class ConflictChecker:
             logger.info("Nessuna colonna match specificata, skip check conflitti")
             return report
 
-        # Verifica che le colonne match esistano nel DataFrame
         missing = [c for c in match_columns if c not in df.columns]
         if missing:
             logger.warning(f"Colonne match mancanti nel DataFrame: {missing}")
@@ -93,7 +83,6 @@ class ConflictChecker:
         report.db_conflicts = db_conflicts
         report.details = details
 
-        # Riepilogo
         report.total_conflicts = internal_dups + db_conflicts
         report.has_conflicts = report.total_conflicts > 0
 
@@ -161,7 +150,6 @@ class ConflictChecker:
         column: str,
     ) -> tuple:
         """Check conflitti su singola colonna match."""
-        # Valori unici dalla sorgente
         values = df[column].dropna().unique().tolist()
         if not values:
             return 0, []
@@ -171,7 +159,6 @@ class ConflictChecker:
 
         conflicting_values = set()
 
-        # Query in batch
         for i in range(0, len(values), self.MAX_IN_BATCH):
             batch = values[i:i + self.MAX_IN_BATCH]
             placeholders = ", ".join(f":v_{j}" for j in range(len(batch)))
@@ -188,7 +175,6 @@ class ConflictChecker:
                 logger.error(f"[CRASH] Errore query conflitti batch: {e}", exc_info=True)
                 continue
 
-        # Costruisci dettagli
         details = []
         if conflicting_values:
             conflict_mask = df[column].isin(conflicting_values)
@@ -213,19 +199,16 @@ class ConflictChecker:
     ) -> tuple:
         """Check conflitti su più colonne match — versione batch.
 
-        Strategia: invece di N query (una per combinazione), carica tutte le
-        combinazioni esistenti nella tabella destinazione con una SINGOLA SELECT
-        DISTINCT e fa il match in memoria. Drastico miglioramento performance
-        su dataset con molte combinazioni uniche (era N+1).
+        Strategia: carica tutte le combinazioni esistenti nella tabella
+        destinazione con una singola SELECT DISTINCT e fa il match in memoria,
+        evitando una query per combinazione.
         """
         full_table = self._qualified_name(schema, table)
 
-        # Estrai combinazioni uniche nel DataFrame sorgente
         unique_combos = df[match_columns].drop_duplicates()
         if unique_combos.empty:
             return 0, []
 
-        # UNA sola query: carica tutte le combinazioni distinct della destinazione
         quoted_cols = ", ".join(self._quote_col(c) for c in match_columns)
         query = f"SELECT DISTINCT {quoted_cols} FROM {full_table}"
 
@@ -237,8 +220,7 @@ class ConflictChecker:
             logger.error(f"[CRASH] Errore query multi-column destinazione: {e}", exc_info=True)
             return 0, []
 
-        # Converte in set di tuple per lookup O(1
-        # Sentinel per NaN (None non è hashable in tuple con NaN reali
+        # Sentinel distinto da None per confrontare NaN in chiavi tuple.
         _NAN_SENTINEL = "__NAN__"
 
         def _normalize(v):
@@ -251,7 +233,6 @@ class ConflictChecker:
             values = tuple(_normalize(v) for v in row)
             existing_set.add(values)
 
-        # Match in memoria: O(n) invece di N query DB
         conflict_count = 0
         details = []
 
@@ -264,7 +245,6 @@ class ConflictChecker:
                         col: _serialize_value(combo_row[col])
                         for col in match_columns
                     }
-                    # Trova righe nel DataFrame con questa combo
                     mask = pd.Series(True, index=df.index)
                     for col in match_columns:
                         if pd.isna(combo_row[col]):

@@ -1,5 +1,5 @@
 /**
- * Contract test — useTaskPolling (Batch 1 FE Reliability, FE-22).
+ * Contract tests for useTaskPolling reliability behavior.
  *
  * Hook condiviso per polling Celery. Garanzie da preservare:
  *   1. startPolling chiama getTaskStatus su ogni tick di setInterval e passa

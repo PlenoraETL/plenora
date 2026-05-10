@@ -17,13 +17,6 @@ import useDialogFocus from '../../hooks/useDialogFocus';
 import './CaricanNode.css';
 import { getCaricaSchemas, getCaricaTables, getCaricaColumns, postCaricaAutoMapping, postCaricaCheckConflicts } from '../../api/carica';
 const CaricanNode = memo(({ data, id }) => {
-  // =========================================================================
-  // DEBUG — rimuovere dopo fix
-  // =========================================================================
-
-  // =========================================================================
-  // STATE — UI
-  // =========================================================================
   const [isExpanded, setIsExpanded] = useState(true);
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [showMapping, setShowMapping] = useState(false);
@@ -51,10 +44,6 @@ const CaricanNode = memo(({ data, id }) => {
   const [conflictError, setConflictError] = useState('');
   const [conflictCheckColumn, setConflictCheckColumn] = useState('');
 
-  // =========================================================================
-  // VALORI CORRENTI dalla configurazione
-  // =========================================================================
-  
   const connectionId = data.connection_id || '';
   const destType = data.dest_type || 'db';
   const schemaName = data.schema_name || '';
@@ -85,10 +74,6 @@ const CaricanNode = memo(({ data, id }) => {
   const executeResult = data.executeResult || null;
   const projectId = useCanvasStore(s => s.projectId) || '';
 
-  // =========================================================================
-  // OPZIONI STATICHE
-  // =========================================================================
-
   const writeModes = [
     { value: 'create', label: '🆕 CREATE', desc: 'Crea nuova tabella (errore se esiste)' },
     { value: 'replace', label: '🔄 REPLACE', desc: 'Elimina e ricrea la tabella' },
@@ -116,10 +101,6 @@ const CaricanNode = memo(({ data, id }) => {
     { value: 'per_record', label: 'Per riga' },
   ];
 
-  // =========================================================================
-  // EFFETTI — DB
-  // =========================================================================
-
   useEffect(() => {
     if (destType === 'db' && connectionId) {
       loadSchemas(connectionId);
@@ -144,10 +125,6 @@ const CaricanNode = memo(({ data, id }) => {
       setDestColumns([]);
     }
   }, [connectionId, schemaName, tableName, writeMode, destType]);
-
-  // =========================================================================
-  // FUNZIONI API — DB
-  // =========================================================================
 
   const loadSchemas = async (connId) => {
     setIsLoadingSchemas(true);
@@ -213,10 +190,6 @@ const CaricanNode = memo(({ data, id }) => {
       console.error('Errore auto-mapping:', error);
     }
   };
-
-  // =========================================================================
-  // HANDLERS
-  // =========================================================================
 
   const _updateNodeData = useCanvasStore(s => s.updateNodeData);
 
@@ -398,19 +371,11 @@ const CaricanNode = memo(({ data, id }) => {
     }
   };
 
-  // =========================================================================
-  // VALIDAZIONE
-  // =========================================================================
-
   const isDbValid = connectionId && schemaName && tableName;
   const needsMatchColumns = ['upsert', 'update'].includes(writeMode);
   const matchColumnsValid = !needsMatchColumns || matchColumns.length > 0;
   const isRestValid = /^https?:\/\//i.test(restUrl) && restMethods.includes(restMethod);
   const isValid = destType === 'rest' ? isRestValid : (isDbValid && matchColumnsValid);
-
-  // =========================================================================
-  // RENDER
-  // =========================================================================
 
   return (
     <div className={`carica-node ${destType === 'rest' ? 'carica-node--rest' : ''} ${!isValid ? 'carica-node--invalid' : ''}`}>
@@ -421,7 +386,6 @@ const CaricanNode = memo(({ data, id }) => {
         className="carica-node__handle carica-node__handle--input"
       />
 
-      {/* Header */}
       <div className="carica-node__header" role="button" tabIndex={0} onClick={() => setIsExpanded(!isExpanded)} onKeyDown={e => (e.key === 'Enter' || e.key === ' ') && setIsExpanded(v => !v)}>
         <div className="carica-node__header-left">
           <span className="carica-node__icon">💾</span>
@@ -441,7 +405,6 @@ const CaricanNode = memo(({ data, id }) => {
         </div>
       </div>
 
-      {/* Body */}
       {isExpanded && (
         <div className="carica-node__body">
 
@@ -462,7 +425,6 @@ const CaricanNode = memo(({ data, id }) => {
             </button>
           </div>
 
-          {/* ============ SEZIONI DB ============ */}
           {destType === 'db' && (
             <>
               {/* Connessione Database */}
@@ -482,7 +444,6 @@ const CaricanNode = memo(({ data, id }) => {
                 </select>
               </div>
 
-              {/* Schema */}
               {connectionId && (
                 <div className="carica-node__section">
                   <label className="carica-node__label">📁 Schema</label>
@@ -611,7 +572,6 @@ const CaricanNode = memo(({ data, id }) => {
                 </div>
               )}
 
-          {/* ============ MAPPING COLONNE ============ */}
           {schemaName && (
             <div className="carica-node__section">
               <div 
@@ -688,7 +648,6 @@ const CaricanNode = memo(({ data, id }) => {
             </div>
           )}
 
-          {/* ============ OPZIONI AVANZATE ============ */}
           <div className="carica-node__section">
             <div
               className="carica-node__section-header"
@@ -955,7 +914,6 @@ const CaricanNode = memo(({ data, id }) => {
             </>
           )}
 
-          {/* ============ PREVIEW / STATUS ============ */}
           {isValid && (
             <div className="carica-node__preview">
               <div className="carica-node__preview-item">
@@ -986,7 +944,6 @@ const CaricanNode = memo(({ data, id }) => {
         </div>
       )}
 
-      {/* ============ MODAL CONFLICT CHECKER (Portal) ============ */}
       {showConflictModal && createPortal(
         <div className="carica-conflict-modal__overlay" onClick={() => setShowConflictModal(false)}>
           <div

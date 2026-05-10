@@ -63,7 +63,7 @@ def test_single_input_transform_reraises_on_internal_failure(transform, kwargs):
 
 def test_plugin_executor_propagates_transform_error():
     """PluginExecutor.execute deve propagare un errore sollevato dal
-    transform. Pre-fix D1, il transform silenziava; post-fix, l'errore
+    transform. Previous behavior D1, il transform silenziava; Current contract, l'errore
     risale a PluginExecutor che logga "[CRASH] Errore esecuzione" e
     rilancia. Qui verifichiamo solo il fail-closed: l'errore arriva
     al chiamante dell'executor."""
@@ -169,7 +169,7 @@ def test_sjoin_happy_path_unchanged():
 )
 def test_builder_extractor_reraises_and_closes_s6(transform, args, kwargs):
     """I 4 builder/extractor devono fail-closed come D1/D2. In piu', il
-    ramo except NON deve re-invocare `to_geodataframe` (smell S6 pre-fix:
+    ramo except NON deve re-invocare `to_geodataframe` (smell S6 Previous behavior:
     un fallback rischioso che poteva a sua volta sollevare, mascherando
     l'errore originale).
 
@@ -186,8 +186,8 @@ def test_builder_extractor_reraises_and_closes_s6(transform, args, kwargs):
         with pytest.raises(RuntimeError, match="mock-builder-failure"):
             transform(df, *args, **kwargs)
 
-    # Pre-fix D3: il ramo except tentava di nuovo to_geodataframe,
-    # call_count sarebbe stato 2. Post-fix: solo 1 (la chiamata nel try).
+    # Previous behavior D3: il ramo except tentava di nuovo to_geodataframe,
+    # call_count sarebbe stato 2. Current contract: solo 1 (la chiamata nel try).
     assert mock_tgdf.call_count == 1, (
         f"smell S6 non chiuso: to_geodataframe invocata {mock_tgdf.call_count} "
         f"volte (attese: 1). Il ramo except sta ancora tentando il fallback."

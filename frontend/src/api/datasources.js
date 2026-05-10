@@ -5,8 +5,6 @@
 
 import http from './http';
 
-// ── CRUD ──────────────────────────────────────────────────────────────────
-
 export const listDataSources = async () => {
   const res = await http.get('/datasources');
   return res.data;
@@ -30,8 +28,6 @@ export const testDataSource = async (id) => {
   const res = await http.post(`/datasources/${id}/test`);
   return res.data;
 };
-
-// ── Operazioni file ───────────────────────────────────────────────────────
 
 export const listFiles = async (id, { path = '', pattern = null, include_hash = false } = {}) => {
   const params = { path, include_hash };

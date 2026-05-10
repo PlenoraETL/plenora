@@ -2,7 +2,7 @@
  * useImdfBundles — "downloader" del ResultNode in modalita' IMDF.
  *
  * Incapsula fetch, hydration e selezione dei bundle IMDF esposti dal
- * backend. Estratto da ResultNode.jsx (Batch 2 step 1 split FE).
+ * backend.
  *
  * Cosa gestisce:
  *   - lista bundle del progetto (listImdfBundles)
@@ -69,7 +69,6 @@ export function useImdfBundles({ isImdfMode }) {
   const selectedBundle = bundles.find(b => b.task_id === bundleTaskId) || null;
   const isBundleFallback = !liveBundleTaskId && !!selectedBundleId;
 
-  // Effect 1: prima fetch + auto-select piu' recente se non c'e' live
   useEffect(() => {
     if (!isImdfMode) return;
     let cancelled = false;
@@ -96,7 +95,6 @@ export function useImdfBundles({ isImdfMode }) {
     return () => { cancelled = true; };
   }, [isImdfMode, projectId]);
 
-  // Effect 2: nuovo live task -> reset override + refetch lista
   useEffect(() => {
     if (!isImdfMode || !liveBundleTaskId) return;
     if (liveBundleTaskId === selectedBundleId) return;
@@ -117,7 +115,6 @@ export function useImdfBundles({ isImdfMode }) {
     // reagire solo all'arrivo di un nuovo liveBundleTaskId.
   }, [isImdfMode, liveBundleTaskId, projectId]);
 
-  // Effect 3: hydration metadata se lo store non ha manifest per bundleTaskId
   useEffect(() => {
     if (!isImdfMode) return;
     const bid = bundleTaskId;

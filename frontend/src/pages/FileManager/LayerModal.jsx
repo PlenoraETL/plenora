@@ -3,9 +3,6 @@
  * multi-layer (gpkg/gdb) o multi-sheet (xlsx) — flusso "carica un solo
  * layer/sheet" come scorciatoia rispetto al wizard multi-layer di
  * UploadModal.
- *
- * Estratto da FileManager.jsx (FE-PHASE1-CLOSURE-3) senza cambio
- * comportamentale.
  */
 
 import React from 'react';

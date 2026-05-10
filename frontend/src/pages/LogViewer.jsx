@@ -34,8 +34,6 @@ const MODULE_COLORS = {
   orchestrator: '#60A5FA', scheduler: '#34D399', connections: '#FBBF24', projects: '#818CF8',
   files: '#A78BFA', services: '#94A3B8', db: '#F87171', utils: '#6B7280', workers: '#F472B6',
 };
-
-// ── Main component ────────────────────────────────────────────────────────
 function LogViewer() {
   const navigate     = useNavigate();
   const toast        = useToast();

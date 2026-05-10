@@ -6,20 +6,10 @@ import { vi } from 'vitest';
 import LogViewer from '../../src/pages/LogViewer';
 
 /**
- * Batch 4 di FE-TEST-001 su LogViewer — page-level contract.
- * Pre-batch: nessun test per `pages/LogViewer.jsx` o `api/logs.js`.
+ * Page-level contract for LogViewer workflows.
  *
- * Aree:
- *   1. admin: load + render table + stats su tab "Log Tecnici"
- *   2. filtro livello via dropdown -> reload con `level` param
- *   3. stats card click -> setta filtro livello + reload
- *   4. search form submit -> reload con `search` param
- *   5. pagination "Successivi →" -> reload con `offset`
- *   6. role gating: viewer NON vede tab bar, Export CSV, ne' "Log Tecnici"
- *      (mainTab forzato a "runs", titolo "Cronologia Esecuzioni")
- *
- * Nessun refactor della pagina, nessun touch a useTheme/ThemeToggle,
- * nessuna modifica backend/docs/audits.
+ * Covers admin log rendering, filter/search/pagination requests, and viewer
+ * role gating to run history only.
  */
 
 const { httpMock, toastMock, navigateMock, authState } = vi.hoisted(() => ({
@@ -42,12 +32,11 @@ vi.mock('react-router-dom', async () => {
 });
 vi.mock('../../src/utils/hexCanvas', () => ({ useHexCanvas: () => {} }));
 vi.mock('../../src/components/AppSidebar', () => ({ default: () => null }));
-// Stub RunsTab — il batch testa LogViewer page, non RunsTab internals.
+// Stub RunsTab; this file exercises LogViewer page behavior.
 vi.mock('../../src/components/logviewer/RunsTab', () => ({
   default: () => null,
 }));
 
-// ── Helpers ───────────────────────────────────────────────────────────
 
 const STATS_OK = {
   total: 10,
@@ -92,9 +81,8 @@ function lastLogsParams() {
   return calls[calls.length - 1]?.[1]?.params || {};
 }
 
-// ── Tests ─────────────────────────────────────────────────────────────
 
-describe('LogViewer — batch 4', () => {
+describe('LogViewer contract', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     authState.user = { role: 'admin', username: 'tester', group_id: 'grp-1' };

@@ -1,7 +1,7 @@
 """
 Contract test N9 â€” re-check permessi user in pipeline_task.
 
-Pre-fix scenario:
+Previous behavior scenario:
 """
 
 from __future__ import annotations

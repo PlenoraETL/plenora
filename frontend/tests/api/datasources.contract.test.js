@@ -62,7 +62,6 @@ describe('datasources api contract', () => {
     expect(httpMock.delete).toHaveBeenCalledWith('/datasources/ds-3');
   });
 
-  // ─── C3.2 Phase 4: file schema endpoint ─────────────────────────────────
   // Pre-C3.2 era una chiamata diretta http.get in DataSourceNode.jsx; ora
   // passa per il boundary api/datasources.
 

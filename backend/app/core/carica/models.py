@@ -10,8 +10,6 @@ from typing import Any, Dict, List, Optional
 from datetime import datetime, timezone
 
 
-# ENUMERAZIONI
-
 class WriteMode(str, Enum):
     """Modalità di scrittura su database.
 
@@ -40,8 +38,8 @@ class WriteStatus(str, Enum):
     CONNECTION_ERROR: impossibile connettersi al database destinazione
     WRITE_ERROR: errore durante la scrittura (query fallita, timeout, ecc.)
     PERMISSION_ERROR: permessi insufficienti (CREATE TABLE, INSERT, ecc.)
-    SKIPPED_IDEMPOTENT: run_id gia' completato in precedenza — no-op sicuro
-        (N15 guard). I caller che trattano il risultato come "failure/retry"
+    SKIPPED_IDEMPOTENT: run_id gia' completato in precedenza — no-op sicuro.
+        I caller che trattano il risultato come "failure/retry"
         devono includerlo tra i success state, altrimenti innescano
         retry loop.
     """
@@ -81,8 +79,6 @@ class ConflictPolicy(str, Enum):
     FORCE = "force"
     ABORT = "abort"
 
-
-# DATACLASS DI CONFIGURAZIONE
 
 @dataclass
 class ColumnMapping:
@@ -130,7 +126,7 @@ class WriteConfig:
         if_table_exists: comportamento se tabella esiste con CREATE ("error" o "replace")
         allow_unsafe_append: opt-in esplicito per la combo APPEND + PER_BATCH
             + nessun match_columns. Default False: la combo viene rifiutata
-            con ValueError dal writer (vedi F-DATA-08 / P1-05). Settare True
+            con ValueError dal writer. Settare True
             solo se la tabella e' append-only con lineage esterno e si
             accetta consapevolmente il rischio di duplicati su retry parziale.
     """
@@ -161,7 +157,6 @@ class WriteConfig:
         mappings = []
         for m in data.get("column_mappings", []):
             if isinstance(m, dict):
-                # Supporta sia formato frontend (source, dest) che backend (source_column, dest_column
                 normalized = {
                     "source_column": m.get("source_column") or m.get("source", ""),
                     "dest_column": m.get("dest_column") or m.get("dest", ""),
@@ -189,11 +184,8 @@ class WriteConfig:
             conflict_policy=ConflictPolicy(data.get("conflict_policy", "skip")),
             if_table_exists=data.get("if_table_exists", "error"),
             unique_key_column=data.get("unique_key_column", ""),
-            # F-DATA-08 / P1-05: default sicuro False. Il frontend deve
-            # settare esplicitamente il boolean True per opt-in alla combo
-            # unsafe. Strict identity check: stringhe come "true"/"false"/
-            # "0"/"1" restano False, perche' `bool("false")` e' True in
-            # Python e abiliterebbe silently la modalita' unsafe
+            # Strict identity check prevents strings like "false" enabling
+            # the unsafe append mode through Python truthiness.
             allow_unsafe_append=data.get("allow_unsafe_append") is True,
         )
 
@@ -258,8 +250,6 @@ class BatchProgress:
             f"({self.percent}%)"
         )
 
-
-# DATACLASS PER RISULTATI
 
 @dataclass
 class ConflictDetail:

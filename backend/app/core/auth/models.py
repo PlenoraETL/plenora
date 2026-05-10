@@ -1,7 +1,5 @@
 """
 Pydantic DTO per il sottosistema auth.
-
-Estratto verbatim da `app.core.auth.auth` (STRUCT-005 Seam C). `auth.py`
 """
 
 from __future__ import annotations
@@ -14,8 +12,7 @@ from pydantic import BaseModel
 class LoginRequest(BaseModel):
     username: str
     password: str
-    # MFA opt-in: None per utenti senza MFA (comportamento invariato
-    # Per utenti con MFA attiva: richiesto, altrimenti 403 mfa_required
+    # None is valid for users without MFA; enrolled users must provide a code.
     mfa_code: Optional[str] = None
 
 

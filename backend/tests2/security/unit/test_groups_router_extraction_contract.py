@@ -156,7 +156,7 @@ def test_groups_router_prefix_and_tags():
 def test_api_composition_mounts_groups_router():
     """Source-bound check: `api.py` include il nuovo router e `main.py`
     monta l'api_router con prefix `/api`, mantenendo i path effettivi
-    `/api/auth/groups*` invariati rispetto al pre-batch."""
+    `/api/auth/groups*` invariati rispetto al Previous contract."""
     api_src = (_BACKEND_ROOT / "app" / "core" / "api.py").read_text(
         encoding="utf-8"
     )

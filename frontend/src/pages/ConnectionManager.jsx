@@ -34,8 +34,6 @@ const ALL_TYPES = [
   { value: 'sqlite',   label: '📁 SQLite',        color: '#6B7280', colorRgb: '107,114,128', defaultPort: 0,    defaultSchema: '',       category: 'database' },
   { value: 'arcgis',   label: '🌐 ArcGIS Server', color: '#F5A623', colorRgb: '245,166,35',  defaultPort: 0,    defaultSchema: '',       category: 'arcgis'   },
 ];
-
-// ── Main component ───────────────────────────────────────────────────────
 function ConnectionManager() {
   const toast    = useToast();
   const confirmModal = useConfirmModal();
@@ -179,12 +177,8 @@ function ConnectionManager() {
 
   return (
     <div className="cm">
-
-      {/* ── SIDEBAR ── */}
-      <AppSidebar counts={{ connections: allConnections.length }} />
-
-      {/* ── MAIN ── */}
-      <div className="cm__main">
+<AppSidebar counts={{ connections: allConnections.length }} />
+<div className="cm__main">
         <header className="cm__topbar">
           <button type="button" className="cm__back-btn" onClick={() => navigate(-1)}>← Indietro</button>
           <div className="cm__page-title">Connessioni</div>
@@ -264,10 +258,7 @@ function ConnectionManager() {
           )}
         </div>
       </div>
-
-      {/* ── CONTEXT AI MODAL ── */}
-
-      {/* ── MODAL ── */}
+{/* ── MODAL ── */}
       {showModal && (
         <ModalWrapper
           isOpen={true}
@@ -394,9 +385,7 @@ function ConnectionManager() {
 
         </ModalWrapper>
       )}
-
-      {/* ── SHARE MODAL (solo superadmin) ── */}
-      {sharingConnection && (
+{sharingConnection && (
         <ModalWrapper
           isOpen={true}
           onClose={() => setSharingConnection(null)}
@@ -417,8 +406,6 @@ function ConnectionManager() {
     </div>
   );
 }
-
-// ── Empty state ─────────────────────────────────────────────────────────
 function EmptyState({ onNew, canCreate = true }) {
   return (
     <div className="cm__empty">
@@ -435,8 +422,6 @@ function EmptyState({ onNew, canCreate = true }) {
     </div>
   );
 }
-
-// ── Connection Table ────────────────────────────────────────────────────
 function ConnTable({ title, subtitle, connections, testResults, testingId, onTest, onEdit, onDelete, onShare, isSuperadmin, arcgis }) {
   return (
     <div className="cm__section">
@@ -538,7 +523,4 @@ function ConnTable({ title, subtitle, connections, testResults, testingId, onTes
     </div>
   );
 }
-
-// ── Empty state ─────────────────────────────────────────────────────────
-
 export default ConnectionManager;

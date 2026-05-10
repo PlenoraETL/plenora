@@ -1,5 +1,5 @@
 """
-Contract test Phase 6 Batch 2 — MANIPOLA snapshot routing.
+Contract test Current contract
 
 Verifica che il loop trasformazioni di MANIPOLA passa per la nuova
 """

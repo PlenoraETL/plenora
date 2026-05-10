@@ -1,7 +1,5 @@
 """
-[phase-2-err][batch7] 7.c-bis — sanitize err_msg in execution_manager.
-
-Audit Batch 7 §3.1 S1 — leak `str(e)` via flow indiretto `err_msg →
+Contract: execution manager surfaces canonical safe error messages.
 """
 
 from __future__ import annotations
@@ -27,32 +25,30 @@ def _read_runtime_src() -> str:
     return _RUNTIME.read_text(encoding="utf-8")
 
 
-# TEST 1 — err_msg ramo broad Exception sanitizzato (no str(e) interpolato)
 
 
 def test_err_msg_inatteso_no_str_e_interpolation():
     """Il sorgente NON deve piu' contenere `err_msg = f"Errore inatteso: {e}"`
-    (pattern pre-fix che interpolava str(e) user-facing). Post-fix la
+    (pattern Previous behavior che interpolava str(e) user-facing). Current contract la
     stringa italiana canonica fissa e' presente."""
     src = _read_manager_src()
 
-    # Pattern pre-fix rimosso
+    # Pattern Previous behavior rimosso
     assert 'err_msg = f"Errore inatteso: {e}"' not in src, (
-        "pattern pre-fix `err_msg = f\"Errore inatteso: {e}\"` ancora presente"
+        "pattern Previous behavior `err_msg = f\"Errore inatteso: {e}\"` ancora presente"
     )
-    # Stringa canonica post-fix presente
+    # Stringa canonica Current contract presente
     assert (
         'err_msg = "Errore inatteso durante l\'esecuzione dello schedule '
         '(consulta log)"'
     ) in src
 
 
-# TEST 2 — Ramo ExecutionError preservato invariato
 
 
 def test_err_msg_execution_error_branch_preserved():
     """Il ramo `isinstance(e, ExecutionError): err_msg = str(e)` deve restare
-    invariato — ExecutionError e' domain exception costruita dal codice
+    invariato â€” ExecutionError e' domain exception costruita dal codice
     applicativo (message controllato), NON leak di internals."""
     src = _read_manager_src()
     # Pattern ExecutionError branch preservato
@@ -76,7 +72,6 @@ def test_err_msg_execution_error_branch_preserved():
     )
 
 
-# TEST 3 — _handle_failure failed branch ha token canonico schedule_execution_fatal
 
 
 def test_handle_failure_failed_branch_has_canonical_error_token():

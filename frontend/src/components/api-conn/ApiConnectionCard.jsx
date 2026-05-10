@@ -1,8 +1,7 @@
 /**
  * ApiConnectionCard.jsx — Card di un connettore API in lista
  *
- * Estratto da `pages/ApiConnectionManager.jsx` in
- * `FE-PHASE2-SPLIT-001C`. Componente presentational: riceve l'oggetto
+ * Componente presentational: riceve l'oggetto
  * `connection` + callback (`onEdit` / `onDelete` / `onQuickTest` /
  * `onShare`) e renderizza la card. Nessuna fetch, nessuna chiamata
  * API, nessun page-level state.

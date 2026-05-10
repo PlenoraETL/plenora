@@ -189,9 +189,7 @@ class ProjectService:
 
         Solleva `CanvasCorruptedError` se il canvas e' presente ma
         non interpretabile (JSON malformato, tipo inatteso, schema
-        Pydantic non valido). Pre-fix questi casi ritornavano un
-        canvas vuoto silenziosamente → l'utente sovrascriveva i dati
-        originali senza accorgersene. Ora la corruzione e' fail-loud:
+        Pydantic non valido). La corruzione e' fail-loud:
         il router traduce in 500 con messaggio esplicito e l'utente
         puo' chiedere il restore da backup.
         """
@@ -201,11 +199,9 @@ class ProjectService:
 
         canvas_data = row.canvas
 
-        # Canvas mancante / vuoto → progetto nuovo, non corruzione
         if canvas_data is None or canvas_data == {} or canvas_data == "":
             return CanvasState()
 
-        # JSON string: tentativo di parse. Fallimento = corruzione
         if isinstance(canvas_data, str):
             try:
                 canvas_data = json.loads(canvas_data)
@@ -219,12 +215,9 @@ class ProjectService:
                     reason=f"JSON malformato ({e.msg} at line {e.lineno})",
                     original_error=e,
                 )
-            # Dopo decode: se e' il literal null/vuoto, canvas legittimo
             if canvas_data is None or canvas_data == {}:
                 return CanvasState()
 
-        # Tipo inatteso dopo parse: non e' un dict ne' un valore vuoto
-        # riconosciuto → strutturalmente corrotto
         if not isinstance(canvas_data, dict):
             got_type = type(canvas_data).__name__
             logger.error(
@@ -243,7 +236,6 @@ class ProjectService:
                 f"Canvas con schema non valido per {project_id}: {e}",
                 op="get_project_canvas",
             )
-            # Tronchiamo il reason: ValidationError e' verboso
             reason_str = str(e)
             if len(reason_str) > 300:
                 reason_str = reason_str[:297] + "..."
@@ -304,7 +296,7 @@ class ProjectService:
         Raises:
             ProjectLineageCycleError: se i `project_source` nel canvas +
                 le dipendenze transitive degli altri progetti formano un
-                ciclo (C3 fix 5). Il router traduce in HTTP 400.
+                ciclo. Il router traduce in HTTP 400.
         """
         row = project_db.get_project_row(project_id)
         if not row:
@@ -319,7 +311,7 @@ class ProjectService:
 
     def _assert_no_lineage_cycle(self, project_id: str, canvas: CanvasState) -> None:
         """Verifica che salvare `canvas` per `project_id` non introduca
-        un ciclo nel DAG delle dipendenze cross-project (C3 fix 5).
+        un ciclo nel DAG delle dipendenze cross-project.
 
         Costruisce una `get_sources_fn` che per il progetto corrente usa
         il CANVAS NUOVO (non ancora salvato) e per tutti gli altri legge
@@ -589,7 +581,7 @@ class ProjectService:
         fallire il task Celery invece di ritornare SUCCESS con metadata
         stale. Un wrapper try/except qui dentro avrebbe trasformato un
         transient in un `return False` silenzioso, disabilitando il retry
-        e re-introducendo il silent-fallback contro cui il fix nasce.
+        e re-introducendo un silent-fallback sui metadata stale.
 
         Tutti i call-site (estrai/manipola/arricchisci/enrichment_task)
         passano dall'helper condiviso — niente try/except locali.
@@ -597,8 +589,6 @@ class ProjectService:
         return self._project_repository.update_canvas_key(
             project_id, "columns_metadata", columns_metadata
         )
-
-    # RISULTATI (file output pipeline
 
     def save_result(
         self,

@@ -1,5 +1,5 @@
 /**
- * Contract test per ResultNodeImdfView — Batch 2 step 2 (ResultNode split FE).
+ * Contract tests for ResultNodeImdfView.
  *
  * Invarianti che questa view deve preservare:
  *   1. 3 bottoni "Visualizza ..." disabled quando imdfData manca:

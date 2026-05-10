@@ -88,9 +88,9 @@ def test_type_cast_coerce_happy_path_unchanged():
 
 
 def test_type_cast_coerce_reraises_on_internal_failure():
-    """Pre-fix E1: errori esterni a pd.to_numeric (es. crash interno)
+    """Previous behavior E1: errori esterni a pd.to_numeric (es. crash interno)
     venivano silenziati anche con errors='coerce', ritornando df
-    invariato. Post-fix: l'errore propaga al caller.
+    invariato. Current contract: l'errore propaga al caller.
 
     Nota (audit §7.4): cambio di semantica osservabile, accettato come
     allineamento behaviour-doc. 'coerce' documenta il comportamento

@@ -20,8 +20,6 @@ import { can } from '../utils/permissions';
 import ConfirmDialog from '../components/common/ConfirmDialog';
 import { useConfirmModal } from '../hooks/useConfirmModal';
 import '../styles/ScheduleList.css';
-
-// ── Helpers ───────────────────────────────────────────────────────────────
 const formatDate = (s) => {
   if (!s) return '—';
   return new Date(s).toLocaleDateString('it-IT', { day:'2-digit', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit' });
@@ -82,8 +80,6 @@ const getLogIcon = (event) => {
   if (event?.includes('RETRY'))     return '🔁';
   return '📋';
 };
-
-// ── Main ──────────────────────────────────────────────────────────────────
 function ScheduleList() {
   const toast   = useToast();
   const confirmModal = useConfirmModal();
@@ -194,9 +190,7 @@ function ScheduleList() {
     try { const d = await listScheduleRuns(id); setExpandedRuns(prev => ({ ...prev, [id]: d.runs || [] })); }
     catch (err) { console.error('[ScheduleList] runs fallito:', err); }
   };
-
-  // ── Derived counts ───────────────────────────────────────────────────────
-  const enabledCount   = schedules.filter(s => s.schedule?.enabled).length;
+const enabledCount   = schedules.filter(s => s.schedule?.enabled).length;
   const failedCount    = schedules.filter(s => s.runtime?.status === 'failed').length;
   const runningCount   = schedules.filter(s => s.runtime?.status === 'running' || s.runtime?.status === 'queued').length;
   const orphanCount    = schedules.filter(s => s.runtime?.status === 'orphan').length;
@@ -345,8 +339,6 @@ function ScheduleList() {
     </div>
   );
 }
-
-// ── Schedule Card ─────────────────────────────────────────────────────────
 function ScheduleCard({ schedule, isRunning, runStartTime, logs, runs, runningManual, onToggle, onDelete, onRunNow, onToggleLogs, onToggleRuns, onEdit, onDownload, onDownloadRun, formatDate, formatCron, getElapsed }) {
   const isEnabled = schedule.schedule?.enabled;
   const isOrphan  = schedule.runtime?.status === 'orphan';
@@ -480,8 +472,6 @@ function ScheduleCard({ schedule, isRunning, runStartTime, logs, runs, runningMa
     </div>
   );
 }
-
-// ── Status bar ────────────────────────────────────────────────────────────
 function StatusBar({ schedule, isRunning, runStartTime, getElapsed }) {
   const runtime  = schedule.runtime;
   const status   = runtime?.status;

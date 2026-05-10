@@ -9,8 +9,6 @@ import http from './http';
 import { API_ENDPOINT } from './config';
 import { downloadBlob } from '../utils/downloadBlob';
 
-// ==================== CRUD ====================
-
 export const listSchedules = async (projectId = null) => {
   const params = projectId ? { project_id: projectId } : {};
   const res = await http.get('/schedules', { params });
@@ -37,8 +35,6 @@ export const deleteSchedule = async (scheduleId) => {
   return res.data;
 };
 
-// ==================== AZIONI ====================
-
 export const toggleSchedule = async (scheduleId, enabled) => {
   const res = await http.patch(`/schedules/${scheduleId}/toggle`, { enabled });
   return res.data;
@@ -49,8 +45,6 @@ export const runScheduleNow = async (scheduleId) => {
   return res.data;
 };
 
-// ==================== LOG ====================
-
 export const getScheduleLogs = async (scheduleId, page = 1, pageSize = 20, status = null) => {
   const params = { page, page_size: pageSize };
   if (status) params.status = status;
@@ -58,14 +52,10 @@ export const getScheduleLogs = async (scheduleId, page = 1, pageSize = 20, statu
   return res.data;
 };
 
-// ==================== SISTEMA ====================
-
 export const getBeatHealthcheck = async () => {
   const res = await http.get('/schedules/healthcheck');
   return res.data;
 };
-
-// ==================== OUTPUT / DOWNLOAD ====================
 
 export const getDownloadUrl = (scheduleId, run = null) => {
   const base = `${API_ENDPOINT}/schedules/${scheduleId}/download`;

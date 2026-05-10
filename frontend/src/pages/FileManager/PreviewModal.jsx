@@ -3,9 +3,6 @@
  * + columns dal backend), tabellare. Differente dal `PreviewModal`
  * generico delle pipeline (`components/modals/PreviewModal.jsx`):
  * questo e' specifico per il file source standalone.
- *
- * Estratto da FileManager.jsx (FE-PHASE1-CLOSURE-3) senza cambio
- * comportamentale.
  */
 
 import React from 'react';

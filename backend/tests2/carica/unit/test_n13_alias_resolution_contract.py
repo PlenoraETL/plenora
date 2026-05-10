@@ -1,7 +1,7 @@
 """
 Contract test N13 — risoluzione alias -> nome originale in dest_column.
 
-Scenario reale (pre-fix):
+Scenario reale (Previous behavior):
 """
 
 from __future__ import annotations

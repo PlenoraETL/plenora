@@ -1,7 +1,7 @@
 """
 Contract test N8 — apply_runs_retention invocato dopo close_run.
 
-Pre-fix: `apply_runs_retention()` in `intermediate/db.py:330` era definita
+Previous behavior: `apply_runs_retention()` in `intermediate/db.py:330` era definita
 """
 
 from __future__ import annotations

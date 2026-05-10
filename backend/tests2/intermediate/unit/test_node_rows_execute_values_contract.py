@@ -1,7 +1,7 @@
 """
 Contract test Bug #22 — `node_rows` batch insert via `execute_values`.
 
-Pre-fix: `cur.executemany(_SQL_INSERT_NODE_ROW, records)` mandava 500
+Previous behavior: `cur.executemany(_SQL_INSERT_NODE_ROW, records)` mandava 500
 """
 
 from __future__ import annotations
@@ -44,7 +44,7 @@ def _patched(idb):
         yield cur, ev_spy
 
 
-# A. write_node_snapshot_atomic (path Batch 1, preview_only)
+# A. write_node_snapshot_atomic (path current contract, preview_only)
 
 
 def test_snapshot_atomic_uses_execute_values_with_jsonb_template():
@@ -156,7 +156,7 @@ def test_insert_node_rows_uses_execute_values():
     assert len(ev_spy.call_args.args[2]) == 3
 
 
-# D. Records preservano shape pre-fix (jsonb-encodable)
+# D. Records preservano shape Previous behavior (jsonb-encodable)
 
 
 def test_records_have_5_tuple_with_jsonb_string_payload():

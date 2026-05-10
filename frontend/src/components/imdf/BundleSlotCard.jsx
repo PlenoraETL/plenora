@@ -9,9 +9,9 @@
  * fetch né scrive nello store. Il caller (ResultNode oggi, Publisher prima)
  * gestisce lo stato.
  *
- * Stili statici in `BundleSlotCard.css` co-locato
- * (FE-PHASE2-INLINE-STYLES-006). Le palette runtime (validation summary
- * passed/failed, isActive selection) restano inline via CSS vars locali.
+ * Stili statici in `BundleSlotCard.css` co-locato. Le palette runtime
+ * (validation summary passed/failed, isActive selection) restano inline
+ * via CSS vars locali.
  */
 import React from 'react';
 import './BundleSlotCard.css';

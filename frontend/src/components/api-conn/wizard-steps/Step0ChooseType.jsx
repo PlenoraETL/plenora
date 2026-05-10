@@ -4,9 +4,8 @@
  * Scelta tipo API (enricher / generator), categoria, tipo connessione
  * (manual / template / openapi / rest_file / datasource).
  *
- * Estratto in `FE-PHASE2-SPLIT-001B`. Presentational: riceve formData
- * e callback di update, nessun state interno, nessuna fetch, nessuna
- * chiamata API.
+ * Presentational: riceve formData e callback di update, nessun state
+ * interno, nessuna fetch, nessuna chiamata API.
  */
 import React from 'react';
 

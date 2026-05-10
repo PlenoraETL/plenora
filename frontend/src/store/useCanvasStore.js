@@ -36,10 +36,6 @@ const useCanvasStore = create(
 
       return {
 
-      // ─────────────────────────────────────────────
-      // STATE
-      // ─────────────────────────────────────────────
-
       nodes:     [],
       edges:     [],
       projectId: null,
@@ -123,10 +119,6 @@ const useCanvasStore = create(
        */
       editorActionsRef: { current: {} },
 
-      // ─────────────────────────────────────────────
-      // INIT — chiamato da useCanvasCore al mount
-      // ─────────────────────────────────────────────
-
       init: (projectId, mode) => set({ projectId, mode }, false, 'init'),
 
       /** Imposta la modalità sola lettura. Chiamata da useCanvasCore in base al ruolo. */
@@ -166,11 +158,7 @@ const useCanvasStore = create(
       /** Shortcut per leggere un'azione specifica (utile nei nodi) */
       getEditorAction: (name) => get().editorActionsRef.current[name],
 
-      // ─────────────────────────────────────────────
-      // REACTFLOW HANDLERS
       // Gestiscono drag, resize, selezione — delegano ad applyNodeChanges/applyEdgeChanges
-      // ─────────────────────────────────────────────
-
       onNodesChange: (changes) => {
         // In sola lettura accettiamo solo i changes innocui (select) per
         // permettere all'utente di selezionare i nodi e ispezionarli.
@@ -223,11 +211,8 @@ const useCanvasStore = create(
         );
       },
 
-      // ─────────────────────────────────────────────
       // SETTERS (per caricamento canvas da API e operazioni bulk)
       // Accettano valore diretto o funzione updater (come useState)
-      // ─────────────────────────────────────────────
-
       // setNodes / setEdges sono usate sia per init programmatico (load
       // canvas, propagazione colonne, schemas, validation styles) sia per
       // azioni utente (add nodo da pulsante, drag&drop). Distinguiamo le due
@@ -276,11 +261,8 @@ const useCanvasStore = create(
           'setEdges'
         ),
 
-      // ─────────────────────────────────────────────
       // NODE OPERATIONS
       // Usate direttamente dai componenti nodo via useCanvasStore(s => s.xxx)
-      // ─────────────────────────────────────────────
-
       /** Aggiorna i data di un nodo. Sostituisce onUpdate/onChange nei props. */
       updateNodeData: (nodeId, updates) => {
         if (get().isReadOnly) return;
@@ -415,10 +397,6 @@ const useCanvasStore = create(
         );
       },
 
-      // ─────────────────────────────────────────────
-      // SAVE
-      // ─────────────────────────────────────────────
-
       /**
        * Salvataggio silenzioso — serializza il canvas e lo invia al backend.
        * Usa il mode corrente per determinare il formato di serializzazione.
@@ -450,10 +428,6 @@ const useCanvasStore = create(
        * inutili finché l'utente non modifica davvero qualcosa.
        */
       markClean: () => set({ isDirty: false }, false, 'markClean'),
-
-      // ─────────────────────────────────────────────
-      // HELPERS (accesso sincrono allo state corrente)
-      // ─────────────────────────────────────────────
 
       /** Restituisce il nodo corrente per ID (lettura sincrona, non reattiva) */
       getNodeById: (nodeId) => get().nodes.find(n => n.id === nodeId),

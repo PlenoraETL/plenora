@@ -332,7 +332,6 @@ def test_extent_filled_from_bounds_when_valid(fake_client, fake_conn):
     """Bounds del gdf finiscono nell'`extent` del layer_def."""
     gdf = _make_polygon_gdf(rows=3)
     # Polygons sono [(i, 0), (i+1, 0), (i+1, 1), (i, 1)] per i in 0..2
-    # → xmin=0, ymin=0, xmax=3, ymax=1
 
     fake_client.add_layer_to_service(
         fake_conn,

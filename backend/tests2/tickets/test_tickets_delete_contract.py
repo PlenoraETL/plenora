@@ -1,4 +1,4 @@
-﻿"""
+"""
 Contract test — DELETE /api/tickets/{id}.
 
 Default = soft delete (set deleted_at, audit preservato).
@@ -84,7 +84,7 @@ def mock_file_service():
 def test_admin_soft_deletes_own_group_ticket(mock_tdb, mock_file_service):
     """F2-B3 (2026-04-24): DELETE /api/tickets/{id} risponde 204 No
     Content. Semantica soft/hard verificata via mock call (il body
-    {"ok": True, "hard": bool} esposto pre-fix e' rimosso)."""
+    {"ok": True, "hard": bool} esposto Previous behavior e' rimosso)."""
     client = _make_client(_user("admin", user_id="adm", group_id="g1"))
     response = client.delete("/api/tickets/t1")
     assert response.status_code == 204
@@ -173,7 +173,7 @@ def test_hard_delete_with_no_attachments_skips_cleanup(mock_tdb, mock_file_servi
 
 
 def test_hard_delete_db_returns_false_propagates_404(mock_tdb, mock_file_service):
-    """Race: ticket sparito tra get_ticket e delete → 404."""
+    """Race: ticket sparito tra get_ticket e delete ? 404."""
     mock_tdb.delete_ticket.return_value = False
     client = _make_client(_user("superadmin"))
     response = client.delete("/api/tickets/t1?hard=true")
@@ -207,7 +207,7 @@ def test_user_creator_cannot_delete_own_ticket(mock_tdb, mock_file_service):
 
 
 def test_user_other_cannot_delete(mock_tdb, mock_file_service):
-    """User u2 non vede ticket di u1 → 404."""
+    """User u2 non vede ticket di u1 ? 404."""
     mock_tdb.get_ticket.return_value = _ticket(group_id="g1", created_by="u1")
     client = _make_client(_user("user", user_id="u2", group_id="g1"))
     response = client.delete("/api/tickets/t1")

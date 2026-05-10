@@ -1,5 +1,5 @@
 """
-Smoke contract - STRUCT-001 Seam D-E: estrazione create_raw_from_upload.
+Smoke contract: estrazione create_raw_from_upload.
 
 Verifica le invarianti minime del refactor:
 """

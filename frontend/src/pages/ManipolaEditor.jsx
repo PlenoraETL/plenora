@@ -81,12 +81,10 @@ const ManipolaEditorContent = () => {
   const { screenToFlowPosition } = useReactFlow();
   const toast = useToast();
 
-  // ===== THEME =====
   const { theme, setTheme } = useTheme();
   const hexCanvasRef = useRef(null);
   useHexCanvas(hexCanvasRef);
 
-  // ===== CANVAS CORE =====
   const {
     nodes, edges, setNodes, setEdges, onNodesChange, onEdgesChange,
     nodesRef, edgesRef, updateNodeData, deleteNode,
@@ -94,10 +92,8 @@ const ManipolaEditorContent = () => {
     isReadOnly, readOnlyProps
   } = useCanvasCore(projectId, { mode: 'manipola' });
 
-  // ===== COLUMN PROPAGATION (specifico Manipola) =====
   const { propagateColumns } = useColumnPropagation(setNodes);
 
-  // ===== DATA LOADING (centralizzato) =====
   const {
     project, connections, loading, error: loadError,
     availableSources, availableFiles,
@@ -107,21 +103,17 @@ const ManipolaEditorContent = () => {
     sourceTypes: MANIPOLA_SOURCE_TYPES,
   });
 
-  // ===== STATE SPECIFICO MANIPOLA =====
   const [saving, setSaving] = useState(false);
 
-  // ===== SCHEMA INFERENCE (specifico Manipola) =====
   const { schemas, loading: schemasLoading, refreshSchemas } = useSchemaInference(projectId);
 
-  // ===== HOOKS COMUNI =====
   const preview   = usePreview(projectId, handleSaveQuiet);
   // I 3 throws fail-fast (canvas vuoto / Output mancante / sorgente mancante)
   // erano duplicati delle regole CANVAS_EMPTY / RESULT_NODE_MISSING /
   // RESULT_NO_SOURCE in `validateManipolaCanvas`. Il flow `ResultNode.handleExecute
   // WithValidation` esegue `runValidation()` PRIMA di chiamare `onExecute`:
   // se la validazione fallisce apre il modal e ritorna; quindi questo
-  // `onBeforeExecute` viene raggiunto solo a validation-passed e i throws
-  // erano dead code (FE-PHASE2-VALIDATION-002).
+  // `onBeforeExecute` viene raggiunto solo a validation-passed.
   const execution = useExecution(projectId, {
     // Arrow wrapper per evitare TDZ: `handleSaveCanvas` e' definito piu' in
     // basso e questa config viene letta sincrono al call site di useExecution.
@@ -146,9 +138,6 @@ const ManipolaEditorContent = () => {
     pollInterval: 1500
   });
 
-  // ===== EFFECTS =====
-
-  // ===== EFFECT: carica nodi nel canvas quando il progetto e pronto =====
   useEffect(() => {
     if (!project?.canvas?.nodes || loading) return;
 
@@ -227,8 +216,6 @@ const ManipolaEditorContent = () => {
     // (snapshot React aggiornato) per evitare il loop nodes->effect->setNodes.
   }, [edges, schemas, setNodes, edgesRef]);
 
-  // ===== NODE HANDLERS =====
-
   const handleUpdateProjectSource = useCallback((nodeId, projectSourceId) => {
     updateNodeData(nodeId, { source_project_id: projectSourceId });
     setTimeout(() => { handleSaveQuiet().then(() => refreshSchemas()); }, 100);
@@ -299,7 +286,6 @@ const ManipolaEditorContent = () => {
     useCanvasStore.getState().setConnections(connections);
   }, [connections]);
 
-  // ===== POST-VALIDATION NODE HIGHLIGHTS (FE-PHASE3-VALIDATION-UX-002) =====
   // Dopo che ResultNode esegue validation (manuale, execute, preview), lo store
   // contiene i nodeId con issue. Applichiamo un outline amber ai nodi coinvolti.
   const validationHighlights = useCanvasStore(s => s.validationHighlights);
@@ -323,15 +309,11 @@ const ManipolaEditorContent = () => {
     })));
   }, [validationHighlights, setNodes]);
 
-  // ===== SAVE =====
-
   const handleSaveCanvas = useCallback(async () => {
     try { setSaving(true); await handleSaveQuiet(); }
     catch (err) { console.error('[ManipolaEditor] Errore salvataggio:', err); toast.error('Errore durante il salvataggio'); }
     finally { setSaving(false); }
   }, [handleSaveQuiet]);
-
-  // ===== EDGE HANDLERS =====
 
   const onConnect = useCallback((params) => {
     setEdges(eds => {
@@ -346,8 +328,6 @@ const ManipolaEditorContent = () => {
     setEdges(eds => eds.filter(e => e.id !== edge.id));
     setTimeout(() => { propagateColumns(nodesRef.current, edgesRef.current); handleSaveQuiet(); }, 50);
   }, [setEdges, propagateColumns, handleSaveQuiet]);
-
-  // ===== ADD NODE HANDLERS =====
 
   const getPos = () => getViewportCenter({ screenToFlowPosition });
 
@@ -410,8 +390,6 @@ const ManipolaEditorContent = () => {
       markerEnd: { type: MarkerType.ArrowClosed, width: 20, height: 20, color: '#7c3aed' }, data: {} }));
   }, [setNodes, setEdges]);
 
-  // ===== DRAG & DROP =====
-
   const onDragStart = (event, type, data) => {
     event.dataTransfer.setData('application/reactflow', type);
     event.dataTransfer.setData('itemData', JSON.stringify(data));
@@ -448,13 +426,9 @@ const ManipolaEditorContent = () => {
     }
   }, [screenToFlowPosition, setNodes, handleUpdateProjectSource, handleUpdateProjectSourceColumns, handleUpdateFileSourceColumns, refreshSchemas, handleSaveQuiet]);
 
-  // ===== RENDER =====
-
   const handleBack = () => navigate('/');
   const hasResultNode  = nodes.some(n => n.type === 'result');
   const hasCaricanNode = nodes.some(n => n.type === 'carica');
-
-  // Guard branches gestiti da EditorShell (FE-SPLIT-004).
 
   // beforeCanvas slot: banner accessibilita' nodi cross-tenant.
   const accessDeniedBanner = <AccessDeniedBanner nodes={nodes} />;

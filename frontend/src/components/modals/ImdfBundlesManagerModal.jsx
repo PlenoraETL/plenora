@@ -6,8 +6,7 @@
  * Non fa fetch autonomo: riceve `bundles` dal parent e invoca callback
  * `onSelect` / `onDelete` / `onClose`.
  *
- * Tema scuro cyan: usa lo shell condiviso `imdf-modal.css`
- * (FE-PHASE2-IMDF-MODAL-SHELL-001).
+ * Tema scuro cyan: usa lo shell condiviso `imdf-modal.css`.
  */
 import React, { useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';

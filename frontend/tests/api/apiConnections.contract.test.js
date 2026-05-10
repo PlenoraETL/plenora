@@ -64,7 +64,6 @@ describe('apiConnections api contract', () => {
     );
   });
 
-  // ─── C3.2 Phase 4: CRUD + test endpoints + fetch-openapi-schema ──────────
   // Le funzioni qui sotto erano definite come shadow inline in
   // ApiConnectionManager.jsx / OpenAPIImportModal.jsx prima di C3.2.
 

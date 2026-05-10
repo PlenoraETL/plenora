@@ -22,7 +22,7 @@ def _legacy_op_geo_clean_topology(
     df, geom_column, snap_tolerance=0.001,
     remove_overlaps=True, fill_gaps=True,
 ):
-    """Copia verbatim dell'impl pre-Batch-3B: O(n^2) unary_union
+    """Copia verbatim dell'impl previous implementation: O(n^2) unary_union
     dentro il for-loop di remove_overlaps."""
     try:
         from shapely.validation import make_valid as _make_valid

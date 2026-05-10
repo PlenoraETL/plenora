@@ -327,9 +327,9 @@ class TestTestApiConnectionExceptions:
         assert "Errore di connessione" in result["error"]
 
     def test_unknown_exception_returns_safe_message(self, tac_env):
-        """Fix-D safety-net #5 ramo Exception: eccezioni inattese
+        """Safety-net contract ramo Exception: eccezioni inattese
         (RuntimeError, TypeError, bug interno) diventano un messaggio
-        safe generico nella response FE. Pre-fix, `str(e)` leakava
+        safe generico nella response FE. Previous behavior, `str(e)` leakava
         internals nel JSON visibile al form di setup -- oggi il
         dettaglio resta solo nel log.
         """
@@ -346,14 +346,14 @@ class TestTestApiConnectionExceptions:
         )
 
     def test_unknown_exception_logs_with_exc_info_true(self, tac_env):
-        """Fix-D safety-net #5: `logger.error(..., exc_info=True)` e'
-        stato aggiunto in questo commit (pre-fix il ramo Exception
+        """Safety-net contract: `logger.error(..., exc_info=True)` e'
+        stato aggiunto in questo commit (Previous behavior il ramo Exception
         non aveva alcun log: il dettaglio tecnico si perdeva
         silenziosamente). Lock sul contratto di osservabilita':
         senza `exc_info=True` la diagnostica dei bug interni
         sarebbe impossibile.
 
-        Modernization B3-B.2a — behavior contract vs source-location contract
+        current contract B3-B.2a — behavior contract vs source-location contract
         ====================================================================
         Pre-B3-B.2a il test patchava
         `patch("app.core.arricchisci.api_connector.logger")` per
@@ -400,7 +400,7 @@ class TestTestApiConnectionExceptions:
         }
 
         # Cattura ERROR sul logger canonico per nome (vedi docstring
-        # per razionale modernization). Imposto setLevel(ERROR) per
+        # per razionale current contract). Imposto setLevel(ERROR) per
         # filtrare emit di altri livelli + `exc_info=True` viene
         # registrato nel `LogRecord.exc_info` field.
         captured_records: list[logging.LogRecord] = []

@@ -16,8 +16,6 @@ import ModalWrapper from '../common/ModalWrapper';
 import { listRuns, getNodeData, compareRunsL1, compareRunsL2, pinRun } from '../../api/runs';
 import './RunHistoryModal.css';
 
-// ─── helpers ─────────────────────────────────────────────────────────────────
-
 /**
  * Mappa un errore di /compare/l2 al messaggio user-facing in base al
  * `detail.reason` ritornato dal backend (intermediate/router.py).
@@ -72,8 +70,6 @@ const StatusBadge = ({ status }) => {
   return <span className={`rh-badge ${cls}`}>{label}</span>;
 };
 
-// ─── component ────────────────────────────────────────────────────────────────
-
 export default function RunHistoryModal({ isOpen, onClose, canvasId, nodeId, nodeLabel }) {
   const params = useParams();
   const effectiveCanvasId = canvasId || params.projectId || params.id || params.canvasId;
@@ -99,10 +95,7 @@ export default function RunHistoryModal({ isOpen, onClose, canvasId, nodeId, nod
 
   // Tab area principale
   const [activeTab, setActiveTab] = useState('data'); // 'data' | 'compare'
-
-  // ── carica runs ────────────────────────────────────────────────────────────
-
-  const loadRuns = useCallback(async () => {
+const loadRuns = useCallback(async () => {
     if (!effectiveCanvasId) return;
     setRunsLoading(true);
     setRunsError(null);
@@ -131,10 +124,7 @@ export default function RunHistoryModal({ isOpen, onClose, canvasId, nodeId, nod
       setCompareL2(null);
     }
   }, [isOpen, canvasId]);
-
-  // ── carica dati nodo quando cambia selectedA ───────────────────────────────
-
-  const [nodeDataError, setNodeDataError] = useState(null);
+const [nodeDataError, setNodeDataError] = useState(null);
 
   useEffect(() => {
     if (!selectedA || !nodeId) return;
@@ -151,10 +141,7 @@ export default function RunHistoryModal({ isOpen, onClose, canvasId, nodeId, nod
       })
       .finally(() => setNodeDataLoading(false));
   }, [selectedA, nodeId]);
-
-  // ── confronto quando entrambe le run sono selezionate ─────────────────────
-
-  useEffect(() => {
+useEffect(() => {
     if (!compareMode || !selectedA || !selectedB) return;
     setCompareLoading(true);
     setCompareError(null);
@@ -181,10 +168,7 @@ export default function RunHistoryModal({ isOpen, onClose, canvasId, nodeId, nod
       })
       .finally(() => setCompareLoading(false));
   }, [compareMode, selectedA, selectedB, nodeId]);
-
-  // ── handlers ───────────────────────────────────────────────────────────────
-
-  const handleSelectRun = (run) => {
+const handleSelectRun = (run) => {
     if (!compareMode) {
       setSelectedA(run);
       setActiveTab('data');
@@ -222,10 +206,7 @@ export default function RunHistoryModal({ isOpen, onClose, canvasId, nodeId, nod
       // silenzioso
     }
   };
-
-  // ── render ─────────────────────────────────────────────────────────────────
-
-  const colKeys = nodeData?.rows?.length > 0
+const colKeys = nodeData?.rows?.length > 0
     ? Object.keys(nodeData.rows[0]).filter(k => k !== '_row_hash')
     : [];
 
@@ -239,9 +220,7 @@ export default function RunHistoryModal({ isOpen, onClose, canvasId, nodeId, nod
       closeOnOverlay={true}
     >
       <div className="rh-layout">
-
-        {/* ── SIDEBAR SINISTRA: lista run ──────────────────────────────── */}
-        <div className="rh-sidebar">
+<div className="rh-sidebar">
           <div className="rh-sidebar__header">
             <span className="rh-sidebar__count">{runs.length} run</span>
             <button
@@ -299,9 +278,7 @@ export default function RunHistoryModal({ isOpen, onClose, canvasId, nodeId, nod
             )}
           </div>
         </div>
-
-        {/* ── AREA PRINCIPALE ─────────────────────────────────────────── */}
-        <div className="rh-main">
+<div className="rh-main">
 
           {/* Tab bar */}
           <div className="rh-tabs">

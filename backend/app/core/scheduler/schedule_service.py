@@ -14,12 +14,6 @@ from app.config import settings
 from app.utils.logger import get_logger
 
 
-# FUNZIONE PURA — detect_missed_run (C3 fix 3
-# Estratta come funzione a livello-modulo (non metodo di ScheduleService
-# per essere banalmente testabile e riusabile dal beat scheduler senza
-# dover istanziare un service completo. Zero side-effect, solo logica
-
-
 def detect_missed_run(
     cron_expression: str,
     last_run: Optional[datetime],
@@ -95,17 +89,8 @@ class ScheduleService:
 
     DEFAULT_GROUP = settings.DEFAULT_GROUP
 
-    # LOCK PER-SCHEDULE — Race condition guard
-    # mark_as_orphan, set_runtime_status e update_runtime fanno tutti
-    # read-modify-write sul blob `config` (lettura piena, modifica in memoria
-    # write piena). Senza lock, due thread che operano sullo stesso schedule
-    # possono perdere update (es. UI toggle disable mentre Celery fa update_runtime
-    # → la modifica dello UI viene sovrascritta
-    # I lock sono CLASS-LEVEL: condivisi fra tutte le istanze di ScheduleService
-    # nello stesso processo. Cross-process (es. multi-worker Celery) NON copre
-    # ma copre il caso comune FastAPI threads + un worker Celery
-    # RLock per permettere call annidate dallo stesso thread (es. mark_as_orphan
-    # chiamato da check_orphans
+    # Process-local guard for read-modify-write updates on the JSON config blob.
+    # Cross-process safety is handled by DB boundaries, not this RLock.
     _schedule_locks_lock = threading.Lock()
     _schedule_locks: Dict[str, threading.RLock] = {}
 
@@ -151,8 +136,6 @@ class ScheduleService:
             "config": config.model_dump(mode='json'),
         }
 
-    # LETTURA
-
     def get_schedule(self, schedule_id: str) -> Optional[ScheduleConfig]:
         """Carica un singolo schedule per ID."""
         row = db.get_schedule_row(schedule_id)
@@ -177,8 +160,6 @@ class ScheduleService:
 
     def schedule_exists(self, schedule_id: str) -> bool:
         return db.get_schedule_row(schedule_id) is not None
-
-    # CREAZIONE
 
     def create_schedule(self, schedule_data: ScheduleCreate,
                         project_name: str = "", project_type: str = "estrai",
@@ -298,7 +279,7 @@ class ScheduleService:
         enabled: bool,
         grace_hours: int = 24,
     ) -> Optional[ScheduleConfig]:
-        """Aggiorna il catchup config di uno schedule (C3 fix 3).
+        """Aggiorna il catchup config di uno schedule.
 
         Ritorna None se lo schedule non esiste.
         """

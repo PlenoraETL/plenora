@@ -39,7 +39,7 @@ def _resolve_aliases_in_mappings(
     available_cols: Optional[List[Dict[str, Any]]],
     project_id: str = "",
 ) -> None:
-    """N13: corregge `dest_column` quando il DataFrame usa alias.
+    """Corregge `dest_column` quando il DataFrame usa alias.
 
     Contesto: `availableColumns` del nodo CARICA e' la lista delle colonne
     del Result node upstream, ciascuna con {name, alias, type}. Se una
@@ -140,15 +140,13 @@ class CaricaExecutor:
             run_id: ID logico della run (opzionale). Se passato e la run
                 risulta gia' completata, l'executor corto-circuita con
                 WriteStatus.SKIPPED_IDEMPOTENT senza toccare il DB.
-                Self-defense layer (N15): il task async ha gia' il check
-                all'ingresso (evita open_run/df load), questo guard
-                protegge i sync caller (scheduler, CLI futuri).
+                Il task async ha gia' il check all'ingresso; questo guard
+                protegge i sync caller.
                 Fail-open: eccezioni nel check NON bloccano il flusso.
 
         Returns:
             WriteResult con esito dell'operazione.
         """
-        # N15: idempotency guard (self-defense per sync caller
         if run_id:
             try:
                 if is_already_completed(run_id):
@@ -174,7 +172,6 @@ class CaricaExecutor:
 
         logger.info(f"Avvio CARICA: {project_id}", op="execute", project_id=project_id)
 
-        # 1. Parse configurazione dal nodo canvas
         try:
             config = WriteConfig.from_node_data(node_data)
         except Exception as e:
@@ -185,7 +182,6 @@ class CaricaExecutor:
                 total_rows=len(df),
             )
 
-        # 2. Recupera connessione database
         try:
             connection = self._get_connection(config.connection_id)
             db_type = connection.get("type", "postgres")
@@ -197,7 +193,6 @@ class CaricaExecutor:
                 total_rows=len(df),
             )
 
-        # 3. Crea engine SQLAlchemy
         try:
             engine = self._create_engine(connection)
         except Exception as e:
@@ -208,7 +203,6 @@ class CaricaExecutor:
                 total_rows=len(df),
             )
 
-        # 4. Auto-mapping colonne se non configurate
         if not config.column_mappings:
             mapper = ColumnMapper(db_type)
             canvas_types = node_data.get('canvas_types', {})
@@ -218,17 +212,12 @@ class CaricaExecutor:
                 srid=config.geometry_srid,
             )
 
-        # N13: resolve alias -> original name in dest_column
-        # Applicato a ENTRAMBI i path (auto-map e mapping esplicito dal canvas
-        # in entrambi i casi la tabella destinazione ha il nome originale
-        # mai l'alias. Fix idempotente se dest_column e' gia' corretto
         _resolve_aliases_in_mappings(
             config.column_mappings,
             node_data.get('availableColumns', []),
             project_id=project_id,
         )
 
-        # 5. Crea writer e valida
         writer = DatabaseWriter(
             config=config,
             engine=engine,
@@ -245,10 +234,8 @@ class CaricaExecutor:
                 total_rows=len(df),
             )
 
-        # 6. Esegui scrittura
         result = writer.write(df)
 
-        # 7. Salva audit
         self._save_audit(result, config, project_id, triggered_by)
 
         logger.info(
@@ -258,8 +245,6 @@ class CaricaExecutor:
         )
 
         return result
-
-    # HELPER INTERNI
 
     def _get_connection(self, connection_id: str) -> Dict[str, Any]:
         """Recupera la configurazione di connessione."""
@@ -273,7 +258,6 @@ class CaricaExecutor:
                 return conn
             raise ValueError(f"Connessione '{connection_id}' non trovata")
 
-        # Fallback: leggi dal DB PostgreSQL con decriptazione password
         import app.db.pg_connection as db_svc
         row = db_svc.fetchone("SELECT * FROM connections WHERE id = %s", (connection_id,))
         if row:
@@ -293,12 +277,10 @@ class CaricaExecutor:
         if self.engine_factory:
             return self.engine_factory.create_engine(connection)
 
-        # Fallback: usa DefaultEngineFactory da query_executor
         try:
             factory = DefaultEngineFactory()
             return factory.create_engine(_dict_to_conn_obj(connection))
         except ImportError:
-            # Costruisci connection string manualmente
             return self._build_engine_manual(connection)
 
     def _build_engine_manual(self, conn: Dict[str, Any]):

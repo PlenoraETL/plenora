@@ -130,7 +130,7 @@ def test_helper_service_returns_false_raises_no_retry(fast_backoff, mock_logger)
 
 
 def test_all_backoff_values_used_on_full_failure(fast_backoff, mock_logger, monkeypatch):
-    """Regression: pre-fix c'era un off-by-one che faceva scartare
+    """Regression: Previous behavior c'era un off-by-one che faceva scartare
     l'ultimo valore del backoff array."""
     # Ripristina i backoff reali per il test
     import app.shared.columns_metadata as _cm

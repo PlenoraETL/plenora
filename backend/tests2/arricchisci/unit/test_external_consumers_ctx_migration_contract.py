@@ -43,7 +43,7 @@ def _scan_assign_targets(src: str) -> list:
             if tgt.attr not in forbidden_attrs:
                 continue
             # Check if the receiver is `api_connection_service`
-            # (or any local that we want to ban). For Phase 3 we
+            # (or any local that we want to ban). For typed context closure we
             # ban ALL setattr on `_current_group_id` /
             # `_preview_limit` in this file - the typed context
             # boundary is the only allowed path.
@@ -56,7 +56,7 @@ def test_enrichment_task_no_direct_singleton_mutation():
     `api_connection_service._current_group_id = ...` o
     `_preview_limit = ...` come Assign target.
 
-    Phase 3 chiusura: il typed `ArricchisciExecutionContext`
+    typed context closure chiusura: il typed `ArricchisciExecutionContext`
     porta esplicitamente il tenant binding.
     """
     src = _ENRICHMENT_TASK_PY.read_text(encoding="utf-8")
@@ -64,7 +64,7 @@ def test_enrichment_task_no_direct_singleton_mutation():
     assert not violations, (
         f"REGRESSIONE BE-GO-READY-TRANSFORMATION-ENGINE-020: "
         f"`enrichment_task.py` contiene ancora direct mutation di "
-        f"singleton state (Phase 3 dovrebbe averli sostituiti col "
+        f"singleton state (typed context closure dovrebbe averli sostituiti col "
         f"typed context): {violations}"
     )
 
@@ -123,7 +123,7 @@ def test_enrichment_task_threads_ctx_to_mixin_callsites():
         )
         for lineno, has_ctx in calls:
             assert has_ctx, (
-                f"REGRESSIONE Phase 3: chiamata a `{name}(...)` in "
+                f"REGRESSIONE typed context closure: chiamata a `{name}(...)` in "
                 f"enrichment_task.py:{lineno} non passa `ctx=...`. "
                 f"Senza il kwarg, il reader non usa il typed boundary."
             )

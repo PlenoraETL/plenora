@@ -44,7 +44,7 @@ def get_upstream_run_context(
     *,
     default_retention_n: int,
 ) -> ProjectExecutionContext:
-    """Return context for cascade upstream runs with legacy defaults."""
+    """Return context for cascade upstream runs with configured defaults."""
     context = get_project_execution_context(project_id)
     if context is None:
         return ProjectExecutionContext(

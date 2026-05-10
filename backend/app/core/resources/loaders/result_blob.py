@@ -219,8 +219,8 @@ def _dispatch_by_id(
     logger = get_logger(__name__)
     _t0 = time.monotonic()
     # Resolve once and pass through; the SQL preflight + the
-    # downstream cap enforcement MUST agree on the same cap value
-    # for a given dispatch (a runtime env mutation between two
+    # downstream cap enforcement MUST agree on the same cap value per
+    # dispatch. A runtime env mutation between two
     # `resolve_resource_max_bytes` calls would otherwise create a
     # tiny window of disagreement that would be hard to reason about
     max_bytes = resolve_resource_max_bytes()

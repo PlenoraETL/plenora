@@ -20,20 +20,14 @@ from celery.utils.log import get_logger
 
 logger = get_logger(__name__)
 
-# Intervallo minimo tra due check (secondi
 DEFAULT_MAX_INTERVAL = 60.0
 
-# Leader election: chiave Redis, TTL del lock, ID processo corrente
 # TTL=120s + refresh a ogni tick (~60s) → margine 2x per sopravvivere
 # a un tick lento o a un transient di rete senza perdere leadership
 _LEADER_LOCK_KEY = "scheduler:beat:leader"
 _LEADER_LOCK_TTL_SECONDS = 120
 
-# Telemetria leader transitions (C3 round 4): counter per-type + stato
-# attuale pubblicato su Redis per osservabilita' cross-processo. Il beat
-# gira in processo separato dalla FastAPI → no memoria condivisa per
-# metriche prometheus in-process, uso Redis come backbone. Transition
-# types: acquired / lost / released / standby / degraded_open
+# Beat is a separate process, so leader transition telemetry uses Redis.
 _LEADER_METRICS_HASH = "scheduler:beat:leader:transitions"
 _LEADER_METRICS_CURRENT_ID = "scheduler:beat:leader:current_leader_id"
 _LEADER_METRICS_LAST_TRANSITION_AT = "scheduler:beat:leader:last_transition_at"
@@ -55,10 +49,6 @@ class PlenoraBeatScheduler(Scheduler):
 
     def __init__(self, *args: object, **kwargs: object) -> None:
         self._db_loaded = False
-        # Leader election state. `_leader_id` identifica questa istanza
-        # all'interno del cluster (pid@hostname). `_is_leader` tracciato
-        # per loggare le transizioni. `_redis_client` lazy — inizializzato
-        # al primo tick via _get_redis
         self._leader_id = f"{os.getpid()}@{socket.gethostname()}"
         self._is_leader = False
         self._redis_client = None
@@ -67,8 +57,6 @@ class PlenoraBeatScheduler(Scheduler):
             f"PlenoraBeatScheduler avviato (schedule da Postgres, "
             f"broker Redis, leader_id={self._leader_id})"
         )
-
-    # Leader election via Redis SETNX
 
     def _get_redis(self) -> Optional[object]:
         """Lazy init del client Redis. Ritorna None se non raggiungibile
@@ -79,9 +67,6 @@ class PlenoraBeatScheduler(Scheduler):
             import redis
             from app.config import settings
             client = redis.Redis.from_url(settings.CELERY_BROKER_URL)
-            # Ping per verificare che sia raggiungibile: se fallisce
-            # trattiamo Redis come down invece di avere eccezioni
-            # random al primo set
             client.ping()
             self._redis_client = client
             return client
@@ -90,7 +75,7 @@ class PlenoraBeatScheduler(Scheduler):
             return None
 
     def _record_leader_transition(self, transition_type: str) -> None:
-        """Telemetria best-effort delle transizioni leader (C3 round 4).
+        """Telemetria best-effort delle transizioni leader.
 
         Scrive su Redis:
         - HINCRBY sulla hash counter per `transition_type`
@@ -113,7 +98,6 @@ class PlenoraBeatScheduler(Scheduler):
             if transition_type in ("acquired", "degraded_open"):
                 client.set(_LEADER_METRICS_CURRENT_ID, self._leader_id)
             elif transition_type in ("lost", "released"):
-                # Clear current quando lasciamo la leadership
                 client.delete(_LEADER_METRICS_CURRENT_ID)
         except Exception as e:
             logger.warning(
@@ -133,7 +117,7 @@ class PlenoraBeatScheduler(Scheduler):
         Degraded mode (Redis unavailable o errore durante acquire):
         - Default **fail-closed**: standby, `return False`. Evita che
           due beat diventino entrambi leader durante un flap Redis
-          riaprendo il doppio enqueue (regressione di C3 fix 1).
+          riaprendo il doppio enqueue.
         - Con `SCHEDULE_BEAT_LEADER_FAIL_OPEN=True`: comportamento
           legacy (assumi di essere leader single-instance). Utile per
           deployment mono-host dove nessun altro beat gira mai.
@@ -269,8 +253,6 @@ class PlenoraBeatScheduler(Scheduler):
             return super().tick(event_t=event_t, **kwargs)
         return super().tick(**kwargs)
 
-    # Catchup dei missed run (C3 fix 3
-
     # Cap anti-runaway: se uno schedule emette piu' di N catchup nei
     # `_CATCHUP_RUNAWAY_WINDOW_MIN` minuti precedenti, il beat skippa
     # ulteriori emit + logga WARNING. Protegge da loop dovuti a bug in
@@ -342,9 +324,6 @@ class PlenoraBeatScheduler(Scheduler):
                     )
                     continue
 
-                # Dedupe: se lo stesso scheduled_for e' stato gia' emesso
-                # nelle ultime N ore, il task precedente e' probabilmente
-                # in volo o in coda — non ri-emettiamo un duplicato
                 if self._catchup_already_emitted_recently(sid, expected_last, now):
                     logger.info(
                         f"[CATCHUP] Skip re-emit per schedule={sid} "
@@ -381,11 +360,8 @@ class PlenoraBeatScheduler(Scheduler):
         lo stesso (schedule_id, scheduled_for) emessa nelle ultime
         _CATCHUP_DEDUPE_WINDOW_HOURS ore.
 
-        Dedupe window necessario perche' non aggiorniamo piu' last_run
-        al momento dell'emit (fix 2 del C3 follow-up): senza questo
-        check, se un task catchup e' ancora in coda Celery quando
-        arriva il tick successivo, detect_missed_run vedrebbe ancora
-        il missed e ri-emetterebbe un duplicato.
+        Dedupe window necessario perche' last_run viene aggiornato dal task
+        completato, non al momento dell'emit.
 
         Degraded: in caso di errore DB restituisce False (preferiamo
         un eventuale duplicato al drop di un catchup legittimo).
@@ -443,7 +419,6 @@ class PlenoraBeatScheduler(Scheduler):
             },
         )
 
-        # C3 follow-up fix 2: NON aggiorniamo last_run qui
         # Aggiornare last_run all'emit significa: se il task fallisce
         # o crasha prima del completamento, al tick successivo
         # detect_missed_run non vede piu' il missed (dato che last_run
@@ -454,13 +429,8 @@ class PlenoraBeatScheduler(Scheduler):
         # _catchup_already_emitted_recently sopra, che legge la
         # history dell'audit
 
-        # intent: optional feature beat-safe / outcome: fail-open con
-        # diagnostica elevata. Il tick beat continua (nessuna propagazione
-        # — romperebbe altri catchup dello stesso tick), ma il fallimento
-        # e' loggato a severity CRASH per essere captato da alerting
-        # se l'audit history resta incompleta, il prossimo tick potrebbe
-        # ri-emettere il catchup duplicato (dedupe history-based non
-        # trovera' la riga pertinente
+        # Audit is fail-open for the tick; failure can cause a duplicate
+        # catchup because history-based dedupe will miss this emit.
         try:
             execute(
                 "INSERT INTO schedule_catchup_history "
@@ -745,9 +715,6 @@ class PlenoraBeatScheduler(Scheduler):
             temp_dir = _Path(settings.DATA_DIR) / "temp"
             if not temp_dir.exists():
                 return
-            # BE-CONFIG-001B: TTL temp orfani migrato a Settings (default
-            # tipato 24h in `Settings.DEFAULTS["TEMP_ORPHAN_CLEANUP_HOURS"]`
-            # Override env continua a funzionare via type coercion `int`
             get_setting = getattr(settings, "get", None)
             if callable(get_setting):
                 raw_ttl_hours = settings.get("TEMP_ORPHAN_CLEANUP_HOURS")
@@ -1386,13 +1353,9 @@ class PlenoraBeatScheduler(Scheduler):
                     ui_lost_count, len(ui_rows),
                 )
 
-        # operational guardrails
         # Eseguiti DOPO la passa di reconcile per non interferire con il
         # set di righe lette da `fetch_due_pending_deletes`. Entrambi
         # best-effort: errori loggati, il tick non crasha
-        # 1. Summary log: count righe `pending`/`lost` per (state,domain
-        # Lascia traccia osservabile per ops anche quando non c'e'
-        # lavoro nel
         try:
             counts = _recon.count_active_by_state_domain()
             if counts:
@@ -1414,9 +1377,6 @@ class PlenoraBeatScheduler(Scheduler):
                 exc_info=True,
             )
 
-        # 2. Prune dei terminali `done`/`orphan_deleted` oltre la
-        # retention window. Boundary helper applica `LIMIT` server
-        # side; qui il caller decide cap + cutoff
         retention_days = _read_int(
             "STORAGE_RECONCILE_TERMINAL_RETENTION_DAYS", 30,
         )

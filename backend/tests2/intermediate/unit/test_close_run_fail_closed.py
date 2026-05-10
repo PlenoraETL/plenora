@@ -1,7 +1,7 @@
 """
-[phase-2-err][batch8] C6 — close_run re-raise dopo nested cleanup.
+C6 — close_run re-raise dopo nested cleanup.
 
-Audit Batch 8 §3.1 S3 / fix F3: `intermediate/writer.py:close_run` pre-fix
+Audit finding: `intermediate/writer.py:close_run` Previous behavior
 """
 
 from __future__ import annotations
@@ -59,7 +59,6 @@ def test_close_run_primary_fail_with_fallback_ok_raises():
 
     def update_side_effect(*args, **kwargs):
         # 1a chiamata (primary con status="completed"|"failed" dal success flag)
-        # → raise. 2a chiamata (fallback con solo status="failed") → ok.
         if kwargs.get("input_hash") is not None:
             raise primary_error
         return None
@@ -133,7 +132,7 @@ def test_close_run_primary_fail_and_fallback_fail_still_raises():
 def test_close_run_logs_crash_with_exc_info_on_outer_fail():
     """Su outer fail, verifica `logger.error('[CRASH] Errore chiusura run...',
     exc_info=True)` prima del raise. Prefix cambiato da [GESTITO] a [CRASH]
-    per coerenza col pattern resource-guard-con-raise (Batch 8 C5)."""
+    per coerenza col pattern resource-guard-con-raise (current contract C5)."""
     from app.core.intermediate import writer as w
 
     with patch.object(

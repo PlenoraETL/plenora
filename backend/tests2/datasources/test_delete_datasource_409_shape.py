@@ -1,7 +1,7 @@
 """
 Contract test per shape 409 canonica su DELETE /api/datasources/{id}.
 
-Invariante blindato (Batch Fix 6.1 — error-handling-governance):
+Invariante blindato (— error-handling-governance):
 """
 
 from __future__ import annotations
@@ -59,7 +59,7 @@ def test_delete_datasource_409_shape_has_canonical_dependencies_field(client, mo
     monkeypatch.setattr(
         ds_router_module,
         "_find_projects_using_datasource",
-        # PR-δ: il helper ora include `group_id` nelle row per consentire
+        # hidden-count contract: il helper ora include `group_id` nelle row per consentire
         # filtro cross-tenant a valle. Per non rompere lo shape test,
         # entrambi i progetti sono dello stesso gruppo del current_user.
         lambda ds_id: [

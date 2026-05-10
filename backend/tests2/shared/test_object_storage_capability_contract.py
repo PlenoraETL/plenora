@@ -1,5 +1,5 @@
 """
-Contract test Phase 6 Batch 1.5 — object storage capability globale.
+Contract test Current contract
 
 Verifica:
 """

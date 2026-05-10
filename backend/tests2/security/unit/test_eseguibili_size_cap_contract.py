@@ -1,5 +1,5 @@
 """
-Contract test — size cap upload eseguibili (B1 Phase 4).
+Contract test — size cap upload eseguibili (B1 current contract).
 
 Verifica che l'endpoint `POST /api/eseguibili/{id}/analyze-upload` rifiuti
 """
@@ -127,5 +127,5 @@ def test_eseguibili_router_calls_size_guard_before_read():
 
     assert _walk(code), (
         "analyze_upload non riferisce enforce_upload_size_limit (size cap "
-        "pre-read e' il contratto di sicurezza B1 Phase 4)."
+        "pre-read e' il contratto di sicurezza B1 current contract)."
     )

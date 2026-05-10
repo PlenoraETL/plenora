@@ -1,5 +1,5 @@
 /**
- * Contract test — R-25 PR-B5: ExecutionModal pre-launch toggle staff-only.
+ * Contract tests for ExecutionModal staff-only pre-launch toggles.
  *
  * Invarianti:
  *  1. Senza awaitingLaunch+onLaunch, il modal NON mostra il config step
@@ -36,7 +36,7 @@ function renderModal(props = {}) {
 }
 
 
-describe('ExecutionModal — config step pre-launch (R-25 PR-B5)', () => {
+describe('ExecutionModal config step pre-launch', () => {
   beforeEach(() => { vi.clearAllMocks(); });
 
   it('back-compat: senza awaitingLaunch+onLaunch nessun config step', () => {

@@ -47,9 +47,7 @@ import './DataSourceNode.css';
 const DataSourceNode = memo(({ id, data }) => {
   const updateNodeData = useCanvasStore(s => s.updateNodeData);
   const deleteNode     = useCanvasStore(s => s.deleteNode);
-
-  // ── Stato locale ───────────────────────────────────────────────────────
-  const [datasources, setDatasources]         = useState([]);
+const [datasources, setDatasources]         = useState([]);
   const [loadingDs, setLoadingDs]             = useState(false);
   const [browserFiles, setBrowserFiles]       = useState([]);
   const [browserPath, setBrowserPath]         = useState('');
@@ -66,9 +64,7 @@ const DataSourceNode = memo(({ id, data }) => {
   const dsId         = data.datasource_id || '';
   const fileMode     = data.file_mode || 'fixed';
   const dynamicRule  = data.dynamic_rule || 'latest';
-
-  // ── Carica lista datasources al mount ─────────────────────────────────
-  useEffect(() => {
+useEffect(() => {
     const load = async () => {
       setLoadingDs(true);
       try {
@@ -79,12 +75,8 @@ const DataSourceNode = memo(({ id, data }) => {
     };
     load();
   }, []);
-
-  // ── Helpers update ─────────────────────────────────────────────────────
-  const upd = useCallback((fields) => updateNodeData(id, fields), [id, updateNodeData]);
-
-  // ── Browser file ────────────────────────────────────────────────────────
-  const openBrowser = useCallback(async (path = '') => {
+const upd = useCallback((fields) => updateNodeData(id, fields), [id, updateNodeData]);
+const openBrowser = useCallback(async (path = '') => {
     if (!dsId) return;
     setShowBrowser(true);
     setBrowserPath(path);
@@ -110,9 +102,7 @@ const DataSourceNode = memo(({ id, data }) => {
     // Dopo selezione file chiedi schema al backend
     fetchSchema(file.path);
   }, [upd, openBrowser]);
-
-  // ── Fetch schema colonne (chiamata backend MANIPOLA parse preview) ─────
-  const fetchSchema = useCallback(async (filePath) => {
+const fetchSchema = useCallback(async (filePath) => {
     if (!dsId || !filePath) return;
     setLoadingSchema(true);
     setSchemaError(null);
@@ -127,9 +117,7 @@ const DataSourceNode = memo(({ id, data }) => {
       setLoadingSchema(false);
     }
   }, [dsId, upd, data.format]);
-
-  // ── Breadcrumb ─────────────────────────────────────────────────────────
-  const BreadCrumb = () => {
+const BreadCrumb = () => {
     const parts = browserPath.split('/').filter(Boolean);
     return (
       <div className="dsn__breadcrumb">
@@ -146,9 +134,7 @@ const DataSourceNode = memo(({ id, data }) => {
       </div>
     );
   };
-
-  // ── DS Selector ────────────────────────────────────────────────────────
-  const selectedDs = datasources.find(d => d.id === dsId);
+const selectedDs = datasources.find(d => d.id === dsId);
 
   const DsSelector = () => (
     <div className="dsn__field">
@@ -172,18 +158,14 @@ const DataSourceNode = memo(({ id, data }) => {
       )}
     </div>
   );
-
-  // ── RENDER ─────────────────────────────────────────────────────────────
-  return (
+return (
     <div className={`dsn dsn--${mode}`}>
 
       {/* Handle input (solo CARICA) */}
       {mode === 'carica' && (
         <Handle key="handle-carica" type="target" position={Position.Left} className="dsn__handle dsn__handle--in" id="carica-in" />
       )}
-
-      {/* ── HEADER ── */}
-      <div className="dsn__header">
+<div className="dsn__header">
         <div className="dsn__header-left">
           <span className="dsn__icon">{mode === 'source' ? '🗄️' : '💾'}</span>
           <span className="dsn__title">{mode === 'source' ? 'Data Source' : 'Carica → DS'}</span>
@@ -217,9 +199,6 @@ const DataSourceNode = memo(({ id, data }) => {
         <div className="dsn__body">
           <DsSelector />
 
-          {/* ══════════════════════════════════════════
-              MODALITÀ SORGENTE
-          ══════════════════════════════════════════ */}
           {mode === 'source' && dsId && (
             <>
               {/* Selezione modalità file */}
@@ -240,9 +219,7 @@ const DataSourceNode = memo(({ id, data }) => {
                   </button>
                 </div>
               </div>
-
-              {/* ── FISSO ── */}
-              {fileMode === 'fixed' && (
+{fileMode === 'fixed' && (
                 <div className="dsn__field">
                   <label className="dsn__label">File selezionato</label>
                   <div className="dsn__file-picker">
@@ -255,9 +232,7 @@ const DataSourceNode = memo(({ id, data }) => {
                   </div>
                 </div>
               )}
-
-              {/* ── DINAMICO ── */}
-              {fileMode === 'dynamic' && (
+{fileMode === 'dynamic' && (
                 <>
                   <div className="dsn__field">
                     <label className="dsn__label">Cartella</label>
@@ -345,9 +320,6 @@ const DataSourceNode = memo(({ id, data }) => {
             </>
           )}
 
-          {/* ══════════════════════════════════════════
-              MODALITÀ CARICA
-          ══════════════════════════════════════════ */}
           {mode === 'carica' && dsId && (
             <>
               <div className="dsn__field">
@@ -403,9 +375,7 @@ const DataSourceNode = memo(({ id, data }) => {
           )}
         </div>
       )}
-
-      {/* ── BROWSER FILE MODAL ── */}
-      {showBrowser && (
+{showBrowser && (
         <div className="dsn__browser-overlay" onMouseDown={e => e.stopPropagation()}>
           <div
             ref={browserDialogRef}

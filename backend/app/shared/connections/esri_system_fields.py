@@ -9,8 +9,6 @@ from __future__ import annotations
 from typing import Final
 
 
-# Field name sets (immutabili)
-
 # Subset auto-generated OID/GUID: ArcGIS assegna OBJECTID e (se abilitato)
 # GLOBALID al server-side; inviarli da `addFeatures` causa errori o duplica
 # valori. Usato da `arcgis_client.dataframe_to_esri_features` per le
@@ -42,8 +40,6 @@ ESRI_SYSTEM_FIELDS_LITERAL: Final[frozenset[str]] = ESRI_OID_FIELDS_LITERAL | fr
 })
 
 
-# Normalized lookup (helper case-insensitive)
-
 _SYS_NORMALIZED: Final[frozenset[str]] = frozenset({
     "OBJECTID",
     "GLOBALID",
@@ -61,10 +57,6 @@ _SYS_NORMALIZED: Final[frozenset[str]] = frozenset({
 def normalize_field_name(name: str) -> str:
     """Normalizza un field name per il match case-insensitive.
 
-    Coerente bit-per-bit con il pattern pre-IMDF-001 in
-    `core/imdf/validator._is_system_field`:
-    `(name or "").upper.replace("_", "")`.
-
     `name=None` ritorna `""` (e quindi non matcha mai).
     """
     return (name or "").upper().replace("_", "")
@@ -74,8 +66,6 @@ def is_esri_system_field(name: str) -> bool:
     """True se `name` corrisponde a un campo di sistema ArcGIS dopo
     normalizzazione case-insensitive (uppercase + strip underscore).
 
-    Equivalente bit-per-bit al pre-IMDF-001
-    `core/imdf/validator._is_system_field`.
     """
     return normalize_field_name(name) in _SYS_NORMALIZED
 

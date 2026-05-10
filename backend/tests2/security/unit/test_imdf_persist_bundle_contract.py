@@ -62,7 +62,6 @@ def dest_dir(tmp_path, monkeypatch):
     return d
 
 
-# ── 1. Happy path ───────────────────────────────────────────────────
 def test_persist_happy_path_moves_files_and_writes_metadata(tmp_path, dest_dir):
     from app.core.imdf.persist import persist_imdf_bundle_to_disk
     bundle = _fake_bundle(tmp_path)
@@ -94,7 +93,6 @@ def test_persist_happy_path_moves_files_and_writes_metadata(tmp_path, dest_dir):
     assert result["path"] == str(dest_root)
 
 
-# ── 2. Move error → tmp dir cleaned ─────────────────────────────────
 def test_persist_cleans_tmp_on_move_error(tmp_path, dest_dir, monkeypatch):
     from app.core.imdf import persist as persist_mod
     bundle = _fake_bundle(tmp_path)
@@ -122,7 +120,6 @@ def test_persist_cleans_tmp_on_move_error(tmp_path, dest_dir, monkeypatch):
     )
 
 
-# ── 3. Destination esistente viene sovrascritta ─────────────────────
 def test_persist_replaces_existing_destination(tmp_path, dest_dir):
     from app.core.imdf.persist import persist_imdf_bundle_to_disk
     # Pre-crea il target con contenuto vecchio
@@ -140,7 +137,6 @@ def test_persist_replaces_existing_destination(tmp_path, dest_dir):
     assert (dest_root / "manifest.json").exists(), "nuovo bundle non scritto"
 
 
-# ── 4. validation_summary incluso nel metadata ──────────────────────
 def test_persist_metadata_includes_validation_summary(tmp_path, dest_dir):
     from app.core.imdf.persist import persist_imdf_bundle_to_disk
     bundle = _fake_bundle(tmp_path)
@@ -156,7 +152,6 @@ def test_persist_metadata_includes_validation_summary(tmp_path, dest_dir):
     assert vs.get("total_errors") == 0
 
 
-# ── 5. Counts layer inclusi nel metadata (per list endpoint) ────────
 def test_persist_metadata_includes_layer_counts(tmp_path, dest_dir):
     from app.core.imdf.persist import persist_imdf_bundle_to_disk
     bundle = _fake_bundle(tmp_path)

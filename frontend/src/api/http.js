@@ -25,8 +25,6 @@ const http = axios.create({
   // - FormData   → axios imposta multipart/form-data; boundary=...
   // Impostarlo qui come default blocca il boundary su FormData (bug axios >= 1.0).
 });
-
-// ── REQUEST: inietta il Bearer token ─────────────────────────────────────────
 http.interceptors.request.use((config) => {
   const token = sessionStorage.getItem('urby_token');
   if (token) {
@@ -34,8 +32,6 @@ http.interceptors.request.use((config) => {
   }
   return config;
 });
-
-// ── RESPONSE: normalizza errori + gestisce sessione scaduta ──────────────────
 http.interceptors.response.use(
   (response) => response,
   (error) => {

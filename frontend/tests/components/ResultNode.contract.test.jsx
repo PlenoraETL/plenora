@@ -174,7 +174,7 @@ describe('ResultNode contract', () => {
 
   it('hydrates the latest IMDF bundle, opens the manager and executes through the shared editor contract', async () => {
     render(
-      // PR-B: ResultNode ora richiede ConfirmProvider nell'albero React
+      // ResultNode requires ConfirmProvider in the React tree.
       // (useConfirm hook). Wrap minimal del test esistente.
       <ConfirmProvider>
         <ResultNode

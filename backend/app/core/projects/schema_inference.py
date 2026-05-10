@@ -1,8 +1,4 @@
-"""
-Servizio di inferenza e propagazione schema attraverso il grafo canvas.
-
-Keeps this module's responsibility explicit and isolated from adjacent code.
-"""
+"""Schema inference across project canvas graphs."""
 
 import json
 from typing import Callable, Dict, List, Optional, Any, Tuple
@@ -18,11 +14,10 @@ logger = get_logger(__name__)
 
 @dataclass
 class ColumnSchema:
-    """Schema di una singola colonna"""
     name: str
-    type: str  # int, real, str, bool, date, geometry:point:4326, etc
-    source_node: Optional[str] = None  # ID del nodo da cui proviene
-    is_calculated: bool = False  # True se è una colonna calcolata/formula
+    type: str
+    source_node: Optional[str] = None
+    is_calculated: bool = False
     
     def to_dict(self) -> dict:
         return {
@@ -42,20 +37,12 @@ class _NodeSchemaContext:
 
 
 class SchemaInferenceService:
-    """
-    Servizio per inferire lo schema delle colonne attraverso il grafo dei nodi.
-    
-    Uso:
-        service = SchemaInferenceService(project_service)
-        schemas = service.infer_all_schemas(project_id)
-        # schemas = {"node_1": [ColumnSchema, ...], "node_2": [...]}
-    """
+    """Infers column schemas through a canvas node graph."""
     
     def __init__(self, project_service):
         self.project_service = project_service
         self._transform_handlers = TransformSchemaHandlers(ColumnSchema)
 
-        # Cache per evitare ricalcoli durante una singola inferenza
         self._schema_cache: Dict[str, List[ColumnSchema]] = {}
     
     def infer_all_schemas(self, project_id: str) -> Dict[str, List[dict]]:
@@ -67,20 +54,16 @@ class SchemaInferenceService:
         """
         logger.info(f"Inferenza schema per progetto: {project_id}")
         
-        # Reset cache
         self._schema_cache = {}
-        
-        # Carica canvas
+
         canvas = self.project_service.get_project_canvas(project_id)
         if not canvas:
             logger.warning(f"Canvas non trovato per {project_id}")
             return {}
         
-        # Costruisci grafo delle dipendenze
         nodes_by_id = {n.id: n for n in canvas.nodes}
         edges_by_target = self._group_edges_by_target(canvas.edges)
-        
-        # Calcola schema per ogni nodo (ordine topologico implicito nella ricorsione
+
         result = {}
         for node in canvas.nodes:
             schema = self._infer_node_schema(
@@ -99,7 +82,6 @@ class SchemaInferenceService:
         Calcola lo schema per un singolo nodo.
         Utile per aggiornamenti incrementali.
         """
-        # Reset cache
         self._schema_cache = {}
         
         canvas = self.project_service.get_project_canvas(project_id)
@@ -133,7 +115,6 @@ class SchemaInferenceService:
         Inferisce lo schema di output per un nodo.
         Ricorsivamente risolve le dipendenze.
         """
-        # Check cache
         if node.id in self._schema_cache:
             return self._schema_cache[node.id]
         
@@ -149,7 +130,6 @@ class SchemaInferenceService:
         if node_type_handler is not None:
             schema = node_type_handler(context)
 
-        # Cache result
         self._schema_cache[node.id] = schema
         return schema
 
@@ -163,14 +143,12 @@ class SchemaInferenceService:
         grow central branches.
         """
         return {
-            # NODE-DISPATCH-REGISTRY:start
             "source": self._infer_source_node_schema,
             "file_source": self._infer_file_source_node_schema,
             "project_source": self._infer_project_source_node_schema,
             "transform": self._infer_transform_node_schema,
             "api_enrich": self._infer_api_enrich_node_schema,
             "result": self._infer_result_node_schema,
-            # NODE-DISPATCH-REGISTRY:end
         }
 
     def _infer_source_node_schema(
@@ -240,19 +218,17 @@ class SchemaInferenceService:
         """
         columns = []
         
-        # Colonne dal database
         node_columns = node.columns or []
         for col in node_columns:
             if col is None or not getattr(col, "visible", True):
                 continue
             columns.append(ColumnSchema(
-                name=col.alias or col.name,  # Usa alias se presente
+                name=col.alias or col.name,
                 type=col.type or "str",
                 source_node=node.id,
                 is_calculated=False
             ))
 
-        # Colonne calcolate
         calculated = node.calculated_columns or []
         for calc in calculated:
             if not isinstance(calc, dict):
@@ -302,13 +278,8 @@ class SchemaInferenceService:
                 )
                 return []
 
-            # Fonte primaria: `result_node.columns` del canvas sorgente, scritto
-            # autorevolmente al PUT /canvas dal C9 fix
-            # app/shared/execution/canvas_columns.compute_result_columns -> mutate
-            # canvas.nodes[result].columns prima della persistenza
-            # Fallback: `canvas.columns_metadata` (legacy / canvas mai salvato
-            # post-C9 / progetti pre-fix). Niente chiamata a
-            # compute_result_columns qui per evitare import/costo/ricorsione
+            # Prefer persisted result node columns; fall back to legacy
+            # columns_metadata without recomputing across project boundaries.
             primary_columns = []
             for n in canvas.get("nodes", []) or []:
                 if not isinstance(n, dict):
@@ -327,7 +298,6 @@ class SchemaInferenceService:
                 else canvas.get("columns_metadata", [])
             )
 
-            # Filtra per colonne visibili se specificato
             node_columns = node.columns or (node.data.get("columns") if node.data else None) or []
             visible_columns = None
             if node_columns:
@@ -340,7 +310,6 @@ class SchemaInferenceService:
             for col in columns_metadata:
                 col_name = col.get("name", "")
 
-                # Skip se non visibile
                 if visible_columns and col_name not in visible_columns:
                     continue
 
@@ -394,12 +363,6 @@ class SchemaInferenceService:
             logger.warning(f"Transform {node.id} senza transform_op")
             return input_schemas[0] if input_schemas else []
 
-        # Dispatch via registry (BE-PHASE2-SCHEMA-INFER-008-FINAL
-        # sostituisce l'if/elif chain di 65 branch con un map lookup
-        # Comportamento invariato: gli adapter lambda nel registry
-        # adattano gli handler con signature non-standard
-        # `_schema_join` richiede `edges_by_target`, `_schema_geo_overlay`
-        # richiede `overlay_type`, alcuni handler ignorano `config`
         handlers = self._build_transform_handlers(edges_by_target)
         handler = handlers.get(transform_op)
         if handler is None:
@@ -422,7 +385,6 @@ class SchemaInferenceService:
         Schema per nodo api_enrich.
         Input + campi aggiunti dall'API.
         """
-        # Parti dallo schema input
         base_schema = input_schemas[0] if input_schemas else []
         result = [ColumnSchema(
             name=col.name,
@@ -431,10 +393,7 @@ class SchemaInferenceService:
             is_calculated=col.is_calculated
         ) for col in base_schema]
 
-        # Campi output dall'API: chiave canonica `output_mapping` (con fallback
-        # tolleranti su nomi storici/varianti FE). `output_fields` non e' mai
-        # stato popolato in produzione — sostituito qui per allineamento al
-        # resto del codebase (api_connector / enrichment_response_processing
+        # output_mapping is canonical; tolerate historical frontend aliases.
         output_mapping = node.data.get("output_mapping", []) if node.data else []
         existing = {col.name for col in result}
         for mapping in output_mapping:
@@ -497,14 +456,8 @@ class SchemaInferenceService:
         return result
 
 
-# VALIDAZIONE CONNESSIONI TRA NODI
-# Verifica che i nodi collegati abbiano schemi compatibili
-# es: la colonna di join esiste in entrambi i lati
-
 class ConnectionValidator:
-    """
-    Valida le connessioni tra nodi basandosi sugli schemi.
-    """
+    """Validates node connections against inferred schemas."""
     
     def __init__(self, schema_service: SchemaInferenceService):
         self.schema_service = schema_service
@@ -529,9 +482,7 @@ class ConnectionValidator:
         if not source_schema:
             return False, f"Nodo sorgente {source_node_id} non ha schema"
         
-        # Validazioni specifiche per tipo connessione
         if connection_config:
-            # Validazione join
             if "left_on" in connection_config:
                 left_col = connection_config.get("left_on")
                 
@@ -567,7 +518,6 @@ class ConnectionValidator:
                 })
                 continue
             
-            # Validazione colonne join
             if edge.source_column:
                 source_cols = {c["name"] for c in source_schema}
                 if edge.source_column not in source_cols:

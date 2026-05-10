@@ -1,7 +1,7 @@
 """
 Unit contract test per ``app.shared.error_sanitizer``.
 
-Batch Fix 6.2 (error-handling-governance). Il sanitizer e' applicato
+(error-handling-governance). Il sanitizer e' applicato
 """
 
 from __future__ import annotations

@@ -90,7 +90,7 @@ def test_unsafe_append_combo_with_flag_proceeds(monkeypatch):
     `_prepare_dataframe`) e che venga emesso un WARNING sul logger
     canonico `app.core.carica.writer` con il payload atteso.
 
-    Modernization B2.5a — behavior contract vs source-location contract
+    current contract B2.5a — behavior contract vs source-location contract
     ====================================================================
     Pre-B2.5a il test patchava `monkeypatch.setattr(dw_mod, "logger",
     spy_logger)` (riga 141 pre-B2.5a). Questo legava il test alla
@@ -131,7 +131,7 @@ def test_unsafe_append_combo_with_flag_proceeds(monkeypatch):
     writer = _make_writer(config)
 
     # Cattura WARNING sul logger canonico per nome (vedi docstring per
-    # razionale modernization). Imposto setLevel(WARNING) DOPO
+    # razionale current contract). Imposto setLevel(WARNING) DOPO
     # addHandler perche' `get_logger` inizializza il logger a INFO;
     # senza questa riga il filtro e' redundant ma esplicito.
     captured_records: list[logging.LogRecord] = []

@@ -22,11 +22,7 @@ from app.utils.logger import get_logger
 logger = get_logger(__name__)
 
 
-# Prefix S3 condiviso (distinto da urby_*.dump dei backup +
-# eseguibili-outputs/). Alias modulare verso
-# `app.shared.resources.storage_layout.IMDF_BUNDLES_PREFIX` (BE-DATA-PLANE-001A
-# single source-of-truth per i prefix object storage. Esposto come
-# `PREFIX` per backward-compat dei call site interni e dei test
+# Module-level alias kept for internal call sites and tests.
 PREFIX = IMDF_BUNDLES_PREFIX
 META_SUFFIX = ".meta.json"
 ZIP_SUFFIX = ".zip"

@@ -1,7 +1,4 @@
-"""
-Typed runtime composition factory — first slice.
-
-"""
+"""Typed runtime composition factory."""
 
 from __future__ import annotations
 
@@ -27,10 +24,9 @@ __all__ = ["RuntimeServices", "build_runtime_services"]
 class RuntimeServices:
     """Frozen typed container for shared service singletons.
 
-    Bundles the coherent slice previously constructed at module-load
-    time in `app/main.py`. Each field is a constructed instance, NOT
-    a class. Frozen so reassignments surface as errors instead of
-    silently rebinding.
+    Bundles shared services previously constructed at module-load time in
+    `app/main.py`. Each field is a constructed instance, NOT a class.
+    Frozen so reassignments surface as errors instead of silently rebinding.
 
     Field roles:
       `project_service`: project CRUD compatibility module
@@ -41,8 +37,7 @@ class RuntimeServices:
       - `features_service`: ArcGIS Feature Service consumer.
       - `orchestrator`: pipeline orchestrator (depends on the above 5,
         excluding `database_inspector`).
-      - `api_connection_service`: arricchisci API connection
-        singleton (added by ).
+      - `api_connection_service`: arricchisci API connection singleton.
         IMPORTANT: this field is the SAME object as the canonical
         module-level singleton
         `app.core.arricchisci.api_connector.api_connection_service`.
@@ -52,8 +47,7 @@ class RuntimeServices:
         public import path + the test monkeypatch surface
         (`patch("app.core.arricchisci.api_connector.api_connection_service.<method>", ...)`)
         are preserved. Identity invariant locked by contract test.
-      - `datasource_service`: datasources singleton (added by
-        ). Same "wrap, don't move"
+      - `datasource_service`: datasources singleton. Same "wrap, don't move"
         strategy as `api_connection_service`: identity-preserving
         compatibility export of the canonical
         `app.core.datasources.service.datasource_service` singleton.
@@ -79,7 +73,7 @@ def build_runtime_services(
     settings: Any,
     save_function: Any,
 ) -> RuntimeServices:
-    """Construct the first-slice shared services in dependency order.
+    """Construct shared services in dependency order.
 
     Args:
         settings: app `Settings` singleton. Read for
@@ -103,8 +97,7 @@ def build_runtime_services(
         by `app.bootstrap`. A contract test locks the order
         invariant.
     """
-    # Lazy imports keep this module cheap to load (e.g. for tests
-    # that import only the typed dataclass to assert shape
+    # Lazy imports keep this module cheap to load for contract tests.
     from app.core.estrai.database_inspector import DatabaseInspector
     from app.core.estrai.query_generator import QueryGenerator
     from app.core.features.features_service import FeaturesService

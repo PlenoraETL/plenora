@@ -1,5 +1,5 @@
 """
-[phase-2-err][batch9] C6 — shape 500 `project_cleanup_partial`.
+C6 — shape 500 `project_cleanup_partial`.
 
 Invariante blindato dal fix C6:
 """

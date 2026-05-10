@@ -57,7 +57,7 @@ def client_with_auth_router(monkeypatch):
     # Force peer = 127.0.0.1: di default TestClient usa "testclient"
     # (stringa), che non matcha nessun CIDR/IP nella trusted list,
     # rendendo il peer non-trusted e XFF ignorato — esattamente il
-    # comportamento pre-fix che stiamo cercando di validare contro.
+    # comportamento Previous behavior che stiamo cercando di validare contro.
     with TestClient(app, client=("127.0.0.1", 50000)) as tc:
         yield tc
 
@@ -111,7 +111,7 @@ def test_login_rate_limit_is_isolated_per_xff_ip(client_with_auth_router):
     r = _login_fail(client_with_auth_router, "10.0.0.2")
     assert r.status_code == 401, (
         f"IP 10.0.0.2 non dovrebbe essere rate-limited dagli attempts di "
-        f"10.0.0.1 — se questo fallisce, il bucket e' condiviso (pre-fix)"
+        f"10.0.0.1 — se questo fallisce, il bucket e' condiviso (Previous behavior)"
     )
 
 

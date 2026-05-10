@@ -1,5 +1,5 @@
 """
-Smoke contract - STRUCT-001 Seam B: Protocols + Defaults del dominio files.
+Smoke contract: Protocols + Defaults del dominio files.
 
 Verifica le invarianti minime del refactor:
 """

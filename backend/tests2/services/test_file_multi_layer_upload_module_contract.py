@@ -1,7 +1,5 @@
 """
-Smoke contract - STRUCT-001 Seam D-G + BE-HARDEN-001C E1+E3.
-
-Verifica le invarianti minime del refactor multi-layer upload:
+Smoke contract:
 """
 
 from __future__ import annotations
@@ -43,7 +41,7 @@ def collaborators(fake_logger, tmp_path):
 
     # build_file_source factory: ritorna oggetto con attributo `id`
     # accessibile (e layer/sheet via getattr) -> compatibile col logger
-    # post-batch che fa `fs.id` e `getattr(fs, 'layer', None)`.
+    # Current contract che fa `fs.id` e `getattr(fs, 'layer', None)`.
     def _build_fs(**kw):
         return type("FS", (), kw)()
 
@@ -484,8 +482,8 @@ def test_delete_blob_calls_storage_when_object_storage_enabled():
 
 def test_zip_unwrap_gdb_directory_uses_original_zip_blob(collaborators):
     """MULTI-GDB-001 fix: per GDB-in-ZIP il path estratto e' una directory
-    .gdb (non un file). Pre-fix: tmp_path.read_bytes() su directory
-    sollevava IsADirectoryError. Post-fix: per format='gdb' conserviamo
+    .gdb (non un file). Previous behavior: tmp_path.read_bytes() su directory
+    sollevava IsADirectoryError. Current contract: per format='gdb' conserviamo
     il ZIP originale come blob."""
     collaborators["detect_format"].side_effect = ["zip", "gdb"]
 

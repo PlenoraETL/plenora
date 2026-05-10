@@ -77,7 +77,6 @@ describe('files api contract', () => {
     expect(result).toEqual({ rows: [] });
   });
 
-  // ─── B3 Phase 4: client-side size guard + 413 propagation ────────────────
 
   it('uploadFile rejects oversized files client-side without calling backend', async () => {
     const { uploadFile } = await import('../../src/api/files');

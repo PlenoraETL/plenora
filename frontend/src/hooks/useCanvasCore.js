@@ -24,7 +24,6 @@ import { can } from '../utils/permissions';
  */
 export function useCanvasCore(projectId, { mode = 'manipola' } = {}) {
 
-  // ─── Store ───
   const nodes          = useCanvasStore(s => s.nodes);
   const edges          = useCanvasStore(s => s.edges);
   const setNodes       = useCanvasStore(s => s.setNodes);
@@ -71,20 +70,17 @@ export function useCanvasCore(projectId, { mode = 'manipola' } = {}) {
 
   const reset = useCanvasStore(s => s.reset);
 
-  // ─── Init store ───
   useEffect(() => {
     reset();                    // pulisce nodi/edges del progetto precedente
     init(projectId, mode);
   }, [projectId, mode, init, reset]);
 
-  // ─── Refs aggiornati (evitano stale closure nelle callback async) ───
   const nodesRef = useRef(nodes);
   const edgesRef = useRef(edges);
 
   useEffect(() => { nodesRef.current = nodes; }, [nodes]);
   useEffect(() => { edgesRef.current = edges; }, [edges]);
 
-  // ─── Keyboard shortcuts (Delete/Backspace) ───
   // Disabilitati per i viewer: non devono poter cancellare nulla.
   useCanvasKeyboard({
     nodes,
@@ -93,7 +89,6 @@ export function useCanvasCore(projectId, { mode = 'manipola' } = {}) {
     setEdges: isReadOnly ? () => {} : setEdges,
   });
 
-  // ─── Helpers ───
 
   /** Nodi escludendo annotazioni — per validation, query preview, column calc */
   const dataNodes = nodes.filter(n => n.type !== 'comment');

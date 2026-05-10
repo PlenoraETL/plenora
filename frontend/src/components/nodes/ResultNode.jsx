@@ -4,7 +4,7 @@
  * Nodo terminale della pipeline. Decide la modalita' (IMDF vs standard) in
  * base all'upstream e delega la view corrispondente a un subcomponente.
  *
- * Owna (post Batch 2 split):
+ * Owna:
  *   - subscriptions canvas (edges, upstream node, hasOnPreview/Execute)
  *   - calcolo upstreamColumns (richiede useReactFlow)
  *   - detection isImdfMode (upstream=api_enrich con output_kind='imdf')
@@ -13,8 +13,8 @@
  *   - header + delete (comune a entrambi i rami)
  *
  * Delega:
- *   - ResultNodeImdfView: view quando isImdfMode=true (Batch 2 step 2)
- *   - ResultNodeStandardView: view altrimenti (Batch 2 step 3)
+ *   - ResultNodeImdfView: view quando isImdfMode=true
+ *   - ResultNodeStandardView: view altrimenti
  */
 import React, { useState, useCallback, useEffect, useRef, memo, useMemo } from 'react';
 import { Handle, Position, useReactFlow, useStore } from 'reactflow';
@@ -247,7 +247,6 @@ const ResultNode = memo(({ data, id }) => {
         className="result-node__handle result-node__handle--output"
       />
 
-      {/* Header (comune ai due rami) */}
       <div className="result-node__header">
         <div className="result-node__title">
           <span className="result-node__title-icon">{icon}</span>
@@ -262,7 +261,6 @@ const ResultNode = memo(({ data, id }) => {
         </button>
       </div>
 
-      {/* Body: ramo IMDF o standard */}
       <div className="result-node__body">
         {isImdfMode ? (
           <ResultNodeImdfView

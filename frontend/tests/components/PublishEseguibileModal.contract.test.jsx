@@ -7,7 +7,6 @@ import PublishEseguibileModal from '../../src/components/eseguibili/PublishEsegu
 
 /**
  * Contract test per PublishEseguibileModal.
- * Pre-batch: nessun test su questo componente (154 LOC).
  *
  * Aree coperte:
  *   1. render: prefill nome dal project + info text + ICON_PRESETS
@@ -35,7 +34,6 @@ describe('PublishEseguibileModal', () => {
     vi.clearAllMocks();
   });
 
-  // ── 1. Render prefill ────────────────────────────────────────────────
 
   it('renders prefilled with the project name and shows the info text + icon presets', () => {
     render(
@@ -59,7 +57,6 @@ describe('PublishEseguibileModal', () => {
     ).toBeInTheDocument();
   });
 
-  // ── 2. Validation UX: nome vuoto disabilita Pubblica ────────────────
 
   it('disables the publish button when the name is empty', async () => {
     const user = userEvent.setup();
@@ -79,7 +76,6 @@ describe('PublishEseguibileModal', () => {
     expect(createEseguibileMock).not.toHaveBeenCalled();
   });
 
-  // ── 3. Publish success ──────────────────────────────────────────────
 
   it('publishes with the expected payload and triggers success callbacks', async () => {
     createEseguibileMock.mockResolvedValueOnce({
@@ -124,7 +120,6 @@ describe('PublishEseguibileModal', () => {
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 
-  // ── 4. Publish error ────────────────────────────────────────────────
 
   it('shows the backend detail inline on publish error and skips success callbacks', async () => {
     createEseguibileMock.mockRejectedValueOnce({
@@ -157,7 +152,6 @@ describe('PublishEseguibileModal', () => {
     expect(onClose).not.toHaveBeenCalled();
   });
 
-  // ── 5. Output format change ─────────────────────────────────────────
 
   it('propagates the chosen output format to the create payload', async () => {
     createEseguibileMock.mockResolvedValueOnce({ id: 'es-2', name: 'Enrich Roma' });
@@ -183,7 +177,6 @@ describe('PublishEseguibileModal', () => {
     );
   });
 
-  // ── 6. Icon preset click ────────────────────────────────────────────
 
   it('propagates the selected icon preset to the create payload', async () => {
     createEseguibileMock.mockResolvedValueOnce({ id: 'es-3', name: 'Enrich Roma' });

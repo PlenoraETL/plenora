@@ -246,7 +246,7 @@ def test_check_pool_headroom_fail_open_on_introspection_error():
     """BE-GO-READY-BOOTSTRAP-ENGINE-010: il consumer e' ora il public
     helper `pg_connection.get_pool_headroom()`. Se il helper solleva
     (lazy-init pool fallito, etc.), `check_pool_headroom` deve
-    catchare e ritornare fail-OPEN — preservando il behavior pre-batch
+    catchare e ritornare fail-OPEN — preservando il behavior Previous contract
     da main.py."""
     def _raise():
         raise RuntimeError("pool not init")
@@ -261,7 +261,7 @@ def test_check_pool_headroom_fail_open_on_introspection_error():
 
 def test_check_pool_headroom_failed_when_pool_saturo():
     """Pool saturo (in_use >= max): outcome `(False, "pool saturo: …")`.
-    Detail string preservato byte-per-byte da pre-batch-010."""
+    Detail string preservato byte-per-byte da Previous contract-010."""
     from app.db.pg_connection import PoolHeadroom
 
     headroom = PoolHeadroom(max=3, in_use=3, free=0)

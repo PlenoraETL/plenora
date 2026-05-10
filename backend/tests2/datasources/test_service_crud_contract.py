@@ -245,7 +245,7 @@ def test_create_datasource_generates_id_with_canonical_pattern(monkeypatch):
     - i grep negli stack di log che cercano il prefisso ``ds_``
     - i parser che estraggono il timestamp per analisi storica
 
-    Regressione: fix-forward deve aggiornare anche il router e il frontend.
+    Regressione: regression fix deve aggiornare anche il router e il frontend.
     Il test blinda il formato lato service.
     """
     from app.core.datasources.service import DataSourceService

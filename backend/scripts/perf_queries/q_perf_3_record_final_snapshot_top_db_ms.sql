@@ -6,7 +6,6 @@
 --
 -- Sorgente marker: app/core/intermediate/snapshot.py, marker [PERF]
 --   record_final_snapshot con campo `db_ms`.
--- Origine: orchestrate/phase_0_consolidation/performance_baseline_0_5f.md §5.1
 --
 -- Finestra: ultimi 7 giorni (modificare INTERVAL per range diversi).
 -- Read-only: SELECT puro su `logs.details` JSONB.

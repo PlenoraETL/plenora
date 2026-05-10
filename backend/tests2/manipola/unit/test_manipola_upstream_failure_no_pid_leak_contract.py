@@ -70,8 +70,8 @@ def _failing_upstream_artifact(source_pid: str) -> PipelineArtifact:
 
 
 def test_upstream_failure_does_not_leak_source_project_id():
-    """Pre-fix: il dict di ritorno aveva `project_id == source_pid`.
-    Post-fix: niente `project_id` nel dict, oppure se presente uguale
+    """Previous behavior: il dict di ritorno aveva `project_id == source_pid`.
+    Current contract: niente `project_id` nel dict, oppure se presente uguale
     al progetto corrente (la regola enforced da
     `from_executor_result`)."""
     source_pid = "proj_source_v1"
@@ -110,7 +110,7 @@ def test_upstream_failure_does_not_leak_source_project_id():
 def test_upstream_failure_result_is_wrappable_without_pid_mismatch():
     """`OrchestratorService.execute_pipeline` chiama
     `PipelineArtifact.from_executor_result(result, project_id=<corrente>)`.
-    Pre-fix sollevava ValueError. Post-fix non solleva."""
+    Previous behavior sollevava ValueError. Current contract non solleva."""
     source_pid = "proj_source_v1"
     current_pid = "proj_current_v1"
     callback = MagicMock(return_value=_failing_upstream_artifact(source_pid))

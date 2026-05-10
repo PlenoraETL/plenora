@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 
 /**
  * Contract test — Connections / OpenAPI / DataSource FE-API boundary
- * (C3.2 Phase 4).
+ * Contract coverage for the split connections API boundary.
  *
  * Pre-C3.2 quattro componenti UI chiamavano `http.<verb>` direttamente
  * sui rispettivi endpoint, violando il contratto architetturale

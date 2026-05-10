@@ -84,11 +84,6 @@ function ExecutionModal({
   const hasEnrichmentErrors = totalErrors > 0;
   const errorReportPath = result?.error_report;
 
-  // C3.4 Phase 4: download del report errori passa per il boundary
-  // api/projects.downloadProjectFile. Pre-C3.4 il componente faceva un
-  // dynamic `import('../../api/http')` dentro l'onClick — boundary
-  // violation + import dinamico inutile su un componente sempre
-  // attivo dietro isOpen.
   const handleDownloadErrorReport = async () => {
     if (!errorReportPath || !result?.project_id) return;
     const filename = errorReportPath.split(/[/\\]/).pop();

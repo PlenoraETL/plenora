@@ -34,7 +34,6 @@ def _make_scheduler(leader_id: str, redis_client) -> PlenoraBeatScheduler:
     return scheduler
 
 
-# SCENARIO 1 — Doppio beat stesso Redis
 
 
 def test_scenario_1_two_beats_only_one_acquires_leadership():
@@ -55,7 +54,6 @@ def test_scenario_1_two_beats_only_one_acquires_leadership():
     assert stored == b"pid-1@host-a"
 
 
-# SCENARIO 2 — SIGKILL del leader (nessun close, TTL scade)
 
 
 def test_scenario_2_standby_promoted_after_leader_ttl_expiration(monkeypatch):
@@ -85,7 +83,6 @@ def test_scenario_2_standby_promoted_after_leader_ttl_expiration(monkeypatch):
     assert shared_redis.get("scheduler:beat:leader") == b"pid-survivor@host-b"
 
 
-# SCENARIO 3 — Redis down temporaneo + recovery
 
 
 def test_scenario_3_redis_down_fail_closed_then_recovers(monkeypatch):
@@ -137,7 +134,6 @@ def test_scenario_3b_redis_down_fail_open_stays_leader(monkeypatch):
     assert beat._is_leader is True
 
 
-# SCENARIO 4 — SIGTERM graceful → close rilascia lock → successore immediato
 
 
 def test_scenario_4_close_releases_lock_so_next_beat_acquires_immediately():
@@ -192,7 +188,6 @@ def test_scenario_4b_close_does_not_release_lock_taken_by_another_after_ttl(monk
     assert shared_redis.get("scheduler:beat:leader") == b"pid-b@host-b"
 
 
-# SCENARIO 5 — TTL vs refresh interval
 
 
 def test_scenario_5_refresh_extends_ttl_preventing_expiration(monkeypatch):

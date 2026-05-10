@@ -1,7 +1,5 @@
 /**
  * MaskingListInput.jsx — Builder mascheramento PII per colonna
- *
- * Estratto da `ParameterInput.jsx` in `FE-PHASE2-SPLIT-002A`.
  * Usato dal dispatcher per il tipo `masking_list`. Tipi mask:
  * cf, email, phone, iban, custom (con chars_start/end + mask_char).
  *

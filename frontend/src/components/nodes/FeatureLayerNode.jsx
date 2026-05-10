@@ -18,10 +18,6 @@ import useCanvasStore from '../../store/useCanvasStore';
 import { useConfirm } from '../../context/ConfirmContext';
 import './FeatureLayerNode.css';
 
-// ============================================================
-// HELPER
-// ============================================================
-
 const FIELD_ICONS = {
   'int': '🔢',
   'real': '🔢',
@@ -55,10 +51,6 @@ function getGeomShortLabel(geomType) {
   return geomType.replace('geometry:', '');
 }
 
-// ============================================================
-// COMPONENTE
-// ============================================================
-
 const FeatureLayerNode = memo(({ data, id }) => {
   // State
   const [isExpanded, setIsExpanded] = useState(false);
@@ -77,10 +69,6 @@ const FeatureLayerNode = memo(({ data, id }) => {
   const columns = data.columns || [];
   const relationships = data.relationships || [];
   const [addingRelation, setAddingRelation] = useState(null);
-  
-  // ============================================================
-  // CARICA SCHEMA AL MOUNT (se colonne non ancora caricate)
-  // ============================================================
   
   useEffect(() => {
     if (columns.length === 0 && data.layer_url && data.connection_id) {
@@ -107,10 +95,6 @@ const FeatureLayerNode = memo(({ data, id }) => {
       setLoadingSchema(false);
     }
   };
-
-  // ============================================================
-  // HANDLERS
-  // ============================================================
 
   const toggleColumn     = useCanvasStore(s => s.toggleColumn);
   const toggleAllColumns = useCanvasStore(s => s.toggleAllColumns);
@@ -155,10 +139,6 @@ const FeatureLayerNode = memo(({ data, id }) => {
     }
   };
 
-  // ============================================================
-  // COLUMN FILTERING & DISPLAY
-  // ============================================================
-
   const filteredColumns = searchTerm
     ? columns.map((col, idx) => ({ ...col, _origIndex: idx }))
         .filter(col => col.name.toLowerCase().includes(searchTerm.toLowerCase()))
@@ -171,10 +151,6 @@ const FeatureLayerNode = memo(({ data, id }) => {
   const allVisible = visibleCount === columns.length;
   const noneVisible = visibleCount === 0;
 
-  // ============================================================
-  // RENDER
-  // ============================================================
-
   return (
     <div className="fl-node">
       {/* Handle input (sinistra) */}
@@ -184,7 +160,6 @@ const FeatureLayerNode = memo(({ data, id }) => {
         className="fl-node__handle"
       />
 
-      {/* Header */}
       <div className="fl-node__header">
         <div className="fl-node__header-content">
           <div className="fl-node__title">

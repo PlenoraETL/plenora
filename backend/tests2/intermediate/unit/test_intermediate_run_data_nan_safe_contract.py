@@ -18,7 +18,7 @@ pytestmark = [pytest.mark.unit, pytest.mark.intermediate, pytest.mark.contract, 
 
 
 def test_get_node_data_returns_200_when_rows_contain_nan(superadmin_user):
-    """Pre-fix: 500. Post-fix: 200, NaN -> null."""
+    """Previous behavior: 500. Current contract: 200, NaN -> null."""
     rows_with_nan = [
         {"id": 1, "value": float("nan"), "name": "alpha"},
         {"id": 2, "value": 3.14,         "name": "beta"},

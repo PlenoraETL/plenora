@@ -24,15 +24,8 @@
 import React, { createContext, useContext, useState, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import ToastContainer from '../components/common/ToastContainer';
-
-// ── Stato incrementale ID ─────────────────────────────────────────────────────
 let _nextId = 0;
-
-// ── Context ───────────────────────────────────────────────────────────────────
 const ToastContext = createContext(null);
-
-// ── Provider ──────────────────────────────────────────────────────────────────
-
 /**
  * ToastProvider — da inserire una volta sola in App.jsx, dentro BrowserRouter.
  * Renderizza <ToastContainer> internamente: le pagine non devono più farlo.
@@ -77,9 +70,6 @@ export function ToastProvider({ children }) {
     </ToastContext.Provider>
   );
 }
-
-// ── Hook ──────────────────────────────────────────────────────────────────────
-
 /**
  * useToast() — API invariata rispetto alla versione locale.
  * Lancia se usato fuori da <ToastProvider>.

@@ -67,7 +67,7 @@ def test_start_lock_heartbeat_state_lock_lost_is_live_reference(tick):
     visibile dal chiamante mostra lock_lost=True (non e' un snapshot
     al momento del return).
 
-    Senza questa proprieta', il refactor PR-#36 con LockHeartbeat
+    Senza questa proprieta', il refactor the lock-heartbeat contract con LockHeartbeat
     non potrebbe mantenere la signature pubblica invariata e
     l'invariante "execute() include lock_lost nel result"."""
     em, _ = _build_em_with_fake_concurrency()

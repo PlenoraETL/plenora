@@ -1,7 +1,5 @@
 /**
  * JsonTreeNode.jsx — Renderer ricorsivo del JSON tree
- *
- * Estratto da `panels/ResponseConfigBuilder.jsx` in `FE-SPLIT-003A`.
  * Componente presentational: riceve l'`AbstractJsonNode` (`{name,
  * type, children?, sample?, count?, fullPath}`) + Set di `expandedPaths`
  * + array `iterateOn` / `mappings` + 3 callback toggle.

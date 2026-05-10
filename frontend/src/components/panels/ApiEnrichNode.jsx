@@ -32,9 +32,7 @@ import RunHistoryModal from '../modals/RunHistoryModal';
  */
 function ApiEnrichNode({ id, data, selected }) {
   const { setNodes, getNodes, getEdges } = useReactFlow();
-  
-  // ── FILE PROCESSOR DETECTION ──
-  // rest_file (servizio HTTP remoto) lavora file→file, non riga-per-riga.
+// rest_file (servizio HTTP remoto) lavora file→file, non riga-per-riga.
   // Il nodo si comporta diversamente sotto il cofano (no auto-mapping colonne,
   // no calcolo output columns, ecc.).
   const isExecutable = data.connection_type === 'rest_file';
@@ -94,7 +92,6 @@ function ApiEnrichNode({ id, data, selected }) {
   const loadApiDetails = async (apiId) => {
     try {
       setLoadingApi(true);
-      // C3.4 Phase 4: passa per il boundary api/apiConnections.
       // getApiConnection ritorna direttamente il body (data), non il
       // wrapper axios — quindi il check di presenza si fa sull'oggetto.
       const apiData = await getApiConnection(apiId);
@@ -112,9 +109,7 @@ function ApiEnrichNode({ id, data, selected }) {
       setLoadingApi(false);
     }
   };
-
-  // ── EXECUTABLE: rileva file source collegato ──
-  const connectedFileSource = useMemo(() => {
+const connectedFileSource = useMemo(() => {
     if (!isExecutable) return null;
     const edges = getEdges();
     const nodes = getNodes();
@@ -148,9 +143,7 @@ function ApiEnrichNode({ id, data, selected }) {
       reason: srcNode.data?.access_denied_reason || 'Sorgente non accessibile al tuo gruppo',
     };
   }, [id, getEdges, getNodes, incomingEdgeCount]);
-
-  // ── EXECUTABLE: aggiorna exec_params ──
-  const handleExecParamChange = (key, value) => {
+const handleExecParamChange = (key, value) => {
     setNodes(nodes => nodes.map(n => {
       if (n.id === id) {
         return {
@@ -166,7 +159,7 @@ function ApiEnrichNode({ id, data, selected }) {
     }));
   };
 
-  // ── REST FILE: aggiorna output_kind (tag che dice "lo zip prodotto da
+  // REST FILE: aggiorna output_kind (tag che dice "lo zip prodotto da
   // questo Processore File ha questa struttura nota") ──
   // Usa useCanvasStore.updateNodeData per persistere nel canvas store
   // (single source of truth per save + sincronizzato con ReactFlow).
@@ -847,9 +840,8 @@ function ExtraFileSlot({ field, label, current, onUploaded, onRemoved }) {
     setError('');
     setUploading(true);
     try {
-      // C3.1 Phase 4: passa per il boundary api/files.uploadFile per
-      // ereditare il guard B3 (size pre-flight + 413 propagation come
-      // UploadTooLargeError) e niente Content-Type manuale.
+      // uploadFile applica size pre-flight, propagazione 413 come
+      // UploadTooLargeError e lascia ad axios il Content-Type multipart.
       // L'errore catchato qui copre sia UploadTooLargeError sia AxiosError;
       // in entrambi i casi err.message e' normalizzato dall'interceptor.
       const fs = await uploadFile(

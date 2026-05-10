@@ -96,8 +96,6 @@ class ExecutionManager:
             features_service=features_service,
         )
     
-    # HEARTBEAT LOCK (C3 fix 4)
-
     def _start_lock_heartbeat(self, schedule_id: str, interval: float = None, clock=None) -> Dict[str, Any]:
         """Compatibility wrapper for scheduler_execution_runtime."""
         return start_lock_heartbeat(self.concurrency, schedule_id, interval, clock)
@@ -105,8 +103,6 @@ class ExecutionManager:
     def _stop_lock_heartbeat(self, state: Dict[str, Any]) -> None:
         """Compatibility wrapper for scheduler_execution_runtime."""
         stop_lock_heartbeat(state)
-
-    # ESECUZIONE PRINCIPALE
 
     def execute(
         self,
@@ -144,10 +140,6 @@ class ExecutionManager:
             return {"success": False, "status": "failed", "message": "Schedule non trovato"}
 
         project_id = config.pipeline.project_id
-        # C3 round 3 fix 2: log esplicito di scheduled_for per lineage
-        # dei catchup run. Distingue "run eseguito alle 10:00 per il
-        # tick delle 06:00" (catchup) da "run alle 10:00 per le 10:00"
-        # cron normale o manuale
         _scheduled_for_display = scheduled_for or "now"
         logger.info(
             f"Esecuzione schedule {schedule_id} -> progetto {project_id} "
@@ -263,10 +255,6 @@ class ExecutionManager:
         
         self.schedule_service.set_runtime_status(schedule_id, "running")
 
-        # Avvia heartbeat del lock (C3 fix 4): il TTL del lock e' corto
-        # 10min), un thread daemon rinfresca mentre la pipeline e' attiva
-        # Su SIGKILL del worker, il thread muore senza rinfrescare, e il
-        # lock scade entro TTL invece di restare orfano fino al hard limit
         heartbeat_state = self._start_lock_heartbeat(schedule_id)
 
         try:
@@ -430,9 +418,6 @@ class ExecutionManager:
                 schedule_info={
                     "cron_expression": config.schedule.cron_expression,
                     "scheduled_at": datetime.now(timezone.utc).isoformat(),
-                    # C3 round 3 fix 2: scheduled_for = tick logico
-                    # recuperato (catchup) o None per run normali
-                    # Persistito nel log per lineage audit
                     "scheduled_for": scheduled_for,
                 },
                 pipeline_info={
@@ -468,10 +453,6 @@ class ExecutionManager:
 
             logger.info(f"Schedule {schedule_id} completato: {decision['status']} in {total_duration}ms")
 
-            # C3 round 3 fix 1: propaga lock_lost al result se il
-            # thread heartbeat ha rilevato perdita del lock durante
-            # l'esecuzione (lock scaduto + re-acquire fallito = un
-            # altro processo potrebbe aver eseguito in parallelo
             lock_lost = bool(heartbeat_state.get("lock_lost", False))
             if lock_lost:
                 logger.warning(
@@ -491,9 +472,6 @@ class ExecutionManager:
             }
 
         except Exception as e:
-            # Unico ramo per ExecutionError (step esplicito) e Exception
-            # errore inatteso): i due casi differiscono solo per il
-            # prefisso del messaggio e il log [CRASH] su quello inatteso
             if isinstance(e, ExecutionError):
                 err_msg = str(e)
             else:
@@ -508,10 +486,6 @@ class ExecutionManager:
                 # log_service.create_log_entry) che continuano a ricevere
                 # err_msg_internal-style per postmortem
                 err_msg = "Errore inatteso durante l'esecuzione dello schedule (consulta log)"
-            # Propagazione lock_lost anche nel failure branch: se il
-            # lock era perso e la pipeline e' poi fallita, l'operatore
-            # deve poter distinguere fail "pulito" da fail "con
-            # concorrenza potenzialmente attiva"
             lock_lost = bool(heartbeat_state.get("lock_lost", False))
             if lock_lost:
                 logger.warning(
@@ -534,8 +508,6 @@ class ExecutionManager:
             return failure_result
         
         finally:
-            # Ferma prima il thread heartbeat (C3 fix 4) cosi' non
-            # rinfresca piu' il lock mentre lo stiamo rilasciando
             try:
                 self._stop_lock_heartbeat(heartbeat_state)
             except Exception as hb_err:
@@ -659,8 +631,6 @@ class ExecutionManager:
             if df.empty:
                 return {"success": False, "error": "DataFrame output vuoto"}
 
-            # 2. Costruisci node_data compatibile con CaricaExecutor.execute
-            # usando la configurazione della destinazione dello schedule
             node_data = {
                 "connection_id": dest.connection_id,
                 "schema_name": dest.schema_name or "",
@@ -674,15 +644,10 @@ class ExecutionManager:
                 "column_mappings": [],  # auto-mapping da CaricaExecutor
             }
 
-            # 3. Istanzia CaricaExecutor con ConnectionService
             from app.core.carica.executor import CaricaExecutor
 
             carica_executor = CaricaExecutor(connection_service=self._get_connection_service())
 
-            # N15: chiave idempotency deterministica sul tick scheduled
-            # stabile su retry dello stesso tick). None se scheduled_for
-            # non e' disponibile -> nessuna protezione sul guard executor
-            # residuo documentato
             carica_run_id = (
                 f"schedule-{config.id}-{scheduled_for}-carica"
                 if scheduled_for else None
@@ -696,9 +661,8 @@ class ExecutionManager:
                 run_id=carica_run_id,
             )
 
-            # 4. Traduci WriteResult nel formato atteso dall'execution_manager
             from app.core.carica.models import WriteStatus
-            # N15: SKIPPED_IDEMPOTENT e' success (no-op sicuro su retry
+            # SKIPPED_IDEMPOTENT is a safe no-op on retry.
             # Se non incluso qui, il guard causa retry loop infiniti
             success = write_result.status in (
                 WriteStatus.SUCCESS,

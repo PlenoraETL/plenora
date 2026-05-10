@@ -1,7 +1,7 @@
 """
-[phase-2-err][batch9] C4 â€” full-cleanup aggregato failures / 207 Multi-Status.
+C4 â€” full-cleanup aggregato failures / 207 Multi-Status.
 
-Audit Batch 9 Â§3.1 S2 / fix F2: l'endpoint DELETE /api/tasks/{id}/full-cleanup
+Audit finding: l'endpoint DELETE /api/tasks/{id}/full-cleanup
 """
 
 from __future__ import annotations

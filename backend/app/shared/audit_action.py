@@ -19,16 +19,14 @@ from app.utils.logger import get_logger
 logger = get_logger(__name__)
 
 
-# METRICHE (contatori in-process, pattern token_blacklist
 # Counters sincroni protetti da lock. Azzerati a ogni restart del backend
 # Esposti via get_metrics per integrazione futura con admin_system_status
 
 _metrics_lock = threading.Lock()
 _metrics: Dict[str, int] = {
-    "write_ok":   0,  # INSERT su plenora.audit_actions riuscito
-    "write_fail": 0,  # INSERT sollevato (DB down, pool exhausted
-    "skipped":    0,  # chiamate dove il decorator non ha tentato la write
-                      # reservato per ramo opt-out futuro; oggi sempre 0
+    "write_ok": 0,
+    "write_fail": 0,
+    "skipped": 0,
 }
 _last_ok_epoch: Optional[float] = None
 
@@ -62,9 +60,6 @@ def _reset_metrics_for_tests() -> None:
         for k in list(_metrics.keys()):
             _metrics[k] = 0
         _last_ok_epoch = None
-
-
-# EXTRACTORS DAL KWARGS DELLA FUNZIONE WRAPPATA
 
 
 def _extract_user_id(kwargs: Dict[str, Any]) -> Optional[str]:
@@ -137,8 +132,6 @@ def _short_error(msg: Any, limit: int = 500) -> Optional[str]:
     return s
 
 
-# WRITE FAIL-OPEN
-
 _INSERT_SQL = (
     "INSERT INTO audit_actions "
     "(user_id, action, target, status, ip_address, error_message) "
@@ -194,9 +187,6 @@ def _write_audit_row(
             exc,
         )
         _record_metric("write_fail")
-
-
-# DECORATOR
 
 
 def audit_action(

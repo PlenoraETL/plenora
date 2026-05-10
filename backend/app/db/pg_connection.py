@@ -1,8 +1,4 @@
-"""
-pg_connection.py — PostgreSQL connection pool per PLENORA-ETL.
-
-Canonical entry point per i query helper DAL (`fetchone`, `fetchall`,
-"""
+"""PostgreSQL connection pool and DAL query helper entry point."""
 
 import os
 import threading
@@ -17,8 +13,6 @@ import psycopg2.pool
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
-
-# ── Configurazione ──────────────────────────────────────────────────────────
 
 _DATABASE_URL: Optional[str] = None
 _DB_SCHEMA = "plenora"
@@ -42,7 +36,6 @@ def _read_int_env(name: str, default: int) -> int:
 _POOL_MIN = 2
 _POOL_MAX = 12
 
-# C7: idle_in_transaction timeout applicato tramite GUC per-connection
 # Evita zombie da transazioni applicative leaked (codice che apre BEGIN
 # e non committa/rollbacka mai) senza richiedere modifiche a
 # postgresql.conf. Scope: solo le connessioni del nostro pool
@@ -51,10 +44,8 @@ _IDLE_IN_TRANSACTION_MS = 300000
 _POOL_CONFIG_LOADED = False
 
 
-# C7 fix-nit: guardrail espliciti sui parametri del pool. Senza questi
-# check, valori malformati (MIN>MAX, negativi, 0) si propagano fino a
-# ThreadedConnectionPool dove falliscono con errori poco leggibili
-# Fail fast all'import con messaggio diagnostico
+# Guardrail espliciti sui parametri del pool: valori malformati
+# falliscono all'import con messaggio diagnostico.
 def _validate_pool_params(
     *,
     pool_min: int,
@@ -259,16 +250,13 @@ def get_pool_headroom() -> PoolHeadroom:
         Qualunque errore di lazy-init del pool (DB unreachable,
         config invalida) propaga al chiamante. Il consumer in
         `app.observability.health.check_pool_headroom` lo cattura
-        e mappa a fail-OPEN `(True, "introspection skipped: ...")`
-        per preservare il behavior pre-batch-010.
+        e mappa a fail-OPEN `(True, "introspection skipped: ...")`.
     """
     pool = _get_pool()
     in_use = len(getattr(pool, "_used", {}) or {})
     free = len(getattr(pool, "_pool", []) or [])
     return PoolHeadroom(max=_POOL_MAX, in_use=in_use, free=free)
 
-
-# ── Query helpers (canonical DAL surface) ────────────────────────────────────
 
 def _adapt_params(sql: str, params: tuple) -> Tuple[str, tuple]:
     """Reject legacy SQLite-style placeholders.

@@ -18,7 +18,7 @@ from app.core.manipola.transforms.spatial import op_geo_voronoi
 
 
 def _legacy_op_geo_voronoi(df, geom_column):
-    """Copia verbatim dell'impl pre-Batch-3A: iterrows su punti +
+    """Copia verbatim dell'impl previous implementation: iterrows su punti +
     loop lineare su tutti i voronoi_polygons."""
     try:
         from shapely.geometry import MultiPoint

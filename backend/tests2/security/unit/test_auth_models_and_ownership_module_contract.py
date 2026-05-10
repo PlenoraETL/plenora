@@ -1,5 +1,5 @@
 """
-Smoke contract — STRUCT-005 Seam C + B': estrazione models + ownership.
+Smoke contract — extracted boundary + B': estrazione models + ownership.
 
 Verifica due invarianti minime del refactor:
 """
@@ -16,10 +16,10 @@ pytestmark = [pytest.mark.unit, pytest.mark.security, pytest.mark.contract]
 # BE-GO-READY-AUTH-ENGINE-021-USERS-GROUPS-REEXPORT-REMOVAL:
 # `UserCreate`, `ResetPasswordRequest`, `GroupCreate` rimossi dal
 # facade re-export (zero callsite, 1-occurrence-only in auth.py
-# pre-batch). `_FACADE_NO_LONGER_REEXPORTED_DTOS` lock simmetrico
+# Previous contract). `_FACADE_NO_LONGER_REEXPORTED_DTOS` lock simmetrico
 # sotto. Tutti e 13 i DTO restano canonici in
 # `app.core.auth.models` e raggiungibili via
-# `app.shared.contracts.auth` (Phase-10 fan-out).
+# `app.shared.contracts.auth` (facade baseline0 fan-out).
 _MODELS = (
     "LoginRequest",
     "TokenResponse",
@@ -189,7 +189,7 @@ def test_require_owner_dependencies_remain_in_auth_module():
 def test_auth_no_longer_reexports_removed_dtos():
     """BE-GO-READY-AUTH-ENGINE-021: 3 DTOs removed from the facade
     (`UserCreate`, `ResetPasswordRequest`, `GroupCreate`). Each was
-    1-occurrence-only in auth.py pre-batch (zero internal use)
+    1-occurrence-only in auth.py Previous contract (zero internal use)
     and had zero `from app.core.auth.auth import` consumers anywhere.
 
     Re-introducing the re-export silently widens the facade surface;
@@ -204,7 +204,7 @@ def test_auth_no_longer_reexports_removed_dtos():
             "BE-GO-READY-AUTH-ENGINE-021. If this assertion fails, "
             "someone re-introduced the re-export. Import from "
             "`app.core.auth.models` (leaf) or "
-            "`app.shared.contracts.auth` (Phase-10 fan-out) instead."
+            "`app.shared.contracts.auth` (facade baseline0 fan-out) instead."
         )
 
 
@@ -264,8 +264,8 @@ def test_auth_no_longer_reexports_group_filter():
     """BE-GO-READY-AUTH-ENGINE-014-AUTH-FACADE-REEXPORT-DEATHMAP-DTO-CUT:
     the `group_filter` KEEP_COMPAT re-export was deleted from
     `app.core.auth.auth`. The 9 app routers already consume the
-    leaf `app.core.auth.ownership` directly (Phase-6 strangler
-    ban, AUTH-ENGINE-011). Production callers via the facade: ZERO.
+    leaf `app.core.auth.ownership` directly. Production callers via
+    the facade: ZERO.
 
     Re-introducing `from app.core.auth.ownership import group_filter`
     (or any other re-export of `group_filter`) at the top of
@@ -283,7 +283,7 @@ def test_auth_no_longer_reexports_group_filter():
         "BE-GO-READY-AUTH-ENGINE-014. If this assertion fails, "
         "someone re-introduced the re-export. Import from "
         "`app.core.auth.ownership` instead (canonical home), or "
-        "`app.shared.contracts.auth` (Phase-7 fan-out)."
+        "`app.shared.contracts.auth` for shared DTO contracts."
     )
     assert "group_filter" not in auth_mod.__dict__, (
         "`from app.core.auth.auth import group_filter` is no "

@@ -1,7 +1,5 @@
 /**
  * StringListInput.jsx — Lista di stringhe con tag chips
- *
- * Estratto da `ParameterInput.jsx` in `FE-PHASE2-SPLIT-002A`.
  * Usato dal dispatcher per il tipo `string_list`. Tiene state
  * locale `inputValue` per il textbox di append; il valore della
  * lista vive nel parent (controlled).

@@ -132,7 +132,7 @@ def test_load_source_project_blocks_cross_tenant_via_loader():
 
 
 def test_load_source_project_does_not_leak_cross_tenant_detail_in_message():
-    """Pre-fix il wrapper mappava OGNI SourceLoadingError a
+    """Previous behavior il wrapper mappava OGNI SourceLoadingError a
     'appartiene a un gruppo diverso' anche quando in realta' era
     'progetto inesistente' o 'errore DB'. Ora il resolver usa lookup
     tenant-scoped: cross-tenant e progetto assente hanno lo stesso
@@ -191,7 +191,7 @@ def test_load_source_project_distinguishes_project_not_found_from_cross_tenant()
 
 
 def test_resolve_file_source_path_project_branch_passes_through_source_loader():
-    """Post-fix #boundary, _resolve_file_source_path NON tocca piu'
+    """Current contract #boundary, _resolve_file_source_path NON tocca piu'
     ArtifactResolver direttamente: passa per
     SourceLoader.resolve_project_path che a sua volta delega al
     resolver con expected_group_id propagato.
@@ -231,7 +231,7 @@ def test_resolve_file_source_path_project_branch_passes_through_source_loader():
 
 def test_resolve_file_source_path_blocks_cross_tenant_project_source():
     """End-to-end: project_source di altro gruppo → ValueError
-    fail-closed. Pre-fix questo path ritornava silenziosamente None
+    fail-closed. Previous behavior questo path ritornava silenziosamente None
     o tentava di servire il file di un altro tenant.
 
     BE-GO-READY-TRANSFORMATION-ENGINE-029: migrato a ctx esplicito.
@@ -291,8 +291,8 @@ def test_load_file_source_preserves_geodataframe():
     BE-GO-READY-TRANSFORMATION-ENGINE-028: migrato a ctx esplicito.
     Il singleton `_current_group_id` e' impostato a "stale-grp-LEAK"
     per provare che `ctx.group_id` vince. Senza migrazione,
-    questo test non avrebbe coverage del path Phase-2 ctx (solo
-    del fallback Phase-1 singleton)."""
+    questo test non avrebbe coverage del path typed-context ctx (solo
+    del fallback facade baseline singleton)."""
     svc = _make_service_no_singleton()
     # Stale singleton: NON deve essere consultato perche' passiamo ctx.
     svc._current_group_id = "stale-grp-LEAK"

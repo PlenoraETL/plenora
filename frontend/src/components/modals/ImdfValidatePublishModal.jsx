@@ -7,8 +7,7 @@
  *  - Lista data issues per layer (espandibile)
  *  - Pulsante "Procedi con pubblicazione" (disabilitato se ci sono errors)
  *
- * Tema scuro cyan: usa lo shell condiviso `imdf-modal.css`
- * (FE-PHASE2-IMDF-MODAL-SHELL-001).
+ * Tema scuro cyan: usa lo shell condiviso `imdf-modal.css`.
  * Legge `var(--plen-*)` → segue data-theme.
  */
 import React, { useState } from 'react';
@@ -281,9 +280,6 @@ export default function ImdfValidatePublishModal({
     </div>
   ), document.body);
 }
-
-// ── Sub-components ─────────────────────────────────────────────────────
-
 function hasIssueError(layer) {
   const all = [...(layer.schema_issues || []), ...(layer.data_issues || [])];
   return all.some(i => i.severity === 'error');

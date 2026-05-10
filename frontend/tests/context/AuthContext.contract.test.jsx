@@ -120,9 +120,7 @@ describe('AuthContext contract', () => {
     expect(sessionStorage.getItem('urby_user')).toBeNull();
   });
 
-  // =========================================================================
   // Logout → POST /auth/logout (best-effort) + clear locale
-  // =========================================================================
 
   it('calls POST /auth/logout with bearer header on logout and clears session', async () => {
     httpMock.post

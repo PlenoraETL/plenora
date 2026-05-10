@@ -1,9 +1,6 @@
 /**
  * PreviewTable.jsx — Tabella paginata con sort, search e raggruppamento colonne
- *
- * Estratto da PreviewModal.jsx (1366 L → split Fase 1 FE).
  * Componente presentational puro: tutto lo stato vive nel parent (PreviewModal).
- * Punto di innesto futuro per virtualizzazione react-window (Batch 1C).
  *
  * Contract:
  *  - onSearchChange(value) responsabilita' parent: reset currentPage -> 1
@@ -15,7 +12,7 @@ import React, { useMemo } from 'react';
 import { getColumnTypeIcon } from '../../utils/columnUtils';
 import './PreviewModal.css';
 
-/* ─── Grouped header: inferisce gruppi sorgente dal prefisso colonna ── */
+/* Inferisce gruppi sorgente dal prefisso colonna. */
 
 /** Palette colori per gruppo sorgente */
 const GROUP_PALETTE = [
@@ -92,8 +89,6 @@ const buildGroupSpans = (columns, groups) => {
   }
   return spans;
 };
-
-/* ─── COMPONENT ───────────────────────────────────────────────────── */
 
 const PreviewTable = ({
   columns,
@@ -189,8 +184,7 @@ const PreviewTable = ({
       <div className="preview-modal__table-container">
         <table className="preview-modal__table">
           <thead>
-            {/* ── RIGA GRUPPI SORGENTE (solo se rilevati) ── */}
-            {columnGroups && groupSpans && (
+{columnGroups && groupSpans && (
               <tr>
                 <th className="preview-modal__row-num pm-group-th pm-group-th--none" />
                 {groupSpans.map(({ prefix, group, span }, idx) => (

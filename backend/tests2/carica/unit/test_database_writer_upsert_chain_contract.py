@@ -1,7 +1,7 @@
 """
-Phase 2 err-dbwriter commit B — preserve exception chain in upsert auto-index.
+typed context contract err-dbwriter commit B — preserve exception chain in upsert auto-index.
 
-Pre-fix: in `_batch_upsert`, quando `check_conn.execute(create_idx)`
+Previous behavior: in `_batch_upsert`, quando `check_conn.execute(create_idx)`
 """
 
 from __future__ import annotations
@@ -53,8 +53,8 @@ def _make_upsert_writer() -> DatabaseWriter:
 
 
 def test_batch_upsert_preserves_idx_err_as_cause_when_auto_index_fails():
-    """Pre-fix: raise ValueError(...) senza `from idx_err` → __cause__ None.
-    Post-fix: raise ValueError(...) from idx_err → __cause__ == idx_err.
+    """Previous behavior: raise ValueError(...) senza `from idx_err` → __cause__ None.
+    Current contract: raise ValueError(...) from idx_err → __cause__ == idx_err.
 
     Verifica davvero la chain preservata: non basta controllare il tipo
     ValueError, serve l'identita' dell'eccezione originale in __cause__.
@@ -101,11 +101,11 @@ def test_batch_upsert_preserves_idx_err_as_cause_when_auto_index_fails():
     assert "creazione automatica" in str(ve)
 
     # Assert 2: __cause__ e' l'eccezione originale (la chain e' preservata).
-    # Questo e' il punto del commit B. Pre-fix: __cause__ era None.
+    # Questo e' il punto del commit B. Previous behavior: __cause__ era None.
     assert ve.__cause__ is original_error, (
         f"Atteso __cause__ == idx_err originale (OperationalError), "
         f"ottenuto __cause__={ve.__cause__!r}. "
-        f"Pre-fix: __cause__ era None perche' mancava `from idx_err`."
+        f"Previous behavior: __cause__ era None perche' mancava `from idx_err`."
     )
 
     # Assert 3: la classe dell'eccezione sollevata resta ValueError

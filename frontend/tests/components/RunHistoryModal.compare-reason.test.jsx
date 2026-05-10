@@ -1,5 +1,5 @@
 /**
- * Test isolato — `mapCompareErrorReason` (PR-A UX Tier 1).
+ * Isolated contract tests for `mapCompareErrorReason`.
  *
  * Backend `intermediate/router.py:475-505` ritorna 422 con
  * `detail.reason` per due casi noti di diff L2 non disponibile. Il

@@ -333,7 +333,7 @@ def test_get_full_config_strict_raises_on_undecryptable_field(service, monkeypat
 
 def test_get_full_config_non_strict_returns_none_field_silently(service, monkeypatch):
     """Bug #2 guard: retro-compat — senza strict=True, decrypt fallito
-    ritorna None nel campo (comportamento pre-fix per path NON-test).
+    ritorna None nel campo (comportamento Previous behavior per path NON-test).
     Serve per non rompere list_datasources / get_datasource / enrichment runtime."""
     import app.core.datasources.db as datasource_db
 

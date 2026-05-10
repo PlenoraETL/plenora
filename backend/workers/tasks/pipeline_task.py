@@ -109,7 +109,7 @@ def execute_pipeline_task(
 ) -> Dict[str, Any]:
     """Task asincrono per eseguire la pipeline completa di un progetto.
 
-    Idempotency (C4 round 4): se `run_id` viene passato dall'esterno
+    Idempotency: se `run_id` viene passato dall'esterno
     (retry-handler UI, scheduler, replay da backup) ed esiste gia' in
     intermediate.runs con status='completed', il task SKIPPA
     l'esecuzione e ritorna un result cached. Copre lo scenario
@@ -131,8 +131,6 @@ def execute_pipeline_task(
     """
     task_id = self.request.id
 
-    # C4 round 4: idempotency guard. Se run_id e' passato ed e' gia'
-    # completato, ritorna subito senza ri-eseguire la pipeline
     if run_id is not None:
         from app.shared.idempotency import is_already_completed
         if is_already_completed(run_id):
@@ -152,9 +150,6 @@ def execute_pipeline_task(
         run_id = str(_uuid.uuid4())
     _run_start = _time.time()
 
-    # Helper centralizzato in app.shared.async_user_recheck — single source
-    # of truth condivisa fra tutti i worker Celery (pipeline, preview
-    # carica, enrichment). user_id=None -> skip legittimo (cron/scheduled
     from app.shared.async_user_recheck import recheck_user_authorized
     _revoked = recheck_user_authorized(
         user_id=user_id, project_id=project_id,
@@ -163,9 +158,6 @@ def execute_pipeline_task(
     if _revoked is not None:
         _revoked.update({"run_id": run_id, "task_id": task_id})
         return _revoked
-
-    # Raccolta step in itinere — popolata dagli executor tramite append_step
-    # Non usiamo una lista locale: get_steps legge dal RunContext thread-local
 
     logger.info(
         f"Task PIPELINE {task_id} avviato per progetto {project_id}",

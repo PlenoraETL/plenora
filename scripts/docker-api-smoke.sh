@@ -1,7 +1,5 @@
 #!/usr/bin/env bash
-# =============================================================================
 # Plenora-ETL Docker API smoke runner
-# =============================================================================
 #
 # Targets an already running backend and performs bounded checks against the
 # real API surface. The full flow requires deterministic credentials seeded
@@ -18,7 +16,6 @@
 # Exit codes:
 #   0 : implemented checks passed.
 #   2 : invocation error or failed implemented check.
-# =============================================================================
 
 set -uo pipefail
 

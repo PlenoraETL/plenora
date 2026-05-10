@@ -1,5 +1,5 @@
 """
-Contract test Phase 6 Batch 1 — intermediate persistence policy.
+Contract test Current contract
 
 Verifica:
 """
@@ -563,7 +563,7 @@ def test_persistence_mode_for_record_passes_through_known_value():
     ) == "metadata_only"
 
 
-# I. flush_snapshots stub (Batch 1)
+# I. flush_snapshots stub (current contract)
 
 
 def test_flush_snapshots_stub_returns_zero_pending():

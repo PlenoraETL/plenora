@@ -185,7 +185,7 @@ def test_merge_raises_when_input_range_is_non_default_and_executor_resets():
 
 
 def test_merge_split_execute_if_path_unaffected(monkeypatch):
-    """Branch `all_exec=False` (split per `execute_if`): pre-fix il codice
+    """Branch `all_exec=False` (split per `execute_if`): Previous behavior il codice
     fa `pd.concat([result_exec, df_skip]).sort_index()`. La guard deve
     accettare l'output perche' index coincide con input dopo sort.
     """

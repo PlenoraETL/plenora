@@ -1,5 +1,5 @@
 """
-[phase-5-b4][batch3] Bugfix copertura - `_delete_existing_service`
+Contract coverage for `_delete_existing_service`
 
 Counters remain owned by the provider delete boundary; IMDF keeps the
 discovery/timing policy and returns the legacy `(attempted, succeeded)` shape.

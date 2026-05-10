@@ -1,8 +1,4 @@
-"""
-PLENORA-ETL — Data Source Backend: FTP
-
-Supporta FTP attivo/passivo con TLS opzionale (FTPS).
-"""
+"""FTP and FTPS data source backend."""
 
 import ftplib
 import io
@@ -51,8 +47,6 @@ class FTPDataSource(DataSourceInterface):
         super().__init__(config)
         self._ftp: Optional[ftplib.FTP] = None
 
-    # ── Lifecycle ──────────────────────────────────────────────────────────
-
     def connect(self) -> None:
         extra = self.config.extra
         host = extra.get("host", "")
@@ -70,7 +64,7 @@ class FTPDataSource(DataSourceInterface):
                 ftp = ftplib.FTP_TLS()
                 ftp.connect(host=host, port=port, timeout=15)
                 ftp.login(user=username, passwd=password)
-                ftp.prot_p()    # canale dati cifrato
+                ftp.prot_p()
             else:
                 ftp = ftplib.FTP()
                 ftp.connect(host=host, port=port, timeout=15)
@@ -79,7 +73,6 @@ class FTPDataSource(DataSourceInterface):
             ftp.set_pasv(passive)
             self._ftp = ftp
 
-            # Posiziona nella root configurata
             root = self.config.root_path
             if root and root != "/":
                 try:
@@ -98,7 +91,6 @@ class FTPDataSource(DataSourceInterface):
                 f"[GESTITO] FTP connect fallita: {type(e).__name__}: {e}",
                 exc_info=True,
             )
-            # Chiudi connessione se è stata aperta ma l'inizializzazione è fallita
             if self._ftp:
                 try:
                     self._ftp.quit()
@@ -134,9 +126,7 @@ class FTPDataSource(DataSourceInterface):
                 },
             }
         except DataSourceConnectionError as e:
-            # F5-B2: `e` qui e' il nostro wrapper con messaggio gia' canonico
-            # vedi connect + _sanitize_ftp_error), quindi str(e) e' safe
-            # Log dettaglio tecnico dell'eventuale original cause
+            # DataSourceConnectionError message is already sanitized by connect().
             logger.warning(
                 f"[GESTITO] FTP test_connection fallita: {type(e).__name__}: {e} "
                 f"(cause: {type(e.__cause__).__name__ if e.__cause__ else 'none'})",
@@ -145,8 +135,6 @@ class FTPDataSource(DataSourceInterface):
             return {"ok": False, "message": str(e), "details": {}}
         finally:
             self.disconnect()
-
-    # ── Le 6 operazioni ────────────────────────────────────────────────────
 
     def list_files(
         self,
@@ -160,7 +148,6 @@ class FTPDataSource(DataSourceInterface):
         results = []
 
         try:
-            # MLSD (RFC 3659) — metadata strutturati se supportato
             entries = list(self._ftp.mlsd(remote, facts=["size", "modify", "type"]))
             for name, facts in entries:
                 if facts.get("type") != "file":
@@ -178,7 +165,6 @@ class FTPDataSource(DataSourceInterface):
                     hash=hash_val,
                 ))
         except ftplib.error_perm:
-            # Server senza MLSD — fallback a NLST + SIZE + MDTM
             results = self._list_nlst(path, pattern, include_hash)
         except ftplib.all_errors as e:
             logger.warning(
@@ -202,7 +188,6 @@ class FTPDataSource(DataSourceInterface):
             name = full_name.split("/")[-1]
             if not self._matches_pattern(name, pattern):
                 continue
-            # intent: optional feature / outcome: fail-open (entry skip su NLST metadata
             try:
                 size = self._ftp.size(full_name) or 0
                 mdtm = self._ftp.sendcmd(f"MDTM {full_name}")
@@ -311,8 +296,6 @@ class FTPDataSource(DataSourceInterface):
         except ftplib.all_errors:
             return False
 
-    # ── Helpers privati ─────────────────────────────────────────────────────
-
     def _check(self):
         if self._ftp is None:
             raise DataSourceConnectionError("Non connesso. Usa il context manager 'with'.")
@@ -320,7 +303,6 @@ class FTPDataSource(DataSourceInterface):
     def _maybe_hash(self, path: str, include_hash: bool) -> Optional[str]:
         if not include_hash:
             return None
-        # intent: optional feature / outcome: fail-open (hash opzionale
         try:
             return self._compute_hash(self.read_file(path))
         except Exception as e:
@@ -336,7 +318,6 @@ class FTPDataSource(DataSourceInterface):
         current = ""
         for part in parts:
             current = f"{current}/{part}" if current else part
-            # intent: optional feature / outcome: fail-open (mkdir idempotent — dir esistente
             try:
                 self._ftp.mkd(current)
             except ftplib.error_perm as e:

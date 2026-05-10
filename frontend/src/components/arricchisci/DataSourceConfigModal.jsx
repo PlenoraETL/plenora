@@ -117,9 +117,7 @@ function DataSourceConfigModal({ onClose, onSave }) {
 
         {/* Body */}
         <div className="dsm__body">
-
-          {/* ── Step 0: Tipo ── */}
-          {step === 0 && (
+{step === 0 && (
             <div className="dsm__section">
               <div className="dsm__field-group">
                 <div className="dsm__label">Nome connessione *</div>
@@ -144,9 +142,7 @@ function DataSourceConfigModal({ onClose, onSave }) {
               </div>
             </div>
           )}
-
-          {/* ── Step 1: Credenziali ── */}
-          {step === 1 && selectedSource && (
+{step === 1 && selectedSource && (
             <div className="dsm__section">
               <div className="dsm__cred-header">
                 <span className="dsm__cred-icon">{selectedSource.icon}</span>
@@ -170,9 +166,7 @@ function DataSourceConfigModal({ onClose, onSave }) {
               })}
             </div>
           )}
-
-          {/* ── Step 2: Percorso ── */}
-          {step === 2 && (
+{step === 2 && (
             <div className="dsm__section">
               <div className="dsm__field-group">
                 <div className="dsm__label">Percorso o Pattern *</div>
@@ -204,9 +198,7 @@ function DataSourceConfigModal({ onClose, onSave }) {
               </label>
             </div>
           )}
-
-          {/* ── Step 3: Test ── */}
-          {step === 3 && (
+{step === 3 && (
             <div className="dsm__section">
               <div className="dsm__summary">
                 {[

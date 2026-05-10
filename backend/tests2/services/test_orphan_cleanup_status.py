@@ -1,7 +1,7 @@
 """
-[phase-2-err][batch9] C3 — orphan_cleanup_service status esplicito.
+C3 — orphan_cleanup_service status esplicito.
 
-Audit Batch 9 §3.2 S7 / fix F5: `cleanup_orphans` ritornava un dict con
+Audit finding: `cleanup_orphans` ritornava un dict con
 """
 
 from __future__ import annotations
@@ -178,7 +178,7 @@ def test_cleanup_orphans_final_log_is_warning_when_partial():
 
 def test_cleanup_orphans_final_log_is_info_when_clean():
     """Il log riassuntivo finale resta `logger.info` quando status='clean'
-    — comportamento invariato rispetto al pre-fix per il caso happy path."""
+    — comportamento invariato rispetto al Previous behavior per il caso happy path."""
     from app.core.results.orphan_cleanup import cleanup_orphans
 
     with patch(
@@ -213,7 +213,7 @@ def test_cleanup_orphans_final_log_is_info_when_clean():
 
 
 def test_cleanup_orphans_report_backward_compat_keys_present():
-    """Sanity: chiavi del dict report pre-fix devono restare presenti
+    """Sanity: chiavi del dict report Previous behavior devono restare presenti
     con la stessa forma (dry_run, orphan_results, orphan_runs, errors).
     `status` e' additivo."""
     from app.core.results.orphan_cleanup import cleanup_orphans

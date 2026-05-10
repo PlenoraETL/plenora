@@ -10,25 +10,21 @@ from dataclasses import dataclass, field, asdict
 from datetime import datetime, timezone
 
 
-# ENUMERAZIONI
-
 class RowStatus(str, Enum):
     """Stato elaborazione singola riga."""
     SUCCESS = "success"
     ERROR = "error"
-    SKIPPED = "skipped"           # Input non valido / nullo
-    CACHED = "cached"             # Risultato da cache (deduplicazione
-    RETRY_EXHAUSTED = "retry_exhausted"  # Max retry raggiunto
+    SKIPPED = "skipped"
+    CACHED = "cached"
+    RETRY_EXHAUSTED = "retry_exhausted"
 
 
 class BatchInputFormat(str, Enum):
     """Formato input per batch API native."""
-    ARRAY = "array"               # {"q": "addr1"}, {"q": "addr2"}
-    FLAT_ARRAY = "flat_array"     # "addr1", "addr2"] (singolo parametro
-    OBJECT = "object"             # {"items": [{"q": "addr1"}, ...]}
+    ARRAY = "array"
+    FLAT_ARRAY = "flat_array"
+    OBJECT = "object"
 
-
-# CONFIGURAZIONE BATCH
 
 @dataclass
 class BatchConfig:
@@ -45,12 +41,12 @@ class BatchConfig:
     }
     """
     enabled: bool = False
-    max_size: int = 100                              # Max righe per singola chiamata batch
-    input_key: str = "items"                         # Chiave array nella request
+    max_size: int = 100
+    input_key: str = "items"
     input_format: BatchInputFormat = BatchInputFormat.ARRAY
-    output_path: str = ""                            # Path all'array di risultati (vuoto = root
-    endpoint_override: Optional[str] = None          # Endpoint diverso per batch
-    method_override: Optional[str] = None            # Metodo diverso (es. POST invece di GET
+    output_path: str = ""
+    endpoint_override: Optional[str] = None
+    method_override: Optional[str] = None
     
     @classmethod
     def from_dict(cls, data: Dict) -> "BatchConfig":

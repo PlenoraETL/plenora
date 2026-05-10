@@ -25,11 +25,8 @@
  * file e poi importare la nuova funzione dove serve.
  */
 
-// ── Ruoli supportati ─────────────────────────────────────────────────────
 // `ROLES` e' interno al modulo + esposto via default export `{ can, role,
-// ROLES }`. Il named `export const ROLES` precedente non aveva consumer
-// (audit FE-PHASE2-STRUCTURAL-CLEANUP-001). L'enum resta semantico nel
-// default export per chi vorra' leggerlo come tabella di ruoli.
+// ROLES }`; l'enum resta semantico nel default export.
 const ROLES = {
   ESECUTORE:  'esecutore',  // ruolo "kiosk": vede SOLO eseguibili, niente altro
   VIEWER:     'viewer',
@@ -37,8 +34,6 @@ const ROLES = {
   ADMIN:      'admin',
   SUPERADMIN: 'superadmin',
 };
-
-// ── Predicati di ruolo "puri" ────────────────────────────────────────────
 // Esatti (= un solo ruolo)
 const isEsecutore  = (u) => u?.role === ROLES.ESECUTORE;
 const isViewer     = (u) => u?.role === ROLES.VIEWER;
@@ -62,8 +57,6 @@ export const role = {
   isUserOrAbove,            // user, admin, superadmin (esclude viewer ed esecutore)
   isViewerOrAbove,          // tutti i ruoli "normali" (esclude esecutore)
 };
-
-// ── Capability semantiche ────────────────────────────────────────────────
 // Mappare ogni "azione" a un predicato. Questa è la tabella di policy.
 //
 // Se domani decidi che "editCanvas" deve essere permesso anche ai viewer,
@@ -74,36 +67,23 @@ export const role = {
 // uniche capability vere dell'esecutore sono `runEseguibile` e
 // `changeOwnPassword` (di fatto sempre vere quando è loggato).
 export const can = {
-  // ── Canvas / progetti ──────────────────────────────────────────────
-  editCanvas:        isUserOrAbove,   // viewer/esecutore sono read-only
+editCanvas:        isUserOrAbove,   // viewer/esecutore sono read-only
   createProject:     isUserOrAbove,
   deleteOwnProject:  isUserOrAbove,
-
-  // ── File ───────────────────────────────────────────────────────────
-  uploadFile:        isUserOrAbove,
+uploadFile:        isUserOrAbove,
   deleteFile:        isUserOrAbove,
-
-  // ── Risorse tecniche (solo admin/superadmin del proprio gruppo) ────
-  createConnection:    isAdminOrAbove,
+createConnection:    isAdminOrAbove,
   createDataSource:    isAdminOrAbove,
   createApiConnection: isAdminOrAbove,
   createSchedule:      isAdminOrAbove,
   createEseguibile:    isAdminOrAbove,
-
-  // ── Sharing cross-gruppo (solo superadmin) ─────────────────────────
-  shareResources:    isSuperadmin,
-
-  // ── User & Group management ────────────────────────────────────────
-  manageUsers:       isAdminOrAbove,  // admin gestisce solo il proprio gruppo
+shareResources:    isSuperadmin,
+manageUsers:       isAdminOrAbove,  // admin gestisce solo il proprio gruppo
   manageGroups:      isSuperadmin,    // solo superadmin tocca i gruppi
   assignAdminRole:   isSuperadmin,    // solo superadmin può creare admin/superadmin
   createEsecutore:   isAdminOrAbove,  // sia superadmin che admin di gruppo
-
-  // ── Log viewer ─────────────────────────────────────────────────────
-  seeTechnicalLogs:  isAdminOrAbove,  // tab "Log Tecnici" del LogViewer
-
-  // ── Eseguibili (kiosk-friendly) ────────────────────────────────────
-  // Tutti i ruoli loggati possono eseguire gli eseguibili visibili al
+seeTechnicalLogs:  isAdminOrAbove,  // tab "Log Tecnici" del LogViewer
+// Tutti i ruoli loggati possono eseguire gli eseguibili visibili al
   // proprio gruppo (incluso esecutore, che è proprio il suo unico scopo).
   runEseguibile:     (u) => !!u?.role && Object.values(ROLES).includes(u.role),
 };

@@ -1,5 +1,5 @@
 """
-Contract test R-25 PR-B2 — propagation `intermediate_mode_override`.
+Contract test R-25 propagation contract — propagation `intermediate_mode_override`.
 
 Verifica end-to-end che il kwarg `intermediate_mode_override` propagato
 """
@@ -123,7 +123,7 @@ class TestResolvePolicyOverride:
         """Arricchisci checkpoint resta skipped anche con override pesante:
         l'override sostituisce la MODE, non la decisione di registrare.
 
-        Garantisce che PR-B2 non rompa la policy di scope (skip checkpoint
+        Garantisce che propagation contract non rompa la policy di scope (skip checkpoint
         per arricchisci e' da `ARRICCHISCI_INTERMEDIATE_CHECKPOINTS=final_only`,
         indipendente da `mode_override`)."""
         from app.core.intermediate import policy as _policy

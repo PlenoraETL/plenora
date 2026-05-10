@@ -5,8 +5,7 @@
  * lastTaskResult.imdf.validation dal task celery). Mostra summary + tabella
  * errori/warning per livello.
  *
- * Tema scuro cyan: usa lo shell condiviso `imdf-modal.css`
- * (FE-PHASE2-IMDF-MODAL-SHELL-001).
+ * Tema scuro cyan: usa lo shell condiviso `imdf-modal.css`.
  * Nota Rules of Hooks: useState/useMemo devono stare PRIMA del return early
  * (React error #310 se spostati sotto).
  */
@@ -155,8 +154,6 @@ export default function ImdfValidationModal({ isOpen, onClose, validation }) {
     </div>
   ), document.body);
 }
-
-// ── Sub-components ──────────────────────────────────────────────────────
 function Badge({ color, count, label }) {
   return (
     <span style={{

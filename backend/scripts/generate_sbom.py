@@ -1,8 +1,4 @@
-"""
-Genera SBOM CycloneDX-JSON dell'inventario dipendenze backend.
-
-T-05 Phase 3 Batch D — baseline SBOM ripetibile.
-"""
+"""Genera SBOM CycloneDX-JSON dell'inventario dipendenze backend."""
 
 from __future__ import annotations
 
@@ -26,12 +22,11 @@ def main() -> int:
 
     sbom_out.parent.mkdir(parents=True, exist_ok=True)
 
-    # pip-audit deve essere importabile: fail-loud se manca.
     if importlib.util.find_spec("pip_audit") is None:
         print(
             "ERROR: pip-audit non installato. Installa con:\n"
             "  pip install -r backend/requirements-dev.txt\n"
-            "(pip-audit e' nelle dev-deps dal Phase 3 Batch D / T-05)",
+            "(pip-audit e' nelle dev-deps)",
             file=sys.stderr,
         )
         return 3

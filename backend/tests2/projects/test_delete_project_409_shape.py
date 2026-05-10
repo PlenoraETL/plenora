@@ -1,7 +1,7 @@
 """
 Contract test per shape 409 canonica su DELETE /api/projects/{id}.
 
-Invariante blindato (Batch Fix 6.1 — error-handling-governance):
+Invariante blindato (— error-handling-governance):
 """
 
 from __future__ import annotations
@@ -88,7 +88,7 @@ def test_delete_project_409_shape_has_canonical_dependencies_field(client):
 
 def test_delete_project_happy_path_returns_204(client):
     """F2-B2 (2026-04-24): DELETE /api/projects/{id} risponde 204 No
-    Content con body vuoto. Pre-fix ritornava 200 + dict
+    Content con body vuoto. Previous behavior ritornava 200 + dict
     {"status": "deleted", "project_id": X}."""
     mock_service = client.app.state.mock_service
     mock_service.delete_project.return_value = None

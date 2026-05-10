@@ -22,12 +22,7 @@ from app.core.carica.models import (
 )
 from app.utils.logger import get_logger
 
-# Stesso logger name di `database_writer.py`: i record sono
-# indistinguibili dai consumer che attaccano handler / filtrano per
-# "app.core.carica.writer". Il `StructuredLogger` wrapper delega a
-# `_logger.log(...)` sul logger stdlib omonimo (singleton per nome
-# quindi handler agganciati nei test (B2.0/B2.5a) catturano gli emit
-# dal mixin
+# Keep the canonical writer logger name so existing handlers receive mixin logs.
 logger = get_logger("app.core.carica.writer")
 
 
@@ -38,18 +33,14 @@ class WriterPreflightLifecycleMixin:
     la propria connection).
     """
 
-    # PREFLIGHT VALIDATION
-
     def validate(self) -> Tuple[bool, str]:
         """Valida le pre-condizioni prima della scrittura."""
-        # 1. Test connessione
         try:
             with self.engine.connect() as conn:
                 conn.execute(text("SELECT 1"))
         except Exception as e:
             return False, f"Connessione al database fallita: {str(e)}"
 
-        # 2. Verifica tabella per modalità che la richiedono
         try:
             exists = self.table_exists()
         except Exception as e:
@@ -76,7 +67,6 @@ class WriterPreflightLifecycleMixin:
                     f"non esiste. Usa modalità CREATE per crearla."
                 )
 
-        # 3. Verifica colonne match per UPDATE/UPSERT
         if self.config.write_mode in (WriteMode.UPDATE, WriteMode.UPSERT):
             if not self.config.match_columns:
                 return False, (
@@ -84,14 +74,11 @@ class WriterPreflightLifecycleMixin:
                     f"almeno una colonna match (chiave primaria)."
                 )
 
-        # 4. Verifica permessi (tentativo CREATE TABLE temporanea
         if self.config.write_mode in (WriteMode.CREATE, WriteMode.REPLACE):
             ok, err = self._check_create_permission()
             if not ok:
                 return False, err
 
-        # 5. Verifica che i dest_column del mapping esistano nella tabella destinazione
-        # solo per modalità che scrivono su tabella esistente
         if self.config.write_mode in (
             WriteMode.APPEND, WriteMode.UPDATE,
             WriteMode.UPSERT, WriteMode.TRUNCATE_INSERT
@@ -124,7 +111,6 @@ class WriterPreflightLifecycleMixin:
         test_table = f"_urby_perm_test_{int(time.time())}"
         try:
             with self.engine.connect() as conn:
-                # Prova a creare e droppare una tabella test
                 full_name = self.ddl.qualified_table_name(
                     self.config.schema_name, test_table
                 )
@@ -141,12 +127,8 @@ class WriterPreflightLifecycleMixin:
                     f"Permessi insufficienti per CREATE TABLE nello schema "
                     f"'{self.config.schema_name}': {str(e)}"
                 )
-            # Errore non classificato come permission: fail-closed
-            # Pre-fix: logger.warning + return True ("logga ma non blocca"
-            # lasciava passare errori transient/DDL sconosciuti come se i
-            # permessi fossero ok, poi CREATE TABLE vero falliva senza
-            # diagnostica utile. Ora la verifica segnala esplicitamente
-            # il fallimento al chiamante
+            # Unknown CREATE probe errors are fail-closed so callers do not
+            # continue with misleading permission assumptions.
             logger.error(
                 f"[CRASH] Verifica permessi CREATE fallita su schema "
                 f"'{self.config.schema_name}': {e}",
@@ -156,8 +138,6 @@ class WriterPreflightLifecycleMixin:
                 f"Verifica permessi CREATE TABLE nello schema "
                 f"'{self.config.schema_name}' fallita: {str(e)}"
             )
-
-    # GESTIONE TABELLA (DDL lifecycle
 
     def create_table(
         self,
@@ -170,11 +150,10 @@ class WriterPreflightLifecycleMixin:
         Args:
             columns: mappature colonne.
             pandas_dtypes: dtypes reali dal DataFrame per type mapping.
-            max_lengths: {col_name: max_char_length} opzionale (C5 fix 2).
+            max_lengths: {col_name: max_char_length} opzionale.
                 Se passato, su Oracle abilita auto-promote VARCHAR2(4000)
                 → CLOB per colonne > 4000 char.
         """
-        # Genera DDL con dtypes reali dal DataFrame
         if pandas_dtypes is None:
             pandas_dtypes = {}
         create_sql = self.ddl.generate_create_table(
@@ -189,7 +168,6 @@ class WriterPreflightLifecycleMixin:
             with self.engine.connect() as conn:
                 conn.execute(text(create_sql))
 
-                # Indice spaziale
                 if self.config.create_spatial_index:
                     geom_cols = [c for c in columns if c.is_geometry]
                     for geom_col in geom_cols:
@@ -203,8 +181,6 @@ class WriterPreflightLifecycleMixin:
                             logger.info(f"SPATIAL INDEX: {idx_sql[:200]}...")
                             conn.execute(text(idx_sql))
 
-                # Indice univoco (per supporto UPSERT futuro
-                # B-BE-61: se configurato, crea UNIQUE constraint sulla colonna chiave
                 unique_col = getattr(self.config, 'unique_key_column', None)
                 if unique_col and self.db_type == 'postgres':
                     unique_col = unique_col.strip()
@@ -248,11 +224,8 @@ class WriterPreflightLifecycleMixin:
         """Svuota la tabella destinazione.
 
         Solleva l'eccezione sottostante se TRUNCATE non e' eseguibile
-        (permessi, lock, DDL). Pre-fix: ritornava False silenziosamente,
-        e il caller in write PER_BATCH (TRUNCATE_INSERT) procedeva
-        comunque con l'INSERT appendendo anziche' truncate-inserting —
-        correttezza dati compromessa. Ora il boundary in write cattura
-        e segnala WRITE_ERROR.
+        (permessi, lock, DDL), cosi' il boundary in write segnala
+        WRITE_ERROR invece di proseguire con un insert non preceduto da truncate.
         """
         trunc_sql = self.ddl.generate_truncate(
             self.config.schema_name, self.config.table_name
@@ -266,8 +239,6 @@ class WriterPreflightLifecycleMixin:
         except Exception as e:
             logger.error(f"[CRASH] Errore truncate tabella: {e}", exc_info=True)
             raise
-
-    # CHECK CONFLITTI
 
     def check_conflicts(
         self,
@@ -290,17 +261,13 @@ class WriterPreflightLifecycleMixin:
             match_columns,
         )
 
-    # WRITE RESULT FACTORY + SAFE-CONFIG GATE
-
     def _build_initial_result(
         self, total_rows: int, started_at: str
     ) -> WriteResult:
         """Costruisce lo skeleton del WriteResult prima dell'esecuzione.
 
-        Estratto da `write` (C4.1 ) come pura factory: nessuna
-        logica di business, nessun side-effect. Mantiene unique-source-of-
-        truth per i campi `table_name` e `write_mode` derivati da
-        `self.config`, evitando duplicazioni inline nei branch di write.
+        Pura factory: nessuna logica di business, nessun side-effect.
+        Mantiene un'unica derivazione dei campi table/write mode.
         """
         return WriteResult(
             started_at=started_at,
@@ -310,21 +277,15 @@ class WriterPreflightLifecycleMixin:
         )
 
     def _assert_safe_write_config(self) -> None:
-        """F-DATA-08 / P1-05: gate fail-loud sulla combo rischiosa.
+        """Gate fail-loud sulla combo append/per_batch senza match columns.
 
         Se il write fallisce a meta' con ' committati (PER_BATCH)
         + write_mode=APPEND + nessun match_columns per conflict detection,
         un rilancio manuale duplicherebbe le righe gia' scritte.
-        Pre-fix la combo era solo "warning"-livel: in produzione il
-        warning e' di fatto silent → corruzione dati su retry partial.
-        Ora la combo e' rifiutata fail-loud, opt-in tramite
+        La combo e' rifiutata fail-loud, opt-in tramite
         `WriteConfig.allow_unsafe_append=True` per chi accetta
         consapevolmente il rischio (es. tabelle append-only con
         lineage esterno che gestisce dedup downstream).
-
-        Estratto da `write` (C4.1 ) come helper privato.
-        Comportamento bit-per-bit invariato: stessa condizione, stesso
-        messaggio di errore, stesso warning su opt-in.
         """
         if not (
             self.config.write_mode == WriteMode.APPEND

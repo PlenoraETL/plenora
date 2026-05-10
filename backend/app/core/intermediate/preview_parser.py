@@ -113,12 +113,10 @@ def parse_parquet_preview(
         reader = pa.BufferReader(body_bytes)
         pf = pq.ParquetFile(reader)
         row_count = int(pf.metadata.num_rows)
-        # Schema derivation: build an empty pandas DataFrame
-        # from the arrow schema so we get the SAME dtype string
-        # mapping that ``pd.read_parquet`` would produce on a
-        # fully-decoded frame. Using the footer schema (not the
-        # first batch) means a wide schema with a row-group
-        # that happens to be empty still surfaces every column
+        # Schema derivation uses an empty pandas DataFrame from the
+        # arrow schema, so dtype strings match ``pd.read_parquet`` on a
+        # fully decoded frame. Footer schema also preserves columns
+        # when a wide file's first row-group happens to be empty.
         empty_df = pf.schema_arrow.empty_table().to_pandas()
         col_schema: Dict[str, str] = {
             str(c): str(empty_df[c].dtype) for c in empty_df.columns

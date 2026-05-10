@@ -253,8 +253,6 @@ function EseguibileExecuteWizard({ eseguibileId, onClose, onAfterDownload = null
           <div className="esw-loading">Caricamento eseguibile...</div>
         ) : (
           <div className="esw-body">
-
-            {/* ───────── STEP 1: UPLOAD ───────── */}
             {step === 1 && eseguibile && (
               <div className="esw-step-content">
                 <h3>Carica il file con i dati da processare</h3>
@@ -326,8 +324,6 @@ function EseguibileExecuteWizard({ eseguibileId, onClose, onAfterDownload = null
                 </div>
               </div>
             )}
-
-            {/* ───────── STEP 2: MAPPING ───────── */}
             {step === 2 && uploadResult && eseguibile && (
               <div className="esw-step-content">
                 <h3>Mappa le colonne del tuo file alle colonne della catena</h3>
@@ -408,8 +404,6 @@ function EseguibileExecuteWizard({ eseguibileId, onClose, onAfterDownload = null
                 </div>
               </div>
             )}
-
-            {/* ───────── STEP 3: EXECUTE ───────── */}
             {step === 3 && eseguibile && (
               <div className="esw-step-content">
                 {!executing && !taskResult ? (

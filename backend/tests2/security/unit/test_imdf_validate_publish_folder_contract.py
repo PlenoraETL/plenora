@@ -8,7 +8,6 @@ import pytest
 pytestmark = [pytest.mark.unit, pytest.mark.contract, pytest.mark.regression]
 
 
-# ── 1. Pydantic model ───────────────────────────────────────────────────
 def test_imdf_validate_request_accepts_optional_folder():
     from app.core.imdf.router import ImdfValidateRequest
 
@@ -30,7 +29,6 @@ def test_imdf_validate_request_accepts_optional_folder():
     assert r.folder == "MyFolder"
 
 
-# ── 2. Fixtures per mockare validate_publish ────────────────────────────
 class _FakeGDF:
     """Mock minimo di un GeoDataFrame per far passare il per-layer loop in
     mode=replace (non serve columns, solo __len__)."""
@@ -108,7 +106,6 @@ def stub_externals(monkeypatch):
     return {"service_discovery": service_discovery_mod}
 
 
-# ── 3. Baseline: senza folder ───────────────────────────────────────────
 def test_validate_publish_without_folder_has_no_folder_mismatch(fake_bundle, stub_externals):
     """Comportamento baseline: senza folder nel request, mai warning
     FOLDER_MISMATCH nel report (retrocompat)."""
@@ -125,7 +122,6 @@ def test_validate_publish_without_folder_has_no_folder_mismatch(fake_bundle, stu
     assert "FOLDER_MISMATCH" not in codes
 
 
-# ── 4. Folder passato, FS non esiste → nessun warning (è solo per esistenti)
 def test_validate_publish_folder_no_existing_fs_no_mismatch(fake_bundle, stub_externals):
     from app.core.imdf.validator import validate_publish
 
@@ -140,7 +136,6 @@ def test_validate_publish_folder_no_existing_fs_no_mismatch(fake_bundle, stub_ex
     assert "FOLDER_MISMATCH" not in codes
 
 
-# ── 5. Folder matches ownerFolder esistente → no warning ────────────────
 def test_validate_publish_folder_matches_existing_no_warning(fake_bundle, stub_externals, monkeypatch):
     import app.core.imdf.arcgis.service_discovery as service_discovery_mod
 
@@ -163,7 +158,6 @@ def test_validate_publish_folder_matches_existing_no_warning(fake_bundle, stub_e
     assert report["fs_exists"] is True
 
 
-# ── 6. Folder mismatches → warning FOLDER_MISMATCH ──────────────────────
 def test_validate_publish_folder_mismatch_emits_warning(fake_bundle, stub_externals, monkeypatch):
     import app.core.imdf.arcgis.service_discovery as service_discovery_mod
 
@@ -191,7 +185,6 @@ def test_validate_publish_folder_mismatch_emits_warning(fake_bundle, stub_extern
     assert folder_issues[0].get("severity") == "warning"
 
 
-# ── 7. FOLDER_MISMATCH falso positivo: id esistente vs title richiesto ─
 def test_validate_publish_folder_id_resolves_to_title_no_warning(fake_bundle, stub_externals, monkeypatch):
     """L'API ArcGIS restituisce ownerFolder come folder ID (hash), mentre
     l'utente sceglie una folder per TITLE. Il validator deve risolvere
@@ -258,7 +251,6 @@ def test_validate_publish_folder_id_mismatch_uses_title_in_message(fake_bundle, 
     assert "hash-abc" not in msg, f"Messaggio NON deve contenere l'id raw. msg={msg}"
 
 
-# ── 9. Folder mismatch NON deve rompere replace ok ──────────────────────
 def test_validate_publish_folder_mismatch_replace_still_ok(fake_bundle, stub_externals, monkeypatch):
     """Anche con folder diverso, replace resta 'ok' (è un warning, non error)."""
     import app.core.imdf.arcgis.service_discovery as service_discovery_mod

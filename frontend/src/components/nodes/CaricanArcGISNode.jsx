@@ -22,9 +22,6 @@ import {
 import './CaricanArcGISNode.css';
 
 const CaricanArcGISNode = memo(({ data, id }) => {
-  // =========================================================================
-  // STATE — UI
-  // =========================================================================
   const [isExpanded, setIsExpanded] = useState(true);
   const [showMapping, setShowMapping] = useState(false);
 
@@ -41,9 +38,6 @@ const CaricanArcGISNode = memo(({ data, id }) => {
   const [arcgisFolders, setArcgisFolders] = useState([]);
   const [isLoadingFolders, setIsLoadingFolders] = useState(false);
 
-  // =========================================================================
-  // VALORI CORRENTI dalla configurazione
-  // =========================================================================
   const arcgisConnectionId = data.arcgis_connection_id || '';
   const arcgisServiceUrl = data.arcgis_service_url || '';
   const arcgisLayerUrl = data.arcgis_layer_url || '';
@@ -65,9 +59,6 @@ const CaricanArcGISNode = memo(({ data, id }) => {
   const isAccessDenied = !!data.access_denied;
   const accessDeniedReason = data.access_denied_reason || '';
 
-  // =========================================================================
-  // OPZIONI STATICHE
-  // =========================================================================
   const arcgisOperations = [
     { value: 'add', label: '+ Add Features', desc: 'Aggiungi features al layer esistente' },
     { value: 'update', label: 'Update Features', desc: 'Aggiorna features esistenti per colonna chiave' },
@@ -75,10 +66,6 @@ const CaricanArcGISNode = memo(({ data, id }) => {
     { value: 'delete', label: 'Delete Features', desc: 'Elimina features per colonna chiave' },
     { value: 'create_service', label: 'Crea Servizio', desc: 'Crea nuovo Feature Service + carica dati' },
   ];
-
-  // =========================================================================
-  // EFFETTI — ArcGIS
-  // =========================================================================
 
   useEffect(() => {
     loadArcgisConnections();
@@ -135,10 +122,6 @@ const CaricanArcGISNode = memo(({ data, id }) => {
       setArcgisLayerSchema(null);
     }
   }, [arcgisConnectionId, arcgisLayerUrl, arcgisOperation, isAccessDenied]);
-
-  // =========================================================================
-  // FUNZIONI API — ArcGIS
-  // =========================================================================
 
   const loadArcgisConnections = async () => {
     setIsLoadingArcgisConns(true);
@@ -222,9 +205,6 @@ const CaricanArcGISNode = memo(({ data, id }) => {
     handleUpdate('column_mappings', mappings);
   };
 
-  // =========================================================================
-  // HANDLERS
-  // =========================================================================
   const _updateNodeData = useCanvasStore(s => s.updateNodeData);
 
   const handleUpdate = (field, value) => {
@@ -282,9 +262,6 @@ const CaricanArcGISNode = memo(({ data, id }) => {
     handleUpdate('column_mappings', columnMappings.filter((_, i) => i !== index));
   };
 
-  // =========================================================================
-  // VALIDAZIONE
-  // =========================================================================
   const needsMatchColumn = ['update', 'upsert', 'delete'].includes(arcgisOperation);
   const matchColumnValid = !needsMatchColumn || arcgisMatchColumn;
 
@@ -298,9 +275,6 @@ const CaricanArcGISNode = memo(({ data, id }) => {
     .filter(f => f.type !== 'esriFieldTypeOID' && f.type !== 'esriFieldTypeGlobalID')
     .map(f => f.name);
 
-  // =========================================================================
-  // RENDER
-  // =========================================================================
   return (
     <div className={`carica-arcgis-node ${!isValid ? 'carica-arcgis-node--invalid' : ''}`}>
       <Handle
@@ -309,7 +283,6 @@ const CaricanArcGISNode = memo(({ data, id }) => {
         className="carica-arcgis-node__handle carica-arcgis-node__handle--input"
       />
 
-      {/* Header */}
       <div className="carica-arcgis-node__header" role="button" tabIndex={0}
         onClick={() => setIsExpanded(!isExpanded)}
         onKeyDown={e => (e.key === 'Enter' || e.key === ' ') && setIsExpanded(v => !v)}>

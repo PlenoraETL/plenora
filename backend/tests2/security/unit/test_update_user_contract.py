@@ -18,7 +18,6 @@ from app.core.auth.db import GroupRow, UserRow
 pytestmark = [pytest.mark.unit, pytest.mark.security, pytest.mark.contract]
 
 
-# ── Fixture utenti mock ───────────────────────────────────────────────────
 
 
 def _admin_user(group_id="g1"):
@@ -76,7 +75,6 @@ def mock_db(monkeypatch):
     return users_mod
 
 
-# ── 1. password rifiutata ─────────────────────────────────────────────────
 
 
 def test_update_user_rejects_password_in_payload(mock_db):
@@ -104,7 +102,6 @@ def test_update_user_rejects_password_even_from_superadmin(mock_db):
     assert exc.value.status_code == 400
 
 
-# ── 2. group_id rifiutato per admin ────────────────────────────────────────
 
 
 def test_update_user_rejects_group_id_from_admin(mock_db):
@@ -129,7 +126,6 @@ def test_update_user_accepts_group_id_from_superadmin(mock_db):
     assert result.group_id == "nuovo_gruppo"
 
 
-# ── 3. role validation ────────────────────────────────────────────────────
 
 
 def test_update_user_rejects_invalid_role(mock_db):
@@ -143,7 +139,6 @@ def test_update_user_rejects_invalid_role(mock_db):
     assert "ruolo non valido" in exc.value.detail.lower()
 
 
-# ── 4/5. campi legittimi passano ───────────────────────────────────────────
 
 
 def test_update_user_accepts_email_from_admin(mock_db):
@@ -173,7 +168,6 @@ def test_update_user_accepts_role_from_superadmin(mock_db):
     assert result.role == "viewer"
 
 
-# ── 6. cross-group access denied ───────────────────────────────────────────
 
 
 def test_update_user_denies_cross_group_access(monkeypatch):

@@ -30,7 +30,6 @@ function lastConfig(onChange) {
 }
 
 describe('ResponseConfigBuilder — residuals', () => {
-  // ── 1. Auto-detect ─────────────────────────────────────────────
 
   it('auto-detect populates mappings from the scalar fields in sampleData', async () => {
     const user = userEvent.setup();
@@ -59,7 +58,6 @@ describe('ResponseConfigBuilder — residuals', () => {
     expect(paths).toEqual(expect.arrayContaining(['name', 'count']));
   });
 
-  // ── 2. root_path input ────────────────────────────────────────
 
   it('typing into root_path propagates to the generated config', async () => {
     const user = userEvent.setup();
@@ -83,7 +81,6 @@ describe('ResponseConfigBuilder — residuals', () => {
     expect(lastConfig(onChange).response_config.root_path).toBe('data.items');
   });
 
-  // ── 3. Transforms tab + addTransform ─────────────────────────
 
   it('addTransform from the transforms tab increments the counter and renders the item', async () => {
     const user = userEvent.setup();
@@ -105,7 +102,6 @@ describe('ResponseConfigBuilder — residuals', () => {
     await user.click(transformsTab);
 
     // Il select "Scegli colonna sorgente" ha id='add-transform-source'
-    // — query diretta DOM (la query by role ritornerebbe multiple cb
     // nella tab transforms).
     const addSelect = document.getElementById('add-transform-source');
     expect(addSelect).toBeTruthy();
@@ -125,7 +121,6 @@ describe('ResponseConfigBuilder — residuals', () => {
     expect(screen.getByDisplayValue('count_transformed')).toBeInTheDocument();
   });
 
-  // ── 4. updateTransform operation ─────────────────────────────
 
   it('changing transform operation propagates to onChange.transforms', async () => {
     const user = userEvent.setup();
@@ -176,7 +171,6 @@ describe('ResponseConfigBuilder — residuals', () => {
     ]);
   });
 
-  // ── 5. Preview tab activation ────────────────────────────────
 
   it('activates the preview tab showing the header, refresh button and config dump', async () => {
     const user = userEvent.setup();

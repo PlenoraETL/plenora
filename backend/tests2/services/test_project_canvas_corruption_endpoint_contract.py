@@ -115,14 +115,14 @@ def test_get_project_response_does_NOT_contain_empty_canvas_fallback(
 ):
     """Regressione diretta: la risposta non deve MAI contenere
     `canvas: {"nodes":[],"edges":[]}` quando il canvas sottostante e'
-    corrotto. Pre-fix, rispondeva 200 con canvas vuoto → utente sovrascrive.
+    corrotto. Previous behavior, rispondeva 200 con canvas vuoto → utente sovrascrive.
     """
     tc, _ = app_with_handler
     r = tc.get("/api/projects/p-corrupt")
 
     assert r.status_code != 200, (
         "Endpoint ha risposto 200 su canvas corrotto — regressione al "
-        "silent-fallback pre-fix"
+        "silent-fallback Previous behavior"
     )
     body = r.json()
     # Il body non deve contenere un `canvas` vuoto ingannevole

@@ -582,10 +582,10 @@ def prune_terminal_older_than(
 # 2. On upload exception, caller invokes `mark_done(intent_id)` —
 # no orphan exists because nothing was uploaded
 # 3. On upload success, the intent row stays `pending`. The
-# reconciler beat hook closes it after a grace window
-# if `file_sources.storage_key` already references the
-# key → caller's DB save committed → `mark_done`
-# otherwise → `compensating_delete` + `mark_orphan_deleted`
+# reconciler beat hook closes it after a grace window:
+# referenced `file_sources.storage_key` means caller DB save committed
+# → `mark_done`; otherwise → `compensating_delete` +
+# `mark_orphan_deleted`
 # or backoff + `mark_failed_attempt`, eventually `mark_lost`
 # Boundedness: pending upload_intents transition to terminal within
 # `grace_seconds + max_attempts * backoff` of creation. Terminal

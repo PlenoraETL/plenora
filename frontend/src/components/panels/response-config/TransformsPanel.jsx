@@ -1,7 +1,5 @@
 /**
  * TransformsPanel.jsx — Tab "Transforms" del ResponseConfigBuilder
- *
- * Estratto da `ResponseConfigBuilder.jsx` in `FE-SPLIT-003C`.
  * Componente presentational: niente fetch, niente API, niente
  * useState (l'unico state UI residuo e' il `defaultValue=""` del
  * select "add transform source", letto via `getElementById` —

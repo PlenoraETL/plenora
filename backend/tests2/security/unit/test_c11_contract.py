@@ -76,7 +76,7 @@ def test_query_generator_raises_on_orphan_join_node():
     )
 
     # Invoca direttamente la funzione che genera JOIN per un singolo nodo
-    # (espone il path del pre-fix CROSS JOIN fallback).
+    # (espone il path del Previous behavior CROSS JOIN fallback).
     with pytest.raises(ValueError, match="non ha alcun edge"):
         gen._genera_join(
             node=orphan_node,
@@ -544,8 +544,8 @@ def test_canvas_put_collects_arcgis_connection_id_from_node_data_dict():
 #
 # FIXME(BUG.md #16): `visible_resource_ids("projects",...)` solleva ValueError
 # perche' projects non e' nel whitelist `_SHAREABLE` (no project_shares
-# table). Pre-fix: PUT canvas con un project_source restituiva 500
-# "Tabella 'projects' non e' shareable". Post-fix: helper ownership-only
+# table). Previous behavior: PUT canvas con un project_source restituiva 500
+# "Tabella 'projects' non e' shareable". Current contract: helper ownership-only
 # `_visible_project_ids_strict` che fa una sola query batch
 # `WHERE id IN (...) AND group_id = ?`.
 
@@ -615,10 +615,10 @@ def test_visible_project_ids_strict_returns_empty_when_owner_group_missing():
 
 
 def test_canvas_put_with_project_source_does_not_raise_value_error_anymore():
-    """Anti-regression #16: PRE-fix `update_project_canvas` con un
+    """Anti-regression #16: Previous behavior `update_project_canvas` con un
     project_source ref triggherava `visible_resource_ids("projects",...)`
     -> ValueError("Tabella 'projects' non e' shareable") -> 500 generico.
-    POST-fix: la chiamata passa per `_visible_project_ids_strict`
+    Current contract: la chiamata passa per `_visible_project_ids_strict`
     (no ValueError). Il test verifica che il path raggiunge 400 (cross-tenant)
     o 200 (ref valido) ma MAI un'eccezione non-HTTPException."""
     from fastapi import HTTPException

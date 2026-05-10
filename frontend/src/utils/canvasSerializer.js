@@ -14,18 +14,10 @@ import { nd } from './nodeHelpers';
  * Il parametro { mode } è mantenuto per compatibilità ma ignorato.
  */
 
-// =============================================================================
-// HELPERS
-// =============================================================================
-
 const nodeSize = (node) => ({
   width:  node.style?.width  || node.data?.width  || node.width  || 250,
   height: node.style?.height || node.data?.height || node.height || 150,
 });
-
-// =============================================================================
-// SERIALIZERS PER TIPO NODO
-// =============================================================================
 
 const serializers = {
 
@@ -227,10 +219,6 @@ serializers.resultNode     = serializers.result;
 serializers.project_source = serializers.projectSource;
 serializers.file_source    = serializers.fileSource;
 
-// =============================================================================
-// EDGES
-// =============================================================================
-
 export function serializeEdge(edge) {
   if (!edge.data || !edge.data.join_type) return edge;
   return {
@@ -248,10 +236,6 @@ export function serializeEdge(edge) {
   };
 }
 
-// =============================================================================
-// ENTRY POINT
-// =============================================================================
-
 export function serializeCanvas(nodes, edges, _options = {}) {
   const ctx = { edges, allNodes: nodes };
   const serializedNodes = nodes.map(node => {
@@ -260,10 +244,6 @@ export function serializeCanvas(nodes, edges, _options = {}) {
   });
   return { nodes: serializedNodes, edges: edges.map(serializeEdge) };
 }
-
-// =============================================================================
-// HELPERS INTERNI
-// =============================================================================
 
 function _computeResultColumns(resultNode, allNodes, edges) {
   // Fonte di verità: colonne del nodo upstream collegato al result.

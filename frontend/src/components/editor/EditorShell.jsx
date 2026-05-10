@@ -1,6 +1,6 @@
 /**
  * EditorShell.jsx — Layout/guard scaffold condiviso da EstraiEditor /
- * ManipolaEditor / ArricchisciEditor (FE-SPLIT-004).
+ * ManipolaEditor / ArricchisciEditor.
  *
  * Cosa GESTISCE direttamente:
  *   - Security guard `isValidProjectId(projectId)` con redirect a '/' se KO.
@@ -19,7 +19,7 @@
  *   - JSX della sidebar (search, catalog tree, ...).
  *   - JSX dei modal (JoinModal, ExecutionModal, ...).
  *
- * API semantica (FE-SPLIT-004 cleanup):
+ * API semantica:
  *
  *   Top-level (8): projectId, prefix, loading, loadError, project,
  *                  reload, onBack, hexCanvasRef, nodes, edges
@@ -95,22 +95,17 @@ function ErrorBanner({ prefix, message, children }) {
 }
 
 function EditorShell({
-  // ── Guards ─────────────────────────────────────────────────────────
-  projectId,
+projectId,
   prefix,
   loading = false,
   loadError = null,
   project,
   reload,
   onBack,
-
-  // ── ReactFlow data + visual ref ────────────────────────────────────
-  nodes = [],
+nodes = [],
   edges = [],
   hexCanvasRef,
-
-  // ── Grouped API ────────────────────────────────────────────────────
-  canvasConfig = EMPTY_OBJ,
+canvasConfig = EMPTY_OBJ,
   canvasHandlers = EMPTY_OBJ,
   slots = EMPTY_OBJ,
 }) {

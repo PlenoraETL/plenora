@@ -6,7 +6,6 @@
 -- Sorgente marker: app/core/intermediate/snapshot.py / artifacts/resolver.py,
 --   marker [PERF] persistence_mode=full_artifact con campi `artifact_ms`,
 --   `artifact_status`.
--- Origine: orchestrate/phase_0_consolidation/performance_baseline_0_5f.md §5.1
 --
 -- Finestra: ultimi 7 giorni (modificare INTERVAL per range diversi).
 -- Read-only: SELECT puro su `logs.details` JSONB.

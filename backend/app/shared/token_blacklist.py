@@ -29,7 +29,6 @@ _client: Optional[Any] = None  # redis.Redis-like instance
 # al Redis locale
 _client_explicit: bool = False
 
-# METRICHE (contatori in-process
 # Contatori sincroni protetti da lock. Esposti via get_metrics →
 # admin_system_status.get_blacklist_status → dashboard admin
 # Scelta in-process vs. Redis INCR
@@ -41,11 +40,11 @@ _client_explicit: bool = False
 # aggregation (Grafana/Loki) sui warning
 _metrics_lock = threading.Lock()
 _metrics: Dict[str, int] = {
-    "write_ok":       0,  # blacklist_jti ha scritto in Redis
-    "write_fail":     0,  # blacklist_jti ha fallito (Redis down/error
-    "read_ok":        0,  # is_jti_blacklisted ha completato (qualunque risultato
-    "read_fail":      0,  # is_jti_blacklisted ha fallito (exception catturata
-    "client_missing": 0,  # _get_client ha restituito None (redis-py o server
+    "write_ok": 0,
+    "write_fail": 0,
+    "read_ok": 0,
+    "read_fail": 0,
+    "client_missing": 0,
 }
 # Timestamp dell'ultima operazione andata a buon fine (write OR read
 # Serve per l'alert "blacklist inoperante da X minuti": se ora - last_ok
@@ -129,8 +128,7 @@ def blacklist_jti(jti: str, ttl_seconds: int) -> bool:
     naturalmente invalidi.
     """
     if not jti or ttl_seconds <= 0:
-        # Input invalido: non lo contiamo come write_fail (non e' colpa
-        # di Redis), torniamo False silenziosamente
+        # Invalid input is not a Redis write failure.
         return False
     client = _get_client()
     if client is None:
@@ -150,8 +148,7 @@ def blacklist_jti(jti: str, ttl_seconds: int) -> bool:
 def is_jti_blacklisted(jti: Optional[str]) -> bool:
     """True se `jti` e' presente in blacklist. Fail-open su Redis giu'."""
     if not jti:
-        # jti vuoto = token legacy: non incrementiamo metriche (non e'
-        # un'operazione vera
+        # Empty jti is not a real blacklist lookup.
         return False
     client = _get_client()
     if client is None:
@@ -166,9 +163,6 @@ def is_jti_blacklisted(jti: Optional[str]) -> bool:
         logger.warning("Redis blacklist read failed (jti=%s): %s", jti, e)
         _record_metric("read_fail")
         return False
-
-
-# METRICHE + HEALTH
 
 
 def get_metrics() -> Dict[str, Any]:

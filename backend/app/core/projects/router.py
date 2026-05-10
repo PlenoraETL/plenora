@@ -32,14 +32,13 @@ from .models import ProjectCreate
 
 class ProjectCreateWithCanvas(ProjectCreate):
     canvas: Any = None
-    plugins: Any = None         # ignorato — rimasto per compatibilità frontend
+    plugins: Any = None
 
 
 logger = get_logger(__name__)
 
 router = APIRouter(prefix="/projects", tags=["projects"])
 
-# Servizi inizializzati da main.py
 _project_service = None
 _schema_service = None
 _validator = None
@@ -49,7 +48,6 @@ def init_projects(project_service: Any) -> None:
     """Inizializza il modulo. Chiamare da main.py dopo setup."""
     global _project_service, _schema_service, _validator
     _project_service = project_service
-    # Inizializza anche schema inference
     from app.core.projects.schema_inference import SchemaInferenceService, ConnectionValidator
     _schema_service = SchemaInferenceService(project_service)
     _validator = ConnectionValidator(_schema_service)
@@ -72,7 +70,6 @@ def create_project(
     if data.canvas:
         try:
             canvas_dict = data.canvas if isinstance(data.canvas, dict) else dict(data.canvas)
-            # Rimuovi campi interni prefissati con _
             canvas_dict = {k: v for k, v in canvas_dict.items() if not k.startswith("_")}
             _project_service.update_canvas(metadata.id, CanvasState(**canvas_dict))
         except (TypeError, ValueError) as e:
@@ -82,7 +79,6 @@ def create_project(
                 op="create_project"
             )
         except Exception as e:
-            # Errore inatteso: rilancia 500 invece di nascondere il problema
             logger.error(
                 f"[CRASH] create_project canvas save fallito per {metadata.id}: {e}",
                 op="create_project", exc_info=True
@@ -157,9 +153,6 @@ def list_projects(
                 project_dict['source_project_ids'] = []
                 project_dict['file_source_ids'] = []
                 project_dict['canvas_corrupted'] = True
-                # F7-B1 (2026-04-24): espone reason safe-by-construction
-                # per UX diagnostica (l'admin vede il motivo direttamente
-                # nella lista senza dover aprire il progetto corrotto
                 project_dict['canvas_corrupted_reason'] = e.reason
             except Exception:
                 project_dict['source_project_ids'] = []
@@ -175,7 +168,7 @@ def _visible_project_ids_strict(
     owner_group_id: Optional[str],
     is_superadmin: bool,
 ) -> set[str]:
-    """RB.4.A.16 (2026-04-27): visibilita' progetti, ownership-only.
+    """Return visible project ids using ownership-only project visibility.
 
     I progetti NON hanno tabella `project_shares` (a differenza di
     file_sources, connections, ecc.): la visibilita' coincide col gruppo
@@ -189,7 +182,7 @@ def _visible_project_ids_strict(
     realmente visibile a `owner_group_id` (stesso group_id) o l'input
     integrale se `is_superadmin`.
 
-    Batch-safe: una sola query `WHERE id IN (...)` invece di N lookups.
+    Uses one `WHERE id IN (...)` query instead of per-id lookups.
     """
     ids = {pid for pid in (project_ids or ()) if pid}
     if not ids:
@@ -211,8 +204,7 @@ def _annotate_inaccessible_canvas_refs(
     owner_group_id: Optional[str],
     is_superadmin: bool,
 ) -> None:
-    """RB.4.B (2026-04-27): annota in-place i nodi del canvas serializzato
-    che referenziano risorse non visibili al gruppo proprietario del progetto.
+    """Annotate serialized canvas nodes whose resources are not visible.
 
     Per ogni nodo `file_source` con `file_source_id` non visibile, oppure
     `project_source` con `source_project_id` non visibile, inietta nel
@@ -236,7 +228,6 @@ def _annotate_inaccessible_canvas_refs(
     if not nodes:
         return
 
-    # Estrazione ref dal dict serializzato (fonte canonica per la response
     file_source_ids: set = set()
     project_ids: set = set()
     arcgis_connection_ids: set = set()
@@ -272,9 +263,6 @@ def _annotate_inaccessible_canvas_refs(
         if file_source_ids
         else set()
     )
-    # RB.4.A.16: projects non e' shareable -> _visible_project_ids_strict
-    # filtra per ownership invece di chiamare visible_resource_ids che
-    # solleverebbe ValueError
     visible_pr = _visible_project_ids_strict(
         project_ids,
         owner_group_id=owner_group_id,
@@ -286,9 +274,7 @@ def _annotate_inaccessible_canvas_refs(
         else set()
     )
 
-    # Annotazione in-place: muta SOLO il dict di response. Il canvas in DB
-    # resta intatto (RB.4.A / RB.7.A bloccano i save futuri con ref invalidi
-    # canvas storici sporchi vengono solo segnalati al frontend
+    # Mutate only the response dict; persisted canvases stay unchanged.
     for n in nodes:
         ntype = n.get("type")
         ndata = n.get("data")
@@ -340,14 +326,12 @@ def get_project(
     """Ottieni progetto specifico (metadata + canvas + columns_metadata).
 
     Se il canvas in DB e' corrotto, `get_project_canvas` solleva
-    `CanvasCorruptedError` → handler globale (main.py) restituisce 500
-    con detail esplicito + error_code=canvas_corrupted. Pre-fix il
-    fallback silenzioso a canvas vuoto portava l'utente a sovrascrivere
-    i dati corrotti originali senza accorgersene.
+    `CanvasCorruptedError` e l'handler globale restituisce un errore
+    esplicito invece di sostituirlo con un canvas vuoto.
 
-    RB.4.B (2026-04-27): canvas storici contenenti riferimenti cross-tenant
+    Canvas contenenti riferimenti cross-tenant
     a file_source / source_project (es. progetti duplicati o condivisi tra
-    gruppi prima dell'introduzione di RB.4.A) sono ritornati as-is dal DB,
+    gruppi diversi) sono ritornati as-is dal DB,
     ma i nodi affected vengono marcati con `data.access_denied = True`.
     Il frontend usa il flag per disabilitare run/preview e mostrare un
     warning all'utente. Nessuna mutazione del canvas persistito.
@@ -466,22 +450,17 @@ def delete_project(
                 "project_preserved": True,
             },
         )
-    # F2-B2 (2026-04-24): DELETE risponde 204 No Content, body vuoto
 
 
 class CanvasWithPlugins(BaseModel):
     """Body del PUT /projects/{id}/canvas.
 
-    C11: pre-fix `nodes: Any, edges: Any` accettava qualsiasi struttura
-    (anche stringa, int, None) e la validazione strutturale veniva
-    delegata a CanvasState più avanti — che a sua volta poteva produrre
-    errori oscuri a runtime. Ora tipizziamo con `List[Node]/List[Edge]`:
-    Pydantic rifiuta 422 al binding se il payload non matcha, con
-    messaggi diagnostici per ogni campo errato.
+    `List[Node]` e `List[Edge]` fanno fallire il binding Pydantic con 422
+    quando il payload non ha la struttura attesa.
     """
     nodes: List[Node] = []
     edges: List[Edge] = []
-    plugins: Optional[dict] = None   # ignorato — rimasto per compatibilità frontend
+    plugins: Optional[dict] = None
 
 
 def _collect_canvas_resource_refs(canvas: CanvasState) -> dict[str, set[str]]:
@@ -500,7 +479,7 @@ def _collect_canvas_resource_refs(canvas: CanvasState) -> dict[str, set[str]]:
             referenziati da nodi `carica_arcgis` (`arcgis_connection_id`)
             o `imdf_publisher` (`imdf_arcgis_connection_id`).
 
-    Used by RB.4.A / RB.7.A `update_project_canvas` per il check cross-tenant.
+    Used by `update_project_canvas` for cross-tenant checks.
     """
     file_source_ids: set = set()
     project_ids: set = set()
@@ -548,23 +527,12 @@ def update_project_canvas(
     gruppo proprietario (non solo l'owner): in un team i membri lavorano
     sui progetti dei colleghi. L'eliminazione del progetto resta invece
     riservata al solo owner (vedi DELETE /projects/{id})."""
-    # Group check: solo membri del gruppo proprietario possono modificare il canvas
     metadata = _project_service.get_project_metadata(project_id)
     assert_group_access(metadata, current_user, f"Progetto '{project_id}'")
 
     canvas = CanvasState(nodes=body.nodes, edges=body.edges)
 
-    # C11: reject canvas con nodi orfani. Un nodo di tipo non-source
-    # es. transform, api_enrich, result, carica, multi_join) senza
-    # alcun edge incoming provoca a runtime
-    # JOIN: CROSS JOIN silente (ora refused da query_generator) →
-    # errore in esecuzione
-    # RESULT: nessuna fonte dati → output vuoto o errore
-    # TRANSFORM: input schema None → crash executor
-    # Molto meglio rifiutare al save con messaggio claro
-    # Esenti: nodi che sono sorgenti per definizione (source
-    # feature_source, project_source, file_source, staticValues
-    # datasource_node) + comment (non influenza il flusso dati
+    # Reject orphan processing nodes before they become runtime failures.
     _SOURCE_LIKE = {
         "source", "feature_source", "project_source", "file_source",
         "staticValues", "datasource_node", "comment",
@@ -585,15 +553,7 @@ def update_project_canvas(
             ),
         )
 
-    # RB.4.A (2026-04-27): rifiuta canvas con riferimenti cross-tenant a
-    # file_source / source_project non visibili al gruppo del progetto
-    # Senza questo check, un canvas duplicato/condiviso da un altro gruppo
-    # poteva essere salvato con riferimenti stantii: il save passava in
-    # silenzio, ma la successiva esecuzione veniva bloccata da
-    # `_assert_file_source_group_access` con un errore opaco
-    # Backend resta autorita': il runtime check fail-closed in
-    # `arricchisci/api_connection_rest_file._assert_file_source_group_access`
-    # non viene rimosso
+    # Save-time cross-tenant validation gives a clear error before runtime.
     refs = _collect_canvas_resource_refs(canvas)
     if refs["file_sources"] or refs["projects"] or refs["arcgis_connections"]:
         from app.core.auth.visibility import visible_resource_ids
@@ -608,9 +568,6 @@ def update_project_canvas(
             )
             invalid_file_sources = refs["file_sources"] - visible_fs
         if refs["projects"]:
-            # RB.4.A.16: projects non e' nel whitelist `_SHAREABLE` (no
-            # tabella project_shares). Usiamo l'helper ownership-only
-            # invece di visible_resource_ids che solleverebbe ValueError
             visible_pr = _visible_project_ids_strict(
                 refs["projects"],
                 owner_group_id=owner_group_id,
@@ -618,11 +575,6 @@ def update_project_canvas(
             )
             invalid_projects = refs["projects"] - visible_pr
         if refs["arcgis_connections"]:
-            # RB.7.A: estensione del check cross-tenant alle connessioni
-            # ArcGIS referenziate da nodi `carica_arcgis` / `imdf_publisher`
-            # post rebrand 2026-04-18 alcuni id urby_* sono diventati
-            # stantii nei canvas, generando 404 a `listFolders` e fail
-            # opachi al publish
             visible_ag = visible_resource_ids(
                 "arcgis_connections", owner_group_id, is_superadmin=is_super,
             )
@@ -657,15 +609,8 @@ def update_project_canvas(
                 ),
             )
 
-    # C9: backend single source of truth per result_node.columns
-    # Pre-fix, il frontend poteva inviare columns stale/vuote (vedi
-    # canvasSerializer.js:270 che ricade su `saved` quando l'upstream
-    # diretto non ha data.columns — tipico per api_enrich). Post-fix
-    # il backend ricomputa autorevolmente via SchemaInferenceService
-    # che gia' gestisce tutti i node type + BFS via edges) e inietta
-    # nel canvas in-memory PRIMA di persistere. Cosi' il canvas
-    # salvato ha result.columns corrette, il reload UI legge il
-    # canvas e il ResultNode mostra le colonne giuste
+    # Backend recomputes result columns before persisting to avoid stale
+    # frontend-provided canvas columns.
     try:
         from app.shared.execution.canvas_columns import (
             compute_result_columns,
@@ -683,15 +628,11 @@ def update_project_canvas(
                 schema_inference_service_factory=SchemaInferenceService,
             )
             if computed:
-                # Mutate in-place: il canvas verra' persistito subito
-                # dopo con update_canvas. Column(BaseModel) accetta
-                # **dict via pydantic
                 from app.core.projects.canvas_models import Column
                 result_node.columns = [Column(**c) for c in computed]
     except Exception as _ccerr:
-        # Non bloccare il save se il compute fallisce (canvas malformato
-        # node type sconosciuto, ecc.). Cade nel comportamento
-        # pre-fix (frontend columns preserved). Loggato per visibility
+        # Column recompute is diagnostic; malformed canvases continue through
+        # the normal validation/persistence path.
         logger.warning(
             f"C9 compute_result_columns fallito (non bloccante): {_ccerr}",
             exc_info=True,
@@ -709,12 +650,8 @@ def update_project_canvas(
     except HTTPException:
         raise
     except ProjectLineageCycleError as e:
-        # 6.4: narrow catch tipizzato (era isinstance inside broad
-        # La chain `from e` preserva il traceback originale nel log backend
-        # senza leakarlo nel detail HTTP (FastAPI serializza solo HTTPException
         raise HTTPException(400, str(e)) from e
 
-    # Estrai e salva columns_metadata dal nodo Result
     columns_metadata = []
     try:
         def _extract_cols(columns: Any) -> list[dict[str, str]]:

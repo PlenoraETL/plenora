@@ -132,7 +132,7 @@ def test_load_project_sources_fail_closed_when_source_project_missing():
 
 
 def test_load_file_sources_reapplies_crs_from_node_columns_metadata():
-    """Pre-fix dopo Refactor #3 il branch file_source di
+    """Previous behavior dopo Refactor #3 il branch file_source di
     _carica_sorgenti_file non chiamava piu' _applica_crs_da_colonne,
     quindi un file caricato come DataFrame piatto (senza geometria
     detected da geopandas) ma con metadati colonna `geometry:point:4326`
@@ -181,7 +181,7 @@ def test_load_file_sources_reapplies_crs_from_node_columns_metadata():
     assert result is None  # nessun errore
     assert captured.get("called") is True, (
         "_applica_crs_da_colonne deve essere chiamato sul branch file_source "
-        "post-fix (era stato dimenticato durante la migrazione a SourceLoader)"
+        "Current contract (era stato dimenticato durante la migrazione a SourceLoader)"
     )
     # Verifica che le node_columns con metadati geometry siano passate
     assert any(

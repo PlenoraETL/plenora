@@ -294,7 +294,6 @@ describe('ArricchisciEditor', () => {
     });
   });
 
-  // ── Loading / error / project-not-found branches ────────────────────
 
   it('renders the loading overlay while useEditorData reports loading', () => {
     currentEditorData = { ...currentEditorData, loading: true };

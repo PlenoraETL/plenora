@@ -1,7 +1,7 @@
 """
 Contract test BE-STORAGE-001A — `TaskScopedBlobStore` Protocol.
 
-Audit/test-first batch (lane B di BE-PHASE2-PARALLEL-PACK-001).
+Contract tests for the task-scoped blob store boundary.
 """
 
 from __future__ import annotations

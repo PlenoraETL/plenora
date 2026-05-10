@@ -1,5 +1,5 @@
 """
-[phase-4][a3] Idempotency + atomicity contract per node_rows / node_meta.
+Idempotency + atomicity contract per node_rows / node_meta.
 
 Scope:
 """
@@ -77,7 +77,7 @@ def _delete_calls(cur) -> list:
 def _insert_row_calls(cur, ev_spy=None) -> list:
     """Filtra le chiamate batch INSERT su `node_rows`.
 
-    Bug #22 (perf, 2026-04-28): post-fix l'INSERT batch passa per
+    Bug #22 (perf, 2026-04-28): Current contract l'INSERT batch passa per
     `psycopg2.extras.execute_values` (1 round-trip) invece di
     `cur.executemany` (500 round-trip serializzati). Restano comunque
     riconoscibili come "INSERT INTO node_rows ... VALUES %s" su
@@ -181,7 +181,7 @@ def test_insert_node_rows_double_invocation_evicts_previous():
 
 def test_insert_node_rows_empty_rows_still_emits_delete():
     """Anche con rows=[] eseguiamo il DELETE: previene l'inconsistenza
-    "node_meta.row_count=0 ma node_rows residue da run pre-fix"."""
+    "node_meta.row_count=0 ma node_rows residue da run Previous behavior"."""
     from app.core.intermediate import db as idb
 
     with _patch_db_io(idb) as (cur, ev_spy):
@@ -358,7 +358,7 @@ def test_write_node_atomic_meta_fail_rollback_propagates():
 
 
 def test_writer_write_node_success_branch_routes_through_atomic_helper():
-    """Phase 4 A3: writer.write_node (status='ok' + rows non vuoti)
+    """node-write atomicity contract: writer.write_node (status='ok' + rows non vuoti)
     chiama `db.write_node_atomic` UNA volta e NON chiama piu'
     `db.insert_node_rows` o `db.upsert_node_meta` separatamente.
     Garantisce che il refactor sia stato applicato end-to-end."""
@@ -386,7 +386,7 @@ def test_writer_write_node_success_branch_routes_through_atomic_helper():
 
 
 def test_writer_write_node_error_branch_keeps_meta_only_path():
-    """Phase 4 A3: ramo error/empty (status != 'ok' o rows vuoto) NON
+    """node-write atomicity contract: ramo error/empty (status != 'ok' o rows vuoto) NON
     passa per write_node_atomic — solo upsert_node_meta. Preserva
     comportamento storico dei caller (manipola/arricchisci/carica) che
     chiamano write_node con status='error' o rows=[]."""

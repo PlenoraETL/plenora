@@ -57,9 +57,7 @@ export function useExecution(projectId, options = {}) {
     caricaRefs.current = {};
     setCaricaPolling(false);
   }, []);
-
-  // ── Polling singolo task CARICA ──────────────────────────────────────
-  const startCaricaPolling = useCallback((caricaTask) => {
+const startCaricaPolling = useCallback((caricaTask) => {
     const { task_id } = caricaTask;
 
     const poll = async () => {
@@ -121,9 +119,7 @@ export function useExecution(projectId, options = {}) {
     poll();
     caricaRefs.current[task_id] = setInterval(poll, pollInterval);
   }, [pollInterval, mountedRef]);
-
-  // ── Avvia polling CARICA da result pipeline ──────────────────────────
-  const startCaricaTasksPolling = useCallback((pipelineResult) => {
+const startCaricaTasksPolling = useCallback((pipelineResult) => {
     const tasks = pipelineResult?.carica?.tasks;
     if (!tasks || tasks.length === 0) return;
 
@@ -140,9 +136,7 @@ export function useExecution(projectId, options = {}) {
     setCaricaPolling(true);
     initialTasks.forEach(t => startCaricaPolling(t));
   }, [startCaricaPolling]);
-
-  // ── Polling pipeline task (usa useTaskPolling) ──────────────────────
-  const startMainPolling = useCallback((taskIdToWatch) => {
+const startMainPolling = useCallback((taskIdToWatch) => {
     isCancelledRef.current = false;
     startPolling(taskIdToWatch, (data) => {
       if (isCancelledRef.current) return true;
@@ -173,9 +167,7 @@ export function useExecution(projectId, options = {}) {
       return false;
     });
   }, [startPolling, startCaricaTasksPolling]);
-
-  // ── handleExecute ────────────────────────────────────────────────────
-  const handleExecute = useCallback(async (executeOptions = {}) => {
+const handleExecute = useCallback(async (executeOptions = {}) => {
     setShowModal(true);
     setIsExecuting(true);
     setAwaitingLaunch(false);   // exit dal config-step se proveniamo da launch()

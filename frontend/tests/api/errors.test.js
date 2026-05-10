@@ -1,7 +1,7 @@
 /**
  * errors.test.js — Unit test per l'hub handleCascade409 + formatCascadeDependencies.
  *
- * Invariante blindato (Batch Fix 6.1 — error-handling-governance):
+ * Invariante blindato per error-handling governance:
  *   - handleCascade409 ritorna l'oggetto normalizzato { error, message,
  *     dependencies } solo se lo status e' 409 E il detail ha la shape
  *     canonica (error string non-empty + dependencies array). Null
@@ -80,8 +80,8 @@ describe('handleCascade409', () => {
     expect(handleCascade409(err)).toBeNull();
   });
 
-  it('ritorna null sulla shape legacy pre-Fix 6.1 (in_use_by)', () => {
-    // Pre-fix api-connections emetteva { message, in_use_by: [...] } senza error.
+  it('ritorna null sulla shape legacy in_use_by', () => {
+    // Legacy api-connections emitted { message, in_use_by: [...] } without error.
     // L'hub deve rifiutarla: se un router non e' stato migrato, il FE cade
     // sul toast generico invece di mostrare "undefined".
     const err = fakeError(409, {
@@ -175,8 +175,6 @@ describe('formatCascadeDependencies', () => {
     expect(formatCascadeDependencies(undefined)).toBe('');
     expect(formatCascadeDependencies({})).toBe('');
   });
-
-  // PR-δ — hidden_count cross-tenant
   it('appende "+ N altro/i non visibili" quando hiddenCount > 0 e progetti visibili', () => {
     const deps = [{ kind: 'project', id: 'p-1', name: 'Mio' }];
     const text = formatCascadeDependencies(deps, 2);
@@ -188,7 +186,7 @@ describe('formatCascadeDependencies', () => {
     expect(text).toBe('3 progetto/i (3 non visibili)');
   });
 
-  it('ignora hiddenCount = 0 (backward compat con response pre-PR-δ)', () => {
+  it('ignora hiddenCount = 0 for backward-compatible responses', () => {
     const deps = [{ kind: 'project', id: 'p-1', name: 'Foo' }];
     expect(formatCascadeDependencies(deps, 0)).toBe('1 progetto/i (Foo)');
     expect(formatCascadeDependencies(deps)).toBe('1 progetto/i (Foo)');
@@ -202,7 +200,7 @@ describe('formatCascadeDependencies', () => {
   });
 });
 
-describe('handleCascade409 — PR-δ hidden_count', () => {
+describe('handleCascade409 hidden_count', () => {
   it('estrae hiddenCount dal detail.hidden_count', () => {
     const err = fakeError(409, {
       detail: {

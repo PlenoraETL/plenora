@@ -23,7 +23,7 @@ def _legacy_op_concat_columns(
     separator: str = " ",
     skip_null: bool = True,
 ):
-    """Copia verbatim dell'impl pre-Batch-2. Non toccare: serve come
+    """Copia verbatim dell'impl previous implementation Non toccare: serve come
     reference point per la garanzia di output invariato."""
     if not columns:
         return df

@@ -19,7 +19,7 @@ pytestmark = [pytest.mark.unit, pytest.mark.arricchisci, pytest.mark.security, p
 # tipato per i 5 site MIGRATE_TO_CTX. Sostituisce il pattern legacy
 # `api_service._current_group_id = X` (singleton mutation) con il
 # typed boundary `ctx=ArricchisciExecutionContext(...)`. Behavior
-# byte-per-byte identico: i 6 mixin reader site (Phase 2) leggono
+# byte-per-byte identico: i 6 mixin reader site (typed context contract) leggono
 # `ctx.group_id` quando il caller passa `ctx=`. Il singleton-state
 # fallback resta KEEP_COMPAT (vedi i lock test
 # `test_resolve_file_source_id_path_fails_closed_without_security_context`
@@ -58,14 +58,14 @@ def test_assert_file_source_group_access_fails_closed_without_context(api_servic
 
 
 def test_assert_file_source_group_access_blocks_invisible_resource(api_service):
-    # BE-GO-READY-TRANSFORMATION-ENGINE-022: typed ctx Phase 2.
+    # BE-GO-READY-TRANSFORMATION-ENGINE-022: typed ctx typed context contract.
     with patch("app.core.auth.visibility.is_resource_visible", return_value=False):
         with pytest.raises(ValueError, match="Accesso negato"):
             api_service._assert_file_source_group_access("fs-1", ctx=_ctx())
 
 
 def test_assert_file_source_group_access_wraps_visibility_backend_errors(api_service):
-    # BE-GO-READY-TRANSFORMATION-ENGINE-022: typed ctx Phase 2.
+    # BE-GO-READY-TRANSFORMATION-ENGINE-022: typed ctx typed context contract.
     with patch("app.core.auth.visibility.is_resource_visible", side_effect=RuntimeError("db error")):
         with pytest.raises(ValueError, match="Errore verifica accesso file_source"):
             api_service._assert_file_source_group_access("fs-1", ctx=_ctx())
@@ -83,7 +83,7 @@ def test_resolve_file_source_id_path_fails_closed_without_security_context(api_s
 
 
 def test_resolve_file_source_id_path_no_longer_falls_back_to_current_group_id(api_service):
-    """BE-GO-READY-ORCHESTRATION-ENGINE-010 (cut lock): post-batch
+    """BE-GO-READY-ORCHESTRATION-ENGINE-010 (cut lock): Current contract
     il fallback `ctx=None → getattr(self, "_current_group_id",
     None)` e' rimosso. Anche se `_current_group_id` e' settato a
     un valore non vuoto (es. residuo di una run precedente nello
@@ -332,7 +332,7 @@ def test_resolve_file_source_path_project_source_ctx_with_none_group_does_not_fa
 
 
 def test_resolve_file_source_id_path_requires_visibility_before_materializing_blob(api_service, monkeypatch, tmp_path):
-    # BE-GO-READY-TRANSFORMATION-ENGINE-022: typed ctx Phase 2.
+    # BE-GO-READY-TRANSFORMATION-ENGINE-022: typed ctx typed context contract.
     import app.config as config_mod
     import app.core.auth.visibility as sharing_mod
     import app.core.files.db as file_sources_db
@@ -366,7 +366,7 @@ def test_load_source_project_force_recalculate_blocks_cross_tenant_before_recomp
     solo a recompute gia' avvenuta. Il pre-check fail-closed deve
     sollevare ValueError PRIMA che execute_pipeline venga invocato.
     """
-    # BE-GO-READY-TRANSFORMATION-ENGINE-022: typed ctx Phase 2.
+    # BE-GO-READY-TRANSFORMATION-ENGINE-022: typed ctx typed context contract.
     # source_project_id appartiene al tenant B, non a grp-A
     monkeypatch.setattr(
         "app.core.arricchisci.api_connection_source_loading.load_project_access_context",
@@ -404,7 +404,7 @@ def test_load_source_project_force_recalculate_blocks_unknown_project(
     """Se il source_project_id non esiste in DB, fail-closed: nessun
     fallthrough che possa diventare un probe per l'enumeration dei
     project_id cross-tenant."""
-    # BE-GO-READY-TRANSFORMATION-ENGINE-022: typed ctx Phase 2.
+    # BE-GO-READY-TRANSFORMATION-ENGINE-022: typed ctx typed context contract.
     monkeypatch.setattr(
         "app.core.arricchisci.api_connection_source_loading.load_project_access_context",
         lambda *args, **kwargs: None,
@@ -424,7 +424,7 @@ def test_load_source_project_force_recalculate_allows_same_tenant(
     """Same-tenant con force_recalculate=True deve passare il pre-check
     e procedere al recompute. Se il pre-check fosse troppo stretto,
     questo test lo catturerebbe."""
-    # BE-GO-READY-TRANSFORMATION-ENGINE-022: typed ctx Phase 2.
+    # BE-GO-READY-TRANSFORMATION-ENGINE-022: typed ctx typed context contract.
     monkeypatch.setattr(
         "app.core.arricchisci.api_connection_source_loading.load_project_access_context",
         lambda project_id: SimpleNamespace(project_id=project_id, group_id="grp-A"),

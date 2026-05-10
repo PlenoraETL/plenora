@@ -5,27 +5,11 @@ import { vi } from 'vitest';
 
 import ApiConnectionManager from '../../src/pages/ApiConnectionManager';
 
-/**
- * Batch 2 di FE-TEST-001 su ApiConnectionManager — gap ad alto valore non
- * coperti dal contract test esistente (ApiConnectionManager.contract.test.jsx,
- * focalizzato su rest_file / template / openapi / datasource).
- *
- * Aree:
- *   1. delete cascade 409 → toast formattato + no reload
- *   2. delete success → DELETE + reload
- *   3. sharing visibility role-gating (admin vs superadmin)
- *   4. wizard step-Parametri validation per arricchitori senza param mappato
- *   5. handleSave sanitizza secret mascherati ("***") prima del PUT
- *
- * Nessun refactor della pagina — solo test. Pattern di mocking allineato
- * a `ApiConnectionManager.contract.test.jsx`.
- */
 
 const { httpMock, toastMock, navigateMock, authState } = vi.hoisted(() => ({
   httpMock: globalThis.__frontendTestHelpers.createHttpMock(vi),
   toastMock: globalThis.__frontendTestHelpers.createToastMock(vi),
   navigateMock: globalThis.__frontendTestHelpers.createNavigateMock(vi),
-  // Mutabile: i test possono cambiare role prima del render (default admin).
   authState: {
     user: { role: 'admin', username: 'tester', group_id: 'grp-1' },
   },
@@ -43,8 +27,6 @@ vi.mock('react-router-dom', async () => {
   const actual = await vi.importActual('react-router-dom');
   return { ...actual, useNavigate: () => navigateMock };
 });
-
-// Stub heavy modal children — non testiamo i loro internals qui.
 vi.mock('../../src/components/arricchisci/TemplateLibraryModal', () => ({
   default: () => null,
 }));
@@ -88,15 +70,12 @@ const sampleApi = {
   can_edit: true,
 };
 
-describe('ApiConnectionManager — batch 2', () => {
+describe('ApiConnectionManager contract', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     authState.user = { role: 'admin', username: 'tester', group_id: 'grp-1' };
     httpMock.get.mockResolvedValue({ data: { api_connections: [] } });
   });
-
-  // ── 1. Delete success ─────────────────────────────────────────────────
-
   it('deletes a connector after confirm, then reloads the list', async () => {
     httpMock.get
       .mockResolvedValueOnce({ data: { api_connections: [sampleApi] } })
@@ -107,7 +86,6 @@ describe('ApiConnectionManager — batch 2', () => {
     await screen.findByText('Geocode');
 
     await userEvent.click(screen.getByTitle('Elimina'));
-    // Confirm dialog button has text "Elimina" (confirmText nel componente).
     await userEvent.click(
       await screen.findByRole('button', { name: 'Elimina' }),
     );
@@ -115,13 +93,9 @@ describe('ApiConnectionManager — batch 2', () => {
     await waitFor(() =>
       expect(httpMock.delete).toHaveBeenCalledWith('/api-connections/api-1'),
     );
-    // initial GET + reload GET
     expect(httpMock.get).toHaveBeenCalledTimes(2);
     expect(toastMock.error).not.toHaveBeenCalled();
   });
-
-  // ── 2. Delete cascade 409 ─────────────────────────────────────────────
-
   it('shows formatted cascade dependencies on 409 delete and skips reload', async () => {
     httpMock.get.mockResolvedValueOnce({
       data: { api_connections: [sampleApi] },
@@ -154,15 +128,10 @@ describe('ApiConnectionManager — batch 2', () => {
     expect(msg).toContain('Geocode');
     expect(msg).toContain('Demo Project');
     expect(msg).toMatch(/progetto/i);
-    // 10000ms TTL passato a toast.error — segnala UX intenzionale
-    // (tempo per leggere la lista delle dipendenze).
     expect(ttl).toBe(10000);
     // Niente reload dopo cascade (handleDelete fa early return).
     expect(httpMock.get).toHaveBeenCalledTimes(1);
   });
-
-  // ── 3. Sharing visibility — non-superadmin ────────────────────────────
-
   it('hides the cross-group sharing button for non-superadmin (default admin)', async () => {
     httpMock.get.mockResolvedValueOnce({
       data: { api_connections: [sampleApi] },
@@ -174,13 +143,9 @@ describe('ApiConnectionManager — batch 2', () => {
     expect(
       screen.queryByTitle('Gestisci condivisione cross-gruppo'),
     ).not.toBeInTheDocument();
-    // Sanity: edit + delete button restano disponibili per admin.
     expect(screen.getByTitle('Modifica')).toBeInTheDocument();
     expect(screen.getByTitle('Elimina')).toBeInTheDocument();
   });
-
-  // ── 4. Sharing visibility — superadmin ────────────────────────────────
-
   it('shows the cross-group sharing button for superadmin', async () => {
     authState.user = {
       role: 'superadmin',
@@ -198,9 +163,6 @@ describe('ApiConnectionManager — batch 2', () => {
       screen.getByTitle('Gestisci condivisione cross-gruppo'),
     ).toBeInTheDocument();
   });
-
-  // ── 5. Wizard validation — enricher senza param mappato ──────────────
-
   it('blocks Avanti at step Parametri when an enricher has no mapped params', async () => {
     httpMock.get.mockResolvedValueOnce({ data: { api_connections: [] } });
 
@@ -235,9 +197,6 @@ describe('ApiConnectionManager — batch 2', () => {
       screen.queryByRole('button', { name: /salva api/i }),
     ).not.toBeInTheDocument();
   });
-
-  // ── 6. Auth secret sanitization su save ──────────────────────────────
-
   it('strips masked auth secrets before PUT on save (no leak of "***" placeholder)', async () => {
     const apiWithMaskedAuth = {
       ...sampleApi,

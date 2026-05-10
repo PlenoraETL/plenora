@@ -12,8 +12,6 @@ from typing import Literal
 PayloadTarget = Literal["db", "object_storage"]
 
 
-# Costanti policy: il caller normalizza l'env value e ce la passa
-# Valori normalizzati ammessi (post-`strip.lower`
 POLICY_DB = "db"
 POLICY_OBJECT_STORAGE = "object_storage"
 POLICY_HYBRID = "hybrid"
@@ -26,12 +24,6 @@ def resolve_payload_target(
     threshold_bytes: int,
 ) -> PayloadTarget:
     """Decide se un payload va in DB BYTEA o su object storage.
-
-    Pure function: stessa decisione presa pre-001B nei due dispatch
-    inline (`result_store._should_use_object_storage` +
-    `file_storage_dispatch.dispatch_blob_storage` ramo policy).
-
-    Behavior bit-per-bit preservato:
 
     - `policy == "db"` -> sempre `"db"` (il caller applica
                                      l'eventuale hard cap come guard
@@ -53,7 +45,7 @@ def resolve_payload_target(
         policy: valore di STORAGE_POLICY normalizzato (ma il modulo lo
             re-normalizza). Valori canonici: `"db"`, `"object_storage"`,
             `"hybrid"`. Stringhe non riconosciute cadono nel branch
-            threshold-based (preserva il comportamento pre-001B).
+            threshold-based.
         size_bytes: dimensione del payload in byte.
         threshold_bytes: soglia per il branch hybrid. Per il dominio
             result e' `RESULT_S3_THRESHOLD_BYTES` (default 50 MB), per
@@ -66,8 +58,7 @@ def resolve_payload_target(
 
     Note:
         Decisione su soglia inclusiva (`>=`): un payload esattamente di
-        `threshold_bytes` byte va in object storage. E' il comportamento
-        pre-001B.
+        `threshold_bytes` byte va in object storage.
     """
     normalized = (policy or "").strip().lower()
 
@@ -75,7 +66,6 @@ def resolve_payload_target(
         return "db"
     if normalized == POLICY_OBJECT_STORAGE:
         return "object_storage"
-    # hybrid + qualunque altro valore (preserva il fallback pre-001B
     if size_bytes >= threshold_bytes:
         return "object_storage"
     return "db"

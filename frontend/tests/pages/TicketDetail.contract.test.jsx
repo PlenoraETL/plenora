@@ -120,9 +120,7 @@ describe('TicketDetail', () => {
     deleteTicketMock.mockResolvedValue({ ok: true });
   });
 
-  // ──────────────────────────────────────────────────────────────────────
   // RENDER
-  // ──────────────────────────────────────────────────────────────────────
 
   it('mostra titolo, descrizione e id corto', async () => {
     renderDetail();
@@ -140,9 +138,7 @@ describe('TicketDetail', () => {
     expect(selects.length).toBeGreaterThanOrEqual(3);
   });
 
-  // ──────────────────────────────────────────────────────────────────────
   // STATUS / SEVERITY / CATEGORY change (admin)
-  // ──────────────────────────────────────────────────────────────────────
 
   it('admin cambia status → chiama updateTicket con nuovo status', async () => {
     const user = userEvent.setup();
@@ -171,9 +167,7 @@ describe('TicketDetail', () => {
     });
   });
 
-  // ──────────────────────────────────────────────────────────────────────
   // RIAPRI flow (creator non-admin su ticket resolved)
-  // ──────────────────────────────────────────────────────────────────────
 
   it('creator non-admin vede pulsante "Riapri" su ticket resolved', async () => {
     authState.user = { user_id: 'u-creator', username: 'creator', role: 'user' };
@@ -225,9 +219,7 @@ describe('TicketDetail', () => {
     expect(screen.queryByRole('button', { name: /riapri/i })).not.toBeInTheDocument();
   });
 
-  // ──────────────────────────────────────────────────────────────────────
   // COMMENTS
-  // ──────────────────────────────────────────────────────────────────────
 
   it('mostra commenti esistenti con autore e data', async () => {
     getTicketMock.mockResolvedValue({
@@ -258,9 +250,7 @@ describe('TicketDetail', () => {
     });
   });
 
-  // ──────────────────────────────────────────────────────────────────────
   // ATTACHMENTS
-  // ──────────────────────────────────────────────────────────────────────
 
   it('mostra allegati esistenti con nome, size e uploader', async () => {
     getTicketMock.mockResolvedValue({
@@ -347,9 +337,6 @@ describe('TicketDetail', () => {
   });
 
   it('click "Rimuovi" su allegato chiama deleteAttachment dopo conferma', async () => {
-    // PR-A2: window.confirm sostituito da useConfirmModal (ConfirmDialog
-    // promise-based). Il test ora simula il click sul button "Rimuovi"
-    // del ConfirmDialog renderizzato.
     getTicketMock.mockResolvedValue({
       ...BASE_DETAIL,
       attachments: [
@@ -404,9 +391,7 @@ describe('TicketDetail', () => {
     expect(deleteAttachmentMock).not.toHaveBeenCalled();
   });
 
-  // ──────────────────────────────────────────────────────────────────────
   // DELETE TICKET
-  // ──────────────────────────────────────────────────────────────────────
 
   it('admin vede pulsante "Elimina ticket"', async () => {
     renderDetail();
@@ -433,9 +418,6 @@ describe('TicketDetail', () => {
   });
 
   it('click "Elimina" dopo confirm chiama deleteTicket e naviga a /tickets', async () => {
-    // PR-A2: window.confirm sostituito da useConfirmModal. Il test ora
-    // clicca prima "Elimina ticket" (toolbar, apre il modal) poi
-    // "Elimina" nel ConfirmDialog.
     const user = userEvent.setup();
     renderDetail();
     await waitFor(() => screen.getByText('SSO non funziona'));
@@ -490,9 +472,7 @@ describe('TicketDetail', () => {
     expect(navigateMock).not.toHaveBeenCalled();
   });
 
-  // ──────────────────────────────────────────────────────────────────────
   // ERROR HANDLING
-  // ──────────────────────────────────────────────────────────────────────
 
   it('404 sul fetch redirige a /tickets', async () => {
     getTicketMock.mockRejectedValue({ response: { status: 404, data: { detail: 'Not found' } } });

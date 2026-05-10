@@ -122,7 +122,7 @@ _EXPECTED_PUBLIC_SYMBOLS = {
     "ROLES_KIOSK_ONLY",
     # Pure policy
     "group_filter",
-    # Phase-10 (TE-016): pure auth DTOs
+    # facade baseline0 (TE-016): pure auth DTOs
     "LoginRequest",
     "TokenResponse",
     "UserCreate",
@@ -138,7 +138,7 @@ _EXPECTED_PUBLIC_SYMBOLS = {
 }
 
 
-# Phase-10 minor DTOs that the contract re-exports from
+# facade baseline0 minor DTOs that the contract re-exports from
 # `app.core.auth.models`. Identity must be preserved end-to-end:
 # `contract.X is auth.models.X` (always); plus
 # `contract.X is auth.X` for the subset still on the facade
@@ -213,7 +213,7 @@ def test_contract_current_user_is_leaf_identity():
 
 @pytest.mark.parametrize("dto_name", _PHASE10_MINOR_DTOS)
 def test_contract_phase10_dto_is_leaf_identity(dto_name: str):
-    """Phase-10 (TE-016): each minor DTO re-exported by the
+    """facade baseline0 (TE-016): each minor DTO re-exported by the
     contract must be the SAME class as `app.core.auth.models.X`
     (not a redefinition). Identity preservation is the binding
     invariant of every fan-out batch — without it, any consumer
@@ -235,7 +235,7 @@ def test_contract_phase10_dto_is_leaf_identity(dto_name: str):
 
 @pytest.mark.parametrize("dto_name", _PHASE10_MINOR_DTOS_ON_FACADE)
 def test_contract_phase10_dto_is_facade_identity(dto_name: str):
-    """Phase-10: identity also holds across the facade
+    """facade baseline0: identity also holds across the facade
     re-export chain for DTOs still re-exported by
     `app.core.auth.auth`. The chain
     `auth.auth.X is auth.models.X is contracts.auth.X` must
@@ -358,8 +358,8 @@ def test_phase7_router_imports_contract_for_current_user_and_group_filter(
 ):
     """Each Phase-7 migrated router must import `CurrentUser` AND
     `group_filter` from `app.shared.contracts.auth`. Drift =
-    regression to the leaf-only direct import (Phase-5/6 shape) or
-    to the facade (Phase-1 shape)."""
+    regression to the leaf-only direct import (typed-context/6 shape) or
+    to the facade (facade baseline shape)."""
     assert path.exists(), f"migrated file missing: {path}"
     contract_imports = _imports_from(path, "app.shared.contracts.auth")
     flat = set().union(*contract_imports) if contract_imports else set()

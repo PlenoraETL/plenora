@@ -69,8 +69,7 @@ function AnnotationNode({ id, data, selected }) {
           '--ag-topbar':       topbarColor,
         }}
       >
-        {/* ── TOPBAR ── */}
-        <div className="ann-group__topbar">
+<div className="ann-group__topbar">
           {editingTitle ? (
             <input
               className="ann-group__title-input"
@@ -117,9 +116,7 @@ function AnnotationNode({ id, data, selected }) {
             >✕</button>
           </div>
         </div>
-
-        {/* ── COLOR PICKER ── */}
-        {showColors && (
+{showColors && (
           <div className="ann-group__colors">
             {COLORS.map(c => (
               <button
@@ -134,12 +131,8 @@ function AnnotationNode({ id, data, selected }) {
             ))}
           </div>
         )}
-
-        {/* ── BODY (area libera dove vivono i nodi) ── */}
-        <div className="ann-group__body" />
-
-        {/* ── NOTE IN BASSO ── */}
-        <div className="ann-group__note-area">
+<div className="ann-group__body" />
+<div className="ann-group__note-area">
           {editingNote ? (
             <textarea
               className="ann-group__textarea"

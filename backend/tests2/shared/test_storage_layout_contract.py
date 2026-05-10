@@ -43,8 +43,6 @@ def test_is_valid_prefix_rejects_invalid_values(bad: str):
     assert not storage_layout.is_valid_prefix(bad)
 
 
-# Uniqueness + non-prefix-of-another
-
 def test_all_prefixes_are_unique():
     assert len(storage_layout.ALL_PREFIXES) == len(set(storage_layout.ALL_PREFIXES)), (
         f"duplicati in ALL_PREFIXES: {storage_layout.ALL_PREFIXES}"

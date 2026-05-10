@@ -1,7 +1,5 @@
 /**
  * OutputSettingsPanel.jsx — Sezione "output settings" del Result node
- *
- * Estratto da `ResultNodeStandardView.jsx` in `FE-SPLIT-005A`.
  * Componente presentational locale: copre filename + format
  * (standard + geo) + geometry column + (solo per editor estrai)
  * distinct/limit. Niente fetch, niente API, niente global state.
@@ -74,7 +72,6 @@ export default function OutputSettingsPanel({
 
   return (
     <>
-      {/* Nome file */}
       <div className="result-node__section">
         <div className="result-node__label">Nome file:</div>
         {isEditingFileName ? (
@@ -108,7 +105,6 @@ export default function OutputSettingsPanel({
         )}
       </div>
 
-      {/* Formato */}
       <div className="result-node__section">
         <div className="result-node__label">Formato:</div>
         <div className="result-node__format-group">

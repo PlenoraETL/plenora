@@ -1,8 +1,5 @@
 /**
  * RunsTab.jsx — Tabella esecuzioni pipeline con filtri e dettaglio
- *
- * Estratto da LogViewer.jsx.
- *
  * Props:
  *   refreshTick {number} - Incrementato dall'esterno per forzare un reload
  */

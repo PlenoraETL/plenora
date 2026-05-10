@@ -15,11 +15,6 @@ from app.shared.resources.path_policy import validate_imdf_task_id
 from app.utils.logger import get_logger
 from workers.celery_app import celery_app
 
-# Regex + path-traversal guard centralizzati in `app.shared.resources.path_policy
-# validate_imdf_task_id` (D3 commit 1). Il wrapper locale preserva la
-# signature `Optional[Path]` attesa dal caller task (None su id malformato
-
-
 def _safe_bundle_dir(bundle_task_id: str) -> Optional[Path]:
     """Valida il bundle_task_id contro path traversal e ritorna il path
     resolved. Ritorna None se l'id e' malformato (il caller deve gestire
@@ -81,7 +76,6 @@ def execute_imdf_publish_task(
     try:
         _update_progress(self, 2, "Risoluzione bundle IMDF...")
 
-        # ── 1. Valida bundle_task_id e risolvi path bundle ───────────
         bundle_dir = _safe_bundle_dir(bundle_task_id)
         if bundle_dir is None:
             msg = (
@@ -122,7 +116,6 @@ def execute_imdf_publish_task(
                 "elapsed_time": round(time.time() - started_at, 2),
             }
 
-        # ── 2. Trova .gdb dentro il bundle ───────────────────────────
         gdb_path: Optional[Path] = None
         for entry in bundle_dir.rglob("*.gdb"):
             if entry.is_dir():
@@ -141,7 +134,6 @@ def execute_imdf_publish_task(
 
         _update_progress(self, 8, f"Caricamento layer IMDF dal GDB...")
 
-        # ── 3. Carica GDB → GeoDataFrame per layer ───────────────────
         from app.core.imdf.loader import load_imdf_layers
         gdf_layers = load_imdf_layers(gdb_path)
         total_features = sum(len(gdf) for gdf in gdf_layers.values())
@@ -155,7 +147,6 @@ def execute_imdf_publish_task(
             f"GDB caricato ({len(gdf_layers)} layer, {total_features} feat). Preparazione upload..."
         )
 
-        # ── 4. Leggi renderers.json se richiesto ─────────────────────
         renderers_data = None
         apply_renderers = bool(publisher_config.get("apply_renderers"))
         if apply_renderers:
@@ -166,7 +157,6 @@ def execute_imdf_publish_task(
                 except Exception as e:
                     logger.warning(f"[Task {task_id}] lettura renderers.json fallita: {e}")
 
-        # ── 5. Estrai publisher config ───────────────────────────────
         connection_id = publisher_config.get("connection_id")
         if not connection_id:
             return {
@@ -182,7 +172,6 @@ def execute_imdf_publish_task(
         mode = publisher_config.get("mode") or "replace"
         match_columns = publisher_config.get("match_columns") or None
 
-        # ── 6. Progress callback per upload ──────────────────────────
         # L'uploader notifica step-by-step (0..N). Mappiamo nel range 15..95
         def _upload_progress(stage, current, total, message=""):
             base = 15
@@ -192,7 +181,6 @@ def execute_imdf_publish_task(
 
         _update_progress(self, 18, f"Upload su ArcGIS (mode={mode}, fs={fs_name})...")
 
-        # ── 7. Chiamata uploader ─────────────────────────────────────
         from app.core.imdf.arcgis_uploader import upload_imdf_layers
         publish_result = upload_imdf_layers(
             connection_id=connection_id,

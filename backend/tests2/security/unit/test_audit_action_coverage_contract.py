@@ -1,7 +1,7 @@
 """
 Contract test AST-based — coverage @audit_action sugli endpoint sensibili.
 
-Scope (Phase 3 Batch B / P1-01):
+Scope (Contract:
 """
 
 from __future__ import annotations

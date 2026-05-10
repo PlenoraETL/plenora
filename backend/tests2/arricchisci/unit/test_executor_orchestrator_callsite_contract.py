@@ -28,7 +28,7 @@ def test_executor_does_not_call_get_execution_order_via_singleton():
     """AST-based scan: `executor.py` non deve piu' chiamare
     `api_connection_service._get_execution_order(...)` come
     Attribute call. La menzione in commenti/docstring e' ammessa
-    (riferimento al pre-batch).
+    (riferimento al Previous contract).
     """
     src = _EXECUTOR_PY.read_text(encoding="utf-8")
     tree = ast.parse(src)

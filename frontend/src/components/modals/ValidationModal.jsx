@@ -5,10 +5,10 @@
  * `utils/canvasValidationContract.js`) tramite la prop `result`. Renderizza
  * sezioni separate per `bySeverity.error` / `.warning` / `.info`.
  *
- * KEEP_COMPAT:
+ * NOTE:
  *   - se `result` non e' passato, accetta ancora `issues` + `isValid`
- *     (shape pre-`FE-PHASE2-VALIDATION-002`); il modal costruisce internamente
- *     le tre sezioni con un filter inline equivalente.
+ *     per compatibilita'; il modal costruisce internamente le tre sezioni
+ *     con un filter inline equivalente.
  *   - i call site nuovi devono preferire `result`.
  */
 import React from 'react';

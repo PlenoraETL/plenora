@@ -1,8 +1,6 @@
 /**
  * GroupOrderHavingPanel.jsx — Sezioni GROUP BY / ORDER BY / HAVING
  * del Result node.
- *
- * Estratto da `ResultNodeStandardView.jsx` in `FE-SPLIT-005B`.
  * Componente presentational locale: niente fetch, niente API,
  * niente global state. Tutta la persistenza passa per
  * `updateNodeData` con i payload identici all'originale.
@@ -66,7 +64,6 @@ export default function GroupOrderHavingPanel({
     (availableColumns.length > 0 || manipolaColumns.length > 0);
   const showHavingGate = groupByEnabled && aggregations.length > 0;
 
-  // ── GROUP BY handlers ────────────────────────────────────────────────
   const handleToggleGroupBy = () => {
     updateNodeData(id, {
       group_by_enabled: !groupByEnabled,
@@ -123,7 +120,6 @@ export default function GroupOrderHavingPanel({
     });
   };
 
-  // ── ORDER BY handlers ────────────────────────────────────────────────
   const handleToggleOrderBy = () => {
     updateNodeData(id, {
       order_by_enabled: !orderByEnabled,
@@ -151,7 +147,6 @@ export default function GroupOrderHavingPanel({
     updateNodeData(id, { order_by_columns: newColumns });
   };
 
-  // ── HAVING handlers ──────────────────────────────────────────────────
   const handleToggleHaving = () => {
     updateNodeData(id, {
       having_enabled: !havingEnabled,

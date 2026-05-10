@@ -3,8 +3,7 @@
  * Redesign Plenora design system
  * Route: /external-connectors
  *
- * Post `FE-PHASE2-SPLIT-001A`: il wizard create/edit vive in
- * `components/api-conn/ApiConnectionWizard.jsx`. La page e' shell:
+ * La page e' shell:
  *  - lista connettori + filtri/categorie + search;
  *  - dropdown "Nuovo Connettore" (Template / OpenAPI / Manuale);
  *  - delete con cascade-aware error;
@@ -39,8 +38,6 @@ import { createDataSource } from '../api/datasources';
 import { can, role } from '../utils/permissions';
 import '../styles/ApiConnectionManager.css';
 import '../components/panels/ResponseConfigBuilder.css';
-
-// ── Constants ─────────────────────────────────────────────────────────────
 const CATEGORIES = [
   { id:'all',        label:'Tutte',       icon:'🔗' },
   { id:'geocoding',  label:'Geocoding',   icon:'🌍' },
@@ -88,8 +85,6 @@ const toDataSourcePayload = (dsConfig) => {
 // Status/icon/timeAgo helpers + STATUS_CFG vivono in
 // `components/api-conn/ApiConnectionCard.jsx` (presentational scope).
 // Qui importiamo solo `getApiStatus` per il counter `globalStats.warningApis`.
-
-// ── Main ──────────────────────────────────────────────────────────────────
 function ApiConnectionManager() {
   const toast = useToast();
   const confirmModal = useConfirmModal();
@@ -109,8 +104,7 @@ function ApiConnectionManager() {
   const [showOpenAPIImport,    setShowOpenAPIImport]    = useState(false);
   const [showDataSourceConfig, setShowDataSourceConfig] = useState(false);
 
-  // Wizard dispatch (FE-SPLIT-001A): state minimo. Il wizard component
-  // ha il suo stato interno (formData, wizardStep, ...).
+  // Wizard keeps its own form state; the page only chooses the seed.
   const [wizardOpen, setWizardOpen] = useState(false);
   const [wizardSeed, setWizardSeed] = useState(null); // null | { kind:'new' } | { kind:'edit', api } | { kind:'template', template }
 
@@ -156,9 +150,7 @@ function ApiConnectionManager() {
     totalErrors: apiConnections.reduce((s,a) => s+(a.usage?.calls_error||0), 0),
     warningApis: apiConnections.filter(a => { const {status}=getApiStatus(a); return status!=='active'; }).length,
   }), [apiConnections]);
-
-  // ── Wizard dispatch helpers ─────────────────────────────────────────
-  const openWizardForNew = () => {
+const openWizardForNew = () => {
     setWizardSeed({ kind: 'new' });
     setWizardOpen(true);
     setShowNewApiDropdown(false);
@@ -347,9 +339,7 @@ function ApiConnectionManager() {
           </div>
         </div>
       </div>
-
-      {/* ── External modals (black box, unchanged) ─────────────────────── */}
-      {showTemplateLibrary && <TemplateLibraryModal onClose={()=>setShowTemplateLibrary(false)} onSelectTemplate={openWizardForTemplate} />}
+{showTemplateLibrary && <TemplateLibraryModal onClose={()=>setShowTemplateLibrary(false)} onSelectTemplate={openWizardForTemplate} />}
       {showOpenAPIImport   && <OpenAPIImportModal   onClose={()=>setShowOpenAPIImport(false)}   onImport={applyOpenAPIImport} />}
       {showDataSourceConfig && (
         <DataSourceConfigModal
@@ -361,16 +351,13 @@ function ApiConnectionManager() {
         />
       )}
 
-      {/* ── Wizard (FE-PHASE2-SPLIT-001A) ──────────────────────────────── */}
       <ApiConnectionWizard
         isOpen={wizardOpen}
         seed={wizardSeed}
         onClose={closeWizard}
         onSaved={handleWizardSaved}
       />
-
-      {/* ── Quick Test Input ───────────────────────────────────────────── */}
-      {quickTestInput && (
+{quickTestInput && (
         <div className="acm__overlay" onClick={()=>setQuickTestInput(null)}>
           <div
             ref={quickTestInputDialogRef}
@@ -401,9 +388,7 @@ function ApiConnectionManager() {
           </div>
         </div>
       )}
-
-      {/* ── Quick Test Result ──────────────────────────────────────────── */}
-      {quickTestResult && (
+{quickTestResult && (
         <div className="acm__overlay" onClick={()=>setQuickTestResult(null)}>
           <div
             ref={quickTestResultDialogRef}
@@ -450,9 +435,7 @@ function ApiConnectionManager() {
           </div>
         </div>
       )}
-
-      {/* ── SHARE MODAL (solo superadmin) ── */}
-      {sharingApi && (
+{sharingApi && (
         <div className="acm__overlay" onClick={()=>setSharingApi(null)}>
           <div
             ref={shareDialogRef}

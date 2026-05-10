@@ -1,7 +1,5 @@
 """
 Rilevamento cicli nel DAG delle dipendenze cross-project.
-
-C3 fix 5: due progetti Manipola possono referenziare l'uno l'altro.
 """
 
 from typing import Callable, List, Optional

@@ -1,5 +1,5 @@
 /**
- * Contract test per ResultNodeStandardView — Batch 2 step 3 (ResultNode split FE).
+ * Contract tests for ResultNodeStandardView.
  *
  * Invarianti che questa view deve preservare post-estrazione:
  *   1. Render ESTRAI con dati minimi: mostra formato + filename + bottone Valida.

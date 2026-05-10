@@ -1,5 +1,5 @@
 """
-Smoke contract — STRUCT-005 Seam A: estrazione password hashing.
+Smoke contract — extracted boundary: estrazione password hashing.
 
 Verifica due invarianti minime del refactor:
 """

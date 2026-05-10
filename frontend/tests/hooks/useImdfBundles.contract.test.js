@@ -1,5 +1,5 @@
 /**
- * Contract test per useImdfBundles — Batch 2 step 1 (ResultNode split FE).
+ * Contract tests for useImdfBundles ResultNode integration.
  *
  * Invarianti estratti da ResultNode.jsx che il hook deve preservare:
  *   1. isImdfMode=false: nessuna fetch, ritorna defaults (bundles [], bundleTaskId null).

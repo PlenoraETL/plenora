@@ -43,14 +43,13 @@ _BLOB_CONSUMER_INVENTORY: dict[tuple[str, int], tuple[
     # `b"".join(stream["body"])` with bounded readers:
     #   - app/services/file_blob_materialization.py — closed by
     #     `_bounded_read_iterable(...)` (RESOURCE-ENGINE-011).
-    #     The module itself was later retired in
-    #     RESOURCE-ENGINE-024 (commit 1862394); the file_source
-    #     read path now goes through `FileSourceBlobLoader`.
+    #     The module is retired; the file_source read path now goes
+    #     through `FileSourceBlobLoader`.
     #   - app/core/resources/loaders/result_blob.py — closed by
     #     `read_stream_bounded(...)` (RESOURCE-ENGINE-010).
     #   - app/core/intermediate/artifact_reader.py — closed by
     #     `read_stream_bounded(..., stage="intermediate_artifact_preview")`
-    #     (RESOURCE-ENGINE-012, Batch 042). The HIGH entry was
+    #     (RESOURCE-ENGINE-012). The HIGH entry was
     #     downgraded to LOW: the AST scan no longer matches the
     #     reader since the inline `b"".join(stream["body"])` is gone,
     #     so the entry is removed entirely (the ratchet's

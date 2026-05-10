@@ -1,7 +1,7 @@
 """
 Regression guards per `_init_execution_context` fail-closed su errori DB.
 
-Batch 3 Fix-B (audit `arricchisci/api_connector` §7.2 + checkpoint C3).
+current contract the execution-context contract (audit `arricchisci/api_connector` §7.2 + checkpoint C3).
 """
 
 from types import SimpleNamespace
@@ -79,7 +79,7 @@ def test_init_execution_context_raises_execution_context_error_on_db_error(
     api_service, monkeypatch
 ):
     """DB down / pool exhausted / deadlock non viene piu' degradato
-    a `group_id=None` (pre-fix): viene re-raised come
+    a `group_id=None` (Previous behavior): viene re-raised come
     `ExecutionContextError` con `original_error` + `__cause__`
     impostati all'eccezione psycopg2 originale (chain preservata).
     """
@@ -147,7 +147,7 @@ def test_init_execution_context_does_not_write_singleton_state_on_db_error(
 def test_execute_enrichment_routes_db_error_to_safe_boundary_response(
     api_service, monkeypatch
 ):
-    """Integrazione Fix-B + Fix-C (Opzione A checkpoint C3): la chiamata
+    """Integrazione the execution-context contract + the error-handling contract (Opzione A checkpoint C3): la chiamata
     a `_init_execution_context` e' DENTRO il `try` di
     `execute_enrichment`. `ExecutionContextError` (non `ValueError`)
     viene catturato dal ramo `except Exception` e tradotto in response

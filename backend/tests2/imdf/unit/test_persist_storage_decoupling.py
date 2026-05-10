@@ -1,5 +1,5 @@
 """
-Contract test D3 commit 4 — persist.py non chiama storage.
+Contract test current IMDF contract — persist.py non chiama storage.
 
 Inversione di dep rimossa (d3_imdf_boundaries.md §3.4 + §4.2 + §8 Opzione D,
 """
@@ -16,7 +16,6 @@ import pytest
 pytestmark = [pytest.mark.unit, pytest.mark.contract, pytest.mark.regression]
 
 
-# ── Helpers ─────────────────────────────────────────────────────────────
 
 
 def _fake_bundle(tmp_path: Path, site_id: str = "LO2244"):
@@ -57,14 +56,13 @@ def fake_settings(tmp_path, monkeypatch):
     return d
 
 
-# ── 1. Functional: persist NON chiama storage.save_bundle ───────────────
 
 
 def test_persist_does_not_call_storage_save_bundle(tmp_path, fake_settings, monkeypatch):
     """Runtime check: eseguendo `persist_imdf_bundle_to_disk` con un bundle
     valido, la funzione non invoca piu' `storage.save_bundle` (R2).
 
-    Pre-commit 4: save_bundle era chiamato inline (persist.py:147-159).
+    Previous contract: save_bundle era chiamato inline (persist.py:147-159).
     Post-commit: il worker orchestra; persist resta local materializer puro.
     """
     from app.core.imdf.persist import persist_imdf_bundle_to_disk
@@ -84,14 +82,13 @@ def test_persist_does_not_call_storage_save_bundle(tmp_path, fake_settings, monk
 
     # storage.save_bundle NON deve essere stato chiamato da persist.
     assert save_bundle_mock.call_count == 0, (
-        "Regression D3 commit 4: persist_imdf_bundle_to_disk ha chiamato "
+        "Regression current IMDF contract: persist_imdf_bundle_to_disk ha chiamato "
         "storage.save_bundle. L'inversione di dependenza e' stata "
         "re-introdotta. L'orchestrazione deve vivere nel worker "
         "(enrichment_task), non in persist."
     )
 
 
-# ── 2. Static: persist source non importa storage ──────────────────────
 
 
 def test_persist_module_does_not_import_storage():
@@ -119,13 +116,13 @@ def test_persist_module_does_not_import_storage():
             mod_name = getattr(bound, "__module__", "") or ""
             obj_name = getattr(bound, "__name__", "") or ""
             assert "imdf.storage" not in mod_name, (
-                f"Regression D3 commit 4: `{attr}` in persist_mod e' "
+                f"Regression current IMDF contract: `{attr}` in persist_mod e' "
                 f"bound a {mod_name} (storage). Persist deve restare local "
                 f"materializer puro (non conosce S3/object_storage). "
                 f"L'orchestrazione vive nel worker (enrichment_task)."
             )
             assert "imdf.storage" not in obj_name, (
-                f"Regression D3 commit 4: `{attr}` in persist_mod referenzia "
+                f"Regression current IMDF contract: `{attr}` in persist_mod referenzia "
                 f"{obj_name} (storage)."
             )
 
@@ -148,13 +145,12 @@ def test_persist_module_does_not_import_storage():
             return False
 
         assert not _walk(co), (
-            f"Regression D3 commit 4: persist_mod.{attr_name} fa "
+            f"Regression current IMDF contract: persist_mod.{attr_name} fa "
             f"riferimento a `save_bundle` nel bytecode. Persist deve "
             f"restare local materializer puro."
         )
 
 
-# ── 3. Static: enrichment_task invoca storage.save_bundle nel branch IMDF ─
 
 
 def test_enrichment_task_imdf_branch_calls_storage_save_after_persist():
@@ -186,13 +182,13 @@ def test_enrichment_task_imdf_branch_calls_storage_save_after_persist():
         return False
 
     assert _walk(code, "save_bundle"), (
-        "Regression D3 commit 4: enrichment_task non riferisce "
+        "Regression current IMDF contract: enrichment_task non riferisce "
         "`save_bundle` come callee. Il worker e' l'orchestratore "
         "post-persist (R2); rimuoverlo da qui spezza il multi-host "
         "senza readd in persist."
     )
     assert _walk(code, "persist_imdf_bundle_to_disk"), (
-        "Regression D3 commit 4: enrichment_task non riferisce "
+        "Regression current IMDF contract: enrichment_task non riferisce "
         "`persist_imdf_bundle_to_disk`."
     )
 
@@ -202,7 +198,7 @@ def test_enrichment_task_imdf_branch_calls_storage_save_after_persist():
     # garantisce di catturarla anche se vive in funzioni nested.
     source = inspect.getsource(enrichment_task)
     assert "imdf storage upload fallito (non-fatal" in source, (
-        "D3 commit 4: il wording del logger.warning deve restare verbatim "
+        "current IMDF contract: il wording del logger.warning deve restare verbatim "
         "('imdf storage upload fallito (non-fatal, bundle disponibile solo "
         "sul nodo corrente)') per non rompere alert/dashboard che ne "
         "fanno grep."

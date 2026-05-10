@@ -150,11 +150,7 @@ export const downloadProjectOutput = async (projectId, filename = null) => {
  *
  * Backend: GET /projects/:projectId/download?file=:filename. La query
  * string viene preservata letterale (senza encoding axios `params`) per
- * mantenere bit-per-bit la URL semantics del consumer storico
- * (ExecutionModal, error_report.csv): pre-C3.4 il componente costruiva
- * lui stesso `${API_ENDPOINT}/projects/.../download?file=...` e faceva
- * `import('../../api/http').then(...)` — boundary violation + dynamic
- * import inutile su un componente sempre montato dietro `isOpen`.
+ * mantenere la URL semantics dei consumer esistenti.
  *
  * Ritorna l'AxiosResponse grezzo (non solo .data) cosi' il caller puo'
  * accedere a headers (es. Content-Disposition) se serve, senza
@@ -171,8 +167,6 @@ export const downloadProjectFile = async (projectId, filename) => {
   );
   return response;
 };
-
-// ─── Schema Inference ────────────────────────────────────────────────────────
 
 /**
  * Restituisce gli schemi inferiti per tutti i nodi di un progetto.

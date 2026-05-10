@@ -1,7 +1,7 @@
 """
 Integration test REPLACE atomic (C6 critical fix).
 
-Pre-fix: REPLACE faceva drop_table() + create_table() + _batch_insert()
+Previous behavior: REPLACE faceva drop_table() + create_table() + _batch_insert()
 """
 
 from __future__ import annotations
@@ -145,7 +145,6 @@ def _pg_writer(engine, table: str) -> DatabaseWriter:
     return DatabaseWriter(cfg, engine=engine, db_type="postgres")
 
 
-# Oracle scenarios
 
 
 @pytest.mark.skipif(not _oracle_reachable(), reason="Oracle non raggiungibile")
@@ -174,7 +173,7 @@ class TestOracleReplaceAtomic:
 
     def test_insert_failure_preserves_target_data(self):
         """Il killer feature del fix: se l'INSERT fallisce durante REPLACE,
-        i dati vecchi del target restano. Pre-fix: tabella scomparsa."""
+        i dati vecchi del target restano. Previous behavior: tabella scomparsa."""
         table = make_it_id("ora_repl_fail").upper()
         try:
             engine = _oracle_engine()
@@ -229,7 +228,6 @@ class TestOracleReplaceAtomic:
             _oracle_drop(f"{table}__BAK")
 
 
-# Postgres scenarios
 
 
 @pytest.mark.skipif(not _pg_reachable(), reason="Postgres non raggiungibile")

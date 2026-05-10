@@ -1,7 +1,7 @@
 """
-[phase-2-err][batch9] C5 — delete_project fail-closed su step critici.
+C5 — delete_project fail-closed su step critici.
 
-Audit Batch 9 §3.1 S1 / fix F3: `ProjectService.delete_project` faceva cascade
+Audit finding: `ProjectService.delete_project` faceva cascade
 """
 
 from __future__ import annotations

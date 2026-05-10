@@ -5,7 +5,7 @@ Benchmark e correctness test per le ottimizzazioni PERF di Fase 1.
 ## Struttura
 
 - `conftest.py` — fixture di generazione dataset sintetici (df/gdf), helper di timing
-- `test_baseline_*.py` — baseline measurement dello stato attuale (pre-Batch 1..3)
+- `test_baseline_*.py` — baseline measurement dello stato attuale (previous implementation)
 - `test_bench_*.py` — benchmark post-refactor (speedup vs baseline, target >=3x)
 - `test_correctness_*.py` — invariant preservation (output identico pre/post)
 

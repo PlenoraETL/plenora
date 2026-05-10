@@ -21,13 +21,11 @@ const MultiJoinNode = memo(({ data, id }) => {
   const [isRunHistoryOpen, setIsRunHistoryOpen] = useState(false);
   const projectId = useCanvasStore(s => s.projectId);
 
-  // ========== COLONNE INPUT ==========
   // useColumnPropagation popola data.inputColumns con tutte le colonne da tutti i predecessori
   const inputColumns = useMemo(() => {
     return data.inputColumns || [];
   }, [data.inputColumns]);
 
-  // ========== SORGENTI COLLEGATE ==========
   // Leggiamo info sulle sorgenti per mostrare nella UI
   const sources = useMemo(() => {
     const edges = getEdges();
@@ -61,7 +59,6 @@ const MultiJoinNode = memo(({ data, id }) => {
     }).filter(Boolean);
   }, [id, getEdges, getNodes, data.inputColumns]); // Trigger anche su inputColumns change
 
-  // ========== COLONNE COMUNI ==========
   const commonColumns = useMemo(() => {
     if (sources.length < 2) return [];
     
@@ -71,8 +68,6 @@ const MultiJoinNode = memo(({ data, id }) => {
       sources.every(src => src.columns.includes(col))
     );
   }, [sources]);
-
-  // ========== HANDLERS ==========
 
   const updateNodeData = useCanvasStore(s => s.updateNodeData);
   const deleteNode     = useCanvasStore(s => s.deleteNode);
@@ -102,7 +97,6 @@ const MultiJoinNode = memo(({ data, id }) => {
     deleteNode(id);
   }, [id, deleteNode, confirm]);
 
-  // ========== PREVIEW OUTPUT ==========
   // Mostra preview delle colonne che usciranno (per info utente)
   const outputPreview = useMemo(() => {
     if (sources.length === 0 || joinKeys.length === 0) return [];
@@ -131,8 +125,6 @@ const MultiJoinNode = memo(({ data, id }) => {
     return result;
   }, [sources, joinKeys]);
 
-  // ========== RENDER ==========
-  
   // Handle multipli (10 fissi)
   const MAX_HANDLES = 10;
   const visibleHandleCount = Math.max(sources.length + 1, 2);
@@ -211,7 +203,6 @@ const MultiJoinNode = memo(({ data, id }) => {
         {sources.length >= 2 && (
           <div className="multi-join-node__section">
             {sources.length === 2 ? (
-              /* === JOIN A 2 SORGENTI: colonne separate SX / DX === */
               <>
                 <label className="multi-join-node__label">
                   Colonne join:
@@ -280,7 +271,6 @@ const MultiJoinNode = memo(({ data, id }) => {
                 </button>
               </>
             ) : (
-              /* === JOIN A 3+ SORGENTI: colonne comuni con checkbox === */
               <>
                 <label className="multi-join-node__label">
                   Colonne chiave (comuni): *

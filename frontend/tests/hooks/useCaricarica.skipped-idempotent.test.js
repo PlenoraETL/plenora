@@ -1,14 +1,14 @@
 /**
- * Contract test — useCaricarica + status 'skipped_idempotent' (PR-A UX Tier 1).
+ * Contract tests for useCaricarica skipped_idempotent handling.
  *
  * Backend `app/core/carica/models.py:81` espone `WriteStatus.SKIPPED_IDEMPOTENT`,
  * propagato come `result.status='skipped_idempotent'` quando il run_id e'
  * gia' stato completato in precedenza (idempotency guard, N15).
  *
- * Pre-fix: il check `data.result?.status === 'success'` ritornava `success:false`
+ * Regression contract: `data.result?.status === 'skipped_idempotent'` is success-equivalent
  * perche' il match era sul literal "success", trattando l'idempotent come errore.
  *
- * Post-fix: l'hook accetta sia 'success' sia 'skipped_idempotent' come
+ * Current contract: the hook accepts both 'success' and 'skipped_idempotent' as
  * success-no-op, ed espone `result.skippedIdempotent=true` per consentire
  * al modal di mostrare un messaggio dedicato (no rosso, no "errore").
  *

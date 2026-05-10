@@ -9,10 +9,6 @@ import http from './http';
 
 const API_BASE = '/features';
 
-// ============================================================
-// CONNESSIONI ArcGIS
-// ============================================================
-
 export async function listFeatureConnections() {
   return http.get(`${API_BASE}/connections`).then(r => r.data);
 }
@@ -33,10 +29,6 @@ export async function testFeatureConnection(connectionId) {
   return http.post(`${API_BASE}/connections/${connectionId}/test`).then(r => r.data);
 }
 
-// ============================================================
-// BROWSE (servizi e layer)
-// ============================================================
-
 export async function browseServices(connectionId) {
   return http.get(`${API_BASE}/connections/${connectionId}/services`).then(r => r.data);
 }
@@ -53,21 +45,13 @@ export async function getLayerSchema(connectionId, layerUrl) {
   return http.get(`${API_BASE}/connections/${connectionId}/schema`, { params: { layer_url: layerUrl } }).then(r => r.data);
 }
 
-// ============================================================
 // API-ready senza consumer UI (ADR-0017 Sub-B keep)
-// ------------------------------------------------------------
 // Le 3 funzioni seguenti — queryLayer, writeFeatures,
 // createFeatureService — chiamano endpoint BE live
 // (/features/query/preview, /features/write, /features/create-service)
 // ma NON sono attualmente consumate da alcun componente UI.
 // Il contract FE↔BE è protetto dai test in
 // tests/api/features.contract.test.js. Wiring UI: scope post-launch.
-// ============================================================
-
-// ============================================================
-// QUERY
-// ============================================================
-
 export async function queryLayer(connectionId, layerUrl, options = {}) {
   return http.post(`${API_BASE}/query/preview`, null, {
     params: {
@@ -79,10 +63,6 @@ export async function queryLayer(connectionId, layerUrl, options = {}) {
     },
   }).then(r => r.data);
 }
-
-// ============================================================
-// SCRITTURA
-// ============================================================
 
 export async function writeFeatures({ connectionId, layerUrl, operation, inputPath, projectId, geometryColumn, sourceSrid, objectIds, where }) {
   return http.post(`${API_BASE}/write`, {

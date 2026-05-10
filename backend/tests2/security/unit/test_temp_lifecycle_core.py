@@ -23,7 +23,7 @@ pytestmark = [
 
 def test_extract_imdf_zip_cleans_up_on_zip_error(tmp_path):
     """Zip corrotto/illeggibile dopo mkdtemp â†’ tmp dir non deve restare
-    sul disco. Pre-fix l'eccezione di safe_extractall lasciava la dir
+    sul disco. Previous behavior l'eccezione di safe_extractall lasciava la dir
     creata in TEMP."""
     from app.core.imdf.loader import extract_imdf_zip
 
@@ -114,7 +114,7 @@ def test_extract_imdf_zip_does_not_cleanup_caller_provided_dest(tmp_path):
 
 
 def test_temp_file_for_cleans_up_tmp_dir_when_zip_extraction_fails(tmp_path):
-    """Pre-fix: il branch SHP/GDB di `_temp_file_for` faceva mkdtemp +
+    """Previous behavior: il branch SHP/GDB di `_temp_file_for` faceva mkdtemp +
     try/except che logga errore senza cleanup. Una qualsiasi exception
     di safe_extractall lasciava la tmp dir su disco. Ora cleanup
     garantito su entrambi i path errore (exception + nessun shp/gdb
@@ -158,7 +158,7 @@ def test_temp_file_for_cleans_up_tmp_dir_when_zip_extraction_fails(tmp_path):
 
 def test_temp_file_for_cleans_up_tmp_dir_when_no_shp_inside_valid_zip(tmp_path):
     """Caso edge: zip valido ma senza .shp/.gdb dentro â†’ return None
-    e cleanup. Pre-fix: il fall-through al `return None` lasciava la
+    e cleanup. Previous behavior: il fall-through al `return None` lasciava la
     tmp_dir creata."""
     import zipfile as _zipfile
     import io
@@ -200,7 +200,7 @@ def test_temp_file_for_cleans_up_tmp_dir_when_no_shp_inside_valid_zip(tmp_path):
 
 
 def test_rest_file_cleans_up_tmp_dir_on_http_error_path():
-    """Pre-fix: errore HTTP / response vuota / download_timed_out
+    """Previous behavior: errore HTTP / response vuota / download_timed_out
     ritornavano dict di errore senza cleanup tmp_exec_dir â†’ leak.
     Ora cleanup garantito da finally + _cleanup_tmp flag.
 
@@ -234,7 +234,7 @@ def test_rest_file_cleans_up_tmp_dir_on_http_error_path():
     fake_response.json.side_effect = Exception("not json")
     fake_response.iter_content.return_value = iter([])
 
-    # B3-B.5a modernization: `requests.post` patchato sul source canonico
+    # B3-B.5a current contract: `requests.post` patchato sul source canonico
     # invece dell'alias `app.core.arricchisci.api_connector.requests.post`.
     # `_shared_prepare_headers` resta source-bound al modulo api_connector
     # perche' `_prepare_headers` (3-line shim) resta in core (vedi B3-B.3

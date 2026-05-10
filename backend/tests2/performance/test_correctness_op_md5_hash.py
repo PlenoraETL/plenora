@@ -22,7 +22,7 @@ from app.core.manipola.transforms.base import op_md5_hash
 def _legacy_op_md5_hash(
     df, columns, output_column="md5_hash", normalize=True
 ):
-    """Copia verbatim dell'impl pre-Batch-2B (base.py:1102)."""
+    """Copia verbatim dell'impl previous implementation (base.py:1102)."""
     if not columns:
         return df
     valid_columns = [c for c in columns if c in df.columns]

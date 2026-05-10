@@ -3,7 +3,7 @@
  *
  * Hook con due flow paralleli:
  *   1) Legacy: handleExecute(opts) parte subito, apre modal in isExecuting.
- *   2) R-25 PR-B5: prepareExecute(opts) -> awaitingLaunch=true (config step
+ *   2) prepareExecute(opts) -> awaitingLaunch=true (config step
  *      del modal) -> launch(intermediateMode) parte mergiando opts.
  *
  * Strategia mock:
@@ -80,7 +80,7 @@ describe('useExecution — initial state + return shape', () => {
     expect(result.current.caricaPolling).toBe(false);
   });
 
-  it('espone metodi pubblici di ciclo vita + R-25 PR-B5', () => {
+  it('espone metodi pubblici di ciclo vita', () => {
     const { result } = renderHook(() => useExecution('proj-1'));
     expect(typeof result.current.handleExecute).toBe('function');
     expect(typeof result.current.prepareExecute).toBe('function');
@@ -93,7 +93,7 @@ describe('useExecution — initial state + return shape', () => {
 });
 
 
-describe('useExecution — prepareExecute / launch (R-25 PR-B5)', () => {
+describe('useExecution prepareExecute / launch', () => {
   it('prepareExecute apre il modal in stato config (awaitingLaunch=true, isExecuting=false)', () => {
     const { result } = renderHook(() => useExecution('proj-1'));
     act(() => { result.current.prepareExecute({ force_recalculate: true }); });

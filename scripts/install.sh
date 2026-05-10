@@ -1,11 +1,9 @@
 #!/usr/bin/env bash
-# =============================================================================
 # Plenora-ETL - Guided installer prototype (non-Docker, single-machine)
-# =============================================================================
 #
 # BE-GO-READY-INSTALLATION-009-INSTALL-SCRIPT-PROTOTYPE.
 #
-# This is a FIRST PROTOTYPE. It is NOT a full production installer.
+# This is not a full production installer.
 # It is safe, explicit, and idempotent. It does NOT install OS packages
 # unless `--install-deps` is passed. It does NOT touch existing
 # `backend/.env` secrets unless `--overwrite-secrets` is passed.
@@ -51,13 +49,10 @@
 #
 # This script EXITS NON-ZERO if a precondition is missing. Re-run it
 # after fixing.
-# =============================================================================
 
 set -Eeuo pipefail
 
-# ---------------------------------------------------------------------------
 # Globals
-# ---------------------------------------------------------------------------
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)"
 REPO_ROOT="$(cd -- "${SCRIPT_DIR}/.." &>/dev/null && pwd)"
@@ -92,9 +87,7 @@ log_step()  { printf "\n%b== %s ==%b\n" "${C_BOLD}" "$*" "${C_RESET}"; }
 
 die() { log_err "$*"; exit 1; }
 
-# ---------------------------------------------------------------------------
 # Argv
-# ---------------------------------------------------------------------------
 
 usage() {
     sed -n '2,50p' "$0" | sed 's/^# \{0,1\}//'
@@ -119,9 +112,7 @@ if (( DRY_RUN )); then
     log_info "DRY RUN: no files will be written, no commands beyond probes."
 fi
 
-# ---------------------------------------------------------------------------
 # Prompts
-# ---------------------------------------------------------------------------
 
 prompt() {
     # prompt VAR_NAME "Question text" "default value" [secret]
@@ -172,9 +163,7 @@ confirm() {
     [[ "$yn" =~ ^[Yy]([Ee][Ss])?$ ]]
 }
 
-# ---------------------------------------------------------------------------
 # Step 1 - Prereq probes
-# ---------------------------------------------------------------------------
 
 require_cmd() {
     local cmd="$1" hint="${2:-}"
@@ -253,20 +242,18 @@ step_validate_prereqs() {
     fi
 }
 
-# ---------------------------------------------------------------------------
 # Step 1b - Cleanroom packaging guard (BE-GO-READY-INSTALLATION-013)
-# ---------------------------------------------------------------------------
 # Verifies what the running OS actually exposes to the Python runtime
 # beyond the bare `command -v` checks: native shared libs, pg_dump
 # version match against the target Postgres server, and a smoke
-# import on the venv if one already exists. None of these probes
+# smoke import on the venv if one already exists. None of these probes
 # install anything; they only report what is or is not present.
 step_validate_packaging() {
     log_step "Step 1b - Validate native packaging (cleanroom guard)"
 
     local missing=0
 
-    # ---- Shared libraries via Python's ctypes loader. ----
+    # Shared libraries via Python's ctypes loader.
     # ctypes.util.find_library returns "" when the library is not on
     # the dynamic linker path. Empty here means the runtime CANNOT
     # load the lib even if `apt list --installed` shows the package -
@@ -294,7 +281,7 @@ PYEOF
         missing=1
     fi
 
-    # ---- pg_dump major version match. ----
+    # pg_dump major version match.
     # docs/ops/runtime-prereqs.md "Binari di sistema (host)" pins this
     # contract: pg_dump major must match the target Postgres server's
     # major. Mismatched dumps fail with cryptic errors. We probe only
@@ -310,7 +297,7 @@ PYEOF
         log_warn "pg_dump not found - backup units will fail at runtime (apt: postgresql-client-NN matched to server)."
     fi
 
-    # ---- Optional venv smoke import. ----
+    # Optional venv smoke import.
     # If the operator has already created backend/venv (e.g. running
     # --check after step 6 of the runbook), do a strict importability
     # check on the runtime deps that pull in native code. This catches
@@ -355,9 +342,7 @@ PYEOF
     fi
 }
 
-# ---------------------------------------------------------------------------
 # Step S - Post-install smoke (--smoke)
-# ---------------------------------------------------------------------------
 # Non-destructive, prompt-free, read-only verification of a freshly
 # installed clean machine. Implements rows 7 and 8 of the canonical
 # clean-install smoke harness documented in
@@ -520,9 +505,7 @@ step_check_only_summary() {
     exit 1
 }
 
-# ---------------------------------------------------------------------------
 # Step 1c - Env file + venv status (--check informational, BE-GO-READY-INSTALL-020)
-# ---------------------------------------------------------------------------
 # Reports whether backend/.env and backend/venv already exist.
 # Called only in --check mode; never reads secret values, never writes.
 # Does not affect the PASS/FAIL verdict from step_check_only_summary.
@@ -542,9 +525,7 @@ step_check_env_status() {
     fi
 }
 
-# ---------------------------------------------------------------------------
 # Step 2 - Gather configuration
-# ---------------------------------------------------------------------------
 
 step_gather_config() {
     log_step "Step 2 - Gather configuration"
@@ -617,9 +598,7 @@ step_gather_config() {
     log_ok "Configuration gathered."
 }
 
-# ---------------------------------------------------------------------------
 # Step 3 - Connectivity probes (psql + redis-cli)
-# ---------------------------------------------------------------------------
 
 step_probe_services() {
     log_step "Step 3 - Probe DB and Redis connectivity"
@@ -647,12 +626,10 @@ step_probe_services() {
     fi
 }
 
-# ---------------------------------------------------------------------------
 # Step 4 - Generate / merge backend/.env safely (no secret overwrite)
-# ---------------------------------------------------------------------------
 
 # Single source of truth for which keys this installer is authoritative
-# for. On every run the merger will set/refresh these to the values the
+# managed by the installer. On every run the merger will set/refresh these to the values the
 # script computes from prompts/env. ALL other keys (operator overrides,
 # unknown keys, comments, blank lines) are preserved verbatim - see
 # BE-GO-READY-INSTALLATION-012-IDEMPOTENT-ENV-MERGE.
@@ -781,19 +758,19 @@ write_env_template() {
 
 ENVIRONMENT=${ENVIRONMENT}
 
-# --- Database ---
+# Database
 DATABASE_URL=${DATABASE_URL}
 DB_SCHEMA=${DB_SCHEMA}
 
-# --- Redis / Celery (single canonical URL) ---
+# Redis / Celery (single canonical URL)
 CELERY_BROKER_URL=${REDIS_URL}
 CELERY_RESULT_BACKEND=${REDIS_URL}
 
-# --- Secrets (do NOT rotate post-encryption - see docs/ops/install-non-docker.md section6) ---
+# Secrets (do NOT rotate post-encryption - see docs/ops/install-non-docker.md section6)
 PLENORA_ENCRYPTION_KEY=${PLENORA_ENCRYPTION_KEY}
 JWT_SECRET_KEY=${JWT_SECRET_KEY}
 
-# --- Storage policy + backup ---
+# Storage policy + backup
 STORAGE_POLICY=${STORAGE_POLICY}
 BACKUP_BUCKET=${BACKUP_BUCKET}
 EOF
@@ -812,7 +789,7 @@ EOF
     fi
     cat >> "$out" <<EOF
 
-# --- Backend port (frontend reverse proxy points here) ---
+# Backend port (frontend reverse proxy points here)
 PLENORA_BACKEND_PORT=${BACKEND_PORT}
 EOF
 }
@@ -942,9 +919,7 @@ step_write_env() {
     log_ok "Wrote ${ENV_FILE} (chmod 600)."
 }
 
-# ---------------------------------------------------------------------------
 # Step 5 - Print next steps
-# ---------------------------------------------------------------------------
 
 step_next_steps() {
     log_step "Step 5 - Next steps (NOT performed by this prototype)"
@@ -1002,9 +977,7 @@ failure.
 EOF
 }
 
-# ---------------------------------------------------------------------------
 # Main
-# ---------------------------------------------------------------------------
 
 main() {
     log_info "Plenora-ETL guided installer (prototype)"

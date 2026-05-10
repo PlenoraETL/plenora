@@ -67,7 +67,7 @@ def _scan_callsites(predicate) -> dict[str, list[int]]:
 # (post-resolver-unblock), bytes mode is the default. Path mode
 # is allowlisted-only, with a documented rationale.
 #
-# Pre-batch the allowlist is INTENTIONALLY EMPTY: no production
+# Previous contract the allowlist is INTENTIONALLY EMPTY: no production
 # caller passes ``mode="path"`` yet (or even ``mode="bytes"``).
 # The lock catches the FIRST callsite that lands on path mode
 # without justification.
@@ -115,7 +115,7 @@ def _scan_resource_engine_path_mode_callers() -> dict[str, list[int]]:
 def test_resource_engine_path_mode_callers_locked_to_allowlist():
     """Lock A: any production callsite passing ``mode="path"``
     to the Resource Engine MUST be in the allowlist with a
-    documented rationale. Pre-batch the allowlist is empty —
+    documented rationale. Previous contract the allowlist is empty —
     the bytes path is the engine's preferred default per the
     canonical usage docstring in ``app/core/resources/__init__.py``.
 
@@ -190,7 +190,7 @@ def test_resource_engine_canonical_usage_docs_bytes_mode():
 
 # Deprecation pressure (BE-GO-READY-RESOURCE-ENGINE-014)
 #
-# At batch 042 the production count of `mode="path"` callers
+# At current contract the production count of `mode="path"` callers
 # in `app/+workers/` is exactly ZERO. The empty allowlist
 # above already enforces this -- but the snapshot below makes
 # the count explicit so any future PR that adds an entry
@@ -199,7 +199,7 @@ def test_resource_engine_canonical_usage_docs_bytes_mode():
 # letting it slip in via "just one more entry".
 
 
-# Pre-batch-042 boundary was 0 (zero production path-mode
+# Previous contract-042 boundary was 0 (zero production path-mode
 # callers). BE-GO-READY-RESOURCE-ENGINE-019 added the FIRST
 # production caller (ArtifactResolver -> registry, mode='path')
 # with a documented rationale (downstream OGR/fiona/geopandas
@@ -257,7 +257,7 @@ def test_resource_engine_loader_marks_path_mode_as_fallback():
     # narrow surface that materializes path-mode results.
     # Require both:
     #   (a) a "caller-owned cleanup" / "is_temporary=True"
-    #       contract signal (already present pre-batch);
+    #       contract signal (already present Previous contract);
     #   (b) a "fallback" / "prefer mode='bytes'" hint (added
     #       by 014).
     assert "is_temporary=True" in text, (
@@ -341,7 +341,7 @@ _TEMP_INVENTORY: dict[tuple[str, int], tuple[str, str]] = {
     # The line is no longer a tempfile call site; the inventory
     # ratchet (`test_temp_materialization_inventory_is_complete`)
     # confirms it is no longer in the AST scan.
-    # Removed: ("app/core/files/service.py", 571) — Batch 092/093 moved
+    # Removed: ("app/core/files/service.py", 571) — current contract/093 moved
     # the SHP/GDB tempfile materialization into `app/core/files/source_blob.py`
     # (inventoried below). The original line is no longer a tempfile call site.
     ("app/core/files/multi_layer_upload.py", 97): (

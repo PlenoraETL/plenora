@@ -143,7 +143,7 @@ def test_finally_release_lock_retries_once_after_transient_db_failure(
 
       1. Loggare warning [GESTITO] per il tentativo transient.
       2. Backoff esponenziale con jitter (``time.sleep`` mockato).
-      3. Ritentare ``concurrency.release`` (budget N=3, T=10s post Batch 7.b).
+      3. Ritentare ``concurrency.release`` (budget N=3, T=10s post current contract.b).
 
     Questo test copre lo scenario ``side_effect=[OperationalError, None]``
     â†’ 1Â° fail transient, 2Â° success â†’ retry classified funziona, count=2.
@@ -152,7 +152,7 @@ def test_finally_release_lock_retries_once_after_transient_db_failure(
     transient lascia un lock orfano (scadrÃ  per TTL ma intanto blocca
     il prossimo tick per 10 minuti).
 
-    Post Batch 7.b: classe transient narrow a psycopg2 (pre-fix era
+    Post current contract.b: classe transient narrow a psycopg2 (Previous behavior era
     Exception broad); RuntimeError generico NON triggera retry (non-transient).
     """
     import psycopg2
@@ -208,7 +208,7 @@ def test_finally_does_not_propagate_when_both_release_attempts_fail(
     di release sollevano transient PG (DB giÃ¹ per piÃ¹ della budget window
     del retry wrapper), ``execute()`` DEVE:
 
-      1. Chiamare release esattamente N=3 volte (post Batch 7.b).
+      1. Chiamare release esattamente N=3 volte (post current contract.b).
       2. Loggare CRITICO (il source cita "scadrÃ  per TTL").
       3. **NON propagare l'eccezione** â€” il finally completa
          pulitamente e ``execute()`` ritorna il result dal
@@ -257,7 +257,7 @@ def test_finally_does_not_propagate_when_both_release_attempts_fail(
         # un'eccezione invece di ritornare un dict.
         result = manager.execute("s-disaster")
 
-    # release chiamata N=3 volte (budget retry wrapper Batch 7.b)
+    # release chiamata N=3 volte (budget retry wrapper current contract.b)
     assert manager.concurrency.release.call_count == 3
 
     # execute() ritorna un result dict (no uncaught exception)

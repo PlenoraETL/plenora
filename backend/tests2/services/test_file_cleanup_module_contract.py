@@ -1,5 +1,5 @@
 """
-Smoke contract - STRUCT-001 Seam D-C: estrazione rmtree_safe.
+Smoke contract: estrazione rmtree_safe.
 
 Verifica le invarianti minime del refactor:
 """

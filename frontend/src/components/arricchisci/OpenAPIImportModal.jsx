@@ -19,9 +19,7 @@ function OpenAPIImportModal({ onClose, onImport }) {
   const [selectedFields, setSelectedFields] = useState({});
   const [manualBaseUrl, setManualBaseUrl] = useState('');
   const [authConfig, setAuthConfig] = useState({ type: 'none', key_name: 'X-API-Key', key_value: '', location: 'header' });
-
-  // ── Parsing ────────────────────────────────────────────────────────────
-  const parseOpenAPISchema = (schema) => {
+const parseOpenAPISchema = (schema) => {
     try {
       const spec = typeof schema === 'string' ? JSON.parse(schema) : schema;
       const baseUrl = spec.servers?.[0]?.url || '';
@@ -183,9 +181,7 @@ function OpenAPIImportModal({ onClose, onImport }) {
       }
     >
         <div className="oai__body">
-
-          {/* ── Step A: Input ── */}
-          {!parsedSpec ? (
+{!parsedSpec ? (
             <div className="oai__section">
               <div className="oai__tabs">
                 {[['url','🌐','Da URL'],['file','📁','Da File'],['paste','📋','Incolla JSON']].map(([id,icon,label])=>(
@@ -231,8 +227,7 @@ function OpenAPIImportModal({ onClose, onImport }) {
             </div>
 
           ) : (
-            // ── Step B: Endpoint selection ──
-            <div className="oai__section">
+<div className="oai__section">
 
               {/* Spec info */}
               <div className="oai__spec-card">

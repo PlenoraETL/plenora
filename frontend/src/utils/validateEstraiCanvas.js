@@ -42,10 +42,6 @@ import {
  *   C4 - ArcGIS connection/layer/service/match (CARICA_ARCGIS_*)
  */
 
-// ============================================================
-// HELPERS
-// ============================================================
-
 const SOURCE_TYPES = ['tableNode', 'datasourceNode', 'featureLayerNode', 'staticValues'];
 
 function isGeometryType(type) {
@@ -60,10 +56,6 @@ function hasGeometryInNodes(nodes) {
   }
   return false;
 }
-
-// ============================================================
-// VALIDATORI PER CATEGORIA
-// ============================================================
 
 function validateStructure(nodes, edges) {
   const issues = [];
@@ -399,10 +391,6 @@ function validateCaricanArcGIS(node, edges, nodes) {
 
   return issues;
 }
-
-// ============================================================
-// FUNZIONE PRINCIPALE
-// ============================================================
 
 /**
  * Valida il canvas ESTRAI.

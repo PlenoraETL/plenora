@@ -18,8 +18,6 @@ import {
   makeDeckColorFn,
   IMDF_CATEGORY_COLORS,
 } from '../../utils/esriToLeafletStyle';
-
-// ── Helpers ─────────────────────────────────────────────────────────────
 function ls(v) {
   if (v == null) return '';
   if (typeof v === 'string') return v;
@@ -66,8 +64,6 @@ function boundsZoom(b) {
   // Zoom ~ log2(360 / d) - 1 (cap a 19 = max OSM)
   return Math.max(10, Math.min(19, Math.log2(360 / d) - 1));
 }
-
-// ── Componente ──────────────────────────────────────────────────────────
 export default function ImdfPreviewModal({ isOpen, onClose, imdfData }) {
   const mapRef       = useRef(null);  // maplibregl.Map
   const deckRef      = useRef(null);  // deck.Deck
@@ -87,9 +83,7 @@ export default function ImdfPreviewModal({ isOpen, onClose, imdfData }) {
   const geojson    = imdfData?.geojson   || {};
   const renderers  = imdfData?.renderers || null;
   const siteId     = imdfData?.site_id;
-
-  // ── Albero navigazione: venue → building → level ──
-  const navTree = useMemo(() => {
+const navTree = useMemo(() => {
     const venueFeatures    = geojson.venue?.features    || [];
     const buildingFeatures = geojson.building?.features || [];
     const levelFeatures    = geojson.level?.features    || [];
@@ -138,16 +132,12 @@ export default function ImdfPreviewModal({ isOpen, onClose, imdfData }) {
 
     return { venueName, buildings };
   }, [geojson, siteId]);
-
-  // ── Lista piatta livelli (per selector + 3D stacking) ──
-  const allLevels = useMemo(() => {
+const allLevels = useMemo(() => {
     const list = [];
     navTree.buildings.forEach(b => b.levels.forEach(l => list.push(l)));
     return list;
   }, [navTree]);
-
-  // ── Stats ──
-  const stats = useMemo(() => {
+const stats = useMemo(() => {
     const u = geojson.unit?.features || [];
     const o = geojson.opening?.features || [];
     const filtered = selectedLevel === 'all' ? u : u.filter(f => f.properties?.level_id === selectedLevel);
@@ -157,17 +147,13 @@ export default function ImdfPreviewModal({ isOpen, onClose, imdfData }) {
       openings: o.length,
     };
   }, [geojson, selectedLevel, allLevels]);
-
-  // ── Color function per unit (dipende da renderers/colorMode) ──
-  const unitColorFn = useMemo(() => {
+const unitColorFn = useMemo(() => {
     if (colorMode === 'renderer' && renderers?.Locale) {
       return makeDeckColorFn(renderers.Locale, { alpha: is3d ? 220 : 200 });
     }
     return (feat) => catColor(feat?.properties?.category, is3d ? 220 : 200);
   }, [colorMode, renderers, is3d]);
-
-  // ── Legenda (da renderer o category) ──
-  const legend = useMemo(() => {
+const legend = useMemo(() => {
     if (colorMode === 'renderer' && renderers?.Locale) {
       const rend = renderers.Locale.renderer || renderers.Locale;
       if (rend.type === 'uniqueValue') {
@@ -190,9 +176,7 @@ export default function ImdfPreviewModal({ isOpen, onClose, imdfData }) {
       return { label: cat, rgb: `rgb(${r},${g},${b})` };
     });
   }, [colorMode, renderers, geojson]);
-
-  // ── Inizializzazione mappa (sincrona, una sola volta per apertura) ──
-  useEffect(() => {
+useEffect(() => {
     if (!isOpen || !basemapRef.current || !canvasRef.current) return;
     if (mapRef.current) return; // già inizializzata
 
@@ -253,9 +237,7 @@ export default function ImdfPreviewModal({ isOpen, onClose, imdfData }) {
       window.removeEventListener('resize', handleResize);
     };
   }, [isOpen]);
-
-  // ── Ricentra la view quando arrivano i dati ──
-  const fittedRef = useRef(false);
+const fittedRef = useRef(false);
   useEffect(() => {
     if (!deckReady || !deckRef.current) return;
     if (fittedRef.current) return;
@@ -268,15 +250,11 @@ export default function ImdfPreviewModal({ isOpen, onClose, imdfData }) {
     if (mapRef.current) mapRef.current.jumpTo({ center: [cx, cy], zoom: z });
     fittedRef.current = true;
   }, [deckReady, geojson]);
-
-  // ── Propaga viewState a deck (controlled) ──
-  useEffect(() => {
+useEffect(() => {
     if (!deckReady || !deckRef.current) return;
     deckRef.current.setProps({ viewState });
   }, [deckReady, viewState]);
-
-  // ── Aggiorna layers quando cambiano dati/filtri ──
-  useEffect(() => {
+useEffect(() => {
     if (!deckRef.current) return;
     const deck = deckRef.current;
 
@@ -382,9 +360,7 @@ export default function ImdfPreviewModal({ isOpen, onClose, imdfData }) {
 
     deck.setProps({ layers });
   }, [deckReady, geojson, selectedLevel, colorMode, is3d, showOpenings, unitColorFn, allLevels]);
-
-  // ── Pitch/bearing transition quando switch 2D/3D ──
-  useEffect(() => {
+useEffect(() => {
     if (!deckRef.current) return;
     const deck = deckRef.current;
     const vm = deck.viewManager;
@@ -399,9 +375,7 @@ export default function ImdfPreviewModal({ isOpen, onClose, imdfData }) {
       },
     });
   }, [is3d]);
-
-  // ── Cleanup alla chiusura ──
-  useEffect(() => {
+useEffect(() => {
     if (isOpen) return;
     if (deckRef.current) { try { deckRef.current.finalize(); } catch (_) {} deckRef.current = null; }
     if (mapRef.current)  { try { mapRef.current.remove();    } catch (_) {} mapRef.current  = null; }
@@ -439,8 +413,7 @@ export default function ImdfPreviewModal({ isOpen, onClose, imdfData }) {
           overflow: 'hidden',
         }}
       >
-        {/* ── SIDEBAR ── */}
-        <aside style={{
+<aside style={{
           width: 300, flexShrink: 0,
           background: 'var(--plen-surface-2, #111525)',
           borderRight: '1px solid var(--plen-border, rgba(255,255,255,0.08))',
@@ -549,9 +522,7 @@ export default function ImdfPreviewModal({ isOpen, onClose, imdfData }) {
             ))}
           </div>
         </aside>
-
-        {/* ── AREA MAPPA ── */}
-        <div style={{ flex: 1, position: 'relative', overflow: 'hidden', background: 'var(--plen-surface, #0C0F18)' }}>
+<div style={{ flex: 1, position: 'relative', overflow: 'hidden', background: 'var(--plen-surface, #0C0F18)' }}>
           {hasData ? (
             <>
               <div ref={basemapRef} style={{ position: 'absolute', inset: 0 }} />
@@ -615,8 +586,6 @@ export default function ImdfPreviewModal({ isOpen, onClose, imdfData }) {
     </div>
   ), document.body);
 }
-
-// ── Sub-components ──────────────────────────────────────────────────────
 function Stat({ label, value, last }) {
   return (
     <div style={{

@@ -14,8 +14,6 @@ import ModalWrapper, { ModalButton } from '../common/ModalWrapper';
 import PreviewTable from './PreviewTable';
 import PermissionRevokedBanner from '../common/PermissionRevokedBanner';
 import './PreviewModal.css';
-
-/* ─── WKB hex → GeoJSON parser ──────────────────────────────────── */
 const parseWKB = (hex) => {
   // EWKB/WKB hex string (PostGIS default output)
   try {
@@ -74,8 +72,6 @@ const parseWKB = (hex) => {
     return readGeom();
   } catch { return null; }
 };
-
-/* ─── WKT → GeoJSON parser ───────────────────────────────────────── */
 const parseWKT = (wkt) => {
   if (!wkt) return null;
   const s = wkt.trim();
@@ -159,8 +155,6 @@ const parseWKT = (wkt) => {
   return null;
 };
 
-/* ─── helpers ─────────────────────────────────────────────────────── */
-
 /** Ritorna true se il tipo colonna è geometrico */
 const isGeoType = (type) =>
   type?.startsWith('geometry') || type?.startsWith('geography') ||
@@ -180,8 +174,6 @@ const extractGeomType = (val) => {
 /** Palette colori per colore-per su mappa */
 const PROV_COLORS = ['#4B8BFF','#34C17A','#9B6DFF','#F5A623','#F87171','#2DD4BF',
   '#FBBF24','#A78BFA','#FB7185','#38BDF8','#FB923C','#A3E635'];
-
-/* ─── sub-component: MapTab ───────────────────────────────────────── */
 const MapTab = memo(({ rows, columns, active }) => {
   const mapRef = useRef(null);
   const leafletMap = useRef(null);
@@ -424,8 +416,6 @@ const MapTab = memo(({ rows, columns, active }) => {
   );
 });
 MapTab.displayName = 'MapTab';
-
-/* ─── sub-component: StatsTab ─────────────────────────────────────── */
 const StatsTab = memo(({ rows, columns }) => {
   const stats = useMemo(() => {
     return columns.map(col => {
@@ -509,8 +499,6 @@ const StatsTab = memo(({ rows, columns }) => {
   );
 });
 StatsTab.displayName = 'StatsTab';
-
-/* ─── MAIN COMPONENT ──────────────────────────────────────────────── */
 const PreviewModal = memo(({
   isOpen,
   onClose,
@@ -690,9 +678,7 @@ const PreviewModal = memo(({
       {/* Content */}
       {!loading && !error && rows.length > 0 && (
         <div className="pm-layout">
-
-          {/* ── TABS ── */}
-          <div className="pm-tabs">
+<div className="pm-tabs">
             <button
               type="button"
               className={`pm-tab${activeTab === 'table' ? ' active' : ''}`}
@@ -726,9 +712,7 @@ const PreviewModal = memo(({
               {sortedRows.length.toLocaleString()} righe
             </span>
           </div>
-
-          {/* ── TABLE TAB ── */}
-          <div className={`pm-tab-content${activeTab === 'table' ? ' active' : ''}`}>
+<div className={`pm-tab-content${activeTab === 'table' ? ' active' : ''}`}>
             <PreviewTable
               columns={columns}
               sortedRows={sortedRows}
@@ -753,16 +737,12 @@ const PreviewModal = memo(({
               onRefresh={onRefresh}
             />
           </div>
-
-          {/* ── MAP TAB ── */}
-          {hasGeo && (
+{hasGeo && (
             <div className={`pm-tab-content pm-tab-content--map${activeTab === 'map' ? ' active' : ''}`}>
               <MapTab rows={rows} columns={columns} active={activeTab === 'map'} />
             </div>
           )}
-
-          {/* ── STATS TAB ── */}
-          <div className={`pm-tab-content pm-tab-content--stats${activeTab === 'stats' ? ' active' : ''}`}>
+<div className={`pm-tab-content pm-tab-content--stats${activeTab === 'stats' ? ' active' : ''}`}>
             <StatsTab rows={rows} columns={columns} />
           </div>
 

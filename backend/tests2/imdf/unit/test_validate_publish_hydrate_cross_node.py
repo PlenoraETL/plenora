@@ -1,5 +1,5 @@
 """
-Contract test D3 commit 2 — validate_publish_endpoint hydrata cache locale.
+Contract test current IMDF contract — validate_publish_endpoint hydrata cache locale.
 
 `/api/imdf/validate-publish` deve chiamare `_hydrate_local_cache` come fanno
 """
@@ -21,7 +21,6 @@ from app.shared.contracts.auth import CurrentUser
 pytestmark = [pytest.mark.unit, pytest.mark.contract, pytest.mark.regression]
 
 
-# ── Fixtures ────────────────────────────────────────────────────────────
 
 
 @pytest.fixture
@@ -85,7 +84,6 @@ def _make_request(bundle_task_id: str = "task-test"):
     )
 
 
-# ── 1. Baseline: bundle gia' in cache locale ─────────────────────────────
 
 
 def test_validate_publish_cached_locally_returns_report(
@@ -114,7 +112,6 @@ def test_validate_publish_cached_locally_returns_report(
     assert "BUNDLE_MISSING" not in codes
 
 
-# ── 2. Fix bug: bundle solo-S3 → hydrate scarica → report valido ─────────
 
 
 def test_validate_publish_hydrates_from_s3_when_cache_miss(
@@ -123,7 +120,7 @@ def test_validate_publish_hydrates_from_s3_when_cache_miss(
     """Cache miss: bundle solo-S3, hydrate scarica e popola la cache,
     validator vede dir popolata, report valido (NON BUNDLE_MISSING).
 
-    Pre-fix (D3 commit 2): hydrate non era chiamato → exists()=False →
+    Previous behavior (current IMDF contract): hydrate non era chiamato → exists()=False →
     validator restituiva BUNDLE_MISSING falso-positivo.
     """
     bundle_dir = fake_settings / "task-test"
@@ -149,7 +146,6 @@ def test_validate_publish_hydrates_from_s3_when_cache_miss(
     assert "BUNDLE_MISSING" not in codes
 
 
-# ── 3. R5: bundle non esiste ne' local ne' S3 → BUNDLE_MISSING ───────────
 
 
 def test_validate_publish_returns_bundle_missing_when_s3_empty(
@@ -173,7 +169,6 @@ def test_validate_publish_returns_bundle_missing_when_s3_empty(
     assert "HYDRATE_FAILED" not in codes, "R5: error code unico per non-disponibilita'"
 
 
-# ── 4. R5: hydrate solleva exception generica → BUNDLE_MISSING ───────────
 
 
 def test_validate_publish_keeps_bundle_missing_on_hydrate_exception(

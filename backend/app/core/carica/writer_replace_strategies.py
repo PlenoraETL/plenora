@@ -24,16 +24,12 @@ from app.core.carica.writer_oracle_redef import execute_oracle_redefinition
 from app.core.carica.writer_batch_loop import run_batched_inserts
 from app.utils.logger import get_logger, get_request_id, get_user_id
 
-# Stesso logger name di `database_writer.py`: i record sono
-# indistinguibili dai consumer che attaccano handler / filtrano per
-# "app.core.carica.writer". Il `StructuredLogger` wrapper delega a
-# `_logger.log(...)` sul logger stdlib omonimo (singleton per nome
+# Keep the canonical writer logger name so existing handlers receive mixin logs.
 logger = get_logger("app.core.carica.writer")
 
 # Telemetry emits (event=stage_swap.dispatched, ecc.) vanno via stdlib
 # logger con stesso name: i campi `extra` diventano attributi del
 # LogRecord, cosa che StructuredLogger (wrapper) non supporta di default
-# Identico al pattern di `database_writer.py:64`
 _telemetry_logger = logging.getLogger("app.core.carica.writer")
 
 
@@ -44,8 +40,7 @@ class ReplaceStrategiesMixin:
     `_generate_single_rename`).
 
     Le transaction boundaries (`engine.begin` per swap/INSERT batch,
-    `engine.connect` per cleanup/DDL singoli) sono incapsulate qui
-    IDENTICHE al previous implementation.
+    `engine.connect` per cleanup/DDL singoli) sono incapsulate qui.
     """
 
     def _truncate_insert_atomic(
@@ -56,10 +51,8 @@ class ReplaceStrategiesMixin:
     ) -> WriteResult:
         """TRUNCATE + INSERT in UNA transazione (ALL_OR_NOTHING).
 
-        Necessario su Oracle: pre-fix, `truncate_table` committava la
-        sua transazione e poi il `_batch_insert` apriva una nuova
-        transazione. Se l'INSERT falliva, il rollback copriva solo
-        l'INSERT e la tabella restava vuota → perdita dati.
+        Necessario su Oracle per mantenere truncate/delete e insert nella
+        stessa transazione.
 
         Qui usiamo:
         - una sola connection
@@ -130,8 +123,6 @@ class ReplaceStrategiesMixin:
 
         return result
 
-    # STAGE + SWAP (C5 fix 3 — UNDO safety su dataset grandi
-
     def _truncate_insert_stage_swap(
         self,
         df: pd.DataFrame,
@@ -194,7 +185,7 @@ class ReplaceStrategiesMixin:
             f"shadow={stg_table}, backup={backup_table}"
         )
 
-        mssql_name_mapping: Dict[str, Tuple[str, str]] = {}  # constraint/index suffixed→original (MSSQL only
+        mssql_name_mapping: Dict[str, Tuple[str, str]] = {}
         try:
             with self.engine.connect() as conn:
                 if self.db_type == "oracle":
@@ -385,8 +376,6 @@ class ReplaceStrategiesMixin:
         )
         return result
 
-    # REPLACE ATOMICO (C6 critical fix: drop+create+insert → stage+swap
-
     def _replace_atomic(
         self,
         df: pd.DataFrame,
@@ -397,13 +386,8 @@ class ReplaceStrategiesMixin:
     ) -> WriteResult:
         """REPLACE via stage+swap atomico.
 
-        Pre-fix: drop_table + create_table + _batch_insert sono
-        3 operazioni non-atomic. Se l'INSERT fallisce, il target del
-        cliente non esiste piu' (DROP gia' committato) → data loss
-        deterministica, peggiore di TRUNCATE_INSERT pre-C5.
-
-        Post-fix: CREATE shadow con schema dai column_mappings, INSERT
-        batch, RENAME atomico target→backup + shadow→target, DROP bak.
+        CREATE shadow con schema dai column_mappings, INSERT batch,
+        RENAME atomico target→backup + shadow→target, DROP bak.
         Se INSERT fallisce, target resta nello stato precedente
         (nuovi dati mai esposti, schema vecchio preservato).
 
@@ -604,8 +588,6 @@ class ReplaceStrategiesMixin:
             f"_generate_single_rename non supportato per db_type="
             f"{self.db_type}"
         )
-
-    # MSSQL schema introspection + replay (C6 fix: schema preservation
 
     def _mssql_replicate_schema_to_shadow(
         self, conn, schema: str, src_table: str, stg_table: str,

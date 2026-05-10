@@ -1,7 +1,7 @@
 """
-[phase-2-err][batch8] C7 — write_node fail-closed + IntermediateWriteError.
+C7 — write_node fail-closed + IntermediateWriteError.
 
-Audit Batch 8 §3.1 S2 / fix F2: `intermediate/writer.py:write_node` pre-fix
+Audit finding: `intermediate/writer.py:write_node` Previous behavior
 """
 
 from __future__ import annotations
@@ -24,7 +24,7 @@ def test_write_node_happy_path_returns_real_hash():
     reale (64 hex), NON il sentinel sha256(b'error'). Il fix C7 non tocca
     il ramo success.
 
-    Phase 4 A3 (atomicity refactor): il ramo success ora chiama
+    node-write atomicity contract (atomicity refactor): il ramo success ora chiama
     `db.write_node_atomic` (singola transazione idempotente) invece di
     `insert_node_rows` + `upsert_node_meta` separati. Il test verifica
     che il helper sia invocato una sola volta sul ramo success.
@@ -47,7 +47,7 @@ def test_write_node_happy_path_returns_real_hash():
     import hashlib
     fake_sentinel = hashlib.sha256(b"error").hexdigest()
     assert result != fake_sentinel
-    # Phase 4 A3: success branch usa il helper atomico (rows non vuoto).
+    # node-write atomicity contract: success branch usa il helper atomico (rows non vuoto).
     mock_atomic.assert_called_once()
     # upsert_node_meta NON viene chiamato direttamente sul ramo success
     # perche' write_node_atomic gia' include l'upsert in singola tx.
@@ -61,7 +61,7 @@ def test_write_node_primary_fail_raises_intermediate_write_error():
     """`db.write_node_atomic` solleva → `pytest.raises(IntermediateWriteError)`
     invece di ritornare il sentinel fake. Attributi tipizzati popolati.
 
-    Phase 4 A3: il primary call ora e' write_node_atomic (atomico
+    node-write atomicity contract: il primary call ora e' write_node_atomic (atomico
     rows+meta), non insert_node_rows separato. Il fail-closed semantico
     e' invariato.
     """
@@ -92,7 +92,7 @@ def test_write_node_fallback_upsert_node_meta_called_before_raise():
     """Quando primary fallisce, il fallback `upsert_node_meta(status='error',
     error_msg=...)` viene chiamato PRIMA del raise come resource guard.
 
-    Phase 4 A3: primary = write_node_atomic; il fallback meta-only resta
+    node-write atomicity contract: primary = write_node_atomic; il fallback meta-only resta
     `db.upsert_node_meta` standalone (l'helper atomico ha gia' fatto
     rollback, ne' senso ne' possibilita' di riusarlo qui).
     """
@@ -187,7 +187,7 @@ def test_write_node_exception_chain_preserved():
 def test_write_node_logs_crash_with_exc_info():
     """Su outer fail, prima del raise verifichiamo `logger.error('[CRASH]
     Errore scrittura nodo node-x run run-1: ...', exc_info=True)`. Prefix
-    [CRASH] coerente con pattern Batch 8 C5/C6."""
+    [CRASH] coerente con pattern current contract C5/C6."""
     from app.core.intermediate import writer as w
 
     with patch.object(

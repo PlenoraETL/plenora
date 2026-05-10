@@ -47,7 +47,7 @@ def _create_test_project(group_id: str) -> str:
 
 def test_concurrent_writes_preserve_both_keys(integration_user_seed):
     """Due thread scrivono chiavi canvas diverse in parallelo.
-    Post-fix: entrambe le chiavi sono presenti nel canvas finale.
+    Current contract: entrambe le chiavi sono presenti nel canvas finale.
     """
     from app.core.projects import db as project_db
 

@@ -1,13 +1,13 @@
 /**
- * Contract test — usePreview + permission_revoked (PR-cleanup UX Tier 1).
+ * Contract tests for usePreview permission_revoked handling.
  *
  * Backend (`pipeline_task.py:392-398`) propaga
  * `result.status='permission_revoked'` quando il ruolo utente viene
- * declassato/disabilitato mid-task. Pre-fix: l'hook trattava il caso
+ * declassato/disabilitato mid-task. Regression contract: the hook must not treat this case
  * come `result.success === false` -> errore generico, perdendo la
  * coerenza UX con gli altri 3 modal (Carica/Execution/Eseguibile).
  *
- * Post-fix: l'hook espone flag `permissionRevoked: true`, consumer
+ * Current contract: the hook exposes `permissionRevoked: true`, and consumers
  * (PreviewModal) renderizza <PermissionRevokedBanner> inline.
  *
  * 3 cases:

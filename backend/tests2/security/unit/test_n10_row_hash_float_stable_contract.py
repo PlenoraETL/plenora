@@ -1,7 +1,7 @@
 """
 Contract test N10 — row_hash MD5 stabile su float / Decimal.
 
-Pre-fix scenario:
+Previous behavior scenario:
 """
 
 from __future__ import annotations

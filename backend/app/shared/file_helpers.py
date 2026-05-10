@@ -1,8 +1,4 @@
-"""
-Pure helper classes per file source upload/inspection (STRUCT-001 Seam A).
-
-Estratto verbatim da `app.services.file_service` senza alcun cambio
-"""
+"""Pure helper classes per file source upload/inspection."""
 
 from __future__ import annotations
 
@@ -39,7 +35,7 @@ else:
 
 
 class FormatDetector:
-    """Rileva formato file - PURE FUNCTIONS"""
+    """Rileva formato file."""
 
     FORMAT_MAP = {
         '.csv': 'csv',
@@ -71,7 +67,7 @@ class FormatDetector:
 
 
 class TypeInferrer:
-    """Inferisce tipi colonne - PURE FUNCTIONS"""
+    """Inferisce tipi colonne."""
 
     WKT_PREFIXES = ('POINT', 'LINESTRING', 'POLYGON', 'MULTIPOINT',
                     'MULTILINESTRING', 'MULTIPOLYGON', 'GEOMETRYCOLLECTION')
@@ -103,19 +99,9 @@ class TypeInferrer:
         else:
             return cls._infer_from_values(series)
 
-    # RB.#11 (2026-04-28): formati esplicitamente accettati per la
-    # detection del tipo `date` durante upload. Cascata in ordine di
-    # preferenza, ISO prima (universale, non-ambiguo) poi italiano
-    # NON includiamo `%m/%d/%Y` (US): collide con `%d/%m/%Y` su date
-    # come `"03/04/2025"` e su utenza italiana invertirebbe la scelta
-    # Se in futuro serve, va aggiunto un setting locale/date policy
-    # esplicito, non un fallback ambiguo
-    # Pre-fix: `pd.to_datetime(series.head(10))` senza format usava il
-    # fallback dateutil interno di pandas 3.x, che
-    # emette `UserWarning: Could not infer format ...` ad ogni upload
-    # sceglie month-first come default -> mm/dd US su utenza IT
-    # parsa anche stringhe semi-numeriche tipo `"42-3-1"` -> falsi
-    # positivi tipo `date` su colonne che dovrebbero essere `str`
+    # Explicit date formats avoid ambiguous dateutil fallbacks and pandas
+    # warnings. US month-first parsing is intentionally excluded because it
+    # conflicts with Italian day-first uploads such as "03/04/2025".
     _DATE_FORMATS = (
         "%Y-%m-%d %H:%M:%S",       # ISO con time
         "%Y-%m-%dT%H:%M:%S",       # ISO8601 strict
@@ -163,13 +149,10 @@ class TypeInferrer:
 
         sample = str(series.dropna().iloc[0])
 
-        # Check WKT geometry
         sample_upper = sample.strip().upper()
         if any(sample_upper.startswith(prefix) for prefix in cls.WKT_PREFIXES):
             return 'geometry'
 
-        # Check date - RB.#11: cascata di formati espliciti + soglia
-        # niente piu' fallback dateutil ambiguo / warning pandas
         if len(sample) >= 8 and any(c in sample for c in ['-', '/']):
             if cls._looks_like_date_column(series):
                 return 'date'
@@ -187,19 +170,10 @@ class TypeInferrer:
 
 
 class FileIdGenerator:
-    """Genera ID per file source - PURE (con time provider iniettato).
+    """Genera ID opachi per file source.
 
-    N1 follow-up: format opaco `file_{uuid_hex}` - niente nome file
-    ne' timestamp nell'ID.
-
-    Pre-N1: `file_{safe_name}_{timestamp}_{uuid[:8]}`. Rivelava il
-    nome file e l'orario di upload a chiunque vedesse l'ID in log o
-    URL trafilati. Anche con fail-closed sul service, l'hygiene era
-    scadente (metadata disclosure via ID).
-
-    Post-N1-B: solo uuid hex. 2^128 entropia, zero info leak.
-    NB: gli ID esistenti nel DB restano validi (lookup by string);
-    solo i NUOVI file generati useranno il formato opaco.
+    `name` e `timestamp` restano nel contract del caller, ma non sono
+    incorporati per evitare metadata disclosure via ID.
     """
 
     @staticmethod
@@ -220,9 +194,6 @@ class FileIdGenerator:
         return safe.replace(' ', '_')[:max_length]
 
 
-# Analizza un DataFrame e costruisce la lista di ColumnInfo con tipo inferito
-
-
 class ColumnInfoBuilder:
     """Costruisce info colonne - separato per testabilita'"""
 
@@ -236,7 +207,6 @@ class ColumnInfoBuilder:
         columns = []
         geom_columns = {}
 
-        # Mappa colonne geometriche dal GeoDataFrame
         if gdf is not None:
             geom_columns = ColumnInfoBuilder._extract_geometry_columns(gdf, user_srid)
 
@@ -262,7 +232,6 @@ class ColumnInfoBuilder:
                 col_dtype = str(gdf[col].dtype)
 
                 if col_dtype == 'geometry' or hasattr(gdf[col], 'geom_type'):
-                    # Rileva tipo geometria
                     geom_series = gdf[col]
                     if not geom_series.empty:
                         geom_types = geom_series.dropna().apply(
@@ -272,7 +241,6 @@ class ColumnInfoBuilder:
                     else:
                         geom_type = 'geometry'
 
-                    # Determina SRID
                     if gdf.crs:
                         srid = gdf.crs.to_epsg() or user_srid or 4326
                         geom_columns[col] = f"{geom_type}:{srid}"

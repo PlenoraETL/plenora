@@ -1,5 +1,5 @@
 /**
- * Contract test — PermissionRevokedBanner (PR-A UX Tier 1).
+ * Contract tests for PermissionRevokedBanner.
  *
  * Invariante: quando il task ritorna `result.status='permission_revoked'`,
  * il banner viene mostrato inline (non toast, non fullscreen) col

@@ -4,9 +4,9 @@ import { resolve, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 /**
- * Contract test — NL2Pipeline frontend cleanup (C3.4 Phase 4).
+ * Contract tests for NL2Pipeline frontend cleanup.
  *
- * Decisione di triage Phase 4: la feature NL2Pipeline lato backend non
+ * Decisione di triage: la feature NL2Pipeline lato backend non
  * esiste piu' (zero endpoint), quindi la superficie frontend e' stale
  * code da rimuovere, non da migrare a un nuovo boundary api/.
  *

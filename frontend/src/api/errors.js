@@ -2,14 +2,7 @@
  * errors.js — Hub di normalizzazione per gli errori API.
  *
  * Contiene helper per parsare in modo uniforme le response di errore del
- * backend, a partire dal 409 cascade-delete. Prima del Batch Fix 6.1
- * (error-handling-governance, Phase 2 Hardening), 4 endpoint DELETE
- * emettevano 3 sub-shape diverse di `detail`:
- *   - projects             → {error, message, eseguibili, dependent_projects}
- *   - connections          → {error, message, projects}
- *   - datasources          → {error, message, projects}
- *   - api-connections      → {message, in_use_by}   (senza `error`)
- * Impossibile scrivere un handler unico. Post 6.1 la shape è canonica:
+ * backend, a partire dal 409 cascade-delete. La shape canonica e':
  *   { error, message, dependencies:[{kind, id, name, project_type?}] }
  * Questo modulo è l'unico posto che la interpreta lato FE.
  */

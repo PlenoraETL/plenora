@@ -243,7 +243,7 @@ def test_mssql_stage_swap_preserves_pk_uk_check_and_index(monkeypatch):
         for c in constraints_after:
             assert not c["name"].endswith("__stg"), (
                 f"Constraint {c['name']} ha ancora suffisso __stg "
-                f"(PHASE 6 sp_rename non eseguita)"
+                f"(schema swap sp_rename non eseguita)"
             )
         for i in indexes_after:
             assert not i["name"].endswith("__stg"), (

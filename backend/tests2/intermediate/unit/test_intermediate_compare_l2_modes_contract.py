@@ -1,5 +1,5 @@
 """
-Contract test Phase 6 batch L2 semantics (2026-04-28).
+Contract test schema swap batch L2 semantics (2026-04-28).
 
 `GET /api/runs/compare/l2` deve essere onesto rispetto alla
 """

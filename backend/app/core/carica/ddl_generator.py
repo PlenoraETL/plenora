@@ -12,10 +12,6 @@ from typing import Dict, List, Optional, Tuple
 from app.core.carica.models import ColumnMapping
 
 
-# MAPPING TIPI PANDAS → SQL PER OGNI DATABASE
-
-# Mappa dtype Pandas/Python → tipo SQL
-# I tipi geometrici sono gestiti separatamente tramite ColumnMapping.is_geometry
 PANDAS_TO_SQL = {
     "postgres": {
         "int64": "BIGINT",
@@ -83,13 +79,9 @@ PANDAS_TO_SQL = {
     },
 }
 
-# Alias per MariaDB (stessa sintassi MySQL
 PANDAS_TO_SQL["mariadb"] = PANDAS_TO_SQL["mysql"]
 
 
-# MAPPING TIPI PLENORA INTERNI → SQL
-
-# Quando il tipo viene dal canvas (tipi interni PLENORA), usiamo questa mappa
 URBY_TO_SQL = {
     "postgres": {
         "int": "BIGINT",
@@ -146,8 +138,6 @@ class DDLGenerator:
             raise ValueError(f"Database type '{db_type}' non supportato. "
                            f"Supportati: {list(PANDAS_TO_SQL.keys())}")
 
-    # QUALIFICAZIONE NOMI
-
     def qualified_table_name(self, schema: str, table: str) -> str:
         """Genera il nome tabella qualificato con schema.
 
@@ -155,7 +145,6 @@ class DDLGenerator:
         Oracle: "SCHEMA"."TABELLA" (uppercase)
         MySQL/MariaDB: `schema`.`tabella` (backtick)
         """
-        # B-BE-60: strip spazi da schema e table per evitare nomi SQL malformati
         table = table.strip() if table else table
         schema = schema.strip() if schema else schema
         if self.db_type in ("mysql", "mariadb"):
@@ -169,7 +158,6 @@ class DDLGenerator:
                 return f'"{schema_upper}"."{table_upper}"'
             return f'"{table_upper}"'
         else:
-            # postgres, mssql
             if schema:
                 return f'"{schema}"."{table}"'
             return f'"{table}"'
@@ -182,8 +170,6 @@ class DDLGenerator:
             return f'"{name.upper()}"'
         else:
             return f'"{name}"'
-
-    # RISOLUZIONE TIPI
 
     def resolve_column_type(self, mapping: ColumnMapping, pandas_dtype: str = "") -> str:
         """Risolve il tipo SQL per una colonna.
@@ -201,7 +187,6 @@ class DDLGenerator:
         Returns:
             Tipo SQL nativo per il database.
         """
-        # Geometria
         if mapping.is_geometry:
             return self._geometry_type(mapping.srid or 4326)
 
@@ -213,29 +198,24 @@ class DDLGenerator:
             type_map = PANDAS_TO_SQL.get(self.db_type, PANDAS_TO_SQL["postgres"])
             return type_map.get("object", "TEXT")
 
-        # Tipo esplicito dall'utente (già SQL
         if mapping.dest_type and mapping.dest_type.upper() not in (
             "INT", "REAL", "STR", "BOOL", "DATE", "GEOMETRY", ""
         ):
             return mapping.dest_type
 
-        # Tipo PLENORA interno (dal canvas
         base_type = mapping.dest_type.split(":")[0].lower() if mapping.dest_type else ""
         if base_type in URBY_TO_SQL.get(self.db_type, {}):
             return URBY_TO_SQL[self.db_type][base_type]
 
-        # Fallback: pandas dtype
         dtype_str = str(pandas_dtype).lower()
         type_map = PANDAS_TO_SQL.get(self.db_type, PANDAS_TO_SQL["postgres"])
 
-        # Prova match esatto, poi parziale
         if dtype_str in type_map:
             return type_map[dtype_str]
         for key, sql_type_candidate in type_map.items():
             if key in dtype_str:
                 return sql_type_candidate
 
-        # Default: TEXT/CLOB/NVARCHAR(MAX
         return type_map.get("object", "TEXT")
 
     def _geometry_type(self, srid: int) -> str:
@@ -256,8 +236,6 @@ class DDLGenerator:
             return f"GEOMETRY /*!80003 SRID {srid} */"
         return "geometry"
 
-    # GENERAZIONE CREATE TABLE
-
     def generate_create_table(
         self,
         schema: str,
@@ -277,7 +255,7 @@ class DDLGenerator:
                 calcolato dal DataFrame sorgente (`df[col].str.len.max`).
                 Su Oracle, abilita l'auto-promozione VARCHAR2(4000) → CLOB
                 per colonne stringa con contenuto > 4000 char, evitando
-                `ORA-12899 value too large for column` (C5 fix 2).
+                `ORA-12899 value too large for column`.
                 Ignorato per altri dialetti che hanno gia' tipi stringa
                 illimitati (Postgres TEXT, MSSQL NVARCHAR(MAX), MySQL TEXT).
 
@@ -296,9 +274,6 @@ class DDLGenerator:
             dtype = str(pandas_dtypes.get(col.source_column, "") or pandas_dtypes.get(col.dest_column, ""))
             sql_type = self.resolve_column_type(col, dtype)
 
-            # C5 fix 2: auto-promote Oracle VARCHAR2(4000) → CLOB se la
-            # colonna supera la soglia. Controlla sia source_column che
-            # dest_column per robustezza contro mapping con rename
             if self.db_type == "oracle" and "VARCHAR2(4000)" in sql_type.upper():
                 col_max = max(
                     int(max_lengths.get(col.source_column, 0) or 0),
@@ -311,8 +286,6 @@ class DDLGenerator:
 
         cols_sql = ",\n".join(col_defs)
         return f"CREATE TABLE {full_name} (\n{cols_sql}\n)"
-
-    # GENERAZIONE INDICI SPAZIALI
 
     def generate_spatial_index(
         self,
@@ -329,8 +302,6 @@ class DDLGenerator:
         Returns:
             Lista di istruzioni SQL da eseguire in ordine.
         """
-        # B-BE-60: strip spazi da table/schema/geometry_column per evitare
-        # nomi indice e tabella malformati (es. "idx_test_c01 _geometry_spatial"
         table = table.strip()
         schema = schema.strip() if schema else schema
         geometry_column = geometry_column.strip()
@@ -344,8 +315,6 @@ class DDLGenerator:
             ]
 
         elif self.db_type == "oracle":
-            # Oracle richiede: 1) INSERT metadata, 2) CREATE INDEX
-            # Validazione identificatori Oracle (solo alfanumerico + underscore
             _ident = _re.compile(r'^[A-Za-z_][A-Za-z0-9_]*$')
             table_upper = table.upper()
             geom_upper = geometry_column.upper()
@@ -353,7 +322,6 @@ class DDLGenerator:
                 if not _ident.match(_id):
                     raise ValueError(f"Oracle identifier non valido: {_id}")
             return [
-                # Metadata per Oracle Spatial
                 f"""INSERT INTO USER_SDO_GEOM_METADATA (TABLE_NAME, COLUMN_NAME, DIMINFO, SRID)
 VALUES (
     '{table_upper}',
@@ -364,7 +332,6 @@ VALUES (
     ),
     {srid}
 )""",
-                # Index
                 f"""CREATE INDEX {index_name} ON {full_name}({geom_col})
 INDEXTYPE IS MDSYS.SPATIAL_INDEX""",
             ]
@@ -385,8 +352,6 @@ WITH (
 
         return []
 
-    # GENERAZIONE DROP / TRUNCATE
-
     def generate_drop_table(self, schema: str, table: str) -> str:
         """Genera DROP TABLE IF EXISTS."""
         full_name = self.qualified_table_name(schema, table)
@@ -403,13 +368,9 @@ END;"""
         else:
             return f"DROP TABLE IF EXISTS {full_name}"
 
-    # Alias semantico: il writer per stage+swap vuole sottolineare
-    # "drop defensivo di una shadow eventualmente orfana", non un
-    # drop generico. L'implementazione e' la stessa
     def generate_drop_if_exists(self, schema: str, table: str) -> str:
+        """Alias for defensively dropping an orphaned stage table."""
         return self.generate_drop_table(schema, table)
-
-    # GENERAZIONE STAGE+SWAP (C5 fix 3
 
     def generate_create_like(
         self, schema: str, src_table: str, stg_table: str
@@ -520,24 +481,18 @@ END;"""
         truncate_insert + ALL_OR_NOTHING. Con DELETE FROM la
         transazione copre sia cancellazione che inserimento.
         Performance inferiore su tabelle grandi e' un trade-off
-        accettato per safety (C5 fix 1, esteso a MySQL in fix 1b).
+        accettato per preservare rollback e atomicita'.
 
         Postgres e SQL Server: TRUNCATE TABLE e' transazionale nella
         stessa connection, niente problema di auto-commit.
         """
         full_name = self.qualified_table_name(schema, table)
 
-        # Dialetti con TRUNCATE TABLE = DDL implicit-commit
-        # Oracle: tutti i TRUNCATE sono DDL auto-commit
-        # MySQL: TRUNCATE su InnoDB = DDL con implicit commit
-        # vedi MySQL ref "TRUNCATE TABLE is classified as a
-        # DDL statement rather than a DML statement"
+        # Oracle and MySQL TRUNCATE auto-commit, so DELETE preserves rollback.
         if self.db_type in ("oracle", "mysql"):
             return f"DELETE FROM {full_name}"
 
         return f"TRUNCATE TABLE {full_name}"
-
-    # GENERAZIONE INSERT
 
     def generate_insert(
         self,
@@ -593,8 +548,6 @@ END;"""
             return f"ST_GeomFromText(:{param_name}, {srid})"
         return f":{param_name}"
 
-    # GENERAZIONE UPSERT (multi-database
-
     def generate_upsert(
         self,
         schema: str,
@@ -624,7 +577,6 @@ END;"""
         active_cols = [c for c in columns if not c.skip]
         param_names = [c.dest_column for c in active_cols]
 
-        # Colonne da aggiornare (tutte tranne match, o lista esplicita
         if update_columns:
             update_cols = [c for c in active_cols
                          if c.dest_column in update_columns]
@@ -777,8 +729,6 @@ WHEN NOT MATCHED THEN INSERT ({insert_cols}) VALUES ({src_cols});"""
         )
         return sql, params
 
-    # GENERAZIONE UPDATE
-
     def generate_update(
         self,
         schema: str,
@@ -823,8 +773,6 @@ WHEN NOT MATCHED THEN INSERT ({insert_cols}) VALUES ({src_cols});"""
 
         sql = f"UPDATE {full_name} SET {set_sql} WHERE {where_sql}"
         return sql, params
-
-    # HELPER: LISTA SCHEMA E TABELLE
 
     def query_list_schemas(self) -> str:
         """Genera la query per elencare gli schema disponibili."""

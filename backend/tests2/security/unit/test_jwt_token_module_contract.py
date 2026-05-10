@@ -1,5 +1,5 @@
 """
-Smoke contract - STRUCT-005 Seam D: estrazione JWT/session.
+Smoke contract: estrazione JWT/session.
 
 Verifica le invarianti minime del refactor:
 """

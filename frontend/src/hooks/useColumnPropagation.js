@@ -241,7 +241,6 @@ function applyTransformation(node, inputColumns) {
   let result = [...inputColumns];
   
   switch (transform_op) {
-    // === CREAZIONE GEOMETRIA ===
     case 'geo_from_coords':
     case 'geometry_from_coords':
     case 'geometry_from_wkt': {
@@ -252,7 +251,6 @@ function applyTransformation(node, inputColumns) {
       break;
     }
     
-    // === SELEZIONE/RIMOZIONE COLONNE ===
     case 'drop':
     case 'drop_columns': {
       const dropCols = config.columns || [];
@@ -269,7 +267,6 @@ function applyTransformation(node, inputColumns) {
       break;
     }
     
-    // === RINOMINA ===
     case 'rename': {
       // Supporto lista rinominazioni
       if (config.renames && Array.isArray(config.renames)) {
@@ -292,7 +289,6 @@ function applyTransformation(node, inputColumns) {
       break;
     }
     
-    // === AGGIUNTA COLONNE ===
     case 'add_column':
     case 'formula': {
       const newCol = config.column || config.output_column || config.new_column;
@@ -383,7 +379,6 @@ function applyTransformation(node, inputColumns) {
       break;
     }
     
-    // === OPERAZIONI GEOMETRICHE ===
     case 'buffer':
     case 'centroid':
     case 'convex_hull':
@@ -404,7 +399,6 @@ function applyTransformation(node, inputColumns) {
       break;
     }
     
-    // === OPERAZIONI CHE NON MODIFICANO SCHEMA ===
     case 'filter':
     case 'sort':
     case 'distinct':

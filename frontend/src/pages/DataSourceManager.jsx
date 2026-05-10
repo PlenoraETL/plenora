@@ -19,8 +19,6 @@ import { handleCascade409, formatCascadeDependencies } from '../api/errors';
 import useDialogFocus from '../hooks/useDialogFocus';
 import { can, role } from '../utils/permissions';
 import '../styles/DataSourceManager.css';
-
-// ── Constants ─────────────────────────────────────────────────────────────
 const DS_TYPES = [
   { value:'local',      label:'Cartella locale',   icon:'📂', color:'#94A3B8', rgb:'148,163,184', desc:'Disco locale o percorso UNC' },
   { value:'ftp',        label:'FTP',               icon:'📁', color:'#60A5FA', rgb:'96,165,250',  desc:'File Transfer Protocol (FTPS)' },
@@ -36,8 +34,6 @@ const EMPTY_FORM = {
   private_key:'', private_key_passphrase:'', host_key_policy:'auto_add',
   tenant_id:'', client_id:'', client_secret:'', site_url:'', site_id:'', drive_id:'',
 };
-
-// ── Helpers ───────────────────────────────────────────────────────────────
 const formatSize = (bytes) => {
   if (!bytes) return '0 B';
   const k = 1024, s = ['B','KB','MB','GB'], i = Math.floor(Math.log(bytes)/Math.log(k));
@@ -47,8 +43,6 @@ const formatDate = (iso) => {
   if (!iso) return '—';
   return new Date(iso).toLocaleString('it-IT', { day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit' });
 };
-
-// ── Main ──────────────────────────────────────────────────────────────────
 export default function DataSourceManager() {
   const toast    = useToast();
   const navigate = useNavigate();

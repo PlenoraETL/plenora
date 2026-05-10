@@ -3,11 +3,6 @@
  *
  * Connettori esterni = API REST, eseguibili Python/Shell, Data Sources (SharePoint, FTP, S3...).
  * Usati dal modulo Arricchisci per arricchire i dataset con dati esterni.
- *
- * Precedentemente alcune di queste funzioni erano definite direttamente in
- * ApiConnectionManager.jsx / ConnectionSelectorModal.jsx / OpenAPIImportModal.jsx
- * come shadow inline. C3.2 Phase 4 le ha consolidate qui per riportare il
- * frontend al contratto "src/api/ unico punto HTTP" (CODE_MAP.md).
  */
 
 import http from './http';

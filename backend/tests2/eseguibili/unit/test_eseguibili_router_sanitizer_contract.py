@@ -1,7 +1,7 @@
 """
 Integration contract test: sanitizer applicato sui 2 punti HIGH RISK
 
-di ``eseguibili/router.py`` (Batch Fix 6.2).
+di ``eseguibili/router.py`` ().
 """
 
 from __future__ import annotations

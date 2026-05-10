@@ -1,7 +1,7 @@
 """
 Contract test per narrow catch su PUT /api/projects/{id}/canvas.
 
-Invariante blindato (Batch Fix 6.4 — error-handling-governance):
+Invariante blindato (— error-handling-governance):
 """
 
 from __future__ import annotations

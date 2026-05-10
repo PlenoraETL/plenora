@@ -30,9 +30,8 @@ import { assertFileSize, throwIfUploadTooLarge } from './uploadGuards';
  * @returns {Promise<Object>} FileSource creato
  */
 export const uploadFile = async (file, name, description = '', layer = '', sheet = '', selectedColumns = null, srid = null) => {
-  // B3 Phase 4: pre-check size lato client; il backend cappa a
-  // settings.MAX_FILE_SIZE (default 100MB) e risponde 413, ma evitiamo
-  // il roundtrip per file ovviamente fuori soglia.
+  // Evita il roundtrip per file ovviamente fuori soglia; il backend
+  // resta il guard autorevole e risponde 413.
   assertFileSize(file);
 
   const formData = new FormData();
@@ -80,12 +79,6 @@ export const getFile = async (fileId) => {
 };
 
 /**
- * Aggiorna file
- * @param {string} fileId - ID del file
- * @param {Object} data - Dati da aggiornare {name, description, layer, sheet}
- * @returns {Promise<Object>} FileSource aggiornato
- */
-/**
  * Upload file multi-layer (GPKG, GDB): crea N FileSource separati, uno per layer.
  * @param {File} file - File da uploadare
  * @param {string} name - Nome base (ogni FileSource si chiamerà name_layername)
@@ -95,7 +88,6 @@ export const getFile = async (fileId) => {
  * @returns {Promise<Array>} Lista di FileSource creati
  */
 export const uploadMultiLayer = async (file, name, description = '', layersConfig = [], srid = null) => {
-  // B3 Phase 4: pre-check size lato client (vedi uploadFile sopra).
   assertFileSize(file);
 
   const formData = new FormData();
@@ -154,8 +146,6 @@ export const getFilePreview = async (fileId, limit = 100) => {
  * @returns {Promise<{columns: Array, row_count: number}>}
  */
 export const previewFileTemp = async (file, layer = null, sheet = null) => {
-  // B3 Phase 4: anche la preview-temp passa per il cap backend
-  // (`_enforce_upload_size_limit`). Pre-check client per coerenza UX.
   assertFileSize(file);
 
   const formData = new FormData();

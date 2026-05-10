@@ -12,9 +12,6 @@ import { useNavigate } from 'react-router-dom';
 import AppSidebar from '../components/AppSidebar';
 import { getSystemStatus } from '../api/adminSystemStatus';
 import '../styles/AdminSystemStatusPage.css';
-
-
-// ── Helpers UI ────────────────────────────────────────────────────────────
 const STATUS_LABELS = { ok: 'OK', warn: 'WARN', error: 'ERRORE', unknown: 'N/D' };
 const STATUS_ICONS = { ok: '✓', warn: '⚠', error: '✗', unknown: '?' };
 
@@ -56,9 +53,6 @@ function fmtUptime(sec) {
   const m = Math.floor((sec % 3600) / 60);
   return `${h}h ${m}m`;
 }
-
-
-// ── Progress bar ─────────────────────────────────────────────────────────
 function ProgressBar({ percent, warnAt = 80, errorAt = 92 }) {
   if (percent == null) return null;
   const cls = percent >= errorAt ? 'error' : percent >= warnAt ? 'warn' : 'ok';
@@ -71,9 +65,6 @@ function ProgressBar({ percent, warnAt = 80, errorAt = 92 }) {
     </div>
   );
 }
-
-
-// ── Card generica ────────────────────────────────────────────────────────
 function Card({ title, icon, data, children, linkLabel, onLink }) {
   const status = (data && data.status) || 'unknown';
   return (
@@ -102,9 +93,6 @@ function Card({ title, icon, data, children, linkLabel, onLink }) {
     </div>
   );
 }
-
-
-// ── Card specializzate ───────────────────────────────────────────────────
 function BackupCard({ data, onLink }) {
   return (
     <Card title="Backup DB" icon="💾" data={data}
@@ -383,9 +371,6 @@ function DbSchemaCard({ data }) {
     </Card>
   );
 }
-
-
-// ── Pagina principale ────────────────────────────────────────────────────
 const REFRESH_INTERVAL_MS = 30000;
 
 const STATUS_KEYS = [

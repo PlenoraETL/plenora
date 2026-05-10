@@ -14,11 +14,7 @@ from sqlalchemy import text
 from app.core.carica.models import ColumnMapping
 from app.utils.logger import get_logger
 
-# Stesso logger name di `database_writer.py`: i record sono
-# indistinguibili dai consumer che attaccano handler / filtrano per
-# "app.core.carica.writer". Il `StructuredLogger` wrapper delega a
-# `_logger.log(...)` sul logger stdlib omonimo (singleton per nome
-# quindi handler agganciati nei test B2.0 catturano gli emit dal mixin
+# Keep the canonical writer logger name so existing handlers receive mixin logs.
 logger = get_logger("app.core.carica.writer")
 
 
@@ -27,8 +23,6 @@ class SchemaIntrospectionMixin:
     DB target + ispezione schema lato DataFrame per DDL planning.
     Zero transaction semantics, zero DDL execution.
     """
-
-    # INTROSPECTION DB-SIDE
 
     def table_exists(self) -> bool:
         """Verifica se la tabella destinazione esiste.
@@ -115,10 +109,7 @@ class SchemaIntrospectionMixin:
         (a differenza di self.table_exists che usa self.config).
 
         Solleva l'eccezione sottostante se la query non e' eseguibile.
-        Pre-fix: logger.warning + return False — ma il valore e' usato
-        da _replace_atomic per scegliere swap vs single-rename, quindi
-        un errore query silenziato produceva routing errato e fallimento
-        confuso downstream. Allineato al pattern di self.table_exists.
+        Errori di query propagano per evitare routing errato nello swap.
         """
         try:
             query, params = self.ddl.query_table_exists(schema, table)
@@ -137,8 +128,6 @@ class SchemaIntrospectionMixin:
             )
             raise
 
-    # INTROSPECTION DATAFRAME-SIDE (DDL planning
-
     def _compute_schema_hints(
         self,
         prepared_df: pd.DataFrame,
@@ -146,10 +135,8 @@ class SchemaIntrospectionMixin:
     ) -> Tuple[Dict[str, str], Dict[str, int]]:
         """Calcola `(real_dtypes, max_lengths)` per `generate_create_table`.
 
-        Estratto da `write` (C4.2 ). previous implementation la stessa
-        logica era duplicata bit-per-bit nei branch CREATE puro e
-        CREATE-via-REPLACE atomic. Helper privato, pura computazione,
-        nessun side-effect, nessuna chiamata DB.
+        Helper privato, pura computazione, nessun side-effect, nessuna
+        chiamata DB.
 
         - `real_dtypes`: mapping colonna → dtype string. Include sia i
           nomi colonna del DataFrame sia i `source_column`/`dest_column`
@@ -160,7 +147,7 @@ class SchemaIntrospectionMixin:
 
         - `max_lengths`: mapping colonna string-like → lunghezza massima
           osservata (one-shot pass). Su Oracle abilita la promozione
-          automatica VARCHAR2(4000) → CLOB per colonne lunghe (C5 fix 2);
+          automatica VARCHAR2(4000) → CLOB per colonne lunghe;
           su altri dialetti l'info viene ignorata da `generate_create_table`,
           ma il calcolo resta cheap su DataFrame gia' in RAM.
 

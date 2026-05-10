@@ -1,7 +1,5 @@
 /**
  * RenameListInput.jsx — Lista rinominazioni colonne (con CSV paste)
- *
- * Estratto da `ParameterInput.jsx` in `FE-PHASE2-SPLIT-002A`.
  * Usato dal dispatcher per il tipo `rename_list`. Stato locale
  * per il pannello CSV-paste (`showCsvPaste`, `csvText`, `csvError`).
  * Le rinominazioni vivono nel parent (controlled).

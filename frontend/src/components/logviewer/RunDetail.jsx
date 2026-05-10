@@ -1,8 +1,5 @@
 /**
  * RunDetail.jsx — Dettaglio esecuzione: tab Steps + Log tecnici
- *
- * Estratto da LogViewer.jsx.
- *
  * Props:
  *   runId {string} - ID della run da visualizzare
  */

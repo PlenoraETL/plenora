@@ -183,8 +183,8 @@ def test_host_resources_uses_existing_parent_for_missing_data_dir(monkeypatch, t
 def test_host_resources_falls_back_to_shutil_when_psutil_disk_fails(monkeypatch, tmp_path):
     """R-2 (2026-04-27, fix funzionale): su Windows locale `psutil.disk_usage`
     solleva `SystemError("argument 1 (impossible<bad format char>)")`.
-    Pre-fix: warning + disk=None per ogni call.
-    Post-fix: fallback a `shutil.disk_usage` (stdlib, GetDiskFreeSpaceExW
+    Previous behavior: warning + disk=None per ogni call.
+    Current contract: fallback a `shutil.disk_usage` (stdlib, GetDiskFreeSpaceExW
     diretto). Se shutil ha successo, disk_info popolato e nessun warning
     di fallimento (solo logger.info diagnostico sul fallback)."""
     from app.core.admin_system_status import service
