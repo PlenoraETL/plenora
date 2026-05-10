@@ -75,7 +75,14 @@ def op_md5_hash(
                     lambda v: "" if pd.isna(v) else (v.wkt if hasattr(v, "wkt") else str(v))
                 )
             else:
-                col_str = s.astype(object).where(s.notna(), "").astype(str)
+                # NB: NON usare `.astype(str)`: in pandas >= 2.x con la
+                # PyArrow string extension caricata, dispatcha a
+                # `pyarrow.string_arrow._from_sequence`, che si e' rivelato
+                # instabile (SIGFPE) quando in-process sono gia' state
+                # caricate altre extension native (geos via shapely nei
+                # bench geo). Conversione esplicita via `.map(str)`:
+                # rimane in dtype=object, niente Arrow path.
+                col_str = s.astype(object).where(s.notna(), "").map(str)
                 col_str = col_str.where(s.notna(), "")
             if normalize:
                 col_str = col_str.str.strip().str.lower()
