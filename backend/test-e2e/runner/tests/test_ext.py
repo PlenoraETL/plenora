@@ -453,3 +453,115 @@ def test_ext_028_estrai_ftp_csv(
         http_client.delete(
             f"{API_PREFIX}/projects/{project_id}", headers=auth_headers,
         )
+
+
+# ── EXT-029 — Estrai SFTP file XLSX ───────────────────────────────────
+
+
+@pytest.mark.requires_app
+@pytest.mark.smoke
+def test_ext_029_estrai_sftp_xlsx(
+    http_client: httpx.Client,
+    auth_headers: dict[str, str],
+    sftp_datasource_id: str,
+) -> None:
+    """EXT-029 — Estrai sheet `customers` di `xlsx/multi_sheet.xlsx`
+    via SFTP. Catalog `ext.yaml`: assertion "SSH session, file letto".
+
+    `multi_sheet.xlsx` ha 3 fogli (customers=12, products=8, orders=15).
+    Selezioniamo `customers` con `parse_options.sheet='customers'`. Il
+    loader MANIPOLA `datasource_node_loading` propaga
+    `parse_options.sheet/layer` a `load_dataframe_from_file`.
+
+    Profilo `files` richiesto — `sftp_datasource_id` skipa altrimenti.
+    """
+    proj_payload = {
+        "name": f"e2e-ext029-{uuid.uuid4().hex[:6]}",
+        "description": "EXT-029: estrai SFTP XLSX",
+        "project_type": "manipola",
+    }
+    r_proj = http_client.post(
+        f"{API_PREFIX}/projects", json=proj_payload, headers=auth_headers,
+    )
+    assert r_proj.status_code in (200, 201), (
+        f"POST project: {r_proj.status_code} — {r_proj.text[:200]}"
+    )
+    pj = r_proj.json()
+    project_id = (pj.get("metadata") or {}).get("id") or pj.get("id")
+    assert project_id, f"project response senza id: {pj}"
+
+    try:
+        ds_id = f"ds_sftp_{uuid.uuid4().hex[:6]}"
+        res_id = f"res_{uuid.uuid4().hex[:6]}"
+        canvas = {
+            "nodes": [
+                {
+                    "id": ds_id,
+                    "type": "datasource_node",
+                    "position": {"x": 100, "y": 100},
+                    "datasource_id": sftp_datasource_id,
+                    "mode": "source",
+                    "file_mode": "fixed",
+                    "file_path": "xlsx/multi_sheet.xlsx",
+                    "format": "xlsx",
+                    "parse_options": {"sheet": "customers"},
+                },
+                {
+                    "id": res_id,
+                    "type": "result",
+                    "position": {"x": 400, "y": 100},
+                },
+            ],
+            "edges": [
+                {
+                    "id": f"e_ds_res_{uuid.uuid4().hex[:4]}",
+                    "source": ds_id,
+                    "target": res_id,
+                },
+            ],
+        }
+        r_put = http_client.put(
+            f"{API_PREFIX}/projects/{project_id}/canvas",
+            json=canvas, headers=auth_headers,
+        )
+        assert r_put.status_code == 200, (
+            f"PUT canvas: {r_put.status_code} — {r_put.text[:300]}"
+        )
+
+        r_exec = http_client.post(
+            f"{API_PREFIX}/projects/{project_id}/execute",
+            json={}, headers=auth_headers,
+        )
+        assert r_exec.status_code in (200, 201, 202), (
+            f"execute: {r_exec.status_code} — {r_exec.text[:300]}"
+        )
+        body = r_exec.json()
+        task_id = body.get("task_id") or body.get("id")
+        assert task_id, f"execute senza task_id: {body}"
+
+        final = _poll_task(http_client, auth_headers, str(task_id), timeout=90)
+        status = (final.get("status") or "").lower()
+        assert status in {"success", "completed"}, (
+            f"Task non success: status={status!r}, body={final}"
+        )
+
+        result = final.get("result") or {}
+        candidates = (
+            result.get("rows"),
+            result.get("row_count"),
+            result.get("rows_count"),
+            result.get("count"),
+            final.get("rows"),
+            final.get("row_count"),
+        )
+        rows_value = next(
+            (v for v in candidates if isinstance(v, int)), None,
+        )
+        assert rows_value == 12, (
+            f"EXT-029 atteso 12 righe, ottenuto rows_value={rows_value!r}. "
+            f"Final: {final}. Result: {result}"
+        )
+    finally:
+        http_client.delete(
+            f"{API_PREFIX}/projects/{project_id}", headers=auth_headers,
+        )
