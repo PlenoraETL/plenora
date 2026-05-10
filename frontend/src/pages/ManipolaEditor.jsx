@@ -317,9 +317,16 @@ const ManipolaEditorContent = () => {
   }, [validationHighlights, setNodes]);
 
   const handleSaveCanvas = useCallback(async () => {
-    try { setSaving(true); await handleSaveQuiet(); }
-    catch (err) { console.error('[ManipolaEditor] Errore salvataggio:', err); toast.error('Errore durante il salvataggio'); }
-    finally { setSaving(false); }
+    try {
+      setSaving(true);
+      await handleSaveQuiet();
+      toast.success('Progetto salvato!');
+    } catch (err) {
+      console.error('[ManipolaEditor] Errore salvataggio:', err);
+      toast.error('Errore durante il salvataggio');
+    } finally {
+      setSaving(false);
+    }
   }, [handleSaveQuiet]);
 
   const onConnect = useCallback((params) => {
