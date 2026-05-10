@@ -201,7 +201,7 @@ class TestGeneratorPagination:
                 "limit_param": "limit",
             },
         }
-        result = gen_env.svc._execute_api_generator(cfg)
+        gen_env.svc._execute_api_generator(cfg)
         # Almeno 2 chiamate (la terza opzionale dipende dall'early-break
         # "len(rows) < page_size")
         assert gen_env.session.get.call_count >= 2

@@ -157,7 +157,7 @@ def test_get_log_nonexistent_returns_none(monkeypatch):
 def test_get_logs_paginated(monkeypatch):
     from app.core.scheduler.log_service import ScheduleLogService
 
-    state = _install_fake_pg(monkeypatch)
+    _install_fake_pg(monkeypatch)
     # COUNT(*) → 42, poi SELECT LIMIT/OFFSET → 20 rows
     # Il fake returna `state["rows"]` sia per fetchone che fetchall.
     # Per gestire count/select diversi, usiamo una side_effect.

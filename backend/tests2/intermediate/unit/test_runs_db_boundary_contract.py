@@ -182,13 +182,11 @@ def test_retention_owns_retention_and_cleanup_logic() -> None:
 def test_intermediate_db_facade_contains_no_embedded_run_sql_or_retention_policy() -> None:
     facade_tree = _tree(_INTERMEDIATE_ROOT / "db.py")
     runs_tree = _tree(_INTERMEDIATE_ROOT / "runs_db.py")
-    retention_tree = _tree(_INTERMEDIATE_ROOT / "retention.py")
     facade_source = _source(_INTERMEDIATE_ROOT / "db.py")
     retention_source = _source(_INTERMEDIATE_ROOT / "retention.py")
 
     facade_literals = "\n".join(_string_literals(facade_tree))
     runs_literals = "\n".join(_string_literals(runs_tree))
-    retention_literals = "\n".join(_string_literals(retention_tree))
 
     leaked = [
         marker

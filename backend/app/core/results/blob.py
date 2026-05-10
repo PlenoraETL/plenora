@@ -9,6 +9,8 @@ from __future__ import annotations
 
 from typing import Optional
 
+from app.core.resources.loaders.result_blob import _dispatch_by_id
+
 
 def get_result_data(result_id: str, group_id: Optional[str] = None) -> Optional[bytes]:
     """Return result blob bytes, preserving the legacy read contract.
@@ -17,8 +19,6 @@ def get_result_data(result_id: str, group_id: Optional[str] = None) -> Optional[
     ``group_id`` is provided, the Resource Engine applies the tenant SQL filter;
     omitting it preserves existing internal caller behavior.
     """
-    from app.core.resources.loaders.result_blob import _dispatch_by_id
-
     data, _backend = _dispatch_by_id(
         result_id,
         group_id_filter=group_id or None,

@@ -413,15 +413,6 @@ class QueryGenerator:
             table_nodes, result_node, group_by_config
         )
 
-    def _genera_select_con_groupby(
-        self,
-        table_nodes: List[Node],
-        group_by_config: Dict[str, Any]
-    ) -> str:
-        return self._projection_renderer().generate_select_with_groupby(
-            table_nodes, group_by_config
-        )
-
     def _genera_group_by(
         self,
         group_by_config: Dict[str, Any],
@@ -454,9 +445,6 @@ class QueryGenerator:
         )
 
     # GEOMETRIE — CONVERSIONE WKT
-
-    def _wrap_geometry_as_wkt(self, col_ref: str) -> str:
-        return self._projection_renderer().wrap_geometry_as_wkt(col_ref)
 
     # GENERAZIONE CLAUSOLA FROM + JOIN
 
@@ -505,22 +493,6 @@ class QueryGenerator:
         return self._where_builder().create_condition(
             table_alias, column, operator, value, params, column_type
         )
-
-    _SQL_FUNCTION_RE = None  # mantenuto per compatibilita' con call-site privati
-
-    @classmethod
-    def _is_sql_function(cls, value: str) -> bool:
-        if cls._SQL_FUNCTION_RE is not None:
-            WhereClauseBuilder._SQL_FUNCTION_RE = cls._SQL_FUNCTION_RE
-        result = WhereClauseBuilder.is_sql_function(value)
-        cls._SQL_FUNCTION_RE = WhereClauseBuilder._SQL_FUNCTION_RE
-        return result
-
-    def _translate_date_function(self, value: str) -> str:
-        return self._where_builder().translate_date_function(value)
-
-    def _crea_condizione_in(self, col_ref: str, value: Any, params: Dict[str, Any]) -> str:
-        return self._where_builder().create_condition_in(col_ref, value, params)
 
     def _where_builder(self) -> WhereClauseBuilder:
         return WhereClauseBuilder(

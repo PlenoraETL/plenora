@@ -4,6 +4,8 @@ Implementation for file-source CRUD, upload orchestration, blob reads, and
 preview delegation.
 """
 
+import logging as _logging
+
 import json
 import os
 import warnings
@@ -15,7 +17,24 @@ from typing import Any, BinaryIO, Dict, List, Optional, Tuple
 import pandas as pd
 
 import app.core.files.db as files_db
-from app.core.files.storage_dispatch import BlobDispatchResult
+from app.core.auth.visibility import is_resource_visible, is_shareable
+from app.core.files.load_dispatch import load_by_format
+from app.core.files.multi_layer_upload import (
+    create_multi_layer_from_upload as _create_multi_layer_from_upload,
+)
+from app.core.files.preview_temp import preview_file_temp as _preview_file_temp
+from app.core.files.raw_upload import create_raw_from_upload as _create_raw_from_upload
+from app.core.files.source_blob import get_blob_from_db as _read_blob_from_db
+from app.core.files.source_blob import temp_file_for
+from app.core.files.source_metadata import delete_file_source as _delete_file_source
+from app.core.files.source_metadata import get_file_source as _read_file_source
+from app.core.files.source_metadata import list_file_sources as _list_file_sources
+from app.core.files.source_metadata import update_file_source as _update_file_source
+from app.core.files.source_read import get_layers_info as _read_layers_info
+from app.core.files.source_read import get_preview as _read_preview
+from app.core.files.source_read import load_dataframe as _read_dataframe
+from app.core.files.storage_dispatch import BlobDispatchResult, dispatch_blob_storage
+from app.core.files.upload import mkdtemp_writable
 from app.core.files.service_deps import (  # noqa: F401 (public domain export)
     LoggerProtocol,
     FileSystemProtocol,
@@ -32,6 +51,9 @@ from app.shared.file_helpers import (  # noqa: F401 (public domain export)
     FileIdGenerator,
     ColumnInfoBuilder,
 )
+from app.shared.resources.file_cleanup import rmtree_safe
+from app.shared.storage_compensation import compensating_delete
+from app.utils.zip_safe import ZipSlipError, safe_extractall
 
 # Sopprimi warning GDAL per versioni GeoPackage più recenti della versione GDAL installata
 # Non bloccante — i file vengono letti correttamente nonostante il warning
@@ -44,7 +66,7 @@ try:
     from app.utils.logger import get_logger as _get_logger
     _logger = _get_logger(__name__)
 except ImportError:
-    import logging as _logging
+    _get_logger = None
     _logger = _logging.getLogger(__name__)
 
 # Usa i modelli canonici del dominio Files in produzione, con fallback a dataclass per test standalone
@@ -142,7 +164,6 @@ else:
 
 def _rmtree_safe(path: Path | str, _retries: int = 3) -> None:
     """Delegate to `app.shared.resources.file_cleanup.rmtree_safe`."""
-    from app.shared.resources.file_cleanup import rmtree_safe
     rmtree_safe(path, retries=_retries, logger=_logger)
 
 class FileSourceService:
@@ -271,7 +292,6 @@ class FileSourceService:
 
         # Shared via *_shares?
         try:
-            from app.core.auth.visibility import is_resource_visible, is_shareable
             if is_shareable("file_sources") and is_resource_visible(
                 "file_sources",
                 file_id,
@@ -318,7 +338,6 @@ class FileSourceService:
         (`self._load_by_format(...)` in upload methods + load_dataframe)
         restano invariati. Behavior byte-per-byte preservato.
         """
-        from app.core.files.load_dispatch import load_by_format
         return load_by_format(
             self._loader, file_path, format_type, layer, sheet,
             logger=self._logger,
@@ -352,7 +371,6 @@ class FileSourceService:
         Vedi `app.core.files.storage_dispatch.dispatch_blob_storage`
         per la documentazione completa del policy dispatch.
         """
-        from app.core.files.storage_dispatch import dispatch_blob_storage
         return dispatch_blob_storage(
             file_id, raw_data, filename, logger=self._logger, **kwargs,
         )
@@ -372,8 +390,7 @@ class FileSourceService:
         self, file_id: str, expected_group_id: str = None,
     ) -> Optional[bytes]:
         """Delegate to `source_blob.get_blob_from_db`."""
-        from app.core.files.source_blob import get_blob_from_db
-        return get_blob_from_db(
+        return _read_blob_from_db(
             file_id,
             expected_group_id=expected_group_id,
             assert_visible=self._assert_visible,
@@ -386,10 +403,6 @@ class FileSourceService:
     ) -> Optional[Path]:
         """Delegate to `source_blob.temp_file_for`."""
         from app.config import settings
-        from app.core.files.upload import mkdtemp_writable
-        from app.shared.resources.file_cleanup import rmtree_safe
-        from app.utils.zip_safe import safe_extractall
-        from app.core.files.source_blob import temp_file_for
 
         return temp_file_for(
             file_id,
@@ -405,8 +418,7 @@ class FileSourceService:
 
     def get_file_source(self, file_id: str) -> Optional[FileSource]:
         """Delegate to `source_metadata.get_file_source`."""
-        from app.core.files.source_metadata import get_file_source
-        return get_file_source(
+        return _read_file_source(
             file_id,
             db_get_file_source=files_db.get_file_source,
             file_source_model=FileSource,
@@ -416,8 +428,7 @@ class FileSourceService:
 
     def delete_file_source(self, file_id: str) -> bool:
         """Delegate to `source_metadata.delete_file_source`."""
-        from app.core.files.source_metadata import delete_file_source
-        return delete_file_source(
+        return _delete_file_source(
             file_id,
             db_get_file_source=files_db.get_file_source,
             db_delete_file_source=files_db.delete_file_source,
@@ -426,9 +437,8 @@ class FileSourceService:
 
     def list_file_sources(self, group_id: str = None) -> Any:
         """Delegate to `source_metadata.list_file_sources`."""
-        from app.core.files.source_metadata import list_file_sources
         file_source_list_model = FileSourceList if _USE_APP_MODELS else None
-        return list_file_sources(
+        return _list_file_sources(
             group_id,
             db_list_file_sources=files_db.list_file_sources,
             get_file_source_by_id=self.get_file_source,
@@ -456,11 +466,9 @@ class FileSourceService:
         espliciti. Behavior byte-per-byte preservato (parse best-effort,
         orphan guard su dispatch, cleanup garantito in finally).
         """
-        from app.core.files.upload import create_from_upload as _impl
         from app.config import settings
-        from app.shared.resources.file_cleanup import rmtree_safe
-        from app.utils.zip_safe import safe_extractall, ZipSlipError
-        return _impl(
+        from app.core.files.upload import create_from_upload as _create_from_upload
+        return _create_from_upload(
             file_content, filename, name, description,
             layer, sheet, selected_columns, srid, group_id,
             generate_file_id=self._generate_file_id,
@@ -497,9 +505,8 @@ class FileSourceService:
         MIME validation defense-in-depth + DTO build + dispatch policy +
         DB save + logger info. Orphan guard rispettato.
         """
-        from app.core.files.raw_upload import create_raw_from_upload as _impl
         from app.config import settings
-        return _impl(
+        return _create_raw_from_upload(
             file_content, filename, name, description, group_id,
             generate_file_id=self._generate_file_id,
             time_now=self._time.now,
@@ -509,10 +516,6 @@ class FileSourceService:
             build_file_source=lambda **kw: FileSource(**kw),
             logger=self._logger,
         )
-
-    def _filter_columns(self, df: pd.DataFrame, selected_columns: List[str]) -> pd.DataFrame:
-        valid_cols = [c for c in selected_columns if c in df.columns]
-        return df[valid_cols] if valid_cols else df
 
     def create_multi_layer_from_upload(
         self,
@@ -535,12 +538,7 @@ class FileSourceService:
         su rollback, cleanup asimmetrico (os.unlink per file + rmtree_safe
         per dir).
         """
-        from app.core.files.multi_layer_upload import (
-            create_multi_layer_from_upload as _impl,
-        )
         from app.config import settings
-        from app.shared.resources.file_cleanup import rmtree_safe
-        from app.utils.zip_safe import safe_extractall, ZipSlipError
 
         # BE-HARDEN-001C E3: callback `delete_blob` per cleanup compensativo
         # del shared storage_key se la transazione Lazy
@@ -556,7 +554,6 @@ class FileSourceService:
         # `event=storage_compensating_delete_failed` con
         # `domain=file_source_multi_layer`
         def _delete_blob(storage_key: str) -> None:
-            from app.shared.storage_compensation import compensating_delete
             compensating_delete(
                 storage_key,
                 domain="file_source_multi_layer",
@@ -564,7 +561,7 @@ class FileSourceService:
                 logger=self._logger,
             )
 
-        return _impl(
+        return _create_multi_layer_from_upload(
             file_content, filename, name, description,
             layers_config, srid, group_id,
             generate_file_id=self._generate_file_id,
@@ -594,8 +591,7 @@ class FileSourceService:
         N1 resta fail-closed: il modulo estratto riceve `_assert_visible`
         come collaborator esplicito.
         """
-        from app.core.files.source_read import load_dataframe
-        return load_dataframe(
+        return _read_dataframe(
             file_id,
             layer=layer,
             sheet=sheet,
@@ -610,8 +606,7 @@ class FileSourceService:
     def update_file_source(self, file_id: str, data: Any) -> Optional[FileSource]:
         """Delegate to `source_metadata.update_file_source`."""
         from app.config import settings
-        from app.core.files.source_metadata import update_file_source
-        return update_file_source(
+        return _update_file_source(
             file_id,
             data,
             get_file_source_by_id=self.get_file_source,
@@ -634,8 +629,7 @@ class FileSourceService:
 
         N1: `expected_group_id` obbligatorio per fail-closed check.
         """
-        from app.core.files.source_read import get_layers_info
-        return get_layers_info(
+        return _read_layers_info(
             file_id,
             expected_group_id=expected_group_id,
             assert_visible=self._assert_visible,
@@ -653,8 +647,7 @@ class FileSourceService:
 
         N1: `expected_group_id` obbligatorio per fail-closed check.
         """
-        from app.core.files.source_read import get_preview
-        return get_preview(
+        return _read_preview(
             file_id,
             limit=limit,
             expected_group_id=expected_group_id,
@@ -675,8 +668,7 @@ class FileSourceService:
         funzione standalone portable (collaborator espliciti via kwargs,
         no DB, no auth). Qui passiamo i collaborator del service.
         """
-        from app.core.files.preview_temp import preview_file_temp as _preview
-        return _preview(
+        return _preview_file_temp(
             file_content,
             filename,
             fs=self._fs,
@@ -689,31 +681,17 @@ class FileSourceService:
         )
 
 
-# Costruisce FileService con tutte le dipendenze di produzione
-# Per creare istanze con dependency injection personalizzata (test, ambienti custom
-
-def create_file_service(
-    filesystem: FileSystemProtocol = None,
-    data_loader: DataLoaderProtocol = None,
-) -> FileSourceService:
-    """Factory function per creare service con dipendenze iniettate."""
-    return FileSourceService(
-        filesystem=filesystem,
-        data_loader=data_loader,
-    )
 
 
 # Istanza globale per uso da router FastAPI (evita ri-creazione ad ogni richiesta
 # Per test, usare create_file_service con mock iniettati
 def _create_production_service() -> FileSourceService:
     """Crea service con configurazione di produzione"""
-    try:
-        from app.utils.logger import get_logger
-        logger = get_logger(__name__)
+    if _get_logger is not None:
+        logger = _get_logger(__name__)
         return FileSourceService(logger=logger)
-    except ImportError:
-        # Fallback per test standalone
-        return FileSourceService()
+    # Fallback per test standalone
+    return FileSourceService()
 
 
 # Singleton globale per uso da router FastAPI

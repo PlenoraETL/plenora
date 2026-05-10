@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Optional
 
+from app.core.results.blob import get_result_data as _get_result_data
 from app.core.results import db as results_db
 
 ResultMetadataRow = results_db.ResultMetadataRow
@@ -129,8 +130,6 @@ def list_results(project_id: str) -> list[dict[str, object]]:
 
 def get_result_data(result_id: str, group_id: Optional[str] = None) -> Optional[bytes]:
     """Return result blob bytes for a result id."""
-    from app.core.results.blob import get_result_data as _get_result_data
-
     if group_id is None:
         return _get_result_data(result_id)
     return _get_result_data(result_id, group_id=group_id)

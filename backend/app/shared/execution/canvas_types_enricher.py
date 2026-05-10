@@ -6,6 +6,8 @@ Risolve il "Type inference loss" tra ESTRAI -> MANIPOLA -> CARICA:
 
 from __future__ import annotations
 
+import importlib
+
 from collections.abc import Callable
 from typing import Any, Dict
 
@@ -31,7 +33,6 @@ def enrich_canvas_types_from_metadata(
     Returns:
         Lo stesso dict (per chainability).
     """
-    import importlib
 
     logger_mod = importlib.import_module("app.utils.logger")
     logger = logger_mod.get_logger(__name__)

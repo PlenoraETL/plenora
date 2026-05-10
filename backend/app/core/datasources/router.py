@@ -4,6 +4,8 @@ PLENORA-ETL — Router Data Source
 Endpoints CRUD per la gestione dei Data Source e operazioni sui file.
 """
 
+import json as _json
+
 from fastapi import APIRouter, HTTPException, Query, UploadFile, File, Depends
 from fastapi.responses import Response
 from typing import Optional, List, Dict
@@ -248,7 +250,6 @@ def _find_projects_using_datasource(ds_id: str) -> List[Dict[str, str]]:
         try:
             canvas = row.get("canvas") or {}
             if isinstance(canvas, str):
-                import json as _json
                 try:
                     canvas = _json.loads(canvas)
                 except Exception as _json_err:

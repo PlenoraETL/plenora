@@ -5,7 +5,6 @@ Runs background execution while preserving backend runtime contracts.
 """
 
 import io
-import os
 import time as _time
 import traceback
 import uuid as _uuid
@@ -751,30 +750,3 @@ def _load_upstream_data(
         )
         return None
 
-
-def _find_latest_output(directory: str) -> Optional[str]:
-    """Trova il file di output più recente nella directory.
-
-    Supporta: CSV, JSON, GeoJSON, GeoPackage, Shapefile, Excel.
-    """
-    SUPPORTED_EXTENSIONS = {
-        '.csv', '.json', '.geojson', '.gpkg', '.shp',
-        '.xlsx', '.xls', '.parquet',
-    }
-
-    latest_file = None
-    latest_time = 0
-
-    try:
-        for fname in os.listdir(directory):
-            fpath = os.path.join(directory, fname)
-            _, ext = os.path.splitext(fname.lower())
-            if ext in SUPPORTED_EXTENSIONS and os.path.isfile(fpath):
-                mtime = os.path.getmtime(fpath)
-                if mtime > latest_time:
-                    latest_time = mtime
-                    latest_file = fpath
-    except Exception as e:
-        logger.error(f"[CRASH] Errore scansione directory output: {e}", exc_info=True)
-
-    return latest_file

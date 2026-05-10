@@ -13,7 +13,13 @@ from app.core.projects.execution_context import get_upstream_run_context
 from app.core.projects.lineage import ProjectLineageCycleError
 from app.shared.execution.executor_protocol import PipelineDispatcherProtocol
 from app.core.files.dataframe_io import find_latest_output_file
-from app.utils.logger import get_logger
+from app.core.artifacts import (
+    ArtifactResolver,
+    ArtifactResolutionError,
+    LatestProjectArtifactRef,
+    MaterializedArtifact,
+)
+from app.utils.logger import close_run, get_logger, open_run
 
 from .source_loading import load_project_source_artifact
 
@@ -76,8 +82,6 @@ def _open_upstream_run(
 ) -> tuple[Optional[str], Optional[int]]:
     upstream_run_id = str(_uuid.uuid4())
     try:
-        from app.utils.logger import open_run
-
         upstream_context = get_upstream_run_context(
             source_project_id,
             default_retention_n=idb.DEFAULT_RUNS_RETENTION,
@@ -108,8 +112,6 @@ def _close_upstream_run(upstream_run_id: Optional[str], upstream, retention_n, l
     if not upstream_run_id:
         return
     try:
-        from app.utils.logger import close_run
-
         status = "success" if upstream.success else "failure"
         close_run(
             run_id=upstream_run_id,
@@ -179,13 +181,6 @@ def load_project_sources(
             "success": False,
             "message": "Contesto di sicurezza non determinabile (group_id mancante)",
         }
-
-    from app.core.artifacts import (
-        ArtifactResolver,
-        ArtifactResolutionError,
-        LatestProjectArtifactRef,
-        MaterializedArtifact,
-    )
 
     for node in source_nodes:
         source_project_id = _node_field(node, "source_project_id")

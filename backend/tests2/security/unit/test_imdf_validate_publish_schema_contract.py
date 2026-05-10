@@ -162,7 +162,6 @@ def test_shape_double_underscore_fields_not_reported(fake_bundle, stub_externals
         fs_name="MyFS",
         mode="append",
     )
-    codes = _layer_issue_codes(report)
     # Cerchiamo i messaggi specifici di Shape__*
     layer = next(l for l in report["layers"] if l["name"] == "Locale")
     shape_issues = [

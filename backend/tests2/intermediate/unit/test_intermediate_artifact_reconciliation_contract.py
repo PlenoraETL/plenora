@@ -419,11 +419,6 @@ def test_delete_all_runs_for_canvas_reconciles_each_run(monkeypatch):
     artifact_a = "intermediate/group=g/project=p/run=r-a/module=m/node=n/kind=final/data.parquet"
     artifact_b = "intermediate/group=g/project=p/run=r-b/module=m/node=n/kind=final/data.parquet"
 
-    fa_responses = {
-        "SELECT run_id FROM runs WHERE canvas_id": runs_response,
-        "FROM node_meta": [],  # default: dynamically overridden below
-    }
-
     fa_calls: List[Tuple[str, tuple]] = []
     pending_seen: List[str] = []
 

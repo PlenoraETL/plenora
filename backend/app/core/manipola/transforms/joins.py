@@ -11,6 +11,7 @@ import pandas as pd
 import geopandas as gpd
 from typing import List, Union
 
+from app.core.resources.exceptions import MemoryLimitExceededError
 from app.utils.logger import get_logger
 
 logger = get_logger("app.core.manipola.transforms.base")
@@ -344,7 +345,6 @@ def op_cross_join(
     if _cap_rows > 0:
         _output_rows = len(left_df) * len(right_df)
         if _output_rows > _cap_rows:
-            from app.core.resources.exceptions import MemoryLimitExceededError
             logger.warning(
                 f"CrossJoin preflight: output stimato {_output_rows} righe "
                 f"({len(left_df)} x {len(right_df)}) supera il cap configurato "

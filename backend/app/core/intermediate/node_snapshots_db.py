@@ -7,6 +7,8 @@ imports for existing callers.
 
 from __future__ import annotations
 
+import decimal
+
 import json
 from typing import Dict, List, Optional
 
@@ -204,7 +206,6 @@ def _to_jsonable(value):
     if hasattr(value, "isoformat"):
         return value.isoformat()
 
-    import decimal
 
     if isinstance(value, decimal.Decimal):
         return float(value)

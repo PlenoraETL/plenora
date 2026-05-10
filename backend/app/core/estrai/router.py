@@ -94,5 +94,5 @@ async def translate_expression(request: TranslateRequest, current_user: CurrentU
         raise
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
-    except Exception as e:
+    except Exception:
         raise_typed_http(error_codes.INTERNAL_ERROR, status_code=500, message="Errore interno del server")

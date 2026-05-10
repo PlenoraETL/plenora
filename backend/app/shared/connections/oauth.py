@@ -9,6 +9,7 @@ from typing import Any, Callable, Dict, Optional
 
 import requests
 
+from app.infrastructure.http.session import get_shared_session
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -26,8 +27,6 @@ _OAUTH2_REFRESH_THRESHOLD_SEC = 60
 
 
 def _get_shared_session() -> requests.Session:
-    from app.infrastructure.http.session import get_shared_session
-
     return get_shared_session()
 
 

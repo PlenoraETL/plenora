@@ -6,20 +6,30 @@ Keeps API enrichment behavior isolated from orchestration callers.
 
 from __future__ import annotations
 
+import time as _time_mod
+
 from typing import Dict, Optional
 
 import pandas as pd
 
 from app.config import settings
+from app.core.artifacts import SourceLoader, SourceLoadingError, SourceRef
 from app.core.arricchisci._api_connection_helpers import _nd
 from app.core.arricchisci.execution_context import (
     ArricchisciExecutionContext,
 )
 from app.core.arricchisci.project_access import load_project_access_context
+from app.core.connections.service import ConnectionService
+from app.core.estrai.query_generator import QueryGenerator
+from app.core.features.features_service import FeaturesService
 from app.core.files.dataframe_io import (
     filter_visible_columns,
     find_latest_output_file,
+    load_dataframe_from_file,
+    save_dataframe as _save_df,
 )
+from app.core.security.outbound_url import check_outbound_address
+from app.db.query_executor import QueryExecutor
 from app.utils.logger import get_logger
 
 
@@ -148,12 +158,6 @@ class ApiConnectionSourceLoadingMixin:
         try:
             from app.core.orchestrator.service import OrchestratorService
             from app.core.projects.service import ProjectService
-            from app.core.connections.service import ConnectionService
-            from app.core.estrai.query_generator import QueryGenerator
-            from app.db.query_executor import QueryExecutor
-            from app.core.features.features_service import FeaturesService
-            from app.core.files.dataframe_io import save_dataframe as _save_df
-
             _proj_svc = ProjectService()
             _conn_svc = ConnectionService()
             _generator = QueryGenerator()
@@ -199,8 +203,6 @@ class ApiConnectionSourceLoadingMixin:
         Emette `logger.warning` con tag `[COMPAT-RESIDUE]` quando lo
         scatta: grep-ami i log di prod per verificare se e' ancora vivo.
         """
-        from app.core.files.dataframe_io import load_dataframe_from_file
-
         if output_dir is None:
             raise ValueError(f"Nessun output per progetto '{source_project_id}'")
         output_file = find_latest_output_file(output_dir)
@@ -238,15 +240,9 @@ class ApiConnectionSourceLoadingMixin:
         (project non trovato) il loader fail-closes con
         `ValueError("Contesto di sicurezza non determinabile...")`.
         """
-        from app.core.artifacts import (
-            SourceLoader,
-            SourceLoadingError,
-            SourceRef,
-        )
         # RB.#19 Step A: timing log totale del source project load
         # Aggrega tutti i sub-step (DB lookup, S3/blob fetch, temp write
         # parse) gia' loggati individualmente downstream
-        import time as _time_mod
         _t0 = _time_mod.monotonic()
 
         source_project_id = node_data.get('source_project_id')
@@ -351,16 +347,9 @@ class ApiConnectionSourceLoadingMixin:
         `ctx.preview_limit is None`, il preview_limit e' considerato
         non-richiesto (no truncation).
         """
-        from app.core.artifacts import (
-            SourceLoader,
-            SourceLoadingError,
-            SourceRef,
-        )
-
         # RB.#19 Step A: timing log totale del file source load (analogo
         # a _load_source_project). Sub-step (DB blob fetch, temp write
         # parse) gia' loggati downstream individualmente
-        import time as _time_mod
         _t0 = _time_mod.monotonic()
 
         file_source_id = node_data.get('file_source_id')
@@ -439,8 +428,6 @@ class ApiConnectionSourceLoadingMixin:
         sentinel `"_static_"` viene applicato come placeholder
         quando il context non fornisce un group_id.
         """
-        from app.core.artifacts import SourceLoader, SourceRef
-
         fields = _nd(node_data, 'fields') or []
         if not fields:
             logger.warning(
@@ -479,5 +466,4 @@ class ApiConnectionSourceLoadingMixin:
 
         Ritorna None se URL safe, stringa con il motivo altrimenti.
         """
-        from app.core.security.outbound_url import check_outbound_address
         return check_outbound_address(url, allow_loopback_opt_in=False)

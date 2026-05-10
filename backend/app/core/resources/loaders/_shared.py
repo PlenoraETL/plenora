@@ -11,6 +11,7 @@ from typing import Optional
 from app.core.resources.exceptions import MemoryLimitExceededError
 from app.core.resources.bounded_reader import read_stream_bounded
 from app.core.resources.resource_caps import resolve_resource_max_bytes
+from app.utils.logger import get_logger
 
 __all__: list[str] = []  # intentionally empty; callers import directly
 
@@ -66,7 +67,6 @@ def _download_object_storage_impl(
         :class:`MemoryLimitExceededError` reporting:
         ``"result_blob_oversize"`` or ``"file_source_blob_oversize"``.
     """
-    from app.utils.logger import get_logger
     from app.infrastructure.storage.cloud_backends import (
         ObjectStorageDisabledError,
         get_runtime_object_storage,

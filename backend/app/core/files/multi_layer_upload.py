@@ -15,6 +15,7 @@ from typing import Any, BinaryIO, Callable, Dict, List, Optional, Tuple
 from app.core.files.db import FileSourceRow
 from app.core.files.storage_dispatch import BlobDispatchResult
 from app.core.files.upload import mkdtemp_writable
+from app.utils.mime_validator import MimeMismatchError, validate_no_executable
 
 
 def create_multi_layer_from_upload(
@@ -71,7 +72,6 @@ def create_multi_layer_from_upload(
     # MIME validator default: lazy import per preservare "sempre attivo"
     # del comportamento originale (NON opzionale come create_from_upload
     if mime_validate is None:
-        from app.utils.mime_validator import validate_no_executable
         mime_validate = validate_no_executable
 
     if not layers_config:
@@ -84,7 +84,6 @@ def create_multi_layer_from_upload(
     try:
         mime_validate(content=raw_data, filename=filename or name)
     except Exception as e:
-        from app.utils.mime_validator import MimeMismatchError
         if isinstance(e, MimeMismatchError):
             logger.warning(
                 f"create_multi_layer_from_upload bloccato (MIME): "

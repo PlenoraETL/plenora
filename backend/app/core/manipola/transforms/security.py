@@ -4,6 +4,9 @@ Cluster SECURITY — hashing MD5 (change detection / anonimizzazione) +
 mascheramento PII fail-closed.
 """
 
+import hashlib
+import re
+
 import numpy as np
 import pandas as pd
 import geopandas as gpd
@@ -40,7 +43,6 @@ def op_md5_hash(
     Returns:
         DataFrame con nuova colonna hash
     """
-    import hashlib
 
     if not columns:
         logger.warning("MD5 Hash: nessuna colonna selezionata")
@@ -120,7 +122,6 @@ def _mask_email(value: str) -> str:
 
 def _mask_phone(value: str) -> str:
     """Maschera telefono: +39 333 1234567 → +39 ***4567"""
-    import re
     digits_only = re.sub(r'[^\d+]', '', str(value))
     if len(digits_only) < 6:
         return value

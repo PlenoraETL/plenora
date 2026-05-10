@@ -4,6 +4,9 @@ Router API per il modulo CARICA.
 Owns the HTTP boundary and delegates business logic to services or helpers.
 """
 
+from urllib.parse import quote_plus as _qp
+import re
+
 from app.utils.logger import get_logger
 from typing import Any, Dict, List, Optional
 
@@ -16,9 +19,23 @@ from app.core.auth.ownership import assert_resource_visible
 from app.core.carica.executor import CaricaExecutor, _dict_to_conn_obj
 from app.core.carica.database_writer import DatabaseWriter
 from app.core.carica.column_mapper import ColumnMapper
+from app.core.carica.conflict_checker import ConflictChecker
 from app.core.carica.ddl_generator import DDLGenerator
 from app.core.carica.models import WriteConfig
+from app.core.artifacts import (
+    LatestProjectArtifactRef,
+    SourceLoader,
+    SourceLoadingError,
+    SourceRef,
+)
+from app.core.connections.service import ConnectionService as _CS
+from app.core.resources.column_types import (
+    canvas_type_to_pandas_dtype,
+    metadata_to_dict,
+)
+from app.db.query_executor import DefaultEngineFactory
 from app.shared import error_codes
+from app.shared.authz_helpers import assert_project_visible
 from app.shared.error_envelope import raise_typed_http
 
 
@@ -108,7 +125,6 @@ async def get_schemas(connection_id: str, current_user: CurrentUser = Depends(re
     # SECURITY: verifica che l'utente possa vedere questa connessione
     # owned dal suo gruppo o shared). Senza questo check un utente di
     # gruppoA potrebbe enumerare schemi/tabelle del DB di gruppoB
-    from app.core.connections.service import ConnectionService as _CS
     _conn_obj = _CS().get_connection(connection_id)
     assert_resource_visible(_conn_obj, "connections", current_user, "Connessione")
     try:
@@ -135,7 +151,6 @@ async def get_tables(connection_id: str, schema_name: str, current_user: Current
 
     Ritorna la lista delle tabelle nello schema specificato.
     """
-    from app.core.connections.service import ConnectionService as _CS
     _conn_obj = _CS().get_connection(connection_id)
     assert_resource_visible(_conn_obj, "connections", current_user, "Connessione")
     try:
@@ -163,7 +178,6 @@ async def get_columns(connection_id: str, schema_name: str, table_name: str, cur
     Ritorna le colonne (nome + tipo) della tabella specificata.
     Usato dal frontend per popolare il form di mapping colonne.
     """
-    from app.core.connections.service import ConnectionService as _CS
     _conn_obj = _CS().get_connection(connection_id)
     assert_resource_visible(_conn_obj, "connections", current_user, "Connessione")
     try:
@@ -202,11 +216,6 @@ async def auto_mapping(request: AutoMappingRequest, current_user: CurrentUser = 
     """
     try:
         import pandas as pd
-        from app.core.resources.column_types import (
-            canvas_type_to_pandas_dtype,
-            metadata_to_dict,
-        )
-
         # Ricostruisci un DataFrame vuoto con le colonne sorgente
         # per il mapping servono solo i nomi e i tipi). La dispatch
         # canvas-type -> pandas dtype lives in app.core.resources.column_types
@@ -296,7 +305,6 @@ async def check_conflicts(request: ConflictCheckRequest, current_user: CurrentUs
         db_type = connection.get("type", "postgres")
         engine = _create_engine(connection)
 
-        from app.core.carica.conflict_checker import ConflictChecker
         import pandas as pd
 
         checker = ConflictChecker(engine, db_type)
@@ -308,7 +316,6 @@ async def check_conflicts(request: ConflictCheckRequest, current_user: CurrentUs
             # Query diretta al DB sorgente — non richiede esecuzione previa della pipeline
             src_conn = _get_connection(request.source_connection_id)
             src_engine = _create_engine(src_conn)
-            import re
             _ident_re = re.compile(r'^[A-Za-z_][A-Za-z0-9_]*$')
             src_schema = request.source_schema or "public"
             src_table = request.source_table
@@ -317,6 +324,7 @@ async def check_conflicts(request: ConflictCheckRequest, current_user: CurrentUs
             for ident in [src_schema, src_table] + list(src_cols):
                 if not _ident_re.match(ident):
                     raise HTTPException(400, f"Nome identificatore non valido: {ident}")
+            from sqlalchemy import text
             from sqlalchemy.sql import quoted_name
             q_schema = quoted_name(src_schema, quote=True)
             q_table = quoted_name(src_table, quote=True)
@@ -338,19 +346,12 @@ async def check_conflicts(request: ConflictCheckRequest, current_user: CurrentUs
             # di leggerne il result blob. Senza questo check, chiunque con
             # accesso a una connection di destinazione potrebbe leggere
             # l'output di un progetto di un altro gruppo conoscendone l'id
-            from app.shared.authz_helpers import assert_project_visible
             assert_project_visible(request.project_id, current_user)
 
             # Defense-in-depth core-level: il SourceLoader propaga
             # expected_group_id al resolver, che applica il check
             # cross-tenant fail-closed anche se l'ACL HTTP a monte
             # venisse bypassata da chiamate interne future
-            from app.core.artifacts import (
-                LatestProjectArtifactRef,
-                SourceLoader,
-                SourceLoadingError,
-                SourceRef,
-            )
             try:
                 df = SourceLoader().load(
                     SourceRef(project=LatestProjectArtifactRef(project_id=request.project_id)),
@@ -435,7 +436,6 @@ def _get_connection(connection_id: str) -> Dict[str, Any]:
 def _create_engine(connection: Dict[str, Any]):
     """Crea engine SQLAlchemy dalla connessione."""
     try:
-        from app.db.query_executor import DefaultEngineFactory
         factory = DefaultEngineFactory()
         return factory.create_engine(_dict_to_conn_obj(connection))
     except ImportError:
@@ -447,7 +447,6 @@ def _create_engine(connection: Dict[str, Any]):
         username = connection.get("username", "")
         password = connection.get("password", "")
 
-        from urllib.parse import quote_plus as _qp
         if db_type == "postgres":
             url = f"postgresql://{_qp(username)}:{_qp(password)}@{host}:{port}/{database}"
         elif db_type in ("mysql", "mariadb"):

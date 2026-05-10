@@ -4,6 +4,8 @@ Cluster COLUMNS — operazioni di shaping/managing della struttura colonne.
 Keeps transformation behavior isolated from orchestration callers.
 """
 
+from itertools import compress
+
 import numpy as np
 import pandas as pd
 import geopandas as gpd
@@ -209,7 +211,6 @@ def op_concat_columns(
             # dove mask=True; separator.join lavora solo su stringhe
             # Semantica legacy preservata: join "" → None (copre sia riga
             # all-NaN che join di un unico ""
-            from itertools import compress  # import locale: hot path
             out = [None] * n
             for i, (row_vals, row_mask) in enumerate(
                 zip(zip(*str_arrs), zip(*mask_arrs))

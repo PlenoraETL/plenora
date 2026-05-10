@@ -4,6 +4,8 @@ Task Celery per l'esecuzione di pipeline schedulate.
 Runs background execution while preserving backend runtime contracts.
 """
 
+from datetime import datetime, timezone
+
 from workers.celery_app import celery_app
 from app.utils.logger import get_logger
 from app.config import settings
@@ -59,7 +61,6 @@ def schedule_pipeline_task(
     # producono ISO diversi (microsecondi) -> run_id distinti -> ognuna
     # eseguita separatamente come intended
     if scheduled_for is None:
-        from datetime import datetime, timezone
         scheduled_for = datetime.now(timezone.utc).isoformat()
 
     logger.info(
@@ -123,7 +124,6 @@ def beat_heartbeat():
     Heartbeat periodico scritto da Beat ogni 60 secondi.
     Scrive timestamp nel DB PostgreSQL (usato dall'healthcheck).
     """
-    from datetime import datetime, timezone
     try:
         from app.db.pg_connection import execute
         now = datetime.now(timezone.utc).isoformat()

@@ -4,11 +4,15 @@ Intermediate Writer — logica di scrittura nello storage intermediate
 (PostgreSQL via `app.core.intermediate.db`; ex SQLite #3 prima della
 """
 
+import decimal
+import math
+
 import hashlib
 from typing import Dict, List
 
-from app.utils.logger import get_logger
 from app.core.intermediate import db
+from app.core.intermediate.exceptions import IntermediateWriteError
+from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
 
@@ -104,7 +108,6 @@ def _format_float_stable(v: float) -> str:
     NaN/Inf gestiti esplicitamente (f"{nan:.6f}" darebbe "nan", ma
     meglio output espliciti per leggibilita' nei log).
     """
-    import math
     if math.isnan(v):
         return "nan"
     if math.isinf(v):
@@ -118,7 +121,6 @@ def _normalize_value(v) -> str:
         return "None"
     if hasattr(v, "isoformat"):
         return v.isoformat()
-    import decimal
     if isinstance(v, decimal.Decimal):
         # N10: Decimal -> float -> formato stabile. Prima era str(float(v
         # che e' sensibile a floating-point noise
@@ -255,7 +257,6 @@ def write_node(run_id: str, node_id: str, node_type: str,
                 f"{type(_cleanup_err).__name__}: {_cleanup_err}",
                 op="intermediate_write",
             )
-        from app.core.intermediate.exceptions import IntermediateWriteError
         raise IntermediateWriteError(
             run_id=run_id, node_id=node_id, original_error=e,
         ) from e

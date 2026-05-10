@@ -14,6 +14,7 @@ from typing import Any, Callable, Optional
 import psycopg2
 
 import app.core.files.db as file_sources_db
+from app.core.auth.visibility import is_resource_visible
 from app.core.files.exceptions import FileSourceResolutionError
 from app.utils.logger import get_logger
 
@@ -58,8 +59,6 @@ def assert_file_source_group_access(
 
     check = visibility_check
     if check is None:
-        from app.core.auth.visibility import is_resource_visible
-
         check = is_resource_visible
 
     try:

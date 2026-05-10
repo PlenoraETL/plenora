@@ -805,7 +805,7 @@ def get_all_schemas(
     try:
         schemas = _schema_service.infer_all_schemas(project_id)
         return {"schemas": schemas}
-    except Exception as e:
+    except Exception:
         raise_typed_http(error_codes.INTERNAL_ERROR, status_code=500, message="Errore interno del server")
 
 
@@ -827,7 +827,7 @@ def get_node_schema(
     try:
         columns = _schema_service.infer_node_schema(project_id, node_id)
         return {"node_id": node_id, "columns": columns}
-    except Exception as e:
+    except Exception:
         raise_typed_http(error_codes.INTERNAL_ERROR, status_code=500, message="Errore interno del server")
 
 
@@ -854,7 +854,7 @@ def validate_connection(
             connection_config=request.config
         )
         return {"valid": is_valid, "error": error}
-    except Exception as e:
+    except Exception:
         raise_typed_http(error_codes.INTERNAL_ERROR, status_code=500, message="Errore interno del server")
 
 
@@ -875,7 +875,7 @@ def validate_all_connections(
     try:
         errors = _validator.validate_all_connections(project_id)
         return {"valid": len(errors) == 0, "errors": errors}
-    except Exception as e:
+    except Exception:
         raise_typed_http(error_codes.INTERNAL_ERROR, status_code=500, message="Errore interno del server")
 
 

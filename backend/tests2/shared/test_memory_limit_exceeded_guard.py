@@ -238,9 +238,6 @@ def test_envelope_does_not_leak_absolute_path(memory_limit_app):
     devono apparire nel body. Solo `resource` (basename)."""
     r = _client(memory_limit_app).get("/raise-memory-exceeded")
     body = r.json()
-    flat = str(body)
-    # Valori che NON devono mai comparire (path assoluti tipici)
-    forbidden = ["/", "\\", "C:", "/var/", "/tmp/", "/home/", "/usr/"]
     # Eccezione: il valore "/" appare nel JSON come separatore di
     # struttura, ma `resource` deve essere basename puro.
     resource = body["details"]["resource"]

@@ -161,7 +161,6 @@ def test_execute_calls_resolve_helper_outside_auto_map_branch():
     """
     from app.core.carica import executor as exec_mod
 
-    src = inspect.getsource(exec_mod.CaricaExecutor.execute)
     tree = ast.parse(inspect.getsource(exec_mod))
 
     # Trova il nodo AsyncFunctionDef/FunctionDef `execute`
@@ -172,7 +171,6 @@ def test_execute_calls_resolve_helper_outside_auto_map_branch():
                 if isinstance(c, ast.Call) and isinstance(c.func, ast.Name) \
                         and c.func.id == "_resolve_aliases_in_mappings":
                     execute_fn = node
-                    resolve_call = c
                     break
             if execute_fn:
                 break

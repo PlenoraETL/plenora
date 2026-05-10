@@ -4,6 +4,10 @@ Business logic per gli eseguibili.
 Operazioni principali:
 """
 
+import io
+import math
+import re
+
 import copy
 import json
 import uuid
@@ -184,7 +188,6 @@ def analyze_file_upload(
     # Preview prime 10 righe (serializzabili
     preview_df = df.head(10)
     # Converti a dict JSON-safe: NaN → None
-    import math
     preview_rows: list[dict[str, object]] = []
     for row in preview_df.to_dict(orient="records"):
         clean = {}
@@ -230,7 +233,6 @@ def execute(
     Returns:
         dict con task_id, project_id (id dell'eseguibile), async flag
     """
-    import io
     from app.core.files.dataframe_io import load_dataframe_from_file
     from app.core.files.service import file_source_service
     from app.core.orchestrator.task_service import task_service
@@ -333,7 +335,6 @@ def execute(
         or eseguibile.get("name", "risultato")
     )
     # Sanitizza: rimuovi estensione, caratteri pericolosi per filesystem
-    import re
     base_name = re.sub(r"\.[a-zA-Z0-9]{1,5}$", "", raw_name)  # togli .xlsx, .csv, etc
     base_name = re.sub(r'[\\/:*?"<>|]', "_", base_name).strip() or "risultato"
 

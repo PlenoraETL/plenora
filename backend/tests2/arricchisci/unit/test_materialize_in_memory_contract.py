@@ -99,7 +99,6 @@ def test_no_tempfile_created_for_dataframe_branch(monkeypatch):
     refactor FS-5 e' stato regressione."""
     import tempfile as tf_mod
     calls = []
-    orig = tf_mod.NamedTemporaryFile
 
     def _spy(*args, **kwargs):
         # Non creare davvero il file: alziamo eccezione per catturare

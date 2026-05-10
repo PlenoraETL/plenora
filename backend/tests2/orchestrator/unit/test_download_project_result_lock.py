@@ -56,7 +56,6 @@ def test_download_project_result_falls_back_to_db_blob(pipeline_client, tmp_path
     .fetch_run_blob quando `RESULTS_DIR/{project_id}` e' vuoto o non
     esiste."""
     project_id = "proj-db-only"
-    empty_dir = tmp_path / project_id
     # NON creare: l'endpoint deve gestire directory inesistente
 
     blob_bytes = b"id,value\n1,ok\n2,nok\n"

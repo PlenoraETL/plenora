@@ -364,7 +364,6 @@ def install_update_task_progress_spy(monkeypatch) -> List[Dict[str, Any]]:
     import workers.tasks.enrichment_task as et_mod
 
     calls: List[Dict[str, Any]] = []
-    orig = et_mod.update_task_progress
 
     def _spy(task, progress, message, *, task_id=None, is_error=False, **kw):
         calls.append({

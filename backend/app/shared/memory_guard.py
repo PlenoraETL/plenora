@@ -8,6 +8,8 @@ from __future__ import annotations
 import logging
 from typing import Optional
 
+from app.core.resources.exceptions import MemoryLimitExceededError
+
 logger = logging.getLogger(__name__)
 
 
@@ -43,7 +45,6 @@ def check_worker_rss(
         return
 
     if rss > cap_bytes:
-        from app.core.resources.exceptions import MemoryLimitExceededError
         raise MemoryLimitExceededError(
             observed_bytes=rss,
             limit_bytes=cap_bytes,

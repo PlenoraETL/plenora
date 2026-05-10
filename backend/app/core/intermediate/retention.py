@@ -4,7 +4,13 @@ from __future__ import annotations
 
 from typing import Callable, Dict, List
 
+from app.core.resources.storage_reconciliation import (
+    mark_done,
+    mark_failed_attempt,
+    record_pending,
+)
 from app.db.pg_connection import fetchall, transaction
+from app.shared.storage_compensation import compensating_delete
 from app.utils.logger import get_logger
 
 
@@ -97,8 +103,6 @@ def _delete_run(
     with transaction_boundary() as conn:
         with conn.cursor() as cur:
             if pending_specs:
-                from app.core.resources.storage_reconciliation import record_pending
-
                 for node_id, storage_key, kind in pending_specs:
                     ref = record_pending(
                         cur,
@@ -116,12 +120,6 @@ def _delete_run(
             cur.execute("DELETE FROM runs WHERE run_id = %s", (run_id,))
 
     if pending_refs:
-        from app.shared.storage_compensation import compensating_delete
-        from app.core.resources.storage_reconciliation import (
-            mark_done,
-            mark_failed_attempt,
-        )
-
         for storage_key, ref in pending_refs:
             outcome = compensating_delete(
                 storage_key,

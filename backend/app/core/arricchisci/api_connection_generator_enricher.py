@@ -6,6 +6,8 @@ Mixin API GENERATOR + API ENRICHER + JSON PATH UTIL per
 
 from __future__ import annotations
 
+import time
+
 import re
 from typing import Any, Dict, List, Optional
 
@@ -13,6 +15,8 @@ import pandas as pd
 import requests
 
 from app.observability.log_sanitization import sanitize_for_log
+from app.core.security.outbound_url import validate_external_url
+from app.infrastructure.http.session import get_shared_session
 from app.shared.resources.json_path import extract_json_value as _shared_extract_json_value
 from app.utils.logger import get_logger
 from app.core.arricchisci.response_parser import ResponseParser, get_preset_config
@@ -207,9 +211,6 @@ class ApiConnectionGeneratorEnricherMixin:
 
         Solleva `ValueError` su HTTP error.
         """
-        from app.core.security.outbound_url import validate_external_url
-        from app.infrastructure.http.session import get_shared_session
-
         target_url = call_url or url
         # Generator: encoding stretto (safe='') — i path param vengono
         # encoded interamente, niente eccezioni per slash/virgola
@@ -467,9 +468,6 @@ class ApiConnectionGeneratorEnricherMixin:
         propagare l'eccezione). Le eccezioni network/parse risalgono al
         caller (che le cattura nel try/except del loop).
         """
-        from app.core.security.outbound_url import validate_external_url
-        from app.infrastructure.http.session import get_shared_session
-
         auth = api_config.get('auth', {}) or {}
         params = dict(api_config.get('static_parameters', {}) or {})
 
@@ -521,7 +519,6 @@ class ApiConnectionGeneratorEnricherMixin:
         Per l'esecuzione avanzata (parallela, con cache, batch) vedere
         enrichment_service.py / EnrichmentExecutor.
         """
-        import time
 
         result_df = df.copy()
 

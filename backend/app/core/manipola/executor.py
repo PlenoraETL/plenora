@@ -17,9 +17,18 @@ from app.shared.execution.graph import kahn_topological_order
 from app.utils.logger import get_logger, append_step
 from app.utils.result_store import save_pipeline_result_outcome
 from app.core.files.dataframe_io import (
+    load_dataframe_from_file,
     sanitize_for_json,
 )
-from app.core.features.geo_utils import detect_geometry_column
+from app.core.artifacts import SourceLoader, SourceRef
+from app.core.features.geo_utils import detect_geometry_column, to_geodataframe
+from app.core.intermediate.snapshot import (
+    record_checkpoint_snapshot,
+    record_final_snapshot,
+)
+from app.core.resources.exceptions import MemoryLimitExceededError
+from app.shared.columns_metadata import save_columns_metadata_with_retry
+from app.shared.resources.metadata import ResourceMetadata
 from .plugin_executor import get_executor
 from .source_loading import load_file_sources
 from .canvas_schema_runtime import (
@@ -38,6 +47,11 @@ from .transform_ordering import sorted_incoming_edges
 
 
 logger = get_logger(__name__)
+
+__all__ = [
+    "ManipolaExecutor",
+    "load_dataframe_from_file",
+]
 
 # stage identifier per il guard OOM pre-merge del multi-join
 # Estende la family `manipola_*` (cross-join: `manipola_cross_join`
@@ -119,13 +133,10 @@ def _applica_crs_da_colonne(
     the legacy fallback path (callers that do not supply ``meta``).
     """
     import geopandas as gpd
-    from app.core.features.geo_utils import to_geodataframe
-
     if isinstance(df, gpd.GeoDataFrame):
         return df  # già GeoDataFrame, non toccare
 
     if meta is None:
-        from app.shared.resources.metadata import ResourceMetadata
         # Normalise alias → name before building ResourceMetadata: after
         # filter_visible_columns the DataFrame uses the alias as the actual
         # column name, so the lookup must use the same key
@@ -303,7 +314,6 @@ class ManipolaExecutor:
         # via pandas_hash_v1 senza materializzare; preview cap dalla policy
         if run_id and current_df is not None:
             try:
-                from app.core.intermediate.snapshot import record_final_snapshot
                 record_final_snapshot(
                     run_id=run_id,
                     module="manipola",
@@ -330,7 +340,6 @@ class ManipolaExecutor:
         # try/except warning rendeva impossibile distinguere "tutto ok"
         # da "ok ma metadata stale" downstream
         if save_result.get("success"):
-            from app.shared.columns_metadata import save_columns_metadata_with_retry
             _col_meta = [
                 {"name": c, "type": str(current_df[c].dtype)} for c in current_df.columns
             ]
@@ -518,8 +527,6 @@ class ManipolaExecutor:
         if not static_nodes:
             return None
 
-        from app.core.artifacts import SourceLoader, SourceRef
-
         # TE-008: pure processing — do NOT read self._current_group_id
         # Explicit group_id (production path) or non-authorizing sentinel
         current_group_id = group_id or "_static_"
@@ -594,7 +601,6 @@ class ManipolaExecutor:
 
             if run_id and current_df is not None:
                 try:
-                    from app.core.intermediate.snapshot import record_checkpoint_snapshot
                     transform_id = (
                         _nf(node, "transform_op")
                         if node.type == "transform" else None
@@ -683,7 +689,6 @@ class ManipolaExecutor:
         # casi degenere (l'utente passa un DataFrame gia' troppo grande
         # come base del multi-join
         if _multi_cap > 0 and len(result) > _multi_cap:
-            from app.core.resources.exceptions import MemoryLimitExceededError
             logger.warning(
                 f"Multi-join base input ({len(result)} righe) supera il cap "
                 f"configurato di {_multi_cap} righe — guard attivato pre-loop."
@@ -717,7 +722,6 @@ class ManipolaExecutor:
                     result, df_copy, join_keys, join_type
                 )
                 if _estimated_rows is not None and _estimated_rows > _multi_cap:
-                    from app.core.resources.exceptions import MemoryLimitExceededError
                     logger.warning(
                         f"Multi-join step #{idx}: output stimato "
                         f"{_estimated_rows} righe sopra il cap {_multi_cap} "
@@ -745,7 +749,6 @@ class ManipolaExecutor:
             # l'inflazione effettiva (incluso il caso di non-unique
             # keys) prevenendo la propagazione N-step
             if _multi_cap > 0 and len(result) > _multi_cap:
-                from app.core.resources.exceptions import MemoryLimitExceededError
                 logger.warning(
                     f"Multi-join post-step #{idx}: output cumulato "
                     f"{len(result)} righe supera il cap {_multi_cap} — "

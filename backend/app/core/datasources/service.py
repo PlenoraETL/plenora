@@ -318,48 +318,6 @@ class DataSourceService:
             encoding="utf-8"
         )
 
-    def reset_scan_state(self, ds_id: str) -> None:
-        self.save_scan_state(ds_id, ScanState())
-        logger.info(f"Scan state azzerato per {ds_id}")
-
-    # ── Rilevamento file nuovi ────────────────────────────────────────────
-
-    def find_new_files(
-        self,
-        ds_id: str,
-        path: str = "",
-        pattern: Optional[str] = None,
-        strategy: str = "modified_date",
-    ) -> list[FileInfoResponse]:
-        state = self.get_scan_state(ds_id)
-        files = self.list_files(ds_id, path=path, pattern=pattern)
-        processed_names = {p.name for p in state.processed}
-
-        if strategy == "modified_date":
-            new_files = files if state.last_check is None else [
-                datasource_file for datasource_file in files
-                if datasource_file.modified_date > state.last_check
-            ]
-        elif strategy == "inventory":
-            snapshot_keys = {(s.name, s.size) for s in state.snapshot}
-            new_files = [
-                datasource_file for datasource_file in files
-                if (datasource_file.name, datasource_file.size) not in snapshot_keys
-            ]
-        elif strategy == "pattern":
-            new_files = [
-                datasource_file for datasource_file in files
-                if datasource_file.name not in processed_names
-            ]
-        else:
-            logger.warning(f"Strategia sconosciuta {strategy!r}, uso 'modified_date'")
-            new_files = files
-
-        return [
-            datasource_file for datasource_file in new_files
-            if datasource_file.name not in processed_names
-        ]
-
     def mark_as_processed(self, ds_id: str, filename: str, pipeline_id: str) -> None:
         from app.core.datasources.models import ProcessedEntry, SnapshotEntry
         state = self.get_scan_state(ds_id)

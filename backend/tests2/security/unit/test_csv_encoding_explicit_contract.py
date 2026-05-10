@@ -73,7 +73,6 @@ def test_in_memory_to_csv_without_path_is_allowed():
     if not workers_dir.exists():
         pytest.skip("workers/ non presente in questo ambiente")
 
-    found_in_memory = False
     for py_file in workers_dir.rglob("*.py"):
         try:
             tree = ast.parse(py_file.read_text(encoding="utf-8"))
@@ -81,7 +80,6 @@ def test_in_memory_to_csv_without_path_is_allowed():
             continue
         for call, has_positional in _iter_to_csv_calls(tree):
             if not has_positional:
-                found_in_memory = True
                 # Deve essere senza encoding (altrimenti warning pandas)
                 assert not _has_encoding_kwarg(call), (
                     f"{py_file.relative_to(BACKEND_ROOT)}:{call.lineno} "

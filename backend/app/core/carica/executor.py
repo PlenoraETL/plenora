@@ -4,6 +4,8 @@ Entry point per l'esecuzione del modulo CARICA.
 Keeps database loading behavior isolated from orchestration callers.
 """
 
+from urllib.parse import quote_plus as _qp
+
 import json
 from app.utils.logger import get_logger
 from typing import Any, Callable, Dict, List, Optional
@@ -19,6 +21,10 @@ from app.core.carica.models import (
 )
 from app.core.carica.database_writer import DatabaseWriter
 from app.core.carica.column_mapper import ColumnMapper
+from app.core.connections.service import _decrypt_password
+from app.db.query_executor import DefaultEngineFactory
+from app.shared.idempotency import is_already_completed
+from app.utils.logger import get_logger as _get_logger
 
 
 def _short_err(e: Exception, max_len: int = 120) -> str:
@@ -145,7 +151,6 @@ class CaricaExecutor:
         # N15: idempotency guard (self-defense per sync caller
         if run_id:
             try:
-                from app.shared.idempotency import is_already_completed
                 if is_already_completed(run_id):
                     logger.info(
                         f"[IDEMPOTENCY] CARICA run_id {run_id} gia' completato, skip.",
@@ -254,92 +259,6 @@ class CaricaExecutor:
 
         return result
 
-    def validate_config(
-        self,
-        df: pd.DataFrame,
-        node_data: Dict[str, Any],
-    ) -> Dict[str, Any]:
-        """Valida la configurazione senza eseguire la scrittura.
-
-        Usato dall'endpoint API per validazione pre-esecuzione.
-
-        Returns:
-            Dict con is_valid, errors, warnings, table_exists, column_count.
-        """
-        errors = []
-        warnings = []
-
-        # Parse config
-        try:
-            config = WriteConfig.from_node_data(node_data)
-        except Exception as e:
-            return {
-                "is_valid": False,
-                "errors": [f"Configurazione non valida: {str(e)}"],
-                "warnings": [],
-            }
-
-        # Verifica connessione
-        try:
-            connection = self._get_connection(config.connection_id)
-            engine = self._create_engine(connection)
-            db_type = connection.get("type", "postgres")
-        except Exception as e:
-            return {
-                "is_valid": False,
-                "errors": [f"Connessione non disponibile: {str(e)}"],
-                "warnings": [],
-            }
-
-        # Verifica tabella
-        writer = DatabaseWriter(config=config, engine=engine, db_type=db_type)
-        try:
-            table_exists = writer.table_exists()
-        except Exception as e:
-            return {
-                "is_valid": False,
-                "errors": [
-                    f"Verifica esistenza tabella "
-                    f"{config.schema_name}.{config.table_name} "
-                    f"fallita: {str(e)}"
-                ],
-                "warnings": [],
-            }
-
-        # Validazione mapping
-        if config.column_mappings:
-            mapper = ColumnMapper(db_type)
-            valid, mapping_errors = mapper.validate_mapping(
-                config.column_mappings, df
-            )
-            errors.extend(mapping_errors)
-
-        # Check specifici per modalità
-        is_valid, mode_error = writer.validate()
-        if not is_valid:
-            errors.append(mode_error)
-
-        # Warnings
-        if config.batch_size > 10000:
-            warnings.append(
-                f"Batch size elevato ({config.batch_size}). "
-                f"Potrebbe causare problemi di memoria."
-            )
-        if len(df) > 100000:
-            warnings.append(
-                f"Dataset grande ({len(df)} righe). "
-                f"Consigliato l'uso di task asincrono."
-            )
-
-        return {
-            "is_valid": len(errors) == 0,
-            "errors": errors,
-            "warnings": warnings,
-            "table_exists": table_exists,
-            "column_count": len(config.column_mappings),
-            "total_rows": len(df),
-        }
-
     # HELPER INTERNI
 
     def _get_connection(self, connection_id: str) -> Dict[str, Any]:
@@ -356,7 +275,6 @@ class CaricaExecutor:
 
         # Fallback: leggi dal DB PostgreSQL con decriptazione password
         import app.db.pg_connection as db_svc
-        from app.core.connections.service import _decrypt_password
         row = db_svc.fetchone("SELECT * FROM connections WHERE id = %s", (connection_id,))
         if row:
             r = dict(row)
@@ -377,7 +295,6 @@ class CaricaExecutor:
 
         # Fallback: usa DefaultEngineFactory da query_executor
         try:
-            from app.db.query_executor import DefaultEngineFactory
             factory = DefaultEngineFactory()
             return factory.create_engine(_dict_to_conn_obj(connection))
         except ImportError:
@@ -395,7 +312,6 @@ class CaricaExecutor:
         username = conn.get("username", "")
         password = conn.get("password", "")
 
-        from urllib.parse import quote_plus as _qp
         if db_type == "postgres":
             url = f"postgresql://{_qp(username)}:{_qp(password)}@{host}:{port}/{database}?gssencmode=disable"
         elif db_type == "mysql" or db_type == "mariadb":
@@ -426,7 +342,6 @@ class CaricaExecutor:
                 result, config, project_id, triggered_by
             )
             audit_dict = audit.to_dict()
-            from app.utils.logger import get_logger as _get_logger
             _audit_logger = _get_logger("app.core.carica.audit")
             _audit_logger.info(
                 f"CARICA audit: {config.table_name} -> {result.status.value}",

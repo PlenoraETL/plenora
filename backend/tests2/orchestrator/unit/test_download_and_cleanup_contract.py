@@ -141,6 +141,8 @@ def test_eseguibili_download_streams_from_storage_cleans_owner_meta():
             eseguibile_id="exe-1", task_id="t1",
             background_tasks=bg, current_user=fake_user,
         )
+        from fastapi.responses import StreamingResponse
+        assert isinstance(response, StreamingResponse)
 
         from fastapi.responses import StreamingResponse
         assert isinstance(response, StreamingResponse)
@@ -200,6 +202,8 @@ def test_eseguibili_download_cleanup_runs_even_if_delete_by_task_raises():
             eseguibile_id="exe-1", task_id="t1",
             background_tasks=bg, current_user=fake_user,
         )
+        from fastapi.responses import StreamingResponse
+        assert isinstance(response, StreamingResponse)
 
         # Esegui cleanup: NON deve crashare, owner cleanup parte comunque
         bg.tasks[0].func()

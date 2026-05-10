@@ -852,19 +852,8 @@ class Settings:
     def ARCGIS_CONNECTIONS_DIR(self) -> Path:
         return self._directory("arcgis_connections", create=False)
 
-
-    def get_project_output_dir(self, project_id: str) -> Path:
-        return self._directory(project_id, base=self.RESULTS_DIR)
-
-    def get_connection_file(self, connection_id: str) -> Path:
-        return self.CONNECTIONS_DIR / f"{connection_id}.json"
-
     def get_file_source_dir(self, file_id: str) -> Path:
         return self._directory(file_id, base=self.FILES_DIR)
-
-    def get_task_dir(self, task_id: str) -> Path:
-        return self._directory(task_id, base=self.TASKS_DIR)
-
 
     def print_config(self):
         from app.config_display import print_config

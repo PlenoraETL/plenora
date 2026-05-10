@@ -4,6 +4,9 @@ Servizio CRUD per progetti PLENORA-ETL.
 Keeps this module's responsibility explicit and isolated from adjacent code.
 """
 
+import json
+import json as _json
+
 import uuid
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -26,10 +29,12 @@ from app.core.projects import db as project_db
 from app.db import pg_connection
 from app.core.results import store as results_store
 from app.core.projects.domain import build_project_id, resolve_project_group_id
+from app.core.projects.lineage import detect_project_lineage_cycle
 from app.core.projects.exceptions import (
     CanvasCorruptedError,
     ProjectCleanupPartialError,
     ProjectHasDependenciesError,
+    ProjectLineageCycleError,
 )
 from app.core.projects.repository import (
     DbProjectCanvasKeyRepository,
@@ -115,18 +120,6 @@ class ProjectService:
             created_at=row.created_at,
             updated_at=row.updated_at,
         )
-
-    def _project_row_to_metadata(
-        self,
-        row: project_db.ProjectRow,
-    ) -> ProjectMetadata:
-        return self.project_row_to_metadata(row)
-
-    def _project_detail_row_to_metadata(
-        self,
-        row: project_db.ProjectDetailRow,
-    ) -> ProjectMetadata:
-        return self.project_detail_row_to_metadata(row)
 
     def create_project(
         self,
@@ -214,7 +207,6 @@ class ProjectService:
 
         # JSON string: tentativo di parse. Fallimento = corruzione
         if isinstance(canvas_data, str):
-            import json
             try:
                 canvas_data = json.loads(canvas_data)
             except json.JSONDecodeError as e:
@@ -334,8 +326,6 @@ class ProjectService:
         il canvas dal DB. Cosi' il check anticipa la validazione al save
         invece di scoprire il ciclo solo al prossimo run.
         """
-        from app.core.projects.lineage import detect_project_lineage_cycle
-
         new_sources = [
             n.source_project_id
             for n in canvas.nodes
@@ -350,7 +340,6 @@ class ProjectService:
                 return []
             canvas_dict = row.canvas or {}
             if isinstance(canvas_dict, str):
-                import json
                 # intent: optional feature — canvas corrotto non blocca cycle check
                 # narrow difensivo: solo errori di parse/shape attesi; altro propaga fail-loud
                 try:
@@ -369,7 +358,6 @@ class ProjectService:
 
         chain = detect_project_lineage_cycle(project_id, get_sources)
         if chain is not None:
-            from app.core.projects.exceptions import ProjectLineageCycleError
             raise ProjectLineageCycleError(chain)
 
     def _find_dependent_projects(self, project_id: str, group_id: str = None) -> List[dict]:
@@ -400,7 +388,6 @@ class ProjectService:
                 continue
             canvas = cand.canvas or {}
             if isinstance(canvas, str):
-                import json as _json
                 # intent: optional feature — canvas corrotto del candidato non blocca la
                 # scansione. Narrow difensivo come in _assert_no_lineage_cycle.get_sources
                 try:
@@ -576,7 +563,6 @@ class ProjectService:
             return []
         canvas = row.canvas or {}
         if isinstance(canvas, str):
-            import json
             try:
                 canvas = json.loads(canvas)
             except json.JSONDecodeError:

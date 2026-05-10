@@ -13,6 +13,9 @@ import zipfile
 from pathlib import Path
 from typing import Any, Callable, Optional
 
+from app.core.resources.exceptions import MemoryLimitExceededError
+from app.core.resources.file_source_blob_access import load_file_source_blob_bytes
+
 
 AssertVisible = Callable[[str, str], None]
 DbGetFileSource = Callable[..., Optional[dict[str, Any]]]
@@ -32,11 +35,6 @@ def get_blob_from_db(
     Tenant visibility remains fail-closed: callers inject the same
     FileSourceService._assert_visible callback used before separation.
     """
-    from app.core.resources.file_source_blob_access import (
-        load_file_source_blob_bytes,
-    )
-    from app.core.resources.exceptions import MemoryLimitExceededError
-
     # `_assert_visible` re-raises PermissionError to the caller. After it
     # returns, the caller has been authorized for this file_source.
     assert_visible(file_id, expected_group_id or "")

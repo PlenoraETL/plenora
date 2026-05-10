@@ -309,11 +309,6 @@ def op_window_function(
             result.sort_values(by=order_column, inplace=True)
             result.reset_index(drop=True, inplace=True)
 
-        if group_by and group_by in result.columns:
-            grouped = result.groupby(group_by)[column]
-        else:
-            grouped = result[column]
-
         if function == "rank":
             if group_by and group_by in result.columns:
                 result[out_col] = result.groupby(group_by)[column].rank(method="min")

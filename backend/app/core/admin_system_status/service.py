@@ -6,10 +6,17 @@ Ogni metrica (backup, verify-restore, schedules, workers) e' una funzione
 
 from __future__ import annotations
 
+import shutil as _shutil
+
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
+from app.core.admin_backups.service import list_backups
+from app.core.admin_system_status.tickets_metrics import (
+    TicketsMetricsUnavailable,
+    get_active_ticket_metrics,
+)
 from app.core.admin_system_status.models import (
     AdminStatusBlock,
     CpuStatus,
@@ -20,6 +27,7 @@ from app.core.admin_system_status.models import (
     SystemStatusPayload,
     WorkerDetail,
 )
+from app.shared.token_blacklist import get_blacklist_status as _probe
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -54,7 +62,6 @@ def get_backup_status() -> AdminStatusBlock:
       - error: >48h
     """
     try:
-        from app.core.admin_backups.service import list_backups
         backups = list_backups()
     except Exception as e:
         logger.warning(f"list_backups fallito: {e}")
@@ -494,7 +501,6 @@ def get_host_resources() -> AdminStatusBlock:
             pct = round(du.percent, 1)
         except Exception as _pse:
             psutil_error = _pse
-            import shutil as _shutil
             su = _shutil.disk_usage(str(usage_path))
             total = su.total
             used = su.used
@@ -745,15 +751,6 @@ def get_blacklist_status() -> AdminStatusBlock:
     Fa parte del contratto di graceful degradation della dashboard:
     mai solleva, sempre ritorna dict con `status` e `message`.
     """
-    try:
-        from app.shared.token_blacklist import get_blacklist_status as _probe
-    except Exception as e:
-        return AdminStatusBlock(
-            status="unknown",
-            message="Modulo blacklist non importabile",
-            error=str(e)[:200],
-        )
-
     # BE-CONFIG-001C: default tipato in `Settings.DEFAULTS`
     # `JWT_BLACKLIST_STALE_THRESHOLD_SEC=1800`). Guard `ValueError` resta
     # safety per env malformata propagata dal type coercion
@@ -793,18 +790,6 @@ def get_tickets_status() -> AdminStatusBlock:
 
     Graceful degradation: mai raise, ritorna sempre dict con status.
     """
-    try:
-        from app.core.admin_system_status.tickets_metrics import (
-            TicketsMetricsUnavailable,
-            get_active_ticket_metrics,
-        )
-    except Exception as e:
-        return AdminStatusBlock(
-            status="unknown",
-            message="Modulo tickets non disponibile",
-            error=str(e)[:200],
-        )
-
     try:
         metrics = get_active_ticket_metrics()
         total_active = metrics.total_active

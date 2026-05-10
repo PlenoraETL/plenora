@@ -15,6 +15,10 @@ from app.core.arricchisci.canvas_orchestrator import (
     get_execution_order,
     init_execution_context,
 )
+from app.core.arricchisci.enrichment_service import EnrichmentExecutor
+from app.core.arricchisci.models import EnrichmentOptions
+from app.core.arricchisci.parallel import should_execute_node
+from app.core.files.dataframe_io import sanitize_for_json
 from app.shared.columns_metadata import save_columns_metadata_with_retry
 
 logger = get_logger(__name__)
@@ -120,10 +124,6 @@ class EnrichExecutor:
         """
         logger.info(f"Preview ARRICCHISCI: {project_id} (limit={limit})", op="preview", project_id=project_id)
         try:
-            from app.core.arricchisci.enrichment_service import EnrichmentExecutor
-            from app.core.arricchisci.models import EnrichmentOptions
-            from app.core.files.dataframe_io import sanitize_for_json
-
             canvas_dict = canvas.model_dump()
             nodes = canvas_dict.get("nodes", [])
             edges = canvas_dict.get("edges", [])
@@ -187,7 +187,6 @@ class EnrichExecutor:
                     input_df = node_results.get(input_edge["source"]) if input_edge else None
 
                     # ── execute_if: skip condizionale ──
-                    from app.core.arricchisci.parallel import should_execute_node
                     if not should_execute_node(node_data, input_df):
                         logger.info(f"Preview: nodo {node_id} skippato (execute_if)")
                         node_results[node_id] = input_df

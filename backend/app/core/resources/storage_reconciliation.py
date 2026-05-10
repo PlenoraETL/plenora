@@ -5,6 +5,8 @@ Persistent reconciliation log for storage compensating-delete intent.
 
 from __future__ import annotations
 
+from datetime import timedelta, timedelta as _td, timezone as _tz
+
 import json
 import logging
 from dataclasses import dataclass
@@ -326,7 +328,6 @@ def fetch_due_pending_deletes(
             f"got {limit!r}"
         )
 
-    from datetime import timezone as _tz
 
     cutoff = now if now is not None else datetime.now(_tz.utc)
 
@@ -407,7 +408,6 @@ def compute_next_retry_at(
             f"got {base_seconds!r}"
         )
 
-    from datetime import timedelta, timezone as _tz
 
     capped_exponent = min(attempts - 1, 8)
     delta_seconds = base_seconds * (2 ** capped_exponent)
@@ -753,7 +753,6 @@ def fetch_due_stale_upload_intents(
             f"got {grace_seconds!r}"
         )
 
-    from datetime import timedelta as _td, timezone as _tz
 
     base_now = now if now is not None else datetime.now(_tz.utc)
     grace_cutoff = base_now - _td(seconds=grace_seconds)

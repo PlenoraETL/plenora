@@ -26,8 +26,6 @@ def test_op_filter_incompatible_operator_value_raises_value_error(monkeypatch):
     uso monkeypatch diretto su `pd.Series.__gt__` per forzare TypeError in
     modo deterministico a prescindere da versione pandas e auto-convert."""
 
-    original_gt = pd.Series.__gt__
-
     def failing_gt(self, other):
         raise TypeError("simulated: '>' not supported between instances")
 

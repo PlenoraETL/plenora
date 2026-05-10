@@ -4,6 +4,8 @@ Execution Manager per lo Scheduler PLENORA-ETL.
 Keeps this module's responsibility explicit and isolated from adjacent code.
 """
 
+import shutil as _shutil
+
 import time
 import uuid as _uuid
 from datetime import datetime, timezone
@@ -336,7 +338,6 @@ class ExecutionManager:
                             if m.path:
                                 # Copia nella project output dir con nome
                                 # basename del blob materializzato
-                                import shutil as _shutil
                                 from app.config import settings as _s
                                 dest_dir = Path(_s.RESULTS_DIR) / project_id
                                 dest_dir.mkdir(parents=True, exist_ok=True)

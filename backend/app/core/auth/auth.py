@@ -18,7 +18,10 @@ from fastapi.security import HTTPAuthorizationCredentials
 from app.config import settings as _settings
 from app.core.auth import db
 from app.core.auth import disclosure as _disclosure
+from app.shared import login_rate_limiter as _rl
 from app.shared.audit_action import audit_action
+from app.shared.request_utils import get_client_ip
+from app.shared.token_blacklist import blacklist_jti
 from app.utils.logger import get_logger
 
 
@@ -93,7 +96,6 @@ def _check_rate_limit(ip: str):
     Le costanti LOGIN_* vengono rilette ad ogni chiamata per mantenere
     monkeypatch-friendly i test esistenti.
     """
-    from app.shared import login_rate_limiter as _rl
     _rl.check_rate_limit(
         ip,
         max_attempts=LOGIN_MAX_ATTEMPTS,
@@ -104,7 +106,6 @@ def _check_rate_limit(ip: str):
 
 
 def _record_failed_login(ip: str):
-    from app.shared import login_rate_limiter as _rl
     _rl.record_failed_login(
         ip,
         window_seconds=LOGIN_WINDOW_SECONDS,
@@ -113,7 +114,6 @@ def _record_failed_login(ip: str):
 
 
 def _clear_failed_logins(ip: str):
-    from app.shared import login_rate_limiter as _rl
     _rl.clear_failed_logins(
         ip,
         fallback=_clear_failed_logins_in_memory,
@@ -206,7 +206,6 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 @audit_action(action="auth.login")
 def login(data: LoginRequest, request: Request):
     """Login con username/password → JWT token."""
-    from app.shared.request_utils import get_client_ip
     client_ip = get_client_ip(request)
     _check_rate_limit(client_ip)
 
@@ -297,7 +296,6 @@ def logout(
         # gia' rifiutato, ma tecnicamente potrebbe accadere in race
         return {"ok": True, "blacklisted": False}
 
-    from app.shared.token_blacklist import blacklist_jti
     if not blacklist_jti(jti, ttl):
         _disclosure.raise_disclosure(_disclosure.revocation_unavailable())
     logger.info(f"Logout: jti blacklistato, ttl={ttl}s", op="logout")

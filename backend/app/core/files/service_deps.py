@@ -5,12 +5,18 @@ Canonical STORAGE_ARTIFACT_ENGINE boundary for the file service dependencies.
 
 from __future__ import annotations
 
+import csv as _csv
+import shutil
+import uuid
+
 import logging
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, BinaryIO, List, Optional, Protocol
 
 import pandas as pd
+
+from app.utils.zip_safe import safe_extract_zip_path
 
 
 # Logger stdlib: file_service_deps e' un leaf module e non deve dipendere
@@ -88,7 +94,6 @@ class DefaultTimeProvider:
         # N1: full 32-hex UUID (pre-fix solo i primi 8 char = ~10^9
         # combinazioni -> brute-force fattibile se il nome + timestamp
         # sono noti). 32-hex = 2^128 = infeasible
-        import uuid
         return uuid.uuid4().hex
 
 
@@ -117,7 +122,6 @@ class DefaultFileSystem:
         path.write_text(content, encoding=encoding)
 
     def write_binary(self, path: Path, content: BinaryIO) -> int:
-        import shutil
         with open(path, 'wb') as f:
             shutil.copyfileobj(content, f)
         return path.stat().st_size
@@ -126,7 +130,6 @@ class DefaultFileSystem:
         return path.stat().st_size
 
     def rmtree(self, path: Path) -> None:
-        import shutil
         shutil.rmtree(path)
 
     def unlink(self, path: Path) -> None:
@@ -139,7 +142,6 @@ class DefaultFileSystem:
         duplicazione: stesso codepath di tutti gli altri estrattori del
         progetto (file_service blob, dataframe utils, imdf storage/loader).
         """
-        from app.utils.zip_safe import safe_extract_zip_path
         safe_extract_zip_path(zip_path, dest_dir)
 
     def rglob(self, path: Path, pattern: str) -> List[Path]:
@@ -158,7 +160,6 @@ class DefaultDataLoader:
           3. Latin-1 + sep auto (sniff)
           4. Latin-1 + ; esplicito
         """
-        import csv as _csv
 
         def _detect_sep(path, encoding):
             try:

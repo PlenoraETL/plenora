@@ -9,14 +9,13 @@ from typing import Optional
 
 import pandas as pd
 
+from app.core.features.geo_utils import detect_geometry_column, to_geodataframe
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
 
 
 def _geo_helpers():
-    from app.core.features.geo_utils import detect_geometry_column, to_geodataframe
-
     return to_geodataframe, detect_geometry_column
 
 

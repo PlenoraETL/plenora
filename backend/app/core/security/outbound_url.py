@@ -5,6 +5,8 @@ This module owns the anti-SSRF checks used before server-side HTTP calls.
 
 from __future__ import annotations
 
+import warnings as _warnings
+
 import functools
 import ipaddress
 import os
@@ -20,7 +22,6 @@ logger = get_logger(__name__)
 @functools.lru_cache(maxsize=1)
 def _warn_urby_loopback_alias_once() -> None:
     """Emit the deprecated URBY loopback env alias warning once per process."""
-    import warnings as _warnings
 
     msg = (
         "[DEPRECATED] URBY_ALLOW_LOOPBACK_OUTBOUND e' un alias retro-compat. "
@@ -94,7 +95,3 @@ def validate_external_url(url: str) -> None:
     if reason is not None:
         raise ValueError(reason)
 
-
-def validate_external_url_silent(url: str) -> Optional[str]:
-    """Return-string variant of validate_external_url."""
-    return check_outbound_address(url, allow_loopback_opt_in=True)

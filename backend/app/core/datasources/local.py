@@ -4,6 +4,8 @@ PLENORA-ETL — Data Source Backend: Cartella Locale / Rete
 Supporta path locali e UNC evitando assunzioni sul filesystem del worker.
 """
 
+from pathlib import Path as _Path
+
 import os
 from datetime import datetime
 from typing import Optional
@@ -316,7 +318,6 @@ class LocalDataSource(DataSourceInterface):
         Raises DataSourcePermissionError se l'input e' malformato o tenta
         di uscire dalla root configurata.
         """
-        from pathlib import Path as _Path
         from app.shared.resources.path_policy import assert_path_within
 
         root = self.config.root_path.rstrip("/\\")

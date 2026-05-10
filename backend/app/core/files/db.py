@@ -1,9 +1,17 @@
 """Domain-owned file-source DB helpers."""
 
+from datetime import datetime, timezone
+
 import json
 from typing import Any, Dict, List, Optional, TypedDict
 
+from app.core.resources.storage_reconciliation import (
+    mark_done,
+    mark_failed_attempt,
+    record_pending,
+)
 from app.db.pg_connection import fetchone, fetchall, execute, transaction
+from app.shared.storage_compensation import compensating_delete
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -137,7 +145,6 @@ def save_file_source(file_id: str, group_id: str, name: str, original_filename: 
     app-level, il DB non lo enforce perche' la migration rilassa NOT NULL
     su data).
     """
-    from datetime import datetime, timezone
     _validate_row(
         {"file_id": file_id, "data": data, "storage_key": storage_key},
         context="save_file_source",
@@ -193,7 +200,6 @@ def save_file_sources_batch(rows: List[FileSourceRow]) -> None:
         - errori espliciti via raise;
         - transaction boundary visibile (un solo `with transaction`).
     """
-    from datetime import datetime, timezone
     if not rows:
         return
 
@@ -230,7 +236,6 @@ def save_file_sources_batch(rows: List[FileSourceRow]) -> None:
 
 
 def update_file_source_metadata(file_id: str, metadata: dict) -> None:
-    from datetime import datetime, timezone
     now = datetime.now(timezone.utc).isoformat()
     execute(
         "UPDATE file_sources SET metadata = %s, updated_at = %s WHERE id = %s",
@@ -318,9 +323,6 @@ def delete_file_source(file_id: str) -> bool:
                     # process death follows the commit before the
                     # post-commit storage call, the pending row is
                     # the only application-side trace of the orphan
-                    from app.core.resources.storage_reconciliation import (
-                        record_pending,
-                    )
                     reconciliation_ref = record_pending(
                         cur,
                         domain="file_source",
@@ -340,7 +342,6 @@ def delete_file_source(file_id: str) -> bool:
     # delegato all'helper unificato
     # outcome -> reconciliation transition
     if storage_key_to_clean:
-        from app.shared.storage_compensation import compensating_delete
         outcome = compensating_delete(
             storage_key_to_clean,
             domain="file_source",
@@ -349,10 +350,6 @@ def delete_file_source(file_id: str) -> bool:
             logger=logger,
         )
         if reconciliation_ref is not None:
-            from app.core.resources.storage_reconciliation import (
-                mark_done,
-                mark_failed_attempt,
-            )
             if outcome in ("ok", "skipped"):
                 mark_done(reconciliation_ref.id)
             else:

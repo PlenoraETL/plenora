@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any, BinaryIO, Callable, Optional
 
 from app.core.files.storage_dispatch import BlobDispatchResult
+from app.utils.mime_validator import MimeMismatchError, validate_no_executable
 
 
 def create_raw_from_upload(
@@ -30,8 +31,6 @@ def create_raw_from_upload(
 ) -> Any:
     """Create a raw file source blob without parsing its content."""
     if mime_validate is None:
-        from app.utils.mime_validator import validate_no_executable
-
         mime_validate = validate_no_executable
 
     file_id = generate_file_id(name)
@@ -41,8 +40,6 @@ def create_raw_from_upload(
     try:
         mime_validate(content=raw_data, filename=filename or name)
     except Exception as exc:
-        from app.utils.mime_validator import MimeMismatchError
-
         if isinstance(exc, MimeMismatchError):
             logger.warning(
                 f"create_raw_from_upload bloccato (MIME): "

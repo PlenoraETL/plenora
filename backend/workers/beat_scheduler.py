@@ -592,7 +592,6 @@ class PlenoraBeatScheduler(Scheduler):
 
     def _check_stuck_tasks(self) -> None:
         """Ogni 5 minuti verifica se ci sono lock scheduler scaduti o task bloccate."""
-        import time
         now = time.time()
         if now - self._last_stuck_check < 300:
             return

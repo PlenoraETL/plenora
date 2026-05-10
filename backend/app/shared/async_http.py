@@ -5,8 +5,7 @@ HTTP client async condiviso basato su httpx.AsyncClient.
 """
 
 import asyncio
-import random
-from typing import Optional, Dict, Any
+from typing import Optional
 
 import httpx
 
@@ -73,96 +72,3 @@ async def get_async_client() -> httpx.AsyncClient:
     return _async_client
 
 
-async def close_async_client() -> None:
-    """Chiude il client async. Da chiamare in shutdown hook."""
-    global _async_client
-    if _async_client and not _async_client.is_closed:
-        await _async_client.aclose()
-        logger.info("AsyncClient chiuso")
-    _async_client = None
-
-
-# Retry helper con backoff esponenziale
-
-async def async_request_with_retry(
-    method: str,
-    url: str,
-    *,
-    headers: Optional[Dict[str, str]] = None,
-    params: Optional[Dict[str, Any]] = None,
-    json: Optional[Any] = None,
-    data: Optional[Any] = None,
-    timeout: Optional[float] = None,
-    max_retries: int = 3,
-    backoff_factor: float = 1.0,
-) -> httpx.Response:
-    """Esegue richiesta HTTP async con retry esponenziale.
-
-    Retry condizioni:
-    - Network errors (ConnectError, ReadError, WriteError, PoolTimeout)
-    - HTTP 408, 429, 500, 502, 503, 504
-    - Rispetta header Retry-After su 429 (cap a 60s)
-
-    Raises:
-        httpx.HTTPStatusError: su errori 4xx non retryable (400, 401, 403, 404)
-        httpx.RequestError: su fallimento definitivo dopo i retry
-    """
-    client = await get_async_client()
-
-    # Costruisci i kwargs dinamicamente per evitare di passare None a campi specifici
-    req_kwargs: Dict[str, Any] = {}
-    if headers is not None:
-        req_kwargs["headers"] = headers
-    if params is not None:
-        req_kwargs["params"] = params
-    if json is not None:
-        req_kwargs["json"] = json
-    if data is not None:
-        req_kwargs["data"] = data
-    if timeout is not None:
-        req_kwargs["timeout"] = timeout
-
-    retryable_status = {408, 429, 500, 502, 503, 504}
-    last_exc: Optional[Exception] = None
-
-    for attempt in range(max_retries + 1):
-        try:
-            response = await client.request(method, url, **req_kwargs)
-
-            if response.status_code in retryable_status and attempt < max_retries:
-                # Rispetta Retry-After se presente (cap a 60s
-                retry_after_hdr = response.headers.get("Retry-After", "")
-                try:
-                    wait = min(60.0, float(retry_after_hdr)) if retry_after_hdr else None
-                except ValueError:
-                    wait = None
-                if wait is None:
-                    wait = min(60.0, backoff_factor * (2 ** attempt) + random.uniform(0, 0.5))
-                logger.warning(
-                    f"Retry {attempt + 1}/{max_retries} {method} {url} "
-                    f"HTTP {response.status_code} wait={wait:.1f}s"
-                )
-                await asyncio.sleep(wait)
-                continue
-
-            # Success o 4xx definitivo
-            return response
-
-        except (httpx.ConnectError, httpx.ReadError, httpx.WriteError,
-                httpx.PoolTimeout, httpx.ConnectTimeout, httpx.ReadTimeout) as e:
-            last_exc = e
-            if attempt < max_retries:
-                wait = backoff_factor * (2 ** attempt) + random.uniform(0, 0.5)
-                logger.warning(
-                    f"Retry {attempt + 1}/{max_retries} {method} {url} "
-                    f"network error ({type(e).__name__}) wait={wait:.1f}s"
-                )
-                await asyncio.sleep(wait)
-                continue
-            raise
-
-    # Non dovremmo mai arrivare qui, ma per completezza
-    if last_exc:
-        raise last_exc
-    # Se arriviamo qui, tutti i retry hanno dato 5xx senza sollevare
-    return response  # type: ignore[return-value

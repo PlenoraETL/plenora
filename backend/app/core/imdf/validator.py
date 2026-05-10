@@ -10,6 +10,8 @@ from typing import Any, Dict, Optional
 from app.utils.logger import get_logger
 from app.shared.connections.arcgis_connection import ArcGISConnectionInfo
 from app.shared.connections.arcgis_provider import ArcGISProviderProtocol
+from app.shared.connections.esri_system_fields import is_esri_system_field as _is_system_field
+from app.shared.connections.esri_types import EsriTypeMapper
 
 logger = get_logger(__name__)
 
@@ -45,12 +47,10 @@ def _count_features_where_via_post(
 # patchare `validator._coarse_type_*`) e per non cambiare il call site
 # di `validate_publish`
 def _coarse_type_from_esri(esri_type: str) -> str:
-    from app.shared.connections.esri_types import EsriTypeMapper  # ADR-0023: moved from features
     return EsriTypeMapper.map_esri_field_to_schema_bucket(esri_type)
 
 
 def _coarse_type_from_dtype(dtype) -> str:
-    from app.shared.connections.esri_types import EsriTypeMapper  # ADR-0023: moved from features
     return EsriTypeMapper.map_pandas_dtype_to_schema_bucket(dtype)
 
 
@@ -89,11 +89,13 @@ def validate_publish(
         _list_user_folders,
     )
     from app.core.imdf.arcgis.sql_helpers import _chunked, _quote_sql_value
-    from app.core.imdf.loader import load_imdf_layers
     from app.core.imdf.arcgis_uploader import (
-        DEFAULT_MATCH_COLUMNS, LAYER_ORDER, PUBLISH_MODES,
+        DEFAULT_MATCH_COLUMNS,
+        LAYER_ORDER,
+        PUBLISH_MODES,
     )
-
+    from app.core.imdf.loader import load_imdf_layers
+    from app.shared.resources.path_policy import validate_imdf_task_id
     effective_match = {**DEFAULT_MATCH_COLUMNS, **(match_columns or {})}
 
     report: Dict[str, Any] = {
@@ -132,7 +134,6 @@ def validate_publish(
     # Utility condivisa in app.shared.resources.path_policy (D3 commit 1): regex +
     # path-traversal guard centralizzati. Il validator traduce ValueError
     # in un issue con code INVALID_BUNDLE_ID (shape report preservata
-    from app.shared.resources.path_policy import validate_imdf_task_id
     _root = settings.IMDF_BUNDLES_DIR.resolve()
     try:
         bundle_dir: Path = validate_imdf_task_id(bundle_task_id, _root)
@@ -537,7 +538,6 @@ def validate_publish(
 
                         # will_update = min(uniq_match_hits, bundle_count
                         # Se bundle ha duplicati, matched_bundle_rows >= uniq_hits
-                        matched_unique_keys = total_match_hits
                         # righe del bundle che hanno un valore nel dict degli hit
                         # qui assumiamo bundle_count ~= righe, eventuali NULL
                         # verranno contati dai check sotto
@@ -595,8 +595,6 @@ def validate_publish(
             # `app.shared.connections.esri_system_fields.is_esri_system_field`
             # Pattern di normalizzazione bit-per-bit invariato
             # `name.upper.replace("_", "")`
-            from app.shared.connections.esri_system_fields import is_esri_system_field as _is_system_field
-
             fs_fields_info = {k: v for k, v in fs_schema.items() if not _is_system_field(k)}
             # Alias: i check "presenza" devono essere case-insensitive
             # ArcGIS ignora il case sui nomi campo). Manteniamo però i

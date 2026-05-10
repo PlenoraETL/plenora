@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from urllib.parse import urlparse
+
 from typing import Callable, List, Optional, Tuple
 
 import requests
@@ -193,7 +195,6 @@ class ArcGISServiceDiscoveryMixin:
             logger.info("Nessun username - uso Search API per l'organizzazione")
             return self.search_services_online(conn, query="", scope="org")
 
-        from urllib.parse import urlparse
 
         parsed = urlparse(conn.server_url)
         base_url = f"{parsed.scheme}://{parsed.netloc}/sharing/rest"
@@ -369,7 +370,6 @@ class ArcGISServiceDiscoveryMixin:
         if not username:
             return [{"id": "", "title": "(root)"}]
 
-        from urllib.parse import urlparse
 
         parsed = urlparse(conn.server_url)
         base_url = f"{parsed.scheme}://{parsed.netloc}/sharing/rest"
@@ -433,7 +433,6 @@ class ArcGISServiceDiscoveryMixin:
         if not conn.username:
             raise ValueError("ArcGIS username richiesto per ensure_folder")
 
-        from urllib.parse import urlparse
 
         parsed = urlparse(conn.server_url)
         base_url = f"{parsed.scheme}://{parsed.netloc}/sharing/rest"
@@ -487,7 +486,6 @@ class ArcGISServiceDiscoveryMixin:
         service_name: str,
     ) -> ServiceNameAvailabilityResult:
         """Check whether a Feature Service name is available on the portal."""
-        from urllib.parse import urlparse
 
         parsed = urlparse(conn.server_url)
         base_url = f"{parsed.scheme}://{parsed.netloc}/sharing/rest"

@@ -79,15 +79,6 @@ def _enumerate_all_user_items(
         return []
 
 
-def _search_user_items(
-    client: ArcGISDiscoveryProviderProtocol,
-    conn: ArcGISConnectionInfo,
-    fs_name: str,
-) -> List[dict]:
-    """Find current-user Feature Service items matching ``fs_name``."""
-    return _arcgis_discovery.search_user_feature_service_items(client, conn, fs_name)
-
-
 def _find_existing_service(
     client: ArcGISDiscoveryProviderProtocol,
     conn: ArcGISConnectionInfo,

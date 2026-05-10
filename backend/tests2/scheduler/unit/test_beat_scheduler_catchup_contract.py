@@ -75,7 +75,7 @@ def test_skips_schedule_when_catchup_flag_disabled(scheduler):
     row = _schedule_row(catchup_enabled=False)
 
     with patch("app.db.pg_connection.fetchall", return_value=[row]), \
-         patch("app.db.pg_connection.execute") as db_exec, \
+         patch("app.db.pg_connection.execute"), \
          patch("workers.beat_scheduler.datetime") as mock_dt:
         mock_dt.now.return_value = _NOW_FIXED
         mock_dt.fromisoformat = datetime.fromisoformat

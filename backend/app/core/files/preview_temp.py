@@ -7,9 +7,17 @@ cleanup isolated from the FileSourceService orchestrator.
 
 from __future__ import annotations
 
+import gc
+import shutil
+import tempfile
+
 import logging
 from pathlib import Path
 from typing import BinaryIO, Optional
+
+from app.core.files.load_dispatch import load_by_format
+from app.shared.resources.file_cleanup import rmtree_safe
+from app.utils.mime_validator import MimeMismatchError, validate_no_executable
 
 
 _logger_module = logging.getLogger(__name__)
@@ -17,7 +25,6 @@ _logger_module = logging.getLogger(__name__)
 
 def _rmtree_safe(path, _retries: int = 3) -> None:
     """Delegate preview cleanup to the shared resource helper."""
-    from app.shared.resources.file_cleanup import rmtree_safe
     rmtree_safe(path, retries=_retries, logger=_logger_module)
 
 
@@ -62,11 +69,6 @@ def preview_file_temp(
     Raises:
         ValueError: formato non supportato o MIME mismatch (block-only).
     """
-    import tempfile
-    from app.utils.mime_validator import (
-        MimeMismatchError, validate_no_executable,
-    )
-
     # Letti i bytes per il MIME check, poi rewind per il caller
     # NB: per file molto grandi questo accumula in RAM una volta in
     # piu'; e' OK per preview che e' bounded a pochi MB tipici
@@ -90,7 +92,6 @@ def preview_file_temp(
 
     from app.config import settings
     with tempfile.NamedTemporaryFile(delete=False, suffix=suffix, dir=settings.TEMP_DIR) as tmp:
-        import shutil
         shutil.copyfileobj(file_content, tmp)
         tmp_path = Path(tmp.name)
 
@@ -148,7 +149,6 @@ def preview_file_temp(
 
         # Carica con layer o sheet
         is_sheet = format_type in ['xlsx', 'xls']
-        from app.core.files.load_dispatch import load_by_format
         df, gdf = load_by_format(
             loader, tmp_path, format_type,
             None if is_sheet else layer,
@@ -167,7 +167,6 @@ def preview_file_temp(
         }
 
     finally:
-        import gc
         try:
             del df, gdf
         except NameError:

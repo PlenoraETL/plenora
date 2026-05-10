@@ -131,9 +131,6 @@ def test_persist_module_does_not_import_storage():
 
     # 2. Il bytecode di persist_mod non deve avere `storage` come name access.
     #    (cattura `storage.save_bundle()` anche se importato lazy nel body.)
-    code = persist_mod.__dict__.get("__code__") or getattr(
-        persist_mod, "__loader__", None,
-    )
     # Ispeziona ogni callable top-level del modulo.
     for attr_name in dir(persist_mod):
         attr = getattr(persist_mod, attr_name, None)

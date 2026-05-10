@@ -4,6 +4,9 @@ Router API per il modulo Files.
 Gestione file sorgente per MANIPOLA e ARRICCHISCI.
 """
 
+import json
+import json as _json
+
 from pathlib import Path
 
 from fastapi import APIRouter, UploadFile, File, Form, HTTPException, Query, Depends
@@ -57,7 +60,6 @@ def _enforce_upload_size_limit(file: "UploadFile") -> int:
     continuano a controllare il cap (preserva il contratto di
     `tests2/security/unit/test_files_router_size_cap_contract.py`).
     """
-    from app.shared.upload_guards import enforce_upload_size_limit
     max_size = settings.get("MAX_FILE_SIZE", 100 * 1024 * 1024)
     return enforce_upload_size_limit(file, max_bytes=max_size)
 
@@ -92,7 +94,7 @@ def _assert_path_within(child: Path, parent: Path, label: str = "Percorso") -> P
             )
         raise HTTPException(status_code=400, detail=f"{label} non valido")
 
-from app.core.files.service import file_source_service
+from app.core.files.service import FileSourceService, file_source_service
 from app.config import settings
 from app.utils.logger import get_logger
 from app.shared import error_codes
@@ -110,6 +112,8 @@ from app.core.auth.ownership import (
 )
 from app.core.auth.visibility import visible_resource_ids
 from app.shared.resources.path_policy import assert_path_within as _core_assert
+from app.shared.upload_guards import enforce_upload_size_limit
+from app.utils.mime_validator import MimeMismatchError, validate_no_executable, validate_upload
 from .models import (
     FileSource,
     FileSourceList,
@@ -167,9 +171,6 @@ def preview_file_temp(
     # no persist ma evita di passare un binario al parser, riducendo
     # superficie RCE da parser bug). Allowlist stretta romperebbe i
     # passthrough_extensions documentati sotto
-    from app.utils.mime_validator import (
-        MimeMismatchError, validate_no_executable,
-    )
     file.file.seek(0)
     _content_for_mime = file.file.read()
     file.file.seek(0)
@@ -228,7 +229,6 @@ def upload_file(
     current_user: CurrentUser = Depends(require_user_or_above),
 ):
     """Upload un nuovo file e crea un File Source. Viewer non può creare."""
-    import json
     try:
         # Sanitizza filename con helper centralizzato (path traversal, NUL
         # nomi riservati ".."/"."/""
@@ -241,8 +241,6 @@ def upload_file(
         # polyglot, content-extension mismatch. Sostituisce la heuristic
         # pure-Python con `filetype` (zero dep sistema, ~200 MIME noti
         # coprono tutti i formati Plenora
-        from app.utils.mime_validator import MimeMismatchError, validate_upload
-
         _ALLOWED_UPLOAD_EXTENSIONS = {
             "csv", "xlsx", "xls", "json", "geojson",
             "gpkg", "shp", "gdb", "zip", "dxf",
@@ -377,7 +375,6 @@ def upload_multi_layer(
     
     Returns: lista di FileSource creati, uno per layer.
     """
-    import json as _json
     try:
         filename = Path(file.filename).name if file.filename else ""
         if not filename:
@@ -389,7 +386,6 @@ def upload_multi_layer(
         _enforce_upload_size_limit(file)
 
         # MIME validation content-based (stessa difesa di /upload
-        from app.utils.mime_validator import MimeMismatchError, validate_upload
         _ALLOWED_MULTI_LAYER_EXTENSIONS = {"gpkg", "gdb", "zip", "xlsx", "xls"}
         file.file.seek(0)
         content_for_mime = file.file.read()
@@ -515,7 +511,6 @@ def delete_file(file_id: str, current_user: CurrentUser = Depends(require_file_o
 def _svc_group(current_user: CurrentUser) -> str:
     """N1: calcola il group_id da passare al service per fail-closed.
     Superadmin usa il bypass sentinel del FileSourceService."""
-    from app.core.files.service import FileSourceService
     if current_user.role == "superadmin":
         return FileSourceService.SUPERADMIN_BYPASS
     return current_user.group_id

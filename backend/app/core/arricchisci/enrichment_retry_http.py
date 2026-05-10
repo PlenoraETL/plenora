@@ -6,6 +6,9 @@ exponential backoff per `EnrichmentExecutor`: path sequenziale
 
 from __future__ import annotations
 
+from urllib.parse import quote as _quote
+import re
+
 import time
 from typing import Dict, Optional, Tuple
 
@@ -18,6 +21,7 @@ from app.observability.log_sanitization import (
     sanitize_for_log,
     sanitize_url_for_log,
 )
+from app.shared.connections.oauth import get_arcgis_token
 from app.utils.logger import get_logger
 
 from app.core.arricchisci.models import RowError, RowStatus
@@ -55,8 +59,6 @@ class EnrichmentRetryHttpMixin:
                 ssl_verify = not getattr(self.options, 'disable_ssl_verify', False)
 
                 # Sostituisci path params nell'URL ({ip}, {coordinates}, ecc
-                import re
-                from urllib.parse import quote as _quote
                 call_url = self.url
                 call_params = dict(params)
                 for pname in re.findall(r'\{(\w+)\}', call_url):
@@ -68,7 +70,6 @@ class EnrichmentRetryHttpMixin:
                 # Il token va come ?token=xxx, NON come Authorization header
                 # La cache su (token_url, username) gestisce l'auto-renewal
                 if self.auth.get("type") == "arcgis_token":
-                    from app.shared.connections.oauth import get_arcgis_token
                     arcgis_tok = get_arcgis_token(self.auth)
                     if arcgis_tok:
                         call_params["token"] = arcgis_tok

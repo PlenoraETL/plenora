@@ -6,6 +6,9 @@ Keeps this module's responsibility explicit and isolated from adjacent code.
 
 from __future__ import annotations
 
+import secrets
+import warnings
+
 import os
 import uuid
 from datetime import datetime, timedelta, timezone
@@ -44,9 +47,7 @@ else:
     else:
         # In sviluppo: genera un secret random per sessione. Piu' sicuro di un
         # default hardcoded perche' non e' committato e cambia ad ogni riavvio
-        import secrets
         SECRET_KEY = secrets.token_hex(32)
-        import warnings
         warnings.warn(
             "[PLENORA-ETL] JWT_SECRET_KEY non configurata: generato secret random per questa sessione. "
             "I token emessi non saranno validi dopo il riavvio dell'app. "

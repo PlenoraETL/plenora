@@ -14,6 +14,7 @@ from typing import Any, Dict, List, Optional
 
 from app.core.intermediate import db as _db
 from app.core.intermediate import policy as _policy
+from app.core.intermediate.writer import compute_row_hash
 
 logger = logging.getLogger(__name__)
 
@@ -245,8 +246,6 @@ def _build_preview_rows(df: Any, n_rows: int) -> List[Dict]:
     if len(head) == 0:
         return []
 
-    from app.core.intermediate.writer import compute_row_hash
-
     cols_sorted = sorted(map(str, df.columns.tolist()))
     out: List[Dict] = []
     # `to_dict(orient="records")` sulle prime N righe: O(N), accettabile
@@ -267,8 +266,6 @@ def _build_full_rows_legacy(df: Any) -> List[Dict]:
     """
     if df is None:
         return []
-
-    from app.core.intermediate.writer import compute_row_hash
 
     cols_sorted = sorted(map(str, df.columns.tolist()))
     out: List[Dict] = []

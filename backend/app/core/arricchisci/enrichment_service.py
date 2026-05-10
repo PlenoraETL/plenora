@@ -4,6 +4,8 @@ Servizio di esecuzione arricchimento dati via API esterne.
 Keeps API enrichment behavior isolated from orchestration callers.
 """
 
+import csv
+
 import json
 import pandas as pd
 import threading
@@ -23,7 +25,6 @@ from app.utils.logger import get_logger
 from app.core.arricchisci._rate_limiter import RateLimiter as _RateLimiter
 from app.shared.connections.oauth import (
     prepare_headers as _shared_prepare_headers,
-    get_cached_oauth2_token as _shared_get_cached_oauth2_token,
 )
 from app.observability.log_sanitization import (
     sanitize_for_log,
@@ -51,9 +52,7 @@ from app.core.arricchisci.enrichment_validation_preview import (
 # substitution + ArcGIS token injection) spostato in
 # `app.core.arricchisci.enrichment_retry_http.EnrichmentRetryHttpMixin`
 # `EnrichmentExecutor` eredita dal mixin (vedi class declaration sotto
-# I 3 auth helper (`_prepare_headers`, `_get_oauth2_token`
-# `_get_oauth2_client_credentials_token`) restano qui core (3-line
-# stub di delega, non chiamati dal retry path
+# Auth header construction stays as a narrow delegator to shared OAuth helpers.
 # Le call-site `self._call_api_with_retry` da `_execute_internal` /
 # `_execute_parallel` continuano a risolvere via MRO senza modifiche
 from app.core.arricchisci.enrichment_retry_http import (
@@ -213,19 +212,6 @@ class EnrichmentExecutor(
         """Prepara headers HTTP. Delegato a shared/connections/oauth."""
         return _shared_prepare_headers(self.auth)
 
-    def _get_oauth2_token(self) -> Optional[str]:
-        """Ottiene token OAuth2 con password flow. Delegato a shared/connections/oauth."""
-        auth = dict(self.auth)
-        auth.setdefault("type", "oauth2_password")
-        return _shared_get_cached_oauth2_token(auth)
-
-    def _get_oauth2_client_credentials_token(self) -> Optional[str]:
-        """Ottiene token OAuth2 con client_credentials flow. Delegato a shared/connections/oauth."""
-        auth = dict(self.auth)
-        auth.setdefault("type", "oauth2_client_credentials")
-        return _shared_get_cached_oauth2_token(auth)
-
-
     def _update_progress(self, processed: int, total: int, stats: EnrichmentStats):
         """Aggiorna progress callback."""
         if self.progress_callback:
@@ -264,7 +250,6 @@ def generate_error_report(
     if not errors:
         return None
 
-    import csv
 
     file_path = f"{output_path}_errors.csv"
 

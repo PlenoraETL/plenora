@@ -7,6 +7,8 @@ column filtering, and JSON-safe row normalization. Geospatial export lives in
 the legacy utils facade.
 """
 
+import time as _time_mod
+
 import io
 import json
 import tempfile
@@ -17,6 +19,8 @@ from typing import Any, Dict, List, Optional, Union
 import numpy as np
 import pandas as pd
 
+from app.core.resources.exceptions import MemoryLimitExceededError
+from app.utils.zip_safe import safe_extractall
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -41,7 +45,6 @@ def load_dataframe_from_file(
         _preflight_size = -1
     if _preflight_size >= 0:
         from app.config import settings as _settings
-        from app.core.resources.exceptions import MemoryLimitExceededError
 
         _cap = int(_settings.get("LOAD_FILE_MAX_BYTES", 200 * 1024 * 1024))
         if _cap > 0 and _preflight_size > _cap:
@@ -54,7 +57,6 @@ def load_dataframe_from_file(
 
     estensione = file_path.suffix.lower()
 
-    import time as _time_mod
 
     _t0 = _time_mod.monotonic()
     try:
@@ -173,7 +175,6 @@ def _carica_da_zip(
 ) -> pd.DataFrame:
     """Load a DataFrame from a ZIP archive."""
     import geopandas as gpd
-    from app.utils.zip_safe import safe_extractall
 
     with zipfile.ZipFile(zip_path, "r") as zf:
         contenuto = zf.namelist()
@@ -420,29 +421,3 @@ def sanitize_for_json(rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
 
     return rows
 
-
-def infer_column_types(df: pd.DataFrame) -> List[Dict[str, str]]:
-    """Infer Plenora column types from pandas dtypes."""
-    colonne = []
-
-    for col in df.columns:
-        dtype = str(df[col].dtype).lower()
-
-        if "int" in dtype:
-            tipo = "int"
-        elif any(t in dtype for t in ("float", "numeric", "decimal", "double")):
-            tipo = "real"
-        elif "bool" in dtype:
-            tipo = "bool"
-        elif any(t in dtype for t in ("datetime", "timestamp")):
-            tipo = "date"
-        elif "date" in dtype:
-            tipo = "date"
-        elif "geometry" in dtype:
-            tipo = "geometry"
-        else:
-            tipo = "str"
-
-        colonne.append({"name": col, "type": tipo})
-
-    return colonne

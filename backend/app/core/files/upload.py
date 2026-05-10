@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Any, BinaryIO, Callable, List, Optional, Tuple
 
 from app.core.files.storage_dispatch import BlobDispatchResult
+from app.utils.mime_validator import MimeMismatchError
 
 
 def mkdtemp_writable(*, dir: str | Path) -> Path:
@@ -94,7 +95,6 @@ def create_from_upload(
         try:
             mime_validate(content=raw_data, filename=filename or name)
         except Exception as e:
-            from app.utils.mime_validator import MimeMismatchError
             if isinstance(e, MimeMismatchError):
                 logger.warning(
                     f"create_from_upload bloccato (MIME): "

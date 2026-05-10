@@ -5,6 +5,8 @@ Health / readiness boundary.
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
+
 from dataclasses import dataclass
 from typing import Tuple
 
@@ -472,7 +474,6 @@ def check_beat_heartbeat() -> CheckOutcome:
         return False, "missing heartbeat (table empty)"
 
     try:
-        from datetime import datetime, timezone
         ts_raw = row["ts"]
         if isinstance(ts_raw, str):
             beat_time = datetime.fromisoformat(ts_raw)

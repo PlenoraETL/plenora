@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from datetime import timedelta
+
 import os
 import subprocess
 from datetime import datetime, timezone
@@ -79,7 +81,12 @@ def _to_datetime(value: Any) -> datetime:
 # consumer in repo) e viene retirato qui
 # schedule cron / description -> `Settings.DEFAULTS` (APP_POLICY
 
-from app.infrastructure.storage.cloud_backends import _resolve_backup_bucket as _resolve_backup_bucket_env
+from app.infrastructure.storage.cloud_backends import (
+    ObjectStorageDisabledError,
+    _resolve_backup_bucket as _resolve_backup_bucket_env,
+    aws_credentials_error_message,
+    get_backup_object_storage,
+)
 
 BUCKET = _resolve_backup_bucket_env() or "plenora-backup-112011134642-eu-south-1-an"
 REGION = os.getenv("AWS_REGION", "eu-south-1")
@@ -116,11 +123,6 @@ def list_backups() -> List[Dict[str, Any]]:
         AdminBackupDependencyError: botocore[crt] o altre dep AWS mancanti.
         AdminBackupCredentialsError: credenziali AWS scadute / SSO refresh.
     """
-    from app.infrastructure.storage.cloud_backends import (
-        ObjectStorageDisabledError,
-        get_backup_object_storage,
-    )
-
     try:
         storage = get_backup_object_storage()
     except ObjectStorageDisabledError as e:
@@ -157,7 +159,6 @@ def list_backups() -> List[Dict[str, Any]]:
             pass  # botocore non importabile: improbabile qui, degrada
         # RB.2 (2026-04-27): credenziali AWS scadute / SSO refresh required
         # > 503 con detail strutturato. Niente lista vuota fuorviante
-        from app.infrastructure.storage.cloud_backends import aws_credentials_error_message
         hint = aws_credentials_error_message(e)
         if hint is not None:
             # R-1 (2026-04-27): log conciso. La causa e' classificata
@@ -291,7 +292,6 @@ def get_schedule_info() -> Dict[str, Any]:
         now = datetime.now(timezone.utc)
         candidate = now.replace(hour=2, minute=0, second=0, microsecond=0)
         if candidate <= now:
-            from datetime import timedelta
             candidate += timedelta(days=1)
         next_run_iso = candidate.isoformat()
 

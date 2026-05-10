@@ -6,6 +6,9 @@ Obiettivo: concentrare in UN punto il codice SDK-specifico (oggi boto3).
 
 from __future__ import annotations
 
+import io
+import warnings as _warnings
+
 import functools
 import logging
 import os
@@ -254,7 +257,6 @@ class AwsS3ObjectStorage:
           - Azure Blob: `BlobClient.upload_blob(data)` auto-chunking
           - GCS: `blob.upload_from_string(data)` resumable upload nativo
         """
-        import io
         from boto3.s3.transfer import TransferConfig
         client = self._client()
         config = TransferConfig(
@@ -658,7 +660,6 @@ def _warn_get_object_storage_deprecated_once() -> None:
     Cache LRU per non spammare il logger ops in caller hot-path. Per i
     test: ``_warn_get_object_storage_deprecated_once.cache_clear``.
     """
-    import warnings as _warnings
     msg = (
         "[DEPRECATED] cloud_backends.get_object_storage e' un alias legacy. "
         "Migrare a get_runtime_object_storage() o get_backup_object_storage() "

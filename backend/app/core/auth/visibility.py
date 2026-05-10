@@ -42,16 +42,6 @@ def _validate_table(resource_table: str) -> tuple[str, str]:
     return _SHAREABLE[resource_table]
 
 
-def share_table_for(resource_table: str) -> str:
-    """Return the share table name for a resource table."""
-    return _validate_table(resource_table)[0]
-
-
-def fk_column_for(resource_table: str) -> str:
-    """Return the foreign-key column name for a share table."""
-    return _validate_table(resource_table)[1]
-
-
 def is_shareable(resource_table: str) -> bool:
     return resource_table in _SHAREABLE
 
@@ -67,21 +57,6 @@ def load_shareable_resource_owner(
         (resource_id,),
     )
     return cast(ShareableResourceOwner, dict(row)) if row else None
-
-
-def build_visible_where_clause(
-    resource_table: str,
-    resource_alias: str = "r",
-) -> tuple[str, list]:
-    """Build a WHERE fragment for resources visible to a group."""
-    share_table, fk = _validate_table(resource_table)
-    clause = (
-        f"({resource_alias}.group_id = %s "
-        f"OR EXISTS (SELECT 1 FROM {share_table} s "
-        f"WHERE s.{fk} = {resource_alias}.id "
-        f"AND (s.group_id = %s OR s.group_id = '{MAGIC_ALL}')))"
-    )
-    return clause, []
 
 
 def visible_resource_ids(

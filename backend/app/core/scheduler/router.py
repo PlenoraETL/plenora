@@ -5,8 +5,10 @@ Owns the HTTP boundary and delegates business logic to services or helpers.
 """
 
 from fastapi import APIRouter, HTTPException, Query, Depends
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
+from app.config import settings
+from app.db import pg_connection as db
 from app.utils.logger import get_logger
 from app.core.auth.dependencies import (
     require_not_esecutore,
@@ -18,6 +20,7 @@ from app.core.auth.ownership import assert_group_access
 from app.shared import error_codes
 from app.shared.error_envelope import raise_typed_http
 from app.shared.audit_action import audit_action
+from app.shared.authz_helpers import assert_project_access
 from app.core.scheduler import db as scheduler_db
 
 logger = get_logger(__name__)
@@ -37,8 +40,6 @@ router = APIRouter(prefix="/schedules", tags=["schedules"])
 
 
 def _as_aware_datetime(value: object) -> "datetime":
-    from datetime import datetime, timezone
-
     if isinstance(value, datetime):
         dt = value
     elif isinstance(value, str):
@@ -57,9 +58,6 @@ async def beat_healthcheck(current_user: CurrentUser = Depends(require_not_esecu
     Legge il heartbeat dalla tabella beat_heartbeat nel DB.
     """
     try:
-        from datetime import datetime, timezone
-        from app.db import pg_connection as db
-
         row = db.fetchone("SELECT ts FROM beat_heartbeat WHERE id = 'beat'")
 
         if row and row["ts"]:
@@ -71,7 +69,6 @@ async def beat_healthcheck(current_user: CurrentUser = Depends(require_not_esecu
 
             if age < 180:
                 # Check task bloccate
-                from app.config import settings
                 hard_limit = settings.CELERY_SCHEDULE_HARD_LIMIT
                 stuck_count = db.fetchone(
                     "SELECT COUNT(*) as n FROM schedules "
@@ -232,7 +229,6 @@ async def update_schedule(schedule_id: str, data: ScheduleUpdate, current_user: 
         # dell'utente (altrimenti un owner di uno schedule del gruppo A
         # puo' ricollegarlo a un progetto del gruppo B
         if data.project_id:
-            from app.shared.authz_helpers import assert_project_access
             assert_project_access(data.project_id, current_user)
         
         schedule = service.update_schedule(schedule_id, data)

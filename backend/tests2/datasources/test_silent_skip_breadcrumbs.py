@@ -124,7 +124,6 @@ def test_local_list_files_logs_debug_on_stat_failure(tmp_path, monkeypatch):
     bad_file.write_text("content")
 
     original_stat = os.stat
-    original_entry_stat = os.DirEntry.stat if hasattr(os, "DirEntry") else None
 
     def _selective_stat(path, *args, **kwargs):
         # Lavora sia con path string sia con Path

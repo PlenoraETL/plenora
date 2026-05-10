@@ -4,6 +4,9 @@ Cluster STRINGS — operazioni di utilita' su colonne stringa.
 Keeps transformation behavior isolated from orchestration callers.
 """
 
+import re
+import unicodedata
+
 import pandas as pd
 import geopandas as gpd
 from typing import List, Union
@@ -144,7 +147,6 @@ def op_string_extract(
         return df
 
     try:
-        import re
         # Valida il pattern regex
         try:
             compiled = re.compile(pattern)
@@ -218,8 +220,6 @@ def op_text_normalize(
     Returns:
         DataFrame con colonne normalizzate
     """
-    import unicodedata
-    import re
 
     if not columns:
         logger.warning("Text Normalize: nessuna colonna selezionata")

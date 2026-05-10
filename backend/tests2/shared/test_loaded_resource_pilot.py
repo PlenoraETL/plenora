@@ -165,7 +165,7 @@ def test_legacy_load_still_returns_raw_data():
     ref = _make_file_ref()
 
     loader = SourceLoader()
-    with patch.object(loader, "load", return_value=df) as mock_load:
+    with patch.object(loader, "load", return_value=df):
         raw = loader.load(ref, expected_group_id="grp-1")
 
     assert raw is df

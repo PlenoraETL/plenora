@@ -469,27 +469,6 @@ class ResponseParser:
             logger.debug("_apply_filter_condition: filtro fallito, riga inclusa per default: %s", e)
             return True
 
-
-# FUNZIONE HELPER
-
-def parse_response(data: Any, config: Dict) -> List[Dict]:
-    """
-    Helper per parsing rapido di una risposta API.
-
-    Crea un ResponseParser con la configurazione fornita e
-    esegue immediatamente il parsing.
-
-    Args:
-        data: Risposta JSON dell'API.
-        config: Configurazione del parser (root_path, iterate_on, mappings, transforms).
-
-    Returns:
-        Lista di dizionari (righe) estratte dalla risposta.
-    """
-    parser = ResponseParser(config)
-    return parser.parse(data)
-
-
 # CONFIGURAZIONI PRESET PER FORMATI COMUNI
 
 PRESET_CONFIGS = {

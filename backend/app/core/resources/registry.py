@@ -8,6 +8,8 @@ from __future__ import annotations
 from threading import Lock
 from typing import Dict, Optional
 
+from app.core.resources.loaders.file_source_blob import FileSourceBlobLoader
+from app.core.resources.loaders.result_blob import ResultBlobLoader
 from app.core.resources.types import (
     OutputMode,
     Resource,
@@ -69,11 +71,6 @@ def build_default_registry() -> _DefaultResourceRegistry:
     Used directly by tests that want isolation. Production code
     consumes the module-level singleton via `default_registry`.
     """
-    from app.core.resources.loaders.result_blob import ResultBlobLoader
-    from app.core.resources.loaders.file_source_blob import (
-        FileSourceBlobLoader,
-    )
-
     reg = _DefaultResourceRegistry()
     reg.register(ResultBlobLoader())
     reg.register(FileSourceBlobLoader())

@@ -4,6 +4,8 @@ Endpoint FastAPI per il modulo Features (ArcGIS Feature Service).
 Owns the HTTP boundary and delegates business logic to services or helpers.
 """
 
+from pathlib import Path as _Path
+
 from fastapi import APIRouter, HTTPException, Query, Depends
 from pydantic import BaseModel, Field
 from typing import Dict, Optional, List
@@ -34,10 +36,12 @@ from app.core.features.features_service import FeaturesService
 from app.shared import error_codes
 from app.shared.error_envelope import raise_typed_http
 from app.shared.audit_action import audit_action
+from app.shared.authz_helpers import assert_project_visible
 from app.shared.resources.path_policy import assert_path_within
 from app.shared.error_sanitizer import sanitize_http_detail
 from app.core.artifacts import ArtifactResolver, LatestProjectArtifactRef
 from app.core.artifacts.types import MaterializedArtifact
+from app.core.auth.visibility import visible_resource_ids
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -122,8 +126,6 @@ async def create_connection(data: ArcGISCreate, current_user: CurrentUser = Depe
 async def list_connections(current_user: CurrentUser = Depends(require_not_esecutore)):
     """Lista connessioni ArcGIS visibili: owned dal gruppo + condivise via allowed_groups.
     Ogni record include `can_edit` calcolato per l'utente corrente."""
-    from app.core.auth.visibility import visible_resource_ids
-
     try:
         is_super = current_user.role == "superadmin"
 
@@ -141,7 +143,7 @@ async def list_connections(current_user: CurrentUser = Depends(require_not_esecu
             c.can_edit = compute_can_edit(c, current_user)
 
         return {"connections": [_mask_secrets(c) for c in result.connections]}
-    except Exception as e:
+    except Exception:
         raise_typed_http(error_codes.INTERNAL_ERROR, status_code=500, message="Errore interno del server")
 
 
@@ -178,7 +180,7 @@ async def test_connection(connection_id: str, current_user: CurrentUser = Depend
     try:
         result = get_service().test_connection(connection_id)
         return result
-    except Exception as e:
+    except Exception:
         raise_typed_http(error_codes.INTERNAL_ERROR, status_code=500, message="Errore interno del server")
 
 
@@ -193,7 +195,7 @@ async def browse_services(connection_id: str, current_user: CurrentUser = Depend
         return {"services": services}
     except ValueError as e:
         raise HTTPException(status_code=404, detail=sanitize_http_detail(str(e)))
-    except ConnectionError as e:
+    except ConnectionError:
         raise HTTPException(
             status_code=502,
             detail={
@@ -201,7 +203,7 @@ async def browse_services(connection_id: str, current_user: CurrentUser = Depend
                 "message": "Servizio esterno non raggiungibile",
             },
         )
-    except Exception as e:
+    except Exception:
         raise_typed_http(error_codes.INTERNAL_ERROR, status_code=500, message="Errore interno del server")
 
 
@@ -214,7 +216,7 @@ async def list_folders(connection_id: str, current_user: CurrentUser = Depends(r
         return {"folders": folders}
     except ValueError as e:
         raise HTTPException(status_code=404, detail=sanitize_http_detail(str(e)))
-    except ConnectionError as e:
+    except ConnectionError:
         raise HTTPException(
             status_code=502,
             detail={
@@ -222,7 +224,7 @@ async def list_folders(connection_id: str, current_user: CurrentUser = Depends(r
                 "message": "Servizio esterno non raggiungibile",
             },
         )
-    except Exception as e:
+    except Exception:
         raise_typed_http(error_codes.INTERNAL_ERROR, status_code=500, message="Errore interno del server")
 
 
@@ -239,7 +241,7 @@ async def browse_layers(
         return {"layers": layers}
     except ValueError as e:
         raise HTTPException(status_code=404, detail=sanitize_http_detail(str(e)))
-    except ConnectionError as e:
+    except ConnectionError:
         raise HTTPException(
             status_code=502,
             detail={
@@ -247,7 +249,7 @@ async def browse_layers(
                 "message": "Servizio esterno non raggiungibile",
             },
         )
-    except Exception as e:
+    except Exception:
         raise_typed_http(error_codes.INTERNAL_ERROR, status_code=500, message="Errore interno del server")
 
 
@@ -264,7 +266,7 @@ async def get_layer_schema(
         return schema
     except ValueError as e:
         raise HTTPException(status_code=404, detail=sanitize_http_detail(str(e)))
-    except ConnectionError as e:
+    except ConnectionError:
         raise HTTPException(
             status_code=502,
             detail={
@@ -272,7 +274,7 @@ async def get_layer_schema(
                 "message": "Servizio esterno non raggiungibile",
             },
         )
-    except Exception as e:
+    except Exception:
         raise_typed_http(error_codes.INTERNAL_ERROR, status_code=500, message="Errore interno del server")
 
 
@@ -307,7 +309,7 @@ async def query_preview(
         
     except ValueError as e:
         raise HTTPException(status_code=404, detail=sanitize_http_detail(str(e)))
-    except Exception as e:
+    except Exception:
         raise_typed_http(error_codes.INTERNAL_ERROR, status_code=500, message="Errore interno del server")
 
 
@@ -385,7 +387,6 @@ def _resolve_input_path(
             "_resolve_input_path: expected_group_id obbligatorio "
             "(defense-in-depth)"
         )
-    from pathlib import Path as _Path
     from app.config import settings
 
     if input_path:
@@ -448,7 +449,6 @@ async def write_features(request: WriteRequest, current_user: CurrentUser = Depe
     # connessione ArcGIS potrebbe scrivere su un Feature Service
     # usando i dati di un progetto di un altro tenant conoscendone l'id
     if request.project_id:
-        from app.shared.authz_helpers import assert_project_visible
         assert_project_visible(request.project_id, current_user)
     try:
         # `with` garantisce cleanup del tempfile quando il resolver
@@ -481,7 +481,7 @@ async def write_features(request: WriteRequest, current_user: CurrentUser = Depe
         raise HTTPException(status_code=400, detail=str(e))
     except FileNotFoundError as e:
         raise HTTPException(status_code=404, detail=sanitize_http_detail(str(e)))
-    except ConnectionError as e:
+    except ConnectionError:
         raise HTTPException(
             status_code=502,
             detail={
@@ -489,7 +489,7 @@ async def write_features(request: WriteRequest, current_user: CurrentUser = Depe
                 "message": "Servizio esterno non raggiungibile",
             },
         )
-    except Exception as e:
+    except Exception:
         raise_typed_http(error_codes.INTERNAL_ERROR, status_code=500, message="Errore interno del server")
 
 
@@ -510,7 +510,6 @@ async def create_service(request: CreateServiceRequest, current_user: CurrentUse
     # Stesso check di write_features: se l'input arriva via project_id
     # validiamo l'accesso al progetto prima di leggerne l'output
     if request.project_id:
-        from app.shared.authz_helpers import assert_project_visible
         assert_project_visible(request.project_id, current_user)
     try:
         # Stesso pattern di write_features: `with` garantisce cleanup
@@ -536,7 +535,7 @@ async def create_service(request: CreateServiceRequest, current_user: CurrentUse
         raise HTTPException(status_code=400, detail=str(e))
     except FileNotFoundError as e:
         raise HTTPException(status_code=404, detail=sanitize_http_detail(str(e)))
-    except ConnectionError as e:
+    except ConnectionError:
         raise HTTPException(
             status_code=502,
             detail={
@@ -544,5 +543,5 @@ async def create_service(request: CreateServiceRequest, current_user: CurrentUse
                 "message": "Servizio esterno non raggiungibile",
             },
         )
-    except Exception as e:
+    except Exception:
         raise_typed_http(error_codes.INTERNAL_ERROR, status_code=500, message="Errore interno del server")

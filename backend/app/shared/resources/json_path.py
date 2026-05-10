@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import importlib
+
 import json
 from typing import Any
 
@@ -13,7 +15,6 @@ def geojson_to_wkt(geom: dict) -> str:
         # (BE-GO-READY-ARCH-057-W1) forbids static `shapely` imports in
         # `app.shared.resources.*`. shapely is optional here (graceful
         # fallback to JSON), so we resolve it dynamically.
-        import importlib
 
         shape = importlib.import_module("shapely.geometry").shape
         return shape(geom).wkt

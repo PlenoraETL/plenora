@@ -203,7 +203,6 @@ def test_mssql_stage_swap_preserves_pk_uk_check_and_index(monkeypatch):
 
         constraints_before = _get_constraints(table)
         indexes_before = _get_indexes(table)
-        types_before = sorted([c["type"] for c in constraints_before])
         # PK, UK, CHECK presenti
         assert any(c["type"] == "PRIMARY_KEY_CONSTRAINT" for c in constraints_before)
         assert any(c["type"] == "UNIQUE_CONSTRAINT" for c in constraints_before)

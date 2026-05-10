@@ -19,6 +19,7 @@ from app.core.auth.ownership import (
 )
 from app.utils.router_utils import require_service
 from app.shared import error_codes
+from app.shared.crypto import CredentialUnavailableError
 from app.shared.error_envelope import raise_typed_http
 from app.shared.audit_action import audit_action
 from app.core.auth.visibility import visible_resource_ids
@@ -101,7 +102,6 @@ def update_connection(
     solo se non creata da un superadmin (hierarchical ownership)."""
     require_service(_connection_service, "ConnectionService")
     # FIXME: #1: get_connection raise CredentialUnavailableError su password None/corrotta
-    from app.shared.crypto import CredentialUnavailableError
     try:
         existing = _connection_service.get_connection(connection_id)
     except CredentialUnavailableError as e:
@@ -134,7 +134,6 @@ def delete_connection(
     al prossimo run).
     """
     require_service(_connection_service, "ConnectionService")
-    from app.shared.crypto import CredentialUnavailableError
     try:
         existing = _connection_service.get_connection(connection_id)
     except CredentialUnavailableError as e:
@@ -198,7 +197,6 @@ def test_connection(
     require_service(_connection_service, "ConnectionService")
     # FIXME: #1 (2026-04-23): password=None o decrypt-fail → 422 esplicito
     # non 500 da Pydantic ValidationError
-    from app.shared.crypto import CredentialUnavailableError
     try:
         existing = _connection_service.get_connection(connection_id)
     except CredentialUnavailableError as e:
@@ -218,7 +216,6 @@ def get_connection_tables(
     """Ottieni tabelle e viste del database (esplora schema). Read-only su risorsa visibile."""
     require_service(_connection_service, "ConnectionService")
     require_service(_database_inspector, "DatabaseInspector")
-    from app.shared.crypto import CredentialUnavailableError
     try:
         connection = _connection_service.get_connection(connection_id)
     except CredentialUnavailableError as e:
@@ -238,5 +235,5 @@ def get_connection_tables(
         return {"tables": tables, "views": views}
     except HTTPException:
         raise
-    except Exception as e:
+    except Exception:
         raise_typed_http(error_codes.INTERNAL_ERROR, status_code=500, message="Errore interno del server")

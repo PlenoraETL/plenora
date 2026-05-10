@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from typing import Dict, Optional
 
+from app.core.connections.arcgis_connection_resolver import resolve_arcgis_connection
 from app.core.imdf.arcgis import (
     publish_ops as _publish_ops,
     service_discovery as _service_discovery,
@@ -87,8 +88,6 @@ def upload_imdf_layers(
                 "errors": [str, ...],
             }
     """
-    from app.core.connections.arcgis_connection_resolver import resolve_arcgis_connection
-
     if mode not in PUBLISH_MODES:
         return {
             "success": False, "service_url": "", "service_item_id": "",

@@ -8,6 +8,7 @@ import pandas as pd
 
 from app.shared.execution.canvas_graph import CanvasGraph
 from app.core.projects.canvas_models import CanvasState
+from app.shared.resources.metadata import ResourceMetadata
 
 
 def extract_srid_from_canvas(
@@ -16,8 +17,6 @@ def extract_srid_from_canvas(
     canvas_graph: Optional[CanvasGraph] = None,
 ) -> Optional[int]:
     """Return the first EPSG SRID declared by canvas column metadata."""
-    from app.shared.resources.metadata import ResourceMetadata
-
     graph = canvas_graph or CanvasGraph.from_canvas(canvas)
     for cn in graph.nodes:
         raw = cn.get_field("columns")

@@ -3,6 +3,9 @@ Logica di parallelizzazione e conditional execution per api_enrich nodes.
 
 Questo modulo contiene le funzioni helper utilizzate da:
 """
+
+import threading as _threading
+
 import re
 from typing import Any, Dict, List, Optional, Set, Tuple
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -373,7 +376,6 @@ def execute_parallel_enrichers(
             first_error = err
         node_results[nid] = res
     else:
-        import threading as _threading
         _lock = _threading.Lock()
         workers = min(len(node_ids), max_workers)
         logger.info(f"Esecuzione parallela: {len(node_ids)} nodi, {workers} workers")

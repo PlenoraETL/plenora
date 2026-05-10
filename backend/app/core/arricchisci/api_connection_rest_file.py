@@ -6,12 +6,24 @@ Keeps API enrichment behavior isolated from orchestration callers.
 
 from __future__ import annotations
 
+import shutil as _shutil_cleanup
+import tempfile
+import time
+import time as _time
+
 import io
 from pathlib import Path
 from typing import Dict, List, Optional
 
 import pandas as pd
 
+from app.core.artifacts import (
+    LatestProjectArtifactRef,
+    SourceLoader,
+    SourceLoadingError,
+)
+from app.core.files.dataframe_io import save_dataframe_to_bytes
+from app.core.files.source_loading import assert_file_source_group_access
 from app.core.files.source_loading import resolve_file_source_id_path
 # File-source path materialization lives in the files domain boundary.
 # This mixin owns ctx extraction and REST-file orchestration.
@@ -184,7 +196,6 @@ class ApiConnectionRestFileMixin:
         Ritorna `(total_bytes, download_timed_out)`. Chiude sempre
         la response in un `finally` interno (`response.close` best-effort).
         """
-        import time as _time
 
         total_bytes = 0
         body_deadline = start_time + timeout
@@ -455,8 +466,6 @@ class ApiConnectionRestFileMixin:
         ``metadata`` cosi' il caller del canvas arricchisci lo tratta come
         un generico risultato file.
         """
-        import time
-        import tempfile
         import requests
 
         start_time = time.time()
@@ -506,7 +515,6 @@ class ApiConnectionRestFileMixin:
         # FileSourceResolutionError: da Fix-A (lookup DB o scrittura
         # cache fallita), messaggio safe-by-construction
         # Eccezioni fuori tupla fluiscono al safety-net outer (#22c
-        from app.core.artifacts import SourceLoadingError
         try:
             input_path, _owns_materialized_input = self._resolve_input_path_for_file_processor(
                 nodes, edges, node_id,
@@ -670,7 +678,6 @@ class ApiConnectionRestFileMixin:
             # con leak progressivo nei worker Celery long-running
             try:
                 if _cleanup_tmp and tmp_exec_dir is not None and tmp_exec_dir.exists():
-                    import shutil as _shutil_cleanup
                     _shutil_cleanup.rmtree(tmp_exec_dir, ignore_errors=True)
             except Exception as _rm_err:
                 logger.debug(
@@ -726,8 +733,6 @@ class ApiConnectionRestFileMixin:
             ValueError con 403-like message se cross-tenant.
         """
         current_group_id = _extract_file_source_group_id(self, ctx)
-        from app.core.files.source_loading import assert_file_source_group_access
-
         assert_file_source_group_access(file_source_id, current_group_id)
 
     def _resolve_file_source_id_path(
@@ -821,11 +826,6 @@ class ApiConnectionRestFileMixin:
                     "Contesto di sicurezza non determinabile (group_id mancante)"
                 )
 
-            from app.core.artifacts import (
-                LatestProjectArtifactRef,
-                SourceLoader,
-                SourceLoadingError,
-            )
             try:
                 return SourceLoader().resolve_project_path(
                     LatestProjectArtifactRef(project_id=source_project_id),
@@ -911,7 +911,6 @@ class ApiConnectionRestFileMixin:
                 # io.BytesIO per requests multipart — requests accetta ogni
                 # file-like object che implementa read
                 if isinstance(upstream_result, pd.DataFrame) and upstream_type != 'file_source':
-                    from app.core.files.dataframe_io import save_dataframe_to_bytes
                     fmt = (materialize_format or 'xlsx').lower()
                     supported = {'xlsx', 'csv', 'json', 'parquet'}
                     if fmt not in supported:

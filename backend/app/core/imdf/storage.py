@@ -13,7 +13,9 @@ import zipfile
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+from app.infrastructure.storage.cloud_backends import object_storage_enabled
 from app.shared.resources.storage_layout import IMDF_BUNDLES_PREFIX
+from app.utils.zip_safe import safe_extractall
 from app.utils.logger import get_logger
 
 
@@ -178,7 +180,6 @@ def ensure_local_bundle(task_id: str) -> Path:
             raise FileNotFoundError(f"Bundle {task_id} non presente su storage: {e}")
 
         local.mkdir(parents=True, exist_ok=True)
-        from app.utils.zip_safe import safe_extractall
         with zipfile.ZipFile(tmp_zip, "r") as zf:
             # safe_extractall: zip slip + zip bomb pre-extract
             # I bundle IMDF tipici sono ~20-100MB, ben sotto i 500MB
@@ -202,7 +203,6 @@ def get_meta_only(task_id: str) -> Optional[Dict[str, Any]]:
     Ritorna None se il meta non esiste su S3 (bundle non ancora pubblicato
     o solo local-cached) oppure se la capability object storage e' off.
     """
-    from app.infrastructure.storage.cloud_backends import object_storage_enabled
     if not object_storage_enabled():
         return None
     storage = _storage()
@@ -223,7 +223,6 @@ def list_task_ids() -> List[str]:
     quelli cached sul nodo corrente). ritorna [] se la
     capability object storage e' disabilitata (router fallback su
     cache locale only)."""
-    from app.infrastructure.storage.cloud_backends import object_storage_enabled
     if not object_storage_enabled():
         return []
     storage = _storage()

@@ -9,6 +9,8 @@ import zipfile
 from pathlib import Path
 from typing import Union
 
+from app.shared.resources.path_policy import assert_path_within
+
 
 class ZipSlipError(ValueError):
     """Raised quando un archivio ZIP tenta un path traversal."""
@@ -67,8 +69,6 @@ def _validate_member(member_name: str, dest_root: Path, dest_dir: Path) -> None:
     assoluti / drive letter restano inline perche' specifici del formato
     ZIP (nessun member ZIP legittimo inizia con '/' o 'C:').
     """
-    from app.shared.resources.path_policy import assert_path_within
-
     if not member_name:
         return
     # Path assoluti Unix / Windows / UNC

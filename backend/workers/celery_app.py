@@ -8,7 +8,7 @@ import os
 
 from celery import Celery
 from app.config import settings
-from app.utils.logger import get_logger
+from app.utils.logger import get_logger, get_request_id, set_request_id
 
 logger = get_logger(__name__)
 
@@ -222,7 +222,6 @@ def _bootstrap_on_beat_init(**kwargs) -> None:
 def _propagate_request_id_on_publish(_sender=None, headers=None, **kwargs):
     """Copia il request_id dal ContextVar locale nei headers del task."""
     try:
-        from app.utils.logger import get_request_id
         req_id = get_request_id()
         if req_id and headers is not None:
             # Celery usa headers dict "raw" — convenzione: chiave custom
@@ -245,7 +244,6 @@ def _propagate_request_id_on_publish(_sender=None, headers=None, **kwargs):
 def _set_request_id_from_task(task_id=None, task=None, **kwargs):
     """Restaura il request_id nel worker dal task headers."""
     try:
-        from app.utils.logger import set_request_id
         headers = getattr(task.request, "headers", None) or {}
         req_id = headers.get("X-Request-ID") or ""
         # Fallback: se non c'e' un request_id propagato (task schedulato
@@ -270,7 +268,6 @@ def _clear_request_id_after_task(**kwargs):
     """Reset ContextVar dopo il task per evitare leak tra task
     consecutivi nello stesso worker child."""
     try:
-        from app.utils.logger import set_request_id
         set_request_id("")
     except Exception as e:
         # Breadcrumb best-effort: se il reset fallisce, il prossimo task

@@ -6,6 +6,8 @@ Centralizza il lookup/listing delle runs prodotte da `ScheduleArtifactStore`,
 
 from __future__ import annotations
 
+import re
+
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import List, Optional, Tuple
@@ -135,7 +137,6 @@ class ScheduleRunsCatalog:
             ValueError: run_token malformato o fuori da runs_root
             FileNotFoundError: run_dir non esiste o non e' directory
         """
-        import re
 
         if not run_token or not re.match(_RUN_TOKEN_PATTERN, run_token):
             raise ValueError(f"run_token malformato: {run_token!r}")

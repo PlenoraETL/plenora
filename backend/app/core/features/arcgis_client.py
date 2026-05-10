@@ -4,12 +4,15 @@ Client REST per ArcGIS Server / Enterprise / Online.
 Keeps provider-specific behavior behind a narrow integration boundary.
 """
 
+from urllib.parse import urlparse
+
 import json
 import time  # noqa: F401 (legacy monkeypatch compatibility for auth backoff)
 from typing import Dict, List, Mapping, Optional, Sequence, Tuple
 
 import requests
 
+from app.shared.connections.esri_system_fields import ESRI_OID_FIELDS_LITERAL
 from app.shared.connections.arcgis_provider_results import (
     DeleteFeatureServiceItemsResult,
     ItemDeleteResult,
@@ -148,7 +151,6 @@ class ArcGISClient(
             # BE-IMDF-001: il subset OID/GLOBALID e' canonizzato in
             # `app.shared.connections.esri_system_fields.ESRI_OID_FIELDS_LITERAL`
             # 5 varianti casing). Behavior bit-per-bit invariato
-            from app.shared.connections.esri_system_fields import ESRI_OID_FIELDS_LITERAL
             skip_cols = {geometry_column, "geometry"}
             if operation in ("add", "create_service"):
                 skip_cols.update(ESRI_OID_FIELDS_LITERAL)
@@ -371,7 +373,6 @@ class ArcGISClient(
         if not username:
             raise ValueError("Username richiesto per creare un servizio")
         
-        from urllib.parse import urlparse
         parsed = urlparse(conn.server_url)
         base_url = f"{parsed.scheme}://{parsed.netloc}/sharing/rest"
         
@@ -695,7 +696,7 @@ class ArcGISClient(
         Returns:
             {success, message}
         """
-        token = self.authenticate(conn)
+        self.authenticate(conn)
         referer_headers = {"Referer": conn.server_url}
 
         # Ricava admin URL dal layer URL
@@ -816,7 +817,6 @@ class ArcGISClient(
 
     def _portal_sharing_base_url(self, conn: ArcGISConnectionInfo) -> str:
         """Return the portal sharing REST base for an ArcGIS connection."""
-        from urllib.parse import urlparse
 
         parsed = urlparse(conn.server_url)
         return f"{parsed.scheme}://{parsed.netloc}/sharing/rest"

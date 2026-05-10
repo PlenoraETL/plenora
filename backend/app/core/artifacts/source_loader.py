@@ -17,6 +17,10 @@ from app.core.artifacts.types import (
     SourceLoadingError,
     SourceRef,
 )
+from app.core.artifacts.static_parameters import process_static_fields
+from app.core.auth.visibility import is_resource_visible
+from app.core.files.dataframe_io import load_dataframe_from_file
+from app.shared.resources.metadata import LoadedResource, ResourceMetadata
 
 logger = get_logger(__name__)
 
@@ -112,7 +116,6 @@ class SourceLoader:
         if not fields:
             return pd.DataFrame([{}])
 
-        from app.core.artifacts.static_parameters import process_static_fields
         processed = process_static_fields(list(fields))
         return pd.DataFrame([processed])
 
@@ -128,8 +131,6 @@ class SourceLoader:
         # Visibility check (owned/shared/superadmin) eseguito qui dentro
         # prima di qualsiasi accesso al blob: il contratto del loader e'
         # fail-closed senza delegare al caller
-        from app.core.auth.visibility import is_resource_visible
-
         try:
             visible = is_resource_visible(
                 "file_sources",
@@ -239,8 +240,6 @@ class SourceLoader:
         expected_group_id: str,
         is_superadmin: bool = False,
     ) -> Any:
-        from app.core.files.dataframe_io import load_dataframe_from_file
-
         try:
             materialized = self._resolver.materialize_latest(
                 project_ref,
@@ -304,8 +303,6 @@ class SourceLoader:
             ``ResourceMetadata`` built from ``columns_metadata`` or
             ``None``.
         """
-        from app.shared.resources.metadata import LoadedResource, ResourceMetadata
-
         data = self.load(
             ref,
             expected_group_id=expected_group_id,

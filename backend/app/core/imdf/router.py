@@ -4,6 +4,10 @@ router.py — Endpoint IMDF
 Endpoint
 """
 
+import json as _json
+import shutil
+import time as _t
+
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 from fastapi import APIRouter, Depends, HTTPException
@@ -18,6 +22,8 @@ from app.shared.error_envelope import raise_typed_http
 from app.shared.audit_action import audit_action
 from app.shared.resources.path_policy import validate_imdf_task_id
 from app.core.imdf import project_access
+from app.core.imdf import storage as _imdf_storage
+from app.core.imdf.validator import validate_publish
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -64,7 +70,6 @@ def _hydrate_local_cache(bundle_task_id: str) -> None:
     Silent pass su errori: il codice downstream gestisce i 404 come prima.
     """
     try:
-        from app.core.imdf import storage as _imdf_storage
         _imdf_storage.ensure_local_bundle(bundle_task_id)
     except FileNotFoundError:
         # Bundle davvero assente — downstream gestisce 404 via file checks
@@ -88,7 +93,6 @@ def _assert_bundle_group_access(bundle_dir: Path, current_user: CurrentUser) -> 
 
     Raises HTTPException 403/404 se accesso non consentito.
     """
-    import json as _json
     if current_user.role == "superadmin":
         return
 
@@ -316,7 +320,6 @@ def validate_publish_endpoint(
     if _val_bundle_dir.exists() and _val_bundle_dir.is_dir():
         _assert_bundle_group_access(_val_bundle_dir, current_user)
     try:
-        from app.core.imdf.validator import validate_publish
         report = validate_publish(
             bundle_task_id=request.bundle_task_id,
             connection_id=request.connection_id,
@@ -344,7 +347,6 @@ def get_bundle_metadata(
     il canvas store dopo un refresh (altrimenti i modali del nodo result
     restano vuoti perche' `lastTaskResult` e' in memoria e non persistente).
     """
-    import json as _json
     bundle_dir = _safe_bundle_dir(bundle_task_id)
     # R2 multi-host: hydrate cache locale da S3 se necessario
     _hydrate_local_cache(bundle_task_id)
@@ -446,8 +448,6 @@ def list_bundles(
         project_id: se valorizzato, filtra solo i bundle generati per quel
             progetto (letto da plenora_metadata.json dentro ogni bundle).
     """
-    import time as _t
-    import json as _json
     bundles_dir = settings.IMDF_BUNDLES_DIR
 
     # Precarico i progetti visibili all'utente (per filtrare i bundle di
@@ -480,7 +480,6 @@ def list_bundles(
             if entry.is_dir():
                 task_ids_set.add(entry.name)
     try:
-        from app.core.imdf import storage as _imdf_storage
         task_ids_set.update(_imdf_storage.list_task_ids())
     except Exception as e:
         logger.warning(f"list_bundles: S3 lookup fallito (mostro solo cache locale): {e}")
@@ -517,7 +516,6 @@ def list_bundles(
                     logger.warning(f"list_bundles: plenora_metadata.json illeggibile in {task_id}: {_e}")
             if not meta:
                 try:
-                    from app.core.imdf import storage as _imdf_storage
                     _meta_from_s3 = _imdf_storage.get_meta_only(task_id)
                     if _meta_from_s3:
                         meta = _meta_from_s3
@@ -639,7 +637,6 @@ def delete_bundle(
     - 404 se il bundle non esiste
     - Rimozione ricorsiva della directory
     """
-    import shutil
     bundle_dir = _safe_bundle_dir(bundle_task_id)
     # R2 multi-host: hydrate per check metadata group-access
     # se il bundle e' solo su S3 e non nella cache locale del nodo corrente
@@ -666,7 +663,6 @@ def delete_bundle(
     # locale). Se fallisce (config mancante in test / network error in prod
     # logghiamo ma non failiamo il 200 — il bundle locale e' gia' rimosso
     try:
-        from app.core.imdf import storage as _imdf_storage
         _imdf_storage.delete_bundle(bundle_task_id)
     except Exception as _se:
         logger.warning(

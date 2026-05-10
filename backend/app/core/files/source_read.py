@@ -8,10 +8,15 @@ explicitly so the storage artifact read boundary remains testable.
 
 from __future__ import annotations
 
+import gc
+
 from pathlib import Path
 from typing import Any, Callable, Dict, Optional, Tuple
 
 import pandas as pd
+
+from app.core.files.models import FileSourceLayersResponse, FileSourcePreview
+from app.shared.resources.file_cleanup import rmtree_safe
 
 
 AssertVisible = Callable[[str, str], None]
@@ -23,8 +28,6 @@ ListSheets = Callable[[Path], list[str]]
 
 
 def _cleanup_temp_path(tmp_path: Path, format_type: str, *, logger: Any) -> None:
-    from app.shared.resources.file_cleanup import rmtree_safe
-
     if format_type in ("shp", "gdb"):
         try:
             rmtree_safe(tmp_path.parent, logger=logger)
@@ -72,7 +75,6 @@ def load_dataframe(
         df, gdf = load_by_format(tmp_path, file_source.format, use_layer, use_sheet)
         return df, gdf
     finally:
-        import gc
 
         try:
             del df, gdf
@@ -114,8 +116,6 @@ def get_layers_info(
                 _cleanup_temp_path(tmp_path, cleanup_format, logger=logger)
 
     try:
-        from app.core.files.models import FileSourceLayersResponse
-
         return FileSourceLayersResponse(
             file_id=file_id,
             format=file_source.format,
@@ -166,8 +166,6 @@ def get_preview(
                 row[key] = bool(value)
 
     try:
-        from app.core.files.models import FileSourcePreview
-
         return FileSourcePreview(
             file_id=file_id,
             columns=file_source.columns,

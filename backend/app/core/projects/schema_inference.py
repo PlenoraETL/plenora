@@ -525,7 +525,6 @@ class ConnectionValidator:
         schemas = self.schema_service.infer_all_schemas(project_id)
         
         source_schema = schemas.get(source_node_id, [])
-        target_schema = schemas.get(target_node_id, [])
         
         if not source_schema:
             return False, f"Nodo sorgente {source_node_id} non ha schema"
@@ -535,7 +534,6 @@ class ConnectionValidator:
             # Validazione join
             if "left_on" in connection_config:
                 left_col = connection_config.get("left_on")
-                right_col = connection_config.get("right_on")
                 
                 source_cols = {c["name"] for c in source_schema}
                 

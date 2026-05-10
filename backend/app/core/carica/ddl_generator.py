@@ -4,6 +4,9 @@ Generatore DDL multi-database per il modulo CARICA.
 Keeps database loading behavior isolated from orchestration callers.
 """
 
+import re
+import re as _re
+
 from typing import Dict, List, Optional, Tuple
 
 from app.core.carica.models import ColumnMapping
@@ -342,10 +345,8 @@ class DDLGenerator:
 
         elif self.db_type == "oracle":
             # Oracle richiede: 1) INSERT metadata, 2) CREATE INDEX
-            import re as _re
             # Validazione identificatori Oracle (solo alfanumerico + underscore
             _ident = _re.compile(r'^[A-Za-z_][A-Za-z0-9_]*$')
-            schema_upper = schema.upper() if schema else "USER"
             table_upper = table.upper()
             geom_upper = geometry_column.upper()
             for _id in (table_upper, geom_upper):
@@ -392,8 +393,6 @@ WITH (
 
         if self.db_type == "oracle":
             # Oracle non supporta IF EXISTS prima di 23c
-            table_upper = table.upper()
-            schema_check = f"AND owner = '{schema.upper()}'" if schema else ""
             return f"""
 BEGIN
     EXECUTE IMMEDIATE 'DROP TABLE {full_name} CASCADE CONSTRAINTS';
@@ -623,7 +622,6 @@ END;"""
         """
         full_name = self.qualified_table_name(schema, table)
         active_cols = [c for c in columns if not c.skip]
-        col_names = [self.quote_column(c.dest_column) for c in active_cols]
         param_names = [c.dest_column for c in active_cols]
 
         # Colonne da aggiornare (tutte tranne match, o lista esplicita
@@ -884,7 +882,6 @@ WHEN NOT MATCHED THEN INSERT ({insert_cols}) VALUES ({src_cols});"""
         elif self.db_type in ("mysql", "mariadb"):
             # MySQL SHOW TABLES non supporta parametri bind
             # Validazione strict del nome schema (solo alfanumerici + underscore
-            import re
             if not re.match(r'^[a-zA-Z0-9_]+$', schema):
                 raise ValueError(f"Nome schema non valido per MySQL: {schema}")
             return (f"SHOW TABLES FROM `{schema}`", {})

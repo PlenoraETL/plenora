@@ -6,6 +6,8 @@ Responsabilita' singola: copiare i file output di un progetto in una
 
 from __future__ import annotations
 
+import shutil
+
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import List, Optional
@@ -102,7 +104,6 @@ class ScheduleArtifactStore:
         return project_output_dir / "runs" / schedule_short / timestamp
 
     def _copy_files(self, files: List[Path], dest_dir: Path) -> List[str]:
-        import shutil
 
         copied: List[str] = []
         for src_file in files:

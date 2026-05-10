@@ -1384,14 +1384,7 @@ def _trigger_carica_if_present(project_id: str, canvas: Dict, output_format: str
         TaskType,
         task_service,
     )
-    from app.core.projects.service import ProjectService
     from workers.tasks.carica_task import execute_carica_task
-    try:
-        metadata = ProjectService().get_project_metadata(project_id)
-        group_id = getattr(metadata, 'group_id', None) if metadata else None
-    except Exception as e:
-        logger.debug(f"group_id metadata lookup fallito: {type(e).__name__}: {e}")
-        group_id = None
 
     tasks = []
     for carica_node in carica_nodes:

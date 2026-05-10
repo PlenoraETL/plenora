@@ -15,6 +15,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Dict, List, Optional
 
+from app.utils.zip_safe import safe_extractall
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -126,7 +127,6 @@ def extract_imdf_zip(zip_path: str | os.PathLike, dest_dir: Optional[str | os.Pa
     tmp.mkdir(parents=True, exist_ok=True)
 
     try:
-        from app.utils.zip_safe import safe_extractall
         with zipfile.ZipFile(src) as z:
             members = z.namelist()
             safe_extractall(z, tmp)

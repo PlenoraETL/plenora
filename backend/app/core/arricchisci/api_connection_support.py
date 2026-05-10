@@ -6,6 +6,8 @@ Mixin SUPPORT — FIELD_INTROSPECTION + RESULT_BUILDING per
 
 from __future__ import annotations
 
+import shutil
+
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -13,7 +15,7 @@ from typing import Any, Dict, List, Optional
 import pandas as pd
 
 from app.utils.logger import get_logger
-from app.utils.result_store import save_result_blob
+from app.utils.result_store import save_pipeline_result_outcome, save_result_blob
 
 # Stesso logger name di `api_connector.py` (`__name__` valuta a
 # `"app.core.arricchisci.api_connector"`). Singleton stdlib per nome →
@@ -267,7 +269,6 @@ class ApiConnectionSupportMixin:
         # Cleanup dir tmp dell'executable (solo se il nome combacia con
         # il pattern `plenora_exec_*`: niente rimozioni di cartelle altrui
         try:
-            import shutil
             tmp_dir = src_path.parent
             if tmp_dir.name.startswith("plenora_exec_"):
                 shutil.rmtree(tmp_dir, ignore_errors=True)
@@ -296,8 +297,6 @@ class ApiConnectionSupportMixin:
         downstream usano `result_id` via `PipelineArtifact.artifact_kind
         == "blob"` e l'ArtifactResolver per materializzare dal DB.
         """
-        from app.utils.result_store import save_pipeline_result_outcome
-
         timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
         filename_stem = f"{output_name}_{timestamp}"
 

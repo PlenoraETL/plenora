@@ -4,6 +4,10 @@ PLENORA-ETL — Data Source Backend: SharePoint Online
 Usa la libreria Office365-REST-Python-Client (stessa usata in sharepoint_uploader.py)
 """
 
+from io import BytesIO
+from urllib.parse import urlparse
+import uuid
+
 import io
 from datetime import datetime
 from typing import Optional
@@ -379,8 +383,6 @@ class SharePointDataSource(DataSourceInterface):
 
     def _upload_chunked(self, folder, name: str, content: bytes) -> None:
         """Upload a chunk per file grandi (>10 MB). Usa le API SharePoint resumable upload."""
-        import uuid
-        from io import BytesIO
 
         total = len(content)
         chunk_size = self._CHUNK_SIZE
@@ -496,7 +498,6 @@ class SharePointDataSource(DataSourceInterface):
         site_url = extra.get("site_url", "").rstrip("/")
         # Ricava il path relativo del sito dall'URL
         # es. "https://tenant.sharepoint.com/sites/workarea/gis" → "/sites/workarea/gis"
-        from urllib.parse import urlparse
         site_path = urlparse(site_url).path.rstrip("/")
         library = self._library_name()
         rel = relative_path.strip("/")

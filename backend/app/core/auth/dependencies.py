@@ -19,6 +19,7 @@ from app.core.auth.roles import (
 )
 from app.shared.contracts.auth import CurrentUser
 from app.shared.jwt_token import decode_token
+from app.shared.token_blacklist import is_jti_blacklisted
 
 
 __all__ = [
@@ -47,7 +48,6 @@ def get_current_user(
     # query DB (piu' economico di un SELECT users
     # Backward compat: token pre-rollout jti non hanno la claim -> None
     # > `is_jti_blacklisted(None)` False -> passa, come prima
-    from app.shared.token_blacklist import is_jti_blacklisted
     if is_jti_blacklisted(payload.get("jti")):
         _disclosure.raise_disclosure(_disclosure.token_revoked())
     user = _users_dal.get_user(payload["sub"])

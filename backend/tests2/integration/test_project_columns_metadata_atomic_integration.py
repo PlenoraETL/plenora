@@ -31,9 +31,7 @@ def _get_canvas_raw(project_id: str) -> dict:
 
 def _create_test_project(group_id: str) -> str:
     from app.core.projects import db as project_db
-    from app.core.projects.service import ProjectService
 
-    svc = ProjectService()
     # Lazy: creiamo direttamente via DB per evitare dipendenze sull'API
     project_id = f"atomic-test-{int(time.time() * 1000)}"
     project_db.create_project_row(

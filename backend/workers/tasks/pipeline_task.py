@@ -2,6 +2,8 @@
 Task Celery per esecuzione pipeline (ESTRAI / MANIPOLA / ARRICCHISCI).
 """
 
+from pathlib import Path as _Path
+
 import time as _time
 import traceback as _traceback
 import uuid as _uuid
@@ -327,7 +329,6 @@ def execute_pipeline_task(
         except Exception as _ce:
             logger.warning(f"Intermediate: chiusura run fallita: {_ce}")
 
-        from pathlib import Path as _Path
         output_path = result.output_path
         output_file = _Path(output_path).name if output_path else None
         extra = {"output_file": output_file} if output_file else {}

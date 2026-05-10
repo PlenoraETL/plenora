@@ -1,5 +1,7 @@
 """Domain service for database connections."""
 
+import sqlite3
+
 import json
 import uuid
 from datetime import datetime, timezone
@@ -201,9 +203,6 @@ class ConnectionService:
         connection_db.delete_connection(connection_id)
         return True
 
-    def connection_exists(self, connection_id: str) -> bool:
-        return connection_db.get_connection_config(connection_id) is not None
-
     def test_connection(self, connection_id: str) -> ConnectionTestResult:
         connection = self.get_connection(connection_id)
         if not connection:
@@ -239,7 +238,7 @@ class ConnectionService:
                 c.close()
         except ImportError:
             return ConnectionTestResult(success=False, message="psycopg2 non installato: pip install psycopg2-binary")
-        except Exception as e:
+        except Exception:
             return ConnectionTestResult(success=False, message="Errore connessione PostgreSQL")
 
     def _test_mssql(self, conn):
@@ -404,7 +403,7 @@ class ConnectionService:
                 c.close()
         except ImportError:
             return ConnectionTestResult(success=False, message="pymysql non installato: pip install pymysql")
-        except Exception as e:
+        except Exception:
             return ConnectionTestResult(success=False, message="Errore connessione MySQL")
 
     def _test_oracle(self, conn):
@@ -422,12 +421,11 @@ class ConnectionService:
                 c.close()
         except ImportError:
             return ConnectionTestResult(success=False, message="oracledb non installato: pip install oracledb")
-        except Exception as e:
+        except Exception:
             return ConnectionTestResult(success=False, message="Errore connessione Oracle")
 
     def _test_sqlite(self, conn):
         try:
-            import sqlite3
             c = sqlite3.connect(conn.database, timeout=5)
             try:
                 cur = c.cursor()
@@ -437,5 +435,5 @@ class ConnectionService:
                 return ConnectionTestResult(success=True, message="SQLite riuscita", details={"version": version})
             finally:
                 c.close()
-        except Exception as e:
+        except Exception:
             return ConnectionTestResult(success=False, message="Errore connessione SQLite")

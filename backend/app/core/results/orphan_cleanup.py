@@ -4,6 +4,10 @@ from __future__ import annotations
 
 from typing import Literal, TypedDict
 
+from app.core.intermediate.cleanup import (
+    delete_runs_for_canvas,
+    list_canvas_ids_with_runs,
+)
 from app.core.projects.cleanup import list_existing_project_ids
 from app.core.results.cleanup import (
     delete_results_for_project,
@@ -57,8 +61,6 @@ def find_orphan_run_canvas_ids() -> list[str]:
     `canvas_id` corrisponde a `project_id` per convenzione PLENORA-ETL
     (vedi commento in `intermediate_schema.sql`).
     """
-    from app.core.intermediate.cleanup import list_canvas_ids_with_runs
-
     existing = _get_existing_project_ids()
     return [
         canvas_id
@@ -124,7 +126,6 @@ def cleanup_orphans(dry_run: bool = False) -> OrphanCleanupReport:
 
     # 2. Orphan runs in intermediate tables
     try:
-        from app.core.intermediate.cleanup import delete_runs_for_canvas
         orphan_canvas_ids = find_orphan_run_canvas_ids()
         report["orphan_runs"]["canvas_ids"] = orphan_canvas_ids
         if not dry_run:

@@ -10,6 +10,10 @@ from typing import Dict, List, Optional, Tuple
 import pandas as pd
 
 from app.core.carica.models import ColumnMapping
+from app.core.resources.column_types import (
+    normalize_canvas_type,
+    pandas_series_to_canvas_type,
+)
 
 
 # Nomi colonna che indicano una geometria (case-insensitive
@@ -272,7 +276,6 @@ class ColumnMapper:
         Delega a `app.core.resources.column_types.normalize_canvas_type` — fonte
         unica del vocabolario canonico (refactor C).
         """
-        from app.core.resources.column_types import normalize_canvas_type
         return normalize_canvas_type(canvas_type)
 
     def _infer_type_from_pandas(self, series: pd.Series) -> str:
@@ -282,7 +285,6 @@ class ColumnMapper:
         fonte unica della dispatch pandas->canonical (refactor C). Vedi il
         modulo per policy N11 e trade-off sui float-all-integer.
         """
-        from app.core.resources.column_types import pandas_series_to_canvas_type
         return pandas_series_to_canvas_type(series)
 
     # MATCHING E SANITIZZAZIONE

@@ -139,9 +139,6 @@ def get_counts(current_user: CurrentUser = Depends(_require_not_esecutore)) -> D
         group_filter = current_user.group_id
     else:
         # user/viewer: contiamo solo i loro
-        total = tdb.count_tickets(
-            status_in=list(svc.TICKET_STATUSES_ACTIVE),
-        )
         # filtro per created_by richiede list + filter: usiamo list_tickets_for
         mine_active = svc.list_tickets_for(
             actor=current_user,
@@ -294,7 +291,7 @@ async def upload_attachment_endpoint(
     # ignorabile da chiunque controlli il browser
     from app.utils.mime_validator import MimeMismatchError, validate_upload
     try:
-        ext = validate_upload(
+        validate_upload(
             content=content,
             filename=filename,
             allowed_extensions=set(_ALLOWED_EXTENSIONS.keys()),
@@ -434,7 +431,7 @@ def delete_attachment_endpoint(
 ) -> None:
     """Rimuove l'allegato dal ticket. Admin/superadmin sempre, uploader
     sui propri allegati."""
-    ticket = svc.check_access(tdb.get_ticket(ticket_id), current_user)
+    svc.check_access(tdb.get_ticket(ticket_id), current_user)
     attachment = tdb.get_attachment(attachment_id)
     if not attachment or attachment.ticket_id != ticket_id:
         raise HTTPException(404, "Allegato non trovato")

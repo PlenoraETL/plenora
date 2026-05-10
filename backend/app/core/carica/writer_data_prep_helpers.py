@@ -7,6 +7,8 @@ the dataframe/value transformations without depending on writer state.
 
 from __future__ import annotations
 
+import json as _json
+
 from typing import Any, Dict, List, Optional, Sequence
 
 import pandas as pd
@@ -94,7 +96,6 @@ def geometry_to_wkt(value: Any, logger) -> Optional[str]:
             return value.strip()
         if value.strip().startswith("{"):
             try:
-                import json as _json
                 from shapely.geometry import shape
 
                 return shape(_json.loads(value)).wkt

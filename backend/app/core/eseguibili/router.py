@@ -4,6 +4,9 @@ Router FastAPI per gli eseguibili.
 Endpoint:
 """
 
+from datetime import datetime, timezone
+import json as _json
+
 import os
 import tempfile
 from pathlib import Path
@@ -216,7 +219,6 @@ def _save_upload_meta(file_id: str, meta: dict) -> None:
     """Salva metadata dell'upload su disco (multi-worker safe)."""
     path = _upload_meta_path(file_id)
     path.parent.mkdir(parents=True, exist_ok=True)
-    import json as _json
     path.write_text(_json.dumps(meta), encoding="utf-8")
 
 
@@ -226,7 +228,6 @@ def _load_upload_meta(file_id: str) -> Optional[Mapping[str, object]]:
     if not path.exists():
         return None
     try:
-        import json as _json
         return _json.loads(path.read_text(encoding="utf-8"))
     except Exception as _meta_err:
         logger.warning(
@@ -259,8 +260,6 @@ def _task_owner_path(task_id: str) -> Path:
 
 
 def _save_task_owner(task_id: str, eseguibile_id: str, user_id: str) -> None:
-    from datetime import datetime, timezone
-    import json as _json
     path = _task_owner_path(task_id)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(_json.dumps({
@@ -276,7 +275,6 @@ def _load_task_owner(task_id: str) -> Optional[Mapping[str, object]]:
     if not path.exists():
         return None
     try:
-        import json as _json
         return _json.loads(path.read_text(encoding="utf-8"))
     except Exception as _owner_err:
         logger.warning(

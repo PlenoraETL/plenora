@@ -94,7 +94,6 @@ def test_buffer_metric_crs_overrides_utm(gdf_point_bologna):
         metric_crs="EPSG:3857", output_crs="metric",
     )
     buf_geom = result["buf"].iloc[0]
-    center = buf_geom.centroid
     # Raggio misurato in 3857
     bounds = buf_geom.bounds
     radius = (bounds[2] - bounds[0]) / 2

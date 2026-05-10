@@ -6,6 +6,12 @@ from collections.abc import Callable, Iterable
 from typing import Protocol
 
 from app.db.pg_connection import fetchall, transaction
+from app.core.resources.storage_reconciliation import (
+    mark_done,
+    mark_failed_attempt,
+    record_pending,
+)
+from app.shared.storage_compensation import compensating_delete
 from app.utils.logger import get_logger
 
 
@@ -72,10 +78,6 @@ def delete_result(result_id: str) -> bool:
                 storage_key_to_clean = storage_key
                 # record cleanup intent inside the same transaction as
                 # the DELETE. Commit advances both atomically.
-                from app.core.resources.storage_reconciliation import (
-                    record_pending,
-                )
-
                 reconciliation_ref = record_pending(
                     cur,
                     domain="result_blob",
@@ -89,8 +91,6 @@ def delete_result(result_id: str) -> bool:
             deleted = cur.rowcount > 0
 
     if deleted and storage_key_to_clean:
-        from app.shared.storage_compensation import compensating_delete
-
         outcome = compensating_delete(
             storage_key_to_clean,
             domain="result_blob",
@@ -99,11 +99,6 @@ def delete_result(result_id: str) -> bool:
             logger=logger,
         )
         if reconciliation_ref is not None:
-            from app.core.resources.storage_reconciliation import (
-                mark_done,
-                mark_failed_attempt,
-            )
-
             if outcome in ("ok", "skipped"):
                 mark_done(reconciliation_ref.id)
             else:
@@ -150,10 +145,6 @@ def delete_results_for_project(project_id: str) -> int:
     with transaction() as conn:
         with conn.cursor() as cur:
             if rows:
-                from app.core.resources.storage_reconciliation import (
-                    record_pending,
-                )
-
                 for r in rows:
                     ref = record_pending(
                         cur,
@@ -176,12 +167,6 @@ def delete_results_for_project(project_id: str) -> int:
             deleted_count = cur.rowcount
 
     if pending_cleanups:
-        from app.shared.storage_compensation import compensating_delete
-        from app.core.resources.storage_reconciliation import (
-            mark_done,
-            mark_failed_attempt,
-        )
-
         for storage_key, result_id, reconciliation_id in pending_cleanups:
             outcome = compensating_delete(
                 storage_key,

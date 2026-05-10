@@ -8,6 +8,9 @@ from __future__ import annotations
 
 from typing import Any, Optional, TypedDict
 
+from app.core.resources.storage_reconciliation import mark_done, record_upload_intent
+from app.infrastructure.storage.cloud_backends import get_runtime_object_storage
+from app.shared.resources.storage_dispatch import resolve_payload_target
 from app.shared.resources.storage_layout import FILE_SOURCES_PREFIX
 
 
@@ -42,7 +45,6 @@ def dispatch_blob_storage(
     DB row for an absent blob.
     """
     from app.config import settings
-    from app.shared.resources.storage_dispatch import resolve_payload_target
 
     size = len(raw_data)
     policy = (settings.get("STORAGE_POLICY", "hybrid") or "hybrid").strip().lower()
@@ -62,8 +64,6 @@ def dispatch_blob_storage(
 
     intent_id: Optional[str] = None
     try:
-        from app.core.resources.storage_reconciliation import record_upload_intent
-
         intent_id = record_upload_intent(
             domain="file_source",
             storage_key=storage_key,
@@ -76,8 +76,6 @@ def dispatch_blob_storage(
         )
 
     try:
-        from app.infrastructure.storage.cloud_backends import get_runtime_object_storage
-
         storage = get_runtime_object_storage()
         storage.upload_bytes(raw_data, storage_key)
     except Exception as e:
@@ -87,8 +85,6 @@ def dispatch_blob_storage(
         )
         if intent_id is not None:
             try:
-                from app.core.resources.storage_reconciliation import mark_done
-
                 mark_done(intent_id)
             except Exception:
                 pass

@@ -26,6 +26,11 @@ from app.utils.router_utils import require_service
 from app.shared import error_codes
 from app.shared.error_envelope import raise_typed_http
 from app.shared.audit_action import audit_action
+from app.shared.authz_helpers import assert_file_source_access, assert_project_visible
+from app.shared.crypto import CredentialUnavailableError
+from app.core.arricchisci.api_connector import api_connection_service
+from app.core.arricchisci.enrichment_service import EnrichmentExecutor
+from app.core.arricchisci.models import EnrichmentOptions
 from app.core.projects.exceptions import CanvasCorruptedError
 from app.core.artifacts import (
     LatestProjectArtifactRef,
@@ -33,6 +38,8 @@ from app.core.artifacts import (
     SourceLoadingError,
     SourceRef,
 )
+from app.core.auth.visibility import visible_resource_ids
+from app.core.security.outbound_url import validate_external_url
 
 
 def _load_request_data(request, current_user) -> dict:
@@ -139,7 +146,6 @@ class FetchSchemaRequest(BaseModel):
 
 def _validate_external_url(url: str) -> None:
     """Anti-SSRF: wrapper che converte ValueError in HTTPException."""
-    from app.core.security.outbound_url import validate_external_url
     try:
         validate_external_url(url)
     except ValueError as e:
@@ -226,11 +232,6 @@ async def validate_enrichment(
 ):
     """Valida input prima di eseguire l'enrichment."""
     try:
-        from app.core.arricchisci.api_connector import api_connection_service
-        from app.shared.authz_helpers import (
-            assert_project_visible, assert_file_source_access,
-        )
-
         api_conn = api_connection_service.get_api_connection(request.api_id)
         # Visibility check (read-only): owned + condivise via allowed_groups
         # Senza, un utente del tenant A potrebbe sondare api_id del tenant B
@@ -362,10 +363,6 @@ async def estimate_enrichment(
 ):
     """Stima tempo di esecuzione senza chiamate API."""
     try:
-        from app.core.arricchisci.api_connector import api_connection_service
-        from app.core.arricchisci.enrichment_service import EnrichmentExecutor
-        from app.core.arricchisci.models import EnrichmentOptions
-
         # include_token=True: codice backend interno, le credenziali non vanno mascherate
         # anche se estimate non chiama l'API, EnrichmentExecutor le legge nel costruttore
         api_config = api_connection_service.get_api_connection(request.api_id, include_token=True)
@@ -373,9 +370,6 @@ async def estimate_enrichment(
         assert_resource_visible(api_config, "api_connections", current_user, f"API {request.api_id}")
 
         # Authz sulle risorse che verranno caricate da _load_request_data
-        from app.shared.authz_helpers import (
-            assert_project_visible, assert_file_source_access,
-        )
         if request.project_id:
             assert_project_visible(request.project_id, current_user)
         if request.file_source_id:
@@ -428,8 +422,6 @@ def list_api_connections(category: str = None, connection_type: str = None, curr
     """Lista API connections visibili: owned dal gruppo + condivise via allowed_groups.
     Ogni record include `can_edit` calcolato per l'utente corrente."""
     try:
-        from app.core.auth.visibility import visible_resource_ids
-
         is_super = current_user.role == "superadmin"
         all_conns = _api_connection_service.list_api_connections(
             category=category, connection_type=connection_type, group_id=None,
@@ -704,7 +696,6 @@ def test_api_config(
         raise
     except Exception as e:
         # FIXME: #2 (2026-04-23): CredentialUnavailableError → 422 esplicito
-        from app.shared.crypto import CredentialUnavailableError
         if isinstance(e, CredentialUnavailableError):
             raise HTTPException(status_code=422, detail=str(e))
         logger.error(f"[CRASH] Errore test API config: {e}", exc_info=True)
@@ -732,7 +723,6 @@ def test_api_connection(
         raise
     except Exception as e:
         # FIXME: #2 (2026-04-23): CredentialUnavailableError → 422 esplicito
-        from app.shared.crypto import CredentialUnavailableError
         if isinstance(e, CredentialUnavailableError):
             raise HTTPException(status_code=422, detail=str(e))
         logger.error(f"[CRASH] Errore test API connection {api_id}: {e}", exc_info=True)

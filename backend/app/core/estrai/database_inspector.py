@@ -4,6 +4,8 @@ Ispettore di schema per database relazionali.
 Keeps this module's responsibility explicit and isolated from adjacent code.
 """
 
+import sqlite3
+
 from typing import Dict, List, Optional, TypedDict, Protocol, Callable, Any, Tuple
 from dataclasses import dataclass
 
@@ -179,7 +181,6 @@ class DefaultConnectionFactory:
 
     def _connetti_sqlite(self, conn: DatabaseConnection) -> Any:
         """Connessione SQLite — il campo database è il path al file."""
-        import sqlite3
         return sqlite3.connect(conn.database, timeout=10)
 
 

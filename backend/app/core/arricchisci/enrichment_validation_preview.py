@@ -149,9 +149,6 @@ class EnrichmentValidationPreviewMixin:
         elapsed_ms = (time.time() - start_time) * 1000
         avg_time_per_row = elapsed_ms / sample_size if sample_size > 0 else 0
 
-        # Stima tempo totale considerando deduplicazione e parallelismo
-        unique_in_sample = self._count_unique_combinations(sample_df)
-
         # Tempo stimato = chiamate uniche / (rate_limit * min(parallel_workers, chiamate
         estimated_api_calls = unique_combinations
         effective_parallelism = min(self.options.parallel_workers, estimated_api_calls)

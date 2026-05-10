@@ -230,20 +230,6 @@ class EnrichmentResult:
             "error_report_file": self.error_report_file,
         }
     
-    def add_error(self, row_index: int, message: str, 
-                  error_type: str = "", input_params: Dict = None,
-                  http_status: int = None, retry_count: int = 0):
-        """Helper per aggiungere errore."""
-        self.errors.append(RowError(
-            row_index=row_index,
-            status=RowStatus.ERROR,
-            error_message=message,
-            error_type=error_type,
-            input_params=input_params or {},
-            http_status=http_status,
-            retry_count=retry_count
-        ))
-        self.stats.errors += 1
 
 
 @dataclass

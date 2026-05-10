@@ -107,7 +107,6 @@ def test_query_features_with_tiny_limit_via_bearer():
     if not services:
         pytest.skip("Nessun Feature Service disponibile")
 
-    service_url = None
     layer_url = None
     for svc in services[:5]:  # prova max 5 servizi
         url = svc.get("url") or svc.get("serviceUrl")
@@ -116,7 +115,6 @@ def test_query_features_with_tiny_limit_via_bearer():
         try:
             layers = client.list_layers(conn, url)
             if layers:
-                service_url = url
                 layer_url = f"{url.rstrip('/')}/{layers[0]['id']}"
                 break
         except Exception:

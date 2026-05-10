@@ -708,41 +708,6 @@ class EstraiExecutor:
         result = re.sub(r'\s+FETCH\s+FIRST\s+\d+\s+ROWS\s+ONLY\s*$', '', result, flags=re.IGNORECASE)
         return result
 
-    def _costruisci_sql_preview(self, sql_no_limit: str, limit: int, db_type: str):
-        """
-        Costruisce la coppia (preview_sql, count_sql) con sintassi specifica per database.
-
-        Returns:
-            Tupla (preview_sql, count_sql)
-        """
-        if db_type in ('postgresql', 'postgres'):
-            preview_sql = f"{sql_no_limit} LIMIT {limit + 1}"
-            count_sql = f"SELECT COUNT(*) as cnt FROM ({sql_no_limit}) AS subquery"
-
-        elif db_type == 'mysql':
-            preview_sql = f"{sql_no_limit} LIMIT {limit + 1}"
-            count_sql = f"SELECT COUNT(*) as cnt FROM ({sql_no_limit}) AS subquery"
-
-        elif db_type == 'mssql':
-            preview_sql = re.sub(
-                r'^SELECT\s+', f'SELECT TOP {limit + 1} ',
-                sql_no_limit, count=1, flags=re.IGNORECASE
-            )
-            count_sql = f"SELECT COUNT(*) as cnt FROM ({sql_no_limit}) AS subquery"
-
-        elif db_type == 'oracle':
-            preview_sql = f"{sql_no_limit} FETCH FIRST {limit + 1} ROWS ONLY"
-            count_sql = f"SELECT COUNT(*) as cnt FROM ({sql_no_limit})"
-
-        elif db_type == 'sqlite':
-            preview_sql = f"{sql_no_limit} LIMIT {limit + 1}"
-            count_sql = f"SELECT COUNT(*) as cnt FROM ({sql_no_limit})"
-
-        else:
-            raise ValueError(f"Tipo database '{db_type}' non supportato per preview")
-
-        return preview_sql, count_sql
-
     def _costruisci_sql_preview_only(self, sql_no_limit: str, limit: int, db_type: str) -> str:
         """
         Costruisce solo la query preview (senza count separata).

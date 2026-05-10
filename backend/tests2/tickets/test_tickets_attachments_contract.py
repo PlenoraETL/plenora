@@ -136,7 +136,7 @@ def mock_file_service():
     fake_fs.delete_file_source.return_value = True
     with patch(
         "app.core.files.service.FileSourceService", return_value=fake_fs,
-    ) as cls:
+    ):
         yield fake_fs
 
 

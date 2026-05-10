@@ -7,6 +7,14 @@ singleton never implies operational behavior.
 
 from __future__ import annotations
 
+from urllib.parse import urlparse
+import shutil
+import socket
+import stat
+import subprocess
+import sys
+import time
+
 import logging
 import os
 from pathlib import Path
@@ -20,7 +28,6 @@ logger = logging.getLogger(__name__)
 
 def wsl_redis_fallback_allowed() -> bool:
     """Return True only for local Windows development."""
-    import sys
 
     env_name = os.getenv("ENVIRONMENT", os.getenv("ENV", "development")).lower()
     is_dev = env_name not in DOTENV_DISABLED_ENVS
@@ -30,8 +37,6 @@ def wsl_redis_fallback_allowed() -> bool:
 
 def ensure_redis(settings: Any, errors: list, warnings: list) -> None:
     """Verify Redis reachability and optionally start WSL Redis in dev Windows."""
-    import socket
-    from urllib.parse import urlparse
 
     broker_url = settings.get("CELERY_BROKER_URL", "redis://localhost:6379/0")
     parsed = urlparse(broker_url)
@@ -66,8 +71,6 @@ def ensure_redis_wsl_fallback(
     warnings: list,
 ) -> None:
     """Opportunistically start Redis through WSL for local Windows dev only."""
-    import subprocess
-    import time
 
     logger.info("Redis non raggiungibile - avvio via WSL (dev Windows)...")
     try:
@@ -104,8 +107,6 @@ def _validate_data_dir(settings: Any, errors: list) -> None:
 
 def _cleanup_temp_dir(settings: Any) -> None:
     try:
-        import shutil
-        import stat
 
         def _on_error(func, fpath, exc_info):
             try:
@@ -131,7 +132,6 @@ def _cleanup_temp_dir(settings: Any) -> None:
 
 def _cleanup_legacy_dirs(settings: Any) -> None:
     try:
-        import shutil
 
         for legacy_dir in ("files", "results", "File", "Results"):
             legacy_path = Path(settings.DATA_DIR) / legacy_dir

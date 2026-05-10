@@ -2,11 +2,15 @@
 
 from __future__ import annotations
 
+from urllib.parse import urlparse
+import random
+
 import time
 from typing import Any, Optional, Protocol
 
 import requests
 
+from app.infrastructure.http.session import get_shared_session
 from app.shared.connections.arcgis_connection import ArcGISConnectionInfo
 from app.utils.logger import get_logger
 
@@ -54,8 +58,6 @@ class DefaultHttpClient:
         timeout: int = 30,
         headers: dict = None,
     ) -> requests.Response:
-        from app.infrastructure.http.session import get_shared_session
-
         return get_shared_session().get(
             url, params=params, timeout=timeout, headers=headers
         )
@@ -67,8 +69,6 @@ class DefaultHttpClient:
         timeout: int = 30,
         headers: dict = None,
     ) -> requests.Response:
-        from app.infrastructure.http.session import get_shared_session
-
         return get_shared_session().post(
             url, data=data, timeout=timeout, headers=headers
         )
@@ -124,7 +124,6 @@ class ArcGISAuthMixin:
         refresh si attiva automaticamente prima di cedere la response
         finale al caller, cosi' il caller vede solo l'esito del retry.
         """
-        import random
 
         # Difesa in profondita': rimuovi token da params/data se qualche
         # caller ha ancora passato la vecchia forma. L'header e' l'unica
@@ -267,7 +266,6 @@ class ArcGISAuthMixin:
         POST /sharing/rest/oauth2/token
         grant_type=client_credentials&client_id=xxx&client_secret=xxx
         """
-        from urllib.parse import urlparse
 
         parsed = urlparse(conn.server_url)
         oauth_url = f"{parsed.scheme}://{parsed.netloc}/sharing/rest/oauth2/token"
@@ -413,14 +411,12 @@ class ArcGISAuthMixin:
         # Usa il dominio dell'organizzazione (es. orgname.maps.arcgis.com
         # invece di forzare www.arcgis.com).
         if "arcgis.com" in base.lower():
-            from urllib.parse import urlparse
 
             parsed = urlparse(base)
             # Usa il dominio originale per il token (supporta portali org-specifici).
             return f"{parsed.scheme}://{parsed.netloc}/sharing/rest/generateToken"
 
         if conn.server_type == "arcgis_online":
-            from urllib.parse import urlparse
 
             parsed = urlparse(base)
             if "arcgis.com" in parsed.netloc.lower():

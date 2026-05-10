@@ -505,7 +505,6 @@ class TaskService:
             # Cast esplicito a int: il worker può salvare float (es. 5.0 da processed/total*100
             progress = int(meta.get("progress", meta.get("percent", 0)))
             message = meta.get("message", "")
-            is_error = meta.get("is_error", False)
 
             # Se completato con successo, meta contiene il risultato
             if status == TaskStatus.SUCCESS:

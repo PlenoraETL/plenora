@@ -285,11 +285,6 @@ class OrchestratorService:
                 "message": "Errore nell'avvio del caricamento (consulta log)"
             }
 
-    def _find_carica_node(self, canvas: CanvasState) -> Optional[Any]:
-        """Trova il primo nodo CARICA collegato all'output (legacy)."""
-        nodes = self._find_all_carica_nodes(canvas)
-        return nodes[0] if nodes else None
-
     def _find_all_carica_nodes(self, canvas: CanvasState) -> list:
         """Trova tutti i nodi CARICA collegati al nodo Output."""
         result = []

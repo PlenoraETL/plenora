@@ -4,6 +4,8 @@ Sistema plugin per trasformazioni MANIPOLA.
 Keeps transformation behavior isolated from orchestration callers.
 """
 
+import json as _json
+
 import json
 import importlib
 from pathlib import Path
@@ -335,7 +337,6 @@ class PluginExecutor:
             elif param_type == 'aggregation_list':
                 # Aggregazioni: deve essere una lista di dict {column, function, ...}
                 if isinstance(value, str):
-                    import json as _json
                     try:
                         parsed = _json.loads(value)
                         return parsed if isinstance(parsed, list) else []
@@ -350,7 +351,6 @@ class PluginExecutor:
                 # Il mapping pivot arriva come dict {valore_sorgente: nome_output}
                 # Se il frontend lo serializza come stringa JSON, deserializziamo
                 if isinstance(value, str):
-                    import json as _json
                     try:
                         parsed = _json.loads(value)
                         return parsed if isinstance(parsed, dict) else {}
@@ -362,75 +362,6 @@ class PluginExecutor:
             logger.warning(f"Errore conversione valore '{value}' a {param_type}: {e}")
 
         return value
-
-    # VALIDAZIONE
-
-    def validate_config(self, transform_id: str, node_config: Dict) -> List[str]:
-        """
-        Valida la configurazione di una trasformazione prima dell'esecuzione.
-
-        Controlla:
-        - Parametri obbligatori presenti (rispettando depends_on)
-        - Valori numerici entro range min/max
-        - Valori select tra le opzioni ammesse
-
-        Args:
-            transform_id: ID trasformazione
-            node_config: configurazione da validare
-
-        Returns:
-            lista di errori (vuota se tutto valido)
-        """
-        errors = []
-        config = self.registry.get(transform_id)
-
-        if not config:
-            return [f"Trasformazione '{transform_id}' non trovata"]
-
-        parameters = config.get('parameters', [])
-
-        for param in parameters:
-            param_id = param['id']
-            value = node_config.get(param_id)
-
-            # Salta parametri con dipendenza condizionale non soddisfatta
-            if 'depends_on' in param:
-                dep = param['depends_on']
-                dep_value = node_config.get(dep['param'])
-                if dep_value != dep['value']:
-                    continue
-
-            # Verifica campi obbligatori
-            if param.get('required') and (value is None or value == ''):
-                errors.append(f"'{param.get('label', param_id)}' è obbligatorio")
-                continue
-
-            if value is None or value == '':
-                continue
-
-            # Validazione specifica per tipo
-            param_type = param.get('type')
-
-            if param_type == 'number':
-                try:
-                    num_val = float(value)
-                    if 'min' in param and num_val < param['min']:
-                        errors.append(f"'{param.get('label', param_id)}' deve essere >= {param['min']}")
-                    if 'max' in param and num_val > param['max']:
-                        errors.append(f"'{param.get('label', param_id)}' deve essere <= {param['max']}")
-                except (ValueError, TypeError):
-                    errors.append(f"'{param.get('label', param_id)}' deve essere un numero")
-
-            elif param_type == 'select':
-                options = param.get('options', [])
-                valid_values = [
-                    o['value'] if isinstance(o, dict) else o
-                    for o in options
-                ]
-                if value not in valid_values:
-                    errors.append(f"'{param.get('label', param_id)}' deve essere uno di: {valid_values}")
-
-        return errors
 
     def get_default_config(self, transform_id: str) -> Dict[str, Any]:
         """

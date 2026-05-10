@@ -13,6 +13,11 @@ from app.core.arricchisci.execution_context import (
     ArricchisciExecutionContext,
     build_execution_context,
 )
+from app.core.arricchisci.parallel import (
+    compute_parallel_groups,
+    execute_parallel_enrichers,
+    should_execute_node,
+)
 from app.shared.execution.canvas_graph import CanvasGraph
 from app.shared.execution.canvas_node import CanvasNode
 from app.shared.execution.graph import kahn_topological_order
@@ -233,11 +238,6 @@ def execute_canvas_enrichment(
         logger.info(f"Ordine esecuzione: {execution_order}")
 
         # ── Raggruppamento nodi per esecuzione parallela ──
-        from app.core.arricchisci.parallel import (
-            compute_parallel_groups,
-            execute_parallel_enrichers,
-            should_execute_node,
-        )
         groups = compute_parallel_groups(
             execution_order, nodes, edges,
             api_connections=api_connections,

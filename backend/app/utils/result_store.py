@@ -4,6 +4,8 @@ PLENORA-ETL — Result Store
 Helper per salvare i risultati pipeline nel DB.
 """
 
+import shutil
+
 import os
 import uuid
 from dataclasses import dataclass
@@ -286,7 +288,7 @@ def save_result_blob(project_id: str, path: Path, fmt: str,
                     storage_key=storage_key,
                     size_bytes=file_size,
                 )
-            except Exception as _db_err:
+            except Exception:
                 _cleanup_uploaded_result_blob(
                     storage,
                     storage_key,
@@ -441,7 +443,7 @@ def save_result_blob_from_bytes(
                     storage_key=storage_key,
                     size_bytes=size,
                 )
-            except Exception as _db_err:
+            except Exception:
                 _cleanup_uploaded_result_blob(
                     storage,
                     storage_key,
@@ -563,7 +565,6 @@ def save_pipeline_result_outcome(
         # puo' essere non scrivibile/cancellabile dal processo test.
         # Upload via save_result_blob_from_bytes (bytes-based, no
         # cleanup sovrapposto al nostro).
-        import shutil
         _settings = globals().get("settings")
         if _settings is None:
             from app.config import settings as _settings

@@ -270,10 +270,6 @@ class FeaturesService:
         safe_name = safe_name.replace(' ', '_')[:30]
         return f"arcgis_{safe_name}_{timestamp}_{short_uuid}"
     
-    def _get_connection_path(self, connection_id: str) -> Path:
-        """Ottieni path file connessione."""
-        return self._arcgis_dir / f"{connection_id}.json"
-    
     def create_connection(self, data: ArcGISCreate, group_id: str = "default",
                           created_by: Optional[str] = None) -> ArcGISConnection:
         """Crea nuova connessione ArcGIS nel DB (assegnata al group_id dato)."""
@@ -581,22 +577,6 @@ class FeaturesService:
             token_url=conn.token_url or "",
         )
     
-    @staticmethod
-    def _detect_server_type(server_url: str) -> str:
-        """
-        Auto-detect tipo server dall'URL.
-        
-        - *.arcgis.com → arcgis_online
-        - */portal/* → arcgis_enterprise
-        - altro → arcgis_server
-        """
-        url = (server_url or "").lower()
-        if "arcgis.com" in url:
-            return "arcgis_online"
-        if "/portal/" in url:
-            return "arcgis_enterprise"
-        return "arcgis_server"
-    
     def _get_layer_crs(self, connection_id: str, layer_url: str, out_sr: int = None) -> str:
         """
         Recupera il CRS del layer come stringa EPSG.
@@ -846,30 +826,6 @@ class FeaturesService:
             batch_size=batch_size,
             match_column=match_column,
             column_mappings=column_mappings,
-        )
-
-    def _resolve_objectids_for_update(
-        self,
-        conn_info: ArcGISConnectionInfo,
-        layer_url: str,
-        features: List[dict],
-        match_column: str,
-    ) -> List[dict]:
-        """
-        Risolve gli OBJECTID per update tramite colonna match.
-
-        1. Raccoglie i valori della colonna match dal DataFrame
-        2. Query il layer per ottenere OBJECTID + colonna match
-        3. Crea un mapping match_value → OBJECTID
-        4. Aggiunge OBJECTID a ogni feature
-
-        Features senza match vengono scartate (log warning).
-        """
-        return self._writer.resolve_objectids_for_update(
-            conn_info,
-            layer_url,
-            features,
-            match_column,
         )
 
     @staticmethod

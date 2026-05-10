@@ -155,7 +155,6 @@ def test_request_retries_once_on_body_error_498():
     }
 
     # Intercetta il 2o authenticate() per dare un token nuovo
-    original_auth = client.authenticate
     auth_calls = {"n": 0}
 
     def spy_auth(c):
@@ -170,6 +169,7 @@ def test_request_retries_once_on_body_error_498():
     response = client._request_with_token(
         "GET", f"{conn.server_url}/endpoint", conn,
     )
+    assert response.json() == {"success": True}
 
     assert mock_http.get.call_count == 2, (
         "498 deve triggere retry, atteso 2 chiamate HTTP"
