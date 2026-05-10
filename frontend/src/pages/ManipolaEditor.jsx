@@ -64,7 +64,14 @@ const nodeTypes = {
   transform: TransformNode, multi_join: MultiJoinNode,
   result: ResultNode, staticValues: StaticValuesNode,
   carica: CaricanNode, carica_arcgis: CaricanArcGISNode, caricaArcgis: CaricanArcGISNode, comment: AnnotationNode,
-  datasource_node: DataSourceNode
+  // React Flow `nodeTypes` chiave deve combaciare con `node.type`. Il
+  // deserializer (`nodeFactories.createDataSourceNode`) e tutti gli altri
+  // pattern del FE — EstraiEditor, QueryPreview, useEdgeHandlers,
+  // graphUtils, validateEstraiCanvas — usano la chiave camelCase
+  // `datasourceNode`. Manteniamo `datasource_node` come alias per
+  // i nodi appena aggiunti via `handleAddDataSourceNode` (vedi sotto)
+  // finché quel path non viene allineato al deserializer.
+  datasourceNode: DataSourceNode, datasource_node: DataSourceNode,
 };
 
 const defaultEdgeOptions = {
