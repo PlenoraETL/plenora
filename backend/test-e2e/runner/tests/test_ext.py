@@ -350,76 +350,106 @@ def test_ext_028_estrai_ftp_csv(
     auth_headers: dict[str, str],
     ftp_datasource_id: str,
 ) -> None:
-    """EXT-028 — Download di `csv/customers_basic.csv` via FTP e parse.
+    """EXT-028 — Estrai `csv/customers_basic.csv` via FTP nel canvas.
 
     Catalog `ext.yaml`: dataset `ftp://tester@ftp:21/fixtures/csv/
     customers_basic.csv`, assertion `download + parse csv`. Il file
     contiene 12 customer (header escluso).
 
-    Plenora **non** esegue file remoti FTP/SFTP nel flow ESTRAI:
-    `core/estrai/executor.py` richiede `default_connection_id` e
-    accetta solo source database/ArcGIS. Il modulo MANIPOLA carica
-    `file_source` (file gestiti localmente) e `project_source` ma
-    non `datasource_node` come source — `manipola/source_loading.py`
-    riconosce solo `n.type == "file_source"`. Il path documentato
-    per FTP e' usare gli endpoint `GET /datasources/{id}/files`
-    (list) e `GET /datasources/{id}/files/download` (raw bytes),
-    poi materializzare in un FileSource via upload o consumarli
-    inline. Il commento di `download_file` lo conferma: "Il
-    parsing (CSV, GeoJSON, ecc.) e' responsabilita' di MANIPOLA".
-
-    Per lo smoke catalog EXT-028 verifichiamo i tre step
-    contrattuali del path FTP supportato:
-      1. `POST /datasources/{id}/test` → success
-      2. `GET /datasources/{id}/files?path=csv` → fixture presente
-      3. `GET /datasources/{id}/files/download` → bytes parsabili
-         come CSV con 12 righe dati (header escluso).
+    Modulo MANIPOLA con un canvas `datasource_node(mode=source) ->
+    result`. Il loader `manipola/datasource_node_loading.py`
+    materializza il file remoto in un tempfile e lo parsa via
+    `load_dataframe_from_file`. Visibility owned-by-group + share
+    via `datasource_shares` (mirror della policy HTTP).
 
     Profilo `files` richiesto — `ftp_datasource_id` skipa se assente.
     """
-    # 1) test connessione
-    r_test = http_client.post(
-        f"{API_PREFIX}/datasources/{ftp_datasource_id}/test",
-        headers=auth_headers,
+    proj_payload = {
+        "name": f"e2e-ext028-{uuid.uuid4().hex[:6]}",
+        "description": "EXT-028: estrai FTP CSV",
+        "project_type": "manipola",
+    }
+    r_proj = http_client.post(
+        f"{API_PREFIX}/projects", json=proj_payload, headers=auth_headers,
     )
-    assert r_test.status_code == 200, (
-        f"FTP test: {r_test.status_code} — {r_test.text[:200]}"
+    assert r_proj.status_code in (200, 201), (
+        f"POST project: {r_proj.status_code} — {r_proj.text[:200]}"
     )
-    test_body = r_test.json()
-    # DataSourceTestResult { success: bool, message: str, details? }
-    assert test_body.get("success") is True, (
-        f"FTP test fallito: {test_body}"
-    )
+    pj = r_proj.json()
+    project_id = (pj.get("metadata") or {}).get("id") or pj.get("id")
+    assert project_id, f"project response senza id: {pj}"
 
-    # 2) list csv/ → fixture presente
-    r_list = http_client.get(
-        f"{API_PREFIX}/datasources/{ftp_datasource_id}/files",
-        params={"path": "csv"}, headers=auth_headers,
-    )
-    assert r_list.status_code == 200, (
-        f"list_files: {r_list.status_code} — {r_list.text[:200]}"
-    )
-    files = r_list.json()
-    names = [f.get("name") for f in files]
-    assert "customers_basic.csv" in names, (
-        f"customers_basic.csv non trovato in csv/: {names}"
-    )
+    try:
+        ds_id = f"ds_ftp_{uuid.uuid4().hex[:6]}"
+        res_id = f"res_{uuid.uuid4().hex[:6]}"
+        canvas = {
+            "nodes": [
+                {
+                    "id": ds_id,
+                    "type": "datasource_node",
+                    "position": {"x": 100, "y": 100},
+                    "datasource_id": ftp_datasource_id,
+                    "mode": "source",
+                    "file_mode": "fixed",
+                    "file_path": "csv/customers_basic.csv",
+                    "format": "csv",
+                },
+                {
+                    "id": res_id,
+                    "type": "result",
+                    "position": {"x": 400, "y": 100},
+                },
+            ],
+            "edges": [
+                {
+                    "id": f"e_ds_res_{uuid.uuid4().hex[:4]}",
+                    "source": ds_id,
+                    "target": res_id,
+                },
+            ],
+        }
+        r_put = http_client.put(
+            f"{API_PREFIX}/projects/{project_id}/canvas",
+            json=canvas, headers=auth_headers,
+        )
+        assert r_put.status_code == 200, (
+            f"PUT canvas: {r_put.status_code} — {r_put.text[:300]}"
+        )
 
-    # 3) download bytes + parse
-    r_dl = http_client.get(
-        f"{API_PREFIX}/datasources/{ftp_datasource_id}/files/download",
-        params={"path": "csv/customers_basic.csv"}, headers=auth_headers,
-    )
-    assert r_dl.status_code == 200, (
-        f"download: {r_dl.status_code} — {r_dl.text[:200]}"
-    )
-    text = r_dl.content.decode("utf-8")
-    lines = [l for l in text.splitlines() if l.strip()]
-    assert len(lines) == 13, (
-        f"EXT-028 atteso 13 righe (header + 12 dati), ottenuto "
-        f"{len(lines)}. Sample: {lines[:3]}"
-    )
-    header = lines[0].split(",")
-    assert {"id", "full_name", "email"}.issubset(set(header)), (
-        f"header inatteso: {header}"
-    )
+        r_exec = http_client.post(
+            f"{API_PREFIX}/projects/{project_id}/execute",
+            json={}, headers=auth_headers,
+        )
+        assert r_exec.status_code in (200, 201, 202), (
+            f"execute: {r_exec.status_code} — {r_exec.text[:300]}"
+        )
+        body = r_exec.json()
+        task_id = body.get("task_id") or body.get("id")
+        assert task_id, f"execute senza task_id: {body}"
+
+        final = _poll_task(http_client, auth_headers, str(task_id), timeout=90)
+        status = (final.get("status") or "").lower()
+        assert status in {"success", "completed"}, (
+            f"Task non success: status={status!r}, body={final}"
+        )
+
+        result = final.get("result") or {}
+        candidates = (
+            result.get("rows"),
+            result.get("row_count"),
+            result.get("rows_count"),
+            result.get("count"),
+            final.get("rows"),
+            final.get("row_count"),
+        )
+        rows_value = next(
+            (v for v in candidates if isinstance(v, int)), None,
+        )
+        assert rows_value == 12, (
+            f"EXT-028 atteso 12 righe, ottenuto rows_value={rows_value!r}. "
+            f"Final: {final}. Result: {result}"
+        )
+    finally:
+        http_client.delete(
+            f"{API_PREFIX}/projects/{project_id}", headers=auth_headers,
+        )

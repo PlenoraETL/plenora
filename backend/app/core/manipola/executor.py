@@ -31,6 +31,7 @@ from app.core.projects.columns_metadata import save_columns_metadata_with_retry
 from app.shared.resources.metadata import ResourceMetadata
 from .plugin_executor import get_executor
 from .source_loading import load_file_sources
+from .datasource_node_loading import load_datasource_nodes
 from .canvas_schema_runtime import (
     build_canvas_type_map,
     build_columns_with_types,
@@ -242,6 +243,7 @@ class ManipolaExecutor:
             for loader in [
                 lambda: self._carica_sorgenti_progetto(canvas, dataframes, force_recalculate, run_id=run_id, group_id=executing_group_id),
                 lambda: self._carica_sorgenti_file(canvas, dataframes, group_id=executing_group_id),
+                lambda: self._carica_sorgenti_datasource(canvas, dataframes, group_id=executing_group_id),
                 lambda: self._carica_sorgenti_statiche(canvas, dataframes, group_id=executing_group_id),
             ]:
                 err = loader()
@@ -477,6 +479,26 @@ class ManipolaExecutor:
         ``"_static_"`` non-autorizzante (TE-008).
         """
         return load_file_sources(
+            canvas,
+            dataframes,
+            group_id=group_id,
+            logger=logger,
+        )
+
+    def _carica_sorgenti_datasource(
+        self,
+        canvas: CanvasState,
+        dataframes: Dict[str, pd.DataFrame],
+        *, group_id: Optional[str] = None,
+    ) -> Optional[Dict[str, Any]]:
+        """Carica DataFrame dai nodi `datasource_node` in `mode=source`.
+
+        Body in `app.core.manipola.datasource_node_loading.load_datasource_nodes`.
+        Stesso contratto degli altri loader: ctx-strict su `group_id`,
+        nessun fallback singleton, mutazione in-place di `dataframes`,
+        ritorno `{success: False, message}` su errore canonical.
+        """
+        return load_datasource_nodes(
             canvas,
             dataframes,
             group_id=group_id,
