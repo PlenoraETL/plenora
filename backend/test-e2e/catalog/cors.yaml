@@ -1,0 +1,97 @@
+area: 'cors'
+description: 'CORS / security headers'
+tests:
+  - id: 'CORS-001'
+    status: 'META'
+    title: 'Response API include X-Content-Type-Options: nosniff'
+    granularity: 'smoke'
+    priority: 'meta'
+    tags:
+          - 'security'
+          - 'cross-cutting'
+    prereq:
+          tests:
+                  - 'PREP-002'
+    references:
+          - 'test-e2e/runner/cross_cutting.py'
+    assertion: |
+          ogni response API ha header `X-Content-Type-Options: nosniff`.
+          [META / cross-cutting-policy] Sostituito da
+          `assert_security_headers` (helper opt-in) chiamabile in qualunque
+          test che voglia il check strict. Non viene applicato in autouse
+          perche' molti endpoint JSON-only escludono headers browser-only.
+  - id: 'CORS-002'
+    status: 'META'
+    title: 'Response API include X-Frame-Options: DENY'
+    granularity: 'smoke'
+    priority: 'meta'
+    tags:
+          - 'security'
+          - 'cross-cutting'
+    prereq:
+          tests:
+                  - 'PREP-002'
+    references:
+          - 'test-e2e/runner/cross_cutting.py'
+    assertion: |
+          ogni response API ha header `X-Frame-Options: DENY`.
+          [META / cross-cutting-policy] Sostituito da
+          `assert_security_headers` (helper opt-in, accetta DENY o
+          SAMEORIGIN).
+  - id: 'CORS-003'
+    status: 'TODO'
+    title: 'CSP header presente su frontend assets'
+    granularity: 'smoke'
+    priority: 'optional'
+    tags:
+          - 'security'
+    prereq:
+          tests:
+                  - 'PREP-001'
+    steps: '`GET /` index html'
+    assertion: 'header `Content-Security-Policy` con direttive `default-src ''self''`, no `unsafe-inline` su script-src in prod'
+  - id: 'CORS-004'
+    status: 'TODO'
+    title: 'CORS preflight OPTIONS → solo origin whitelisted accettati'
+    granularity: 'smoke'
+    priority: 'optional'
+    tags:
+          - 'security'
+    prereq:
+          tests:
+                  - 'PREP-002'
+    steps: 'OPTIONS con `Origin: https://malicious.example.com`'
+    assertion: 'response NO `Access-Control-Allow-Origin` per origin non whitelisted; whitelist accettata con echo origin'
+  - id: 'CORS-005'
+    status: 'META'
+    title: 'API credenziali (cookie/JWT) NON loggate in error response'
+    granularity: 'smoke'
+    priority: 'meta'
+    tags:
+          - 'security'
+          - 'auth'
+          - 'cross-cutting'
+    prereq:
+          tests:
+                  - 'SEC-006'
+    references:
+          - 'app/shared/error_sanitizer.py'
+          - 'test-e2e/runner/cross_cutting.py'
+    steps: 'trigger 500 con request che include `Authorization: Bearer <jwt>`'
+    assertion: |
+          error response body + log non contengono il JWT, pattern
+          `Bearer <REDACTED>`.
+          [META / cross-cutting-policy] Coperto da autouse
+          `assert_no_pii_in_response`: il pattern `Bearer <token>` con valori
+          non redacted viene rilevato e fa fallire il test.
+  - id: 'CORS-006'
+    status: 'TODO'
+    title: 'Exception handler globali iniettano CORS solo se origin in whitelist'
+    granularity: 'integration'
+    priority: 'optional'
+    tags:
+          - 'security'
+    references:
+          - 'app/main.py'
+    steps: '1) `POST /connections` (trigger 500) con `Origin: https://app.plenora.example` (whitelisted) 2) ripeti con `Origin: https://malicious.example.com` (non whitelist)'
+    assertion: 'case 1: response 500 ha header `Access-Control-Allow-Origin: https://app.plenora.example`; case 2: header CORS assente (no echo); l''iniezione CORS avviene anche su path di errore (handlers globali) ma rispetta la whitelist; nessuna wildcard `*` mai presente'

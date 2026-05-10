@@ -1,0 +1,80 @@
+area: 'tenant'
+description: 'Multi-tenancy isolation'
+tests:
+  - id: 'TENANT-001'
+    status: 'TODO'
+    title: 'Gruppo A crea connection, gruppo B non la vede in list'
+    granularity: 'integration'
+    priority: 'nice'
+    tags:
+          - 'tenancy'
+    prereq:
+          tests:
+                  - 'PREP-003'
+    steps: '1) user A crea connection 2) user B `GET /connections`'
+    assertion: 'response B non contiene `connection_id` di A, total = solo count B'
+  - id: 'TENANT-002'
+    status: 'TODO'
+    title: 'Gruppo A non può GET/PUT/DELETE risorsa di gruppo B → 403/404'
+    granularity: 'smoke'
+    priority: 'optional'
+    tags:
+          - 'tenancy'
+          - 'cleanup'
+    prereq:
+          tests:
+                  - 'TENANT-001'
+    steps: 'user A tenta `GET/PUT/DELETE /connections/{id_di_B}`'
+    assertion: '404 (tenant-blind: non rivela esistenza) o 403 documentato; risorsa B invariata'
+  - id: 'TENANT-003'
+    status: 'TODO'
+    title: 'Schema introspection di DB condiviso con permessi distinti per gruppo'
+    granularity: 'smoke'
+    priority: 'optional'
+    tags:
+          - 'tenancy'
+          - 'rbac'
+    prereq:
+          tests:
+                  - 'PREP-009'
+    steps: 'gruppo A vede schema `plenora`, gruppo B vede solo schema `plenora_b`'
+    assertion: 'list tables filtrato per ruolo DB del gruppo, no leak cross-schema'
+  - id: 'TENANT-004'
+    status: 'TODO'
+    title: 'Risultati di run di gruppo A non leggibili da gruppo B'
+    granularity: 'smoke'
+    priority: 'optional'
+    tags:
+          - 'tenancy'
+    prereq:
+          tests:
+                  - 'PREP-022'
+    steps: 'user B `GET /results/{result_id_A}`'
+    assertion: '404, `audit_log` registra tentativo con `actor=B, resource=result_A, action=denied`'
+  - id: 'TENANT-005'
+    status: 'TODO'
+    title: 'Cleanup gruppo A non tocca dati gruppo B'
+    granularity: 'integration'
+    priority: 'optional'
+    tags:
+          - 'tenancy'
+          - 'cleanup'
+    prereq:
+          tests:
+                  - 'PREP-023'
+                  - 'TENANT-001'
+    steps: '1) popola entrambi i gruppi 2) `DELETE /groups/{A}`'
+    assertion: 'gruppo B count entità invariato per tutte le 14 tabelle child'
+  - id: 'TENANT-006'
+    status: 'TODO'
+    title: 'Quota disco per gruppo: superamento → 413'
+    granularity: 'smoke'
+    priority: 'optional'
+    tags:
+          - 'tenancy'
+          - 'limits'
+    prereq:
+          tests:
+                  - 'PREP-003'
+    steps: 'gruppo A con `quota_bytes=10MB`; tentativo upload file 20MB'
+    assertion: '413 `error_code=group_quota_exceeded`, file non scritto'

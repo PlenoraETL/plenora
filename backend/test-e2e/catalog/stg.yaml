@@ -1,0 +1,22 @@
+area: 'stg'
+description: 'Storage reconciler'
+tests:
+  - id: 'STG-001'
+    status: 'TODO'
+    title: 'Reconcile object storage vs DB lifecycle'
+    granularity: 'integration'
+    priority: 'nice'
+    tags:
+          - 'reconciler'
+    references:
+          - 'app/config.py:280-328'
+    steps: '1) crea result con object su MinIO 2) elimina record DB 3) trigger reconcile'
+    assertion: 'object orfano rimosso da MinIO'
+  - id: 'STG-002'
+    status: 'TODO'
+    title: 'Reconcile retry su transient error'
+    granularity: 'smoke'
+    priority: 'nice'
+    tags:
+          - 'reconciler'
+    assertion: 'retry policy applicata, no reconcile-storm'

@@ -1,0 +1,70 @@
+area: 'recon'
+description: 'Storage reconciler beat'
+tests:
+  - id: 'RECON-001'
+    status: 'TODO'
+    title: 'Gate 15min: lock acquisito, secondo skipped'
+    granularity: 'integration'
+    priority: 'nice'
+    tags:
+          - 'reconciler'
+    references:
+          - 'workers/beat_scheduler.py:1136-1444'
+    steps: '1) trigger reconcile beat 2) trigger secondo entro 15 min'
+    assertion: 'prima esecuzione acquisisce lock con TTL 15 min e procede; seconda log `reconcile_skipped lock_held`; nessuna doppia scansione'
+  - id: 'RECON-002'
+    status: 'TODO'
+    title: 'Operation `delete`: object orfano rimosso'
+    granularity: 'integration'
+    priority: 'nice'
+    tags:
+          - 'reconciler'
+          - 'cleanup'
+    references:
+          - 'workers/beat_scheduler.py:1136-1444'
+    steps: '1) crea object S3 senza record DB 2) trigger reconcile'
+    assertion: 'object identificato come orfano; eseguito DELETE; row in `storage_reconcile_log` con `operation=delete, state=succeeded`'
+  - id: 'RECON-003'
+    status: 'TODO'
+    title: 'Operation `upload_intent` (W2): grace period rispettato'
+    granularity: 'integration'
+    priority: 'nice'
+    tags:
+          - 'reconciler'
+    references:
+          - 'workers/beat_scheduler.py:1136-1444'
+    steps: '1) record DB con `upload_intent_at = now() - 5 min` (grace 30 min default) 2) trigger reconcile'
+    assertion: 'record NON marcato lost; reconciler skippa con `state=pending_grace`; dopo 31 min → marcato `lost` se ancora orfano'
+  - id: 'RECON-004'
+    status: 'TODO'
+    title: 'Max attempts → state `lost`'
+    granularity: 'integration'
+    priority: 'nice'
+    tags:
+          - 'reconciler'
+    references:
+          - 'workers/beat_scheduler.py:1136-1444'
+    steps: '1) record con `attempts=MAX-1` 2) trigger reconcile con object effettivamente assente'
+    assertion: 'attempts incrementato a MAX; state transizionato a `lost`; row `storage_reconcile_log` con `operation=mark_lost, state=succeeded, attempts=MAX`; future scansioni skippano (terminale)'
+  - id: 'RECON-005'
+    status: 'TODO'
+    title: 'Prune terminali > 30 giorni'
+    granularity: 'integration'
+    priority: 'nice'
+    tags:
+          - 'reconciler'
+    references:
+          - 'workers/beat_scheduler.py:1136-1444'
+    steps: '1) row `state=lost` o `state=succeeded` con `terminal_at = now() - 31 days` 2) trigger reconcile'
+    assertion: 'row rimossa da `storage_reconcile_log`; row `terminal_at = -29 days` preservata; log `prune_terminals removed=N retention_days=30`'
+  - id: 'RECON-006'
+    status: 'TODO'
+    title: 'Summary breakdown per (state, domain) in response'
+    granularity: 'smoke'
+    priority: 'nice'
+    tags:
+          - 'reconciler'
+    references:
+          - 'workers/beat_scheduler.py:1136-1444'
+    steps: 'trigger reconcile via API admin'
+    assertion: 'response 200 con `{summary: {by_state_domain: {(succeeded, results): N, (failed, intermediate): M, (lost, backups): K, ...}, total: ...}}`; ogni domain (results, intermediate, backups, log_archive, eseguibili, imdf) presente'

@@ -1,0 +1,76 @@
+area: 'flow'
+description: 'Cross-feature flow (e2e completi)'
+tests:
+  - id: 'FLOW-001'
+    status: 'TODO'
+    title: 'Schedule cron → run → estrai postgres → arricchisci REST OAuth2 → carica MySQL → notifica → audit'
+    granularity: 'scenario'
+    priority: 'must'
+    tags:
+          - 'scenario'
+          - 'postgres'
+          - 'mysql'
+          - 'oauth2'
+          - 'rest'
+          - 'scheduler'
+          - 'audit'
+    prereq:
+          tests:
+                  - 'SCH-001'
+                  - 'EXT-001'
+                  - 'ENR-001'
+                  - 'LOAD-002'
+                  - 'AUDIT-001'
+    assertion: 'in ordine: log_runs status=success, audit_log entry, target MySQL count match, notification_sent=true; result_id accessible via `GET /results/{id}`'
+  - id: 'FLOW-002'
+    status: 'TODO'
+    title: 'Flow recovery: REST esterno fail al 3° tentativo → retry → success al 4°'
+    granularity: 'scenario'
+    priority: 'optional'
+    tags:
+          - 'scenario'
+          - 'rest'
+    prereq:
+          tests:
+                  - 'ENR-002'
+                  - 'RES-002'
+    dataset: 'fake-rest endpoint con failure-counter (fail 3× then success)'
+    assertion: '4 chiamate loggate, run completed; result corretto; audit retry annotated'
+  - id: 'FLOW-003'
+    status: 'TODO'
+    title: 'Flow batch: 100 canvas schedulati nello stesso minuto → tutti completati senza throttling reciproco'
+    granularity: 'scenario'
+    priority: 'optional'
+    tags:
+          - 'scenario'
+    prereq:
+          tests:
+                  - 'SCH-001'
+    assertion: '100 run inseriti entro 60s di tick; completion p95 < 5min; no run con `error_code=worker_pool_full`'
+  - id: 'FLOW-004'
+    status: 'TODO'
+    title: 'Flow cancel: utente cancella run a metà → cleanup completo, no orphan'
+    granularity: 'scenario'
+    priority: 'optional'
+    tags:
+          - 'scenario'
+          - 'cleanup'
+    prereq:
+          tests:
+                  - 'PREP-021'
+    steps: '1) start run lungo 2) `POST /runs/{id}/cancel`'
+    assertion: 'run `status=cancelled`; intermediate snapshots eliminati; lock rilasciato; nessuna riga parziale su target'
+  - id: 'FLOW-005'
+    status: 'TODO'
+    title: 'Flow nested: canvas A → intermediate → canvas B legge intermediate di A → output combinato'
+    granularity: 'scenario'
+    priority: 'optional'
+    tags:
+          - 'scenario'
+          - 'cache'
+    prereq:
+          tests:
+                  - 'PREP-020'
+    references:
+          - 'app/core/intermediate/'
+    assertion: 'canvas B legge da `intermediate_runs` riferimento di A; output combinato matcha expected; entrambi run `success` linkati via `parent_run_id`'

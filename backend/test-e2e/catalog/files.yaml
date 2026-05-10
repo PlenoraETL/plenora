@@ -1,0 +1,25 @@
+area: 'files'
+description: 'File preview / multi-layer upload'
+tests:
+  - id: 'FILE-MULTI-001'
+    status: 'TODO'
+    title: 'upload-multi-layer GPKG/GDB/SHP-zip rejects per layer'
+    granularity: 'smoke'
+    priority: 'nice'
+    tags:
+          - 'files'
+    references:
+          - 'app/core/files/router.py'
+    steps: 'upload bundle multi-layer (GPKG con 3 layer, dei quali 1 layer ha geometry corrupt); analoga per GDB e SHP-zip'
+    assertion: '207 con `{layers: [{name, status: "ok", row_count}, {name, status: "rejected", reason: "invalid_geometry"}, ...]}`; layer validi accettati e processati; layer rejected logged con reason precisa; bundle non rifiutato in toto (per-layer granularity)'
+  - id: 'FILE-PREV-001'
+    status: 'TODO'
+    title: 'preview-temp passthrough_extensions ritorna preview vuota (non 400)'
+    granularity: 'smoke'
+    priority: 'nice'
+    tags:
+          - 'files'
+    references:
+          - 'app/core/files/router.py'
+    steps: 'upload file con extension in `passthrough_extensions` (es. `.bin`, `.dat`); chiama `POST /files/preview-temp`'
+    assertion: '200 con `{preview: {rows: [], schema: [], passthrough: true}}`; **NON** 400 (passthrough = file non parsato ma comunque utilizzabile downstream); flag `passthrough=true` esplicito'

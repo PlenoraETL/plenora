@@ -1,0 +1,7 @@
+[
+  {"id": 1, "name": "Milano", "longitude": 9.19, "latitude": 45.4642},
+  {"id": 2, "name": "Bergamo", "longitude": 9.6773, "latitude": 45.6983},
+  {"id": 3, "name": "Brescia", "longitude": 10.22, "latitude": 45.5398},
+  {"id": 10, "name": "Milano Centro", "longitude": 9.1908, "latitude": 45.466},
+  {"id": 11, "name": "Mêntina", "longitude": 9.5, "latitude": 45.5}
+]

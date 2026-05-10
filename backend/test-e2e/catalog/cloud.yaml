@@ -1,0 +1,39 @@
+area: 'cloud'
+description: 'Cloud secrets / SSM *(richiede LocalStack)*'
+tests:
+  - id: 'CLOUD-001'
+    status: 'TODO'
+    title: 'Get secrets from SSM (LocalStack)'
+    granularity: 'smoke'
+    priority: 'nice'
+    tags:
+          - 'cloud-secrets'
+    references:
+          - 'app/infrastructure/storage/cloud_backends.py:171-198'
+    assertion: 'secret recuperato, decrittato'
+  - id: 'CLOUD-002'
+    status: 'TODO'
+    title: 'SSM credenziali expired (`AWS_CREDENTIALS_EXPIRED`)'
+    granularity: 'smoke'
+    priority: 'optional'
+    tags:
+          - 'cloud-secrets'
+    assertion: 'errore mappato correttamente'
+  - id: 'CLOUD-003'
+    status: 'TODO'
+    title: 'SSM CRT missing (`AWS_CRT_MISSING`)'
+    granularity: 'smoke'
+    priority: 'optional'
+    tags:
+          - 'cloud-secrets'
+    assertion: 'warning + fallback documentato'
+  - id: 'CLOUD-004'
+    status: 'TODO'
+    title: 'Bucket multipli: BACKUP_BUCKET ≠ LOG_ARCHIVE_BUCKET'
+    granularity: 'smoke'
+    priority: 'optional'
+    tags:
+          - 'cloud-secrets'
+    references:
+          - 'cloud_backends.py:929-939'
+    assertion: 'scritture su bucket dedicato, IAM-isolation rispettata'

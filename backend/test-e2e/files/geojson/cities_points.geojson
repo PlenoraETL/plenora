@@ -1,0 +1,158 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          9.19,
+          45.4642
+        ]
+      },
+      "properties": {
+        "id": 1,
+        "name": "Milano",
+        "region_id": 1,
+        "population": 1396000,
+        "founded_year": -222
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          9.6773,
+          45.6983
+        ]
+      },
+      "properties": {
+        "id": 2,
+        "name": "Bergamo",
+        "region_id": 1,
+        "population": 122000,
+        "founded_year": -49
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.22,
+          45.5398
+        ]
+      },
+      "properties": {
+        "id": 3,
+        "name": "Brescia",
+        "region_id": 1,
+        "population": 196000,
+        "founded_year": -27
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          12.4964,
+          41.9028
+        ]
+      },
+      "properties": {
+        "id": 4,
+        "name": "Roma",
+        "region_id": 2,
+        "population": 2873000,
+        "founded_year": -753
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          12.9038,
+          41.4676
+        ]
+      },
+      "properties": {
+        "id": 5,
+        "name": "Latina",
+        "region_id": 2,
+        "population": 127000,
+        "founded_year": 1932
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          13.35,
+          41.6403
+        ]
+      },
+      "properties": {
+        "id": 6,
+        "name": "Frosinone",
+        "region_id": 2,
+        "population": 46000,
+        "founded_year": null
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          14.2681,
+          40.8518
+        ]
+      },
+      "properties": {
+        "id": 7,
+        "name": "Napoli",
+        "region_id": 3,
+        "population": 914000,
+        "founded_year": -470
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          14.7681,
+          40.6824
+        ]
+      },
+      "properties": {
+        "id": 8,
+        "name": "Salerno",
+        "region_id": 3,
+        "population": 133000,
+        "founded_year": -197
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          14.3327,
+          41.0721
+        ]
+      },
+      "properties": {
+        "id": 9,
+        "name": "Caserta",
+        "region_id": 3,
+        "population": 74000,
+        "founded_year": 1750
+      }
+    }
+  ]
+}

@@ -1,0 +1,121 @@
+area: 'contract'
+description: 'Contract test (response shape validation, pre-Fase 1)'
+tests:
+  - id: 'CT-001'
+    status: 'TODO'
+    title: 'Login response shape'
+    granularity: 'smoke'
+    priority: 'nice'
+    tags:
+          - 'contract'
+          - 'auth'
+    prereq:
+          profile: 'core'
+    references:
+          - 'app/core/auth/models.py:22'
+    assertion: |
+          200 + body con keys {access_token, token_type, user_id, username,
+          group_id, role, expires_in}. access_token: str non vuoto.
+          token_type: "bearer". expires_in: int positivo. Le altre str
+          (user_id/username/group_id/role) sono str non vuote.
+  - id: 'CT-002'
+    status: 'TODO'
+    title: 'POST /api/connections shape (postgres)'
+    granularity: 'smoke'
+    priority: 'nice'
+    tags:
+          - 'contract'
+          - 'connections'
+          - 'postgres'
+    prereq:
+          profile: 'core'
+          tests:
+                  - 'CT-001'
+    references:
+          - 'app/core/connections/models.py'
+          - 'test-e2e/runner/builders/connection.py'
+    assertion: |
+          ConnectionBuilder.postgres() -> 200/201 + response con id riconoscibile
+          (id | connection_id). Idempotenza body: stessa POST con stesso name
+          ritorna 4xx (idealmente 409/422), MAI 5xx.
+  - id: 'CT-003'
+    status: 'TODO'
+    title: 'POST /api/connections/{id}/test response shape'
+    granularity: 'smoke'
+    priority: 'nice'
+    tags:
+          - 'contract'
+          - 'connections'
+    prereq:
+          profile: 'core'
+          tests:
+                  - 'CT-002'
+    references:
+          - 'app/core/connections/models.py'
+    assertion: |
+          200 con body shape {success: bool, message: str, details?: dict}.
+          Sia success: true che success: false sono response valide.
+          NB: il legacy {ok, latency_ms} è errato — il contratto reale è
+          success/message.
+  - id: 'CT-004'
+    status: 'TODO'
+    title: 'POST /api/projects shape'
+    granularity: 'smoke'
+    priority: 'nice'
+    tags:
+          - 'contract'
+          - 'projects'
+    prereq:
+          profile: 'core'
+          tests:
+                  - 'CT-002'
+    references:
+          - 'app/core/projects/router.py'
+          - 'test-e2e/runner/factories.py'
+    assertion: |
+          factories.project_estrai_payload() -> 200/201 con id riconoscibile
+          (id | project_id). Il payload NON include group_id (deriva da JWT).
+          DELETE /api/projects/{id} ritorna 200/204/202 (cleanup ok).
+  - id: 'CT-005'
+    status: 'TODO'
+    title: 'PUT /api/projects/{id}/canvas shape'
+    granularity: 'smoke'
+    priority: 'nice'
+    tags:
+          - 'contract'
+          - 'projects'
+          - 'canvas'
+    prereq:
+          profile: 'core'
+          tests:
+                  - 'CT-004'
+    references:
+          - 'app/core/projects/router.py'
+          - 'app/core/projects/canvas_models.py'
+          - 'test-e2e/runner/builders/canvas.py'
+    assertion: |
+          CanvasBuilder().with_estrai_sql(connection_id=<pg_id>, table=...).build()
+          -> PUT canvas 200/201/204. GET /api/projects/{id} successivo riflette
+          il canvas (presenza di nodes/edges top-level oppure di canvas /
+          canvas_state come sotto-oggetto).
+  - id: 'CT-006'
+    status: 'TODO'
+    title: 'POST /api/projects/{id}/execute shape + task polling'
+    granularity: 'smoke'
+    priority: 'nice'
+    tags:
+          - 'contract'
+          - 'execute'
+          - 'tasks'
+    prereq:
+          profile: 'core'
+          tests:
+                  - 'CT-005'
+    references:
+          - 'app/core/projects/router.py'
+          - 'app/core/tasks/router.py'
+    assertion: |
+          POST /api/projects/{id}/execute -> 200/201/202 con task_id (o id) nel
+          body. GET /api/tasks/{task_id} polled fino a status terminale (success
+          | failure | cancelled | error | completed | failed) entro 60s. Nessuna
+          asserzione su success/fail (è un contract test, non funzionale).

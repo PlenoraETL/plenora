@@ -1,0 +1,89 @@
+area: 'sch'
+description: 'Scheduler'
+tests:
+  - id: 'SCH-001'
+    status: 'TODO'
+    title: 'Cron schedule esegue canvas'
+    granularity: 'smoke'
+    priority: 'must'
+    tags:
+          - 'scheduler'
+    prereq:
+          profile: 'core'
+    assertion: 'run inserito in log_runs, status `success`'
+  - id: 'SCH-002'
+    status: 'TODO'
+    title: 'Manual trigger via API'
+    granularity: 'smoke'
+    priority: 'nice'
+    tags:
+          - 'scheduler'
+    prereq:
+          profile: 'core'
+    assertion: 'run on-demand parte, completa'
+  - id: 'SCH-003'
+    status: 'TODO'
+    title: 'Schedule disabilitato non parte'
+    granularity: 'smoke'
+    priority: 'nice'
+    tags:
+          - 'scheduler'
+    prereq:
+          profile: 'core'
+    assertion: 'nessun run inserito'
+  - id: 'SCH-004'
+    status: 'TODO'
+    title: 'Beat scheduler leader election (2 worker → 1 lock)'
+    granularity: 'smoke'
+    priority: 'nice'
+    tags:
+          - 'scheduler'
+          - 'celery'
+    references:
+          - 'workers/beat_scheduler.py'
+          - 'app/core/scheduler/scheduler_lock.py'
+    steps: '2 instanze beat in concorrenza'
+    assertion: 'solo una acquisisce il lock; l''altra attende'
+  - id: 'SCH-005'
+    status: 'TODO'
+    title: 'Cron expression invalida → 422'
+    granularity: 'smoke'
+    priority: 'nice'
+    tags:
+          - 'scheduler'
+    references:
+          - 'app/core/scheduler/router.py:158'
+    assertion: 'validation error con detail su croniter'
+  - id: 'SCH-006'
+    status: 'TODO'
+    title: 'Download per-schedule scoping (autorizzazione strict)'
+    granularity: 'integration'
+    priority: 'nice'
+    tags:
+          - 'scheduler'
+    references:
+          - 'app/core/scheduler/router.py'
+    steps: '1) schedule X di gruppo A produce result file 2) utente di gruppo B chiama `GET /schedules/{X}/download/{run_id}` 3) utente di gruppo A chiama lo stesso endpoint'
+    assertion: 'utente B → 404 (no leak esistenza); utente A → 200 con `Content-Disposition: attachment` e payload corretto; audit_log entry per accesso B `denied`'
+  - id: 'SCH-007'
+    status: 'TODO'
+    title: 'Run-now status flow (queued → running → success)'
+    granularity: 'integration'
+    priority: 'nice'
+    tags:
+          - 'scheduler'
+    references:
+          - 'app/core/scheduler/router.py'
+    steps: '1) `POST /schedules/{id}/run-now` 2) poll `GET /schedules/{id}/runs/latest` ogni 500ms'
+    assertion: 'prima risposta del poll ritorna `status=queued`; transition osservata a `running`; transition finale a `success` entro N secondi; ogni transition ha `updated_at` monotono crescente'
+  - id: 'SCH-008'
+    status: 'TODO'
+    title: 'Toggle schedule orphan → 400'
+    granularity: 'integration'
+    priority: 'nice'
+    tags:
+          - 'scheduler'
+    references:
+          - 'app/core/scheduler/router.py'
+    steps: '1) crea schedule 2) elimina canvas/project di riferimento via DB diretto (orphan state) 3) `PATCH /schedules/{id}/toggle` con `enabled=true`'
+    assertion: '400 con `error_code=schedule_orphan`; messaggio include `canvas_id` o `project_id` mancante; schedule `enabled` invariato'

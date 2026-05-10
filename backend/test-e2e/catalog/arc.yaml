@@ -1,0 +1,93 @@
+area: 'arc'
+description: 'ArcGIS'
+tests:
+  - id: 'ARC-001'
+    status: 'TODO'
+    title: 'generateToken (username/password)'
+    granularity: 'smoke'
+    priority: 'nice'
+    tags:
+          - 'arcgis'
+          - 'auth'
+          - 'password'
+    prereq:
+          profile: 'core'
+    dataset: '`fake-rest:8080/auth/arcgis/generateToken`'
+    assertion: 'token ottenuto, riusato'
+  - id: 'ARC-002'
+    status: 'TODO'
+    title: 'OAuth2 client_credentials per ArcGIS'
+    granularity: 'smoke'
+    priority: 'nice'
+    tags:
+          - 'arcgis'
+          - 'oauth2'
+    prereq:
+          profile: 'core'
+    dataset: '`fake-rest:8080/sharing/rest/oauth2/token`'
+    assertion: 'ARCGIS_OAUTH_TOKEN ottenuto'
+  - id: 'ARC-003'
+    status: 'TODO'
+    title: 'createService + applyEdits'
+    granularity: 'smoke'
+    priority: 'nice'
+    tags:
+          - 'arcgis'
+    prereq:
+          profile: 'core'
+    assertion: 'service creato, features added/updated/deleted'
+  - id: 'ARC-004'
+    status: 'TODO'
+    title: 'Query FeatureServer con returnCountOnly'
+    granularity: 'smoke'
+    priority: 'nice'
+    tags:
+          - 'arcgis'
+    prereq:
+          profile: 'core'
+    assertion: 'count = 5'
+  - id: 'ARC-005'
+    status: 'TODO'
+    title: 'Token invalido → 200 + body error (pattern ArcGIS)'
+    granularity: 'smoke'
+    priority: 'nice'
+    tags:
+          - 'arcgis'
+          - 'auth'
+    prereq:
+          profile: 'core'
+    assertion: 'plenora rileva error code 498 nel body, non lo confonde con 200 success'
+  - id: 'ARC-006'
+    status: 'TODO'
+    title: 'OAuth2 client_credentials ArcGIS (oauth2/token)'
+    granularity: 'smoke'
+    priority: 'nice'
+    tags:
+          - 'arcgis'
+          - 'oauth2'
+          - 'auth'
+    references:
+          - 'app/core/features/arcgis_auth.py:267,273'
+    dataset: '`fake-rest:8080/sharing/rest/oauth2/token`'
+    assertion: 'token ricevuto, riusato per richieste protette'
+  - id: 'ARC-007'
+    status: 'TODO'
+    title: 'createFolder / isServiceNameAvailable / findServices'
+    granularity: 'smoke'
+    priority: 'nice'
+    tags:
+          - 'arcgis'
+    references:
+          - 'app/core/imdf/arcgis/service_discovery.py:404,461,503'
+    assertion: 'workflow di discovery completo'
+  - id: 'ARC-008'
+    status: 'TODO'
+    title: 'IFC bundle in IMDF loader'
+    granularity: 'smoke'
+    priority: 'nice'
+    tags:
+          - 'arcgis'
+          - 'imdf'
+    references:
+          - 'app/core/imdf/loader.py:173-174'
+    assertion: '`.ifc` accettato e processato'

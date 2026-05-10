@@ -1,0 +1,102 @@
+area: 'idem'
+description: 'Idempotenza generale'
+tests:
+  - id: 'IDEM-001'
+    status: 'META'
+    title: 'POST /connections con Idempotency-Key duplicato → stesso connection_id'
+    granularity: 'smoke'
+    priority: 'meta'
+    tags:
+          - 'idempotency'
+          - 'cross-cutting'
+    prereq:
+          tests:
+                  - 'PREP-003'
+    references:
+          - 'test-e2e/runner/cross_cutting.py'
+    steps: '2× `POST /connections` con header `Idempotency-Key: idem-conn-001`'
+    assertion: |
+          entrambe 201 con stesso `connection_id`; in DB esiste 1 sola riga.
+          [META / cross-cutting-policy] Sostituito da `assert_idempotent_post`
+          chiamato da PREP-004 (e da qualunque altro test write su
+          /connections).
+  - id: 'IDEM-002'
+    status: 'META'
+    title: 'POST /api_connections con Idempotency-Key duplicato → stesso api_connection_id'
+    granularity: 'smoke'
+    priority: 'meta'
+    tags:
+          - 'idempotency'
+          - 'rest'
+          - 'cross-cutting'
+    prereq:
+          tests:
+                  - 'PREP-003'
+    references:
+          - 'test-e2e/runner/cross_cutting.py'
+    steps: '2× `POST /api_connections` con stessa Idempotency-Key'
+    assertion: |
+          stesso `api_connection_id`, 1 sola riga.
+          [META / cross-cutting-policy] Sostituito da `assert_idempotent_post`
+          chiamato da PREP-010..PREP-012 (api_connections).
+  - id: 'IDEM-003'
+    status: 'META'
+    title: 'POST /datasources con Idempotency-Key duplicato → stesso datasource_id'
+    granularity: 'smoke'
+    priority: 'meta'
+    tags:
+          - 'idempotency'
+          - 'cross-cutting'
+    prereq:
+          tests:
+                  - 'PREP-003'
+    references:
+          - 'test-e2e/runner/cross_cutting.py'
+    steps: '2× `POST /datasources` con stessa Idempotency-Key'
+    assertion: |
+          stesso `datasource_id`, 1 sola riga.
+          [META / cross-cutting-policy] Sostituito da `assert_idempotent_post`
+          chiamato da PREP-014/PREP-015 (datasources FTP/SFTP).
+  - id: 'IDEM-004'
+    status: 'META'
+    title: 'POST /canvases con Idempotency-Key duplicato → stesso canvas_id'
+    granularity: 'smoke'
+    priority: 'meta'
+    tags:
+          - 'idempotency'
+          - 'cross-cutting'
+    prereq:
+          tests:
+                  - 'PREP-018'
+    references:
+          - 'test-e2e/runner/cross_cutting.py'
+    steps: '2× `POST /projects/{id}/canvases` con stessa Idempotency-Key'
+    assertion: |
+          stesso `canvas_id`, 1 sola riga.
+          [META / cross-cutting-policy] Sostituito da `assert_idempotent_post`
+          chiamato da PREP-019 (canvas init).
+  - id: 'IDEM-005'
+    status: 'TODO'
+    title: 'DELETE su risorsa già cancellata → 204/404 documentato e consistente'
+    granularity: 'integration'
+    priority: 'must'
+    tags:
+          - 'idempotency'
+          - 'cleanup'
+    prereq:
+          tests:
+                  - 'PREP-019'
+    steps: '1) `DELETE /canvases/{id}` 2) `DELETE /canvases/{id}` di nuovo'
+    assertion: 'prima 204; seconda 404 (consistente, documentato in spec API); audit log entry solo per la prima'
+  - id: 'IDEM-006'
+    status: 'TODO'
+    title: 'PUT idempotente: chiamato 2× → stesso stato finale'
+    granularity: 'smoke'
+    priority: 'nice'
+    tags:
+          - 'idempotency'
+    prereq:
+          tests:
+                  - 'PREP-020'
+    steps: '2× `PUT /canvases/{id}` con identico body'
+    assertion: 'entrambe 200; canvas state identico; version incrementata massimo 1× (o documentazione esplicita del comportamento)'

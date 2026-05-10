@@ -1,0 +1,18 @@
+# Runtime deps per il runner E2E. Versioni allineate con il backend
+# plenora (vedi backend/requirements.txt) dove rilevante.
+
+pytest>=8.0
+pytest-timeout>=2.3
+
+httpx>=0.27               # client HTTP per API plenora + fake-rest
+sqlalchemy>=2.0           # query DB target nei test di carica
+psycopg2-binary>=2.9      # driver PostgreSQL
+pymysql>=1.1              # driver MySQL
+pymssql>=2.3              # driver SQL Server
+oracledb>=2.4             # driver Oracle (sostituisce cx_Oracle)
+redis>=5.0                # client Redis per i test scheduler/blacklist
+boto3>=1.34               # client S3/MinIO/SSM (LocalStack)
+azure-storage-blob>=12.20 # client Azurite
+paramiko>=3.4             # client SFTP
+pyarrow>=24.0             # lettura parquet fixtures
+pyyaml>=6.0               # config / canvas templates

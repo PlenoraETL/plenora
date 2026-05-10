@@ -1,0 +1,19 @@
+[
+  {"id": 1, "manager_id": null, "name": "Alice CEO", "role": "manager", "depth": 1},
+  {"id": 2, "manager_id": null, "name": "Bruno COO", "role": "manager", "depth": 1},
+  {"id": 13, "manager_id": null, "name": "Mario Boss-Lone", "role": "manager", "depth": 1},
+  {"id": 3, "manager_id": 1, "name": "Carla Senior Dev", "role": "senior", "depth": 2},
+  {"id": 4, "manager_id": 1, "name": "Diego Senior PM", "role": "senior", "depth": 2},
+  {"id": 5, "manager_id": 2, "name": "Eva Senior Sales", "role": "senior", "depth": 2},
+  {"id": 14, "manager_id": 2, "name": "Néstor López", "role": "senior", "depth": 2},
+  {"id": 16, "manager_id": 1, "name": "Null Salary Emp", "role": "senior", "depth": 2},
+  {"id": 17, "manager_id": 1, "name": "Null HireDate Emp", "role": "junior", "depth": 2},
+  {"id": 6, "manager_id": 3, "name": "Franco Junior Dev", "role": "junior", "depth": 3},
+  {"id": 7, "manager_id": 3, "name": "Greta Junior Dev", "role": "junior", "depth": 3},
+  {"id": 8, "manager_id": 4, "name": "Hans Junior PM", "role": "junior", "depth": 3},
+  {"id": 9, "manager_id": 5, "name": "Irene Junior Sales", "role": "junior", "depth": 3},
+  {"id": 10, "manager_id": 5, "name": "Jacopo Junior Sales", "role": "junior", "depth": 3},
+  {"id": 15, "manager_id": 14, "name": "O'Sullivan Tom", "role": "junior", "depth": 3},
+  {"id": 11, "manager_id": 6, "name": "Kira Helper", "role": "helper", "depth": 4},
+  {"id": 12, "manager_id": 11, "name": "Lia Intern", "role": "intern", "depth": 5}
+]

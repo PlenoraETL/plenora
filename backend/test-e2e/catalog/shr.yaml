@@ -1,0 +1,72 @@
+area: 'shr'
+description: 'Shares router'
+tests:
+  - id: 'SHR-001'
+    status: 'TODO'
+    title: 'Set shares (superadmin only)'
+    granularity: 'integration'
+    priority: 'nice'
+    tags:
+          - 'sharing'
+          - 'rbac'
+    references:
+          - 'app/core/auth/shares_router.py:83'
+    steps: '1) admin (non super) `PUT /shares/{resource_id}` con `{groups: [G1, G2]}` → 403 2) superadmin stessa chiamata'
+    assertion: 'admin → 403 con `error_code=insufficient_role`; superadmin → 200; risorsa accessibile da utenti di G1, G2'
+  - id: 'SHR-002'
+    status: 'TODO'
+    title: 'Add idempotente'
+    granularity: 'integration'
+    priority: 'nice'
+    tags:
+          - 'sharing'
+          - 'idempotency'
+    references:
+          - 'app/core/auth/shares_router.py:102'
+    steps: '1) superadmin `POST /shares/{resource_id}/add` con `{group: G1}` 2) ripeti stessa add'
+    assertion: 'prima 200 con `added=true`; seconda 200 con `added=false, already_present=true`; in DB esiste 1 sola entry; nessun errore 409'
+  - id: 'SHR-003'
+    status: 'TODO'
+    title: 'Remove specifico'
+    granularity: 'integration'
+    priority: 'nice'
+    tags:
+          - 'sharing'
+    references:
+          - 'app/core/auth/shares_router.py:124'
+    steps: '1) shares = [G1, G2, G3] 2) `POST /shares/{resource_id}/remove` con `{group: G2}`'
+    assertion: '200; shares finali = [G1, G3]; remove di group non presente → 200 con `removed=false`'
+  - id: 'SHR-004'
+    status: 'TODO'
+    title: '`["*"]` = global share semantics'
+    granularity: 'smoke'
+    priority: 'nice'
+    tags:
+          - 'sharing'
+    references:
+          - 'app/core/auth/shares_router.py:83'
+    steps: 'superadmin `PUT /shares/{resource_id}` con `{groups: ["*"]}`'
+    assertion: '200; risorsa accessibile da TUTTI i gruppi (incl. nuovi creati post-share); `GET /shares/{resource_id}` ritorna `{groups: ["*"]}`'
+  - id: 'SHR-005'
+    status: 'TODO'
+    title: '`[]` = rimozione totale'
+    granularity: 'integration'
+    priority: 'nice'
+    tags:
+          - 'sharing'
+    references:
+          - 'app/core/auth/shares_router.py:83'
+    steps: '1) shares = [G1, G2] 2) `PUT /shares/{resource_id}` con `{groups: []}`'
+    assertion: '200; tutti i gruppi rimossi; risorsa visibile solo dal group_owner; `GET /shares/{resource_id}` ritorna `{groups: []}`'
+  - id: 'SHR-006'
+    status: 'TODO'
+    title: 'Non-superadmin → 403'
+    granularity: 'smoke'
+    priority: 'nice'
+    tags:
+          - 'sharing'
+          - 'rbac'
+    references:
+          - 'app/core/auth/shares_router.py:83,102,124,145'
+    steps: 'utente role admin (non super) tenta tutti i 4 endpoint shares (PUT, add, remove, GET)'
+    assertion: 'PUT/add/remove → 403; GET potrebbe essere 200 (read-only documentato) o 403 (più strict); comportamento documentato e coerente'

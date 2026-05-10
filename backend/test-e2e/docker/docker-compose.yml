@@ -1,0 +1,286 @@
+# Plenora E2E — master compose.
+# Vedi README.md per profili e credenziali.
+
+name: plenora-e2e
+
+x-default-restart: &default-restart
+  restart: unless-stopped
+
+# La network `plenora-e2e` è external: condivisa con il compose dell'app
+# plenora (root `docker-compose.yml`). Va creata UNA volta prima del primo
+# `up`:
+#     docker network create plenora-e2e
+# Poi i 2 stack (app + test fixtures) la usano e si vedono via DNS interno.
+networks:
+  plenora-e2e:
+    external: true
+    name: plenora-e2e
+
+volumes:
+  postgres-data:
+  mysql-data:
+  sqlserver-data:
+  oracle-data:
+  minio-data:
+  azurite-data:
+  ftp-data:
+  sftp-data:
+  localstack-data:
+
+services:
+
+  # ── Core ────────────────────────────────────────────────────────────
+  postgres:
+    <<: *default-restart
+    image: postgis/postgis:17-3.5
+    container_name: plenora-e2e-postgres
+    profiles: ["core", "db", "full"]
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-plenora}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-plenora_test_pwd}
+      POSTGRES_DB: ${POSTGRES_DB:-plenora_test}
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./postgres/init:/docker-entrypoint-initdb.d:ro
+      - ../sql/postgres:/seed:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    networks: [plenora-e2e]
+
+  # NB: redis NON è qui. È fornito dal compose root dell'app plenora
+  # (`docker-compose.yml` a livello repo). L'app e i test usano lo stesso
+  # redis (broker Celery + cache + token blacklist + scheduler lock).
+
+  fake-rest:
+    <<: *default-restart
+    build:
+      context: ../fake-rest
+      dockerfile: Dockerfile
+    container_name: plenora-e2e-fake-rest
+    profiles: ["core", "full"]
+    ports:
+      - "8080:8080"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    networks: [plenora-e2e]
+
+  # ── DB cross-dialect ────────────────────────────────────────────────
+  mysql:
+    <<: *default-restart
+    image: mysql:8.4
+    container_name: plenora-e2e-mysql
+    profiles: ["db", "full"]
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-plenora_test_root}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-plenora_test}
+      MYSQL_USER: ${MYSQL_USER:-plenora}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-plenora_test_pwd}
+    ports:
+      - "3307:3306"
+    volumes:
+      - mysql-data:/var/lib/mysql
+      - ./mysql/init:/docker-entrypoint-initdb.d:ro
+      - ../sql/mysql:/seed:ro
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+      - --cte-max-recursion-depth=10000
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-p$$MYSQL_ROOT_PASSWORD"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+    networks: [plenora-e2e]
+
+  sqlserver:
+    <<: *default-restart
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    container_name: plenora-e2e-sqlserver
+    profiles: ["db", "full"]
+    environment:
+      ACCEPT_EULA: "Y"
+      MSSQL_SA_PASSWORD: ${MSSQL_SA_PASSWORD:-PlenoraTest!2026}
+      MSSQL_PID: Developer
+    ports:
+      - "1434:1433"
+    volumes:
+      - sqlserver-data:/var/opt/mssql
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$$MSSQL_SA_PASSWORD" -C -Q "SELECT 1" || /opt/mssql-tools/bin/sqlcmd -S localhost -U sa -P "$$MSSQL_SA_PASSWORD" -Q "SELECT 1"
+      interval: 10s
+      timeout: 5s
+      retries: 20
+      start_period: 30s
+    networks: [plenora-e2e]
+
+  sqlserver-init:
+    image: mcr.microsoft.com/mssql-tools18
+    container_name: plenora-e2e-sqlserver-init
+    profiles: ["db", "full"]
+    depends_on:
+      sqlserver:
+        condition: service_healthy
+    environment:
+      MSSQL_SA_PASSWORD: ${MSSQL_SA_PASSWORD:-PlenoraTest!2026}
+      MSSQL_DATABASE: ${MSSQL_DATABASE:-plenora_test}
+    volumes:
+      - ../sql/sqlserver:/seed:ro
+      - ./sqlserver/init.sh:/init.sh:ro
+    entrypoint: ["/bin/bash", "/init.sh"]
+    restart: "no"
+    networks: [plenora-e2e]
+
+  oracle:
+    <<: *default-restart
+    image: gvenzl/oracle-free:23-slim-faststart
+    container_name: plenora-e2e-oracle
+    profiles: ["db-heavy", "full"]
+    environment:
+      ORACLE_PASSWORD: ${ORACLE_PASSWORD:-plenora_test_pwd}
+      ORACLE_DATABASE: ${ORACLE_DATABASE:-plenora_test}
+      APP_USER: ${ORACLE_DATABASE:-plenora_test}
+      APP_USER_PASSWORD: ${ORACLE_PASSWORD:-plenora_test_pwd}
+    ports:
+      - "1522:1521"
+    volumes:
+      - oracle-data:/opt/oracle/oradata
+      - ../sql/oracle:/container-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD", "healthcheck.sh"]
+      interval: 30s
+      timeout: 10s
+      retries: 30
+      start_period: 120s
+    networks: [plenora-e2e]
+
+  # ── Cloud storage ──────────────────────────────────────────────────
+  minio:
+    <<: *default-restart
+    image: minio/minio:latest
+    container_name: plenora-e2e-minio
+    profiles: ["cloud", "full"]
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-plenora_minio}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-plenora_minio_pwd}
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio-data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:9000/minio/health/live"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks: [plenora-e2e]
+
+  minio-init:
+    image: minio/mc:latest
+    container_name: plenora-e2e-minio-init
+    profiles: ["cloud", "full"]
+    depends_on:
+      minio:
+        condition: service_healthy
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-plenora_minio}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-plenora_minio_pwd}
+      MINIO_DEFAULT_BUCKETS: ${MINIO_DEFAULT_BUCKETS:-plenora-test,plenora-artifacts}
+    volumes:
+      - ./minio/init.sh:/init.sh:ro
+      - ../files:/fixtures:ro
+    entrypoint: ["/bin/sh", "/init.sh"]
+    restart: "no"
+    networks: [plenora-e2e]
+
+  azurite:
+    <<: *default-restart
+    image: mcr.microsoft.com/azure-storage/azurite:latest
+    container_name: plenora-e2e-azurite
+    profiles: ["cloud", "full"]
+    command: azurite --blobHost 0.0.0.0 --queueHost 0.0.0.0 --tableHost 0.0.0.0 --location /data
+    ports:
+      - "10000:10000"
+      - "10001:10001"
+      - "10002:10002"
+    volumes:
+      - azurite-data:/data
+    healthcheck:
+      test: ["CMD", "nc", "-z", "localhost", "10000"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks: [plenora-e2e]
+
+  localstack:
+    image: localstack/localstack:latest
+    container_name: plenora-e2e-localstack
+    profiles: ["cloud", "full"]
+    environment:
+      SERVICES: ssm,s3,sts,iam
+      DEBUG: 0
+      PERSISTENCE: 0
+      AWS_DEFAULT_REGION: us-east-1
+    ports:
+      - "4566:4566"
+    volumes:
+      - localstack-data:/var/lib/localstack
+      - ./localstack/init:/etc/localstack/init/ready.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:4566/_localstack/health | grep '\"ssm\":[ ]*\"available\"'"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+    networks: [plenora-e2e]
+
+  # ── File transfer ──────────────────────────────────────────────────
+  ftp:
+    <<: *default-restart
+    image: delfer/alpine-ftp-server:latest
+    container_name: plenora-e2e-ftp
+    profiles: ["files", "full"]
+    environment:
+      USERS: "${FTP_USER_NAME:-tester}|${FTP_USER_PASS:-plenora_ftp_pwd}|/home/${FTP_USER_NAME:-tester}"
+      ADDRESS: ftp
+    ports:
+      - "21:21"
+      - "21000-21010:21000-21010"
+    volumes:
+      - ftp-data:/home
+      - ../files:/home/tester/fixtures:ro
+    healthcheck:
+      test: ["CMD-SHELL", "netstat -ln | grep ':21 ' || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    networks: [plenora-e2e]
+
+  sftp:
+    <<: *default-restart
+    image: atmoz/sftp:alpine
+    container_name: plenora-e2e-sftp
+    profiles: ["files", "full"]
+    command: "${SFTP_USER:-tester}:${SFTP_PASS:-plenora_sftp_pwd}:1001"
+    ports:
+      - "2222:22"
+    volumes:
+      - sftp-data:/home
+      - ../files:/home/tester/fixtures:ro
+      - ./sftp/keys/id_rsa_test.pub:/home/tester/.ssh/keys/id_rsa_test.pub:ro
+      - ./sftp/keys/id_rsa_test_passphrase.pub:/home/tester/.ssh/keys/id_rsa_test_passphrase.pub:ro
+    healthcheck:
+      test: ["CMD-SHELL", "nc -z localhost 22 || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    networks: [plenora-e2e]

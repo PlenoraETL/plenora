@@ -1,0 +1,64 @@
+area: 'mig'
+description: 'Migration / backward compat'
+tests:
+  - id: 'MIG-001'
+    status: 'TODO'
+    title: 'Canvas salvato in schema v1.0 → loaded e parsed graceful in v1.5'
+    granularity: 'smoke'
+    priority: 'optional'
+    tags:
+          - 'migration'
+    prereq:
+          tests:
+                  - 'PREP-019'
+    steps: 'insert diretto canvas con `definition.schema_version=1.0` + nodi old-style'
+    assertion: 'GET canvas response include `schema_version=1.5` e nodi migrati on-the-fly, run executes OK'
+  - id: 'MIG-002'
+    status: 'TODO'
+    title: 'Connection con campo deprecato → warning log, no crash'
+    granularity: 'smoke'
+    priority: 'optional'
+    tags:
+          - 'migration'
+    prereq:
+          tests:
+                  - 'PREP-004'
+    steps: 'insert connection con campo legacy es. `ssl_mode` deprecato'
+    assertion: 'connection caricata, log `warning=deprecated_field_ssl_mode_use_sslmode`, no exception'
+  - id: 'MIG-003'
+    status: 'TODO'
+    title: 'Migration alembic up/down idempotenti (applicato 2× → ok)'
+    granularity: 'integration'
+    priority: 'optional'
+    tags:
+          - 'migration'
+          - 'idempotency'
+    prereq:
+          tests:
+                  - 'PREP-001'
+    steps: '1) `alembic upgrade head` 2) `alembic upgrade head` di nuovo 3) `alembic downgrade -1` 4) `alembic upgrade +1`'
+    assertion: 'nessuna step fallisce, schema finale identico a baseline'
+  - id: 'MIG-004'
+    status: 'TODO'
+    title: 'Field aggiunto in schema canvas: vecchi canvas leggono default'
+    granularity: 'smoke'
+    priority: 'optional'
+    tags:
+          - 'migration'
+    prereq:
+          tests:
+                  - 'MIG-001'
+    steps: 'aggiungi field `retry_policy` in nuova versione; carica canvas vecchio'
+    assertion: 'GET response include `retry_policy=<default>`, no validation error'
+  - id: 'MIG-005'
+    status: 'TODO'
+    title: 'Field rimosso: vecchi canvas con quel field → ignorato, no error'
+    granularity: 'smoke'
+    priority: 'optional'
+    tags:
+          - 'migration'
+    prereq:
+          tests:
+                  - 'MIG-001'
+    steps: 'load canvas con campo `legacy_attribute` non più nello schema'
+    assertion: 'campo rimosso silenziosamente da response, log `info=stripped_unknown_field`'

@@ -1,0 +1,166 @@
+[
+  {
+    "id": 1,
+    "full_name": "Anna Rossi",
+    "email": "anna.rossi@example.com",
+    "age": 34,
+    "signup_date": "2023-01-15",
+    "status": "active",
+    "city_id": 1,
+    "address": {
+      "street": "Via Dante 12",
+      "city": "Milano",
+      "zip": "20121"
+    }
+  },
+  {
+    "id": 2,
+    "full_name": "Marco Bianchi",
+    "email": "marco.bianchi@example.com",
+    "age": 41,
+    "signup_date": "2023-02-20",
+    "status": "active",
+    "city_id": 1,
+    "address": {
+      "street": "Via Dante 12",
+      "city": "Milano",
+      "zip": "20121"
+    }
+  },
+  {
+    "id": 3,
+    "full_name": "Giulia Verdi",
+    "email": "giulia.verdi@example.com",
+    "age": 28,
+    "signup_date": "2023-03-10",
+    "status": "pending",
+    "city_id": 1,
+    "address": {
+      "street": "Via Dante 12",
+      "city": "Milano",
+      "zip": "20121"
+    }
+  },
+  {
+    "id": 4,
+    "full_name": "Paolo Ferrari",
+    "email": "paolo.ferrari@example.com",
+    "age": 52,
+    "signup_date": "2023-04-05",
+    "status": "active",
+    "city_id": 3,
+    "address": {
+      "street": "Corso Zanardelli 8",
+      "city": "Brescia",
+      "zip": "25121"
+    }
+  },
+  {
+    "id": 5,
+    "full_name": "Laura Romano",
+    "email": "laura.romano@example.com",
+    "age": 45,
+    "signup_date": "2023-05-12",
+    "status": "inactive",
+    "city_id": 4,
+    "address": {
+      "street": "Via del Corso 100",
+      "city": "Roma",
+      "zip": "00184"
+    }
+  },
+  {
+    "id": 6,
+    "full_name": "Stefano Conti",
+    "email": "stefano.conti@example.com",
+    "age": 37,
+    "signup_date": "2023-06-18",
+    "status": "active",
+    "city_id": 4,
+    "address": {
+      "street": "Via del Corso 100",
+      "city": "Roma",
+      "zip": "00184"
+    }
+  },
+  {
+    "id": 7,
+    "full_name": "Elena Greco",
+    "email": "elena.greco@example.com",
+    "age": 29,
+    "signup_date": "2023-07-22",
+    "status": "active",
+    "city_id": 4,
+    "address": {
+      "street": "Via del Corso 100",
+      "city": "Roma",
+      "zip": "00184"
+    }
+  },
+  {
+    "id": 8,
+    "full_name": "Davide Marini",
+    "email": "davide.marini@example.com",
+    "age": 60,
+    "signup_date": "2023-08-08",
+    "status": "inactive",
+    "city_id": 5,
+    "address": {
+      "street": "Via Roma 22",
+      "city": "Latina",
+      "zip": "04100"
+    }
+  },
+  {
+    "id": 9,
+    "full_name": "Chiara Esposito",
+    "email": "chiara.esposito@example.com",
+    "age": 31,
+    "signup_date": "2023-09-14",
+    "status": "active",
+    "city_id": 7,
+    "address": {
+      "street": "Via Toledo 3",
+      "city": "Napoli",
+      "zip": "80133"
+    }
+  },
+  {
+    "id": 10,
+    "full_name": "Luca Russo",
+    "email": "luca.russo@example.com",
+    "age": 48,
+    "signup_date": "2023-10-25",
+    "status": "pending",
+    "city_id": 7,
+    "address": {
+      "street": "Via Toledo 3",
+      "city": "Napoli",
+      "zip": "80133"
+    }
+  },
+  {
+    "id": 11,
+    "full_name": "Francesca Galli",
+    "email": "francesca.galli@example.com",
+    "age": 39,
+    "signup_date": "2023-11-03",
+    "status": "active",
+    "city_id": 8,
+    "address": {
+      "street": "Via Mercanti 7",
+      "city": "Salerno",
+      "zip": "84121"
+    }
+  },
+  {
+    "id": 12,
+    "full_name": "Roberto Costa",
+    "email": "roberto.costa@example.com",
+    "age": 55,
+    "signup_date": "2023-12-19",
+    "status": "active",
+    "city_id": null,
+    "address": null
+  }
+]

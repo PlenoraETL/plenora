@@ -1,0 +1,6 @@
+[
+  {"event_type": "click", "n": 2500},
+  {"event_type": "logout", "n": 2500},
+  {"event_type": "purchase", "n": 2500},
+  {"event_type": "view", "n": 2500}
+]

@@ -1,0 +1,7 @@
+[
+  {"customer_id": 1, "full_name": "Anna Rossi", "n_orders": 7},
+  {"customer_id": 2, "full_name": "Marco Bianchi", "n_orders": 2},
+  {"customer_id": 6, "full_name": "Stefano Conti", "n_orders": 2},
+  {"customer_id": 7, "full_name": "Elena Greco", "n_orders": 2},
+  {"customer_id": 9, "full_name": "Chiara Esposito", "n_orders": 2}
+]

@@ -1,0 +1,24 @@
+area: 'qstr'
+description: 'Query streaming'
+tests:
+  - id: 'QSTR-001'
+    status: 'TODO'
+    title: 'Streaming `fetchmany(CHUNK_SIZE)` su result grande'
+    granularity: 'smoke'
+    priority: 'nice'
+    tags:
+          - 'streaming'
+    references:
+          - 'app/db/query_streaming.py:35-110'
+    dataset: 'events_log 10000 righe'
+    assertion: 'memoria stabile, no OOM, tutte le righe processate'
+  - id: 'QSTR-002'
+    status: 'TODO'
+    title: 'Cap MAX_STREAMING_ROWS rispettato'
+    granularity: 'smoke'
+    priority: 'nice'
+    tags:
+          - 'streaming'
+          - 'limits'
+    dataset: 'query che eccede il cap'
+    assertion: 'errore controllato, status 413 o equivalente'

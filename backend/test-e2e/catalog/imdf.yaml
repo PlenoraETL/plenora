@@ -1,0 +1,60 @@
+area: 'imdf'
+description: 'IMDF publish/bundles'
+tests:
+  - id: 'IMDF-001'
+    status: 'TODO'
+    title: 'Publish (full validation+upload)'
+    granularity: 'smoke'
+    priority: 'nice'
+    tags:
+          - 'imdf'
+    references:
+          - 'app/core/imdf/router.py:286'
+    steps: '`POST /imdf/publish` con bundle valido'
+    assertion: '200 con `{bundle_id, status: "published", uploaded: true, validation: {ok: true, warnings: []}}`; bundle presente su S3/MinIO; record DB con `state=published`'
+  - id: 'IMDF-002'
+    status: 'TODO'
+    title: 'Validate-publish (validation only, no upload)'
+    granularity: 'smoke'
+    priority: 'nice'
+    tags:
+          - 'imdf'
+    references:
+          - 'app/core/imdf/router.py:286'
+    steps: '`POST /imdf/validate-publish` con bundle'
+    assertion: '200 con `{validation: {ok: true|false, errors: [...], warnings: [...]}}`; nessun oggetto su S3; nessun record DB nuovo'
+  - id: 'IMDF-003'
+    status: 'TODO'
+    title: 'Bundles list paginato per group_id'
+    granularity: 'smoke'
+    priority: 'nice'
+    tags:
+          - 'imdf'
+    references:
+          - 'app/core/imdf/router.py:438'
+    steps: '`GET /imdf/bundles?page=1&size=20`'
+    assertion: '200 con `{items: [...], total, page, size}`; solo bundles del group_id dell''utente; paginazione rispettata; cross-group bundles assenti'
+  - id: 'IMDF-004'
+    status: 'TODO'
+    title: 'Bundles get singolo'
+    granularity: 'smoke'
+    priority: 'nice'
+    tags:
+          - 'imdf'
+    references:
+          - 'app/core/imdf/router.py:438'
+    steps: '`GET /imdf/bundles/{id}`'
+    assertion: '200 con metadata bundle (versione, created_at, validation summary, S3 url firmato); bundle di altro group → 404'
+  - id: 'IMDF-005'
+    status: 'TODO'
+    title: 'Bundles delete (con cleanup S3)'
+    granularity: 'smoke'
+    priority: 'nice'
+    tags:
+          - 'imdf'
+          - 's3'
+          - 'cleanup'
+    references:
+          - 'app/core/imdf/router.py:628'
+    steps: '`DELETE /imdf/bundles/{id}`'
+    assertion: '204; record DB rimosso (o soft-delete); oggetto S3 cancellato dal bucket; secondo DELETE → 404'

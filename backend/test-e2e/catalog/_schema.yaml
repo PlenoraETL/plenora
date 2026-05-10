@@ -1,0 +1,62 @@
+# Plenora E2E Test Catalog — Schema canonico
+#
+# Questo file documenta la struttura YAML usata dai cataloghi `<area>.yaml`.
+# Non viene letto da `render.py` (escluso esplicitamente). Serve come
+# riferimento per umani e CI lint.
+#
+# Ogni file area ha forma:
+#
+#     area: <slug>
+#     description: <una riga, libera>
+#     tests:
+#       - <test_object>
+#       - <test_object>
+#       ...
+#
+# Il blocco sotto è il template canonico di un singolo test.
+
+# ---------------------------------------------------------------------------
+# Test object schema
+# ---------------------------------------------------------------------------
+id: PREP-004                       # <area>-<NNN> (zero-padded a 3 cifre)
+area: prep                         # slug area, lowercase
+status: TODO                       # TODO | WIP | DONE | SKIP
+title: Crea connection PostgreSQL  # short, in italiano coerente con legacy
+prereq:
+  profile: core                    # core | db | db-heavy | files | cloud | full | <vuoto>
+  tests:                           # ID di test che devono essere DONE prima
+    - PREP-003
+references:                        # path[:line] al codice prodotto rilevante
+  - app/core/connections/router.py:42
+dataset: sql/postgres/01_seed.sql  # opzionale: fixture/path utile al test
+granularity: smoke                 # smoke | integration | scenario
+priority: must                     # must | nice | optional | meta
+# - must: smoke critici, gate merge, regression core
+# - nice: CI nightly, valore alto ma non bloccante
+# - optional: edge case secondari, scriverli solo se sopra fatti
+# - meta: policy / cross-cutting / non test eseguibile autonomo
+tags:                              # parole chiave (lowercase)
+  - api
+  - db
+  - postgres
+steps: |                           # passi numerati, multi-line
+  1. POST /api/connections con type=postgres, host=plenora-e2e-postgres
+  2. Verifica response 201
+expected_failure_owner: plenora    # plenora | fixture | infra
+assertion: |                       # cosa il test verifica end-to-end
+  201 + connection_id presente. Password cifrata at-rest.
+
+# ---------------------------------------------------------------------------
+# Note
+# ---------------------------------------------------------------------------
+# - I campi opzionali (`references`, `dataset`, `prereq.profile`, `prereq.tests`,
+#   `steps`, `expected_failure_owner`) possono essere omessi o vuoti.
+# - `tags` è una lista (anche vuota). Fonte di tagging automatica:
+#     * keyword nel titolo → mappata in render.py / parser
+#     * area → tag implicito (non duplicato qui)
+# - `granularity` default "smoke" se il test è single-action; "integration"
+#   per i test multi-step non-flow; "scenario" per FLOW-*.
+# - `priority` (must/nice/optional/meta) — vedi commento sopra. Default
+#   raccomandato: "nice". "must" riservato a smoke critici/gate merge
+#   (PREP-*, AUTH-001, SEC-001, INF-001..007/013, ecc.). "meta" usato dai
+#   test status=META (cross-cutting policy, non eseguibili autonomi).

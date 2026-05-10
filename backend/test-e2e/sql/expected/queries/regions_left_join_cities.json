@@ -1,0 +1,6 @@
+[
+  {"region_id": 1, "region_code": "LOM", "region_name": "Lombardia", "n_cities": 5},
+  {"region_id": 2, "region_code": "LAZ", "region_name": "Lazio", "n_cities": 4},
+  {"region_id": 3, "region_code": "CAM", "region_name": "Campania", "n_cities": 9},
+  {"region_id": 4, "region_code": "VEN", "region_name": "Veneto", "n_cities": 0}
+]

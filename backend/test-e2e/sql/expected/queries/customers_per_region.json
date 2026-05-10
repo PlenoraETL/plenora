@@ -1,0 +1,5 @@
+[
+  {"region_code": "CAM", "region_name": "Campania", "n_customers": 3},
+  {"region_code": "LAZ", "region_name": "Lazio", "n_customers": 6},
+  {"region_code": "LOM", "region_name": "Lombardia", "n_customers": 11}
+]

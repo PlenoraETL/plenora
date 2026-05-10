@@ -1,0 +1,61 @@
+area: 'catch'
+description: 'Catchup missed runs'
+tests:
+  - id: 'CATCH-001'
+    status: 'TODO'
+    title: 'Detect missed run dopo crash beat'
+    granularity: 'integration'
+    priority: 'nice'
+    tags:
+          - 'scheduler'
+    references:
+          - 'workers/beat_scheduler.py:287-476'
+    steps: '1) schedule `*/5 * * * *` 2) stop beat per 11 minuti 3) restart beat'
+    assertion: 'catchup detecta 2 tick mancati (slot a -10min e -5min); emette enqueue per i missed slot; log `catchup_missed_runs detected=2 enqueued=2`'
+  - id: 'CATCH-002'
+    status: 'TODO'
+    title: 'Runaway cap 5/10min'
+    granularity: 'smoke'
+    priority: 'nice'
+    tags:
+          - 'scheduler'
+          - 'limits'
+    references:
+          - 'workers/beat_scheduler.py:287-476'
+    steps: 'schedule `* * * * *` con beat down 60 minuti'
+    assertion: 'catchup emette al massimo 5 run nei primi 10 minuti dopo restart; log `catchup_runaway_cap_hit limit=5 window_seconds=600`; restanti 55 missed slot droppati'
+  - id: 'CATCH-003'
+    status: 'TODO'
+    title: 'Dedupe history-based (window 2h)'
+    granularity: 'integration'
+    priority: 'nice'
+    tags:
+          - 'scheduler'
+    references:
+          - 'workers/beat_scheduler.py:287-476'
+    steps: '1) catchup emette run per slot S 2) restart beat ancora 3) catchup re-evaluates slot S (entro 2h)'
+    assertion: 'secondo evaluation skip slot S grazie a entry in `schedule_catchup_history` con `slot_at=S`; log `catchup_skipped_already_emitted slot=S`'
+  - id: 'CATCH-004'
+    status: 'TODO'
+    title: 'NO last_run update on emit (loss-safe)'
+    granularity: 'integration'
+    priority: 'nice'
+    tags:
+          - 'scheduler'
+          - 'spatial'
+    references:
+          - 'workers/beat_scheduler.py:287-476'
+    steps: '1) snapshot `schedules.last_run_at` per schedule X 2) catchup emette missed run di X'
+    assertion: '`last_run_at` invariato dopo emit; aggiornato SOLO al completamento del run (worker, non beat); audit row in `schedule_catchup_history` invece traccia l''emit'
+  - id: 'CATCH-005'
+    status: 'TODO'
+    title: 'Audit row in `schedule_catchup_history`'
+    granularity: 'smoke'
+    priority: 'nice'
+    tags:
+          - 'scheduler'
+          - 'audit'
+    references:
+          - 'workers/beat_scheduler.py:287-476'
+    steps: 'catchup emette missed run; query `SELECT * FROM schedule_catchup_history WHERE schedule_id=X`'
+    assertion: 'row con campi `schedule_id, slot_at, emitted_at, run_id, reason=''missed_run''`; `slot_at` precede `emitted_at`; row immutabile (no update successivi)'

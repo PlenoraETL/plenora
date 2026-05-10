@@ -1,0 +1,47 @@
+area: 'auth'
+description: 'Auth & lifecycle'
+tests:
+  - id: 'AUTH-001'
+    status: 'TODO'
+    title: 'Group cleanup cascade su delete utente'
+    granularity: 'smoke'
+    priority: 'must'
+    tags:
+          - 'auth'
+          - 'cleanup'
+    prereq:
+          profile: 'core'
+    assertion: 'schedules, projects, datasources, connections, file_sources tutti rimossi'
+  - id: 'AUTH-002'
+    status: 'TODO'
+    title: 'MFA TOTP enrollment'
+    granularity: 'smoke'
+    priority: 'nice'
+    tags:
+          - 'auth'
+          - 'mfa'
+    prereq:
+          profile: 'core'
+    assertion: 'secret generato, code valida apre sessione'
+  - id: 'AUTH-003'
+    status: 'TODO'
+    title: 'Login con password sbagliata → rate limit'
+    granularity: 'smoke'
+    priority: 'nice'
+    tags:
+          - 'auth'
+          - 'rate-limit'
+          - 'password'
+    prereq:
+          profile: 'core'
+    assertion: 'dopo N tentativi, 429'
+  - id: 'AUTH-004'
+    status: 'TODO'
+    title: 'JWT scaduto → 401'
+    granularity: 'smoke'
+    priority: 'must'
+    tags:
+          - 'auth'
+    prereq:
+          profile: 'core'
+    assertion: 're-login richiesto'

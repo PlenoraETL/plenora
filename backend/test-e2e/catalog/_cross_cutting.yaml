@@ -1,0 +1,130 @@
+# Plenora E2E Test Catalog - Cross-cutting policy
+#
+# Documentazione (NON test list) dei check cross-cutting applicati a
+# TUTTI i test che fanno richieste HTTP verso l'app plenora.
+#
+# Questo file inizia con `_` quindi NON viene letto da
+# `catalog/render.py` ne' da `catalog/query.py`. Serve come riferimento
+# per umani e per chiunque tocchi `runner/cross_cutting.py`.
+#
+# Filosofia: ogni POST scrive audit log -> tutti i test che fanno POST
+# verificano l'audit log, NON un singolo test dedicato. Stesso ragionamento
+# per request_id, PII, security headers, idempotency, rate-limit.
+#
+# Implementazione: test-e2e/runner/cross_cutting.py
+
+policy:
+  description: |
+    Cross-cutting checks applicati globalmente o opt-in. Vedi
+    test-e2e/runner/README.md sezione "Cross-cutting assertions" per
+    l'uso pratico.
+
+  autouse:
+    - check: request_id_propagation
+      trigger: ogni 2xx response che passa per http_client
+      implementation: |
+        runner/cross_cutting.py::assert_request_id_propagated
+        wrappato dalla fixture autouse `_global_response_audit`
+      esenti:
+        - "test marcato @pytest.mark.no_global_assertions"
+      verifies:
+        - X-Request-ID presente nella response
+        - len(X-Request-ID) <= 64 (truncate trust-but-verify)
+        - se expected dato: echo identico
+
+    - check: no_pii_in_response
+      trigger: ogni response con content-type testuale (json/text/xml/yaml)
+      implementation: |
+        runner/cross_cutting.py::assert_no_pii_in_response
+        wrappato dalla fixture autouse `_global_response_audit`
+      esenti:
+        - "test smoke che non usano http_client (no app)"
+      verifies:
+        - 'pattern "password|api_key|client_secret|access_token|..." con valori non REDACTED'
+        - 'pattern "Bearer <token>" con token non REDACTED'
+
+  opt_in:
+    - check: audit_log_written
+      helper: assert_audit_logged
+      use_in: ogni test write (PREP-004..PREP-021, ADM-*, IDEM-*)
+      sostituisce_test: AUDIT-001
+      graceful_skip: |
+        se nessuno degli endpoint candidati
+        (`/api/audit/logs`, `/api/audit-logs`, `/api/admin/audit-logs`,
+        `/api/admin/audit/logs`) e' esposto, il check skippa con
+        motivo "endpoint audit_log non esposto"
+
+    - check: idempotency
+      helper: assert_idempotent_post
+      use_in: PREP-004 (connection), PREP-010..PREP-012 (api_conn), PREP-014/015 (datasource), PREP-019 (canvas)
+      sostituisce_test:
+        - IDEM-001
+        - IDEM-002
+        - IDEM-003
+        - IDEM-004
+
+    - check: security_headers
+      helper: assert_security_headers
+      use_in: test su endpoint browser-facing (HTML)
+      sostituisce_test:
+        - CORS-001
+        - CORS-002
+      richiede:
+        - "X-Content-Type-Options: nosniff"
+        - "X-Frame-Options: DENY o SAMEORIGIN"
+
+    - check: rate_limit_headers
+      helper: assert_rate_limit_headers_present
+      use_in: test su endpoint con rate-limit configurato
+      sostituisce_test: RATE-003
+      richiede:
+        - X-RateLimit-Limit (int)
+        - X-RateLimit-Remaining (int)
+        - X-RateLimit-Reset (int)
+
+    - check: permission_boundary
+      helper: assert_403_for_role
+      use_in: test che verificano deny per ruolo viewer/non-superadmin
+      verifies:
+        - HTTP 401 o 403 per il role_token dato
+
+    - check: cleanup_verified
+      helper: assert_resource_deleted
+      use_in: test che fanno DELETE
+      verifies:
+        - HTTP 404 o 410 sulla GET successiva alla DELETE
+
+    - check: no_pii_in_logs
+      helper: assert_no_pii_in_logs
+      use_in: test che raccolgono log container backend
+      sostituisce_test:
+        - LOG-004 (parte log)
+        - SEC-006 (parte log)
+
+    - check: no_flaky_timing
+      helper: poll_until
+      use_in: ovunque ci sarebbe un sleep arbitrario
+      verifies:
+        - retry/backoff esplicito con timeout
+        - no race condition flakiness
+
+# I test del catalogo che ora sono coperti da questi check sono marcati
+# `status: META` e `category: cross-cutting-policy`. Restano nel catalogo
+# come documentazione del comportamento ma NON producono un test pytest
+# eseguibile (la loro asserzione e' esercitata implicitamente da tutti
+# gli altri test che fanno richieste HTTP).
+meta_tests:
+  - AUDIT-001
+  - REQID-001
+  - REQID-002
+  - LOG-001
+  - LOG-004
+  - SEC-006
+  - CORS-001
+  - CORS-002
+  - CORS-005
+  - RATE-003
+  - IDEM-001
+  - IDEM-002
+  - IDEM-003
+  - IDEM-004

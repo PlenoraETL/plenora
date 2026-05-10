@@ -1,0 +1,5 @@
+[
+  {"status": "cancelled", "n": 2},
+  {"status": "paid", "n": 13},
+  {"status": "pending", "n": 6}
+]

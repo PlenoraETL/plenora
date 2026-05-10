@@ -1,0 +1,48 @@
+area: 'sftp'
+description: 'SFTP key-based auth *(richiede modifica container)*'
+tests:
+  - id: 'SFTP-001'
+    status: 'TODO'
+    title: 'Auth con private key (no passphrase)'
+    granularity: 'smoke'
+    priority: 'nice'
+    tags:
+          - 'sftp'
+    references:
+          - 'app/core/datasources/sftp.py:83-95'
+    dataset: '`test-e2e/docker/sftp/keys/id_rsa_test`'
+    assertion: 'connessione stabilita, file letto'
+  - id: 'SFTP-002'
+    status: 'TODO'
+    title: 'Auth con private key + passphrase'
+    granularity: 'smoke'
+    priority: 'optional'
+    tags:
+          - 'sftp'
+    assertion: 'passphrase sbloccata correttamente'
+  - id: 'SFTP-003'
+    status: 'TODO'
+    title: 'Auth fallisce: chiave non autorizzata'
+    granularity: 'smoke'
+    priority: 'optional'
+    tags:
+          - 'sftp'
+    assertion: 'errore controllato, log strutturato'
+  - id: 'SFTP-004'
+    status: 'TODO'
+    title: 'Host key verification (RejectPolicy)'
+    granularity: 'smoke'
+    priority: 'optional'
+    tags:
+          - 'sftp'
+    references:
+          - 'paramiko.RejectPolicy'
+    assertion: 'known_hosts mismatch → connessione rifiutata'
+  - id: 'SFTP-005'
+    status: 'TODO'
+    title: 'Host key verification (AutoAddPolicy disabilitata in prod)'
+    granularity: 'smoke'
+    priority: 'optional'
+    tags:
+          - 'sftp'
+    assertion: 'configurazione produzione rifiuta nuovi host'

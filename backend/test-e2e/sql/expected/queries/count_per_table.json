@@ -1,0 +1,11 @@
+[
+  {"table_name": "cities", "n": 18},
+  {"table_name": "customers", "n": 22},
+  {"table_name": "employees", "n": 17},
+  {"table_name": "events_log", "n": 10000},
+  {"table_name": "order_items", "n": 35},
+  {"table_name": "orders", "n": 21},
+  {"table_name": "products", "n": 13},
+  {"table_name": "regions", "n": 4},
+  {"table_name": "routes", "n": 5}
+]

@@ -1,0 +1,37 @@
+{
+    "id": 0,
+    "name": "layer0",
+    "type": "Feature Layer",
+    "geometryType": "esriGeometryPoint",
+    "description": "Plenora fake ArcGIS layer descriptor (cities)",
+    "copyrightText": "Plenora E2E Fake",
+    "minScale": 0,
+    "maxScale": 0,
+    "defaultVisibility": true,
+    "extent": {
+        "xmin": 9.1900,
+        "ymin": 40.6824,
+        "xmax": 14.7681,
+        "ymax": 45.6983,
+        "spatialReference": {"wkid": 4326, "latestWkid": 4326}
+    },
+    "fields": [
+        {"name": "OBJECTID", "type": "esriFieldTypeOID", "alias": "OBJECTID"},
+        {"name": "id", "type": "esriFieldTypeInteger", "alias": "id"},
+        {"name": "region_id", "type": "esriFieldTypeInteger", "alias": "region_id"},
+        {"name": "name", "type": "esriFieldTypeString", "alias": "name", "length": 100},
+        {"name": "population", "type": "esriFieldTypeInteger", "alias": "population"}
+    ],
+    "objectIdField": "OBJECTID",
+    "drawingInfo": {
+        "renderer": {
+            "type": "simple",
+            "symbol": {
+                "type": "esriSMS",
+                "style": "esriSMSCircle",
+                "size": 8,
+                "color": [255, 0, 0, 255]
+            }
+        }
+    }
+}

@@ -1,0 +1,90 @@
+area: 'undo'
+description: 'Soft delete / undo'
+tests:
+  - id: 'UNDO-001'
+    status: 'TODO'
+    title: 'DELETE soft di canvas → flag deleted_at, non visibile in list di default'
+    granularity: 'smoke'
+    priority: 'nice'
+    tags:
+          - 'soft-delete'
+          - 'cleanup'
+    prereq:
+          tests:
+                  - 'PREP-019'
+    steps: '`DELETE /canvases/{id}` poi `GET /canvases`'
+    assertion: '204; row in DB con `deleted_at` non NULL; list non include il canvas'
+  - id: 'UNDO-002'
+    status: 'TODO'
+    title: 'GET con ?include_deleted=true → ricomparso'
+    granularity: 'smoke'
+    priority: 'nice'
+    tags:
+          - 'soft-delete'
+    prereq:
+          tests:
+                  - 'UNDO-001'
+    steps: '`GET /canvases?include_deleted=true`'
+    assertion: 'response include canvas con flag `deleted=true`, `deleted_at` popolato'
+  - id: 'UNDO-003'
+    status: 'TODO'
+    title: 'Restore canvas cancellato → torna in list normale, version incrementata'
+    granularity: 'smoke'
+    priority: 'nice'
+    tags:
+          - 'soft-delete'
+          - 'backup'
+    prereq:
+          tests:
+                  - 'UNDO-001'
+    steps: '`POST /canvases/{id}/restore`'
+    assertion: '`deleted_at=NULL`, `version=N+1`; `GET /canvases` lo include'
+  - id: 'UNDO-004'
+    status: 'TODO'
+    title: 'Hard delete dopo retention N giorni → rimosso definitivamente'
+    granularity: 'integration'
+    priority: 'nice'
+    tags:
+          - 'soft-delete'
+          - 'cleanup'
+          - 'retention'
+    prereq:
+          tests:
+                  - 'UNDO-001'
+    steps: '1) soft delete con `deleted_at` simulato a -N-1gg 2) trigger retention task'
+    assertion: 'row fisicamente rimossa; `GET /canvases/{id}?include_deleted=true` → 404'
+  - id: 'UNDO-005'
+    status: 'TODO'
+    title: 'Cascade soft-delete su gruppo → tutti i child marked deleted'
+    granularity: 'smoke'
+    priority: 'nice'
+    tags:
+          - 'soft-delete'
+          - 'cleanup'
+    prereq:
+          tests:
+                  - 'PREP-023'
+    steps: 'soft `DELETE /groups/{id}`'
+    assertion: 'gruppo + projects + canvases + connections tutti con `deleted_at` set; restore gruppo ripristina cascade'
+  - id: 'UNDO-006'
+    status: 'TODO'
+    title: '`/canvas/raw` recovery endpoint bypass `CanvasState` validation'
+    granularity: 'integration'
+    priority: 'nice'
+    tags:
+          - 'soft-delete'
+    references:
+          - 'app/core/canvases/router.py'
+    steps: '1) corrompi canvas con definition non conforme allo schema (insert diretto DB) 2) `GET /canvases/{id}` 3) `GET /canvases/{id}/raw`'
+    assertion: 'GET classico ritorna 500 con custom handler (vedi UNDO-007); `/raw` ritorna 200 con definition raw (string JSON come archiviato), no validation Pydantic applicata; payload include flag `raw=true`'
+  - id: 'UNDO-007'
+    status: 'TODO'
+    title: 'Canvas corrupted handler (custom 500 con `project_id`+`reason`)'
+    granularity: 'smoke'
+    priority: 'nice'
+    tags:
+          - 'soft-delete'
+    references:
+          - 'app/core/canvases/router.py'
+    steps: 'GET canvas corrotto (vedi UNDO-006 step 1)'
+    assertion: '500 con body `{"error_code": "canvas_corrupted", "project_id": <int>, "canvas_id": <int>, "reason": <str>, "recovery_url": "/canvases/{id}/raw"}`; reason è messaggio human-readable senza traceback'
