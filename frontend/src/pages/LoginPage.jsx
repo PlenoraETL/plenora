@@ -95,6 +95,8 @@ export default function LoginPage() {
   const { theme, toggleTheme } = useTheme();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  const [mfaCode,  setMfaCode]  = useState('');
+  const [needsMfa, setNeedsMfa]  = useState(false);
   const [showPw,   setShowPw]   = useState(false);
   const [error,    setError]    = useState('');
   const [loading,  setLoading]  = useState(false);
@@ -128,12 +130,18 @@ export default function LoginPage() {
     setError('');
     if (!username.trim()) { setError('Inserisci il nome utente.');  return; }
     if (!password)        { setError('Inserisci la password.');     return; }
+    if (needsMfa && !mfaCode.trim()) { setError('Inserisci il codice MFA.'); return; }
     setLoading(true);
     try {
-      const userData = await login(username, password);
+      const userData = await login(username, password, mfaCode.trim() || null);
       navigate(landingPathFor(userData), { replace: true });
     } catch (err) {
-      setError(err.message || 'Credenziali non valide.');
+      if (err?.response?.status === 403 && (err.code === 'auth_mfa_required' || err.message === 'mfa_required')) {
+        setNeedsMfa(true);
+        setError("Inserisci il codice MFA per completare l'accesso.");
+      } else {
+        setError(err.message || 'Credenziali non valide.');
+      }
     } finally {
       setLoading(false);
     }
@@ -243,6 +251,24 @@ export default function LoginPage() {
                 </button>
               </div>
             </div>
+
+            {needsMfa && (
+              <div className="lp__field">
+                <label className="lp__label" htmlFor="lp-mfa">Codice MFA</label>
+                <input
+                  id="lp-mfa"
+                  className="lp__input"
+                  type="text"
+                  inputMode="numeric"
+                  pattern="[0-9]*"
+                  placeholder="123456"
+                  value={mfaCode}
+                  onChange={e => setMfaCode(e.target.value)}
+                  autoComplete="one-time-code"
+                  disabled={loading}
+                />
+              </div>
+            )}
 
             {error && (
               <div className="lp__error" role="alert">

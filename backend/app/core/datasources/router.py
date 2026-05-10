@@ -367,6 +367,30 @@ def download_file(
         raise_typed_http(error_codes.INTERNAL_ERROR, status_code=500, message="Errore interno del server")
 
 
+@router.get("/{ds_id}/files/schema")
+def get_file_schema(
+    ds_id: str,
+    path: str = Query(..., description="Percorso relativo alla root"),
+    layer: Optional[str] = Query(default=None, description="Layer GPKG/GDB opzionale"),
+    sheet: Optional[str] = Query(default=None, description="Sheet XLS/XLSX opzionale"),
+    current_user: CurrentUser = Depends(require_not_esecutore),
+):
+    """
+    Inferisce lo schema colonne di un file remoto senza creare un FileSource.
+    Read-only su risorsa visibile.
+    """
+    assert_resource_visible(_svc().get_datasource(ds_id), "datasources", current_user, "Data Source")
+    try:
+        return _svc().get_file_schema(ds_id, path, layer=layer, sheet=sheet)
+    except DataSourceError as e:
+        raise _ds_error_to_http(e)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.error(f"[CRASH] Errore schema {ds_id}/{path}: {e}", exc_info=True)
+        raise_typed_http(error_codes.INTERNAL_ERROR, status_code=500, message="Errore interno del server")
+
+
 @router.post("/{ds_id}/files/upload", status_code=201)
 @audit_action(action="datasource.file_upload", target_param="ds_id")
 def upload_file(

@@ -64,6 +64,19 @@ describe('api/auth contract', () => {
       const { login } = await import('../../src/api/auth');
       await expect(login('alice', 'wrong')).rejects.toBe(err);
     });
+
+    it('adds mfa_code only when supplied', async () => {
+      httpMock.post.mockResolvedValueOnce({ data: { access_token: 'jwt-mfa' } });
+
+      const { login } = await import('../../src/api/auth');
+      await login('alice', 'pwd', '123456');
+
+      expect(httpMock.post).toHaveBeenCalledWith('/auth/login', {
+        username: 'alice',
+        password: 'pwd',
+        mfa_code: '123456',
+      });
+    });
   });
 
   describe('logout', () => {

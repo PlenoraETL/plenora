@@ -81,10 +81,10 @@ export function AuthProvider({ children }) {
     return () => { authBus.onUnauthorized = null; };
   }, [logout, navigate]);
 
-  const login = useCallback(async (username, password) => {
+  const login = useCallback(async (username, password, mfaCode = null) => {
     // Nota: http non ha ancora il token in questo momento,
     // ma l'interceptor lo aggiunge solo se presente — quindi va bene.
-    const data = await apiLogin(username, password);
+    const data = await apiLogin(username, password, mfaCode);
 
     const userData = {
       user_id:  data.user_id,

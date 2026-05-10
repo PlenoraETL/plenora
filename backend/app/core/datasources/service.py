@@ -6,6 +6,7 @@ CRUD configurazioni Data Source -> PostgreSQL via app.core.datasources.db.
 
 import json
 import uuid
+from io import BytesIO
 from pathlib import Path
 from datetime import datetime, timezone
 from typing import Optional
@@ -28,6 +29,9 @@ from app.core.datasources.models import (
 from app.core.datasources.factory import create_backend
 from app.core.datasources.interface import DataSourceInterface
 from app.core.datasources import db as datasource_db
+from app.core.files.preview_temp import preview_file_temp
+from app.core.files.service_deps import DefaultDataLoader, DefaultFileSystem
+from app.shared.file_helpers import ColumnInfoBuilder, FormatDetector
 
 logger = get_logger(__name__)
 
@@ -260,6 +264,33 @@ class DataSourceService:
         backend = self._get_backend(ds_id)
         with backend as ds:
             return ds.read_file(path)
+
+    def get_file_schema(
+        self,
+        ds_id: str,
+        path: str,
+        *,
+        layer: Optional[str] = None,
+        sheet: Optional[str] = None,
+    ) -> dict:
+        """Inferisce colonne/formato di un file esposto da un Data Source.
+
+        Il datasource resta la boundary di lettura remota; il parsing riusa
+        il parser temporaneo del dominio Files, senza persistere FileSource.
+        """
+        content = self.read_file(ds_id, path)
+        filename = Path(path).name or "datasource_file"
+        return preview_file_temp(
+            BytesIO(content),
+            filename,
+            fs=DefaultFileSystem(),
+            loader=DefaultDataLoader(),
+            format_detector=FormatDetector,
+            column_builder=ColumnInfoBuilder,
+            logger=logger,
+            layer=layer,
+            sheet=sheet,
+        )
 
     def write_file(self, ds_id: str, path: str, content: bytes) -> None:
         backend = self._get_backend(ds_id)

@@ -50,6 +50,41 @@ const CATEGORIES = [
   { id:'custom',     label:'Custom',      icon:'⚙️' },
 ];
 
+const toDataSourcePayload = (dsConfig) => {
+  const datasource = dsConfig.datasource || {};
+  const credentials = datasource.credentials || {};
+  const rawType = datasource.type || dsConfig.source_type || '';
+  const typeMap = {
+    sharepoint_365: 'sharepoint',
+    sharepoint_onprem: 'sharepoint',
+    sharepoint: 'sharepoint',
+    ftp: 'ftp',
+    sftp: 'sftp',
+    local: 'local',
+  };
+  const type = typeMap[rawType] || rawType;
+  const payload = {
+    name: dsConfig.name,
+    description: dsConfig.description || '',
+    type,
+    root_path: credentials.root_path || datasource.root_path || datasource.path || datasource.path_pattern || '',
+  };
+  [
+    'host', 'port', 'username', 'password', 'private_key',
+    'private_key_passphrase', 'tenant_id', 'client_id', 'client_secret',
+    'site_id', 'site_url', 'drive_id',
+  ].forEach((key) => {
+    const value = credentials[key] ?? datasource[key];
+    if (value !== undefined && value !== '') {
+      payload[key] = value;
+    }
+  });
+  if (!payload.site_url && credentials.server_url) {
+    payload.site_url = credentials.server_url;
+  }
+  return payload;
+};
+
 // Status/icon/timeAgo helpers + STATUS_CFG vivono in
 // `components/api-conn/ApiConnectionCard.jsx` (presentational scope).
 // Qui importiamo solo `getApiStatus` per il counter `globalStats.warningApis`.
@@ -320,7 +355,7 @@ function ApiConnectionManager() {
         <DataSourceConfigModal
           onClose={()=>setShowDataSourceConfig(false)}
           onSave={async(dsConfig)=>{
-            try { await createDataSource({name:dsConfig.name,description:dsConfig.description||'',ds_type:dsConfig.datasource?.type||dsConfig.source_type||'',config:JSON.stringify(dsConfig.datasource||dsConfig)}); setShowDataSourceConfig(false); }
+            try { await createDataSource(toDataSourcePayload(dsConfig)); setShowDataSourceConfig(false); }
             catch(e){console.error(e);}
           }}
         />

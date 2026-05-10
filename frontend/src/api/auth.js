@@ -20,10 +20,13 @@ import http from './http';
  *
  * @param {string} username
  * @param {string} password
+ * @param {string|null} mfaCode
  * @returns {Promise<Object>}
  */
-export const login = async (username, password) => {
-  const { data } = await http.post('/auth/login', { username, password });
+export const login = async (username, password, mfaCode = null) => {
+  const payload = { username, password };
+  if (mfaCode) payload.mfa_code = mfaCode;
+  const { data } = await http.post('/auth/login', payload);
   return data;
 };
 

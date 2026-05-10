@@ -288,12 +288,9 @@ describe('ApiConnectionManager', () => {
     expect(httpMock.post).toHaveBeenCalledWith('/datasources', {
       name: 'FTP Import',
       description: '',
-      ds_type: 'ftp',
-      config: JSON.stringify({
-        type: 'ftp',
-        host: 'ftp.example.test',
-        path: '/incoming',
-      }),
+      type: 'ftp',
+      root_path: '/incoming',
+      host: 'ftp.example.test',
     });
   });
 
