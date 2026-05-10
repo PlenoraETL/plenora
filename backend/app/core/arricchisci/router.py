@@ -271,6 +271,26 @@ async def validate_enrichment(
                 ]
             )
 
+        # api_type=generator: il nodo e' una source standalone (1 call
+        # HTTP -> N righe), non c'e' un dataframe di input da validare.
+        # Skippa il caricamento dati e ritorna valid; senza, il
+        # `_load_request_data` per project_id tenta di caricare
+        # l'ultimo result_blob del progetto (potenzialmente corrotto o
+        # dell'execute precedente), facendo fallire la pre-flight UI.
+        # Il warning "Estrazione REST" e' contrattuale: il FE lo usa
+        # per discriminare "total_rows=0 atteso" da "progetto vuoto".
+        if (api_conn.get("api_type") or "enricher") == "generator":
+            return ValidateResponse(
+                valid=True,
+                total_rows=0, valid_rows=0, invalid_rows=0,
+                missing_columns=[],
+                null_param_rows_count=0,
+                warnings=[
+                    "Estrazione REST: il numero di righe sara' "
+                    "determinato dalla risposta dell'API."
+                ],
+            )
+
         try:
             df = _load_request_data(request, current_user)
         except SourceLoadingError as e:

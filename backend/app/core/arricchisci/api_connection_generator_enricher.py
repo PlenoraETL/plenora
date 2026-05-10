@@ -433,8 +433,20 @@ class ApiConnectionGeneratorEnricherMixin:
         elif isinstance(data, dict) and 'data' in data and isinstance(data.get('data'), list):
             logger.info("Auto-detect: usando array 'data' come root")
             for item in data['data']:
-                row = {m.get('column', m.get('path')): self._extract_json_value(item, m.get('path', ''))
-                       for m in output_mapping}
+                if output_mapping:
+                    row = {
+                        m.get('column', m.get('path')): self._extract_json_value(
+                            item, m.get('path', ''),
+                        )
+                        for m in output_mapping
+                    }
+                else:
+                    # Senza output_mapping configurato, copia tutte le
+                    # chiavi del dict come colonne (auto-discovery).
+                    # Senza questo, il generator produrrebbe N righe
+                    # vuote (DataFrame len=N, cols=0, empty=True),
+                    # facendo fallire il preview con "Nessun dato".
+                    row = dict(item) if isinstance(item, dict) else {"value": item}
                 rows.append(row)
 
         # Oggetto singolo

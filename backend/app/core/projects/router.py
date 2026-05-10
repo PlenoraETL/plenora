@@ -538,9 +538,23 @@ def update_project_canvas(
         "staticValues", "datasource_node", "comment",
     }
     target_ids = {e.target for e in canvas.edges}
+
+    def _is_source_like(n) -> bool:
+        if n.type in _SOURCE_LIKE:
+            return True
+        # `api_enrich` con `api_type=generator` e' una sorgente REST: il
+        # runtime (`canvas_orchestrator.run_single_enricher` +
+        # `executor.execute_api_node`) chiama `_execute_api_generator`
+        # con input_df=None, e la response diventa il dataframe.
+        # Distinto da `api_type=enricher` (1 chiamata per riga, richiede
+        # dataframe upstream e quindi un edge incoming).
+        if n.type == "api_enrich" and getattr(n, "api_type", None) == "generator":
+            return True
+        return False
+
     orphans = [
         n.id for n in canvas.nodes
-        if n.type not in _SOURCE_LIKE and n.id not in target_ids
+        if not _is_source_like(n) and n.id not in target_ids
     ]
     if orphans:
         raise HTTPException(

@@ -150,6 +150,22 @@ def _node_may_explode_cardinality(
     cn = CanvasNode(node)
     if cn.type != "api_enrich":
         return False
+
+    # `api_type=generator` produce N righe da 1 chiamata HTTP: e'
+    # intrinsecamente cardinality-changing rispetto all'input (anche
+    # se input_df e' None). Non puo' stare in un parallel batch
+    # column-by-column con altri enricher 1-to-1. Il check sull'api_type
+    # ha precedenza sul fallback `output_mapping` perche' un generator
+    # puo' avere output_mapping vuoto (response intero -> df) ma resta
+    # cardinality-changing.
+    api_type = cn.get_field("api_type")
+    if not api_type and api_connections is not None:
+        api_id = cn.get_field("api_id")
+        if api_id:
+            api_type = (api_connections.get(api_id) or {}).get("api_type")
+    if api_type == "generator":
+        return True
+
     om = cn.get_field("output_mapping") or []
     if not om and api_connections is not None:
         api_id = cn.get_field("api_id")
