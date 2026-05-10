@@ -22,7 +22,9 @@ _FACADE_MODULE = "app.core.auth.auth"
 _PHASE1_FILES = (
     _APP / "core" / "auth" / "auth_middleware.py",
     _APP / "core" / "auth" / "ownership.py",
-    _APP / "shared" / "authz_helpers.py",
+    # `app.shared.authz_helpers` migrato a `app.core.auth.resource_access`
+    # (canonical home: i checker DB-bound vivono accanto a ownership).
+    _APP / "core" / "auth" / "resource_access.py",
     # typed-context also forbids facade entirely for these (CurrentUser-only
     # imports — nothing else was being pulled from the facade).
     _APP / "core" / "auth" / "async_user_recheck.py",
@@ -377,8 +379,12 @@ def test_authz_helpers_imports_models_and_ownership_leaves():
     `app.core.auth.models` → `app.shared.contracts.auth` (the
     contract module re-exports from auth.models, identity
     preserved). `assert_*` ownership helpers stay on
-    `app.core.auth.ownership` (DB-bound canonical home)."""
-    path = _APP / "shared" / "authz_helpers.py"
+    `app.core.auth.ownership` (DB-bound canonical home).
+
+    Successivamente `app.shared.authz_helpers` e' stato migrato a
+    `app.core.auth.resource_access` (stesso payload, home canonical
+    accanto al cluster auth/ownership)."""
+    path = _APP / "core" / "auth" / "resource_access.py"
     text = path.read_text(encoding="utf-8")
     assert "from app.shared.contracts.auth import CurrentUser" in text
     assert "from app.core.auth.ownership import" in text
