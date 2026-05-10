@@ -147,7 +147,7 @@ def _patch_pipeline_eager_success(monkeypatch):
         lambda run_id: False,
     )
     monkeypatch.setattr(
-        "app.shared.async_user_recheck.recheck_user_authorized",
+        "app.core.auth.async_user_recheck.recheck_user_authorized",
         lambda **kwargs: None,
     )
 
@@ -303,7 +303,7 @@ def test_shared_recheck_invokes_assert_project_access(monkeypatch):
     Replacement R-04 di `inspect.getsource(recheck_user_authorized) + "assert_project_access" in src`:
     spy diretto sul collaborator -> osserva la chiamata al helper.
     """
-    from app.shared import async_user_recheck as mod
+    from app.core.auth import async_user_recheck as mod
     from app.core.auth.db import UserRow
 
     monkeypatch.setattr(
@@ -364,9 +364,9 @@ def test_pipeline_task_passes_user_id_to_open_run(monkeypatch):
         "workers.tasks.pipeline_task.close_run", lambda **kwargs: None,
     )
 
-    # Spy su intermediate.db.create_run: no-op (covered separatamente).
+    # Spy su intermediate run lifecycle create_run: no-op (covered separately).
     monkeypatch.setattr(
-        "app.core.intermediate.db.create_run",
+        "app.core.intermediate.run_lifecycle.create_run",
         lambda *args, **kwargs: {"run_id": kwargs.get("run_id", "r-1")},
     )
 
@@ -422,7 +422,7 @@ def test_open_run_writes_user_id_in_insert_sql(monkeypatch):
 
 def test_shared_recheck_helper_exists_and_has_correct_contract():
     """Helper recheck_user_authorized centralizzato in app.shared."""
-    from app.shared.async_user_recheck import recheck_user_authorized
+    from app.core.auth.async_user_recheck import recheck_user_authorized
 
     sig = inspect.signature(recheck_user_authorized)
     assert "user_id" in sig.parameters
@@ -434,14 +434,14 @@ def test_shared_recheck_helper_exists_and_has_correct_contract():
 
 def test_shared_recheck_returns_none_when_user_id_missing():
     """user_id=None (cron/scheduled) -> None (task procede senza check)."""
-    from app.shared.async_user_recheck import recheck_user_authorized
+    from app.core.auth.async_user_recheck import recheck_user_authorized
     result = recheck_user_authorized(user_id=None, project_id="any")
     assert result is None
 
 
 def test_shared_recheck_returns_permission_revoked_on_disabled_user(monkeypatch):
     """User disabilitato -> return permission_revoked dict."""
-    from app.shared import async_user_recheck as mod
+    from app.core.auth import async_user_recheck as mod
     from app.core.auth.db import UserRow
 
     def fake_get_user(uid):
@@ -461,7 +461,7 @@ def test_shared_recheck_returns_permission_revoked_on_disabled_user(monkeypatch)
     # â†’ access violation se DB non raggiungibile (vedi review #8 Batch B).
     # Pattern simmetrico a `test_n11_canvas_types_propagation_contract.py`
     # (review #7).
-    monkeypatch.setattr("app.shared.async_user_recheck.get_user", fake_get_user)
+    monkeypatch.setattr("app.core.auth.async_user_recheck.get_user", fake_get_user)
     result = mod.recheck_user_authorized(user_id="usr_x", project_id="proj_1")
     assert result is not None
     assert result["status"] == "permission_revoked"
@@ -650,7 +650,7 @@ def test_pipeline_task_passes_user_id_to_intermediate_create_run(monkeypatch):
         return {"run_id": kwargs.get("run_id") or (args[0] if args else "r-1")}
 
     monkeypatch.setattr(
-        "app.core.intermediate.db.create_run", spy_create_run,
+        "app.core.intermediate.run_lifecycle.create_run", spy_create_run,
     )
 
     pt.execute_pipeline_task.apply(

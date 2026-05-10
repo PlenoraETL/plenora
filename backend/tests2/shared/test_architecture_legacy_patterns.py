@@ -87,8 +87,8 @@ def test_value_error_str_e_lock_exists_in_catalog_test():
 #   `validate_storage_config` deve distinguere "user explicitly set"
 #   vs "Settings default" — Settings.get swallows malformed input.
 #   Documentato come eccezione esplicita ADR-0021.
-# - `app/shared/crypto.py`: secret/key loading at module load.
-# - `app/shared/jwt_token.py`: JWT secret loading at module load.
+# - `app/infrastructure/security/crypto.py`: secret/key loading at module load.
+# - `app/core/auth/jwt_token.py`: JWT secret loading at module load.
 # - `app/shared/request_utils.py`: TRUSTED_PROXIES infra config (1
 #   read, lru_cache su raw value).
 # - `app/utils/zip_safe.py`: zip uncompressed-bytes cap env reads
@@ -112,8 +112,8 @@ ALLOWLIST_GETENV_COUNTS: Dict[str, int] = {
     "app/db/migrations_runner.py": 1,
     "app/db/pg_connection.py": 3,
     "app/infrastructure/storage/cloud_backends.py": 30,
-    "app/shared/crypto.py": 4,
-    "app/shared/jwt_token.py": 3,
+    "app/infrastructure/security/crypto.py": 4,
+    "app/core/auth/jwt_token.py": 3,
     "app/shared/request_utils.py": 1,
     "app/utils/zip_safe.py": 1,
     "app/core/admin_backups/service.py": 1,

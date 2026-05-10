@@ -1,5 +1,5 @@
 """
-app/shared/crypto.py
+app/infrastructure/security/crypto.py
 
 Modulo centralizzato per la cifratura simmetrica di campi sensibili a riposo
 """

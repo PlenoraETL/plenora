@@ -94,7 +94,7 @@ class ObjectStorage(Protocol):
 
 
 # Messaggio operativo unico per tutti i casi di credenziali AWS scadute o
-# non disponibili. Usato da result_store + admin_backups per uniformare
+# non disponibili. Usato da results.blob_writer + admin_backups per uniformare
 # l'errore percepito dall'utente. Mantenere conciso e azionabile
 _AWS_CREDENTIALS_ERROR_HINT = (
     "AWS credentials expired/unavailable. "

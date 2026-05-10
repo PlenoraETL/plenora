@@ -13,7 +13,7 @@ import pyotp
 import qrcode
 
 from app.db import pg_connection
-from app.shared.crypto import decrypt, encrypt
+from app.infrastructure.security.crypto import decrypt, encrypt
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)

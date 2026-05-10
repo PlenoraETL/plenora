@@ -28,6 +28,7 @@ from app.core.artifacts import (
     SourceLoadingError,
     SourceRef,
 )
+from app.core.connections import errors as connection_errors
 from app.core.connections.service import ConnectionService as _CS
 from app.core.resources.column_types import (
     canvas_type_to_pandas_dtype,
@@ -422,7 +423,7 @@ def _get_connection(connection_id: str) -> Dict[str, Any]:
         raise HTTPException(
             status_code=404,
             detail={
-                "error": error_codes.CONNECTION_NOT_FOUND,
+                "error": connection_errors.CONNECTION_NOT_FOUND,
                 "message": f"Connessione '{connection_id}' non trovata",
             },
         )

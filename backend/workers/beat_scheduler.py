@@ -690,8 +690,8 @@ class PlenoraBeatScheduler(Scheduler):
         vecchi di TTL (default 24h, env TEMP_ORPHAN_CLEANUP_HOURS).
 
         Copre i pattern noti di temp naming:
-          - plenora_cached_* / plenora_cached_* (result_store.get_result_as_file)
-          - plenora_{pid}_{hash}/ (result_store.get_temp_output_path)
+          - plenora_cached_* / plenora_cached_* (results.result_reader materialization)
+          - plenora_{pid}_{hash}/ (results.temp_paths.get_temp_output_path)
           - tmp* (NamedTemporaryFile/mkdtemp generici
                                                 in file_service, artifacts, ecc.)
           - eseguibili_uploads/* (cross-worker upload staging,

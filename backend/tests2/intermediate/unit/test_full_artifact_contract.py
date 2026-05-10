@@ -78,7 +78,7 @@ def _mock_object_storage(uploads: dict):
 
 def _patch_run_meta(canvas_id: str = "proj-1", group_id: str = "grp-1"):
     return patch(
-        "app.core.intermediate.db.get_run",
+        "app.core.intermediate.runs_db.get_run",
         return_value={
             "canvas_id": canvas_id,
             "group_id": group_id,
@@ -110,7 +110,7 @@ def test_full_artifact_writes_parquet_and_manifest_to_runtime_object_storage():
     uploads: dict = {}
     with _patch_settings(mode="full_artifact"), _mock_object_storage(uploads), \
             _patch_run_meta(canvas_id="proj-FA", group_id="grp-FA"), patch(
-        "app.core.intermediate.db.write_node_snapshot_atomic",
+        "app.core.intermediate.node_snapshots_db.write_node_snapshot_atomic",
         side_effect=_capture_db,
     ):
         handle = _snap.record_final_snapshot(
@@ -177,7 +177,7 @@ def test_full_artifact_parquet_payload_roundtrip():
 
     with _patch_settings(mode="full_artifact"), _mock_object_storage(uploads), \
             _patch_run_meta(), patch(
-        "app.core.intermediate.db.write_node_snapshot_atomic"
+        "app.core.intermediate.node_snapshots_db.write_node_snapshot_atomic"
     ):
         _snap.record_final_snapshot(
             run_id="run-r",
@@ -235,7 +235,7 @@ def test_full_artifact_runtime_capability_collapse_marks_failed():
     ), patch(
         "app.infrastructure.storage.cloud_backends.get_runtime_object_storage", fake_get,
     ), _patch_run_meta(), patch(
-        "app.core.intermediate.db.write_node_snapshot_atomic",
+        "app.core.intermediate.node_snapshots_db.write_node_snapshot_atomic",
         side_effect=_capture_db,
     ):
         handle = _snap.record_final_snapshot(
@@ -310,7 +310,7 @@ def test_full_artifact_does_not_call_to_dict_full():
          _patch_settings(mode="full_artifact"), \
          _mock_object_storage(uploads), \
          _patch_run_meta(), patch(
-        "app.core.intermediate.db.write_node_snapshot_atomic",
+        "app.core.intermediate.node_snapshots_db.write_node_snapshot_atomic",
     ):
         _snap.record_final_snapshot(
             run_id="run-no-dict", module="manipola",
@@ -342,7 +342,7 @@ def test_full_pg_legacy_path_does_not_touch_object_storage():
     with _patch_settings(mode="full_pg"), patch(
         "app.infrastructure.storage.cloud_backends.get_runtime_object_storage", fake_get_storage,
     ), patch(
-        "app.core.intermediate.db.write_node_snapshot_atomic",
+        "app.core.intermediate.node_snapshots_db.write_node_snapshot_atomic",
         side_effect=_capture_db,
     ):
         _snap.record_final_snapshot(
@@ -376,7 +376,7 @@ def test_metadata_only_path_does_not_touch_object_storage():
     with _patch_settings(mode="metadata_only"), patch(
         "app.infrastructure.storage.cloud_backends.get_runtime_object_storage", fake_get_storage,
     ), patch(
-        "app.core.intermediate.db.write_node_snapshot_atomic",
+        "app.core.intermediate.node_snapshots_db.write_node_snapshot_atomic",
         side_effect=_capture_db,
     ):
         _snap.record_final_snapshot(
@@ -419,7 +419,7 @@ def test_full_artifact_serialize_error_marks_failed_and_does_not_crash():
         "app.core.intermediate.artifact_writer._serialize_dataframe_to_parquet",
         side_effect=_bad_serialize,
     ), patch(
-        "app.core.intermediate.db.write_node_snapshot_atomic",
+        "app.core.intermediate.node_snapshots_db.write_node_snapshot_atomic",
         side_effect=_capture_db,
     ):
         handle = _snap.record_final_snapshot(

@@ -15,7 +15,7 @@ from app.shared.execution.canvas_graph import CanvasGraph
 from app.shared.execution.executor_protocol import PipelineDispatcherProtocol
 from app.shared.execution.graph import kahn_topological_order
 from app.utils.logger import get_logger, append_step
-from app.core.results.result_store import save_pipeline_result_outcome
+from app.core.results.pipeline_result import save_pipeline_result_outcome
 from app.core.files.dataframe_io import (
     load_dataframe_from_file,
     sanitize_for_json,

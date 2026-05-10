@@ -151,7 +151,7 @@ def execute_enrichment_task(
     # Per is_eseguibile, skip: gli eseguibili hanno flusso di auth
     # separato (token eseguibile) e non passano per user_id interattivo
     if not is_eseguibile:
-        from app.shared.async_user_recheck import recheck_user_authorized
+        from app.core.auth.async_user_recheck import recheck_user_authorized
         _revoked = recheck_user_authorized(
             user_id=user_id, project_id=project_id,
             task_id=task_id, run_id=run_id or "", task_name="ENRICHMENT",
@@ -199,16 +199,24 @@ def execute_enrichment_task(
     else:
         _run_id = str(_uuid.uuid4())
         try:
-            from app.core.intermediate import db as _idb
+            from app.core.intermediate.run_lifecycle import (
+                create_run as _create_intermediate_run,
+                get_default_runs_retention as _get_default_runs_retention,
+            )
             from app.core.projects.service import ProjectService as _PS
             from app.core.projects.retention import resolve_runs_retention_n
             _meta = _PS().get_project_metadata(project_id)
             _group_id = getattr(_meta, 'group_id', 'unknown') if _meta else 'unknown'
             _retention_n = resolve_runs_retention_n(
                 project_id,
-                default=_idb.DEFAULT_RUNS_RETENTION,
+                default=_get_default_runs_retention(),
             )
-            _idb.create_run(run_id=_run_id, canvas_id=project_id, group_id=_group_id, user_id=user_id)
+            _create_intermediate_run(
+                run_id=_run_id,
+                canvas_id=project_id,
+                group_id=_group_id,
+                user_id=user_id,
+            )
         except Exception as _rie:
             logger.warning(f"[Task {task_id}] Intermediate: apertura run fallita (non bloccante): {_rie}")
             _run_id = None
@@ -884,7 +892,7 @@ def execute_enrichment_task(
                 logger.info(f"[Task {task_id}] Output eseguibile su storage: eseguibili-outputs/{task_id}/{_output_filename}")
             else:
                 # Flusso arricchisci standard: salva nel DB
-                from app.core.results.result_store import save_result_blob
+                from app.core.results.blob_writer import save_result_blob
                 result_id = save_result_blob(
                     project_id=project_id,
                     path=src_path,
@@ -988,7 +996,7 @@ def execute_enrichment_task(
             logger.info(f"[Task {task_id}] Output eseguibile (df) su storage: eseguibili-outputs/{task_id}/{final_filename}")
         else:
             # Arricchisci standard: single entry-point save_pipeline_result
-            from app.core.results.result_store import save_pipeline_result
+            from app.core.results.pipeline_result import save_pipeline_result
             saved = save_pipeline_result(
                 project_id=project_id,
                 df=final_df,

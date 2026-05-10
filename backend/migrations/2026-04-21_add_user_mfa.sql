@@ -14,7 +14,7 @@
 --     utente. Un nuovo enroll sovrascrive il precedente (vedi mfa.py).
 --     CASCADE: cancellare un utente deve cancellare il suo secret.
 --   - secret_encrypted TEXT NOT NULL: base32 TOTP secret, cifrato con
---     Fernet via app.shared.crypto (chain `PLENORA_ENCRYPTION_KEY` →
+--     Fernet via app.infrastructure.security.crypto (chain `PLENORA_ENCRYPTION_KEY` →
 --     `URBY_ENCRYPTION_KEY` → `CONN_ENCRYPT_KEY`). Il prefisso `enc:` e'
 --     parte del valore, il decrypt e' idempotente su plaintext legacy
 --     (ma qui non dovrebbero mai esistere plaintext: tutte le INSERT

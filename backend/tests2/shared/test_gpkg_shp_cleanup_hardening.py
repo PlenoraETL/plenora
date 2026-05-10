@@ -46,9 +46,9 @@ def _route_stdlib_temp_to_tmp_path(monkeypatch, tmp_path):
 
 def test_save_pipeline_result_gpkg_no_file_in_data_dir_temp(monkeypatch, tmp_path):
     """Sentinel: DATA_DIR/temp/ resta vuota dopo save_pipeline_result(gpkg)."""
-    from app.core.results.result_store import save_pipeline_result
-    import app.core.results.result_store as result_store
-    import app.core.projects.db as projects_db
+    from app.core.results.pipeline_result import save_pipeline_result
+    import app.core.results.blob_writer as result_blob_writer
+    import app.core.results.pipeline_result as pipeline_result
     import app.core.results.db as results_db
 
     # Simula DATA_DIR su tmp_path per intercettare eventuali file residui
@@ -60,7 +60,7 @@ def test_save_pipeline_result_gpkg_no_file_in_data_dir_temp(monkeypatch, tmp_pat
         DATA_DIR = data_dir
         @staticmethod
         def get(key, default=None): return default
-    monkeypatch.setattr(result_store, "settings", _FakeSettings, raising=False)
+    monkeypatch.setattr(pipeline_result, "settings", _FakeSettings, raising=False)
 
     # Mock save_dataframe (fs-only writer) per isolare il test
     def _fake_save(df, output_path, fmt, *a, **kw):
@@ -72,13 +72,11 @@ def test_save_pipeline_result_gpkg_no_file_in_data_dir_temp(monkeypatch, tmp_pat
 
     # Mock DB save
     saved_db_calls = []
-    monkeypatch.setattr(result_store, "uuid",
+    monkeypatch.setattr(result_blob_writer, "uuid",
                         SimpleNamespace(uuid4=lambda: "res-gpkg"))
-    monkeypatch.setattr(projects_db, "get_project_row",
-                        lambda pid: SimpleNamespace(id=pid, group_id="grp"))
     monkeypatch.setattr(results_db, "save_result_row",
                         lambda **kw: saved_db_calls.append(kw))
-    monkeypatch.setattr(result_store, "_apply_results_retention",
+    monkeypatch.setattr(result_blob_writer, "apply_results_retention_after_save",
                         lambda pid: None)
 
     df = pd.DataFrame({"a": [1, 2, 3]})
@@ -106,9 +104,9 @@ def test_save_pipeline_result_gpkg_no_file_in_data_dir_temp(monkeypatch, tmp_pat
 def test_save_pipeline_result_gpkg_uses_temporary_directory_prefix(monkeypatch, tmp_path):
     """Sentinel: il path passato a save_dataframe e' dentro tempfile.TemporaryDirectory
     con prefix urby_gpkg_shp_ (non DATA_DIR/temp/urby_<pid>_<hash>/)."""
-    from app.core.results.result_store import save_pipeline_result
-    import app.core.results.result_store as result_store
-    import app.core.projects.db as projects_db
+    from app.core.results.pipeline_result import save_pipeline_result
+    import app.core.results.blob_writer as result_blob_writer
+    import app.core.results.pipeline_result as pipeline_result
     import app.core.results.db as results_db
 
     # Settings DATA_DIR
@@ -116,7 +114,7 @@ def test_save_pipeline_result_gpkg_uses_temporary_directory_prefix(monkeypatch, 
         DATA_DIR = tmp_path
         @staticmethod
         def get(key, default=None): return default
-    monkeypatch.setattr(result_store, "settings", _FakeSettings, raising=False)
+    monkeypatch.setattr(pipeline_result, "settings", _FakeSettings, raising=False)
 
     captured_paths = []
 
@@ -127,12 +125,10 @@ def test_save_pipeline_result_gpkg_uses_temporary_directory_prefix(monkeypatch, 
         return out
     monkeypatch.setattr("app.core.files.dataframe_io.save_dataframe", _spy_save)
 
-    monkeypatch.setattr(result_store, "uuid",
+    monkeypatch.setattr(result_blob_writer, "uuid",
                         SimpleNamespace(uuid4=lambda: "res-1"))
-    monkeypatch.setattr(projects_db, "get_project_row",
-                        lambda pid: SimpleNamespace(id=pid, group_id="grp"))
     monkeypatch.setattr(results_db, "save_result_row", lambda **kw: None)
-    monkeypatch.setattr(result_store, "_apply_results_retention",
+    monkeypatch.setattr(result_blob_writer, "apply_results_retention_after_save",
                         lambda pid: None)
 
     df = pd.DataFrame({"a": [1]})
@@ -152,16 +148,16 @@ def test_save_pipeline_result_gpkg_uses_temporary_directory_prefix(monkeypatch, 
 
 def test_save_pipeline_result_gpkg_cleans_tmp_dir_on_upload_failure(monkeypatch, tmp_path):
     """Su upload failure, il context exit pulisce comunque la tmp_dir."""
-    from app.core.results.result_store import save_pipeline_result
-    import app.core.results.result_store as result_store
-    import app.core.projects.db as projects_db
+    from app.core.results.pipeline_result import save_pipeline_result
+    import app.core.results.blob_writer as result_blob_writer
+    import app.core.results.pipeline_result as pipeline_result
     import app.core.results.db as results_db
 
     class _FakeSettings:
         DATA_DIR = tmp_path
         @staticmethod
         def get(key, default=None): return default
-    monkeypatch.setattr(result_store, "settings", _FakeSettings, raising=False)
+    monkeypatch.setattr(pipeline_result, "settings", _FakeSettings, raising=False)
 
     captured_tmp_dirs = []
 
@@ -173,10 +169,8 @@ def test_save_pipeline_result_gpkg_cleans_tmp_dir_on_upload_failure(monkeypatch,
     monkeypatch.setattr("app.core.files.dataframe_io.save_dataframe", _spy_save)
 
     # save_result_row (DB) solleva
-    monkeypatch.setattr(result_store, "uuid",
+    monkeypatch.setattr(result_blob_writer, "uuid",
                         SimpleNamespace(uuid4=lambda: "res-fail"))
-    monkeypatch.setattr(projects_db, "get_project_row",
-                        lambda pid: SimpleNamespace(id=pid, group_id="grp"))
     def _boom(**kw):
         raise RuntimeError("DB unavailable")
     monkeypatch.setattr(results_db, "save_result_row", _boom)

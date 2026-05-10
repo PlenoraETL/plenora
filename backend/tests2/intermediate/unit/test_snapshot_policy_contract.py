@@ -328,7 +328,7 @@ def test_checkpoint_skip_does_not_touch_dataframe_or_db():
     with _patch_settings(manipola_checkpoints="none"), patch.object(
         _snap, "compute_dataframe_fingerprint", fingerprint_spy,
     ), patch(
-        "app.core.intermediate.db.write_node_snapshot_atomic", db_spy,
+        "app.core.intermediate.node_snapshots_db.write_node_snapshot_atomic", db_spy,
     ):
         handle = _snap.record_checkpoint_snapshot(
             run_id="run-1",
@@ -407,7 +407,7 @@ def test_record_final_metadata_only_zero_rows_real_count_hash_present():
     captured, capture = _capture_db_call()
 
     with _patch_settings(mode="metadata_only"), patch(
-        "app.core.intermediate.db.write_node_snapshot_atomic",
+        "app.core.intermediate.node_snapshots_db.write_node_snapshot_atomic",
         side_effect=capture,
     ):
         handle = _snap.record_final_snapshot(
@@ -440,7 +440,7 @@ def test_record_final_preview_only_caps_rows_real_count_truncated_flag():
     captured, capture = _capture_db_call()
 
     with _patch_settings(mode="preview_only", preview_rows=500), patch(
-        "app.core.intermediate.db.write_node_snapshot_atomic",
+        "app.core.intermediate.node_snapshots_db.write_node_snapshot_atomic",
         side_effect=capture,
     ):
         handle = _snap.record_final_snapshot(
@@ -470,7 +470,7 @@ def test_record_final_preview_only_no_truncation_when_dataset_smaller_than_cap()
     captured, capture = _capture_db_call()
 
     with _patch_settings(mode="preview_only", preview_rows=500), patch(
-        "app.core.intermediate.db.write_node_snapshot_atomic",
+        "app.core.intermediate.node_snapshots_db.write_node_snapshot_atomic",
         side_effect=capture,
     ):
         handle = _snap.record_final_snapshot(
@@ -490,7 +490,7 @@ def test_record_final_full_pg_persists_all_rows():
     captured, capture = _capture_db_call()
 
     with _patch_settings(mode="full_pg"), patch(
-        "app.core.intermediate.db.write_node_snapshot_atomic",
+        "app.core.intermediate.node_snapshots_db.write_node_snapshot_atomic",
         side_effect=capture,
     ):
         handle = _snap.record_final_snapshot(
@@ -517,7 +517,7 @@ def test_node_hash_invariant_across_modes_on_same_dataframe():
     df = pd.DataFrame({"a": list(range(1000)), "b": ["x"] * 1000})
 
     with _patch_settings(mode="metadata_only"), patch(
-        "app.core.intermediate.db.write_node_snapshot_atomic",
+        "app.core.intermediate.node_snapshots_db.write_node_snapshot_atomic",
     ):
         h_meta = _snap.record_final_snapshot(
             run_id="rA", module="manipola", node_id="r",
@@ -525,7 +525,7 @@ def test_node_hash_invariant_across_modes_on_same_dataframe():
         ).node_hash
 
     with _patch_settings(mode="preview_only", preview_rows=500), patch(
-        "app.core.intermediate.db.write_node_snapshot_atomic",
+        "app.core.intermediate.node_snapshots_db.write_node_snapshot_atomic",
     ):
         h_prev = _snap.record_final_snapshot(
             run_id="rB", module="manipola", node_id="r",
@@ -533,7 +533,7 @@ def test_node_hash_invariant_across_modes_on_same_dataframe():
         ).node_hash
 
     with _patch_settings(mode="full_pg"), patch(
-        "app.core.intermediate.db.write_node_snapshot_atomic",
+        "app.core.intermediate.node_snapshots_db.write_node_snapshot_atomic",
     ):
         h_full = _snap.record_final_snapshot(
             run_id="rC", module="manipola", node_id="r",

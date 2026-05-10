@@ -115,17 +115,17 @@ def env(api_service):
             #     veniva mai invocato.
             #   - `app.core.arricchisci.api_connector.save_result_blob`: il
             #     binding alias api_connector e' dead post-extraction; la
-            #     canonical via `app.core.results.result_store.save_result_blob_from_bytes`
+            #     canonical via `app.core.results.blob_writer.save_result_blob_from_bytes`
             #     resta patchata sotto (`save_blob_bytes`) e copre il code
             #     path csv/xlsx/json/parquet/geojson (in-memory).
             #   - `app.core.arricchisci.api_connector.get_temp_output_path`
             #     (0 usages): mai invocato post-extraction.
             #
             # Per scenari path-based (gpkg/shp) un eventuale futuro test deve
-            # patchare il canonical `app.core.results.result_store.save_result_blob`,
+            # patchare il canonical `app.core.results.blob_writer.save_result_blob`,
             # NON l'alias re-import ormai rimosso da api_connector.
             save_blob_bytes=_p(
-                "app.core.results.result_store.save_result_blob_from_bytes",
+                "app.core.results.pipeline_result.save_result_blob_from_bytes",
                 return_value="res-stubbed-id",
             ),
             save_df_bytes=_p(
@@ -581,7 +581,7 @@ class TestExecuteEnrichmentResponseIncludesResultId:
     contenere `result_id` sia sul ramo DataFrame che sul ramo file_result.
 
     `save_result_blob` ritorna un result_id E cancella il file temp su
-    success (vedi `app/core/results/result_store.py:80`). Senza `result_id` nel
+    success (vedi `app/core/results/blob_writer.py`). Senza `result_id` nel
     response dict, un consumer downstream che wrappa il risultato in
     `PipelineArtifact` vedrebbe `artifact_kind == "file"` e tenterebbe
     di materializzare `output_path` — un path gia' unlink-ato.

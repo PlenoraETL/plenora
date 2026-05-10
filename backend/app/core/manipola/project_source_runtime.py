@@ -7,8 +7,11 @@ from typing import Any, Dict, List, Optional
 import threading
 import uuid as _uuid
 
-from app.core.intermediate import db as idb
-from app.core.intermediate.writer import close_run as idb_close_run
+from app.core.intermediate.run_lifecycle import (
+    close_run as close_intermediate_run,
+    create_run as create_intermediate_run,
+    get_default_runs_retention,
+)
 from app.core.projects.execution_context import get_upstream_run_context
 from app.core.projects.lineage import ProjectLineageCycleError
 from app.shared.execution.executor_protocol import PipelineDispatcherProtocol
@@ -84,7 +87,7 @@ def _open_upstream_run(
     try:
         upstream_context = get_upstream_run_context(
             source_project_id,
-            default_retention_n=idb.DEFAULT_RUNS_RETENTION,
+            default_retention_n=get_default_runs_retention(),
         )
         upstream_group_id = upstream_context.group_id
         open_run(
@@ -94,7 +97,7 @@ def _open_upstream_run(
             module=upstream_context.project_type,
             triggered_by="cascade",
         )
-        idb.create_run(
+        create_intermediate_run(
             run_id=upstream_run_id,
             canvas_id=source_project_id,
             group_id=upstream_group_id,
@@ -121,7 +124,7 @@ def _close_upstream_run(upstream_run_id: Optional[str], upstream, retention_n, l
             steps=[],
             error_message=upstream.message if not upstream.success else None,
         )
-        idb_close_run(
+        close_intermediate_run(
             run_id=upstream_run_id,
             input_hash="",
             output_hash="",

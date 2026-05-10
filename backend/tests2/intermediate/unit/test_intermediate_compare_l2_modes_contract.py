@@ -49,7 +49,7 @@ def test_l2_full_pg_full_pg_returns_full_diff(superadmin_user):
         "app.core.intermediate.router._check_run_access",
         return_value={"run_id": "r", "group_id": "g"},
     ), patch(
-        "app.core.intermediate.router.idb.get_node_meta",
+        "app.core.intermediate.router.node_snapshots_db.get_node_meta",
         side_effect=_fake_meta,
     ), patch(
         "app.db.pg_connection.fetchall",
@@ -81,7 +81,7 @@ def test_l2_legacy_null_treated_as_full_pg(superadmin_user):
         "app.core.intermediate.router._check_run_access",
         return_value={"run_id": "r", "group_id": "g"},
     ), patch(
-        "app.core.intermediate.router.idb.get_node_meta",
+        "app.core.intermediate.router.node_snapshots_db.get_node_meta",
         side_effect=_fake_meta,
     ), patch(
         "app.db.pg_connection.fetchall",
@@ -112,7 +112,7 @@ def test_l2_preview_only_pair_is_partial(superadmin_user):
         "app.core.intermediate.router._check_run_access",
         return_value={"run_id": "r", "group_id": "g"},
     ), patch(
-        "app.core.intermediate.router.idb.get_node_meta",
+        "app.core.intermediate.router.node_snapshots_db.get_node_meta",
         side_effect=_fake_meta,
     ), patch(
         "app.db.pg_connection.fetchall",
@@ -146,7 +146,7 @@ def test_l2_metadata_only_returns_422_operational(superadmin_user):
         "app.core.intermediate.router._check_run_access",
         return_value={"run_id": "r", "group_id": "g"},
     ), patch(
-        "app.core.intermediate.router.idb.get_node_meta",
+        "app.core.intermediate.router.node_snapshots_db.get_node_meta",
         side_effect=_fake_meta,
     ), patch(
         "app.db.pg_connection.fetchall",
@@ -177,7 +177,7 @@ def test_l2_metadata_only_on_one_side_only_returns_422(superadmin_user):
         "app.core.intermediate.router._check_run_access",
         return_value={"run_id": "r", "group_id": "g"},
     ), patch(
-        "app.core.intermediate.router.idb.get_node_meta",
+        "app.core.intermediate.router.node_snapshots_db.get_node_meta",
         side_effect=_fake_meta,
     ):
         response = client.get("/api/runs/compare/l2?run_id_a=rA&run_id_b=rB&node_id=n1")
@@ -208,7 +208,7 @@ def test_l2_full_artifact_complete_returns_501_not_implemented(superadmin_user):
         "app.core.intermediate.router._check_run_access",
         return_value={"run_id": "r", "group_id": "g"},
     ), patch(
-        "app.core.intermediate.router.idb.get_node_meta",
+        "app.core.intermediate.router.node_snapshots_db.get_node_meta",
         side_effect=_fake_meta,
     ), patch(
         "app.infrastructure.storage.cloud_backends.get_runtime_object_storage",
@@ -245,7 +245,7 @@ def test_l2_full_artifact_pending_returns_422_operational(superadmin_user):
         "app.core.intermediate.router._check_run_access",
         return_value={"run_id": "r", "group_id": "g"},
     ), patch(
-        "app.core.intermediate.router.idb.get_node_meta",
+        "app.core.intermediate.router.node_snapshots_db.get_node_meta",
         side_effect=_fake_meta,
     ):
         response = client.get("/api/runs/compare/l2?run_id_a=rA&run_id_b=rB&node_id=n1")
@@ -271,7 +271,7 @@ def test_l2_full_artifact_failed_returns_422_operational(superadmin_user):
         "app.core.intermediate.router._check_run_access",
         return_value={"run_id": "r", "group_id": "g"},
     ), patch(
-        "app.core.intermediate.router.idb.get_node_meta",
+        "app.core.intermediate.router.node_snapshots_db.get_node_meta",
         side_effect=_fake_meta,
     ):
         response = client.get("/api/runs/compare/l2?run_id_a=rA&run_id_b=rB&node_id=n1")
@@ -299,7 +299,7 @@ def test_l2_preview_only_vs_full_pg_returns_422_mode_mismatch(superadmin_user):
         "app.core.intermediate.router._check_run_access",
         return_value={"run_id": "r", "group_id": "g"},
     ), patch(
-        "app.core.intermediate.router.idb.get_node_meta",
+        "app.core.intermediate.router.node_snapshots_db.get_node_meta",
         side_effect=_fake_meta,
     ):
         response = client.get("/api/runs/compare/l2?run_id_a=rA&run_id_b=rB&node_id=n1")
@@ -326,7 +326,7 @@ def test_l2_full_pg_vs_preview_only_symmetric(superadmin_user):
         "app.core.intermediate.router._check_run_access",
         return_value={"run_id": "r", "group_id": "g"},
     ), patch(
-        "app.core.intermediate.router.idb.get_node_meta",
+        "app.core.intermediate.router.node_snapshots_db.get_node_meta",
         side_effect=_fake_meta,
     ):
         response = client.get("/api/runs/compare/l2?run_id_a=rA&run_id_b=rB&node_id=n1")
@@ -358,7 +358,7 @@ def test_l2_mixed_metadata_full_pg_returns_metadata_reason(superdmin_or_admin: b
         "app.core.intermediate.router._check_run_access",
         return_value={"run_id": "r", "group_id": "g"},
     ), patch(
-        "app.core.intermediate.router.idb.get_node_meta",
+        "app.core.intermediate.router.node_snapshots_db.get_node_meta",
         side_effect=_fake_meta,
     ):
         response = client.get("/api/runs/compare/l2?run_id_a=rA&run_id_b=rB&node_id=n1")
@@ -398,7 +398,7 @@ def test_l2_does_not_return_500_on_any_documented_mode(superadmin_user):
             "app.core.intermediate.router._check_run_access",
             return_value={"run_id": "r", "group_id": "g"},
         ), patch(
-            "app.core.intermediate.router.idb.get_node_meta",
+            "app.core.intermediate.router.node_snapshots_db.get_node_meta",
             side_effect=_fake_meta,
         ), patch(
             "app.db.pg_connection.fetchall",

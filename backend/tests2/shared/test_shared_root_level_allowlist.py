@@ -19,15 +19,11 @@ _SHARED_DIR = Path(__file__).parents[2] / "app" / "shared"
 # Engine-specific code belongs in the engine subpackages above.
 _ALLOWED_ROOT_MODULES: frozenset[str] = frozenset(
     {
-        "async_http",         # thin httpx async wrapper used across domains
         "request_utils",      # request context extraction helpers
-        "async_user_recheck", # async per-request permission re-validation helper
         "error_codes",        # shared error code registry
         "error_envelope",     # standard error response envelope
         "error_sanitizer",    # strip sensitive data from error messages
         "authz_helpers",      # authorization predicate helpers
-        "crypto",             # cryptographic primitives (fernet, hashing)
-        "jwt_token",          # JWT encode/decode helpers
         "login_rate_limiter", # per-user login throttle
         "password_hashing",   # bcrypt password helpers
         "token_blacklist",    # JWT revocation store
@@ -40,15 +36,11 @@ _ALLOWED_ROOT_MODULES: frozenset[str] = frozenset(
 )
 
 _ROOT_MODULE_CLASSIFICATIONS: dict[str, str] = {
-    "async_http": "MOVE_TO_CONNECTIONS_CANDIDATE",
     "request_utils": "KEEP_ROOT_CROSS_CUTTING",
-    "async_user_recheck": "MOVE_TO_SECURITY_PACKAGE_LATER",
     "error_codes": "KEEP_ROOT_CROSS_CUTTING",
     "error_envelope": "KEEP_ROOT_CROSS_CUTTING",
     "error_sanitizer": "KEEP_ROOT_CROSS_CUTTING",
     "authz_helpers": "MOVE_TO_SECURITY_PACKAGE_LATER",
-    "crypto": "MOVE_TO_SECURITY_PACKAGE_LATER",
-    "jwt_token": "MOVE_TO_SECURITY_PACKAGE_LATER",
     "login_rate_limiter": "MOVE_TO_SECURITY_PACKAGE_LATER",
     "password_hashing": "MOVE_TO_SECURITY_PACKAGE_LATER",
     "token_blacklist": "MOVE_TO_SECURITY_PACKAGE_LATER",

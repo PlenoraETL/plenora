@@ -14,6 +14,10 @@ from typing import Dict, Set
 import pytest
 from fastapi import HTTPException
 
+from app.core.admin_backups import errors as admin_backup_errors
+from app.core.connections import errors as connection_errors
+from app.core.datasources import errors as datasource_errors
+from app.core.tickets import errors as ticket_errors
 from app.shared import error_codes
 from app.shared.error_envelope import (
     normalize_http_exception_detail,
@@ -130,6 +134,49 @@ _GLOBAL_CONSTANT_NAMES = {
     "VALIDATION_ERROR",
 }
 
+_MIGRATED_DOMAIN_MODULES = {
+    "app/core/admin_backups/router.py": (
+        "admin_backup_errors",
+        {
+            "OBJECT_STORAGE_DISABLED",
+            "AWS_CRT_MISSING",
+            "AWS_CREDENTIALS_EXPIRED",
+        },
+    ),
+    "app/core/connections/router.py": (
+        "connection_errors",
+        {
+            "CONNECTION_IN_USE",
+            "CONNECTION_NOT_FOUND",
+        },
+    ),
+    "app/core/carica/router.py": (
+        "connection_errors",
+        {
+            "CONNECTION_NOT_FOUND",
+        },
+    ),
+    "app/core/datasources/router.py": (
+        "datasource_errors",
+        {
+            "DATASOURCE_IN_USE",
+            "DATASOURCE_NOT_FOUND",
+        },
+    ),
+    "app/core/tickets/service.py": (
+        "ticket_errors",
+        {
+            "TICKET_NOT_FOUND",
+        },
+    ),
+}
+
+_MIGRATED_DOMAIN_CONSTANTS = {
+    const
+    for _, constants in _MIGRATED_DOMAIN_MODULES.values()
+    for const in constants
+}
+
 
 def test_known_domain_codes_matches_expected_lock():
     """Il `frozenset` esposto dal catalog deve combaciare
@@ -175,6 +222,60 @@ def test_catalog_constants_match_set_values():
     assert domain_constants == set(error_codes.KNOWN_DOMAIN_CODES)
 
 
+def test_migrated_domain_modules_feed_shared_catalog():
+    assert admin_backup_errors.KNOWN_DOMAIN_CODES <= error_codes.KNOWN_DOMAIN_CODES
+    assert connection_errors.KNOWN_DOMAIN_CODES <= error_codes.KNOWN_DOMAIN_CODES
+    assert datasource_errors.KNOWN_DOMAIN_CODES <= error_codes.KNOWN_DOMAIN_CODES
+    assert ticket_errors.KNOWN_DOMAIN_CODES <= error_codes.KNOWN_DOMAIN_CODES
+
+
+def test_migrated_domain_codes_keep_shared_reexports_for_compat():
+    assert error_codes.OBJECT_STORAGE_DISABLED == admin_backup_errors.OBJECT_STORAGE_DISABLED
+    assert error_codes.AWS_CRT_MISSING == admin_backup_errors.AWS_CRT_MISSING
+    assert error_codes.AWS_CREDENTIALS_EXPIRED == admin_backup_errors.AWS_CREDENTIALS_EXPIRED
+    assert error_codes.CONNECTION_IN_USE == connection_errors.CONNECTION_IN_USE
+    assert error_codes.CONNECTION_NOT_FOUND == connection_errors.CONNECTION_NOT_FOUND
+    assert error_codes.DATASOURCE_IN_USE == datasource_errors.DATASOURCE_IN_USE
+    assert error_codes.DATASOURCE_NOT_FOUND == datasource_errors.DATASOURCE_NOT_FOUND
+    assert error_codes.TICKET_NOT_FOUND == ticket_errors.TICKET_NOT_FOUND
+
+
+def test_migrated_domain_codes_are_not_defined_in_shared_catalog():
+    source = (_BACKEND_ROOT / "app" / "shared" / "error_codes.py").read_text(
+        encoding="utf-8",
+    )
+    centrally_defined = {
+        const
+        for const in _MIGRATED_DOMAIN_CONSTANTS
+        if re.search(rf"^{const}\s*=", source, re.MULTILINE)
+    }
+    assert centrally_defined == set(), (
+        "Domain-owned error codes must live in app/core/<domain>/errors.py; "
+        f"central definitions found: {sorted(centrally_defined)}"
+    )
+
+
+def test_migrated_domain_call_sites_use_domain_error_modules():
+    violations = []
+    missing_refs = []
+    for rel_path, (alias, constants) in _MIGRATED_DOMAIN_MODULES.items():
+        text = (_BACKEND_ROOT / rel_path).read_text(encoding="utf-8")
+        for const in constants:
+            if f"error_codes.{const}" in text:
+                violations.append(f"{rel_path}:error_codes.{const}")
+            if f"{alias}.{const}" not in text:
+                missing_refs.append(f"{rel_path}:{alias}.{const}")
+
+    assert violations == [], (
+        "Migrated domain call sites must not use app.shared.error_codes "
+        f"for owned constants: {violations}"
+    )
+    assert missing_refs == [], (
+        "Migrated domain call sites must import/use their domain errors "
+        f"module: {missing_refs}"
+    )
+
+
 def test_accepted_http_fallback_patterns_lock():
     """Lock i pattern accettati come fallback intenzionale
     (BE-GO-READY-ERROR-CODES-009). Riduce il drift detection
@@ -202,11 +303,11 @@ def test_not_found_family_uses_consistent_suffix():
         error_codes.SCHEDULE_NOT_FOUND,
         error_codes.RUN_NOT_FOUND,
         error_codes.BUNDLE_NOT_FOUND,
-        error_codes.CONNECTION_NOT_FOUND,
+        connection_errors.CONNECTION_NOT_FOUND,
         error_codes.API_CONNECTION_NOT_FOUND,
         error_codes.FILE_SOURCE_NOT_FOUND,
-        error_codes.DATASOURCE_NOT_FOUND,
-        error_codes.TICKET_NOT_FOUND,
+        datasource_errors.DATASOURCE_NOT_FOUND,
+        ticket_errors.TICKET_NOT_FOUND,
     }
     for code in not_found_codes:
         assert code.endswith("_not_found"), (
@@ -361,7 +462,7 @@ def test_raise_typed_http_works_with_catalog_constant():
     valori del catalog senza ulteriore conversione."""
     with pytest.raises(HTTPException) as exc_info:
         raise_typed_http(
-            code=error_codes.OBJECT_STORAGE_DISABLED,
+            code=admin_backup_errors.OBJECT_STORAGE_DISABLED,
             status_code=503,
             message="Object storage non configurato.",
         )
@@ -451,15 +552,13 @@ def _scan_router_constant_refs() -> Set[str]:
 
 
 def test_router_constant_refs_find_baseline():
-    """Sanity check post-migration BE-GO-READY-ERROR-CODES-007:
-    i 11 call site domain referenziano il catalog via
-    `error_codes.<CONST>` invece di literal stringa.
+    """Sanity check for unmigrated `error_codes.<CONST>` call sites.
 
     Pre-migrazione (audit 005) questa stessa sanity scansionava
     i `"error": "<x>"` literal; post-migrazione i literal sono
-    spariti dai router (sostituiti dalle costanti) e il sanity
-    check si sposta sulle referenze costanti per garantire che
-    la migrazione sia completa.
+    spariti dai router (sostituiti dalle costanti). I codici gia'
+    spostati in `app/core/<domain>/errors.py` sono coperti da
+    `test_migrated_domain_call_sites_use_domain_error_modules`.
 
     Fail = qualcuno ha rimosso una costante senza spostare il
     call site, o il regex parser e' rotto.
@@ -467,14 +566,9 @@ def test_router_constant_refs_find_baseline():
     found = _scan_router_constant_refs()
     baseline_constants_must_appear = {
         # batch 007 (in-use family)
-        "CONNECTION_IN_USE",
         "API_CONNECTION_IN_USE",
-        "DATASOURCE_IN_USE",
         "PROJECT_HAS_DEPENDENCIES",
         "PROJECT_CLEANUP_PARTIAL",
-        "OBJECT_STORAGE_DISABLED",
-        "AWS_CRT_MISSING",
-        "AWS_CREDENTIALS_EXPIRED",
         "CARICA_LAUNCH_FAILED",
         # batch 009 (not-found family)
         "PROJECT_NOT_FOUND",
@@ -482,11 +576,8 @@ def test_router_constant_refs_find_baseline():
         "SCHEDULE_NOT_FOUND",
         "RUN_NOT_FOUND",
         "BUNDLE_NOT_FOUND",
-        "CONNECTION_NOT_FOUND",
         "API_CONNECTION_NOT_FOUND",
         "FILE_SOURCE_NOT_FOUND",
-        "DATASOURCE_NOT_FOUND",
-        "TICKET_NOT_FOUND",
         # batch 010 (external-service family)
         "EXTERNAL_SERVICE_UNREACHABLE",
         # batch 011 (global fallback promotion)
@@ -734,7 +825,7 @@ EXPECTED_VALUE_ERROR_STR_E_COUNTS: Dict[str, int] = {
     "backend/app/core/arricchisci/router.py": 4,
     "backend/app/core/carica/router.py": 1,
     "backend/app/core/connections/router.py": 5,
-    "backend/app/core/datasources/router.py": 5,
+    "backend/app/core/datasources/router.py": 6,
     "backend/app/core/eseguibili/router.py": 4,
     "backend/app/core/estrai/router.py": 1,
     "backend/app/core/features/routes.py": 9,
@@ -779,7 +870,7 @@ def test_value_error_str_e_total_count_lock():
     """Sanity check: somma per-file == 42. Lock indipendente che
     cattura desync fra `EXPECTED_VALUE_ERROR_STR_E_COUNTS` e somma
     intesa nel commit message."""
-    assert sum(EXPECTED_VALUE_ERROR_STR_E_COUNTS.values()) == 42
+    assert sum(EXPECTED_VALUE_ERROR_STR_E_COUNTS.values()) == 43
 
 
 def test_value_error_str_e_pattern_in_accepted_fallback():

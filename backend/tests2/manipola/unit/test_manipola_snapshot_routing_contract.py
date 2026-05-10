@@ -112,7 +112,7 @@ def test_transform_loop_calls_record_checkpoint_for_each_non_source_node():
     ), patch.object(
         executor, "_esegui_multi_join", return_value=monkey_df,
     ), patch(
-        "app.core.intermediate.snapshot.record_checkpoint_snapshot",
+        "app.core.manipola.executor.record_checkpoint_snapshot",
         fake_record,
     ), _patch_settings():
         executor._applica_trasformazioni(canvas, dataframes, run_id="run-1")
@@ -188,7 +188,7 @@ def test_noncritical_transform_does_not_materialize_dataframe():
     with patch.object(
         executor, "_esegui_trasformazione", return_value=spy_df,
     ), patch(
-        "app.core.intermediate.db.write_node_snapshot_atomic", db_spy,
+        "app.core.intermediate.node_snapshots_db.write_node_snapshot_atomic", db_spy,
     ), _patch_settings(manipola_checkpoints="critical"):
         executor._applica_trasformazioni(canvas, dataframes, run_id="run-1")
 
@@ -212,7 +212,7 @@ def test_critical_transform_triggers_db_write():
     with patch.object(
         executor, "_esegui_trasformazione", return_value=_df(20),
     ), patch(
-        "app.core.intermediate.db.write_node_snapshot_atomic",
+        "app.core.intermediate.node_snapshots_db.write_node_snapshot_atomic",
         side_effect=_capture,
     ), _patch_settings(manipola_checkpoints="critical"):
         executor._applica_trasformazioni(canvas, dataframes, run_id="run-1")
@@ -241,7 +241,7 @@ def test_multi_join_always_checkpointed():
     with patch.object(
         executor, "_esegui_multi_join", return_value=_df(30),
     ), patch(
-        "app.core.intermediate.db.write_node_snapshot_atomic", db_spy,
+        "app.core.intermediate.node_snapshots_db.write_node_snapshot_atomic", db_spy,
     ), _patch_settings(manipola_checkpoints="critical"):
         executor._applica_trasformazioni(canvas, dataframes, run_id="run-1")
 
@@ -277,7 +277,7 @@ def test_policy_none_skips_all_checkpoint_transforms():
     ), patch.object(
         executor, "_esegui_multi_join", return_value=_df(),
     ), patch(
-        "app.core.intermediate.db.write_node_snapshot_atomic", db_spy,
+        "app.core.intermediate.node_snapshots_db.write_node_snapshot_atomic", db_spy,
     ), _patch_settings(manipola_checkpoints="none"):
         executor._applica_trasformazioni(canvas, dataframes, run_id="run-1")
 
@@ -300,7 +300,7 @@ def test_policy_all_records_every_transform_including_noncritical():
     with patch.object(
         executor, "_esegui_trasformazione", return_value=_df(),
     ), patch(
-        "app.core.intermediate.db.write_node_snapshot_atomic", db_spy,
+        "app.core.intermediate.node_snapshots_db.write_node_snapshot_atomic", db_spy,
     ), _patch_settings(manipola_checkpoints="all"):
         executor._applica_trasformazioni(canvas, dataframes, run_id="run-1")
 
@@ -344,9 +344,9 @@ def test_result_node_uses_record_final_snapshot():
     ), patch.object(
         executor, "_salva_risultato", return_value={"success": True, "rows_count": 100},
     ), patch(
-        "app.core.intermediate.snapshot.record_final_snapshot", final_spy,
+        "app.core.manipola.executor.record_final_snapshot", final_spy,
     ), patch(
-        "app.shared.columns_metadata.save_columns_metadata_with_retry",
+        "app.core.manipola.executor.save_columns_metadata_with_retry",
     ), _patch_settings():
         executor.execute("proj-1", canvas, run_id="run-1")
 

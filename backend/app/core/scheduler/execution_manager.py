@@ -555,7 +555,7 @@ class ExecutionManager:
         """
         Esegue il caricamento su database con la configurazione dello schedule.
 
-        Recupera l'output della pipeline (dal result_store o dal path diretto),
+        Recupera l'output della pipeline (dal result reader o dal path diretto),
         carica il DataFrame e lo scrive sulla tabella configurata nello schedule
         tramite CaricaExecutor (stessa logica dei task Celery CARICA).
 

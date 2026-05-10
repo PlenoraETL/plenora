@@ -1,5 +1,5 @@
 """
-app/shared/async_http.py
+app/infrastructure/http/async_client.py
 
 HTTP client async condiviso basato su httpx.AsyncClient.
 """

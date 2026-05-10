@@ -77,14 +77,14 @@ def test_legacy_full_pg_node_rows_path_unchanged(superadmin_user):
         "app.core.intermediate.router._check_run_access",
         return_value={"run_id": "r1", "group_id": "g1"},
     ), patch(
-        "app.core.intermediate.router.idb.get_node_meta",
+        "app.core.intermediate.router.node_snapshots_db.get_node_meta",
         return_value=_node_meta(
             persistence_mode=None,  # NOTE: legacy NULL -> trattato come full_pg
             row_count=2,
             col_schema={"id": "int", "v": "str"},
         ),
     ), patch(
-        "app.core.intermediate.router.idb.get_node_table_rows",
+        "app.core.intermediate.router.node_snapshots_db.get_node_table_rows",
         return_value=legacy_rows,
     ) as mock_rows:
         response = client.get("/api/runs/r1/nodes/n1/data")
@@ -106,7 +106,7 @@ def test_preview_only_node_rows_path(superadmin_user):
         "app.core.intermediate.router._check_run_access",
         return_value={"run_id": "r1", "group_id": "g1"},
     ), patch(
-        "app.core.intermediate.router.idb.get_node_meta",
+        "app.core.intermediate.router.node_snapshots_db.get_node_meta",
         return_value=_node_meta(
             persistence_mode="preview_only",
             row_count=10000,
@@ -115,7 +115,7 @@ def test_preview_only_node_rows_path(superadmin_user):
             col_schema={"x": "int"},
         ),
     ), patch(
-        "app.core.intermediate.router.idb.get_node_table_rows",
+        "app.core.intermediate.router.node_snapshots_db.get_node_table_rows",
         return_value=preview_rows,
     ):
         response = client.get("/api/runs/r1/nodes/n1/data?limit=500")
@@ -145,7 +145,7 @@ def test_metadata_only_returns_empty_rows_and_message(superadmin_user):
         "app.core.intermediate.router._check_run_access",
         return_value={"run_id": "r1", "group_id": "g1"},
     ), patch(
-        "app.core.intermediate.router.idb.get_node_meta",
+        "app.core.intermediate.router.node_snapshots_db.get_node_meta",
         return_value=_node_meta(
             persistence_mode="metadata_only",
             row_count=2370000,
@@ -156,7 +156,7 @@ def test_metadata_only_returns_empty_rows_and_message(superadmin_user):
         "app.infrastructure.storage.cloud_backends.get_runtime_object_storage",
         fake_get_storage,
     ), patch(
-        "app.core.intermediate.router.idb.get_node_table_rows",
+        "app.core.intermediate.router.node_snapshots_db.get_node_table_rows",
         side_effect=AssertionError("node_rows NON deve essere letto"),
     ):
         response = client.get("/api/runs/r1/nodes/n1/data")
@@ -195,7 +195,7 @@ def test_full_artifact_complete_returns_parquet_preview(superadmin_user):
         "app.core.intermediate.router._check_run_access",
         return_value={"run_id": "r1", "group_id": "g1"},
     ), patch(
-        "app.core.intermediate.router.idb.get_node_meta",
+        "app.core.intermediate.router.node_snapshots_db.get_node_meta",
         return_value=_node_meta(
             persistence_mode="full_artifact",
             artifact_uri=artifact_uri,
@@ -242,7 +242,7 @@ def test_full_artifact_complete_sanitizes_nan_and_inf(superadmin_user):
         "app.core.intermediate.router._check_run_access",
         return_value={"run_id": "r1", "group_id": "g1"},
     ), patch(
-        "app.core.intermediate.router.idb.get_node_meta",
+        "app.core.intermediate.router.node_snapshots_db.get_node_meta",
         return_value=_node_meta(
             persistence_mode="full_artifact",
             artifact_uri="some/key/data.parquet",
@@ -280,7 +280,7 @@ def test_full_artifact_failed_returns_200_with_message(superadmin_user):
         "app.core.intermediate.router._check_run_access",
         return_value={"run_id": "r1", "group_id": "g1"},
     ), patch(
-        "app.core.intermediate.router.idb.get_node_meta",
+        "app.core.intermediate.router.node_snapshots_db.get_node_meta",
         return_value=_node_meta(
             persistence_mode="full_artifact",
             artifact_uri=None,
@@ -307,7 +307,7 @@ def test_full_artifact_pending_returns_200_with_message(superadmin_user):
         "app.core.intermediate.router._check_run_access",
         return_value={"run_id": "r1", "group_id": "g1"},
     ), patch(
-        "app.core.intermediate.router.idb.get_node_meta",
+        "app.core.intermediate.router.node_snapshots_db.get_node_meta",
         return_value=_node_meta(
             persistence_mode="full_artifact",
             artifact_status="pending",
@@ -333,7 +333,7 @@ def test_full_artifact_with_no_uri_returns_200_operational_message(superadmin_us
         "app.core.intermediate.router._check_run_access",
         return_value={"run_id": "r1", "group_id": "g1"},
     ), patch(
-        "app.core.intermediate.router.idb.get_node_meta",
+        "app.core.intermediate.router.node_snapshots_db.get_node_meta",
         return_value=_node_meta(
             persistence_mode="full_artifact",
             artifact_uri=None,
@@ -366,7 +366,7 @@ def test_full_artifact_with_storage_disabled_returns_operational_message(
         "app.core.intermediate.router._check_run_access",
         return_value={"run_id": "r1", "group_id": "g1"},
     ), patch(
-        "app.core.intermediate.router.idb.get_node_meta",
+        "app.core.intermediate.router.node_snapshots_db.get_node_meta",
         return_value=_node_meta(
             persistence_mode="full_artifact",
             artifact_uri="key/data.parquet",
@@ -402,7 +402,7 @@ def test_full_artifact_default_limit_is_100(superadmin_user):
         "app.core.intermediate.router._check_run_access",
         return_value={"run_id": "r1", "group_id": "g1"},
     ), patch(
-        "app.core.intermediate.router.idb.get_node_meta",
+        "app.core.intermediate.router.node_snapshots_db.get_node_meta",
         return_value=_node_meta(
             persistence_mode="full_artifact",
             artifact_uri="k/data.parquet",
@@ -434,10 +434,10 @@ def test_response_contains_additive_fields_for_legacy_path(superadmin_user):
         "app.core.intermediate.router._check_run_access",
         return_value={"run_id": "r1", "group_id": "g1"},
     ), patch(
-        "app.core.intermediate.router.idb.get_node_meta",
+        "app.core.intermediate.router.node_snapshots_db.get_node_meta",
         return_value=_node_meta(row_count=2),
     ), patch(
-        "app.core.intermediate.router.idb.get_node_table_rows",
+        "app.core.intermediate.router.node_snapshots_db.get_node_table_rows",
         return_value=[{"id": 1}, {"id": 2}],
     ):
         response = client.get("/api/runs/r1/nodes/n1/data")

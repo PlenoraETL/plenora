@@ -145,7 +145,7 @@ def test_estrai_metadata_only_writes_meta_and_hash_no_rows(monkeypatch):
     fake_conn.type = "postgres"
 
     with patch(
-        "app.core.intermediate.db.write_node_snapshot_atomic",
+        "app.core.intermediate.node_snapshots_db.write_node_snapshot_atomic",
         side_effect=_capture,
     ), _patch_settings(mode="metadata_only"):
         executor.execute_query(
@@ -195,7 +195,7 @@ def test_estrai_preview_only_above_legacy_cap_caps_to_preview_rows(monkeypatch):
 
     # mode=preview_only + preview_rows=500
     with patch(
-        "app.core.intermediate.db.write_node_snapshot_atomic",
+        "app.core.intermediate.node_snapshots_db.write_node_snapshot_atomic",
         side_effect=_capture,
     ), _patch_settings(mode="preview_only", preview_rows=500):
         executor.execute_query(

@@ -5,6 +5,27 @@ PLENORA-ETL — Catalog dei codici stringa per error envelope
 
 from __future__ import annotations
 
+from app.core.admin_backups.errors import (
+    AWS_CREDENTIALS_EXPIRED,
+    AWS_CRT_MISSING,
+    KNOWN_DOMAIN_CODES as ADMIN_BACKUPS_DOMAIN_CODES,
+    OBJECT_STORAGE_DISABLED,
+)
+from app.core.connections.errors import (
+    CONNECTION_IN_USE,
+    CONNECTION_NOT_FOUND,
+    KNOWN_DOMAIN_CODES as CONNECTIONS_DOMAIN_CODES,
+)
+from app.core.datasources.errors import (
+    DATASOURCE_IN_USE,
+    DATASOURCE_NOT_FOUND,
+    KNOWN_DOMAIN_CODES as DATASOURCES_DOMAIN_CODES,
+)
+from app.core.tickets.errors import (
+    KNOWN_DOMAIN_CODES as TICKETS_DOMAIN_CODES,
+    TICKET_NOT_FOUND,
+)
+
 
 # Generic / framework-level
 
@@ -30,10 +51,9 @@ def http_status_code(status_code: int) -> str:
     return f"http_{status_code}"
 
 
-# Domain-specific (codici gia' lockati nei test esistenti
-
-CONNECTION_IN_USE = "connection_in_use"
-"""409: tentativo di delete di una connection referenziata."""
+# Domain-specific legacy definitions.
+# Migrated domain-owned codes are imported above and re-exported for
+# backward compatibility while call sites move to app.core.<domain>.errors.
 
 API_CONNECTION_IN_USE = "api_connection_in_use"
 """409: tentativo di delete di un'api_connection referenziata."""
@@ -43,19 +63,6 @@ PROJECT_HAS_DEPENDENCIES = "project_has_dependencies"
 
 PROJECT_CLEANUP_PARTIAL = "project_cleanup_partial"
 """500: cleanup progetto fallito su step derivati (row preservata)."""
-
-DATASOURCE_IN_USE = "datasource_in_use"
-"""409: tentativo di delete di un datasource referenziato."""
-
-
-OBJECT_STORAGE_DISABLED = "object_storage_disabled"
-"""503: object storage non configurato/disabilitato (admin_backups)."""
-
-AWS_CRT_MISSING = "aws_crt_missing"
-"""503: dipendenza `aws-crt` non installata sul server (admin_backups)."""
-
-AWS_CREDENTIALS_EXPIRED = "aws_credentials_expired"
-"""503: credenziali AWS scadute o non valide (admin_backups)."""
 
 CARICA_LAUNCH_FAILED = "carica_launch_failed"
 """500-state: lancio task carica fallito (orchestrator/service)."""
@@ -82,20 +89,11 @@ RUN_NOT_FOUND = "run_not_found"
 BUNDLE_NOT_FOUND = "bundle_not_found"
 """404: bundle IMDF non trovato/scaduto (imdf)."""
 
-CONNECTION_NOT_FOUND = "connection_not_found"
-"""404: connessione DB non trovata (carica/connections/features)."""
-
 API_CONNECTION_NOT_FOUND = "api_connection_not_found"
 """404: API connection non trovata (arricchisci)."""
 
 FILE_SOURCE_NOT_FOUND = "file_source_not_found"
 """404: file source non trovato (files)."""
-
-DATASOURCE_NOT_FOUND = "datasource_not_found"
-"""404: data source non trovato (datasources)."""
-
-TICKET_NOT_FOUND = "ticket_not_found"
-"""404: ticket o allegato ticket non trovato (tickets)."""
 
 
 # Domain-specific — External-Service family
@@ -282,14 +280,9 @@ AUTH_REVOCATION_UNAVAILABLE = "auth_revocation_unavailable"
 # per evitare drift fra costante e set. Frozen per immutabilita'
 # non modificabile a runtime
 KNOWN_DOMAIN_CODES: frozenset[str] = frozenset({
-    CONNECTION_IN_USE,
     API_CONNECTION_IN_USE,
     PROJECT_HAS_DEPENDENCIES,
     PROJECT_CLEANUP_PARTIAL,
-    DATASOURCE_IN_USE,
-    OBJECT_STORAGE_DISABLED,
-    AWS_CRT_MISSING,
-    AWS_CREDENTIALS_EXPIRED,
     CARICA_LAUNCH_FAILED,
     CARICA_SCHEDULER_FAILED,
     SCHEDULE_EXECUTION_FATAL,
@@ -298,11 +291,8 @@ KNOWN_DOMAIN_CODES: frozenset[str] = frozenset({
     SCHEDULE_NOT_FOUND,
     RUN_NOT_FOUND,
     BUNDLE_NOT_FOUND,
-    CONNECTION_NOT_FOUND,
     API_CONNECTION_NOT_FOUND,
     FILE_SOURCE_NOT_FOUND,
-    DATASOURCE_NOT_FOUND,
-    TICKET_NOT_FOUND,
     EXTERNAL_SERVICE_UNREACHABLE,
     # Memory/OOM family
     MEMORY_LIMIT_EXCEEDED,
@@ -341,7 +331,12 @@ KNOWN_DOMAIN_CODES: frozenset[str] = frozenset({
     AUTH_RATE_LIMIT_EXCEEDED,
     # 503 — infra fail-loud
     AUTH_REVOCATION_UNAVAILABLE,
-})
+}) | (
+    ADMIN_BACKUPS_DOMAIN_CODES
+    | CONNECTIONS_DOMAIN_CODES
+    | DATASOURCES_DOMAIN_CODES
+    | TICKETS_DOMAIN_CODES
+)
 
 # Codici globali (envelope-level): NON domain-specific
 # Mantenuto separato perche' il drift detection deve permettere

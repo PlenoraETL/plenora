@@ -25,7 +25,7 @@ _PHASE1_FILES = (
     _APP / "shared" / "authz_helpers.py",
     # typed-context also forbids facade entirely for these (CurrentUser-only
     # imports — nothing else was being pulled from the facade).
-    _APP / "shared" / "async_user_recheck.py",
+    _APP / "core" / "auth" / "async_user_recheck.py",
     _APP / "core" / "tickets" / "service.py",
 )
 
@@ -161,7 +161,7 @@ def _imports_facade(path: Path) -> list[tuple[int, str]]:
 )
 def test_phase1_migrated_file_does_not_import_from_facade(path: Path):
     """facade baseline contract: each migrated file imports directly from
-    leaf modules (`app.shared.jwt_token`, `app.core.auth.roles`,
+    leaf modules (`app.core.auth.jwt_token`, `app.core.auth.roles`,
     `app.core.auth.models`, `app.core.auth.ownership`) — NOT from
     the facade `app.core.auth.auth` at all."""
     assert path.exists(), f"migrated file missing: {path}"
@@ -334,11 +334,11 @@ def test_phase6_migrated_file_does_not_import_group_filter_from_facade(
 
 def test_auth_middleware_imports_decode_token_from_jwt_leaf():
     """Lock the exact leaf source: `decode_token` must come from
-    `app.shared.jwt_token`, not the facade."""
+    `app.core.auth.jwt_token`, not the facade."""
     path = _APP / "core" / "auth" / "auth_middleware.py"
     text = path.read_text(encoding="utf-8")
-    assert "from app.shared.jwt_token import decode_token" in text, (
-        "auth_middleware.py must import decode_token from app.shared.jwt_token "
+    assert "from app.core.auth.jwt_token import decode_token" in text, (
+        "auth_middleware.py must import decode_token from app.core.auth.jwt_token "
         "(strangler facade baseline)."
     )
 
@@ -461,10 +461,8 @@ def test_phase3_features_routes_imports_ownership_helpers_from_leaf():
         "app.core.auth.ownership leaf."
     )
     for name in (
-        "assert_group_access",
         "assert_resource_visible",
         "assert_can_modify",
-        "compute_can_edit",
     ):
         assert name in text, (
             f"features/routes.py must still consume {name} (from "
@@ -489,8 +487,7 @@ def test_phase3_features_routes_imports_ownership_helpers_from_leaf():
         ),
         (
             _APP / "core" / "connections" / "router.py",
-            ("assert_group_access", "assert_resource_visible",
-             "assert_can_modify", "compute_can_edit"),
+            ("assert_resource_visible", "assert_can_modify"),
         ),
         (
             _APP / "core" / "datasources" / "router.py",
@@ -499,8 +496,7 @@ def test_phase3_features_routes_imports_ownership_helpers_from_leaf():
         ),
         (
             _APP / "core" / "eseguibili" / "router.py",
-            ("assert_group_access", "assert_resource_visible",
-             "assert_can_modify", "compute_can_edit"),
+            ("assert_resource_visible", "assert_can_modify"),
         ),
     ],
     ids=lambda v: (

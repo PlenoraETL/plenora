@@ -299,7 +299,7 @@ def test_enroll_creates_pending_row(mfa_user):
     """/mfa/enroll → riga creata con enabled=FALSE, secret cifrato."""
     from app.core.auth import mfa
     from app.db import pg_connection
-    from app.shared.crypto import is_encrypted
+    from app.infrastructure.security.crypto import is_encrypted
 
     data = mfa.generate_enrollment(mfa_user["user_id"], mfa_user["username"])
     assert data["secret"], "secret non presente nell'output"

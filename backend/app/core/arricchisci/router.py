@@ -27,7 +27,7 @@ from app.shared import error_codes
 from app.shared.error_envelope import raise_typed_http
 from app.observability.audit_action import audit_action
 from app.shared.authz_helpers import assert_file_source_access, assert_project_visible
-from app.shared.crypto import CredentialUnavailableError
+from app.infrastructure.security.crypto import CredentialUnavailableError
 from app.core.arricchisci.api_connector import api_connection_service
 from app.core.arricchisci.enrichment_service import EnrichmentExecutor
 from app.core.arricchisci.models import EnrichmentOptions

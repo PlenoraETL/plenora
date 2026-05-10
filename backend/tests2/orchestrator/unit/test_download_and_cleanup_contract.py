@@ -215,21 +215,21 @@ def test_eseguibili_download_cleanup_runs_even_if_delete_by_task_raises():
 
 def test_save_pipeline_result_dict_shape(monkeypatch):
     """save_pipeline_result ritorna sempre {result_id, output_filename}."""
-    from app.core.results.result_store import save_pipeline_result
-    import app.core.results.result_store as result_store
+    from app.core.results.pipeline_result import save_pipeline_result
+    import app.core.results.blob_writer as result_blob_writer
     import app.core.results.store as results_store
     import app.core.results.db as results_db
     from types import SimpleNamespace
 
     # Stub DB mock
     saved_calls = []
-    monkeypatch.setattr(result_store, "uuid",
+    monkeypatch.setattr(result_blob_writer, "uuid",
                         SimpleNamespace(uuid4=lambda: "res-xyz"))
     monkeypatch.setattr(results_store, "resolve_group_id_for_result",
                         lambda project_id, group_id=None: "grp")
     monkeypatch.setattr(results_db, "save_result_row",
                         lambda **kw: saved_calls.append(kw))
-    monkeypatch.setattr(result_store, "_apply_results_retention",
+    monkeypatch.setattr(result_blob_writer, "apply_results_retention_after_save",
                         lambda pid: None)
 
     df = pd.DataFrame({"a": [1, 2]})
@@ -249,7 +249,7 @@ def test_save_pipeline_result_dict_shape(monkeypatch):
 
 def test_save_pipeline_result_rejects_unknown_format():
     """Formato non supportato â†’ ValueError dalla serializzazione."""
-    from app.core.results.result_store import save_pipeline_result
+    from app.core.results.pipeline_result import save_pipeline_result
 
     df = pd.DataFrame({"a": [1]})
     with pytest.raises(ValueError):
@@ -262,8 +262,9 @@ def test_save_pipeline_result_rejects_unknown_format():
 def test_save_pipeline_result_fs_only_fallback_to_filesystem(monkeypatch, tmp_path):
     """Per gpkg/shp il dispatch interno usa tempfile + save_result_blob.
     Deve comunque ritornare la stessa shape dict."""
-    from app.core.results.result_store import save_pipeline_result
-    import app.core.results.result_store as result_store
+    from app.core.results.pipeline_result import save_pipeline_result
+    import app.core.results.blob_writer as result_blob_writer
+    import app.core.results.pipeline_result as pipeline_result
     import app.core.results.store as results_store
     import app.core.results.db as results_db
     from types import SimpleNamespace
@@ -279,20 +280,20 @@ def test_save_pipeline_result_fs_only_fallback_to_filesystem(monkeypatch, tmp_pa
     monkeypatch.setattr("app.core.files.dataframe_io.save_dataframe", _fake_save_dataframe)
 
     saved_calls = []
-    monkeypatch.setattr(result_store, "uuid",
+    monkeypatch.setattr(result_blob_writer, "uuid",
                         SimpleNamespace(uuid4=lambda: "res-fs"))
     monkeypatch.setattr(results_store, "resolve_group_id_for_result",
                         lambda project_id, group_id=None: "grp")
     monkeypatch.setattr(results_db, "save_result_row",
                         lambda **kw: saved_calls.append(kw))
-    monkeypatch.setattr(result_store, "_apply_results_retention",
+    monkeypatch.setattr(result_blob_writer, "apply_results_retention_after_save",
                         lambda pid: None)
 
     class _FakeSettings:
         DATA_DIR = tmp_path
         @staticmethod
         def get(key, default=None): return default
-    monkeypatch.setattr(result_store, "settings", _FakeSettings, raising=False)
+    monkeypatch.setattr(pipeline_result, "settings", _FakeSettings, raising=False)
 
     df = pd.DataFrame({"a": [1]})
     result = save_pipeline_result(

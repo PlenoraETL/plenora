@@ -15,7 +15,7 @@ from app.core.auth.dependencies import (
 )
 from app.shared.contracts.auth import CurrentUser, group_filter
 from app.core.auth.ownership import assert_group_access
-from app.core.intermediate import db as idb
+from app.core.intermediate import node_snapshots_db, runs_db
 from app.shared import error_codes
 from app.utils.logger import get_logger
 
@@ -25,7 +25,7 @@ router = APIRouter(prefix="/runs", tags=["intermediate"])
 
 
 # FIXME: #23 (2026-04-28): JSON spec non ammette NaN / +Inf / -Inf
-# `db.get_node_table_rows` ricostruisce questi valori dai sentinel
+# `node_snapshots_db.get_node_table_rows` ricostruisce questi valori dai sentinel
 # JSONB persistiti (`_from_jsonable_value`) per garantire hash
 # roundtrip-safe. Sul boundary HTTP non serve quella semantica
 # FastAPI/json.dumps(allow_nan=False) solleva ValueError. Mappiamo
@@ -113,7 +113,7 @@ def _run_to_summary(run: dict) -> RunSummary:
 
 def _check_run_access(run_id: str, current_user: CurrentUser) -> dict:
     """Verifica che la run esista e appartenga al gruppo. Ritorna run dict."""
-    run = idb.get_run(run_id)
+    run = runs_db.get_run(run_id)
     assert_group_access(run, current_user, f"Run {run_id}")
     return run
 
@@ -137,7 +137,7 @@ def list_runs(
                 (canvas_id, limit)
             )
         else:
-            runs = idb.list_runs(canvas_id, gid, limit=limit)
+            runs = runs_db.list_runs(canvas_id, gid, limit=limit)
         return [_run_to_summary(r) for r in runs]
     except Exception as e:
         logger.error(f"[GESTITO] Errore lista runs canvas {canvas_id}: {e}", op="intermediate_api", exc_info=True)
@@ -152,7 +152,7 @@ def get_node_data(
     current_user: CurrentUser = Depends(require_not_esecutore),
 ) -> dict:
     """
-    Righe del nodo da intermediate.db.
+    Righe del nodo dallo storage intermediate.
     Ritorna max `limit` righe (default 100).
     """
     try:
@@ -167,7 +167,7 @@ def get_node_data(
             effective_group = None
         else:
             effective_group = (run or {}).get("group_id") or current_user.group_id
-        node = idb.get_node_meta(run_id, node_id)
+        node = node_snapshots_db.get_node_meta(run_id, node_id)
         # preview da artifact (2026-04-28): dispatch
         # per `persistence_mode`
         # full_artifact + status=complete -> read parquet (object storage
@@ -257,7 +257,7 @@ def get_node_data(
             )
         else:
             # full_pg / preview_only / legacy NULL -> legge node_rows
-            rows = idb.get_node_table_rows(
+            rows = node_snapshots_db.get_node_table_rows(
                 run_id=run_id,
                 node_id=node_id,
                 group_id=effective_group,
@@ -389,8 +389,8 @@ def compare_runs_l2(
         # Verifica che il nodo esista in entrambe le run via node_meta
         # piu' robusto che controllare la presenza di righe in node_rows
         # un nodo potrebbe essere stato eseguito con 0 righe di output
-        meta_a = idb.get_node_meta(run_id_a, node_id)
-        meta_b = idb.get_node_meta(run_id_b, node_id)
+        meta_a = node_snapshots_db.get_node_meta(run_id_a, node_id)
+        meta_b = node_snapshots_db.get_node_meta(run_id_b, node_id)
         if not meta_a:
             raise HTTPException(
                 status_code=404,
@@ -604,14 +604,14 @@ def pin_run(
     try:
         # Stessa logica di `get_node_data`. Il superadmin puo' pinnare
         # run di qualsiasi gruppo (access check passa); senza questa
-        # branch, `idb.pin_run` filtrerebbe per `current_user.group_id`
+        # branch, `runs_db.pin_run` filtrerebbe per `current_user.group_id`
         # e fallirebbe con un falso 404 quando la run appartiene a un
         # altro gruppo. Quindi
         # superadmin → usa il group_id della run stessa (post-check
         # altri → group della run validato da _check_run_access
         run = _check_run_access(run_id, current_user)
         effective_group = (run or {}).get("group_id") or current_user.group_id
-        ok = idb.pin_run(run_id, effective_group, pinned=body.pinned)
+        ok = runs_db.pin_run(run_id, effective_group, pinned=body.pinned)
         if not ok:
             raise HTTPException(
                 status_code=404,

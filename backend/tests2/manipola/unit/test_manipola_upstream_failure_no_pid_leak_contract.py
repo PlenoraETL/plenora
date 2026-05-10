@@ -85,8 +85,8 @@ def test_upstream_failure_does_not_leak_source_project_id():
 
     # Bypass create_run upstream e open_run upstream (DB-bound).
     with patch("app.utils.logger.open_run"), \
-         patch("app.core.intermediate.db.create_run"), \
-         patch("app.core.intermediate.writer.close_run"), \
+         patch("app.core.manipola.project_source_runtime.create_intermediate_run"), \
+         patch("app.core.manipola.project_source_runtime.close_intermediate_run"), \
          patch("app.utils.logger.close_run"), \
          patch("app.core.manipola.project_source_runtime.get_upstream_run_context",
                return_value=_UPSTREAM_CONTEXT):
@@ -122,8 +122,8 @@ def test_upstream_failure_result_is_wrappable_without_pid_mismatch():
     dataframes: dict = {}
 
     with patch("app.utils.logger.open_run"), \
-         patch("app.core.intermediate.db.create_run"), \
-         patch("app.core.intermediate.writer.close_run"), \
+         patch("app.core.manipola.project_source_runtime.create_intermediate_run"), \
+         patch("app.core.manipola.project_source_runtime.close_intermediate_run"), \
          patch("app.utils.logger.close_run"), \
          patch("app.core.manipola.project_source_runtime.get_upstream_run_context",
                return_value=_UPSTREAM_CONTEXT):
@@ -164,8 +164,8 @@ def test_upstream_failure_message_includes_source_project_id():
     dataframes: dict = {}
 
     with patch("app.utils.logger.open_run"), \
-         patch("app.core.intermediate.db.create_run"), \
-         patch("app.core.intermediate.writer.close_run"), \
+         patch("app.core.manipola.project_source_runtime.create_intermediate_run"), \
+         patch("app.core.manipola.project_source_runtime.close_intermediate_run"), \
          patch("app.utils.logger.close_run"), \
          patch("app.core.manipola.project_source_runtime.get_upstream_run_context",
                return_value=_UPSTREAM_CONTEXT):
@@ -220,12 +220,12 @@ def test_upstream_success_path_unchanged():
     fake_materialized.__exit__ = MagicMock(return_value=False)
 
     with patch("app.utils.logger.open_run"), \
-         patch("app.core.intermediate.db.create_run"), \
-         patch("app.core.intermediate.writer.close_run"), \
+         patch("app.core.manipola.project_source_runtime.create_intermediate_run"), \
+         patch("app.core.manipola.project_source_runtime.close_intermediate_run"), \
          patch("app.utils.logger.close_run"), \
          patch("app.core.manipola.project_source_runtime.get_upstream_run_context",
                return_value=_UPSTREAM_CONTEXT), patch(
-             "app.core.artifacts.ArtifactResolver"
+             "app.core.manipola.project_source_runtime.ArtifactResolver"
          ) as MockResolver, patch(
              "app.core.manipola.executor.load_dataframe_from_file",
              return_value=fake_df,

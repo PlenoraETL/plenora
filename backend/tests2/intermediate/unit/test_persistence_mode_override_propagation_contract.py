@@ -158,7 +158,7 @@ class TestSnapshotWrappersPropagation:
             with patch.object(_snap._policy, "resolve_intermediate_policy", side_effect=spy):
                 # Mock del DB writer + fingerprint per evitare side-effect
                 # reali (qui ci interessa solo il kwarg propagato).
-                with patch.object(_snap._db, "write_node_snapshot_atomic"):
+                with patch.object(_snap._node_snapshots_db, "write_node_snapshot_atomic"):
                     _snap.record_final_snapshot(
                         run_id="run-1", module="estrai",
                         node_id="n-1", node_type="estrai",
@@ -179,7 +179,7 @@ class TestSnapshotWrappersPropagation:
 
         with _patch_settings(_make_cfg(mode="metadata_only")):
             with patch.object(_snap._policy, "resolve_intermediate_policy", side_effect=spy):
-                with patch.object(_snap._db, "write_node_snapshot_atomic"):
+                with patch.object(_snap._node_snapshots_db, "write_node_snapshot_atomic"):
                     _snap.record_checkpoint_snapshot(
                         run_id="run-1", module="manipola",
                         node_id="n-1", node_type="multi_join",
@@ -202,7 +202,7 @@ class TestSnapshotWrappersPropagation:
 
         with _patch_settings(_make_cfg(mode="metadata_only")):
             with patch.object(_snap._policy, "resolve_intermediate_policy", side_effect=spy):
-                with patch.object(_snap._db, "write_node_snapshot_atomic"):
+                with patch.object(_snap._node_snapshots_db, "write_node_snapshot_atomic"):
                     _snap.record_final_snapshot(
                         run_id="run-1", module="estrai",
                         node_id="n-1", node_type="estrai",
@@ -218,7 +218,7 @@ class TestSnapshotWrappersPropagation:
         from app.core.intermediate.policy import IntermediateSettingsError
 
         with _patch_settings(_make_cfg(mode="metadata_only")):
-            with patch.object(_snap._db, "write_node_snapshot_atomic"):
+            with patch.object(_snap._node_snapshots_db, "write_node_snapshot_atomic"):
                 with pytest.raises(IntermediateSettingsError):
                     _snap.record_final_snapshot(
                         run_id="run-1", module="estrai",
@@ -234,7 +234,7 @@ class TestSnapshotWrappersPropagation:
 
         with _patch_settings(_make_cfg(mode="metadata_only")):
             mock_writer = MagicMock()
-            with patch.object(_snap._db, "write_node_snapshot_atomic", mock_writer):
+            with patch.object(_snap._node_snapshots_db, "write_node_snapshot_atomic", mock_writer):
                 _snap.record_final_snapshot(
                     run_id="run-1", module="estrai",
                     node_id="n-1", node_type="estrai",
@@ -489,7 +489,7 @@ class TestQueryExecutorPropagation:
         scrivere DB. Verifica via spy sul DB writer atomic che non
         venga chiamato con persistence_mode=metadata_only (perche' il
         chain ha sollevato prima)."""
-        from app.core.intermediate import db as _db
+        from app.core.intermediate import node_snapshots_db as _node_snapshots_db
         from types import SimpleNamespace
 
         executor = self._build_executor()
@@ -507,7 +507,7 @@ class TestQueryExecutorPropagation:
                        result_id="r-1",
                        output_filename="out.json",
                    )), \
-             patch.object(_db, "write_node_snapshot_atomic", writer_spy):
+             patch.object(_node_snapshots_db, "write_node_snapshot_atomic", writer_spy):
             executor.execute_query(
                 connection=fake_conn, sql="S",
                 project_id="p", output_filename="o",

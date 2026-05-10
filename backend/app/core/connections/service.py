@@ -9,9 +9,9 @@ from typing import Optional
 
 from app.config import settings
 from app.core.connections import db as connection_db
-from app.shared.crypto import CredentialUnavailableError, is_encrypted
-from app.shared.crypto import decrypt as _decrypt_password
-from app.shared.crypto import encrypt as _encrypt_password
+from app.infrastructure.security.crypto import CredentialUnavailableError, is_encrypted
+from app.infrastructure.security.crypto import decrypt as _decrypt_password
+from app.infrastructure.security.crypto import encrypt as _encrypt_password
 from app.core.connections.models import (
     DatabaseConnection,
     ConnectionCreate,

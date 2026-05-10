@@ -6,7 +6,7 @@ Locks backend contracts and regression boundaries for the current architecture.
 
 import pytest
 
-from app.shared import crypto
+from app.infrastructure.security import crypto
 
 
 pytestmark = [pytest.mark.unit, pytest.mark.security, pytest.mark.contract]

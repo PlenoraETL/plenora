@@ -16,7 +16,7 @@ from app.shared.contracts.auth import CurrentUser
 from app.core.auth.auth import require_admin, require_not_esecutore
 from app.core.connections import router as connections_router_module
 from app.core.connections.router import router as connections_router
-from app.shared.crypto import CredentialUnavailableError
+from app.infrastructure.security.crypto import CredentialUnavailableError
 
 
 pytestmark = [pytest.mark.unit, pytest.mark.contract, pytest.mark.regression]

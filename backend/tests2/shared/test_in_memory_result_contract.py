@@ -25,11 +25,11 @@ def mock_db(monkeypatch):
     """Mock db_service minimale per save_result_blob* flows."""
     import app.core.projects.runtime_context as project_runtime_context
     import app.core.results.db as results_db
-    import app.core.results.result_store as result_store
+    import app.core.results.blob_writer as result_blob_writer
 
     saved: dict = {}
 
-    monkeypatch.setattr(result_store, "uuid",
+    monkeypatch.setattr(result_blob_writer, "uuid",
                         SimpleNamespace(uuid4=lambda: "res-1"))
     monkeypatch.setattr(
         project_runtime_context,
@@ -38,7 +38,7 @@ def mock_db(monkeypatch):
     )
     monkeypatch.setattr(results_db, "save_result_row",
                         lambda **kwargs: saved.update(kwargs))
-    monkeypatch.setattr(result_store, "_apply_results_retention",
+    monkeypatch.setattr(result_blob_writer, "apply_results_retention_after_save",
                         lambda pid: None)
 
     # Evita dependency su settings per MAX_RESULT_BLOB_SIZE
@@ -46,7 +46,7 @@ def mock_db(monkeypatch):
         @staticmethod
         def get(key, default=None):
             return default
-    monkeypatch.setattr(result_store, "settings", _FakeSettings, raising=False)
+    monkeypatch.setattr(result_blob_writer, "settings", _FakeSettings, raising=False)
 
     return saved
 
@@ -56,7 +56,7 @@ def mock_db(monkeypatch):
 
 def test_regression_path_based_save_preserves_bytes_exactly(mock_db, tmp_path):
     """Il blob salvato su DB deve essere byte-identico al file temp."""
-    from app.core.results.result_store import save_result_blob
+    from app.core.results.blob_writer import save_result_blob
 
     f = tmp_path / "r.csv"
     f.write_bytes(b"id,name\n1,alice\n2,bob\n")
@@ -69,15 +69,15 @@ def test_regression_path_based_save_preserves_bytes_exactly(mock_db, tmp_path):
 
 def test_regression_path_based_save_keeps_temp_on_db_error(monkeypatch, tmp_path):
     """Se il DB fallisce, il temp file NON deve essere cancellato (retry-friendly)."""
-    from app.core.results.result_store import save_result_blob, ResultSaveError
+    from app.core.results.blob_writer import save_result_blob, ResultSaveError
     import app.core.projects.runtime_context as project_runtime_context
     import app.core.results.db as results_db
-    import app.core.results.result_store as result_store
+    import app.core.results.blob_writer as result_blob_writer
 
     def _boom(**kwargs):
         raise RuntimeError("DB down")
 
-    monkeypatch.setattr(result_store, "uuid",
+    monkeypatch.setattr(result_blob_writer, "uuid",
                         SimpleNamespace(uuid4=lambda: "res-x"))
     monkeypatch.setattr(
         project_runtime_context,
@@ -90,7 +90,7 @@ def test_regression_path_based_save_keeps_temp_on_db_error(monkeypatch, tmp_path
         @staticmethod
         def get(key, default=None):
             return default
-    monkeypatch.setattr(result_store, "settings", _FakeSettings, raising=False)
+    monkeypatch.setattr(result_blob_writer, "settings", _FakeSettings, raising=False)
 
     f = tmp_path / "r.csv"
     f.write_bytes(b"id\n1\n")
@@ -174,7 +174,7 @@ def test_save_dataframe_to_bytes_rejects_filesystem_only_formats():
 
 def test_save_result_blob_from_bytes_happy_path(mock_db):
     """Bytes → DB blob direttamente, zero disk."""
-    from app.core.results.result_store import save_result_blob_from_bytes
+    from app.core.results.blob_writer import save_result_blob_from_bytes
 
     payload = b"id,name\n1,alice\n"
     result_id = save_result_blob_from_bytes(
@@ -247,8 +247,8 @@ def test_save_result_blob_from_bytes_creates_no_files_on_disk(
     Mock settings.DATA_DIR a tmp_path e verifica che dopo la call
     la dir resti vuota.
     """
-    import app.core.results.result_store as result_store
-    from app.core.results.result_store import save_result_blob_from_bytes
+    import app.core.results.blob_writer as result_blob_writer
+    from app.core.results.blob_writer import save_result_blob_from_bytes
 
     # Crea la dir per aver qualcosa da enumerare
     temp_dir = tmp_path / "temp"
@@ -259,7 +259,7 @@ def test_save_result_blob_from_bytes_creates_no_files_on_disk(
         @staticmethod
         def get(key, default=None):
             return default
-    monkeypatch.setattr(result_store, "settings", _FakeSettings, raising=False)
+    monkeypatch.setattr(result_blob_writer, "settings", _FakeSettings, raising=False)
 
     save_result_blob_from_bytes(
         project_id="proj-1",

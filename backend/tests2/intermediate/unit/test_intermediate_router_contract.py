@@ -18,8 +18,8 @@ def test_get_node_data_superadmin_reads_without_group_filter(superadmin_user):
     client = build_client(superadmin_user)
 
     with patch("app.core.intermediate.router._check_run_access", return_value={"run_id": "run-1", "group_id": "grp-99"}), \
-         patch("app.core.intermediate.router.idb.get_node_table_rows", return_value=[{"id": 1}]) as get_rows, \
-         patch("app.core.intermediate.router.idb.get_node_meta", return_value={"row_count": 1, "col_schema": {"id": "int"}}):
+         patch("app.core.intermediate.router.node_snapshots_db.get_node_table_rows", return_value=[{"id": 1}]) as get_rows, \
+         patch("app.core.intermediate.router.node_snapshots_db.get_node_meta", return_value={"row_count": 1, "col_schema": {"id": "int"}}):
         response = client.get("/api/runs/run-1/nodes/node-1/data")
 
     assert response.status_code == 200
@@ -36,7 +36,7 @@ def test_pin_run_superadmin_uses_run_group_not_profile_group(superadmin_user):
     client = build_client(superadmin_user)
 
     with patch("app.core.intermediate.router._check_run_access", return_value={"run_id": "run-1", "group_id": "grp-99"}), \
-         patch("app.core.intermediate.router.idb.pin_run", return_value=True) as pin_run:
+         patch("app.core.intermediate.router.runs_db.pin_run", return_value=True) as pin_run:
         response = client.post("/api/runs/run-1/pin", json={"pinned": True})
 
     assert response.status_code == 200

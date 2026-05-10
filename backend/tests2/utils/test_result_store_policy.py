@@ -10,7 +10,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from app.core.results.result_store import (
+from app.core.results.blob_writer import (
     ResultSaveError,
     save_result_blob_from_bytes,
 )
@@ -46,17 +46,17 @@ def stub_storage(monkeypatch):
 @pytest.fixture
 def mock_db(monkeypatch):
     import app.core.results.store as results_store
-    import app.core.results.result_store as result_store
+    import app.core.results.blob_writer as result_blob_writer
 
     saved: list[dict] = []
 
-    monkeypatch.setattr(result_store, "uuid",
+    monkeypatch.setattr(result_blob_writer, "uuid",
                         SimpleNamespace(uuid4=lambda: "res-pol"))
     monkeypatch.setattr(results_store, "resolve_group_id_for_result",
                         lambda pid, group_id=None: group_id or "grp-1")
     monkeypatch.setattr(results_store, "save_result_row",
                         lambda **kw: saved.append(kw))
-    monkeypatch.setattr(result_store, "_apply_results_retention",
+    monkeypatch.setattr(result_blob_writer, "apply_results_retention_after_save",
                         lambda pid: None)
     return saved
 

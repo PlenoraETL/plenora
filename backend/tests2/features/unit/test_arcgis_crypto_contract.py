@@ -9,7 +9,7 @@ from datetime import datetime, timezone
 import pytest
 
 from app.core.features.features_service import _row_to_connection, create_connection_db
-from app.shared.crypto import decrypt, is_encrypted
+from app.infrastructure.security.crypto import decrypt, is_encrypted
 from tests2.helpers.builders import build_arcgis_create
 
 
@@ -85,7 +85,7 @@ def test_row_to_connection_decrypts_sensitive_fields_from_storage():
         "created_by": "u-1",
     }
 
-    from app.shared.crypto import encrypt
+    from app.infrastructure.security.crypto import encrypt
 
     row["password"] = encrypt(row["password"])
     row["client_secret"] = encrypt(row["client_secret"])

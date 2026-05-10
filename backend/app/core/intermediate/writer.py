@@ -1,7 +1,6 @@
 """
 Intermediate Writer — logica di scrittura nello storage intermediate
 
-(PostgreSQL via `app.core.intermediate.db`; ex SQLite #3 prima della
 """
 
 import decimal
@@ -10,7 +9,7 @@ import math
 import hashlib
 from typing import Dict, List
 
-from app.core.intermediate import db
+from app.core.intermediate import node_snapshots_db, retention, runs_db
 from app.core.intermediate.exceptions import IntermediateWriteError
 from app.utils.logger import get_logger
 
@@ -20,7 +19,7 @@ logger = get_logger(__name__)
 def _resolve_runs_retention_n(retention_n: int | None = None) -> int:
     """Normalize caller-provided retention policy for intermediate cleanup."""
     if retention_n is None:
-        return db.DEFAULT_RUNS_RETENTION
+        return retention.DEFAULT_RUNS_RETENTION
     return retention_n
 
 
@@ -180,7 +179,8 @@ def write_node(run_id: str, node_id: str, node_type: str,
     try:
         if status == "ok" and rows:
             # Calcola _row_hash per ogni riga. Non serve piu' sanitizzare
-            # list/dict/geometry qui: db.write_node_atomic usa _to_jsonable
+            # list/dict/geometry qui: node_snapshots_db.write_node_atomic usa
+            # _to_jsonable
             # che gestisce tutti i tipi per la serializzazione in JSONB
             col_names_sorted = sorted(col_schema.keys())
             rows_with_hash = [
@@ -192,7 +192,7 @@ def write_node(run_id: str, node_id: str, node_type: str,
             # transazione. Idempotent (DELETE-then-INSERT) e atomic (qualsiasi
             # fallimento rollback-a entrambi). Pre-fix erano due tx separate
             # con duplicati silenti su retry Celery
-            db.write_node_atomic(
+            node_snapshots_db.write_node_atomic(
                 run_id=run_id,
                 node_id=node_id,
                 node_type=node_type,
@@ -208,7 +208,7 @@ def write_node(run_id: str, node_id: str, node_type: str,
         else:
             node_hash = hashlib.sha256(b"empty").hexdigest()
             # Branch error/empty: nessuna riga da scrivere, solo meta
-            db.upsert_node_meta(
+            node_snapshots_db.upsert_node_meta(
                 run_id=run_id,
                 node_id=node_id,
                 node_type=node_type,
@@ -242,7 +242,7 @@ def write_node(run_id: str, node_id: str, node_type: str,
         )
         # Scrive comunque node_meta con errore (resource guard best-effort
         try:
-            db.upsert_node_meta(
+            node_snapshots_db.upsert_node_meta(
                 run_id=run_id,
                 node_id=node_id,
                 node_type=node_type,
@@ -270,7 +270,7 @@ def close_run(run_id: str, input_hash: str, output_hash: str,
     """
     try:
         # Conta nodi per status
-        node_metas = db.list_node_meta(run_id)
+        node_metas = node_snapshots_db.list_node_meta(run_id)
         nodes_ok = sum(1 for n in node_metas if n.get("status") == "ok")
         nodes_error = sum(1 for n in node_metas if n.get("status") == "error")
         nodes_skipped = sum(1 for n in node_metas if n.get("status") == "skipped")
@@ -279,7 +279,7 @@ def close_run(run_id: str, input_hash: str, output_hash: str,
         rows_in = node_metas[0].get("row_count", 0) if node_metas else 0
         rows_out = node_metas[-1].get("row_count", 0) if node_metas else 0
 
-        db.update_run(
+        runs_db.update_run(
             run_id,
             status="completed" if success else "failed",
             input_hash=input_hash,
@@ -308,10 +308,10 @@ def close_run(run_id: str, input_hash: str, output_hash: str,
         # viene applicata a ogni chiusura run. Best-effort: un errore qui non
         # rollbacka l'update
         try:
-            run = db.get_run(run_id)
+            run = runs_db.get_run(run_id)
             if run and run.get("canvas_id"):
                 canvas_id = run["canvas_id"]
-                db.apply_runs_retention(
+                retention.apply_runs_retention(
                     canvas_id,
                     run.get("group_id", ""),
                     retention_n=_resolve_runs_retention_n(retention_n),
@@ -336,7 +336,7 @@ def close_run(run_id: str, input_hash: str, output_hash: str,
             exc_info=True,
         )
         try:
-            db.update_run(run_id, status="failed")
+            runs_db.update_run(run_id, status="failed")
         except Exception as _cleanup_err:
             logger.debug(
                 f"update_run(status=failed) fallback fallito per run {run_id}: "

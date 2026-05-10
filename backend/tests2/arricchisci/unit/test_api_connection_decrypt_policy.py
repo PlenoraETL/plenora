@@ -10,7 +10,7 @@ from unittest.mock import patch
 
 import pytest
 
-from app.shared.crypto import CredentialUnavailableError
+from app.infrastructure.security.crypto import CredentialUnavailableError
 
 
 pytestmark = [pytest.mark.unit, pytest.mark.security, pytest.mark.contract]

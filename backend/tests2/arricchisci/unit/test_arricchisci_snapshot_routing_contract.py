@@ -135,7 +135,7 @@ def test_api_enrich_with_final_only_policy_does_not_reach_db():
     ))
 
     with patch(
-        "app.core.intermediate.db.write_node_snapshot_atomic", db_spy,
+        "app.core.intermediate.node_snapshots_db.write_node_snapshot_atomic", db_spy,
     ), _patch_settings(arricchisci_checkpoints="final_only"):
         target._write_intermediate_snapshot(
             run_id="run-1", node_id="ae-1", node_type="api_enrich", df=df,

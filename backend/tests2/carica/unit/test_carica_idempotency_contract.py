@@ -19,7 +19,7 @@ pytestmark = [pytest.mark.unit, pytest.mark.carica, pytest.mark.contract]
 def test_is_already_completed_returns_false_when_run_does_not_exist():
     from app.shared.idempotency import is_already_completed
 
-    with patch("app.core.intermediate.db.get_run", return_value=None):
+    with patch("app.core.intermediate.runs_db.get_run", return_value=None):
         assert is_already_completed("run-missing") is False
 
 
@@ -27,7 +27,7 @@ def test_is_already_completed_returns_true_for_completed_run():
     from app.shared.idempotency import is_already_completed
 
     with patch(
-        "app.core.intermediate.db.get_run",
+        "app.core.intermediate.runs_db.get_run",
         return_value={"run_id": "run-1", "status": "completed"},
     ):
         assert is_already_completed("run-1") is True
@@ -38,7 +38,7 @@ def test_is_already_completed_returns_false_for_failed_run():
     from app.shared.idempotency import is_already_completed
 
     with patch(
-        "app.core.intermediate.db.get_run",
+        "app.core.intermediate.runs_db.get_run",
         return_value={"run_id": "run-1", "status": "failed"},
     ):
         assert is_already_completed("run-1") is False
@@ -50,7 +50,7 @@ def test_is_already_completed_returns_false_for_running_run():
     from app.shared.idempotency import is_already_completed
 
     with patch(
-        "app.core.intermediate.db.get_run",
+        "app.core.intermediate.runs_db.get_run",
         return_value={"run_id": "run-1", "status": "running"},
     ):
         assert is_already_completed("run-1") is False
@@ -62,7 +62,7 @@ def test_is_already_completed_swallows_db_error_returning_false():
     from app.shared.idempotency import is_already_completed
 
     with patch(
-        "app.core.intermediate.db.get_run",
+        "app.core.intermediate.runs_db.get_run",
         side_effect=RuntimeError("db down"),
     ):
         assert is_already_completed("run-1") is False

@@ -1,5 +1,5 @@
 """
-Contract test per `app.shared.crypto` — livello primitive Fernet.
+Contract test per `app.infrastructure.security.crypto` — livello primitive Fernet.
 
 Invariants blindati (da ``backend/docs/architecture/invariants.md``):
 """
@@ -11,7 +11,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from app.shared import crypto
+from app.infrastructure.security import crypto
 
 
 pytestmark = [pytest.mark.unit, pytest.mark.security, pytest.mark.contract]

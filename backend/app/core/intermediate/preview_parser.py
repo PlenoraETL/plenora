@@ -102,6 +102,7 @@ def parse_parquet_preview(
     # invokes the parser does not pay the import cost. The
     # sibling module under ``app/core/intermediate/`` references
     # pyarrow/pandas anymore
+    import pandas as pd
     import pyarrow as pa
     import pyarrow.parquet as pq
 
@@ -117,7 +118,7 @@ def parse_parquet_preview(
         # arrow schema, so dtype strings match ``pd.read_parquet`` on a
         # fully decoded frame. Footer schema also preserves columns
         # when a wide file's first row-group happens to be empty.
-        empty_df = pf.schema_arrow.empty_table().to_pandas()
+        empty_df = pd.DataFrame(pf.schema_arrow.empty_table().to_pandas())
         col_schema: Dict[str, str] = {
             str(c): str(empty_df[c].dtype) for c in empty_df.columns
         }
@@ -150,7 +151,7 @@ def parse_parquet_preview(
             head_table = pa.Table.from_batches(
                 collected, schema=pf.schema_arrow,
             )
-            head_df = head_table.to_pandas().head(target)
+            head_df = pd.DataFrame(head_table.to_pandas()).head(target)
         else:
             # Zero-row file: head_df is the same empty-schema
             # frame we already built for col_schema

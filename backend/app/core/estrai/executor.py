@@ -14,7 +14,7 @@ from app.core.projects.canvas_models import CanvasState
 from app.utils.logger import get_logger, append_step
 from app.core.files.dataframe_io import sanitize_for_json
 from app.core.features.geo_utils import extract_srid_from_column_type
-from app.shared.crypto import CredentialUnavailableError
+from app.infrastructure.security.crypto import CredentialUnavailableError
 from app.shared.resources.metadata import ResourceMetadata, SourceKind
 from app.core.estrai.sql_errors import (
     is_user_error_message as _is_user_error_message,

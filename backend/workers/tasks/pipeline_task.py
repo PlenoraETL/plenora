@@ -150,7 +150,7 @@ def execute_pipeline_task(
         run_id = str(_uuid.uuid4())
     _run_start = _time.time()
 
-    from app.shared.async_user_recheck import recheck_user_authorized
+    from app.core.auth.async_user_recheck import recheck_user_authorized
     _revoked = recheck_user_authorized(
         user_id=user_id, project_id=project_id,
         task_id=task_id, run_id=run_id, task_name="PIPELINE",
@@ -415,7 +415,7 @@ def preview_pipeline_task(
     _update_progress(self, 0, "Inizializzazione preview...")
 
     # N9: re-check permessi al pickup (helper condiviso
-    from app.shared.async_user_recheck import recheck_user_authorized
+    from app.core.auth.async_user_recheck import recheck_user_authorized
     _revoked = recheck_user_authorized(
         user_id=user_id, project_id=project_id,
         task_id=task_id, task_name="PREVIEW",

@@ -11,7 +11,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from app.core.estrai.executor import EstraiExecutor
-from app.shared.crypto import CredentialUnavailableError
+from app.infrastructure.security.crypto import CredentialUnavailableError
 
 
 pytestmark = [pytest.mark.unit, pytest.mark.contract, pytest.mark.regression]

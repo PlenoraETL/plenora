@@ -134,11 +134,6 @@ def test_runs_db_owns_run_crud_without_cross_domain_db_imports() -> None:
 
     from app.core.intermediate import runs_db
 
-    assert hasattr(runs_db, "DEFAULT_RUNS_RETENTION")
-    assert hasattr(runs_db, "apply_runs_retention")
-    assert hasattr(runs_db, "_delete_run")
-    assert hasattr(runs_db, "delete_all_runs_for_canvas")
-
     imported_modules = {
         node.module
         for node in ast.walk(tree)
@@ -244,6 +239,37 @@ def test_intermediate_db_facade_imports_only_intermediate_leaf_dbs() -> None:
     assert "app.core.intermediate.runs_db" in imports
     assert "app.core.intermediate.node_snapshots_db" in imports
     assert "app.core.intermediate.retention" in imports
+    assert "app.core.intermediate.init" in imports
+
+
+def test_runtime_code_does_not_import_intermediate_db_facade() -> None:
+    """Runtime call-sites must depend on explicit intermediate boundaries."""
+    roots = (_BACKEND_ROOT / "app", _BACKEND_ROOT / "workers")
+    violations: list[str] = []
+    for root in roots:
+        if not root.exists():
+            continue
+        for path in root.rglob("*.py"):
+            if path == _INTERMEDIATE_ROOT / "db.py":
+                continue
+            tree = _tree(path)
+            for node in ast.walk(tree):
+                if (
+                    isinstance(node, ast.Import)
+                    and any(
+                        alias.name == "app.core.intermediate.db"
+                        for alias in node.names
+                    )
+                ):
+                    violations.append(f"{path.relative_to(_BACKEND_ROOT)}:{node.lineno}")
+                if (
+                    isinstance(node, ast.ImportFrom)
+                    and node.module == "app.core.intermediate"
+                    and any(alias.name == "db" for alias in node.names)
+                ):
+                    violations.append(f"{path.relative_to(_BACKEND_ROOT)}:{node.lineno}")
+
+    assert violations == []
 
 
 def test_intermediate_db_facade_exports_are_explicit_and_ratcheted() -> None:

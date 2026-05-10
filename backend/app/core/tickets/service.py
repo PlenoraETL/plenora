@@ -13,7 +13,7 @@ from fastapi import HTTPException
 
 from app.shared.contracts.auth import CurrentUser
 from app.core.tickets import db as tdb
-from app.shared import error_codes
+from app.core.tickets import errors as ticket_errors
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -217,7 +217,7 @@ def check_access(ticket: tdb.TicketRow | None, actor: CurrentUser) -> tdb.Ticket
         raise HTTPException(
             status_code=404,
             detail={
-                "error": error_codes.TICKET_NOT_FOUND,
+                "error": ticket_errors.TICKET_NOT_FOUND,
                 "message": "Ticket non trovato",
             },
         )
@@ -228,7 +228,7 @@ def check_access(ticket: tdb.TicketRow | None, actor: CurrentUser) -> tdb.Ticket
         raise HTTPException(
             status_code=404,
             detail={
-                "error": error_codes.TICKET_NOT_FOUND,
+                "error": ticket_errors.TICKET_NOT_FOUND,
                 "message": "Ticket non trovato",
             },
         )
@@ -414,7 +414,7 @@ def update_ticket(
         raise HTTPException(
             status_code=404,
             detail={
-                "error": error_codes.TICKET_NOT_FOUND,
+                "error": ticket_errors.TICKET_NOT_FOUND,
                 "message": "Ticket non trovato",
             },
         )
@@ -477,7 +477,7 @@ def delete_ticket(
             raise HTTPException(
                 status_code=404,
                 detail={
-                    "error": error_codes.TICKET_NOT_FOUND,
+                    "error": ticket_errors.TICKET_NOT_FOUND,
                     "message": "Ticket non trovato",
                 },
             )
@@ -494,7 +494,7 @@ def delete_ticket(
         raise HTTPException(
             status_code=404,
             detail={
-                "error": error_codes.TICKET_NOT_FOUND,
+                "error": ticket_errors.TICKET_NOT_FOUND,
                 "message": "Ticket non trovato",
             },
         )

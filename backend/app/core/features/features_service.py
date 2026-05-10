@@ -14,7 +14,7 @@ import pandas as pd
 
 from app.config import settings
 from app.utils.logger import get_logger
-from app.core.results.result_store import save_pipeline_result_outcome
+from app.core.results.pipeline_result import save_pipeline_result_outcome
 from app.core.files.dataframe_io import _read_csv_safe
 from app.core.features.models import (
     ArcGISConnection,
@@ -41,14 +41,14 @@ logger = get_logger(__name__)
 # per preservare la superficie importata dai test
 
 import app.db.pg_connection as db
-from app.shared.crypto import encrypt as _encrypt, decrypt as _decrypt
+from app.infrastructure.security.crypto import encrypt as _encrypt, decrypt as _decrypt
 
 DEFAULT_GROUP = "default"
 
 # Campi sensibili cifrati a riposo: senza questa lista, password e
 # client_secret verrebbero scritti in chiaro su arcgis_connections e
 # chiunque leggesse il DB avrebbe le credenziali live. Usiamo lo stesso
-# pattern di ConnectionService (app.shared.crypto Fernet, prefisso
+# pattern di ConnectionService (app.infrastructure.security.crypto Fernet, prefisso
 # "enc:", idempotente
 _SENSITIVE_FIELDS = ("password", "client_secret")
 

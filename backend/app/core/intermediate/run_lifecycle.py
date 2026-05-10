@@ -4,14 +4,14 @@ from __future__ import annotations
 
 from typing import Optional
 
-from app.core.intermediate import db as _db
 from app.core.intermediate.cleanup import close_worker_connection
+from app.core.intermediate import retention, runs_db
 from app.core.intermediate.writer import close_run
 
 
 def get_default_runs_retention() -> int:
     """Return the intermediate default retention policy."""
-    return _db.DEFAULT_RUNS_RETENTION
+    return retention.DEFAULT_RUNS_RETENTION
 
 
 def create_run(
@@ -23,7 +23,7 @@ def create_run(
     user_id: Optional[str] = None,
 ):
     """Create an intermediate run row."""
-    return _db.create_run(
+    return runs_db.create_run(
         run_id=run_id,
         canvas_id=canvas_id,
         group_id=group_id,

@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from typing import Dict
 
-from app.shared.crypto import (
+from app.infrastructure.security.crypto import (
     CredentialUnavailableError,
     decrypt as _crypto_decrypt,
     encrypt as _crypto_encrypt,

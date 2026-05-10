@@ -1,7 +1,7 @@
 """Idempotency guard condiviso tra i task asincroni."""
 
 from app.utils.logger import get_logger
-from app.core.intermediate import db as idb
+from app.core.intermediate import runs_db
 
 logger = get_logger(__name__)
 
@@ -13,7 +13,7 @@ def is_already_completed(run_id: str) -> bool:
     if not run_id:
         return False
     try:
-        row = idb.get_run(run_id)
+        row = runs_db.get_run(run_id)
         if not row:
             return False
         return row.get("status") == "completed"

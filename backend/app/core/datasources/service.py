@@ -9,7 +9,7 @@ from typing import Optional
 
 from app.config import settings
 from app.utils.logger import get_logger
-from app.shared.crypto import (
+from app.infrastructure.security.crypto import (
     encrypt_dict_fields as _encrypt_dict_fields,
     decrypt_dict_fields as _decrypt_dict_fields,
 )

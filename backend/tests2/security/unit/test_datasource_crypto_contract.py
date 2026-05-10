@@ -7,7 +7,7 @@ Locks backend contracts and regression boundaries for the current architecture.
 import pytest
 
 from app.core.datasources.service import DataSourceService
-from app.shared.crypto import decrypt, is_encrypted
+from app.infrastructure.security.crypto import decrypt, is_encrypted
 from tests2.helpers.builders import utc_now
 
 
@@ -62,7 +62,7 @@ def test_get_full_config_decrypts_sensitive_fields_from_storage(monkeypatch):
     service = DataSourceService()
 
     import app.core.datasources.db as datasource_db
-    from app.shared.crypto import encrypt_dict_fields
+    from app.infrastructure.security.crypto import encrypt_dict_fields
 
     row = {
         "group_id": "grp-1",

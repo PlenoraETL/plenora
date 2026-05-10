@@ -11,6 +11,7 @@ from fastapi.responses import Response
 from typing import Optional, List, Dict
 
 from app.utils.logger import get_logger
+from app.core.datasources import errors as datasource_errors
 from app.shared import error_codes
 from app.shared.error_envelope import raise_typed_http
 from app.observability.audit_action import audit_action
@@ -197,7 +198,7 @@ def delete_datasource(ds_id: str, current_user: CurrentUser = Depends(require_ad
         raise HTTPException(
             status_code=409,
             detail={
-                "error": error_codes.DATASOURCE_IN_USE,
+                "error": datasource_errors.DATASOURCE_IN_USE,
                 "message": (
                     f"Data Source usato in {len(using_projects)} progetto/i. "
                     f"Rimuoverlo dai canvas prima di cancellarlo."
@@ -219,7 +220,7 @@ def delete_datasource(ds_id: str, current_user: CurrentUser = Depends(require_ad
         raise HTTPException(
             status_code=404,
             detail={
-                "error": error_codes.DATASOURCE_NOT_FOUND,
+                "error": datasource_errors.DATASOURCE_NOT_FOUND,
                 "message": f"Data Source '{ds_id}' non trovato",
             },
         )
@@ -301,7 +302,7 @@ def test_connection(ds_id: str, current_user: CurrentUser = Depends(require_not_
     assert_resource_visible(existing, "datasources", current_user, "Data Source")
     # FIXME: #2 (2026-04-23): credenziale cifrata non decriptabile → 422
     # non 200-OK fasullo ne' 500 ASGI
-    from app.shared.crypto import CredentialUnavailableError
+    from app.infrastructure.security.crypto import CredentialUnavailableError
     try:
         return _svc().test_connection(ds_id)
     except CredentialUnavailableError as e:

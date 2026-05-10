@@ -1,8 +1,10 @@
 """
-Intermediate DB facade for PostgreSQL-backed intermediate storage.
+Intermediate DB compatibility facade.
 
-Keeps the historical app.core.intermediate.db import surface while run and
-node snapshot persistence move into smaller boundaries.
+Runtime code should import the explicit intermediate leaf modules
+(`runs_db`, `node_snapshots_db`, `retention`, `cleanup`, `init`) instead. This
+module remains for tests and old external imports that still patch the
+historical `app.core.intermediate.db` surface.
 """
 
 from typing import Any, Dict, List, Optional
@@ -12,13 +14,12 @@ from psycopg2.extras import execute_values
 from app.core.intermediate import runs_db as _runs_db
 from app.core.intermediate import node_snapshots_db as _node_snapshots_db
 from app.core.intermediate import retention as _retention
+from app.core.intermediate import init as _init
 from app.utils.logger import get_logger
 
 # Import from pg_connection (same pool used by config/results).
 from app.db.pg_connection import (
-    fetchone, fetchall, execute, executemany,
-    get_connection, put_connection, close_connection as _pg_close,
-    transaction,
+    fetchone, fetchall, execute, close_connection as _pg_close, transaction,
 )
 
 logger = get_logger(__name__)
@@ -29,11 +30,6 @@ __all__ = [
     "close_connection",
     "create_run",
     "delete_all_runs_for_canvas",
-    "execute",
-    "executemany",
-    "fetchall",
-    "fetchone",
-    "get_connection",
     "get_node_meta",
     "get_node_table_rows",
     "get_run",
@@ -42,8 +38,6 @@ __all__ = [
     "list_node_meta",
     "list_runs",
     "pin_run",
-    "put_connection",
-    "transaction",
     "update_run",
     "upsert_node_meta",
     "upsert_node_meta_extended",
@@ -61,8 +55,8 @@ def close_connection() -> None:
 
 
 def init_db():
-    """No-op for PostgreSQL: runs/node_meta tables already exist."""
-    logger.info("Intermediate DB: PostgreSQL tables already present", op="init_db")
+    """Compatibility wrapper for the explicit intermediate init boundary."""
+    _init.init_db()
 
 
 # fetchone, fetchall, execute are imported from pg_connection above.

@@ -54,11 +54,11 @@ _CALLSITE_CLASSIFICATION: dict[str, tuple[Classification, str]] = {
     # scanner therefore does not flag them, and they are not listed
     # below. The runtime contract for those files is locked separately
     # by `test_storage_reconciliation_boundedness_lock.py`.
-    "app/core/results/result_store.py": (
+    "app/core/results/blob_writer.py": (
         "tracked",
         "save_result_blob and save_result_blob_from_bytes "
         "(upload-then-DB-save). Compensating delete on DB save "
-        "failure via _cleanup_uploaded_result_blob. The DB-side "
+        "failure via cleanup_uploaded_result_blob. The DB-side "
         "deletes go through the results cleanup boundary which records "
         "pending entries pre-commit.",
     ),
@@ -274,17 +274,17 @@ def test_classifications_have_non_empty_reasons():
 
 
 def test_classification_includes_known_tracked_upload_callsites():
-    """Sanity: `app/core/results/result_store.py` is the only file that
+    """Sanity: `app/core/results/blob_writer.py` is the only file that
     issues raw `storage.upload(...)` calls behind the
     record_pending + compensating_delete contract. Removing it is
     a regression. The other tracked result/file DB consumers
     consume the
     canonical `compensating_delete` helper (no raw storage call,
     not in scope of this scanner)."""
-    p = "app/core/results/result_store.py"
+    p = "app/core/results/blob_writer.py"
     assert p in _CALLSITE_CLASSIFICATION, (
         f"{p} must be classified as `tracked`. Removal indicates "
-        "a regression: result_store no longer participates in the "
+        "a regression: blob_writer no longer participates in the "
         "record_pending + compensating_delete contract."
     )
     cls, _ = _CALLSITE_CLASSIFICATION[p]

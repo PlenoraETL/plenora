@@ -14,7 +14,7 @@ from app.core.connections import db as connection_db
 from app.core.connections.arcgis_provider_factory import create_arcgis_provider
 from app.shared.connections.arcgis_connection import ArcGISConnectionInfo
 from app.shared.connections.arcgis_provider import ArcGISProviderProtocol
-from app.shared.crypto import decrypt as _decrypt
+from app.infrastructure.security.crypto import decrypt as _decrypt
 
 
 __all__ = ["resolve_arcgis_connection"]

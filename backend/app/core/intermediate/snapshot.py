@@ -12,8 +12,9 @@ import time
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
-from app.core.intermediate import db as _db
+from app.core.intermediate import node_snapshots_db as _node_snapshots_db
 from app.core.intermediate import policy as _policy
+from app.core.intermediate import runs_db as _runs_db
 from app.core.intermediate.writer import compute_row_hash
 
 logger = logging.getLogger(__name__)
@@ -383,7 +384,7 @@ def _record_snapshot(
     if persistence_mode == _policy.MODE_FULL_ARTIFACT and df is not None:
         _t_art = time.monotonic()
         # Lookup group_id + project_id dalla run intermediate
-        run_meta = _db.get_run(run_id) or {}
+        run_meta = _runs_db.get_run(run_id) or {}
         run_project_id = run_meta.get("canvas_id") or ""
         run_group_id = run_meta.get("group_id") or ""
         if not run_project_id or not run_group_id:
@@ -420,7 +421,7 @@ def _record_snapshot(
         artifact_ms = _ms(_t_art)
 
     _t_db = time.monotonic()
-    _db.write_node_snapshot_atomic(
+    _node_snapshots_db.write_node_snapshot_atomic(
         run_id=run_id,
         node_id=node_id,
         node_type=node_type,

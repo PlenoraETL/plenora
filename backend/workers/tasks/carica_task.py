@@ -102,7 +102,7 @@ def execute_carica_task(
 
     logger.info(f"Task CARICA {task_id} avviato per progetto {project_id} (run_id={run_id})")
 
-    from app.shared.async_user_recheck import recheck_user_authorized
+    from app.core.auth.async_user_recheck import recheck_user_authorized
     _revoked = recheck_user_authorized(
         user_id=user_id, project_id=project_id,
         task_id=task_id, run_id=run_id, task_name="CARICA",

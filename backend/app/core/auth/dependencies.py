@@ -18,7 +18,7 @@ from app.core.auth.roles import (
     ROLES_KIOSK_ONLY,
 )
 from app.shared.contracts.auth import CurrentUser
-from app.shared.jwt_token import decode_token
+from app.core.auth.jwt_token import decode_token
 from app.shared.token_blacklist import is_jti_blacklisted
 
 

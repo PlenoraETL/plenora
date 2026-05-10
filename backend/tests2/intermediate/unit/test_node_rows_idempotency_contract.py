@@ -367,9 +367,9 @@ def test_writer_write_node_success_branch_routes_through_atomic_helper():
     rows = [{"col_a": 1}, {"col_a": 2}]
     schema = {"col_a": "int64"}
 
-    with patch.object(w.db, "write_node_atomic") as mock_atomic, \
-         patch.object(w.db, "insert_node_rows") as mock_insert, \
-         patch.object(w.db, "upsert_node_meta") as mock_meta:
+    with patch.object(w.node_snapshots_db, "write_node_atomic") as mock_atomic, \
+         patch.object(w.node_snapshots_db, "insert_node_rows") as mock_insert, \
+         patch.object(w.node_snapshots_db, "upsert_node_meta") as mock_meta:
         result = w.write_node(
             run_id="run-r", node_id="node-r", node_type="estrai",
             rows=rows, col_schema=schema, exec_time=0.4, status="ok",
@@ -392,8 +392,8 @@ def test_writer_write_node_error_branch_keeps_meta_only_path():
     chiamano write_node con status='error' o rows=[]."""
     from app.core.intermediate import writer as w
 
-    with patch.object(w.db, "write_node_atomic") as mock_atomic, \
-         patch.object(w.db, "upsert_node_meta") as mock_meta:
+    with patch.object(w.node_snapshots_db, "write_node_atomic") as mock_atomic, \
+         patch.object(w.node_snapshots_db, "upsert_node_meta") as mock_meta:
         # Caso 1: status='ok' ma rows=[]
         w.write_node(
             run_id="run-empty", node_id="node-empty", node_type="estrai",

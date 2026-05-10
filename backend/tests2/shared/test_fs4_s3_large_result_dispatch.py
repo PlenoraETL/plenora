@@ -55,11 +55,11 @@ def mock_db(monkeypatch):
     """DB mock che registra save_result_row calls."""
     import app.core.projects.runtime_context as project_runtime_context
     from app.core.results import db as results_db
-    import app.core.results.result_store as result_store
+    import app.core.results.blob_writer as result_blob_writer
 
     saved = []
 
-    monkeypatch.setattr(result_store, "uuid",
+    monkeypatch.setattr(result_blob_writer, "uuid",
                         SimpleNamespace(uuid4=lambda: "res-fs4"))
     monkeypatch.setattr(
         project_runtime_context,
@@ -68,7 +68,7 @@ def mock_db(monkeypatch):
     )
     monkeypatch.setattr(results_db, "save_result_row",
                         lambda **kw: saved.append(kw))
-    monkeypatch.setattr(result_store, "_apply_results_retention",
+    monkeypatch.setattr(result_blob_writer, "apply_results_retention_after_save",
                         lambda pid: None)
 
     return saved
@@ -79,7 +79,7 @@ def mock_db(monkeypatch):
 
 def test_small_file_goes_to_db_blob(mock_db, stub_storage, monkeypatch):
     """Sotto threshold -> DB blob, S3 non toccato."""
-    from app.core.results.result_store import save_result_blob_from_bytes
+    from app.core.results.blob_writer import save_result_blob_from_bytes
     import app.config as app_config
 
     # Threshold piccolo ma dato ancora piu' piccolo -> DB
@@ -102,7 +102,7 @@ def test_small_file_goes_to_db_blob(mock_db, stub_storage, monkeypatch):
 
 def test_large_file_goes_to_s3(mock_db, stub_storage, monkeypatch):
     """Sopra threshold -> S3 upload + DB row con storage_key (data None)."""
-    from app.core.results.result_store import save_result_blob_from_bytes
+    from app.core.results.blob_writer import save_result_blob_from_bytes
     import app.config as app_config
 
     # Threshold basso per isolare il test
@@ -135,7 +135,7 @@ def test_no_hard_cap_any_size_goes_to_s3(mock_db, stub_storage, monkeypatch):
     """Post FS-4+multipart: nessun hard cap. upload_bytes auto-chunking
     delega al provider (S3 multipart, Azure block, GCS resumable).
     Il limite reale e' RAM del processo, non artificialmente imposto."""
-    from app.core.results.result_store import save_result_blob_from_bytes
+    from app.core.results.blob_writer import save_result_blob_from_bytes
     import app.config as app_config
 
     def _fake_get(key, default=None):
@@ -167,7 +167,7 @@ def test_no_hard_cap_any_size_goes_to_s3(mock_db, stub_storage, monkeypatch):
 
 def test_s3_upload_failure_no_db_row_orphan(mock_db, stub_storage, monkeypatch):
     """Se S3 upload solleva, non crea row DB orfana."""
-    from app.core.results.result_store import save_result_blob_from_bytes, ResultSaveError
+    from app.core.results.blob_writer import save_result_blob_from_bytes, ResultSaveError
     import app.config as app_config
 
     def _fake_get(key, default=None):
@@ -354,7 +354,7 @@ def test_delete_result_db_backed_does_not_touch_s3(monkeypatch):
 
 def test_save_result_blob_path_small_goes_to_db_blob(mock_db, stub_storage, monkeypatch, tmp_path):
     """Path-based: file < threshold -> DB BYTEA, NO storage.upload."""
-    from app.core.results.result_store import save_result_blob
+    from app.core.results.blob_writer import save_result_blob
     import app.config as app_config
 
     def _fake_get(key, default=None):
@@ -383,7 +383,7 @@ def test_save_result_blob_path_small_goes_to_db_blob(mock_db, stub_storage, monk
 
 def test_save_result_blob_path_large_goes_to_s3(mock_db, stub_storage, monkeypatch, tmp_path):
     """Path-based: file >= threshold -> S3 via storage.upload(path) (streaming)."""
-    from app.core.results.result_store import save_result_blob
+    from app.core.results.blob_writer import save_result_blob
     import app.config as app_config
 
     def _fake_get(key, default=None):
@@ -416,7 +416,7 @@ def test_save_result_blob_path_large_goes_to_s3(mock_db, stub_storage, monkeypat
 
 def test_save_result_blob_path_s3_upload_failure_no_db_row(mock_db, stub_storage, monkeypatch, tmp_path):
     """Path-based: se S3 upload solleva, no row DB orfana; file temp resta."""
-    from app.core.results.result_store import save_result_blob, ResultSaveError
+    from app.core.results.blob_writer import save_result_blob, ResultSaveError
     import app.config as app_config
 
     def _fake_get(key, default=None):

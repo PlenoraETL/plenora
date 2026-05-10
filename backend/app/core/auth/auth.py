@@ -96,7 +96,7 @@ def _clear_failed_logins(ip: str):
 
 
 # Keep these as explicit public auth facade exports for existing callers.
-from app.shared.jwt_token import (  # noqa: F401 (explicit public auth API)
+from app.core.auth.jwt_token import (  # noqa: F401 (explicit public auth API)
     ALGORITHM,
     ACCESS_TOKEN_EXPIRE_HOURS,
     SECRET_KEY,

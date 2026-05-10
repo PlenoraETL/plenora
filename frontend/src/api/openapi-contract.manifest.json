@@ -1,0 +1,95 @@
+{
+  "critical": {
+    "auth.login": {
+      "method": "POST",
+      "path": "/api/auth/login",
+      "requestSchema": "LoginRequest"
+    }
+  },
+  "endpoints": [
+    {
+      "method": "POST",
+      "operationId": "login_api_auth_login_post",
+      "path": "/api/auth/login",
+      "requestSchema": "LoginRequest",
+      "responseSchemas": [
+        "TokenResponse"
+      ]
+    }
+  ],
+  "manifestVersion": 1,
+  "openapi": "3.0.0",
+  "schemas": {
+    "LoginRequest": {
+      "fields": {
+        "mfa_code": {
+          "nullable": true,
+          "required": false,
+          "type": "string"
+        },
+        "password": {
+          "nullable": false,
+          "required": true,
+          "type": "string"
+        },
+        "username": {
+          "nullable": false,
+          "required": true,
+          "type": "string"
+        }
+      },
+      "required": [
+        "password",
+        "username"
+      ]
+    },
+    "TokenResponse": {
+      "fields": {
+        "access_token": {
+          "nullable": false,
+          "required": true,
+          "type": "string"
+        },
+        "expires_in": {
+          "nullable": false,
+          "required": true,
+          "type": "integer"
+        },
+        "group_id": {
+          "nullable": false,
+          "required": true,
+          "type": "string"
+        },
+        "role": {
+          "nullable": false,
+          "required": true,
+          "type": "string"
+        },
+        "token_type": {
+          "nullable": false,
+          "required": false,
+          "type": "string"
+        },
+        "user_id": {
+          "nullable": false,
+          "required": true,
+          "type": "string"
+        },
+        "username": {
+          "nullable": false,
+          "required": true,
+          "type": "string"
+        }
+      },
+      "required": [
+        "access_token",
+        "expires_in",
+        "group_id",
+        "role",
+        "user_id",
+        "username"
+      ]
+    }
+  },
+  "source": "backend_auth_model_fragment"
+}

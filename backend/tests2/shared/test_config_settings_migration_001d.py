@@ -77,7 +77,7 @@ def test_query_engine_factory_reads_mssql_fast_via_settings():
 
 
 def test_async_http_reads_pool_size_via_settings():
-    src = _read(_BACKEND_APP / "shared" / "async_http.py")
+    src = _read(_BACKEND_APP / "infrastructure" / "http" / "async_client.py")
     assert "_settings.get(\"ENRICHMENT_POOL_SIZE\")" in src
     assert "os.environ.get(\"ENRICHMENT_POOL_SIZE" not in src
 
@@ -99,24 +99,24 @@ def test_admin_system_status_reads_db_schema_thresholds_via_settings():
 # Behavior helpers (clamp / fallback)
 
 def test_async_http_pool_size_default_returns_50():
-    from app.shared.async_http import _get_pool_size
+    from app.infrastructure.http.async_client import _get_pool_size
     assert _get_pool_size() == 50
 
 
 def test_async_http_pool_size_clamps_low(monkeypatch):
-    from app.shared.async_http import _get_pool_size
+    from app.infrastructure.http.async_client import _get_pool_size
     monkeypatch.setenv("ENRICHMENT_POOL_SIZE", "1")
     assert _get_pool_size() == 5  # clamp lower bound
 
 
 def test_async_http_pool_size_clamps_high(monkeypatch):
-    from app.shared.async_http import _get_pool_size
+    from app.infrastructure.http.async_client import _get_pool_size
     monkeypatch.setenv("ENRICHMENT_POOL_SIZE", "9999")
     assert _get_pool_size() == 200  # clamp upper bound
 
 
 def test_async_http_pool_size_invalid_falls_back(monkeypatch):
-    from app.shared.async_http import _get_pool_size
+    from app.infrastructure.http.async_client import _get_pool_size
     # Settings ritorna il default int 50 perche' la coercion fallisce
     # silente ed e' come se non fosse settato.
     monkeypatch.setenv("ENRICHMENT_POOL_SIZE", "not-a-number")

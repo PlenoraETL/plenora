@@ -26,8 +26,8 @@ def test_runtime_db_init_preserves_historical_order(monkeypatch):
         lambda: calls.append("pg_connection.init_db"),
     )
     monkeypatch.setattr(
-        "app.core.intermediate.db.init_db",
-        lambda: calls.append("intermediate.db.init_db"),
+        "app.core.intermediate.init.init_db",
+        lambda: calls.append("intermediate.init.init_db"),
     )
     monkeypatch.setattr(
         "app.db.migrations_runner.apply_pending_migrations",
@@ -36,11 +36,16 @@ def test_runtime_db_init_preserves_historical_order(monkeypatch):
 
     import app.core.runtime.db_init as runtime_db_init
 
-    runtime_db_init.init_all_dbs()
+    init_all_dbs = getattr(
+        runtime_db_init,
+        "_original_init_all_dbs",
+        runtime_db_init.init_all_dbs,
+    )
+    init_all_dbs()
 
     assert calls == [
         "pg_connection.init_db",
-        "intermediate.db.init_db",
+        "intermediate.init.init_db",
         "migrations_runner.apply_pending_migrations",
     ]
 

@@ -21,7 +21,7 @@ _EXPECTED_CLAIMS = ("sub", "username", "group_id", "role", "exp", "iat", "jti")
 
 
 def test_jwt_token_module_exposes_expected_symbols():
-    from app.shared import jwt_token as jt
+    from app.core.auth import jwt_token as jt
 
     assert jt.ALGORITHM == _EXPECTED_ALGORITHM
     assert isinstance(jt.ACCESS_TOKEN_EXPIRE_HOURS, int)
@@ -39,7 +39,7 @@ def test_auth_reexports_jwt_with_function_identity_and_value_equality():
     binding del modulo nuovo via `from ... import ...`.
     """
     from app.core.auth import auth as auth_mod
-    from app.shared import jwt_token as jt
+    from app.core.auth import jwt_token as jt
 
     # Funzioni: identita' object (necessaria per monkeypatch via auth_mod)
     assert auth_mod.create_access_token is jt.create_access_token
@@ -57,7 +57,7 @@ def test_create_access_token_round_trip_preserves_claim_contract():
     control-plane): chiunque legge questo payload deve trovare gli stessi
     nomi di claim.
     """
-    from app.shared import jwt_token as jt
+    from app.core.auth import jwt_token as jt
 
     tok = jt.create_access_token(
         user_id="u-123",
@@ -81,7 +81,7 @@ def test_create_access_token_round_trip_preserves_claim_contract():
 
 def test_decode_token_returns_none_on_garbage_and_expired():
     """Fail-closed: invalid/expired tokens producono None, non eccezioni."""
-    from app.shared import jwt_token as jt
+    from app.core.auth import jwt_token as jt
 
     assert jt.decode_token("not-a-valid-jwt-at-all") is None
     assert jt.decode_token("aaa.bbb.ccc") is None

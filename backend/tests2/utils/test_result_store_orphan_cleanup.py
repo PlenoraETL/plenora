@@ -12,7 +12,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from app.core.results.result_store import (
+from app.core.results.blob_writer import (
     ResultSaveError,
     save_result_blob,
     save_result_blob_from_bytes,
@@ -71,11 +71,11 @@ def stub_storage_factory(monkeypatch):
 @pytest.fixture
 def mock_db_save_ok(monkeypatch):
     import app.core.results.store as results_store
-    import app.core.results.result_store as result_store
+    import app.core.results.blob_writer as result_blob_writer
 
     saved: list[dict] = []
     monkeypatch.setattr(
-        result_store, "uuid", SimpleNamespace(uuid4=lambda: "res-orph")
+        result_blob_writer, "uuid", SimpleNamespace(uuid4=lambda: "res-orph")
     )
     monkeypatch.setattr(
         results_store,
@@ -84,7 +84,7 @@ def mock_db_save_ok(monkeypatch):
     )
     monkeypatch.setattr(results_store, "save_result_row", lambda **kw: saved.append(kw))
     monkeypatch.setattr(
-        result_store, "_apply_results_retention", lambda pid: None
+        result_blob_writer, "apply_results_retention_after_save", lambda pid: None
     )
     return saved
 
@@ -94,10 +94,10 @@ def mock_db_save_fails(monkeypatch):
     """Configura `db.save_result` perche' sollevi RuntimeError simulando
     una row DB rifiutata (vincolo FK, connection, ecc.)."""
     import app.core.results.store as results_store
-    import app.core.results.result_store as result_store
+    import app.core.results.blob_writer as result_blob_writer
 
     monkeypatch.setattr(
-        result_store, "uuid", SimpleNamespace(uuid4=lambda: "res-orph")
+        result_blob_writer, "uuid", SimpleNamespace(uuid4=lambda: "res-orph")
     )
     monkeypatch.setattr(
         results_store,
@@ -110,7 +110,7 @@ def mock_db_save_fails(monkeypatch):
 
     monkeypatch.setattr(results_store, "save_result_row", _raise)
     monkeypatch.setattr(
-        result_store, "_apply_results_retention", lambda pid: None
+        result_blob_writer, "apply_results_retention_after_save", lambda pid: None
     )
 
 
@@ -130,11 +130,11 @@ def caplog_app(caplog):
     """`app.utils.logger.get_logger("app")` setta `propagate=False` quindi
     caplog di default non vede i log applicativi. Ci attacchiamo
     direttamente al logger del modulo per catturare i record."""
-    from app.core.results import result_store as _rs
+    from app.core.results import blob_writer as _rs
     handler_logger = _rs.logger
     # Risolvi il logger stdlib sotto lo StructuredLogger wrapper.
     stdlib_logger = getattr(handler_logger, "_logger", None) or logging.getLogger(
-        "app.core.results.result_store"
+        "app.core.results.blob_writer"
     )
     stdlib_logger.addHandler(caplog.handler)
     prev_level = stdlib_logger.level

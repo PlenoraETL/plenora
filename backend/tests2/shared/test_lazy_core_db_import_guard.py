@@ -48,14 +48,6 @@ class AllowedLazyCoreDbImport:
 
 
 _ALLOWED_LAZY_CORE_DB_IMPORTS: tuple[AllowedLazyCoreDbImport, ...] = (
-    AllowedLazyCoreDbImport(
-        "app/core/runtime/db_init.py",
-        "init_all_dbs",
-        "app.core.intermediate.db",
-        "<module>",
-        "LOW",
-        "BOOTSTRAP_BOUNDARY: runtime DB init imports DB leaves lazily during startup initialization only; remove only if init ordering is made explicit elsewhere",
-    ),
 )
 
 
@@ -200,4 +192,4 @@ def test_lazy_core_db_import_allowlist_has_rationales() -> None:
 
 
 def test_lazy_core_db_import_baseline_count_is_explicit() -> None:
-    assert len(_current_lazy_core_db_imports()) == len(_ALLOWED_LAZY_CORE_DB_IMPORTS) == 1
+    assert len(_current_lazy_core_db_imports()) == len(_ALLOWED_LAZY_CORE_DB_IMPORTS) == 0

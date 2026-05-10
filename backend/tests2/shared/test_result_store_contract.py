@@ -32,10 +32,10 @@ def test_save_result_blob_removes_temp_file_only_after_success(monkeypatch, tmp_
     saved = {}
 
     import app.core.results.store as results_store
-    import app.core.results.result_store as result_store
+    import app.core.results.blob_writer as result_blob_writer
 
     monkeypatch.setattr(
-        result_store,
+        result_blob_writer,
         "uuid",
         SimpleNamespace(uuid4=lambda: "res-1"),
     )
@@ -48,12 +48,12 @@ def test_save_result_blob_removes_temp_file_only_after_success(monkeypatch, tmp_
         lambda **kwargs: saved.update(kwargs),
     )
     monkeypatch.setattr(
-        result_store,
-        "_apply_results_retention",
+        result_blob_writer,
+        "apply_results_retention_after_save",
         lambda project_id: None,
     )
     monkeypatch.setattr(
-        result_store,
+        result_blob_writer,
         "settings",
         None,
         raising=False,
@@ -75,10 +75,10 @@ def test_save_result_blob_keeps_temp_file_when_db_save_fails(monkeypatch, tmp_pa
     result_file.write_text("id\n1\n", encoding="utf-8")
 
     import app.core.results.store as results_store
-    import app.core.results.result_store as result_store
+    import app.core.results.blob_writer as result_blob_writer
 
     monkeypatch.setattr(
-        result_store,
+        result_blob_writer,
         "uuid",
         SimpleNamespace(uuid4=lambda: "res-1"),
     )
@@ -132,12 +132,12 @@ def test_apply_results_retention_uses_typed_result_rows(monkeypatch):
 
 
 def test_result_store_retention_wrapper_delegates_to_results_domain(monkeypatch):
-    import app.core.results.retention as results_retention
+    import app.core.results.blob_writer as result_blob_writer
     import app.core.results.result_store as result_store
 
     called: list[str] = []
     monkeypatch.setattr(
-        results_retention,
+        result_blob_writer,
         "apply_results_retention",
         called.append,
     )
@@ -156,7 +156,8 @@ def test_result_store_uses_results_boundary_not_row_modules():
     assert "from app.core.results.db import" not in source
     assert "from app.core.results.blob import" not in source
     assert "from app.core.projects.db import" not in source
-    assert "from app.core.results import store as results_store" in source
+    assert "from app.core.results import store as results_store" not in source
+    assert "from app.core.results.blob_writer import" in source
 
 
 def test_result_store_slice_has_no_row_owned_to_legacy_dict():
@@ -192,7 +193,7 @@ def test_result_store_slice_has_no_row_owned_to_legacy_dict():
 
 
 def test_save_pipeline_result_outcome_is_typed_internal_boundary(monkeypatch):
-    import app.core.results.result_store as result_store
+    import app.core.results.pipeline_result as pipeline_result
 
     calls: dict[str, object] = {}
 
@@ -206,7 +207,7 @@ def test_save_pipeline_result_outcome_is_typed_internal_boundary(monkeypatch):
         return "res-typed"
 
     monkeypatch.setattr(
-        result_store,
+        pipeline_result,
         "save_result_blob_from_bytes",
         _save_from_bytes,
     )
@@ -227,10 +228,10 @@ def test_save_pipeline_result_outcome_is_typed_internal_boundary(monkeypatch):
 
 
 def test_save_pipeline_result_public_wrapper_is_explicit_legacy_dict(monkeypatch):
-    import app.core.results.result_store as result_store
+    import app.core.results.pipeline_result as pipeline_result
 
     monkeypatch.setattr(
-        result_store,
+        pipeline_result,
         "save_pipeline_result_outcome",
         lambda **kwargs: PipelineResultSave(
             result_id="res-compat",
@@ -253,11 +254,11 @@ def test_save_pipeline_result_public_wrapper_is_explicit_legacy_dict(monkeypatch
 def _force_object_storage(monkeypatch, tmp_path):
     """Setup minimo per portare save_result_blob nel ramo object_storage."""
     import app.core.results.store as results_store
-    import app.core.results.result_store as result_store
+    import app.core.results.blob_writer as result_blob_writer
     from types import SimpleNamespace
 
     monkeypatch.setattr(
-        result_store,
+        result_blob_writer,
         "uuid",
         SimpleNamespace(uuid4=lambda: "res-rb2"),
     )
@@ -267,7 +268,7 @@ def _force_object_storage(monkeypatch, tmp_path):
         lambda project_id, group_id=None: group_id or "grp-1",
     )
     # Forza policy=object_storage cosi' upload S3 e' obbligatorio.
-    monkeypatch.setattr(result_store, "_storage_policy", lambda: "object_storage")
+    monkeypatch.setenv("STORAGE_POLICY", "object_storage")
 
 
 def test_save_result_blob_aws_credentials_expired_raises_operational_message(
@@ -393,10 +394,10 @@ def _wire_object_storage_writer(monkeypatch, *, fake_storage, saved):
     Forza policy=object_storage, mock di db.save_result con cattura kwargs,
     e installa un fake runtime object storage che registra gli upload."""
     import app.core.results.store as results_store
-    import app.core.results.result_store as result_store
+    import app.core.results.blob_writer as result_blob_writer
 
     monkeypatch.setattr(
-        result_store,
+        result_blob_writer,
         "uuid",
         SimpleNamespace(uuid4=lambda: "res-os-1"),
     )
@@ -408,9 +409,9 @@ def _wire_object_storage_writer(monkeypatch, *, fake_storage, saved):
     monkeypatch.setattr(results_store, "save_result_row",
         lambda **kwargs: saved.update(kwargs),
     )
-    monkeypatch.setattr(result_store, "_apply_results_retention", lambda pid: None)
+    monkeypatch.setattr(result_blob_writer, "apply_results_retention_after_save", lambda pid: None)
     # policy=object_storage: dispatcher forza sempre object storage
-    monkeypatch.setattr(result_store, "_storage_policy", lambda: "object_storage")
+    monkeypatch.setenv("STORAGE_POLICY", "object_storage")
     monkeypatch.setattr(
         "app.infrastructure.storage.cloud_backends.get_runtime_object_storage",
         lambda: fake_storage,

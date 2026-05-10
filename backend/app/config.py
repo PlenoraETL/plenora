@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 
 # Carica backend/.env il prima possibile, prima di qualunque os.getenv del
 # resto dell'app. Tutti i moduli che leggono variabili d'ambiente (incluso
-# app.shared.crypto) vedranno così le variabili definite nel .env. Senza
+# app.infrastructure.security.crypto) vedranno così le variabili definite nel .env. Senza
 # questo, l'app userebbe la chiave di cifratura di default e fallirebbe a
 # decifrare qualsiasi record salvato con la chiave reale
 # CLASSE SETTINGS

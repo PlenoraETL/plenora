@@ -197,7 +197,7 @@ def install_enrichment_task_mocks(
 
     # 2. User recheck
     monkeypatch.setattr(
-        "app.shared.async_user_recheck.recheck_user_authorized",
+        "app.core.auth.async_user_recheck.recheck_user_authorized",
         lambda **kwargs: revoked_payload,
     )
 
@@ -261,18 +261,15 @@ def install_enrichment_task_mocks(
         spies.intermediate_run_creates.append(kwargs)
 
     import types as _types
-    idb_name = "app.core.intermediate.db"
-    if idb_name in sys.modules:
-        monkeypatch.setattr(f"{idb_name}.create_run", _fake_create_run)
+    lifecycle_name = "app.core.intermediate.run_lifecycle"
+    if lifecycle_name in sys.modules:
+        monkeypatch.setattr(f"{lifecycle_name}.create_run", _fake_create_run)
     else:
-        stub = _types.ModuleType(idb_name)
+        stub = _types.ModuleType(lifecycle_name)
         stub.create_run = _fake_create_run
-        monkeypatch.setitem(sys.modules, idb_name, stub)
-        inter_pkg = sys.modules.get("app.core.intermediate")
-        if inter_pkg is not None:
-            monkeypatch.setattr(inter_pkg, "db", stub, raising=False)
+        monkeypatch.setitem(sys.modules, lifecycle_name, stub)
 
-    # 9. result_store (lazy)
+    # 9. result persistence (lazy)
     def _fake_save_pipeline_result(**kwargs):
         spies.saved_pipeline_results.append(kwargs)
         return {
@@ -285,10 +282,10 @@ def install_enrichment_task_mocks(
         return "fake-result-id-file"
 
     monkeypatch.setattr(
-        "app.core.results.result_store.save_pipeline_result", _fake_save_pipeline_result,
+        "app.core.results.pipeline_result.save_pipeline_result", _fake_save_pipeline_result,
     )
     monkeypatch.setattr(
-        "app.core.results.result_store.save_result_blob", _fake_save_result_blob,
+        "app.core.results.blob_writer.save_result_blob", _fake_save_result_blob,
     )
 
     # 10. columns_metadata

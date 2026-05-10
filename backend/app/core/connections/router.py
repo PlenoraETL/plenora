@@ -17,9 +17,10 @@ from app.core.auth.ownership import (
     assert_can_modify,
     compute_can_edit,
 )
+from app.core.connections import errors as connection_errors
 from app.utils.router_utils import require_service
 from app.shared import error_codes
-from app.shared.crypto import CredentialUnavailableError
+from app.infrastructure.security.crypto import CredentialUnavailableError
 from app.shared.error_envelope import raise_typed_http
 from app.observability.audit_action import audit_action
 from app.core.auth.visibility import visible_resource_ids
@@ -112,7 +113,7 @@ def update_connection(
         raise HTTPException(
             status_code=404,
             detail={
-                "error": error_codes.CONNECTION_NOT_FOUND,
+                "error": connection_errors.CONNECTION_NOT_FOUND,
                 "message": f"Connessione '{connection_id}' non trovata",
             },
         )
@@ -163,7 +164,7 @@ def delete_connection(
         raise HTTPException(
             status_code=409,
             detail={
-                "error": error_codes.CONNECTION_IN_USE,
+                "error": connection_errors.CONNECTION_IN_USE,
                 "message": (
                     f"Connessione usata in {len(using_projects)} progetto/i. "
                     f"Rimuoverla dai progetti prima di cancellarla."

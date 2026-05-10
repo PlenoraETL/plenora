@@ -270,7 +270,7 @@ def pytest_collection_modifyitems(config, items):
 if os.getenv("URBY_TEST_REAL_DB_INIT") != "1":
     try:
         import app.db.pg_connection as _pg_conn
-        import app.core.intermediate.db as _idb
+        import app.core.intermediate.init as _intermediate_init
         import app.core.runtime.db_init as _runtime_db_init
         import app.db.migrations_runner as _mig_runner
         import app.bootstrap as _bootstrap
@@ -279,7 +279,7 @@ if os.getenv("URBY_TEST_REAL_DB_INIT") != "1":
         # opt-in via `_runtime_db_init._original_init_all_dbs()`).
         _runtime_db_init._original_init_all_dbs = _runtime_db_init.init_all_dbs
         _pg_conn._original_init_db = _pg_conn.init_db
-        _idb._original_init_db = _idb.init_db
+        _intermediate_init._original_init_db = _intermediate_init.init_db
         _mig_runner._original_apply_pending_migrations = (
             _mig_runner.apply_pending_migrations
         )
@@ -299,7 +299,7 @@ if os.getenv("URBY_TEST_REAL_DB_INIT") != "1":
 
         _runtime_db_init.init_all_dbs = _noop_init_all_dbs
         _pg_conn.init_db = _noop_init_db
-        _idb.init_db = _noop_init_db
+        _intermediate_init.init_db = _noop_init_db
         _mig_runner.apply_pending_migrations = _noop_apply_pending_migrations
         # `app.main` ora chiama `app.bootstrap.bootstrap()` al top-level
         # invece dei 4 step inline. Lo stub a livello del

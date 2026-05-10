@@ -1,5 +1,5 @@
 """
-Contract test per `app.shared.crypto._get_raw_key` — key sourcing.
+Contract test per `app.infrastructure.security.crypto._get_raw_key` — key sourcing.
 
 Invariants blindati (da ``backend/docs/architecture/invariants.md``):
 """
@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import pytest
 
-from app.shared import crypto
+from app.infrastructure.security import crypto
 
 
 pytestmark = [pytest.mark.unit, pytest.mark.security, pytest.mark.contract]

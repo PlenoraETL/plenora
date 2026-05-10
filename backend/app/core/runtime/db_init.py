@@ -12,9 +12,9 @@ def init_all_dbs() -> None:
 
     pg_init()
 
-    import app.core.intermediate.db as intermediate_db
+    from app.core.intermediate.init import init_db as intermediate_init
 
-    intermediate_db.init_db()
+    intermediate_init()
 
     from app.db.migrations_runner import apply_pending_migrations
 

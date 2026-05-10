@@ -11,7 +11,7 @@ from app.core.connections import db as connection_db
 from app.core.connections.models import ConnectionCreate
 from app.core.connections.service import ConnectionService
 from app.shared.connections.arcgis_connection import ArcGISConnectionInfo
-from app.shared.crypto import encrypt
+from app.infrastructure.security.crypto import encrypt
 
 
 pytestmark = [pytest.mark.unit, pytest.mark.contract]

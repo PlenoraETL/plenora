@@ -11,7 +11,7 @@ import pytest
 
 from app.core.datasources.models import DataSourceUpdate
 from app.core.datasources.service import DataSourceService
-from app.shared import crypto
+from app.infrastructure.security import crypto
 
 
 pytestmark = [pytest.mark.unit, pytest.mark.security, pytest.mark.contract]

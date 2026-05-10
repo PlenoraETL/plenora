@@ -22,12 +22,12 @@ def test_close_run_happy_path_returns_none():
     retention tentata. Il ramo success e' invariato dal fix C6."""
     from app.core.intermediate import writer as w
 
-    with patch.object(w.db, "list_node_meta", return_value=[
+    with patch.object(w.node_snapshots_db, "list_node_meta", return_value=[
         {"status": "ok", "row_count": 100},
         {"status": "ok", "row_count": 80},
-    ]), patch.object(w.db, "update_run") as mock_update, \
-        patch.object(w.db, "get_run", return_value={"canvas_id": "c-1", "group_id": "g-1"}), \
-        patch.object(w.db, "apply_runs_retention") as mock_retention:
+    ]), patch.object(w.runs_db, "update_run") as mock_update, \
+        patch.object(w.runs_db, "get_run", return_value={"canvas_id": "c-1", "group_id": "g-1"}), \
+        patch.object(w.retention, "apply_runs_retention") as mock_retention:
         result = w.close_run(
             run_id="run-ok",
             input_hash="h-in",
@@ -63,10 +63,10 @@ def test_close_run_primary_fail_with_fallback_ok_raises():
             raise primary_error
         return None
 
-    with patch.object(w.db, "list_node_meta", return_value=[
+    with patch.object(w.node_snapshots_db, "list_node_meta", return_value=[
         {"status": "ok", "row_count": 10}
-    ]), patch.object(w.db, "update_run", side_effect=update_side_effect) as mock_update, \
-        patch.object(w.db, "get_run"):
+    ]), patch.object(w.runs_db, "update_run", side_effect=update_side_effect) as mock_update, \
+        patch.object(w.runs_db, "get_run"):
         with pytest.raises(RuntimeError, match="primary update_run DB pool exhausted"):
             w.close_run(
                 run_id="run-primary-fail",
@@ -104,10 +104,10 @@ def test_close_run_primary_fail_and_fallback_fail_still_raises():
             raise primary_error
         raise fallback_error
 
-    with patch.object(w.db, "list_node_meta", return_value=[
+    with patch.object(w.node_snapshots_db, "list_node_meta", return_value=[
         {"status": "ok", "row_count": 5}
-    ]), patch.object(w.db, "update_run", side_effect=update_side_effect), \
-        patch.object(w.db, "get_run"), \
+    ]), patch.object(w.runs_db, "update_run", side_effect=update_side_effect), \
+        patch.object(w.runs_db, "get_run"), \
         patch.object(w, "logger") as mock_logger:
         with pytest.raises(RuntimeError) as exc_info:
             w.close_run(
@@ -136,9 +136,9 @@ def test_close_run_logs_crash_with_exc_info_on_outer_fail():
     from app.core.intermediate import writer as w
 
     with patch.object(
-        w.db, "list_node_meta",
+        w.node_snapshots_db, "list_node_meta",
         side_effect=RuntimeError("list_node_meta exploded"),
-    ), patch.object(w.db, "update_run"), \
+    ), patch.object(w.runs_db, "update_run"), \
         patch.object(w, "logger") as mock_logger:
         with pytest.raises(RuntimeError):
             w.close_run(
@@ -174,9 +174,9 @@ def test_close_run_fallback_update_run_called_with_status_failed():
     from app.core.intermediate import writer as w
 
     with patch.object(
-        w.db, "list_node_meta",
+        w.node_snapshots_db, "list_node_meta",
         side_effect=RuntimeError("bang"),
-    ), patch.object(w.db, "update_run") as mock_update:
+    ), patch.object(w.runs_db, "update_run") as mock_update:
         with pytest.raises(RuntimeError):
             w.close_run(
                 run_id="run-fallback-check",

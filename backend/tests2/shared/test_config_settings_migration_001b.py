@@ -66,10 +66,10 @@ def _read(path: Path) -> str:
     return path.read_text(encoding="utf-8")
 
 
-def test_result_store_reads_threshold_via_settings():
-    """`_result_s3_threshold` deve leggere `settings.get(...)` e non
+def test_result_storage_policy_reads_threshold_via_settings():
+    """`result_s3_threshold` deve leggere `settings.get(...)` e non
     avere piu' un default inline duplicato."""
-    src = _read(_BACKEND_APP / "core" / "results" / "result_store.py")
+    src = _read(_BACKEND_APP / "core" / "results" / "storage_policy.py")
     assert "settings.get(\"RESULT_S3_THRESHOLD_BYTES\")" in src
     # Niente os.getenv su questa chiave nel modulo
     assert "os.getenv(\"RESULT_S3_THRESHOLD_BYTES" not in src
@@ -91,7 +91,7 @@ def test_beat_scheduler_reads_temp_ttl_via_settings():
 
 
 def test_jwt_token_reads_expire_hours_via_settings():
-    src = _read(_BACKEND_APP / "shared" / "jwt_token.py")
+    src = _read(_BACKEND_APP / "core" / "auth" / "jwt_token.py")
     assert "_settings.get(\"JWT_EXPIRE_HOURS\")" in src
     assert "os.getenv(\"JWT_EXPIRE_HOURS" not in src
 
@@ -102,19 +102,19 @@ def test_jwt_token_constant_is_int_and_matches_default():
     """`ACCESS_TOKEN_EXPIRE_HOURS` resta int module-level (consumato da
     `auth.auth` + test-contract). Senza override deve coincidere con il
     default Settings."""
-    from app.shared import jwt_token
+    from app.core.auth import jwt_token
     assert isinstance(jwt_token.ACCESS_TOKEN_EXPIRE_HOURS, int)
     assert jwt_token.ACCESS_TOKEN_EXPIRE_HOURS == Settings.DEFAULTS["JWT_EXPIRE_HOURS"]
 
 
-def test_result_store_threshold_helper_returns_int():
-    from app.core.results.result_store import _result_s3_threshold
-    val = _result_s3_threshold()
+def test_result_storage_policy_threshold_helper_returns_int():
+    from app.core.results.storage_policy import result_s3_threshold
+    val = result_s3_threshold()
     assert isinstance(val, int)
     assert val == Settings.DEFAULTS["RESULT_S3_THRESHOLD_BYTES"]
 
 
-def test_result_store_threshold_helper_honors_env(monkeypatch):
+def test_result_storage_policy_threshold_helper_honors_env(monkeypatch):
     monkeypatch.setenv("RESULT_S3_THRESHOLD_BYTES", "12345")
-    from app.core.results import result_store
-    assert result_store._result_s3_threshold() == 12345
+    from app.core.results import storage_policy
+    assert storage_policy.result_s3_threshold() == 12345

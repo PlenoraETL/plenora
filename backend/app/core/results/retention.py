@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from app.core.projects import runtime_context as project_runtime_context
+from app.core.results import cleanup, store
 from app.utils.logger import get_logger
 
 
@@ -18,23 +20,19 @@ def apply_results_retention(project_id: str) -> None:
     is not rolled back by cleanup of older rows.
     """
     try:
-        from app.core.projects.runtime_context import resolve_project_runtime_retention_n
-        from app.core.results import cleanup as results_cleanup
-        from app.core.results import store as results_store
-
-        retention_n = resolve_project_runtime_retention_n(
+        retention_n = project_runtime_context.resolve_project_runtime_retention_n(
             project_id,
             default=DEFAULT_RESULTS_RETENTION,
         )
 
-        all_results = results_store.list_result_rows(project_id)
+        all_results = store.list_result_rows(project_id)
         if len(all_results) <= retention_n:
             return
 
         to_delete = all_results[retention_n:]
         for row in to_delete:
             result_id = row.id
-            results_cleanup.delete_result(result_id)
+            cleanup.delete_result(result_id)
             logger.debug(
                 f"Retention: eliminato risultato {result_id} del progetto {project_id}",
                 op="retention",
