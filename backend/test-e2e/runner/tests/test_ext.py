@@ -455,6 +455,95 @@ def test_ext_028_estrai_ftp_csv(
         )
 
 
+# ── EXT-010..016 — CSV varieties via FTP ────────────────────────────
+
+
+@pytest.mark.requires_app
+@pytest.mark.smoke
+@pytest.mark.parametrize(
+    "fixture_path, label",
+    [
+        ("csv/customers_utf8_bom.csv",  "utf8_bom"),       # EXT-010
+        ("csv/customers_semicolon.csv", "semicolon"),      # EXT-011
+        ("csv/customers_iso8859.csv",   "iso8859"),        # EXT-014
+        ("csv/customers_quoted.csv",    "quoted"),         # EXT-015
+        ("csv/customers_unicode.csv",   "unicode"),        # EXT-016
+        ("csv/customers_with_nulls.csv", "with_nulls"),    # EXT-017
+    ],
+    ids=["utf8_bom", "semicolon", "iso8859", "quoted",
+         "unicode", "with_nulls"],
+)
+def test_ext_010_017_csv_varieties_via_ftp(
+    http_client: httpx.Client,
+    auth_headers: dict[str, str],
+    ftp_datasource_id: str,
+    fixture_path: str,
+    label: str,
+) -> None:
+    """EXT-010/011/014/015/016/017 — Varianti CSV via FTP nel
+    canvas MANIPOLA. Smoke parametrizzato per coprire encoding
+    (UTF-8 BOM, ISO-8859), separator (`;`), quoting, unicode e
+    NULL handling tutti dietro la stessa pipeline `datasource_node
+    -> result`.
+
+    Ogni variante prende il file dalla fixture FTP gia' montata
+    (`/home/tester/fixtures/csv/`); l'assertion comune e' `rows
+    >= 1` perche' ogni variante usa un seed di customer ridotto
+    diverso ma sempre non vuoto. Smoke catturera' regressioni
+    nel parser pandas/encoding, non i conteggi esatti.
+    """
+    proj = http_client.post(
+        f"{API_PREFIX}/projects",
+        json={
+            "name": f"e2e-ext-csv-{label}-{uuid.uuid4().hex[:6]}",
+            "description": f"EXT csv variety {label}",
+            "project_type": "manipola",
+        }, headers=auth_headers,
+    )
+    assert proj.status_code in (200, 201), proj.text[:200]
+    pid = (proj.json().get("metadata") or {}).get("id") or proj.json().get("id")
+
+    try:
+        ds_id = f"ds_{uuid.uuid4().hex[:6]}"
+        res_id = f"res_{uuid.uuid4().hex[:6]}"
+        canvas = {
+            "nodes": [
+                {"id": ds_id, "type": "datasource_node",
+                 "position": {"x": 100, "y": 100},
+                 "datasource_id": ftp_datasource_id, "mode": "source",
+                 "file_mode": "fixed", "file_path": fixture_path,
+                 "format": "csv"},
+                {"id": res_id, "type": "result",
+                 "position": {"x": 400, "y": 100}},
+            ],
+            "edges": [{"id": f"e_{uuid.uuid4().hex[:4]}",
+                       "source": ds_id, "target": res_id}],
+        }
+        r_put = http_client.put(
+            f"{API_PREFIX}/projects/{pid}/canvas",
+            json=canvas, headers=auth_headers,
+        )
+        assert r_put.status_code == 200, r_put.text[:200]
+        r = http_client.post(
+            f"{API_PREFIX}/projects/{pid}/execute",
+            json={}, headers=auth_headers,
+        )
+        task_id = r.json().get("task_id") or r.json().get("id")
+        final = _poll_task(http_client, auth_headers, str(task_id), timeout=60)
+        status = (final.get("status") or "").lower()
+        assert status in {"success", "completed"}, (
+            f"EXT[{label}] non success: {final}"
+        )
+        rows = (final.get("result") or {}).get("rows_count") or 0
+        assert rows >= 1, (
+            f"EXT[{label}] nessuna riga estratta: {final.get('result')}"
+        )
+    finally:
+        http_client.delete(
+            f"{API_PREFIX}/projects/{pid}", headers=auth_headers,
+        )
+
+
 # ── EXT-029 — Estrai SFTP file XLSX ───────────────────────────────────
 
 

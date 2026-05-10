@@ -330,3 +330,210 @@ def test_man_002_inner_join_three_tables(
             http_client.delete(
                 f"{API_PREFIX}/projects/{pid}", headers=auth_headers,
             )
+
+
+# ── MAN-001 — Filter su NULL handling ────────────────────────────────
+
+
+@pytest.mark.profile_core
+@pytest.mark.requires_app
+@pytest.mark.smoke
+def test_man_001_filter_null_handling(
+    http_client: httpx.Client,
+    auth_headers: dict[str, str],
+    postgres_conn_id: str,
+) -> None:
+    """MAN-001 — Catalog: "customers con email IS NULL → 1 riga matcha".
+
+    Filter ESTRAI su `email IS NULL`. Smoke per il path NULL del
+    Filter model (`canvas_models.Filter.operator='IS NULL'`).
+    """
+    proj = http_client.post(
+        f"{API_PREFIX}/projects",
+        json={
+            "name": f"e2e-man001-{uuid.uuid4().hex[:6]}",
+            "description": "MAN-001 filter NULL",
+            "project_type": "estrai",
+            "default_connection_id": postgres_conn_id,
+        }, headers=auth_headers,
+    )
+    assert proj.status_code in (200, 201), proj.text[:200]
+    pid = (proj.json().get("metadata") or {}).get("id") or proj.json().get("id")
+
+    canvas = {
+        "nodes": [
+            {"id": "src", "type": "source",
+             "position": {"x": 100, "y": 100},
+             "connection_id": postgres_conn_id, "table_name": "customers",
+             "columns": [
+                 {"name": "id", "type": "int", "visible": True},
+                 {"name": "email", "type": "str", "visible": True},
+             ],
+             "filters": [{"column": "email", "operator": "IS NULL"}]},
+            {"id": "res", "type": "result",
+             "position": {"x": 400, "y": 100}},
+        ],
+        "edges": [{"id": "e1", "source": "src", "target": "res"}],
+    }
+    http_client.put(
+        f"{API_PREFIX}/projects/{pid}/canvas", json=canvas, headers=auth_headers,
+    )
+    try:
+        r = http_client.post(
+            f"{API_PREFIX}/projects/{pid}/execute",
+            json={}, headers=auth_headers,
+        )
+        task_id = r.json().get("task_id") or r.json().get("id")
+        final = _poll_task(http_client, auth_headers, str(task_id))
+        assert (final.get("status") or "").lower() in {"success", "completed"}
+        rows = (final.get("result") or {}).get("rows_count")
+        assert rows == 1, (
+            f"MAN-001 atteso 1 riga (email IS NULL nel seed), "
+            f"ottenuto {rows}: {final.get('result')}"
+        )
+    finally:
+        http_client.delete(
+            f"{API_PREFIX}/projects/{pid}", headers=auth_headers,
+        )
+
+
+# ── MAN-004 — Group by + aggregate (customers per region) ─────────────
+
+
+@pytest.mark.profile_core
+@pytest.mark.requires_app
+@pytest.mark.smoke
+@pytest.mark.xfail(
+    reason=(
+        "MAN-004 produce N righe (customers) invece di N_groups "
+        "(regions). Il `group_by_enabled/group_by_columns/"
+        "aggregations` sul result node MANIPOLA non scatena "
+        "l'aggregazione nel path attuale: il blob output e' la "
+        "join non aggregata. Da indagare se sia "
+        "(a) campo non letto dal manipola executor, "
+        "(b) aggregations mal-formattate dal client, "
+        "(c) feature da implementare ex-novo."
+    ),
+    strict=True,
+)
+def test_man_004_group_by_aggregate(
+    http_client: httpx.Client,
+    auth_headers: dict[str, str],
+    postgres_conn_id: str,
+) -> None:
+    """MAN-004 — Catalog: "customers per region, vedi expected sez 2".
+
+    Test ridotto: ESTRAI con SQL group by tramite `aggregations`
+    sul nodo result. Plenora ESTRAI/MANIPOLA supportano
+    `group_by_enabled` + `group_by_columns` + `aggregations` sul
+    result node (vedi `canvas_models.Node`).
+
+    Approccio piu' diretto possibile: verifichiamo che il result
+    blob abbia un numero di righe uguale al numero di gruppi
+    (regions distinct con almeno 1 customer = 3 regions secondo
+    seed canonico, ma puo' essere 4 se seed duplicato).
+    """
+    import psycopg2
+    conn = psycopg2.connect(
+        host=os.getenv("PLENORA_E2E_PG_HOST", "plenora-e2e-postgres"),
+        port=int(os.getenv("PLENORA_E2E_PG_PORT", "5432")),
+        user=os.getenv("PLENORA_E2E_PG_USER", "plenora"),
+        password=os.getenv("PLENORA_E2E_PG_PWD", "plenora_test_pwd"),
+        dbname=os.getenv("PLENORA_E2E_PG_DB", "plenora_test"),
+    )
+    try:
+        with conn.cursor() as cur:
+            cur.execute("""
+                SELECT count(DISTINCT r.id)
+                FROM customers c
+                JOIN cities ci ON c.city_id = ci.id
+                JOIN regions r ON ci.region_id = r.id
+            """)
+            expected_groups = int(cur.fetchone()[0])
+    finally:
+        conn.close()
+
+    pid_cust = _create_estrai_source(
+        http_client, auth_headers, conn_id=postgres_conn_id,
+        table="customers", columns=[
+            {"name": "id", "type": "int"},
+            {"name": "city_id", "type": "int"},
+        ],
+    )
+    pid_cit = _create_estrai_source(
+        http_client, auth_headers, conn_id=postgres_conn_id,
+        table="cities", columns=[
+            {"name": "id", "alias": "city_id", "type": "int"},
+            {"name": "region_id", "type": "int"},
+        ],
+    )
+    pid_reg = _create_estrai_source(
+        http_client, auth_headers, conn_id=postgres_conn_id,
+        table="regions", columns=[
+            {"name": "id", "alias": "region_id", "type": "int"},
+            {"name": "name", "alias": "region_name", "type": "str"},
+        ],
+    )
+    cleanup = [pid_cust, pid_cit, pid_reg]
+
+    proj = http_client.post(
+        f"{API_PREFIX}/projects",
+        json={
+            "name": f"e2e-man004-{uuid.uuid4().hex[:6]}",
+            "description": "MAN-004 group by region",
+            "project_type": "manipola",
+        }, headers=auth_headers,
+    )
+    pid_m = (proj.json().get("metadata") or {}).get("id") or proj.json().get("id")
+    cleanup.append(pid_m)
+
+    canvas = {
+        "nodes": [
+            {"id": "ps_c", "type": "project_source", "position": {"x": 80, "y": 80},
+             "source_project_id": pid_cust, "columns": []},
+            {"id": "ps_ci", "type": "project_source", "position": {"x": 80, "y": 200},
+             "source_project_id": pid_cit, "columns": []},
+            {"id": "ps_r", "type": "project_source", "position": {"x": 80, "y": 320},
+             "source_project_id": pid_reg, "columns": []},
+            {"id": "mj1", "type": "multi_join", "position": {"x": 400, "y": 140},
+             "join_keys": ["city_id"], "multi_join_type": "inner"},
+            {"id": "mj2", "type": "multi_join", "position": {"x": 700, "y": 200},
+             "join_keys": ["region_id"], "multi_join_type": "inner"},
+            {"id": "res", "type": "result", "position": {"x": 1000, "y": 200},
+             "group_by_enabled": True,
+             "group_by_columns": ["region_id"],
+             "aggregations": [
+                 {"column": "id", "function": "COUNT", "alias": "n_customers"}
+             ]},
+        ],
+        "edges": [
+            {"id": "e1", "source": "ps_c", "target": "mj1", "join_type": "inner"},
+            {"id": "e2", "source": "ps_ci", "target": "mj1", "join_type": "inner"},
+            {"id": "e3", "source": "mj1", "target": "mj2", "join_type": "inner"},
+            {"id": "e4", "source": "ps_r", "target": "mj2", "join_type": "inner"},
+            {"id": "e5", "source": "mj2", "target": "res", "join_type": "output"},
+        ],
+    }
+    try:
+        http_client.put(
+            f"{API_PREFIX}/projects/{pid_m}/canvas", json=canvas, headers=auth_headers,
+        )
+        r = http_client.post(
+            f"{API_PREFIX}/projects/{pid_m}/execute",
+            json={}, headers=auth_headers,
+        )
+        task_id = r.json().get("task_id") or r.json().get("id")
+        final = _poll_task(http_client, auth_headers, str(task_id), timeout=120)
+        assert (final.get("status") or "").lower() in {"success", "completed"}, (
+            f"MAN-004 task non success: {final}"
+        )
+        rows = (final.get("result") or {}).get("rows_count")
+        assert rows == expected_groups, (
+            f"MAN-004 atteso {expected_groups} gruppi (regions con customer), "
+            f"ottenuto {rows}: {final.get('result')}"
+        )
+    finally:
+        for p in cleanup:
+            http_client.delete(
+                f"{API_PREFIX}/projects/{p}", headers=auth_headers,
+            )
