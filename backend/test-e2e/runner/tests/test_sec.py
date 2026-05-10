@@ -125,3 +125,68 @@ def test_sec_001_ssrf_blocks_private_url(
         http_client.delete(
             f"{API_PREFIX}/api-connections/{cid}", headers=auth_headers,
         )
+
+
+# ── SSRF-001/002 — Anti-SSRF sul path payload-based ────────────────────
+
+
+@pytest.mark.profile_core
+@pytest.mark.requires_app
+@pytest.mark.smoke
+@pytest.mark.parametrize(
+    "url, label",
+    [
+        # SSRF-001: cloud metadata (AWS / GCP / Alibaba expose 169.254.169.254)
+        ("http://169.254.169.254/latest/meta-data/", "aws_metadata"),
+        # SSRF-002: localhost varianti
+        ("http://localhost:6379/INFO",   "localhost_redis"),
+        ("http://127.0.0.1:5432/",       "localhost_postgres"),
+        ("http://[::1]:8080/admin",      "localhost_ipv6"),
+        ("http://0.0.0.0:80/",           "unspecified"),
+    ],
+    ids=["aws_metadata", "localhost_redis", "localhost_postgres",
+         "localhost_ipv6", "unspecified"],
+)
+def test_ssrf_001_002_blocks_payload_based_test(
+    http_client: httpx.Client,
+    auth_headers: dict[str, str],
+    url: str,
+    label: str,
+) -> None:
+    """SSRF-001/002 — `POST /api-connections/test` (config payload,
+    senza salvarla) deve essere bloccato dall'anti-SSRF prima di
+    inviare la richiesta HTTP.
+
+    Reference: `app/core/arricchisci/router.test_api_config:706`
+    chiama `_validate_external_url(url)` che alza `HTTPException
+    403` su URL bloccati. Differente dal path by-id (SEC-001) che
+    usa `validate_external_url` come early-return; qui il guard
+    e' all'ingresso del router, prima di costruire la config.
+
+    Catalog richiede `outbound_url_blocked` come error_code; il
+    backend ritorna `403` con messaggio "URL bloccato:" quando il
+    sostituto `outbound_url_blocked` non e' ancora cablato come
+    error envelope dedicato. Verifichiamo entrambi: status 403/400
+    + messaggio contenente i keyword di blocco.
+    """
+    payload = {
+        "url": url,
+        "method": "GET",
+        "auth": {"type": "none"},
+    }
+    r = http_client.post(
+        f"{API_PREFIX}/api-connections/test",
+        json=payload, headers=auth_headers,
+    )
+    # Il guard alza HTTPException 403 (private/blocked) o 400
+    # (URL malformato / non risolvibile). Mai success 200.
+    assert r.status_code in (400, 403, 422), (
+        f"SSRF[{label}] status code inatteso {r.status_code}: "
+        f"{r.text[:200]}"
+    )
+    msg = r.text.lower()
+    keywords = ("bloccato", "blocked", "ssrf", "privato", "loopback",
+                "interno", "non valido", "invalid", "non risolvibile")
+    assert any(k in msg for k in keywords), (
+        f"SSRF[{label}] messaggio non riconosciuto: {msg!r}"
+    )
