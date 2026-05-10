@@ -17,7 +17,7 @@ from fastapi import APIRouter, Depends, Query
 from app.core.auth.dependencies import (
     require_not_esecutore,
 )
-from app.shared.contracts.auth import CurrentUser
+from app.shared.contracts.auth import CurrentUser, group_filter
 from app.db.pg_connection import fetchone as _fetchone, fetchall as _fetchall
 from app.shared.authz_helpers import assert_project_visible
 from app.utils.logger import get_logger
@@ -112,9 +112,10 @@ def get_logs(
         params.append(before)
 
     # Filtro per gruppo (superadmin vede tutto, altri solo il proprio gruppo
-    if current_user.role != "superadmin":
+    gf = group_filter(current_user)
+    if gf is not None:
         conditions.append("(group_id = %s OR group_id = '')")
-        params.append(current_user.group_id)
+        params.append(gf)
 
     where = f"WHERE {' AND '.join(conditions)}" if conditions else ""
 
@@ -146,9 +147,10 @@ def get_log_stats(
     if after:
         conditions.append("ts >= %s")
         params.append(after)
-    if current_user.role != "superadmin":
+    gf = group_filter(current_user)
+    if gf is not None:
         conditions.append("(group_id = %s OR group_id = '')")
-        params.append(current_user.group_id)
+        params.append(gf)
 
     where = f"WHERE {' AND '.join(conditions)}" if conditions else ""
     p = tuple(params)

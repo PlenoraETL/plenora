@@ -10,7 +10,12 @@ from app.core.auth import db as _users_dal
 from app.core.auth import disclosure as _disclosure
 from app.core.auth.roles import ROLES_ADMIN_OR_ABOVE
 from app.core.auth.visibility import is_resource_visible, is_shareable
-from app.shared.contracts.auth import CurrentUser
+from app.shared.contracts.auth import CurrentUser, group_filter
+
+# Phase-7 re-export: la home canonica di `group_filter` e' il
+# contract module. `app.core.auth.ownership.group_filter` resta
+# come edge legacy noto, identita' preservata via re-export.
+__all__ = ["group_filter"]
 
 
 def _extract_group_and_id(resource):
