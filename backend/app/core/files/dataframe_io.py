@@ -226,23 +226,57 @@ def find_latest_output_file(output_dir: Union[str, Path]) -> Optional[Path]:
 
 
 def _compact_whole_number_floats(df: pd.DataFrame) -> pd.DataFrame:
-    """Restituisce un DataFrame con le colonne float che contengono solo
-    valori interi (modulo NaN) convertite in pandas ``Int64`` nullable.
+    """Restituisce un DataFrame normalizzato per la serializzazione tabular.
 
-    pandas promuove silenziosamente int -> float quando incontra NaN. Al
-    momento del salvataggio CSV/XLSX/JSON questo produce ``34.0`` invece
-    di ``34``, che e' confondente per chi legge un export di id/conteggi/
-    anagrafiche. La conversione avviene solo qui, sul DataFrame
-    serializzato (non muta lo stato a monte) e solo se TUTTI i non-NaN
-    sono interi.
+    Due passi:
 
-    Le colonne float legittime (con decimali reali) restano invariate.
+    1. Colonne ``object`` che contengono solo ``Decimal``/numeri vengono
+       convertite a ``float`` (o ``Int64`` se interi). PostgreSQL ``AVG``,
+       ``SUM`` su tipi numeric ritornano ``Decimal`` via psycopg2:
+       pandas li tiene come ``object`` e il CSV writer non puo' usare
+       ``float_format``, producendo output come ``36.5000000000000000``
+       (16 decimali del repr di Decimal).
+    2. Colonne ``float`` con tutti i non-NaN interi vengono convertite
+       a ``Int64`` nullable. pandas promuove silenziosamente int -> float
+       quando incontra NaN: senza questo passo, un id/age/conteggio
+       esce ``34.0`` invece di ``34``.
+
+    Trasformazione confinata al boundary di serializzazione (no mutazione
+    upstream).
     """
     if df is None or df.empty:
         return df
+    from decimal import Decimal
+
     result = df
     for col in list(result.columns):
         s = result[col]
+
+        # Passo 1: object -> float/Int64 se tutti Decimal o numerici
+        if s.dtype == object:
+            non_nan = s.dropna()
+            if non_nan.empty:
+                continue
+            if all(isinstance(v, Decimal) for v in non_nan):
+                floats = non_nan.astype(float)
+                if (floats % 1 == 0).all():
+                    if result is df:
+                        result = df.copy()
+                    try:
+                        result[col] = pd.array(
+                            [int(v) if v is not None and not pd.isna(v) else pd.NA
+                             for v in s],
+                            dtype="Int64",
+                        )
+                    except (TypeError, ValueError):
+                        result[col] = s.astype(float)
+                else:
+                    if result is df:
+                        result = df.copy()
+                    result[col] = s.astype(float)
+                continue
+
+        # Passo 2: float -> Int64 se tutti interi
         if pd.api.types.is_float_dtype(s):
             non_nan = s.dropna()
             if not non_nan.empty and (non_nan % 1 == 0).all():
@@ -251,8 +285,6 @@ def _compact_whole_number_floats(df: pd.DataFrame) -> pd.DataFrame:
                 try:
                     result[col] = result[col].astype("Int64")
                 except (TypeError, ValueError):
-                    # Valori troppo grandi per Int64 o conversione non
-                    # supportata: lascia float per evitare data loss.
                     continue
     return result
 

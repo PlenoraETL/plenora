@@ -137,6 +137,41 @@ def _safe_compare_operator(value) -> str:
     return value
 
 
+def _split_csv_respect_quotes(value: str) -> List[str]:
+    """Split su virgola ignorando le virgole dentro string literal quoted.
+
+    Esempio: ``"email, 'no-email@example.com', full_name"`` ->
+    ``["email", "'no-email@example.com'", "full_name"]``.
+
+    Necessario per i traduttori (es. COALESCE) che accettano una lista
+    di colonne / letterali separati da virgola, dove un letterale puo'
+    legittimamente contenere virgole interne.
+    """
+    out: List[str] = []
+    buf: list[str] = []
+    quote: Optional[str] = None
+    for ch in value:
+        if quote is None:
+            if ch in ("'", '"'):
+                quote = ch
+                buf.append(ch)
+            elif ch == ",":
+                token = "".join(buf).strip()
+                if token:
+                    out.append(token)
+                buf = []
+            else:
+                buf.append(ch)
+        else:
+            buf.append(ch)
+            if ch == quote:
+                quote = None
+    tail = "".join(buf).strip()
+    if tail:
+        out.append(tail)
+    return out
+
+
 # ENUMERAZIONI
 
 class DbType(Enum):
@@ -748,12 +783,39 @@ class SqlFunctionTranslator(
     # FUNZIONI CONDIZIONALI (nuove
 
     def _translate_coalesce(self, params: Dict, table_alias: str = None) -> str:
-        """Primo valore non NULL — COALESCE() identico su tutti i database."""
+        """Primo valore non NULL — COALESCE() identico su tutti i database.
+
+        Accetta sia nomi colonna (qualificati automaticamente con l'alias
+        di tabella) sia valori letterali quoted con apici singoli
+        (es. ``"'default'"``). Senza il supporto ai letterali l'uso
+        canonico ``COALESCE(email, 'default')`` falliva con
+        ``_safe_qualified_identifier``: la funzione era utilizzabile solo
+        per concatenare piu' colonne, perdendo il valore tipico di un
+        fallback letterale.
+        """
         valori = params["values"]
         if isinstance(valori, str):
-            valori = [v.strip() for v in valori.split(',') if v.strip()]
-        valori_q = [self._qualify_column(v, table_alias) for v in valori]
-        return f"COALESCE({', '.join(valori_q)})"
+            # Splitta sulla virgola rispettando le stringhe quoted: una
+            # virgola dentro 'literal,con,virgole' non e' un separatore.
+            valori = _split_csv_respect_quotes(valori)
+
+        out_parts: list[str] = []
+        for v in valori:
+            v_str = str(v).strip()
+            if not v_str:
+                continue
+            # Letterale quoted ('foo' o "foo"): passa attraverso. Il
+            # raddoppio di apici interni resta responsabilita' del FE
+            # (l'helper _sql_escape si applica solo ai param che il
+            # traduttore inietta in f-string, non al pass-through).
+            if (
+                (v_str.startswith("'") and v_str.endswith("'") and len(v_str) >= 2)
+                or (v_str.startswith('"') and v_str.endswith('"') and len(v_str) >= 2)
+            ):
+                out_parts.append(v_str)
+            else:
+                out_parts.append(self._qualify_column(v_str, table_alias))
+        return f"COALESCE({', '.join(out_parts)})"
 
     def _translate_nullif(self, params: Dict, table_alias: str = None) -> str:
         """NULL se uguale — NULLIF() identico su tutti i database."""

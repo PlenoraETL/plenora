@@ -8,6 +8,9 @@ from typing import Any, Callable, Dict, List
 from app.db.sql_functions import translate_calculated_column
 from app.db.sql_translator import sql_translator
 from app.core.projects.canvas_models import Node
+from app.utils.logger import get_logger
+
+logger = get_logger(__name__)
 
 
 class QueryProjectionRenderer:
@@ -81,7 +84,24 @@ class QueryProjectionRenderer:
                             expression=calc_col["expression"],
                             table_alias=table_alias,
                         )
+                    elif isinstance(calc_col.get("expression"), str) and calc_col["expression"].strip():
+                        # Manual SQL come stringa: il FE (ColumnBuilderModal in
+                        # modalita' manuale) serializza la colonna con
+                        # `function_name=null, params=null, expression="<sql>"`
+                        # senza il flag `is_manual`. Senza questo branch la
+                        # colonna veniva droppata silenziosamente al SELECT
+                        # build (calculated_columns "manual" persi nell'output).
+                        # Stesso modello di trust di `is_manual+sql`: l'utente
+                        # ha gia' accettato di scrivere SQL grezzo.
+                        col_alias_sql = self._safe_identifier(
+                            calc_col["name"], "Nome colonna calcolata"
+                        )
+                        sql_expr = f"({calc_col['expression']}) AS {col_alias_sql}"
                     else:
+                        logger.warning(
+                            "calculated_column '%s' senza expression/function valida, skip",
+                            calc_col.get("name", "?"),
+                        )
                         continue
 
                     columns.append(sql_expr)
