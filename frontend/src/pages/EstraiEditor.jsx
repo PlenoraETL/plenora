@@ -257,11 +257,9 @@ function EstraiEditor() {
   // file → trasform vive in MANIPOLA dove abbiamo il loader
   // `manipola/datasource_node_loading.py`.
 
-  const handleAddStaticValuesNode = useCallback(() => {
-    const pos = getViewportCenter(reactFlowInstance);
-    setNodes(nds => nds.concat({ id: `static_${Date.now()}`, type: 'staticValues', position: pos,
-      data: { label: 'Valori Statici', fields: [] } }));
-  }, [setNodes, getViewportCenter, reactFlowInstance]);
+  // `handleAddStaticValuesNode` rimosso: ESTRAI non genera SQL
+  // valido per `staticValues` come source (FROM vuoto -> syntax
+  // error). Lo staticValues live in MANIPOLA / ARRICCHISCI.
 
   const handleAddCommentNode = useCallback(() => {
     const pos = getViewportCenter(reactFlowInstance);
@@ -407,10 +405,14 @@ function EstraiEditor() {
                 onClick={handleAddCommentNode} title="Aggiungi annotazione">
                 💬 Nota
               </button>
-              <button type="button" className="estrai-toolbar__btn estrai-toolbar__btn--static"
-                onClick={handleAddStaticValuesNode}>
-                ✦ Valori Statici
-              </button>
+              {/* Bottone "Valori Statici" rimosso intenzionalmente:
+                  ESTRAI e' SQL-based e non sa tradurre `staticValues`
+                  in CTE/VALUES — il save canvas passa ma l'execute
+                  genera "FROM " vuoto + JOIN, syntax error psycopg2.
+                  Plenora `staticValues` come source vive solo nei
+                  moduli MANIPOLA (`_carica_sorgenti_statiche`) e
+                  ARRICCHISCI (canvas_orchestrator branch
+                  `node_type=='staticValues'`). */}
               <button type="button" className="estrai-toolbar__btn estrai-toolbar__btn--output"
                 onClick={handleAddResultNode} disabled={hasResultNode}>
                 📁 Output

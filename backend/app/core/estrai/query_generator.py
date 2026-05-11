@@ -82,6 +82,21 @@ class QueryGenerator:
         if not result_node:
             raise ValueError(f"Nodo risultato '{result_node_id}' non trovato")
 
+        # Guard: `staticValues` come source in ESTRAI non e' SQL-
+        # traducibile (servirebbe materializzare un VALUES o CTE
+        # con i valori del nodo). Senza questo check, il generator
+        # produceva un `FROM ` vuoto + JOIN, syntax error psycopg2.
+        # Il nodo `staticValues` e' invece supportato in MANIPOLA
+        # (`_carica_sorgenti_statiche`) e ARRICCHISCI
+        # (canvas_orchestrator branch `node_type=='staticValues'`).
+        static_nodes = [n for n in nodes if n.type == "staticValues"]
+        if static_nodes:
+            ids = ", ".join(n.id for n in static_nodes)
+            raise ValueError(
+                f"Il modulo ESTRAI non supporta nodi 'Valori Statici' "
+                f"({ids}). Usali in un progetto MANIPOLA o ARRICCHISCI."
+            )
+
         # Risali il grafo dal risultato per trovare le tabelle connesse
         table_nodes = self._trova_tabelle_connesse(nodes, edges, result_node_id)
         table_nodes.reverse()
