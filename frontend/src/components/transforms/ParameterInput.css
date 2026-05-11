@@ -222,16 +222,29 @@
 
 .aggregation-list-input__row {
   display: flex;
-  gap: 4px;
+  gap: 6px;
   align-items: center;
+  flex-wrap: wrap;
 }
 
-.aggregation-list-input__row select {
-  flex: 1;
-  padding: 4px 6px;
+.aggregation-list-input__row select,
+.aggregation-list-input__row > input[type="text"] {
+  flex: 1 1 100px;
+  min-width: 90px;
+  padding: 5px 7px;
   font-size: 12px;
+  height: 28px;
+  box-sizing: border-box;
   border: 1px solid var(--color-border);
   border-radius: 4px;
+  background: var(--color-bg, #fff);
+  color: var(--color-text, inherit);
+}
+
+.aggregation-list-input__row > input[type="text"]:focus,
+.aggregation-list-input__row select:focus {
+  outline: none;
+  border-color: var(--color-manipola, #6366f1);
 }
 
 .aggregation-list-input__remove {

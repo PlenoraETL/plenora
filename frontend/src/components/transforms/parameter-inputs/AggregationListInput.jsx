@@ -63,7 +63,6 @@ const AggregationListInput = ({ value, onChange, columns }) => {
             onChange={(e) => updateAggregation(idx, 'alias', e.target.value)}
             placeholder="Nome output (opzionale)"
             title="Alias colonna output (es. n_customers, total_revenue)"
-            style={{ flex: 1, minWidth: '120px' }}
           />
           {agg.function === 'concat' && (
             <div className="aggregation-list-input__concat-params">
