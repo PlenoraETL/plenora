@@ -69,6 +69,35 @@ function ColumnBuilderModal({
     }
   }, [isOpen, existingColumn]);
 
+  const loadCatalog = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const data = await getFunctionsCatalog();
+      setCatalog(data);
+    } catch (err) {
+      setError(`Errore caricamento catalogo: ${err.message}`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Funzioni disponibili per la categoria selezionata
+  const availableFunctions = useMemo(() => {
+    if (!catalog?.functions) return [];
+    return Object.entries(catalog.functions)
+      .filter(([_, func]) => func.category === selectedCategory)
+      .map(([name, func]) => ({ name, ...func }))
+      .sort((a, b) => a.label.localeCompare(b.label));
+  }, [catalog, selectedCategory]);
+
+  // Definizione funzione corrente — DEVE precedere l'useEffect del
+  // preview, che la legge per pre-validare i required params (TDZ).
+  const currentFunctionDef = useMemo(() => {
+    if (!catalog?.functions || !selectedFunction) return null;
+    return catalog.functions[selectedFunction];
+  }, [catalog, selectedFunction]);
+
   // Aggiorna preview SQL quando cambia l'espressione.
   //  - debounce 350ms per evitare un POST /functions/translate per
   //    ogni keystroke nel wizard
@@ -97,34 +126,6 @@ function ColumnBuilderModal({
     const handle = setTimeout(() => { updateSqlPreview(); }, 350);
     return () => clearTimeout(handle);
   }, [selectedFunction, params, nestedExpression, columnName, dbType, isManualEdit, currentFunctionDef]);
-
-  const loadCatalog = async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const data = await getFunctionsCatalog();
-      setCatalog(data);
-    } catch (err) {
-      setError(`Errore caricamento catalogo: ${err.message}`);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // Funzioni disponibili per la categoria selezionata
-  const availableFunctions = useMemo(() => {
-    if (!catalog?.functions) return [];
-    return Object.entries(catalog.functions)
-      .filter(([_, func]) => func.category === selectedCategory)
-      .map(([name, func]) => ({ name, ...func }))
-      .sort((a, b) => a.label.localeCompare(b.label));
-  }, [catalog, selectedCategory]);
-
-  // Definizione funzione corrente
-  const currentFunctionDef = useMemo(() => {
-    if (!catalog?.functions || !selectedFunction) return null;
-    return catalog.functions[selectedFunction];
-  }, [catalog, selectedFunction]);
 
   // Colonne geometry disponibili
   const geometryColumns = useMemo(() => {
