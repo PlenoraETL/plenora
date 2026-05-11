@@ -65,15 +65,30 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PATH="/opt/venv/bin:${PATH}"
 
-# Runtime native libs only (no -dev headers). libpq5 is required by
-# psycopg2 wheels at runtime; libgdal* + libmagic1 mirror the build
-# stage. curl is kept for the HEALTHCHECK probe.
+# Runtime native libs only (no -dev headers). libpq5 e' richiesto da
+# psycopg2 wheels at runtime; libgdal* + libmagic1 mirror il build
+# stage. curl resta per la probe HEALTHCHECK.
+#
+# postgresql-client-17 fornisce `pg_dump` / `pg_restore` allineati al
+# server PG 17 dell'image `postgres:17-alpine`. Senza un major-match
+# il dump fallisce con "aborting because of server version mismatch"
+# (pg_dump rifiuta di leggere un server piu' recente). Repo ufficiale
+# PostgreSQL apt necessario perche' Debian bookworm porta solo 15.x.
 RUN apt-get update && apt-get install -y --no-install-recommends \
         libpq5 \
         libgdal32 \
         libmagic1 \
+        gnupg \
         curl \
         ca-certificates \
+    && install -d /usr/share/keyrings \
+    && curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc \
+       | gpg --dearmor -o /usr/share/keyrings/postgresql.gpg \
+    && echo "deb [signed-by=/usr/share/keyrings/postgresql.gpg] https://apt.postgresql.org/pub/repos/apt bookworm-pgdg main" \
+       > /etc/apt/sources.list.d/pgdg.list \
+    && apt-get update && apt-get install -y --no-install-recommends \
+        postgresql-client-17 \
+    && apt-get purge -y --auto-remove gnupg \
     && rm -rf /var/lib/apt/lists/*
 
 # Non-root runtime user. The data dir under /data is mounted from a
