@@ -69,12 +69,34 @@ function ColumnBuilderModal({
     }
   }, [isOpen, existingColumn]);
 
-  // Aggiorna preview SQL quando cambia l'espressione
+  // Aggiorna preview SQL quando cambia l'espressione.
+  //  - debounce 350ms per evitare un POST /functions/translate per
+  //    ogni keystroke nel wizard
+  //  - pre-validate required params: senza, ogni cambio campo del
+  //    wizard mandava una call che il backend rifiutava 400
+  //    ("Specificare column2 o value...") inquinando la console
+  //    finche' l'utente non completava l'espressione
   useEffect(() => {
-    if (!isManualEdit && selectedFunction && columnName) {
-      updateSqlPreview();
+    if (isManualEdit || !selectedFunction || !columnName) return;
+
+    const required = (currentFunctionDef?.params || []).filter(
+      (p) => p.required,
+    );
+    const missing = required.filter((p) => {
+      const v = params[p.name];
+      return v === undefined || v === null || v === '';
+    });
+    if (missing.length > 0) {
+      // espressione incompleta: niente preview, niente call. Resetto
+      // il preview cosi' l'utente vede "Configura un'espressione
+      // valida" se prova a salvare.
+      setSqlPreview('');
+      return;
     }
-  }, [selectedFunction, params, nestedExpression, columnName, dbType, isManualEdit]);
+
+    const handle = setTimeout(() => { updateSqlPreview(); }, 350);
+    return () => clearTimeout(handle);
+  }, [selectedFunction, params, nestedExpression, columnName, dbType, isManualEdit, currentFunctionDef]);
 
   const loadCatalog = async () => {
     setLoading(true);
