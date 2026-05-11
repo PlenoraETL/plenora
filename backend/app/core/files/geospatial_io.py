@@ -19,6 +19,41 @@ def _geo_helpers():
     return to_geodataframe, detect_geometry_column
 
 
+def _dedup_columns_for_geo_save(df: pd.DataFrame, formato: str) -> pd.DataFrame:
+    """Rinomina colonne duplicate prima del save geospaziale.
+
+    Geopandas / fiona / pyogrio rifiutano una GeoDataFrame con
+    nomi colonna duplicati ("GeoDataFrame cannot contain
+    duplicated column names"). Una JOIN che produce colonne
+    omonime da entrambe le tabelle (es. cities.id + regions.id
+    entrambe aliasate `id` dal SELECT) entra in questa situazione.
+    Rinomina posizionale `<name>_2`, `<name>_3`, ... preservando
+    la prima occorrenza. Allineato a `_dedup_column_names` nel
+    `estrai/executor.py` (stesso schema di rename).
+    """
+    if not df.columns.duplicated(keep="first").any():
+        return df
+    new_columns: list[str] = []
+    seen: set[str] = set()
+    for col in df.columns:
+        if col in seen:
+            idx = 2
+            while f"{col}_{idx}" in seen:
+                idx += 1
+            new_name = f"{col}_{idx}"
+        else:
+            new_name = col
+        new_columns.append(new_name)
+        seen.add(new_name)
+    df = df.copy()
+    df.columns = new_columns
+    logger.warning(
+        f"Save {formato}: colonne duplicate rinominate "
+        f"posizionalmente per evitare crash geopandas."
+    )
+    return df
+
+
 def save_geospatial_dataframe(
     df: pd.DataFrame,
     base_path: Path,
@@ -28,36 +63,7 @@ def save_geospatial_dataframe(
 ) -> Path:
     """Save a DataFrame in a geospatial filesystem format."""
     to_geodataframe, detect_geometry_column = _geo_helpers()
-    # Geopandas / fiona rifiutano colonne duplicate al
-    # `to_file(driver="GeoJSON"|"GPKG"|"ESRI Shapefile")`:
-    # "GeoDataFrame cannot contain duplicated column names".
-    # Tipico dopo un JOIN che produce colonne omonime da entrambe
-    # le tabelle (es. cities.name + regions.name). I formati
-    # tabulari (csv/json) deduplicano col helper
-    # `_dedup_dataframe_columns_for_serialization` lato preview,
-    # ma il path save → geospatial saltava la dedup.
-    # Coerente con quel helper rinominiamo posizionalmente.
-    duplicated_mask = df.columns.duplicated(keep="first")
-    if duplicated_mask.any():
-        new_columns: list[str] = []
-        seen: set[str] = set()
-        for col in df.columns:
-            if col in seen:
-                idx = 2
-                while f"{col}_{idx}" in seen:
-                    idx += 1
-                new_name = f"{col}_{idx}"
-            else:
-                new_name = col
-            new_columns.append(new_name)
-            seen.add(new_name)
-        df = df.copy()
-        df.columns = new_columns
-        logger.warning(
-            f"Save {formato}: colonne duplicate rinominate "
-            f"posizionalmente per evitare crash geopandas "
-            f"(GeoDataFrame cannot contain duplicated column names)."
-        )
+    df = _dedup_columns_for_geo_save(df, formato)
     return _salva_formato_geo(
         df,
         base_path,
@@ -85,6 +91,7 @@ def geospatial_dataframe_to_bytes(
         raise ValueError(f"Formato '{formato}' non supportato")
 
     to_geodataframe, detect_geometry_column = _geo_helpers()
+    df = _dedup_columns_for_geo_save(df, formato)
     if geom_column is None:
         geom_column = detect_geometry_column(df)
     try:
@@ -171,6 +178,14 @@ def _salva_formato_geo(
                 )
 
         gdf = to_geodataframe(df, geom_column, crs=crs)
+        # Allinea i due rami: anche partendo da un pandas DataFrame,
+        # le colonne geom-like non-attive (es. cities.geom dopo un
+        # JOIN con regions.boundary come geom principale) devono
+        # essere convertite in WKT stringa + rinominate, altrimenti
+        # i driver OGR (GPKG/GeoJSON/Shapefile) tentano di trattarle
+        # come secondary geometry e crashano con
+        # "Error adding field 'geom' to layer".
+        gdf = _converti_geometrie_secondarie_in_wkt(gdf)
 
     if formato == "geojson":
         final_path = base_path.with_suffix(".geojson")
@@ -203,23 +218,60 @@ def _switch_colonna_geometria(gdf, geom_column: str):
     return gdf.set_geometry(geom_column)
 
 
+_GEOMETRY_LIKE_COLUMN_NAMES = {
+    "geom", "geometry", "shape", "the_geom",
+    "geom_4326", "geom_wgs84",
+}
+
+
 def _converti_geometrie_secondarie_in_wkt(gdf):
-    """Convert non-active geometry columns to WKT for file export."""
+    """Convert non-active geometry columns to WKT for file export.
+
+    Drivers OGR (GPKG, Shapefile, GeoJSON via pyogrio) interpretano
+    colonne con nomi tipici di geometry (`geom`, `geometry`, `shape`,
+    `the_geom`) come secondary geometry fields anche quando il
+    contenuto e' una stringa WKT. Risultato:
+    `pyogrio.errors.FieldError: Error adding field 'geom' to layer`.
+
+    Per evitare il conflitto rinominiamo queste colonne non-attive
+    con suffix `_wkt`, oltre a convertirle in WKT se BaseGeometry.
+    """
     from shapely.geometry.base import BaseGeometry
 
     nome_geometria_attiva = gdf.geometry.name
+    renames: dict[str, str] = {}
 
-    for col in gdf.columns:
+    for col in list(gdf.columns):
         if col == nome_geometria_attiva:
             continue
 
         col_data = gdf[col].dropna()
-        if col_data.empty:
-            continue
+        if not col_data.empty:
+            primo_valido = col_data.iloc[0]
+            if isinstance(primo_valido, BaseGeometry):
+                gdf[col] = col_data.apply(
+                    lambda x: x.wkt if isinstance(x, BaseGeometry) else x
+                )
 
-        primo_valido = col_data.iloc[0]
-        if isinstance(primo_valido, BaseGeometry):
-            gdf[col] = col_data.apply(lambda x: x.wkt if isinstance(x, BaseGeometry) else x)
+        # Rinomina se il nome collide con i nomi-tipo di geometry,
+        # cosi' il driver OGR non prova ad aggiungere un secondo
+        # geometry field nello schema del layer.
+        if col.lower() in _GEOMETRY_LIKE_COLUMN_NAMES:
+            new_name = f"{col}_wkt"
+            base_new = new_name
+            n = 2
+            while new_name in gdf.columns:
+                new_name = f"{base_new}_{n}"
+                n += 1
+            renames[col] = new_name
+
+    if renames:
+        gdf = gdf.rename(columns=renames)
+        logger.warning(
+            "Rinominate colonne geometry-like non-attive per "
+            "evitare conflitti col driver OGR: "
+            + ", ".join(f"{o}->{n}" for o, n in renames.items())
+        )
 
     return gdf
 
