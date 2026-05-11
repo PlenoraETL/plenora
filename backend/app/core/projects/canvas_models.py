@@ -288,8 +288,15 @@ class Edge(BaseModel):
     id: str = Field(..., min_length=1)
     source: str = Field(..., min_length=1)
     target: str = Field(..., min_length=1)
+    # `full` e' un alias di `outer` (FULL OUTER JOIN). Il FE
+    # `JoinModal` espone "FULL" come value `'full'`; il SQL
+    # generator `core/estrai/query_joins.py:108-113` accetta sia
+    # FULL che OUTER e li mappa entrambi a `FULL OUTER`. Senza
+    # `'full'` qui il PUT canvas rispondeva 422 e l'utente vedeva
+    # il modale "errore salvataggio" dopo aver scelto FULL nella
+    # JoinModal.
     join_type: Optional[Literal[
-        "left", "inner", "right", "outer", "cross",
+        "left", "inner", "right", "outer", "full", "cross",
         "output", "carica", "carica_arcgis", "imdf_publisher",
     ]] = "left"
     source_column: Optional[str] = ""
