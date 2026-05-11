@@ -69,20 +69,37 @@ class AttachmentRow:
         return getattr(self, key)
 
 
+from datetime import date, datetime
+
+
+def _coerce_str(value: object) -> str | None:
+    """Coerce DB scalar to string-or-None.
+
+    psycopg2 ritorna ``datetime`` per timestamp e ``date`` per date,
+    non stringhe. Il DTO ``TicketRow`` usa ``str`` perche' viene
+    serializzato in JSON al volo (ISO format). Senza questa coercion
+    ``_required_str("created_at")`` su un timestamp PG crasha con
+    ``Malformed ticket DB row: created_at must be a string`` anche
+    quando il valore e' presente e ben tipizzato.
+    """
+    if value is None:
+        return None
+    if isinstance(value, str):
+        return value
+    if isinstance(value, (datetime, date)):
+        return value.isoformat()
+    return str(value)
+
+
 def _required_str(row: Mapping[str, object], key: str) -> str:
-    value = row.get(key)
-    if not isinstance(value, str):
+    value = _coerce_str(row.get(key))
+    if value is None:
         raise ValueError(f"Malformed ticket DB row: {key} must be a string")
     return value
 
 
 def _optional_str(row: Mapping[str, object], key: str) -> str | None:
-    value = row.get(key)
-    if value is None:
-        return None
-    if not isinstance(value, str):
-        raise ValueError(f"Malformed ticket DB row: {key} must be a string or null")
-    return value
+    return _coerce_str(row.get(key))
 
 
 def _optional_int(row: Mapping[str, object], key: str) -> int | None:
