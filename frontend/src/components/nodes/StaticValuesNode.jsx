@@ -5,7 +5,6 @@
 import React, { useState, useCallback, useMemo, useRef, memo } from 'react';
 import { useEffect } from 'react';
 import { useToast } from '../../hooks/useToast';
-import ToastContainer from '../common/ToastContainer';
 import { Handle, Position } from 'reactflow';
 import { 
   processTemplateVariables, 
@@ -264,7 +263,11 @@ function StaticValuesNode({ id, data, selected }) {
       )}
 
       <Handle type="source" position={Position.Right} id="output" className="svn__handle" />
-      <ToastContainer toasts={toast.toasts} onDismiss={toast.dismiss} />
+      {/* `<ToastContainer>` legacy rimosso: il container vive nel
+          provider globale (`ToastContext`). Senza la rimozione,
+          ogni toast (es. "Progetto salvato!" dal ManipolaEditor)
+          appariva DUE volte — una via il container globale e una
+          via questo container locale che ascolta lo stesso store. */}
     </div>
   );
 }
