@@ -234,7 +234,7 @@ class Node(BaseModel):
     having_enabled: Optional[bool] = False
     having_conditions: Optional[List[HavingCondition]] = []
 
-    dest_type: Optional[Literal["db", "arcgis"]] = None
+    dest_type: Optional[Literal["db", "arcgis", "rest"]] = None
     schema_name: Optional[str] = None
     write_mode: Optional[Literal["create", "replace", "append", "upsert", "update", "truncate_insert"]] = "create"
     column_mappings: Optional[List[dict]] = []
@@ -254,6 +254,19 @@ class Node(BaseModel):
     arcgis_match_column: Optional[str] = None
     arcgis_new_service_name: Optional[str] = None
     arcgis_new_layer_name: Optional[str] = None
+
+    # CARICA REST sink. Il FE (canvasSerializer.js) li serializza ai
+    # top-level del nodo carica con `dest_type=rest`; senza il typing
+    # qui Pydantic li droppava silenziosamente al PUT canvas, lasciando
+    # il task carica con "CARICA REST url is required".
+    rest_url: Optional[str] = None
+    rest_method: Optional[Literal["POST", "PUT", "PATCH", "DELETE"]] = None
+    rest_headers: Optional[List[dict]] = []
+    rest_body_mapping: Optional[List[dict]] = []
+    rest_batch_mode: Optional[Literal["batch", "per_record"]] = None
+    rest_batch_size: Optional[int] = None
+    rest_timeout_seconds: Optional[int] = None
+    rest_success_statuses: Optional[List[int]] = None
 
     join_keys: Optional[List[str]] = []
     multi_join_type: Optional[Literal["inner", "left", "outer"]] = "inner"
