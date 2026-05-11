@@ -1030,6 +1030,17 @@ def _translate_expression(
     nome_funzione = expression.get("function")
     parametri = expression.get("params", {})
 
+    # Validation: senza `function` non c'e' nulla da tradurre. Senza
+    # questo check `traduttore.translate(None, ...)` crasha con
+    # AttributeError → 500 nel router. Mappiamo il caso utente
+    # (espressione incompleta dal FE wizard) a un 400 chiaro.
+    if not nome_funzione:
+        raise ValueError(
+            "Espressione mancante del campo 'function'. La calculated "
+            "column non e' configurata: completare l'operazione nel "
+            "wizard prima di salvare/preview."
+        )
+
     parametri_risolti = {}
     for chiave, valore in parametri.items():
         if isinstance(valore, dict) and "function" in valore:
