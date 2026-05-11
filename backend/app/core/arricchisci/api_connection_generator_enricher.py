@@ -423,6 +423,15 @@ class ApiConnectionGeneratorEnricherMixin:
                     col = m.get('column', m.get('path'))
                     row[col] = self._extract_json_value(data, m.get('path', ''))
                 rows.append(row)
+            elif not output_mapping:
+                # Auto-discovery dei campi quando l'utente non specifica
+                # `output_mapping`: parallelo al ramo "dict con 'data'"
+                # piu' sotto. Senza, una response come `[{id:1,name:"a"},...]`
+                # produceva N righe vuote (dict comprehension su mapping
+                # vuoto = `{}`) -> DataFrame con 0 colonne, percepito come
+                # "Nessun dato" lato downstream.
+                for item in data:
+                    rows.append(dict(item) if isinstance(item, dict) else {"value": item})
             else:
                 for item in data:
                     row = {m.get('column', m.get('path')): self._extract_json_value(item, m.get('path', ''))

@@ -6,7 +6,7 @@ Endpoint CRUD progetti, gestione canvas, e inferenza schema.
 
 from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
-from typing import Any, List, Optional
+from typing import Any, Dict, List, Optional
 
 from app.utils.logger import get_logger
 from app.shared import error_codes
@@ -539,6 +539,25 @@ def update_project_canvas(
     }
     target_ids = {e.target for e in canvas.edges}
 
+    # Cache lookup api connection -> api_type per evitare query ripetute
+    # nello stesso PUT canvas (utile su canvas con piu' api_enrich).
+    _api_type_cache: Dict[str, Optional[str]] = {}
+
+    def _lookup_api_type(api_id: Optional[str]) -> Optional[str]:
+        if not api_id:
+            return None
+        if api_id in _api_type_cache:
+            return _api_type_cache[api_id]
+        t: Optional[str] = None
+        try:
+            from app.core.arricchisci.api_connector import api_connection_service as _aconn
+            cfg = _aconn.get_api_connection(api_id, include_token=False)
+            t = (cfg or {}).get("api_type")
+        except Exception:
+            t = None
+        _api_type_cache[api_id] = t
+        return t
+
     def _is_source_like(n) -> bool:
         if n.type in _SOURCE_LIKE:
             return True
@@ -548,8 +567,19 @@ def update_project_canvas(
         # con input_df=None, e la response diventa il dataframe.
         # Distinto da `api_type=enricher` (1 chiamata per riga, richiede
         # dataframe upstream e quindi un edge incoming).
-        if n.type == "api_enrich" and getattr(n, "api_type", None) == "generator":
-            return True
+        if n.type == "api_enrich":
+            # Il valore puo' essere sul nodo (override esplicito del FE) o
+            # nella api_connection referenziata via api_id. Senza il
+            # fallback su api_id, un canvas valido ("generator" lato API
+            # connection) veniva rifiutato come orfano se il FE non
+            # propagava l'`api_type` sul nodo.
+            node_api_type = getattr(n, "api_type", None)
+            if node_api_type == "generator":
+                return True
+            if not node_api_type:
+                lookup = _lookup_api_type(getattr(n, "api_id", None))
+                if lookup == "generator":
+                    return True
         return False
 
     orphans = [

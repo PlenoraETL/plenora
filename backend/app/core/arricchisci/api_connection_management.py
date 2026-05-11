@@ -59,6 +59,29 @@ class ApiConnectionManagementMixin:
     def _config_from_api_connection_row(row: db_svc.ApiConnectionRow) -> Dict[str, Any]:
         return deepcopy(row.config or {})
 
+    @staticmethod
+    def _normalize_auth_schema(config: Dict[str, Any]) -> Dict[str, Any]:
+        """Compatibilita' fra schema storage (OpenAPI-style: in/name/value)
+        e schema runtime (location/key_name/key_value).
+
+        La UI/create_api persiste l'auth nel formato OpenAPI. Gli engine
+        di esecuzione (generator, enricher, prepare_headers, batch,
+        grouping) leggono lo schema runtime. Senza questa traduzione,
+        ogni api_key configurata via UI veniva ignorata a runtime
+        (401 Unauthorized). Manteniamo entrambi i nomi per non rompere
+        consumer che si aspettano il formato storage.
+        """
+        auth = config.get("auth")
+        if not isinstance(auth, dict) or auth.get("type") != "api_key":
+            return config
+        if "in" in auth and "location" not in auth:
+            auth["location"] = auth["in"]
+        if "name" in auth and "key_name" not in auth:
+            auth["key_name"] = auth["name"]
+        if "value" in auth and "key_value" not in auth:
+            auth["key_value"] = auth["value"]
+        return config
+
     def _public_config_from_api_connection_row(
         self,
         row: db_svc.ApiConnectionRow,
@@ -71,8 +94,10 @@ class ApiConnectionManagementMixin:
         config["group_id"] = row.group_id
         config["created_by"] = row.created_by
         if include_token:
-            return _decrypt_auth_in_config(config, strict=strict)
-        return self._mask_credentials(config)
+            return self._normalize_auth_schema(
+                _decrypt_auth_in_config(config, strict=strict)
+            )
+        return self._normalize_auth_schema(self._mask_credentials(config))
 
     def list_api_connections(self, category: str = None, connection_type: str = None, group_id: str = None) -> List[Dict]:
         """Lista tutte le API connections dal DB.
@@ -185,6 +210,10 @@ class ApiConnectionManagementMixin:
             config["request"] = data["request"]
         if data.get("response") is not None:
             config["response"] = data["response"]
+        # Allinea schema storage runtime (OpenAPI-style `value` -> `key_value`)
+        # cosi' che `_encrypt_auth_in_config` veda il campo sensibile e lo cifri
+        # at-rest. Senza, un api_key salvato via UI restava in chiaro nel DB.
+        self._normalize_auth_schema(config)
         # Cifra i campi auth sensibili at-rest prima di salvare nel DB
         _encrypt_auth_in_config(config)
         row = db_svc.save_api_connection_row(
