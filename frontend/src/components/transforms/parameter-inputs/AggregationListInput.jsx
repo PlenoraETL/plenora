@@ -14,7 +14,7 @@ const AggregationListInput = ({ value, onChange, columns }) => {
   const aggFunctions = ['count', 'sum', 'mean', 'min', 'max', 'first', 'last', 'concat'];
 
   const addAggregation = () => {
-    onChange([...aggregations, { column: '', function: 'count' }]);
+    onChange([...aggregations, { column: '', function: 'count', alias: '' }]);
   };
 
   const updateAggregation = (idx, field, newValue) => {
@@ -57,6 +57,14 @@ const AggregationListInput = ({ value, onChange, columns }) => {
               <option key={fn} value={fn}>{fn}</option>
             ))}
           </select>
+          <input
+            type="text"
+            value={agg.alias || ''}
+            onChange={(e) => updateAggregation(idx, 'alias', e.target.value)}
+            placeholder="Nome output (opzionale)"
+            title="Alias colonna output (es. n_customers, total_revenue)"
+            style={{ flex: 1, minWidth: '120px' }}
+          />
           {agg.function === 'concat' && (
             <div className="aggregation-list-input__concat-params">
               <input

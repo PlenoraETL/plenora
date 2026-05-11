@@ -117,6 +117,29 @@ def op_aggregate(
             if isinstance(result.columns, pd.MultiIndex):
                 result.columns = ['_'.join(col).strip('_') for col in result.columns]
 
+        # Alias utente-friendly per le colonne aggregate. Senza, la
+        # colonna output mantiene il nome originale (es. `id` per
+        # COUNT(id)) o `<col>_<func>` (MultiIndex flat), entrambi
+        # poco leggibili. Il FE permette di specificare `alias`
+        # nell'AggregationListInput; lo applichiamo qui post-agg.
+        renames: Dict[str, str] = {}
+        for agg in aggregations:
+            alias = (agg.get("alias") or "").strip()
+            if not alias:
+                continue
+            col = agg.get("column")
+            func = (agg.get("function") or "").lower()
+            # Caso single agg per colonna → output col == col originale
+            if col in result.columns and col not in group_by:
+                renames[col] = alias
+                continue
+            # Caso multi-agg → MultiIndex flat `<col>_<func>`
+            flat_name = f"{col}_{func}"
+            if flat_name in result.columns:
+                renames[flat_name] = alias
+        if renames:
+            result = result.rename(columns=renames)
+
         logger.info(f"Aggregate: {len(df)} -> {len(result)} righe")
         return result
 
