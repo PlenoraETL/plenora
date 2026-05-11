@@ -7,3 +7,6 @@ build/
 *.log
 .claude/
 __pycache__/
+playwright-report/
+test-results/
+e2e/.auth/
