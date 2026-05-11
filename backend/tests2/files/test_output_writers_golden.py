@@ -1,18 +1,4 @@
-"""
-Golden test sui writer di output (CSV / JSON / XLSX / GeoJSON / GPKG).
-
-Costruisce un DataFrame "torturato" che riproduce i casi reali dove
-la sessione di audit aveva trovato bug silenziosi (trailing ``.0`` su
-int promossi a float, Decimal con 16 zeri da PG NUMERIC, Unicode/emoji,
-virgolette interne in CSV) e congela il comportamento atteso byte per
-byte cosi' che future regressioni nei writer si manifestino con un
-diff esplicito, non con dati visivamente "sospetti" lato utente.
-
-Coverage:
-- ``app.core.files.dataframe_io.tabular_dataframe_to_bytes`` (csv/json/xlsx)
-- ``app.core.files.dataframe_io._compact_whole_number_floats`` (Decimal+float)
-- ``app.core.files.geospatial_io.geospatial_dataframe_to_bytes`` (geojson)
-"""
+"""Regression tests for output writers and numeric/text serialization."""
 
 from __future__ import annotations
 
@@ -206,7 +192,7 @@ def test_compact_whole_number_floats_preserves_real_decimals():
             ],                                              # tutti interi -> Int64
             "decimals_mixed": [
                 Decimal("36.5"), Decimal("42.0"), Decimal("100"), None,
-            ],                                              # 36.5 -> float64
+            ],                                              # 36.5 -> compact string
         }
     )
 
@@ -217,8 +203,7 @@ def test_compact_whole_number_floats_preserves_real_decimals():
     assert "float" in str(out["real_floats"].dtype).lower()
     # decimals_int: object con tutti Decimal interi -> Int64
     assert str(out["decimals_int"].dtype) == "Int64"
-    # decimals_mixed: contiene 36.5 -> float64 (no data loss)
-    assert "float" in str(out["decimals_mixed"].dtype).lower()
+    assert list(out["decimals_mixed"].dropna()) == ["36.5", "42", "100"]
 
 
 def test_geojson_writer_compacts_int_properties():

@@ -101,12 +101,6 @@ def _fetch_oauth2_password_token(auth: Dict) -> Optional[Dict]:
         return None
 
     try:
-        # `client_id` / `client_secret` sono richiesti dalla maggioranza
-        # degli auth server quando l'app e' "confidential" (es. il
-        # fake-rest /auth/oauth2/token ritorna 401 invalid_grant senza
-        # questi campi anche col grant_type=password). Inclusi qui ma
-        # vuoti vengono tralasciati (alcune server-side strict mode
-        # rifiutano i campi vuoti).
         payload: Dict[str, str] = {
             "grant_type": "password",
             "username": username,

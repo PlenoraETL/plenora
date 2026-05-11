@@ -172,6 +172,22 @@ def _split_csv_respect_quotes(value: str) -> List[str]:
     return out
 
 
+def _is_safe_single_quoted_literal(value: str) -> bool:
+    """True for SQL string literals with only doubled internal quotes."""
+    if len(value) < 2 or not (value.startswith("'") and value.endswith("'")):
+        return False
+    inner = value[1:-1]
+    i = 0
+    while i < len(inner):
+        if inner[i] == "'":
+            if i + 1 >= len(inner) or inner[i + 1] != "'":
+                return False
+            i += 2
+        else:
+            i += 1
+    return True
+
+
 # ENUMERAZIONI
 
 class DbType(Enum):
@@ -783,20 +799,9 @@ class SqlFunctionTranslator(
     # FUNZIONI CONDIZIONALI (nuove
 
     def _translate_coalesce(self, params: Dict, table_alias: str = None) -> str:
-        """Primo valore non NULL — COALESCE() identico su tutti i database.
-
-        Accetta sia nomi colonna (qualificati automaticamente con l'alias
-        di tabella) sia valori letterali quoted con apici singoli
-        (es. ``"'default'"``). Senza il supporto ai letterali l'uso
-        canonico ``COALESCE(email, 'default')`` falliva con
-        ``_safe_qualified_identifier``: la funzione era utilizzabile solo
-        per concatenare piu' colonne, perdendo il valore tipico di un
-        fallback letterale.
-        """
+        """Primo valore non NULL: colonne qualificate e literal SQL sicuri."""
         valori = params["values"]
         if isinstance(valori, str):
-            # Splitta sulla virgola rispettando le stringhe quoted: una
-            # virgola dentro 'literal,con,virgole' non e' un separatore.
             valori = _split_csv_respect_quotes(valori)
 
         out_parts: list[str] = []
@@ -804,14 +809,7 @@ class SqlFunctionTranslator(
             v_str = str(v).strip()
             if not v_str:
                 continue
-            # Letterale quoted ('foo' o "foo"): passa attraverso. Il
-            # raddoppio di apici interni resta responsabilita' del FE
-            # (l'helper _sql_escape si applica solo ai param che il
-            # traduttore inietta in f-string, non al pass-through).
-            if (
-                (v_str.startswith("'") and v_str.endswith("'") and len(v_str) >= 2)
-                or (v_str.startswith('"') and v_str.endswith('"') and len(v_str) >= 2)
-            ):
+            if _is_safe_single_quoted_literal(v_str):
                 out_parts.append(v_str)
             else:
                 out_parts.append(self._qualify_column(v_str, table_alias))

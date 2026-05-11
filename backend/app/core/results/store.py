@@ -114,6 +114,11 @@ def get_latest_result_row(
     return results_db.get_latest_result_row(project_id, group_id=group_id)
 
 
+def get_result_row(result_id: str) -> Optional[ResultMetadataRow]:
+    """Return typed result metadata for one result id."""
+    return results_db.get_result_row(result_id)
+
+
 def get_latest_result(
     project_id: str,
     group_id: Optional[str] = None,
@@ -139,6 +144,7 @@ __all__ = [
     "ResultMetadataRow",
     "get_latest_result",
     "get_latest_result_row",
+    "get_result_row",
     "get_result_data",
     "list_result_rows",
     "list_results",

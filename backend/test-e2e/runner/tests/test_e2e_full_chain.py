@@ -1,32 +1,4 @@
-"""
-E2E full-chain integration test (catch FE↔BE schema mismatches).
-
-Motivazione (post audit cross-modulo, ~34 bug fix):
-La maggioranza dei bug strutturali della sessione era dovuta a
-disallineamenti tra cosa il FE serializza nel canvas e cosa il
-Pydantic `Node` accetta (es. `dest_type=rest` non in Literal, campi
-`rest_url`/`rest_method` non dichiarati, auth `in/name/value` vs
-`location/key_name/key_value`). Erano errori "shallow" — fix di 1-5
-righe — ma non emergevano dai test unitari per-modulo perche'
-ogni modulo testa il proprio path; il disallineamento si manifesta
-SOLO al boundary "FE canvas → executor reale".
-
-Questo test esercita la chain plenora end-to-end:
-    ESTRAI → MANIPOLA (project_source) → CARICA (DB destination)
-    + Schedule manuale che ri-esegue la pipeline.
-
-Un nuovo bug di tipo "campo FE droppato silenziosamente da Pydantic"
-farebbe fallire il PUT canvas o l'execute con un errore parlante,
-catturando la regressione prima di un audit manuale.
-
-Marker:
-- ``profile_core``: pg-seed + fake-rest
-- ``requires_app``: backend FastAPI + worker Celery up
-
-Run:
-    docker compose up -d
-    pytest -m "profile_core and requires_app" test_e2e_full_chain.py -v
-"""
+"""Full-chain e2e: ESTRAI -> MANIPOLA -> CARICA -> schedule run."""
 
 from __future__ import annotations
 
@@ -236,7 +208,7 @@ def test_e2e_full_chain(
                 "connection_id": postgres_conn_id,
                 "schema_name": "public",
                 "table_name": target_table,
-                "write_mode": "create",
+                "write_mode": "replace",
             }
         )
         carica_canvas["edges"].append({"id": "e3", "source": "res", "target": "car"})

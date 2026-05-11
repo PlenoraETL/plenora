@@ -248,18 +248,25 @@ def _compact_whole_number_floats(df: pd.DataFrame) -> pd.DataFrame:
         return df
     from decimal import Decimal
 
+    def _compact_decimal(value: Decimal) -> str:
+        if not value.is_finite():
+            return str(value)
+        text = format(value.normalize(), "f")
+        if "." in text:
+            text = text.rstrip("0").rstrip(".")
+        return text or "0"
+
     result = df
     for col in list(result.columns):
         s = result[col]
 
-        # Passo 1: object -> float/Int64 se tutti Decimal o numerici
         if s.dtype == object:
             non_nan = s.dropna()
             if non_nan.empty:
                 continue
             if all(isinstance(v, Decimal) for v in non_nan):
-                floats = non_nan.astype(float)
-                if (floats % 1 == 0).all():
+                decimals = list(non_nan)
+                if all(v == v.to_integral_value() for v in decimals):
                     if result is df:
                         result = df.copy()
                     try:
@@ -269,14 +276,17 @@ def _compact_whole_number_floats(df: pd.DataFrame) -> pd.DataFrame:
                             dtype="Int64",
                         )
                     except (TypeError, ValueError):
-                        result[col] = s.astype(float)
+                        result[col] = s.map(
+                            lambda v: None if pd.isna(v) else _compact_decimal(v)
+                        )
                 else:
                     if result is df:
                         result = df.copy()
-                    result[col] = s.astype(float)
+                    result[col] = s.map(
+                        lambda v: None if pd.isna(v) else _compact_decimal(v)
+                    )
                 continue
 
-        # Passo 2: float -> Int64 se tutti interi
         if pd.api.types.is_float_dtype(s):
             non_nan = s.dropna()
             if not non_nan.empty and (non_nan % 1 == 0).all():

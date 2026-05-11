@@ -85,25 +85,20 @@ def _columns_from_result(result: Any, connection: StreamingConnection) -> List[s
     return columns
 
 
+def _compact_decimal(value: Decimal) -> str:
+    """Return a compact decimal string without converting through float."""
+    if not value.is_finite():
+        return str(value)
+    text = format(value.normalize(), "f")
+    if "." in text:
+        text = text.rstrip("0").rstrip(".")
+    return text or "0"
+
+
 def _normalize_decimal(value: Any) -> Any:
-    """Converte ``Decimal`` in stringa compatta evitando la coda di zeri.
-
-    psycopg2 mappa i tipi numerici PG (``NUMERIC``/``DECIMAL``, ritornati da
-    ``AVG``/``SUM`` su colonne numeric) a ``decimal.Decimal``. Senza
-    normalizzazione, ``csv.writer.writerows`` chiama ``str(Decimal)`` che
-    preserva la scala configurata: ``AVG(age)`` su NUMERIC(20,16) esce
-    ``36.5000000000000000`` invece di ``36.5``.
-
-    Formattazione ``%.15g``: 15 cifre significative (precisione float64),
-    no notazione scientifica per numeri "normali". Coerente col fix gia'
-    applicato in ``dataframe_io._compact_whole_number_floats`` + ``to_csv``.
-    """
+    """Compact Decimal values for CSV streaming while preserving precision."""
     if isinstance(value, Decimal):
-        # Decimal -> formattazione compatta. Cast a float ok: 15 cifre
-        # significative coprono la precisione che il consumer si aspetta
-        # in CSV; le query che richiedono precisione esatta usano
-        # parquet/altro o quote esplicite.
-        return f"{float(value):.15g}"
+        return _compact_decimal(value)
     return value
 
 

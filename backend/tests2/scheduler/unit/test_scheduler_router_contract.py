@@ -96,6 +96,48 @@ def test_download_specific_run_returns_requested_file(current_user, tmp_path):
     assert "requested.csv" in content_disposition
 
 
+def test_download_blob_only_run_uses_schedule_result_id(current_user, tmp_path):
+    client = _build_client(current_user)
+
+    schedule_id = "schedule_123456789abc"
+    project_id = "proj-1"
+    schedule_cfg = SimpleNamespace(pipeline=SimpleNamespace(project_id=project_id))
+    result_row = SimpleNamespace(
+        id="res-1",
+        project_id=project_id,
+        filename="blob.csv",
+    )
+
+    with patch("app.core.scheduler.schedule_service.ScheduleService.get_schedule", return_value=schedule_cfg), \
+         patch("app.core.scheduler.db.get_schedule_row", return_value=SimpleNamespace(id=schedule_id, group_id="grp-1")), \
+         patch("app.core.scheduler.db.list_schedule_logs", return_value=[{"execution_info": {"result_id": "res-1"}}]), \
+         patch("app.core.results.store.get_result_row", return_value=result_row), \
+         patch("app.core.results.store.get_result_data", return_value=b"id\n9\n"), \
+         patch("app.config.settings", new=SimpleNamespace(RESULTS_DIR=tmp_path)):
+        response = client.get(f"/api/schedules/{schedule_id}/download")
+
+    assert response.status_code == 200
+    assert response.content == b"id\n9\n"
+    assert "blob.csv" in response.headers.get("content-disposition", "")
+
+
+def test_download_blob_only_run_rejects_cross_project_result(current_user, tmp_path):
+    client = _build_client(current_user)
+
+    schedule_id = "schedule_123456789abc"
+    schedule_cfg = SimpleNamespace(pipeline=SimpleNamespace(project_id="proj-1"))
+    result_row = SimpleNamespace(id="res-1", project_id="other", filename="blob.csv")
+
+    with patch("app.core.scheduler.schedule_service.ScheduleService.get_schedule", return_value=schedule_cfg), \
+         patch("app.core.scheduler.db.get_schedule_row", return_value=SimpleNamespace(id=schedule_id, group_id="grp-1")), \
+         patch("app.core.scheduler.db.list_schedule_logs", return_value=[{"execution_info": {"result_id": "res-1"}}]), \
+         patch("app.core.results.store.get_result_row", return_value=result_row), \
+         patch("app.config.settings", new=SimpleNamespace(RESULTS_DIR=tmp_path)):
+        response = client.get(f"/api/schedules/{schedule_id}/download")
+
+    assert response.status_code == 404
+
+
 def test_list_runs_returns_archived_runs_with_sizes(current_user, tmp_path):
     client = _build_client(current_user)
     schedule_id = "schedule_123456789abc"

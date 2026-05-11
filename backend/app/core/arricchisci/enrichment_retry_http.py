@@ -113,6 +113,8 @@ class EnrichmentRetryHttpMixin:
 
                 # Rate limited - rispetta Retry-After
                 if response.status_code == 429:
+                    with self._stats_lock:
+                        self._rate_limit_hits_observed += 1
                     if self.options.respect_retry_after:
                         retry_after = int(response.headers.get("Retry-After", 60))
                         time.sleep(retry_after)

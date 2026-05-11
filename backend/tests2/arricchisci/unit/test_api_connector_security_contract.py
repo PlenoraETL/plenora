@@ -40,6 +40,7 @@ def test_mask_credentials_hides_all_sensitive_auth_fields(api_service):
             "password": "pwd",
             "client_secret": "secret",
             "key_value": "api-key",
+            "value": "api-key",
         }
     }
 
@@ -49,6 +50,7 @@ def test_mask_credentials_hides_all_sensitive_auth_fields(api_service):
     assert masked["auth"]["password"] == "***"
     assert masked["auth"]["client_secret"] == "***"
     assert masked["auth"]["key_value"] == "***"
+    assert masked["auth"]["value"] == "***"
     assert config["auth"]["token"] == "tok"
 
 

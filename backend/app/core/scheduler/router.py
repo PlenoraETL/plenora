@@ -457,32 +457,54 @@ async def download_schedule_output(
                 headers={"Content-Disposition": f'attachment; filename="{out_file.name}"'},
             )
 
-        # Fallback: post-refactor i risultati pipeline sono blob in
-        # `plenora.results` (no file filesystem). L'archive scheduler
-        # materializza solo quando `ArtifactResolver` riesce a risolvere
-        # il ref della run; per schedule senza destination CARICA il
-        # ref puo' restare vuoto e nessun file viene archiviato.
-        # Senza questo fallback il download tornava 404 anche se la
-        # run e' completata e il blob esiste nel DB. Servimao quindi
-        # l'ultimo blob risultato del progetto (best-effort: copre il
-        # caso reale singolo-schedule; per progetti con schedule
-        # multipli concorrenti il caller dovrebbe passare ?run=...).
+        # Blob-only schedules record the exact result_id in the schedule log.
+        # Do not fall back to "latest project result": that can cross schedules.
         from fastapi.responses import Response
         from app.core.results import store as _results_store
 
-        latest_row = _results_store.get_latest_result_row(project_id)
-        latest_bytes = (
-            _results_store.get_result_data(latest_row.id)
-            if latest_row is not None
+        latest_logs = scheduler_db.list_schedule_logs(
+            schedule_id=schedule_id,
+            events=("PIPELINE_COMPLETED", "PIPELINE_PARTIAL"),
+            limit=1,
+        )
+        execution_info = latest_logs[0].get("execution_info") if latest_logs else None
+        if isinstance(execution_info, str):
+            import json
+            try:
+                execution_info = json.loads(execution_info)
+            except json.JSONDecodeError:
+                execution_info = None
+        result_id = (
+            execution_info.get("result_id")
+            if isinstance(execution_info, dict)
             else None
         )
-        if latest_row is None or latest_bytes is None:
+        if not result_id:
+            raise HTTPException(
+                status_code=404,
+                detail=(
+                    f"Nessun file archiviato per lo schedule '{schedule_id}'. "
+                    f"Le run precedenti non espongono un result_id scaricabile."
+                ),
+            )
+
+        latest_row = _results_store.get_result_row(result_id)
+        if latest_row is None or latest_row.project_id != project_id:
             raise HTTPException(
                 status_code=404,
                 detail=(
                     f"Nessun output disponibile per lo schedule '{schedule_id}'. "
                     f"Esegui lo schedule almeno una volta per generare un output."
                 ),
+            )
+        latest_bytes = _results_store.get_result_data(
+            result_id,
+            group_id=getattr(_sched_row, "group_id", None),
+        )
+        if latest_bytes is None:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Blob risultato '{result_id}' non disponibile",
             )
         filename = latest_row.filename or f"{schedule_id}.bin"
         return Response(

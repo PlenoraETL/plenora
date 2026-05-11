@@ -322,6 +322,22 @@ def test_qualify_column_expression_path_accepts_legitimate_outputs(expr):
     assert tr._qualify_column(expr, "t") == expr
 
 
+def test_coalesce_accepts_escaped_string_literal_with_comma():
+    tr = _translator()
+    sql = tr.translate(
+        "COALESCE",
+        {"values": "email, 'fallback, with comma', 'O''Reilly'"},
+        "t",
+    )
+    assert sql == "COALESCE(t.email, 'fallback, with comma', 'O''Reilly')"
+
+
+def test_coalesce_rejects_unescaped_quote_literal():
+    tr = _translator()
+    with pytest.raises(ValueError):
+        tr.translate("COALESCE", {"values": "email, 'bad'value'"}, "t")
+
+
 # 7. N2 residui — operator non validato in CASE_WHEN / IIF
 
 

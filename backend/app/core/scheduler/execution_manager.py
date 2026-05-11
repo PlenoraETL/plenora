@@ -450,6 +450,8 @@ class ExecutionManager:
                     "pre_check_passed": True,
                     "retry_attempt": retry_attempt,
                     "scheduled_for": scheduled_for,
+                    "run_id": run_id,
+                    "result_id": result.result_id,
                 }
             )
             log_path = self.log_service.write_log(entry)
@@ -695,21 +697,7 @@ class ExecutionManager:
                 logger.error(f"[GESTITO] CARICA scheduler fallito: {error_msg}", op="carica")
                 return {"success": False, "error": error_msg}
 
-            # `WriteResult` (app.core.carica.models) espone solo
-            # `rows_written / rows_failed / rows_skipped / total_rows`.
-            # I campi `rows_inserted` / `rows_updated` non esistono sul
-            # WriteResult: erano un'aspettativa rimasta dal vecchio
-            # contract. Senza questa armonizzazione, ogni CARICA
-            # scheduler riusciva A SCRIVERE i dati (tabella creata e
-            # popolata correttamente) ma poi crashava sul post-process
-            # con `AttributeError: 'WriteResult' object has no
-            # attribute 'rows_inserted'`, marcando il run come
-            # `carica_scheduler_failed` e schedulando un retry inutile.
             rows_written = getattr(write_result, "rows_written", 0) or 0
-            # Backward-compat: se in futuro WriteResult dovesse
-            # esporre rows_inserted/rows_updated, usali; altrimenti
-            # imputiamo tutto a rows_written (caso CREATE/APPEND) o a
-            # rows_updated (UPDATE/UPSERT) leggendo dal write_mode.
             rows_inserted = getattr(write_result, "rows_inserted", None)
             rows_updated = getattr(write_result, "rows_updated", None)
             if rows_inserted is None and rows_updated is None:

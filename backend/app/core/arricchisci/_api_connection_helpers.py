@@ -26,6 +26,7 @@ _AUTH_SENSITIVE_FIELDS = (
     "access_token",
     "refresh_token",
     "key_value",
+    "value",
 )
 
 

@@ -1,37 +1,4 @@
-"""
-Lint: rifiuta `pass` solitario in funzioni/blocchi "load-bearing".
-
-Motivazione (post audit cross-modulo, 34 bug fissati):
-- bug 333e12b3: `enrichment_retry_http` aveva `with self._stats_lock:
-  pass  # Conta rate limit hits se presente nelle stats` — TODO mai
-  chiuso, counter `rate_limit_hits` sempre 0.
-- bug 666fa513: `query_projection` aveva `else: continue` silent
-  drop dei calculated_columns con expression string (NON un pass ma
-  stesso pattern di "stub silente").
-- diversi `_translate_*` / `_build_*` / `_apply_*` con branch incompleti.
-
-Un `# TODO` che nasconde un'aspettativa silenziosa fa peggio di un
-crash: il dato a valle e' sbagliato senza segnale. Questo linter:
-1. Cammina i file Python sotto i moduli "engine" (transforms, db,
-   carica, arricchisci, scheduler, manipola, estrai).
-2. Trova ``pass`` come UNICO statement non-comment dentro:
-   - corpi di funzione/metodo
-   - blocchi ``with``
-   - rami ``if/elif/else`` non-vuoti
-
-E' OK il ``pass`` dentro ``except:`` esplicito (errore deliberatamente
-ignorato) o dentro ``class Foo: pass`` (forward declaration / Protocol).
-
-Uso:
-    python scripts/lint_pass_stubs.py [path_root]
-
-Exit 1 se trova violazioni. Lista i file:linea:contesto.
-
-Estensibilita': aggiungere un nome a ``_EXEMPT_NAMES`` permette di
-declassare un singolo pass come accettabile (es. stub di un Protocol
-o no-op in fixture). Nessuna pragma in-line per non incentivare
-silenziamento facile.
-"""
+"""Reject solitary ``pass`` stubs in runtime-heavy backend modules."""
 
 from __future__ import annotations
 
@@ -82,11 +49,7 @@ def _stmt_is_pass(node: ast.stmt) -> bool:
 
 
 def _body_is_only_pass(body: List[ast.stmt]) -> bool:
-    """Il body contiene SOLO ``pass`` (eventuali docstring iniziali
-    sono tollerate: un body docstring+pass non e' uno stub silente
-    ma una funzione documentata che ritorna implicitamente None,
-    pattern tipico di Protocol/abstract).
-    """
+    """Return True when a body is effectively only ``pass``."""
     # Strip leading docstring
     if body and isinstance(body[0], ast.Expr) and isinstance(body[0].value, ast.Constant) and isinstance(body[0].value.value, str):
         body = body[1:]
@@ -137,7 +100,7 @@ def _check_file(path: Path, backend_root: Path) -> List[_Violation]:
         def _ctx_label(self, node: ast.AST) -> str:
             if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
                 return f"funzione `{node.name}`"
-            if isinstance(node, ast.With):
+            if isinstance(node, (ast.With, ast.AsyncWith)):
                 items = ", ".join(
                     ast.unparse(item.context_expr).strip()[:40]
                     for item in node.items
@@ -175,6 +138,11 @@ def _check_file(path: Path, backend_root: Path) -> List[_Violation]:
                 violations.append(_Violation(rel_path, node.lineno, self._ctx_label(node)))
             self.generic_visit(node)
 
+        def visit_AsyncWith(self, node: ast.AsyncWith) -> None:  # noqa: N802
+            if _body_is_only_pass(node.body):
+                violations.append(_Violation(rel_path, node.lineno, self._ctx_label(node)))
+            self.generic_visit(node)
+
         def visit_If(self, node: ast.If) -> None:  # noqa: N802
             for branch in (node.body, node.orelse):
                 if branch and _body_is_only_pass(branch):
@@ -188,14 +156,7 @@ def _check_file(path: Path, backend_root: Path) -> List[_Violation]:
 
 
 def _is_protocol_or_abstract(func: ast.FunctionDef) -> bool:
-    """``pass`` e' ammesso quando il metodo e' protocol/abstract:
-    decoratore ``@abstractmethod``, ``@overload``, oppure la classe
-    parent ha ``Protocol`` come base.
-
-    Non possiamo risalire alla classe via AST puro qui senza tracciare
-    il contesto; trattiamo solo i decorator. La classe Protocol viene
-    coperta dal ``_body_is_only_pass`` che esclude i corpi che sono
-    solo docstring (vedi commento nella funzione)."""
+    """``pass`` is allowed for explicitly abstract or overload methods."""
     for dec in func.decorator_list:
         # @abstractmethod / @abc.abstractmethod / @overload
         name = ast.unparse(dec).strip()
@@ -237,8 +198,7 @@ def main(argv: List[str]) -> int:
         for v in all_violations:
             print(f"  {v}")
         print(
-            "\nUn `pass` solitario in funzione/with/if e' tipicamente un TODO\n"
-            "lasciato aperto. Decisioni possibili:\n"
+            "\nUn `pass` solitario in funzione/with/if richiede una scelta esplicita:\n"
             "  - implementare il branch mancante;\n"
             "  - sostituire con `raise NotImplementedError(...)` se intenzionale;\n"
             "  - se davvero no-op deliberato, aggiungere il qualifier\n"

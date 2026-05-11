@@ -53,6 +53,8 @@ class ApiConnectionManagementMixin:
                 config['auth']['client_secret'] = '***'
             if 'key_value' in config['auth']:
                 config['auth']['key_value'] = '***'
+            if 'value' in config['auth']:
+                config['auth']['value'] = '***'
         return config
 
     @staticmethod
@@ -61,16 +63,7 @@ class ApiConnectionManagementMixin:
 
     @staticmethod
     def _normalize_auth_schema(config: Dict[str, Any]) -> Dict[str, Any]:
-        """Compatibilita' fra schema storage (OpenAPI-style: in/name/value)
-        e schema runtime (location/key_name/key_value).
-
-        La UI/create_api persiste l'auth nel formato OpenAPI. Gli engine
-        di esecuzione (generator, enricher, prepare_headers, batch,
-        grouping) leggono lo schema runtime. Senza questa traduzione,
-        ogni api_key configurata via UI veniva ignorata a runtime
-        (401 Unauthorized). Manteniamo entrambi i nomi per non rompere
-        consumer che si aspettano il formato storage.
-        """
+        """Map OpenAPI-style api_key fields to runtime auth fields."""
         auth = config.get("auth")
         if not isinstance(auth, dict) or auth.get("type") != "api_key":
             return config
@@ -80,6 +73,8 @@ class ApiConnectionManagementMixin:
             auth["key_name"] = auth["name"]
         if "value" in auth and "key_value" not in auth:
             auth["key_value"] = auth["value"]
+        if "key_value" in auth and "value" not in auth:
+            auth["value"] = auth["key_value"]
         return config
 
     def _public_config_from_api_connection_row(
@@ -97,7 +92,7 @@ class ApiConnectionManagementMixin:
             return self._normalize_auth_schema(
                 _decrypt_auth_in_config(config, strict=strict)
             )
-        return self._normalize_auth_schema(self._mask_credentials(config))
+        return self._mask_credentials(self._normalize_auth_schema(config))
 
     def list_api_connections(self, category: str = None, connection_type: str = None, group_id: str = None) -> List[Dict]:
         """Lista tutte le API connections dal DB.
@@ -121,7 +116,7 @@ class ApiConnectionManagementMixin:
             config["id"] = row.id or config.get("id")
             config["group_id"] = row.group_id
             config["created_by"] = row.created_by
-            connections.append(self._mask_credentials(config))
+            connections.append(self._mask_credentials(self._normalize_auth_schema(config)))
         connections.sort(
             key=lambda connection: connection.get('created_at', ''),
             reverse=True,
@@ -146,8 +141,7 @@ class ApiConnectionManagementMixin:
             config["id"] = api_id
             config["group_id"] = row.group_id
             config["created_by"] = row.created_by
-            # Decifra credenziali at-rest
-            config = _decrypt_auth_in_config(config)
+            config = self._normalize_auth_schema(_decrypt_auth_in_config(config))
             result[api_id] = config
         return result
 
@@ -210,11 +204,7 @@ class ApiConnectionManagementMixin:
             config["request"] = data["request"]
         if data.get("response") is not None:
             config["response"] = data["response"]
-        # Allinea schema storage runtime (OpenAPI-style `value` -> `key_value`)
-        # cosi' che `_encrypt_auth_in_config` veda il campo sensibile e lo cifri
-        # at-rest. Senza, un api_key salvato via UI restava in chiaro nel DB.
         self._normalize_auth_schema(config)
-        # Cifra i campi auth sensibili at-rest prima di salvare nel DB
         _encrypt_auth_in_config(config)
         row = db_svc.save_api_connection_row(
             api_id=api_id,
@@ -270,7 +260,7 @@ class ApiConnectionManagementMixin:
             # per gli altri (es. `key_name`, `location`) "" puo'
             # essere un reset legittimo.
             _SENSITIVE_AUTH = {
-                "key_value", "password", "client_secret", "token",
+                "key_value", "value", "password", "client_secret", "token",
             }
             existing_auth = config.get("auth", {})
             incoming_auth = {
@@ -278,10 +268,15 @@ class ApiConnectionManagementMixin:
                 if v != "***"
                 and not (k in _SENSITIVE_AUTH and v == "")
             }
+            if "value" in incoming_auth and "key_value" not in incoming_auth:
+                incoming_auth["key_value"] = incoming_auth["value"]
+            if "key_value" in incoming_auth and "value" not in incoming_auth:
+                incoming_auth["value"] = incoming_auth["key_value"]
             config["auth"] = {**existing_auth, **incoming_auth}
+            self._normalize_auth_schema(config)
         config["updated_at"] = datetime.now(timezone.utc).isoformat()
 
-        # Re-cifra auth prima del save
+        self._normalize_auth_schema(config)
         _encrypt_auth_in_config(config)
         updated_row = db_svc.update_api_connection_row(api_id, config=config)
         logger.info(f"Aggiornata API connection: {api_id}")
@@ -414,15 +409,13 @@ class ApiConnectionManagementMixin:
         ({{NOW}}, {{TODAY}}, etc.) prima della chiamata.
         """
         if api_id:
-            # FIXME: #2 (2026-04-23): strict=True → se un campo auth cifrato non
-            # e' decifrabile, CredentialUnavailableError propagato al router
-            # per HTTP 422 invece di eseguire la chiamata HTTP con auth None
             config = self.get_api_connection(api_id, include_token=True, strict=True)
             if not config:
                 return {"success": False, "error": "API connection non trovata"}
 
         if not config:
             return {"success": False, "error": "Nessuna configurazione fornita"}
+        config = self._normalize_auth_schema(deepcopy(config))
 
         url = config.get("endpoint", {}).get("url", "")
         method = config.get("endpoint", {}).get("method", "GET").upper()
