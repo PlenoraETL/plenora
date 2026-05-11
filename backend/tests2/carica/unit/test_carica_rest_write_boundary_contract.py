@@ -86,6 +86,8 @@ def test_carica_rest_boundary_writes_dataframe_with_injected_client() -> None:
     assert result["status"] == "completed"
     assert result["success"] is True
     assert result["rows_written"] == 3
+    assert result["rows_inserted"] == 3
+    assert result["rows_updated"] == 0
     assert result["rows_failed"] == 0
     assert result["total_rows"] == 3
     assert result["message"] == "Scrittura REST completata: 3 righe"

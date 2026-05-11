@@ -133,15 +133,15 @@ def test_tickets_public_shapes_survive_typed_rows(
         category="other",
         created_by="u-1",
         group_id="grp-1",
-        created_at="2026-05-08T00:00:00Z",
-        updated_at="2026-05-08T00:00:00Z",
+        created_at=datetime(2026, 5, 8, tzinfo=timezone.utc),
+        updated_at=datetime(2026, 5, 8, tzinfo=timezone.utc),
     )
     comment = tdb.CommentRow(
         id="c-1",
         ticket_id="t-1",
         author_id="u-1",
         body="note",
-        created_at="2026-05-08T00:00:01Z",
+        created_at=datetime(2026, 5, 8, 0, 0, 1, tzinfo=timezone.utc),
         author_username="tester",
     )
     attachment = tdb.AttachmentRow(
@@ -149,7 +149,7 @@ def test_tickets_public_shapes_survive_typed_rows(
         ticket_id="t-1",
         file_source_id="fs-1",
         uploaded_by="u-1",
-        uploaded_at="2026-05-08T00:00:02Z",
+        uploaded_at=datetime(2026, 5, 8, 0, 0, 2, tzinfo=timezone.utc),
         file_name="log",
     )
     monkeypatch.setattr(svc, "list_tickets_for", lambda **kw: [ticket])
@@ -170,13 +170,16 @@ def test_tickets_public_shapes_survive_typed_rows(
     list_body = list_response.json()
     assert set(list_body) == {"tickets"}
     assert list_body["tickets"][0]["id"] == "t-1"
+    assert list_body["tickets"][0]["created_at"] == "2026-05-08T00:00:00+00:00"
 
     detail_response = client.get("/api/tickets/t-1")
     assert detail_response.status_code == 200
     detail_body = detail_response.json()
     assert set(detail_body) == {"ticket", "comments", "attachments"}
     assert detail_body["comments"][0]["author_username"] == "tester"
+    assert detail_body["comments"][0]["created_at"] == "2026-05-08T00:00:01+00:00"
     assert detail_body["attachments"][0]["file_source_id"] == "fs-1"
+    assert detail_body["attachments"][0]["uploaded_at"] == "2026-05-08T00:00:02+00:00"
 
 
 def test_eseguibili_public_shapes_survive_typed_rows(

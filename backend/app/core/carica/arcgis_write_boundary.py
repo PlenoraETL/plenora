@@ -84,6 +84,8 @@ class CaricaArcGISWriteOutcome:
     status: str
     success: bool
     rows_written: int
+    rows_inserted: int
+    rows_updated: int
     total_rows: int
     message: str
     project_id: str = ""
@@ -106,6 +108,8 @@ class CaricaArcGISWriteOutcome:
                 "message": self.message,
                 "error_message": self.error_message or self.message,
                 "rows_written": 0,
+                "rows_inserted": 0,
+                "rows_updated": 0,
                 "total_rows": self.total_rows,
             }
 
@@ -126,6 +130,8 @@ class CaricaArcGISWriteOutcome:
             "success": True,
             "project_id": self.project_id,
             "rows_written": self.rows_written,
+            "rows_inserted": self.rows_inserted,
+            "rows_updated": self.rows_updated,
             "rows_count": self.rows_written,
             "total_rows": self.total_rows,
             "columns_count": self.columns_count,
@@ -176,6 +182,8 @@ def execute_carica_arcgis_write(
             status="write_error",
             success=False,
             rows_written=0,
+            rows_inserted=0,
+            rows_updated=0,
             total_rows=total_rows,
             message="Errore scrittura ArcGIS (consulta log)",
             error="carica_arcgis_write_failed",
@@ -183,11 +191,14 @@ def execute_carica_arcgis_write(
         )
 
     rows = raw_result.rows_written
+    rows_inserted, rows_updated = _arcgis_write_counts(request.operation, rows)
     return CaricaArcGISWriteOutcome(
         status="completed",
         success=True,
         project_id=request.project_id,
         rows_written=rows,
+        rows_inserted=rows_inserted,
+        rows_updated=rows_updated,
         total_rows=total_rows,
         columns_count=columns_count,
         message=raw_result.message or f"Scrittura ArcGIS completata: {rows} features",
@@ -251,6 +262,8 @@ def _validation_error(message: str, total_rows: int) -> CaricaArcGISWriteOutcome
         status="validation_error",
         success=False,
         rows_written=0,
+        rows_inserted=0,
+        rows_updated=0,
         total_rows=total_rows,
         message=message,
         error_message=message,
@@ -265,3 +278,13 @@ def _string_result(result: Mapping[str, object], key: str) -> str:
 def _int_result(result: Mapping[str, object], key: str) -> int:
     value = result.get(key)
     return value if isinstance(value, int) else 0
+
+
+def _arcgis_write_counts(operation: str, rows_written: int) -> tuple[int, int]:
+    if operation == "update":
+        return 0, rows_written
+    if operation == "upsert":
+        return 0, rows_written
+    if operation == "delete":
+        return 0, 0
+    return rows_written, 0

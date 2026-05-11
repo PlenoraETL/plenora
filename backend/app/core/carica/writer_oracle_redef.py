@@ -170,6 +170,7 @@ END;"""))
                     target_table=interim,
                 )
                 result.rows_written += rows
+                result.rows_inserted += rows
                 result.batches_completed = batch_num + 1
 
             run_batched_inserts(
@@ -263,6 +264,8 @@ END;"""))
             )
 
         result.rows_written = 0
+        result.rows_inserted = 0
+        result.rows_updated = 0
         result.status = WriteStatus.WRITE_ERROR
         result.error_message = f"DBMS_REDEFINITION fallimento: {e}"
         result.error_details = repr(e)

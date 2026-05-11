@@ -319,6 +319,8 @@ class WriteResult:
     Attributes:
         status: stato finale (SUCCESS, PARTIAL, CONFLICT, *_ERROR)
         rows_written: numero righe effettivamente scritte
+        rows_inserted: numero righe inserite
+        rows_updated: numero righe aggiornate
         rows_failed: numero righe fallite
         rows_skipped: numero righe skippate (conflitti con policy SKIP)
         total_rows: numero righe totali nel DataFrame sorgente
@@ -334,6 +336,8 @@ class WriteResult:
     """
     status: WriteStatus = WriteStatus.SUCCESS
     rows_written: int = 0
+    rows_inserted: int = 0
+    rows_updated: int = 0
     rows_failed: int = 0
     rows_skipped: int = 0
     total_rows: int = 0
@@ -346,6 +350,15 @@ class WriteResult:
     completed_at: Optional[str] = None
     batches_completed: int = 0
     batches_total: int = 0
+
+    def fill_write_counts(self) -> None:
+        """Derive insert/update counters when the writer reports only total rows."""
+        if self.rows_inserted or self.rows_updated:
+            return
+        if self.write_mode in (WriteMode.UPDATE.value, WriteMode.UPSERT.value):
+            self.rows_updated = self.rows_written
+            return
+        self.rows_inserted = self.rows_written
 
     @property
     def success_rate(self) -> float:
@@ -371,6 +384,8 @@ class WriteResult:
         result = {
             "status": self.status.value,
             "rows_written": self.rows_written,
+            "rows_inserted": self.rows_inserted,
+            "rows_updated": self.rows_updated,
             "rows_failed": self.rows_failed,
             "rows_skipped": self.rows_skipped,
             "total_rows": self.total_rows,

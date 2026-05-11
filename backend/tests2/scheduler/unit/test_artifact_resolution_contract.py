@@ -42,6 +42,7 @@ def _make_write_result():
         rows_written=10,
         rows_inserted=10,
         rows_updated=0,
+        rows_skipped=0,
         total_rows=10,
         message="ok",
         error_message=None,

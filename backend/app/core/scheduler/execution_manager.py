@@ -697,20 +697,10 @@ class ExecutionManager:
                 logger.error(f"[GESTITO] CARICA scheduler fallito: {error_msg}", op="carica")
                 return {"success": False, "error": error_msg}
 
-            rows_written = getattr(write_result, "rows_written", 0) or 0
-            rows_inserted = getattr(write_result, "rows_inserted", None)
-            rows_updated = getattr(write_result, "rows_updated", None)
-            if rows_inserted is None and rows_updated is None:
-                mode = getattr(write_result, "write_mode", "") or ""
-                if mode in ("update", "upsert"):
-                    rows_inserted = 0
-                    rows_updated = rows_written
-                else:
-                    rows_inserted = rows_written
-                    rows_updated = 0
-            rows_skipped = getattr(write_result, "rows_skipped", None)
-            if rows_skipped is None:
-                rows_skipped = max((write_result.total_rows or 0) - rows_written, 0)
+            rows_written = write_result.rows_written or 0
+            rows_inserted = write_result.rows_inserted or 0
+            rows_updated = write_result.rows_updated or 0
+            rows_skipped = write_result.rows_skipped
 
             logger.info(
                 f"CARICA scheduler completato: {rows_written} righe -> "

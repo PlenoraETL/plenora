@@ -11,6 +11,7 @@ from dataclasses import asdict
 from typing import Any, Dict, Optional
 
 from fastapi import APIRouter, Depends, File, HTTPException, Response, UploadFile
+from fastapi.encoders import jsonable_encoder
 from pydantic import BaseModel, Field
 
 from app.core.auth.dependencies import get_current_user
@@ -53,7 +54,7 @@ _MAX_ATTACHMENT_SIZE_BYTES = int(_settings_cfg.get("TICKET_ATTACHMENT_MAX_BYTES"
 
 
 def _row_dict(row: object) -> Dict[str, Any]:
-    return asdict(row)
+    return jsonable_encoder(asdict(row))
 
 
 def _ticket_details_dict(details: svc.TicketDetails) -> Dict[str, Any]:

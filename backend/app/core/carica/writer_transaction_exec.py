@@ -119,6 +119,10 @@ class TransactionExecutionMixin:
                         _conn, batch_df, columns, sql, operation
                     )
                     result.rows_written += rows_in_batch
+                    if operation == "insert":
+                        result.rows_inserted += rows_in_batch
+                    else:
+                        result.rows_updated += rows_in_batch
                     result.batches_completed = batch_num + 1
 
                 run_batched_inserts(
@@ -144,6 +148,8 @@ class TransactionExecutionMixin:
             result.error_message = f"Errore durante {operation}: {str(e)}"
             result.error_details = repr(e)
             result.rows_written = 0  # rollback
+            result.rows_inserted = 0
+            result.rows_updated = 0
             logger.error(f"[CRASH] Rollback {operation}: {e}", exc_info=True)
 
         return result
@@ -178,6 +184,10 @@ class TransactionExecutionMixin:
                     )
                     conn_holder[0].commit()
                     result.rows_written += rows_in_batch
+                    if operation == "insert":
+                        result.rows_inserted += rows_in_batch
+                    else:
+                        result.rows_updated += rows_in_batch
                     result.batches_completed = batch_num + 1
                 except Exception as e:
                     try:

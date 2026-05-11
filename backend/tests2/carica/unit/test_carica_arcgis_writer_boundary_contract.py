@@ -102,7 +102,44 @@ def test_carica_arcgis_boundary_delegates_existing_layer_write_to_feature_writer
     result = outcome.to_task_result()
     assert result["success"] is True
     assert result["rows_written"] == 1
+    assert result["rows_inserted"] == 1
+    assert result["rows_updated"] == 0
     assert result["rows_count"] == 1
+
+
+def test_carica_arcgis_boundary_reports_update_counts_for_update_operation() -> None:
+    df = pd.DataFrame([{"id": 1, "name": "A"}])
+    writer = SimpleNamespace(
+        write_features_from_df=MagicMock(
+            return_value={
+                "success": True,
+                "feature_count": 1,
+                "message": "Aggiornata 1 feature",
+            }
+        )
+    )
+    request = CaricaArcGISWriteRequest(
+        project_id="proj-1",
+        connection_id="arc-1",
+        operation="update",
+        geometry_column="shape",
+        source_srid=3003,
+        batch_size=250,
+        match_column="id",
+        layer_url="https://example.test/FeatureServer/0",
+        column_mappings=[],
+    )
+
+    result = execute_carica_arcgis_write(
+        df=df,
+        request=request,
+        feature_writer=writer,
+    ).to_task_result()
+
+    assert result["success"] is True
+    assert result["rows_written"] == 1
+    assert result["rows_inserted"] == 0
+    assert result["rows_updated"] == 1
 
 
 def test_carica_arcgis_boundary_delegates_service_create_to_feature_writer() -> None:
@@ -172,6 +209,8 @@ def test_worker_delegates_arcgis_provider_write_to_carica_boundary() -> None:
         success=True,
         project_id="proj-1",
         rows_written=1,
+        rows_inserted=1,
+        rows_updated=0,
         total_rows=1,
         columns_count=2,
         message="done",

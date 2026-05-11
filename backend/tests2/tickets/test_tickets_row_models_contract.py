@@ -1,4 +1,6 @@
-﻿from __future__ import annotations
+from __future__ import annotations
+
+from datetime import datetime, timezone
 
 import pytest
 
@@ -6,6 +8,9 @@ from app.core.tickets import db as tdb
 
 
 pytestmark = [pytest.mark.unit, pytest.mark.contract]
+
+
+NOW = datetime(2026, 4, 19, tzinfo=timezone.utc)
 
 
 def _ticket_row(**overrides) -> dict[str, object]:
@@ -20,8 +25,8 @@ def _ticket_row(**overrides) -> dict[str, object]:
         "created_by": "u1",
         "assignee": None,
         "group_id": "g1",
-        "created_at": "2026-04-19T00:00:00Z",
-        "updated_at": "2026-04-19T00:00:00Z",
+        "created_at": NOW,
+        "updated_at": NOW,
         "resolved_at": None,
         "deleted_at": None,
     }
@@ -50,6 +55,11 @@ def test_ticket_row_accepts_nullable_optional_fields() -> None:
     assert row.deleted_at is None
 
 
+def test_ticket_row_rejects_string_timestamp() -> None:
+    with pytest.raises(ValueError, match="created_at"):
+        tdb.ticket_row_from_db(_ticket_row(created_at="2026-04-19T00:00:00Z"))
+
+
 def test_comment_row_rejects_null_body() -> None:
     with pytest.raises(ValueError, match="body"):
         tdb.comment_row_from_db({
@@ -57,7 +67,7 @@ def test_comment_row_rejects_null_body() -> None:
             "ticket_id": "t1",
             "author_id": "u1",
             "body": None,
-            "created_at": "2026-04-19T00:00:00Z",
+            "created_at": NOW,
             "author_username": None,
         })
 
@@ -69,7 +79,7 @@ def test_attachment_row_rejects_malformed_size() -> None:
             "ticket_id": "t1",
             "file_source_id": "fs1",
             "uploaded_by": "u1",
-            "uploaded_at": "2026-04-19T00:00:00Z",
+            "uploaded_at": NOW,
             "file_name": "log.txt",
             "original_filename": "log.txt",
             "format": "txt",

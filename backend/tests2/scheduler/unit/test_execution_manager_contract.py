@@ -11,7 +11,7 @@ from unittest.mock import MagicMock, patch
 import pandas as pd
 import pytest
 
-from app.core.carica.models import WriteStatus
+from app.core.carica.models import WriteResult, WriteStatus
 from app.core.scheduler.execution_manager import ExecutionManager
 
 
@@ -47,6 +47,7 @@ def _make_write_result(status=WriteStatus.SUCCESS, rows_written=2, total_rows=2)
     result.rows_written = rows_written
     result.rows_inserted = rows_written
     result.rows_updated = 0
+    result.rows_skipped = 0
     result.total_rows = total_rows
     result.error_message = ""
     return result
@@ -83,6 +84,37 @@ def test_execute_carica_fails_when_no_run_specific_artifact_is_available(schedul
 
     assert result["success"] is False
     assert "Artefatto della run non disponibile" in result["error"]
+
+
+def test_execute_carica_uses_explicit_write_result_insert_update_counts(schedule_config, tmp_path):
+    manager = _make_manager()
+    df = pd.DataFrame({"id": [1, 2, 3, 4, 5]})
+    explicit_result = WriteResult(
+        status=WriteStatus.SUCCESS,
+        rows_written=5,
+        rows_inserted=0,
+        rows_updated=0,
+        rows_skipped=0,
+        total_rows=5,
+        write_mode="upsert",
+    )
+
+    from app.core.results.db import ResultMetadataRow
+
+    with patch("app.core.files.dataframe_io.load_dataframe_from_file", return_value=df), \
+         patch("app.core.carica.executor.CaricaExecutor") as mock_executor, \
+         patch("app.core.results.db.get_result_row", return_value=ResultMetadataRow(id="res-1", project_id="proj-1", group_id="grp-1", format="csv")), \
+         patch("app.db.pg_connection.fetchone", return_value={"data": b"id\n1\n2\n3\n4\n5\n", "storage_key": None, "project_id": "proj-1"}):
+        mock_executor.return_value.execute.return_value = explicit_result
+        result = manager._execute_carica(
+            schedule_config,
+            {"result_id": "res-1", "output_path": str(tmp_path / "stale.csv")},
+        )
+
+    assert result["success"] is True
+    assert result["rows_written"] == 5
+    assert result["rows_inserted"] == 0
+    assert result["rows_updated"] == 0
 
 
 # Group isolation fail-closed (Refactor #2 invariante C)

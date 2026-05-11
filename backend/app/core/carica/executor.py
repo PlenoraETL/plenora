@@ -234,6 +234,7 @@ class CaricaExecutor:
             )
 
         result = writer.write(df)
+        result.fill_write_counts()
 
         self._save_audit(result, config, project_id, triggered_by)
 

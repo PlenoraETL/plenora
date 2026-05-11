@@ -46,6 +46,8 @@ class CaricaRestWriteOutcome:
     status: str
     success: bool
     rows_written: int
+    rows_inserted: int
+    rows_updated: int
     rows_failed: int
     total_rows: int
     message: str
@@ -58,6 +60,8 @@ class CaricaRestWriteOutcome:
             "status": self.status,
             "success": self.success,
             "rows_written": self.rows_written,
+            "rows_inserted": self.rows_inserted,
+            "rows_updated": self.rows_updated,
             "rows_failed": self.rows_failed,
             "total_rows": self.total_rows,
             "message": self.message,
@@ -87,6 +91,8 @@ def execute_carica_rest_write(
             status="write_error",
             success=False,
             rows_written=0,
+            rows_inserted=0,
+            rows_updated=0,
             rows_failed=total_rows,
             total_rows=total_rows,
             message=message,
@@ -103,6 +109,8 @@ def _to_outcome(result: RestSinkWriteResult, total_rows: int) -> CaricaRestWrite
             status="completed",
             success=True,
             rows_written=result.written_count,
+            rows_inserted=result.written_count,
+            rows_updated=0,
             rows_failed=result.failed_count,
             total_rows=total_rows,
             message=f"Scrittura REST completata: {result.written_count} righe",
@@ -115,6 +123,8 @@ def _to_outcome(result: RestSinkWriteResult, total_rows: int) -> CaricaRestWrite
         status=status,
         success=False,
         rows_written=result.written_count,
+        rows_inserted=result.written_count,
+        rows_updated=0,
         rows_failed=result.failed_count,
         total_rows=total_rows,
         message=message,

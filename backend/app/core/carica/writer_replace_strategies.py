@@ -92,6 +92,7 @@ class ReplaceStrategiesMixin:
                         _conn, batch_df, active_cols, insert_sql, "insert"
                     )
                     result.rows_written += rows_in_batch
+                    result.rows_inserted += rows_in_batch
                     result.batches_completed = batch_num + 1
 
                 run_batched_inserts(
@@ -116,6 +117,8 @@ class ReplaceStrategiesMixin:
             result.error_message = f"Errore durante truncate+insert: {e}"
             result.error_details = repr(e)
             result.rows_written = 0  # rollback → niente scritto
+            result.rows_inserted = 0
+            result.rows_updated = 0
             logger.error(
                 f"[CRASH] Rollback TRUNCATE+INSERT (tabella preserva "
                 f"contenuto precedente): {e}", exc_info=True,
@@ -256,6 +259,7 @@ class ReplaceStrategiesMixin:
                         target_table=stg_table,
                     )
                     result.rows_written += rows_in_batch
+                    result.rows_inserted += rows_in_batch
                     result.batches_completed = batch_num + 1
 
                 run_batched_inserts(
@@ -283,6 +287,8 @@ class ReplaceStrategiesMixin:
                     f"la shadow verra' rimossa alla prossima run): {ce}"
                 )
             result.rows_written = 0
+            result.rows_inserted = 0
+            result.rows_updated = 0
             result.status = WriteStatus.WRITE_ERROR
             result.error_message = f"INSERT shadow fallito: {e}"
             result.error_details = repr(e)
@@ -329,6 +335,8 @@ class ReplaceStrategiesMixin:
                         f"Intervento manuale richiesto. Errore: {re_err}"
                     )
             result.rows_written = 0
+            result.rows_inserted = 0
+            result.rows_updated = 0
             result.status = WriteStatus.WRITE_ERROR
             result.error_message = f"SWAP fallito: {e}"
             result.error_details = repr(e)
@@ -463,6 +471,7 @@ class ReplaceStrategiesMixin:
                         target_table=stg_table,
                     )
                     result.rows_written += rows
+                    result.rows_inserted += rows
                     result.batches_completed = batch_num + 1
 
                 run_batched_inserts(
@@ -492,6 +501,8 @@ class ReplaceStrategiesMixin:
                     cleanup_err,
                 )
             result.rows_written = 0
+            result.rows_inserted = 0
+            result.rows_updated = 0
             result.status = WriteStatus.WRITE_ERROR
             result.error_message = f"INSERT shadow fallito: {e}"
             result.error_details = repr(e)
@@ -541,6 +552,8 @@ class ReplaceStrategiesMixin:
                         f"potrebbe mancare. Intervento manuale: {re_err}"
                     )
             result.rows_written = 0
+            result.rows_inserted = 0
+            result.rows_updated = 0
             result.status = WriteStatus.WRITE_ERROR
             result.error_message = f"SWAP fallito: {e}"
             return result

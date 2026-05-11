@@ -26,11 +26,11 @@ class TicketRow:
     category: str
     created_by: str
     group_id: str
-    created_at: str
-    updated_at: str
+    created_at: datetime
+    updated_at: datetime
     assignee: str | None = None
-    resolved_at: str | None = None
-    deleted_at: str | None = None
+    resolved_at: datetime | None = None
+    deleted_at: datetime | None = None
 
     def __getitem__(self, key: str) -> object:
         return getattr(self, key)
@@ -45,7 +45,7 @@ class CommentRow:
     ticket_id: str
     author_id: str
     body: str
-    created_at: str
+    created_at: datetime
     author_username: str | None = None
 
     def __getitem__(self, key: str) -> object:
@@ -58,7 +58,7 @@ class AttachmentRow:
     ticket_id: str
     file_source_id: str
     uploaded_by: str
-    uploaded_at: str
+    uploaded_at: datetime
     file_name: str | None = None
     original_filename: str | None = None
     format: str | None = None
@@ -69,37 +69,36 @@ class AttachmentRow:
         return getattr(self, key)
 
 
-from datetime import date, datetime
-
-
-def _coerce_str(value: object) -> str | None:
-    """Coerce DB scalar to string-or-None.
-
-    psycopg2 ritorna ``datetime`` per timestamp e ``date`` per date,
-    non stringhe. Il DTO ``TicketRow`` usa ``str`` perche' viene
-    serializzato in JSON al volo (ISO format). Senza questa coercion
-    ``_required_str("created_at")`` su un timestamp PG crasha con
-    ``Malformed ticket DB row: created_at must be a string`` anche
-    quando il valore e' presente e ben tipizzato.
-    """
-    if value is None:
-        return None
-    if isinstance(value, str):
-        return value
-    if isinstance(value, (datetime, date)):
-        return value.isoformat()
-    return str(value)
-
-
 def _required_str(row: Mapping[str, object], key: str) -> str:
-    value = _coerce_str(row.get(key))
-    if value is None:
+    value = row.get(key)
+    if not isinstance(value, str):
         raise ValueError(f"Malformed ticket DB row: {key} must be a string")
     return value
 
 
 def _optional_str(row: Mapping[str, object], key: str) -> str | None:
-    return _coerce_str(row.get(key))
+    value = row.get(key)
+    if value is None:
+        return None
+    if not isinstance(value, str):
+        raise ValueError(f"Malformed ticket DB row: {key} must be a string or null")
+    return value
+
+
+def _required_datetime(row: Mapping[str, object], key: str) -> datetime:
+    value = row.get(key)
+    if not isinstance(value, datetime):
+        raise ValueError(f"Malformed ticket DB row: {key} must be a datetime")
+    return value
+
+
+def _optional_datetime(row: Mapping[str, object], key: str) -> datetime | None:
+    value = row.get(key)
+    if value is None:
+        return None
+    if not isinstance(value, datetime):
+        raise ValueError(f"Malformed ticket DB row: {key} must be a datetime or null")
+    return value
 
 
 def _optional_int(row: Mapping[str, object], key: str) -> int | None:
@@ -122,11 +121,11 @@ def ticket_row_from_db(row: Mapping[str, object]) -> TicketRow:
         category=_required_str(row, "category"),
         created_by=_required_str(row, "created_by"),
         group_id=_required_str(row, "group_id"),
-        created_at=_required_str(row, "created_at"),
-        updated_at=_required_str(row, "updated_at"),
+        created_at=_required_datetime(row, "created_at"),
+        updated_at=_required_datetime(row, "updated_at"),
         assignee=_optional_str(row, "assignee"),
-        resolved_at=_optional_str(row, "resolved_at"),
-        deleted_at=_optional_str(row, "deleted_at"),
+        resolved_at=_optional_datetime(row, "resolved_at"),
+        deleted_at=_optional_datetime(row, "deleted_at"),
     )
 
 
@@ -136,7 +135,7 @@ def comment_row_from_db(row: Mapping[str, object]) -> CommentRow:
         ticket_id=_required_str(row, "ticket_id"),
         author_id=_required_str(row, "author_id"),
         body=_required_str(row, "body"),
-        created_at=_required_str(row, "created_at"),
+        created_at=_required_datetime(row, "created_at"),
         author_username=_optional_str(row, "author_username"),
     )
 
@@ -147,7 +146,7 @@ def attachment_row_from_db(row: Mapping[str, object]) -> AttachmentRow:
         ticket_id=_required_str(row, "ticket_id"),
         file_source_id=_required_str(row, "file_source_id"),
         uploaded_by=_required_str(row, "uploaded_by"),
-        uploaded_at=_required_str(row, "uploaded_at"),
+        uploaded_at=_required_datetime(row, "uploaded_at"),
         file_name=_optional_str(row, "file_name"),
         original_filename=_optional_str(row, "original_filename"),
         format=_optional_str(row, "format"),
@@ -170,7 +169,7 @@ def create_ticket(
 ) -> TicketRow:
     """Crea nuovo ticket. Ritorna la row appena creata."""
     ticket_id = str(uuid.uuid4())
-    now = datetime.now(timezone.utc).isoformat()
+    now = datetime.now(timezone.utc)
     execute(
         "INSERT INTO tickets (id, kind, title, description, severity, status, "
         "category, created_by, assignee, group_id, created_at, updated_at) "
@@ -292,7 +291,7 @@ def update_ticket(
     if not fields:
         return current
 
-    now = datetime.now(timezone.utc).isoformat()
+    now = datetime.now(timezone.utc)
     fields["updated_at"] = now
 
     # resolved_at: popolato solo alla PRIMA transizione verso 'resolved'
@@ -376,7 +375,7 @@ def counts_by_severity(
 def add_comment(ticket_id: str, author_id: str, body: str) -> CommentRow:
     """Aggiunge un commento + tocca updated_at del ticket."""
     cid = str(uuid.uuid4())
-    now = datetime.now(timezone.utc).isoformat()
+    now = datetime.now(timezone.utc)
     with transaction() as conn:
         with conn.cursor() as cur:
             cur.execute(
@@ -418,7 +417,7 @@ def link_attachment(
     """Registra un file_source come allegato del ticket.
     Il file_source deve essere gia' stato creato prima (via file_service)."""
     aid = str(uuid.uuid4())
-    now = datetime.now(timezone.utc).isoformat()
+    now = datetime.now(timezone.utc)
     execute(
         "INSERT INTO ticket_attachments (id, ticket_id, file_source_id, uploaded_by, uploaded_at) "
         "VALUES (%s, %s, %s, %s, %s)",
@@ -478,7 +477,7 @@ def soft_delete_ticket(ticket_id: str) -> bool:
     Idempotente: chiamata su un ticket gia' soft-deleted aggiorna
     `deleted_at` al timestamp piu' recente (rare race ok).
     """
-    now = datetime.now(timezone.utc).isoformat()
+    now = datetime.now(timezone.utc)
     cur = execute(
         "UPDATE tickets SET deleted_at = %s WHERE id = %s",
         (now, ticket_id),
