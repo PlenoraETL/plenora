@@ -130,20 +130,39 @@ class Node(BaseModel):
     fields: Optional[List[dict]] = []
 
     collapsed: Optional[bool] = False
+    # Allineato al `transforms_registry.json` (base 35 + spatial 33 +
+    # privacy 2 = 70 op). Pre-allineamento il Literal accettava solo
+    # ~30 nomi e la UI permetteva di selezionare op del registry
+    # (es. `cross_join`, `lookup`, `geo_distance`) che facevano fallire
+    # il PUT canvas con 422 "Dati richiesta non validi", anche se il
+    # `plugin_executor` runtime le sa eseguire. La lista qui sotto
+    # tiene anche `merge`/`geo_to_crs`/`query_db`/`custom` (orfani
+    # rispetto al registry) per backward-compat con canvas legacy.
     transform_op: Optional[Literal[
-        # Base
+        # Base (registry: 35)
         "merge", "join", "concat", "filter", "aggregate", "formula",
         "sort", "distinct", "rename", "drop_columns", "reorder_columns",
         "fill_na", "replace", "split_column", "concat_columns",
         "pivot", "conditional", "type_cast", "text_normalize",
         "md5_hash", "mask_data",
-        # Spatial
+        "cross_join", "sample", "melt", "add_row_number", "date_extract",
+        "lookup", "bin", "flatten_json", "statistics", "string_extract",
+        "transpose", "string_pad", "string_length", "dedup_advanced",
+        "window_function", "uuid_generator",
+        # Spatial (registry: 33)
         "sjoin",
         "geo_centroid", "geo_buffer", "geo_area", "geo_length",
         "geo_simplify", "geo_convex_hull", "geo_union", "geo_intersection",
         "geo_to_crs", "geo_clip", "geo_dissolve", "geo_difference",
         "geo_reproject", "geo_envelope", "geo_from_coords",
-        # Other
+        "geo_boundary", "geo_bounds_extractor", "geo_clean_topology",
+        "geo_count_points_in_polygons", "geo_distance", "geo_explode",
+        "geo_line_builder", "geo_make_valid", "geo_nearest", "geo_overlay",
+        "geo_perimeter", "geo_point_on_surface", "geo_polygon_builder",
+        "geo_symmetric_difference", "geo_to_wkt", "geo_vertex_count",
+        "geo_voronoi", "geo_within",
+        # Other / orfani backward-compat (non presenti nel registry corrente
+        # ma referenziati da canvas legacy salvati prima del refactor)
         "table_diff", "query_db", "custom"
     ]] = None
     transform_category: Optional[Literal["base", "geometric", "query", "custom"]] = None
