@@ -448,28 +448,47 @@ async def download_schedule_output(
         # ritornerebbe l'ultimo del progetto includendo anche altri
         # schedule o esecuzioni manuali (race cross-schedule
         latest_run = catalog.latest_run_dir(project_id, schedule_id)
-        if latest_run is None:
+        out_file = catalog.first_file_in(latest_run) if latest_run else None
+        if out_file is not None:
+            return FileResponse(
+                path=str(out_file),
+                filename=out_file.name,
+                media_type="application/octet-stream",
+                headers={"Content-Disposition": f'attachment; filename="{out_file.name}"'},
+            )
+
+        # Fallback: post-refactor i risultati pipeline sono blob in
+        # `plenora.results` (no file filesystem). L'archive scheduler
+        # materializza solo quando `ArtifactResolver` riesce a risolvere
+        # il ref della run; per schedule senza destination CARICA il
+        # ref puo' restare vuoto e nessun file viene archiviato.
+        # Senza questo fallback il download tornava 404 anche se la
+        # run e' completata e il blob esiste nel DB. Servimao quindi
+        # l'ultimo blob risultato del progetto (best-effort: copre il
+        # caso reale singolo-schedule; per progetti con schedule
+        # multipli concorrenti il caller dovrebbe passare ?run=...).
+        from fastapi.responses import Response
+        from app.core.results import store as _results_store
+
+        latest_row = _results_store.get_latest_result_row(project_id)
+        latest_bytes = (
+            _results_store.get_result_data(latest_row.id)
+            if latest_row is not None
+            else None
+        )
+        if latest_row is None or latest_bytes is None:
             raise HTTPException(
                 status_code=404,
                 detail=(
-                    f"Nessuna run archiviata per lo schedule '{schedule_id}'. "
+                    f"Nessun output disponibile per lo schedule '{schedule_id}'. "
                     f"Esegui lo schedule almeno una volta per generare un output."
                 ),
             )
-        out_file = catalog.first_file_in(latest_run)
-        if out_file is None:
-            raise HTTPException(
-                status_code=404,
-                detail=(
-                    f"La run piu' recente '{latest_run.name}' dello schedule "
-                    f"'{schedule_id}' non contiene file"
-                ),
-            )
-        return FileResponse(
-            path=str(out_file),
-            filename=out_file.name,
+        filename = latest_row.filename or f"{schedule_id}.bin"
+        return Response(
+            content=latest_bytes,
             media_type="application/octet-stream",
-            headers={"Content-Disposition": f'attachment; filename="{out_file.name}"'},
+            headers={"Content-Disposition": f'attachment; filename="{filename}"'},
         )
     except HTTPException:
         raise
