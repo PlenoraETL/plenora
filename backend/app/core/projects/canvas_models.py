@@ -1,7 +1,26 @@
 """Pydantic models for project canvas state."""
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 from typing import Any, Dict, List, Optional, Literal
+
+from app.utils.logger import get_logger
+
+_canvas_logger = get_logger(__name__)
+
+
+# Set di field "noti ma extra" che NON devono triggerare il warning di
+# divergenza FE/BE: il FE ReactFlow li serializza come decorazioni
+# visuali (selezione, dragging, posizione assoluta) o come metadata che
+# il backend volontariamente ignora. Mantenere stretto: ogni nuovo
+# campo qui dovrebbe avere un commento sul perche' non sta sul modello.
+_NODE_KNOWN_VISUAL_EXTRAS: frozenset[str] = frozenset({
+    # ReactFlow-runtime fields (auto-populated dal FE, niente semantica BE)
+    "selected", "dragging", "measured", "positionAbsolute", "zIndex",
+    "sourcePosition", "targetPosition",
+    # Camp tipicamente echoed-back che il FE riceve in lettura e rinvia
+    # come parte dei dati node ma che non hanno effetto runtime sul BE
+    "data",  # bag generico FE-only (la chiave "config" gia' c'e' sul modello)
+})
 
 
 # TIPI COLONNA
@@ -92,6 +111,40 @@ class Node(BaseModel):
         - staticValues: valori statici con supporto variabili template
         - comment: annotazione/nota visuale nel canvas (non influenza il flusso dati)
     """
+
+    # `extra="allow"` invece del default `ignore`: preserva campi FE che
+    # non sono ancora dichiarati sul modello. Storia: la default policy
+    # `ignore` ha causato ~12 dei 32 bug di questa sessione di audit
+    # (campo serializzato dal FE droppato silenziosamente -> il
+    # path runtime trovava None e fallava senza segnale parlante,
+    # es. `rest_url`, `rest_method`, `dest_type=rest`, le coppie auth
+    # OpenAPI-style `in/name/value`, ecc.). Con `allow` il campo arriva
+    # comunque a destinazione (anche se un caller `getattr(node, "x")`
+    # non lo vedrebbe — serve `node.model_extra["x"]`); soprattutto il
+    # `model_validator` qui sotto logga un WARNING strutturato a ogni
+    # carico, cosi' un campo nuovo del FE che divergesse dal BE
+    # compare immediatamente nei log invece che diventare un bug
+    # silenzioso a runtime. `extra="forbid"` sarebbe stato il
+    # rigorosamente corretto ma avrebbe rotto canvas legacy in DB —
+    # vedi il commit `e5b04dcf` (Literal aggiornata da 30 a 70 op): la
+    # stessa famiglia di bug.
+    model_config = ConfigDict(extra="allow")
+
+    @model_validator(mode="after")
+    def _warn_on_unknown_extras(self) -> "Node":
+        extra = self.__pydantic_extra__ or {}
+        if extra:
+            unknown = sorted(set(extra) - _NODE_KNOWN_VISUAL_EXTRAS)
+            if unknown:
+                _canvas_logger.warning(
+                    "[canvas-contract] Node id=%r type=%r riceve campi non "
+                    "dichiarati sul modello: %s. Aggiungerli al Pydantic Node "
+                    "(con il tipo corretto) per evitare drop silenziosi al "
+                    "boundary FE->BE.",
+                    self.id, self.type, unknown,
+                )
+        return self
+    # (Definizione campi sotto.)
     id: str
     type: Literal[
         "source", "result", "project_source", "file_source", "feature_source",
@@ -121,6 +174,11 @@ class Node(BaseModel):
     geometry_type: Optional[str] = None
     feature_count: Optional[int] = None
     where: Optional[str] = None
+    # ArcGIS feature_source: lista relazioni dichiarate sul layer
+    # (cardinalita', child layer id, ecc.). Il FE le serializza dal
+    # nodo, il BE le accettava silenziosamente droppate via
+    # extra='ignore' (catturato dal contract test post-`extra=allow`).
+    relationships: Optional[List[dict]] = []
 
     source_project_id: Optional[str] = None
 
@@ -202,6 +260,11 @@ class Node(BaseModel):
     continue_on_error: Optional[bool] = None
     skip_null_params: Optional[bool] = None
     max_errors: Optional[int] = None
+    # api_enrich: condizione opzionale di esecuzione del nodo. Quando
+    # valorizzata (es. un'espressione boolean valutata sui dati a
+    # monte), il runtime salta il nodo se la condizione e' falsa.
+    # Catturato dal contract test post-`extra=allow`.
+    execute_if: Optional[Any] = None
 
     data: Optional[dict] = {}
     config: Optional[dict] = {}
