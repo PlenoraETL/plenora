@@ -84,12 +84,34 @@ const serializers = {
     collapsed:    nd(node, 'collapsed', false),
   }),
 
-  multi_join: (node) => ({
-    id: node.id, type: 'multi_join', position: node.position,
-    // join_keys e join_type stanno in data.config nel frontend
-    join_keys:       node.data?.config?.join_keys ?? node.data?.join_keys ?? [],
-    multi_join_type: node.data?.config?.join_type ?? node.data?.multi_join_type ?? 'inner',
-  }),
+  multi_join: (node) => {
+    const cfg = node.data?.config || {};
+    // Per 2 sorgenti la UI usa `join_pairs` (mapping
+    // `{left, right}` con possibili nomi diversi). Per >2 usa
+    // `join_keys` (colonne comuni toggled). Il backend MANIPOLA
+    // (`_esegui_multi_join`) legge SOLO `join_keys` — quando i
+    // pair hanno `left == right` ricaviamo la chiave da li',
+    // cosi' il join e' deterministico invece di cadere sul
+    // fallback "trova colonne comuni" (silent e fragile).
+    //
+    // Per i pair `left != right` (es. cust.city_id ↔ city.id)
+    // serve un refactor backend per usare pandas `left_on/
+    // right_on`; per ora ignoriamo il pair e l'utente vedra'
+    // join_keys=[] (fallback) — TODO doc esplicito nel modal.
+    const pairs = Array.isArray(cfg.join_pairs) ? cfg.join_pairs : [];
+    const derivedKeys = pairs
+      .filter(p => p && p.left && p.right && p.left === p.right)
+      .map(p => p.left);
+    const explicitKeys = cfg.join_keys ?? node.data?.join_keys ?? [];
+    const mergedKeys = [
+      ...new Set([...(explicitKeys || []), ...derivedKeys]),
+    ];
+    return {
+      id: node.id, type: 'multi_join', position: node.position,
+      join_keys:       mergedKeys,
+      multi_join_type: cfg.join_type ?? node.data?.multi_join_type ?? 'inner',
+    };
+  },
 
   api_enrich: (node) => ({
     id: node.id, type: 'api_enrich', position: node.position,

@@ -269,6 +269,43 @@ const MultiJoinNode = memo(({ data, id }) => {
                 >
                   + Aggiungi coppia colonne
                 </button>
+
+                {/* Warning quando l'utente non ha configurato pairs:
+                    senza, il backend MANIPOLA cade sul fallback
+                    "trova colonne comuni" che e' silente e fragile.
+                    Mostra il warning anche per coppie left!=right
+                    perche' il serializer ad oggi le ignora (backend
+                    non supporta ancora left_on/right_on diverso). */}
+                {(() => {
+                  const pairs = config.join_pairs || [];
+                  const usable = pairs.filter(p =>
+                    p && p.left && p.right && p.left === p.right,
+                  );
+                  const mismatch = pairs.filter(p =>
+                    p && p.left && p.right && p.left !== p.right,
+                  );
+                  if (pairs.length === 0) {
+                    return (
+                      <div className="multi-join-node__warning">
+                        ⚠️ Nessuna chiave di join configurata. Il
+                        backend usera' le colonne comuni in
+                        automatico (rischio risultati inattesi se
+                        gli alias cambiano).
+                      </div>
+                    );
+                  }
+                  if (mismatch.length > 0 && usable.length === 0) {
+                    return (
+                      <div className="multi-join-node__warning">
+                        ⚠️ Le coppie con colonne di nome diverso
+                        non sono ancora supportate dal runtime
+                        MANIPOLA. Rinomina via alias upstream o usa
+                        nomi uguali (es. entrambe `city_id`).
+                      </div>
+                    );
+                  }
+                  return null;
+                })()}
               </>
             ) : (
               <>
