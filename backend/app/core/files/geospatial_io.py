@@ -28,6 +28,36 @@ def save_geospatial_dataframe(
 ) -> Path:
     """Save a DataFrame in a geospatial filesystem format."""
     to_geodataframe, detect_geometry_column = _geo_helpers()
+    # Geopandas / fiona rifiutano colonne duplicate al
+    # `to_file(driver="GeoJSON"|"GPKG"|"ESRI Shapefile")`:
+    # "GeoDataFrame cannot contain duplicated column names".
+    # Tipico dopo un JOIN che produce colonne omonime da entrambe
+    # le tabelle (es. cities.name + regions.name). I formati
+    # tabulari (csv/json) deduplicano col helper
+    # `_dedup_dataframe_columns_for_serialization` lato preview,
+    # ma il path save → geospatial saltava la dedup.
+    # Coerente con quel helper rinominiamo posizionalmente.
+    duplicated_mask = df.columns.duplicated(keep="first")
+    if duplicated_mask.any():
+        new_columns: list[str] = []
+        seen: set[str] = set()
+        for col in df.columns:
+            if col in seen:
+                idx = 2
+                while f"{col}_{idx}" in seen:
+                    idx += 1
+                new_name = f"{col}_{idx}"
+            else:
+                new_name = col
+            new_columns.append(new_name)
+            seen.add(new_name)
+        df = df.copy()
+        df.columns = new_columns
+        logger.warning(
+            f"Save {formato}: colonne duplicate rinominate "
+            f"posizionalmente per evitare crash geopandas "
+            f"(GeoDataFrame cannot contain duplicated column names)."
+        )
     return _salva_formato_geo(
         df,
         base_path,
