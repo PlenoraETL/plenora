@@ -92,19 +92,36 @@ def _fetch_oauth2_password_token(auth: Dict) -> Optional[Dict]:
     token_url = auth.get("token_url", "")
     username = auth.get("username", "")
     password = auth.get("password", "")
+    client_id = auth.get("client_id", "")
+    client_secret = auth.get("client_secret", "")
+    scope = auth.get("scope", "")
 
     if not token_url or not username:
         logger.warning("OAuth2 password: token_url o username mancante")
         return None
 
     try:
+        # `client_id` / `client_secret` sono richiesti dalla maggioranza
+        # degli auth server quando l'app e' "confidential" (es. il
+        # fake-rest /auth/oauth2/token ritorna 401 invalid_grant senza
+        # questi campi anche col grant_type=password). Inclusi qui ma
+        # vuoti vengono tralasciati (alcune server-side strict mode
+        # rifiutano i campi vuoti).
+        payload: Dict[str, str] = {
+            "grant_type": "password",
+            "username": username,
+            "password": password,
+        }
+        if client_id:
+            payload["client_id"] = client_id
+        if client_secret:
+            payload["client_secret"] = client_secret
+        if scope:
+            payload["scope"] = scope
+
         response = _get_shared_session().post(
             token_url,
-            data={
-                "grant_type": "password",
-                "username": username,
-                "password": password,
-            },
+            data=payload,
             headers={"Content-Type": "application/x-www-form-urlencoded"},
             timeout=30,
         )

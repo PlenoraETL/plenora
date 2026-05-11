@@ -117,10 +117,6 @@ class EnrichmentRetryHttpMixin:
                         retry_after = int(response.headers.get("Retry-After", 60))
                         time.sleep(retry_after)
 
-                    with self._stats_lock:
-                        # Conta rate limit hits se presente nelle stats
-                        pass
-
                     last_error = RowError(
                         row_index=row_index,
                         status=RowStatus.ERROR,

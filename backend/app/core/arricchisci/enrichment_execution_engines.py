@@ -249,6 +249,14 @@ class EnrichmentExecutionEnginesMixin:
                                 stats.retry_exhausted += len(row_indices)
                             else:
                                 stats.errors += len(row_indices)
+                            # B-BE-29: la mixin retry HTTP marcava
+                            # `error_type="rate_limit"` ma il TODO del
+                            # counter era `pass` -> `rate_limit_hits`
+                            # restava 0 anche su dataset interamente
+                            # 429. Conta qui sul callsite engine, che
+                            # detiene `stats`.
+                            if getattr(error, "error_type", "") == "rate_limit":
+                                stats.rate_limit_hits += len(row_indices)
                             if api_called:
                                 stats.api_calls_made += 1
                     else:
@@ -383,12 +391,15 @@ class EnrichmentExecutionEnginesMixin:
                     error,
                     input_params=params,
                 )
+                is_rate_limit = getattr(error, "error_type", "") == "rate_limit"
                 for idx in row_indices:
                     if error.status == RowStatus.RETRY_EXHAUSTED:
                         stats.retry_exhausted += 1
                         stats.errors += 1  # B-BE-56: conta anche nel threshold
                     else:
                         stats.errors += 1
+                    if is_rate_limit:
+                        stats.rate_limit_hits += 1
                 # Stop immediato se continue_on_error=False
                 if not self.options.continue_on_error:
                     logger.warning(f"Errore su riga {first_idx}, continue_on_error=False -> interruzione")
