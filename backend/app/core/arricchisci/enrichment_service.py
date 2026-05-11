@@ -106,7 +106,28 @@ class EnrichmentExecutor(
             progress_callback: Callback per aggiornare progress (percent, message)
         """
         self.api_config = api_config
-        self.param_mapping = param_mapping
+        # Deriva fallback dal contratto dell'API: ogni parametro con
+        # `source=column` (o solo `column` valorizzata) ha gia' un
+        # binding di default verso una colonna sorgente. Senza questo
+        # fallback, un canvas che usa l'API "as-is" (nessun override sul
+        # nodo api_enrich) produceva un `param_mapping` vuoto -> i
+        # placeholder URL (`{item_id}`) restavano letterali e l'API
+        # rispondeva 404/422 su tutte le righe. Il `param_mapping`
+        # esplicito del nodo (override utente) prevale.
+        derived_mapping: Dict[str, Any] = {}
+        for pdef in (api_config.get("parameters") or []):
+            if not isinstance(pdef, dict):
+                continue
+            name = pdef.get("name")
+            col = pdef.get("column")
+            src = pdef.get("source")
+            # Match: source == "column" (esplicito) o source non specificato
+            # ma column valorizzata (legacy / convenzione).
+            if name and col and (src in (None, "", "column")):
+                derived_mapping[name] = col
+        if param_mapping:
+            derived_mapping.update(param_mapping)
+        self.param_mapping = derived_mapping
         self.options = options or EnrichmentOptions()
         self.progress_callback = progress_callback
         
@@ -127,7 +148,23 @@ class EnrichmentExecutor(
         endpoint = api_config.get("endpoint", {})
         self.url = endpoint.get("url", "")
         self.method = endpoint.get("method", "GET").upper()
-        self.auth = api_config.get("auth", {})
+        # Normalizza l'oggetto `auth` per supportare sia lo schema
+        # OpenAPI-style (`{in, name, value}`) che lo schema runtime
+        # legacy (`{location, key_name, key_value}`). Lo storage e i
+        # tester di api_connection_management usano `in/name/value`, ma
+        # gli engine di esecuzione (build_params, batch, grouping)
+        # leggono `location/key_name/key_value`. Senza questa
+        # normalizzazione qualunque api_key configurata via UI viene
+        # ignorata a runtime → l'API risponde 401 su tutte le righe.
+        raw_auth = dict(api_config.get("auth") or {})
+        if raw_auth.get("type") == "api_key":
+            if "in" in raw_auth and "location" not in raw_auth:
+                raw_auth["location"] = raw_auth["in"]
+            if "name" in raw_auth and "key_name" not in raw_auth:
+                raw_auth["key_name"] = raw_auth["name"]
+            if "value" in raw_auth and "key_value" not in raw_auth:
+                raw_auth["key_value"] = raw_auth["value"]
+        self.auth = raw_auth
         self.output_mapping = api_config.get("output_mapping", [])
         self.api_name = api_config.get("name", "API")
 

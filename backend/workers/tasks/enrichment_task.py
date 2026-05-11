@@ -1154,7 +1154,10 @@ def execute_enrichment_task(
                 logger.debug(f"close_connection intermediate fallito (outer except): {type(e_inner).__name__}: {e_inner}")
         error_message = str(e)
         _elapsed_ms_f = int((time.time() - _run_start) * 1000)
-        logger.error(f"[CRASH] [Task {task_id}] Errore: {error_message}", project_id=_log_pid)
+        logger.error(
+            f"[CRASH] [Task {task_id}] Errore: {error_message}\n{_tb.format_exc()}",
+            project_id=_log_pid,
+        )
 
         if not is_eseguibile:
             try:

@@ -46,9 +46,27 @@ def _tokenize_path(path: str) -> list[str]:
 
 
 def extract_json_value(data: Any, path: str) -> Any:
-    """Extract a value from nested JSON/dict/list data using dotted paths."""
+    """Extract a value from nested JSON/dict/list data using dotted paths.
+
+    Accetta sia il formato "dotted" interno (es. ``features.0.props.name``,
+    ``data.results[*].id``) sia il formato JSONPath con prefisso ``$.``
+    (es. ``$.full_name``, ``$.data.items[0]``). Il prefisso JSONPath e'
+    quello usato comunemente nelle UI / OpenAPI mapping, quindi viene
+    normalizzato qui per evitare di restituire silenziosamente ``None``
+    su path validi.
+    """
     if not path:
         return data
+
+    # Strip JSONPath root marker se presente: il tokenizer interno usa
+    # dotted-path, quindi `$` come token sarebbe cercato come chiave
+    # letterale nel dict e tornerebbe None.
+    if path.startswith("$."):
+        path = path[2:]
+    elif path == "$":
+        return data
+    elif path.startswith("$["):
+        path = path[1:]
 
     parts = _tokenize_path(path)
     current = data
