@@ -145,10 +145,37 @@ def resolve_file_source_id_path(
             original_error=exc,
         ) from exc
 
-    if not row_full or not row_full.get("data"):
+    if not row_full:
         return None
 
-    raw = row_full["data"]
+    raw = row_full.get("data")
+    # In STORAGE_POLICY=hybrid/object_storage il blob non e' in BYTEA
+    # ma su S3/MinIO referenziato da `storage_key`. La query precedente
+    # ritorna sempre la riga (anche con data=NULL); per recuperare il
+    # blob serve il loader storage-aware. Senza questo fallback i
+    # caller (rest_file connector, materialize) ricevevano None e
+    # fallivano con "nessun file di input collegato".
+    if not raw and row_full.get("storage_key"):
+        try:
+            from app.core.resources.file_source_blob_access import (
+                load_file_source_blob_bytes,
+            )
+
+            raw = load_file_source_blob_bytes(
+                file_source_id=file_source_id,
+                expected_group_id=expected_group_id or "",
+                is_superadmin=expected_group_id is None,
+            )
+        except Exception as exc:
+            raise FileSourceResolutionError(
+                file_source_id=file_source_id,
+                cause="lookup",
+                reason="errore download blob da object storage",
+                original_error=exc,
+            ) from exc
+
+    if not raw:
+        return None
     try:
         source_dir.mkdir(parents=True, exist_ok=True)
         out_path = source_dir / expected_name
