@@ -7,7 +7,7 @@
  * Posizione: /components/transforms/DynamicConfig.jsx
  */
 
-import React, { useMemo } from 'react';
+import React, { useMemo, useEffect } from 'react';
 import ParameterInput from './ParameterInput';
 import './DynamicConfig.css';
 
@@ -107,6 +107,25 @@ const DynamicConfig = ({
       updateConfig(paramId, value);
     }
   };
+
+  // Auto-select geometry_column quando esiste una sola candidata e
+  // l'utente non ne ha ancora scelta una. Senza, op_geo_buffer e
+  // simili partono con `geom_column=None` → fallback `_auto_detect`
+  // backend che logga "UTM zone guard CRITICAL" e calcola buffer su
+  // un CRS sbagliato.
+  useEffect(() => {
+    if (!updateConfig) return;
+    for (const param of visibleParams) {
+      if (param.type !== 'geometry_column') continue;
+      const current = config[param.id];
+      if (current) continue;
+      const candidates = getColumnsForParam(param);
+      if (candidates.length === 1) {
+        updateConfig(param.id, candidates[0].name);
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visibleParams, geometryColumns, inputColumns, leftColumns, rightColumns, config]);
   
   return (
     <div className="dynamic-config">

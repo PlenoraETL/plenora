@@ -225,11 +225,48 @@ def find_latest_output_file(output_dir: Union[str, Path]) -> Optional[Path]:
     return max(files, key=lambda x: x.stat().st_mtime)
 
 
+def _compact_whole_number_floats(df: pd.DataFrame) -> pd.DataFrame:
+    """Restituisce un DataFrame con le colonne float che contengono solo
+    valori interi (modulo NaN) convertite in pandas ``Int64`` nullable.
+
+    pandas promuove silenziosamente int -> float quando incontra NaN. Al
+    momento del salvataggio CSV/XLSX/JSON questo produce ``34.0`` invece
+    di ``34``, che e' confondente per chi legge un export di id/conteggi/
+    anagrafiche. La conversione avviene solo qui, sul DataFrame
+    serializzato (non muta lo stato a monte) e solo se TUTTI i non-NaN
+    sono interi.
+
+    Le colonne float legittime (con decimali reali) restano invariate.
+    """
+    if df is None or df.empty:
+        return df
+    result = df
+    for col in list(result.columns):
+        s = result[col]
+        if pd.api.types.is_float_dtype(s):
+            non_nan = s.dropna()
+            if not non_nan.empty and (non_nan % 1 == 0).all():
+                if result is df:
+                    result = df.copy()
+                try:
+                    result[col] = result[col].astype("Int64")
+                except (TypeError, ValueError):
+                    # Valori troppo grandi per Int64 o conversione non
+                    # supportata: lascia float per evitare data loss.
+                    continue
+    return result
+
+
 def save_tabular_dataframe(df: pd.DataFrame, base_path: Path, formato: str) -> Path:
     """Save a DataFrame in a non-geospatial format."""
+    df = _compact_whole_number_floats(df)
     if formato == "csv":
         final_path = base_path.with_suffix(".csv")
-        df.to_csv(final_path, index=False, encoding="utf-8")
+        # `float_format='%.15g'`: scrive `52000` invece di `52000.0` ma
+        # preserva `45000.5` con i decimali reali. Resta dentro 15 cifre
+        # significative (precisione float64) e non incappa nella
+        # notazione scientifica del semplice `%g` su numeri molto piccoli.
+        df.to_csv(final_path, index=False, encoding="utf-8", float_format="%.15g")
         return final_path
 
     if formato == "xlsx":
@@ -296,9 +333,10 @@ def save_dataframe(
 
 def tabular_dataframe_to_bytes(df: pd.DataFrame, formato: str) -> bytes:
     """Serialize a DataFrame to bytes for non-geospatial formats."""
+    df = _compact_whole_number_floats(df)
     if formato == "csv":
         buf = io.StringIO()
-        df.to_csv(buf, index=False, encoding="utf-8")
+        df.to_csv(buf, index=False, encoding="utf-8", float_format="%.15g")
         return buf.getvalue().encode("utf-8")
 
     if formato == "xlsx":

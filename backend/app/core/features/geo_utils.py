@@ -294,11 +294,20 @@ def to_geodataframe(
         if srid:
             crs_rilevato = f"EPSG:{srid}"
 
-    # Creazione GeoDataFrame (rimuove la colonna geometria originale se non è 'geometry'
-    df_copia = df.drop(columns=[geom_column]) if geom_column != "geometry" else df.copy()
-    gdf = gpd.GeoDataFrame(df_copia, geometry=geometrie.values, crs=crs_rilevato)
+    # Preserva il nome originale della colonna geometria. Costruire
+    # `gpd.GeoDataFrame(..., geometry=<GeoSeries>)` senza nome esplicito
+    # avrebbe rinominato l'active geometry in "geometry": il runtime DF
+    # avrebbe poi divergeva dai metadati canvas (che mantengono il nome
+    # originale, es. "geom"), facendo fallire il salvataggio GeoJSON con
+    # `set_geometry("geom")` -> "Unknown column geom".
+    df_copia = df.copy()
+    df_copia[geom_column] = geometrie.values
+    gdf = gpd.GeoDataFrame(df_copia, geometry=geom_column, crs=crs_rilevato)
 
-    logger.info(f"Convertito in GeoDataFrame: {len(gdf)} righe, CRS: {gdf.crs}")
+    logger.info(
+        f"Convertito in GeoDataFrame: {len(gdf)} righe, CRS: {gdf.crs}, "
+        f"geom_column='{geom_column}'"
+    )
     return gdf
 
 

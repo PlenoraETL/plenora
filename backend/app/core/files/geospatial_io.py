@@ -19,6 +19,43 @@ def _geo_helpers():
     return to_geodataframe, detect_geometry_column
 
 
+def _compact_whole_number_float_properties(gdf):
+    """Per le colonne NON-geometry, converte float-tutti-interi in Int64.
+
+    Stessa logica di `dataframe_io._compact_whole_number_floats` ma
+    applicata al GeoDataFrame, saltando la colonna di geometria attiva
+    (e qualunque altra colonna di tipo geometry secondaria). Evita
+    output GeoJSON con properties ``"age": 41.0`` quando il valore
+    originale era un intero promosso a float per la presenza di NaN.
+    """
+    if gdf is None or gdf.empty:
+        return gdf
+    try:
+        active_geom_name = gdf.geometry.name
+    except Exception:
+        active_geom_name = None
+    out = gdf
+    for col in list(gdf.columns):
+        if col == active_geom_name:
+            continue
+        try:
+            if hasattr(gdf[col], "geom_type"):
+                continue
+        except Exception:
+            pass
+        s = gdf[col]
+        if pd.api.types.is_float_dtype(s):
+            non_nan = s.dropna()
+            if not non_nan.empty and (non_nan % 1 == 0).all():
+                if out is gdf:
+                    out = gdf.copy()
+                try:
+                    out[col] = out[col].astype("Int64")
+                except (TypeError, ValueError):
+                    continue
+    return out
+
+
 def _dedup_columns_for_geo_save(df: pd.DataFrame, formato: str) -> pd.DataFrame:
     """Rename duplicated columns before geospatial export."""
     if not df.columns.duplicated(keep="first").any():
@@ -97,6 +134,7 @@ def geospatial_dataframe_to_bytes(
         if geom_column and gdf.geometry.name != geom_column:
             gdf = gdf.set_geometry(geom_column)
     gdf = _converti_geometrie_secondarie_in_wkt(gdf)
+    gdf = _compact_whole_number_float_properties(gdf)
     return gdf.to_json().encode("utf-8")
 
 
@@ -170,6 +208,8 @@ def _salva_formato_geo(
 
         gdf = to_geodataframe(df, geom_column, crs=crs)
         gdf = _converti_geometrie_secondarie_in_wkt(gdf)
+
+    gdf = _compact_whole_number_float_properties(gdf)
 
     if formato == "geojson":
         final_path = base_path.with_suffix(".geojson")

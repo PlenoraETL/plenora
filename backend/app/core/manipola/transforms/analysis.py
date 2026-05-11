@@ -187,7 +187,8 @@ def op_flatten_json(
     df: DataFrame,
     column: str,
     prefix: str = "",
-    max_level: int = 1
+    max_level: int = 1,
+    output_columns: Optional[List[str]] = None,
 ) -> DataFrame:
     """
     Espande una colonna JSON/dict in colonne separate.
@@ -199,6 +200,11 @@ def op_flatten_json(
         column: Colonna contenente JSON/dict
         prefix: Prefisso per le colonne generate
         max_level: Livello massimo di nidificazione da espandere
+        output_columns: Whitelist opzionale di chiavi JSON da estrarre
+            (post-prefix). Vuoto = estrai tutte. Il parametro arriva dal
+            registry: senza questo arg, il pipeline crashava con
+            ``TypeError: unexpected keyword argument 'output_columns'``
+            su qualunque nodo configurato dal UI.
 
     Returns:
         DataFrame con colonne JSON espanse
@@ -234,6 +240,13 @@ def op_flatten_json(
         # Applica prefisso alle colonne
         col_prefix = prefix if prefix else f"{column}_"
         flat.columns = [f"{col_prefix}{c}" for c in flat.columns]
+
+        # Whitelist opzionale: tiene solo le colonne richieste.
+        if output_columns:
+            wanted = set(output_columns)
+            keep = [c for c in flat.columns if c in wanted]
+            if keep:
+                flat = flat[keep]
 
         # Allinea indici e unisci
         flat.index = result.index

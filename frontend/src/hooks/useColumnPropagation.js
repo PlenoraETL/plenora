@@ -382,12 +382,96 @@ function applyTransformation(node, inputColumns) {
     }
     
     case 'buffer':
-    case 'centroid':
-    case 'convex_hull':
     case 'simplify':
     case 'reproject':
+    case 'geo_simplify':
+    case 'geo_reproject':
+    case 'geo_make_valid':
       // Mantengono geometry esistente
       break;
+
+    // Spatial ops che AGGIUNGONO una colonna geometrica derivata
+    // (mirror dei `_schema_geo_*` lato backend in
+    // `app/core/projects/schema_geo_handlers.py`). Senza questi case
+    // l'`OutputSettingsPanel` del result node downstream non vede la
+    // nuova colonna finche' il backend non ricomputa lo schema al
+    // save → dropdown "Colonna geometria" non offre la scelta.
+    case 'geo_buffer': {
+      const outCol = config.output_column || 'buffer_geom';
+      if (outCol !== (config.geom_column || 'geometry')) {
+        if (!result.find(c => c.name === outCol)) {
+          result.push({ name: outCol, type: 'geometry:polygon' });
+        }
+      } else {
+        result = result.map(c => c.name === outCol ? { ...c, type: 'geometry:polygon' } : c);
+      }
+      break;
+    }
+    case 'centroid':
+    case 'geo_centroid': {
+      const outCol = config.output_column || 'centroid';
+      if (outCol !== (config.geom_column || 'geometry')) {
+        if (!result.find(c => c.name === outCol)) {
+          result.push({ name: outCol, type: 'geometry:point' });
+        }
+      } else {
+        result = result.map(c => c.name === outCol ? { ...c, type: 'geometry:point' } : c);
+      }
+      break;
+    }
+    case 'convex_hull':
+    case 'geo_convex_hull':
+    case 'geo_envelope':
+    case 'geo_point_on_surface':
+    case 'geo_boundary': {
+      const defaults = {
+        convex_hull: 'convex_hull',
+        geo_convex_hull: 'convex_hull',
+        geo_envelope: 'envelope',
+        geo_point_on_surface: 'point_on_surface',
+        geo_boundary: 'boundary',
+      };
+      const outCol = config.output_column || defaults[transform_op];
+      if (outCol !== (config.geom_column || 'geometry') && !result.find(c => c.name === outCol)) {
+        result.push({ name: outCol, type: 'geometry' });
+      }
+      break;
+    }
+    case 'geo_area': {
+      const outCol = config.output_column || 'area_m2';
+      if (!result.find(c => c.name === outCol)) {
+        result.push({ name: outCol, type: 'real' });
+      }
+      break;
+    }
+    case 'geo_distance': {
+      const outCol = config.output_column || 'distance_m';
+      if (!result.find(c => c.name === outCol)) {
+        result.push({ name: outCol, type: 'real' });
+      }
+      break;
+    }
+    case 'geo_length': {
+      const outCol = config.output_column || 'length_m';
+      if (!result.find(c => c.name === outCol)) {
+        result.push({ name: outCol, type: 'real' });
+      }
+      break;
+    }
+    case 'geo_perimeter': {
+      const outCol = config.output_column || 'perimeter_m';
+      if (!result.find(c => c.name === outCol)) {
+        result.push({ name: outCol, type: 'real' });
+      }
+      break;
+    }
+    case 'geo_vertex_count': {
+      const outCol = config.output_column || 'vertex_count';
+      if (!result.find(c => c.name === outCol)) {
+        result.push({ name: outCol, type: 'int' });
+      }
+      break;
+    }
     
     case 'extract_coordinates': {
       const latCol = config.lat_column || 'lat';

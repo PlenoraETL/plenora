@@ -89,9 +89,15 @@ const ResultNodeStandardView = memo(({
   const isGeoFormat = ['geojson', 'gpkg', 'shp'].includes(format);
 
   // Colonne geometriche candidate (MANIPOLA/ARRICCHISCI: upstream; ESTRAI: merge columns+upstream)
+  // Per Manipola/Arricchisci si fa fallback a `data.columns` (autoritativo
+  // dal canvas persistito post schema-inference) quando `upstreamColumns`
+  // e' ancora vuoto al primo render — altrimenti l'auto-reset format -> csv
+  // (sotto) scattava su un transient e azzerava la scelta utente di geojson.
   const geomSourceColumns = (() => {
     if (isManipulate || isArricchisci) {
-      return upstreamColumns.length > 0 ? upstreamColumns : (data.availableColumns || []);
+      if (upstreamColumns.length > 0) return upstreamColumns;
+      if ((data.columns || []).length > 0) return data.columns;
+      return data.availableColumns || [];
     }
     const cols = data.columns || [];
     if (upstreamColumns.length > 0) {

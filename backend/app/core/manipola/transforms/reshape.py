@@ -445,6 +445,29 @@ def op_melt(
             if not value_columns:
                 value_columns = None
 
+        # `value_name` collide se il DataFrame ha gia' una colonna con
+        # quel nome — pandas.melt allora rifiuta con ValueError. I
+        # default registry ("variable"/"value") sono nomi comuni: lo
+        # auto-rinominiamo con un suffisso per non far crashare nodi
+        # configurati con default su sorgenti che contengono "value".
+        df_cols = set(df.columns)
+
+        def _avoid_collision(name: str) -> str:
+            if name not in df_cols:
+                return name
+            for i in range(1, 100):
+                cand = f"{name}_{i}"
+                if cand not in df_cols:
+                    logger.warning(
+                        f"Melt: '{name}' collide con una colonna sorgente, "
+                        f"rinominato in '{cand}'"
+                    )
+                    return cand
+            return name  # fallback (improbabile)
+
+        var_name = _avoid_collision(var_name)
+        value_name = _avoid_collision(value_name)
+
         result = pd.melt(
             df,
             id_vars=id_columns or None,
@@ -469,7 +492,8 @@ def op_melt(
 
 def op_transpose(
     df: DataFrame,
-    id_column: str = None
+    id_column: str = None,
+    output_columns: list = None,
 ) -> DataFrame:
     """
     Trasposizione del DataFrame (righe ↔ colonne).
@@ -478,6 +502,13 @@ def op_transpose(
         df: DataFrame input
         id_column: Colonna da usare come intestazioni delle nuove colonne.
                    Se None, traspone con indice numerico.
+        output_columns: Nomi espliciti per le colonne post-traspose.
+            Se forniti e di lunghezza compatibile, rinominano sequenzialmente
+            le colonne risultanti (escludendo la prima, se ``id_column`` e'
+            presente, che mantiene il nome originale). Il parametro arriva
+            dal registry: senza questo arg, qualunque nodo configurato
+            dal UI crashava con ``TypeError: unexpected keyword argument
+            'output_columns'``.
 
     Returns:
         DataFrame trasposto
@@ -495,6 +526,17 @@ def op_transpose(
         else:
             result = df.T.reset_index()
             result.columns = [f"col_{i}" for i in range(len(result.columns))]
+
+        if output_columns:
+            # Rinomina mantenendo la prima colonna (id/index) e applicando
+            # i nomi forniti alle restanti, per evitare collisioni quando
+            # ``output_columns`` ne ha meno o piu' del necessario.
+            current = list(result.columns)
+            new_cols = current.copy()
+            for i, name in enumerate(output_columns, start=1):
+                if i < len(new_cols) and name:
+                    new_cols[i] = str(name)
+            result.columns = new_cols
 
         logger.info(
             f"Transpose completato: {original_shape} -> {result.shape}"

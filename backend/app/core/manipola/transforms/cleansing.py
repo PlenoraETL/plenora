@@ -229,9 +229,26 @@ def op_type_cast(
 
     try:
         if target_type == 'str':
-            result[column] = result[column].astype(str)
-            # Pulisci 'None' e 'nan' in stringhe vuote
-            result[column] = result[column].replace({'None': '', 'nan': '', 'NaT': ''})
+            col = result[column]
+            # Float con valori interi (es. age=34.0 dopo promozione pandas
+            # int->float per presenza di NaN) produrrebbe "34.0" con un
+            # astype(str) ingenuo. L'utente che converte un id/age
+            # numerico in stringa si aspetta "34", non "34.0". Se tutti
+            # i non-NaN sono interi, formattali senza la coda decimale.
+            if pd.api.types.is_float_dtype(col):
+                non_nan = col.dropna()
+                if not non_nan.empty and (non_nan % 1 == 0).all():
+                    result[column] = col.apply(
+                        lambda x: "" if pd.isna(x) else str(int(x))
+                    )
+                else:
+                    result[column] = col.astype(str).replace(
+                        {"None": "", "nan": "", "NaT": ""}
+                    )
+            else:
+                result[column] = col.astype(str).replace(
+                    {"None": "", "nan": "", "NaT": ""}
+                )
 
         elif target_type == 'int':
             result[column] = pd.to_numeric(result[column], errors=errors)

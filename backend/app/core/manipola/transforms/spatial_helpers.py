@@ -8,6 +8,7 @@ la superficie pubblica di `spatial.py`.
 from typing import Optional
 
 import geopandas as gpd
+from shapely.geometry.base import BaseGeometry
 
 from app.utils.logger import get_logger
 
@@ -114,6 +115,60 @@ def _resolve_metric_crs(
     if gdf.crs is not None and gdf.crs.is_geographic:
         return get_utm_crs_for_geometry(gdf)
     return None
+
+
+def _utm_epsg_for_lonlat(lon: float, lat: float) -> str:
+    """UTM zone EPSG per un singolo punto (geog WGS84)."""
+    zone = int((lon + 180) / 6) + 1
+    if zone < 1:
+        zone = 1
+    elif zone > 60:
+        zone = 60
+    return f"EPSG:326{zone:02d}" if lat >= 0 else f"EPSG:327{zone:02d}"
+
+
+def _buffer_per_row_local_utm(
+    geoseries: "gpd.GeoSeries", distance: float, cap_style_int: int
+) -> "gpd.GeoSeries":
+    """Buffer per-riga in UTM locale, riproiettato all'origine.
+
+    Per ogni geometria sceglie la zona UTM del proprio centroide,
+    riproietta singolarmente, applica il buffer in metri, e torna
+    in EPSG:4326. Evita la distorsione del buffer globale single-CRS
+    su dataset distribuiti su piu' zone UTM (es. Italia + Tokyo).
+    """
+    import pandas as pd
+    from shapely.geometry import Point
+
+    src_crs = geoseries.crs or "EPSG:4326"
+    results: list[Optional[BaseGeometry]] = []
+    # Polo Nord/Sud e antimeridiano sono singolarita': UTM degenera.
+    # Per quei punti restituiamo None (buffer non rappresentabile in lat/lon
+    # senza split antimeridiano), il caller scarta i NaN.
+    for geom in geoseries:
+        if geom is None or geom.is_empty:
+            results.append(None)
+            continue
+        try:
+            centroid: Point = geom.centroid
+            lon, lat = float(centroid.x), float(centroid.y)
+            if abs(lat) >= 89.0 or abs(lon) >= 179.5:
+                logger.warning(
+                    "Buffer per-riga: punto a singolarita' (lon=%.4f, lat=%.4f) "
+                    "saltato (UTM degenera al polo/antimeridiano).",
+                    lon, lat,
+                )
+                results.append(None)
+                continue
+            utm = _utm_epsg_for_lonlat(lon, lat)
+            row = gpd.GeoSeries([geom], crs=src_crs).to_crs(utm)
+            buffered = row.buffer(distance, cap_style=cap_style_int)
+            back = buffered.to_crs(src_crs)
+            results.append(back.iloc[0])
+        except Exception as e:
+            logger.warning(f"Buffer per-riga fallito su geometria: {e}")
+            results.append(None)
+    return gpd.GeoSeries(results, crs=src_crs, index=geoseries.index)
 
 
 def _resolve_output_geom_crs(

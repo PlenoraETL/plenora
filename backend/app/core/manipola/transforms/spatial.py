@@ -14,6 +14,7 @@ from app.core.features.geo_utils import (
     ensure_same_crs,
 )
 from app.core.manipola.transforms.spatial_helpers import (
+    _buffer_per_row_local_utm,
     _ensure_active_geometry,
     _resolve_metric_crs,
     _resolve_output_geom_crs,
@@ -105,16 +106,42 @@ def op_geo_buffer(
         gdf = df if isinstance(df, gpd.GeoDataFrame) else to_geodataframe(df, geom_column)
         original_crs = gdf.crs
 
-        metric_used = _resolve_metric_crs(gdf, metric_crs)
-        if metric_used is not None:
-            gdf_projected = gdf.to_crs(metric_used)
-        else:
-            gdf_projected = gdf
+        # Auto-UTM globale per tutto il GDF distorce le geometrie lontane
+        # dalla zona scelta sul centroide (es. punti italiani + Tokyo: la
+        # zona scelta sul centroide globale rende il buffer ~0.7 km invece
+        # di 1 km su Tokyo). Quando l'utente non specifica un metric_crs
+        # esplicito e l'input e' geografico con bbox > 6 gradi di longitudine,
+        # passiamo a buffer per-riga in UTM locale.
+        # `metric_crs` arriva come "" dal registry quando l'utente non lo
+        # imposta esplicitamente (default JSON e' stringa vuota, non null);
+        # bisogna trattarlo come "non specificato".
+        no_explicit_metric_crs = not (
+            isinstance(metric_crs, str) and metric_crs.strip()
+        )
+        use_per_row_utm = (
+            no_explicit_metric_crs
+            and gdf.crs is not None
+            and gdf.crs.is_geographic
+            and not gdf.empty
+            and (gdf.total_bounds[2] - gdf.total_bounds[0]) > 6
+        )
 
-        buffer_geom = gdf_projected.geometry.buffer(distance, cap_style=cap_style_int)
+        if use_per_row_utm:
+            buffer_geom = _buffer_per_row_local_utm(
+                gdf.geometry, distance, cap_style_int
+            )
+            metric_used = None  # gia' riproiettato a original_crs per riga
+            current_geom_crs = original_crs
+        else:
+            metric_used = _resolve_metric_crs(gdf, metric_crs)
+            if metric_used is not None:
+                gdf_projected = gdf.to_crs(metric_used)
+            else:
+                gdf_projected = gdf
+            buffer_geom = gdf_projected.geometry.buffer(distance, cap_style=cap_style_int)
+            current_geom_crs = metric_used if metric_used is not None else original_crs
 
         target_crs = _resolve_output_geom_crs(original_crs, metric_used, output_crs)
-        current_geom_crs = metric_used if metric_used is not None else original_crs
         if target_crs is not None and str(target_crs) != str(current_geom_crs):
             buffer_gdf = gpd.GeoDataFrame(geometry=buffer_geom, crs=current_geom_crs)
             buffer_geom = buffer_gdf.to_crs(target_crs).geometry
@@ -122,7 +149,8 @@ def op_geo_buffer(
         result = gdf.copy()
         result[output_column] = buffer_geom.values
 
-        logger.info(f"Buffer completato: {distance}m, output={output_column}")
+        mode = "per-row UTM" if use_per_row_utm else f"single-CRS {metric_used or original_crs}"
+        logger.info(f"Buffer completato: {distance}m, output={output_column}, mode={mode}")
         return result
 
     except Exception as e:
