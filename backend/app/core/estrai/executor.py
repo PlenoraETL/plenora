@@ -481,17 +481,31 @@ class EstraiExecutor:
             base_sql = query_info['sql']
             params = query_info.get('params', {})
 
+            # Rispetta il LIMIT utente sul result node, se presente,
+            # clampando il preview_limit. Senza questo clamp il preview
+            # ignorava il limit configurato dall'utente: per esempio,
+            # canvas con `distinct=True, limit=2` su `customers.status`
+            # in preview mostrava 4 distinct (tutti) invece di 2,
+            # confondendo l'utente sulla "anteprima del risultato vero".
+            user_limit = getattr(result_node, "limit", None)
+            if isinstance(user_limit, int) and user_limit > 0:
+                effective_preview_limit = min(limit, user_limit)
+            else:
+                effective_preview_limit = limit
+
             sql_no_limit = self._rimuovi_limit(base_sql)
             preview_sql = self._costruisci_sql_preview_only(
-                sql_no_limit, limit, connection.type
+                sql_no_limit, effective_preview_limit, connection.type
             )
 
             rows, columns = self.executor.execute_raw(connection, preview_sql, params)
 
-            # Se abbiamo ricevuto limit+1 righe, ci sono più dati → troncato
-            truncated = len(rows) > limit
+            # Se abbiamo ricevuto effective_preview_limit+1 righe, ci
+            # sono più dati → troncato. Calcoliamo sul limit effettivo
+            # (post clamp utente), non sul parametro preview originale.
+            truncated = len(rows) > effective_preview_limit
             if truncated:
-                rows = rows[:limit]
+                rows = rows[:effective_preview_limit]
             total_count = len(rows)
 
             df = pd.DataFrame(rows, columns=columns)
