@@ -84,7 +84,13 @@ class WhereClauseBuilder:
         if is_oracle_lob:
             col_ref = f"TO_CHAR({table_alias}.{column})"
 
-        valid_operators = {"=", "!=", ">", "<", ">=", "<=", "LIKE", "IN", "IS NULL", "IS NOT NULL"}
+        valid_operators = {
+            "=", "!=", ">", "<", ">=", "<=",
+            "LIKE", "NOT LIKE",
+            "IN", "NOT IN",
+            "IS NULL", "IS NOT NULL",
+            "BETWEEN",
+        }
         if operator not in valid_operators:
             raise ValueError(f"Operatore non valido: {operator}")
 
@@ -95,11 +101,59 @@ class WhereClauseBuilder:
 
         if operator == "IN":
             return self.create_condition_in(col_ref, value, params)
+        if operator == "NOT IN":
+            inner = self.create_condition_in(col_ref, value, params)
+            # `create_condition_in` ritorna gia' `col IN (:p1, :p2, ...)`.
+            # Per NOT IN sostituiamo l'operatore preservando i param.
+            return inner.replace(" IN ", " NOT IN ", 1)
 
         if operator == "LIKE":
             param_name = self._next_param_name()
             params[param_name] = f"%{value}%"
             return f"{col_ref} LIKE :{param_name}"
+        if operator == "NOT LIKE":
+            param_name = self._next_param_name()
+            params[param_name] = f"%{value}%"
+            return f"{col_ref} NOT LIKE :{param_name}"
+
+        if operator == "BETWEEN":
+            # Il FE manda BETWEEN come stringa "lo AND hi" (vedi
+            # FilterModal placeholder "valore1 AND valore2").
+            # Supportiamo anche un value list/tuple per call programmatica.
+            if isinstance(value, (list, tuple)) and len(value) >= 2:
+                lo_raw, hi_raw = value[0], value[1]
+            elif isinstance(value, str):
+                import re as _re
+                parts = _re.split(r"\s+and\s+", value.strip(), maxsplit=1,
+                                  flags=_re.IGNORECASE)
+                if len(parts) != 2 or not parts[0] or not parts[1]:
+                    raise ValueError(
+                        "BETWEEN richiede due valori separati da 'AND' "
+                        "(es. '10 AND 20')"
+                    )
+                lo_raw, hi_raw = parts[0].strip(), parts[1].strip()
+            else:
+                raise ValueError(
+                    "BETWEEN richiede un valore stringa 'lo AND hi' "
+                    "o una lista di 2 elementi"
+                )
+
+            col_type_norm = (column_type or "str").lower().split(":")[0]
+
+            def _coerce(v):
+                if col_type_norm in ("int", "integer", "bigint", "smallint"):
+                    try: return int(v)
+                    except (ValueError, TypeError): return v
+                if col_type_norm in ("real", "float", "double", "numeric", "decimal"):
+                    try: return float(v)
+                    except (ValueError, TypeError): return v
+                return v
+
+            p_lo = self._next_param_name()
+            p_hi = self._next_param_name()
+            params[p_lo] = _coerce(lo_raw)
+            params[p_hi] = _coerce(hi_raw)
+            return f"{col_ref} BETWEEN :{p_lo} AND :{p_hi}"
 
         if isinstance(value, str) and self.is_sql_function(value):
             translated = self.translate_date_function(value)
