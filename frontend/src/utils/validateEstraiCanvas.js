@@ -42,7 +42,8 @@ import {
  *   C4 - ArcGIS connection/layer/service/match (CARICA_ARCGIS_*)
  */
 
-const SOURCE_TYPES = ['tableNode', 'datasourceNode', 'featureLayerNode', 'staticValues'];
+const SOURCE_TYPES = ['tableNode', 'featureLayerNode'];
+const UNSUPPORTED_SOURCE_TYPES = ['datasourceNode', 'datasource_node', 'staticValues'];
 
 function isGeometryType(type) {
   if (!type) return false;
@@ -83,6 +84,16 @@ function validateStructure(nodes, edges) {
       id: RULE_IDS.CYCLE_DETECTED,
       severity: SEVERITY.ERROR,
       message: 'Rilevato ciclo nel grafo. Rimuovi una connessione per risolvere.',
+    }));
+  }
+
+  for (const node of nodes.filter(n => UNSUPPORTED_SOURCE_TYPES.includes(n.type))) {
+    issues.push(createIssue({
+      id: RULE_IDS.SOURCE_UNSUPPORTED,
+      severity: SEVERITY.ERROR,
+      message: 'ESTRAI supporta solo tabelle database e layer ArcGIS come sorgenti.',
+      nodeId: node.id,
+      nodeName: getNodeName(node),
     }));
   }
 

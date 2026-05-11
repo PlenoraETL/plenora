@@ -130,7 +130,7 @@ function validateResult(resultNode, edges, connectedToResult, nodes) {
     return issues;
   }
 
-  const sourceTypes = ['project_source', 'file_source', 'staticValues', 'datasourceNode'];
+  const sourceTypes = ['project_source', 'file_source', 'staticValues', 'datasourceNode', 'datasource_node'];
   const sourcesInPath = nodes.filter(n => sourceTypes.includes(n.type) && connectedToResult.has(n.id));
   if (sourcesInPath.length === 0) {
     issues.push(createIssue({
@@ -422,7 +422,7 @@ function validateSources(connectedSources) {
 
 function validateOrphans(nodes, edges, connectedToResult, registry = null) {
   const issues = [];
-  const sourceTypes = ['project_source', 'file_source', 'staticValues', 'datasourceNode'];
+  const sourceTypes = ['project_source', 'file_source', 'staticValues', 'datasourceNode', 'datasource_node'];
   const transformTypes = ['transform', 'multi_join'];
   const allEdgeSources = new Set(edges.map(e => e.source));
   const allEdgeTargets = new Set(edges.map(e => e.target));
@@ -505,7 +505,7 @@ export function validateManipolaCanvas(nodes, edges, registry = null) {
   issues.push(...validateTransforms(connectedTransforms, registry));
 
   const connectedSources = nodes.filter(n =>
-    ['project_source', 'file_source', 'staticValues', 'datasourceNode'].includes(n.type) && connectedToResult.has(n.id)
+    ['project_source', 'file_source', 'staticValues', 'datasourceNode', 'datasource_node'].includes(n.type) && connectedToResult.has(n.id)
   );
   issues.push(...validateSources(connectedSources));
 

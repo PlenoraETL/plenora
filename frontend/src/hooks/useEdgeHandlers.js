@@ -105,9 +105,9 @@ export function useEdgeHandlers(nodes, setEdges, options = {}) {
       return;
     }
     
-    // Se target è nodo CARICA (DB o ArcGIS) o datasourceNode in modalità carica, crea edge direttamente (no modal)
+    // Se target e' nodo CARICA o Data Source in modalita' carica, crea edge diretto.
     if (targetNode && (targetNode.type === 'carica' || targetNode.type === 'caricaArcgis' ||
-        (targetNode.type === 'datasourceNode' && targetNode.data?.mode === 'carica'))) {
+        (['datasourceNode', 'datasource_node'].includes(targetNode.type) && targetNode.data?.mode === 'carica'))) {
       const joinType = targetNode.type === 'caricaArcgis' ? 'carica_arcgis' : 'carica';
       const edgeStyle = getEdgeStyle({ join_type: joinType });
       const newEdge = {
@@ -151,7 +151,7 @@ export function useEdgeHandlers(nodes, setEdges, options = {}) {
       targetNode.type === 'caricaArcgis' ||
       targetNode.type === 'resultNode' ||
       targetNode.type === 'result' ||
-      (targetNode.type === 'datasourceNode' && targetNode.data?.mode === 'carica')
+      (['datasourceNode', 'datasource_node'].includes(targetNode.type) && targetNode.data?.mode === 'carica')
     )) {
       return;
     }

@@ -1,37 +1,4 @@
-"""Loader MANIPOLA per i nodi ``datasource_node`` con ``mode='source'``.
-
-Plenora ha due famiglie di sorgenti file nel canvas MANIPOLA:
-
-* ``file_source`` — file materializzati e governati da Plenora
-  (upload, schema editor, share). Caricati da ``load_file_sources``.
-* ``datasource_node`` — riferimento a un file remoto su un
-  ``DataSource`` (FTP/SFTP/SharePoint/local). Storicamente i nodi
-  ``datasource_node`` venivano usati solo come **target** ("carica
-  su FTP") e come hint per lo scheduler; ``mode='source'`` non
-  veniva caricato dall'executor MANIPOLA — il canvas falliva con
-  *"Nessun progetto sorgente configurato"* (vedi
-  ``executor._gestisci_join_default``).
-
-Questo modulo chiude il gap. Per ogni nodo ``datasource_node`` con
-``mode='source'`` valido:
-
-  1. Risolve il ``DataSource`` per id e ne fa visibility check
-     contro il ``group_id`` di esecuzione (``is_resource_visible``
-     copre owned + shared, identico al check HTTP).
-  2. Legge i bytes via ``DataSourceService.read_file`` (boundary
-     remota: FTP/SFTP/SharePoint/local).
-  3. Materializza i bytes in un ``NamedTemporaryFile`` con il
-     suffix giusto cosi' ``load_dataframe_from_file`` (che
-     ispeziona ``Path.suffix``) sceglie il parser corretto.
-     ``parse_options.layer`` / ``parse_options.sheet`` sono
-     propagate per GPKG/GDB e XLSX multifoglio.
-  4. Applica ``filter_visible_columns`` con la lista colonne del
-     nodo (allineata al pattern ``file_source``).
-
-Tutti gli errori del backend remoto vengono rimappati nel dict
-``{success: False, message: ...}`` canonico — bit-compatibile con
-gli altri loader MANIPOLA.
-"""
+"""MANIPOLA loader for datasource nodes used as file sources."""
 
 from __future__ import annotations
 
@@ -84,9 +51,6 @@ def _suffix_for(node, file_path: str) -> str:
     fmt = (_nf(node, "format") or "").strip().lower()
     if fmt and fmt in _FORMAT_SUFFIX:
         return _FORMAT_SUFFIX[fmt]
-    # Fallback: derive from the remote path so the parser picks the
-    # right branch (CSV vs XLSX vs GeoJSON ...). Empty suffix triggers
-    # the CSV fallback, which matches the legacy file_source policy.
     suffix = Path(file_path).suffix.lower() if file_path else ""
     return suffix
 
@@ -98,20 +62,7 @@ def load_datasource_nodes(
     group_id: Optional[str],
     logger=None,
 ) -> Optional[Dict[str, Any]]:
-    """Load DataFrames for ``datasource_node`` source nodes in ``canvas``.
-
-    Mirrors the contract of ``load_file_sources`` / ``load_project_sources``:
-
-    * ``dataframes`` is mutated in place (``dataframes[node.id] = df``).
-    * Returns ``None`` on success.
-    * Returns ``{"success": False, "message": "..."}`` for tenant
-      context errors, visibility blocks, or per-node loader
-      failures (operator-visible message preserved verbatim).
-
-    The ``group_id`` is the **only** tenant binding channel; missing
-    group_id triggers the canonical fail-closed dict (mirrors
-    TE-005/006/007 contract on the sibling loaders).
-    """
+    """Load source-mode datasource nodes into ``dataframes``."""
     log = logger or _DEFAULT_LOGGER
 
     nodes = [

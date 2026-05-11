@@ -20,17 +20,7 @@ def _geo_helpers():
 
 
 def _dedup_columns_for_geo_save(df: pd.DataFrame, formato: str) -> pd.DataFrame:
-    """Rinomina colonne duplicate prima del save geospaziale.
-
-    Geopandas / fiona / pyogrio rifiutano una GeoDataFrame con
-    nomi colonna duplicati ("GeoDataFrame cannot contain
-    duplicated column names"). Una JOIN che produce colonne
-    omonime da entrambe le tabelle (es. cities.id + regions.id
-    entrambe aliasate `id` dal SELECT) entra in questa situazione.
-    Rinomina posizionale `<name>_2`, `<name>_3`, ... preservando
-    la prima occorrenza. Allineato a `_dedup_column_names` nel
-    `estrai/executor.py` (stesso schema di rename).
-    """
+    """Rename duplicated columns before geospatial export."""
     if not df.columns.duplicated(keep="first").any():
         return df
     new_columns: list[str] = []
@@ -103,9 +93,10 @@ def geospatial_dataframe_to_bytes(
             raise ValueError("geojson: serve una colonna geometria")
         gdf = to_geodataframe(df, geom_column, crs)
     else:
-        gdf = df
+        gdf = df.copy()
         if geom_column and gdf.geometry.name != geom_column:
             gdf = gdf.set_geometry(geom_column)
+    gdf = _converti_geometrie_secondarie_in_wkt(gdf)
     return gdf.to_json().encode("utf-8")
 
 
@@ -178,13 +169,6 @@ def _salva_formato_geo(
                 )
 
         gdf = to_geodataframe(df, geom_column, crs=crs)
-        # Allinea i due rami: anche partendo da un pandas DataFrame,
-        # le colonne geom-like non-attive (es. cities.geom dopo un
-        # JOIN con regions.boundary come geom principale) devono
-        # essere convertite in WKT stringa + rinominate, altrimenti
-        # i driver OGR (GPKG/GeoJSON/Shapefile) tentano di trattarle
-        # come secondary geometry e crashano con
-        # "Error adding field 'geom' to layer".
         gdf = _converti_geometrie_secondarie_in_wkt(gdf)
 
     if formato == "geojson":
@@ -225,17 +209,7 @@ _GEOMETRY_LIKE_COLUMN_NAMES = {
 
 
 def _converti_geometrie_secondarie_in_wkt(gdf):
-    """Convert non-active geometry columns to WKT for file export.
-
-    Drivers OGR (GPKG, Shapefile, GeoJSON via pyogrio) interpretano
-    colonne con nomi tipici di geometry (`geom`, `geometry`, `shape`,
-    `the_geom`) come secondary geometry fields anche quando il
-    contenuto e' una stringa WKT. Risultato:
-    `pyogrio.errors.FieldError: Error adding field 'geom' to layer`.
-
-    Per evitare il conflitto rinominiamo queste colonne non-attive
-    con suffix `_wkt`, oltre a convertirle in WKT se BaseGeometry.
-    """
+    """Convert and rename non-active geometry-like columns for OGR export."""
     from shapely.geometry.base import BaseGeometry
 
     nome_geometria_attiva = gdf.geometry.name
@@ -260,7 +234,7 @@ def _converti_geometrie_secondarie_in_wkt(gdf):
             new_name = f"{col}_wkt"
             base_new = new_name
             n = 2
-            while new_name in gdf.columns:
+            while new_name in gdf.columns or new_name in renames.values():
                 new_name = f"{base_new}_{n}"
                 n += 1
             renames[col] = new_name

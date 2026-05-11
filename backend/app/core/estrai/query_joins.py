@@ -40,7 +40,7 @@ class QueryJoinRenderer:
 
         first_node = table_nodes[0]
         raw_name = self._get_node_table_name(first_node)
-        qualified_table_name = self._qualify_table_name(raw_name) if first_node.type != 'datasource_node' else raw_name
+        qualified_table_name = self._qualify_table_name(raw_name)
         from_clause = qualified_table_name
         if first_node.alias:
             self._safe_identifier(first_node.alias, "Alias tabella FROM")
@@ -92,7 +92,7 @@ class QueryJoinRenderer:
             )
 
         raw_name = self._get_node_table_name(node)
-        qualified_table_name = self._qualify_table_name(raw_name) if node.type != 'datasource_node' else raw_name
+        qualified_table_name = self._qualify_table_name(raw_name)
 
         if not edge:
             raise ValueError(

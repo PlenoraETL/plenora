@@ -53,7 +53,8 @@ export function getNodeName(node, registry = null) {
   switch (node.type) {
     // Estrai
     case 'tableNode':        return node.data?.alias || node.data?.table_name || 'Tabella';
-    case 'datasourceNode':   return node.data?.alias || node.data?.name || 'DataSource';
+    case 'datasourceNode':
+    case 'datasource_node':  return node.data?.alias || node.data?.name || 'DataSource';
     case 'featureLayerNode': return node.data?.alias || node.data?.name || 'Feature Layer';
     case 'resultNode':       return 'Output';
     // Manipola + condivisi

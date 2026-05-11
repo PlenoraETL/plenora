@@ -38,12 +38,6 @@ class QueryProjectionRenderer:
         for node in table_nodes:
             table_alias = node.alias or self._get_node_table_name(node)
 
-            if node.type == "datasource_node":
-                visible_cols = [c for c in (node.columns or []) if getattr(c, "visible", True)]
-                if not visible_cols:
-                    columns.append(f"{table_alias}.*")
-                    continue
-
             for col in node.columns:
                 if not col.visible:
                     continue

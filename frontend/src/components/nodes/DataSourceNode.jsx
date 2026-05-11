@@ -60,10 +60,7 @@ const [datasources, setDatasources]         = useState([]);
   const [browserError, setBrowserError]       = useState(null);
   const [loadingSchema, setLoadingSchema]     = useState(false);
   const [schemaError, setSchemaError]         = useState(null);
-  // Liste sheets/layers rilevate dal file remoto (XLSX/GPKG/GDB).
-  // Servono al select di selezione foglio/layer, popolato dopo il
-  // primo `getFileSchema` senza sheet/layer (il backend ritorna
-  // l'inventario disponibile in `schema.sheets` / `schema.layers`).
+  // Sheet/layer disponibili per file multi-tabella.
   const [availableSheets, setAvailableSheets] = useState([]);
   const [availableLayers, setAvailableLayers] = useState([]);
   const [isExpanded, setIsExpanded]           = useState(true);
@@ -107,7 +104,6 @@ const openBrowser = useCallback(async (path = '') => {
     }
     upd({ file_path: file.path, format: file.type });
     setShowBrowser(false);
-    // Dopo selezione file chiedi schema al backend
     fetchSchema(file.path);
   }, [upd, openBrowser]);
 const fetchSchema = useCallback(async (filePath, opts = {}) => {
@@ -115,27 +111,16 @@ const fetchSchema = useCallback(async (filePath, opts = {}) => {
     setLoadingSchema(true);
     setSchemaError(null);
     try {
-      // Step 1 (sempre): chiama lo schema senza sheet/layer per
-      // discoverare l'inventario `sheets` / `layers` del file remoto.
-      // Per i file single-sheet/layer (csv/json/parquet/geojson/shp)
-      // il backend ritorna gia' `columns` qui — niente seconda call.
       const base = await getFileSchema(dsId, filePath);
       const sheets = Array.isArray(base.sheets) ? base.sheets : [];
       const layers = Array.isArray(base.layers) ? base.layers : [];
       setAvailableSheets(sheets);
       setAvailableLayers(layers);
 
-      // Sheet/layer effettivo: explicit > already-persisted > primo
-      // dell'inventario (solo se multi). Se single-sheet/layer non
-      // serve scegliere — `base.columns` e' gia' valido.
       const po = data.parse_options || {};
       const effSheet = opts.sheet ?? po.sheet ?? (sheets.length > 1 ? sheets[0] : null);
       const effLayer = opts.layer ?? po.layer ?? (layers.length > 1 ? layers[0] : null);
 
-      // Step 2 (solo multi-sheet/layer): re-fetch con il sheet/layer
-      // scelto per ottenere le `columns` di quel foglio/layer
-      // specifico (il backend ritorna `columns=[]` quando lo schema
-      // e' chiesto senza sheet su un workbook multi-sheet).
       let cols = base.columns || [];
       const needsDetail =
         (effSheet && sheets.length > 1) ||
@@ -148,7 +133,6 @@ const fetchSchema = useCallback(async (filePath, opts = {}) => {
         cols = detail.columns || [];
       }
 
-      // Persist sheet/layer scelto se mancante in parse_options.
       const updates = {
         columns: cols,
         format:  base.format || data.format,
@@ -163,27 +147,14 @@ const fetchSchema = useCallback(async (filePath, opts = {}) => {
         updates.parse_options = newPo;
       }
       upd(updates);
-      // Persisti immediatamente: senza un save automatico le columns
-      // restano solo nel React state e il primo reload mostra
-      // "Nessuna colonna rilevata" finche' fetchSchema riparte.
-      // Allineato al pattern di altri update colonne in
-      // ManipolaEditor (`handleUpdateFileSourceColumns`).
       setTimeout(() => { handleSaveQuiet().catch(() => {}); }, 100);
     } catch {
-      // Schema opzionale — non blocca l'uso del nodo
       setSchemaError(true);
     } finally {
       setLoadingSchema(false);
     }
   }, [dsId, upd, data.format, data.parse_options, handleSaveQuiet]);
 
-  // Auto-fetch dello schema al mount (ed a ogni cambio di file).
-  // Il fetchSchema riusa `data.parse_options.sheet/layer` se gia'
-  // persistiti, quindi il reload di un nodo con multi-sheet
-  // selezionato ricarica le colonne del foglio giusto. Senza
-  // questo effect, le columns appaiono solo dopo che l'utente
-  // riapre Sfoglia o cambia sheet — il reload mostrava "Nessuna
-  // colonna rilevata" anche con file_path persistito.
   useEffect(() => {
     if (!dsId || !data.file_path) return;
     fetchSchema(data.file_path);
@@ -357,10 +328,6 @@ return (
                 </>
               )}
 
-              {/* Selezione sheet (XLSX multi-foglio) o layer (GPKG/GDB
-                  multi-layer). availableSheets/Layers viene popolato
-                  dalla prima `getFileSchema` (senza sheet/layer)
-                  dopo che l'utente ha scelto il file via Sfoglia. */}
               {fileMode === 'fixed' && availableSheets.length > 1 && (
                 <div className="dsn__field">
                   <label className="dsn__label">Foglio (sheet)</label>
@@ -400,17 +367,6 @@ return (
                 </div>
               )}
 
-              {/* Schema colonne — sempre visibile per dare feedback
-                  stabile (vedi gh#... ux): l'header c'è anche con 0
-                  colonne, lo stato interno ruota tra:
-                    - loading
-                    - errore di fetch
-                    - elenco colonne
-                    - placeholder "Seleziona file"
-                    - placeholder "Schema non rilevato"
-                  La sezione era condizionata a `columns.length > 0`
-                  e spariva al reload se la fetch automatica falliva
-                  o se il file_mode era dynamic. */}
               {(mode === 'source') && (
                 <div className="dsn__columns">
                   <div className="dsn__columns-header">
@@ -448,7 +404,7 @@ return (
                       </div>
                     ) : (
                       <div className="dsn__columns-empty">
-                        Nessuna colonna rilevata — usa 🔄 per riprovare
+                        Schema non rilevato
                       </div>
                     )}
                   </div>

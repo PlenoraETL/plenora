@@ -5,13 +5,13 @@ Keeps this module's responsibility explicit and isolated from adjacent code.
 """
 
 import re
-from app.utils.logger import get_logger
 from typing import List, Dict, Optional, Any
 
 from app.core.projects.canvas_models import Node, Edge
 from app.core.estrai.query_filters import WhereClauseBuilder
 from app.core.estrai.query_joins import QueryJoinRenderer
 from app.core.estrai.query_projection import QueryProjectionRenderer
+from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
 
@@ -82,19 +82,16 @@ class QueryGenerator:
         if not result_node:
             raise ValueError(f"Nodo risultato '{result_node_id}' non trovato")
 
-        # Guard: `staticValues` come source in ESTRAI non e' SQL-
-        # traducibile (servirebbe materializzare un VALUES o CTE
-        # con i valori del nodo). Senza questo check, il generator
-        # produceva un `FROM ` vuoto + JOIN, syntax error psycopg2.
-        # Il nodo `staticValues` e' invece supportato in MANIPOLA
-        # (`_carica_sorgenti_statiche`) e ARRICCHISCI
-        # (canvas_orchestrator branch `node_type=='staticValues'`).
-        static_nodes = [n for n in nodes if n.type == "staticValues"]
-        if static_nodes:
-            ids = ", ".join(n.id for n in static_nodes)
+        # ESTRAI is SQL-source only.
+        unsupported_sources = [
+            n for n in nodes
+            if n.type in {"staticValues", "datasourceNode", "datasource_node"}
+        ]
+        if unsupported_sources:
+            ids = ", ".join(n.id for n in unsupported_sources)
             raise ValueError(
-                f"Il modulo ESTRAI non supporta nodi 'Valori Statici' "
-                f"({ids}). Usali in un progetto MANIPOLA o ARRICCHISCI."
+                f"Il modulo ESTRAI non supporta sorgenti file o statiche "
+                f"({ids}). Usa tabelle database, layer ArcGIS, oppure MANIPOLA."
             )
 
         # Risali il grafo dal risultato per trovare le tabelle connesse
@@ -154,11 +151,7 @@ class QueryGenerator:
             return None
 
     def _get_node_table_name(self, node) -> str:
-        """Restituisce il nome tabella SQL per un nodo, gestendo datasource_node."""
-        if getattr(node, 'type', None) == 'datasource_node':
-            raw = (getattr(node, 'datasource_name', None) or node.id)
-            sanitized = raw.replace(' ', '_').replace('-', '_').replace('.', '_')
-            return f"_urby_ds_{sanitized}"
+        """Restituisce il nome tabella SQL per un nodo."""
         return getattr(node, 'table_name', None) or ''
 
     def _qualify_table_name(self, table_name: str) -> str:

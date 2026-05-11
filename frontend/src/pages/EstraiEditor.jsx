@@ -252,14 +252,9 @@ function EstraiEditor() {
       label: 'Carica ArcGIS', animated: true, style: { stroke: '#2DD4BF', strokeWidth: 2 }, data: { join_type: 'carica_arcgis' } }));
   }, [nodes, setNodes, setEdges]);
 
-  // `handleAddDataSourceNode` rimosso: ESTRAI non gestisce
-  // `datasource_node` come source (richiede SQL backend). Il flow
-  // file → trasform vive in MANIPOLA dove abbiamo il loader
-  // `manipola/datasource_node_loading.py`.
+  // ESTRAI accetta solo sorgenti SQL/ArcGIS; Data Source resta in MANIPOLA.
 
-  // `handleAddStaticValuesNode` rimosso: ESTRAI non genera SQL
-  // valido per `staticValues` come source (FROM vuoto -> syntax
-  // error). Lo staticValues live in MANIPOLA / ARRICCHISCI.
+  // Static values non sono una sorgente SQL ESTRAI.
 
   const handleAddCommentNode = useCallback(() => {
     const pos = getViewportCenter(reactFlowInstance);
@@ -295,11 +290,7 @@ function EstraiEditor() {
       return;
     }
 
-    // Drop di un DataSource dalla palette laterale ignorato in
-    // ESTRAI: il backend non puo' eseguire datasource_node come
-    // source SQL. Lasciamo il payload `datasourceData` per
-    // compatibilita' col data-transfer dei vecchi browser ma non
-    // creiamo il nodo. (In MANIPOLA il drop e' supportato.)
+    // Data Source come sorgente e' supportato in MANIPOLA, non in ESTRAI.
     const datasourceRaw = event.dataTransfer.getData('datasourceData');
     if (datasourceRaw) {
       try { JSON.parse(datasourceRaw); } catch { /* noop */ }
@@ -405,14 +396,7 @@ function EstraiEditor() {
                 onClick={handleAddCommentNode} title="Aggiungi annotazione">
                 💬 Nota
               </button>
-              {/* Bottone "Valori Statici" rimosso intenzionalmente:
-                  ESTRAI e' SQL-based e non sa tradurre `staticValues`
-                  in CTE/VALUES — il save canvas passa ma l'execute
-                  genera "FROM " vuoto + JOIN, syntax error psycopg2.
-                  Plenora `staticValues` come source vive solo nei
-                  moduli MANIPOLA (`_carica_sorgenti_statiche`) e
-                  ARRICCHISCI (canvas_orchestrator branch
-                  `node_type=='staticValues'`). */}
+              {/* Valori Statici non sono sorgenti SQL ESTRAI. */}
               <button type="button" className="estrai-toolbar__btn estrai-toolbar__btn--output"
                 onClick={handleAddResultNode} disabled={hasResultNode}>
                 📁 Output
@@ -428,14 +412,7 @@ function EstraiEditor() {
                 style={{ borderColor: 'rgba(45,212,191,0.4)', color: '#2DD4BF' }}>
                 🌐 Carica ArcGIS
               </button>
-              {/* Bottone "Data Source" rimosso intenzionalmente:
-                  ESTRAI e' SQL-based e richiede `default_connection_id`
-                  + `source` (DB tabelle) o `feature_source` (ArcGIS).
-                  Un `datasource_node` (FTP/SFTP/SharePoint) nel canvas
-                  ESTRAI viene rifiutato a runtime con "Il progetto non
-                  ha una connessione associata" (vedi
-                  `core/estrai/executor.py:300`). Il flow file → trasform
-                  vive in MANIPOLA. */}
+              {/* Data Source file-based vive in MANIPOLA. */}
 
               <div className="estrai-toolbar__sep" />
             </>
