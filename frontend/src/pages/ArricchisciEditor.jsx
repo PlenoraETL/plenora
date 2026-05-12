@@ -238,7 +238,14 @@ const ArricchisciEditorContent = () => {
     return { apiId: apiNode.data?.api_id, paramMapping: apiNode.data?.param_mapping || {}, staticColumns: allStaticColumns, fileSourceId, sourceProjectId };
   }, []);
 
-  const handleShowConfirmModal = useCallback(async () => {
+  // Persistiamo le options ricevute da ResultNode (es. force_recalculate) tra
+  // l'apertura del modal di conferma e il click su "Conferma" — altrimenti
+  // la flag dal radio "Ricalcola tutto" andava persa nel passaggio
+  // handleShowConfirmModal -> setShowConfirmModal -> handleConfirmExecution.
+  const [pendingExecuteOptions, setPendingExecuteOptions] = useState({});
+
+  const handleShowConfirmModal = useCallback(async (_id, options = {}) => {
+    setPendingExecuteOptions(options);
     const currentNodes = nodesRef.current;
     // Pre-flight access_denied: backend (RB.4.B/RB.7.B) marca i nodi che
     // riferiscono risorse non visibili al gruppo del progetto. Blocca il
@@ -263,7 +270,8 @@ const ArricchisciEditorContent = () => {
     if (hasFileProcessor) {
       const resultNode = currentNodes.find(n => n.type === 'result');
       const format = resultNode?.data?.format || exportFormat || 'csv';
-      execution.prepareExecute({ format });
+      execution.prepareExecute({ format, ...options });
+      setPendingExecuteOptions({});
       return;
     }
     setShowConfirmModal(true);
@@ -276,8 +284,9 @@ const ArricchisciEditorContent = () => {
     // Leggi il formato dal nodo Result al momento dell'esecuzione
     const resultNode = nodesRef.current.find(n => n.type === 'result');
     const format = resultNode?.data?.format || exportFormat || 'csv';
-    execution.prepareExecute({ format });
-  }, [execution, exportFormat]);
+    execution.prepareExecute({ format, ...pendingExecuteOptions });
+    setPendingExecuteOptions({});
+  }, [execution, exportFormat, pendingExecuteOptions]);
   const handleCloseConfirmModal = useCallback(() => { setShowConfirmModal(false); enrichmentValidation.reset(); }, [enrichmentValidation]);
 
   // Registra azioni editor nello store — dopo tutti gli hook e useCallback
