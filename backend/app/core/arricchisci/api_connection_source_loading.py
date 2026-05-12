@@ -142,6 +142,40 @@ class ApiConnectionSourceLoadingMixin:
                 f"'{source_project_id}' non appartiene al tuo gruppo."
             )
 
+    def _upstream_blob_is_stale(self, source_project_id: str) -> bool:
+        """True quando il canvas dell'upstream e' stato aggiornato dopo
+        l'ultimo blob risultato.
+
+        Implica che il blob non riflette piu' lo schema corrente
+        (es. output_mapping rinominato, transform aggiunto). Usato da
+        `_load_source_project` per scattare il recompute aggressivo
+        anche senza ``force_recalculate`` dall'utente — evita che
+        MANIPOLA leggesse colonne fantasma dell'ARR upstream.
+        """
+        try:
+            from app.db.pg_connection import fetchone
+            row = fetchone(
+                "SELECT p.updated_at AS proj_ts, "
+                "(SELECT MAX(r.created_at) FROM results r "
+                "WHERE r.project_id = p.id) AS blob_ts "
+                "FROM projects p WHERE p.id = %s",
+                (source_project_id,),
+            )
+            if not row:
+                return False
+            proj_ts = row.get("proj_ts")
+            blob_ts = row.get("blob_ts")
+            if not proj_ts or not blob_ts:
+                return False
+            return proj_ts > blob_ts
+        except Exception as e:
+            # Failure mode safe: niente staleness, flusso normale prosegue
+            logger.warning(
+                f"upstream_blob_is_stale check fallito per "
+                f"{source_project_id}: {e}"
+            )
+            return False
+
     def _recompute_upstream_project(
         self, source_project_id: str, force_recalculate: bool
     ) -> None:
@@ -259,8 +293,21 @@ class ApiConnectionSourceLoadingMixin:
         loader = SourceLoader()
 
         df = None
-        # Tentativo 1: latest output dal blob DB (skip se force_recalculate
-        if not force_recalculate:
+        # FIX 6: se il canvas dell'upstream e' stato salvato dopo
+        # l'ultimo blob risultato, il blob e' stale (le colonne /
+        # formule downstream non riflettono il nuovo schema). In quel
+        # caso saltiamo il tentativo 1 e forziamo il recompute per non
+        # propagare dati obsoleti a MANIPOLA / risultato.
+        upstream_stale = self._upstream_blob_is_stale(source_project_id)
+        if upstream_stale:
+            logger.info(
+                f"Upstream blob stale per {source_project_id}: "
+                f"recompute forzato (canvas modificato dopo l'ultimo run)"
+            )
+
+        # Tentativo 1: latest output dal blob DB (skip se
+        # force_recalculate o se l'upstream e' stale)
+        if not force_recalculate and not upstream_stale:
             try:
                 df = loader.load(ref, expected_group_id=executing_group_id)
             except SourceLoadingError as e:
@@ -283,12 +330,19 @@ class ApiConnectionSourceLoadingMixin:
 
         # Tentativo 2: recompute upstream (orchestrator standalone
         if df is None and (
-            force_recalculate or output_dir is None or not output_dir.exists()
+            force_recalculate or upstream_stale
+            or output_dir is None or not output_dir.exists()
         ):
             self._assert_source_project_in_tenant(
                 source_project_id, executing_group_id
             )
-            self._recompute_upstream_project(source_project_id, force_recalculate)
+            # FIX 6: stale upstream → ricalcolo aggressivo. Senza
+            # questo, l'orchestratore poteva riusare la propria cache
+            # locale e produrre di nuovo lo stesso blob obsoleto.
+            self._recompute_upstream_project(
+                source_project_id,
+                force_recalculate=force_recalculate or upstream_stale,
+            )
 
             # Re-tenta load via SourceLoader dopo recompute
             try:

@@ -498,7 +498,21 @@ def execute_enrichment_task(
 
                     param_mapping = node_data.get("param_mapping", {})
 
-                    raw_output_mapping = node_data.get("output_mapping") or api_config.get("output_mapping", [])
+                    # Diagnostica: il node override (canvas) ha la priorita'
+                    # sulla connection default. Se il canvas non porta un
+                    # output_mapping (es. Pydantic Node drop pre-fix
+                    # extra="allow"), si torna ai column = path-leaf della
+                    # API connection — utile saperlo dai log quando si
+                    # indagano colonne mancanti downstream nei result blob.
+                    node_om = node_data.get("output_mapping")
+                    api_om = api_config.get("output_mapping", [])
+                    raw_output_mapping = node_om if node_om else api_om
+                    logger.info(
+                        f"[Task {task_id}] enrich node {node_id}: "
+                        f"output_mapping source="
+                        f"{'NODE' if node_om else 'API_DEFAULT'}, "
+                        f"len={len(raw_output_mapping or [])}"
+                    )
                     seen_cols = set()
                     deduped = []
                     for m in (raw_output_mapping or []):

@@ -73,10 +73,28 @@ def create_project(
             canvas_dict = {k: v for k, v in canvas_dict.items() if not k.startswith("_")}
             _project_service.update_canvas(metadata.id, CanvasState(**canvas_dict))
         except (TypeError, ValueError) as e:
+            # FIX 2: prima il warning era silenzioso → il client riceveva
+            # success ma canvas vuoto, con response['warning'] non sempre
+            # letto. Ora promuoviamo a 400 con dettaglio Pydantic in modo
+            # che il chiamante (curl/script) veda l'errore vero.
             canvas_warning = f"Canvas non salvato: schema non valido ({e})"
             logger.warning(
                 f"create_project canvas save fallito per {metadata.id}: {e}",
-                op="create_project"
+                op="create_project",
+            )
+            # Cleanup progetto orfano (canvas dichiarato ma non persistibile)
+            try:
+                _project_service.rollback_created_project(
+                    metadata.id, group_id=current_user.group_id,
+                )
+            except Exception as _rb:
+                logger.warning(f"rollback fallito: {_rb}", op="create_project")
+            raise HTTPException(
+                status_code=400,
+                detail={
+                    "error": "canvas_invalid",
+                    "message": str(e)[:500],
+                },
             )
         except Exception as e:
             logger.error(
