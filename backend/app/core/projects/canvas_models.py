@@ -49,7 +49,17 @@ class Position(BaseModel):
 
 
 class Column(BaseModel):
-    """Colonna di una tabella/dataset nel canvas."""
+    """Colonna di una tabella/dataset nel canvas.
+
+    ``extra="allow"`` — simmetrico al fix di ``Node`` (commit fc86a999).
+    Il frontend serializza per ogni colonna metadata extra (``selected``,
+    ``fromApi``, ``path`` per output_mapping, ecc.) che il backend NON
+    modella esplicitamente ma deve preservare nel round-trip
+    PUT->GET->PUT del canvas. Senza ``extra="allow"`` i campi extra
+    venivano droppati silenziosamente, rompendo p.es. la validation
+    FE che si aspetta ``columns[i].fromApi`` per i fixed-param marker.
+    """
+    model_config = ConfigDict(extra="allow")
     name: str
     alias: Optional[str] = None
     visible: bool = True
