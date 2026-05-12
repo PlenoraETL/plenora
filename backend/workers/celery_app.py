@@ -137,7 +137,20 @@ def _bootstrap_on_worker_init(**kwargs) -> None:
 def _bootstrap_on_worker_process_init(**kwargs) -> None:
     """Prefork child process post-fork. The psycopg2 pool inherited
     from the master is NOT safe to use; force re-bootstrap so each
-    child has its own pool / Redis client / settings cache."""
+    child has its own pool / Redis client / settings cache.
+
+    Order matters: ``discard_pool_after_fork()`` must run BEFORE
+    ``bootstrap()`` re-enters DB code. Without it, the bootstrap step
+    that opens a connection (e.g. ``init_db`` / migrations runner)
+    grabs the inherited TLS socket and dies with
+    ``SSL SYSCALL error: EOF detected``. The first task assigned to
+    that child then fails with ``connection already closed`` because
+    ``_bootstrap_on_worker_process_init`` raised, leaving the child in
+    a half-initialized state."""
+    # Drop inherited psycopg2 pool reference WITHOUT closeall() — the
+    # parent still owns the underlying TLS sockets.
+    from app.db.pg_connection import discard_pool_after_fork
+    discard_pool_after_fork()
     _bootstrap_worker_process(force_reset=True)
 
 

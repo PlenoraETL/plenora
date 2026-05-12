@@ -198,6 +198,24 @@ def close_pool():
         _pool = None
 
 
+def discard_pool_after_fork() -> None:
+    """Scarta il riferimento al pool ereditato dal parent post-fork.
+
+    I worker prefork di Celery ereditano i socket TLS del pool aperto nel
+    master: questi non sono fork-safe (la state crittografica e' condivisa
+    col parent) e al primo uso producono ``SSL SYSCALL error: EOF
+    detected`` o ``decryption failed or bad record mac``. Chiamare
+    ``closeall()`` qui peggiorerebbe il problema (SSL teardown sui socket
+    condivisi col parent), quindi azzeriamo solo il riferimento: il
+    prossimo ``_get_pool()`` aprira' connessioni fresh nel PID del child.
+
+    Idempotente. Da invocare nel signal handler
+    ``celery.signals.worker_process_init``.
+    """
+    global _pool
+    _pool = None
+
+
 def close_connection():
     """No-op per PostgreSQL: il pool gestisce le connessioni.
 
