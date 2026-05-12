@@ -80,22 +80,36 @@ def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+def _coerce_str(value: object) -> str | None:
+    """Best-effort coercion to ISO string for datetime values returned by psycopg2.
+
+    psycopg2 returns ``TIMESTAMPTZ`` as ``datetime`` objects by default; the
+    eseguibile DTO declares those columns as ``str``. Without coercion the
+    factory raises ``Malformed eseguibile DB row`` even on legitimate rows.
+    Same pattern as ``tickets.db._coerce_str`` (commit 4bdfc74a).
+    """
+    if value is None:
+        return None
+    if isinstance(value, str):
+        return value
+    from datetime import datetime, date
+    if isinstance(value, (datetime, date)):
+        return value.isoformat()
+    return str(value)
+
+
 def _required_str(row: Mapping[str, object], key: str) -> str:
-    value = row.get(key)
-    if not isinstance(value, str):
+    value = _coerce_str(row.get(key))
+    if value is None:
         raise ValueError(f"Malformed eseguibile DB row: {key} must be a string")
     return value
 
 
 def _optional_str(row: Mapping[str, object], key: str) -> str | None:
-    value = row.get(key)
-    if value is None:
+    raw = row.get(key)
+    if raw is None:
         return None
-    if not isinstance(value, str):
-        raise ValueError(
-            f"Malformed eseguibile DB row: {key} must be a string or null"
-        )
-    return value
+    return _coerce_str(raw)
 
 
 def _parse_json_object(value: object, *, field_name: str) -> JsonObject:
