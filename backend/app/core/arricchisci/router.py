@@ -195,6 +195,11 @@ class ValidateRequest(BaseModel):
     param_mapping: Dict[str, str]
     file_source_id: Optional[str] = None
     static_columns: Optional[List[str]] = None
+    # static_parameters: dict {param_name: fixed_value}. Quando passato, le
+    # sue chiavi sono trattate come 'colonne statiche' al pari di
+    # static_columns. Evita di dover passare due liste in sync (lato FE) per
+    # ogni nodo api_enrich.
+    static_parameters: Optional[Dict[str, str]] = None
 
 
 class EstimateRequest(BaseModel):
@@ -254,7 +259,12 @@ async def validate_enrichment(
             p["name"] for p in (api_conn.get("parameters") or [])
             if p.get("required", False)
         ]
-        static_cols_pre = set(request.static_columns or [])
+        # FIX 5: static_columns può essere derivato anche da static_parameters.keys()
+        # Storico: il FE doveva mantenere 2 liste separate in sync. Ora il
+        # backend accetta entrambi i campi nella richiesta e li unisce.
+        static_cols_pre = set(request.static_columns or []) | set(
+            (request.static_parameters or {}).keys()
+        )
         unmapped_required = [
             p for p in required_params
             if not request.param_mapping.get(p)          # mancante o stringa vuota

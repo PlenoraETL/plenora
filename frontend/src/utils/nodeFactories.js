@@ -457,6 +457,18 @@ function createApiEnrichNode(node) {
       // questa struttura nota" (es. 'imdf'). Il nodo result downstream
       // legge questo tag per specializzarsi.
       output_kind:       nd(node, 'output_kind', null),
+      // FIX 3 (commit follow): execute_if dal backend (top-level Pydantic Node)
+      // va copiato in data.execute_if cosi' la UI form lo mostra.
+      // Senza, il valore PUT via API top-level rimaneva invisibile al refresh.
+      execute_if:        nd(node, 'execute_if', null),
+      // Flag opt-out della validazione null-params (se True salta righe con
+      // parametri nulli invece di fallire). Default True nel runtime.
+      continue_on_error: nd(node, 'continue_on_error', true),
+      skip_null_params:  nd(node, 'skip_null_params', true),
+      // Lista nomi dei parametri 'fixed' del nodo (in sync con
+      // static_parameters.keys()). Backend FIX 5 ora accetta entrambi
+      // ma teniamo il roundtrip per backward compat.
+      static_columns:    nd(node, 'static_columns', []),
     },
   };
 }
