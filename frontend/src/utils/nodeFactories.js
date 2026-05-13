@@ -1,4 +1,4 @@
-import { nd } from './nodeHelpers';
+import { nd, nodeTopLevelData } from './nodeHelpers';
 
 /**
  * nodeFactories.js — Factory e deserializzatori per nodi ReactFlow
@@ -427,48 +427,53 @@ function createTransformNode(node) {
  * @returns {Object} Nodo ReactFlow type='api_enrich'
  */
 function createApiEnrichNode(node) {
+  // I default qui sono i fallback UI per quando il BE ritorna un canvas
+  // legacy in cui il campo non e` ancora dichiarato. Aggiornare se il
+  // Pydantic Node lato backend cambia il valore di default.
+  // I campi top-level del Node Pydantic vengono ribaltati automaticamente
+  // in `data` via `nodeTopLevelData(node)` — non serve enumerarli uno
+  // per uno con `nd(node, 'fieldname', ...)` come prima. Aggiungere un
+  // nuovo campo al Pydantic Node lato BE lo rende disponibile in
+  // `node.data.<field>` lato FE senza modificare questo factory ne'
+  // `canvasSerializer.js` (che gia` legge top-level via `nd()`).
+  const defaults = {
+    api_id: '',
+    api_name: '',
+    param_mapping: {},
+    parameters: [],
+    output_mapping: [],
+    enrich_type: 'manual',
+    connection_type: null,
+    exec_params: {},
+    endpoint: null,
+    columns: [],
+    batch: {},
+    continue_on_error: true,
+    skip_null_params: true,
+    max_errors: 0,
+    api_type: null,
+    static_parameters: {},
+    request: null,
+    response: null,
+    extra_files: null,
+    output_kind: null,
+    execute_if: null,
+    // `static_columns`: in sync con `static_parameters.keys()`. Backend
+    // FIX 5 (commit f9700d33) accetta entrambi, lo teniamo nei default
+    // per backward compat con canvas salvati prima del fix.
+    static_columns: [],
+  };
   return {
     ...node,
     data: {
-      ...node.data,
-      api_id:          nd(node, 'api_id', ''),
-      api_name:        nd(node, 'api_name', ''),
-      param_mapping:   nd(node, 'param_mapping', {}),
-      parameters:      nd(node, 'parameters', []),
-      output_mapping:  nd(node, 'output_mapping', []),
-      enrich_type:     nd(node, 'enrich_type', 'manual'),
-      connection_type: nd(node, 'connection_type', null),
-      exec_params:     nd(node, 'exec_params', {}),
-      endpoint:        nd(node, 'endpoint', null),
-      columns:         nd(node, 'columns', []),
-      batch:           nd(node, 'batch', {}),
-      continue_on_error: nd(node, 'continue_on_error', true),
-      skip_null_params:  nd(node, 'skip_null_params', true),
-      max_errors:        nd(node, 'max_errors', 0),
-      api_type:          nd(node, 'api_type', null),
-      static_parameters: nd(node, 'static_parameters', {}),
-      // Processore File (rest_file): config multipart in/binary out
-      request:           nd(node, 'request',  null),
-      response:          nd(node, 'response', null),
-      // File aggiuntivi caricati inline (per file_fields extra_input).
-      // Formato: {field_name: {file_source_id, original_filename, size}}
-      extra_files:       nd(node, 'extra_files', null),
-      // Tag che dice al canvas "lo zip prodotto da questo nodo ha
-      // questa struttura nota" (es. 'imdf'). Il nodo result downstream
-      // legge questo tag per specializzarsi.
-      output_kind:       nd(node, 'output_kind', null),
-      // FIX 3 (commit follow): execute_if dal backend (top-level Pydantic Node)
-      // va copiato in data.execute_if cosi' la UI form lo mostra.
-      // Senza, il valore PUT via API top-level rimaneva invisibile al refresh.
-      execute_if:        nd(node, 'execute_if', null),
-      // Flag opt-out della validazione null-params (se True salta righe con
-      // parametri nulli invece di fallire). Default True nel runtime.
-      continue_on_error: nd(node, 'continue_on_error', true),
-      skip_null_params:  nd(node, 'skip_null_params', true),
-      // Lista nomi dei parametri 'fixed' del nodo (in sync con
-      // static_parameters.keys()). Backend FIX 5 ora accetta entrambi
-      // ma teniamo il roundtrip per backward compat.
-      static_columns:    nd(node, 'static_columns', []),
+      ...defaults,
+      // Top-level del raw node ribaltato (skip null/undefined cosi` i
+      // default sopra restano validi quando il BE non popola il campo).
+      ...nodeTopLevelData(node),
+      // Eventuali extra gia` in node.data hanno precedenza: rappresentano
+      // l'edit dell'utente non ancora salvato (es. cambio in form non
+      // ancora propagato a PUT canvas).
+      ...(node.data || {}),
     },
   };
 }
