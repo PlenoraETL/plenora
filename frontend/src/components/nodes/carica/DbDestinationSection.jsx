@@ -51,7 +51,7 @@ function DbDestinationSection({
     tables,
     isLoadingSchemas,
     isLoadingTables,
-  } = useCaricaSchemaSelect({ connectionId, destType: 'db', schemaName, tableName, writeMode });
+  } = useCaricaSchemaSelect({ connectionId, destType: 'db', schemaName });
 
   const handleConnectionChange = (newConnectionId) => {
     onMultiUpdate({

@@ -1,25 +1,21 @@
 import { useEffect, useState } from 'react';
-import { getCaricaSchemas, getCaricaTables, getCaricaColumns } from '../../../api/carica';
+import { getCaricaSchemas, getCaricaTables } from '../../../api/carica';
 
 export function useCaricaSchemaSelect({
   connectionId,
   destType,
   schemaName,
-  tableName,
-  writeMode,
 }) {
   const [schemas, setSchemas] = useState([]);
   const [tables, setTables] = useState([]);
-  const [destColumns, setDestColumns] = useState([]);
   const [isLoadingSchemas, setIsLoadingSchemas] = useState(false);
   const [isLoadingTables, setIsLoadingTables] = useState(false);
-  const [isLoadingColumns, setIsLoadingColumns] = useState(false);
 
   useEffect(() => {
     if (destType === 'db' && connectionId) {
       loadSchemas(connectionId);
     } else {
-      setSchemas([]); setTables([]); setDestColumns([]);
+      setSchemas([]); setTables([]);
     }
   }, [connectionId, destType]);
 
@@ -27,18 +23,9 @@ export function useCaricaSchemaSelect({
     if (destType === 'db' && connectionId && schemaName) {
       loadTables(connectionId, schemaName);
     } else {
-      setTables([]); setDestColumns([]);
+      setTables([]);
     }
   }, [connectionId, schemaName, destType]);
-
-  useEffect(() => {
-    if (destType === 'db' && connectionId && schemaName && tableName
-        && writeMode !== 'create' && writeMode !== 'replace') {
-      loadDestColumns(connectionId, schemaName, tableName);
-    } else {
-      setDestColumns([]);
-    }
-  }, [connectionId, schemaName, tableName, writeMode, destType]);
 
   const loadSchemas = async (connId) => {
     setIsLoadingSchemas(true);
@@ -64,25 +51,11 @@ export function useCaricaSchemaSelect({
     }
   };
 
-  const loadDestColumns = async (connId, schema, table) => {
-    setIsLoadingColumns(true);
-    try {
-      const data = await getCaricaColumns(connId, schema, table);
-      setDestColumns(data.columns || []);
-    } catch (error) {
-      console.error('Errore caricamento colonne:', error);
-    } finally {
-      setIsLoadingColumns(false);
-    }
-  };
-
   return {
     schemas,
     tables,
-    destColumns,
     isLoadingSchemas,
     isLoadingTables,
-    isLoadingColumns,
   };
 }
 
