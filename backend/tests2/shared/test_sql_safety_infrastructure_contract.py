@@ -94,6 +94,11 @@ _ALLOWED_DYNAMIC_SQL_FSTRINGS = {
         "UPDATE schedules SET ",
     ): "Dynamic SET clause comes from safe_set_clause('schedules', fields).",
     (
+        "app/core/scheduler/db.py",
+        "list_schedule_logs",
+        "SELECT log_id, schedule_id, timestamp, level, event, ",
+    ): "Dynamic IN(...) fragment contains only generated %s parameter placeholders.",
+    (
         "app/core/auth/shares.py",
         "list_resource_shares",
         "SELECT group_id FROM ",
