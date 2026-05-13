@@ -59,7 +59,7 @@ _ALLOWED_DYNAMIC_SQL_FSTRINGS = {
         "app/core/eseguibili/db.py",
         "update_eseguibile",
         "UPDATE eseguibili SET ",
-    ): "Dynamic SET identifiers are constrained by the local allowed set.",
+    ): "Dynamic SET clause comes from safe_set_clause('eseguibili', fields).",
     (
         "app/core/files/db.py",
         "get_file_source",

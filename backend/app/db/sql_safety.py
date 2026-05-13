@@ -60,6 +60,14 @@ _ALLOWED_UPDATE_FIELDS: dict[str, frozenset[str]] = {
         "config",
         "updated_at",
     }),
+    "eseguibili": frozenset({
+        "name",
+        "description",
+        "default_output_format",
+        "default_output_name",
+        "icon",
+        "updated_at",
+    }),
 }
 
 

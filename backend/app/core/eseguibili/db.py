@@ -13,6 +13,7 @@ from datetime import datetime, timezone
 from typing import Any, Dict, List, Mapping, Optional
 
 from app.db import pg_connection as db
+from app.db.sql_safety import safe_set_clause
 
 
 JsonObject = Dict[str, Any]
@@ -283,14 +284,17 @@ def list_eseguibili_by_source(source_canvas_id: str) -> List[EseguibileSourceRef
 
 def update_eseguibile(eid: str, **fields: object) -> Optional[EseguibileRow]:
     """Aggiorna i campi passati (solo metadata, non canvas/expected_columns)."""
-    allowed = {"name", "description", "default_output_format", "default_output_name", "icon"}
-    to_update = {k: v for k, v in fields.items() if k in allowed and v is not None}
+    to_update = {
+        k: v
+        for k, v in fields.items()
+        if k in {"name", "description", "default_output_format", "default_output_name", "icon"}
+        and v is not None
+    }
     if not to_update:
         return get_eseguibile(eid)
     to_update["updated_at"] = _now()
-    set_clause = ", ".join(f"{k} = %s" for k in to_update.keys())
-    values = list(to_update.values()) + [eid]
-    db.execute(f"UPDATE eseguibili SET {set_clause} WHERE id = %s", tuple(values))
+    set_clause, vals = safe_set_clause("eseguibili", to_update)
+    db.execute(f"UPDATE eseguibili SET {set_clause} WHERE id = %s", vals + (eid,))
     return get_eseguibile(eid)
 
 
