@@ -1,9 +1,14 @@
 """
 Auth users admin CRUD router — typed boundary.
 
+NOTE: NON usare `from __future__ import annotations` qui. Pydantic v2 +
+FastAPI faticano a risolvere ForwardRef dei BaseModel passati come body
+parameter (es. `def create_user(data: UserCreate)`): senza PEP 563 le
+annotation sono oggetti reali a load-time e FastAPI sceglie Body
+implicito senza ambiguita`. Con PEP 563 la stringa "UserCreate" diventa
+un Annotated[ForwardRef, Query(PydanticUndefined)] che fallisce lo
+schema generation con `TypeAdapter is not fully defined`.
 """
-
-from __future__ import annotations
 
 import uuid
 

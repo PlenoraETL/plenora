@@ -53,18 +53,6 @@ def test_openapi_endpoint_is_invariant_across_environments():
         )
 
 
-@pytest.mark.skip(
-    reason=(
-        "BUG pre-esistente nello schema generation: "
-        "`PydanticUserError: TypeAdapter[Annotated[ForwardRef('UserCreate'), "
-        "Query(PydanticUndefined)]] is not fully defined`. Causato da "
-        "`from __future__ import annotations` in router (PEP 563) + "
-        "ForwardRef Pydantic non rebuiltato a startup. Fix richiede: "
-        "(a) `UserCreate.model_rebuild()` esplicito al bootstrap, oppure "
-        "(b) rimuovere `from __future__ import annotations` dal router. "
-        "Task separato, fuori scope del fix policy /openapi.json esposto in prod."
-    ),
-)
 def test_openapi_json_actually_served_by_app():
     """Smoke test: l'app risponde 200 con JSON OpenAPI valido."""
     from fastapi.testclient import TestClient

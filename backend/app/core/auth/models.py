@@ -90,3 +90,19 @@ class GroupResponse(BaseModel):
     group_id: str
     name: str
     description: str = ""
+
+
+# `from __future__ import annotations` (PEP 563) trasforma le annotation
+# in stringhe ForwardRef. Pydantic v2 + FastAPI a runtime devono
+# risolverle via `model_rebuild()` per generare lo schema OpenAPI dei
+# parametri tipizzati nei router (`def create_user(data: UserCreate)`).
+# Senza rebuild esplicito FastAPI raise `PydanticUserError: TypeAdapter
+# [Annotated[ForwardRef('UserCreate'), Query(PydanticUndefined)]] is not
+# fully defined` su /openapi.json. Costo del rebuild: zero a startup.
+for _m in (
+    LoginRequest, TokenResponse, CurrentUser, UserCreate,
+    ChangePasswordRequest, UserResponse, ResetPasswordRequest,
+    GroupCreate, MFAEnrollResponse, MFAVerifyRequest, MFADisableRequest,
+    MFAStatusResponse, GroupResponse,
+):
+    _m.model_rebuild()
