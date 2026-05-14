@@ -3,6 +3,16 @@
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 from typing import Any, Dict, List, Optional, Literal
 
+from app.shared.canvas_types import (
+    ConflictPolicyLiteral,
+    DestTypeLiteral,
+    MultiJoinTypeLiteral,
+    NodeTypeLiteral,
+    RestBatchModeLiteral,
+    RestMethodLiteral,
+    TransactionModeLiteral,
+    WriteModeLiteral,
+)
 from app.utils.logger import get_logger
 
 _canvas_logger = get_logger(__name__)
@@ -156,11 +166,7 @@ class Node(BaseModel):
         return self
     # (Definizione campi sotto.)
     id: str
-    type: Literal[
-        "source", "result", "project_source", "file_source", "feature_source",
-        "transform", "api_enrich", "staticValues", "carica", "carica_arcgis",
-        "multi_join", "comment", "datasource_node", "imdf_publisher"
-    ]
+    type: NodeTypeLiteral
     position: Position
 
     @field_validator('type', mode='before')
@@ -307,15 +313,15 @@ class Node(BaseModel):
     having_enabled: Optional[bool] = False
     having_conditions: Optional[List[HavingCondition]] = []
 
-    dest_type: Optional[Literal["db", "arcgis", "rest"]] = None
+    dest_type: Optional[DestTypeLiteral] = None
     schema_name: Optional[str] = None
-    write_mode: Optional[Literal["create", "replace", "append", "upsert", "update", "truncate_insert"]] = "create"
+    write_mode: Optional[WriteModeLiteral] = "create"
     column_mappings: Optional[List[dict]] = []
     match_columns: Optional[List[str]] = []
     batch_size: Optional[int] = 1000
-    transaction_mode: Optional[Literal["all_or_nothing", "per_batch"]] = "all_or_nothing"
+    transaction_mode: Optional[TransactionModeLiteral] = "all_or_nothing"
     create_spatial_index: Optional[bool] = True
-    conflict_policy: Optional[Literal["abort", "skip", "update"]] = "abort"
+    conflict_policy: Optional[ConflictPolicyLiteral] = "abort"
     create_unique_index: Optional[bool] = False
     unique_key_column: Optional[str] = None
 
@@ -333,16 +339,16 @@ class Node(BaseModel):
     # qui Pydantic li droppava silenziosamente al PUT canvas, lasciando
     # il task carica con "CARICA REST url is required".
     rest_url: Optional[str] = None
-    rest_method: Optional[Literal["POST", "PUT", "PATCH", "DELETE"]] = None
+    rest_method: Optional[RestMethodLiteral] = None
     rest_headers: Optional[List[dict]] = []
     rest_body_mapping: Optional[List[dict]] = []
-    rest_batch_mode: Optional[Literal["batch", "per_record"]] = None
+    rest_batch_mode: Optional[RestBatchModeLiteral] = None
     rest_batch_size: Optional[int] = None
     rest_timeout_seconds: Optional[int] = None
     rest_success_statuses: Optional[List[int]] = None
 
     join_keys: Optional[List[str]] = []
-    multi_join_type: Optional[Literal["inner", "left", "outer"]] = "inner"
+    multi_join_type: Optional[MultiJoinTypeLiteral] = "inner"
 
     mode: Optional[Literal["source", "carica"]] = None
     datasource_id: Optional[str] = None
