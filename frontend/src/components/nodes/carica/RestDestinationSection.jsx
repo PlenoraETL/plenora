@@ -1,10 +1,20 @@
 import React from 'react';
+import {
+  REST_METHODS_UI,
+  REST_BATCH_MODES as REST_BATCH_MODE_VALUES,
+} from '../../../constants/canvasTypes';
 
-export const REST_METHODS = ['POST', 'PUT', 'PATCH'];
+// Re-export del subset UI: CaricanNode lo importa come REST_METHODS per
+// `isRestValid` (validation) e Preview. Riesporta sotto il nome legacy
+// per non rompere i consumer al momento del refactor.
+export const REST_METHODS = REST_METHODS_UI;
 
+// Labels UI restano locali (drop-down i18n-volatile). Il valore di
+// `value` deve restare in REST_BATCH_MODE_VALUES; il contract test
+// FE cattura ogni divergenza.
 const REST_BATCH_MODES = [
-  { value: 'batch', label: 'Batch' },
-  { value: 'per_record', label: 'Per riga' },
+  { value: REST_BATCH_MODE_VALUES[0], label: 'Batch' },
+  { value: REST_BATCH_MODE_VALUES[1], label: 'Per riga' },
 ];
 
 function RestDestinationSection({

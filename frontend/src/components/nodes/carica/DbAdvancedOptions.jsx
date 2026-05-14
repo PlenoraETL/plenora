@@ -1,14 +1,21 @@
 import React from 'react';
+import {
+  TRANSACTION_MODES as TRANSACTION_MODE_VALUES,
+  CONFLICT_POLICIES as CONFLICT_POLICY_VALUES,
+} from '../../../constants/canvasTypes';
 
+// Etichette UI, drift FE↔BE noto per CONFLICT_POLICIES (FE+executor
+// usano "force", canvas Pydantic accetta "update"). Il valore qui
+// e' il canonico FE (single source via canvasTypes).
 const TRANSACTION_MODES = [
-  { value: 'all_or_nothing', label: 'Atomica', desc: 'Rollback totale su errore' },
-  { value: 'per_batch', label: 'Per batch', desc: 'Commit ogni batch (parziale ok)' },
+  { value: TRANSACTION_MODE_VALUES[0], label: 'Atomica', desc: 'Rollback totale su errore' },
+  { value: TRANSACTION_MODE_VALUES[1], label: 'Per batch', desc: 'Commit ogni batch (parziale ok)' },
 ];
 
 const CONFLICT_POLICIES = [
-  { value: 'abort', label: 'Interrompi', desc: 'Blocca se ci sono conflitti' },
-  { value: 'skip', label: 'Salta', desc: 'Inserisci solo righe non in conflitto' },
-  { value: 'force', label: 'Sovrascrivi', desc: 'Sovrascrivi righe in conflitto' },
+  { value: CONFLICT_POLICY_VALUES[0], label: 'Interrompi', desc: 'Blocca se ci sono conflitti' },
+  { value: CONFLICT_POLICY_VALUES[1], label: 'Salta', desc: 'Inserisci solo righe non in conflitto' },
+  { value: CONFLICT_POLICY_VALUES[2], label: 'Sovrascrivi', desc: 'Sovrascrivi righe in conflitto' },
 ];
 
 function DbAdvancedOptions({

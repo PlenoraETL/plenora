@@ -1,17 +1,22 @@
 import React, { useState } from 'react';
 import { postCaricaCheckConflicts } from '../../../api/carica';
+import { WRITE_MODES as WRITE_MODE_VALUES } from '../../../constants/canvasTypes';
 import { useCaricaSchemaSelect } from './useCaricaSchemaSelect';
 import ColumnMappingPanel from './ColumnMappingPanel';
 import DbAdvancedOptions from './DbAdvancedOptions';
 import ConflictModal from './ConflictModal';
 
+// Labels e descrizioni sono UX, restano locali. I `value` arrivano da
+// `canvasTypes.WRITE_MODES` (single source of truth allineata col BE);
+// il contract test FE verifica che ogni entry abbia un `value` ∈
+// WRITE_MODE_VALUES e che non manchi nessun valore canonico.
 export const WRITE_MODES = [
-  { value: 'create', label: '🆕 CREATE', desc: 'Crea nuova tabella (errore se esiste)' },
-  { value: 'replace', label: '🔄 REPLACE', desc: 'Elimina e ricrea la tabella' },
-  { value: 'append', label: '➕ APPEND', desc: 'Aggiungi righe alla tabella esistente' },
-  { value: 'upsert', label: '🔀 UPSERT', desc: 'Inserisci o aggiorna se esiste' },
-  { value: 'update', label: '✏️ UPDATE', desc: 'Aggiorna solo righe esistenti' },
-  { value: 'truncate_insert', label: '🗑️ TRUNCATE + INSERT', desc: 'Svuota e reinserisci' },
+  { value: WRITE_MODE_VALUES[0], label: '🆕 CREATE', desc: 'Crea nuova tabella (errore se esiste)' },
+  { value: WRITE_MODE_VALUES[1], label: '🔄 REPLACE', desc: 'Elimina e ricrea la tabella' },
+  { value: WRITE_MODE_VALUES[2], label: '➕ APPEND', desc: 'Aggiungi righe alla tabella esistente' },
+  { value: WRITE_MODE_VALUES[3], label: '🔀 UPSERT', desc: 'Inserisci o aggiorna se esiste' },
+  { value: WRITE_MODE_VALUES[4], label: '✏️ UPDATE', desc: 'Aggiorna solo righe esistenti' },
+  { value: WRITE_MODE_VALUES[5], label: '🗑️ TRUNCATE + INSERT', desc: 'Svuota e reinserisci' },
 ];
 
 function DbDestinationSection({

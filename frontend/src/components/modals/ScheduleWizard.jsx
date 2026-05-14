@@ -30,6 +30,10 @@ const CRON_PRESETS = [
   { label: 'Personalizzato...',     value: 'custom' },
 ];
 
+// Subset CRON-safe dei WRITE_MODES canvas: i 3 modi senza interazione
+// utente (no match_columns picker / no conflitti UI). Il `value` di
+// ciascuna entry deve essere ∈ canvasTypes.WRITE_MODES — verificato dal
+// contract test `tests/contract/canvasTypes.contract.test.js`.
 const WRITE_MODES = [
   { value: 'append',  label: 'Append',  desc: 'aggiungi righe' },
   { value: 'replace', label: 'Replace', desc: 'svuota e riscrivi' },
