@@ -7,8 +7,9 @@ import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { useToast } from '../hooks/useToast';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { listProjects, createProject, deleteProject, listConnections, listApiConnections,
+import { listProjects, deleteProject, listConnections, listApiConnections,
          listEseguibili, deleteEseguibile } from '../api';
+import NewProjectModal from '../components/projects/NewProjectModal';
 
 import { listFeatureConnections } from '../api/features';
 import { getFiles } from '../api/files';
@@ -42,17 +43,13 @@ function ProjectList() {
   const [schedules,         setSchedules]         = useState([]);
   const [dataSources,       setDataSources]       = useState([]);
   const [loading,           setLoading]           = useState(true);
-  const [creating,          setCreating]          = useState(false);
   const [showModal,         setShowModal]         = useState(false);
+  const [newProjectInitialType, setNewProjectInitialType] = useState('estrai');
   const [publishProject, setPublishProject] = useState(null); // progetto da pubblicare come eseguibile
   const [eseguibili, setEseguibili] = useState([]);            // lista eseguibili (catene on-demand)
   const [executeEseguibileId, setExecuteEseguibileId] = useState(null); // id eseguibile da lanciare nel wizard
   const [showEsegSelector, setShowEsegSelector] = useState(false);      // selettore progetto sorgente per nuovo eseguibile
   const [esegSelectorSearch, setEsegSelectorSearch] = useState('');
-  const [newProjectName,    setNewProjectName]    = useState('');
-  const [newProjectDesc,    setNewProjectDesc]    = useState('');
-  const [newProjectType,    setNewProjectType]    = useState('estrai');
-  const [newProjectConnId,  setNewProjectConnId]  = useState('');
   const [projectSources,    setProjectSources]    = useState({});
   const [projectFileSources,setProjectFileSources]= useState({});
   const [search,            setSearch]            = useState('');
@@ -122,23 +119,6 @@ function ProjectList() {
     } finally {
       setLoading(false);
     }
-  };
-
-  const handleCreateProject = async () => {
-    if (creating) return;
-    if (!newProjectName.trim()) { toast.warning('Inserisci un nome'); return; }
-    if (newProjectType === 'estrai' && !newProjectConnId) {
-      toast.warning('Seleziona una connessione'); return;
-    }
-    setCreating(true);
-    try {
-      await createProject(newProjectName, newProjectDesc, newProjectType, newProjectConnId);
-      setShowModal(false);
-      setNewProjectName(''); setNewProjectDesc(''); setNewProjectConnId('');
-      loadData();
-    } catch (err) {
-      toast.error('Errore creazione: ' + (err.message || 'errore sconosciuto'));
-    } finally { setCreating(false); }
   };
 
   const handleDeleteProject = async (id, name) => {
@@ -216,8 +196,7 @@ function ProjectList() {
   };
 
   const openModalForType = (type) => {
-    setNewProjectType(type);
-    setNewProjectName(''); setNewProjectDesc(''); setNewProjectConnId('');
+    setNewProjectInitialType(type);
     setShowModal(true);
   };
 
@@ -467,109 +446,14 @@ function ProjectList() {
 
         </div>{/* /content */}
       </div>{/* /main */}
-{showModal && (
-        <ModalWrapper
-          isOpen={true}
-          onClose={() => setShowModal(false)}
-          title={`Nuovo progetto ${newProjectType === 'estrai' ? 'Estrai' : newProjectType === 'manipola' ? 'Manipola' : 'Arricchisci'}`}
-          icon={newProjectType === 'estrai' ? '↓' : newProjectType === 'manipola' ? '⚙' : '◈'}
-          size="md"
-          closeOnOverlay={!creating}
-          closeOnEsc={!creating}
-          footer={
-            <>
-              <ModalButton variant="secondary" onClick={() => setShowModal(false)} disabled={creating}>Annulla</ModalButton>
-              <ModalButton variant="primary" onClick={handleCreateProject} loading={creating}>
-                Crea Progetto
-              </ModalButton>
-            </>
-          }
-        >
-            {/* Tipo selector */}
-            <div className="pl__modal-field">
-              <label className="pl__modal-label">Tipo</label>
-              <div className="pl__modal-type-row">
-                {['estrai','manipola','arricchisci'].map(t => (
-                  <button
-                    key={t}
-                    type="button"
-                    className={`pl__modal-type-btn pl__modal-type-btn--${t} ${newProjectType === t ? 'pl__modal-type-btn--on' : ''}`}
-                    onClick={() => setNewProjectType(t)}
-                  >
-                    {t === 'estrai' ? '↓ Estrai' : t === 'manipola' ? '⚙ Manipola' : '◈ Arricchisci'}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <div className="pl__modal-field">
-              <label className="pl__modal-label">Nome *</label>
-              <input
-                type="text"
-                className="pl__modal-input"
-                value={newProjectName}
-                onChange={e => setNewProjectName(e.target.value)}
-                placeholder="Es. 'Catasto Campania Q2'"
-                autoFocus
-              />
-            </div>
-
-            <div className="pl__modal-field">
-              <label className="pl__modal-label">Descrizione</label>
-              <textarea
-                className="pl__modal-textarea"
-                value={newProjectDesc}
-                onChange={e => setNewProjectDesc(e.target.value)}
-                placeholder="Descrizione opzionale..."
-                rows={2}
-              />
-            </div>
-
-            {newProjectType === 'estrai' && (
-              <div className="pl__modal-field">
-                <label className="pl__modal-label" htmlFor="new-project-connection">Connessione *</label>
-                <select
-                  id="new-project-connection"
-                  className="pl__modal-select"
-                  value={newProjectConnId}
-                  onChange={e => setNewProjectConnId(e.target.value)}
-                >
-                  <option value="">-- Seleziona connessione --</option>
-                  {connections.length > 0 && (
-                    <optgroup label="Database">
-                      {connections.map(c => <option key={c.id} value={c.id}>{c.name} ({c.database})</option>)}
-                    </optgroup>
-                  )}
-                  {arcgisConnections.length > 0 && (
-                    <optgroup label="ArcGIS Server">
-                      {arcgisConnections.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                    </optgroup>
-                  )}
-                </select>
-                {connections.length === 0 && arcgisConnections.length === 0 && (
-                  <p className="pl__modal-error">
-                    Nessuna connessione.{' '}
-                    <span className="pl__modal-error-link" onClick={() => { setShowModal(false); navigate('/connections'); }}>
-                      Creane una
-                    </span>
-                  </p>
-                )}
-              </div>
-            )}
-
-            {newProjectType === 'manipola' && (
-              <div className="pl__modal-info pl__modal-info--manipola">
-                💡 I progetti Manipola usano come input i risultati dei progetti Estrai.
-              </div>
-            )}
-
-            {newProjectType === 'arricchisci' && (
-              <div className="pl__modal-info pl__modal-info--arricchisci">
-                💡 I progetti Arricchisci chiamano API esterne per arricchire i dati estratti.
-              </div>
-            )}
-        </ModalWrapper>
-      )}
+      <NewProjectModal
+        isOpen={showModal}
+        initialType={newProjectInitialType}
+        connections={connections}
+        arcgisConnections={arcgisConnections}
+        onClose={() => setShowModal(false)}
+        onCreated={loadData}
+      />
 {publishProject && (
         <PublishEseguibileModal
           project={publishProject}
