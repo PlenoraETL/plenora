@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 
 from app.core.features.arcgis_client import ArcGISClient
-from app.core.features.arcgis_sql_helpers import (
+from app.core.connections.arcgis_sql_helpers import (
     chunked,
     query_oid_by_key,
     quote_sql_value,

@@ -3,19 +3,15 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Mapping, Optional
+from typing import Any, Mapping, Optional
 
 from app.core.features.arcgis_writer_boundary import (
     ArcGISColumnMappingsInput,
     ArcGISFeatureWriter,
 )
 from app.core.features.features_service import FeaturesService
-from app.core.files.dataframe_io import save_dataframe
+from app.core.dataframes.frame_io import save_dataframe
 from app.utils.logger import get_logger
-
-if TYPE_CHECKING:
-    import pandas as pd
-
 
 logger = get_logger(__name__)
 
@@ -150,7 +146,7 @@ def create_default_arcgis_feature_writer() -> ArcGISFeatureWriter:
 
 def execute_carica_arcgis_write(
     *,
-    df: "pd.DataFrame",
+    df: Any,
     request: CaricaArcGISWriteRequest,
     feature_writer: ArcGISFeatureWriter,
 ) -> CaricaArcGISWriteOutcome:
@@ -212,7 +208,7 @@ def execute_carica_arcgis_write(
 
 def _create_service(
     *,
-    df: "pd.DataFrame",
+    df: Any,
     request: CaricaArcGISWriteRequest,
     feature_writer: ArcGISFeatureWriter,
 ) -> ArcGISFeatureWriteResult:
@@ -235,7 +231,7 @@ def _create_service(
 
 def _write_existing_layer(
     *,
-    df: "pd.DataFrame",
+    df: Any,
     request: CaricaArcGISWriteRequest,
     feature_writer: ArcGISFeatureWriter,
 ) -> ArcGISFeatureWriteResult:

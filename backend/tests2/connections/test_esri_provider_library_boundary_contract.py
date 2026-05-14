@@ -30,6 +30,8 @@ CARICA_ARCGIS_BOUNDARY = APP_DIR / "core" / "carica" / "arcgis_write_boundary.py
 
 NEUTRAL_FACTORY_MODULE = "app.core.connections.arcgis_provider_factory"
 NEUTRAL_RESOLVER_MODULE = "app.core.connections.arcgis_connection_resolver"
+ARCGIS_SQL_HELPERS_MODULE = "app.core.connections.arcgis_sql_helpers"
+ARCGIS_PUBLISH_MODES_MODULE = "app.core.connections.arcgis_publish_modes"
 SHARED_PROVIDER_MODULE = "app.shared.connections.arcgis_provider"
 SHARED_CONNECTION_MODULE = "app.shared.connections.arcgis_connection"
 
@@ -145,26 +147,24 @@ def test_direct_arcgis_rest_is_confined_to_concrete_provider_client(src_file: Pa
     python_files_under(IMDF_DIR),
     ids=lambda p: p.relative_to(BACKEND_DIR).as_posix(),
 )
-def test_imdf_uses_arcgis_provider_protocol_or_resolver_only(src_file: Path) -> None:
-    # KEEP_COMPAT (ADR-0023): the same 3 IMDF policy wrappers documented in
+def test_imdf_uses_arcgis_provider_protocol_resolver_or_neutral_helpers(
+    src_file: Path,
+) -> None:
+    # KEEP_COMPAT (ADR-0023): the remaining IMDF policy wrappers documented in
     # `tests2/shared/test_arcgis_provider_boundary_guard.py:_KNOWN_VIOLATIONS`
     # are allowed to keep their thin `from app.core.features` import while the
-    # generic ArcGIS helpers live there. Both guards must stay in sync: this
+    # generic ArcGIS helpers are migrated. Both guards must stay in sync: this
     # allowlist mirrors the sibling one. Trim entries when the underlying
     # import is removed; the sibling guard catches any drift.
     _KNOWN_FEATURES_VIOLATIONS = {
         "app/core/imdf/arcgis/service_discovery.py": {"app.core.features"},
         "app/core/imdf/arcgis/service_lifecycle.py": {"app.core.features"},
-        "app/core/imdf/arcgis/sql_helpers.py": {"app.core.features"},
-        # publish_ops orchestra il replay/append/upsert su layer ArcGIS
-        # esistenti delegando a `arcgis_publish_modes.publish_existing_layer_mode`,
-        # che vive in `app.core.features` insieme agli altri ArcGIS helpers
-        # generici. Stessa rationale KEEP_COMPAT degli altri 3 wrapper IMDF.
-        "app/core/imdf/arcgis/publish_ops.py": {"app.core.features.arcgis_publish_modes"},
     }
 
     allowed_connections_imports = {
         NEUTRAL_RESOLVER_MODULE,
+        ARCGIS_SQL_HELPERS_MODULE,
+        ARCGIS_PUBLISH_MODES_MODULE,
     }
     rel = _rel(src_file)
     accepted_features = _KNOWN_FEATURES_VIOLATIONS.get(rel, set())

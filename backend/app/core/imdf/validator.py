@@ -4,7 +4,6 @@ validator.py — Pre-publish validator per bundle IMDF → Feature Service ArcGI
 Esegue un controllo read-only (senza side effect su ArcGIS) prima della
 """
 
-from pathlib import Path
 from typing import Any, Dict, Optional
 
 from app.utils.logger import get_logger
@@ -83,6 +82,7 @@ def validate_publish(
     """
     from app.config import settings
     from app.core.connections.arcgis_connection_resolver import resolve_arcgis_connection
+    from app.core.imdf import bundle_store
     from app.core.imdf.arcgis.service_discovery import (
         _find_existing_service,
         _is_service_name_available,
@@ -95,7 +95,6 @@ def validate_publish(
         PUBLISH_MODES,
     )
     from app.core.imdf.loader import load_imdf_layers
-    from app.shared.resources.path_policy import validate_imdf_task_id
     effective_match = {**DEFAULT_MATCH_COLUMNS, **(match_columns or {})}
 
     report: Dict[str, Any] = {
@@ -128,10 +127,8 @@ def validate_publish(
         _add_top_issue("error", "INVALID_MODE", f"Modalita' '{mode}' non supportata")
         return report
 
-    # Defense in depth: validator also enforces the shared path policy.
-    _root = settings.IMDF_BUNDLES_DIR.resolve()
     try:
-        bundle_dir: Path = validate_imdf_task_id(bundle_task_id, _root)
+        bundle_dir = bundle_store.ensure_local_bundle(bundle_task_id)
     except ValueError:
         _add_top_issue(
             "error", "INVALID_BUNDLE_ID",
@@ -139,8 +136,7 @@ def validate_publish(
             "(ammessi solo alfanumerico, '-', '_')"
         )
         return report
-
-    if not bundle_dir.exists() or not bundle_dir.is_dir():
+    except FileNotFoundError:
         _add_top_issue(
             "error", "BUNDLE_MISSING",
             f"Bundle '{bundle_task_id}' non trovato (potrebbe essere scaduto: "
@@ -148,11 +144,7 @@ def validate_publish(
         )
         return report
 
-    gdb_path = None
-    for p in bundle_dir.rglob("*.gdb"):
-        if p.is_dir():
-            gdb_path = p
-            break
+    gdb_path = bundle_store.find_gdb_dir(bundle_dir)
     if gdb_path is None:
         _add_top_issue("error", "GDB_MISSING", f"Nessun .gdb trovato in {bundle_dir}")
         return report

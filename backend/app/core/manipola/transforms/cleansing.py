@@ -4,21 +4,28 @@ Cluster CLEANSING — pulizia dati e coercion di tipo per colonna.
 Keeps transformation behavior isolated from orchestration callers.
 """
 
-import pandas as pd
-import geopandas as gpd
-from typing import Any, Union
+from typing import Any
 
+from app.core.dataframes.ports import FrameLike
+from app.core.dataframes.tabular import (
+    coerce_datetime_series,
+    coerce_numeric_series,
+    is_bool_series,
+    is_float_series,
+    is_numeric_series,
+)
+from app.core.dataframes.values import is_null_scalar
 from app.utils.logger import get_logger
 
 logger = get_logger("app.core.manipola.transforms.base")
 
-DataFrame = Union[pd.DataFrame, gpd.GeoDataFrame]
+DataFrame = FrameLike
 
 
 # RIEMPIMENTO VALORI NULLI
 # Riempie NULL con: valore costante, media, mediana, moda, ffill, bfill
 
-def _is_strict_numeric_series(s: "pd.Series") -> bool:
+def _is_strict_numeric_series(s: Any) -> bool:
     """True se la Series ha dtype numerico (int/float) ma NON booleano.
 
     `pd.api.types.is_numeric_dtype` ritorna True anche su bool: lo
@@ -26,9 +33,7 @@ def _is_strict_numeric_series(s: "pd.Series") -> bool:
     di tipo a parte (non vogliamo upcast bool->int silenzioso ne
     ValueError su `value=False`).
     """
-    return (
-        pd.api.types.is_numeric_dtype(s) and not pd.api.types.is_bool_dtype(s)
-    )
+    return is_numeric_series(s) and not is_bool_series(s)
 
 
 def _coerce_fill_value_for_numeric(value: Any, col_name: str, dtype: Any) -> Any:
@@ -47,7 +52,7 @@ def _coerce_fill_value_for_numeric(value: Any, col_name: str, dtype: Any) -> Any
     if value is None:
         return value
     # NaN float: idem, nessun upcast
-    if isinstance(value, float) and pd.isna(value):
+    if isinstance(value, float) and is_null_scalar(value):
         return value
     # Bool e' un sottotipo di int in Python: gestiamolo PRIMA del check int
     if isinstance(value, bool):
@@ -72,7 +77,7 @@ def _coerce_fill_value_for_numeric(value: Any, col_name: str, dtype: Any) -> Any
                 f"colonna."
             )
         try:
-            coerced = pd.to_numeric(value)
+            coerced = coerce_numeric_series(value, errors="raise")
         except (ValueError, TypeError):
             raise ValueError(
                 f"op_fill_na: colonna numerica '{col_name}' (dtype={dtype}) "
@@ -235,11 +240,11 @@ def op_type_cast(
             # astype(str) ingenuo. L'utente che converte un id/age
             # numerico in stringa si aspetta "34", non "34.0". Se tutti
             # i non-NaN sono interi, formattali senza la coda decimale.
-            if pd.api.types.is_float_dtype(col):
+            if is_float_series(col):
                 non_nan = col.dropna()
                 if not non_nan.empty and (non_nan % 1 == 0).all():
                     result[column] = col.apply(
-                        lambda x: "" if pd.isna(x) else str(int(x))
+                        lambda x: "" if is_null_scalar(x) else str(int(x))
                     )
                 else:
                     result[column] = col.astype(str).replace(
@@ -251,7 +256,7 @@ def op_type_cast(
                 )
 
         elif target_type == 'int':
-            result[column] = pd.to_numeric(result[column], errors=errors)
+            result[column] = coerce_numeric_series(result[column], errors=errors)
             if errors == 'coerce':
                 # Converti a Int64 (nullable) per preservare NULL
                 result[column] = result[column].astype('Int64')
@@ -262,7 +267,7 @@ def op_type_cast(
             # Gestisci virgola italiana come separatore decimale
             if result[column].dtype == object:
                 result[column] = result[column].astype(str).str.replace(',', '.', regex=False)
-            result[column] = pd.to_numeric(result[column], errors=errors)
+            result[column] = coerce_numeric_series(result[column], errors=errors)
 
         elif target_type == 'bool':
             truthy = {'true', '1', 'yes', 'si', 'sì', 'vero', 't', 'y', 's'}
@@ -270,12 +275,12 @@ def op_type_cast(
 
         elif target_type in ('date', 'datetime'):
             if date_format and date_format.strip():
-                result[column] = pd.to_datetime(
+                result[column] = coerce_datetime_series(
                     result[column], format=date_format, errors=errors
                 )
             else:
                 # Auto-detect: prova prima formato italiano, poi ISO
-                result[column] = pd.to_datetime(
+                result[column] = coerce_datetime_series(
                     result[column], dayfirst=True, errors=errors
                 )
 

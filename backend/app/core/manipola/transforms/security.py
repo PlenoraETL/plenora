@@ -8,15 +8,14 @@ import hashlib
 import re
 
 import numpy as np
-import pandas as pd
-import geopandas as gpd
-from typing import Any, Dict, List, Union
+from typing import Any, Dict, List
 
+from app.core.dataframes.tabular import empty_object_series
 from app.utils.logger import get_logger
 
 logger = get_logger("app.core.manipola.transforms.base")
 
-DataFrame = Union[pd.DataFrame, gpd.GeoDataFrame]
+DataFrame = Any
 
 
 # HASH MD5 (Rilevamento modifiche
@@ -112,7 +111,7 @@ def op_md5_hash(
 
         n = len(result)
         if n == 0:
-            result[output_column] = pd.Series([], dtype=object)
+            result[output_column] = empty_object_series()
         else:
             md5 = hashlib.md5
             out = [

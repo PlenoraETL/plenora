@@ -8,8 +8,6 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Optional
 
-import pandas as pd
-
 from app.core.carica.models import ColumnMapping
 from app.core.carica.writer_data_prep_helpers import (
     build_params,
@@ -31,11 +29,11 @@ class DataPrepMixin:
     tested without constructing the full DatabaseWriter mixin chain.
     """
 
-    def _prepare_dataframe(self, df: pd.DataFrame) -> pd.DataFrame:
+    def _prepare_dataframe(self, df: Any) -> Any:
         """Prepara il DataFrame per la scrittura."""
         return prepare_dataframe(df, logger)
 
-    def _fix_mixed_type_columns(self, df: pd.DataFrame) -> pd.DataFrame:
+    def _fix_mixed_type_columns(self, df: Any) -> Any:
         """Rileva colonne con tipi misti e le forza a str."""
         return fix_mixed_type_columns(df, logger)
 
@@ -45,7 +43,7 @@ class DataPrepMixin:
 
     def _build_params(
         self,
-        row: pd.Series,
+        row: Any,
         columns: List[ColumnMapping],
         operation: str,
     ) -> Dict[str, Any]:

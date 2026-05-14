@@ -58,7 +58,7 @@ def test_group_cleanup_helper_uses_table_allowlist():
     assert sorted(delete_literals) == sorted(
         f"DELETE FROM {table_name} WHERE group_id = %s"
         for table_name in _KNOWN_GROUP_TABLES
-        if table_name not in {"log_runs", "schedules"}
+        if table_name not in {"file_sources", "log_runs", "schedules"}
     )
 
 
@@ -84,8 +84,14 @@ def test_domain_cleanup_modules_keep_public_boundaries_and_use_table_helper():
             assert "delete_group_rows(" in src
             continue
 
-        assert _imports_module(tree, "app.db.group_cleanup")
-        assert "delete_group_rows_for_table(" in src
+        if cleanup_path.parts[-2] == "files":
+            assert _imports_module(tree, "app.core.files")
+            assert "list_file_source_ids_for_group(" in src
+            assert "delete_file_source(" in src
+            assert not _imports_module(tree, "app.db.group_cleanup")
+        else:
+            assert _imports_module(tree, "app.db.group_cleanup")
+            assert "delete_group_rows_for_table(" in src
         assert "app.db.pg_connection" not in src
 
         delete_literals = [

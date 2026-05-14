@@ -7,18 +7,23 @@ Keeps transformation behavior isolated from orchestration callers.
 import uuid
 
 import numpy as np
-import pandas as pd
-import geopandas as gpd
-from typing import List, Union
+from typing import List
 
+from app.core.dataframes.ports import FrameLike
+from app.core.dataframes.tabular import (
+    coerce_numeric_series,
+    concat_dataframes,
+    empty_dataframe,
+    is_numeric_series,
+    merge_dataframes,
+    missing_scalar,
+)
 from app.core.resources.exceptions import MemoryLimitExceededError
 from app.utils.logger import get_logger
 
 logger = get_logger("app.core.manipola.transforms.base")
 
-# Stesso alias dtype-union usato in base.py: copre sia pandas DataFrame
-# sia geopandas GeoDataFrame (op_join supporta entrambi via copy + merge
-DataFrame = Union[pd.DataFrame, gpd.GeoDataFrame]
+DataFrame = FrameLike
 
 
 # JOIN — Unione tabelle per colonna chiave
@@ -47,7 +52,7 @@ def op_join(
     """
     if len(inputs) < 2:
         logger.warning("Join richiede 2 input, ricevuto meno")
-        return inputs[0] if inputs else pd.DataFrame()
+        return inputs[0] if inputs else empty_dataframe()
 
     left_df = inputs[0].copy()
     right_df = inputs[1].copy()
@@ -110,7 +115,7 @@ def op_join(
             if left_dtype == 'object' or right_dtype == 'object':
                 def clean_to_str(series):
                     null_mask = series.isna()
-                    if pd.api.types.is_numeric_dtype(series):
+                    if is_numeric_series(series):
                         # Numeric -> stringa pulita (1.0 -> "1") via Int64 nullable
                         try:
                             str_series = series.astype('Int64').astype(str)
@@ -123,7 +128,7 @@ def op_join(
                     # Riapplica la mask: i veri NaN/None/pd.NA tornano pd.NA
                     # qualunque cosa abbia scritto astype(str) in quelle posizioni
                     # es. "<NA>" da Int64, "nan" da float, "None" da object con None
-                    return str_series.mask(null_mask, other=pd.NA)
+                    return str_series.mask(null_mask, other=missing_scalar())
 
                 left_df[left_on] = clean_to_str(left_df[left_on])
                 right_df[right_on] = clean_to_str(right_df[right_on])
@@ -133,8 +138,8 @@ def op_join(
                 # per i valori non parsabili, gestiti correttamente da pandas merge
                 # no NaN==NaN). Niente downstream cleanup serve qui
                 try:
-                    left_df[left_on] = pd.to_numeric(left_df[left_on], errors='coerce')
-                    right_df[right_on] = pd.to_numeric(right_df[right_on], errors='coerce')
+                    left_df[left_on] = coerce_numeric_series(left_df[left_on])
+                    right_df[right_on] = coerce_numeric_series(right_df[right_on])
                 except Exception as e:
                     logger.warning(f"Join: impossibile convertire a numerico: {e}")
 
@@ -231,7 +236,7 @@ def op_join(
             ]
 
     # Esegui merge
-    result = pd.merge(
+    result = merge_dataframes(
         left_df, right_df,
         left_on=left_on,
         right_on=right_on,
@@ -282,12 +287,12 @@ def op_union(
         DataFrame concatenato
     """
     if not inputs:
-        return pd.DataFrame()
+        return empty_dataframe()
 
     if len(inputs) == 1:
         return inputs[0]
 
-    result = pd.concat(inputs, ignore_index=ignore_index)
+    result = concat_dataframes(inputs, ignore_index=ignore_index)
     logger.info(f"Union completato: {len(result)} righe da {len(inputs)} sorgenti")
     return result
 
@@ -312,7 +317,7 @@ def op_cross_join(
         DataFrame con tutte le combinazioni di righe
     """
     if not dfs:
-        return pd.DataFrame()
+        return empty_dataframe()
     if len(dfs) < 2:
         logger.warning("CrossJoin richiede 2 input, ricevuto meno")
         return dfs[0]
@@ -358,7 +363,7 @@ def op_cross_join(
             )
 
     try:
-        result = pd.merge(left_df, right_df, how="cross")
+        result = merge_dataframes(left_df, right_df, how="cross")
 
         logger.info(
             f"CrossJoin completato: {len(left_df)} x {len(right_df)} = {len(result)} righe"

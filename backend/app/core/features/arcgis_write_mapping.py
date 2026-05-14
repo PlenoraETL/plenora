@@ -3,10 +3,9 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Mapping, Sequence, TYPE_CHECKING
+from typing import Mapping, Sequence
 
-if TYPE_CHECKING:
-    import pandas as pd
+from app.core.dataframes.ports import FrameLike
 
 
 @dataclass(frozen=True)
@@ -23,7 +22,7 @@ class ArcGISColumnMapping:
 class ArcGISMappedFrame:
     """DataFrame plus the geometry column name after write-boundary mapping."""
 
-    df: "pd.DataFrame"
+    df: FrameLike
     geometry_column: str
 
 
@@ -73,7 +72,7 @@ class ArcGISWriteMappingContract:
 
     def apply(
         self,
-        df: "pd.DataFrame",
+        df: FrameLike,
         *,
         geometry_column: str,
         required_match_column: str = "",

@@ -7,9 +7,7 @@ parametri (deduplicazione cache key) per `EnrichmentExecutor`.
 from __future__ import annotations
 
 from collections import defaultdict
-from typing import Dict, List
-
-import pandas as pd
+from typing import Any, Dict, List
 
 
 class EnrichmentGroupingMixin:
@@ -18,7 +16,7 @@ class EnrichmentGroupingMixin:
     Pure data grouping in-memory. Zero log, zero side-effects.
     """
 
-    def _group_by_params(self, df: pd.DataFrame) -> Dict[str, List[int]]:
+    def _group_by_params(self, df: Any) -> Dict[str, List[int]]:
         """
         Raggruppa righe per combinazione unica di parametri (deduplicazione).
 
@@ -41,6 +39,6 @@ class EnrichmentGroupingMixin:
 
         return dict(groups)
 
-    def _count_unique_combinations(self, df: pd.DataFrame) -> int:
+    def _count_unique_combinations(self, df: Any) -> int:
         """Conta combinazioni uniche di parametri."""
         return len(self._group_by_params(df))

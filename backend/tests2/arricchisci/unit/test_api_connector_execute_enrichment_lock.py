@@ -129,7 +129,7 @@ def env(api_service):
                 return_value="res-stubbed-id",
             ),
             save_df_bytes=_p(
-                "app.core.files.dataframe_io.save_dataframe_to_bytes",
+                "app.core.dataframes.frame_io.save_dataframe_to_bytes",
                 return_value=b"stub-bytes",
             ),
             project_access_ctx=_p(

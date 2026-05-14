@@ -11,19 +11,18 @@ import json as _json
 
 from typing import Any, Dict, List, Optional, Sequence
 
-import pandas as pd
-
 from app.core.carica.models import ColumnMapping
+from app.core.dataframes.values import is_geometry_series, is_null_scalar
 
 
 def is_pandas_null(value: Any) -> bool:
     """Return True for pandas null-like scalar values, excluding strings/bytes."""
     if isinstance(value, (str, bytes)):
         return False
-    return bool(pd.isna(value))
+    return is_null_scalar(value)
 
 
-def fix_mixed_type_columns(df: pd.DataFrame, logger) -> pd.DataFrame:
+def fix_mixed_type_columns(df: Any, logger) -> Any:
     """Force object columns mixing numeric and string values to strings."""
     for col in df.columns:
         if df[col].dtype != "object":
@@ -57,25 +56,17 @@ def fix_mixed_type_columns(df: pd.DataFrame, logger) -> pd.DataFrame:
     return df
 
 
-def convert_geoseries_columns_to_wkt(df: pd.DataFrame, logger) -> pd.DataFrame:
+def convert_geoseries_columns_to_wkt(df: Any, logger) -> Any:
     """Convert GeoSeries columns to WKT when geopandas is available."""
-    try:
-        import geopandas as gpd
-
-        for col in df.columns:
-            if isinstance(df[col], gpd.GeoSeries):
-                df[col] = df[col].apply(
-                    lambda g: g.wkt if g is not None and not pd.isna(g) else None
-                )
-    except ImportError:
-        logger.debug(
-            "[_prepare_dataframe] geopandas non disponibile, "
-            "skip pre-conversione GeoSeries -> WKT"
-        )
+    for col in df.columns:
+        if is_geometry_series(df[col]):
+            df[col] = df[col].apply(
+                lambda g: g.wkt if g is not None and not is_null_scalar(g) else None
+            )
     return df
 
 
-def prepare_dataframe(df: pd.DataFrame, logger) -> pd.DataFrame:
+def prepare_dataframe(df: Any, logger) -> Any:
     """Prepare a DataFrame for database writes without writer state."""
     prepared = df.copy()
     prepared = fix_mixed_type_columns(prepared, logger)
@@ -133,7 +124,7 @@ def normalize_sql_value(value: Any) -> Any:
 
 
 def build_params(
-    row: pd.Series,
+    row: Any,
     columns: List[ColumnMapping],
     operation: str,
     match_columns: Sequence[str],

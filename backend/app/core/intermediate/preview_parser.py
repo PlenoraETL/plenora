@@ -13,8 +13,8 @@ from typing import Any, Dict, List, Optional
 class ParquetPreview:
     """Parsed Parquet preview.
 
-    ``rows`` is at most ``limit`` rows materialized via
-    ``RecordBatch.to_pandas.to_dict(orient='records')``.
+    ``rows`` is at most ``limit`` rows materialized through the local
+    pyarrow table bridge and projected to record dictionaries.
     ``col_schema`` maps ``{col_name: dtype_str}`` for the FULL
     frame schema (derived from the parquet footer's arrow
     schema, not just the first batch — so a wide-but-empty file
@@ -95,14 +95,13 @@ def parse_parquet_preview(
     Success surface: ``ParquetPreview(rows, col_schema,
     row_count)``.
     """
-    # Lazy / leaf imports: pyarrow + pandas live ONLY inside
+    # Lazy / leaf imports: pyarrow lives ONLY inside
     # this function body (and transitively, ONLY inside this
     # module). Keeping the imports inside the call site means
     # a process that imports ``preview_parser`` but never
-    # invokes the parser does not pay the import cost. The
-    # sibling module under ``app/core/intermediate/`` references
-    # pyarrow/pandas anymore
-    import pandas as pd
+    # invokes the parser does not pay the import cost. Callers receive
+    # plain preview data; dataframe-engine details stay behind helpers
+    # elsewhere.
     import pyarrow as pa
     import pyarrow.parquet as pq
 
@@ -114,11 +113,11 @@ def parse_parquet_preview(
         reader = pa.BufferReader(body_bytes)
         pf = pq.ParquetFile(reader)
         row_count = int(pf.metadata.num_rows)
-        # Schema derivation uses an empty pandas DataFrame from the
-        # arrow schema, so dtype strings match ``pd.read_parquet`` on a
-        # fully decoded frame. Footer schema also preserves columns
+        # Schema derivation uses an empty table materialized through
+        # pyarrow's bridge, so dtype strings match the dataframe loader
+        # on a fully decoded frame. Footer schema also preserves columns
         # when a wide file's first row-group happens to be empty.
-        empty_df = pd.DataFrame(pf.schema_arrow.empty_table().to_pandas())
+        empty_df = pf.schema_arrow.empty_table().to_pandas()
         col_schema: Dict[str, str] = {
             str(c): str(empty_df[c].dtype) for c in empty_df.columns
         }
@@ -151,7 +150,7 @@ def parse_parquet_preview(
             head_table = pa.Table.from_batches(
                 collected, schema=pf.schema_arrow,
             )
-            head_df = pd.DataFrame(head_table.to_pandas()).head(target)
+            head_df = head_table.to_pandas().head(target)
         else:
             # Zero-row file: head_df is the same empty-schema
             # frame we already built for col_schema

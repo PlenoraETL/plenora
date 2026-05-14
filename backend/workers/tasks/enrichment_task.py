@@ -19,6 +19,7 @@ from pathlib import Path
 from typing import Dict, Any, Optional, List
 from workers.celery_app import celery_app
 from app.config import settings
+from app.core.dataframes.values import is_dataframe, is_nonempty_dataframe
 from app.utils.logger import get_logger, open_run, close_run, set_run_context, append_step
 from app.core.arricchisci.enrichment_service import EnrichmentExecutor, generate_error_report
 from app.core.arricchisci.models import EnrichmentOptions
@@ -58,13 +59,11 @@ def _merge_batch_parallel_node_results(
             `common_input_df`. Il messaggio cita task_id, node_id,
             len(result_df), len(common_input_df), e cause probabili.
     """
-    import pandas as _pd
-
     merged = common_input_df.copy() if hasattr(common_input_df, "copy") else common_input_df
     expected_len = len(merged)
     for nid in node_ids:
         nr = node_results.get(nid)
-        if not isinstance(nr, _pd.DataFrame):
+        if not is_dataframe(nr):
             continue
         if len(nr) != expected_len:
             raise RuntimeError(
@@ -638,9 +637,8 @@ def execute_enrichment_task(
 
             if _run_id:
                 try:
-                    import pandas as _pd
-                    _df = result if isinstance(result, _pd.DataFrame) else None
-                    if _df is not None and not _df.empty:
+                    _df = result if is_nonempty_dataframe(result) else None
+                    if _df is not None:
                         from app.core.intermediate.snapshot import (
                             record_checkpoint_snapshot,
                         )
@@ -986,7 +984,7 @@ def execute_enrichment_task(
             # rmtree al __exit__ (no orphan su SIGKILL mid-run entro il
             # cleanup OS-level del /tmp
             from app.core.eseguibili import storage as _eseg_storage
-            from app.core.files.dataframe_io import save_dataframe, save_dataframe_to_bytes
+            from app.core.dataframes.frame_io import save_dataframe, save_dataframe_to_bytes
             fmt_lower = (final_format or "").lower()
             if fmt_lower in ("gpkg", "shp"):
                 with _tf.TemporaryDirectory(

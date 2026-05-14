@@ -122,14 +122,14 @@ class ArcGISClient(
             Lista di features in formato Esri JSON:
             [{"attributes": {...}, "geometry": {...}}, ...]
         """
-        import pandas as pd
-        
+        from app.core.dataframes.values import is_null_scalar
+
         has_geometry = False
         is_geodataframe = False
         
         try:
-            import geopandas as gpd
-            if isinstance(df, gpd.GeoDataFrame) and df.geometry is not None:
+            from app.core.dataframes.geodata import is_geodataframe as _is_geodataframe
+            if _is_geodataframe(df) and df.geometry is not None:
                 is_geodataframe = True
                 has_geometry = True
                 if df.crs:
@@ -153,7 +153,7 @@ class ArcGISClient(
                 if col in skip_cols:
                     continue
                 attribute_value = row[col]
-                if pd.isna(attribute_value):
+                if is_null_scalar(attribute_value):
                     feature["attributes"][col] = None
                 elif hasattr(attribute_value, 'item'):  # numpy scalar
                     feature["attributes"][col] = attribute_value.item()
@@ -164,7 +164,7 @@ class ArcGISClient(
                 geom = None
                 if is_geodataframe:
                     geom = row.geometry
-                elif geometry_column in df.columns and pd.notna(row[geometry_column]):
+                elif geometry_column in df.columns and not is_null_scalar(row[geometry_column]):
                     from shapely import wkt
                     try:
                         geom = wkt.loads(str(row[geometry_column]))
@@ -438,8 +438,8 @@ class ArcGISClient(
         # tutte le altre fallirebbero in addFeatures
         geom_type = "esriGeometryPolygon"  # default
         try:
-            import geopandas as gpd
-            if isinstance(df, gpd.GeoDataFrame) and df.geometry is not None and len(df) > 0:
+            from app.core.dataframes.geodata import is_geodataframe as _is_geodataframe
+            if _is_geodataframe(df) and df.geometry is not None and len(df) > 0:
                 geom_types = df.geometry.dropna().geom_type
                 if len(geom_types) > 0:
                     majority_type = geom_types.value_counts().idxmax()
@@ -455,7 +455,7 @@ class ArcGISClient(
                         )
                 if df.crs:
                     srid = df.crs.to_epsg() or srid
-        except (ImportError, IndexError):
+        except IndexError:
             pass
         
         if not geom_type.startswith("esri") and geometry_column in df.columns:
@@ -482,8 +482,8 @@ class ArcGISClient(
             "spatialReference": {"wkid": srid},
         }
         try:
-            import geopandas as gpd
-            if isinstance(df, gpd.GeoDataFrame) and df.geometry is not None and len(df) > 0:
+            from app.core.dataframes.geodata import is_geodataframe as _is_geodataframe
+            if _is_geodataframe(df) and df.geometry is not None and len(df) > 0:
                 bounds = df.geometry.dropna().total_bounds  # minx, miny, maxx, maxy
                 if len(bounds) == 4 and all(abs(b) < 1e15 for b in bounds):
                     extent = {

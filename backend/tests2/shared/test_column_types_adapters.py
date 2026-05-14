@@ -12,10 +12,10 @@ import numpy as np
 import pandas as pd
 import pytest
 
+from app.core.dataframes.schema import canvas_type_to_pandas_dtype
 from app.core.resources.column_types import (
     CANONICAL_BASE_TYPES,
     TYPE_ALIASES,
-    canvas_type_to_pandas_dtype,
     dict_to_metadata,
     is_canonical_type,
     lookup_canvas_column_type,
@@ -201,7 +201,7 @@ def test_type_aliases_map_coherent_with_canonical():
         )
 
 
-# canvas_type_to_pandas_dtype (fase C)
+# canvas_type_to_pandas_dtype (fase C; accesso preferito via dataframes.schema)
 
 
 @pytest.mark.parametrize("canvas_type,expected_dtype", [
@@ -234,6 +234,12 @@ def test_canvas_type_to_pandas_dtype_is_instantiable():
         dtype = canvas_type_to_pandas_dtype(canvas)
         # Non deve esplodere
         pd.Series([], dtype=dtype)
+
+
+def test_canvas_type_to_pandas_dtype_resource_compat_wrapper():
+    from app.core.resources.column_types import canvas_type_to_pandas_dtype as compat
+
+    assert compat("integer") == canvas_type_to_pandas_dtype("integer")
 
 
 # lookup_canvas_column_type

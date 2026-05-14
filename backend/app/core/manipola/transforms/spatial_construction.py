@@ -2,18 +2,22 @@
 Geometry construction transforms for MANIPOLA spatial operations.
 """
 
-from typing import Optional, Union
+from typing import Optional
 
-import geopandas as gpd
-import pandas as pd
 from shapely.geometry import LineString, Polygon
 
-from app.core.features.geo_utils import to_geodataframe
+from app.core.dataframes.geodata import (
+    empty_geodataframe,
+    geodataframe_from_rows,
+    is_geodataframe,
+    to_geodataframe,
+)
+from app.core.dataframes.ports import FrameLike
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
 
-DataFrame = Union[pd.DataFrame, gpd.GeoDataFrame]
+DataFrame = FrameLike
 
 
 def op_geo_line_builder(
@@ -22,7 +26,7 @@ def op_geo_line_builder(
     group_column: str,
     order_column: Optional[str] = None,
     output_column: str = "geometry",
-) -> gpd.GeoDataFrame:
+) -> DataFrame:
     """
     Crea LineString da punti ordinati raggruppati per attributo.
 
@@ -40,7 +44,7 @@ def op_geo_line_builder(
         GeoDataFrame con una LineString per ogni gruppo
     """
     try:
-        gdf = df if isinstance(df, gpd.GeoDataFrame) else to_geodataframe(df, geom_column)
+        gdf = df if is_geodataframe(df) else to_geodataframe(df, geom_column)
         result_rows = []
 
         for group_val, group_df in gdf.groupby(group_column):
@@ -63,9 +67,9 @@ def op_geo_line_builder(
 
         if not result_rows:
             logger.warning("GeoLineBuilder: nessuna linea creata")
-            return gpd.GeoDataFrame(columns=[group_column, output_column])
+            return empty_geodataframe(columns=[group_column, output_column])
 
-        result = gpd.GeoDataFrame(result_rows, geometry=output_column, crs=gdf.crs)
+        result = geodataframe_from_rows(result_rows, geometry=output_column, crs=gdf.crs)
 
         logger.info(
             f"GeoLineBuilder completato: {len(gdf)} punti -> {len(result)} linee"
@@ -83,7 +87,7 @@ def op_geo_polygon_builder(
     group_column: str,
     order_column: Optional[str] = None,
     output_column: str = "geometry",
-) -> gpd.GeoDataFrame:
+) -> DataFrame:
     """
     Crea Polygon da punti ordinati raggruppati per attributo.
 
@@ -102,7 +106,7 @@ def op_geo_polygon_builder(
         GeoDataFrame con un Polygon per ogni gruppo
     """
     try:
-        gdf = df if isinstance(df, gpd.GeoDataFrame) else to_geodataframe(df, geom_column)
+        gdf = df if is_geodataframe(df) else to_geodataframe(df, geom_column)
         result_rows = []
 
         for group_val, group_df in gdf.groupby(group_column):
@@ -128,9 +132,9 @@ def op_geo_polygon_builder(
 
         if not result_rows:
             logger.warning("GeoPolygonBuilder: nessun poligono creato")
-            return gpd.GeoDataFrame(columns=[group_column, output_column])
+            return empty_geodataframe(columns=[group_column, output_column])
 
-        result = gpd.GeoDataFrame(result_rows, geometry=output_column, crs=gdf.crs)
+        result = geodataframe_from_rows(result_rows, geometry=output_column, crs=gdf.crs)
 
         logger.info(
             f"GeoPolygonBuilder completato: {len(gdf)} punti -> {len(result)} poligoni"

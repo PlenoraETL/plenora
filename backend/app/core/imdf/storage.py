@@ -7,13 +7,13 @@ Chiude R2 del multi-host audit: i bundle IMDF non vivono piu' solo su
 from __future__ import annotations
 
 import json
-import shutil
 import tempfile
 import zipfile
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from app.infrastructure.storage.cloud_backends import object_storage_enabled
+from app.shared.resources.file_cleanup import rmtree_safe
 from app.shared.resources.storage_layout import IMDF_BUNDLES_PREFIX
 from app.utils.zip_safe import safe_extractall
 from app.utils.logger import get_logger
@@ -235,7 +235,7 @@ def list_task_ids() -> List[str]:
     return task_ids
 
 
-def delete_bundle(task_id: str) -> int:
+def delete_bundle(task_id: str, *, cleanup_local: bool = True) -> int:
     """Cancella zip + meta da S3. Ritorna count oggetti eliminati."""
     storage = _storage()
     deleted = 0
@@ -247,11 +247,9 @@ def delete_bundle(task_id: str) -> int:
             logger.warning(f"delete {key} fallito (non-fatal): {e}")
 
     # Cleanup cache locale sul nodo corrente (se presente
-    local = _local_dir(task_id)
-    if local.exists():
-        try:
-            shutil.rmtree(local, ignore_errors=True)
-        except OSError as e:
-            logger.warning(f"[{task_id}] cleanup local cache fallito: {e}")
+    if cleanup_local:
+        local = _local_dir(task_id)
+        if local.exists():
+            rmtree_safe(local, logger=logger)
 
     return deleted

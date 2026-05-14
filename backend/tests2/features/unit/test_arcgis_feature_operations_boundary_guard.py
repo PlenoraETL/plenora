@@ -131,6 +131,29 @@ def test_arcgis_feature_writer_does_not_import_concrete_client() -> None:
     )
 
 
+def test_arcgis_feature_writer_does_not_import_pandas_directly() -> None:
+    """The write boundary must use dataframe ports for frame annotations."""
+    tree = _parse_writer()
+    forbidden_modules = {"pandas", "geopandas"}
+    violations: list[tuple[int, str]] = []
+
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom) and node.module:
+            root_module = node.module.split(".", maxsplit=1)[0]
+            if root_module in forbidden_modules:
+                violations.append((node.lineno, node.module))
+        elif isinstance(node, ast.Import):
+            for alias in node.names:
+                root_module = alias.name.split(".", maxsplit=1)[0]
+                if root_module in forbidden_modules:
+                    violations.append((node.lineno, alias.name))
+
+    assert not violations, (
+        "arcgis_feature_writer.py must not import pandas/geopandas directly; "
+        f"use app.core.dataframes.ports types instead. Violations: {violations}"
+    )
+
+
 def test_arcgis_client_no_longer_defines_feature_write_methods_directly() -> None:
     """Low-level ArcGIS writes live in arcgis_feature_write_methods.py."""
     tree = _parse_client()

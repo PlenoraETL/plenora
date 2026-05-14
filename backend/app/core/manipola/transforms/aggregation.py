@@ -4,15 +4,16 @@ Cluster AGGREGATION — operazioni analytics: group-by, sort, dedup, window.
 Keeps transformation behavior isolated from orchestration callers.
 """
 
-import pandas as pd
-import geopandas as gpd
-from typing import Dict, List, Union
+from typing import Dict, List
 
+from app.core.dataframes.ports import FrameLike
+from app.core.dataframes.tabular import is_multiindex
+from app.core.dataframes.values import is_null_scalar
 from app.utils.logger import get_logger
 
 logger = get_logger("app.core.manipola.transforms.base")
 
-DataFrame = Union[pd.DataFrame, gpd.GeoDataFrame]
+DataFrame = FrameLike
 
 
 # AGGREGAZIONE (GROUP BY
@@ -62,7 +63,7 @@ def op_aggregate(
             def concat_agg(values):
                 vals = list(values)
                 if skip_null:
-                    vals = [v for v in vals if v is not None and pd.notna(v)]
+                    vals = [v for v in vals if v is not None and not is_null_scalar(v)]
                 if distinct:
                     vals = list(dict.fromkeys(vals))  # preserva ordine
                 return separator.join(str(v) for v in vals)
@@ -114,7 +115,7 @@ def op_aggregate(
             logger.info(f"agg_dict finale: {agg_dict}")
             result = df.groupby(group_by, dropna=False).agg(agg_dict).reset_index()
             # Flatten multi-index columns
-            if isinstance(result.columns, pd.MultiIndex):
+            if is_multiindex(result.columns):
                 result.columns = ['_'.join(col).strip('_') for col in result.columns]
 
         # Alias utente-friendly per le colonne aggregate. Senza, la

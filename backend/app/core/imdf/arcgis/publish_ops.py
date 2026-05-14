@@ -6,7 +6,7 @@ Service ArcGIS (create+populate / append / upsert / update).
 
 from typing import Dict, List
 
-from app.core.features.arcgis_publish_modes import publish_existing_layer_mode
+from app.core.connections.arcgis_publish_modes import publish_existing_layer_mode
 from app.shared.connections.arcgis_connection import ArcGISConnectionInfo
 from app.shared.connections.arcgis_provider import ArcGISServiceAdminProviderProtocol
 from app.utils.logger import get_logger

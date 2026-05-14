@@ -6,9 +6,8 @@ per DatabaseWriter.
 
 from __future__ import annotations
 
-from typing import Dict, List, Tuple
+from typing import Any, Dict, List, Tuple
 
-import pandas as pd
 from sqlalchemy import text
 
 from app.core.carica.models import ColumnMapping
@@ -130,7 +129,7 @@ class SchemaIntrospectionMixin:
 
     def _compute_schema_hints(
         self,
-        prepared_df: pd.DataFrame,
+        prepared_df: Any,
         columns: List[ColumnMapping],
     ) -> Tuple[Dict[str, str], Dict[str, int]]:
         """Calcola `(real_dtypes, max_lengths)` per `generate_create_table`.

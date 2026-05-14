@@ -245,3 +245,18 @@ def test_delete_bundle_idempotent_when_nothing(fake_storage, fake_settings):
     count = st.delete_bundle("task-nope")
     # Anche se 0 key S3, il count riflette i tentativi (2 = zip + meta tentati)
     assert count == 2
+
+
+def test_delete_bundle_can_skip_local_cleanup(fake_storage, fake_settings, tmp_path):
+    from app.core.imdf import storage as st
+
+    source = tmp_path / "s1"
+    _write_bundle(source)
+    st.save_bundle("task-1", source)
+    local = fake_settings / "task-1"
+    _write_bundle(local)
+
+    count = st.delete_bundle("task-1", cleanup_local=False)
+
+    assert count == 2
+    assert local.exists()

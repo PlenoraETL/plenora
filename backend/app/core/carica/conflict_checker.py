@@ -8,12 +8,13 @@ from app.utils.logger import get_logger
 from datetime import datetime, timezone
 from typing import Any, List, Optional
 
-import pandas as pd
 from sqlalchemy import text
 from sqlalchemy.engine import Engine
 
 from app.core.carica.ddl_generator import DDLGenerator
 from app.core.carica.models import ConflictDetail, ConflictReport
+from app.core.dataframes.parallel_ops import true_mask_for_frame
+from app.core.dataframes.values import is_null_scalar
 
 
 logger = get_logger("app.core.carica.conflict")
@@ -47,7 +48,7 @@ class ConflictChecker:
 
     def check(
         self,
-        df: pd.DataFrame,
+        df: Any,
         schema: str,
         table: str,
         match_columns: List[str],
@@ -96,7 +97,7 @@ class ConflictChecker:
 
     def _check_internal_duplicates(
         self,
-        df: pd.DataFrame,
+        df: Any,
         match_columns: List[str],
     ) -> int:
         """Passaggio 1: cerca duplicati interni al DataFrame.
@@ -119,7 +120,7 @@ class ConflictChecker:
 
     def _check_db_conflicts(
         self,
-        df: pd.DataFrame,
+        df: Any,
         schema: str,
         table: str,
         match_columns: List[str],
@@ -144,7 +145,7 @@ class ConflictChecker:
 
     def _check_single_column(
         self,
-        df: pd.DataFrame,
+        df: Any,
         schema: str,
         table: str,
         column: str,
@@ -192,7 +193,7 @@ class ConflictChecker:
 
     def _check_multi_column(
         self,
-        df: pd.DataFrame,
+        df: Any,
         schema: str,
         table: str,
         match_columns: List[str],
@@ -224,7 +225,7 @@ class ConflictChecker:
         _NAN_SENTINEL = "__NAN__"
 
         def _normalize(v):
-            if pd.isna(v):
+            if is_null_scalar(v):
                 return _NAN_SENTINEL
             return _serialize_value(v)
 
@@ -245,9 +246,9 @@ class ConflictChecker:
                         col: _serialize_value(combo_row[col])
                         for col in match_columns
                     }
-                    mask = pd.Series(True, index=df.index)
+                    mask = true_mask_for_frame(df)
                     for col in match_columns:
-                        if pd.isna(combo_row[col]):
+                        if is_null_scalar(combo_row[col]):
                             mask &= df[col].isna()
                         else:
                             mask &= (df[col] == combo_row[col])
@@ -279,7 +280,7 @@ class ConflictChecker:
 
 def _serialize_value(val) -> Any:
     """Converte un valore per la serializzazione JSON."""
-    if pd.isna(val):
+    if is_null_scalar(val):
         return None
     if hasattr(val, 'item'):  # numpy scalar
         return val.item()

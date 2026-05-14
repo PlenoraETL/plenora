@@ -309,7 +309,7 @@ def test_load_file_source_preserves_geodataframe():
 
     with patch("app.core.artifacts.source_loader.is_resource_visible", return_value=True), \
          patch("app.core.files.service.file_source_service") as svc_fs, \
-         patch("app.core.files.dataframe_io.filter_visible_columns",
+         patch("app.core.arricchisci.api_connection_source_loading.filter_visible_columns",
                side_effect=lambda d, _cols: d):
         svc_fs.load_dataframe.return_value = (df, gdf)
         out = svc._load_file_source(
@@ -347,7 +347,7 @@ def test_load_file_source_falls_back_to_df_when_no_gdf():
 
     with patch("app.core.artifacts.source_loader.is_resource_visible", return_value=True), \
          patch("app.core.files.service.file_source_service") as svc_fs, \
-         patch("app.core.files.dataframe_io.filter_visible_columns",
+         patch("app.core.arricchisci.api_connection_source_loading.filter_visible_columns",
                side_effect=lambda d, _cols: d):
         svc_fs.load_dataframe.return_value = (df, None)
         out = svc._load_file_source(

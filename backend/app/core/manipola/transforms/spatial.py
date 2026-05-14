@@ -4,14 +4,18 @@ Operazioni di trasformazione geospaziali per MANIPOLA.
 Keeps transformation behavior isolated from orchestration callers.
 """
 
-import pandas as pd
-import geopandas as gpd
-from typing import List, Optional, Union
+from typing import List, Optional
 
 from app.utils.logger import get_logger
-from app.core.features.geo_utils import (
-    to_geodataframe,
+from app.core.dataframes.ports import FrameLike
+from app.core.dataframes.geodata import (
+    empty_geodataframe,
     ensure_same_crs,
+    geodataframe_from_geometry_series,
+    geodataframe_sjoin,
+    geodataframe_sjoin_nearest,
+    is_geodataframe,
+    to_geodataframe,
 )
 from app.core.manipola.transforms.spatial_helpers import (
     _buffer_per_row_local_utm,
@@ -68,7 +72,7 @@ except ImportError:
 
 logger = get_logger(__name__)
 
-DataFrame = Union[pd.DataFrame, gpd.GeoDataFrame]
+DataFrame = FrameLike
 
 
 # BUFFER
@@ -82,7 +86,7 @@ def op_geo_buffer(
     cap_style: str = "round",
     metric_crs: Optional[str] = None,
     output_crs: str = "same",
-) -> gpd.GeoDataFrame:
+) -> DataFrame:
     """
     Crea buffer attorno alle geometrie.
 
@@ -103,7 +107,7 @@ def op_geo_buffer(
     cap_style_int = cap_style_map.get(cap_style, 1)
 
     try:
-        gdf = df if isinstance(df, gpd.GeoDataFrame) else to_geodataframe(df, geom_column)
+        gdf = df if is_geodataframe(df) else to_geodataframe(df, geom_column)
         original_crs = gdf.crs
 
         # Auto-UTM globale per tutto il GDF distorce le geometrie lontane
@@ -143,7 +147,7 @@ def op_geo_buffer(
 
         target_crs = _resolve_output_geom_crs(original_crs, metric_used, output_crs)
         if target_crs is not None and str(target_crs) != str(current_geom_crs):
-            buffer_gdf = gpd.GeoDataFrame(geometry=buffer_geom, crs=current_geom_crs)
+            buffer_gdf = geodataframe_from_geometry_series(buffer_geom, crs=current_geom_crs)
             buffer_geom = buffer_gdf.to_crs(target_crs).geometry
 
         result = gdf.copy()
@@ -167,7 +171,7 @@ def op_geo_centroid(
     output_column: str = "centroid",
     metric_crs: Optional[str] = None,
     output_crs: str = "same",
-) -> gpd.GeoDataFrame:
+) -> DataFrame:
     """
     Calcola il centroide delle geometrie.
 
@@ -182,7 +186,7 @@ def op_geo_centroid(
         GeoDataFrame con colonna centroide
     """
     try:
-        gdf = df if isinstance(df, gpd.GeoDataFrame) else to_geodataframe(df, geom_column)
+        gdf = df if is_geodataframe(df) else to_geodataframe(df, geom_column)
         original_crs = gdf.crs
 
         metric_used = _resolve_metric_crs(gdf, metric_crs)
@@ -195,7 +199,7 @@ def op_geo_centroid(
         target_crs = _resolve_output_geom_crs(original_crs, metric_used, output_crs)
         current_geom_crs = metric_used if metric_used is not None else original_crs
         if target_crs is not None and str(target_crs) != str(current_geom_crs):
-            centroid_gdf = gpd.GeoDataFrame(geometry=centroids, crs=current_geom_crs)
+            centroid_gdf = geodataframe_from_geometry_series(centroids, crs=current_geom_crs)
             centroids = centroid_gdf.to_crs(target_crs).geometry
 
         result = gdf.copy()
@@ -210,14 +214,14 @@ def op_geo_centroid(
 
 
 # AREA
-# Calcola area in m². Riproietta automaticamente in CRS metrico se necessario
+# Calcola area in mÂ². Riproietta automaticamente in CRS metrico se necessario
 
 def op_geo_area(
     df: DataFrame,
     geom_column: str,
     output_column: str = "area_m2",
     metric_crs: Optional[str] = None,
-) -> gpd.GeoDataFrame:
+) -> DataFrame:
     """
     Calcola l'area in unita' quadrate del CRS metrico (m^2 di default).
 
@@ -231,7 +235,7 @@ def op_geo_area(
         GeoDataFrame con colonna area
     """
     try:
-        gdf = df if isinstance(df, gpd.GeoDataFrame) else to_geodataframe(df, geom_column)
+        gdf = df if is_geodataframe(df) else to_geodataframe(df, geom_column)
 
         metric_used = _resolve_metric_crs(gdf, metric_crs)
         if metric_used is not None:
@@ -258,7 +262,7 @@ def op_geo_dissolve(
     geom_column: str,
     by_column: str = None,
     aggfunc: str = "first"
-) -> gpd.GeoDataFrame:
+) -> DataFrame:
     """
     Dissolve geometrie (unione spaziale con raggruppamento).
     
@@ -275,7 +279,7 @@ def op_geo_dissolve(
     NUMERIC_ONLY_AGGFUNCS = {"mean", "sum", "std", "var", "median"}
 
     try:
-        gdf = df if isinstance(df, gpd.GeoDataFrame) else to_geodataframe(df, geom_column)
+        gdf = df if is_geodataframe(df) else to_geodataframe(df, geom_column)
 
         if aggfunc in NUMERIC_ONLY_AGGFUNCS:
             # Costruisce un dict per colonna: aggfunc sulle numeriche, "first" sulle stringhe
@@ -308,21 +312,21 @@ def op_geo_dissolve(
 
 
 # SEMPLIFICAZIONE
-# Riduce complessità geometrie mantenendo la forma (algoritmo Douglas-Peucker
+# Riduce complessitÃ  geometrie mantenendo la forma (algoritmo Douglas-Peucker
 
 def op_geo_simplify(
     df: DataFrame,
     geom_column: str,
     tolerance: float = 0.001,
     preserve_topology: bool = True
-) -> gpd.GeoDataFrame:
+) -> DataFrame:
     """
     Semplifica geometrie (Douglas-Peucker).
     
     Args:
         df: DataFrame input
         geom_column: Colonna geometria
-        tolerance: Tolleranza semplificazione (unità del CRS)
+        tolerance: Tolleranza semplificazione (unitÃ  del CRS)
         preserve_topology: Se True, evita auto-intersezioni
         
     Returns:
@@ -332,7 +336,7 @@ def op_geo_simplify(
         raise ValueError(f"Simplify tolerance deve essere > 0, ricevuto: {tolerance}")
 
     try:
-        gdf = df if isinstance(df, gpd.GeoDataFrame) else to_geodataframe(df, geom_column)
+        gdf = df if is_geodataframe(df) else to_geodataframe(df, geom_column)
 
         gdf['geometry'] = gdf.geometry.simplify(tolerance, preserve_topology=preserve_topology)
 
@@ -351,7 +355,7 @@ def op_geo_convex_hull(
     df: DataFrame,
     geom_column: str,
     output_column: str = "convex_hull"
-) -> gpd.GeoDataFrame:
+) -> DataFrame:
     """
     Calcola l'inviluppo convesso delle geometrie.
     
@@ -364,7 +368,7 @@ def op_geo_convex_hull(
         GeoDataFrame con colonna convex hull
     """
     try:
-        gdf = df if isinstance(df, gpd.GeoDataFrame) else to_geodataframe(df, geom_column)
+        gdf = df if is_geodataframe(df) else to_geodataframe(df, geom_column)
 
         convex_hulls = gdf.geometry.convex_hull
         
@@ -380,14 +384,14 @@ def op_geo_convex_hull(
 
 
 # RIPROIEZIONE CRS
-# Cambia sistema di coordinate (es: WGS84 → UTM 32N, EPSG:4326 → EPSG:32632
+# Cambia sistema di coordinate (es: WGS84 â†’ UTM 32N, EPSG:4326 â†’ EPSG:32632
 
 def op_geo_reproject(
     df: DataFrame,
     geom_column: str,
     target_crs: str = "EPSG:4326",
     source_crs: str = None
-) -> gpd.GeoDataFrame:
+) -> DataFrame:
     """
     Riproietta geometrie in un nuovo CRS.
     
@@ -413,7 +417,7 @@ def op_geo_reproject(
         crs_hint = source_crs  # puo' essere None: nessun default
         gdf = to_geodataframe(df, geom_column, crs=crs_hint)
 
-        # Se source_crs è fornito esplicitamente, forzalo (override auto-detect
+        # Se source_crs Ã¨ fornito esplicitamente, forzalo (override auto-detect
         if source_crs and gdf.crs and str(gdf.crs) != source_crs:
             logger.info(f"Override CRS sorgente: {gdf.crs} -> {source_crs}")
             gdf = gdf.set_crs(source_crs, allow_override=True)
@@ -447,7 +451,7 @@ def op_geo_envelope(
     df: DataFrame,
     geom_column: str,
     output_column: str = "envelope"
-) -> gpd.GeoDataFrame:
+) -> DataFrame:
     """
     Calcola il bounding box (rettangolo minimo) delle geometrie.
     
@@ -460,7 +464,7 @@ def op_geo_envelope(
         GeoDataFrame con colonna envelope
     """
     try:
-        gdf = df if isinstance(df, gpd.GeoDataFrame) else to_geodataframe(df, geom_column)
+        gdf = df if is_geodataframe(df) else to_geodataframe(df, geom_column)
 
         envelopes = gdf.geometry.envelope
         
@@ -484,7 +488,7 @@ def op_geo_distance(
     right_geom_column: str,
     output_column: str = "distance_m",
     metric_crs: Optional[str] = None,
-) -> gpd.GeoDataFrame:
+) -> DataFrame:
     """
     Calcola la distanza tra geometrie di due layer.
 
@@ -503,11 +507,11 @@ def op_geo_distance(
     """
     if len(dfs) < 2:
         logger.warning("Distance richiede 2 input")
-        return dfs[0] if dfs else gpd.GeoDataFrame()
+        return dfs[0] if dfs else empty_geodataframe([])
 
     try:
-        left_gdf = dfs[0] if isinstance(dfs[0], gpd.GeoDataFrame) else to_geodataframe(dfs[0], left_geom_column)
-        right_gdf = dfs[1] if isinstance(dfs[1], gpd.GeoDataFrame) else to_geodataframe(dfs[1], right_geom_column)
+        left_gdf = dfs[0] if is_geodataframe(dfs[0]) else to_geodataframe(dfs[0], left_geom_column)
+        right_gdf = dfs[1] if is_geodataframe(dfs[1]) else to_geodataframe(dfs[1], right_geom_column)
 
         # Allinea CRS
         left_gdf, right_gdf = ensure_same_crs(left_gdf, right_gdf)
@@ -540,7 +544,7 @@ def op_geo_distance(
 
 
 # NEAREST NEIGHBOR JOIN
-# Join per vicinanza: associa ad ogni geometria il vicino più prossimo
+# Join per vicinanza: associa ad ogni geometria il vicino piÃ¹ prossimo
 
 def op_geo_nearest(
     dfs: List[DataFrame],
@@ -550,32 +554,32 @@ def op_geo_nearest(
     output_column: str = "distance_m",
     metric_crs: Optional[str] = None,
     output_crs: str = "same",
-) -> gpd.GeoDataFrame:
+) -> DataFrame:
     """
     Nearest neighbor join tra due layer.
 
-    Per ogni geometria del layer sinistro, trova il vicino più prossimo
+    Per ogni geometria del layer sinistro, trova il vicino piÃ¹ prossimo
     nel layer destro e ne riporta gli attributi con la distanza.
 
     Args:
         dfs: Lista [layer_sinistro, layer_destro]
         left_geom_column: Colonna geometria del layer sinistro
         right_geom_column: Colonna geometria del layer destro
-        max_distance: Distanza massima in unità del CRS metrico scelto.
+        max_distance: Distanza massima in unitÃ  del CRS metrico scelto.
         output_column: Nome colonna distanza output
         metric_crs: CRS per calcolo distanza. None -> auto-UTM se geografico.
         output_crs: "same" | "metric" | "EPSG:xxxx"
 
     Returns:
-        GeoDataFrame con attributi del vicino più prossimo e distanza
+        GeoDataFrame con attributi del vicino piÃ¹ prossimo e distanza
     """
     if len(dfs) < 2:
         logger.warning("Nearest richiede 2 input")
-        return dfs[0] if dfs else gpd.GeoDataFrame()
+        return dfs[0] if dfs else empty_geodataframe([])
 
     try:
-        left_gdf = dfs[0] if isinstance(dfs[0], gpd.GeoDataFrame) else to_geodataframe(dfs[0], left_geom_column)
-        right_gdf = dfs[1] if isinstance(dfs[1], gpd.GeoDataFrame) else to_geodataframe(dfs[1], right_geom_column)
+        left_gdf = dfs[0] if is_geodataframe(dfs[0]) else to_geodataframe(dfs[0], left_geom_column)
+        right_gdf = dfs[1] if is_geodataframe(dfs[1]) else to_geodataframe(dfs[1], right_geom_column)
 
         if len(left_gdf) == 0 or len(right_gdf) == 0:
             logger.warning(f"Nearest: input vuoto (left={len(left_gdf)}, right={len(right_gdf)})")
@@ -594,7 +598,7 @@ def op_geo_nearest(
             right_proj = right_gdf
 
         # sjoin_nearest con distanza
-        result = gpd.sjoin_nearest(
+        result = geodataframe_sjoin_nearest(
             left_proj,
             right_proj,
             how="left",
@@ -630,7 +634,7 @@ def op_geo_length(
     geom_column: str,
     output_column: str = "length_m",
     metric_crs: Optional[str] = None,
-) -> gpd.GeoDataFrame:
+) -> DataFrame:
     """
     Calcola la lunghezza di geometrie lineari in unita' del CRS metrico.
 
@@ -644,7 +648,7 @@ def op_geo_length(
         GeoDataFrame con colonna lunghezza
     """
     try:
-        gdf = df if isinstance(df, gpd.GeoDataFrame) else to_geodataframe(df, geom_column)
+        gdf = df if is_geodataframe(df) else to_geodataframe(df, geom_column)
 
         metric_used = _resolve_metric_crs(gdf, metric_crs)
         if metric_used is not None:
@@ -671,7 +675,7 @@ def op_geo_perimeter(
     geom_column: str,
     output_column: str = "perimeter_m",
     metric_crs: Optional[str] = None,
-) -> gpd.GeoDataFrame:
+) -> DataFrame:
     """
     Calcola il perimetro di geometrie poligonali in unita' del CRS metrico.
 
@@ -685,7 +689,7 @@ def op_geo_perimeter(
         GeoDataFrame con colonna perimetro
     """
     try:
-        gdf = df if isinstance(df, gpd.GeoDataFrame) else to_geodataframe(df, geom_column)
+        gdf = df if is_geodataframe(df) else to_geodataframe(df, geom_column)
 
         metric_used = _resolve_metric_crs(gdf, metric_crs)
         if metric_used is not None:
@@ -711,7 +715,7 @@ def op_geo_perimeter(
 def op_geo_explode(
     df: DataFrame,
     geom_column: str
-) -> gpd.GeoDataFrame:
+) -> DataFrame:
     """
     Esplode multi-geometrie in geometrie singole.
 
@@ -726,7 +730,7 @@ def op_geo_explode(
         GeoDataFrame con geometrie singole
     """
     try:
-        gdf = df if isinstance(df, gpd.GeoDataFrame) else to_geodataframe(df, geom_column)
+        gdf = df if is_geodataframe(df) else to_geodataframe(df, geom_column)
 
         result = gdf.explode(index_parts=False).reset_index(drop=True)
 
@@ -744,7 +748,7 @@ def op_geo_explode(
 def op_geo_make_valid(
     df: DataFrame,
     geom_column: str
-) -> gpd.GeoDataFrame:
+) -> DataFrame:
     """
     Corregge geometrie invalide.
 
@@ -759,13 +763,13 @@ def op_geo_make_valid(
         GeoDataFrame con geometrie valide
     """
     try:
-        gdf = df if isinstance(df, gpd.GeoDataFrame) else to_geodataframe(df, geom_column)
+        gdf = df if is_geodataframe(df) else to_geodataframe(df, geom_column)
         result = gdf.copy()
 
         invalid_count = (~result.geometry.is_valid).sum()
 
         if invalid_count == 0:
-            logger.info("Make Valid: tutte le geometrie sono già valide")
+            logger.info("Make Valid: tutte le geometrie sono giÃ  valide")
             return result
 
         if HAS_MAKE_VALID:
@@ -798,7 +802,7 @@ def op_geo_within(
     dfs: List[DataFrame],
     left_geom_column: str,
     right_geom_column: str
-) -> gpd.GeoDataFrame:
+) -> DataFrame:
     """
     Filtra geometrie contenute interamente in un altro layer.
 
@@ -815,24 +819,29 @@ def op_geo_within(
     """
     if len(dfs) < 2:
         logger.warning("Within richiede 2 input")
-        return dfs[0] if dfs else gpd.GeoDataFrame()
+        return dfs[0] if dfs else empty_geodataframe([])
 
     try:
-        left_gdf = dfs[0] if isinstance(dfs[0], gpd.GeoDataFrame) else to_geodataframe(dfs[0], left_geom_column)
-        right_gdf = dfs[1] if isinstance(dfs[1], gpd.GeoDataFrame) else to_geodataframe(dfs[1], right_geom_column)
+        left_gdf = dfs[0] if is_geodataframe(dfs[0]) else to_geodataframe(dfs[0], left_geom_column)
+        right_gdf = dfs[1] if is_geodataframe(dfs[1]) else to_geodataframe(dfs[1], right_geom_column)
 
         # Allinea CRS
         left_gdf, right_gdf = ensure_same_crs(left_gdf, right_gdf)
 
         # Spatial join con predicato within
-        joined = gpd.sjoin(left_gdf, right_gdf, how="inner", predicate="within")
+        joined = geodataframe_sjoin(
+            left_gdf,
+            right_gdf,
+            how="inner",
+            predicate="within",
+        )
 
         # Tieni solo le colonne del layer sinistro
         left_columns = list(left_gdf.columns)
         keep_cols = [c for c in left_columns if c in joined.columns]
         result = joined[keep_cols].copy()
 
-        # Rimuovi duplicati (una geometria può essere within più poligoni sovrapposti
+        # Rimuovi duplicati (una geometria puÃ² essere within piÃ¹ poligoni sovrapposti
         result = result.drop_duplicates().reset_index(drop=True)
 
         # Assicura geometria attiva valida
@@ -853,11 +862,11 @@ def op_geo_point_on_surface(
     df: DataFrame,
     geom_column: str,
     output_column: str = "point_on_surface"
-) -> gpd.GeoDataFrame:
+) -> DataFrame:
     """
     Calcola un punto garantito all'interno di ogni poligono.
 
-    A differenza del centroide, il punto rappresentativo è sempre
+    A differenza del centroide, il punto rappresentativo Ã¨ sempre
     all'interno della geometria, anche per forme concave o con buchi.
 
     Args:
@@ -869,7 +878,7 @@ def op_geo_point_on_surface(
         GeoDataFrame con colonna punto sulla superficie
     """
     try:
-        gdf = df if isinstance(df, gpd.GeoDataFrame) else to_geodataframe(df, geom_column)
+        gdf = df if is_geodataframe(df) else to_geodataframe(df, geom_column)
 
         result = gdf.copy()
         result[output_column] = gdf.geometry.representative_point()
@@ -889,7 +898,7 @@ def op_geo_boundary(
     df: DataFrame,
     geom_column: str,
     output_column: str = "boundary"
-) -> gpd.GeoDataFrame:
+) -> DataFrame:
     """
     Estrae il bordo (boundary) delle geometrie.
 
@@ -905,7 +914,7 @@ def op_geo_boundary(
         GeoDataFrame con colonna boundary
     """
     try:
-        gdf = df if isinstance(df, gpd.GeoDataFrame) else to_geodataframe(df, geom_column)
+        gdf = df if is_geodataframe(df) else to_geodataframe(df, geom_column)
 
         result = gdf.copy()
         result[output_column] = gdf.geometry.boundary
@@ -924,12 +933,12 @@ def op_geo_boundary(
 def op_geo_voronoi(
     df: DataFrame,
     geom_column: str
-) -> gpd.GeoDataFrame:
+) -> DataFrame:
     """
     Genera diagramma di Voronoi da geometrie puntuali.
 
     Ogni punto in input produce un poligono di Voronoi che rappresenta
-    l'area più vicina a quel punto rispetto a tutti gli altri.
+    l'area piÃ¹ vicina a quel punto rispetto a tutti gli altri.
     Richiede shapely.ops.voronoi_diagram (shapely >= 1.8).
 
     Args:
@@ -941,7 +950,7 @@ def op_geo_voronoi(
     """
     try:
         from shapely.geometry import MultiPoint
-        gdf = df if isinstance(df, gpd.GeoDataFrame) else to_geodataframe(df, geom_column)
+        gdf = df if is_geodataframe(df) else to_geodataframe(df, geom_column)
 
         if not HAS_VORONOI:
             logger.error("shapely.ops.voronoi_diagram non disponibile. Aggiornare shapely >= 1.8")
@@ -998,11 +1007,11 @@ def op_geo_to_wkt(
     wkt_column: str = "geometry_wkt",
     lat_column: str = "latitude",
     lon_column: str = "longitude"
-) -> gpd.GeoDataFrame:
+) -> DataFrame:
     """
     Esporta geometria come WKT e/o coordinate lat/lon.
 
-    Modalità disponibili:
+    ModalitÃ  disponibili:
     - "wkt": aggiunge colonna con rappresentazione WKT
     - "latlon": aggiunge colonne latitudine e longitudine (dal centroide)
     - "both": aggiunge sia WKT che lat/lon
@@ -1010,7 +1019,7 @@ def op_geo_to_wkt(
     Args:
         df: DataFrame input
         geom_column: Colonna geometria sorgente
-        mode: Modalità export ("wkt", "latlon", "both")
+        mode: ModalitÃ  export ("wkt", "latlon", "both")
         wkt_column: Nome colonna WKT output
         lat_column: Nome colonna latitudine output
         lon_column: Nome colonna longitudine output
@@ -1019,7 +1028,7 @@ def op_geo_to_wkt(
         GeoDataFrame con colonne aggiuntive
     """
     try:
-        gdf = df if isinstance(df, gpd.GeoDataFrame) else to_geodataframe(df, geom_column)
+        gdf = df if is_geodataframe(df) else to_geodataframe(df, geom_column)
         result = gdf.copy()
 
         if mode in ("wkt", "both"):
@@ -1039,7 +1048,7 @@ def op_geo_to_wkt(
         logger.error(f"[CRASH] Errore To WKT: {e}", exc_info=True)
         raise
 
-# CLEAN TOPOLOGY — AreaGapAndOverlapCleaner
+# CLEAN TOPOLOGY â€” AreaGapAndOverlapCleaner
 # Corregge gap e sovrapposizioni tra aree adiacenti
 
 def op_geo_clean_topology(
@@ -1048,7 +1057,7 @@ def op_geo_clean_topology(
     snap_tolerance: float = 0.001,
     remove_overlaps: bool = True,
     fill_gaps: bool = True
-) -> gpd.GeoDataFrame:
+) -> DataFrame:
     """
     Corregge problemi topologici: geometrie non valide, micro-gap
     e sovrapposizioni tra poligoni adiacenti.
@@ -1063,7 +1072,7 @@ def op_geo_clean_topology(
     Args:
         df: DataFrame/GeoDataFrame con geometrie poligonali
         geom_column: Colonna geometria
-        snap_tolerance: Tolleranza di snapping in unità CRS
+        snap_tolerance: Tolleranza di snapping in unitÃ  CRS
         remove_overlaps: Se True, rimuove sovrapposizioni
         fill_gaps: Se True, chiude micro-gap tra poligoni
 
@@ -1071,7 +1080,7 @@ def op_geo_clean_topology(
         GeoDataFrame con topologia corretta
     """
     try:
-        gdf = df if isinstance(df, gpd.GeoDataFrame) else to_geodataframe(df, geom_column)
+        gdf = df if is_geodataframe(df) else to_geodataframe(df, geom_column)
         result = gdf.copy()
         fixed_count = 0
 
@@ -1099,12 +1108,12 @@ def op_geo_clean_topology(
 
         # Step 3: rimuovi sovrapposizioni
         # NOTE: per ogni i, ricostruisce `unary_union(geometries[:i])`
-        # da zero — O(n^2). Qui teniamo un accumulator incrementale
+        # da zero â€” O(n^2). Qui teniamo un accumulator incrementale
         # al passo i, `accumulated` e' gia' l'unione dei geometries[0..i-1
         # processati. Complessita' effettiva ~O(n) union pairwise
         # Nota FP: pair-union vs cascading-union possono differire a
         # livello di coordinate; i test perf_correctness usano tolerance
-        # topologica (equals → equals_exact → area-relative 1e-6
+        # topologica (equals â†’ equals_exact â†’ area-relative 1e-6
         if remove_overlaps and len(result) > 1:
             from shapely.ops import unary_union
             geom_col_name = result.geometry.name
@@ -1126,7 +1135,7 @@ def op_geo_clean_topology(
                     else:
                         # Nessun preceding non-empty: legacy avrebbe fatto
                         # diff = g.difference(empty_collection) = g
-                        # non-empty → fixed_count++ e geometries[i] = g
+                        # non-empty â†’ fixed_count++ e geometries[i] = g
                         geometries[i] = g
                         fixed_count += 1
                         accumulated = g
@@ -1152,14 +1161,14 @@ def op_geo_clean_topology(
         raise
 
 
-# GEO BOUNDS EXTRACTOR — Estrai bounding box come attributi
+# GEO BOUNDS EXTRACTOR â€” Estrai bounding box come attributi
 # Calcola le coordinate min/max del rettangolo contenitore di ogni geometria
 
 def op_geo_bounds_extractor(
     df: DataFrame,
     geom_column: str,
     prefix: str = ""
-) -> gpd.GeoDataFrame:
+) -> DataFrame:
     """
     Estrae le coordinate del bounding box di ogni geometria come attributi.
 
@@ -1175,7 +1184,7 @@ def op_geo_bounds_extractor(
         GeoDataFrame con colonne bounding box aggiunte
     """
     try:
-        gdf = df if isinstance(df, gpd.GeoDataFrame) else to_geodataframe(df, geom_column)
+        gdf = df if is_geodataframe(df) else to_geodataframe(df, geom_column)
         result = gdf.copy()
 
         bounds = result.geometry.bounds  # DataFrame con minx, miny, maxx, maxy
@@ -1198,14 +1207,14 @@ def op_geo_bounds_extractor(
         raise
 
 
-# GEO VERTEX COUNT — Conta i vertici di ogni geometria
-# Utile per analisi della complessità geometrica
+# GEO VERTEX COUNT â€” Conta i vertici di ogni geometria
+# Utile per analisi della complessitÃ  geometrica
 
 def op_geo_vertex_count(
     df: DataFrame,
     geom_column: str,
     output_column: str = "vertex_count"
-) -> gpd.GeoDataFrame:
+) -> DataFrame:
     """
     Conta il numero di vertici per ogni geometria.
 
@@ -1218,7 +1227,7 @@ def op_geo_vertex_count(
         GeoDataFrame con colonna conteggio vertici aggiunta
     """
     try:
-        gdf = df if isinstance(df, gpd.GeoDataFrame) else to_geodataframe(df, geom_column)
+        gdf = df if is_geodataframe(df) else to_geodataframe(df, geom_column)
         result = gdf.copy()
 
         if HAS_SHAPELY2:

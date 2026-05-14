@@ -7,15 +7,15 @@ la superficie pubblica di `spatial.py`.
 
 from typing import Optional
 
-import geopandas as gpd
 from shapely.geometry.base import BaseGeometry
 
+from app.core.dataframes.geodata import geoseries_from_geometry_values
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
 
 
-def _ensure_active_geometry(gdf: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
+def _ensure_active_geometry(gdf):
     """
     Assicura che il GeoDataFrame abbia una geometria attiva valida.
 
@@ -60,7 +60,7 @@ def _ensure_active_geometry(gdf: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
     return gdf
 
 
-def get_utm_crs_for_geometry(gdf: gpd.GeoDataFrame) -> str:
+def get_utm_crs_for_geometry(gdf) -> str:
     """Calcola la zona UTM appropriata per un GeoDataFrame."""
     if gdf.empty:
         return "EPSG:32632"
@@ -99,7 +99,7 @@ def get_utm_crs_for_geometry(gdf: gpd.GeoDataFrame) -> str:
 
 
 def _resolve_metric_crs(
-    gdf: gpd.GeoDataFrame, metric_crs: Optional[str]
+    gdf, metric_crs: Optional[str]
 ) -> Optional[str]:
     """CRS da usare per il calcolo metrico.
 
@@ -128,8 +128,8 @@ def _utm_epsg_for_lonlat(lon: float, lat: float) -> str:
 
 
 def _buffer_per_row_local_utm(
-    geoseries: "gpd.GeoSeries", distance: float, cap_style_int: int
-) -> "gpd.GeoSeries":
+    geoseries, distance: float, cap_style_int: int
+):
     """Buffer per-riga in UTM locale, riproiettato all'origine.
 
     Per ogni geometria sceglie la zona UTM del proprio centroide,
@@ -137,7 +137,6 @@ def _buffer_per_row_local_utm(
     in EPSG:4326. Evita la distorsione del buffer globale single-CRS
     su dataset distribuiti su piu' zone UTM (es. Italia + Tokyo).
     """
-    import pandas as pd
     from shapely.geometry import Point
 
     src_crs = geoseries.crs or "EPSG:4326"
@@ -161,14 +160,14 @@ def _buffer_per_row_local_utm(
                 results.append(None)
                 continue
             utm = _utm_epsg_for_lonlat(lon, lat)
-            row = gpd.GeoSeries([geom], crs=src_crs).to_crs(utm)
+            row = geoseries_from_geometry_values([geom], crs=src_crs).to_crs(utm)
             buffered = row.buffer(distance, cap_style=cap_style_int)
             back = buffered.to_crs(src_crs)
             results.append(back.iloc[0])
         except Exception as e:
             logger.warning(f"Buffer per-riga fallito su geometria: {e}")
             results.append(None)
-    return gpd.GeoSeries(results, crs=src_crs, index=geoseries.index)
+    return geoseries_from_geometry_values(results, crs=src_crs, index=geoseries.index)
 
 
 def _resolve_output_geom_crs(

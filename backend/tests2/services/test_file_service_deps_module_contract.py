@@ -34,6 +34,16 @@ def test_file_service_deps_module_exposes_eight_symbols():
         )
 
 
+def test_file_service_deps_reexports_dataframe_loader_boundary():
+    from app.core.dataframes import default_loader
+    from app.core.dataframes import ports
+    from app.core.files import service_deps as deps
+
+    assert deps.DataLoaderProtocol is ports.DataLoaderProtocol
+    assert default_loader.DataLoaderProtocol is ports.DataLoaderProtocol
+    assert deps.DefaultDataLoader is default_loader.DefaultDataLoader
+
+
 def test_core_file_service_uses_deps_objects_by_identity():
     """app.core.files.service espone gli STESSI oggetti di service_deps.
     Identity preservata: monkeypatch su `app.core.files.service.X`

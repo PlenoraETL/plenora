@@ -5,15 +5,12 @@ Keeps database loading behavior isolated from orchestration callers.
 """
 
 import re
-from typing import Dict, List, Optional, Tuple
-
-import pandas as pd
+from typing import Any, Dict, List, Optional, Tuple
 
 from app.core.carica.models import ColumnMapping
-from app.core.resources.column_types import (
-    normalize_canvas_type,
-    pandas_series_to_canvas_type,
-)
+from app.core.dataframes.schema import series_to_canvas_type
+from app.core.dataframes.values import is_geometry_series
+from app.core.resources.column_types import normalize_canvas_type
 
 
 # Nomi colonna che indicano una geometria (case-insensitive
@@ -41,7 +38,7 @@ class ColumnMapper:
 
     def auto_map(
         self,
-        df: pd.DataFrame,
+        df: Any,
         existing_columns: Optional[List[Dict[str, str]]] = None,
         canvas_types: Optional[Dict[str, str]] = None,
         srid: int = 4326,
@@ -118,7 +115,7 @@ class ColumnMapper:
     def validate_mapping(
         self,
         mappings: List[ColumnMapping],
-        df: pd.DataFrame,
+        df: Any,
     ) -> Tuple[bool, List[str]]:
         """Valida un mapping colonne.
 
@@ -204,7 +201,7 @@ class ColumnMapper:
     def _is_geometry_column(
         self,
         col_name: str,
-        series: pd.Series,
+        series: Any,
         canvas_type: str = "",
     ) -> bool:
         """Determina se una colonna contiene dati geometrici.
@@ -225,15 +222,9 @@ class ColumnMapper:
         if col_name.lower() in GEOMETRY_COLUMN_NAMES:
             return True
 
-        # 3. GeoSeries (GeoPandas
-        try:
-            import geopandas as gpd
-            if isinstance(series, gpd.GeoSeries):
-                return True
-            if hasattr(series, 'geom_type'):
-                return True
-        except ImportError:
-            pass
+        # 3. GeoSeries-like values.
+        if is_geometry_series(series):
+            return True
 
         # 4. Contenuto WKT (campione) — usa shapely per validare geometrie reali
         # Più robusto della regex: "POINT" fallisce, "POINT(9 45)" passa
@@ -276,13 +267,12 @@ class ColumnMapper:
         """
         return normalize_canvas_type(canvas_type)
 
-    def _infer_type_from_pandas(self, series: pd.Series) -> str:
+    def _infer_type_from_pandas(self, series: Any) -> str:
         """Converte dtype Pandas in tipo interno PLENORA.
 
-        Delega a `app.core.resources.column_types.pandas_series_to_canvas_type`,
-        fonte unica della dispatch pandas->canonical.
+        Delega al boundary dataframe, che mantiene la dispatch engine->canonical.
         """
-        return pandas_series_to_canvas_type(series)
+        return series_to_canvas_type(series)
 
     def _find_matching_column(
         self,

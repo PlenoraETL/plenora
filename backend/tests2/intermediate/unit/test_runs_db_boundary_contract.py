@@ -27,7 +27,7 @@ _RETENTION_POLICY_MARKERS = (
     "DEFAULT_RUNS_RETENTION = 5",
     "retention_n = DEFAULT_RUNS_RETENTION",
     "unpinned[retention_n:]",
-    "artifact_status = 'complete'",
+    "artifact_status IN ('complete', 'failed')",
 )
 _INTERMEDIATE_DB_PUBLIC_EXPORTS = {
     "DEFAULT_RUNS_RETENTION",
@@ -131,8 +131,6 @@ def test_runs_db_owns_run_crud_without_cross_domain_db_imports() -> None:
         "update_run",
         "pin_run",
     }.issubset(exported_functions)
-
-    from app.core.intermediate import runs_db
 
     imported_modules = {
         node.module

@@ -4,15 +4,16 @@ Cluster GEO — costruzione geometria da coordinate (lat/lon o WKT).
 Keeps transformation behavior isolated from orchestration callers.
 """
 
-import pandas as pd
-import geopandas as gpd
-from typing import Union
+from app.core.dataframes.geodata import geodataframe_from_geometry
+from app.core.dataframes.ports import FrameLike
+from app.core.dataframes.tabular import coerce_numeric_series
+from app.core.dataframes.values import is_null_scalar
 
 from app.utils.logger import get_logger
 
 logger = get_logger("app.core.manipola.transforms.base")
 
-DataFrame = Union[pd.DataFrame, gpd.GeoDataFrame]
+DataFrame = FrameLike
 
 
 # GEOMETRIA DA COORDINATE
@@ -57,13 +58,13 @@ def op_geo_from_coords(
                 return df
 
             # Converti a numerico
-            lats = pd.to_numeric(result[lat_column], errors='coerce')
-            lons = pd.to_numeric(result[lon_column], errors='coerce')
+            lats = coerce_numeric_series(result[lat_column])
+            lons = coerce_numeric_series(result[lon_column])
 
             # Crea Point (lon, lat) - ordine GIS standard
             geometries = []
             for lat, lon in zip(lats, lons):
-                if pd.notna(lat) and pd.notna(lon):
+                if not is_null_scalar(lat) and not is_null_scalar(lon):
                     geometries.append(Point(lon, lat))
                 else:
                     geometries.append(None)
@@ -77,7 +78,7 @@ def op_geo_from_coords(
 
             def safe_wkt_parse(val):
                 """Parsa una stringa WKT in oggetto Shapely; restituisce None per valori vuoti o malformati."""
-                if pd.isna(val) or not val or str(val).strip() == '':
+                if is_null_scalar(val) or not val or str(val).strip() == '':
                     return None
                 try:
                     return wkt.loads(str(val))
@@ -94,7 +95,7 @@ def op_geo_from_coords(
             return df
 
         # Converti a GeoDataFrame
-        gdf = gpd.GeoDataFrame(result, geometry=output_column, crs=crs)
+        gdf = geodataframe_from_geometry(result, geometry=output_column, crs=crs)
 
         logger.info(f"Geo from Coords ({mode}): -> {output_column} [{crs}]")
         return gdf

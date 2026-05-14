@@ -7,8 +7,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Optional, TYPE_CHECKING
 
-import pandas as pd
-
+from app.core.dataframes.values import is_dataframe
 from app.core.arricchisci.execution_context import (
     ArricchisciExecutionContext,
     build_execution_context,
@@ -336,9 +335,7 @@ def execute_canvas_enrichment(
                 if input_df is None:
                     # Fallback: prova a trovare l'ultimo risultato disponibile
                     for prev_id in reversed(execution_order):
-                        if prev_id in node_results and isinstance(
-                            node_results[prev_id], pd.DataFrame
-                        ):
+                        if prev_id in node_results and is_dataframe(node_results[prev_id]):
                             input_df = node_results[prev_id]
                             break
 
@@ -452,7 +449,7 @@ def execute_canvas_enrichment(
         ):
             return svc._build_file_result_response(final_result, project_id)
 
-        if not isinstance(final_result, pd.DataFrame):
+        if not is_dataframe(final_result):
             return {"success": False, "error": "Nessun DataFrame generato"}
 
         return svc._save_and_build_dataframe_response(

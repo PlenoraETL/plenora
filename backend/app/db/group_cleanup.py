@@ -12,7 +12,6 @@ GroupCleanupTable = Literal[
     "api_connections",
     "connections",
     "datasources",
-    "file_sources",
     "users",
 ]
 
@@ -20,7 +19,6 @@ _DELETE_GROUP_ROWS_SQL: dict[GroupCleanupTable, str] = {
     "api_connections": "DELETE FROM api_connections WHERE group_id = %s",
     "connections": "DELETE FROM connections WHERE group_id = %s",
     "datasources": "DELETE FROM datasources WHERE group_id = %s",
-    "file_sources": "DELETE FROM file_sources WHERE group_id = %s",
     "users": "DELETE FROM users WHERE group_id = %s",
 }
 

@@ -11,6 +11,7 @@ from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 
 from app.config import settings
+from app.core.scheduler.job_dispatcher import enqueue_schedule_run
 from app.core.scheduler.models import ScheduleConfig
 from app.utils.logger import close_run, get_logger
 
@@ -157,17 +158,11 @@ def handle_failure(
         schedule_service.set_runtime_status(schedule_id, "running")
 
         try:
-            from workers.tasks.schedule_task import schedule_pipeline_task
-
-            retry_kwargs = {
-                "triggered_by": triggered_by,
-                "retry_attempt": retry_attempt + 1,
-            }
-            if scheduled_for:
-                retry_kwargs["scheduled_for"] = scheduled_for
-            schedule_pipeline_task.apply_async(
-                args=[schedule_id],
-                kwargs=retry_kwargs,
+            enqueue_schedule_run(
+                schedule_id,
+                triggered_by=triggered_by,
+                retry_attempt=retry_attempt + 1,
+                scheduled_for=scheduled_for,
                 countdown=decision["wait_seconds"],
             )
             logger.info(

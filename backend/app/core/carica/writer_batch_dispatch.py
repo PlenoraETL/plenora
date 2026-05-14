@@ -6,9 +6,8 @@ verso il di TransactionExecutionMixin.
 
 from __future__ import annotations
 
-from typing import List
+from typing import Any, List
 
-import pandas as pd
 from sqlalchemy import text
 
 from app.core.carica.models import ColumnMapping, WriteResult
@@ -28,7 +27,7 @@ class BatchDispatchMixin:
 
     def _batch_insert(
         self,
-        df: pd.DataFrame,
+        df: Any,
         columns: List[ColumnMapping],
         result: WriteResult,
     ) -> WriteResult:
@@ -44,7 +43,7 @@ class BatchDispatchMixin:
 
     def _batch_update(
         self,
-        df: pd.DataFrame,
+        df: Any,
         columns: List[ColumnMapping],
         result: WriteResult,
     ) -> WriteResult:
@@ -70,7 +69,7 @@ class BatchDispatchMixin:
 
     def _batch_upsert(
         self,
-        df: pd.DataFrame,
+        df: Any,
         columns: List[ColumnMapping],
         result: WriteResult,
     ) -> WriteResult:

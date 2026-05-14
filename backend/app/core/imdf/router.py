@@ -5,7 +5,6 @@ Endpoint
 """
 
 import json as _json
-import shutil
 import time as _t
 
 from pathlib import Path
@@ -20,9 +19,8 @@ from app.core.auth.ownership import assert_resource_visible
 from app.shared import error_codes
 from app.shared.error_envelope import raise_typed_http
 from app.observability.audit_action import audit_action
-from app.shared.resources.path_policy import validate_imdf_task_id
 from app.core.imdf import project_access
-from app.core.imdf import storage as _imdf_storage
+from app.core.imdf import bundle_store as _imdf_bundle_store
 from app.core.imdf.validator import validate_publish
 from app.utils.logger import get_logger
 
@@ -34,24 +32,25 @@ router = APIRouter(prefix="/imdf", tags=["imdf"])
 # ══════════════════════════════════════════════════════════════════════
 # VALIDAZIONE PATH TRAVERSAL
 # ══════════════════════════════════════════════════════════════════════
-# Regex + path-traversal guard centralizzati in `app.shared.resources.path_policy
-# validate_imdf_task_id` (D3 commit 1). Il wrapper locale resta per
-# tradurre `ValueError` in `HTTPException 400` preservando la signature
-# attesa dai call site interni del router
+# Regex + path-traversal guard centralizzati nel bundle lifecycle boundary.
+# Il wrapper locale resta per tradurre `ValueError` in `HTTPException 400`
+# preservando la signature attesa dai call site interni del router.
 
 
 def _safe_bundle_dir(bundle_task_id: str) -> Path:
     """Ritorna il path della cartella bundle validando contro path traversal.
 
-    Thin wrapper attorno a `validate_imdf_task_id`: traduce `ValueError`
-    in `HTTPException 400` con detail stabile.
+    Thin wrapper attorno a `bundle_store.resolve_bundle_dir`: traduce
+    `ValueError` in `HTTPException 400` con detail stabile.
 
     Raises:
         HTTPException 400 se l'id e' malformato o tenta di uscire dalla root.
     """
-    root = settings.IMDF_BUNDLES_DIR.resolve()
     try:
-        return validate_imdf_task_id(bundle_task_id, root)
+        return _imdf_bundle_store.resolve_bundle_dir(
+            bundle_task_id,
+            root=settings.IMDF_BUNDLES_DIR,
+        )
     except ValueError:
         raise HTTPException(
             status_code=400,
@@ -70,11 +69,19 @@ def _hydrate_local_cache(bundle_task_id: str) -> None:
     Silent pass su errori: il codice downstream gestisce i 404 come prima.
     """
     try:
-        _imdf_storage.ensure_local_bundle(bundle_task_id)
+        from app.config import settings as runtime_settings
+
+        if runtime_settings.IMDF_BUNDLES_DIR.resolve() == settings.IMDF_BUNDLES_DIR.resolve():
+            _imdf_bundle_store.ensure_local_bundle(bundle_task_id)
+        else:
+            _imdf_bundle_store.ensure_local_bundle(
+                bundle_task_id,
+                root=settings.IMDF_BUNDLES_DIR,
+            )
     except FileNotFoundError:
         # Bundle davvero assente — downstream gestisce 404 via file checks
         pass
-    except Exception as e:
+    except (OSError, RuntimeError, ValueError) as e:
         logger.warning(f"[{bundle_task_id}] hydrate cache fallita (non-fatal): {e}")
 
 
@@ -96,8 +103,8 @@ def _assert_bundle_group_access(bundle_dir: Path, current_user: CurrentUser) -> 
     if current_user.role == "superadmin":
         return
 
-    meta_path = bundle_dir / "plenora_metadata.json"
-    if not meta_path.exists():
+    meta = _imdf_bundle_store.read_metadata(bundle_dir)
+    if meta is None:
         logger.warning(
             f"_assert_bundle_group_access: bundle '{bundle_dir.name}' senza "
             f"plenora_metadata.json — accesso NEGATO a utente "
@@ -109,8 +116,8 @@ def _assert_bundle_group_access(bundle_dir: Path, current_user: CurrentUser) -> 
         )
 
     try:
-        meta = _json.loads(meta_path.read_text(encoding="utf-8"))
-    except Exception as e:
+        bundle_project_id = meta.get("project_id")
+    except (AttributeError, TypeError) as e:
         logger.warning(
             f"plenora_metadata.json illeggibile ({bundle_dir.name}): {e} — "
             f"accesso NEGATO (fail-closed)"
@@ -120,7 +127,6 @@ def _assert_bundle_group_access(bundle_dir: Path, current_user: CurrentUser) -> 
             detail="Metadata bundle illeggibile: accesso non consentito",
         )
 
-    bundle_project_id = meta.get("project_id")
     if not bundle_project_id:
         logger.warning(
             f"plenora_metadata.json senza project_id ({bundle_dir.name}) — "
@@ -268,8 +274,9 @@ def publish_imdf(
         "match_columns":   request.match_columns,
     }
 
-    from workers.tasks.imdf_publish_task import execute_imdf_publish_task
-    result = execute_imdf_publish_task.delay(
+    from app.core.imdf.publish_dispatcher import enqueue_imdf_publish
+
+    result = enqueue_imdf_publish(
         bundle_task_id=request.bundle_task_id,
         publisher_config=publisher_config,
     )
@@ -365,18 +372,13 @@ def get_bundle_metadata(
     # scritto da persist dal valore autoritativo di `loader.ImdfBundle.site_id`
     # Nessuna scansione dir per derivarlo. Bundle senza meta o con meta senza
     # site_id (legacy malformati) -> response site_id=None, FE gestisce
-    meta_path = bundle_dir / "plenora_metadata.json"
     site_id: Optional[str] = None
-    if meta_path.exists():
-        try:
-            _meta_for_site = _json.loads(meta_path.read_text(encoding="utf-8"))
-            site_id = _meta_for_site.get("site_id") or None
-        except Exception as _me:
-            logger.warning(f"get_bundle_metadata: plenora_metadata.json illeggibile: {_me}")
+    _meta_for_site = _imdf_bundle_store.read_metadata(bundle_dir)
+    if _meta_for_site:
+        site_id = _meta_for_site.get("site_id") or None
 
     manifest_path = bundle_dir / "manifest.json"
     validation_path = bundle_dir / "validation.json"
-    renderers_path = bundle_dir / "renderers.json"
     imdf_dir = (bundle_dir / site_id) if site_id else None
     gdb_path = None
     ifc_path = None
@@ -398,7 +400,7 @@ def get_bundle_metadata(
 
     manifest   = _read_json(manifest_path)
     validation = _read_json(validation_path)
-    renderers  = _read_json(renderers_path)
+    renderers  = _imdf_bundle_store.read_renderers(bundle_dir)
 
     # Carica geojson IMDF (ogni layer in un dict
     geojson_layers: Dict[str, Any] = {}
@@ -433,7 +435,7 @@ def get_bundle_metadata(
         "files":         files_list,
         "has_gdb":       gdb_path is not None,
         "has_ifc":       ifc_path is not None,
-        "has_renderers": renderers_path.exists(),
+        "has_renderers": renderers is not None,
     }
 
 
@@ -480,7 +482,7 @@ def list_bundles(
             if entry.is_dir():
                 task_ids_set.add(entry.name)
     try:
-        task_ids_set.update(_imdf_storage.list_task_ids())
+        task_ids_set.update(_imdf_bundle_store.list_task_ids())
     except Exception as e:
         logger.warning(f"list_bundles: S3 lookup fallito (mostro solo cache locale): {e}")
 
@@ -507,16 +509,10 @@ def list_bundles(
         try:
             # Leggi plenora_metadata.json: prima da local cache (fast
             # poi fallback a S3 (multi-host: bundle generato su altro nodo
-            meta: Dict[str, Any] = {}
-            meta_path = entry / "plenora_metadata.json"
-            if meta_path.exists():
-                try:
-                    meta = _json.loads(meta_path.read_text(encoding="utf-8"))
-                except Exception as _e:
-                    logger.warning(f"list_bundles: plenora_metadata.json illeggibile in {task_id}: {_e}")
+            meta: Dict[str, Any] = _imdf_bundle_store.read_metadata(entry) or {}
             if not meta:
                 try:
-                    _meta_from_s3 = _imdf_storage.get_meta_only(task_id)
+                    _meta_from_s3 = _imdf_bundle_store.read_remote_metadata(task_id)
                     if _meta_from_s3:
                         meta = _meta_from_s3
                 except Exception as _e:
@@ -651,24 +647,16 @@ def delete_bundle(
         )
     _assert_bundle_group_access(bundle_dir, current_user)
     try:
-        shutil.rmtree(bundle_dir)
-    except Exception as e:
+        _imdf_bundle_store.delete_bundle(
+            task_id=bundle_task_id,
+            local_dir=bundle_dir,
+        )
+    except (OSError, RuntimeError, ValueError) as e:
         logger.error(
             f"delete_bundle: rimozione '{bundle_task_id}' fallita: {e}",
             exc_info=True,
         )
         raise_typed_http(error_codes.INTERNAL_ERROR, status_code=500, message="Errore interno del server")
-
-    # R2 multi-host: cancella anche da S3 (best-effort, separato dal delete
-    # locale). Se fallisce (config mancante in test / network error in prod
-    # logghiamo ma non failiamo il 200 — il bundle locale e' gia' rimosso
-    try:
-        _imdf_storage.delete_bundle(bundle_task_id)
-    except Exception as _se:
-        logger.warning(
-            f"delete_bundle: S3 cleanup per '{bundle_task_id}' fallito "
-            f"(non-fatal, locale rimosso): {_se}"
-        )
 
     logger.info(
         f"[User {current_user.username}] IMDF bundle '{bundle_task_id}' cancellato"

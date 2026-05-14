@@ -1,5 +1,7 @@
 # Horizontal Engines
 
+BE-GO-READY-DOCS-001-CODEMAP-ARCHITECTURE-REFRESH.
+
 This is the active backend boundary map. Keep it current when code moves
 between engines.
 
@@ -28,6 +30,9 @@ Rules:
 Canonical surfaces:
 
 - `app/shared/connections/*`
+- `app/core/connections/rest_sink.py`
+- `app/core/connections/arcgis_sql_helpers.py`
+- `app/core/connections/arcgis_publish_modes.py`
 - `app/core/features/arcgis_client.py`
 - `app/core/connections/arcgis_connection_resolver.py`
 - `app/core/datasources/*`
@@ -39,6 +44,8 @@ Current ArcGIS shape:
 - `ArcGISProviderProtocol` lives in `app/shared/connections/arcgis_provider.py`.
 - IMDF uses the neutral connection resolver instead of depending directly on
   `FeaturesService` or a Features-owned adapter.
+- Generic ArcGIS SQL and existing-service publish-mode helpers live under
+  `app/core/connections`; legacy `features` modules are compatibility-only.
 
 Rules:
 
@@ -57,7 +64,11 @@ Canonical surfaces:
 - `app/shared/execution/graph.py`
 - `app/shared/execution/executor_protocol.py`
 - `app/shared/execution/payloads.py`
+- `app/shared/execution/schema_types.py`
 - `app/core/orchestrator/*`
+- `app/core/scheduler/job_dispatcher.py`
+- `app/core/scheduler/run_log_store.py`
+- `app/core/imdf/publish_dispatcher.py`
 
 Current contracts:
 
@@ -68,6 +79,13 @@ Current contracts:
   `app/shared/execution/graph.py`.
 - `ExecutionResult` is the typed result boundary.
 - `ArtifactPayload` lives in `app/shared/execution/payloads.py`.
+- `ColumnSchema` is the shared schema contract for inferred canvas columns.
+- `app/core/scheduler/job_dispatcher.py` is the scheduled-run dispatch
+  boundary; scheduler application code should not call Celery tasks directly.
+- `app/core/scheduler/run_log_store.py` is the scheduled-run DB log reader
+  boundary; catalog/view code should not import scheduler DB directly.
+- `app/core/imdf/publish_dispatcher.py` is the IMDF publish dispatch boundary;
+  IMDF routers should not call Celery tasks directly.
 
 Rules:
 
@@ -75,6 +93,12 @@ Rules:
 - Do not put DataFrames, bytes, or streams in `ExecutionResult.payload`.
 - Do not create a generic `BaseGraphExecutor` until duplication proves it is
   needed.
+- Do not call `workers.tasks.schedule_task.schedule_pipeline_task.apply_async`
+  from scheduler application code; use the dispatch boundary.
+- Do not import scheduler DB directly from scheduler catalog/view code; use
+  `app.core.scheduler.run_log_store`.
+- Do not call `workers.tasks.imdf_publish_task.execute_imdf_publish_task`
+  from IMDF application code; use the dispatch boundary.
 
 ---
 
@@ -82,6 +106,7 @@ Rules:
 
 Canonical surfaces:
 
+- `app/core/dataframes/*`
 - `app/core/manipola/*`
 - `app/core/estrai/*`
 - `app/core/arricchisci/*`
@@ -93,12 +118,77 @@ Current direction:
   intake without merging their business semantics.
 - Shared metadata should travel with loaded resources instead of being
   reconstructed repeatedly from canvas dictionaries.
+- Pandas/geopandas-backed tabular and geospatial mechanics are confined to
+  `app/core/dataframes/*`. Vertical engines must express business intent and
+  call dataframe ports/helpers instead of importing pandas/geopandas directly.
+  Vertical code may pass frame-like values across boundaries, but it must not
+  own pandas/geopandas imports or implementation-specific mechanics.
+- Pandas-neutral dataframe contracts live in `app/core/dataframes/ports.py`;
+  this module must not import pandas/geopandas or vertical runtime services.
+- File-source parser dispatch lives in `app/core/dataframes/load_dispatch.py`;
+  `app/core/files/load_dispatch.py` is compatibility-only during migration.
+- The default file-source loader that owns pandas/geopandas parsing lives in
+  `app/core/dataframes/default_loader.py`; `app/core/files/service_deps.py`
+  re-exports it for legacy service DI.
+- DataFrame path/bytes I/O lives in `app/core/dataframes/frame_io.py` and
+  geospatial export helpers live in `app/core/dataframes/geospatial_io.py`;
+  matching `app/core/files/*_io.py` modules are compatibility-only during
+  migration.
+- DataFrame-backed column type inference and empty typed-frame construction live in
+  `app/core/dataframes/schema.py`; `app/core/files/helpers.py` re-exports
+  the legacy helper names while upload code migrates.
+- Scalar null checks, DataFrame probes, and GeoSeries-like probes that depend
+  on pandas/geopandas live in
+  `app/core/dataframes/values.py`; vertical domains should use those helpers
+  instead of importing pandas/geopandas only for scalar/type checks.
+- Conditional split and parallel column merge helpers that depend on dataframe
+  engine index/cardinality mechanics live in `app/core/dataframes/parallel_ops.py`;
+  vertical orchestration should use them instead of owning pandas merge logic.
+- DataFrame-to-record projection for generic REST payloads, tabular coercion,
+  dtype probes, empty/false Series construction, concat/merge, JSON normalize,
+  binning, and string-join helpers live in `app/core/dataframes/tabular.py`;
+  vertical domains should keep transform intent but not import pandas only for
+  these mechanics.
+- Row iteration and row-drop/reset helpers live in
+  `app/core/dataframes/tabular.py`; SQL writers should use those helpers
+  instead of owning pandas row traversal or index-reset mechanics.
+- Geodataframe helpers live in `app/core/dataframes/geodata.py`, including
+  GeoDataFrame construction/probes and overlay, clip, and spatial join
+  wrappers backed by the dataframe engine; legacy `features/geo_utils.py` is
+  compatibility-only.
 
 Rules:
 
 - Keep transformation behavior in the owning engine.
 - Use shared structural contracts only for structure, not business execution.
 - Avoid reintroducing global mutable execution context.
+- Do not add direct pandas/geopandas imports in vertical domains. Route
+  parser dispatch, constructors, probes, joins, serialization, hashing, and
+  geospatial mechanics through `app.core.dataframes.*`.
+- Do not put pandas/geopandas type imports in dataframe contracts; use
+  `app.core.dataframes.ports` for pandas-neutral engine protocols.
+- Do not add new concrete pandas/geopandas file-source loader behavior in
+  `app.core.files`; use `app.core.dataframes.default_loader`.
+- Do not add new direct dataframe path/bytes I/O in vertical domains; use
+  `app.core.dataframes.frame_io` / `app.core.dataframes.geospatial_io` or the
+  current compatibility wrappers.
+- Do not add new pandas-backed column inference in `app.core.files`; use
+  `app.core.dataframes.schema`.
+- Do not import pandas/geopandas directly from `app.core.files`; route any
+  frame behavior through `app.core.dataframes`.
+- Do not import pandas/geopandas in vertical domains only for scalar null
+  checks, DataFrame type probes, or GeoSeries-like probes; use
+  `app.core.dataframes.values`.
+- Do not duplicate pandas split/merge/index guard behavior in vertical
+  orchestration; use `app.core.dataframes.parallel_ops`.
+- Do not duplicate pandas record extraction for REST payloads in vertical
+  write boundaries; use `app.core.dataframes.tabular`.
+- Do not duplicate pandas row traversal or row-drop/reset mechanics in SQL
+  writers; use `app.core.dataframes.tabular`.
+- Do not import pandas/geopandas in vertical transform modules only for
+  dataframe constructors, dtype probes, scalar missing values, concat/merge,
+  JSON normalization, binning, or GeoDataFrame construction/overlay/clip/join;
+  use `app.core.dataframes.tabular` or `app.core.dataframes.geodata`.
 
 ---
 
@@ -108,7 +198,14 @@ Canonical surfaces:
 
 - `app/core/resources/*`
 - `app/core/artifacts/*`
+- `app/core/results/legacy_file_store.py`
+- `app/core/files/cleanup.py`
+- `app/core/scheduler/run_archive_store.py`
+- `app/core/eseguibili/output_store.py`
+- `app/core/imdf/bundle_store.py`
+- `app/core/intermediate/retention.py`
 - `app/shared/resources/metadata.py`
+- `app/shared/resources/file_cleanup.py`
 - `app/shared/cloud_backends.py`
 - `app/shared/storage_reconciliation.py`
 
@@ -117,12 +214,44 @@ Current contracts:
 - Resource loading is bounded by explicit byte limits.
 - `LoadedResource` pairs loaded data with `ResourceMetadata`.
 - Object storage is governed by `STORAGE_POLICY`.
+- Result object-storage writes record `upload_intent` before upload and
+  close it only after the `results` row is saved or after confirmed
+  compensating delete.
+- Legacy filesystem result downloads and output-file cleanup should go
+  through `app/core/results/legacy_file_store.py`.
+- Scheduled-run filesystem archive lookup should go through
+  `app/core/scheduler/run_archive_store.py`; the catalog should merge store
+  outputs, not encode archive layout itself.
+- Group cleanup for `file_sources` must use the storage-aware file-source
+  cleanup boundary, not a direct group-row delete.
+- Eseguibili output download, ownership metadata, and task-scoped cleanup
+  should go through `app/core/eseguibili/output_store.py`; routers should not
+  inspect raw `eseguibili-outputs/{task_id}/` keys directly.
+- IMDF bundle path validation, cache hydration, metadata sidecar reads,
+  publish GDB lookup, task listing, and deletion should go through the
+  bundle lifecycle boundary.
+- Intermediate run cleanup includes completed artifacts and failed artifacts
+  that already have an `artifact_uri`; pending artifacts are not cleanup
+  eligible.
+- Beat janitors should remove filesystem paths through
+  `app/shared/resources/file_cleanup.py`.
 
 Rules:
 
 - No unbounded `b"".join(stream)` over external or object-storage streams.
 - Path materialization is fallback behavior and must be inventoried.
 - Resource loaders must not become vertical domain services.
+- Do not bypass file-source refcount/reconciliation cleanup with direct
+  `DELETE FROM file_sources WHERE group_id`.
+- Do not inspect or delete legacy `RESULTS_DIR/{project_id}` files directly
+  from API routers; use the legacy result file-store boundary.
+- Do not encode scheduled-run archive path/listing/lookup in catalog or router
+  code; use `app.core.scheduler.run_archive_store`.
+- Do not stream eseguibili outputs by calling raw storage key lookup directly
+  from routers; use the output-store boundary so owner sidecars are filtered
+  and validated consistently.
+- Do not resolve, hydrate, inspect metadata, scan for publish GDBs, or delete
+  IMDF bundle directories directly from routers/workers/validators.
 
 ---
 
@@ -148,6 +277,7 @@ Rules:
 Canonical surfaces:
 
 - `app/observability/health.py`
+- `app/core/admin_system_status/worker_runtime.py`
 - `scripts/install.sh`
 - `scripts/docker-validate.sh`
 - `backend/Dockerfile`
@@ -166,6 +296,8 @@ Rules:
 
 - Prefer automated checks over long manual checklists.
 - Keep `/health` cheap and `/ready` bounded.
+- Admin status code should probe Celery through
+  `app/core/admin_system_status/worker_runtime.py`, not direct worker imports.
 - Do not claim Docker production readiness until a real Linux-PC validation
   report exists.
 
@@ -179,3 +311,58 @@ Rules:
 - [ADR registry](decisions/README.md)
 - [Clean install, non-Docker](../ops/install-non-docker.md)
 - [Clean install, Docker](../ops/install-docker.md)
+
+---
+
+## Do not import
+
+- Do not add new imports from the retired `app.core.auth.auth` facade.
+- Do not re-expand retired DB facades such as `app.db.config_db_service`.
+- Do not read external or object-storage streams with unbounded stream
+  `b"".join(...)`; use `read_stream_bounded` at the resource boundary.
+- Do not add new `mode="path"` resource callsites without an inventory entry.
+- Do not import provider-neutral REST sink behavior from
+  `app.core.features.rest_sink` in production code; use
+  `app.core.connections.rest_sink`.
+- Do not import generic ArcGIS SQL or publish-mode behavior from
+  `app.core.features.arcgis_sql_helpers` or
+  `app.core.features.arcgis_publish_modes` in production code; use
+  `app.core.connections`.
+- Do not add direct pandas/geopandas imports in vertical domains; use
+  `app.core.dataframes.*` ports/helpers for parser dispatch, constructors,
+  probes, joins, serialization, hashing, and geospatial mechanics.
+- Do not put pandas/geopandas type imports in dataframe contracts; use
+  `app.core.dataframes.ports` for pandas-neutral engine protocols.
+- Do not add new concrete pandas/geopandas file-source loader behavior in
+  `app.core.files`; use `app.core.dataframes.default_loader`.
+- Do not add new direct dataframe path/bytes I/O in vertical domains; use
+  `app.core.dataframes.frame_io` / `app.core.dataframes.geospatial_io` or the
+  current compatibility wrappers.
+- Do not add new pandas-backed column inference in `app.core.files`; use
+  `app.core.dataframes.schema`.
+- Do not import pandas/geopandas directly from `app.core.files`; route any
+  frame behavior through `app.core.dataframes`.
+- Do not import pandas/geopandas in vertical domains only for scalar null
+  checks, DataFrame type probes, or GeoSeries-like probes; use
+  `app.core.dataframes.values`.
+- Do not duplicate pandas split/merge/index guard behavior in vertical
+  orchestration; use `app.core.dataframes.parallel_ops`.
+- Do not enqueue scheduled runs directly through
+  `workers.tasks.schedule_task`; use `app.core.scheduler.job_dispatcher`.
+- Do not import scheduler DB directly from scheduler catalog/view code; use
+  `app.core.scheduler.run_log_store`.
+- Do not enqueue IMDF publish tasks directly through
+  `workers.tasks.imdf_publish_task`; use `app.core.imdf.publish_dispatcher`.
+- Do not inspect Celery workers directly from admin service code; use
+  `app.core.admin_system_status.worker_runtime`.
+- Do not remove file-source group rows through the generic DB cleanup helper;
+  use `app.core.files.cleanup`.
+- Do not inspect or delete legacy result files directly from API routers; use
+  `app.core.results.legacy_file_store`.
+- Do not encode scheduled-run archive path/listing/lookup in catalog or router
+  code; use `app.core.scheduler.run_archive_store`.
+- Do not lookup or stream raw eseguibili output keys from API routers; use
+  `app.core.eseguibili.output_store`.
+- Do not resolve, hydrate, inspect metadata, scan for publish GDBs, or delete
+  IMDF bundles directly from router/worker/validator code; use
+  `app.core.imdf.bundle_store`.

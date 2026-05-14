@@ -8,7 +8,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any, Dict, Optional, Sequence
 
-from app.core.files.dataframe_io import filter_visible_columns
+from app.core.dataframes.frame_io import filter_visible_columns
 from app.utils.logger import get_logger
 from app.shared.resources.metadata import LoadedResource, ResourceMetadata
 

@@ -13,8 +13,7 @@ import gc
 from pathlib import Path
 from typing import Any, Callable, Dict, Optional, Tuple
 
-import pandas as pd
-
+from app.core.dataframes.tabular import dataframe_preview_records
 from app.core.files.models import FileSourceLayersResponse, FileSourcePreview
 from app.shared.resources.file_cleanup import rmtree_safe
 
@@ -22,7 +21,7 @@ from app.shared.resources.file_cleanup import rmtree_safe
 AssertVisible = Callable[[str, str], None]
 GetFileSource = Callable[[str], Any]
 TempFileFor = Callable[[str, Optional[str]], Optional[Path]]
-LoadByFormat = Callable[[Path, str, Optional[str], Optional[str]], Tuple[pd.DataFrame, Optional[Any]]]
+LoadByFormat = Callable[[Path, str, Optional[str], Optional[str]], Tuple[Any, Optional[Any]]]
 ListLayers = Callable[[Path], list[str]]
 ListSheets = Callable[[Path], list[str]]
 
@@ -55,7 +54,7 @@ def load_dataframe(
     temp_file_for: TempFileFor,
     load_by_format: LoadByFormat,
     logger: Any,
-) -> Tuple[pd.DataFrame, Optional[Any]]:
+) -> Tuple[Any, Optional[Any]]:
     """Load a persisted file source into a DataFrame.
 
     Visibility remains fail-closed: callers inject the same
@@ -140,7 +139,7 @@ def get_preview(
     assert_visible: AssertVisible,
     get_file_source: GetFileSource,
     load_dataframe_for_preview: Callable[
-        [str, Optional[str]], Tuple[pd.DataFrame, Optional[Any]]
+        [str, Optional[str]], Tuple[Any, Optional[Any]]
     ],
 ) -> Dict[str, Any]:
     """Return a row preview for a persisted file source."""
@@ -151,19 +150,7 @@ def get_preview(
 
     df, _gdf = load_dataframe_for_preview(file_id, expected_group_id)
     total_count = len(df)
-    preview_df = df.head(limit)
-    rows = preview_df.to_dict(orient="records")
-
-    import numpy as np
-
-    for row in rows:
-        for key, value in row.items():
-            if pd.isna(value):
-                row[key] = None
-            elif isinstance(value, (np.integer, np.floating)):
-                row[key] = value.item()
-            elif isinstance(value, np.bool_):
-                row[key] = bool(value)
+    rows = dataframe_preview_records(df, limit)
 
     try:
         return FileSourcePreview(

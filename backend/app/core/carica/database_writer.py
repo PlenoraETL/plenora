@@ -7,9 +7,8 @@ Keeps database loading behavior isolated from orchestration callers.
 from app.utils.logger import get_logger
 import logging
 from datetime import datetime, timezone
-from typing import Callable, List, Optional, Tuple
+from typing import Any, Callable, List, Optional, Tuple
 
-import pandas as pd
 from sqlalchemy import text
 from sqlalchemy.engine import Engine
 
@@ -31,6 +30,8 @@ from app.core.carica.writer_transaction_exec import TransactionExecutionMixin
 from app.core.carica.writer_replace_strategies import ReplaceStrategiesMixin
 from app.core.carica.writer_preflight_lifecycle import WriterPreflightLifecycleMixin
 from app.core.carica.writer_batch_dispatch import BatchDispatchMixin
+from app.core.dataframes.tabular import drop_rows_reset_index
+from app.core.dataframes.values import is_empty_dataframe
 from app.config import settings
 
 
@@ -81,7 +82,7 @@ class DatabaseWriter(
 
     def _dispatch_write_mode(
         self,
-        prepared_df: pd.DataFrame,
+        prepared_df: Any,
         columns: List[ColumnMapping],
         result: WriteResult,
     ) -> Tuple[WriteResult, bool]:
@@ -152,15 +153,15 @@ class DatabaseWriter(
                                 d.row_index for d in conflict_report.details
                             }
                             pre_filter = len(prepared_df)
-                            prepared_df = prepared_df.drop(
-                                index=list(conflict_indices), errors='ignore',
-                            ).reset_index(drop=True)
+                            prepared_df = drop_rows_reset_index(
+                                prepared_df, conflict_indices,
+                            )
                             result.rows_skipped = pre_filter - len(prepared_df)
                             logger.info(
                                 f"APPEND SKIP: {result.rows_skipped} righe saltate, "
                                 f"{len(prepared_df)} righe da inserire"
                             )
-                        if prepared_df.empty:
+                        if is_empty_dataframe(prepared_df):
                             result.status = WriteStatus.SUCCESS
                             result.completed_at = datetime.now(
                                 timezone.utc,
@@ -219,7 +220,7 @@ class DatabaseWriter(
 
         return result, False
 
-    def write(self, df: pd.DataFrame) -> WriteResult:
+    def write(self, df: Any) -> WriteResult:
         """Esegue la scrittura effettiva dei dati.
 
         Routing basato su write_mode:

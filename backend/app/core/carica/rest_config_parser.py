@@ -7,7 +7,7 @@ import re
 from typing import Mapping, Sequence
 from urllib.parse import urlparse
 
-from app.core.features.rest_sink import (
+from app.core.connections.rest_sink import (
     RestSinkBatchMode,
     RestSinkBodyField,
     RestSinkBodyMapping,

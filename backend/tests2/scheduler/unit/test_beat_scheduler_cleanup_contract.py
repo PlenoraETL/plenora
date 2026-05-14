@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import ast
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
@@ -14,6 +16,8 @@ from workers.beat_scheduler import PlenoraBeatScheduler
 
 pytestmark = [pytest.mark.unit, pytest.mark.scheduler, pytest.mark.contract]
 
+_BACKEND_ROOT = Path(__file__).resolve().parents[3]
+
 
 def _make_scheduler() -> PlenoraBeatScheduler:
     scheduler = PlenoraBeatScheduler.__new__(PlenoraBeatScheduler)
@@ -24,6 +28,22 @@ def _make_scheduler() -> PlenoraBeatScheduler:
     scheduler._last_imdf_bundles_cleanup = 0.0
     scheduler._last_temp_orphan_cleanup = 0.0
     return scheduler
+
+
+def test_beat_janitors_use_shared_filesystem_cleanup_boundary() -> None:
+    scheduler_path = _BACKEND_ROOT / "workers" / "beat_scheduler.py"
+    src = scheduler_path.read_text(encoding="utf-8")
+    tree = ast.parse(src)
+    imports = {
+        node.module
+        for node in ast.walk(tree)
+        if isinstance(node, ast.ImportFrom) and node.module
+    }
+
+    assert "app.shared.resources.file_cleanup" in imports
+    assert "shutil.rmtree" not in src
+    assert "_shutil.rmtree" not in src
+    assert ".unlink(missing_ok=True)" not in src
 
 
 def test_cleanup_imdf_bundles_removes_only_expired(tmp_path, monkeypatch):

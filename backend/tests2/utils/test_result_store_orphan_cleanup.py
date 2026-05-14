@@ -169,6 +169,38 @@ def test_object_storage_save_ok_does_not_delete(
     assert storage.deletes == []  # no compensating delete on happy path
 
 
+def test_object_storage_save_ok_closes_result_upload_intent(
+    stub_storage_factory, mock_db_save_ok, monkeypatch, tmp_path
+):
+    import app.core.results.blob_writer as result_blob_writer
+
+    monkeypatch.setenv("STORAGE_POLICY", "object_storage")
+    stub_storage_factory()
+    record_calls = []
+    close_calls = []
+    monkeypatch.setattr(
+        result_blob_writer,
+        "record_result_upload_intent",
+        lambda *args, **kwargs: record_calls.append((args, kwargs)) or "intent-1",
+    )
+    monkeypatch.setattr(
+        result_blob_writer,
+        "close_result_upload_intent",
+        lambda intent_id: close_calls.append(intent_id),
+    )
+
+    src = _write_temp_file(tmp_path, "out.bin", b"payload")
+    save_result_blob(project_id="p1", path=src, fmt="bin")
+
+    assert record_calls
+    args, kwargs = record_calls[0]
+    assert args[0] == "results/p1/res-orph.bin"
+    assert kwargs["project_id"] == "p1"
+    assert kwargs["result_id"] == "res-orph"
+    assert kwargs["filename"] == "out.bin"
+    assert close_calls == ["intent-1"]
+
+
 def test_object_storage_save_ok_bytes_path_does_not_delete(
     stub_storage_factory, mock_db_save_ok, monkeypatch
 ):
@@ -180,6 +212,39 @@ def test_object_storage_save_ok_bytes_path_does_not_delete(
     )
     assert len(storage.uploads) == 1
     assert storage.deletes == []
+
+
+def test_object_storage_upload_failure_leaves_result_upload_intent_pending(
+    stub_storage_factory, mock_db_save_ok, monkeypatch
+):
+    import app.core.results.blob_writer as result_blob_writer
+
+    monkeypatch.setenv("STORAGE_POLICY", "object_storage")
+    storage = stub_storage_factory()
+    storage.upload_bytes = lambda data, key: (_ for _ in ()).throw(
+        RuntimeError("S3 down")
+    )
+    close_calls = []
+    monkeypatch.setattr(
+        result_blob_writer,
+        "record_result_upload_intent",
+        lambda *args, **kwargs: "intent-upload-failed",
+    )
+    monkeypatch.setattr(
+        result_blob_writer,
+        "close_result_upload_intent",
+        lambda intent_id: close_calls.append(intent_id),
+    )
+
+    with pytest.raises(ResultSaveError, match="Upload object storage fallito"):
+        save_result_blob_from_bytes(
+            project_id="p1",
+            data=b"payload",
+            filename="out.bin",
+            fmt="bin",
+        )
+
+    assert close_calls == []
 
 
 # (b) upload OK + DB save fails -> delete chiamato + ResultSaveError
@@ -202,6 +267,57 @@ def test_object_storage_db_save_failure_triggers_compensating_delete(
     # cleanup compensativo chiamato esattamente sulla stessa key
     assert storage.deletes == [uploaded_key]
     assert uploaded_key == "results/p1/res-orph.bin"
+
+
+def test_object_storage_db_save_failure_closes_upload_intent_as_orphan(
+    stub_storage_factory, mock_db_save_fails, monkeypatch
+):
+    import app.core.results.blob_writer as result_blob_writer
+
+    monkeypatch.setenv("STORAGE_POLICY", "object_storage")
+    stub_storage_factory()
+    close_failed_calls = []
+    monkeypatch.setattr(
+        result_blob_writer,
+        "record_result_upload_intent",
+        lambda *args, **kwargs: "intent-db-failed",
+    )
+    monkeypatch.setattr(
+        result_blob_writer,
+        "close_failed_result_upload_intent",
+        lambda intent_id, **kwargs: close_failed_calls.append((intent_id, kwargs)),
+    )
+
+    with pytest.raises(ResultSaveError, match="Salvataggio risultato in-memory"):
+        save_result_blob_from_bytes(
+            project_id="p1",
+            data=b"payload",
+            filename="out.bin",
+            fmt="bin",
+        )
+
+    assert close_failed_calls == [
+        ("intent-db-failed", {"cleanup_outcome": "ok"}),
+    ]
+
+
+def test_close_failed_result_upload_intent_does_not_terminalize_skipped(
+    monkeypatch,
+):
+    import app.core.results.blob_writer as result_blob_writer
+
+    orphan_calls = []
+    monkeypatch.setattr(
+        "app.core.resources.storage_reconciliation.mark_orphan_deleted",
+        lambda intent_id: orphan_calls.append(intent_id),
+    )
+
+    result_blob_writer.close_failed_result_upload_intent(
+        "intent-skipped",
+        cleanup_outcome="skipped",
+    )
+
+    assert orphan_calls == []
 
 
 def test_object_storage_db_save_failure_bytes_path_triggers_delete(

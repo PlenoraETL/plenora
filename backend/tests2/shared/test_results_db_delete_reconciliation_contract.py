@@ -52,6 +52,8 @@ class _FakeCursor:
         # subsequent fetchone's return record_pending RETURNING id rows.
         if select_storage_key is not None:
             self._next_fetchone.append(select_storage_key)
+        if select_bulk_rows is not None:
+            self._next_fetchall.append(select_bulk_rows)
         # bulk path doesn't use fetchone on the cursor (uses module-level
         # fetchall before the tx). Stage record_pending RETURNING ids.
         for ret_id in (returning_ids or []):
@@ -222,9 +224,8 @@ def test_delete_result_failed_compensation_marks_failed_attempt(monkeypatch):
     assert "compensating_delete_outcome=failed" in error
 
 
-def test_delete_result_skipped_outcome_marks_done(monkeypatch):
-    """outcome=skipped (capability off) → mark_done. No orphan
-    possible to reconcile."""
+def test_delete_result_skipped_outcome_marks_failed_for_retry(monkeypatch):
+    """outcome=skipped does not prove the object was removed."""
     cursor = _FakeCursor(
         select_storage_key={"storage_key": "results/p1/r1.bin"},
         delete_rowcount=1,
@@ -251,8 +252,10 @@ def test_delete_result_skipped_outcome_marks_done(monkeypatch):
     deleted = results_cleanup.delete_result("r1")
 
     assert deleted is True
-    assert mark_done_calls == ["recon-3"]
-    assert mark_failed_calls == []
+    assert mark_done_calls == []
+    assert mark_failed_calls == [
+        ("recon-3", "compensating_delete_outcome=skipped"),
+    ]
 
 
 def test_delete_result_legacy_bytea_row_skips_reconciliation(monkeypatch):
@@ -311,19 +314,17 @@ def test_delete_result_row_not_found_skips_reconciliation(monkeypatch):
 def test_delete_results_for_project_records_pending_per_key_in_one_tx(
     monkeypatch,
 ):
-    """Bulk path: pre-fetch (id, storage_key), record_pending N times
-    in one transaction, DELETE all-by-project, then per-row
+    """Bulk path: DELETE RETURNING, record_pending N times
+    in one transaction, then per-row
     compensating_delete + mark_done."""
     rows = [
         {"id": "r1", "storage_key": "results/p1/r1.bin"},
         {"id": "r2", "storage_key": "results/p1/r2.bin"},
     ]
-    monkeypatch.setattr(
-        results_cleanup, "fetchall", lambda *a, **kw: rows
-    )
 
     cursor = _FakeCursor(
         delete_rowcount=2,
+        select_bulk_rows=rows,
         returning_ids=["recon-r1", "recon-r2"],
     )
     cm_factory, state = _patched_transaction(cursor)
@@ -352,7 +353,7 @@ def test_delete_results_for_project_records_pending_per_key_in_one_tx(
     assert rowcount == 2
     assert state["committed"] is True
 
-    # 2 INSERT pending + 1 DELETE inside the transaction.
+    # 1 DELETE + 2 INSERT pending inside the transaction.
     sqls = [s for s, _ in cursor.executed]
     insert_count = sum(
         1 for s in sqls
@@ -362,14 +363,15 @@ def test_delete_results_for_project_records_pending_per_key_in_one_tx(
     assert insert_count == 2
     assert delete_count == 1
 
-    # All 2 inserts come BEFORE the delete (atomic batch).
+    # DELETE RETURNING discovers the exact committed row set; pending
+    # inserts happen after it but still inside the same transaction.
     delete_idx = next(i for i, (s, _) in enumerate(cursor.executed)
                       if "DELETE FROM results" in s)
     insert_indices = [
         i for i, (s, _) in enumerate(cursor.executed)
         if "INSERT INTO storage_reconciliation_log" in s
     ]
-    assert all(i < delete_idx for i in insert_indices)
+    assert all(i > delete_idx for i in insert_indices)
 
     # Compensating delete called per key with correct domain + extras.
     assert len(comp_calls) == 2
@@ -388,13 +390,14 @@ def test_delete_results_for_project_records_pending_per_key_in_one_tx(
 def test_delete_results_for_project_no_s3_rows_skips_reconciliation(
     monkeypatch,
 ):
-    """Project with only BYTEA legacy rows (or empty): pre-fetch
-    returns []; no record_pending, no compensating_delete."""
-    monkeypatch.setattr(
-        results_cleanup, "fetchall", lambda *a, **kw: []
-    )
+    """Project with only BYTEA legacy rows skips reconciliation."""
+    rows = [
+        {"id": "r1", "storage_key": None},
+        {"id": "r2", "storage_key": None},
+        {"id": "r3", "storage_key": None},
+    ]
 
-    cursor = _FakeCursor(delete_rowcount=3)
+    cursor = _FakeCursor(delete_rowcount=3, select_bulk_rows=rows)
     cm_factory, _ = _patched_transaction(cursor)
     monkeypatch.setattr(results_cleanup, "transaction", cm_factory)
 
@@ -422,12 +425,11 @@ def test_delete_results_for_project_per_key_failure_isolates_others(
         {"id": "rA", "storage_key": "results/p1/rA.bin"},
         {"id": "rB", "storage_key": "results/p1/rB.bin"},
     ]
-    monkeypatch.setattr(
-        results_cleanup, "fetchall", lambda *a, **kw: rows
-    )
 
     cursor = _FakeCursor(
-        delete_rowcount=2, returning_ids=["recon-rA", "recon-rB"]
+        delete_rowcount=2,
+        select_bulk_rows=rows,
+        returning_ids=["recon-rA", "recon-rB"],
     )
     cm_factory, _ = _patched_transaction(cursor)
     monkeypatch.setattr(results_cleanup, "transaction", cm_factory)

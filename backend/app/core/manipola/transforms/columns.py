@@ -7,15 +7,15 @@ Keeps transformation behavior isolated from orchestration callers.
 from itertools import compress
 
 import numpy as np
-import pandas as pd
-import geopandas as gpd
-from typing import Dict, List, Union
+from typing import Dict, List
 
+from app.core.dataframes.tabular import empty_object_series, join_columns_as_strings
+from app.core.dataframes.ports import FrameLike
 from app.utils.logger import get_logger
 
 logger = get_logger("app.core.manipola.transforms.base")
 
-DataFrame = Union[pd.DataFrame, gpd.GeoDataFrame]
+DataFrame = FrameLike
 
 
 # RIMOZIONE COLONNE
@@ -196,7 +196,7 @@ def op_concat_columns(
             # valori numpy direttamente, senza costruire una Series-per-riga
             n = len(subset)
             if n == 0:
-                result[output_column] = pd.Series([], dtype=object)
+                result[output_column] = empty_object_series()
                 return result
 
             # numpy str arrays + notna masks, una volta per colonna
@@ -220,20 +220,7 @@ def op_concat_columns(
                     out[i] = joined
             result[output_column] = np.array(out, dtype=object)
         else:
-            # NULL come stringa vuota (skip_null=False). Pandas 3.0 puo'
-            # preservare NaN/NaT su dtype numerici/datetime anche dopo
-            # `fillna("")` o `where(notna, "")` perche' la coercion
-            # implicita a object dtype e' stata rimossa: i sostitutivi
-            # stringa vengono silenziosamente non-applicati e il
-            # successivo `astype(str)` non converte affidabilmente NaN
-            # Fix bulletproof: conversione per-cella che bypassa la
-            # type-coercion DataFrame e gestisce esplicitamente NaN/NaT
-            def _cell_to_str(x):
-                return "" if pd.isna(x) else str(x)
-
-            result[output_column] = (
-                subset.map(_cell_to_str).agg(separator.join, axis=1)
-            )
+            result[output_column] = join_columns_as_strings(subset, separator)
 
         return result
 

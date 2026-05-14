@@ -9,8 +9,10 @@ from __future__ import annotations
 import time
 from typing import Any, List
 
-import pandas as pd
-
+from app.core.dataframes.tabular import (
+    dataframe_head_records,
+    null_row_indices_for_columns,
+)
 from app.core.arricchisci.models import (
     EnrichmentValidationResult,
     PreviewResult,
@@ -22,7 +24,7 @@ class EnrichmentValidationPreviewMixin:
     `validate_input` + `preview`. Pure pre-execute preparation +
     """
 
-    def validate_input(self, df: pd.DataFrame) -> EnrichmentValidationResult:
+    def validate_input(self, df: Any) -> EnrichmentValidationResult:
         """
         Valida il DataFrame input prima dell'esecuzione.
 
@@ -89,11 +91,10 @@ class EnrichmentValidationPreviewMixin:
 
         if required_cols_set:
             # Maschera vectorizzata: True se QUALSIASI required column è null/vuota
-            null_mask = pd.Series(False, index=df.index)
-            for col in required_cols_set:
-                col_null = df[col].isna() | (df[col].astype(str) == "")
-                null_mask = null_mask | col_null
-            null_param_rows = df.index[null_mask].tolist()
+            null_param_rows = null_row_indices_for_columns(
+                df,
+                sorted(required_cols_set),
+            )
 
         valid_rows = len(df) - len(null_param_rows)
 
@@ -112,7 +113,7 @@ class EnrichmentValidationPreviewMixin:
             warnings=warnings
         )
 
-    def preview(self, df: pd.DataFrame, sample_size: int = None) -> PreviewResult:
+    def preview(self, df: Any, sample_size: int = None) -> PreviewResult:
         """
         Esegue preview su un campione per stimare tempo e verificare funzionamento.
 
@@ -179,7 +180,7 @@ class EnrichmentValidationPreviewMixin:
             estimated_total_time_seconds=estimated_time,
             estimated_api_calls=estimated_api_calls,
             unique_param_combinations=unique_combinations,
-            preview_data=result_df.head(5).to_dict(orient="records"),
+            preview_data=dataframe_head_records(result_df, 5),
             errors=errors,
             warnings=warnings
         )

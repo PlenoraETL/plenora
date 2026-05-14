@@ -6,15 +6,19 @@ Keeps transformation behavior isolated from orchestration callers.
 
 import json
 
-import pandas as pd
-import geopandas as gpd
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional
 
+from app.core.dataframes.ports import FrameLike
+from app.core.dataframes.tabular import (
+    concat_dataframes,
+    cut_numeric_series,
+    normalize_json_records,
+)
 from app.utils.logger import get_logger
 
 logger = get_logger("app.core.manipola.transforms.base")
 
-DataFrame = Union[pd.DataFrame, gpd.GeoDataFrame]
+DataFrame = FrameLike
 
 
 # CAMPIONAMENTO RIGHE
@@ -60,7 +64,7 @@ def op_sample(
                 group_n = min(group_n, len(group))
                 groups.append(group.sample(n=group_n, random_state=random_state))
 
-            result = pd.concat(groups, ignore_index=True)
+            result = concat_dataframes(groups, ignore_index=True)
         else:
             if fraction is not None:
                 fraction = max(0.0, min(1.0, fraction))
@@ -161,11 +165,8 @@ def op_bin(
         result = df.copy()
         target = output_column or f"{column}_bin"
 
-        # Converti a numerico se necessario
-        numeric_col = pd.to_numeric(result[column], errors='coerce')
-
-        result[target] = pd.cut(
-            numeric_col,
+        result[target] = cut_numeric_series(
+            result[column],
             bins=bins,
             labels=labels,
             include_lowest=True
@@ -231,7 +232,7 @@ def op_flatten_json(
         parsed_col = result[column].apply(parse_json)
 
         # Normalizza in DataFrame piatto
-        flat = pd.json_normalize(parsed_col.tolist(), max_level=max_level)
+        flat = normalize_json_records(parsed_col.tolist(), max_level=max_level)
 
         if flat.empty:
             logger.warning(f"FlattenJSON: nessun dato JSON valido in '{column}'")
@@ -250,7 +251,7 @@ def op_flatten_json(
 
         # Allinea indici e unisci
         flat.index = result.index
-        result = pd.concat([result, flat], axis=1)
+        result = concat_dataframes([result, flat], axis=1)
 
         logger.info(f"FlattenJSON: {len(flat.columns)} colonne estratte da '{column}'")
         return result

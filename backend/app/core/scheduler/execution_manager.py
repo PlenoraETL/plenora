@@ -76,7 +76,7 @@ class ExecutionManager:
         from app.core.estrai.query_generator import QueryGenerator
         from app.core.orchestrator.service import OrchestratorService
         from app.core.features.features_service import FeaturesService
-        from app.core.files.dataframe_io import save_dataframe
+        from app.core.dataframes.frame_io import save_dataframe
 
         project_service = ProjectService()
         connection_service = self._get_connection_service()
@@ -608,7 +608,7 @@ class ExecutionManager:
             # mismatch) → output_path. Niente latest-by-project: due
             # esecuzioni parallele sullo stesso project si scambierebbero
             # silenziosamente l'output sulla tabella di destinazione
-            from app.core.files.dataframe_io import load_dataframe_from_file
+            from app.core.dataframes.frame_io import load_dataframe_from_file
             from app.core.artifacts import (
                 ArtifactResolver,
                 ArtifactResolutionError,

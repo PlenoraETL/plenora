@@ -1,244 +1,72 @@
-"""
-ScheduleRunsCatalog: catalog delle esecuzioni archiviate di uno schedule.
-
-Centralizza il lookup/listing delle runs prodotte da `ScheduleArtifactStore`,
-"""
+"""Catalog view for archived executions of a schedule."""
 
 from __future__ import annotations
 
-import re
-
-from dataclasses import dataclass, field
 from pathlib import Path
-from typing import List, Optional, Tuple
+from typing import Optional
 
-from app.shared.resources.path_policy import assert_path_within
-from app.utils.logger import get_logger
-
-logger = get_logger(__name__)
-
-
-@dataclass(frozen=True)
-class RunFileInfo:
-    """Metadata di un file dentro una run archiviata."""
-
-    name: str
-    size_bytes: int
-
-
-@dataclass(frozen=True)
-class RunInfo:
-    """Snapshot di una run archiviata.
-
-    `timestamp` e' il nome della cartella (formato `YYYYMMDD_HHMMSS`).
-    `path` e' il path assoluto della directory della run.
-    `files` e' una tuple immutabile di file presenti nella root della
-    run (sottocartelle escluse, coerente con `ScheduleArtifactStore`).
-    """
-
-    timestamp: str
-    path: Path
-    files: Tuple[RunFileInfo, ...] = field(default_factory=tuple)
-
-    @property
-    def total_size_bytes(self) -> int:
-        return sum(f.size_bytes for f in self.files)
-
-
-_RUN_TOKEN_PATTERN = r"^[0-9A-Za-z_-]{1,32}$"
+from app.core.scheduler.run_archive_store import (
+    RunFileInfo,
+    RunInfo,
+    ScheduleRunArchiveStore,
+    schedule_short,
+)
+from app.core.scheduler.run_log_store import ScheduleRunLogStore
 
 
 class ScheduleRunsCatalog:
-    """Catalog read-only delle runs archiviate da ScheduleArtifactStore.
+    """Merge filesystem archived runs with DB-only scheduled run logs."""
 
-    DI esplicito su `results_dir` per testabilita' senza monkey-patch
-    di settings. Default: `settings.RESULTS_DIR`.
-    """
-
-    def __init__(self, results_dir: Optional[Path] = None) -> None:
-        if results_dir is None:
-            from app.config import settings
-            self._results_dir = Path(settings.RESULTS_DIR)
-        else:
-            self._results_dir = Path(results_dir)
-
-    # path helpers
+    def __init__(
+        self,
+        results_dir: Optional[Path] = None,
+        *,
+        archive_store: ScheduleRunArchiveStore | None = None,
+        log_store: ScheduleRunLogStore | None = None,
+    ) -> None:
+        self._archive_store = archive_store or ScheduleRunArchiveStore(results_dir)
+        self._log_store = log_store or ScheduleRunLogStore()
 
     @staticmethod
     def _schedule_short(schedule_id: str) -> str:
-        """Convenzione condivisa con `ScheduleArtifactStore._build_archive_dir`.
-
-        Rimuove il prefisso `schedule_` (se presente) e tronca a 12 char.
-        Vive in un solo punto del codebase per evitare drift fra archive
-        e catalog."""
-        return schedule_id.replace("schedule_", "")[:12]
+        return schedule_short(schedule_id)
 
     def runs_root_for(self, project_id: str, schedule_id: str) -> Path:
-        """Path della cartella che contiene tutte le runs di uno schedule.
+        return self._archive_store.runs_root_for(project_id, schedule_id)
 
-        NB: ritorna un Path resolved anche se la cartella non esiste —
-        e' deliberato, i caller la usano per check di esistenza
-        successivi. Non valida se project_id contiene path traversal:
-        l'ACL HTTP a monte garantisce che project_id arrivi pulito.
-        """
-        return (
-            self._results_dir / project_id / "runs" / self._schedule_short(schedule_id)
-        ).resolve()
-
-    # API: listing
-
-    def list_runs(
-        self, project_id: str, schedule_id: str
-    ) -> List[RunInfo]:
-        """Lista tutte le runs archiviate di uno schedule, dal piu' recente.
-
-        Storico ibrido (post refactor blob→DB):
-          1. Filesystem: cartelle archiviate da `ScheduleArtifactStore`
-             quando il progetto produce file (estrai csv/xlsx, manipola
-             output_file, ecc.). Backward-compat con il pre-refactor.
-          2. DB: entries in `schedule_logs` filtrate per `schedule_id`
-             ed event PIPELINE_COMPLETED / PIPELINE_PARTIAL. Coprono i
-             run "blob-only" che il refactor ha spostato in `results`
-             senza materializzare file su disco — senza questa lettura
-             il catalog ritornava sempre `runs_count: 0` per quei run.
-
-        Le entry FS hanno priorita' (mostrano i file scaricabili);
-        quelle DB-only sono restituite con `files=()` e `path=None`-like
-        (path placeholder: `runs_root_for(...)` non resolved). Non
-        solleva — il caller decide come rappresentare lo stato vuoto.
-        """
-        runs: List[RunInfo] = []
-        seen_timestamps: set[str] = set()
-
+    def list_runs(self, project_id: str, schedule_id: str) -> list[RunInfo]:
+        """List archived runs, newest first, including DB-only runs."""
+        runs = list(self._archive_store.list_runs(project_id, schedule_id))
+        seen_timestamps = {run.timestamp for run in runs}
         runs_root = self.runs_root_for(project_id, schedule_id)
-        if runs_root.exists() and runs_root.is_dir():
-            for run_folder in sorted(runs_root.iterdir(), reverse=True):
-                if not run_folder.is_dir():
-                    continue
-                files = tuple(
-                    RunFileInfo(name=f.name, size_bytes=f.stat().st_size)
-                    for f in run_folder.iterdir()
-                    if f.is_file()
-                )
-                runs.append(
-                    RunInfo(
-                        timestamp=run_folder.name,
-                        path=run_folder,
-                        files=files,
-                    )
-                )
-                seen_timestamps.add(run_folder.name)
 
-        # DB fallback per run blob-only (no file su disco). Best-effort:
-        # se la query fallisce o la tabella non c'e' (test isolato), ci
-        # accontentiamo del solo storico filesystem.
-        try:
-            from app.core.scheduler import db as scheduler_db
-            db_entries = scheduler_db.list_schedule_logs(
-                schedule_id=schedule_id,
-                events=("PIPELINE_COMPLETED", "PIPELINE_PARTIAL"),
-            )
-        except Exception as e:
-            logger.debug(
-                "list_runs: DB fallback skipped (%s: %s)",
-                type(e).__name__, e,
-            )
-            db_entries = []
-
-        for entry in db_entries:
+        for entry in self._log_store.list_completed_runs(schedule_id):
             ts = entry.get("timestamp_str") or entry.get("timestamp")
             if ts is None:
                 continue
             if not isinstance(ts, str):
-                # datetime → YYYYMMDD_HHMMSS (mirror della convenzione
-                # filesystem cosi' i caller possono trattare uniforme).
                 ts = ts.strftime("%Y%m%d_%H%M%S")
             if ts in seen_timestamps:
                 continue
             seen_timestamps.add(ts)
-            runs.append(
-                RunInfo(
-                    timestamp=ts,
-                    path=runs_root / ts,
-                    files=(),
-                )
-            )
+            runs.append(RunInfo(timestamp=ts, path=runs_root / ts, files=()))
 
-        runs.sort(key=lambda r: r.timestamp, reverse=True)
+        runs.sort(key=lambda run: run.timestamp, reverse=True)
         return runs
 
-    # API: lookup specifico
-
     def get_run_dir(
-        self, project_id: str, schedule_id: str, run_token: str
+        self,
+        project_id: str,
+        schedule_id: str,
+        run_token: str,
     ) -> Path:
-        """Risolve il path di una run specifica identificata da `run_token`.
+        return self._archive_store.get_run_dir(project_id, schedule_id, run_token)
 
-        Steps:
-        1. Sanitize regex su `run_token` (no path traversal nei nomi)
-        2. Compone candidate dentro `runs_root_for(...)`
-        3. Valida via `assert_path_within` (R#4 cleanup, niente
-           reimplementazione manuale di `relative_to`)
-        4. Verifica che esista come directory
-
-        Solleva:
-            ValueError: run_token malformato o fuori da runs_root
-            FileNotFoundError: run_dir non esiste o non e' directory
-        """
-
-        if not run_token or not re.match(_RUN_TOKEN_PATTERN, run_token):
-            raise ValueError(f"run_token malformato: {run_token!r}")
-
-        runs_root = self.runs_root_for(project_id, schedule_id)
-        # Containment check delegato al path_policy: catturiamo
-        # ValueError e re-raise con il wording del catalog
-        try:
-            run_dir = assert_path_within(runs_root / run_token, [runs_root])
-        except ValueError as e:
-            raise ValueError(f"run_token non valido: {run_token!r}") from e
-
-        if not run_dir.exists() or not run_dir.is_dir():
-            raise FileNotFoundError(
-                f"Run '{run_token}' non trovata per schedule '{schedule_id}'"
-            )
-        return run_dir
-
-    def latest_run_dir(
-        self, project_id: str, schedule_id: str
-    ) -> Optional[Path]:
-        """Path della run piu' recente (per timestamp).
-
-        I nomi delle subdir sono `YYYYMMDD_HHMMSS` quindi l'ordinamento
-        lessicografico coincide con quello temporale; fallback a mtime
-        per robustezza contro nomi non standard.
-
-        Ritorna None se non ci sono runs archiviate (caller decide
-        come tradurre — di solito 404).
-        """
-        runs_root = self.runs_root_for(project_id, schedule_id)
-        if not runs_root.exists() or not runs_root.is_dir():
-            return None
-
-        run_dirs = [d for d in runs_root.iterdir() if d.is_dir()]
-        if not run_dirs:
-            return None
-
-        run_dirs.sort(key=lambda d: (d.name, d.stat().st_mtime), reverse=True)
-        return run_dirs[0]
-
-    # API: file lookup dentro una run
+    def latest_run_dir(self, project_id: str, schedule_id: str) -> Optional[Path]:
+        return self._archive_store.latest_run_dir(project_id, schedule_id)
 
     def first_file_in(self, run_dir: Path) -> Optional[Path]:
-        """Primo file (non directory) dentro una run.
+        return self._archive_store.first_file_in(run_dir)
 
-        I caller download attuali servono il primo file della run (se
-        ce n'e' piu' di uno e' uno scenario non previsto, in futuro
-        si potrebbe zippare). Centralizziamo la logica per non
-        ripeterla.
-        """
-        if not run_dir.exists() or not run_dir.is_dir():
-            return None
-        for f in run_dir.iterdir():
-            if f.is_file():
-                return f
-        return None
+
+__all__ = ["RunFileInfo", "RunInfo", "ScheduleRunsCatalog"]

@@ -1,7 +1,8 @@
 """
 Contract test — dispatch dei tipi colonna (post-refactor C).
 
-Dopo la centralizzazione in `app.core.resources.column_types`, il vocabolario
+Dopo la centralizzazione del vocabolario in `app.core.resources.column_types`,
+i helper pandas-specific passano dal boundary `app.core.dataframes.schema`.
 """
 
 from __future__ import annotations
@@ -138,7 +139,7 @@ def _extract_auto_mapping_body_source() -> str:
 
 
 @pytest.mark.parametrize("alias,expected_dtype", [
-    # Alias map post-refactor C: sorgente unica in app.core.resources.column_types
+    # Alias map post-refactor C: accesso preferito in app.core.dataframes.schema
     ("int",     "int64"),
     ("integer", "int64"),
     ("real",    "float64"),
@@ -156,10 +157,11 @@ def _extract_auto_mapping_body_source() -> str:
 def test_canvas_type_to_pandas_dtype_behavior(alias, expected_dtype):
     """Behavior contract del dispatch canvas-type -> pandas-dtype.
 
-    Post refactor C la dispatch vive in `app.core.resources.column_types.canvas_type_to_pandas_dtype`.
+    Post refactor C la dispatch pandas-specific vive in
+    `app.core.dataframes.schema.canvas_type_to_pandas_dtype`.
     I test restano sul comportamento osservabile (input->output), non sull'impl.
     """
-    from app.core.resources.column_types import canvas_type_to_pandas_dtype
+    from app.core.dataframes.schema import canvas_type_to_pandas_dtype
     assert canvas_type_to_pandas_dtype(alias) == expected_dtype
 
 
@@ -171,9 +173,16 @@ def test_auto_mapping_delegates_to_canonical_dispatch():
     riappare e questo test fallisce.
     """
     src = _extract_auto_mapping_body_source()
-    assert "canvas_type_to_pandas_dtype" in src, (
-        "auto_mapping non usa canvas_type_to_pandas_dtype. Refactor C richiede "
-        "delega al modulo canonico, non dispatch inline."
+    assert "empty_dataframe_from_column_metadata" in src, (
+        "auto_mapping non usa il dataframe boundary. Refactor dataframe "
+        "richiede delega a app.core.dataframes.schema, non dispatch inline."
+    )
+    from app.core.dataframes.schema import empty_dataframe_from_column_metadata
+
+    helper_src = inspect.getsource(empty_dataframe_from_column_metadata)
+    assert "canvas_type_to_pandas_dtype" in helper_src, (
+        "empty_dataframe_from_column_metadata non usa canvas_type_to_pandas_dtype. "
+        "Il dispatch canonico deve restare la fonte unica."
     )
     # Guardia contro reintroduzione dell'if/elif storico
     forbidden_patterns = [
@@ -185,6 +194,29 @@ def test_auto_mapping_delegates_to_canonical_dispatch():
             f"auto_mapping contiene '{pat}' — dispatch reintrodotto inline. "
             "Usa canvas_type_to_pandas_dtype."
         )
+
+
+def test_empty_dataframe_from_column_metadata_preserves_declared_dtypes():
+    from app.core.dataframes.schema import empty_dataframe_from_column_metadata
+
+    df = empty_dataframe_from_column_metadata(
+        [
+            {"name": "id", "type": "integer"},
+            {"name": "amount", "type": "double"},
+            {"name": "enabled", "type": "boolean"},
+            {"name": "created_at", "type": "date"},
+            {"name": "geom", "type": "geometry:Point:4326"},
+            {"name": "label", "type": "str"},
+        ]
+    )
+
+    assert list(df.columns) == ["id", "amount", "enabled", "created_at", "geom", "label"]
+    assert str(df["id"].dtype) == "int64"
+    assert str(df["amount"].dtype) == "float64"
+    assert str(df["enabled"].dtype) == "bool"
+    assert str(df["created_at"].dtype) == "datetime64[ns]"
+    assert str(df["geom"].dtype) == "object"
+    assert str(df["label"].dtype) == "object"
 
 
 # Geometry vocabulary (alias set condiviso fra ColumnMapper)

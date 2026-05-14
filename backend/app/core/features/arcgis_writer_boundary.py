@@ -2,15 +2,13 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Mapping, Optional, Protocol, Sequence, Union
+from typing import Mapping, Optional, Protocol, Sequence, Union
 
+from app.core.dataframes.ports import FrameLike
 from app.core.features.arcgis_write_mapping import (
     ArcGISColumnMapping,
     ArcGISWriteMappingContract,
 )
-
-if TYPE_CHECKING:
-    import pandas as pd
 
 
 ArcGISRawColumnMapping = Union[ArcGISColumnMapping, Mapping[str, object]]
@@ -28,7 +26,7 @@ class ArcGISFeatureWriter(Protocol):
         connection_id: str,
         service_name: str,
         layer_name: str,
-        df: "pd.DataFrame",
+        df: FrameLike,
         geometry_column: str = "geometry",
         source_srid: Optional[int] = None,
         folder_id: str = "",
@@ -42,7 +40,7 @@ class ArcGISFeatureWriter(Protocol):
         connection_id: str,
         layer_url: str,
         operation: str,
-        df: "pd.DataFrame",
+        df: FrameLike,
         geometry_column: str = "geometry",
         source_srid: Optional[int] = None,
         batch_size: Optional[int] = None,

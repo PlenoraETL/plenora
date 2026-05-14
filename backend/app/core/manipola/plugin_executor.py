@@ -9,11 +9,9 @@ import json as _json
 import json
 import importlib
 from pathlib import Path
-from typing import Dict, Any, List, Callable, Optional, Union
+from typing import Dict, Any, List, Callable, Optional
 
-import pandas as pd
-import geopandas as gpd
-
+from app.core.dataframes.ports import FrameLike
 from app.core.projects.canvas_models import Node
 from app.utils.logger import get_logger
 
@@ -170,9 +168,9 @@ class PluginExecutor:
     def execute(
         self,
         transform_id: str,
-        inputs: List[Union[pd.DataFrame, gpd.GeoDataFrame]],
+        inputs: List[FrameLike],
         node: Node
-    ) -> Union[pd.DataFrame, gpd.GeoDataFrame]:
+    ) -> FrameLike:
         """
         Esegue una trasformazione con la configurazione dal nodo canvas.
 
@@ -216,9 +214,9 @@ class PluginExecutor:
     def execute_with_params(
         self,
         transform_id: str,
-        inputs: List[Union[pd.DataFrame, gpd.GeoDataFrame]],
+        inputs: List[FrameLike],
         params: Dict[str, Any]
-    ) -> Union[pd.DataFrame, gpd.GeoDataFrame]:
+    ) -> FrameLike:
         """
         Esegue una trasformazione con parametri diretti (senza Node).
 
@@ -445,9 +443,9 @@ class PluginExecutorCompatibility:
     @staticmethod
     def dispatch(
         transform_id: str,
-        inputs: List[Union[pd.DataFrame, gpd.GeoDataFrame]],
+        inputs: List[FrameLike],
         node: Node
-    ) -> Optional[Union[pd.DataFrame, gpd.GeoDataFrame]]:
+    ) -> Optional[FrameLike]:
         """
         Esegue la trasformazione se presente nel registry, altrimenti restituisce None.
 

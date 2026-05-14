@@ -201,7 +201,7 @@ def test_reconcile_storage_ok_outcome_marks_orphan_deleted():
     mark_lost.assert_not_called()
 
 
-def test_reconcile_storage_skipped_outcome_marks_orphan_deleted():
+def test_reconcile_storage_skipped_outcome_marks_failed_attempt():
     """Capability disabled (object storage off) treated as success
     for reconciliation purposes — no orphan possible to delete."""
     sched = _make_scheduler()
@@ -223,8 +223,8 @@ def test_reconcile_storage_skipped_outcome_marks_orphan_deleted():
                return_value="skipped"):
         sched._reconcile_storage()
 
-    mark_orphan.assert_called_once_with(row.id)
-    mark_failed.assert_not_called()
+    mark_orphan.assert_not_called()
+    mark_failed.assert_called_once()
     mark_lost.assert_not_called()
 
 

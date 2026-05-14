@@ -11,9 +11,10 @@ import time
 import re
 from typing import Any, Dict, List, Optional
 
-import pandas as pd
 import requests
 
+from app.core.dataframes.tabular import dataframe_from_records
+from app.core.dataframes.values import is_null_scalar
 from app.observability.log_sanitization import sanitize_for_log
 from app.core.security.outbound_url import validate_external_url
 from app.infrastructure.http.session import get_shared_session
@@ -254,7 +255,7 @@ class ApiConnectionGeneratorEnricherMixin:
         return self._extract_rows_from_response(data, output_mapping), data, resp
 
     def _build_generator_base_params(
-        self, api_config: Dict, input_df: Optional[pd.DataFrame]
+        self, api_config: Dict, input_df: Optional[Any]
     ) -> Dict:
         """Costruisce i parametri base per `_execute_api_generator`.
 
@@ -299,7 +300,7 @@ class ApiConnectionGeneratorEnricherMixin:
 
         return base_params
 
-    def _execute_api_generator(self, api_config: Dict, input_df: pd.DataFrame = None) -> pd.DataFrame:
+    def _execute_api_generator(self, api_config: Dict, input_df: Any = None) -> Any:
         """
         Esegue API di tipo 'generator' — genera un DataFrame dalla risposta.
 
@@ -357,7 +358,7 @@ class ApiConnectionGeneratorEnricherMixin:
             pagination=pagination,
             base_params=base_params,
         )
-        return pd.DataFrame(all_rows) if all_rows else pd.DataFrame()
+        return dataframe_from_records(all_rows)
 
     # API ENRICHER
     # Pipeline: per riga del df → build params → path subst → SSRF guard →
@@ -486,7 +487,7 @@ class ApiConnectionGeneratorEnricherMixin:
         for api_param, df_column in param_mapping.items():
             if df_column and df_column in row:
                 value = row[df_column]
-                params[api_param] = str(value) if pd.notna(value) else None
+                params[api_param] = str(value) if not is_null_scalar(value) else None
 
         if auth.get('type') == 'api_key' and auth.get('location') == 'query':
             params[auth.get('key_name', 'apiKey')] = auth.get('key_value', '')
@@ -519,7 +520,7 @@ class ApiConnectionGeneratorEnricherMixin:
             extracted[col_name] = self._extract_json_value(data, path)
         return extracted
 
-    def _execute_api_enricher(self, df: pd.DataFrame, api_config: Dict, param_mapping: Dict) -> pd.DataFrame:
+    def _execute_api_enricher(self, df: Any, api_config: Dict, param_mapping: Dict) -> Any:
         """
         Esegue API di tipo 'enricher' — arricchisce ogni riga del DataFrame.
         

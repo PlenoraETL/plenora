@@ -9,7 +9,7 @@ import time as _time
 import traceback
 import uuid as _uuid
 from pathlib import PurePosixPath
-from typing import TYPE_CHECKING, Any, Dict, Optional
+from typing import Any, Dict, Optional
 
 from app.utils.logger import get_logger, open_run, close_run, set_run_context, append_step
 from app.config import settings
@@ -24,9 +24,6 @@ from workers.celery_app import celery_app, BaseTaskWithRetry
 
 
 logger = get_logger("workers.carica_task")
-
-if TYPE_CHECKING:
-    import pandas as pd
 
 
 @celery_app.task(
@@ -417,7 +414,7 @@ def _execute_db_write(task, df, carica_node_data, project_id, task_id, triggered
 
 def _execute_rest_write(
     task: Any,
-    df: "pd.DataFrame",
+    df: Any,
     carica_node_data: Dict[str, Any],
     project_id: str,
     task_id: str,
@@ -478,7 +475,7 @@ class _RequestsRestHttpClient:
         timeout: float,
     ) -> Any:
         import requests
-        from app.core.features.rest_sink import RestSinkHttpResponse
+        from app.core.connections.rest_sink import RestSinkHttpResponse
 
         response = requests.request(
             method=method,
@@ -506,7 +503,7 @@ def create_default_rest_http_client() -> _RequestsRestHttpClient:
 
 def _execute_arcgis_write(
     task: Any,
-    df: "pd.DataFrame",
+    df: Any,
     carica_node_data: Dict[str, Any],
     project_id: str,
     task_id: str,
@@ -596,7 +593,7 @@ def _load_upstream_data(
     canvas: Dict[str, Any],
     force_recalculate: bool,
     output_format: str,
-) -> Optional["pd.DataFrame"]:
+) -> Optional[Any]:
     """Carica il DataFrame dal nodo Result upstream.
 
     Strategia:
@@ -605,7 +602,7 @@ def _load_upstream_data(
     3. Dopo ricalcolo rilegge l'artefatto specifico della run
     """
     try:
-        from app.core.files.dataframe_io import load_dataframe_from_file
+        from app.core.dataframes.frame_io import load_dataframe_from_file
         from app.core.artifacts import (
             LatestProjectArtifactRef,
             SourceLoader,
@@ -663,7 +660,7 @@ def _load_upstream_data(
         from app.core.estrai.query_generator import QueryGenerator
         from app.db.query_executor import create_executor
         from app.core.features.features_service import FeaturesService
-        from app.core.files.dataframe_io import save_dataframe
+        from app.core.dataframes.frame_io import save_dataframe
 
         project_service = ProjectService()
         connection_service = ConnectionService()

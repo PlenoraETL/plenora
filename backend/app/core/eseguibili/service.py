@@ -132,7 +132,7 @@ def analyze_file_upload(
     Returns:
         dict con file_id, detected_columns, row_count, auto_mapping, preview_rows
     """
-    from app.core.files.dataframe_io import load_dataframe_from_file
+    from app.core.dataframes.frame_io import load_dataframe_from_file
 
     df = load_dataframe_from_file(file_path)
     if df is None or df.empty:
@@ -233,7 +233,7 @@ def execute(
     Returns:
         dict con task_id, project_id (id dell'eseguibile), async flag
     """
-    from app.core.files.dataframe_io import load_dataframe_from_file
+    from app.core.dataframes.frame_io import load_dataframe_from_file
     from app.core.files.service import file_source_service
     from app.core.orchestrator.task_service import task_service
 

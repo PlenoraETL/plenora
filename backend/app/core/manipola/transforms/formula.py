@@ -6,15 +6,16 @@ gate AST anti-RCE.
 
 import ast as _ast
 
-import pandas as pd
-import geopandas as gpd
-from typing import Union
-
+from app.core.dataframes.ports import FrameLike
+from app.core.dataframes.tabular import (
+    coerce_numeric_series,
+    dataframe_eval_namespace,
+)
 from app.utils.logger import get_logger
 
 logger = get_logger("app.core.manipola.transforms.base")
 
-DataFrame = Union[pd.DataFrame, gpd.GeoDataFrame]
+DataFrame = FrameLike
 
 
 # COLONNA CALCOLATA (FORMULA) — Validazione AST anti-RCE
@@ -223,7 +224,7 @@ def op_formula(
             series = eval_df[col]
             if series.dtype == 'object':
                 # Prova conversione a numerico (gestisce formato IT: 1.234,56
-                converted = pd.to_numeric(series, errors='coerce')
+                converted = coerce_numeric_series(series)
                 nan_ratio = converted.isna().sum() / max(len(converted), 1)
                 original_na = series.isna().sum() / max(len(series), 1)
                 if nan_ratio - original_na > 0.3:
@@ -236,7 +237,7 @@ def op_formula(
                         .str.replace('.', '', regex=False)  # separatore migliaia IT
                         .str.replace(',', '.', regex=False)  # decimale IT
                     )
-                    converted = pd.to_numeric(cleaned, errors='coerce')
+                    converted = coerce_numeric_series(cleaned)
                 # Se la conversione ha senso (pochi NaN aggiuntivi), usa numerica
                 if nan_ratio - original_na <= 0.3:
                     local_vars[col] = converted
@@ -247,7 +248,11 @@ def op_formula(
 
         # SECURITY: validazione AST gia' eseguita all'inizio del try (sopra
         # prima di qualsiasi engine eval. Niente da rifare qui
-        result[new_column] = eval(formula, {"__builtins__": {}, "pd": pd}, local_vars)
+        result[new_column] = eval(
+            formula,
+            {"__builtins__": {}, **dataframe_eval_namespace()},
+            local_vars,
+        )
         logger.info(f"Formula (eval namespace) ok: '{new_column}'")
         return result
 

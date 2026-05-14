@@ -4,8 +4,7 @@ from __future__ import annotations
 
 from typing import List, Optional, Protocol, Tuple
 
-import pandas as pd
-
+from app.core.dataframes.ports import FrameLike
 from app.core.features.arcgis_writer_boundary import (
     ArcGISColumnMappingsInput,
     normalize_arcgis_column_mappings,
@@ -61,7 +60,7 @@ class ArcGISFeatureWriteService:
         conn_info: ArcGISConnectionInfo,
         service_name: str,
         layer_name: str,
-        df: pd.DataFrame,
+        df: FrameLike,
         geometry_column: str = "geometry",
         source_srid: Optional[int] = None,
         folder_id: str = "",
@@ -89,7 +88,7 @@ class ArcGISFeatureWriteService:
         conn_info: ArcGISConnectionInfo,
         layer_url: str,
         operation: str,
-        df: pd.DataFrame,
+        df: FrameLike,
         geometry_column: str,
         source_srid: Optional[int],
         batch_size: Optional[int],

@@ -6,11 +6,10 @@ Helper canonico per il loop batched-insert + progress reporting.
 from __future__ import annotations
 
 import time
-from typing import Callable
-
-import pandas as pd
+from typing import Any, Callable
 
 from app.core.carica.models import BatchProgress, WriteResult
+from app.core.dataframes.parallel_ops import positional_row_slice
 
 
 __all__ = ["run_batched_inserts"]
@@ -18,20 +17,20 @@ __all__ = ["run_batched_inserts"]
 
 def run_batched_inserts(
     *,
-    df: pd.DataFrame,
+    df: Any,
     result: WriteResult,
     batch_size: int,
     total_batches: int,
     start_time: float,
-    process_batch: Callable[[pd.DataFrame, int], None],
+    process_batch: Callable[[Any, int], None],
     report_progress: Callable[[BatchProgress], None],
 ) -> None:
     """Iterazione canonica batched-insert + progress reporting.
 
     Args:
         df: DataFrame preparato (gia' uscito da `_prepare_dataframe`).
-            Il helper esegue solo `df.iloc[start_idx:end_idx]`; non
-            assume copia, non muta `df`.
+            Il helper esegue solo slicing posizionale via
+            `app.core.dataframes`; non assume copia, non muta `df`.
         result: `WriteResult` corrente. Letto per costruire il
             `BatchProgress.rows_written` / `total_rows`. **Non mutato**
             dal helper — la mutation e' a carico del callback.
@@ -78,7 +77,7 @@ def run_batched_inserts(
     for batch_num in range(total_batches):
         start_idx = batch_num * batch_size
         end_idx = min(start_idx + batch_size, total_rows)
-        batch_df = df.iloc[start_idx:end_idx]
+        batch_df = positional_row_slice(df, start_idx, end_idx)
 
         process_batch(batch_df, batch_num)
 

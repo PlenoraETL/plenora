@@ -62,14 +62,10 @@ def _patched_cleanup(
     else:
         pg_patch = {"return_value": SimpleNamespace(rowcount=1)}
 
-    # Celery AsyncResult.forget
-    forget_mock = (
-        SimpleNamespace(forget=lambda: (_ for _ in ()).throw(
-            RuntimeError("celery down")
-        ))
-        if async_result_forget_raises
-        else SimpleNamespace(forget=lambda: None)
-    )
+    if async_result_forget_raises:
+        forget_patch = {"side_effect": RuntimeError("celery down")}
+    else:
+        forget_patch = {"return_value": None}
 
     # Path.unlink raise
     from pathlib import Path as _RealPath
@@ -94,7 +90,8 @@ def _patched_cleanup(
     ), patch(
         "app.db.pg_connection.execute", **pg_patch
     ), patch(
-        "celery.result.AsyncResult", return_value=forget_mock
+        "app.core.orchestrator.task_service.task_service.forget_task_result",
+        **forget_patch
     ), patch.object(
         _RealPath, "unlink", patched_unlink
     ):

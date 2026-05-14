@@ -68,7 +68,7 @@ def test_save_pipeline_result_gpkg_no_file_in_data_dir_temp(monkeypatch, tmp_pat
         out = Path(str(output_path)).with_suffix(f".{fmt}")
         out.write_bytes(b"fake-gpkg-content")
         return out
-    monkeypatch.setattr("app.core.files.dataframe_io.save_dataframe", _fake_save)
+    monkeypatch.setattr("app.core.dataframes.frame_io.save_dataframe", _fake_save)
 
     # Mock DB save
     saved_db_calls = []
@@ -123,7 +123,7 @@ def test_save_pipeline_result_gpkg_uses_temporary_directory_prefix(monkeypatch, 
         out = Path(str(output_path)).with_suffix(f".{fmt}")
         out.write_bytes(b"x")
         return out
-    monkeypatch.setattr("app.core.files.dataframe_io.save_dataframe", _spy_save)
+    monkeypatch.setattr("app.core.dataframes.frame_io.save_dataframe", _spy_save)
 
     monkeypatch.setattr(result_blob_writer, "uuid",
                         SimpleNamespace(uuid4=lambda: "res-1"))
@@ -166,7 +166,7 @@ def test_save_pipeline_result_gpkg_cleans_tmp_dir_on_upload_failure(monkeypatch,
         out.write_bytes(b"content")
         captured_tmp_dirs.append(out.parent)
         return out
-    monkeypatch.setattr("app.core.files.dataframe_io.save_dataframe", _spy_save)
+    monkeypatch.setattr("app.core.dataframes.frame_io.save_dataframe", _spy_save)
 
     # save_result_row (DB) solleva
     monkeypatch.setattr(result_blob_writer, "uuid",

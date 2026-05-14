@@ -206,7 +206,7 @@ def test_get_run_dir_rejects_path_policy_escape_even_with_regex_safe_token(runs_
     with pytest.raises(ValueError, match="run_token non valido"), \
          pytest.MonkeyPatch.context() as mp:
         mp.setattr(
-            "app.core.scheduler.runs_catalog.assert_path_within",
+            "app.core.scheduler.run_archive_store.assert_path_within",
             lambda *_a, **_k: (_ for _ in ()).throw(ValueError("fuori dai trusted roots")),
         )
         catalog.get_run_dir(

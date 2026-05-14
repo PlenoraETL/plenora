@@ -80,7 +80,7 @@ def build_runtime_services(
             `DATA_DIR` (composed into the executor's results dir).
         save_function: dataframe save function injected into
             `QueryExecutor` and `FeaturesService`. Today this is
-            `app.core.files.dataframe_io.save_dataframe`; injected to keep
+            `app.core.dataframes.frame_io.save_dataframe`; injected to keep
             the factory dependency-explicit and to allow tests to
             substitute a stub.
 

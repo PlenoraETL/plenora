@@ -242,6 +242,33 @@ def test_is_storage_key_referenced_uses_indexed_column():
     assert captured["params"] == ("file-sources/x/y.csv",)
 
 
+def test_is_storage_key_referenced_can_check_results_storage_key():
+    from app.core.resources.storage_reconciliation import is_storage_key_referenced
+
+    captured = {}
+
+    def _fake(sql, params=()):
+        captured["sql"] = sql
+        captured["params"] = params
+        return [(1,)]
+
+    with patch("app.db.pg_connection.fetchall", _fake):
+        assert is_storage_key_referenced(
+            "results/p1/r1.bin",
+            domain="result",
+        ) is True
+
+    assert "results" in captured["sql"]
+    assert "storage_key" in captured["sql"]
+    assert captured["params"] == ("results/p1/r1.bin",)
+
+
+def test_is_storage_key_referenced_unknown_domain_fails_closed():
+    from app.core.resources.storage_reconciliation import is_storage_key_referenced
+
+    assert is_storage_key_referenced("some/key", domain="unknown") is None
+
+
 # dispatch_blob_storage wiring
 
 
@@ -490,7 +517,7 @@ def _run_upload_intent_reconcile(
          patch("app.core.resources.storage_reconciliation.fetch_due_stale_upload_intents",
                return_value=[row]), \
          patch("app.core.resources.storage_reconciliation.is_storage_key_referenced",
-               return_value=referenced), \
+               return_value=referenced) as ref_check, \
          patch("app.core.resources.storage_reconciliation.mark_done",
                side_effect=lambda i: calls["done"].append(i)), \
          patch("app.core.resources.storage_reconciliation.mark_orphan_deleted",
@@ -507,6 +534,7 @@ def _run_upload_intent_reconcile(
                side_effect=lambda *a, **kw: calls["delete"].append((a, kw)) or "ok"):
         sched._reconcile_storage()
 
+    calls["ref_check"] = ref_check.call_args_list
     return calls
 
 
@@ -520,6 +548,7 @@ def test_reconcile_upload_intent_referenced_marks_done(monkeypatch):
 
     assert calls["done"] == ["ui-1"]
     assert calls["delete"] == []  # NO compensating_delete on referenced=True
+    assert calls["ref_check"][0].kwargs == {"domain": "file_source"}
 
 
 def test_reconcile_upload_intent_not_referenced_calls_compensating_delete(monkeypatch):

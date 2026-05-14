@@ -1,5 +1,5 @@
 """
-Canvas column types: canonical names, shape adapters, and dispatch table.
+Canvas column types: canonical names and shape adapters.
 
 Three concepts have adjacent names but distinct semantics:
 """
@@ -77,24 +77,10 @@ def normalize_canvas_type(canvas_type: Optional[str]) -> str:
 
 
 def canvas_type_to_pandas_dtype(canvas_type: Optional[str]) -> str:
-    """canvas-type string -> pandas dtype string for `pd.Series(dtype=...)`.
+    """Compatibility wrapper for the dataframe boundary implementation."""
+    from app.core.dataframes.schema import canvas_type_to_pandas_dtype as _impl
 
-    Used by CARICA/auto-mapping to reconstruct an empty DataFrame with the
-    types declared by the frontend. Handles all aliases understood by
-    `normalize_canvas_type` plus geometry (opaque object, no native dtype).
-    Fallback: `"object"` (safe for any content).
-    """
-    canonical = normalize_canvas_type(canvas_type)
-    if canonical == "int":
-        return "int64"
-    if canonical == "real":
-        return "float64"
-    if canonical == "bool":
-        return "bool"
-    if canonical == "date":
-        return "datetime64[ns]"
-    # "geometry" / "str" / "" / unknown -> object (opaque)
-    return "object"
+    return _impl(canvas_type)
 
 
 def lookup_canvas_column_type(

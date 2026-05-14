@@ -10,12 +10,14 @@ from pathlib import Path
 from datetime import datetime, timezone
 from typing import List, Optional, Dict, Any, Tuple, Protocol
 
-import pandas as pd
-
 from app.config import settings
 from app.utils.logger import get_logger
 from app.core.results.pipeline_result import save_pipeline_result_outcome
-from app.core.files.dataframe_io import _read_csv_safe
+from app.core.dataframes.frame_io import (
+    dataframe_from_rows,
+    load_arcgis_feature_dataframe,
+)
+from app.core.dataframes.ports import FrameLike
 from app.core.features.models import (
     ArcGISConnection,
     ArcGISCreate,
@@ -219,7 +221,7 @@ class SaveFunctionProtocol(Protocol):
     """Protocollo per la funzione di salvataggio DataFrame — iniettabile per test."""
     def __call__(
         self,
-        df: pd.DataFrame,
+        df: FrameLike,
         output_path: Path,
         format: str,
         geom_column: Optional[str] = None,
@@ -521,7 +523,7 @@ class FeaturesService:
             
             # Fase 2: DataFrame
             t_df = time.time()
-            df = pd.DataFrame(rows, columns=columns)
+            df = dataframe_from_rows(rows, list(columns))
             timings["dataframe"] = time.time() - t_df
             
             # Fase 3: Salvataggio su blob DB (single entry, dispatch interno
@@ -601,7 +603,7 @@ class FeaturesService:
     
     @staticmethod
     def _salvataggio_default(
-        df: pd.DataFrame,
+        df: FrameLike,
         output_path: Path,
         format: str,
         geom_column: Optional[str] = None,
@@ -610,7 +612,7 @@ class FeaturesService:
         """
         Salvataggio di fallback (formati base).
         
-        In produzione viene sostituito da app.core.files.dataframe_io.save_dataframe
+        In produzione viene sostituito da app.core.dataframes.frame_io.save_dataframe
         che supporta anche formati geospaziali (geojson, gpkg, shp).
         """
         final_path = output_path.with_suffix(f".{format}")
@@ -698,7 +700,7 @@ class FeaturesService:
         connection_id: str,
         layer_url: str,
         operation: str,
-        df: pd.DataFrame,
+        df: FrameLike,
         geometry_column: str = "geometry",
         source_srid: Optional[int] = None,
         batch_size: Optional[int] = None,
@@ -777,7 +779,7 @@ class FeaturesService:
         connection_id: str,
         service_name: str,
         layer_name: str,
-        df: pd.DataFrame,
+        df: FrameLike,
         geometry_column: str = "geometry",
         source_srid: Optional[int] = None,
         folder_id: str = "",
@@ -808,7 +810,7 @@ class FeaturesService:
         conn_info: ArcGISConnectionInfo,
         layer_url: str,
         operation: str,
-        df: pd.DataFrame,
+        df: FrameLike,
         geometry_column: str,
         source_srid: Optional[int],
         batch_size: Optional[int],
@@ -829,7 +831,7 @@ class FeaturesService:
         )
 
     @staticmethod
-    def _load_dataframe(file_path: str) -> pd.DataFrame:
+    def _load_dataframe(file_path: str) -> FrameLike:
         """
         Carica un file in un DataFrame/GeoDataFrame.
         
@@ -837,74 +839,7 @@ class FeaturesService:
         Il CRS NON viene impostato qui — viene passato dal chiamante
         tramite source_srid (letto dallo schema del nodo sorgente).
         """
-        path = Path(file_path)
-        
-        if not path.exists():
-            raise FileNotFoundError(f"File non trovato: {file_path}")
-        
-        suffix = path.suffix.lower()
-        
-        try:
-            import geopandas as gpd
-            
-            if suffix == ".geojson":
-                return gpd.read_file(path)
-            elif suffix == ".gpkg":
-                return gpd.read_file(path)
-            elif suffix in (".shp",):
-                return gpd.read_file(path)
-        except ImportError:
-            pass
-        
-        if suffix == ".csv":
-            df = _read_csv_safe(path)
-            # Cerca colonna geometria WKT
-            geom_col = None
-            if "geometry" in df.columns:
-                geom_col = "geometry"
-
-            if geom_col:
-                try:
-                    import geopandas as gpd
-                    from shapely import wkt
-                    df["geometry"] = df[geom_col].apply(
-                        lambda wkt_value: (
-                            wkt.loads(wkt_value) if pd.notna(wkt_value) else None
-                        )
-                    )
-                    gdf = gpd.GeoDataFrame(df, geometry="geometry")
-                    return gdf
-                except (ImportError, Exception) as e:
-                    logger.warning(f"Errore conversione geometria WKT: {e}")
-                    pass
-            return df
-        elif suffix == ".json":
-            return pd.read_json(path)
-        elif suffix in (".xlsx", ".xls"):
-            return pd.read_excel(path)
-        else:
-            # Estensione non riconosciuta: prova come GeoJSON via geopandas
-            # Fallback a CSV solo se l'estensione e' plausibilmente CSV-like
-            # tsv, .txt). Altrimenti fail-fast: un .gpkg corrotto o un
-            # binario mislabel-ato non deve essere letto silenziosamente come CSV
-            try:
-                import geopandas as gpd
-                return gpd.read_file(path)
-            except Exception as exc:
-                logger.warning(
-                    f"Lettura come GeoJSON fallita per {path.name} "
-                    f"(suffix={suffix!r}): {type(exc).__name__}: {exc}"
-                )
-                if suffix in (".tsv", ".txt"):
-                    logger.info(
-                        f"Fallback a CSV per {path.name}: suffix {suffix!r} plausibile"
-                    )
-                    return _read_csv_safe(path)
-                raise ValueError(
-                    f"Formato file non supportato: {path.name} (suffix={suffix!r}). "
-                    f"Formati supportati: .csv, .tsv, .txt, .geojson, .gpkg, .shp, "
-                    f".json, .xlsx, .xls. Lettura GeoJSON fallita: {exc}"
-                ) from exc
+        return load_arcgis_feature_dataframe(file_path)
 
 
 # FACTORY FUNCTION

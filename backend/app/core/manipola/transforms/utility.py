@@ -6,15 +6,15 @@ Keeps transformation behavior isolated from orchestration callers.
 
 import uuid
 
-import pandas as pd
-import geopandas as gpd
-from typing import List, Optional, Union
+from typing import List, Optional
 
+from app.core.dataframes.ports import FrameLike
+from app.core.dataframes.tabular import coerce_datetime_series
 from app.utils.logger import get_logger
 
 logger = get_logger("app.core.manipola.transforms.base")
 
-DataFrame = Union[pd.DataFrame, gpd.GeoDataFrame]
+DataFrame = FrameLike
 
 
 # NUMERAZIONE RIGHE
@@ -98,7 +98,7 @@ def op_date_extract(
         result = df.copy()
 
         # Conversione a datetime
-        dt_col = pd.to_datetime(result[column], errors='coerce')
+        dt_col = coerce_datetime_series(result[column])
 
         # Prefisso per le colonne output
         col_prefix = prefix if prefix else f"{column}_"

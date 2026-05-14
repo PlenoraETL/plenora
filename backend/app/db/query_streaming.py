@@ -12,11 +12,11 @@ from decimal import Decimal
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Protocol, Tuple
 
-import pandas as pd
 from sqlalchemy import text
 from sqlalchemy.engine import Engine
 
 from app.config import settings
+from app.core.dataframes.tabular import dataframe_from_rows
 from app.utils.logger import get_logger
 
 
@@ -132,7 +132,7 @@ def _write_parquet(result: Any, columns: List[str], output_path: Path, max_rows:
             chunk = result.fetchmany(CHUNK_SIZE)
             if not chunk:
                 break
-            df_chunk = pd.DataFrame(chunk, columns=columns)
+            df_chunk = dataframe_from_rows(chunk, columns)
             table = pa.Table.from_pandas(df_chunk, preserve_index=False)
             if pq_writer is None:
                 pq_writer = pq.ParquetWriter(output_path, table.schema)

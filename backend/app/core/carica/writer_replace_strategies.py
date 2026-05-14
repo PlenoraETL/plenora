@@ -9,9 +9,8 @@ from __future__ import annotations
 import logging
 import math
 import time
-from typing import Dict, List, Tuple
+from typing import Any, Dict, List, Tuple
 
-import pandas as pd
 from sqlalchemy import text
 
 from app.config import settings
@@ -45,7 +44,7 @@ class ReplaceStrategiesMixin:
 
     def _truncate_insert_atomic(
         self,
-        df: pd.DataFrame,
+        df: Any,
         columns: List[ColumnMapping],
         result: WriteResult,
     ) -> WriteResult:
@@ -128,7 +127,7 @@ class ReplaceStrategiesMixin:
 
     def _truncate_insert_stage_swap(
         self,
-        df: pd.DataFrame,
+        df: Any,
         columns: List[ColumnMapping],
         result: WriteResult,
     ) -> WriteResult:
@@ -386,7 +385,7 @@ class ReplaceStrategiesMixin:
 
     def _replace_atomic(
         self,
-        df: pd.DataFrame,
+        df: Any,
         columns: List[ColumnMapping],
         result: WriteResult,
         pandas_dtypes: Dict[str, str],
@@ -733,7 +732,7 @@ class ReplaceStrategiesMixin:
 
     def _truncate_insert_oracle_redef(
         self,
-        df: pd.DataFrame,
+        df: Any,
         columns: List[ColumnMapping],
         result: WriteResult,
     ) -> WriteResult:

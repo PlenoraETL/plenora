@@ -6,21 +6,27 @@ anchored in `spatial.py`.
 """
 
 import sys
-from typing import List, Union
+from typing import List
 
-import geopandas as gpd
-import pandas as pd
-
+from app.core.dataframes.ports import FrameLike
 from app.core.manipola.transforms.spatial_helpers import _ensure_active_geometry
-from app.core.features.geo_utils import ensure_same_crs, to_geodataframe as _to_geodataframe
+from app.core.dataframes.geodata import (
+    empty_geodataframe,
+    ensure_same_crs,
+    geodataframe_clip,
+    geodataframe_overlay,
+    geodataframe_sjoin,
+    is_geodataframe,
+    to_geodataframe as _to_geodataframe,
+)
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
 
-DataFrame = Union[pd.DataFrame, gpd.GeoDataFrame]
+DataFrame = FrameLike
 
 
-def _to_gdf(df: DataFrame, geom_column: str) -> gpd.GeoDataFrame:
+def _to_gdf(df: DataFrame, geom_column: str) -> FrameLike:
     spatial_module = sys.modules.get("app.core.manipola.transforms.spatial")
     converter = getattr(spatial_module, "to_geodataframe", _to_geodataframe)
     return converter(df, geom_column)
@@ -32,7 +38,7 @@ def op_sjoin(
     right_geom: str,
     predicate: str = "intersects",
     how: str = "inner"
-) -> gpd.GeoDataFrame:
+) -> FrameLike:
     """
     Join spaziale tra due GeoDataFrame.
 
@@ -48,16 +54,16 @@ def op_sjoin(
     """
     if len(inputs) < 2:
         logger.warning("Spatial Join richiede 2 input")
-        return inputs[0] if inputs else gpd.GeoDataFrame()
+        return inputs[0] if inputs else empty_geodataframe([])
 
     try:
-        left_gdf = inputs[0] if isinstance(inputs[0], gpd.GeoDataFrame) else _to_gdf(inputs[0], left_geom)
-        right_gdf = inputs[1] if isinstance(inputs[1], gpd.GeoDataFrame) else _to_gdf(inputs[1], right_geom)
+        left_gdf = inputs[0] if is_geodataframe(inputs[0]) else _to_gdf(inputs[0], left_geom)
+        right_gdf = inputs[1] if is_geodataframe(inputs[1]) else _to_gdf(inputs[1], right_geom)
 
         # Allinea CRS
         left_gdf, right_gdf = ensure_same_crs(left_gdf, right_gdf)
 
-        result = gpd.sjoin(left_gdf, right_gdf, how=how, predicate=predicate)
+        result = geodataframe_sjoin(left_gdf, right_gdf, how=how, predicate=predicate)
 
         # Rimuovi colonna index_right
         if 'index_right' in result.columns:
@@ -78,7 +84,7 @@ def op_geo_clip(
     inputs: List[DataFrame],
     input_geom: str,
     mask_geom: str
-) -> gpd.GeoDataFrame:
+) -> FrameLike:
     """
     Ritaglia geometrie usando una maschera.
 
@@ -92,16 +98,16 @@ def op_geo_clip(
     """
     if len(inputs) < 2:
         logger.warning("Clip richiede 2 input")
-        return inputs[0] if inputs else gpd.GeoDataFrame()
+        return inputs[0] if inputs else empty_geodataframe([])
 
     try:
-        input_gdf = inputs[0] if isinstance(inputs[0], gpd.GeoDataFrame) else _to_gdf(inputs[0], input_geom)
-        mask_gdf = inputs[1] if isinstance(inputs[1], gpd.GeoDataFrame) else _to_gdf(inputs[1], mask_geom)
+        input_gdf = inputs[0] if is_geodataframe(inputs[0]) else _to_gdf(inputs[0], input_geom)
+        mask_gdf = inputs[1] if is_geodataframe(inputs[1]) else _to_gdf(inputs[1], mask_geom)
 
         # Allinea CRS
         input_gdf, mask_gdf = ensure_same_crs(input_gdf, mask_gdf)
 
-        result = gpd.clip(input_gdf, mask_gdf)
+        result = geodataframe_clip(input_gdf, mask_gdf)
 
         # FIX: Assicura geometria attiva valida
         result = _ensure_active_geometry(result)
@@ -118,7 +124,7 @@ def op_geo_intersection(
     inputs: List[DataFrame],
     left_geom: str,
     right_geom: str
-) -> gpd.GeoDataFrame:
+) -> FrameLike:
     """
     Intersezione geometrica tra due layer.
 
@@ -131,15 +137,15 @@ def op_geo_intersection(
         GeoDataFrame con intersezione
     """
     if len(inputs) < 2:
-        return inputs[0] if inputs else gpd.GeoDataFrame()
+        return inputs[0] if inputs else empty_geodataframe([])
 
     try:
-        left_gdf = inputs[0] if isinstance(inputs[0], gpd.GeoDataFrame) else _to_gdf(inputs[0], left_geom)
-        right_gdf = inputs[1] if isinstance(inputs[1], gpd.GeoDataFrame) else _to_gdf(inputs[1], right_geom)
+        left_gdf = inputs[0] if is_geodataframe(inputs[0]) else _to_gdf(inputs[0], left_geom)
+        right_gdf = inputs[1] if is_geodataframe(inputs[1]) else _to_gdf(inputs[1], right_geom)
 
         left_gdf, right_gdf = ensure_same_crs(left_gdf, right_gdf)
 
-        result = gpd.overlay(left_gdf, right_gdf, how='intersection', keep_geom_type=False)
+        result = geodataframe_overlay(left_gdf, right_gdf, how='intersection', keep_geom_type=False)
 
         # FIX: Assicura geometria attiva valida
         result = _ensure_active_geometry(result)
@@ -156,7 +162,7 @@ def op_geo_union(
     inputs: List[DataFrame],
     left_geom: str,
     right_geom: str
-) -> gpd.GeoDataFrame:
+) -> FrameLike:
     """
     Unione geometrica di due layer.
 
@@ -169,15 +175,15 @@ def op_geo_union(
         GeoDataFrame con unione
     """
     if len(inputs) < 2:
-        return inputs[0] if inputs else gpd.GeoDataFrame()
+        return inputs[0] if inputs else empty_geodataframe([])
 
     try:
-        left_gdf = inputs[0] if isinstance(inputs[0], gpd.GeoDataFrame) else _to_gdf(inputs[0], left_geom)
-        right_gdf = inputs[1] if isinstance(inputs[1], gpd.GeoDataFrame) else _to_gdf(inputs[1], right_geom)
+        left_gdf = inputs[0] if is_geodataframe(inputs[0]) else _to_gdf(inputs[0], left_geom)
+        right_gdf = inputs[1] if is_geodataframe(inputs[1]) else _to_gdf(inputs[1], right_geom)
 
         left_gdf, right_gdf = ensure_same_crs(left_gdf, right_gdf)
 
-        result = gpd.overlay(left_gdf, right_gdf, how='union', keep_geom_type=False)
+        result = geodataframe_overlay(left_gdf, right_gdf, how='union', keep_geom_type=False)
 
         # FIX: Assicura geometria attiva valida
         result = _ensure_active_geometry(result)
@@ -194,7 +200,7 @@ def op_geo_difference(
     inputs: List[DataFrame],
     left_geom: str,
     right_geom: str
-) -> gpd.GeoDataFrame:
+) -> FrameLike:
     """
     Differenza geometrica (A - B).
 
@@ -207,15 +213,15 @@ def op_geo_difference(
         GeoDataFrame con differenza
     """
     if len(inputs) < 2:
-        return inputs[0] if inputs else gpd.GeoDataFrame()
+        return inputs[0] if inputs else empty_geodataframe([])
 
     try:
-        left_gdf = inputs[0] if isinstance(inputs[0], gpd.GeoDataFrame) else _to_gdf(inputs[0], left_geom)
-        right_gdf = inputs[1] if isinstance(inputs[1], gpd.GeoDataFrame) else _to_gdf(inputs[1], right_geom)
+        left_gdf = inputs[0] if is_geodataframe(inputs[0]) else _to_gdf(inputs[0], left_geom)
+        right_gdf = inputs[1] if is_geodataframe(inputs[1]) else _to_gdf(inputs[1], right_geom)
 
         left_gdf, right_gdf = ensure_same_crs(left_gdf, right_gdf)
 
-        result = gpd.overlay(left_gdf, right_gdf, how='difference', keep_geom_type=False)
+        result = geodataframe_overlay(left_gdf, right_gdf, how='difference', keep_geom_type=False)
 
         # FIX: Assicura geometria attiva valida
         result = _ensure_active_geometry(result)
@@ -232,7 +238,7 @@ def op_geo_symmetric_difference(
     dfs: List[DataFrame],
     left_geom_column: str,
     right_geom_column: str
-) -> gpd.GeoDataFrame:
+) -> FrameLike:
     """
     Differenza simmetrica tra due layer.
 
@@ -248,15 +254,15 @@ def op_geo_symmetric_difference(
         GeoDataFrame con differenza simmetrica
     """
     if len(dfs) < 2:
-        return dfs[0] if dfs else gpd.GeoDataFrame()
+        return dfs[0] if dfs else empty_geodataframe([])
 
     try:
-        left_gdf = dfs[0] if isinstance(dfs[0], gpd.GeoDataFrame) else _to_gdf(dfs[0], left_geom_column)
-        right_gdf = dfs[1] if isinstance(dfs[1], gpd.GeoDataFrame) else _to_gdf(dfs[1], right_geom_column)
+        left_gdf = dfs[0] if is_geodataframe(dfs[0]) else _to_gdf(dfs[0], left_geom_column)
+        right_gdf = dfs[1] if is_geodataframe(dfs[1]) else _to_gdf(dfs[1], right_geom_column)
 
         left_gdf, right_gdf = ensure_same_crs(left_gdf, right_gdf)
 
-        result = gpd.overlay(left_gdf, right_gdf, how='symmetric_difference', keep_geom_type=False)
+        result = geodataframe_overlay(left_gdf, right_gdf, how='symmetric_difference', keep_geom_type=False)
 
         # Assicura geometria attiva valida
         result = _ensure_active_geometry(result)
@@ -276,7 +282,7 @@ def op_geo_count_points_in_polygons(
     count_column: str = "point_count",
     aggregate_column: str = None,
     aggregate_func: str = "sum"
-) -> gpd.GeoDataFrame:
+) -> FrameLike:
     """
     Conta i punti che ricadono in ciascun poligono e, opzionalmente,
     aggrega un attributo dei punti.
@@ -296,11 +302,11 @@ def op_geo_count_points_in_polygons(
     """
     if len(dfs) < 2:
         logger.warning("CountPointsInPolygons richiede 2 input")
-        return dfs[0] if dfs else gpd.GeoDataFrame()
+        return dfs[0] if dfs else empty_geodataframe([])
 
     try:
-        poly_gdf = dfs[0] if isinstance(dfs[0], gpd.GeoDataFrame) else _to_gdf(dfs[0], polygon_geom_column)
-        point_gdf = dfs[1] if isinstance(dfs[1], gpd.GeoDataFrame) else _to_gdf(dfs[1], point_geom_column)
+        poly_gdf = dfs[0] if is_geodataframe(dfs[0]) else _to_gdf(dfs[0], polygon_geom_column)
+        point_gdf = dfs[1] if is_geodataframe(dfs[1]) else _to_gdf(dfs[1], point_geom_column)
 
         if len(poly_gdf) == 0 or len(point_gdf) == 0:
             logger.warning(f"CountPointsInPolygons: input vuoto (poly={len(poly_gdf)}, point={len(point_gdf)})")
@@ -317,7 +323,7 @@ def op_geo_count_points_in_polygons(
         poly_gdf[poly_idx_col] = range(len(poly_gdf))
 
         # Spatial join: punti dentro poligoni
-        joined = gpd.sjoin(
+        joined = geodataframe_sjoin(
             point_gdf, poly_gdf,
             how="inner",
             predicate="within"
@@ -366,7 +372,7 @@ def op_geo_overlay(
     right_geom_column: str,
     how: str = "intersection",
     keep_geom_type: bool = True
-) -> gpd.GeoDataFrame:
+) -> FrameLike:
     """
     Overlay tra due layer poligonali con condivisione attributi
     da entrambi i layer.
@@ -388,7 +394,7 @@ def op_geo_overlay(
     """
     if len(dfs) < 2:
         logger.warning("Overlay richiede 2 input")
-        return dfs[0] if dfs else gpd.GeoDataFrame()
+        return dfs[0] if dfs else empty_geodataframe([])
 
     valid_how = ("intersection", "union", "identity", "symmetric_difference")
     if how not in valid_how:
@@ -396,13 +402,13 @@ def op_geo_overlay(
         how = "intersection"
 
     try:
-        left_gdf = dfs[0] if isinstance(dfs[0], gpd.GeoDataFrame) else _to_gdf(dfs[0], left_geom_column)
-        right_gdf = dfs[1] if isinstance(dfs[1], gpd.GeoDataFrame) else _to_gdf(dfs[1], right_geom_column)
+        left_gdf = dfs[0] if is_geodataframe(dfs[0]) else _to_gdf(dfs[0], left_geom_column)
+        right_gdf = dfs[1] if is_geodataframe(dfs[1]) else _to_gdf(dfs[1], right_geom_column)
 
         # Allinea CRS
         left_gdf, right_gdf = ensure_same_crs(left_gdf, right_gdf)
 
-        result = gpd.overlay(
+        result = geodataframe_overlay(
             left_gdf, right_gdf,
             how=how,
             keep_geom_type=keep_geom_type

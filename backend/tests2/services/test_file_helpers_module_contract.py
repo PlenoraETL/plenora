@@ -40,6 +40,15 @@ def test_core_file_service_uses_shared_helper_objects_by_identity():
     assert fs_mod.ColumnInfoBuilder is fh.ColumnInfoBuilder
 
 
+def test_file_helpers_reexports_dataframe_schema_helpers():
+    from app.core.dataframes import schema
+    from app.core.files import helpers as fh
+
+    assert fh.ColumnInfo is schema.ColumnInfo
+    assert fh.TypeInferrer is schema.TypeInferrer
+    assert fh.ColumnInfoBuilder is schema.ColumnInfoBuilder
+
+
 # 2. FormatDetector
 
 

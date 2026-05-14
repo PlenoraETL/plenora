@@ -98,8 +98,6 @@ _IMDF_UPLOADER_COMPAT_ALLOWED_FILES: set[Path] = set()
 _KNOWN_VIOLATIONS: dict[str, set[str]] = {
     "service_discovery.py": {"app.core.features"},
     "service_lifecycle.py": {"app.core.features"},
-    "sql_helpers.py": {"app.core.features"},
-    "publish_ops.py": {"app.core.features.arcgis_publish_modes"},
 }
 
 _KNOWN_VIOLATION_REASONS: dict[str, str] = {
@@ -110,14 +108,6 @@ _KNOWN_VIOLATION_REASONS: dict[str, str] = {
     "service_lifecycle.py": (
         "KEEP_COMPAT: IMDF keeps lifecycle timing policy while generic ArcGIS "
         "delete orchestration lives in app.core.features."
-    ),
-    "sql_helpers.py": (
-        "KEEP_COMPAT: IMDF publish keeps private wrapper names while generic "
-        "ArcGIS SQL helpers live in app.core.features."
-    ),
-    "publish_ops.py": (
-        "KEEP_COMPAT: IMDF publish_ops orchestra replay/append/upsert delegando "
-        "a app.core.features.arcgis_publish_modes (helper generico ArcGIS)."
     ),
 }
 

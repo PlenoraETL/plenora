@@ -379,16 +379,6 @@ def test_reconcile_storage_advances_gate_after_run(monkeypatch):
     ("outcome", "row", "expected_id"),
     [
         ("ok", _delete_row(id="rec-1"), "rec-1"),
-        (
-            "skipped",
-            _delete_row(
-                id="rec-skip",
-                domain="result_blob",
-                storage_key="results/p/r.bin",
-                attempts=2,
-            ),
-            "rec-skip",
-        ),
     ],
 )
 def test_reconcile_storage_marks_orphan_deleted_on_terminal_outcomes(
@@ -398,6 +388,25 @@ def test_reconcile_storage_marks_orphan_deleted_on_terminal_outcomes(
 
     assert calls["orphan"] == [expected_id]
     assert calls["failed"] == []
+    assert calls["lost"] == []
+
+
+def test_reconcile_storage_skipped_outcome_is_retryable(monkeypatch):
+    calls = _run_reconcile_storage(
+        monkeypatch,
+        rows=[
+            _delete_row(
+                id="rec-skip",
+                domain="result_blob",
+                storage_key="results/p/r.bin",
+                attempts=2,
+            ),
+        ],
+        outcome="skipped",
+    )
+
+    assert calls["orphan"] == []
+    assert len(calls["failed"]) == 1
     assert calls["lost"] == []
 
 

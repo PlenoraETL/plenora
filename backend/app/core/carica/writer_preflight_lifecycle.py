@@ -7,9 +7,8 @@ target table per DatabaseWriter.
 from __future__ import annotations
 
 import time
-from typing import Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
-import pandas as pd
 from sqlalchemy import text
 
 from app.core.carica.conflict_checker import ConflictChecker
@@ -242,7 +241,7 @@ class WriterPreflightLifecycleMixin:
 
     def check_conflicts(
         self,
-        df: pd.DataFrame,
+        df: Any,
         match_columns: List[str],
     ) -> ConflictReport:
         """Pre-check conflitti per APPEND.

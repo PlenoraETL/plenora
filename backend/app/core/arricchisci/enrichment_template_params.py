@@ -11,8 +11,7 @@ import json
 import re
 from typing import Any, Dict, List, Optional
 
-import pandas as pd
-
+from app.core.dataframes.values import is_null_scalar, to_python_scalar
 from app.utils.logger import get_logger
 
 # Stesso logger name di `enrichment_service.py` (`__name__` valuta a
@@ -40,7 +39,7 @@ class EnrichmentTemplateParamsMixin:
         return re.findall(r"\{(\w+)\}", template)
 
     @staticmethod
-    def _interpolate_template(template: str, row: "pd.Series") -> Optional[str]:
+    def _interpolate_template(template: str, row: Any) -> Optional[str]:
         """Sostituisce {col} con i valori della riga.
 
         Ritorna None se almeno una colonna referenziata è null/NaN
@@ -58,12 +57,13 @@ class EnrichmentTemplateParamsMixin:
             if val is None:
                 return None
             try:
-                if pd.isna(val) if not isinstance(val, (list, dict)) else False:
+                if is_null_scalar(val):
                     return None
             except Exception as _isna_err:
                 logger.debug(
                     f"pd.isna probe fallito per tipo {type(val).__name__}: {_isna_err}"
                 )
+            val = to_python_scalar(val)
             # Converti numpy → Python nativo per str
             try:
                 import numpy as _np
@@ -84,7 +84,7 @@ class EnrichmentTemplateParamsMixin:
         out_parts.append(template[last_end:])
         return "".join(out_parts)
 
-    def _build_params(self, row: pd.Series) -> Dict[str, Any]:
+    def _build_params(self, row: Any) -> Dict[str, Any]:
         """
         Costruisce parametri API dalla riga DataFrame.
 
@@ -127,7 +127,8 @@ class EnrichmentTemplateParamsMixin:
             if mapping_value not in row.index:
                 continue
             value = row[mapping_value]
-            if pd.isna(value) if not isinstance(value, (list, dict)) else False:
+            value = to_python_scalar(value)
+            if is_null_scalar(value):
                 # Parametro null: se è opzionale (e abbiamo definizioni dei parametri
                 # NON lo aggiungiamo affatto — così l'API riceve solo i campi presenti
                 # e _has_null_params non lo segnala come bloccante

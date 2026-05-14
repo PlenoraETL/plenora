@@ -799,10 +799,18 @@ _FILE_SOURCE_STORAGE_KEY_REF_SQL = (
     "WHERE storage_key = %s LIMIT 1"
 )
 
+_RESULT_STORAGE_KEY_REF_SQL = (
+    "SELECT 1 FROM results "
+    "WHERE storage_key = %s LIMIT 1"
+)
 
-def is_storage_key_referenced(storage_key: str) -> Optional[bool]:
-    """Verifica se `storage_key` e' referenziato da una row in
-    `file_sources` (idx_file_sources_storage_key_notnull).
+
+def is_storage_key_referenced(
+    storage_key: str,
+    *,
+    domain: str = "file_source",
+) -> Optional[bool]:
+    """Verifica se `storage_key` e' referenziato da una row DB.
 
      il reconciler usa questo helper
     per decidere se un upload_intent stantio rappresenta:
@@ -818,23 +826,37 @@ def is_storage_key_referenced(storage_key: str) -> Optional[bool]:
     cancellare blob ancora vivi. Il caller MUST branchare
     esplicitamente sui tre stati.
 
-    Args:
-        storage_key: chiave object storage da cercare.
+    Domains:
+        `file_source`: controlla `file_sources.storage_key`.
+        `result` / `result_blob`: controlla `results.storage_key`.
 
     Returns:
         `True` se la riga esiste; `False` se non esiste; `None`
         se la lettura ha fallito (DB unreachable, syntax error,
         ecc.).
     """
+    if domain == "file_source":
+        sql = _FILE_SOURCE_STORAGE_KEY_REF_SQL
+    elif domain in ("result", "result_blob"):
+        sql = _RESULT_STORAGE_KEY_REF_SQL
+    else:
+        logger.warning(
+            "event=storage_reconciliation_storage_key_ref_failed "
+            "storage_key=%s domain=%s ref_error=UnknownDomain "
+            "ref_error_msg=%r",
+            storage_key, domain, f"unsupported domain {domain!r}",
+        )
+        return None
+
     try:
         from app.db.pg_connection import fetchall
 
-        rows = fetchall(_FILE_SOURCE_STORAGE_KEY_REF_SQL, (storage_key,))
+        rows = fetchall(sql, (storage_key,))
     except Exception as e:
         logger.warning(
             "event=storage_reconciliation_storage_key_ref_failed "
-            "storage_key=%s ref_error=%s ref_error_msg=%r",
-            storage_key, type(e).__name__, str(e),
+            "storage_key=%s domain=%s ref_error=%s ref_error_msg=%r",
+            storage_key, domain, type(e).__name__, str(e),
         )
         return None
 

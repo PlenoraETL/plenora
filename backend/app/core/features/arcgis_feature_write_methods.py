@@ -244,14 +244,14 @@ class ArcGISFeatureWriteMethodsMixin:
         srid: int = 4326,
     ) -> AddLayerResult:
         """Add one layer to an existing Feature Service."""
-        import geopandas as gpd
+        from app.core.dataframes.geodata import is_geodataframe
 
         token = self.authenticate(conn)
         referer = {"Referer": conn.server_url}
         admin_url = service_url.replace("/rest/services/", "/rest/admin/services/")
 
         geom_type = "esriGeometryPolygon"
-        if isinstance(gdf, gpd.GeoDataFrame) and len(gdf) > 0 and gdf.geometry is not None:
+        if is_geodataframe(gdf) and len(gdf) > 0 and gdf.geometry is not None:
             geom_types = gdf.geometry.dropna().geom_type
             if len(geom_types) > 0:
                 majority_type = geom_types.value_counts().idxmax()
@@ -287,7 +287,7 @@ class ArcGISFeatureWriteMethodsMixin:
             "spatialReference": {"wkid": srid},
         }
         try:
-            if isinstance(gdf, gpd.GeoDataFrame) and gdf.geometry is not None and len(gdf) > 0:
+            if is_geodataframe(gdf) and gdf.geometry is not None and len(gdf) > 0:
                 bounds = gdf.geometry.dropna().total_bounds
                 if len(bounds) == 4 and all(abs(b) < 1e15 for b in bounds):
                     extent = {

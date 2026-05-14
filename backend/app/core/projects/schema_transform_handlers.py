@@ -12,7 +12,7 @@ from app.core.projects.schema_reshape_handlers import ReshapeSchemaHandlers
 from app.core.projects.schema_table_handlers import TableSchemaHandlers
 
 if TYPE_CHECKING:
-    from app.core.projects.schema_inference import ColumnSchema
+    from app.shared.execution.schema_types import ColumnSchema
 
 
 class TransformSchemaHandlers:

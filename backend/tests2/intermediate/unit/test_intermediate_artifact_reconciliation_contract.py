@@ -91,7 +91,7 @@ def _executed_sqls(cursor):
 
 def test_no_artifacts_only_deletes_run_no_reconciliation(monkeypatch):
     """Dominant case in production (`metadata_only`): no node_meta
-    row has a non-NULL artifact_uri with status=complete."""
+    row has a non-NULL artifact_uri with cleanup-eligible status."""
     from app.core.intermediate import db as idb
 
     fa_calls = _patch_fetchall(monkeypatch, response=[])
@@ -113,12 +113,12 @@ def test_no_artifacts_only_deletes_run_no_reconciliation(monkeypatch):
                side_effect=lambda rid, **kw: mark_fail_calls.append((rid, kw))):
         idb._delete_run("run-empty")
 
-    # Pre-fetch SQL filtered by status=complete + artifact_uri NOT NULL.
+    # Pre-fetch SQL filtered by cleanup-eligible status + artifact_uri NOT NULL.
     assert len(fa_calls) == 1
     sql, params = fa_calls[0]
     assert "FROM node_meta" in sql
     assert "artifact_uri IS NOT NULL" in sql
-    assert "artifact_status = 'complete'" in sql
+    assert "artifact_status IN ('complete', 'failed')" in sql
     assert params == ("run-empty",)
 
     # Only DELETE inside the transaction.
@@ -327,13 +327,12 @@ def test_compensating_delete_failed_marks_failed_attempt(monkeypatch):
         assert rid in ref_ids
 
 
-# 6. SQL filter: status=complete + artifact_uri IS NOT NULL
+# 6. SQL filter: status complete/failed + artifact_uri IS NOT NULL
 
 
-def test_pre_fetch_sql_excludes_failed_and_null_at_db_level(monkeypatch):
-    """The pre-fetch SQL must filter at the DB level — failed /
-    null artifact rows never reach the Python-side loop. This is a
-    defense-in-depth lock against accidental relaxation."""
+def test_pre_fetch_sql_includes_failed_and_excludes_null_at_db_level(monkeypatch):
+    """Failed artifacts with artifact_uri are cleanup-eligible; null rows
+    remain filtered at the DB level."""
     from app.core.intermediate import db as idb
 
     fa_calls = _patch_fetchall(monkeypatch, response=[])
@@ -348,7 +347,7 @@ def test_pre_fetch_sql_excludes_failed_and_null_at_db_level(monkeypatch):
 
     sql, _ = fa_calls[0]
     assert "artifact_uri IS NOT NULL" in sql
-    assert "artifact_status = 'complete'" in sql
+    assert "artifact_status IN ('complete', 'failed')" in sql
     # Schema-agnostic via search_path: no `plenora.` prefix leak.
     assert "plenora.node_meta" not in sql
 

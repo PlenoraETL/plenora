@@ -337,6 +337,29 @@ def test_schedules_status_ignores_disabled():
 # get_workers_status — Celery app non importabile + broker timeout
 
 
+def test_admin_status_service_uses_worker_runtime_boundary():
+    import ast
+    from pathlib import Path
+
+    service_path = (
+        Path(__file__).resolve().parents[2]
+        / "app"
+        / "core"
+        / "admin_system_status"
+        / "service.py"
+    )
+    tree = ast.parse(service_path.read_text(encoding="utf-8"))
+    imports: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            imports.update(alias.name for alias in node.names)
+        elif isinstance(node, ast.ImportFrom) and node.module:
+            imports.add(node.module)
+
+    assert "workers.celery_app" not in imports
+    assert "app.core.admin_system_status.worker_runtime" in imports
+
+
 def test_workers_status_when_celery_app_import_fails(monkeypatch):
     from app.core.admin_system_status import service
 

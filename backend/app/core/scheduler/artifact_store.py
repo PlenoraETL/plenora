@@ -12,6 +12,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import List, Optional
 
+from app.core.scheduler.run_archive_store import schedule_short
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -100,8 +101,7 @@ class ScheduleArtifactStore:
 
     def _build_archive_dir(self, project_output_dir: Path, schedule_id: str) -> Path:
         timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
-        schedule_short = schedule_id.replace("schedule_", "")[:12]
-        return project_output_dir / "runs" / schedule_short / timestamp
+        return project_output_dir / "runs" / schedule_short(schedule_id) / timestamp
 
     def _copy_files(self, files: List[Path], dest_dir: Path) -> List[str]:
 

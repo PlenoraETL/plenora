@@ -80,7 +80,7 @@ def _delete_run(
         "FROM node_meta "
         "WHERE run_id = %s "
         "  AND artifact_uri IS NOT NULL "
-        "  AND artifact_status = 'complete'",
+        "  AND artifact_status IN ('complete', 'failed')",
         (run_id,),
     )
 

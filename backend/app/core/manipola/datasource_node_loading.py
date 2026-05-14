@@ -9,7 +9,7 @@ from typing import Any, Dict, Optional
 
 from app.core.auth.visibility import is_resource_visible
 from app.core.datasources.service import datasource_service
-from app.core.files.dataframe_io import (
+from app.core.dataframes.frame_io import (
     filter_visible_columns,
     load_dataframe_from_file,
 )

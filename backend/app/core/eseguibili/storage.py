@@ -99,6 +99,11 @@ def open_stream(key: str) -> dict:
     return _storage().get_object_stream(key)
 
 
+def delete_key(key: str) -> None:
+    """Cancella una singola key. Idempotenza delegata al backend cloud."""
+    _storage().delete(key)
+
+
 def delete_by_task(task_id: str) -> int:
     """Cancella tutti gli oggetti sotto `eseguibili-outputs/{task_id}/`.
 

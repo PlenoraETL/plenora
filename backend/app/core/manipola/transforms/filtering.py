@@ -4,15 +4,19 @@ Cluster FILTERING — selezione righe e logica condizionale colonna.
 Keeps transformation behavior isolated from orchestration callers.
 """
 
-import pandas as pd
-import geopandas as gpd
-from typing import Any, Dict, List, Union
+from typing import Any, Dict, List
 
+from app.core.dataframes.ports import FrameLike
+from app.core.dataframes.tabular import (
+    coerce_numeric_series,
+    false_boolean_series,
+    is_numeric_series,
+)
 from app.utils.logger import get_logger
 
 logger = get_logger("app.core.manipola.transforms.base")
 
-DataFrame = Union[pd.DataFrame, gpd.GeoDataFrame]
+DataFrame = FrameLike
 
 
 # FILTRO RIGHE
@@ -49,7 +53,7 @@ def op_filter(
     col = result[column]
 
     # Se la colonna è numerica e il valore è stringa, converti
-    if value is not None and pd.api.types.is_numeric_dtype(col):
+    if value is not None and is_numeric_series(col):
         try:
             # Prova int prima, poi float
             if '.' in str(value):
@@ -186,7 +190,7 @@ def op_conditional(
                 break
 
         if all_numeric:
-            result[output_column] = pd.to_numeric(result[output_column], errors='coerce')
+            result[output_column] = coerce_numeric_series(result[output_column])
             logger.info(f"Conditional: '{output_column}' convertita a numerico (dtype: {result[output_column].dtype})")
 
         logger.info(f"Conditional: {column} -> {output_column} ({len(conditions)} condizioni)")
@@ -214,16 +218,16 @@ def _evaluate_condition(col_values, operator: str, value: str):
 
     if operator == '==':
         if numeric_val is not None:
-            return pd.to_numeric(col_values, errors='coerce') == numeric_val
+            return coerce_numeric_series(col_values) == numeric_val
         return col_values.astype(str) == str(value)
 
     elif operator == '!=':
         if numeric_val is not None:
-            return pd.to_numeric(col_values, errors='coerce') != numeric_val
+            return coerce_numeric_series(col_values) != numeric_val
         return col_values.astype(str) != str(value)
 
     elif operator in ('>', '>=', '<', '<='):
-        num_col = pd.to_numeric(col_values, errors='coerce')
+        num_col = coerce_numeric_series(col_values)
         if numeric_val is None:
             numeric_val = 0
         if operator == '>':
@@ -250,7 +254,7 @@ def _evaluate_condition(col_values, operator: str, value: str):
         if len(parts) == 2:
             low = float(parts[0].strip())
             high = float(parts[1].strip())
-            num_col = pd.to_numeric(col_values, errors='coerce')
+            num_col = coerce_numeric_series(col_values)
             return (num_col >= low) & (num_col <= high)
 
-    return pd.Series(False, index=col_values.index)
+    return false_boolean_series(col_values.index)

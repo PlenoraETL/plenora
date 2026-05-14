@@ -6,10 +6,7 @@ Cluster SQL_HELPERS — quoting valori SQL ArcGIS-safe + chunking generico
 
 from typing import Dict, List, Sequence, Tuple
 
-# ADR-0023 accepted residual: IMDF publish keeps private wrapper names
-# because generic ArcGIS SQL helpers live in `app.core.features`.
-# Documented in `_KNOWN_VIOLATIONS` of the boundary guard tests.
-from app.core.features import arcgis_sql_helpers as _arcgis_sql_helpers
+import app.core.connections.arcgis_sql_helpers as _arcgis_sql_helpers
 from app.shared.connections.arcgis_connection import ArcGISConnectionInfo
 from app.shared.connections.arcgis_provider import ArcGISReadProviderProtocol
 

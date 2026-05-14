@@ -4,15 +4,12 @@ Operazioni di trasformazione base (non-geospaziali) per MANIPOLA.
 Keeps transformation behavior isolated from orchestration callers.
 """
 
-import pandas as pd
-import geopandas as gpd
-from typing import Union
-
+from app.core.dataframes.ports import FrameLike
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
 
-DataFrame = Union[pd.DataFrame, gpd.GeoDataFrame]
+DataFrame = FrameLike
 
 
 from .joins import op_join, op_union, op_cross_join  # noqa: F401 (compatibility export, consumato via getattr

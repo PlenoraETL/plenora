@@ -198,3 +198,24 @@ def test_intermediate_cleanup_boundary_lists_canvas_ids(monkeypatch) -> None:
     )
 
     assert cleanup.list_canvas_ids_with_runs() == ["canvas-a", "canvas-b"]
+
+
+def test_file_source_group_cleanup_uses_storage_aware_single_row_boundary(
+    monkeypatch,
+) -> None:
+    from app.core.files import cleanup
+
+    calls: list[str] = []
+    monkeypatch.setattr(
+        cleanup.files_db,
+        "list_file_source_ids_for_group",
+        lambda group_id: ["file-a", "file-b"] if group_id == "group-1" else [],
+    )
+    monkeypatch.setattr(
+        cleanup.files_db,
+        "delete_file_source",
+        lambda file_id: calls.append(file_id) or file_id == "file-a",
+    )
+
+    assert cleanup.delete_file_sources_for_group("group-1") == 1
+    assert calls == ["file-a", "file-b"]

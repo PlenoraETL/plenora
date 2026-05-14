@@ -5,9 +5,7 @@ Keeps database loading behavior isolated from orchestration callers.
 """
 
 from abc import ABC, abstractmethod
-from typing import Callable, Dict, List, Optional, Tuple
-
-import pandas as pd
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from app.core.carica.models import (
     ColumnMapping,
@@ -83,7 +81,7 @@ class DestinationWriter(ABC):
     @abstractmethod
     def check_conflicts(
         self,
-        df: pd.DataFrame,
+        df: Any,
         match_columns: List[str],
     ) -> ConflictReport:
         """Pre-check conflitti per la modalità APPEND.
@@ -101,7 +99,7 @@ class DestinationWriter(ABC):
         ...
 
     @abstractmethod
-    def write(self, df: pd.DataFrame) -> WriteResult:
+    def write(self, df: Any) -> WriteResult:
         """Esegue la scrittura effettiva dei dati.
 
         La modalità (CREATE, APPEND, UPDATE, UPSERT, TRUNCATE_INSERT)

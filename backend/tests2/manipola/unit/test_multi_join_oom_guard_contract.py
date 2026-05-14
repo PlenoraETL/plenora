@@ -189,7 +189,7 @@ def test_executor_source_has_estimate_before_merge():
     )
     src = src_path.read_text(encoding="utf-8")
     estimate_pos = src.index("_estimate_merge_output_rows(")
-    merge_pos = src.index("result = pd.merge(")
+    merge_pos = src.index("result = merge_dataframes(")
 
     assert 'MULTI_JOIN_STAGE = "manipola_multi_join"' in src
     assert 'settings.get("MULTI_JOIN_MAX_OUTPUT_ROWS"' in src

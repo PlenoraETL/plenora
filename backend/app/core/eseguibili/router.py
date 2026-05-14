@@ -4,7 +4,6 @@ Router FastAPI per gli eseguibili.
 Endpoint:
 """
 
-from datetime import datetime, timezone
 import json as _json
 
 import os
@@ -33,6 +32,7 @@ from app.shared import error_codes
 from app.shared.error_envelope import raise_typed_http
 
 from . import db as eseguibili_db
+from . import output_store as _output_store
 from . import service as eseguibili_service
 from .models import (
     EseguibileCreate, EseguibileUpdate, EseguibileSummary, EseguibileDetails,
@@ -255,46 +255,33 @@ def _delete_upload_meta(file_id: str) -> None:
 # Tracking task_id → (eseguibile_id, user_id) per autorizzare il download
 # Scritto al momento dell'execute, letto al download, cancellato al cleanup
 def _task_owner_path(task_id: str) -> Path:
-    safe_id = "".join(c for c in task_id if c.isalnum() or c in "-_")
-    return settings.ESEGUIBILI_OUTPUTS_DIR / ".owners" / f"{safe_id}.json"
+    return _output_store.task_owner_path(
+        task_id,
+        outputs_dir=settings.ESEGUIBILI_OUTPUTS_DIR,
+    )
 
 
 def _save_task_owner(task_id: str, eseguibile_id: str, user_id: str) -> None:
-    path = _task_owner_path(task_id)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(_json.dumps({
-        "task_id": task_id,
-        "eseguibile_id": eseguibile_id,
-        "user_id": user_id,
-        "created_at": datetime.now(timezone.utc).isoformat(),
-    }), encoding="utf-8")
+    _output_store.save_task_owner(
+        task_id,
+        eseguibile_id,
+        user_id,
+        outputs_dir=settings.ESEGUIBILI_OUTPUTS_DIR,
+    )
 
 
 def _load_task_owner(task_id: str) -> Optional[Mapping[str, object]]:
-    path = _task_owner_path(task_id)
-    if not path.exists():
-        return None
-    try:
-        return _json.loads(path.read_text(encoding="utf-8"))
-    except Exception as _owner_err:
-        logger.warning(
-            f"_load_task_owner: ownership file task_id={task_id} presente ma "
-            f"non decodificabile ({type(_owner_err).__name__}: {_owner_err}); "
-            f"ritorno None -> download endpoint fail-closed per non-superadmin"
-        )
-        return None
+    return _output_store.load_task_owner(
+        task_id,
+        outputs_dir=settings.ESEGUIBILI_OUTPUTS_DIR,
+    )
 
 
 def _delete_task_owner(task_id: str) -> None:
-    try:
-        path = _task_owner_path(task_id)
-        if path.exists():
-            path.unlink()
-    except Exception as _unlink_err:
-        logger.debug(
-            f"_delete_task_owner best-effort fallito per task_id={task_id}: "
-            f"{_unlink_err}"
-        )
+    _output_store.delete_task_owner(
+        task_id,
+        outputs_dir=settings.ESEGUIBILI_OUTPUTS_DIR,
+    )
 
 
 @router.post("/{eseguibile_id}/analyze-upload", response_model=AnalyzeUploadResponse)
@@ -520,9 +507,8 @@ def download_eseguibile_output(
 
     # Lookup dell'output su object storage (S3 via cloud_backends
     # Multi-host safe: backend e worker possono essere su macchine diverse
-    from app.core.eseguibili import storage as _eseg_storage
     try:
-        keys = _eseg_storage.find_keys(safe_task_id)
+        keys = _output_store.find_output_keys(safe_task_id)
     except Exception as e:
         logger.warning(f"Lookup storage eseguibili fallito: {e}")
         keys = []
@@ -538,23 +524,16 @@ def download_eseguibile_output(
     filename = key.rsplit("/", 1)[-1]
 
     try:
-        stream = _eseg_storage.open_stream(key)
+        stream = _output_store.open_stream(key)
     except Exception as e:
         logger.error(f"[CRASH] open_stream eseguibile {key}: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Errore apertura stream output")
 
     def _cleanup_after_send():
         try:
-            _eseg_storage.delete_by_task(safe_task_id)
+            _output_store.delete_task_outputs(safe_task_id)
         except Exception as e:
             logger.warning(f"Cleanup storage post-download fallito per {safe_task_id}: {e}")
-        try:
-            _delete_task_owner(safe_task_id)
-        except Exception as _owner_err:
-            logger.debug(
-                f"_cleanup_after_send: _delete_task_owner best-effort fallito "
-                f"per task_id={safe_task_id}: {_owner_err}"
-            )
 
     background_tasks.add_task(_cleanup_after_send)
 

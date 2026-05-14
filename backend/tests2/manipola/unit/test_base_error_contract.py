@@ -98,7 +98,7 @@ def test_type_cast_coerce_reraises_on_internal_failure():
     df = pd.DataFrame({"col": ["10", "20", "30"]})
 
     with patch(
-        "app.core.manipola.transforms.base.pd.to_numeric",
+        "app.core.manipola.transforms.cleansing.coerce_numeric_series",
         side_effect=RuntimeError("mock-type-cast-failure"),
     ):
         with pytest.raises(RuntimeError, match="mock-type-cast-failure"):

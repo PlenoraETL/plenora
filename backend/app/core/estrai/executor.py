@@ -6,14 +6,16 @@ Keeps this module's responsibility explicit and isolated from adjacent code.
 
 import time as _time
 import re
-import pandas as pd
 from dataclasses import dataclass
 from typing import Dict, Any, List, Mapping, MutableMapping, Optional, Protocol, Sequence, Tuple
 
 from app.core.projects.canvas_models import CanvasState
 from app.utils.logger import get_logger, append_step
-from app.core.files.dataframe_io import sanitize_for_json
-from app.core.features.geo_utils import extract_srid_from_column_type
+from app.core.dataframes.frame_io import sanitize_for_json
+from app.core.dataframes.geodata import extract_srid_from_column_type
+from app.core.dataframes.ports import FrameLike
+from app.core.dataframes.schema import series_to_canvas_type
+from app.core.dataframes.tabular import dataframe_from_rows
 from app.infrastructure.security.crypto import CredentialUnavailableError
 from app.shared.resources.metadata import ResourceMetadata, SourceKind
 from app.core.estrai.sql_errors import (
@@ -22,7 +24,6 @@ from app.core.estrai.sql_errors import (
 )
 from app.core.resources.column_types import (
     lookup_canvas_column_type,
-    pandas_series_to_canvas_type,
 )
 
 try:
@@ -37,7 +38,7 @@ logger = get_logger(__name__)
 
 @dataclass(frozen=True)
 class EstraiPreviewResource:
-    dataframe: pd.DataFrame
+    dataframe: FrameLike
     metadata: ResourceMetadata
 
 
@@ -112,16 +113,15 @@ def _dedup_column_names(columns: List[str]) -> Tuple[List[str], List[Tuple[str, 
 
 
 def _dedup_dataframe_columns_for_serialization(
-    df: pd.DataFrame,
-) -> Tuple[pd.DataFrame, List[str]]:
+    df: FrameLike,
+) -> Tuple[FrameLike, List[str]]:
     """Se ``df`` ha nomi colonna duplicati, li rinomina in modo stabile e
     ritorna ``(df_dedup, warnings)``. Senza duplicati, ritorna il df
     originale e una lista vuota.
 
-    Risolve BUG.md #6: ``df.to_dict(orient='records')`` con colonne duplicate
-    emette ``UserWarning: DataFrame columns are not unique, some columns
-    will be omitted`` e perde silenziosamente colonne. Qui rinominiamo
-    invece di scartare, cosi' nessuna colonna sparisce dalla preview.
+    Risolve BUG.md #6: la proiezione record con colonne duplicate puo'
+    perdere silenziosamente colonne. Qui rinominiamo invece di scartare,
+    cosi' nessuna colonna sparisce dalla preview.
 
     Tipica causa upstream: JOIN SQL senza alias espliciti che produce
     due colonne con lo stesso nome (es. ``a.id`` e ``b.id``).
@@ -131,8 +131,8 @@ def _dedup_dataframe_columns_for_serialization(
     if not renames:
         return df, []
 
-    # Rinomina posizionale: pd.DataFrame(rows, columns=...) col costruttore
-    # attuale conserva l'ordine; assegniamo direttamente la nuova lista
+    # Il costruttore righe/colonne conserva l'ordine; assegniamo direttamente
+    # la nuova lista per rinominare anche colonne duplicate.
     df_renamed = df.copy()
     df_renamed.columns = new_columns
 
@@ -151,7 +151,7 @@ def _dedup_dataframe_columns_for_serialization(
 
 
 def _build_preview_resource(
-    df: pd.DataFrame,
+    df: FrameLike,
     columns_info: List[Dict[str, str]],
     *,
     source_kind: SourceKind,
@@ -169,12 +169,12 @@ def _build_preview_resource(
     return EstraiPreviewResource(dataframe=df, metadata=metadata)
 
 
-def _infer_dataframe_column_type(series: pd.Series) -> str:
-    return pandas_series_to_canvas_type(series)
+def _infer_dataframe_column_type(series: Any) -> str:
+    return series_to_canvas_type(series)
 
 
 def _build_db_preview_resource_from_cursor_schema(
-    df: pd.DataFrame,
+    df: FrameLike,
     cursor_columns: Sequence[str],
     canvas_type_map: Mapping[str, str],
     *,
@@ -508,11 +508,11 @@ class EstraiExecutor:
                 rows = rows[:effective_preview_limit]
             total_count = len(rows)
 
-            df = pd.DataFrame(rows, columns=columns)
+            df = dataframe_from_rows(rows, list(columns))
 
-            # FIXME(BUG.md #6): dedup colonne duplicate PRIMA di costruire columns_info
-            # e PRIMA di to_dict, altrimenti pandas le scarta silenziosamente
-            # e l'utente non se ne accorge
+            # FIXME(BUG.md #6): dedup colonne duplicate PRIMA di costruire
+            # columns_info e PRIMA della proiezione record, altrimenti
+            # il dataframe engine puo' scartarle silenziosamente.
             df, dedup_warnings = _dedup_dataframe_columns_for_serialization(df)
 
             canvas_type_map = self._build_canvas_type_map(canvas)
@@ -594,7 +594,7 @@ class EstraiExecutor:
             if truncated:
                 rows = rows[:limit]
 
-            df = pd.DataFrame(rows, columns=columns)
+            df = dataframe_from_rows(rows, list(columns))
 
             # FIXME(BUG.md #6): dedup colonne duplicate PRIMA di columns_info e to_dict
             # vedi _preview_database per il razionale
@@ -806,7 +806,7 @@ class EstraiExecutor:
         return canvas_type_map
 
     def _costruisci_colonne_con_tipi_canvas(
-        self, df: pd.DataFrame, canvas_type_map: Dict[str, str]
+        self, df: FrameLike, canvas_type_map: Dict[str, str]
     ) -> List[Dict[str, str]]:
         """
         Costruisce la lista colonne con tipi, preferendo quelli del canvas.
@@ -814,13 +814,13 @@ class EstraiExecutor:
         Strategia di lookup:
         1. Match esatto nel canvas
         2. Match case-insensitive (per Oracle UPPERCASE)
-        3. Fallback: inferenza dal dtype del DataFrame
+        3. Fallback: inferenza via helper `app.core.dataframes.schema`
         """
         columns = []
         for col in df.columns:
             col_type = lookup_canvas_column_type(col, canvas_type_map)
             if col_type is None:
-                col_type = pandas_series_to_canvas_type(df[col])
+                col_type = series_to_canvas_type(df[col])
 
             columns.append({'name': col, 'type': col_type})
 

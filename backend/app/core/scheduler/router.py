@@ -357,11 +357,12 @@ async def run_schedule_now(schedule_id: str, current_user: CurrentUser = Depends
         # Setta subito "queued" — metodo leggero, non incrementa contatori
         service.set_runtime_status(schedule_id, status="queued")
         
-        from workers.tasks.schedule_task import schedule_pipeline_task
-        
-        result = schedule_pipeline_task.apply_async(
-            args=[schedule_id],
-            kwargs={"triggered_by": "manual", "retry_attempt": 0}
+        from app.core.scheduler.job_dispatcher import enqueue_schedule_run
+
+        result = enqueue_schedule_run(
+            schedule_id,
+            triggered_by="manual",
+            retry_attempt=0,
         )
         
         # Salva task_id per tracking

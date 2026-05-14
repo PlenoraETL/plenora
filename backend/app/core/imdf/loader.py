@@ -13,8 +13,9 @@ import tempfile
 import zipfile
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
+from app.core.dataframes.frame_io import load_dataframe_from_file
 from app.utils.zip_safe import safe_extractall
 from app.utils.logger import get_logger
 
@@ -224,7 +225,6 @@ def load_imdf_layers(
     Raises:
         FileNotFoundError: se gdb_path non esiste
     """
-    import geopandas as gpd
     import pyogrio
     from shapely.ops import transform as shapely_transform
 
@@ -234,11 +234,11 @@ def load_imdf_layers(
 
     available = {name: gtype for name, gtype in pyogrio.list_layers(str(p))}
 
-    result: Dict[str, "gpd.GeoDataFrame"] = {}
+    result: Dict[str, Any] = {}
     for layer_name in EXPECTED_LAYERS:
         if layer_name not in available:
             continue
-        gdf = gpd.read_file(str(p), layer=layer_name)
+        gdf = load_dataframe_from_file(p, layer=layer_name)
 
         # Riproiezione
         if gdf.crs and target_srid:

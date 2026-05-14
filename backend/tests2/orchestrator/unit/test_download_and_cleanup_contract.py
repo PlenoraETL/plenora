@@ -34,6 +34,8 @@ def test_tasks_download_eseguibile_streams_from_storage_and_cleans_up():
     with patch("app.core.orchestrator.router._assert_task_group", return_value=None), \
          patch("app.core.orchestrator.task_service.task_service.get_task_status",
                return_value=fake_task_info), \
+         patch("app.core.eseguibili.output_store.load_task_owner",
+               return_value=None), \
          patch("app.core.eseguibili.storage.find_keys",
                return_value=["eseguibili-outputs/t1/out.csv"]) as mock_find, \
          patch("app.core.eseguibili.storage.open_stream",
@@ -58,6 +60,35 @@ def test_tasks_download_eseguibile_streams_from_storage_and_cleans_up():
         # resta attivo e la chiamata viene registrata.
         bg.tasks[0].func()
         mock_delete.assert_called_once_with("t1")
+
+
+def test_tasks_download_eseguibile_blocks_owner_mismatch():
+    from fastapi import BackgroundTasks, HTTPException
+    from app.core.orchestrator.router import download_task_result
+
+    fake_task_info = MagicMock()
+    fake_task_info.status.value = "success"
+    fake_task_info.result = {"project_id": "exe-1"}
+    fake_task_info.project_id = None
+
+    fake_user = MagicMock(user_id="u1", role="viewer", group_id="g1")
+
+    with patch("app.core.orchestrator.router._assert_task_group", return_value=None), \
+         patch("app.core.orchestrator.task_service.task_service.get_task_status",
+               return_value=fake_task_info), \
+         patch("app.core.eseguibili.storage.find_keys",
+               return_value=["eseguibili-outputs/t1/out.csv"]), \
+         patch("app.core.eseguibili.output_store.load_task_owner",
+               return_value={"eseguibile_id": "exe-1", "user_id": "u2"}):
+
+        with pytest.raises(HTTPException) as exc:
+            download_task_result(
+                task_id="t1",
+                background_tasks=BackgroundTasks(),
+                current_user=fake_user,
+            )
+
+    assert exc.value.status_code == 403
 
 
 def test_tasks_download_falls_back_to_db_blob_if_no_s3_key():
@@ -135,7 +166,7 @@ def test_eseguibili_download_streams_from_storage_cleans_owner_meta():
          patch("app.core.eseguibili.storage.open_stream",
                return_value={"body": iter([b"abc"]), "size": 3, "content_type": "text/csv"}), \
          patch("app.core.eseguibili.storage.delete_by_task") as mock_delete, \
-         patch("app.core.eseguibili.router._delete_task_owner") as mock_del_owner:
+         patch("app.core.eseguibili.output_store.delete_task_owner") as mock_del_owner:
 
         response = download_eseguibile_output(
             eseguibile_id="exe-1", task_id="t1",
@@ -196,7 +227,7 @@ def test_eseguibili_download_cleanup_runs_even_if_delete_by_task_raises():
                return_value={"body": iter([b"abc"]), "size": 3, "content_type": "text/csv"}), \
          patch("app.core.eseguibili.storage.delete_by_task",
                side_effect=RuntimeError("S3 temporaneamente down")), \
-         patch("app.core.eseguibili.router._delete_task_owner") as mock_del_owner:
+         patch("app.core.eseguibili.output_store.delete_task_owner") as mock_del_owner:
 
         response = download_eseguibile_output(
             eseguibile_id="exe-1", task_id="t1",
@@ -277,7 +308,7 @@ def test_save_pipeline_result_fs_only_fallback_to_filesystem(monkeypatch, tmp_pa
         out.write_bytes(b"fake-gpkg-bytes")
         return out
 
-    monkeypatch.setattr("app.core.files.dataframe_io.save_dataframe", _fake_save_dataframe)
+    monkeypatch.setattr("app.core.dataframes.frame_io.save_dataframe", _fake_save_dataframe)
 
     saved_calls = []
     monkeypatch.setattr(result_blob_writer, "uuid",

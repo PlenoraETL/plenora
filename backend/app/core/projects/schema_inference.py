@@ -1,31 +1,17 @@
 """Schema inference across project canvas graphs."""
 
 import json
-from typing import Callable, Dict, List, Optional, Any, Tuple
 from dataclasses import dataclass
+from typing import Callable, Dict, List, Optional, Any, Tuple
+
 from app.core.projects.project_context_loader import (
     load_project_source_schema_context,
 )
 from app.core.projects.schema_transform_handlers import TransformSchemaHandlers
+from app.shared.execution.schema_types import ColumnSchema
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
-
-
-@dataclass
-class ColumnSchema:
-    name: str
-    type: str
-    source_node: Optional[str] = None
-    is_calculated: bool = False
-    
-    def to_dict(self) -> dict:
-        return {
-            "name": self.name,
-            "type": self.type,
-            "source_node": self.source_node,
-            "is_calculated": self.is_calculated
-        }
 
 
 @dataclass(frozen=True)
@@ -142,7 +128,8 @@ class SchemaInferenceService:
         `_infer_node_schema` as a registry lookup so new node types do not
         grow central branches.
         """
-        return {
+        # NODE-DISPATCH-REGISTRY:start
+        handlers = {
             "source": self._infer_source_node_schema,
             "file_source": self._infer_file_source_node_schema,
             "project_source": self._infer_project_source_node_schema,
@@ -150,6 +137,8 @@ class SchemaInferenceService:
             "api_enrich": self._infer_api_enrich_node_schema,
             "result": self._infer_result_node_schema,
         }
+        # NODE-DISPATCH-REGISTRY:end
+        return handlers
 
     def _infer_source_node_schema(
         self,

@@ -4,8 +4,6 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Optional
 
-import pandas as pd
-
 from app.shared.execution.canvas_graph import CanvasGraph
 from app.core.projects.canvas_models import CanvasState
 from app.shared.resources.metadata import ResourceMetadata
@@ -74,7 +72,7 @@ def build_canvas_type_map(
 
 
 def build_columns_with_types(
-    df: pd.DataFrame,
+    df: Any,
     canvas_type_map: Dict[str, str],
     *,
     logger: Any = None,
@@ -111,7 +109,7 @@ def build_columns_with_types(
 
 
 def detect_geometry_from_content(
-    df: pd.DataFrame,
+    df: Any,
     col_name: str,
     *,
     logger: Any = None,

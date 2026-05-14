@@ -8,9 +8,7 @@ from __future__ import annotations
 
 import time as _time_mod
 
-from typing import Dict, Optional
-
-import pandas as pd
+from typing import Any, Dict, Optional
 
 from app.config import settings
 from app.core.artifacts import SourceLoader, SourceLoadingError, SourceRef
@@ -22,7 +20,7 @@ from app.core.arricchisci.project_access import load_project_access_context
 from app.core.connections.service import ConnectionService
 from app.core.estrai.query_generator import QueryGenerator
 from app.core.features.features_service import FeaturesService
-from app.core.files.dataframe_io import (
+from app.core.dataframes.frame_io import (
     filter_visible_columns,
     find_latest_output_file,
     load_dataframe_from_file,
@@ -222,7 +220,7 @@ class ApiConnectionSourceLoadingMixin:
 
     def _filesystem_fallback_load_project(
         self, source_project_id: str, output_dir
-    ) -> pd.DataFrame:
+    ) -> Any:
         """Carica l'ultimo output di `source_project_id` dal filesystem.
 
         Tentativo 3 (last resort) di `_load_source_project`: usato quando
@@ -257,7 +255,7 @@ class ApiConnectionSourceLoadingMixin:
         force_recalculate: bool = False,
         *,
         ctx: ArricchisciExecutionContext,
-    ) -> pd.DataFrame:
+    ) -> Any:
         """Carica dati dal progetto sorgente via SourceLoader.
 
         Cross-tenant fail-closed delegato al loader (che a sua volta
@@ -377,7 +375,7 @@ class ApiConnectionSourceLoadingMixin:
         node_data: Dict,
         *,
         ctx: ArricchisciExecutionContext,
-    ) -> pd.DataFrame:
+    ) -> Any:
         """Carica dati da file source via SourceLoader.
 
         Visibility check + preserve GeoDataFrame (per non perdere il
@@ -452,7 +450,7 @@ class ApiConnectionSourceLoadingMixin:
         node_data: Dict,
         *,
         ctx: Optional[ArricchisciExecutionContext] = None,
-    ) -> pd.DataFrame:
+    ) -> Any:
         """Carica dati da nodo StaticValues via SourceLoader.
 
         Le variabili template ({{NOW}}, {{TODAY}}, ecc.) vengono

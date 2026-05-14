@@ -3,21 +3,18 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import Any, cast
 
-from app.core.features.rest_sink import (
+from app.core.connections.rest_sink import (
     RestFeatureSink,
-    RestJsonValue,
     RestRecord,
     RestSinkBatchResult,
     RestSinkConfig,
     RestSinkHttpClient,
     RestSinkWriteResult,
 )
+from app.core.dataframes.tabular import dataframe_to_rest_records
 from app.utils.logger import get_logger
-
-if TYPE_CHECKING:
-    import pandas as pd
 
 
 logger = get_logger(__name__)
@@ -75,14 +72,14 @@ class CaricaRestWriteOutcome:
 
 def execute_carica_rest_write(
     *,
-    df: "pd.DataFrame",
+    df: Any,
     config: RestSinkConfig,
     http_client: RestSinkHttpClient,
 ) -> CaricaRestWriteOutcome:
     """Write a CARICA DataFrame through the typed REST sink."""
     total_rows = len(df)
     try:
-        records = _dataframe_to_rest_records(df)
+        records = cast(tuple[RestRecord, ...], dataframe_to_rest_records(df))
         write_result = RestFeatureSink(config, http_client).write_records(records)
     except Exception as exc:
         logger.error("[GESTITO] Errore scrittura REST CARICA: %s", exc, exc_info=True)
@@ -132,27 +129,6 @@ def _to_outcome(result: RestSinkWriteResult, total_rows: int) -> CaricaRestWrite
         error="carica_rest_write_failed",
         error_message=message,
     )
-
-
-def _dataframe_to_rest_records(df: "pd.DataFrame") -> tuple[RestRecord, ...]:
-    records: list[RestRecord] = []
-    for raw_record in df.to_dict(orient="records"):
-        records.append(
-            {
-                str(key): _json_safe_value(value)
-                for key, value in raw_record.items()
-            }
-        )
-    return tuple(records)
-
-
-def _json_safe_value(value: object) -> RestJsonValue:
-    if value is None or isinstance(value, (str, int, float, bool)):
-        if isinstance(value, float) and value != value:
-            return None
-        return value
-    return str(value)
-
 
 def _batch_summaries(
     batches: tuple[RestSinkBatchResult, ...],

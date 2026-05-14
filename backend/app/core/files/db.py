@@ -125,6 +125,23 @@ def list_file_sources(group_id: Optional[str] = None) -> List[Dict]:
     )
 
 
+def list_file_source_ids_for_group(group_id: str) -> List[str]:
+    """List file_source ids owned by a group for storage-aware cleanup."""
+    rows = fetchall(
+        "SELECT id FROM file_sources WHERE group_id = %s ORDER BY id",
+        (group_id,),
+    )
+    ids: list[str] = []
+    for row in rows:
+        if isinstance(row, dict):
+            file_id = row.get("id")
+        else:
+            file_id = row[0] if row else None
+        if file_id:
+            ids.append(str(file_id))
+    return ids
+
+
 def save_file_source(file_id: str, group_id: str, name: str, original_filename: str,
                      fmt: str, data: Optional[bytes] = None,
                      metadata: dict = None, created_by: str = None,

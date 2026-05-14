@@ -63,7 +63,7 @@ def save_pipeline_result_outcome(
     crs: str = "EPSG:4326",
 ) -> PipelineResultSave:
     """Save a DataFrame as a result artifact through a single entry point."""
-    from app.core.files.dataframe_io import (
+    from app.core.dataframes.frame_io import (
         save_dataframe,
         save_dataframe_to_bytes,
     )

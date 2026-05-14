@@ -5,9 +5,10 @@ Keeps transformation behavior isolated from orchestration callers.
 """
 
 import time as _time
-import pandas as pd
 from typing import Dict, Any, List, Optional
 
+from app.core.dataframes.ports import FrameLike
+from app.core.dataframes.tabular import empty_dataframe, merge_dataframes
 from app.core.projects.canvas_models import CanvasState, Node
 from app.config import settings
 from app.core.projects.execution_context import get_project_group_id
@@ -16,12 +17,16 @@ from app.shared.execution.executor_protocol import PipelineDispatcherProtocol
 from app.shared.execution.graph import kahn_topological_order
 from app.utils.logger import get_logger, append_step
 from app.core.results.pipeline_result import save_pipeline_result_outcome
-from app.core.files.dataframe_io import (
+from app.core.dataframes.frame_io import (
     load_dataframe_from_file,
     sanitize_for_json,
 )
 from app.core.artifacts import SourceLoader, SourceRef
-from app.core.features.geo_utils import detect_geometry_column, to_geodataframe
+from app.core.dataframes.geodata import (
+    detect_geometry_column,
+    is_geodataframe,
+    to_geodataframe,
+)
 from app.core.intermediate.snapshot import (
     record_checkpoint_snapshot,
     record_final_snapshot,
@@ -59,16 +64,17 @@ MULTI_JOIN_STAGE = "manipola_multi_join"
 
 
 def _estimate_merge_output_rows(
-    left: pd.DataFrame,
-    right: pd.DataFrame,
+    left: FrameLike,
+    right: FrameLike,
     join_keys: List[str],
     how: str,
 ) -> Optional[int]:
-    """Estimate pandas merge output cardinality from key frequencies.
+    """Estimate merge output cardinality from key frequencies.
 
-    The estimate is exact for pandas equality joins on the configured keys and
-    join types used by multi-join (`inner`, `left`, `right`, `outer`). It costs
-    O(N+M), but it runs before `pd.merge` allocates the output DataFrame.
+    The estimate is exact for equality joins exposed through
+    `merge_dataframes` on the configured keys and join types used by
+    multi-join (`inner`, `left`, `right`, `outer`). It costs O(N+M), but it
+    runs before `merge_dataframes` allocates the output frame.
     """
     join_how = str(how or "inner").lower()
     if join_how not in {"inner", "left", "right", "outer"}:
@@ -114,28 +120,27 @@ def _nf(node: Node, key: str, default: Any = None) -> Any:
 
 
 def _applica_crs_da_colonne(
-    df: pd.DataFrame,
+    df: FrameLike,
     node_columns: Optional[List[Dict[str, Any]]],
     meta: Any = None,
-) -> pd.DataFrame:
+) -> FrameLike:
     """
-    Se il DataFrame contiene una colonna geometrica e node_columns ha il CRS
-    (formato geometry:subtype:SRID), converte il DataFrame in GeoDataFrame
-    con il CRS corretto. Evita che le trasformazioni spaziali downstream
-    perdano il CRS perché il CSV non lo preserva.
+    Se il frame contiene una colonna geometrica e node_columns ha il CRS
+    (formato geometry:subtype:SRID), delega al boundary geodata per ottenere
+    una risorsa geospaziale con il CRS corretto. Evita che le trasformazioni
+    spaziali downstream perdano il CRS per sorgenti tabulari.
 
     ``meta`` (optional): pre-built ``ResourceMetadata`` produced by the
     source-loading path. When provided the internal construction from
-    ``node_columns`` is skipped — metadata travels from the loader rather
+    ``node_columns`` is skipped â€” metadata travels from the loader rather
     than being reconstructed here. ``node_columns`` is still required for
     the legacy fallback path (callers that do not supply ``meta``).
     """
-    import geopandas as gpd
-    if isinstance(df, gpd.GeoDataFrame):
-        return df  # già GeoDataFrame, non toccare
+    if is_geodataframe(df):
+        return df  # Gia' risorsa geospaziale: non toccare.
 
     if meta is None:
-        # Normalise alias → name before building ResourceMetadata: after
+        # Normalise alias â†’ name before building ResourceMetadata: after
         # filter_visible_columns the DataFrame uses the alias as the actual
         # column name, so the lookup must use the same key
         _meta_input = [
@@ -195,7 +200,7 @@ class ManipolaExecutor:
           a un tenant).
         - `strict=False` (preview): ritorna None in caso di lookup fallito;
           i loader fail-closed e il preview torna "Nessun dato sorgente
-          disponibile" — comportamento corretto per canvas con sorgenti
+          disponibile" â€” comportamento corretto per canvas con sorgenti
           inaccessibili.
         """
         resolved: Optional[str]
@@ -239,7 +244,7 @@ class ManipolaExecutor:
         try:
             # TE-007/008/009: tutti e 3 i loader sono ctx-strict
             # `executing_group_id` (da `_init_security_context`) e' l'unico
-            # canale tenant — nessuno stato di istanza coinvolto
+            # canale tenant â€” nessuno stato di istanza coinvolto
             for loader in [
                 lambda: self._carica_sorgenti_progetto(canvas, dataframes, force_recalculate, run_id=run_id, group_id=executing_group_id),
                 lambda: self._carica_sorgenti_file(canvas, dataframes, group_id=executing_group_id),
@@ -409,7 +414,7 @@ class ManipolaExecutor:
     def _carica_sorgenti_progetto(
         self,
         canvas: CanvasState,
-        dataframes: Dict[str, pd.DataFrame],
+        dataframes: Dict[str, FrameLike],
         force_recalculate: bool,
         run_id: Optional[str] = None,
         *, group_id: Optional[str] = None,
@@ -443,13 +448,13 @@ class ManipolaExecutor:
     def _carica_sorgenti_file(
         self,
         canvas: CanvasState,
-        dataframes: Dict[str, pd.DataFrame],
+        dataframes: Dict[str, FrameLike],
         *, group_id: Optional[str] = None,
     ) -> Optional[Dict[str, Any]]:
         """Carica DataFrame dai nodi file_source via SourceLoader.
 
         thin delegator. Il body vive in
-        ``app.core.manipola.source_loading.load_file_sources`` —
+        ``app.core.manipola.source_loading.load_file_sources`` â€”
         funzione pura con parametri espliciti, zero stato di
         classe. Il nome del metodo e' preservato cosi' i test
         esistenti e i caller esterni (oggi nessuno fuori dal
@@ -458,9 +463,10 @@ class ManipolaExecutor:
 
         Behaviour-preserving:
 
-          - Visibility check cross-tenant + preserve del
-            GeoDataFrame sono ancora garantiti dal ``SourceLoader``
-            unificato, nessuna duplicazione inline.
+          - Visibility check cross-tenant + preserve della risorsa
+            geospaziale sono ancora garantiti dal ``SourceLoader``
+            unificato e dagli helper `app.core.dataframes`, nessuna
+            duplicazione inline.
           - ``TRANSFORMATION-ENGINE-004``: ``group_id`` esplicito
             e' il canale primario di tenant binding (production:
             ``execute``/``preview`` lo passano sempre dopo
@@ -491,7 +497,7 @@ class ManipolaExecutor:
     def _carica_sorgenti_datasource(
         self,
         canvas: CanvasState,
-        dataframes: Dict[str, pd.DataFrame],
+        dataframes: Dict[str, FrameLike],
         *, group_id: Optional[str] = None,
     ) -> Optional[Dict[str, Any]]:
         """Carica DataFrame dai nodi `datasource_node` in `mode=source`.
@@ -511,7 +517,7 @@ class ManipolaExecutor:
     def _carica_sorgenti_statiche(
         self,
         canvas: CanvasState,
-        dataframes: Dict[str, pd.DataFrame],
+        dataframes: Dict[str, FrameLike],
         *, group_id: Optional[str] = None,
     ) -> Optional[Dict[str, Any]]:
         """Carica DataFrame dai nodi StaticValues via SourceLoader.
@@ -532,7 +538,7 @@ class ManipolaExecutor:
         if not static_nodes:
             return None
 
-        # TE-008: pure processing — do NOT read self._current_group_id
+        # TE-008: pure processing â€” do NOT read self._current_group_id
         # Explicit group_id (production path) or non-authorizing sentinel
         current_group_id = group_id or "_static_"
         loader = SourceLoader()
@@ -556,15 +562,15 @@ class ManipolaExecutor:
     def _applica_trasformazioni(
         self,
         canvas: CanvasState,
-        dataframes: Dict[str, pd.DataFrame],
+        dataframes: Dict[str, FrameLike],
         run_id: Optional[str] = None,
         canvas_graph: Optional[CanvasGraph] = None,
         intermediate_mode_override: Optional[str] = None,
-    ) -> Optional[pd.DataFrame]:
+    ) -> Optional[FrameLike]:
         """
         Applica le trasformazioni del canvas in ordine topologico.
         Supporta sia nodi 'transform' che 'multi_join'.
-        Se run_id è presente, scrive uno snapshot intermediate per ogni nodo.
+        Se run_id Ã¨ presente, scrive uno snapshot intermediate per ogni nodo.
         """
         # Prendi sia transform che multi_join
         process_nodes = [n for n in canvas.nodes if n.type in ("transform", "multi_join")]
@@ -627,7 +633,7 @@ class ManipolaExecutor:
 
         return current_df
 
-    def _esegui_multi_join(self, node: Node, inputs: List[pd.DataFrame]) -> pd.DataFrame:
+    def _esegui_multi_join(self, node: Node, inputs: List[FrameLike]) -> FrameLike:
         """
         Esegue multi-join su N DataFrame.
 
@@ -638,7 +644,7 @@ class ManipolaExecutor:
         """
         if len(inputs) < 2:
             logger.warning("Multi-join richiede almeno 2 input")
-            return inputs[0] if inputs else pd.DataFrame()
+            return inputs[0] if inputs else empty_dataframe()
 
         join_keys = _nf(node, 'join_keys') or (node.data or {}).get('config', {}).get('join_keys', [])
         join_type = _nf(node, 'multi_join_type') or (node.data or {}).get('config', {}).get('join_type', 'inner')
@@ -666,13 +672,13 @@ class ManipolaExecutor:
         # Inizia con il primo DataFrame
         result = inputs[0].copy()
 
-        # Multi-join sequenziale: ogni step `pd.merge` puo' inflate
+        # Multi-join sequenziale: ogni step `merge_dataframes` puo' inflate
         # l'output rispetto agli input se le chiavi non sono unique
         # Senza un guard, un'esplosione al merge step k si propaga ai
         # merge step k+1, k+2, ... saturando la memoria del worker
         # SIGKILL OS
         # Strategia: pre-merge cardinality estimate. Prima di ogni
-        # `pd.merge`, stimiamo le righe output dalle frequenze delle
+        # `merge_dataframes`, stimiamo le righe output dalle frequenze delle
         # join key (`groupby(...).size`). Se la stima supera il cap
         # solleviamo PRIMA della materializzazione del DataFrame. Reuse
         # del contratto Memory/OOM
@@ -682,7 +688,7 @@ class ManipolaExecutor:
         # Il costo e' O(N+M) per step, ma evita sia il falso positivo
         # del worst-case cartesian (`len(result) * len(next_df)`) sia
         # l'OOM del primo merge esplosivo. Il post-merge check resta
-        # come safety net se pandas semantics o join_type non stimabile
+        # come safety net se merge_dataframes o join_type non stimabile
         # divergono
         try:
             _multi_cap = int(settings.get("MULTI_JOIN_MAX_OUTPUT_ROWS", 50_000_000))
@@ -696,7 +702,7 @@ class ManipolaExecutor:
         if _multi_cap > 0 and len(result) > _multi_cap:
             logger.warning(
                 f"Multi-join base input ({len(result)} righe) supera il cap "
-                f"configurato di {_multi_cap} righe — guard attivato pre-loop."
+                f"configurato di {_multi_cap} righe â€” guard attivato pre-loop."
             )
             raise MemoryLimitExceededError(
                 observed_bytes=len(result),
@@ -720,8 +726,8 @@ class ManipolaExecutor:
                 df_copy = df_copy.rename(columns=rename_map)
                 logger.info(f"Rinominate colonne: {list(rename_map.keys())}")
 
-            # Pre-merge exact cardinality estimate. Runs before pandas
-            # materializes the merge output
+            # Pre-merge exact cardinality estimate. Runs before
+            # merge_dataframes materializes the merge output.
             if _multi_cap > 0:
                 _estimated_rows = _estimate_merge_output_rows(
                     result, df_copy, join_keys, join_type
@@ -730,7 +736,7 @@ class ManipolaExecutor:
                     logger.warning(
                         f"Multi-join step #{idx}: output stimato "
                         f"{_estimated_rows} righe sopra il cap {_multi_cap} "
-                        f"prima del merge — guard attivato."
+                        f"prima del merge â€” guard attivato."
                     )
                     raise MemoryLimitExceededError(
                         observed_bytes=_estimated_rows,
@@ -740,7 +746,7 @@ class ManipolaExecutor:
                     )
 
             # Merge
-            result = pd.merge(
+            result = merge_dataframes(
                 result,
                 df_copy,
                 on=join_keys,
@@ -756,7 +762,7 @@ class ManipolaExecutor:
             if _multi_cap > 0 and len(result) > _multi_cap:
                 logger.warning(
                     f"Multi-join post-step #{idx}: output cumulato "
-                    f"{len(result)} righe supera il cap {_multi_cap} — "
+                    f"{len(result)} righe supera il cap {_multi_cap} â€” "
                     f"guard attivato. Step rimanenti: {len(inputs) - idx}."
                 )
                 raise MemoryLimitExceededError(
@@ -770,8 +776,8 @@ class ManipolaExecutor:
 
     def _gestisci_join_default(
         self,
-        dataframes: Dict[str, pd.DataFrame],
-    ) -> pd.DataFrame:
+        dataframes: Dict[str, FrameLike],
+    ) -> FrameLike:
         """Singola sorgente: passthrough. Multiple sorgenti senza join: errore."""
         if not dataframes:
             raise ValueError("Nessun progetto sorgente configurato")
@@ -782,17 +788,17 @@ class ManipolaExecutor:
     def _esegui_trasformazione(
         self,
         node: Node,
-        inputs: List[pd.DataFrame],
-    ) -> pd.DataFrame:
+        inputs: List[FrameLike],
+    ) -> FrameLike:
         """Delega al PluginExecutor. Rilancia l'eccezione in caso di errore (no silent fail)."""
         transform_op = _nf(node, 'transform_op')
         if not transform_op:
-            return inputs[0] if inputs else pd.DataFrame()
+            return inputs[0] if inputs else empty_dataframe()
         return get_executor().execute(transform_op, inputs, node)
 
     # GROUP BY
 
-    def _applica_group_by(self, df: pd.DataFrame, result_node: Node) -> pd.DataFrame:
+    def _applica_group_by(self, df: FrameLike, result_node: Node) -> FrameLike:
         """Applica GROUP BY dal nodo risultato (count, sum, mean, min, max, std)."""
         if not _nf(result_node, 'group_by_enabled', False):
             return df
@@ -816,7 +822,7 @@ class ManipolaExecutor:
                 alias = agg.get('alias', f"{col}_{func}")
 
                 if func == 'count':
-                    # COUNT(*) via groupby.size — non dipende da una
+                    # COUNT(*) via groupby.size â€” non dipende da una
                     # colonna specifica, non perde righe sul gruppo
                     count_aliases.append(alias)
                 elif func in ['sum', 'mean', 'min', 'max', 'std']:
@@ -829,7 +835,7 @@ class ManipolaExecutor:
                 result = df.groupby(group_cols, as_index=False).agg(agg_dict)
                 result = result.rename(columns=rename_dict)
             elif count_aliases:
-                # Solo COUNT(*) richiesti — parti da una base con i gruppi
+                # Solo COUNT(*) richiesti â€” parti da una base con i gruppi
                 result = df.groupby(group_cols, as_index=False).size().drop(columns=['size'])
             else:
                 # Nessuna aggregazione valida
@@ -851,7 +857,7 @@ class ManipolaExecutor:
         self,
         project_id: str,
         result_node: Node,
-        df: pd.DataFrame,
+        df: FrameLike,
         canvas: Optional[CanvasState] = None,
         canvas_graph: Optional[CanvasGraph] = None,
     ) -> Dict[str, Any]:
@@ -932,12 +938,12 @@ class ManipolaExecutor:
 
     def _costruisci_colonne_con_tipi(
         self,
-        df: pd.DataFrame,
+        df: FrameLike,
         canvas_type_map: Dict[str, str],
     ) -> List[Dict[str, str]]:
         """Costruisce lista colonne con tipi. Lookup: canvas -> dtype -> WKT."""
         return build_columns_with_types(df, canvas_type_map, logger=logger)
 
-    def _rileva_geometria_da_contenuto(self, df: pd.DataFrame, col_name: str) -> str:
+    def _rileva_geometria_da_contenuto(self, df: FrameLike, col_name: str) -> str:
         """Rileva geometria WKT o oggetti Shapely dal contenuto di una colonna."""
         return detect_geometry_from_content(df, col_name, logger=logger)

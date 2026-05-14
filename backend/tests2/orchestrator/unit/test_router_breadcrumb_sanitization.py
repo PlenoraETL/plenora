@@ -112,8 +112,7 @@ def test_full_cleanup_tenant_check_breadcrumb_on_project_lookup_fail(client, tmp
     ), patch(
         "app.db.pg_connection.execute", return_value=SimpleNamespace(rowcount=0)
     ), patch(
-        "celery.result.AsyncResult",
-        return_value=SimpleNamespace(forget=lambda: None)
+        "app.core.orchestrator.task_service.task_service.forget_task_result"
     ):
         response = client.delete("/api/tasks/task-xyz/full-cleanup")
 

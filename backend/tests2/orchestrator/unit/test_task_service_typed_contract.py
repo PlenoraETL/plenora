@@ -2,6 +2,8 @@
 
 import inspect
 from types import SimpleNamespace
+import ast
+from pathlib import Path
 from typing import get_type_hints
 from unittest.mock import patch
 
@@ -9,11 +11,8 @@ import pytest
 
 from app.core.orchestrator.task_service import (
     ActiveTaskInfo,
-    CaricaTaskPayload,
     CeleryLaunchResult,
-    EnrichmentTaskPayload,
     PipelineTaskPayload,
-    PreviewTaskPayload,
     TaskInfo,
     TaskResultPayload,
     TaskService,
@@ -31,6 +30,29 @@ pytestmark = [
     pytest.mark.contract,
     pytest.mark.regression,
 ]
+
+_BACKEND_ROOT = Path(__file__).resolve().parents[3]
+
+
+def _imports(rel_path: str) -> set[str]:
+    tree = ast.parse((_BACKEND_ROOT / rel_path).read_text(encoding="utf-8"))
+    imports: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            imports.update(alias.name for alias in node.names)
+        elif isinstance(node, ast.ImportFrom) and node.module:
+            imports.add(node.module)
+    return imports
+
+
+def test_orchestrator_application_code_uses_task_service_boundary():
+    for rel_path in (
+        "app/core/orchestrator/router.py",
+        "app/core/orchestrator/service.py",
+    ):
+        imports = _imports(rel_path)
+        assert "celery.result" not in imports
+        assert not any(module.startswith("workers.tasks") for module in imports)
 
 
 def test_get_task_status_uses_typed_result_payload_inside_core():
@@ -243,6 +265,21 @@ def test_get_task_result_returns_typed_payload():
     assert task_result_to_dict(result) == celery_result
 
 
+def test_forget_task_result_delegates_to_celery_boundary():
+    forget_calls = []
+    async_result = SimpleNamespace(forget=lambda: forget_calls.append("forgot"))
+
+    with patch(
+        "app.core.orchestrator.task_service.AsyncResult",
+        return_value=async_result,
+    ) as async_result_cls:
+        service = TaskService()
+        service.forget_task_result("task-1")
+
+    async_result_cls.assert_called_once_with("task-1", app=service.app)
+    assert forget_calls == ["forgot"]
+
+
 def test_submit_task_launches_celery_and_returns_pending_task_info():
     captured_kwargs = {}
 
@@ -306,31 +343,30 @@ def test_task_service_has_no_magic_getattr_compat_layer():
     assert "__getattr__" not in TaskService.__dict__
 
 
-def test_preview_router_builds_typed_submit_request_directly(monkeypatch):
+def test_preview_router_uses_task_service_boundary(monkeypatch):
     from app.core.orchestrator import router as router_mod
     from app.core.orchestrator.task_service import task_service
-    from workers.tasks.pipeline_task import preview_pipeline_task
 
     router_mod.init_orchestrator(object())
     monkeypatch.setattr(router_mod, "_assert_project_group", lambda *args, **kwargs: None)
 
-    captured_requests = []
+    captured_kwargs = {}
 
-    def fail_create_preview_task(**kwargs):
-        raise AssertionError("preview router used create_preview_task wrapper")
-
-    def fake_submit_task(request):
-        captured_requests.append(request)
+    def fake_create_preview_task(**kwargs):
+        captured_kwargs.update(kwargs)
         return TaskInfo(
             task_id="preview-task-1",
-            task_type=request.task_type,
-            project_id=request.project_id,
+            task_type=TaskType.PREVIEW,
+            project_id=kwargs["project_id"],
             status=TaskStatus.PENDING,
-            message=request.queued_message,
+            message="Preview in coda...",
         )
 
-    monkeypatch.setattr(task_service, "create_preview_task", fail_create_preview_task)
-    monkeypatch.setattr(task_service, "submit_task", fake_submit_task)
+    def fail_submit_task(_request):
+        raise AssertionError("preview router bypassed create_preview_task")
+
+    monkeypatch.setattr(task_service, "create_preview_task", fake_create_preview_task)
+    monkeypatch.setattr(task_service, "submit_task", fail_submit_task)
 
     response = router_mod.preview_project(
         project_id="project-1",
@@ -342,21 +378,11 @@ def test_preview_router_builds_typed_submit_request_directly(monkeypatch):
     assert response["task_type"] == "preview"
     assert response["project_id"] == "project-1"
     assert response["async"] is True
-
-    assert len(captured_requests) == 1
-    request = captured_requests[0]
-    assert isinstance(request, TaskSubmitRequest)
-    assert request.celery_task is preview_pipeline_task
-    assert request.task_type is TaskType.PREVIEW
-    assert request.project_id == "project-1"
-    assert isinstance(request.payload, PreviewTaskPayload)
-    assert dict(task_payload_to_celery_kwargs(request.payload)) == {
+    assert captured_kwargs == {
         "project_id": "project-1",
         "limit": 42,
         "user_id": "user-1",
     }
-    assert request.queued_message == "Preview in coda..."
-    assert request.log_label == "preview"
 
 
 @pytest.mark.parametrize(
@@ -474,30 +500,29 @@ def test_create_task_wrappers_delegate_to_generic_submit(
     assert task_info.status is TaskStatus.PENDING
 
 
-def test_create_task_router_builds_enrichment_submit_payload(monkeypatch):
+def test_create_task_router_uses_enrichment_task_service_boundary(monkeypatch):
     from app.core.orchestrator import router as router_mod
     from app.core.orchestrator.task_service import task_service
-    from workers.tasks.enrichment_task import execute_enrichment_task
 
-    captured_requests = []
+    captured_kwargs = {}
 
-    def fake_submit_task(request):
-        captured_requests.append(request)
+    def fake_create_enrichment_task(**kwargs):
+        captured_kwargs.update(kwargs)
         return TaskInfo(
             task_id="task-1",
-            task_type=request.task_type,
-            project_id=request.project_id,
+            task_type=TaskType.ENRICHMENT,
+            project_id=kwargs["project_id"],
             status=TaskStatus.PENDING,
-            message=request.queued_message,
+            message="Task in coda...",
         )
 
-    def fail_legacy_wrapper(**kwargs):
-        raise AssertionError("router used create_enrichment_task wrapper")
+    def fail_submit_task(_request):
+        raise AssertionError("router bypassed create_enrichment_task")
 
     monkeypatch.setattr("app.core.auth.resource_access.assert_project_access", lambda *a, **kw: None)
     monkeypatch.setattr("app.core.auth.resource_access.assert_canvas_resources_access", lambda *a, **kw: None)
-    monkeypatch.setattr(task_service, "create_enrichment_task", fail_legacy_wrapper)
-    monkeypatch.setattr(task_service, "submit_task", fake_submit_task)
+    monkeypatch.setattr(task_service, "create_enrichment_task", fake_create_enrichment_task)
+    monkeypatch.setattr(task_service, "submit_task", fail_submit_task)
 
     response = router_mod.create_task(
         router_mod.CreateTaskRequest(
@@ -511,48 +536,39 @@ def test_create_task_router_builds_enrichment_submit_payload(monkeypatch):
     )
 
     assert response.task_id == "task-1"
-    assert len(captured_requests) == 1
-    request = captured_requests[0]
-    assert request.celery_task is execute_enrichment_task
-    assert request.task_type is TaskType.ENRICHMENT
-    assert isinstance(request.payload, EnrichmentTaskPayload)
-    assert dict(task_payload_to_celery_kwargs(request.payload)) == {
+    assert captured_kwargs == {
         "project_id": "project-1",
         "canvas": {"nodes": [], "edges": []},
         "output_format": "csv",
         "force_recalculate": True,
-        "cleanup_file_source_ids": None,
-        "is_eseguibile": False,
         "user_id": "user-1",
-        "intermediate_mode_override": None,
     }
 
 
-def test_create_task_router_builds_carica_submit_payload(monkeypatch):
+def test_create_task_router_uses_carica_task_service_boundary(monkeypatch):
     from app.core.orchestrator import router as router_mod
     from app.core.orchestrator.task_service import task_service
-    from workers.tasks.carica_task import execute_carica_task
 
-    captured_requests = []
+    captured_kwargs = {}
 
-    def fake_submit_task(request):
-        captured_requests.append(request)
+    def fake_create_carica_task(**kwargs):
+        captured_kwargs.update(kwargs)
         return TaskInfo(
             task_id="task-1",
-            task_type=request.task_type,
-            project_id=request.project_id,
+            task_type=TaskType.CARICA,
+            project_id=kwargs["project_id"],
             status=TaskStatus.PENDING,
-            message=request.queued_message,
+            message="Task CARICA in coda...",
         )
 
-    def fail_legacy_wrapper(**kwargs):
-        raise AssertionError("router used create_carica_task wrapper")
+    def fail_submit_task(_request):
+        raise AssertionError("router bypassed create_carica_task")
 
     monkeypatch.setattr("app.core.auth.resource_access.assert_project_access", lambda *a, **kw: None)
     monkeypatch.setattr("app.core.auth.resource_access.assert_canvas_resources_access", lambda *a, **kw: None)
     monkeypatch.setattr(router_mod, "enrich_canvas_types_from_metadata", lambda *a, **kw: None)
-    monkeypatch.setattr(task_service, "create_carica_task", fail_legacy_wrapper)
-    monkeypatch.setattr(task_service, "submit_task", fake_submit_task)
+    monkeypatch.setattr(task_service, "create_carica_task", fake_create_carica_task)
+    monkeypatch.setattr(task_service, "submit_task", fail_submit_task)
 
     response = router_mod.create_task(
         router_mod.CreateTaskRequest(
@@ -568,12 +584,7 @@ def test_create_task_router_builds_carica_submit_payload(monkeypatch):
     )
 
     assert response.task_id == "task-1"
-    assert len(captured_requests) == 1
-    request = captured_requests[0]
-    assert request.celery_task is execute_carica_task
-    assert request.task_type is TaskType.CARICA
-    assert isinstance(request.payload, CaricaTaskPayload)
-    assert dict(task_payload_to_celery_kwargs(request.payload)) == {
+    assert captured_kwargs == {
         "project_id": "project-1",
         "canvas": {"nodes": [], "edges": []},
         "carica_node_data": {"id": "carica-1", "dest_type": "pg"},

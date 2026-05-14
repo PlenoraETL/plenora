@@ -13,6 +13,7 @@ from app.core.results.storage_policy import (
     should_use_object_storage,
     storage_policy,
 )
+from app.infrastructure.storage.compensation import CompensateOutcome
 from app.shared.resources.storage_layout import RESULTS_PREFIX
 from app.utils.logger import get_logger
 
@@ -35,11 +36,11 @@ def cleanup_uploaded_result_blob(
     reason: str,
     project_id: str,
     result_id: str,
-) -> None:
+) -> CompensateOutcome:
     """Best-effort delete for an object blob whose DB row failed to persist."""
     from app.infrastructure.storage.compensation import compensating_delete
 
-    compensating_delete(
+    return compensating_delete(
         storage_key,
         domain="result",
         reason=reason,
@@ -47,6 +48,51 @@ def cleanup_uploaded_result_blob(
         extras={"project_id": project_id, "result_id": result_id},
         logger=logger,
     )
+
+
+def record_result_upload_intent(
+    storage_key: str,
+    *,
+    project_id: str,
+    result_id: str,
+    filename: str,
+    size_bytes: int,
+) -> Optional[str]:
+    """Record a pre-upload intent for result object-storage blobs."""
+    from app.core.resources.storage_reconciliation import record_upload_intent
+
+    return record_upload_intent(
+        domain="result",
+        storage_key=storage_key,
+        reason="result_upload_intent_pre_db_row",
+        extras={
+            "project_id": project_id,
+            "result_id": result_id,
+            "filename": filename,
+            "size_bytes": size_bytes,
+        },
+    )
+
+
+def close_result_upload_intent(intent_id: Optional[str]) -> None:
+    if not intent_id:
+        return
+    from app.core.resources.storage_reconciliation import mark_done
+
+    mark_done(intent_id)
+
+
+def close_failed_result_upload_intent(
+    intent_id: Optional[str],
+    *,
+    cleanup_outcome: CompensateOutcome,
+) -> None:
+    if not intent_id:
+        return
+    if cleanup_outcome == "ok":
+        from app.core.resources.storage_reconciliation import mark_orphan_deleted
+
+        mark_orphan_deleted(intent_id)
 
 
 def enforce_db_hard_cap(size: int, ctx: str) -> None:
@@ -112,10 +158,18 @@ def save_result_blob(
             )
         else:
             storage_key = _storage_key(project_id, result_id)
+            upload_intent_id: Optional[str] = None
             try:
                 from app.infrastructure.storage.cloud_backends import get_runtime_object_storage
 
                 storage = get_runtime_object_storage()
+                upload_intent_id = record_result_upload_intent(
+                    storage_key,
+                    project_id=project_id,
+                    result_id=result_id,
+                    filename=path.name,
+                    size_bytes=file_size,
+                )
                 storage.upload(path, storage_key)
             except Exception as exc:
                 raise _runtime_storage_upload_error(
@@ -136,13 +190,18 @@ def save_result_blob(
                     storage_key=storage_key,
                     size_bytes=file_size,
                 )
+                close_result_upload_intent(upload_intent_id)
             except Exception:
-                cleanup_uploaded_result_blob(
+                cleanup_outcome = cleanup_uploaded_result_blob(
                     storage,
                     storage_key,
                     reason="db_save_failed_after_object_upload",
                     project_id=project_id,
                     result_id=result_id,
+                )
+                close_failed_result_upload_intent(
+                    upload_intent_id,
+                    cleanup_outcome=cleanup_outcome,
                 )
                 raise
             logger.info(
@@ -205,10 +264,18 @@ def save_result_blob_from_bytes(
             )
         else:
             storage_key = _storage_key(project_id, result_id)
+            upload_intent_id: Optional[str] = None
             try:
                 from app.infrastructure.storage.cloud_backends import get_runtime_object_storage
 
                 storage = get_runtime_object_storage()
+                upload_intent_id = record_result_upload_intent(
+                    storage_key,
+                    project_id=project_id,
+                    result_id=result_id,
+                    filename=filename,
+                    size_bytes=size,
+                )
                 storage.upload_bytes(data, storage_key)
             except Exception as exc:
                 raise _runtime_storage_upload_error(exc, result_id=result_id) from exc
@@ -225,13 +292,18 @@ def save_result_blob_from_bytes(
                     storage_key=storage_key,
                     size_bytes=size,
                 )
+                close_result_upload_intent(upload_intent_id)
             except Exception:
-                cleanup_uploaded_result_blob(
+                cleanup_outcome = cleanup_uploaded_result_blob(
                     storage,
                     storage_key,
                     reason="db_save_failed_after_object_upload",
                     project_id=project_id,
                     result_id=result_id,
+                )
+                close_failed_result_upload_intent(
+                    upload_intent_id,
+                    cleanup_outcome=cleanup_outcome,
                 )
                 raise
             logger.info(
@@ -258,7 +330,10 @@ __all__ = [
     "ResultSaveError",
     "apply_results_retention_after_save",
     "cleanup_uploaded_result_blob",
+    "close_failed_result_upload_intent",
+    "close_result_upload_intent",
     "enforce_db_hard_cap",
+    "record_result_upload_intent",
     "save_result_blob",
     "save_result_blob_from_bytes",
 ]

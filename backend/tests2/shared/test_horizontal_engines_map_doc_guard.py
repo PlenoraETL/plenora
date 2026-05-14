@@ -45,9 +45,9 @@ def test_horizontal_engines_doc_exists():
 
 
 def test_doc_has_canonical_title_and_stream_tag(doc_text: str):
-    assert doc_text.startswith("# Horizontal engines map\n"), (
+    assert doc_text.startswith("# Horizontal Engines\n"), (
         "horizontal-engines.md must start with the canonical "
-        "title '# Horizontal engines map'. Renaming silently "
+        "title '# Horizontal Engines'. Renaming silently "
         "breaks the cross-link from the README."
     )
     assert "BE-GO-READY-DOCS-001-CODEMAP-ARCHITECTURE-REFRESH" \
@@ -57,53 +57,33 @@ def test_doc_has_canonical_title_and_stream_tag(doc_text: str):
     )
 
 
-# Six canonical horizontal sections + engine alignment tags
+# Canonical horizontal sections
 
 
-def test_doc_has_six_canonical_sections_in_order(doc_text: str):
+def test_doc_has_canonical_sections_in_order(doc_text: str):
     expected_in_order = (
-        "## 1. Auth / Ownership / Disclosure",
-        "## 2. Resource Engine + bounded reader + preview parser",
-        "## 3. Storage / reconciliation",
-        "## 4. DB config facade strangler + canonical `app/db/config/*`",
-        "## 5. Health / readiness",
-        "## 6. Install smoke path",
+        "## 1. Auth / Security Engine",
+        "## 2. Connections Engine",
+        "## 3. Execution Engine",
+        "## 4. Transformation Engine",
+        "## 5. Resource / Storage Engine",
+        "## 6. Persistence / DB Engine",
+        "## 7. Observability / Install Engine",
     )
     last = -1
     for header in expected_in_order:
         idx = doc_text.find(header)
         assert idx != -1, (
             f"horizontal-engines.md must contain section header "
-            f"{header!r}. The six sections form the canonical "
+            f"{header!r}. The sections form the canonical "
             "horizontal map; dropping any of them lets the "
             "boundary discovery surface drift."
         )
         assert idx > last, (
             f"Section header {header!r} appears out of order. "
-            "The six horizontal sections must appear 1..6 "
-            "to match the engine-alignment ordering in BE_RULES."
+            "The horizontal sections must appear in canonical order."
         )
         last = idx
-
-
-def test_doc_lists_engine_alignment_tags(doc_text: str):
-    # Each horizontal section must declare the engine alignment
-    # tag from BE_RULES so a reader can trace the section to the
-    # rule.
-    expected_tags = (
-        "AUTH_SECURITY_ENGINE",
-        "STORAGE_ARTIFACT_ENGINE",
-        "CONNECTION_ENGINE",
-        "OBSERVABILITY_ENGINE",
-        "DEPLOYMENT_RUNTIME_ENGINE",
-    )
-    for tag in expected_tags:
-        assert tag in doc_text, (
-            f"horizontal-engines.md must reference engine "
-            f"alignment tag {tag!r} (one of the canonical tags "
-            "in BE_RULES 'Horizontal Engine Alignment'). Missing "
-            "the tag means a section is not anchored to its rule."
-        )
 
 
 # Canonical entry points referenced
@@ -113,12 +93,36 @@ def test_doc_references_canonical_entry_points(doc_text: str):
     # The page must point at the canonical paths so the reader
     # does not have to guess. These are the load-bearing imports.
     expected_paths = (
-        "backend/app/core/auth/middleware.py",
-        "backend/app/core/auth/dependencies.py",
-        "backend/app/core/resources/",
-        "backend/app/core/resources/bounded_reader.py",
-        "backend/app/db/config/",
-        "backend/app/observability/health.py",
+        "app/core/auth/middleware.py",
+        "app/core/auth/dependencies.py",
+        "app/core/connections/rest_sink.py",
+        "app/core/connections/arcgis_sql_helpers.py",
+        "app/core/connections/arcgis_publish_modes.py",
+        "app/shared/execution/schema_types.py",
+        "app/core/scheduler/job_dispatcher.py",
+        "app/core/scheduler/run_log_store.py",
+        "app/core/imdf/publish_dispatcher.py",
+        "app/core/dataframes/*",
+        "app/core/dataframes/ports.py",
+        "app/core/dataframes/default_loader.py",
+        "app/core/dataframes/frame_io.py",
+        "app/core/dataframes/geodata.py",
+        "app/core/dataframes/geospatial_io.py",
+        "app/core/dataframes/load_dispatch.py",
+        "app/core/dataframes/parallel_ops.py",
+        "app/core/dataframes/schema.py",
+        "app/core/dataframes/values.py",
+        "app/core/resources/*",
+        "app/core/results/legacy_file_store.py",
+        "app/core/files/cleanup.py",
+        "app/core/scheduler/run_archive_store.py",
+        "app/core/eseguibili/output_store.py",
+        "app/core/imdf/bundle_store.py",
+        "app/core/intermediate/retention.py",
+        "app/shared/resources/file_cleanup.py",
+        "app/db/config/*",
+        "app/observability/health.py",
+        "app/core/admin_system_status/worker_runtime.py",
         "scripts/install.sh",
     )
     for path in expected_paths:
@@ -142,7 +146,7 @@ def test_doc_has_do_not_import_section(doc_text: str):
     )
 
 
-def test_do_not_import_lists_four_canonical_guards(doc_text: str):
+def test_do_not_import_lists_canonical_guards(doc_text: str):
     do_not_idx = doc_text.find("## Do not import")
     assert do_not_idx != -1
     do_not_section = doc_text[do_not_idx:]
@@ -163,6 +167,66 @@ def test_do_not_import_lists_four_canonical_guards(doc_text: str):
         ("mode=\"path\"",
          "Do-not-import section must call out new `mode=\"path\"` "
          "callsites without inventory entry."),
+        ("app.core.connections.rest_sink",
+         "Do-not-import section must point production callers at "
+         "the neutral REST sink boundary."),
+        ("app.core.dataframes.load_dispatch",
+         "Do-not-import section must point file-source parser dispatch "
+         "at the dataframe dispatch boundary."),
+        ("app.core.dataframes.ports",
+         "Do-not-import section must point dataframe contracts "
+         "at the pandas-neutral ports boundary."),
+        ("app.core.dataframes.default_loader",
+         "Do-not-import section must point concrete file-source loader "
+         "behavior at the dataframe loader boundary."),
+        ("app.core.dataframes.frame_io",
+         "Do-not-import section must point dataframe path/bytes I/O "
+         "at the dataframe I/O boundary."),
+        ("app.core.dataframes.geospatial_io",
+         "Do-not-import section must point geospatial dataframe I/O "
+         "at the dataframe geospatial I/O boundary."),
+        ("app.core.dataframes.schema",
+         "Do-not-import section must point pandas-backed column inference "
+         "at the dataframe schema boundary."),
+        ("app.core.dataframes.values",
+         "Do-not-import section must point scalar null checks and "
+         "DataFrame probes at the dataframe values boundary."),
+        ("app.core.dataframes.parallel_ops",
+         "Do-not-import section must point split/merge/index guard "
+         "behavior at the dataframe parallel-ops boundary."),
+        ("app.core.features.arcgis_sql_helpers",
+         "Do-not-import section must call out the legacy ArcGIS SQL "
+         "features helper path."),
+        ("app.core.features.arcgis_publish_modes",
+         "Do-not-import section must call out the legacy ArcGIS publish "
+         "features helper path."),
+        ("app.core.scheduler.job_dispatcher",
+         "Do-not-import section must point production callers at "
+         "the scheduler dispatch boundary."),
+        ("app.core.scheduler.run_log_store",
+         "Do-not-import section must point scheduler catalog/view code "
+         "at the scheduler run log boundary."),
+        ("app.core.scheduler.run_archive_store",
+         "Do-not-import section must point scheduler archive lookup "
+         "at the archive-store boundary."),
+        ("app.core.imdf.publish_dispatcher",
+         "Do-not-import section must point production callers at "
+         "the IMDF dispatch boundary."),
+        ("app.core.admin_system_status.worker_runtime",
+         "Do-not-import section must point production callers at "
+         "the admin worker runtime boundary."),
+        ("app.core.files.cleanup",
+         "Do-not-import section must point group file-source cleanup "
+         "at the storage-aware lifecycle boundary."),
+        ("app.core.results.legacy_file_store",
+         "Do-not-import section must point legacy result files "
+         "at the result file-store boundary."),
+        ("app.core.eseguibili.output_store",
+         "Do-not-import section must point eseguibili output access "
+         "at the task-scoped output boundary."),
+        ("app.core.imdf.bundle_store",
+         "Do-not-import section must point IMDF bundle deletion "
+         "at the lifecycle boundary."),
     )
     for needle, message in expected_guards:
         assert needle in do_not_section, message

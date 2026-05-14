@@ -15,14 +15,13 @@ import io
 from pathlib import Path
 from typing import Dict, List, Optional
 
-import pandas as pd
-
+from app.core.dataframes.values import is_dataframe
 from app.core.artifacts import (
     LatestProjectArtifactRef,
     SourceLoader,
     SourceLoadingError,
 )
-from app.core.files.dataframe_io import save_dataframe_to_bytes
+from app.core.dataframes.frame_io import save_dataframe_to_bytes
 from app.core.files.source_loading import assert_file_source_group_access
 from app.core.files.source_loading import resolve_file_source_id_path
 # File-source path materialization lives in the files domain boundary.
@@ -910,7 +909,7 @@ class ApiConnectionRestFileMixin:
                 # Il caller (`_build_rest_file_multipart`) wrappa i bytes in
                 # io.BytesIO per requests multipart — requests accetta ogni
                 # file-like object che implementa read
-                if isinstance(upstream_result, pd.DataFrame) and upstream_type != 'file_source':
+                if is_dataframe(upstream_result) and upstream_type != 'file_source':
                     fmt = (materialize_format or 'xlsx').lower()
                     supported = {'xlsx', 'csv', 'json', 'parquet'}
                     if fmt not in supported:

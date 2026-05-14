@@ -9,10 +9,9 @@ from __future__ import annotations
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from typing import Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
-import pandas as pd
-
+from app.core.dataframes.tabular import append_record_rows
 from app.core.arricchisci.models import EnrichmentStats, RowError, RowStatus
 from app.utils.logger import get_logger
 
@@ -58,8 +57,8 @@ class EnrichmentExecutionEnginesMixin:
 
     def _start_execution_state(
         self,
-        df: pd.DataFrame,
-    ) -> Tuple[pd.DataFrame, EnrichmentStats, List[RowError], int, float]:
+        df: Any,
+    ) -> Tuple[Any, EnrichmentStats, List[RowError], int, float]:
         result_df = df.copy()
         stats = EnrichmentStats(total_rows=len(df))
         errors: List[RowError] = []
@@ -73,7 +72,7 @@ class EnrichmentExecutionEnginesMixin:
 
     def _build_execution_groups(
         self,
-        df: pd.DataFrame,
+        df: Any,
     ) -> Dict[str, List[int]]:
         if self.options.enable_deduplication:
             return self._group_by_params(df)
@@ -136,8 +135,8 @@ class EnrichmentExecutionEnginesMixin:
 
     def _execute_parallel(
         self,
-        df: pd.DataFrame
-    ) -> Tuple[pd.DataFrame, EnrichmentStats, List[RowError]]:
+        df: Any,
+    ) -> Tuple[Any, EnrichmentStats, List[RowError]]:
         """
         Esecuzione parallela con ThreadPoolExecutor.
 
@@ -298,8 +297,8 @@ class EnrichmentExecutionEnginesMixin:
 
     def _execute_internal(
         self,
-        df: pd.DataFrame
-    ) -> Tuple[pd.DataFrame, EnrichmentStats, List[RowError]]:
+        df: Any,
+    ) -> Tuple[Any, EnrichmentStats, List[RowError]]:
         """
         Esecuzione interna sequenziale con deduplicazione e gestione errori.
         """
@@ -435,8 +434,7 @@ class EnrichmentExecutionEnginesMixin:
 
         # Concatena righe espanse (FeatureCollection explosion
         if _extra_rows:
-            extra_df = pd.DataFrame(_extra_rows)
-            result_df = pd.concat([result_df, extra_df], ignore_index=True)
+            result_df = append_record_rows(result_df, _extra_rows)
             logger.info(f"Esplosione FeatureCollection: aggiunte {len(_extra_rows)} righe extra")
 
         self._finish_execution_stats(stats, start_time)

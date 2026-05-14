@@ -4,25 +4,14 @@ imdf_publish_task.py — Task Celery per pubblicazione IMDF su ArcGIS.
 Workflow
 """
 
-import json
 import time
 from datetime import datetime, timezone
-from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict
 
 from app.config import settings
-from app.shared.resources.path_policy import validate_imdf_task_id
+from app.core.imdf import bundle_store
 from app.utils.logger import get_logger
 from workers.celery_app import celery_app
-
-def _safe_bundle_dir(bundle_task_id: str) -> Optional[Path]:
-    """Valida il bundle_task_id contro path traversal e ritorna il path
-    resolved. Ritorna None se l'id e' malformato (il caller deve gestire
-    l'errore e propagarlo al task result)."""
-    try:
-        return validate_imdf_task_id(bundle_task_id, settings.IMDF_BUNDLES_DIR.resolve())
-    except ValueError:
-        return None
 
 logger = get_logger(__name__)
 
@@ -76,8 +65,9 @@ def execute_imdf_publish_task(
     try:
         _update_progress(self, 2, "Risoluzione bundle IMDF...")
 
-        bundle_dir = _safe_bundle_dir(bundle_task_id)
-        if bundle_dir is None:
+        try:
+            bundle_dir = bundle_store.ensure_local_bundle(bundle_task_id)
+        except ValueError:
             msg = (
                 f"bundle_task_id '{bundle_task_id}' malformato "
                 "(ammessi solo alfanumerico + '-' '_')"
@@ -90,19 +80,7 @@ def execute_imdf_publish_task(
                 "error": msg,
                 "elapsed_time": round(time.time() - started_at, 2),
             }
-        # R2 multi-host: se il bundle non e' nella cache locale di questo
-        # worker, prova a hydrate-lo da S3. Serve quando il publish gira su
-        # un nodo diverso da quello che ha generato il bundle
-        if not bundle_dir.exists() or not bundle_dir.is_dir():
-            try:
-                from app.core.imdf import storage as _imdf_storage
-                _imdf_storage.ensure_local_bundle(bundle_task_id)
-            except FileNotFoundError:
-                pass  # gestito sotto con il return 404-like
-            except Exception as _e:
-                logger.warning(f"[Task {task_id}] hydrate storage fallita: {_e}")
-
-        if not bundle_dir.exists() or not bundle_dir.is_dir():
+        except FileNotFoundError:
             msg = (
                 f"Bundle IMDF '{bundle_task_id}' non trovato (ne' local ne' S3). "
                 f"Potrebbe essere scaduto (TTL {settings.IMDF_BUNDLE_TTL_HOURS}h)."
@@ -116,11 +94,7 @@ def execute_imdf_publish_task(
                 "elapsed_time": round(time.time() - started_at, 2),
             }
 
-        gdb_path: Optional[Path] = None
-        for entry in bundle_dir.rglob("*.gdb"):
-            if entry.is_dir():
-                gdb_path = entry
-                break
+        gdb_path = bundle_store.find_gdb_dir(bundle_dir)
         if gdb_path is None:
             msg = f"Nessun File Geodatabase (.gdb) trovato in {bundle_dir}"
             logger.error(f"[Task {task_id}] {msg}")
@@ -150,12 +124,7 @@ def execute_imdf_publish_task(
         renderers_data = None
         apply_renderers = bool(publisher_config.get("apply_renderers"))
         if apply_renderers:
-            renderers_path = bundle_dir / "renderers.json"
-            if renderers_path.exists():
-                try:
-                    renderers_data = json.loads(renderers_path.read_text(encoding="utf-8"))
-                except Exception as e:
-                    logger.warning(f"[Task {task_id}] lettura renderers.json fallita: {e}")
+            renderers_data = bundle_store.read_renderers(bundle_dir)
 
         connection_id = publisher_config.get("connection_id")
         if not connection_id:

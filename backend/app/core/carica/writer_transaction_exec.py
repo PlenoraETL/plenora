@@ -8,9 +8,8 @@ from __future__ import annotations
 
 import math
 import time
-from typing import List, Optional
+from typing import Any, List, Optional
 
-import pandas as pd
 from sqlalchemy import text
 from sqlalchemy.engine import Connection
 
@@ -20,6 +19,7 @@ from app.core.carica.models import (
     WriteResult,
     WriteStatus,
 )
+from app.core.dataframes.tabular import iter_dataframe_rows
 from app.core.carica.writer_batch_loop import run_batched_inserts
 from app.utils.logger import get_logger
 
@@ -37,7 +37,7 @@ class TransactionExecutionMixin:
 
     def _execute_in_batches(
         self,
-        df: pd.DataFrame,
+        df: Any,
         columns: List[ColumnMapping],
         sql_template: str,
         result: WriteResult,
@@ -88,7 +88,7 @@ class TransactionExecutionMixin:
 
     def _execute_all_or_nothing(
         self,
-        df: pd.DataFrame,
+        df: Any,
         columns: List[ColumnMapping],
         sql: str,
         result: WriteResult,
@@ -111,7 +111,7 @@ class TransactionExecutionMixin:
                     self._oracle_setup(conn)
 
                 def _process_batch(
-                    batch_df: pd.DataFrame,
+                    batch_df: Any,
                     batch_num: int,
                     _conn: Connection = conn,
                 ) -> None:
@@ -156,7 +156,7 @@ class TransactionExecutionMixin:
 
     def _execute_per_batch(
         self,
-        df: pd.DataFrame,
+        df: Any,
         columns: List[ColumnMapping],
         sql: str,
         result: WriteResult,
@@ -177,7 +177,7 @@ class TransactionExecutionMixin:
             if self.db_type == "oracle":
                 self._oracle_setup(conn_holder[0])
 
-            def _process_batch(batch_df: pd.DataFrame, batch_num: int) -> None:
+            def _process_batch(batch_df: Any, batch_num: int) -> None:
                 try:
                     rows_in_batch = self._execute_batch(
                         conn_holder[0], batch_df, columns, sql, operation
@@ -251,7 +251,7 @@ class TransactionExecutionMixin:
     def _execute_batch(
         self,
         conn: Connection,
-        batch_df: pd.DataFrame,
+        batch_df: Any,
         columns: List[ColumnMapping],
         sql: str,
         operation: str,
@@ -280,7 +280,7 @@ class TransactionExecutionMixin:
 
         params_list = [
             self._build_params(row, columns, operation)
-            for _, row in batch_df.iterrows()
+            for row in iter_dataframe_rows(batch_df)
         ]
         conn.execute(text(sql), params_list)
         return len(params_list)

@@ -19,7 +19,7 @@ from app.core.artifacts.types import (
 )
 from app.core.artifacts.static_parameters import process_static_fields
 from app.core.auth.visibility import is_resource_visible
-from app.core.files.dataframe_io import load_dataframe_from_file
+from app.core.dataframes.frame_io import load_dataframe_from_file
 from app.shared.resources.metadata import LoadedResource, ResourceMetadata
 
 logger = get_logger(__name__)
@@ -47,7 +47,7 @@ def _source_kind_for_ref(ref: SourceRef) -> str:
 
 
 class SourceLoader:
-    """Carica una `SourceRef` in DataFrame (o GeoDataFrame se applicabile).
+    """Carica una `SourceRef` in una risorsa frame-like.
 
     Tre branch:
     - **project**: delega a `ArtifactResolver.materialize_latest`, con
@@ -57,9 +57,9 @@ class SourceLoader:
     - **file**: visibility check via `is_resource_visible` enforced
       qui dentro (non dal caller); se non visibile solleva
       `SourceLoadingError`. Poi `file_source_service.load_dataframe`
-      e preferenza al GeoDataFrame quando presente per preservare il CRS.
+      e preferenza alla risorsa geospaziale quando presente per preservare il CRS.
     - **static**: static-parameter contract su lista di campi raw, ritorna
-      `pd.DataFrame([...])` di una riga.
+      una riga costruita tramite helper `app.core.dataframes`.
     """
 
     def __init__(self, artifact_resolver: Optional[ArtifactResolver] = None) -> None:
@@ -111,13 +111,13 @@ class SourceLoader:
     # branch: static
 
     def _load_static(self, fields: Optional[tuple]) -> Any:
-        import pandas as pd
+        from app.core.dataframes.frame_io import dataframe_from_records
 
         if not fields:
-            return pd.DataFrame([{}])
+            return dataframe_from_records([{}])
 
         processed = process_static_fields(list(fields))
-        return pd.DataFrame([processed])
+        return dataframe_from_records([processed])
 
     # branch: file
 
@@ -183,9 +183,9 @@ class SourceLoader:
                 f"Impossibile caricare il file sorgente '{file_source_id}'"
             ) from e
 
-        # Preferenza al GeoDataFrame quando presente: preserva il CRS
-        # lungo le trasformazioni downstream (un DataFrame piatto
-        # perderebbe `geometry.crs` al primo cast
+        # Preferenza alla risorsa geospaziale quando presente: preserva il CRS
+        # lungo le trasformazioni downstream; la meccanica concreta resta
+        # confinata negli helper `app.core.dataframes`.
         return gdf if gdf is not None else df
 
     # branch: project
@@ -198,7 +198,7 @@ class SourceLoader:
         is_superadmin: bool = False,
     ) -> Optional[str]:
         """Variante di `_load_project` che ritorna il path su disco
-        invece del DataFrame caricato.
+        invece della risorsa frame-like caricata.
 
         Pensato per consumer che leggono il file in modo custom (es.
         file processor rest_file che invia il file a un servizio

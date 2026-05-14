@@ -10,8 +10,16 @@ import re
 from typing import Any, Dict, List, Optional, Set, Tuple
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-import pandas as pd
-
+from app.core.dataframes.parallel_ops import (
+    execute_condition_mask,
+    mask_all,
+    mask_any,
+    mask_count,
+    merge_split_execution_result,
+    split_execution_frame,
+    should_execute_first_row,
+    validate_and_merge_parallel_columns,
+)
 from app.shared.execution.canvas_node import CanvasNode
 from app.utils.logger import get_logger
 
@@ -38,7 +46,7 @@ def _parse_execute_if(node_data: Dict):
     return col.strip(), expected.strip().lower(), negate
 
 
-def get_execute_mask(node_data: Dict, input_df: Any) -> pd.Series:
+def get_execute_mask(node_data: Dict, input_df: Any) -> Any:
     """Ritorna una maschera booleana per-riga del DataFrame.
 
     Per ogni riga: True se il nodo deve essere eseguito su quella riga,
@@ -48,17 +56,8 @@ def get_execute_mask(node_data: Dict, input_df: Any) -> pd.Series:
     Usato per split-execute-merge: le righe True vengono arricchite,
     le False passano inalterate (colonne output = None).
     """
-    parsed = _parse_execute_if(node_data)
-    if parsed is None:
+    return execute_condition_mask(input_df, _parse_execute_if(node_data))
         # Nessuna condizione → tutte le righe
-        return pd.Series(True, index=input_df.index) if isinstance(input_df, pd.DataFrame) else True
-
-    col, expected, negate = parsed
-    if not isinstance(input_df, pd.DataFrame) or col not in input_df.columns:
-        return pd.Series(negate, index=input_df.index) if isinstance(input_df, pd.DataFrame) else negate
-
-    match = input_df[col].astype(str).str.strip().str.lower() == expected
-    return (~match) if negate else match
 
 
 def should_execute_node(node_data: Dict, input_df: Any) -> bool:
@@ -73,18 +72,7 @@ def should_execute_node(node_data: Dict, input_df: Any) -> bool:
     pd.Series booleano. Questa funzione controlla solo la prima riga
     (backward compat per preview e Celery task dove il check e globale).
     """
-    parsed = _parse_execute_if(node_data)
-    if parsed is None:
-        return True
-
-    col, expected, negate = parsed
-
-    if not isinstance(input_df, pd.DataFrame) or col not in input_df.columns or len(input_df) == 0:
-        return negate  # colonna assente o df vuoto: condizione = falsa (o vera se negata
-
-    actual = str(input_df[col].iloc[0]).strip().lower()
-    match = actual == expected
-    return (not match) if negate else match
+    return should_execute_first_row(input_df, _parse_execute_if(node_data))
 
 
 # PARALLEL GROUPS — raggruppamento nodi indipendenti
@@ -323,12 +311,12 @@ def compute_parallel_groups(
 
 def execute_parallel_enrichers(
     node_ids: List[str],
-    input_df: pd.DataFrame,
+    input_df: Any,
     node_map: Dict[str, Dict],
     api_connections: Dict[str, Dict],
     execute_single_fn,
     max_workers: int = 10,
-) -> Tuple[Dict[str, pd.DataFrame], Optional[str]]:
+) -> Tuple[Dict[str, Any], Optional[str]]:
     """Esegue un gruppo di nodi api_enrich in parallelo sullo stesso input_df.
 
     Args:
@@ -345,13 +333,13 @@ def execute_parallel_enrichers(
         - results_dict: {node_id: merged_dataframe} per tutti i nodi del gruppo
         - error_msg: None se ok, stringa errore se fallito
     """
-    def run_one(node_id: str) -> Tuple[str, Optional[pd.DataFrame], Optional[str]]:
+    def run_one(node_id: str) -> Tuple[str, Optional[Any], Optional[str]]:
         node = node_map[node_id]
 
         # Per-row execute_if: split → execute solo righe matching → merge
         mask = get_execute_mask(node, input_df)
-        all_skip = not mask.any() if isinstance(mask, pd.Series) else not mask
-        all_exec = mask.all() if isinstance(mask, pd.Series) else mask
+        all_skip = not mask_any(mask)
+        all_exec = mask_all(mask)
 
         if all_skip:
             logger.info(f"Nodo {node_id} skippato per tutte le righe (execute_if)")
@@ -363,25 +351,17 @@ def execute_parallel_enrichers(
                 result_df = execute_single_fn(node, api_connections, input_df)
             else:
                 # Split: esegui solo le righe che matchano, le altre passthrough
-                df_exec = input_df[mask].copy()
-                df_skip = input_df[~mask].copy()
+                df_exec = split_execution_frame(input_df, mask)
                 result_exec = execute_single_fn(node, api_connections, df_exec)
-                # Aggiungi colonne mancanti alle righe skippate (None
-                if isinstance(result_exec, pd.DataFrame):
-                    new_cols = [c for c in result_exec.columns if c not in df_skip.columns]
-                    for c in new_cols:
-                        df_skip[c] = None
-                    result_df = pd.concat([result_exec, df_skip]).sort_index()
-                else:
-                    result_df = input_df  # fallback
-                logger.info(f"Nodo {node_id}: {mask.sum()}/{len(mask)} righe eseguite (execute_if per-riga)")
+                result_df = merge_split_execution_result(input_df, mask, result_exec)
+                logger.info(f"Nodo {node_id}: {mask_count(mask)}/{len(mask)} righe eseguite (execute_if per-riga)")
             return node_id, result_df, None
         except Exception as e:
             logger.error(f"Errore parallelo nodo {node_id}: {e}", exc_info=True)
             return node_id, None, str(e)
 
     # Esecuzione
-    node_results: Dict[str, Optional[pd.DataFrame]] = {}
+    node_results: Dict[str, Optional[Any]] = {}
     first_error = None
 
     if len(node_ids) <= 1:
@@ -423,34 +403,7 @@ def execute_parallel_enrichers(
     # con start != 0 (es. RangeIndex(10, 13)) NON sono accettati: l'identita'
     # dell'index e' stata persa e il positional merge resta ambiguo
     # Tutto il resto -> RuntimeError diagnostico
-    merged = input_df.copy()
-    for nid in node_ids:
-        result_df = node_results.get(nid)
-        if result_df is None or not isinstance(result_df, pd.DataFrame):
-            continue
-
-        if not result_df.index.equals(merged.index):
-            same_len = len(result_df) == len(merged)
-            default_range = pd.RangeIndex(len(merged))
-            both_default_range = (
-                result_df.index.equals(default_range)
-                and merged.index.equals(default_range)
-            )
-            if not (same_len and both_default_range):
-                raise RuntimeError(
-                    f"[parallel-merge] mismatch index/cardinalita' su nodo "
-                    f"{nid}: result_df ha {len(result_df)} righe vs "
-                    f"merged {len(merged)}; index uguali={result_df.index.equals(merged.index)}. "
-                    f"Il merge positional .values produrrebbe silent "
-                    f"corruption riga<->valore. L'executor del nodo deve "
-                    f"preservare l'index di input_df, oppure produrre il "
-                    f"RangeIndex default (0..N-1) coerente con un input "
-                    f"a RangeIndex default."
-                )
-
-        new_cols = [c for c in result_df.columns if c not in merged.columns]
-        for c in new_cols:
-            merged[c] = result_df[c].values
+    merged = validate_and_merge_parallel_columns(input_df, node_ids, node_results)
 
     # Tutti i nodi del gruppo puntano al merged (cosi il nodo successivo
     # nel DAG, che ha input_edge verso l'ultimo nodo del gruppo, trova

@@ -4,15 +4,26 @@ Cluster RESHAPE — operazioni di trasformazione struttura tabella.
 Keeps transformation behavior isolated from orchestration callers.
 """
 
-import pandas as pd
-import geopandas as gpd
 from typing import Dict, List, Optional, Union
 
+from app.core.dataframes.ports import FrameLike
+from app.core.dataframes.tabular import (
+    constant_object_series,
+    dataframe_from_mapping,
+    dataframe_from_rows,
+    empty_dataframe,
+    false_boolean_series,
+    is_multiindex,
+    is_numeric_series,
+    melt_dataframe,
+    object_series,
+    pivot_table_dataframe,
+)
 from app.utils.logger import get_logger
 
 logger = get_logger("app.core.manipola.transforms.base")
 
-DataFrame = Union[pd.DataFrame, gpd.GeoDataFrame]
+DataFrame = FrameLike
 
 
 # PIVOT TABLE
@@ -121,7 +132,7 @@ def op_pivot(
             logger.warning(f"Pivot: funzione '{aggr_func}' non supportata, uso 'first'")
             agg_fn = 'first'
 
-        pivoted = pd.pivot_table(
+        pivoted = pivot_table_dataframe(
             result,
             index=index_cols,
             columns=pivot_col,
@@ -130,7 +141,7 @@ def op_pivot(
         )
 
         # Flatten MultiIndex colonne
-        if isinstance(pivoted.columns, pd.MultiIndex):
+        if is_multiindex(pivoted.columns):
             pivoted.columns = [
                 '_'.join(str(c) for c in col).strip('_')
                 for col in pivoted.columns
@@ -206,7 +217,7 @@ def op_table_diff(
     """
     if len(inputs) < 2:
         logger.warning("Table Diff richiede 2 input")
-        return inputs[0] if inputs else pd.DataFrame()
+        return inputs[0] if inputs else empty_dataframe()
 
     old_df = inputs[0].copy()
     new_df = inputs[1].copy()
@@ -299,7 +310,7 @@ def op_table_diff(
         new_s = merged[f'{c}_NEW']
         both_nan = old_s.isna() & new_s.isna()
         one_nan = old_s.isna() ^ new_s.isna()
-        if pd.api.types.is_numeric_dtype(old_s) and pd.api.types.is_numeric_dtype(new_s):
+        if is_numeric_series(old_s) and is_numeric_series(new_s):
             # Confronto numerico con tolleranza 1e-9
             numeric_diff = (old_s.fillna(0) - new_s.fillna(0)).abs() > 1e-9
             # Se uno solo e' NaN -> changed (one_nan), altrimenti solo se diff > tol
@@ -310,11 +321,19 @@ def op_table_diff(
             col_changed = one_nan | (str_diff & ~both_nan & ~one_nan)
         changed_masks[c] = col_changed
 
-    changed_df = pd.DataFrame(changed_masks, index=merged.index) if common_value_cols else pd.DataFrame(index=merged.index)
+    changed_df = (
+        dataframe_from_mapping(changed_masks, index=merged.index)
+        if common_value_cols
+        else dataframe_from_mapping(index=merged.index)
+    )
 
     # Status per riga
-    any_changed = changed_df.any(axis=1) if len(changed_df.columns) else pd.Series(False, index=merged.index)
-    status = pd.Series('UNCHANGED', index=merged.index, dtype=object)
+    any_changed = (
+        changed_df.any(axis=1)
+        if len(changed_df.columns)
+        else false_boolean_series(merged.index)
+    )
+    status = constant_object_series('UNCHANGED', merged.index)
     status[mask_deleted] = 'DELETED'
     status[mask_added] = 'ADDED'
     status[mask_both & any_changed] = 'MODIFIED'
@@ -328,12 +347,13 @@ def op_table_diff(
 
     if len(merged) == 0:
         logger.info("Table Diff: nessuna differenza trovata")
-        return pd.DataFrame(
+        return dataframe_from_rows(
+            [],
             columns=key_cols + common_value_cols + ['_diff_status', '_diff_columns', '_diff_old_values']
         )
 
     # Costruzione result_df vectorized
-    result_df = pd.DataFrame(index=merged.index)
+    result_df = dataframe_from_mapping(index=merged.index)
     for k in key_cols:
         result_df[k] = merged[k]
 
@@ -354,8 +374,8 @@ def op_table_diff(
 
     # _diff_columns e _diff_old_values solo per MODIFIED — vectorized
     # via stack+groupby.agg(join). Niente loop Python (pandas internals in C
-    diff_columns_col = pd.Series([None] * len(merged), index=merged.index, dtype=object)
-    diff_old_values_col = pd.Series([None] * len(merged), index=merged.index, dtype=object)
+    diff_columns_col = object_series([None] * len(merged), index=merged.index)
+    diff_old_values_col = object_series([None] * len(merged), index=merged.index)
 
     modified_mask = status == 'MODIFIED'
     if modified_mask.any() and common_value_cols:
@@ -376,7 +396,7 @@ def op_table_diff(
 
         # ── _diff_old_values ───────────────────────────────────────────
         # DataFrame parallelo di old values stringificati, stessa shape di cd_mod
-        old_df = pd.DataFrame(index=cd_mod.index)
+        old_df = dataframe_from_mapping(index=cd_mod.index)
         for c in common_value_cols:
             ov = merged.loc[modified_mask, f'{c}_OLD']
             # Vectorized: NaN -> '', altrimenti str
@@ -468,7 +488,7 @@ def op_melt(
         var_name = _avoid_collision(var_name)
         value_name = _avoid_collision(value_name)
 
-        result = pd.melt(
+        result = melt_dataframe(
             df,
             id_vars=id_columns or None,
             value_vars=value_columns,

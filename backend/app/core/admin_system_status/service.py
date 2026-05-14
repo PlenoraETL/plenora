@@ -17,6 +17,11 @@ from app.core.admin_system_status.tickets_metrics import (
     TicketsMetricsUnavailable,
     get_active_ticket_metrics,
 )
+from app.core.admin_system_status.worker_runtime import (
+    CeleryAppUnavailable,
+    get_celery_queue_depth,
+    inspect_celery_workers,
+)
 from app.core.admin_system_status.models import (
     AdminStatusBlock,
     CpuStatus,
@@ -298,12 +303,19 @@ def get_workers_status() -> AdminStatusBlock:
         (<=concurrency_slots).
     """
     try:
-        from workers.celery_app import celery_app
-    except Exception as e:
+        active, stats, queues_info = inspect_celery_workers(timeout=2.0)
+    except CeleryAppUnavailable as e:
         logger.warning(f"celery_app import fallito: {e}")
         return AdminStatusBlock(
             status="unknown",
             message="Celery app non importabile",
+            error=str(e)[:200],
+        )
+    except Exception as e:
+        logger.warning(f"celery inspect fallito: {e}")
+        return AdminStatusBlock(
+            status="unknown",
+            message="Broker Celery non raggiungibile",
             error=str(e)[:200],
         )
 
@@ -313,11 +325,6 @@ def get_workers_status() -> AdminStatusBlock:
     details: list[WorkerDetail] = []
 
     try:
-        inspect = celery_app.control.inspect(timeout=2.0)
-        active = inspect.active() or {}
-        stats = inspect.stats() or {}
-        queues_info = inspect.active_queues() or {}
-
         nodes = len(active)
         active_tasks = sum(len(v or []) for v in active.values())
 
@@ -382,11 +389,7 @@ def get_workers_status() -> AdminStatusBlock:
     # Redis dell'app (stesso broker che Celery stesso consuma
     queue_depth: Optional[int] = None
     try:
-        import redis as _redis
-        from app.config import settings as _settings
-        r = _redis.from_url(_settings.CELERY_BROKER_URL, socket_timeout=2)
-        # La queue di default di celery si chiama "celery"
-        queue_depth = r.llen("celery")
+        queue_depth = get_celery_queue_depth("celery")
     except Exception as e:
         logger.debug(f"Redis queue depth non disponibile: {e}")
 

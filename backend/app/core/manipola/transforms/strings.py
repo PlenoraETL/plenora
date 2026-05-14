@@ -7,28 +7,26 @@ Keeps transformation behavior isolated from orchestration callers.
 import re
 import unicodedata
 
-import pandas as pd
-import geopandas as gpd
-from typing import List, Union
+from typing import Any, List
 
+from app.core.dataframes.ports import FrameLike
+from app.core.dataframes.values import is_null_scalar
 from app.utils.logger import get_logger
 
 logger = get_logger("app.core.manipola.transforms.base")
-
-DataFrame = Union[pd.DataFrame, gpd.GeoDataFrame]
 
 
 # STRING PAD — Riempimento stringa a larghezza fissa
 # Aggiunge caratteri di riempimento a sinistra o a destra
 
 def op_string_pad(
-    df: DataFrame,
+    df: FrameLike,
     column: str,
     width: int = 5,
     side: str = "left",
     fill_char: str = "0",
     output_column: str = None
-) -> DataFrame:
+) -> FrameLike:
     """
     Riempimento (padding) di una colonna stringa a larghezza fissa.
 
@@ -75,10 +73,10 @@ def op_string_pad(
 # Aggiunge una colonna con la lunghezza di ogni valore
 
 def op_string_length(
-    df: DataFrame,
+    df: FrameLike,
     column: str,
     output_column: str = None
-) -> DataFrame:
+) -> FrameLike:
     """
     Calcola la lunghezza delle stringhe in una colonna.
 
@@ -115,12 +113,12 @@ def op_string_length(
 # Estrae testo da una colonna tramite espressione regolare
 
 def op_string_extract(
-    df: DataFrame,
+    df: FrameLike,
     column: str,
     pattern: str,
     output_column: str = None,
     extract_all: bool = False
-) -> DataFrame:
+) -> FrameLike:
     """
     Estrae sottostringhe da una colonna di testo usando
     un'espressione regolare.
@@ -202,11 +200,11 @@ def op_string_extract(
 # Operazioni su testo: upper, lower, trim, title, strip accenti
 
 def op_text_normalize(
-    df: DataFrame,
+    df: FrameLike,
     columns: List[str],
     operations: str = "full",
     overwrite: bool = True
-) -> DataFrame:
+) -> FrameLike:
     """
     Normalizza colonne testo.
 
@@ -232,16 +230,16 @@ def op_text_normalize(
 
     result = df.copy()
 
-    def strip_accents(text):
+    def strip_accents(text: Any) -> Any:
         """Rimuovi accenti: è→e, à→a, ü→u"""
         if not isinstance(text, str):
             return text
         nfkd = unicodedata.normalize('NFKD', text)
         return ''.join(c for c in nfkd if not unicodedata.combining(c))
 
-    def normalize_text(text, ops):
+    def normalize_text(text: Any, ops: str) -> Any:
         """Applica operazioni di normalizzazione."""
-        if pd.isna(text) or not isinstance(text, str):
+        if is_null_scalar(text) or not isinstance(text, str):
             return text
 
         s = text

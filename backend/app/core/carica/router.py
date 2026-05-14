@@ -22,6 +22,8 @@ from app.core.carica.column_mapper import ColumnMapper
 from app.core.carica.conflict_checker import ConflictChecker
 from app.core.carica.ddl_generator import DDLGenerator
 from app.core.carica.models import WriteConfig
+from app.core.dataframes.schema import empty_dataframe_from_column_metadata
+from app.core.dataframes.tabular import dataframe_from_records, dataframe_from_rows
 from app.core.artifacts import (
     LatestProjectArtifactRef,
     SourceLoader,
@@ -30,10 +32,7 @@ from app.core.artifacts import (
 )
 from app.core.connections import errors as connection_errors
 from app.core.connections.service import ConnectionService as _CS
-from app.core.resources.column_types import (
-    canvas_type_to_pandas_dtype,
-    metadata_to_dict,
-)
+from app.core.resources.column_types import metadata_to_dict
 from app.db.query_executor import DefaultEngineFactory
 from app.shared import error_codes
 from app.core.auth.resource_access import assert_project_visible
@@ -189,19 +188,10 @@ async def auto_mapping(request: AutoMappingRequest, current_user: CurrentUser = 
     riceve il mapping proposto che l'utente può modificare.
     """
     try:
-        import pandas as pd
         # Ricostruisci un DataFrame vuoto con le colonne sorgente
         # per il mapping servono solo i nomi e i tipi). La dispatch
-        # canvas-type -> pandas dtype lives in app.core.resources.column_types
-        # fonte unica: alias, geometry, fallback object
-        columns_data = {
-            col_info.get("name", ""): pd.Series(
-                dtype=canvas_type_to_pandas_dtype(col_info.get("type", "str"))
-            )
-            for col_info in request.source_columns
-        }
-
-        df = pd.DataFrame(columns_data)
+        # canvas-type -> pandas dtype resta confinata in app.core.dataframes.
+        df = empty_dataframe_from_column_metadata(request.source_columns)
 
         # Canvas types (dict form del tipo semantico) per rilevare geometrie
         # `source_columns` arriva gia' come list[{"name","type"}] (columns_metadata
@@ -279,13 +269,11 @@ async def check_conflicts(request: ConflictCheckRequest, current_user: CurrentUs
         db_type = connection.get("type", "postgres")
         engine = _create_engine(connection)
 
-        import pandas as pd
-
         checker = ConflictChecker(engine, db_type)
 
         if request.sample_values:
             # Check su campione esplicito inviato dal frontend
-            df = pd.DataFrame(request.sample_values)
+            df = dataframe_from_records(request.sample_values)
         elif request.source_connection_id and request.source_table:
             # Query diretta al DB sorgente — non richiede esecuzione previa della pipeline
             src_conn = _get_connection(request.source_connection_id)
@@ -309,7 +297,7 @@ async def check_conflicts(request: ConflictCheckRequest, current_user: CurrentUs
                 result_proxy = src_conn_obj.execute(text(src_query))
                 rows = result_proxy.fetchall()
                 col_names = list(result_proxy.keys())
-            df = pd.DataFrame(rows, columns=col_names)
+            df = dataframe_from_rows(rows, col_names)
             # Rinomina colonne sorgente → nomi DB destinazione (match_columns
             if request.source_match_columns and request.source_match_columns != request.match_columns:
                 rename_map = dict(zip(request.source_match_columns, request.match_columns))
@@ -350,7 +338,7 @@ async def check_conflicts(request: ConflictCheckRequest, current_user: CurrentUs
                     if col_rename:
                         df = df.rename(columns=col_rename)
                 else:
-                    df = pd.DataFrame(columns=request.match_columns)
+                    df = dataframe_from_rows([], request.match_columns)
             else:
                 return {
                     "has_conflicts": False,

@@ -7,7 +7,6 @@ PlenoraBeatScheduler — subclass di celery.beat.Scheduler con:
 import json
 import os
 import os as _os
-import shutil as _shutil
 import socket
 import time
 import time as _t
@@ -17,6 +16,11 @@ from pathlib import Path as _Path
 from typing import Optional
 from celery.beat import Scheduler, ScheduleEntry
 from celery.utils.log import get_logger
+from app.core.scheduler.job_dispatcher import (
+    SCHEDULE_PIPELINE_TASK_NAME,
+    scheduled_run_kwargs,
+)
+from app.shared.resources.file_cleanup import rmtree_safe
 
 logger = get_logger(__name__)
 
@@ -411,11 +415,13 @@ class PlenoraBeatScheduler(Scheduler):
         )
 
         self.app.send_task(
-            "workers.tasks.schedule_task.schedule_pipeline_task",
+            SCHEDULE_PIPELINE_TASK_NAME,
             kwargs={
                 "schedule_id": schedule_id,
-                "triggered_by": "catchup",
-                "scheduled_for": scheduled_for_iso,
+                **scheduled_run_kwargs(
+                    triggered_by="catchup",
+                    scheduled_for=scheduled_for_iso,
+                ),
             },
         )
 
@@ -471,9 +477,12 @@ class PlenoraBeatScheduler(Scheduler):
                 if entry_name not in self.data:
                     self.data[entry_name] = ScheduleEntry(
                         name=entry_name,
-                        task="workers.tasks.schedule_task.schedule_pipeline_task",
+                        task=SCHEDULE_PIPELINE_TASK_NAME,
                         schedule=schedule,
-                        kwargs={"schedule_id": sid, "triggered_by": "cron"},
+                        kwargs={
+                            "schedule_id": sid,
+                            **scheduled_run_kwargs(triggered_by="cron"),
+                        },
                         app=self.app,
                         last_run_at=last_run_at or self.app.now(),
                     )
@@ -491,9 +500,12 @@ class PlenoraBeatScheduler(Scheduler):
                         logger.info(f"Schedule modificato: '{row.get('name', sid)}' cron={row['cron_expression']} (era {entry.schedule})")
                         self.data[entry_name] = ScheduleEntry(
                             name=entry_name,
-                            task="workers.tasks.schedule_task.schedule_pipeline_task",
+                            task=SCHEDULE_PIPELINE_TASK_NAME,
                             schedule=schedule,
-                            kwargs={"schedule_id": sid, "triggered_by": "cron"},
+                            kwargs={
+                                "schedule_id": sid,
+                                **scheduled_run_kwargs(triggered_by="cron"),
+                            },
                             app=self.app,
                             last_run_at=entry.last_run_at,
                         )
@@ -625,22 +637,12 @@ class PlenoraBeatScheduler(Scheduler):
         self._last_eseguibili_cleanup = now
 
         try:
-            from app.config import settings
-            outputs_dir = settings.ESEGUIBILI_OUTPUTS_DIR
-            if not outputs_dir.exists():
-                return
+            from app.core.eseguibili import output_store
             ttl_seconds = 2 * 3600  # 2 ore
-            removed = 0
-            for entry in outputs_dir.iterdir():
-                try:
-                    if not entry.is_dir():
-                        continue
-                    age = now - entry.stat().st_mtime
-                    if age > ttl_seconds:
-                        _shutil.rmtree(entry, ignore_errors=True)
-                        removed += 1
-                except Exception as e:
-                    logger.warning(f"Cleanup: errore su {entry}: {e}")
+            removed = output_store.purge_expired_local_outputs(
+                now_ts=now,
+                ttl_seconds=ttl_seconds,
+            )
             if removed:
                 logger.info(f"Cleanup eseguibili_outputs: rimosse {removed} directory orfane")
         except Exception as e:
@@ -663,21 +665,12 @@ class PlenoraBeatScheduler(Scheduler):
 
         try:
             from app.config import settings
-            bundles_dir = settings.IMDF_BUNDLES_DIR
-            if not bundles_dir.exists():
-                return
+            from app.core.imdf import bundle_store
             ttl_seconds = settings.IMDF_BUNDLE_TTL_HOURS * 3600
-            removed = 0
-            for entry in bundles_dir.iterdir():
-                try:
-                    if not entry.is_dir():
-                        continue
-                    age = now - entry.stat().st_mtime
-                    if age > ttl_seconds:
-                        _shutil.rmtree(entry, ignore_errors=True)
-                        removed += 1
-                except Exception as e:
-                    logger.warning(f"Cleanup IMDF bundles: errore su {entry}: {e}")
+            removed = bundle_store.purge_expired_local_bundles(
+                now_ts=now,
+                ttl_seconds=ttl_seconds,
+            )
             if removed:
                 logger.info(f"Cleanup imdf_bundles: rimossi {removed} bundle scaduti")
         except Exception as e:
@@ -737,10 +730,7 @@ class PlenoraBeatScheduler(Scheduler):
                             try:
                                 age = now - child.stat().st_mtime
                                 if age > ttl_seconds:
-                                    if child.is_dir():
-                                        _shutil.rmtree(child, ignore_errors=True)
-                                    else:
-                                        child.unlink(missing_ok=True)
+                                    rmtree_safe(child, logger=logger)
                                     removed += 1
                             except Exception as e:
                                 logger.warning(
@@ -750,10 +740,7 @@ class PlenoraBeatScheduler(Scheduler):
 
                     age = now - entry.stat().st_mtime
                     if age > ttl_seconds:
-                        if entry.is_dir():
-                            _shutil.rmtree(entry, ignore_errors=True)
-                        else:
-                            entry.unlink(missing_ok=True)
+                        rmtree_safe(entry, logger=logger)
                         removed += 1
                 except Exception as e:
                     logger.warning(f"Cleanup temp: errore su {entry}: {e}")
@@ -1205,11 +1192,12 @@ class PlenoraBeatScheduler(Scheduler):
                     extras={"reconciliation_id": row.id},
                 )
 
-                if outcome == "ok" or outcome == "skipped":
+                if outcome == "ok":
                     _recon.mark_orphan_deleted(row.id)
                     ok_count += 1
                 else:
-                    # outcome == "failed"
+                    # outcome == "failed" or "skipped": object not confirmed
+                    # deleted, keep the row retryable instead of terminal.
                     new_attempts = row.attempts + 1
                     if new_attempts >= max_attempts:
                         _recon.mark_lost(
@@ -1278,7 +1266,10 @@ class PlenoraBeatScheduler(Scheduler):
                         # belt-and-suspenders: SQL gia' filtra
                         continue
 
-                    referenced = _recon.is_storage_key_referenced(row.storage_key)
+                    referenced = _recon.is_storage_key_referenced(
+                        row.storage_key,
+                        domain=row.domain,
+                    )
                     if referenced is True:
                         # caller's DB save committed -> intent satisfied
                         _recon.mark_done(row.id)
@@ -1317,7 +1308,7 @@ class PlenoraBeatScheduler(Scheduler):
                         reason="upload_intent_orphan",
                         extras={"reconciliation_id": row.id},
                     )
-                    if outcome == "ok" or outcome == "skipped":
+                    if outcome == "ok":
                         _recon.mark_orphan_deleted(row.id)
                         ui_orphan_count += 1
                     else:

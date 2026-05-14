@@ -4,7 +4,6 @@ Router API per il modulo Orchestrator.
 Esecuzione pipeline, preview, download risultati e gestione task Celery.
 """
 
-from pathlib import Path
 import time
 from typing import Literal, Optional, Dict, Any, List, Iterator
 
@@ -18,10 +17,6 @@ from app.shared import error_codes
 from app.shared.error_envelope import raise_typed_http
 from app.core.projects.canvas_models import ExecuteRequest
 from app.core.orchestrator.task_service import (
-    CaricaTaskPayload,
-    EnrichmentTaskPayload,
-    PreviewTaskPayload,
-    TaskSubmitRequest,
     TaskType,
 )
 from app.core.orchestrator.router_mappers import (
@@ -38,8 +33,10 @@ from app.core.auth.ownership import assert_group_access
 from app.shared.execution.canvas_graph import CanvasGraph
 from app.shared.execution.canvas_types_enricher import enrich_canvas_types_from_metadata
 from app.core.eseguibili import db as eseguibili_db
+from app.core.eseguibili import output_store as _eseg_output_store
 from app.core.results import blob as results_blob
 from app.core.results import db as results_db
+from app.core.results import legacy_file_store
 
 # ── Content-Type per formato file ─────────────────────────────────────────
 _MIME_TYPES = {
@@ -195,6 +192,36 @@ def _assert_task_group(task_id: str, current_user: CurrentUser) -> None:
         )
 
 
+def _assert_eseguibile_task_owner(
+    task_id: str,
+    current_user: CurrentUser,
+    *,
+    expected_eseguibile_id: str | None = None,
+) -> None:
+    """Validate task-scoped eseguibile output ownership.
+
+    Visibility on the executable is necessary but not sufficient: a shared
+    executable can be run by many users, and the output belongs to the user who
+    launched that specific task.
+    """
+    owner_meta = _eseg_output_store.load_task_owner(task_id)
+    if owner_meta is None:
+        if current_user.role != "superadmin":
+            raise HTTPException(
+                status_code=404,
+                detail="Output non trovato o scaduto (ownership metadata assente)",
+            )
+        return
+
+    if expected_eseguibile_id and owner_meta.get("eseguibile_id") != expected_eseguibile_id:
+        raise HTTPException(status_code=404, detail="Task non appartiene a questo eseguibile")
+    if owner_meta.get("user_id") != current_user.user_id and current_user.role != "superadmin":
+        raise HTTPException(
+            status_code=403,
+            detail="Output non accessibile (task eseguito da un altro utente)",
+        )
+
+
 pipeline_router = APIRouter(prefix="/projects", tags=["orchestrator"])
 tasks_router = APIRouter(prefix="/tasks", tags=["tasks"])
 
@@ -280,21 +307,10 @@ def preview_project(
     _assert_project_group(project_id, current_user)
     try:
         from app.core.orchestrator.task_service import task_service
-        from workers.tasks.pipeline_task import preview_pipeline_task
-
-        task_info = task_service.submit_task(
-            TaskSubmitRequest(
-                celery_task=preview_pipeline_task,
-                task_type=TaskType.PREVIEW,
-                project_id=project_id,
-                payload=PreviewTaskPayload(
-                    project_id=project_id,
-                    limit=limit,
-                    user_id=current_user.user_id,
-                ),
-                queued_message="Preview in coda...",
-                log_label="preview",
-            )
+        task_info = task_service.create_preview_task(
+            project_id=project_id,
+            limit=limit,
+            user_id=current_user.user_id,
         )
         result = _task_info_to_dict(task_info)
         result["async"] = True
@@ -323,16 +339,12 @@ def download_project_result(
     """
     _assert_project_group(project_id, current_user)
     try:
-        results_dir = settings.RESULTS_DIR / project_id
-
         if file:
-            if not results_dir.exists():
-                raise HTTPException(404, f"File '{file}' non trovato per progetto '{project_id}'")
-            from app.shared.resources.path_policy import assert_path_within
-            safe_name = Path(file).name
             try:
-                target = assert_path_within(
-                    results_dir / safe_name, [results_dir]
+                target = legacy_file_store.resolve_specific_file(
+                    project_id,
+                    file,
+                    root=settings.RESULTS_DIR,
                 )
             except ValueError:
                 raise_typed_http(
@@ -340,7 +352,8 @@ def download_project_result(
                     status_code=403,
                     message="Accesso negato",
                 )
-            if not target.exists():
+            safe_name = target.name if target else file
+            if target is None:
                 raise HTTPException(404, f"File '{safe_name}' non trovato per progetto '{project_id}'")
             return FileResponse(
                 path=str(target),
@@ -351,18 +364,16 @@ def download_project_result(
         # Fast-path legacy: se il filesystem ha risultati (progetti pre-R#1
         # mai migrati al result store moderno — DB BYTEA o S3), servi
         # il file più recente senza toccare il result store
-        if results_dir.exists():
-            result_files = list(results_dir.glob("*.*"))
-            if result_files:
-                latest_file = max(
-                    result_files,
-                    key=lambda result_file: result_file.stat().st_mtime,
-                )
-                return FileResponse(
-                    path=str(latest_file),
-                    filename=latest_file.name,
-                    media_type=_mime_for_filename(latest_file.name),
-                )
+        latest_file = legacy_file_store.resolve_latest_file(
+            project_id,
+            root=settings.RESULTS_DIR,
+        )
+        if latest_file is not None:
+            return FileResponse(
+                path=str(latest_file),
+                filename=latest_file.name,
+                media_type=_mime_for_filename(latest_file.name),
+            )
 
         # Fallback post-R#1: i result blob vivono nel DB, il file temp è
         # già stato cancellato da `save_result_blob`. Recupera l'ultimo
@@ -457,23 +468,12 @@ def create_task(
 
     try:
         if request.task_type == TaskType.ENRICHMENT:
-            from workers.tasks.enrichment_task import execute_enrichment_task
-
-            task_info = task_service.submit_task(
-                TaskSubmitRequest(
-                    celery_task=execute_enrichment_task,
-                    task_type=TaskType.ENRICHMENT,
-                    project_id=request.project_id,
-                    payload=EnrichmentTaskPayload(
-                        project_id=request.project_id,
-                        canvas=request.canvas,
-                        output_format=request.output_format,
-                        force_recalculate=request.force_recalculate,
-                        user_id=current_user.user_id,
-                    ),
-                    queued_message="Task in coda...",
-                    log_label="enrichment",
-                )
+            task_info = task_service.create_enrichment_task(
+                project_id=request.project_id,
+                canvas=request.canvas,
+                output_format=request.output_format,
+                force_recalculate=request.force_recalculate,
+                user_id=current_user.user_id,
             )
         elif request.task_type == TaskType.CARICA:
             if not request.carica_node_data:
@@ -486,25 +486,14 @@ def create_task(
                 request.project_id,
                 ProjectService().get_project_columns_metadata,
             )
-            from workers.tasks.carica_task import execute_carica_task
-
-            task_info = task_service.submit_task(
-                TaskSubmitRequest(
-                    celery_task=execute_carica_task,
-                    task_type=TaskType.CARICA,
-                    project_id=request.project_id,
-                    payload=CaricaTaskPayload(
-                        project_id=request.project_id,
-                        canvas=request.canvas,
-                        carica_node_data=request.carica_node_data,
-                        output_format=request.output_format,
-                        force_recalculate=request.force_recalculate,
-                        triggered_by=request.triggered_by,
-                        user_id=current_user.user_id,
-                    ),
-                    queued_message="Task CARICA in coda...",
-                    log_label="carica",
-                )
+            task_info = task_service.create_carica_task(
+                project_id=request.project_id,
+                canvas=request.canvas,
+                carica_node_data=request.carica_node_data,
+                output_format=request.output_format,
+                force_recalculate=request.force_recalculate,
+                triggered_by=request.triggered_by,
+                user_id=current_user.user_id,
             )
         else:
             raise HTTPException(status_code=400, detail=f"Tipo task '{request.task_type}' non supportato")
@@ -707,14 +696,14 @@ def cleanup_task_completely(
     try:
         output_file = task_result_payload.get("output_file")
         if output_file:
-            candidate = settings.RESULTS_DIR / project_id / output_file
-            root = (settings.RESULTS_DIR / project_id).resolve()
             try:
-                resolved = candidate.resolve()
-                resolved.relative_to(root)
-                if resolved.is_file():
-                    resolved.unlink()
-                    logger.info(f"cleanup: file output rimosso: {resolved.name}")
+                deleted_output = legacy_file_store.delete_output_file(
+                    project_id,
+                    output_file,
+                    root=settings.RESULTS_DIR,
+                )
+                if deleted_output:
+                    logger.info(f"cleanup: file output rimosso: {output_file}")
             except ValueError:
                 # Path traversal guard: file fuori da RESULTS_DIR, skip sicuro
                 # non contato in failed_steps: e' una safety skip, non un fallimento
@@ -732,9 +721,7 @@ def cleanup_task_completely(
 
     # 6. Forget del result Celery (libera Redis
     try:
-        from celery.result import AsyncResult
-        ar = AsyncResult(task_id, app=task_service.app)
-        ar.forget()
+        task_service.forget_task_result(task_id)
     except Exception as e:
         logger.warning(f"cleanup: errore forget Celery: {e}", exc_info=True)
         failed_steps.append("celery_forget")
@@ -788,29 +775,36 @@ def download_task_result(
 
         safe_task_id = "".join(c for c in task_id if c.isalnum() or c in "-_")
         if safe_task_id == task_id:
-            from app.core.eseguibili import storage as _eseg_storage
             # intent: optional feature — fallback a DB blob se S3 lookup fallisce
             # outcome: fail-open con breadcrumb (exc_info per diagnosticare S3 down
             try:
-                storage_keys = _eseg_storage.find_keys(safe_task_id)
+                storage_keys = _eseg_output_store.find_output_keys(safe_task_id)
             except Exception as storage_error:
                 logger.warning(f"lookup eseguibili storage fallito: {storage_error}", exc_info=True)
                 storage_keys = []
 
             if storage_keys:
+                project_id = getattr(task_info, "project_id", None)
+                if not project_id and task_info.result:
+                    project_id = _task_result_project_id(task_info.result)
+                _assert_eseguibile_task_owner(
+                    safe_task_id,
+                    current_user,
+                    expected_eseguibile_id=project_id,
+                )
                 # Tipicamente 1 file per task. Se multipli, primo e' OK
                 # convention: un solo output per task eseguibile
                 storage_key = storage_keys[0]
                 storage_filename = storage_key.rsplit("/", 1)[-1]
                 try:
-                    storage_stream = _eseg_storage.open_stream(storage_key)
+                    storage_stream = _eseg_output_store.open_stream(storage_key)
                 except Exception as storage_error:
                     logger.error(f"[CRASH] open_stream eseguibile {storage_key}: {storage_error}", exc_info=True)
                     raise HTTPException(status_code=500, detail="Errore apertura stream output")
 
                 def _cleanup_after_send(task_id_to_delete: str = safe_task_id) -> None:
                     try:
-                        _eseg_storage.delete_by_task(task_id_to_delete)
+                        _eseg_output_store.delete_task_outputs(task_id_to_delete)
                     except Exception as storage_error:
                         logger.warning(f"Cleanup post-download S3 fallito per {task_id_to_delete}: {storage_error}")
 

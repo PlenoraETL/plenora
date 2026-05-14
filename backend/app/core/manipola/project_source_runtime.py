@@ -15,7 +15,7 @@ from app.core.intermediate.run_lifecycle import (
 from app.core.projects.execution_context import get_upstream_run_context
 from app.core.projects.lineage import ProjectLineageCycleError
 from app.shared.execution.executor_protocol import PipelineDispatcherProtocol
-from app.core.files.dataframe_io import find_latest_output_file
+from app.core.dataframes.frame_io import find_latest_output_file
 from app.core.artifacts import (
     ArtifactResolver,
     ArtifactResolutionError,

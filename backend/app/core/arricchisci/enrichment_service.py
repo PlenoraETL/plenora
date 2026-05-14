@@ -7,7 +7,6 @@ Keeps API enrichment behavior isolated from orchestration callers.
 import csv
 
 import json
-import pandas as pd
 import threading
 import urllib3
 from typing import Dict, Any, Optional, List, Tuple, Callable
@@ -183,7 +182,7 @@ class EnrichmentExecutor(
     # L'ordine tipico è: validate -> preview (opzionale) -> execute
     
 
-    def execute(self, df: pd.DataFrame) -> Tuple[pd.DataFrame, EnrichmentResult]:
+    def execute(self, df: Any) -> Tuple[Any, EnrichmentResult]:
         """
         Esegue l'enrichment completo.
 

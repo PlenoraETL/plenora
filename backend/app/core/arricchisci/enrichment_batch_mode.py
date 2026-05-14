@@ -9,7 +9,6 @@ from __future__ import annotations
 import time
 from typing import Any, Dict, List, Optional, Tuple
 
-import pandas as pd
 import requests
 
 from app.infrastructure.http.session import get_shared_session
@@ -37,8 +36,8 @@ class EnrichmentBatchModeMixin:
 
     def _execute_batch_native(
         self,
-        df: pd.DataFrame
-    ) -> Tuple[pd.DataFrame, EnrichmentStats, List[RowError]]:
+        df: Any,
+    ) -> Tuple[Any, EnrichmentStats, List[RowError]]:
         """
         Esecuzione con native.
 

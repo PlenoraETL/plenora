@@ -9,8 +9,6 @@ from __future__ import annotations
 import json
 from typing import Any, Dict, List
 
-import pandas as pd
-
 from app.shared.resources.json_path import (
     extract_json_value as _shared_extract_json_value,
     geojson_to_wkt as _shared_geojson_to_wkt,
@@ -210,7 +208,7 @@ class EnrichmentResponseProcessingMixin:
         """
         return self._response_type_detector.flatten_dict(data)
 
-    def _apply_result(self, df: pd.DataFrame, idx: int, result: Dict) -> None:
+    def _apply_result(self, df: Any, idx: int, result: Dict) -> None:
         """Applica risultato API a una riga del DataFrame."""
         for col_name, value in result.items():
             df.at[idx, col_name] = value

@@ -6,7 +6,7 @@ from unittest.mock import MagicMock
 import pandas as pd
 import pytest
 
-from app.core.features.arcgis_publish_modes import publish_existing_layer_mode
+from app.core.connections.arcgis_publish_modes import publish_existing_layer_mode
 
 
 pytestmark = [pytest.mark.unit, pytest.mark.contract]

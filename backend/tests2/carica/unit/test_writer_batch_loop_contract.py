@@ -328,13 +328,13 @@ def test_helper_signature_is_kw_only_with_typed_callables():
     text = _read(_HELPER_PY)
     assert "def run_batched_inserts(" in text
     assert "*," in text  # kw-only marker
-    assert "process_batch: Callable[[pd.DataFrame, int], None]" in text
+    assert "process_batch: Callable[[Any, int], None]" in text
     assert "report_progress: Callable[[BatchProgress], None]" in text
     assert "result: WriteResult" in text
     assert "batch_size: int" in text
     assert "total_batches: int" in text
     assert "start_time: float" in text
-    assert "df: pd.DataFrame" in text
+    assert "df: Any" in text
 
 
 def test_helper_is_only_canonical_loop_remaining():

@@ -14,11 +14,9 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, BinaryIO, Dict, List, Optional, Tuple
 
-import pandas as pd
-
 import app.core.files.db as files_db
 from app.core.auth.visibility import is_resource_visible, is_shareable
-from app.core.files.load_dispatch import load_by_format
+from app.core.files import load_dispatch as _load_dispatch
 from app.core.files.multi_layer_upload import (
     create_multi_layer_from_upload as _create_multi_layer_from_upload,
 )
@@ -290,8 +288,8 @@ class FileSourceService:
         format_type: str,
         layer: str = None,
         sheet: str = None
-    ) -> Tuple[pd.DataFrame, Optional[Any]]:
-        return load_by_format(
+    ) -> Tuple[Any, Optional[Any]]:
+        return _load_dispatch.load_by_format(
             self._loader, file_path, format_type, layer, sheet,
             logger=self._logger,
         )
@@ -471,7 +469,7 @@ class FileSourceService:
     def load_dataframe(
         self, file_id: str, layer: str = None, sheet: str = None,
         expected_group_id: str = None,
-    ) -> Tuple[pd.DataFrame, Optional[Any]]:
+    ) -> Tuple[Any, Optional[Any]]:
         """Delegate to `source_read.load_dataframe`.
 
         N1 resta fail-closed: il modulo estratto riceve `_assert_visible`

@@ -601,6 +601,10 @@ class TaskService:
         if result.state == "SUCCESS" and isinstance(result.result, Mapping):
             return TaskResultPayload.from_celery_meta(result.result)
         return None
+
+    def forget_task_result(self, task_id: str) -> None:
+        """Forget the runtime result record for a task."""
+        AsyncResult(task_id, app=self.app).forget()
     
     # LISTA TASK ATTIVI
     

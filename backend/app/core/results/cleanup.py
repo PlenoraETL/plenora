@@ -45,8 +45,8 @@ def delete_result(result_id: str) -> bool:
          reconciliation log.
       3. `compensating_delete` (best-effort, fuori transazione).
       4. Outcome:
-         - `ok`/`skipped` => `mark_done(reconciliation_ref.id)`;
-         - `failed` => `mark_failed_attempt(...)` => il reconciler
+         - `ok` => `mark_done(reconciliation_ref.id)`;
+         - `failed`/`skipped` => `mark_failed_attempt(...)` => il reconciler
            beat hook re-tentera' secondo backoff esponenziale, fino a
            `mark_lost`.
 
@@ -95,7 +95,7 @@ def delete_result(result_id: str) -> bool:
             logger=logger,
         )
         if reconciliation_ref is not None:
-            if outcome in ("ok", "skipped"):
+            if outcome == "ok":
                 reconciliation.mark_done(reconciliation_ref.id)
             else:
                 reconciliation.mark_failed_attempt(
@@ -112,8 +112,8 @@ def delete_results_for_project(project_id: str) -> int:
     Ritorna il numero di righe eliminate.
 
     Flow: pattern bulk W1.
-      1. Pre-fetch `(id, storage_key)` di tutti gli S3-backed.
-      2. `transaction`: per ognuno `record_pending` + DELETE row.
+      1. `transaction`: DELETE row con `RETURNING id, storage_key`.
+      2. Nella stessa transazione registra un pending per ogni storage key.
       3. Post-commit: per ogni reconciliation_ref, `compensating_delete`
          + `mark_done`/`mark_failed_attempt` per outcome.
 
@@ -125,42 +125,37 @@ def delete_results_for_project(project_id: str) -> int:
     ADR-0011 preservato: storage failure NON propaga. Il caller riceve
     sempre il `rowcount` finale.
     """
-    rows = [
-        r
-        for r in fetchall(
-            "SELECT id, storage_key FROM results "
-            "WHERE project_id = %s AND storage_key IS NOT NULL",
-            (project_id,),
-        )
-        if r.get("storage_key")
-    ]
-
     deleted_count = 0
     pending_cleanups: list[tuple[str, str, str]] = []
 
     with transaction() as conn:
         with conn.cursor() as cur:
-            if rows:
-                for r in rows:
+            cur.execute(
+                "DELETE FROM results WHERE project_id = %s "
+                "RETURNING id, storage_key",
+                (project_id,),
+            )
+            deleted_rows = cur.fetchall() or []
+            deleted_count = len(deleted_rows)
+
+            for r in deleted_rows:
+                result_id = r["id"] if isinstance(r, dict) else r[0]
+                storage_key = r["storage_key"] if isinstance(r, dict) else r[1]
+                if storage_key:
                     ref = reconciliation.record_pending(
                         cur,
                         domain="result_blob",
-                        storage_key=r["storage_key"],
+                        storage_key=storage_key,
                         operation="delete",
                         reason="row_delete_post_commit",
                         extras={
-                            "result_id": r["id"],
+                            "result_id": result_id,
                             "project_id": project_id,
                         },
                     )
                     pending_cleanups.append(
-                        (r["storage_key"], r["id"], ref.id)
+                        (storage_key, result_id, ref.id)
                     )
-
-            cur.execute(
-                "DELETE FROM results WHERE project_id = %s", (project_id,)
-            )
-            deleted_count = cur.rowcount
 
     if pending_cleanups:
         for storage_key, result_id, reconciliation_id in pending_cleanups:
@@ -174,7 +169,7 @@ def delete_results_for_project(project_id: str) -> int:
                 },
                 logger=logger,
             )
-            if outcome in ("ok", "skipped"):
+            if outcome == "ok":
                 reconciliation.mark_done(reconciliation_id)
             else:
                 reconciliation.mark_failed_attempt(

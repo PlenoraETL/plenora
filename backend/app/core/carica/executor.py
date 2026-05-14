@@ -8,8 +8,6 @@ import json
 from typing import Any, Callable, Dict, List, Optional
 from urllib.parse import quote_plus as _qp
 
-import pandas as pd
-
 from app.core.carica.column_mapper import ColumnMapper
 from app.core.carica.database_writer import DatabaseWriter
 from app.core.carica.models import (
@@ -121,7 +119,7 @@ class CaricaExecutor:
 
     def execute(
         self,
-        df: pd.DataFrame,
+        df: Any,
         node_data: Dict[str, Any],
         project_id: str = "",
         progress_callback: Optional[Callable] = None,

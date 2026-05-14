@@ -12,8 +12,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-import pandas as pd
-
+from app.core.dataframes.values import is_nonempty_dataframe
 from app.utils.logger import get_logger
 from app.core.results.blob_writer import save_result_blob
 from app.core.results.pipeline_result import save_pipeline_result_outcome
@@ -282,7 +281,7 @@ class ApiConnectionSupportMixin:
 
     def _save_and_build_dataframe_response(
         self,
-        final_df: pd.DataFrame,
+        final_df: Any,
         output_name: str,
         output_format: str,
         project_id: str,
@@ -346,7 +345,7 @@ class ApiConnectionSupportMixin:
 
         No-op se `df` non e' un DataFrame non vuoto.
         """
-        if not isinstance(df, pd.DataFrame) or df.empty:
+        if not is_nonempty_dataframe(df):
             return
         try:
             from app.core.intermediate.snapshot import record_checkpoint_snapshot

@@ -34,7 +34,7 @@ _bootstrap()
 # `from app.core.*` imports MUST come after `_bootstrap()`: the
 # dependency-graph lock (`test_main_py_bootstrap_runs_before_router_imports`)
 # enforces routers/core load only against an initialised app.
-from app.core.files.dataframe_io import save_dataframe
+from app.core.dataframes.frame_io import save_dataframe
 from app.core.projects.exceptions import CanvasCorruptedError
 from app.core.resources.exceptions import MemoryLimitExceededError
 from app.middleware_stack import install_middleware_stack

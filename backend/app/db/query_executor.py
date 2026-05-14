@@ -9,10 +9,11 @@ from pathlib import Path
 from typing import List, Dict, Any, Optional, Tuple, Protocol
 from dataclasses import dataclass, field
 
-import pandas as pd
 from sqlalchemy import text
 from sqlalchemy.engine import Engine
 
+from app.core.dataframes.ports import FrameLike
+from app.core.dataframes.tabular import dataframe_from_rows
 from app.db.query_engines import DefaultEngineFactory
 from app.db.query_session import (
     ExecutionContext,
@@ -92,7 +93,7 @@ class SaveFunctionProtocol(Protocol):
     """Protocollo per la funzione di salvataggio DataFrame — iniettabile per test."""
     def __call__(
         self,
-        df: pd.DataFrame,
+        df: FrameLike,
         output_path: Path,
         format: str,
         geom_column: Optional[str] = None
@@ -175,9 +176,9 @@ class DataFrameBuilder:
     """Costruttore di DataFrame — funzione pura senza stato."""
 
     @staticmethod
-    def from_rows(rows: List[Tuple], columns: List[str]) -> pd.DataFrame:
-        """Crea un DataFrame pandas da una lista di tuple e nomi colonne."""
-        return pd.DataFrame(rows, columns=columns)
+    def from_rows(rows: List[Tuple], columns: List[str]) -> FrameLike:
+        """Crea un frame da una lista di tuple e nomi colonne."""
+        return dataframe_from_rows(rows, columns)
 
 
 # QUERY EXECUTOR
@@ -231,7 +232,7 @@ class QueryExecutor:
 
     @staticmethod
     def _salvataggio_default(
-        df: pd.DataFrame,
+        df: FrameLike,
         output_path: Path,
         format: str,
         geom_column: Optional[str] = None
@@ -239,7 +240,7 @@ class QueryExecutor:
         """
         Salvataggio di fallback — supporta solo formati base (CSV, JSON, XLSX).
 
-        In produzione viene sostituito da app.core.files.dataframe_io.save_dataframe
+        In produzione viene sostituito da app.core.dataframes.frame_io.save_dataframe
         che supporta anche i formati geospaziali.
         """
         final_path = output_path.with_suffix(f".{format}")

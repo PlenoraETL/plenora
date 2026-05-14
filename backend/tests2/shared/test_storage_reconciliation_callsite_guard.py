@@ -57,10 +57,13 @@ _CALLSITE_CLASSIFICATION: dict[str, tuple[Classification, str]] = {
     "app/core/results/blob_writer.py": (
         "tracked",
         "save_result_blob and save_result_blob_from_bytes "
-        "(upload-then-DB-save). Compensating delete on DB save "
-        "failure via cleanup_uploaded_result_blob. The DB-side "
+        "(upload-then-DB-save). Pre-upload "
+        "`record_upload_intent(domain='result')` covers process death "
+        "between object upload and results row insert. Successful DB save "
+        "marks the intent done; DB save failure runs compensating delete "
+        "and terminalizes the intent only on confirmed delete. The DB-side "
         "deletes go through the results cleanup boundary which records "
-        "pending entries pre-commit.",
+        "pending entries in the delete transaction.",
     ),
 
     "app/core/scheduler/log_archive.py": (

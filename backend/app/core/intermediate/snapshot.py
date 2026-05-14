@@ -16,6 +16,11 @@ from app.core.intermediate import node_snapshots_db as _node_snapshots_db
 from app.core.intermediate import policy as _policy
 from app.core.intermediate import runs_db as _runs_db
 from app.core.intermediate.writer import compute_row_hash
+from app.core.dataframes.frame_io import (
+    dataframe_from_mapping,
+    dataframe_hash_bytes,
+    is_dataframe,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -69,21 +74,17 @@ class FlushResult:
     errors: List[str] = field(default_factory=list)
 
 
-# Hash dataframe — pandas_hash_v1
+# Hash dataframe - pandas_hash_v1
 
 def _hash_pandas_block(digest, df, *, label: str) -> None:
-    """Aggiorna `digest` con `pd.util.hash_pandas_object(df).tobytes()`.
+    """Aggiorna `digest` con i byte hash prodotti dal dataframe boundary.
 
     Estratto in helper per riusarlo dal full mode e dal sample mode.
     Su exception logga warning e marca il digest con un tag stabile
     (deterministico per (schema, len, type-of-error)).
     """
-    import pandas as pd
     try:
-        row_hashes = pd.util.hash_pandas_object(
-            df, index=False, categorize=True,
-        ).to_numpy(dtype="uint64", copy=False)
-        digest.update(row_hashes.tobytes())
+        digest.update(dataframe_hash_bytes(df, index=False, categorize=True))
     except Exception as e:  # pragma: no cover - difensivo
         logger.warning(
             "compute_dataframe_fingerprint(%s): hash_pandas_object fallito: %s",
@@ -95,13 +96,13 @@ def _hash_pandas_block(digest, df, *, label: str) -> None:
 def _compute_dataframe_fingerprint_full(df: Any) -> str:
     """Algoritmo `pandas_hash_v1`: hash di tutto il DataFrame.
 
-    Costo O(n*cols) — su DF da 275k righe e 56 colonne 1.0–1.5 s.
+    Costo O(n*cols) - su DF da 275k righe e 56 colonne circa 1.0-1.5 s.
     Esatto: ogni cambio in qualunque riga produce hash diverso.
 
     1. Schema payload: `<col>=<dtype>|<col>=<dtype>|...` ordinato.
     2. Row count payload: stringa decimale.
-    3. Row hash payload: `pd.util.hash_pandas_object(df[ordered_cols],
-       index=False, categorize=True)` -> ndarray uint64 -> bytes raw.
+    3. Row hash payload: `dataframe_hash_bytes(df[ordered_cols],
+       index=False, categorize=True)` dal boundary `app.core.dataframes`.
     4. SHA256 di (schema || rowcount || rowhashes).
     """
     digest, ordered_cols, row_count = _init_digest_with_schema(df)
@@ -114,7 +115,7 @@ def _compute_dataframe_fingerprint_sample(df: Any, sample_rows: int) -> str:
     """Algoritmo `pandas_sample_hash_v1`: hash sample-based.
 
     Bug #24 (perf, 2026-04-28). Trade-off:
-      + costo O(min(n, sample_rows) * cols) -> ~10–20 ms anche su DF
+      + costo O(min(n, sample_rows) * cols) -> circa 10-20 ms anche su DF
         grandi
       - cambi che toccano SOLO righe oltre la N-esima possono non
         essere rilevati al checkpoint (audit alto livello, non
@@ -125,7 +126,7 @@ def _compute_dataframe_fingerprint_sample(df: Any, sample_rows: int) -> str:
        sono SEMPRE rilevati anche se il sample e' identico).
     3. Sample size payload: `sample_rows` (cambiando sample_rows fra
        run l'hash diventa diverso -> documentato).
-    4. Sample hash payload: `pd.util.hash_pandas_object(df.head(N))`.
+    4. Sample hash payload: `dataframe_hash_bytes(df.head(N))`.
     5. SHA256 finale.
 
     `df.head(sample_rows)` e' deterministico (no shuffle, no random
@@ -201,12 +202,10 @@ def compute_dataframe_fingerprint(df: Any) -> tuple[str, str]:
         )
         return digest_hex, algo
 
-    import pandas as pd
-
-    if not isinstance(df, pd.DataFrame):
+    if not is_dataframe(df):
         # Coercion difensiva
         try:
-            df = pd.DataFrame(df)
+            df = dataframe_from_mapping(df)
         except Exception:
             digest_hex = hashlib.sha256(
                 f"non-dataframe:{type(df).__name__}".encode("utf-8")

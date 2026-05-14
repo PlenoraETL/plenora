@@ -18,7 +18,7 @@ from app.core.arricchisci.canvas_orchestrator import (
 from app.core.arricchisci.enrichment_service import EnrichmentExecutor
 from app.core.arricchisci.models import EnrichmentOptions
 from app.core.arricchisci.parallel import should_execute_node
-from app.core.files.dataframe_io import sanitize_for_json
+from app.core.dataframes.frame_io import sanitize_for_json
 from app.core.projects.columns_metadata import save_columns_metadata_with_retry
 
 logger = get_logger(__name__)

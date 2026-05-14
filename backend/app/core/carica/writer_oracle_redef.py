@@ -11,9 +11,8 @@ from __future__ import annotations
 import logging
 import math
 import time
-from typing import List
+from typing import Any, List
 
-import pandas as pd
 from sqlalchemy import text
 
 from app.config import settings
@@ -27,7 +26,7 @@ _telemetry_logger = logging.getLogger("app.core.carica.writer")
 
 def execute_oracle_redefinition(
     writer,
-    df: pd.DataFrame,
+    df: Any,
     columns: List[ColumnMapping],
     result: WriteResult,
 ) -> WriteResult:

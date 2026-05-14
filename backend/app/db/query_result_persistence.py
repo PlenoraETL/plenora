@@ -11,8 +11,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
 
-import pandas as pd
-
+from app.core.dataframes.ports import FrameLike
 from app.core.results.blob_writer import save_result_blob
 from app.core.results.pipeline_result import save_pipeline_result_outcome
 from app.core.results.temp_paths import get_temp_output_path
@@ -55,7 +54,7 @@ class QueryResultPersistence:
         self,
         *,
         project_id: str,
-        df: pd.DataFrame,
+        df: FrameLike,
         output_format: str,
         filename_stem: str,
         rows_count: int,
