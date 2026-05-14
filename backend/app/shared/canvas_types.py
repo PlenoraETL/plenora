@@ -75,9 +75,19 @@ VALID_TRANSACTION_MODES: tuple[str, ...] = get_args(TransactionModeLiteral)
 
 # Carica conflict policy — comportamento del CARICA su righe in conflitto
 # con i match_columns. Allineato con `app.core.carica.models.ConflictPolicy`
-# enum (SKIP, FORCE, ABORT) che e' canonico dell'executor.
-ConflictPolicyLiteral = Literal["abort", "skip", "update"]
+# enum (SKIP, FORCE, ABORT) che e' canonico dell'executor + col FE.
+# Prima del fix dei drift il canvas Pydantic accettava "update" (bug
+# pre-esistente, valore non corrispondente a nulla nell'executor): il
+# validator `_normalize_conflict_policy` su Node mappa "update" -> "force"
+# per preservare canvas legacy eventualmente salvati con il valore
+# sbagliato.
+ConflictPolicyLiteral = Literal["abort", "skip", "force"]
 VALID_CONFLICT_POLICIES: tuple[str, ...] = get_args(ConflictPolicyLiteral)
+# Legacy mapping per validator backward-compat. Bumpa al fix di
+# ulteriori drift.
+LEGACY_CONFLICT_POLICY_ALIASES: dict[str, str] = {
+    "update": "force",
+}
 
 
 # REST destination HTTP method (per carica con dest_type='rest').

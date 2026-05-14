@@ -57,19 +57,25 @@ def test_transaction_modes_lockin():
 
 def test_conflict_policies_lockin():
     """
-    Lock attuale: ["abort", "skip", "update"].
+    Lock post fix-drift: ["abort", "skip", "force"].
 
-    DRIFT NOTO (separato da questo task di centralizzazione): il FE
-    invia "force" e l'enum executor `ConflictPolicy.FORCE` di
-    `app.core.carica.models` usa "force" come canonico. Canvas
-    Pydantic accetta "update" — possibile bug pre-esistente. Il fix
-    richiede:
-        (a) decidere il valore canonico (probabile: "force")
-        (b) migration sui canvas legacy con conflict_policy="update"
-        (c) bump qui + bump in canvas_models.py + mirror FE
-    Fuori scope di questo lockin.
+    Pre-fix il canvas Pydantic accettava "update" — bug pre-esistente,
+    valore non corrispondente a nulla nell'executor
+    `ConflictPolicy` (SKIP/FORCE/ABORT). Il valore canonico ora e'
+    "force", allineato all'executor e al FE
+    (`frontend/src/constants/canvasTypes.js`).
+
+    Il validator `Node._normalize_conflict_policy` rimappa
+    "update" -> "force" per preservare canvas legacy eventualmente
+    salvati con il valore sbagliato (vedi
+    LEGACY_CONFLICT_POLICY_ALIASES).
     """
-    assert set(ct.VALID_CONFLICT_POLICIES) == {"abort", "skip", "update"}
+    assert set(ct.VALID_CONFLICT_POLICIES) == {"abort", "skip", "force"}
+
+
+def test_conflict_policy_legacy_alias_update_maps_to_force():
+    """Lock del mapping legacy "update" -> "force"."""
+    assert ct.LEGACY_CONFLICT_POLICY_ALIASES == {"update": "force"}
 
 
 def test_rest_methods_lockin():
@@ -103,3 +109,44 @@ def test_canvas_models_imports_centralized_types():
     assert "type" in node_fields
     # Pydantic v2 preserva il TypeAlias originale in `annotation`.
     assert node_fields["type"].annotation is ct.NodeTypeLiteral
+
+
+def _make_carica_node(conflict_policy: str):
+    """Helper: minimal Node payload con dest_type=db e una conflict_policy."""
+    from app.core.projects.canvas_models import Node
+    return Node.model_validate({
+        "id": "n1",
+        "type": "carica",
+        "position": {"x": 0, "y": 0},
+        "dest_type": "db",
+        "conflict_policy": conflict_policy,
+    })
+
+
+def test_conflict_policy_legacy_update_maps_to_force():
+    """Canvas legacy con conflict_policy="update" caricano come "force"."""
+    node = _make_carica_node("update")
+    assert node.conflict_policy == "force"
+
+
+def test_conflict_policy_canonical_force_passes_through():
+    node = _make_carica_node("force")
+    assert node.conflict_policy == "force"
+
+
+def test_conflict_policy_canonical_abort_passes_through():
+    node = _make_carica_node("abort")
+    assert node.conflict_policy == "abort"
+
+
+def test_conflict_policy_canonical_skip_passes_through():
+    node = _make_carica_node("skip")
+    assert node.conflict_policy == "skip"
+
+
+def test_conflict_policy_unknown_value_raises():
+    """Valori fuori canonical e fuori legacy alias falliscono validation."""
+    import pytest as _pytest
+    from pydantic import ValidationError
+    with _pytest.raises(ValidationError):
+        _make_carica_node("garbage_policy")

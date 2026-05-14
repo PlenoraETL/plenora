@@ -6,6 +6,7 @@ from typing import Any, Dict, List, Optional, Literal
 from app.shared.canvas_types import (
     ConflictPolicyLiteral,
     DestTypeLiteral,
+    LEGACY_CONFLICT_POLICY_ALIASES,
     MultiJoinTypeLiteral,
     NodeTypeLiteral,
     RestBatchModeLiteral,
@@ -175,6 +176,23 @@ class Node(BaseModel):
         """Normalizza nomi tipo camelCase dal frontend a snake_case."""
         _MAP = {'caricaArcgis': 'carica_arcgis', 'resultNode': 'result'}
         return _MAP.get(v, v)
+
+    @field_validator('conflict_policy', mode='before')
+    @classmethod
+    def _normalize_conflict_policy(cls, v):
+        """Rimappa valori legacy di conflict_policy al canonico FE/executor.
+
+        Pre-centralizzazione il canvas Pydantic accettava "update" come
+        conflict_policy — valore non corrispondente a nulla nell'executor
+        `app.core.carica.models.ConflictPolicy` (SKIP/FORCE/ABORT). Il
+        FE ha sempre inviato "force" (allineato all'executor); canvas
+        eventualmente salvati con "update" da percorsi che bypassavano
+        la Pydantic validation (es. JSONB diretto, scripts) si
+        caricano comunque post-fix grazie a questo alias.
+        """
+        if isinstance(v, str):
+            return LEGACY_CONFLICT_POLICY_ALIASES.get(v, v)
+        return v
 
     table_name: Optional[str] = None
     alias: Optional[str] = None
