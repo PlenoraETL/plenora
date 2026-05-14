@@ -14,7 +14,7 @@
  */
 
 import axios from 'axios';
-import { API_ENDPOINT, API_TIMEOUT } from './config';
+import { API_ENDPOINT, API_TIMEOUT, EXPECTED_API_VERSION } from './config';
 import { authBus } from '../utils/authBus';
 
 const http = axios.create({
@@ -32,8 +32,23 @@ http.interceptors.request.use((config) => {
   }
   return config;
 });
+
+// API version drift detector. Su rolling deploy con bundle FE su una version
+// e backend su un'altra, ogni response porta `X-API-Version`; logghiamo un
+// warning unico al primo mismatch osservato per evitare spam in console.
+let _versionMismatchLogged = false;
 http.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    const observed = response.headers?.['x-api-version'];
+    if (observed && observed !== EXPECTED_API_VERSION && !_versionMismatchLogged) {
+      _versionMismatchLogged = true;
+      console.warn(
+        `[API Version Mismatch] bundle compilato per ${EXPECTED_API_VERSION}, server risponde ${observed}. ` +
+        'Possibile rolling deploy in corso: ricarica la pagina se vedi comportamenti anomali.'
+      );
+    }
+    return response;
+  },
   (error) => {
     // Precedenza: new envelope `message` → legacy FastAPI `detail` → JS Error.
     // Il BE dual-shape mantiene `detail` come mirror durante la transizione.

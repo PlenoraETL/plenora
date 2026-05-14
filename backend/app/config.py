@@ -11,6 +11,15 @@ from typing import Any, Optional
 
 logger = logging.getLogger(__name__)
 
+# API contract version esposta nel response header X-API-Version. Bumpare
+# qui al cambio breaking del contratto FE↔BE (Pydantic model shape, endpoint
+# rinominati, response envelope ridisegnato). Il FE compila contro
+# EXPECTED_API_VERSION in frontend/src/api/config.js e logga warning su
+# mismatch — durante un rolling deploy questo evidenzia se il browser sta
+# parlando con un BE su versione diversa da quella per cui il bundle e'
+# stato costruito.
+API_VERSION = "1.0"
+
 # Carica backend/.env il prima possibile, prima di qualunque os.getenv del
 # resto dell'app. Tutti i moduli che leggono variabili d'ambiente (incluso
 # app.infrastructure.security.crypto) vedranno così le variabili definite nel .env. Senza
