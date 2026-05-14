@@ -15,12 +15,13 @@
  *  - Modalita': replace | append | upsert
  *  - Apply renderers (solo replace)
  */
-import React, { memo, useEffect, useState, lazy, Suspense } from 'react';
+import React, { memo, useState, lazy, Suspense } from 'react';
 import { Handle, Position } from 'reactflow';
 import useCanvasStore from '../../store/useCanvasStore';
-import { listFeatureConnections, listFolders } from '../../api/features';
 import { publishImdf, validateImdfPublish } from '../../api/imdf';
 import { useTaskPolling } from '../../hooks/useTaskPolling';
+import ImdfPublishResult from './imdf/ImdfPublishResult';
+import { useImdfConnectionsAndFolders } from './imdf/useImdfConnectionsAndFolders';
 import './ImdfPublisherNode.css';
 
 const ImdfValidatePublishModal = lazy(() =>
@@ -36,10 +37,6 @@ const MODE_OPTIONS = [
 
 const ImdfPublisherNode = memo(({ data, id }) => {
   const [isExpanded, setIsExpanded]         = useState(true);
-  const [connections, setConnections]       = useState([]);
-  const [loadingConns, setLoadingConns]     = useState(false);
-  const [folders, setFolders]               = useState([]);
-  const [loadingFolders, setLoadingFolders] = useState(false);
 
   // Stato pubblicazione in corso
   const [publishing, setPublishing]         = useState(false);
@@ -86,40 +83,9 @@ const ImdfPublisherNode = memo(({ data, id }) => {
 
   // Esito ultimo publish (letto reattivamente dallo store).
   const lastResult = imdfStore?.publish || null;
-useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      setLoadingConns(true);
-      try {
-        const res = await listFeatureConnections();
-        if (!cancelled) setConnections(Array.isArray(res) ? res : (res.connections || []));
-      } catch (e) {
-        console.error('Errore caricamento connessioni ArcGIS:', e);
-      } finally {
-        if (!cancelled) setLoadingConns(false);
-      }
-    })();
-    return () => { cancelled = true; };
-  }, []);
-useEffect(() => {
-    // RB.7.C: skip API call quando la connection e' marcata access_denied
-    // dal backend (eviterebbe 404 a vuoto su listFolders).
-    if (isAccessDenied) { setFolders([]); return; }
-    if (!connectionId) { setFolders([]); return; }
-    let cancelled = false;
-    (async () => {
-      setLoadingFolders(true);
-      try {
-        const res = await listFolders(connectionId);
-        if (!cancelled) setFolders(res?.folders || res || []);
-      } catch (e) {
-        if (!cancelled) setFolders([]);
-      } finally {
-        if (!cancelled) setLoadingFolders(false);
-      }
-    })();
-    return () => { cancelled = true; };
-  }, [connectionId, isAccessDenied]);
+
+  const { connections, folders, loadingConns, loadingFolders } =
+    useImdfConnectionsAndFolders({ connectionId, isAccessDenied });
 
   // Cleanup polling on unmount: gestito da useTaskPolling.
 
@@ -435,60 +401,8 @@ const handleValidate = async () => {
             </div>
           )}
 
-          {/* Risultato ultima pubblicazione */}
-          {!publishing && !publishError && lastResult && (
-            <div className={`imdf-pub-node__result ${lastResult.success ? 'imdf-pub-node__result--success' : 'imdf-pub-node__result--error'}`}>
-              <div className="imdf-pub-node__result-title">
-                {lastResult.success ? '✓ Pubblicato su ArcGIS' : '✗ Errore pubblicazione'}
-                {lastResult.mode ? ` (${lastResult.mode})` : ''}
-              </div>
-
-              {lastResult.success && Array.isArray(lastResult.layers) && (
-                <div className="imdf-pub-node__result-stats">
-                  {lastResult.layers.map((l) => {
-                    // Mostra le stat rilevanti per la mode
-                    const bits = [];
-                    if (l.updated_count) bits.push(`~${l.updated_count}`);
-                    if (l.added_count)   bits.push(`+${l.added_count}`);
-                    if (l.deleted_count) bits.push(`−${l.deleted_count}`);
-                    if (l.skipped_count) bits.push(`×${l.skipped_count}`);
-                    if (bits.length === 0) bits.push(`${l.feature_count ?? 0} feat.`);
-                    return (
-                      <div key={l.id ?? l.name} className="imdf-pub-node__result-row">
-                        <span>{l.name}</span>
-                        <span>{bits.join(' ')}</span>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-
-              {lastResult.success && lastResult.renderers_applied != null && (
-                <div className="imdf-pub-node__result-row">
-                  <span>Renderer applicati</span>
-                  <span>{lastResult.renderers_applied}/{lastResult.layers?.length ?? 0}</span>
-                </div>
-              )}
-
-              {lastResult.service_url && (
-                <a
-                  href={lastResult.service_url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="imdf-pub-node__result-url"
-                  title={lastResult.service_url}
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  ↗ Apri Feature Service
-                </a>
-              )}
-
-              {!lastResult.success && Array.isArray(lastResult.errors) && lastResult.errors.length > 0 && (
-                <div className="imdf-pub-node__result-err">
-                  {lastResult.errors.slice(0, 3).join(' · ')}
-                </div>
-              )}
-            </div>
+          {!publishing && !publishError && (
+            <ImdfPublishResult lastResult={lastResult} />
           )}
         </div>
       )}
