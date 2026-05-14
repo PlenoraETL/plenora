@@ -40,12 +40,14 @@ describe('canvasTypes lockin', () => {
     ]);
   });
 
-  it('DEST_TYPES_BE espone il superset (db/arcgis/rest)', () => {
-    expect([...ct.DEST_TYPES_BE].sort()).toEqual(['arcgis', 'db', 'rest']);
+  it('DEST_TYPES contiene i 3 canonici (db/arcgis/rest)', () => {
+    expect([...ct.DEST_TYPES].sort()).toEqual(['arcgis', 'db', 'rest']);
   });
 
-  it('DEST_TYPES_UI espone solo il subset offerto dal CaricanNode', () => {
-    expect([...ct.DEST_TYPES_UI].sort()).toEqual(['db', 'rest']);
+  it('DEST_TYPES_CARICAN_UI subset 2-way del selettore CaricanNode', () => {
+    // `arcgis` non e' qui perche` ha il suo componente dedicato
+    // (CaricanArcGISNode + factory caricaArcgis in canvasSerializer.js).
+    expect([...ct.DEST_TYPES_CARICAN_UI].sort()).toEqual(['db', 'rest']);
   });
 
   it('TRANSACTION_MODES contiene 2 valori', () => {

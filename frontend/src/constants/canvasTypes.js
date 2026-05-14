@@ -42,12 +42,18 @@ export const WRITE_MODES = Object.freeze([
   'create', 'replace', 'append', 'upsert', 'update', 'truncate_insert',
 ]);
 
-// Destination type CARICA. BE accetta anche 'arcgis' ma il
-// CaricanNode UI non lo offre — esiste CaricanArcGISNode separato
-// (Node.type='carica_arcgis'). Drift legacy documentato in
-// `backend/app/shared/canvas_types.py`.
-export const DEST_TYPES_BE = Object.freeze(['db', 'arcgis', 'rest']);
-export const DEST_TYPES_UI = Object.freeze(['db', 'rest']);
+// Destination type CARICA. Tre valori canonici, NON e' drift
+// FE↔BE: `arcgis` e' emesso dal factory `caricaArcgis` di
+// `canvasSerializer.js` come parte del Node serializzato (Node.type=
+// 'carica_arcgis' + dest_type='arcgis'). Il CaricanNode UI semplice
+// (CARICA su DB/REST) offre solo db/rest perche` arcgis ha il suo
+// componente dedicato CaricanArcGISNode; entrambi i percorsi
+// arrivano allo stesso `dest_type` literal lato BE per il branch
+// logic dell'executor (`workers/tasks/carica_task.py:293`).
+export const DEST_TYPES = Object.freeze(['db', 'arcgis', 'rest']);
+// Subset offerto dal nodo CaricanNode UI (selettore dest_type 2-way):
+// arcgis ha il suo componente dedicato e non e' selezionabile qui.
+export const DEST_TYPES_CARICAN_UI = Object.freeze(['db', 'rest']);
 
 // Transaction granularity DB.
 export const TRANSACTION_MODES = Object.freeze(['all_or_nothing', 'per_batch']);

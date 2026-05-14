@@ -21,10 +21,16 @@ Convention di bump:
     - Rimuovere o rinominare un valore e' breaking: bumpare
       API_VERSION major + migration sui canvas legacy.
 
-Drift attualmente NON corretti (vedi commit message di
-introduzione): conflict_policy "update" vs "force" canvas/executor,
-rest_method DELETE assente FE, dest_type "arcgis" non offerto da
-CaricanNode UI.
+Drift FE↔BE storici fixati nei commit a9800ee (conflict_policy
+"update"→"force" + legacy alias) e c6bcd9a (rest_method DELETE
+rimosso, BE↔UI allineato). Nessun drift attivo dopo Sprint 2.
+
+Nota su `dest_type='arcgis'`: NON e' drift. Il FE `canvasSerializer.js`
+factory `caricaArcgis` produce un Node con `type='carica_arcgis'`
+(discriminator del componente UI) E `dest_type='arcgis'` (branch
+logic dell'executor backend, vedi `workers/tasks/carica_task.py:293`).
+Pattern di doppio canale by-design: l'UI sa quale componente
+montare, l'executor sa quale write_boundary chiamare.
 """
 
 from __future__ import annotations
