@@ -42,8 +42,42 @@ from app.middleware_stack import install_middleware_stack
 logger = get_logger(__name__)
 
 
-# In produzione disabilita /docs e /openapi.json per non esporre lo schema API.
-_is_prod = os.getenv("ENVIRONMENT", os.getenv("ENV", "development")).lower() in ("production", "prod")
+# Politica esposizione doc endpoints:
+#  - /openapi.json: sempre attivo (anche in prod). Lo schema OpenAPI e' la
+#    base per validator FE, contract test cross-stack, generazione client.
+#    Tenerlo solo in dev produce drift FE↔BE (12 bug della sessione di
+#    audit, vedi commit 1d5e1ac). I dati esposti sono la SHAPE degli
+#    endpoint, non i loro segreti — equivalente di leggere il sorgente
+#    aperto su GitHub.
+#  - /docs e /redoc: solo in dev/staging. Sono UI interattive per esplorare
+#    l'API, non serve esporle al pubblico produzione (riducono la
+#    superficie di reconnaissance senza valore aggiunto per gli utenti
+#    reali, che usano il FE).
+
+
+def _compute_doc_endpoints(env_value: str | None) -> tuple[str | None, str | None, str]:
+    """Decide docs_url, redoc_url, openapi_url in base all'env.
+
+    Estratto come funzione pura per facilitare il lock contract test
+    (`test_doc_endpoints_policy_contract`): la stessa logica testata
+    su 'production', 'prod', 'staging', 'development', None.
+
+    Ritorna (docs_url, redoc_url, openapi_url) con None = endpoint
+    disabilitato. openapi_url e' sempre stringa non-None.
+    """
+    env_normalized = (env_value or "development").strip().lower()
+    is_prod = env_normalized in ("production", "prod")
+    return (
+        None if is_prod else "/docs",
+        None if is_prod else "/redoc",
+        "/openapi.json",
+    )
+
+
+_docs_url, _redoc_url, _openapi_url = _compute_doc_endpoints(
+    os.getenv("ENVIRONMENT", os.getenv("ENV", "development"))
+)
+
 
 @asynccontextmanager
 async def lifespan(app):
@@ -55,9 +89,9 @@ async def lifespan(app):
 app = FastAPI(
     title="PLENORA-ETL API",
     lifespan=lifespan,
-    docs_url=None if _is_prod else "/docs",
-    redoc_url=None if _is_prod else "/redoc",
-    openapi_url=None if _is_prod else "/openapi.json",
+    docs_url=_docs_url,
+    redoc_url=_redoc_url,
+    openapi_url=_openapi_url,
 )
 
 install_middleware_stack(app, cors_origins=settings.CORS_ORIGINS_LIST)
