@@ -28,6 +28,7 @@ __all__ = [
     "DEFAULT_RUNS_RETENTION",
     "apply_runs_retention",
     "close_connection",
+    "close_worker_connection",
     "create_run",
     "delete_all_runs_for_canvas",
     "get_node_meta",
@@ -52,6 +53,11 @@ def close_connection() -> None:
     Kept for Celery tasks that call close_connection in finally.
     """
     _pg_close()
+
+
+def close_worker_connection() -> None:
+    """Release the current worker thread's intermediate DB connection."""
+    close_connection()
 
 
 def init_db():

@@ -71,30 +71,16 @@ class ExecutionManager:
         Importato lazy per evitare circular imports e perché i servizi
         richiedono settings già inizializzati.
         """
-        from app.core.projects.service import ProjectService
-        from app.db.query_executor import QueryExecutor
-        from app.core.estrai.query_generator import QueryGenerator
-        from app.core.orchestrator.service import OrchestratorService
-        from app.core.features.features_service import FeaturesService
         from app.core.dataframes.frame_io import save_dataframe
+        from app.runtime.services import build_orchestrator_stack
 
-        project_service = ProjectService()
-        connection_service = self._get_connection_service()
-        query_generator = QueryGenerator()
-        query_executor = QueryExecutor(
+        stack = build_orchestrator_stack(
+            settings=settings,
             results_dir=settings.RESULTS_DIR,
-            save_function=save_dataframe
+            save_function=save_dataframe,
+            connection_service=self._get_connection_service(),
         )
-        # FeaturesService necessario se la pipeline usa Feature Service ArcGIS
-        features_service = FeaturesService(save_function=save_dataframe)
-
-        return OrchestratorService(
-            project_service=project_service,
-            executor=query_executor,
-            generator=query_generator,
-            connection_service=connection_service,
-            features_service=features_service,
-        )
+        return stack.orchestrator
     
     def _start_lock_heartbeat(self, schedule_id: str, interval: float = None, clock=None) -> Dict[str, Any]:
         """Compatibility wrapper for scheduler_execution_runtime."""
@@ -549,8 +535,7 @@ class ExecutionManager:
             except Exception as e:
                 logger.debug(f"close_connection intermediate fallito: {type(e).__name__}: {e}")
             try:
-                from app.db.pg_connection import close_connection as _close_cfg
-                _close_cfg()
+                scheduler_db.close_connection()
             except Exception as e:
                 logger.debug(f"close_connection config fallito: {type(e).__name__}: {e}")
     

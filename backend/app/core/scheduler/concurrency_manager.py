@@ -10,7 +10,7 @@ from typing import Literal
 import psycopg2
 import psycopg2.errors
 
-from app.db import pg_connection as db
+from app.core.scheduler import db
 from app.config import settings
 from app.utils.logger import get_logger
 
@@ -126,8 +126,7 @@ class ConcurrencyManager:
         Prima: SELECT + INSERT OR REPLACE non atomici → due thread che
         leggevano value=2 sovrascrivevano entrambi a value=3 invece di 4.
         """
-        from app.db.pg_connection import get_connection, put_connection
-        conn = get_connection()
+        conn = db.get_connection()
         try:
             with conn.cursor() as cur:
                 cur.execute(
@@ -150,15 +149,14 @@ class ConcurrencyManager:
                 pass
             raise
         finally:
-            put_connection(conn)
+            db.put_connection(conn)
 
     def _decr(self, key: str) -> int:
         """Decrementa contatore atomicamente. Rimuove se arriva a 0.
 
         Stesso pattern atomic di _incr: UPDATE ... RETURNING.
         """
-        from app.db.pg_connection import get_connection, put_connection
-        conn = get_connection()
+        conn = db.get_connection()
         try:
             with conn.cursor() as cur:
                 cur.execute(
@@ -187,7 +185,7 @@ class ConcurrencyManager:
                 pass
             raise
         finally:
-            put_connection(conn)
+            db.put_connection(conn)
 
     def _delete(self, key: str):
         db.execute("DELETE FROM scheduler_locks WHERE key = %s", (key,))

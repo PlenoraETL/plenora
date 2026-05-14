@@ -211,3 +211,79 @@ def test_execute_calls_is_already_completed_when_run_id_present():
         )
 
     assert calls == ["the-run"]
+
+
+def test_get_connection_fallback_uses_carica_connection_store(monkeypatch):
+    from app.core.carica import executor as executor_mod
+
+    calls: list[str] = []
+    expected = {
+        "id": "conn-1",
+        "name": "Dest",
+        "type": "postgres",
+        "host": "db",
+        "port": 5432,
+        "database": "main",
+        "db_schema": "public",
+        "username": "u",
+        "password": "plain",
+    }
+    monkeypatch.setattr(
+        executor_mod,
+        "fetch_connection_config",
+        lambda connection_id: calls.append(connection_id) or expected,
+    )
+
+    executor = CaricaExecutor()
+
+    assert executor._get_connection("conn-1") == expected
+    assert calls == ["conn-1"]
+
+
+def test_connection_store_returns_legacy_shape_with_decrypted_password(monkeypatch):
+    from app.core.carica import connection_store
+
+    monkeypatch.setattr(
+        connection_store,
+        "fetchone",
+        lambda sql, params: {
+            "id": "conn-1",
+            "name": "Dest",
+            "db_type": "postgres",
+            "host": "db",
+            "port": 5432,
+            "database": "main",
+            "db_schema": "public",
+            "username": "u",
+            "password": "encrypted",
+        },
+    )
+    monkeypatch.setattr(
+        connection_store,
+        "_decrypt_password",
+        lambda value: f"decrypted:{value}",
+    )
+
+    connection = connection_store.fetch_connection_config("conn-1")
+
+    assert connection == {
+        "id": "conn-1",
+        "name": "Dest",
+        "type": "postgres",
+        "host": "db",
+        "port": 5432,
+        "database": "main",
+        "db_schema": "public",
+        "username": "u",
+        "password": "decrypted:encrypted",
+    }
+
+
+def test_carica_executor_has_no_direct_pg_connection_import():
+    import inspect
+    from pathlib import Path
+
+    source_file = inspect.getsourcefile(CaricaExecutor)
+    assert source_file is not None
+    src = Path(source_file).read_text(encoding="utf-8")
+    assert "app.db.pg_connection" not in src

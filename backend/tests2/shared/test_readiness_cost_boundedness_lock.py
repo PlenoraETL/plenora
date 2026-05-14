@@ -22,6 +22,9 @@ _REPO_ROOT = Path(__file__).resolve().parents[3]
 _HEALTH_PY = (
     _REPO_ROOT / "backend" / "app" / "observability" / "health.py"
 )
+_TASK_RUNTIME_PROBES_PY = (
+    _REPO_ROOT / "backend" / "app" / "core" / "task_runtime" / "probes.py"
+)
 
 _READINESS_CHECKS_OK = {
     "check_postgres": (True, "ok"),
@@ -271,10 +274,10 @@ def test_redis_check_uses_socket_connect_timeout():
     `socket_connect_timeout=` MUST be present. Removing it would
     change /ready's worst-case latency from ~2s to the kernel's
     default SYN-retransmit window (~75s on Linux)."""
-    text = _HEALTH_PY.read_text(encoding="utf-8")
+    text = _TASK_RUNTIME_PROBES_PY.read_text(encoding="utf-8")
     code_only = _python_code_only(text)
     assert "socket_connect_timeout" in code_only, (
-        "check_redis() must use `redis.from_url(..., "
+        "ping_redis_broker() must use `redis.from_url(..., "
         "socket_connect_timeout=N)`. Without it, an unreachable "
         "Redis (e.g. Redis pod restarting in k8s) would block "
         "/ready for ~75s on the kernel SYN retransmit timeout."
@@ -436,10 +439,10 @@ def test_redis_check_uses_socket_operation_timeout():
     operation timeout, a Redis that accepts the TCP handshake but
     stalls before responding to PING would block /ready
     until the kernel TCP keepalive fires (~minutes)."""
-    text = _HEALTH_PY.read_text(encoding="utf-8")
+    text = _TASK_RUNTIME_PROBES_PY.read_text(encoding="utf-8")
     code_only = _python_code_only(text)
     assert "socket_timeout" in code_only, (
-        "check_redis() must pass `socket_timeout=` in addition to "
+        "ping_redis_broker() must pass `socket_timeout=` in addition to "
         "`socket_connect_timeout=`. Without it, a Redis that accepts "
         "the connection but stalls before responding to PING would "
         "block /ready beyond the connect timeout window."

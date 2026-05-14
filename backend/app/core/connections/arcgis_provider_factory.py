@@ -2,16 +2,16 @@
 
 from __future__ import annotations
 
-from typing import Optional, TYPE_CHECKING
+from typing import Optional
 
+from app.core.connections.arcgis_http_client_protocol import (
+    ArcGISProviderHttpClientProtocol,
+)
 from app.shared.connections.arcgis_provider import ArcGISProviderProtocol
-
-if TYPE_CHECKING:
-    from app.core.features.arcgis_client import HttpClientProtocol
 
 
 def create_arcgis_provider(
-    http_client: Optional["HttpClientProtocol"] = None,
+    http_client: Optional[ArcGISProviderHttpClientProtocol] = None,
 ) -> ArcGISProviderProtocol:
     """Create the canonical ArcGIS provider instance.
 
@@ -23,4 +23,4 @@ def create_arcgis_provider(
     return ArcGISClient(http_client=http_client)
 
 
-__all__ = ["create_arcgis_provider"]
+__all__ = ["ArcGISProviderHttpClientProtocol", "create_arcgis_provider"]

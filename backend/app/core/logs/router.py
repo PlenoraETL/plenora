@@ -18,7 +18,7 @@ from app.core.auth.dependencies import (
     require_not_esecutore,
 )
 from app.shared.contracts.auth import CurrentUser, group_filter
-from app.db.pg_connection import fetchone as _fetchone, fetchall as _fetchall
+from app.core.logs.repository import fetchone as _fetchone, fetchall as _fetchall
 from app.core.auth.resource_access import assert_project_visible
 from app.utils.logger import get_logger
 

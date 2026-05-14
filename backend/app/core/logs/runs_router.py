@@ -16,7 +16,7 @@ from app.core.auth.dependencies import (
     require_not_esecutore,
 )
 from app.shared.contracts.auth import CurrentUser
-from app.db.pg_connection import fetchone as _fetchone, fetchall as _fetchall
+from app.core.logs.repository import fetchone as _fetchone, fetchall as _fetchall
 from app.shared import error_codes
 from app.shared.error_envelope import raise_typed_http
 

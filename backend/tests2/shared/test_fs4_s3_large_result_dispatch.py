@@ -454,19 +454,13 @@ def test_delete_results_for_project_cleans_all_s3_keys(monkeypatch):
     from app.core.results import cleanup as results_cleanup
     from contextlib import contextmanager
 
-    # fetchall ritorna 2 row con (id, storage_key) — il bulk path
-    # ora pre-fetcha anche `id` per l'extras del record_pending.
-    monkeypatch.setattr(
-        results_cleanup, "fetchall",
-        lambda sql, args: [
-            {"id": "rA", "storage_key": "results/p1/a.bin"},
-            {"id": "rB", "storage_key": "results/p1/b.bin"},
-        ],
-    )
-
     class _Cur:
         def __init__(self):
             self.rowcount = 0
+            self._fetchall_queue = [[
+                {"id": "rA", "storage_key": "results/p1/a.bin"},
+                {"id": "rB", "storage_key": "results/p1/b.bin"},
+            ]]
             # 2 record_pending RETURNING id rows.
             self._fetchone_queue = [
                 {"id": "recon-rA"}, {"id": "recon-rB"},
@@ -476,6 +470,8 @@ def test_delete_results_for_project_cleans_all_s3_keys(monkeypatch):
                 self.rowcount = 2
         def fetchone(self):
             return self._fetchone_queue.pop(0) if self._fetchone_queue else None
+        def fetchall(self):
+            return self._fetchall_queue.pop(0) if self._fetchall_queue else []
         def __enter__(self):
             return self
         def __exit__(self, *exc):

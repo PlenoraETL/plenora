@@ -91,7 +91,8 @@ def test_handle_failure_failed_branch_has_canonical_error_token():
     assert "schedule_pipeline_task.apply_async" not in manager_src
     assert "decide_after_failure" in src
     assert "DebugPayloadBuilder" in src
-    assert "schedule_pipeline_task.apply_async" in src
+    assert "schedule_pipeline_task.apply_async" not in src
+    assert "enqueue_schedule_run" in src
     # Token fatal presente
     assert '"error": "schedule_execution_fatal"' in src, (
         "token canonico `schedule_execution_fatal` non trovato nel file"

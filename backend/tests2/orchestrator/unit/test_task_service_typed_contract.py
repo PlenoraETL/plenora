@@ -55,6 +55,15 @@ def test_orchestrator_application_code_uses_task_service_boundary():
         assert not any(module.startswith("workers.tasks") for module in imports)
 
 
+def test_task_service_depends_on_runtime_port_not_celery_directly():
+    imports = _imports("app/core/orchestrator/task_service.py")
+
+    assert "celery.result" not in imports
+    assert "workers.celery_app" not in imports
+    assert not any(module.startswith("workers.tasks") for module in imports)
+    assert "app.core.task_runtime" in imports
+
+
 def test_get_task_status_uses_typed_result_payload_inside_core():
     celery_meta = {
         "success": True,
@@ -69,7 +78,7 @@ def test_get_task_status_uses_typed_result_payload_inside_core():
     )
 
     with patch(
-        "app.core.orchestrator.task_service.AsyncResult",
+        "app.core.task_runtime.orchestrator.AsyncResult",
         return_value=async_result,
     ):
         task_info = TaskService().get_task_status("task-1")
@@ -189,7 +198,7 @@ def test_task_service_does_not_call_task_result_to_dict_internally(monkeypatch):
     )
 
     with patch(
-        "app.core.orchestrator.task_service.AsyncResult",
+        "app.core.task_runtime.orchestrator.AsyncResult",
         return_value=async_result,
     ):
         task_info = TaskService().get_task_status("task-1")
@@ -255,7 +264,7 @@ def test_get_task_result_returns_typed_payload():
     )
 
     with patch(
-        "app.core.orchestrator.task_service.AsyncResult",
+        "app.core.task_runtime.orchestrator.AsyncResult",
         return_value=async_result,
     ):
         result = TaskService().get_task_result("task-1")
@@ -270,7 +279,7 @@ def test_forget_task_result_delegates_to_celery_boundary():
     async_result = SimpleNamespace(forget=lambda: forget_calls.append("forgot"))
 
     with patch(
-        "app.core.orchestrator.task_service.AsyncResult",
+        "app.core.task_runtime.orchestrator.AsyncResult",
         return_value=async_result,
     ) as async_result_cls:
         service = TaskService()

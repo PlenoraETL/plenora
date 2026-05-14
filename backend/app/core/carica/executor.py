@@ -17,7 +17,7 @@ from app.core.carica.models import (
     WriteResult,
     WriteStatus,
 )
-from app.core.connections.service import _decrypt_password
+from app.core.carica.connection_store import fetch_connection_config
 from app.core.intermediate import run_idempotency
 from app.db.query_executor import DefaultEngineFactory
 from app.utils.logger import get_logger
@@ -256,17 +256,9 @@ class CaricaExecutor:
                 return conn
             raise ValueError(f"Connessione '{connection_id}' non trovata")
 
-        import app.db.pg_connection as db_svc
-        row = db_svc.fetchone("SELECT * FROM connections WHERE id = %s", (connection_id,))
-        if row:
-            r = dict(row)
-            return {
-                "id": r["id"], "name": r["name"], "type": r["db_type"],
-                "host": r.get("host", ""), "port": r.get("port"),
-                "database": r.get("database", ""), "db_schema": r.get("db_schema", ""),
-                "username": r.get("username", ""),
-                "password": _decrypt_password(r.get("password", "")),
-            }
+        connection = fetch_connection_config(connection_id)
+        if connection:
+            return connection
 
         raise ValueError(f"Connessione '{connection_id}' non trovata")
 

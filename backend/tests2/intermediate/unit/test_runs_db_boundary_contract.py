@@ -33,6 +33,7 @@ _INTERMEDIATE_DB_PUBLIC_EXPORTS = {
     "DEFAULT_RUNS_RETENTION",
     "apply_runs_retention",
     "close_connection",
+    "close_worker_connection",
     "create_run",
     "delete_all_runs_for_canvas",
     "get_node_meta",

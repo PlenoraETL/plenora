@@ -26,7 +26,7 @@ def _manipola_file_source_denied():
     canvas = build_canvas(build_node("file_source", file_source_id="fs-99", columns=[]))
     dataframes = {}
 
-    with patch("app.core.auth.visibility.is_resource_visible", return_value=False):
+    with patch("app.core.artifacts.source_loader.is_resource_visible", return_value=False):
         result = executor._carica_sorgenti_file(
             canvas, dataframes, group_id="grp-1",
         )
@@ -77,7 +77,7 @@ def _arricchisci_file_source_denied():
         project_id="p-1", group_id="grp-1", preview_limit=None,
     )
 
-    with patch("app.core.auth.visibility.is_resource_visible", return_value=False):
+    with patch("app.core.files.source_loading.is_resource_visible", return_value=False):
         with pytest.raises(ValueError, match="Accesso negato"):
             service._assert_file_source_group_access("fs-99", ctx=ctx)
 

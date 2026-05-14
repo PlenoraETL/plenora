@@ -129,15 +129,8 @@ def list_runs(
     """Lista run per canvas, ordinate dalla più recente."""
     try:
         gid = group_filter(current_user)
-        # superadmin: gid è None → nessun filtro gruppo
-        if gid is None:
-            from app.db.pg_connection import fetchall as _pg_fetchall
-            runs = _pg_fetchall(
-                "SELECT * FROM runs WHERE canvas_id = %s ORDER BY timestamp DESC LIMIT %s",
-                (canvas_id, limit)
-            )
-        else:
-            runs = runs_db.list_runs(canvas_id, gid, limit=limit)
+        # superadmin: gid is None -> no group filter in the store boundary.
+        runs = runs_db.list_runs(canvas_id, gid, limit=limit)
         return [_run_to_summary(r) for r in runs]
     except Exception as e:
         logger.error(f"[GESTITO] Errore lista runs canvas {canvas_id}: {e}", op="intermediate_api", exc_info=True)
@@ -376,7 +369,6 @@ def compare_runs_l2(
         _check_run_access(run_id_a, current_user)
         _check_run_access(run_id_b, current_user)
 
-        from app.db.pg_connection import fetchall, fetchone
         from app.core.intermediate.policy import (
             persistence_mode_for_record,
             MODE_FULL_PG,
@@ -499,50 +491,24 @@ def compare_runs_l2(
         # Righe rimosse: in A ma non in B (confronto su row_hash
         # L'indice idx_node_rows_hash su (run_id, node_id, row_hash) rende
         # il NOT EXISTS O(n log m) anche per dataset grandi
-        removed_raw = fetchall(
-            """
-            SELECT a.row_hash, a.row_data
-            FROM node_rows a
-            WHERE a.run_id = %s AND a.node_id = %s
-              AND NOT EXISTS (
-                SELECT 1 FROM node_rows b
-                WHERE b.run_id = %s AND b.node_id = %s
-                  AND b.row_hash = a.row_hash
-              )
-            ORDER BY a.row_idx
-            LIMIT 500
-            """,
-            (run_id_a, node_id, run_id_b, node_id),
+        removed_raw = node_snapshots_db.list_node_row_hash_diff(
+            source_run_id=run_id_a,
+            compare_run_id=run_id_b,
+            node_id=node_id,
+            limit=500,
         )
 
         # Righe aggiunte: in B ma non in A
-        added_raw = fetchall(
-            """
-            SELECT b.row_hash, b.row_data
-            FROM node_rows b
-            WHERE b.run_id = %s AND b.node_id = %s
-              AND NOT EXISTS (
-                SELECT 1 FROM node_rows a
-                WHERE a.run_id = %s AND a.node_id = %s
-                  AND a.row_hash = b.row_hash
-              )
-            ORDER BY b.row_idx
-            LIMIT 500
-            """,
-            (run_id_b, node_id, run_id_a, node_id),
+        added_raw = node_snapshots_db.list_node_row_hash_diff(
+            source_run_id=run_id_b,
+            compare_run_id=run_id_a,
+            node_id=node_id,
+            limit=500,
         )
 
         # Conta totali senza limite
-        row_a = fetchone(
-            "SELECT COUNT(*) AS cnt FROM node_rows WHERE run_id = %s AND node_id = %s",
-            (run_id_a, node_id),
-        )
-        row_b = fetchone(
-            "SELECT COUNT(*) AS cnt FROM node_rows WHERE run_id = %s AND node_id = %s",
-            (run_id_b, node_id),
-        )
-        count_a = row_a["cnt"] if row_a else 0
-        count_b = row_b["cnt"] if row_b else 0
+        count_a = node_snapshots_db.count_node_rows(run_id_a, node_id)
+        count_b = node_snapshots_db.count_node_rows(run_id_b, node_id)
 
         # Shape del response identico a prima: gli elementi sono dict con
         # le colonne "piatte" della riga. Espandiamo row_data (jsonb) e

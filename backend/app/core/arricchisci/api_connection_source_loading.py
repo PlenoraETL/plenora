@@ -17,9 +17,9 @@ from app.core.arricchisci.execution_context import (
     ArricchisciExecutionContext,
 )
 from app.core.arricchisci.project_access import load_project_access_context
-from app.core.connections.service import ConnectionService
-from app.core.estrai.query_generator import QueryGenerator
-from app.core.features.features_service import FeaturesService
+from app.core.arricchisci.source_project_store import (
+    fetch_project_and_latest_result_timestamps,
+)
 from app.core.dataframes.frame_io import (
     filter_visible_columns,
     find_latest_output_file,
@@ -27,7 +27,6 @@ from app.core.dataframes.frame_io import (
     save_dataframe as _save_df,
 )
 from app.core.security.outbound_url import check_outbound_address
-from app.db.query_executor import QueryExecutor
 from app.utils.logger import get_logger
 
 
@@ -151,14 +150,7 @@ class ApiConnectionSourceLoadingMixin:
         MANIPOLA leggesse colonne fantasma dell'ARR upstream.
         """
         try:
-            from app.db.pg_connection import fetchone
-            row = fetchone(
-                "SELECT p.updated_at AS proj_ts, "
-                "(SELECT MAX(r.created_at) FROM results r "
-                "WHERE r.project_id = p.id) AS blob_ts "
-                "FROM projects p WHERE p.id = %s",
-                (source_project_id,),
-            )
+            row = fetch_project_and_latest_result_timestamps(source_project_id)
             if not row:
                 return False
             proj_ts = row.get("proj_ts")
@@ -188,24 +180,13 @@ class ApiConnectionSourceLoadingMixin:
         """
         logger.info(f"Riesecuzione progetto upstream: {source_project_id}")
         try:
-            from app.core.orchestrator.service import OrchestratorService
-            from app.core.projects.service import ProjectService
-            _proj_svc = ProjectService()
-            _conn_svc = ConnectionService()
-            _generator = QueryGenerator()
-            _executor = QueryExecutor(
+            from app.runtime.services import build_orchestrator_stack
+            _stack = build_orchestrator_stack(
+                settings=settings,
                 results_dir=settings.DATA_DIR / "temp",
                 save_function=_save_df,
             )
-            _features = FeaturesService(save_function=_save_df)
-            _orchestrator = OrchestratorService(
-                project_service=_proj_svc,
-                executor=_executor,
-                generator=_generator,
-                connection_service=_conn_svc,
-                features_service=_features,
-            )
-            upstream_result = _orchestrator.execute_pipeline(
+            upstream_result = _stack.orchestrator.execute_pipeline(
                 source_project_id, force_recalculate=force_recalculate
             )
         except ImportError as _ie:

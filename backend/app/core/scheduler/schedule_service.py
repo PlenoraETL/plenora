@@ -381,15 +381,11 @@ class ScheduleService:
         Fix N+1: era un loop con project_exists per ogni schedule. Ora fa una
         sola query per avere tutti i project_id esistenti.
         """
-        from app.db.pg_connection import fetchall
-
         orphaned = []
         schedule_list = self.list_schedules()
 
         # Fetch tutti gli ID progetto esistenti in un set
-        existing_project_ids = {
-            row["id"] for row in fetchall("SELECT id FROM projects")
-        }
+        existing_project_ids = db.list_project_ids()
 
         for schedule in schedule_list.schedules:
             if schedule.runtime.status == "orphan":

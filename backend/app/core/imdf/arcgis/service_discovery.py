@@ -4,13 +4,7 @@ Cluster SERVICE_DISCOVERY - IMDF folder + Feature Service discovery policy.
 
 from typing import List, Optional, Tuple
 
-# ADR-0023 accepted residual: IMDF policy wrappers stay here while the
-# generic ArcGIS discovery helpers live in `app.core.features`. The
-# cross-domain import is documented in
-# `tests2/shared/test_arcgis_provider_boundary_guard.py` and in the
-# matching allowlist of
-# `tests2/connections/test_esri_provider_library_boundary_contract.py`.
-from app.core.features import arcgis_service_discovery as _arcgis_discovery
+import app.core.connections.arcgis_service_discovery as _arcgis_discovery
 from app.shared.connections.arcgis_connection import ArcGISConnectionInfo
 from app.shared.connections.arcgis_provider import ArcGISDiscoveryProviderProtocol
 from app.utils.logger import get_logger

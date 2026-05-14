@@ -20,6 +20,17 @@ pytestmark = [pytest.mark.unit, pytest.mark.scheduler, pytest.mark.contract]
 _BACKEND_ROOT = Path(__file__).resolve().parents[3]
 
 
+def _imports(rel_path: str) -> set[str]:
+    tree = ast.parse((_BACKEND_ROOT / rel_path).read_text(encoding="utf-8"))
+    imports: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            imports.update(alias.name for alias in node.names)
+        elif isinstance(node, ast.ImportFrom) and node.module:
+            imports.add(node.module)
+    return imports
+
+
 class FakeScheduleTask:
     def __init__(self) -> None:
         self.calls: list[dict[str, object]] = []
@@ -27,6 +38,15 @@ class FakeScheduleTask:
     def apply_async(self, **kwargs):
         self.calls.append(kwargs)
         return SimpleNamespace(id="scheduled-task-1")
+
+
+class FakeScheduleRuntime:
+    def __init__(self) -> None:
+        self.calls: list[dict[str, object]] = []
+
+    def send_task(self, name, **kwargs):
+        self.calls.append({"name": name, **kwargs})
+        return SimpleNamespace(id="scheduled-runtime-1")
 
 
 def test_enqueue_schedule_run_adapts_manual_run_to_runtime_shape() -> None:
@@ -42,6 +62,26 @@ def test_enqueue_schedule_run_adapts_manual_run_to_runtime_shape() -> None:
     assert handle.id == "scheduled-task-1"
     assert task.calls == [
         {
+            "args": ["schedule-1"],
+            "kwargs": {"triggered_by": "manual", "retry_attempt": 0},
+        }
+    ]
+
+
+def test_enqueue_schedule_run_dispatches_by_task_name_through_runtime() -> None:
+    runtime = FakeScheduleRuntime()
+
+    handle = enqueue_schedule_run(
+        "schedule-1",
+        triggered_by="manual",
+        retry_attempt=0,
+        runtime=runtime,
+    )
+
+    assert handle.id == "scheduled-runtime-1"
+    assert runtime.calls == [
+        {
+            "name": SCHEDULE_PIPELINE_TASK_NAME,
             "args": ["schedule-1"],
             "kwargs": {"triggered_by": "manual", "retry_attempt": 0},
         }
@@ -99,15 +139,22 @@ def test_scheduler_application_code_uses_dispatch_boundary() -> None:
         if path.name != "job_dispatcher.py"
     ]
     for path in checked_paths:
-        tree = ast.parse(path.read_text(encoding="utf-8"))
-        imports: set[str] = set()
-        for node in ast.walk(tree):
-            if isinstance(node, ast.Import):
-                imports.update(alias.name for alias in node.names)
-            elif isinstance(node, ast.ImportFrom) and node.module:
-                imports.add(node.module)
+        imports = _imports(path.relative_to(_BACKEND_ROOT).as_posix())
 
         assert "workers.tasks.schedule_task" not in imports, path
+
+
+def test_scheduler_dispatcher_does_not_import_concrete_task_module() -> None:
+    dispatcher_imports = _imports("app/core/scheduler/job_dispatcher.py")
+
+    assert "workers.tasks.schedule_task" not in dispatcher_imports
+    assert "workers.celery_app" not in dispatcher_imports
+
+
+def test_scheduler_dispatcher_uses_shared_task_runtime_boundary() -> None:
+    dispatcher_imports = _imports("app/core/scheduler/job_dispatcher.py")
+
+    assert "app.core.task_runtime.dispatch" in dispatcher_imports
 
 
 def test_beat_scheduler_uses_dispatcher_task_name_constant() -> None:

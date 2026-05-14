@@ -10,6 +10,10 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import List, Dict, Any, Optional
 
+from app.core.admin_backups.backup_run_store import (
+    fetch_latest_backup_run,
+    fetch_latest_backup_started_at,
+)
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -212,12 +216,7 @@ def get_last_run_status() -> Dict[str, Any]:
     }
 
     try:
-        from app.db.pg_connection import fetchone
-        row = fetchone(
-            "SELECT id, started_at, finished_at, exit_code, result, bucket_key, "
-            "size_bytes, log_tail, error_message "
-            "FROM backup_runs ORDER BY started_at DESC LIMIT 1"
-        )
+        row = fetch_latest_backup_run()
     except Exception as e:
         logger.warning(f"get_last_run_status query fallita: {e}")
         out["error_message"] = f"DB non accessibile: {str(e)[:200]}"
@@ -298,11 +297,7 @@ def get_schedule_info() -> Dict[str, Any]:
     # last_run: started_at dell'ultima row in backup_runs
     last_run_iso: Optional[str] = None
     try:
-        from app.db.pg_connection import fetchone
-        row = fetchone(
-            "SELECT started_at FROM backup_runs "
-            "ORDER BY started_at DESC LIMIT 1"
-        )
+        row = fetch_latest_backup_started_at()
         if row and row.get("started_at"):
             started = row["started_at"]
             last_run_iso = started.isoformat() if hasattr(started, "isoformat") else str(started)

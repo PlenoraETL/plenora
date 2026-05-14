@@ -554,6 +554,36 @@ def test_arricchisci_project_access_uses_local_boundary_not_projects_db_get_proj
     )
 
 
+def test_source_loading_stale_check_uses_local_source_project_store(monkeypatch):
+    """The project/blob timestamp lookup stays behind arricchisci's DB boundary."""
+    from app.core.arricchisci import api_connection_source_loading as mod
+    from app.core.arricchisci.api_connection_source_loading import (
+        ApiConnectionSourceLoadingMixin,
+    )
+
+    calls: list[str] = []
+    monkeypatch.setattr(
+        mod,
+        "fetch_project_and_latest_result_timestamps",
+        lambda project_id: calls.append(project_id)
+        or {"proj_ts": 2, "blob_ts": 1},
+    )
+
+    svc = ApiConnectionSourceLoadingMixin()
+
+    assert svc._upstream_blob_is_stale("proj-1") is True
+    assert calls == ["proj-1"]
+
+
+def test_source_loading_has_no_direct_pg_connection_import():
+    src_path = (
+        _BACKEND_ROOT / "app" / "core" / "arricchisci"
+        / "api_connection_source_loading.py"
+    )
+    src = src_path.read_text(encoding="utf-8")
+    assert "app.db.pg_connection" not in src
+
+
 def _get_signature_from_mixin(method_name: str):
     """Helper: ottiene la signature di un metodo del mixin
     `ApiConnectionSourceLoadingMixin` evitando l'inheritance MRO
@@ -679,8 +709,8 @@ def test_te032_no_app_workers_callsite_omits_ctx_for_tenant_loaders():
                     violations.append((str(rel), node.lineno, f.attr))
 
     assert not violations, (
-        f"TE-032 regression: callsite production di tenant-bound "
-        f"loader senza `ctx=` kwarg:\n"
+        "TE-032 regression: callsite production di tenant-bound "
+        "loader senza `ctx=` kwarg:\n"
         + "\n".join(f"  {v[0]}:{v[1]} -> {v[2]}" for v in violations)
         + "\nPost-TE-032 i 2 metodi richiedono ctx esplicito."
     )

@@ -8,7 +8,10 @@ from types import SimpleNamespace
 
 import pytest
 
-from app.core.imdf.publish_dispatcher import enqueue_imdf_publish
+from app.core.imdf.publish_dispatcher import (
+    IMDF_PUBLISH_TASK_NAME,
+    enqueue_imdf_publish,
+)
 
 
 pytestmark = [pytest.mark.unit, pytest.mark.contract]
@@ -23,6 +26,15 @@ class FakeImdfPublishTask:
     def delay(self, **kwargs):
         self.calls.append(kwargs)
         return SimpleNamespace(id="imdf-publish-1")
+
+
+class FakeImdfPublishRuntime:
+    def __init__(self) -> None:
+        self.calls: list[dict[str, object]] = []
+
+    def send_task(self, name, **kwargs):
+        self.calls.append({"name": name, **kwargs})
+        return SimpleNamespace(id="imdf-runtime-1")
 
 
 def _imports(rel_path: str) -> set[str]:
@@ -54,6 +66,27 @@ def test_enqueue_imdf_publish_adapts_to_runtime_shape() -> None:
     ]
 
 
+def test_enqueue_imdf_publish_dispatches_by_task_name_through_runtime() -> None:
+    runtime = FakeImdfPublishRuntime()
+
+    handle = enqueue_imdf_publish(
+        bundle_task_id="bundle-1",
+        publisher_config={"mode": "replace", "fs_name": "site"},
+        runtime=runtime,
+    )
+
+    assert handle.id == "imdf-runtime-1"
+    assert runtime.calls == [
+        {
+            "name": IMDF_PUBLISH_TASK_NAME,
+            "kwargs": {
+                "bundle_task_id": "bundle-1",
+                "publisher_config": {"mode": "replace", "fs_name": "site"},
+            },
+        }
+    ]
+
+
 def test_imdf_router_uses_publish_dispatch_boundary() -> None:
     imdf_root = _BACKEND_ROOT / "app" / "core" / "imdf"
     checked_paths = [
@@ -67,3 +100,16 @@ def test_imdf_router_uses_publish_dispatch_boundary() -> None:
     for path in checked_paths:
         imports = _imports(path.relative_to(_BACKEND_ROOT).as_posix())
         assert "workers.tasks.imdf_publish_task" not in imports, path
+
+
+def test_imdf_publish_dispatcher_does_not_import_concrete_task_module() -> None:
+    dispatcher_imports = _imports("app/core/imdf/publish_dispatcher.py")
+
+    assert "workers.tasks.imdf_publish_task" not in dispatcher_imports
+    assert "workers.celery_app" not in dispatcher_imports
+
+
+def test_imdf_publish_dispatcher_uses_shared_task_runtime_boundary() -> None:
+    dispatcher_imports = _imports("app/core/imdf/publish_dispatcher.py")
+
+    assert "app.core.task_runtime.dispatch" in dispatcher_imports

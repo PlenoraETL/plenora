@@ -125,20 +125,17 @@ def check_redis() -> CheckOutcome:
     disabilitabile: /ready senza bound sarebbe un footgun ops).
     """
     try:
-        import redis
         from app.config import settings
-        try:
-            timeout = int(settings.get("READINESS_REDIS_TIMEOUT_SECONDS", 2))
-        except Exception:
-            timeout = 2
-        if timeout <= 0:
-            timeout = 2
-        r = redis.from_url(
-            settings.CELERY_BROKER_URL,
-            socket_connect_timeout=timeout,
-            socket_timeout=timeout,
+        from app.observability.runtime_ports import (
+            bounded_readiness_timeout,
+            ping_redis_broker,
         )
-        if r.ping():
+        timeout = bounded_readiness_timeout(
+            settings,
+            "READINESS_REDIS_TIMEOUT_SECONDS",
+            2,
+        )
+        if ping_redis_broker(settings.CELERY_BROKER_URL, timeout=timeout):
             return True, "ok"
         return False, "PING non ha risposto True"
     except Exception as e:

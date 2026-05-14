@@ -32,6 +32,8 @@ NEUTRAL_FACTORY_MODULE = "app.core.connections.arcgis_provider_factory"
 NEUTRAL_RESOLVER_MODULE = "app.core.connections.arcgis_connection_resolver"
 ARCGIS_SQL_HELPERS_MODULE = "app.core.connections.arcgis_sql_helpers"
 ARCGIS_PUBLISH_MODES_MODULE = "app.core.connections.arcgis_publish_modes"
+ARCGIS_SERVICE_DISCOVERY_MODULE = "app.core.connections.arcgis_service_discovery"
+ARCGIS_SERVICE_LIFECYCLE_MODULE = "app.core.connections.arcgis_service_lifecycle"
 SHARED_PROVIDER_MODULE = "app.shared.connections.arcgis_provider"
 SHARED_CONNECTION_MODULE = "app.shared.connections.arcgis_connection"
 
@@ -150,30 +152,18 @@ def test_direct_arcgis_rest_is_confined_to_concrete_provider_client(src_file: Pa
 def test_imdf_uses_arcgis_provider_protocol_resolver_or_neutral_helpers(
     src_file: Path,
 ) -> None:
-    # KEEP_COMPAT (ADR-0023): the remaining IMDF policy wrappers documented in
-    # `tests2/shared/test_arcgis_provider_boundary_guard.py:_KNOWN_VIOLATIONS`
-    # are allowed to keep their thin `from app.core.features` import while the
-    # generic ArcGIS helpers are migrated. Both guards must stay in sync: this
-    # allowlist mirrors the sibling one. Trim entries when the underlying
-    # import is removed; the sibling guard catches any drift.
-    _KNOWN_FEATURES_VIOLATIONS = {
-        "app/core/imdf/arcgis/service_discovery.py": {"app.core.features"},
-        "app/core/imdf/arcgis/service_lifecycle.py": {"app.core.features"},
-    }
-
     allowed_connections_imports = {
         NEUTRAL_RESOLVER_MODULE,
         ARCGIS_SQL_HELPERS_MODULE,
         ARCGIS_PUBLISH_MODES_MODULE,
+        ARCGIS_SERVICE_DISCOVERY_MODULE,
+        ARCGIS_SERVICE_LIFECYCLE_MODULE,
     }
     rel = _rel(src_file)
-    accepted_features = _KNOWN_FEATURES_VIOLATIONS.get(rel, set())
 
     forbidden_imports = set()
     for module in imports_in_file(src_file):
         if module.startswith("app.core.features"):
-            if module in accepted_features:
-                continue
             forbidden_imports.add(module)
         elif (
             module.startswith("app.core.connections")

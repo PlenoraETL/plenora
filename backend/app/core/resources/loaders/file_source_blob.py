@@ -6,7 +6,7 @@ File-source blob loader — second Resource Engine kind.
 from __future__ import annotations
 
 import time
-from typing import Optional, Tuple
+from typing import Mapping, Optional, Tuple
 
 from app.core.resources.exceptions import MemoryLimitExceededError
 
@@ -19,6 +19,9 @@ from app.core.resources.types import (
 )
 from app.core.resources.loaders._shared import (
     _download_object_storage_impl,
+)
+from app.core.resources.loaders.file_source_blob_store import (
+    fetch_file_source_blob_lookup_row,
 )
 
 
@@ -66,8 +69,6 @@ def _fetch_row(
     used when ``is_superadmin=True`` at the loader entrypoint, the
     bypass is logged there).
     """
-    from app.db.pg_connection import fetchone
-
     clauses = ["id = %s"]
     where_params: list = [file_source_id]
     if group_id_filter:
@@ -90,7 +91,8 @@ def _fetch_row(
     # 2. WHERE id = %s -> file_source_id
     # 3. AND group_id = %s -> group_id_filter (if set
     params = (max_bytes, *where_params)
-    return fetchone(sql, params)
+    row = fetch_file_source_blob_lookup_row(sql, params)
+    return dict(row) if isinstance(row, Mapping) else row
 
 
 def _download_object_storage(storage_key: str) -> Optional[bytes]:

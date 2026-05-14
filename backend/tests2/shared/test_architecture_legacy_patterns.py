@@ -169,11 +169,11 @@ def test_os_getenv_only_at_boundary_modules():
 
 
 # Allowlist: router legacy che importano `app.db.pg_connection`
-# direttamente. Razionale per file:
-# - `app/core/intermediate/router.py`: endpoint admin di
-#   intermediate runs/nodes; query read-only su `runs`/`node_meta`.
-# - `app/core/logs/router.py` + `runs_router.py`: log query
-#   read-only paginate.
+# direttamente.
+#
+# Baseline corrente: vuota. I router legacy intermediate/logs sono stati
+# migrati a repository/store di dominio; nuovi router devono restare
+# dipendenti dal service layer o da repository locali, non da pg_connection.
 #
 # Migrazioni gia' chiuse (la baseline scende man mano):
 # - `app/core/projects/router.py` (BE-GO-READY-CONNECTION-ENGINE-003):
@@ -188,11 +188,7 @@ def test_os_getenv_only_at_boundary_modules():
 #
 # Lock: SET di file allowlistati. Nuovi router NON possono importare
 # pg_connection senza esplicita aggiunta + razionale.
-ALLOWLIST_PG_CONNECTION_ROUTER_FILES: Set[str] = {
-    "app/core/intermediate/router.py",
-    "app/core/logs/router.py",
-    "app/core/logs/runs_router.py",
-}
+ALLOWLIST_PG_CONNECTION_ROUTER_FILES: Set[str] = set()
 
 
 def _is_router_path(rel_path: str) -> bool:
@@ -260,8 +256,12 @@ def test_pg_connection_not_imported_from_new_routers():
 #   in `main.py` sia integro. Patcha le check di
 #   postgres/redis/pool/migrations e spawna un TestClient sull'app
 #   reale. Documentato sez. C8 dell'observability contract.
+# - `tests2/shared/test_doc_endpoints_policy_contract.py`: locka la
+#   policy `_compute_doc_endpoints` e fa uno smoke minimale su
+#   `/openapi.json`; importare `app.main` e' il comportamento sotto test.
 ALLOWLIST_APP_MAIN_TEST_FILES: Set[str] = {
     "tests2/security/unit/test_c8_observability_contract.py",
+    "tests2/shared/test_doc_endpoints_policy_contract.py",
 }
 
 
@@ -385,11 +385,10 @@ def test_scanners_find_expected_baseline_files():
     assert "app/main.py" in found
 
 
-def test_scanner_pg_connection_finds_router_baseline():
-    """Sanity: lo scanner Rule 3 trova almeno 1 router conosciuto
-    nell'allowlist."""
+def test_scanner_pg_connection_router_baseline_is_empty():
+    """Sanity: lo scanner Rule 3 mantiene baseline router pulita."""
     found = _scan_pg_connection_in_routers()
-    assert "app/core/logs/runs_router.py" in found
+    assert found == set()
 
 
 def test_scanner_app_main_finds_observability_test():

@@ -408,6 +408,26 @@ def test_db_pool_threshold_statuses(monkeypatch, row, expected_status, expected_
 # get_redis_status
 
 
+def test_redis_client_unavailable_returns_unknown():
+    """redis non importabile -> conserva il path degraded legacy."""
+    from app.core.admin_system_status import service
+
+    import builtins
+    real_import = builtins.__import__
+
+    def fake_import(name, *args, **kwargs):
+        if name == "redis":
+            raise ImportError("redis missing")
+        return real_import(name, *args, **kwargs)
+
+    with patch("builtins.__import__", side_effect=fake_import):
+        out = service.get_redis_status()
+
+    assert out["status"] == "unknown"
+    assert out["message"] == "redis client non importabile"
+    assert "redis missing" in out["error"]
+
+
 def test_redis_unreachable_returns_error(monkeypatch):
     """redis.Redis.from_url raise → status=error con messaggio leggibile."""
     from app.core.admin_system_status import service

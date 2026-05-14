@@ -8,7 +8,6 @@ from fastapi import APIRouter, HTTPException, Query, Depends
 from datetime import datetime, timezone
 from typing import Optional
 from app.config import settings
-from app.db import pg_connection as db
 from app.utils.logger import get_logger
 from app.core.auth.dependencies import (
     require_not_esecutore,
@@ -58,25 +57,19 @@ async def beat_healthcheck(current_user: CurrentUser = Depends(require_not_esecu
     Legge il heartbeat dalla tabella beat_heartbeat nel DB.
     """
     try:
-        row = db.fetchone("SELECT ts FROM beat_heartbeat WHERE id = 'beat'")
+        row = scheduler_db.get_beat_heartbeat()
 
         if row and row["ts"]:
             beat_time = _as_aware_datetime(row["ts"])
             age = (datetime.now(timezone.utc) - beat_time).total_seconds()
 
             # Conta schedule attivi
-            schedules_count = db.fetchone("SELECT COUNT(*) as n FROM schedules WHERE is_enabled = TRUE")["n"]
+            schedules_count = scheduler_db.count_enabled_schedules()
 
             if age < 180:
                 # Check task bloccate
                 hard_limit = settings.CELERY_SCHEDULE_HARD_LIMIT
-                stuck_count = db.fetchone(
-                    "SELECT COUNT(*) as n FROM schedules "
-                    "WHERE last_status = 'running' "
-                    "AND last_run IS NOT NULL "
-                    "AND last_run < NOW() - INTERVAL '%s seconds'",
-                    (hard_limit,)
-                )["n"]
+                stuck_count = scheduler_db.count_stuck_schedules(hard_limit)
                 stuck_msg = f" — {stuck_count} task bloccate" if stuck_count > 0 else ""
                 beat_status = "warning" if stuck_count > 0 else "ok"
                 return BeatHealthcheck(

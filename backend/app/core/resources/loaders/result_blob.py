@@ -24,6 +24,9 @@ from app.core.resources.types import (
 from app.core.resources.loaders._shared import (
     _download_object_storage_impl,
 )
+from app.core.resources.loaders.result_blob_store import (
+    fetch_result_blob_lookup_row,
+)
 
 
 # bound the previously unbounded `b"".join(list(stream["body"]))` read
@@ -137,8 +140,6 @@ def _fetch_row(
     round trip and to keep the read atomic (no race window between
     preflight and fetch where the row could be mutated).
     """
-    from app.db.pg_connection import fetchone
-
     clauses = ["id = %s"]
     where_params: list = [result_id]
     if group_id_filter:
@@ -169,7 +170,7 @@ def _fetch_row(
     # 3. AND group_id = %s -> group_id_filter (if set
     # 4. AND project_id = %s -> project_id_filter (if set
     params = (max_bytes, *where_params)
-    row = fetchone(sql, params)
+    row = fetch_result_blob_lookup_row(sql, params)
     if row is None:
         return None
     return ResultBlobLookupRow.from_mapping(row)

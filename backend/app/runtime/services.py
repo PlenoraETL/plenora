@@ -17,7 +17,24 @@ if TYPE_CHECKING:
     from app.core.projects.service import ProjectService
 
 
-__all__ = ["RuntimeServices", "build_runtime_services"]
+__all__ = [
+    "OrchestratorStack",
+    "RuntimeServices",
+    "build_orchestrator_stack",
+    "build_runtime_services",
+]
+
+
+@dataclass(frozen=True)
+class OrchestratorStack:
+    """Small runtime bundle for callers that only need pipeline execution."""
+
+    project_service: "ProjectService"
+    connection_service: "ConnectionService"
+    query_generator: "QueryGenerator"
+    query_executor: "QueryExecutor"
+    features_service: "FeaturesService"
+    orchestrator: "OrchestratorService"
 
 
 @dataclass(frozen=True)
@@ -68,6 +85,57 @@ class RuntimeServices:
     datasource_service: "DataSourceService"
 
 
+def build_orchestrator_stack(
+    *,
+    settings: Any,
+    save_function: Any,
+    results_dir: Any = None,
+    connection_service: Any = None,
+) -> OrchestratorStack:
+    """Construct the shared services required to execute a pipeline.
+
+    This keeps ArcGIS Feature Service construction inside the runtime
+    composition boundary while preserving standalone callers such as
+    scheduler and arricchisci recompute paths.
+    """
+    # Lazy imports keep this module cheap to load for contract tests.
+    from app.core.estrai.query_generator import QueryGenerator
+    from app.core.features.features_service import FeaturesService
+    from app.core.orchestrator.service import OrchestratorService
+    from app.db.query_executor import QueryExecutor
+    from app.core.connections.service import ConnectionService
+    from app.core.projects.service import ProjectService
+
+    project_service = ProjectService()
+    resolved_connection_service = connection_service or ConnectionService()
+    query_generator = QueryGenerator()
+    resolved_results_dir = (
+        results_dir if results_dir is not None else settings.DATA_DIR / "temp"
+    )
+    query_executor = QueryExecutor(
+        results_dir=resolved_results_dir,
+        save_function=save_function,
+    )
+    features_service = FeaturesService(save_function=save_function)
+
+    orchestrator = OrchestratorService(
+        project_service=project_service,
+        executor=query_executor,
+        generator=query_generator,
+        connection_service=resolved_connection_service,
+        features_service=features_service,
+    )
+
+    return OrchestratorStack(
+        project_service=project_service,
+        connection_service=resolved_connection_service,
+        query_generator=query_generator,
+        query_executor=query_executor,
+        features_service=features_service,
+        orchestrator=orchestrator,
+    )
+
+
 def build_runtime_services(
     *,
     settings: Any,
@@ -99,43 +167,28 @@ def build_runtime_services(
     """
     # Lazy imports keep this module cheap to load for contract tests.
     from app.core.estrai.database_inspector import DatabaseInspector
-    from app.core.estrai.query_generator import QueryGenerator
-    from app.core.features.features_service import FeaturesService
-    from app.core.orchestrator.service import OrchestratorService
-    from app.db.query_executor import QueryExecutor
     from app.core.connections.service import ConnectionService
-    from app.core.projects.service import ProjectService
 
     from app.core.arricchisci.api_connector import api_connection_service
 
     from app.core.datasources.service import datasource_service
 
-    project_service = ProjectService()
     connection_service = ConnectionService()
     database_inspector = DatabaseInspector()
-    query_generator = QueryGenerator()
-    query_executor = QueryExecutor(
-        results_dir=settings.DATA_DIR / "temp",
+    orchestrator_stack = build_orchestrator_stack(
+        settings=settings,
         save_function=save_function,
-    )
-    features_service = FeaturesService(save_function=save_function)
-
-    orchestrator = OrchestratorService(
-        project_service=project_service,
-        executor=query_executor,
-        generator=query_generator,
         connection_service=connection_service,
-        features_service=features_service,
     )
 
     return RuntimeServices(
-        project_service=project_service,
+        project_service=orchestrator_stack.project_service,
         connection_service=connection_service,
         database_inspector=database_inspector,
-        query_generator=query_generator,
-        query_executor=query_executor,
-        features_service=features_service,
-        orchestrator=orchestrator,
+        query_generator=orchestrator_stack.query_generator,
+        query_executor=orchestrator_stack.query_executor,
+        features_service=orchestrator_stack.features_service,
+        orchestrator=orchestrator_stack.orchestrator,
         api_connection_service=api_connection_service,
         datasource_service=datasource_service,
     )

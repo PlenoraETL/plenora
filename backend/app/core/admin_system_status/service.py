@@ -13,13 +13,22 @@ from pathlib import Path
 from typing import Optional
 
 from app.core.admin_backups.service import list_backups
+from app.core.admin_system_status.db_probe_store import (
+    fetch_critical_table_rows,
+    fetch_db_pool_row,
+    fetch_latest_verify_run,
+    fetch_schedule_rows,
+    fetch_schema_size_row,
+)
 from app.core.admin_system_status.tickets_metrics import (
     TicketsMetricsUnavailable,
     get_active_ticket_metrics,
 )
-from app.core.admin_system_status.worker_runtime import (
+from app.core.task_runtime.probes import (
     CeleryAppUnavailable,
+    RedisClientUnavailable,
     get_celery_queue_depth,
+    get_redis_info,
     inspect_celery_workers,
 )
 from app.core.admin_system_status.models import (
@@ -145,11 +154,7 @@ def get_verify_restore_status() -> AdminStatusBlock:
     Soglie weekly: ok < 8gg, warn 8-14gg, error > 14gg.
     """
     try:
-        from app.db.pg_connection import fetchone
-        row = fetchone(
-            "SELECT started_at, finished_at, exit_code, result, error_message "
-            "FROM verify_runs ORDER BY started_at DESC LIMIT 1"
-        )
+        row = fetch_latest_verify_run()
     except Exception as e:
         logger.warning(f"query verify_runs fallita: {e}")
         return AdminStatusBlock(
@@ -231,11 +236,7 @@ def get_verify_restore_status() -> AdminStatusBlock:
 def get_schedules_status() -> AdminStatusBlock:
     """Count schedule attivi + count failing — cross-group (superadmin)."""
     try:
-        from app.db.pg_connection import fetchall
-        # Query cross-group: superadmin vede TUTTI gli schedule
-        rows = fetchall(
-            "SELECT id, name, is_enabled, last_status FROM schedules"
-        )
+        rows = fetch_schedule_rows()
     except Exception as e:
         logger.warning(f"query schedules fallita: {e}")
         return AdminStatusBlock(
@@ -619,17 +620,7 @@ def get_db_pool_status() -> AdminStatusBlock:
     80% del max, error a 95%.
     """
     try:
-        from app.db.pg_connection import fetchone
-        row = fetchone(
-            "SELECT "
-            "  (SELECT setting::int FROM pg_settings WHERE name='max_connections') AS max_conn, "
-            "  COUNT(*) AS total, "
-            "  COUNT(*) FILTER (WHERE state='active') AS active, "
-            "  COUNT(*) FILTER (WHERE state='idle') AS idle, "
-            "  COUNT(*) FILTER (WHERE state='idle in transaction') AS idle_in_tx, "
-            "  COUNT(*) FILTER (WHERE wait_event IS NOT NULL) AS waiting "
-            "FROM pg_stat_activity"
-        )
+        row = fetch_db_pool_row()
     except Exception as e:
         logger.warning(f"db_pool status query failed: {e}")
         return AdminStatusBlock(
@@ -680,20 +671,13 @@ def get_db_pool_status() -> AdminStatusBlock:
 def get_redis_status() -> AdminStatusBlock:
     """Stato Redis broker/cache: memory usage, clients connessi, uptime."""
     try:
-        import redis as _redis_mod
-        from app.config import settings as _settings
-    except Exception as e:
+        info = get_redis_info()
+    except RedisClientUnavailable as e:
         return AdminStatusBlock(
             status="unknown",
             message="redis client non importabile",
             error=str(e)[:200],
         )
-
-    try:
-        client = _redis_mod.Redis.from_url(
-            _settings.CELERY_BROKER_URL, socket_connect_timeout=2,
-        )
-        info = client.info()
     except Exception as e:
         logger.warning(f"redis info failed: {e}")
         return AdminStatusBlock(
@@ -863,25 +847,8 @@ def get_db_schema_size() -> AdminStatusBlock:
     pre-FS-B1-large fix gonfiato con blob >50MB).
     """
     try:
-        from app.db.pg_connection import fetchone, fetchall
-        size_row = fetchone(
-            "SELECT pg_size_pretty(SUM(pg_total_relation_size(c.oid))) AS size_pretty, "
-            "       SUM(pg_total_relation_size(c.oid)) AS size_bytes "
-            "FROM pg_class c "
-            "JOIN pg_namespace n ON n.oid = c.relnamespace "
-            "WHERE n.nspname = 'plenora' AND c.relkind = 'r'"
-        )
-        table_rows = fetchall(
-            "SELECT c.relname AS table, s.n_live_tup AS rows, "
-            "       pg_size_pretty(pg_total_relation_size(c.oid)) AS size_pretty, "
-            "       pg_total_relation_size(c.oid) AS size_bytes "
-            "FROM pg_stat_user_tables s "
-            "JOIN pg_class c ON c.oid = s.relid "
-            "JOIN pg_namespace n ON n.oid = c.relnamespace "
-            "WHERE n.nspname = 'plenora' AND c.relname = ANY(%s) "
-            "ORDER BY size_bytes DESC",
-            (_CRITICAL_TABLES,),
-        )
+        size_row = fetch_schema_size_row()
+        table_rows = fetch_critical_table_rows(_CRITICAL_TABLES)
     except Exception as e:
         logger.warning(f"db_schema_size query failed: {e}")
         return AdminStatusBlock(

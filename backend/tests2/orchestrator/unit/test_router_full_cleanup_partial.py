@@ -56,7 +56,7 @@ def _patched_cleanup(
     else:
         dr_patch = {"return_value": delete_result_return}
 
-    # pg_connection.execute
+    # orchestrator log cleanup repository execute
     if pg_exec_side_effect:
         pg_patch = {"side_effect": pg_exec_side_effect}
     else:
@@ -88,7 +88,7 @@ def _patched_cleanup(
     ), patch(
         "app.core.results.cleanup.delete_result", **dr_patch
     ), patch(
-        "app.db.pg_connection.execute", **pg_patch
+        "app.core.orchestrator.log_cleanup_repository.execute", **pg_patch
     ), patch(
         "app.core.orchestrator.task_service.task_service.forget_task_result",
         **forget_patch

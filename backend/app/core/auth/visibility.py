@@ -4,11 +4,7 @@ from __future__ import annotations
 
 from typing import Optional, TypedDict, cast
 
-from app.db.pg_connection import (
-    fetchone as _pg_fetchone,
-    get_connection as _pg_get_conn,
-    put_connection as _pg_put_conn,
-)
+from app.core.auth import share_store
 
 
 MAGIC_ALL = "*"
@@ -26,11 +22,6 @@ _SHAREABLE: dict[str, tuple[str, str]] = {
 class ShareableResourceOwner(TypedDict):
     id: str
     group_id: str | None
-
-
-def _conn():
-    """Return a PostgreSQL connection from the pool."""
-    return _pg_get_conn()
 
 
 def _validate_table(resource_table: str) -> tuple[str, str]:
@@ -52,11 +43,8 @@ def load_shareable_resource_owner(
 ) -> ShareableResourceOwner | None:
     """Load the owner group row for a shareable resource."""
     _validate_table(resource_table)
-    row = _pg_fetchone(
-        f"SELECT id, group_id FROM {resource_table} WHERE id = %s",
-        (resource_id,),
-    )
-    return cast(ShareableResourceOwner, dict(row)) if row else None
+    row = share_store.fetch_shareable_resource_owner(resource_table, resource_id)
+    return cast(ShareableResourceOwner, row) if row else None
 
 
 def visible_resource_ids(
@@ -66,31 +54,14 @@ def visible_resource_ids(
 ) -> set[str]:
     """Return ids from a resource table visible to a user group."""
     share_table, fk = _validate_table(resource_table)
-    conn = _conn()
-    try:
-        with conn.cursor() as cur:
-            if is_superadmin:
-                cur.execute(f"SELECT id FROM {resource_table}")
-                return {row["id"] for row in cur.fetchall()}
-
-            cur.execute(
-                f"""
-                SELECT id FROM {resource_table} WHERE group_id = %s
-                UNION
-                SELECT {fk} FROM {share_table}
-                WHERE group_id = %s OR group_id = %s
-                """,
-                (user_group_id, user_group_id, MAGIC_ALL),
-            )
-            return {row["id"] for row in cur.fetchall()}
-    except Exception:
-        try:
-            conn.rollback()
-        except Exception:
-            pass
-        raise
-    finally:
-        _pg_put_conn(conn)
+    return share_store.fetch_visible_resource_ids(
+        resource_table,
+        share_table,
+        fk,
+        user_group_id,
+        MAGIC_ALL,
+        is_superadmin=is_superadmin,
+    )
 
 
 def is_resource_visible(
@@ -105,31 +76,12 @@ def is_resource_visible(
         return True
 
     share_table, fk = _validate_table(resource_table)
-    conn = _conn()
-    try:
-        with conn.cursor() as cur:
-            if resource_owner_group_id is None:
-                cur.execute(
-                    f"SELECT group_id FROM {resource_table} WHERE id = %s",
-                    (resource_id,),
-                )
-                row = cur.fetchone()
-                if not row:
-                    return False
-                resource_owner_group_id = row["group_id"]
-
-            if resource_owner_group_id == user_group_id:
-                return True
-
-            cur.execute(
-                f"""
-                SELECT 1 FROM {share_table}
-                WHERE {fk} = %s
-                  AND (group_id = %s OR group_id = %s)
-                LIMIT 1
-                """,
-                (resource_id, user_group_id, MAGIC_ALL),
-            )
-            return cur.fetchone() is not None
-    finally:
-        _pg_put_conn(conn)
+    return share_store.check_resource_visible(
+        resource_table,
+        share_table,
+        fk,
+        resource_id,
+        user_group_id,
+        MAGIC_ALL,
+        resource_owner_group_id=resource_owner_group_id,
+    )

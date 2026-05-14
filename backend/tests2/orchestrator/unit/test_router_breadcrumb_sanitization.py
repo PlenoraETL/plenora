@@ -110,7 +110,8 @@ def test_full_cleanup_tenant_check_breadcrumb_on_project_lookup_fail(client, tmp
     ), patch(
         "app.core.results.cleanup.delete_result", return_value=True
     ), patch(
-        "app.db.pg_connection.execute", return_value=SimpleNamespace(rowcount=0)
+        "app.core.orchestrator.log_cleanup_repository.execute",
+        return_value=SimpleNamespace(rowcount=0)
     ), patch(
         "app.core.orchestrator.task_service.task_service.forget_task_result"
     ):

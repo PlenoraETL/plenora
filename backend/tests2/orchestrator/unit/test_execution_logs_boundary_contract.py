@@ -18,7 +18,7 @@ def _capture_execute(monkeypatch) -> List[Tuple[str, tuple]]:
 
     from app.core.orchestrator import execution_logs
 
-    monkeypatch.setattr(execution_logs, "execute", _fake_execute)
+    monkeypatch.setattr(execution_logs, "_execute", _fake_execute)
     return calls
 
 
@@ -31,7 +31,7 @@ def _capture_fetchall(monkeypatch, *, response):
 
     from app.core.orchestrator import execution_logs
 
-    monkeypatch.setattr(execution_logs, "fetchall", _fake_fetchall)
+    monkeypatch.setattr(execution_logs, "_fetchall", _fake_fetchall)
     return calls
 
 

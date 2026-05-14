@@ -7,10 +7,7 @@ delete mechanics to the provider boundary.
 
 from typing import Tuple
 
-# ADR-0023 accepted residual: IMDF lifecycle policy stays here while the
-# generic ArcGIS delete orchestration lives in `app.core.features`.
-# Documented in `_KNOWN_VIOLATIONS` of the boundary guard tests.
-from app.core.features import arcgis_service_lifecycle as _arcgis_lifecycle
+import app.core.connections.arcgis_service_lifecycle as _arcgis_lifecycle
 
 
 def _try_cleanup_zombie_service(client, conn, fs_name: str) -> Tuple[bool, str]:

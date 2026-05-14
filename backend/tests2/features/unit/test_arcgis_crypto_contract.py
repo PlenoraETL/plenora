@@ -19,7 +19,7 @@ pytestmark = [pytest.mark.unit, pytest.mark.features, pytest.mark.security, pyte
 def test_create_connection_db_encrypts_password_and_client_secret_before_insert(monkeypatch):
     captured = {}
 
-    import app.core.features.features_service as fs_db
+    import app.core.features.arcgis_connection_store as store
 
     def _execute(sql, params):
         captured["sql"] = sql
@@ -44,10 +44,10 @@ def test_create_connection_db_encrypts_password_and_client_secret_before_insert(
             "created_by": "u-1",
         }
 
-    monkeypatch.setattr(fs_db, "_ensure_default_group", lambda: None)
-    monkeypatch.setattr(fs_db, "_generate_id", lambda name: "arcgis_test")
-    monkeypatch.setattr(fs_db.db, "execute", _execute)
-    monkeypatch.setattr(fs_db.db, "fetchone", _fetchone)
+    monkeypatch.setattr(store, "ensure_default_group", lambda: None)
+    monkeypatch.setattr(store, "generate_id", lambda name: "arcgis_test")
+    monkeypatch.setattr(store.db, "execute", _execute)
+    monkeypatch.setattr(store.db, "fetchone", _fetchone)
 
     conn = create_connection_db(
         build_arcgis_create(password="pwd-123", client_secret="secret-123"),

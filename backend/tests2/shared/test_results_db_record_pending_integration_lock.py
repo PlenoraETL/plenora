@@ -16,6 +16,9 @@ pytestmark = [pytest.mark.unit, pytest.mark.shared, pytest.mark.contract]
 
 _BACKEND_ROOT = Path(__file__).resolve().parent.parent.parent
 _RESULTS_CLEANUP = _BACKEND_ROOT / "app" / "core" / "results" / "cleanup.py"
+_RESULTS_CLEANUP_REPOSITORY = (
+    _BACKEND_ROOT / "app" / "core" / "results" / "cleanup_repository.py"
+)
 _STORAGE_RECONCILIATION = (
     _BACKEND_ROOT / "app" / "core" / "resources" / "storage_reconciliation.py"
 )
@@ -134,7 +137,7 @@ def test_delete_results_for_project_calls_record_pending_inside_transaction():
     )
 
 
-def test_delete_results_for_project_record_pending_precedes_bulk_delete():
+def test_delete_results_for_project_records_pending_after_delete_returning():
     body = _slice_function(
         _read_source(_RESULTS_CLEANUP),
         "def delete_results_for_project(",
@@ -142,6 +145,7 @@ def test_delete_results_for_project_record_pending_precedes_bulk_delete():
 
     record_pending_pos = body.find("reconciliation.record_pending(")
     delete_pos = body.find("DELETE FROM results WHERE project_id = %s")
+    returning_pos = body.find("RETURNING id, storage_key")
 
     assert record_pending_pos != -1, (
         "delete_results_for_project missing record_pending call."
@@ -150,7 +154,11 @@ def test_delete_results_for_project_record_pending_precedes_bulk_delete():
         "delete_results_for_project missing the canonical bulk "
         "DELETE FROM results WHERE project_id = %s statement."
     )
-    assert record_pending_pos < delete_pos, (
+    assert returning_pos != -1, (
+        "delete_results_for_project must keep DELETE ... RETURNING "
+        "so pending cleanup entries are created for the exact deleted rows."
+    )
+    assert delete_pos < record_pending_pos, (
         "record_pending MUST precede the bulk DELETE statement — "
         "preserving the W1 invariant on the bulk path."
     )
@@ -199,6 +207,14 @@ def test_results_cleanup_owns_delete_surface():
 
     assert "def delete_result(" in source
     assert "def delete_results_for_project(" in source
+
+
+def test_results_cleanup_uses_repository_for_pg_connection():
+    cleanup_source = _read_source(_RESULTS_CLEANUP)
+    repository_source = _read_source(_RESULTS_CLEANUP_REPOSITORY)
+
+    assert "app.db.pg_connection" not in cleanup_source
+    assert "from app.db.pg_connection import" in repository_source
 
 
 def test_storage_reconciliation_exposes_record_pending_surface():

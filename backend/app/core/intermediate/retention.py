@@ -19,6 +19,21 @@ DeleteRun = Callable[[str], None]
 DEFAULT_RUNS_RETENTION = 5
 
 
+def list_canvas_ids_with_runs(
+    *,
+    fetchall_func: FetchAll | None = None,
+) -> list[str]:
+    """Return distinct canvas IDs that currently have intermediate runs."""
+    fetchall_boundary = fetchall_func or fetchall
+    rows = fetchall_boundary("SELECT DISTINCT canvas_id FROM runs", ())
+    canvas_ids: list[str] = []
+    for row in rows:
+        canvas_id = row["canvas_id"] if isinstance(row, dict) else row[0]
+        if canvas_id:
+            canvas_ids.append(canvas_id)
+    return canvas_ids
+
+
 def apply_runs_retention(
     canvas_id: str,
     group_id: str,

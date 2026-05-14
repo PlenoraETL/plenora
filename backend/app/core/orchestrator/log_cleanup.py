@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from app.core.orchestrator import log_cleanup_repository
+
 
 __all__ = ["delete_task_log_runs"]
 
@@ -15,7 +17,8 @@ def delete_task_log_runs(task_id: str) -> int:
     propagate so the router can preserve its existing best-effort
     partial-cleanup response contract.
     """
-    from app.db.pg_connection import execute as pg_execute
-
-    cur = pg_execute("DELETE FROM log_runs WHERE run_id = %s", (task_id,))
+    cur = log_cleanup_repository.execute(
+        "DELETE FROM log_runs WHERE run_id = %s",
+        (task_id,),
+    )
     return cur.rowcount

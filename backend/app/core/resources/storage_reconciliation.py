@@ -13,6 +13,8 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Literal, Mapping, Optional
 
+from app.core.resources import storage_reconciliation_store as _store
+
 
 logger = logging.getLogger(__name__)
 
@@ -162,9 +164,7 @@ def _autocommit_update(
     whose DELETE already succeeded.
     """
     try:
-        from app.db.pg_connection import execute as pg_execute
-
-        pg_execute(sql, params)
+        _store.execute_reconciliation_update(sql, params)
     except Exception as e:
         logger.warning(
             "event=storage_reconciliation_mark_failed "
@@ -332,9 +332,11 @@ def fetch_due_pending_deletes(
     cutoff = now if now is not None else datetime.now(_tz.utc)
 
     try:
-        from app.db.pg_connection import fetchall
-
-        rows = fetchall(_FETCH_DUE_PENDING_DELETES_SQL, (cutoff, limit))
+        rows = _store.fetch_due_pending_delete_rows(
+            _FETCH_DUE_PENDING_DELETES_SQL,
+            cutoff=cutoff,
+            limit=limit,
+        )
     except Exception as e:
         logger.warning(
             "event=storage_reconciliation_fetch_failed "
@@ -476,9 +478,9 @@ def count_active_by_state_domain() -> list["ReconciliationStateCount"]:
         terminali. Su errore di lettura: `[]`.
     """
     try:
-        from app.db.pg_connection import fetchall
-
-        rows = fetchall(_COUNT_ACTIVE_BY_STATE_DOMAIN_SQL, ())
+        rows = _store.fetch_active_state_domain_count_rows(
+            _COUNT_ACTIVE_BY_STATE_DOMAIN_SQL,
+        )
     except Exception as e:
         logger.warning(
             "event=storage_reconciliation_count_failed "
@@ -559,9 +561,11 @@ def prune_terminal_older_than(
         )
 
     try:
-        from app.db.pg_connection import execute as pg_execute
-
-        cur = pg_execute(_PRUNE_TERMINAL_SQL, (older_than, limit))
+        cur = _store.delete_terminal_rows(
+            _PRUNE_TERMINAL_SQL,
+            older_than=older_than,
+            limit=limit,
+        )
         return int(getattr(cur, "rowcount", 0) or 0)
     except Exception as e:
         logger.warning(
@@ -675,11 +679,12 @@ def record_upload_intent(
     """
     extras_json = json.dumps(dict(extras)) if extras else None
     try:
-        from app.db.pg_connection import fetchone as pg_fetchone
-
-        row = pg_fetchone(
+        row = _store.insert_upload_intent_row(
             _INSERT_UPLOAD_INTENT_SQL,
-            (domain, storage_key, reason, extras_json),
+            domain=domain,
+            storage_key=storage_key,
+            reason=reason,
+            extras_json=extras_json,
         )
         if row is None:
             return None
@@ -758,11 +763,11 @@ def fetch_due_stale_upload_intents(
     grace_cutoff = base_now - _td(seconds=grace_seconds)
 
     try:
-        from app.db.pg_connection import fetchall
-
-        rows = fetchall(
+        rows = _store.fetch_due_stale_upload_intent_rows(
             _FETCH_DUE_STALE_UPLOAD_INTENTS_SQL,
-            (grace_cutoff, base_now, limit),
+            grace_cutoff=grace_cutoff,
+            now=base_now,
+            limit=limit,
         )
     except Exception as e:
         logger.warning(
@@ -849,9 +854,10 @@ def is_storage_key_referenced(
         return None
 
     try:
-        from app.db.pg_connection import fetchall
-
-        rows = fetchall(sql, (storage_key,))
+        rows = _store.fetch_storage_key_reference_rows(
+            sql,
+            storage_key=storage_key,
+        )
     except Exception as e:
         logger.warning(
             "event=storage_reconciliation_storage_key_ref_failed "
@@ -918,9 +924,9 @@ def count_pending_by_operation() -> dict[str, int]:
         nessun upload_intent e' pending). Su errore di lettura: `{}`.
     """
     try:
-        from app.db.pg_connection import fetchall
-
-        rows = fetchall(_COUNT_PENDING_BY_OPERATION_SQL, ())
+        rows = _store.fetch_pending_operation_count_rows(
+            _COUNT_PENDING_BY_OPERATION_SQL,
+        )
     except Exception as e:
         logger.warning(
             "event=storage_reconciliation_count_by_operation_failed "

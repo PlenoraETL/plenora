@@ -7,8 +7,7 @@ from typing import Dict, Mapping, Optional, List, Protocol, TypeAlias
 from datetime import datetime, timezone
 from enum import Enum
 from dataclasses import dataclass
-from celery.result import AsyncResult
-from workers.celery_app import celery_app
+from app.core.task_runtime import CeleryTaskRuntime, TaskRuntimePort
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -313,8 +312,18 @@ class TaskService:
             for k in keys:
                 self._task_project_cache.pop(k, None)
 
-    def __init__(self):
-        self.app = celery_app
+    def __init__(self, runtime: TaskRuntimePort | None = None):
+        self.runtime = runtime or CeleryTaskRuntime()
+
+    @property
+    def app(self) -> object:
+        """Compatibility access to the underlying runtime app."""
+
+        return self.runtime.app
+
+    @app.setter
+    def app(self, app: object) -> None:
+        self.runtime.app = app
 
     def submit_task(self, request: TaskSubmitRequest) -> TaskInfo:
         """Launch a Celery task and record the pending task metadata."""
@@ -353,11 +362,9 @@ class TaskService:
         intermediate_mode_override: Optional[str] = None,
     ) -> TaskInfo:
         """Crea e avvia un task di arricchimento."""
-        from workers.tasks.enrichment_task import execute_enrichment_task
-
         return self.submit_task(
             TaskSubmitRequest(
-                celery_task=execute_enrichment_task,
+                celery_task=self.runtime.enrichment_task(),
                 task_type=TaskType.ENRICHMENT,
                 project_id=project_id,
                 payload=EnrichmentTaskPayload(
@@ -386,11 +393,9 @@ class TaskService:
         user_id: Optional[str] = None,
     ) -> TaskInfo:
         """Crea e avvia un task CARICA."""
-        from workers.tasks.carica_task import execute_carica_task
-
         return self.submit_task(
             TaskSubmitRequest(
-                celery_task=execute_carica_task,
+                celery_task=self.runtime.carica_task(),
                 task_type=TaskType.CARICA,
                 project_id=project_id,
                 payload=CaricaTaskPayload(
@@ -424,10 +429,9 @@ class TaskService:
         Celery per audit run-specific. None = bit-compat. Auth gate
         (superadmin-only) e' al boundary HTTP, non qui.
         """
-        from workers.tasks.pipeline_task import execute_pipeline_task
         return self.submit_task(
             TaskSubmitRequest(
-                celery_task=execute_pipeline_task,
+                celery_task=self.runtime.pipeline_task(),
                 task_type=TaskType.EXECUTE,
                 project_id=project_id,
                 payload=PipelineTaskPayload(
@@ -449,10 +453,9 @@ class TaskService:
         user_id: Optional[str] = None,
     ) -> TaskInfo:
         """Crea e avvia un task di preview pipeline."""
-        from workers.tasks.pipeline_task import preview_pipeline_task
         return self.submit_task(
             TaskSubmitRequest(
-                celery_task=preview_pipeline_task,
+                celery_task=self.runtime.preview_task(),
                 task_type=TaskType.PREVIEW,
                 project_id=project_id,
                 payload=PreviewTaskPayload(
@@ -475,7 +478,7 @@ class TaskService:
         Returns:
             TaskInfo con stato attuale
         """
-        result = AsyncResult(task_id, app=self.app)
+        result = self.runtime.get_result(task_id)
         
         # Mappa stati Celery ai nostri stati
         celery_to_status = {
@@ -577,7 +580,7 @@ class TaskService:
             True se annullato con successo
         """
         try:
-            self.app.control.revoke(task_id, terminate=True)
+            self.runtime.revoke(task_id, terminate=True)
             logger.info(f"Task {task_id} annullato")
             return True
         except Exception as e:
@@ -596,7 +599,7 @@ class TaskService:
         Returns:
             Risultato del task o None se non completato
         """
-        result = AsyncResult(task_id, app=self.app)
+        result = self.runtime.get_result(task_id)
         
         if result.state == "SUCCESS" and isinstance(result.result, Mapping):
             return TaskResultPayload.from_celery_meta(result.result)
@@ -604,7 +607,7 @@ class TaskService:
 
     def forget_task_result(self, task_id: str) -> None:
         """Forget the runtime result record for a task."""
-        AsyncResult(task_id, app=self.app).forget()
+        self.runtime.forget_result(task_id)
     
     # LISTA TASK ATTIVI
     
@@ -616,10 +619,7 @@ class TaskService:
             Lista di task attivi
         """
         try:
-            inspect = self.app.control.inspect()
-            
-            active = inspect.active() or {}
-            reserved = inspect.reserved() or {}
+            active, reserved = self.runtime.task_lists()
             
             tasks: List[ActiveTaskInfo] = []
             

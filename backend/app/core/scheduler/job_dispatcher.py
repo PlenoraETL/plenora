@@ -10,6 +10,12 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Protocol
 
+from app.core.task_runtime.dispatch import (
+    TaskDispatchResult,
+    TaskRuntime,
+    dispatch_task_by_name,
+)
+
 
 SCHEDULE_PIPELINE_TASK_NAME = "workers.tasks.schedule_task.schedule_pipeline_task"
 
@@ -21,10 +27,8 @@ class ScheduledJobHandle:
     id: str
 
 
-class ScheduledJobResult(Protocol):
+class ScheduledJobResult(TaskDispatchResult, Protocol):
     """Minimal async result contract exposed by the runtime adapter."""
-
-    id: str
 
 
 class ScheduledJobTask(Protocol):
@@ -32,6 +36,20 @@ class ScheduledJobTask(Protocol):
 
     def apply_async(
         self,
+        *,
+        args: list[str],
+        kwargs: dict[str, Any],
+        countdown: int | float | None = None,
+    ) -> ScheduledJobResult:
+        ...
+
+
+class ScheduledJobRuntime(TaskRuntime, Protocol):
+    """Minimal queue runtime contract required to enqueue a scheduler run."""
+
+    def send_task(
+        self,
+        name: str,
         *,
         args: list[str],
         kwargs: dict[str, Any],
@@ -64,13 +82,9 @@ def enqueue_schedule_run(
     scheduled_for: str | None = None,
     countdown: int | float | None = None,
     task: ScheduledJobTask | None = None,
+    runtime: ScheduledJobRuntime | None = None,
 ) -> ScheduledJobHandle:
     """Enqueue a scheduler run through the configured task runtime."""
-    if task is None:
-        from workers.tasks.schedule_task import schedule_pipeline_task
-
-        task = schedule_pipeline_task
-
     apply_kwargs: dict[str, Any] = {
         "args": [schedule_id],
         "kwargs": scheduled_run_kwargs(
@@ -82,7 +96,15 @@ def enqueue_schedule_run(
     if countdown is not None:
         apply_kwargs["countdown"] = countdown
 
-    result = task.apply_async(**apply_kwargs)
+    if task is not None:
+        result = task.apply_async(**apply_kwargs)
+    else:
+        result = dispatch_task_by_name(
+            SCHEDULE_PIPELINE_TASK_NAME,
+            runtime=runtime,
+            **apply_kwargs,
+        )
+
     return ScheduledJobHandle(id=str(result.id))
 
 
@@ -90,6 +112,7 @@ __all__ = [
     "SCHEDULE_PIPELINE_TASK_NAME",
     "ScheduledJobHandle",
     "ScheduledJobResult",
+    "ScheduledJobRuntime",
     "ScheduledJobTask",
     "enqueue_schedule_run",
     "scheduled_run_kwargs",

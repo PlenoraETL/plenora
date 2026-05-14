@@ -5,8 +5,11 @@ from __future__ import annotations
 from collections.abc import Callable, Iterable
 from typing import Protocol
 
-from app.core.intermediate.retention import delete_all_runs_for_canvas
-from app.db.pg_connection import close_connection as _close_connection, fetchall
+from app.core.intermediate.retention import (
+    delete_all_runs_for_canvas,
+    list_canvas_ids_with_runs as _list_canvas_ids_with_runs,
+)
+from app.core.intermediate.db import close_worker_connection as _close_worker_connection
 
 
 class CleanupLogger(Protocol):
@@ -15,13 +18,7 @@ class CleanupLogger(Protocol):
 
 def list_canvas_ids_with_runs() -> list[str]:
     """Return distinct canvas IDs that currently have intermediate runs."""
-    rows = fetchall("SELECT DISTINCT canvas_id FROM runs")
-    canvas_ids: list[str] = []
-    for row in rows:
-        canvas_id = row["canvas_id"] if isinstance(row, dict) else row[0]
-        if canvas_id:
-            canvas_ids.append(canvas_id)
-    return canvas_ids
+    return _list_canvas_ids_with_runs()
 
 
 def delete_runs_for_canvas(canvas_id: str) -> int:
@@ -50,7 +47,7 @@ def delete_runs_for_canvases(
 
 def close_worker_connection() -> None:
     """Release the current worker thread's intermediate DB connection."""
-    _close_connection()
+    _close_worker_connection()
 
 
 __all__ = [

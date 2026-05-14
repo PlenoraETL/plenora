@@ -106,7 +106,11 @@ def test_sync_from_db_adds_entry_for_enabled_schedule(scheduler):
     assert "urby:schedule:sched-1" in scheduler.data
     entry = scheduler.data["urby:schedule:sched-1"]
     assert entry.task == "workers.tasks.schedule_task.schedule_pipeline_task"
-    assert entry.kwargs == {"schedule_id": "sched-1", "triggered_by": "cron"}
+    assert entry.kwargs == {
+        "schedule_id": "sched-1",
+        "triggered_by": "cron",
+        "retry_attempt": 0,
+    }
 
 
 def test_sync_from_db_removes_disabled_schedule(scheduler):

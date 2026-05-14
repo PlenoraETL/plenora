@@ -15,6 +15,7 @@ from app.core.scheduler.models import (
     ScheduleLogEntry,
     ScheduleLogList,
 )
+from app.core.scheduler import db as scheduler_db
 from app.utils.logger import get_logger
 
 
@@ -38,27 +39,19 @@ class ScheduleLogService:
         e' stabile, opaco, usabile come identificatore anywhere.
         """
         try:
-            from app.db.pg_connection import execute
-            execute(
-                "INSERT INTO schedule_logs "
-                "(log_id, schedule_id, timestamp, level, event, triggered_by, "
-                " steps, total_duration_ms, error_message, schedule_info, "
-                " pipeline_info, execution_info) "
-                "VALUES (%s,%s,%s,%s,%s,%s,%s::jsonb,%s,%s,%s::jsonb,%s::jsonb,%s::jsonb)",
-                (
-                    log_entry.log_id,
-                    log_entry.schedule_id,
-                    log_entry.timestamp,
-                    log_entry.level,
-                    log_entry.event,
-                    log_entry.triggered_by,
-                    json.dumps([s.model_dump(mode="json") for s in log_entry.steps]),
-                    log_entry.total_duration_ms,
-                    log_entry.error_message,
-                    json.dumps(log_entry.schedule_info) if log_entry.schedule_info else None,
-                    json.dumps(log_entry.pipeline_info) if log_entry.pipeline_info else None,
-                    json.dumps(log_entry.execution_info) if log_entry.execution_info else None,
-                ),
+            scheduler_db.insert_schedule_log(
+                log_id=log_entry.log_id,
+                schedule_id=log_entry.schedule_id,
+                timestamp=log_entry.timestamp,
+                level=log_entry.level,
+                event=log_entry.event,
+                triggered_by=log_entry.triggered_by,
+                steps_json=json.dumps([s.model_dump(mode="json") for s in log_entry.steps]),
+                total_duration_ms=log_entry.total_duration_ms,
+                error_message=log_entry.error_message,
+                schedule_info_json=json.dumps(log_entry.schedule_info) if log_entry.schedule_info else None,
+                pipeline_info_json=json.dumps(log_entry.pipeline_info) if log_entry.pipeline_info else None,
+                execution_info_json=json.dumps(log_entry.execution_info) if log_entry.execution_info else None,
             )
             return log_entry.log_id
         except Exception as e:
@@ -95,11 +88,7 @@ class ScheduleLogService:
     def get_log(self, log_id: str) -> Optional[ScheduleLogEntry]:
         """Carica un singolo log entry per ID."""
         try:
-            from app.db.pg_connection import fetchone
-            row = fetchone(
-                "SELECT * FROM schedule_logs WHERE log_id = %s",
-                (log_id,),
-            )
+            row = scheduler_db.get_schedule_log_row(log_id)
             if not row:
                 return None
             return self._row_to_entry(row)
@@ -131,37 +120,13 @@ class ScheduleLogService:
             event_filter = f"PIPELINE_{status_filter.upper()}"
 
         try:
-            from app.db.pg_connection import fetchall, fetchone
-
-            if event_filter:
-                count_sql = (
-                    "SELECT COUNT(*) AS n FROM schedule_logs "
-                    "WHERE schedule_id = %s AND event = %s"
-                )
-                page_sql = (
-                    "SELECT * FROM schedule_logs "
-                    "WHERE schedule_id = %s AND event = %s "
-                    "ORDER BY timestamp DESC LIMIT %s OFFSET %s"
-                )
-                args_count = (schedule_id, event_filter)
-                args_page = (schedule_id, event_filter, page_size, offset)
-            else:
-                count_sql = (
-                    "SELECT COUNT(*) AS n FROM schedule_logs "
-                    "WHERE schedule_id = %s"
-                )
-                page_sql = (
-                    "SELECT * FROM schedule_logs "
-                    "WHERE schedule_id = %s "
-                    "ORDER BY timestamp DESC LIMIT %s OFFSET %s"
-                )
-                args_count = (schedule_id,)
-                args_page = (schedule_id, page_size, offset)
-
-            count_row = fetchone(count_sql, args_count)
-            total = int(count_row["n"]) if count_row else 0
-
-            rows = fetchall(page_sql, args_page)
+            total = scheduler_db.count_schedule_log_rows(schedule_id, event_filter)
+            rows = scheduler_db.list_schedule_log_rows(
+                schedule_id,
+                page_size=page_size,
+                offset=offset,
+                event_filter=event_filter,
+            )
             logs = [self._row_to_entry(r) for r in rows]
 
             return ScheduleLogList(
@@ -177,12 +142,7 @@ class ScheduleLogService:
         Usato dall'execution_manager per aggiornare runtime.last_execution.
         """
         try:
-            from app.db.pg_connection import fetchone
-            row = fetchone(
-                "SELECT * FROM schedule_logs WHERE schedule_id = %s "
-                "ORDER BY timestamp DESC LIMIT 1",
-                (schedule_id,),
-            )
+            row = scheduler_db.get_latest_schedule_log_row(schedule_id)
             if not row:
                 return None
             return self._row_to_entry(row)
@@ -198,14 +158,9 @@ class ScheduleLogService:
         Usato tipicamente da un beat job di retention. Indexed su timestamp.
         """
         try:
-            from app.db.pg_connection import execute
             # Convert date -> datetime UTC per comparison con TIMESTAMPTZ
             before_dt = datetime.combine(before_date, datetime.min.time(), tzinfo=timezone.utc)
-            cur = execute(
-                "DELETE FROM schedule_logs WHERE timestamp < %s",
-                (before_dt,),
-            )
-            deleted = cur.rowcount
+            deleted = scheduler_db.delete_schedule_logs_before(before_dt)
             if deleted:
                 logger.info(f"Eliminati {deleted} log prima di {before_date}")
             return deleted
@@ -216,12 +171,7 @@ class ScheduleLogService:
     def delete_schedule_logs(self, schedule_id: str) -> int:
         """Cancella tutti i log di uno specifico schedule (cleanup on delete)."""
         try:
-            from app.db.pg_connection import execute
-            cur = execute(
-                "DELETE FROM schedule_logs WHERE schedule_id = %s",
-                (schedule_id,),
-            )
-            deleted = cur.rowcount
+            deleted = scheduler_db.delete_schedule_logs_for_schedule(schedule_id)
             logger.info(f"Eliminati {deleted} log per schedule {schedule_id}")
             return deleted
         except Exception as e:

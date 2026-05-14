@@ -5,7 +5,8 @@ from __future__ import annotations
 from collections.abc import Callable, Iterable
 from typing import Protocol
 
-from app.db.pg_connection import fetchall, transaction
+from app.core.results import cleanup_repository
+from app.core.results.cleanup_repository import transaction
 from app.core.resources import storage_reconciliation as reconciliation
 from app.infrastructure.storage import compensation as storage_compensation
 from app.utils.logger import get_logger
@@ -20,7 +21,7 @@ class CleanupLogger(Protocol):
 
 def list_project_ids_with_results() -> list[str]:
     """Return distinct project IDs that currently have result rows."""
-    rows = fetchall("SELECT DISTINCT project_id FROM results")
+    rows = cleanup_repository.list_distinct_project_id_rows()
     project_ids: list[str] = []
     for row in rows:
         if isinstance(row, dict):

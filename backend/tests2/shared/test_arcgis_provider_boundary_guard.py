@@ -91,25 +91,15 @@ _CONCRETE_ARCGIS_CLIENT_IMPORT_ALLOWLIST = {
 _IMDF_UPLOADER_COMPAT_IMPORT = "app.core.imdf.arcgis_uploader"
 _IMDF_UPLOADER_COMPAT_ALLOWED_FILES: set[Path] = set()
 
-# Known violations - TODO: fix these per macro-components.md section 2.3.
-# Each entry is (filename -> exact imported modules). The guard is strict
-# on all other files and on any new module inside known-bad files.
-# Remove an entry only when the cross-domain import is gone.
-_KNOWN_VIOLATIONS: dict[str, set[str]] = {
-    "service_discovery.py": {"app.core.features"},
-    "service_lifecycle.py": {"app.core.features"},
-}
+# Known ADR-0023 residuals for IMDF -> Features ArcGIS imports.
+# Each entry is (filename -> exact imported modules). The guard is strict on
+# all other files and on any new module inside known-bad files. If a worker
+# moves these generic helpers behind the Connections/provider boundary, the
+# drift assertion below requires trimming this allowlist in the same change.
+_KNOWN_VIOLATIONS: dict[str, set[str]] = {}
 
-_KNOWN_VIOLATION_REASONS: dict[str, str] = {
-    "service_discovery.py": (
-        "KEEP_COMPAT: IMDF keeps policy wrappers while generic ArcGIS "
-        "discovery helpers live in app.core.features."
-    ),
-    "service_lifecycle.py": (
-        "KEEP_COMPAT: IMDF keeps lifecycle timing policy while generic ArcGIS "
-        "delete orchestration lives in app.core.features."
-    ),
-}
+_KNOWN_VIOLATION_REMOVAL_CONDITION_PREFIX = "KEEP_COMPAT_WITH_REMOVAL_CONDITION:"
+_KNOWN_VIOLATION_REASONS: dict[str, str] = {}
 
 
 def _imdf_python_files() -> list[Path]:
@@ -208,6 +198,16 @@ def test_concrete_arcgis_client_import_allowlist_reasons_are_explicit() -> None:
         assert reason.startswith("KEEP_COMPAT_WITH_REMOVAL_CONDITION:"), (
             f"{path.relative_to(_BACKEND_DIR).as_posix()}: concrete "
             "ArcGISClient import allowlist entries require an explicit "
+            "KEEP_COMPAT_WITH_REMOVAL_CONDITION reason."
+        )
+
+
+def test_imdf_known_violation_reasons_are_explicit_and_in_sync() -> None:
+    """Every IMDF residual must have a matching removal condition."""
+    assert set(_KNOWN_VIOLATION_REASONS) == set(_KNOWN_VIOLATIONS)
+    for filename, reason in _KNOWN_VIOLATION_REASONS.items():
+        assert reason.startswith(_KNOWN_VIOLATION_REMOVAL_CONDITION_PREFIX), (
+            f"{filename}: IMDF ADR-0023 allowlist entries require an explicit "
             "KEEP_COMPAT_WITH_REMOVAL_CONDITION reason."
         )
 

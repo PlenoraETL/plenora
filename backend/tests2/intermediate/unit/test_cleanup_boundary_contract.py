@@ -34,14 +34,15 @@ def test_intermediate_cleanup_imports_leaf_boundaries_without_db_facade() -> Non
     tree = _tree(_CLEANUP_PATH)
     imports = _imported_modules(tree)
 
-    assert "app.core.intermediate.db" not in imports
     assert "app.core.intermediate.db.fetchall" not in imports
     assert "app.core.intermediate.db.close_connection" not in imports
     assert "app.core.intermediate.db.delete_all_runs_for_canvas" not in imports
 
     assert "app.core.intermediate.retention.delete_all_runs_for_canvas" in imports
-    assert "app.db.pg_connection.fetchall" in imports
-    assert "app.db.pg_connection.close_connection" in imports
+    assert "app.core.intermediate.retention.list_canvas_ids_with_runs" in imports
+    assert "app.db.pg_connection.fetchall" not in imports
+    assert "app.db.pg_connection.close_connection" not in imports
+    assert "app.core.intermediate.db.close_worker_connection" in imports
 
 
 def test_intermediate_cleanup_delete_delegates_to_retention_boundary(monkeypatch) -> None:
@@ -67,7 +68,7 @@ def test_intermediate_cleanup_close_delegates_to_pg_boundary(monkeypatch) -> Non
     from app.core.intermediate import cleanup
 
     calls: list[str] = []
-    monkeypatch.setattr(cleanup, "_close_connection", lambda: calls.append("close"))
+    monkeypatch.setattr(cleanup, "_close_worker_connection", lambda: calls.append("close"))
 
     cleanup.close_worker_connection()
 

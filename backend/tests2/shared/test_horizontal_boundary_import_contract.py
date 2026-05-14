@@ -11,6 +11,14 @@ pytestmark = [pytest.mark.unit, pytest.mark.shared, pytest.mark.contract]
 
 _BACKEND_ROOT = Path(__file__).resolve().parents[2]
 
+_APP_CORE_ROOT = _BACKEND_ROOT / "app" / "core"
+
+_TASK_RUNTIME_PREFIX = "app/core/task_runtime/"
+
+_ADMIN_WORKER_BOUNDARY_ALLOWLIST = {
+    "app/core/admin_system_status/worker_runtime.py": ("workers.celery_app",),
+}
+
 
 def _imports(rel_path: str) -> set[str]:
     tree = ast.parse((_BACKEND_ROOT / rel_path).read_text(encoding="utf-8"))
@@ -21,6 +29,22 @@ def _imports(rel_path: str) -> set[str]:
         elif isinstance(node, ast.ImportFrom) and node.module:
             modules.add(node.module)
     return modules
+
+
+def _app_core_python_paths() -> list[Path]:
+    return sorted(path for path in _APP_CORE_ROOT.rglob("*.py") if path.is_file())
+
+
+def _rel_path(path: Path) -> str:
+    return path.relative_to(_BACKEND_ROOT).as_posix()
+
+
+def _matches_import(module: str, prefix: str) -> bool:
+    return module == prefix or module.startswith(prefix + ".")
+
+
+def _is_task_runtime_path(rel_path: str) -> bool:
+    return rel_path.startswith(_TASK_RUNTIME_PREFIX)
 
 
 @pytest.mark.parametrize(
@@ -295,6 +319,50 @@ def test_horizontal_boundaries_do_not_import_forbidden_runtime_modules(
     violations = sorted(
         module
         for module in imports
-        if any(module == prefix or module.startswith(prefix + ".") for prefix in forbidden_prefixes)
+        if any(_matches_import(module, prefix) for prefix in forbidden_prefixes)
     )
     assert violations == [], f"{rel_path} has forbidden imports: {violations}"
+
+
+def test_app_core_does_not_gain_new_direct_celery_imports() -> None:
+    violations: dict[str, list[str]] = {}
+
+    for path in _app_core_python_paths():
+        rel_path = _rel_path(path)
+        forbidden = sorted(
+            module
+            for module in _imports(rel_path)
+            if _matches_import(module, "celery")
+            and not _is_task_runtime_path(rel_path)
+        )
+        if forbidden:
+            violations[rel_path] = forbidden
+
+    assert violations == {}, (
+        "Application modules must not import Celery directly. Put runtime access "
+        "behind app/core/task_runtime/*. Violations: "
+        f"{violations}"
+    )
+
+
+def test_app_core_worker_imports_stay_on_explicit_runtime_boundaries() -> None:
+    violations: dict[str, list[str]] = {}
+
+    for path in _app_core_python_paths():
+        rel_path = _rel_path(path)
+        admin_allowed = _ADMIN_WORKER_BOUNDARY_ALLOWLIST.get(rel_path, ())
+        forbidden = sorted(
+            module
+            for module in _imports(rel_path)
+            if _matches_import(module, "workers")
+            and not _is_task_runtime_path(rel_path)
+            and module not in admin_allowed
+        )
+        if forbidden:
+            violations[rel_path] = forbidden
+
+    assert violations == {}, (
+        "Application modules must not import worker runtime internals except "
+        "through app/core/task_runtime/* or explicit admin worker-status "
+        f"boundaries. Violations: {violations}"
+    )

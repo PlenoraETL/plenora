@@ -1,0 +1,44 @@
+"""Shared task dispatch adapter for application boundaries."""
+
+from __future__ import annotations
+
+from typing import Any, Protocol
+
+
+class TaskDispatchResult(Protocol):
+    """Minimal async result contract exposed by task runtimes."""
+
+    id: str
+
+
+class TaskRuntime(Protocol):
+    """Minimal queue runtime contract for named task dispatch."""
+
+    def send_task(self, name: str, **options: Any) -> TaskDispatchResult:
+        ...
+
+
+def default_task_runtime() -> TaskRuntime:
+    """Return the process-wide concrete task runtime."""
+    from workers.celery_app import celery_app
+
+    return celery_app
+
+
+def dispatch_task_by_name(
+    name: str,
+    *,
+    runtime: TaskRuntime | None = None,
+    **options: Any,
+) -> TaskDispatchResult:
+    """Dispatch a named task through the provided or default runtime."""
+    task_runtime = runtime if runtime is not None else default_task_runtime()
+    return task_runtime.send_task(name, **options)
+
+
+__all__ = [
+    "TaskDispatchResult",
+    "TaskRuntime",
+    "default_task_runtime",
+    "dispatch_task_by_name",
+]

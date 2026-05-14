@@ -44,6 +44,9 @@ Current ArcGIS shape:
 - `ArcGISProviderProtocol` lives in `app/shared/connections/arcgis_provider.py`.
 - IMDF uses the neutral connection resolver instead of depending directly on
   `FeaturesService` or a Features-owned adapter.
+- The ADR-0023 IMDF residual allowlist is empty: IMDF ArcGIS policy wrappers
+  route generic discovery and lifecycle helper calls through
+  `app.core.connections`, not `app.core.features`.
 - Generic ArcGIS SQL and existing-service publish-mode helpers live under
   `app/core/connections`; legacy `features` modules are compatibility-only.
 
@@ -52,6 +55,8 @@ Rules:
 - ArcGIS is an external read/write provider, not an IMDF subdomain.
 - Shared connection contracts must not import concrete clients or DB code.
 - New provider semantics belong in `connections`, not in canvas node models.
+- Do not add new IMDF imports from `app.core.features`; the boundary guard has
+  no remaining ADR-0023 IMDF exceptions.
 
 ---
 
@@ -66,6 +71,7 @@ Canonical surfaces:
 - `app/shared/execution/payloads.py`
 - `app/shared/execution/schema_types.py`
 - `app/core/orchestrator/*`
+- `app/core/task_runtime/*`
 - `app/core/scheduler/job_dispatcher.py`
 - `app/core/scheduler/run_log_store.py`
 - `app/core/imdf/publish_dispatcher.py`
@@ -82,6 +88,11 @@ Current contracts:
 - `ColumnSchema` is the shared schema contract for inferred canvas columns.
 - `app/core/scheduler/job_dispatcher.py` is the scheduled-run dispatch
   boundary; scheduler application code should not call Celery tasks directly.
+- `app/core/task_runtime/*` is the shared task-runtime adapter surface;
+  app services depend on its ports instead of importing Celery,
+  `workers.celery_app`, or concrete `workers.tasks.*` modules directly.
+- `app/core/orchestrator/task_runtime.py` is a legacy pre-shared-runtime
+  location and must not keep or regain concrete Celery/worker imports.
 - `app/core/scheduler/run_log_store.py` is the scheduled-run DB log reader
   boundary; catalog/view code should not import scheduler DB directly.
 - `app/core/imdf/publish_dispatcher.py` is the IMDF publish dispatch boundary;
@@ -95,6 +106,8 @@ Rules:
   needed.
 - Do not call `workers.tasks.schedule_task.schedule_pipeline_task.apply_async`
   from scheduler application code; use the dispatch boundary.
+- Do not import Celery, `workers.celery_app`, or concrete `workers.tasks.*`
+  modules from application services; use `app.core.task_runtime`.
 - Do not import scheduler DB directly from scheduler catalog/view code; use
   `app.core.scheduler.run_log_store`.
 - Do not call `workers.tasks.imdf_publish_task.execute_imdf_publish_task`
@@ -263,12 +276,18 @@ Canonical surfaces:
 - `app/db/config/*`
 - `app/db/results_db_service.py`
 - `app/db/query_executor.py`
+- Domain DB boundaries: `app/core/**/db.py`, `app/core/**/*_store.py`,
+  and `app/core/**/*_repository.py`
 
 Rules:
 
 - Prefer direct domain repositories over broad facade imports.
 - Do not re-expand retired DB facades.
 - Keep SQL and connection handling out of shared leaf contracts.
+- Routers and vertical services should not import `app.db.pg_connection`
+  directly; route reads/writes through the local domain DB boundary.
+- `app/core/task_runtime/*` is the only app-core surface allowed to import
+  Celery, `workers.celery_app`, or concrete `workers.tasks.*` modules.
 
 ---
 
@@ -349,6 +368,8 @@ Rules:
   orchestration; use `app.core.dataframes.parallel_ops`.
 - Do not enqueue scheduled runs directly through
   `workers.tasks.schedule_task`; use `app.core.scheduler.job_dispatcher`.
+- Do not import Celery, `workers.celery_app`, or concrete `workers.tasks.*`
+  modules from application services; use `app.core.task_runtime`.
 - Do not import scheduler DB directly from scheduler catalog/view code; use
   `app.core.scheduler.run_log_store`.
 - Do not enqueue IMDF publish tasks directly through

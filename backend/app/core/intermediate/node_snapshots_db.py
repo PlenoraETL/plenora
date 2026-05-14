@@ -421,3 +421,43 @@ def get_node_table_rows(
         }
         result.append({"_row_hash": row.get("row_hash", ""), **row_data})
     return result
+
+
+def list_node_row_hash_diff(
+    *,
+    source_run_id: str,
+    compare_run_id: str,
+    node_id: str,
+    limit: int = 500,
+    fetchall_func=fetchall,
+) -> List[Dict]:
+    """Rows present in source run/node but absent from compare by row_hash."""
+    return fetchall_func(
+        """
+        SELECT a.row_hash, a.row_data
+        FROM node_rows a
+        WHERE a.run_id = %s AND a.node_id = %s
+          AND NOT EXISTS (
+            SELECT 1 FROM node_rows b
+            WHERE b.run_id = %s AND b.node_id = %s
+              AND b.row_hash = a.row_hash
+          )
+        ORDER BY a.row_idx
+        LIMIT %s
+        """,
+        (source_run_id, node_id, compare_run_id, node_id, int(limit)),
+    )
+
+
+def count_node_rows(
+    run_id: str,
+    node_id: str,
+    *,
+    fetchone_func=fetchone,
+) -> int:
+    """Count persisted rows for one run/node."""
+    row = fetchone_func(
+        "SELECT COUNT(*) AS cnt FROM node_rows WHERE run_id = %s AND node_id = %s",
+        (run_id, node_id),
+    )
+    return int(row["cnt"]) if row else 0

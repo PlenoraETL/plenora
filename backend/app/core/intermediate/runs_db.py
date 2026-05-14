@@ -156,17 +156,23 @@ def get_run(
 
 def list_runs(
     canvas_id: str,
-    group_id: str,
+    group_id: Optional[str],
     limit: int = 50,
     *,
     fetchall_func: FetchAll | None = None,
 ) -> list[RunRow]:
     """List runs for a canvas, isolated by group, newest first."""
     fetchall_boundary = fetchall_func or fetchall
-    rows = fetchall_boundary(
-        "SELECT * FROM runs WHERE canvas_id = %s AND group_id = %s ORDER BY timestamp DESC LIMIT %s",
-        (canvas_id, group_id, limit),
-    )
+    if group_id is None:
+        rows = fetchall_boundary(
+            "SELECT * FROM runs WHERE canvas_id = %s ORDER BY timestamp DESC LIMIT %s",
+            (canvas_id, limit),
+        )
+    else:
+        rows = fetchall_boundary(
+            "SELECT * FROM runs WHERE canvas_id = %s AND group_id = %s ORDER BY timestamp DESC LIMIT %s",
+            (canvas_id, group_id, limit),
+        )
     return [RunRow.from_record(row) for row in rows]
 
 

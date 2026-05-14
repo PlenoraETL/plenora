@@ -4,7 +4,10 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from app.db.pg_connection import execute, fetchall
+from app.core.orchestrator.execution_log_repository import (
+    execute as _execute,
+    fetchall as _fetchall,
+)
 
 
 def _utc_now_iso() -> str:
@@ -22,7 +25,7 @@ def log_execution(
 ) -> dict[str, str]:
     """Create an orchestrator execution-log row."""
     now = _utc_now_iso()
-    execute(
+    _execute(
         "INSERT INTO execution_logs (id, group_id, project_id, schedule_id, status, "
         "started_at, message, triggered_by) VALUES (%s,%s,%s,%s,%s,%s,%s,%s)",
         (
@@ -50,7 +53,7 @@ def update_log(
 ) -> None:
     """Mark an orchestrator execution-log row with its latest status."""
     finished = finished_at or _utc_now_iso()
-    execute(
+    _execute(
         "UPDATE execution_logs SET status=%s, finished_at=%s, duration_s=%s, "
         "rows_count=%s, message=%s, error=%s WHERE id=%s",
         (status, finished, duration_s, rows_count, message, error, log_id),
@@ -75,7 +78,7 @@ def list_logs(
         conditions.append("group_id = %s")
         params.append(group_id)
     where = f"WHERE {' AND '.join(conditions)}" if conditions else ""
-    return fetchall(
+    return _fetchall(
         f"SELECT * FROM execution_logs {where} ORDER BY started_at DESC LIMIT %s OFFSET %s",
         tuple(params) + (bounded_limit, bounded_offset),
     )
