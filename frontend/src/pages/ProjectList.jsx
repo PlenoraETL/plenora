@@ -10,6 +10,7 @@ import { useAuth } from '../context/AuthContext';
 import { listProjects, deleteProject, listConnections, listApiConnections,
          listEseguibili, deleteEseguibile } from '../api';
 import NewProjectModal from '../components/projects/NewProjectModal';
+import EsegSelectorModal from '../components/projects/EsegSelectorModal';
 
 import { listFeatureConnections } from '../api/features';
 import { getFiles } from '../api/files';
@@ -24,7 +25,6 @@ import EseguibileExecuteWizard from '../components/eseguibili/EseguibileExecuteW
 import AppSidebar from '../components/AppSidebar';
 import ThemeToggle from '../components/common/ThemeToggle';
 import { useTheme } from '../hooks/useTheme';
-import ModalWrapper, { ModalButton } from '../components/common/ModalWrapper';
 import { can, role } from '../utils/permissions';
 import '../styles/ProjectList.css';
 function ProjectList() {
@@ -49,7 +49,6 @@ function ProjectList() {
   const [eseguibili, setEseguibili] = useState([]);            // lista eseguibili (catene on-demand)
   const [executeEseguibileId, setExecuteEseguibileId] = useState(null); // id eseguibile da lanciare nel wizard
   const [showEsegSelector, setShowEsegSelector] = useState(false);      // selettore progetto sorgente per nuovo eseguibile
-  const [esegSelectorSearch, setEsegSelectorSearch] = useState('');
   const [projectSources,    setProjectSources]    = useState({});
   const [projectFileSources,setProjectFileSources]= useState({});
   const [search,            setSearch]            = useState('');
@@ -185,7 +184,6 @@ function ProjectList() {
   };
 
   const openEsegSelector = () => {
-    setEsegSelectorSearch('');
     setShowEsegSelector(true);
   };
 
@@ -470,64 +468,15 @@ function ProjectList() {
           onClose={() => setExecuteEseguibileId(null)}
         />
       )}
-{showEsegSelector && (
-        <ModalWrapper
-          isOpen={true}
-          onClose={() => setShowEsegSelector(false)}
-          title="Pubblica come Eseguibile"
-          icon="📢"
-          subtitle="Seleziona un progetto Arricchisci da pubblicare come catena on-demand"
-          size="md"
-          footer={
-            <ModalButton variant="secondary" onClick={() => setShowEsegSelector(false)}>Annulla</ModalButton>
-          }
-        >
-            <div className="pl__modal-field">
-              <input
-                type="text"
-                className="pl__modal-input"
-                placeholder="Cerca progetto Arricchisci..."
-                value={esegSelectorSearch}
-                onChange={(e) => setEsegSelectorSearch(e.target.value)}
-                autoFocus
-              />
-            </div>
-
-            <div className="pl__modal-list">
-              {arricchisciProjects.length === 0 ? (
-                <div className="pl__modal-empty">
-                  Nessun progetto Arricchisci disponibile.<br />
-                  <span className="pl__modal-empty-hint">Crea prima un progetto Arricchisci.</span>
-                </div>
-              ) : (
-                arricchisciProjects
-                  .filter(p => !esegSelectorSearch || (p.name || '').toLowerCase().includes(esegSelectorSearch.toLowerCase()))
-                  .map(p => (
-                    <div
-                      key={p.id}
-                      className="pl__modal-row"
-                      onClick={() => {
-                        setShowEsegSelector(false);
-                        setPublishProject(p);
-                      }}
-                    >
-                      <span className="pl__modal-row-icon">◈</span>
-                      <div className="pl__modal-row-body">
-                        <div className="pl__modal-row-name">{p.name}</div>
-                        {p.description && (
-                          <div className="pl__modal-row-desc">
-                            {p.description}
-                          </div>
-                        )}
-                      </div>
-                      <span className="pl__modal-row-arrow">→</span>
-                    </div>
-                  ))
-              )}
-            </div>
-
-        </ModalWrapper>
-      )}
+      <EsegSelectorModal
+        isOpen={showEsegSelector}
+        arricchisciProjects={arricchisciProjects}
+        onClose={() => setShowEsegSelector(false)}
+        onSelect={(p) => {
+          setShowEsegSelector(false);
+          setPublishProject(p);
+        }}
+      />
 
       <ConfirmDialog {...confirmModal} />
     </div>
