@@ -10,6 +10,9 @@ import { useAuth } from '../context/AuthContext';
 import { deleteProject, deleteEseguibile } from '../api';
 import NewProjectModal from '../components/projects/NewProjectModal';
 import EsegSelectorModal from '../components/projects/EsegSelectorModal';
+import ProjectSection from '../components/projects/ProjectSection';
+import ProjectCard from '../components/projects/ProjectCard';
+import EseguibiliSection from '../components/projects/EseguibiliSection';
 import { useProjectListData } from '../components/projects/useProjectListData';
 import { handleCascade409, formatCascadeDependencies } from '../api/errors';
 import ConfirmDialog from '../components/common/ConfirmDialog';
@@ -354,47 +357,13 @@ function ProjectList() {
               />
             ))}
           </ProjectSection>
-<section id="pl-section-eseguibili" className="pl__section">
-            <div className="pl__section-header">
-              <div className="pl__section-title-wrap">
-                <span className="pl__chip pl__chip--eseg">🚀 Eseguibili</span>
-                <span className="pl__section-sub">Catene on-demand — l'utente carica un file e ottiene il risultato</span>
-              </div>
-              {isAdmin && (
-                <button
-                  type="button"
-                  className="pl__btn pl__btn--ghost pl__btn--sm"
-                  onClick={openEsegSelector}
-                  title="Pubblica un progetto Arricchisci come eseguibile"
-                >＋ Nuovo</button>
-              )}
-            </div>
-
-            {filterBySearch(eseguibili).length === 0 ? (
-              <div className="pl__empty">
-                <canvas className="pl__empty-hex" />
-                <div className="pl__empty-icon">🚀</div>
-                <div className="pl__empty-title">Nessun eseguibile pubblicato</div>
-                <div className="pl__empty-text">
-                  {isAdmin
-                    ? 'Pubblica un progetto Arricchisci come eseguibile usando il pulsante 📢 sulla sua card o "+ Nuovo" qui sopra.'
-                    : 'Chiedi a un amministratore di pubblicare una catena come eseguibile.'}
-                </div>
-              </div>
-            ) : (
-              <div className="pl__cards-grid">
-                {filterBySearch(eseguibili).map(item => (
-                  <EseguibileCard
-                    key={item.id}
-                    item={item}
-                    isAdmin={isAdmin}
-                    onExecute={() => setExecuteEseguibileId(item.id)}
-                    onDelete={() => handleDeleteEseguibile(item.id, item.name)}
-                  />
-                ))}
-              </div>
-            )}
-          </section>
+<EseguibiliSection
+            items={filterBySearch(eseguibili)}
+            isAdmin={isAdmin}
+            onNew={openEsegSelector}
+            onExecute={(item) => setExecuteEseguibileId(item.id)}
+            onDelete={(item) => handleDeleteEseguibile(item.id, item.name)}
+          />
 
         </div>{/* /content */}
       </div>{/* /main */}
@@ -433,123 +402,6 @@ function ProjectList() {
       />
 
       <ConfirmDialog {...confirmModal} />
-    </div>
-  );
-}
-function ProjectSection({ id, chipClass, chipLabel, subtitle, onNew, canCreate = true, empty, emptyIcon, emptyTitle, emptyText, children }) {
-  return (
-    <section id={id} className="pl__section">
-      <div className="pl__section-header">
-        <div className="pl__section-title-wrap">
-          <span className={`pl__chip ${chipClass}`}>{chipLabel}</span>
-          <span className="pl__section-sub">{subtitle}</span>
-        </div>
-        {canCreate && (
-          <button type="button" className="pl__btn pl__btn--ghost pl__btn--sm" onClick={onNew}>＋ Nuovo</button>
-        )}
-      </div>
-
-      {empty ? (
-        <div className="pl__empty">
-          <canvas className="pl__empty-hex" />
-          <div className="pl__empty-icon">{emptyIcon}</div>
-          <div className="pl__empty-title">{emptyTitle}</div>
-          <div className="pl__empty-text">{emptyText}</div>
-        </div>
-      ) : (
-        <div className="pl__cards-grid">{children}</div>
-      )}
-    </section>
-  );
-}
-function ProjectCard({ project, accentClass, modLabel, meta, scheduleCount, onOpen, onDelete, onSchedule }) {
-  const lastRun = project.last_run_at;
-  const status  = project.last_status;
-
-  const statusLabel = status === 'success' ? 'Completato'
-    : status === 'running' ? 'In esecuzione'
-    : status === 'error'   ? 'Errore'
-    : 'Idle';
-  const statusMod = status === 'success' ? 'pl__status--ok'
-    : status === 'error' ? 'pl__status--err'
-    : '';
-
-  return (
-    <div className="pl__card" onClick={onOpen}>
-      <div className={`pl__card-accent ${accentClass}`} />
-      <div className="pl__card-body">
-        <div className="pl__card-header-row">
-          <div className="pl__card-name">{project.name}</div>
-          <span className="pl__card-mod">{modLabel}</span>
-        </div>
-        <div className="pl__card-desc">{project.description || 'Nessuna descrizione'}</div>
-        <div className="pl__card-meta">
-          {meta.map(({ key, val }) => (
-            <div key={key}>
-              <div className="pl__meta-key">{key}</div>
-              <div className="pl__meta-val">{val}</div>
-            </div>
-          ))}
-        </div>
-        <div className="pl__card-footer">
-          <span className={`pl__status ${statusMod}`}>{statusLabel}</span>
-          <div className="pl__card-actions">
-            {scheduleCount > 0 && (
-              <button type="button" className="pl__btn pl__btn--ghost pl__btn--sm pl__btn--schedule"
-                onClick={e => { e.stopPropagation(); onSchedule(); }}
-                title="Schedule automatici"
-              >
-                ⏰ <span className="pl__schedule-badge">{scheduleCount}</span>
-              </button>
-            )}
-            <button type="button" className="pl__btn pl__btn--ghost pl__btn--sm"
-              onClick={e => { e.stopPropagation(); onDelete(); }}
-            >🗑</button>
-            <button type="button" className="pl__btn pl__btn--primary pl__btn--sm"
-              onClick={e => { e.stopPropagation(); onOpen(); }}
-            >Apri →</button>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-function EseguibileCard({ item, isAdmin, onExecute, onDelete }) {
-  const fmt = (item.default_output_format || 'xlsx').toUpperCase();
-  return (
-    <div className="pl__card" onClick={onExecute}>
-      <div className="pl__card-accent pl__card-accent--eseg" />
-      <div className="pl__card-body">
-        <div className="pl__card-header-row">
-          <div className="pl__card-name">{item.name}</div>
-          <span className="pl__card-mod pl__card-mod--eseg">🚀 {fmt}</span>
-        </div>
-        <div className="pl__card-desc">{item.description || 'Nessuna descrizione'}</div>
-        <div className="pl__card-meta">
-          <div>
-            <div className="pl__meta-key">Colonne attese</div>
-            <div className="pl__meta-val">{item.expected_columns_count ?? '—'}</div>
-          </div>
-          <div>
-            <div className="pl__meta-key">Output</div>
-            <div className="pl__meta-val">{fmt}</div>
-          </div>
-        </div>
-        <div className="pl__card-footer">
-          <span className="pl__status">On-demand</span>
-          <div className="pl__card-actions">
-            {isAdmin && (
-              <button type="button" className="pl__btn pl__btn--ghost pl__btn--sm"
-                onClick={e => { e.stopPropagation(); onDelete(); }}
-                title="Elimina eseguibile"
-              >🗑</button>
-            )}
-            <button type="button" className="pl__btn pl__btn--primary pl__btn--sm"
-              onClick={e => { e.stopPropagation(); onExecute(); }}
-            >▶ Esegui</button>
-          </div>
-        </div>
-      </div>
     </div>
   );
 }
