@@ -59,10 +59,9 @@ export const TRANSACTION_MODES = Object.freeze(['all_or_nothing', 'per_batch']);
 // (rinominare "update" -> "force") e' task separato.
 export const CONFLICT_POLICIES = Object.freeze(['abort', 'skip', 'force']);
 
-// REST HTTP method. BE accetta anche DELETE (per future estensioni)
-// ma il FE non lo offre — CARICA su DELETE non ha semantica.
-export const REST_METHODS_BE = Object.freeze(['POST', 'PUT', 'PATCH', 'DELETE']);
-export const REST_METHODS_UI = Object.freeze(['POST', 'PUT', 'PATCH']);
+// REST HTTP method. Post fix-drift: BE e UI allineati. CARICA su
+// DELETE non ha semantica e DELETE non era mai stato esposto in UI.
+export const REST_METHODS = Object.freeze(['POST', 'PUT', 'PATCH']);
 
 // REST batching: invio batch unico vs per-record.
 export const REST_BATCH_MODES = Object.freeze(['batch', 'per_record']);

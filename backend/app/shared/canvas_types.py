@@ -91,7 +91,13 @@ LEGACY_CONFLICT_POLICY_ALIASES: dict[str, str] = {
 
 
 # REST destination HTTP method (per carica con dest_type='rest').
-RestMethodLiteral = Literal["POST", "PUT", "PATCH", "DELETE"]
+# DELETE rimosso post fix-drift (commit successivo al lockin): CARICA
+# su DELETE non ha semantica (cosa cancelli?), il FE non l'ha mai
+# offerto. Nessuna migration: canvas legacy con rest_method="DELETE"
+# verrebbero rifiutati dal Pydantic; se mai dovessero comparire (solo
+# scripts che hanno bypassato il FE) il fail e' visibile e gestibile
+# caso per caso.
+RestMethodLiteral = Literal["POST", "PUT", "PATCH"]
 VALID_REST_METHODS: tuple[str, ...] = get_args(RestMethodLiteral)
 
 

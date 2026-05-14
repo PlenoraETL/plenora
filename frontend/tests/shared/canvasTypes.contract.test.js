@@ -58,12 +58,8 @@ describe('canvasTypes lockin', () => {
     expect([...ct.CONFLICT_POLICIES].sort()).toEqual(['abort', 'force', 'skip']);
   });
 
-  it('REST_METHODS_BE espone il superset (POST/PUT/PATCH/DELETE)', () => {
-    expect([...ct.REST_METHODS_BE].sort()).toEqual(['DELETE', 'PATCH', 'POST', 'PUT']);
-  });
-
-  it('REST_METHODS_UI espone solo il subset esposto in UI', () => {
-    expect([...ct.REST_METHODS_UI].sort()).toEqual(['PATCH', 'POST', 'PUT']);
+  it('REST_METHODS allineato BE↔UI (POST/PUT/PATCH, DELETE rimosso)', () => {
+    expect([...ct.REST_METHODS].sort()).toEqual(['PATCH', 'POST', 'PUT']);
   });
 
   it('REST_BATCH_MODES contiene 2 valori', () => {
@@ -78,7 +74,7 @@ describe('canvasTypes lockin', () => {
     expect(Object.isFrozen(ct.NODE_TYPES)).toBe(true);
     expect(Object.isFrozen(ct.WRITE_MODES)).toBe(true);
     expect(Object.isFrozen(ct.CONFLICT_POLICIES)).toBe(true);
-    expect(Object.isFrozen(ct.REST_METHODS_UI)).toBe(true);
+    expect(Object.isFrozen(ct.REST_METHODS)).toBe(true);
   });
 });
 

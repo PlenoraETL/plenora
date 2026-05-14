@@ -80,15 +80,13 @@ def test_conflict_policy_legacy_alias_update_maps_to_force():
 
 def test_rest_methods_lockin():
     """
-    Lock attuale: POST/PUT/PATCH/DELETE.
-
-    DRIFT NOTO: il FE espone solo POST/PUT/PATCH (RestDestinationSection
-    REST_METHODS). DELETE e' accettato dal BE ma non offerto in UI —
-    intenzionale perche' CARICA su DELETE non ha semantica (cancella
-    cosa?). Da decidere se rimuovere "DELETE" dal Literal canvas o
-    aggiungerlo all'UI.
+    Lock post fix-drift: POST/PUT/PATCH. DELETE rimosso — il FE non
+    l'ha mai esposto in UI e la semantica CARICA su DELETE non era
+    definita. Canvas legacy con rest_method="DELETE" (solo bypass
+    scripts, mai dal FE) vengono ora rifiutati dal Pydantic; nessun
+    validator legacy aggiunto perche` la fattispecie e' teorica.
     """
-    assert set(ct.VALID_REST_METHODS) == {"POST", "PUT", "PATCH", "DELETE"}
+    assert set(ct.VALID_REST_METHODS) == {"POST", "PUT", "PATCH"}
 
 
 def test_rest_batch_modes_lockin():
