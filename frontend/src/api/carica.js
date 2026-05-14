@@ -34,18 +34,6 @@ export const getCaricaTables = async (connId, schema) => {
 };
 
 /**
- * Restituisce le colonne di una tabella.
- * @param {string|number} connId
- * @param {string} schema
- * @param {string} table
- * @returns {Promise<Array<{name: string, type: string}>>}
- */
-export const getCaricaColumns = async (connId, schema, table) => {
-  const response = await http.get(`/carica/columns/${connId}/${schema}/${table}`);
-  return response.data;
-};
-
-/**
  * Calcola un auto-mapping tra colonne sorgente e colonne di destinazione.
  * @param {Object} payload
  * @param {string[]} payload.source_columns   - Colonne output della pipeline

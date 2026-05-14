@@ -170,39 +170,12 @@ async def get_tables(connection_id: str, schema_name: str, current_user: Current
         raise_typed_http(error_codes.INTERNAL_ERROR, status_code=500, message="Errore interno del server")
 
 
-# ENDPOINT: COLONNE TABELLA
-
-@router.get("/columns/{connection_id}/{schema_name}/{table_name}")
-async def get_columns(connection_id: str, schema_name: str, table_name: str, current_user: CurrentUser = Depends(require_not_esecutore)):
-    """GET /api/carica/columns/{connection_id}/{schema_name}/{table_name}
-
-    Ritorna le colonne (nome + tipo) della tabella specificata.
-    Usato dal frontend per popolare il form di mapping colonne.
-    """
-    _conn_obj = _CS().get_connection(connection_id)
-    assert_resource_visible(_conn_obj, "connections", current_user, "Connessione")
-    try:
-        connection = _get_connection(connection_id)
-        db_type = connection.get("type", "postgres")
-        engine = _create_engine(connection)
-
-        config = WriteConfig(
-            connection_id=connection_id,
-            schema_name=schema_name,
-            table_name=table_name,
-        )
-        writer = DatabaseWriter(config=config, engine=engine, db_type=db_type)
-        columns = writer.get_existing_columns()
-
-        return {
-            "columns": columns,
-            "table_name": table_name,
-            "table_exists": len(columns) > 0,
-        }
-
-    except Exception as e:
-        logger.error(f"[CRASH] Errore recupero colonne: {e}", exc_info=True)
-        raise_typed_http(error_codes.INTERNAL_ERROR, status_code=500, message="Errore interno del server")
+# NOTE: l'endpoint `GET /columns/{connection_id}/{schema_name}/{table_name}`
+# e' stato rimosso il 2026-05-14. Il FE non lo chiamava piu` dal commit
+# f71d0a0 (dead fetch `loadDestColumns` rimossa); nessun test BE lo
+# referenziava. La funzionalita` "leggi colonne tabella DB
+# destinazione" si fa via `POST /carica/auto-mapping` che ritorna
+# `existing_columns` come parte del payload mapping.
 
 
 # ENDPOINT: AUTO-MAPPING

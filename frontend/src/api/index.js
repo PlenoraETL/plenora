@@ -84,7 +84,6 @@ export * from './schedules';
 export {
   getCaricaSchemas,
   getCaricaTables,
-  getCaricaColumns,
   postCaricaAutoMapping,
 } from './carica';
 
