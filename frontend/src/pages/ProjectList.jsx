@@ -7,15 +7,10 @@ import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { useToast } from '../hooks/useToast';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { listProjects, deleteProject, listConnections, listApiConnections,
-         listEseguibili, deleteEseguibile } from '../api';
+import { deleteProject, deleteEseguibile } from '../api';
 import NewProjectModal from '../components/projects/NewProjectModal';
 import EsegSelectorModal from '../components/projects/EsegSelectorModal';
-
-import { listFeatureConnections } from '../api/features';
-import { getFiles } from '../api/files';
-import { listSchedules } from '../api/schedules';
-import { listDataSources } from '../api/datasources';
+import { useProjectListData } from '../components/projects/useProjectListData';
 import { handleCascade409, formatCascadeDependencies } from '../api/errors';
 import ConfirmDialog from '../components/common/ConfirmDialog';
 import { useConfirmModal } from '../hooks/useConfirmModal';
@@ -34,32 +29,34 @@ function ProjectList() {
   const location = useLocation();
   const { user, logout } = useAuth();
 
-  // State
-  const [projects,          setProjects]          = useState([]);
-  const [connections,       setConnections]       = useState([]);
-  const [arcgisConnections, setArcgisConnections] = useState([]);
-  const [apiConnections,    setApiConnections]    = useState([]);
-  const [files,             setFiles]             = useState([]);
-  const [schedules,         setSchedules]         = useState([]);
-  const [dataSources,       setDataSources]       = useState([]);
-  const [loading,           setLoading]           = useState(true);
+  // Data caricati via hook condiviso (8 fetch parallele + indici manipola).
+  const {
+    projects,
+    connections,
+    arcgisConnections,
+    apiConnections,
+    files,
+    schedules,
+    dataSources,
+    eseguibili,
+    projectSources,
+    projectFileSources,
+    loading,
+    reload: loadData,
+  } = useProjectListData();
+
+  // UI state
   const [showModal,         setShowModal]         = useState(false);
   const [newProjectInitialType, setNewProjectInitialType] = useState('estrai');
   const [publishProject, setPublishProject] = useState(null); // progetto da pubblicare come eseguibile
-  const [eseguibili, setEseguibili] = useState([]);            // lista eseguibili (catene on-demand)
   const [executeEseguibileId, setExecuteEseguibileId] = useState(null); // id eseguibile da lanciare nel wizard
   const [showEsegSelector, setShowEsegSelector] = useState(false);      // selettore progetto sorgente per nuovo eseguibile
-  const [projectSources,    setProjectSources]    = useState({});
-  const [projectFileSources,setProjectFileSources]= useState({});
   const [search,            setSearch]            = useState('');
   const { theme } = useTheme();
 
 
   const canvasRef = useRef(null);
   useHexCanvas(canvasRef);
-
-  // Load data
-  useEffect(() => { loadData(); }, []);
 
   // Quando si arriva sulla dashboard con un hash (es. /#estrai), scrolliamo
   // alla sezione corrispondente. Aspettiamo che `loading` sia false così
@@ -76,49 +73,6 @@ function ProjectList() {
     }, 50);
     return () => clearTimeout(t);
   }, [loading, location.hash]);
-
-  const loadData = async () => {
-    try {
-      setLoading(true);
-      const [projectsData, connectionsData, apiConnData, filesData, schedulesData, arcgisData, eseguibiliData, dataSourcesData] =
-        await Promise.all([
-          listProjects(),
-          listConnections(),
-          listApiConnections(),
-          getFiles().catch(() => ({ files: [] })),
-          listSchedules().catch(() => ({ schedules: [], total: 0 })),
-          listFeatureConnections().catch(() => ({ connections: [] })),
-          listEseguibili().catch(() => []),
-          listDataSources().catch(() => []),
-        ]);
-
-      const projectsList = projectsData.projects || [];
-      setProjects(projectsList);
-      setConnections(connectionsData.connections || []);
-      setArcgisConnections(arcgisData.connections || arcgisData || []);
-      setApiConnections(apiConnData.api_connections || []);
-      setFiles(filesData.files || []);
-      setSchedules(schedulesData.schedules || []);
-      setEseguibili(Array.isArray(eseguibiliData) ? eseguibiliData : (eseguibiliData?.items || []));
-      setDataSources(dataSourcesData?.datasources || []);
-
-      const sourcesMap = {};
-      const fileSourcesMap = {};
-      projectsList.forEach(p => {
-        if (p.project_type === 'manipola') {
-          if (p.source_project_ids)  sourcesMap[p.id]     = p.source_project_ids;
-          if (p.file_source_ids)     fileSourcesMap[p.id] = p.file_source_ids;
-        }
-      });
-      setProjectSources(sourcesMap);
-      setProjectFileSources(fileSourcesMap);
-    } catch (err) {
-      console.error('Errore caricamento dati:', err);
-      toast.error('Errore caricamento dati');
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const handleDeleteProject = async (id, name) => {
     const ok = await confirmModal.confirm({
