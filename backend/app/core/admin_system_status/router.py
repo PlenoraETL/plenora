@@ -31,7 +31,10 @@ def get_system_status(
     - `jwt_blacklist`: stato blacklist JWT (Redis) + contatori ops + warning "inoperante da X min"
 
     Ogni blocco ha `status` in {ok, warn, error, unknown} e `message`
-    human-readable. Errori di uno NON bloccano gli altri (graceful
-    degradation).
+    human-readable. Ogni blocco espone anche `scope`:
+    `cluster` per dipendenze condivise e `local_replica` per metriche
+    della sola replica backend che risponde. I blocchi locali includono
+    `scope_warning`/`warnings`. Errori di uno NON bloccano gli altri
+    (graceful degradation).
     """
     return service.get_system_status().to_api_dict()

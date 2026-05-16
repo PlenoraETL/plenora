@@ -9,6 +9,14 @@ from pydantic import BaseModel, ConfigDict
 
 
 StatusValue: TypeAlias = Literal["ok", "warn", "error", "unknown"]
+StatusScope: TypeAlias = Literal["local_replica", "cluster"]
+
+LOCAL_REPLICA_SCOPE_WARNING = (
+    "Dato locale alla replica backend che ha servito la richiesta; "
+    "non rappresenta l'intero cluster."
+)
+
+
 class ScheduleFailure(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -80,6 +88,9 @@ class AdminStatusBlock(BaseModel):
     status: StatusValue
     message: str
     error: str | None = None
+    scope: StatusScope | None = None
+    scope_warning: str | None = None
+    warnings: list[str] | None = None
 
     last_key: str | None = None
     last_modified: str | None = None
@@ -138,7 +149,20 @@ class AdminStatusBlock(BaseModel):
         return key in self.to_api_dict()
 
     def to_api_dict(self) -> Mapping[str, object]:
-        return self.model_dump(exclude_unset=True)
+        data = self.model_dump(exclude_unset=True)
+        scope = data.get("scope") or "cluster"
+        data["scope"] = scope
+        if scope == "local_replica":
+            scope_warning = (
+                data.get("scope_warning")
+                or LOCAL_REPLICA_SCOPE_WARNING
+            )
+            data["scope_warning"] = scope_warning
+            warnings = list(data.get("warnings") or [])
+            if scope_warning not in warnings:
+                warnings.insert(0, scope_warning)
+            data["warnings"] = warnings
+        return data
 
 
 class SystemStatusPayload(BaseModel):

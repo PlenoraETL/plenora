@@ -107,7 +107,33 @@ def _ticket_counts(*, low=0, medium=0, high=0, critical=0):
     }
 
 
-# get_host_resources — psutil
+# Scope metadata
+
+
+def test_status_block_serializes_default_cluster_scope():
+    from app.core.admin_system_status.models import AdminStatusBlock
+
+    out = AdminStatusBlock(status="ok", message="ok").to_api_dict()
+
+    assert out["scope"] == "cluster"
+    assert "warnings" not in out
+
+
+def test_status_block_local_replica_scope_adds_warning():
+    from app.core.admin_system_status.models import AdminStatusBlock
+
+    out = AdminStatusBlock(
+        status="ok",
+        message="ok",
+        scope="local_replica",
+    ).to_api_dict()
+
+    assert out["scope"] == "local_replica"
+    assert "replica backend" in out["scope_warning"]
+    assert out["warnings"] == [out["scope_warning"]]
+
+
+# get_host_resources - psutil
 
 
 def test_host_resources_when_psutil_missing(monkeypatch):
@@ -127,6 +153,9 @@ def test_host_resources_when_psutil_missing(monkeypatch):
         out = service.get_host_resources()
 
     assert out["status"] == "unknown"
+    assert out["scope"] == "local_replica"
+    assert "replica backend" in out["scope_warning"]
+    assert out["warnings"] == [out["scope_warning"]]
     assert "psutil" in out["message"]
     assert out["disk"] is None
     assert out["memory"] is None
@@ -148,6 +177,8 @@ def test_host_resources_happy_path(monkeypatch):
     out = service.get_host_resources()
 
     assert out["status"] == "ok"
+    assert out["scope"] == "local_replica"
+    assert "intero cluster" in out["warnings"][0]
     assert out["disk"]["percent"] == 50.0
     assert out["memory"]["percent"] == 50.0
     assert out["cpu"]["count"] == 4
@@ -403,6 +434,7 @@ def test_db_pool_threshold_statuses(monkeypatch, row, expected_status, expected_
     if expected_percent is not None:
         assert out["total"] == row["total"]
         assert out["percent"] == expected_percent
+    assert out["scope"] == "cluster"
 
 
 # get_redis_status
@@ -574,6 +606,11 @@ def test_aggregator_includes_new_blocks(monkeypatch):
               "host_resources", "db_pool", "redis", "db_schema",
               "jwt_blacklist", "tickets", "generated_at"):
         assert k in out, f"Mancante: {k}"
+    api = out.to_api_dict()
+    assert api["backup"]["scope"] == "cluster"
+    assert api["host_resources"]["scope"] == "local_replica"
+    assert "replica backend" in api["host_resources"]["scope_warning"]
+    assert api["db_pool"]["scope"] == "cluster"
 
 
 def test_router_serializes_typed_system_status(monkeypatch):
@@ -587,7 +624,7 @@ def test_router_serializes_typed_system_status(monkeypatch):
         verify_restore=AdminStatusBlock(status="unknown", message="Nessuna verifica registrata", last_run_at=None),
         schedules=AdminStatusBlock(status="ok", message="Nessuno schedule attivo", total_active=0, failing_count=0, failing=[]),
         workers=AdminStatusBlock(status="error", message="Nessun worker online", nodes=0, workers_online=0),
-        host_resources=AdminStatusBlock(status="unknown", message="Metriche non disponibili", disk=None, memory=None, cpu=None),
+        host_resources=AdminStatusBlock(status="unknown", message="Metriche non disponibili", scope="local_replica", disk=None, memory=None, cpu=None),
         db_pool=AdminStatusBlock(status="unknown", message="pg_stat_activity vuoto"),
         redis=AdminStatusBlock(status="error", message="Redis non raggiungibile: ConnectionError", error="down"),
         db_schema=AdminStatusBlock(status="unknown", message="DB non accessibile", error="down"),
@@ -600,6 +637,9 @@ def test_router_serializes_typed_system_status(monkeypatch):
 
     assert isinstance(out, dict)
     assert out["backup"]["status"] == "unknown"
+    assert out["backup"]["scope"] == "cluster"
+    assert out["host_resources"]["scope"] == "local_replica"
+    assert "replica backend" in out["host_resources"]["scope_warning"]
     assert "last_key" not in out["backup"]
     assert out["verify_restore"]["last_run_at"] is None
 
@@ -626,7 +666,7 @@ def test_blacklist_status_ok_via_wrapper(monkeypatch):
     _ = tb  # noqa: F841
 
     out = service.get_blacklist_status()
-    assert out.to_api_dict() == expected
+    assert out.to_api_dict() == {**expected, "scope": "cluster"}
 
 
 def test_blacklist_status_unknown_when_module_missing(monkeypatch):

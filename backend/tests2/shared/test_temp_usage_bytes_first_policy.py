@@ -350,7 +350,7 @@ _TEMP_INVENTORY: dict[tuple[str, int], tuple[str, str]] = {
         "then opens with fiona to enumerate layers (GDB/GPKG). "
         "fiona requires a path; bytes API not available.",
     ),
-    ("app/core/files/preview_temp.py", 94): (
+    ("app/core/files/preview_temp.py", 107): (
         "STAGING_INGESTION",
         "Preview render: writes uploaded body to a temp before "
         "format-aware preview reader picks it up (CSV / Excel / "
@@ -368,27 +368,35 @@ _TEMP_INVENTORY: dict[tuple[str, int], tuple[str, str]] = {
     # was deleted as dead code. R-021.1 is closed; the typed
     # replacement is `ResultBlobLoader._materialize_to_temp_path`,
     # already inventoried below as PATH_REQUIRED_FILE.
-    ("app/core/eseguibili/router.py", 326): (
+    ("app/core/eseguibili/router.py", 336): (
         "PATH_REQUIRED_FILE",
         "Eseguibile output materialization: temp path written to "
         "FastAPI StreamingResponse via FileResponse. Path "
         "structurally required by FileResponse contract.",
     ),
-    ("app/core/imdf/storage.py", 94): (
+    ("app/core/eseguibili/service.py", 315): (
+        "PATH_REQUIRED_FILE",
+        "Eseguibile upload hydration: file_source bytes are materialized "
+        "to a short-lived local path only so the existing multi-format "
+        "dataframe parser can inspect CSV/XLSX/geospatial uploads. The "
+        "path is not handed to Celery and is unlinked immediately after "
+        "parsing.",
+    ),
+    ("app/core/imdf/storage.py", 95): (
         "DIR_MULTIFILE",
         "IMDF bundle download: temp path is the local cache "
         "destination for multi-file IMDF zip (then extracted to "
         "directory). Path required by ZipFile API + extract dir.",
     ),
-    ("app/core/imdf/storage.py", 117): (
+    ("app/core/imdf/storage.py", 118): (
         "DIR_MULTIFILE",
         "IMDF bundle re-cache: same multi-file pattern.",
     ),
-    ("app/core/imdf/storage.py", 165): (
+    ("app/core/imdf/storage.py", 166): (
         "DIR_MULTIFILE",
         "IMDF bundle re-cache fallback: same multi-file pattern.",
     ),
-    ("app/core/resources/loaders/result_blob.py", 342): (
+    ("app/core/resources/loaders/result_blob.py", 343): (
         "PATH_REQUIRED_FILE",
         "ResultBlobLoader._materialize_to_temp_path (mode='path'): "
         "the ENGINE'S OWN path-mode tempfile. Caller-owned "
@@ -399,18 +407,18 @@ _TEMP_INVENTORY: dict[tuple[str, int], tuple[str, str]] = {
         "callers should prefer mode='bytes'.",
     ),
 
-    ("app/core/files/dataframe_io.py", 184): (
+    ("app/core/dataframes/frame_io.py", 431): (
         "DIR_MULTIFILE",
         "Shapefile zip extraction: SHP is multi-file (shp+shx+"
         "dbf+prj+cpg). geopandas.read_file requires a directory "
         "with all sidecars present.",
     ),
-    ("app/core/files/dataframe_io.py", 196): (
+    ("app/core/dataframes/frame_io.py", 443): (
         "DIR_MULTIFILE",
         "FileGDB zip extraction: GDB is a directory artifact. "
         "Path required by GDAL/OGR driver.",
     ),
-    ("app/core/files/dataframe_io.py", 204): (
+    ("app/core/dataframes/frame_io.py", 451): (
         "DIR_MULTIFILE",
         "Single-file ZIP recursive load: extract to dir then "
         "recurse into load_dataframe_from_file (which dispatches "
@@ -425,14 +433,21 @@ _TEMP_INVENTORY: dict[tuple[str, int], tuple[str, str]] = {
         "Bytes API not available for these drivers; tempfile is "
         "the structural adapter at the source-loading boundary.",
     ),
-    ("app/core/files/geospatial_io.py", 230): (
+    ("app/core/manipola/datasource_node_loading.py", 162): (
+        "PATH_REQUIRED_FILE",
+        "Manipola datasource node blob materialization: downloaded "
+        "file_source bytes are staged to a NamedTemporaryFile so the "
+        "format-aware dataframe loader can parse by extension. The "
+        "temporary path is caller-owned and removed after loading.",
+    ),
+    ("app/core/dataframes/geospatial_io.py", 326): (
         "DIR_MULTIFILE",
         "Shapefile WRITE: gdf.to_file emits multi-file shapefile "
         "into tempdir, then zipfile packages into single .zip. "
         "OGR driver requires path; multi-file zip not "
         "expressible as bytes-only.",
     ),
-    ("workers/tasks/enrichment_task.py", 978): (
+    ("workers/tasks/enrichment_task.py", 992): (
         "PATH_REQUIRED_FILE",
         "Enrichment task gpkg/shp output (eseguibile): same "
         "OGR-driver-requires-path constraint as "
@@ -445,18 +460,18 @@ _TEMP_INVENTORY: dict[tuple[str, int], tuple[str, str]] = {
         "tempdirs. Current callers use it for SHP/GDB/GPKG multi-file "
         "artifacts whose sidecars require a directory path.",
     ),
-    ("app/core/files/preview_temp.py", 106): (
+    ("app/core/files/preview_temp.py", 119): (
         "DIR_MULTIFILE",
         "Preview-temp ZIP extraction: same multi-file pattern as "
         "the regular SHP/GDB upload paths.",
     ),
-    ("app/core/arricchisci/api_connection_rest_file.py", 563): (
+    ("app/core/arricchisci/api_connection_rest_file.py", 568): (
         "STAGING_INGESTION",
         "REST file processor: tempdir hosting multipart upload "
         "staging + binary response buffer for the outbound HTTP "
         "POST + download.",
     ),
-    ("app/core/imdf/loader.py", 119): (
+    ("app/core/imdf/loader.py", 121): (
         "DIR_MULTIFILE",
         "IMDF zip extraction: bundle is a multi-file artifact "
         "(manifest + GDB + IFC + renderers). Path required by "

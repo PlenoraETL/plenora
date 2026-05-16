@@ -38,6 +38,7 @@ from app.core.admin_system_status.models import (
     DiskStatus,
     MemoryStatus,
     ScheduleFailure,
+    StatusScope,
     SystemStatusPayload,
     WorkerDetail,
 )
@@ -47,13 +48,21 @@ from app.utils.logger import get_logger
 logger = get_logger(__name__)
 
 
-def _as_status_block(value: AdminStatusBlock | dict[str, object]) -> AdminStatusBlock:
+def _as_status_block(
+    value: AdminStatusBlock | dict[str, object],
+    *,
+    default_scope: StatusScope = "cluster",
+) -> AdminStatusBlock:
     """Normalize test doubles and legacy delegates at the service boundary."""
     if isinstance(value, AdminStatusBlock):
-        return value
-    if "message" not in value:
-        value = {**value, "message": ""}
-    return AdminStatusBlock.model_validate(value)
+        block = value
+    else:
+        if "message" not in value:
+            value = {**value, "message": ""}
+        block = AdminStatusBlock.model_validate(value)
+    if block.scope is None:
+        block = block.model_copy(update={"scope": default_scope})
+    return block
 
 
 # Soglie (documentate qui per review esplicita
@@ -471,6 +480,7 @@ def get_host_resources() -> AdminStatusBlock:
         return AdminStatusBlock(
             status="unknown",
             message="psutil non installato",
+            scope="local_replica",
             disk=None,
             memory=None,
             cpu=None,
@@ -604,6 +614,7 @@ def get_host_resources() -> AdminStatusBlock:
     return AdminStatusBlock(
         status=worst_status if (disk_info or memory_info or cpu_info) else "unknown",
         message=message,
+        scope="local_replica",
         disk=disk_info,
         memory=memory_info,
         cpu=cpu_info,
@@ -910,7 +921,10 @@ def get_system_status() -> SystemStatusPayload:
         verify_restore=_as_status_block(get_verify_restore_status()),
         schedules=_as_status_block(get_schedules_status()),
         workers=_as_status_block(get_workers_status()),
-        host_resources=_as_status_block(get_host_resources()),
+        host_resources=_as_status_block(
+            get_host_resources(),
+            default_scope="local_replica",
+        ),
         db_pool=_as_status_block(get_db_pool_status()),
         redis=_as_status_block(get_redis_status()),
         db_schema=_as_status_block(get_db_schema_size()),

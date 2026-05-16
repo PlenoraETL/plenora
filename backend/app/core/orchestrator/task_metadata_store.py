@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import os
 import threading
 from dataclasses import dataclass
 from typing import Any, Protocol
@@ -56,8 +55,13 @@ def _redis_module() -> Any:
 
 
 def _is_local_fallback_allowed() -> bool:
-    env_name = os.getenv("ENVIRONMENT", os.getenv("ENV", "development")).lower()
-    return env_name in _LOCAL_FALLBACK_ENVS or bool(os.getenv("PYTEST_CURRENT_TEST"))
+    from app.config import settings
+
+    env_name = str(
+        settings.get("ENVIRONMENT", settings.get("ENV", "development"))
+        or "development"
+    ).lower()
+    return env_name in _LOCAL_FALLBACK_ENVS or bool(settings.get("PYTEST_CURRENT_TEST"))
 
 
 def _key(task_id: str) -> str:
@@ -201,4 +205,3 @@ def default_task_metadata_store() -> TaskMetadataStore:
             timeout_seconds=int(settings.get("READINESS_REDIS_TIMEOUT_SECONDS", 2) or 2),
         )
     )
-

@@ -3,9 +3,12 @@ OAuth and token management helpers shared by API connectors.
 """
 
 import base64
+import hashlib
+import json
 import threading
 import time
-from typing import Callable, Optional
+import uuid
+from typing import Any, Callable, MutableMapping, Optional
 
 import requests
 
@@ -27,8 +30,327 @@ _OAUTH2_TOKEN_LOCK = threading.Lock()
 _OAUTH2_REFRESH_THRESHOLD_SEC = 60
 
 
+_TOKEN_CACHE_REDIS_KEY_PREFIX = "plenora:connections:token"
+_TOKEN_CACHE_LOCK_KEY_PREFIX = "plenora:connections:token_lock"
+_TOKEN_CACHE_DEFAULT_REDIS_TIMEOUT_SEC = 1
+_TOKEN_CACHE_DEFAULT_LOCK_TTL_SEC = 30
+_TOKEN_CACHE_DEFAULT_WAIT_TIMEOUT_SEC = 5
+_TOKEN_CACHE_POLL_INTERVAL_SEC = 0.1
+
+_TOKEN_CACHE_CLIENT_LOCK = threading.Lock()
+_TOKEN_CACHE_CLIENT: Optional[Any] = None
+_TOKEN_CACHE_CLIENT_EXPLICIT = False
+_TOKEN_CACHE_WARNED_FALLBACK = False
+
+
 def _get_shared_session() -> requests.Session:
     return get_shared_session()
+
+
+def _setting_int(name: str, default: int) -> int:
+    try:
+        from app.config import settings
+
+        value = int(settings.get(name, default))
+        return value if value > 0 else default
+    except Exception:
+        return default
+
+
+def _setting_float(name: str, default: float) -> float:
+    try:
+        from app.config import settings
+
+        value = float(settings.get(name, default))
+        return value if value > 0 else default
+    except Exception:
+        return default
+
+
+def _get_token_cache_redis_client() -> Optional[Any]:
+    global _TOKEN_CACHE_CLIENT
+    if _TOKEN_CACHE_CLIENT_EXPLICIT:
+        return _TOKEN_CACHE_CLIENT
+    if _TOKEN_CACHE_CLIENT is not None:
+        return _TOKEN_CACHE_CLIENT
+    with _TOKEN_CACHE_CLIENT_LOCK:
+        if _TOKEN_CACHE_CLIENT_EXPLICIT:
+            return _TOKEN_CACHE_CLIENT
+        if _TOKEN_CACHE_CLIENT is not None:
+            return _TOKEN_CACHE_CLIENT
+        try:
+            import redis  # type: ignore
+        except ImportError:
+            return None
+        try:
+            from app.config import settings
+
+            timeout = _setting_int(
+                "OAUTH_TOKEN_CACHE_REDIS_TIMEOUT_SEC",
+                _TOKEN_CACHE_DEFAULT_REDIS_TIMEOUT_SEC,
+            )
+            _TOKEN_CACHE_CLIENT = redis.from_url(
+                settings.CELERY_BROKER_URL,
+                socket_timeout=timeout,
+                socket_connect_timeout=timeout,
+                decode_responses=True,
+            )
+            return _TOKEN_CACHE_CLIENT
+        except Exception as exc:
+            _warn_token_cache_fallback_once(type(exc).__name__)
+            return None
+
+
+def _warn_token_cache_fallback_once(reason: str) -> None:
+    global _TOKEN_CACHE_WARNED_FALLBACK
+    if _TOKEN_CACHE_WARNED_FALLBACK:
+        return
+    _TOKEN_CACHE_WARNED_FALLBACK = True
+    logger.warning(
+        "OAuth/API token Redis cache non disponibile (%s); fallback locale attivo",
+        reason,
+    )
+
+
+def _distributed_token_cache_key(namespace: str, raw_key: str) -> str:
+    digest = hashlib.sha256(f"{namespace}|{raw_key}".encode("utf-8")).hexdigest()
+    return f"{_TOKEN_CACHE_REDIS_KEY_PREFIX}:{namespace}:{digest}"
+
+
+def _distributed_token_lock_key(namespace: str, raw_key: str) -> str:
+    digest = hashlib.sha256(f"{namespace}|{raw_key}".encode("utf-8")).hexdigest()
+    return f"{_TOKEN_CACHE_LOCK_KEY_PREFIX}:{namespace}:{digest}"
+
+
+def _token_expires_at(record: JsonObject) -> float:
+    try:
+        return float(record.get("expires_at", record.get("expires", 0)) or 0)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def _is_token_record_valid(record: Optional[JsonObject], min_ttl_sec: int) -> bool:
+    if not record or not record.get("token"):
+        return False
+    return (_token_expires_at(record) - time.time()) > min_ttl_sec
+
+
+def _normalize_token_record(record: JsonObject) -> JsonObject:
+    token = str(record.get("token") or record.get("access_token") or "")
+    expires_at = _token_expires_at(record)
+    return {
+        "token": token,
+        "expires_at": expires_at,
+        "expires": expires_at,
+    }
+
+
+def _read_redis_token_record(
+    client: Any,
+    redis_key: str,
+    min_ttl_sec: int,
+) -> Optional[JsonObject]:
+    raw_payload = client.get(redis_key)
+    if not raw_payload:
+        return None
+    if isinstance(raw_payload, bytes):
+        raw_payload = raw_payload.decode("utf-8")
+    try:
+        payload = json.loads(str(raw_payload))
+    except json.JSONDecodeError:
+        return None
+    if not isinstance(payload, dict):
+        return None
+    record = _normalize_token_record(payload)
+    if not _is_token_record_valid(record, min_ttl_sec):
+        return None
+    return record
+
+
+def _write_redis_token_record(client: Any, redis_key: str, record: JsonObject) -> None:
+    ttl_seconds = max(1, int(_token_expires_at(record) - time.time()))
+    payload = json.dumps(
+        {
+            "token": record["token"],
+            "expires_at": _token_expires_at(record),
+        },
+        separators=(",", ":"),
+    )
+    client.setex(redis_key, ttl_seconds, payload)
+
+
+def _acquire_redis_token_lock(client: Any, lock_key: str, owner: str) -> bool:
+    lock_ttl = _setting_int(
+        "OAUTH_TOKEN_CACHE_LOCK_TTL_SEC",
+        _TOKEN_CACHE_DEFAULT_LOCK_TTL_SEC,
+    )
+    return bool(client.set(lock_key, owner, nx=True, ex=lock_ttl))
+
+
+def _release_redis_token_lock(client: Any, lock_key: str, owner: str) -> None:
+    try:
+        current_owner = client.get(lock_key)
+        if isinstance(current_owner, bytes):
+            current_owner = current_owner.decode("utf-8")
+        if current_owner == owner:
+            client.delete(lock_key)
+    except Exception as exc:
+        logger.debug(
+            "OAuth/API token Redis lock release failed: %s",
+            type(exc).__name__,
+        )
+
+
+def _wait_for_redis_token_record(
+    client: Any,
+    redis_key: str,
+    min_ttl_sec: int,
+) -> Optional[JsonObject]:
+    wait_timeout = _setting_float(
+        "OAUTH_TOKEN_CACHE_WAIT_TIMEOUT_SEC",
+        _TOKEN_CACHE_DEFAULT_WAIT_TIMEOUT_SEC,
+    )
+    deadline = time.time() + wait_timeout
+    while time.time() < deadline:
+        cached = _read_redis_token_record(client, redis_key, min_ttl_sec)
+        if cached:
+            return cached
+        time.sleep(_TOKEN_CACHE_POLL_INTERVAL_SEC)
+    return None
+
+
+def _get_or_refresh_token_record(
+    *,
+    namespace: str,
+    cache_key: str,
+    local_cache: MutableMapping[str, JsonObject],
+    local_lock: threading.Lock,
+    refresh_threshold_sec: int,
+    fetch_token_record: Callable[[], Optional[JsonObject]],
+) -> Optional[str]:
+    cached = local_cache.get(cache_key)
+    if _is_token_record_valid(cached, refresh_threshold_sec):
+        return str(cached["token"])
+
+    redis_key = _distributed_token_cache_key(namespace, cache_key)
+    lock_key = _distributed_token_lock_key(namespace, cache_key)
+
+    client = _get_token_cache_redis_client()
+    if client is not None:
+        try:
+            cached = _read_redis_token_record(client, redis_key, refresh_threshold_sec)
+            if cached:
+                with local_lock:
+                    local_cache[cache_key] = cached
+                return str(cached["token"])
+        except Exception as exc:
+            _warn_token_cache_fallback_once(type(exc).__name__)
+            client = None
+
+    with local_lock:
+        cached = local_cache.get(cache_key)
+        if _is_token_record_valid(cached, refresh_threshold_sec):
+            return str(cached["token"])
+
+        if client is not None:
+            owner: Optional[str] = None
+            try:
+                cached = _read_redis_token_record(client, redis_key, refresh_threshold_sec)
+                if cached:
+                    local_cache[cache_key] = cached
+                    return str(cached["token"])
+
+                owner = uuid.uuid4().hex
+                if not _acquire_redis_token_lock(client, lock_key, owner):
+                    owner = None
+                    cached = _wait_for_redis_token_record(
+                        client,
+                        redis_key,
+                        refresh_threshold_sec,
+                    )
+                    if cached:
+                        local_cache[cache_key] = cached
+                        return str(cached["token"])
+                    _warn_token_cache_fallback_once(
+                        "timeout attesa refresh distribuito"
+                    )
+            except Exception as exc:
+                _warn_token_cache_fallback_once(type(exc).__name__)
+                owner = None
+
+            if owner is not None:
+                return _refresh_token_with_redis_lock(
+                    client=client,
+                    redis_key=redis_key,
+                    lock_key=lock_key,
+                    owner=owner,
+                    local_cache=local_cache,
+                    cache_key=cache_key,
+                    refresh_threshold_sec=refresh_threshold_sec,
+                    fetch_token_record=fetch_token_record,
+                )
+
+        fetched = fetch_token_record()
+        if not fetched or not fetched.get("token"):
+            return None
+        record = _normalize_token_record(fetched)
+        local_cache[cache_key] = record
+        return str(record["token"])
+
+
+def _refresh_token_with_redis_lock(
+    *,
+    client: Any,
+    redis_key: str,
+    lock_key: str,
+    owner: str,
+    local_cache: MutableMapping[str, JsonObject],
+    cache_key: str,
+    refresh_threshold_sec: int,
+    fetch_token_record: Callable[[], Optional[JsonObject]],
+) -> Optional[str]:
+    try:
+        cached = _read_redis_token_record(client, redis_key, refresh_threshold_sec)
+        if cached:
+            local_cache[cache_key] = cached
+            return str(cached["token"])
+    except Exception as exc:
+        _warn_token_cache_fallback_once(type(exc).__name__)
+
+    try:
+        fetched = fetch_token_record()
+        if not fetched or not fetched.get("token"):
+            return None
+        record = _normalize_token_record(fetched)
+        local_cache[cache_key] = record
+        try:
+            _write_redis_token_record(client, redis_key, record)
+        except Exception as exc:
+            _warn_token_cache_fallback_once(type(exc).__name__)
+        return str(record["token"])
+    finally:
+        _release_redis_token_lock(client, lock_key, owner)
+
+
+def _invalidate_token_record(
+    *,
+    namespace: str,
+    cache_key: str,
+    local_cache: Optional[MutableMapping[str, JsonObject]] = None,
+    local_lock: Optional[threading.Lock] = None,
+) -> None:
+    if local_cache is not None:
+        if local_lock is None:
+            local_cache.pop(cache_key, None)
+        else:
+            with local_lock:
+                local_cache.pop(cache_key, None)
+    client = _get_token_cache_redis_client()
+    if client is not None:
+        try:
+            client.delete(_distributed_token_cache_key(namespace, cache_key))
+        except Exception as exc:
+            _warn_token_cache_fallback_once(type(exc).__name__)
 
 
 def _oauth2_cache_key(auth: JsonObject) -> str:
@@ -42,6 +364,10 @@ def _oauth2_cache_key(auth: JsonObject) -> str:
     return f"{auth_type}|{token_url}|{identifier}"
 
 
+def _api_timeout_seconds() -> int:
+    return _setting_int("API_TIMEOUT", 30)
+
+
 def get_cached_oauth2_token(auth: JsonObject) -> Optional[str]:
     """Ritorna un token OAuth2 valido, rinnovandolo solo se sta per scadere."""
     auth_type = auth.get("type", "")
@@ -49,18 +375,8 @@ def get_cached_oauth2_token(auth: JsonObject) -> Optional[str]:
         return None
 
     cache_key = _oauth2_cache_key(auth)
-    now = time.time()
 
-    cached = _OAUTH2_TOKEN_CACHE.get(cache_key)
-    if cached and (cached["expires_at"] - now) > _OAUTH2_REFRESH_THRESHOLD_SEC:
-        return cached["token"]
-
-    with _OAUTH2_TOKEN_LOCK:
-        cached = _OAUTH2_TOKEN_CACHE.get(cache_key)
-        now = time.time()
-        if cached and (cached["expires_at"] - now) > _OAUTH2_REFRESH_THRESHOLD_SEC:
-            return cached["token"]
-
+    def _fetch_record() -> Optional[JsonObject]:
         if auth_type == "oauth2_password":
             result = _fetch_oauth2_password_token(auth)
         else:
@@ -69,23 +385,36 @@ def get_cached_oauth2_token(auth: JsonObject) -> Optional[str]:
         if not result or not result.get("access_token"):
             return None
 
-        token = result["access_token"]
         expires_in = int(result.get("expires_in", 3600))
-        _OAUTH2_TOKEN_CACHE[cache_key] = {
-            "token": token,
+        logger.info(
+            "OAuth2 token rinnovato (%s, valido per %ss)",
+            auth_type,
+            expires_in,
+        )
+        return {
+            "token": result["access_token"],
             "expires_at": time.time() + expires_in,
         }
-        logger.info(
-            f"OAuth2 token rinnovato ({auth_type}, valido per {expires_in}s)"
-        )
-        return token
+
+    return _get_or_refresh_token_record(
+        namespace="oauth2",
+        cache_key=cache_key,
+        local_cache=_OAUTH2_TOKEN_CACHE,
+        local_lock=_OAUTH2_TOKEN_LOCK,
+        refresh_threshold_sec=_OAUTH2_REFRESH_THRESHOLD_SEC,
+        fetch_token_record=_fetch_record,
+    )
 
 
 def invalidate_oauth2_token(auth: JsonObject) -> None:
     """Forza invalidazione cache per un set di credenziali."""
     cache_key = _oauth2_cache_key(auth)
-    with _OAUTH2_TOKEN_LOCK:
-        _OAUTH2_TOKEN_CACHE.pop(cache_key, None)
+    _invalidate_token_record(
+        namespace="oauth2",
+        cache_key=cache_key,
+        local_cache=_OAUTH2_TOKEN_CACHE,
+        local_lock=_OAUTH2_TOKEN_LOCK,
+    )
 
 
 def _fetch_oauth2_password_token(auth: JsonObject) -> Optional[JsonObject]:
@@ -118,16 +447,14 @@ def _fetch_oauth2_password_token(auth: JsonObject) -> Optional[JsonObject]:
             token_url,
             data=payload,
             headers={"Content-Type": "application/x-www-form-urlencoded"},
-            timeout=30,
+            timeout=_api_timeout_seconds(),
         )
         if response.status_code == 200:
             data = response.json()
             masked = f"{username[:3]}{'*' * max(0, len(username) - 3)}"
             logger.info(f"OAuth2 password token ottenuto per user={masked}")
             return data
-        logger.warning(
-            f"OAuth2 password token fallito: HTTP {response.status_code} - {response.text[:200]}"
-        )
+        logger.warning("OAuth2 password token fallito: HTTP %s", response.status_code)
         return None
     except Exception as e:
         logger.error(f"[CRASH] Errore OAuth2 password grant: {e}", exc_info=True)
@@ -157,7 +484,7 @@ def _fetch_oauth2_client_credentials_token(auth: JsonObject) -> Optional[JsonObj
             token_url,
             data=data,
             headers={"Content-Type": "application/x-www-form-urlencoded"},
-            timeout=30,
+            timeout=_api_timeout_seconds(),
             verify=True,
         )
 
@@ -187,78 +514,82 @@ def get_arcgis_token(auth: JsonObject) -> Optional[str]:
 
     cache_key = f"{token_url}|{username}"
 
-    with _ARCGIS_TOKEN_LOCK:
-        cached = _ARCGIS_TOKEN_CACHE.get(cache_key)
-        if cached and cached.get("expires_at", 0) > time.time() + 60:
-            return cached["token"]
+    def _fetch_record() -> Optional[JsonObject]:
+        client_mode = auth.get("client", "requestip")
+        payload = {
+            "username": username,
+            "password": password,
+            "client": client_mode,
+            "expiration": int(auth.get("expiration", 60)),
+            "f": "json",
+        }
+        if client_mode == "referer":
+            payload["referer"] = auth.get("referer", "")
+        elif client_mode == "ip":
+            payload["ip"] = auth.get("ip", "")
 
-    client_mode = auth.get("client", "requestip")
-    payload = {
-        "username": username,
-        "password": password,
-        "client": client_mode,
-        "expiration": int(auth.get("expiration", 60)),
-        "f": "json",
-    }
-    if client_mode == "referer":
-        payload["referer"] = auth.get("referer", "")
-    elif client_mode == "ip":
-        payload["ip"] = auth.get("ip", "")
-
-    verify_ssl = auth.get("verify_ssl", True)
-    try:
-        if not verify_ssl:
-            try:
-                from urllib3.exceptions import InsecureRequestWarning
-                import urllib3
-
-                urllib3.disable_warnings(InsecureRequestWarning)
-            except Exception:
-                pass
-
-        response = requests.post(
-            token_url,
-            data=payload,
-            headers={"Content-Type": "application/x-www-form-urlencoded"},
-            timeout=30,
-            verify=verify_ssl,
-        )
-        if response.status_code != 200:
-            logger.warning(
-                f"ArcGIS token fallito: HTTP {response.status_code} - {response.text[:200]}"
-            )
-            return None
-
-        data = response.json()
-        if "error" in data:
-            logger.warning(f"ArcGIS token errore: {data.get('error')}")
-            return None
-
-        token = data.get("token")
-        expires_raw = data.get("expires")
-        if not token:
-            logger.warning("ArcGIS token: nessun token nella risposta")
-            return None
-
+        verify_ssl = auth.get("verify_ssl", True)
         try:
-            expires_at = int(expires_raw) / 1000.0
-        except (TypeError, ValueError):
-            expires_at = time.time() + (int(auth.get("expiration", 60)) * 60)
+            if not verify_ssl:
+                try:
+                    from urllib3.exceptions import InsecureRequestWarning
+                    import urllib3
 
-        with _ARCGIS_TOKEN_LOCK:
-            _ARCGIS_TOKEN_CACHE[cache_key] = {
+                    urllib3.disable_warnings(InsecureRequestWarning)
+                except Exception:
+                    pass
+
+            response = requests.post(
+                token_url,
+                data=payload,
+                headers={"Content-Type": "application/x-www-form-urlencoded"},
+                timeout=_api_timeout_seconds(),
+                verify=verify_ssl,
+            )
+            if response.status_code != 200:
+                logger.warning("ArcGIS token fallito: HTTP %s", response.status_code)
+                return None
+
+            data = response.json()
+            if "error" in data:
+                logger.warning("ArcGIS token errore: %s", data.get("error"))
+                return None
+
+            token = data.get("token")
+            expires_raw = data.get("expires")
+            if not token:
+                logger.warning("ArcGIS token: nessun token nella risposta")
+                return None
+
+            try:
+                expires_at = int(expires_raw) / 1000.0
+            except (TypeError, ValueError):
+                expires_at = time.time() + (int(auth.get("expiration", 60)) * 60)
+
+            masked = f"{username[:3]}{'*' * max(0, len(username) - 3)}"
+            ttl_min = (expires_at - time.time()) / 60
+            logger.info(
+                "ArcGIS token ottenuto per user=%s, valido %.0f min",
+                masked,
+                ttl_min,
+            )
+            return {
                 "token": token,
                 "expires_at": expires_at,
             }
 
-        masked = f"{username[:3]}{'*' * max(0, len(username) - 3)}"
-        ttl_min = (expires_at - time.time()) / 60
-        logger.info(f"ArcGIS token ottenuto per user={masked}, valido {ttl_min:.0f} min")
-        return token
+        except Exception as e:
+            logger.error("[CRASH] Errore richiesta ArcGIS token: %s", e, exc_info=True)
+            return None
 
-    except Exception as e:
-        logger.error(f"[CRASH] Errore richiesta ArcGIS token: {e}", exc_info=True)
-        return None
+    return _get_or_refresh_token_record(
+        namespace="arcgis-token",
+        cache_key=cache_key,
+        local_cache=_ARCGIS_TOKEN_CACHE,
+        local_lock=_ARCGIS_TOKEN_LOCK,
+        refresh_threshold_sec=_OAUTH2_REFRESH_THRESHOLD_SEC,
+        fetch_token_record=_fetch_record,
+    )
 
 
 def prepare_headers(
@@ -309,3 +640,22 @@ def prepare_headers(
         pass
 
     return headers
+
+
+def _set_token_cache_client_for_tests(client: Optional[Any]) -> None:
+    global _TOKEN_CACHE_CLIENT, _TOKEN_CACHE_CLIENT_EXPLICIT
+    with _TOKEN_CACHE_CLIENT_LOCK:
+        _TOKEN_CACHE_CLIENT = client
+        _TOKEN_CACHE_CLIENT_EXPLICIT = True
+
+
+def _reset_token_cache_state_for_tests() -> None:
+    global _TOKEN_CACHE_CLIENT, _TOKEN_CACHE_CLIENT_EXPLICIT, _TOKEN_CACHE_WARNED_FALLBACK
+    with _TOKEN_CACHE_CLIENT_LOCK:
+        _TOKEN_CACHE_CLIENT = None
+        _TOKEN_CACHE_CLIENT_EXPLICIT = False
+    with _OAUTH2_TOKEN_LOCK:
+        _OAUTH2_TOKEN_CACHE.clear()
+    with _ARCGIS_TOKEN_LOCK:
+        _ARCGIS_TOKEN_CACHE.clear()
+    _TOKEN_CACHE_WARNED_FALLBACK = False

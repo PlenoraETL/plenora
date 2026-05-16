@@ -201,11 +201,22 @@ def delete_eseguibile(
 
 # ANALYZE UPLOAD
 
-# Upload metadata store (su disco, multi-worker safe
-# Era in-memory (_UPLOAD_CACHE) ma non funzionava con piu worker uvicorn
+_LOCAL_UPLOAD_FALLBACK_ENVS = {"dev", "development", "local", "test", "testing"}
+
+
+def _local_upload_meta_fallback_allowed() -> bool:
+    env_name = str(
+        settings.get("ENVIRONMENT", settings.get("ENV", "development"))
+        or "development"
+    ).lower()
+    return env_name in _LOCAL_UPLOAD_FALLBACK_ENVS or bool(
+        settings.get("PYTEST_CURRENT_TEST")
+    )
+
+# Upload metadata store.
 # il dict non era condiviso tra processi → analyze e execute potevano
-# finire su worker diversi e il secondo non trovava l'entry
-# Soluzione: salva i metadata come file .meta.json accanto al file temp
+# Source of truth: file_sources DB metadata; local sidecar remains readable
+# only in dev/test for stale pre-migration uploads.
 
 def _upload_meta_path(file_id: str) -> Path:
     """Percorso del file metadata per un upload."""
@@ -216,14 +227,19 @@ def _upload_meta_path(file_id: str) -> Path:
 
 
 def _save_upload_meta(file_id: str, meta: dict) -> None:
-    """Salva metadata dell'upload su disco (multi-worker safe)."""
-    path = _upload_meta_path(file_id)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(_json.dumps(meta), encoding="utf-8")
+    """Compatibility wrapper: upload metadata is persisted by the service."""
+    if "path" in meta:
+        raise ValueError("upload metadata must not contain local paths")
 
 
 def _load_upload_meta(file_id: str) -> Optional[Mapping[str, object]]:
-    """Carica metadata di un upload da disco. Ritorna None se non esiste."""
+    """Carica metadata upload durable dal DB; legacy local solo dev/test."""
+    meta = eseguibili_service.load_upload_metadata(file_id)
+    if meta is not None:
+        return meta
+    if not _local_upload_meta_fallback_allowed():
+        return None
+
     path = _upload_meta_path(file_id)
     if not path.exists():
         return None
@@ -239,7 +255,21 @@ def _load_upload_meta(file_id: str) -> Optional[Mapping[str, object]]:
 
 
 def _delete_upload_meta(file_id: str) -> None:
-    """Elimina il file metadata dopo l'uso."""
+    """Elimina l'upload temporaneo durable dopo l'uso."""
+    try:
+        from app.core.files.service import file_source_service
+
+        if file_source_service.delete_file_source(file_id):
+            return
+    except Exception as _delete_err:
+        logger.debug(
+            f"_delete_upload_meta: delete file_source best-effort fallito "
+            f"per file_id={file_id}: {_delete_err}"
+        )
+
+    if not _local_upload_meta_fallback_allowed():
+        return
+
     path = _upload_meta_path(file_id)
     try:
         if path.exists():
@@ -363,19 +393,35 @@ async def analyze_upload(
                 status_code=400, detail=sanitize_http_detail(str(e)),
             )
 
-        # Salva metadata su disco (multi-worker safe: visibile a tutti i worker uvicorn
-        _save_upload_meta(result.file_id, {
-            "path": result.file_path,
-            "filename": result.filename,
-            "eseguibile_id": eseguibile_id,
-            "user_id": current_user.user_id,
-        })
+        durable_file_id = eseguibili_service.persist_upload_file_source(
+            eseguibile=record,
+            file_content=content,
+            filename=Path((file.filename or "upload.bin").replace("\\", "/")).name,
+            user_id=current_user.user_id,
+            group_id=current_user.group_id,
+        )
+        result = result.model_copy(
+            update={"file_id": durable_file_id, "file_path": ""}
+        )
+        try:
+            os.unlink(tmp_path)
+        except Exception as _unlink_err:
+            logger.debug(
+                f"analyze_upload: cleanup tmp post-persist best-effort "
+                f"fallito per {tmp_path}: {_unlink_err}"
+            )
 
         return result.to_api_dict()
 
     except HTTPException:
         raise
     except Exception as e:
+        tmp_path_for_cleanup = locals().get("tmp_path")
+        if tmp_path_for_cleanup:
+            try:
+                os.unlink(tmp_path_for_cleanup)
+            except Exception:
+                pass
         logger.error(f"[CRASH] Errore analyze upload: {e}", exc_info=True)
         raise_typed_http(error_codes.INTERNAL_ERROR, status_code=500, message="Errore interno del server")
 
@@ -416,12 +462,24 @@ def execute_eseguibile(
         )
 
     try:
+        execute_kwargs = {
+            "eseguibile": record,
+            "column_mapping": [m.model_dump() for m in payload.column_mapping],
+            "output_format": payload.output_format,
+            "output_name": payload.output_name,
+        }
+        if upload.get("file_source_id"):
+            execute_kwargs["file_source_id"] = str(upload["file_source_id"])
+            execute_kwargs["upload_group_id"] = str(
+                upload.get("group_id") or current_user.group_id
+            )
+        elif _local_upload_meta_fallback_allowed() and upload.get("path"):
+            execute_kwargs["file_path"] = str(upload["path"])
+        else:
+            raise ValueError("Upload non idratabile cross-host")
+
         result = eseguibili_service.execute(
-            eseguibile=record,
-            file_path=upload["path"],
-            column_mapping=[m.model_dump() for m in payload.column_mapping],
-            output_format=payload.output_format,
-            output_name=payload.output_name,
+            **execute_kwargs,
         )
         # Persist ownership del task per il download endpoint: senza
         # questo file un attacker che indovina un task_id valido puo'
@@ -439,15 +497,17 @@ def execute_eseguibile(
         logger.error(f"[CRASH] Errore execute eseguibile: {e}", exc_info=True)
         raise_typed_http(error_codes.INTERNAL_ERROR, status_code=500, message="Errore interno del server")
     finally:
-        # Cleanup: elimina file temp + metadata
-        try:
-            if os.path.exists(upload["path"]):
-                os.unlink(upload["path"])
-        except Exception as _unlink_err:
-            logger.debug(
-                f"execute_eseguibile: cleanup tmp upload best-effort fallito "
-                f"per {upload.get('path')}: {_unlink_err}"
-            )
+        # Cleanup: elimina il file_source upload temporaneo + metadata.
+        if _local_upload_meta_fallback_allowed() and upload.get("path"):
+            try:
+                if os.path.exists(str(upload["path"])):
+                    os.unlink(str(upload["path"]))
+            except Exception as _unlink_err:
+                logger.debug(
+                    f"execute_eseguibile: cleanup tmp upload legacy "
+                    f"best-effort fallito per {upload.get('path')}: "
+                    f"{_unlink_err}"
+                )
         _delete_upload_meta(payload.file_id)
 
     return result.to_api_dict()

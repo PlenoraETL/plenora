@@ -11,7 +11,7 @@ from __future__ import annotations
 import hashlib
 import threading
 import time
-from typing import Any, Optional
+from typing import Any, Mapping, Optional
 
 from app.utils.logger import get_logger
 
@@ -114,7 +114,7 @@ def _warn_fallback_once(reason: str) -> None:
         )
 
 
-def rate_limit_scope_for_api_config(api_config: dict[str, Any]) -> str:
+def rate_limit_scope_for_api_config(api_config: Mapping[str, Any]) -> str:
     endpoint = api_config.get("endpoint") or {}
     if not isinstance(endpoint, dict):
         endpoint = {}

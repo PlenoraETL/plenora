@@ -86,8 +86,8 @@ def test_execute_returns_typed_internal_payload(monkeypatch):
 
     result = service.execute(
         _row(),
-        "/tmp/upload.csv",
         [{"chain_column": "customer_id", "file_column": "source_customer_id"}],
+        file_path="/tmp/upload.csv",
     )
 
     assert isinstance(result, EseguibileExecutionResult)
@@ -101,6 +101,58 @@ def test_execute_returns_typed_internal_payload(monkeypatch):
     }
 
 
+def test_execute_hydrates_upload_from_file_source_before_worker_handoff(monkeypatch):
+    from app.core.files.service import file_source_service
+    from app.core.dataframes import frame_io
+    from app.core.orchestrator.task_service import task_service
+
+    captured: dict[str, object] = {}
+
+    monkeypatch.setattr(
+        file_source_service,
+        "get_blob_bytes",
+        lambda file_id, expected_group_id=None: b"source_customer_id\n1\n2\n",
+    )
+    monkeypatch.setattr(
+        service,
+        "load_upload_metadata",
+        lambda file_id: {"filename": "upload.csv", "group_id": "grp-user"},
+    )
+    monkeypatch.setattr(
+        frame_io,
+        "load_dataframe_from_file",
+        lambda path: pd.DataFrame({"source_customer_id": [1, 2]}),
+    )
+    monkeypatch.setattr(
+        file_source_service,
+        "create_from_upload",
+        lambda **kwargs: SimpleNamespace(id="fs-temp-1"),
+    )
+
+    def fake_create_enrichment_task(**kwargs):
+        captured.update(kwargs)
+        return SimpleNamespace(task_id="task-1")
+
+    monkeypatch.setattr(task_service, "create_enrichment_task", fake_create_enrichment_task)
+
+    result = service.execute(
+        _row(),
+        [{"chain_column": "customer_id", "file_column": "source_customer_id"}],
+        file_source_id="fs-upload-1",
+        upload_group_id="grp-user",
+    )
+
+    assert result.task_id == "task-1"
+    assert captured["cleanup_file_source_ids"] == ["fs-temp-1"]
+    assert captured["is_eseguibile"] is True
+    canvas = captured["canvas"]
+    source = canvas["nodes"][0]
+    assert source["file_source_id"] == "fs-temp-1"
+    assert source["data"]["file_source_id"] == "fs-temp-1"
+    assert "file_path" not in str(captured)
+    assert "fs-upload-1" not in str(captured)
+
+
 def test_execute_router_serializes_typed_service_payload(monkeypatch):
     from app.core.eseguibili import router
 
@@ -111,13 +163,13 @@ def test_execute_router_serializes_typed_service_payload(monkeypatch):
         router,
         "_load_upload_meta",
         lambda file_id: {
-            "path": "/tmp/upload.csv",
+            "file_source_id": "fs-upload-1",
             "filename": "upload.csv",
             "eseguibile_id": "exec-1",
             "user_id": "u-1",
+            "group_id": "grp-1",
         },
     )
-    monkeypatch.setattr(router.os.path, "exists", lambda path: False)
     monkeypatch.setattr(router, "_delete_upload_meta", lambda file_id: None)
     monkeypatch.setattr(
         router,
@@ -167,3 +219,53 @@ def test_execute_router_serializes_typed_service_payload(monkeypatch):
         "eseguibile_id": "exec-1",
         "user_id": "u-1",
     }
+
+
+def test_execute_router_passes_file_source_id_not_local_path(monkeypatch):
+    from app.core.eseguibili import router
+
+    captured: dict[str, object] = {}
+    monkeypatch.setattr(router.eseguibili_db, "get_eseguibile", lambda eid: _row())
+    monkeypatch.setattr(router, "_check_visible", lambda *args, **kwargs: None)
+    monkeypatch.setattr(
+        router,
+        "_load_upload_meta",
+        lambda file_id: {
+            "file_source_id": "fs-upload-1",
+            "filename": "upload.csv",
+            "eseguibile_id": "exec-1",
+            "user_id": "u-1",
+            "group_id": "grp-user",
+        },
+    )
+    monkeypatch.setattr(router, "_delete_upload_meta", lambda file_id: None)
+    monkeypatch.setattr(router, "_save_task_owner", lambda *args, **kwargs: None)
+
+    def fake_execute(**kwargs):
+        captured.update(kwargs)
+        return EseguibileExecutionResult(
+            **{
+                "async": True,
+                "task_id": "task-1",
+                "project_id": "exec-1",
+                "temp_file_source_id": "fs-temp-1",
+                "message": "started",
+            }
+        )
+
+    monkeypatch.setattr(router.eseguibili_service, "execute", fake_execute)
+
+    router.execute_eseguibile(
+        "exec-1",
+        ExecuteRequest(file_id="fs-upload-1", column_mapping=[]),
+        CurrentUser(
+            user_id="u-1",
+            username="tester",
+            group_id="grp-user",
+            role="admin",
+        ),
+    )
+
+    assert captured["file_source_id"] == "fs-upload-1"
+    assert captured["upload_group_id"] == "grp-user"
+    assert "file_path" not in captured

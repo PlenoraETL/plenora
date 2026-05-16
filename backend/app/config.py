@@ -55,6 +55,13 @@ class Settings:
 
         "CELERY_BROKER_URL":            "redis://localhost:6379/0",
         "CELERY_RESULT_BACKEND":        "redis://localhost:6379/0",
+        # Production gates: dev/test restano single-node per default.
+        # Imposta uno di questi flag a true per forzare le stesse regole
+        # di production/staging anche in env non-prod (cluster/multi-pod).
+        "CLUSTER_MODE":                 False,
+        "PLENORA_CLUSTER_MODE":         False,
+        "MULTI_POD_MODE":               False,
+        "PLENORA_MULTI_POD":            False,
         "CELERY_TASK_TIMEOUT":          3600,
         "CELERY_TASK_HARD_LIMIT":       3900,
         "CELERY_PREVIEW_TIMEOUT":       300,
@@ -131,6 +138,12 @@ class Settings:
         "ARRICCHISCI_RATE_LIMIT_REDIS_REQUIRED": False,
         "ARRICCHISCI_RATE_LIMIT_REDIS_TIMEOUT_SEC": 1,
         "ARRICCHISCI_RATE_LIMIT_REDIS_KEY_PREFIX": "plenora:arricchisci:rl",
+        # Cache distribuita opzionale per token OAuth/API provider. Usa Redis
+        # via CELERY_BROKER_URL quando disponibile; se Redis non c'e', i
+        # caller degradano alla cache locale storica.
+        "OAUTH_TOKEN_CACHE_REDIS_TIMEOUT_SEC": 1,
+        "OAUTH_TOKEN_CACHE_LOCK_TTL_SEC": 30,
+        "OAUTH_TOKEN_CACHE_WAIT_TIMEOUT_SEC": 5,
 
         "SUPPORTED_OUTPUT_FORMATS": [
             "csv", "json", "xlsx", "parquet",

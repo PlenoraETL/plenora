@@ -43,6 +43,7 @@ from app.shared.error_sanitizer import sanitize_http_detail
 from app.core.artifacts import ArtifactResolver, LatestProjectArtifactRef
 from app.core.artifacts.types import MaterializedArtifact
 from app.core.auth.visibility import visible_resource_ids
+from app.core.results import legacy_file_store
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -322,8 +323,8 @@ class WriteRequest(BaseModel):
     layer_url: str  # URL completo del layer (es. .../FeatureServer/0
     operation: str = "add"  # add, update, upsert, delete
     upsert: bool = False  # Compat shorthand: true forces operation="upsert"
-    input_path: str = ""  # Path file sorgente (per add/update
-    project_id: str = ""  # Alternativa: cerca output in RESULTS_DIR/{project_id}
+    input_path: str = ""  # Fallback legacy locale solo con opt-in dev/test
+    project_id: str = ""  # Sorgente canonica: ultimo result blob del progetto
     geometry_column: str = "geometry"
     source_srid: Optional[int] = None  # SRID sorgente (dal nodo pipeline
     batch_size: Optional[int] = None
@@ -338,8 +339,8 @@ class CreateServiceRequest(BaseModel):
     connection_id: str
     service_name: str
     layer_name: str = "Layer 0"
-    input_path: str = ""  # Path file sorgente
-    project_id: str = ""  # Alternativa: cerca output in RESULTS_DIR/{project_id}
+    input_path: str = ""  # Fallback legacy locale solo con opt-in dev/test
+    project_id: str = ""  # Sorgente canonica: ultimo result blob del progetto
     geometry_column: str = "geometry"
     source_srid: Optional[int] = None  # SRID sorgente (dal nodo pipeline
     column_mappings: List[Dict[str, object]] = Field(default_factory=list)
@@ -360,13 +361,14 @@ def _resolve_input_path(
     e `__exit__` e' no-op.
 
     Dispatcher a 2 strategie:
-      - `input_path` valorizzato → valida contro whitelist
-        (RESULTS_DIR / TEMP_DIR / DATA_DIR / FILE_SOURCES_DIR) e
-        ritorna un MaterializedArtifact non temporaneo
       - `project_id` valorizzato → risolve l'ultimo output via
         `ArtifactResolver.materialize_latest` con tenant binding
         fail-closed
-      - entrambi vuoti → `ValueError("Specificare input_path o project_id")`
+      - `input_path` valorizzato → fallback legacy locale: ammesso
+        solo in dev/test con PLENORA_ALLOW_LEGACY_LOCAL_RESULT_PATHS=1,
+        poi validato contro whitelist
+        (RESULTS_DIR / TEMP_DIR / DATA_DIR / FILE_SOURCES_DIR)
+      - entrambi vuoti → `ValueError("Specificare project_id o input_path")`
 
     `expected_group_id` keyword-only required: senza tenant binding
     il check cross-tenant del resolver sarebbe disabilitato (rifiuta
@@ -380,7 +382,8 @@ def _resolve_input_path(
       - `input_path UNC non consentito` (UNC paths)
       - `input_path non consentito: ...` (fuori whitelist)
       - `input_path non valido: ...` (malformed)
-      - `Specificare input_path o project_id` (entrambi vuoti)
+      - `input_path locale disabilitato: ...` (fallback non abilitato)
+      - `Specificare project_id o input_path` (entrambi vuoti)
       - `FileNotFoundError` (project_id valido, no output)
     """
     if not expected_group_id:
@@ -390,7 +393,29 @@ def _resolve_input_path(
         )
     from app.config import settings
 
+    if project_id:
+        # Defense-in-depth: l'ACL a livello router (assert_project_visible
+        # gia' garantisce la visibilita', ma passare expected_group_id al
+        # resolver mantiene l'invariante cross-tenant uniforme anche se in
+        # futuro questa funzione venisse richiamata da un path che salta
+        # il check HTTP
+        materialized = ArtifactResolver().materialize_latest(
+            LatestProjectArtifactRef(project_id=project_id),
+            expected_group_id=expected_group_id,
+        )
+        if materialized is not None and materialized.path is not None:
+            return materialized
+
+        raise FileNotFoundError(f"Nessun output trovato per progetto: {project_id}")
+
     if input_path:
+        if not legacy_file_store.legacy_local_result_paths_enabled():
+            raise ValueError(
+                legacy_file_store.legacy_local_result_paths_disabled_message(
+                    "input_path locale"
+                )
+            )
+
         # Whitelist di directory in cui e' lecito leggere file
         _allowed_roots = []
         for attr in ("RESULTS_DIR", "TEMP_DIR", "DATA_DIR", "FILE_SOURCES_DIR"):
@@ -418,22 +443,7 @@ def _resolve_input_path(
             raise ValueError(f"input_path non valido: {e}") from e
         return MaterializedArtifact(path=candidate, is_temporary=False)
 
-    if not project_id:
-        raise ValueError("Specificare input_path o project_id")
-
-    # Defense-in-depth: l'ACL a livello router (assert_project_visible
-    # gia' garantisce la visibilita', ma passare expected_group_id al
-    # resolver mantiene l'invariante cross-tenant uniforme anche se in
-    # futuro questa funzione venisse richiamata da un path che salta
-    # il check HTTP
-    materialized = ArtifactResolver().materialize_latest(
-        LatestProjectArtifactRef(project_id=project_id),
-        expected_group_id=expected_group_id,
-    )
-    if materialized is not None and materialized.path is not None:
-        return materialized
-
-    raise FileNotFoundError(f"Nessun output trovato per progetto: {project_id}")
+    raise ValueError("Specificare project_id o input_path")
 
 
 @router.post("/write", response_model=WriteFeaturesResponse)

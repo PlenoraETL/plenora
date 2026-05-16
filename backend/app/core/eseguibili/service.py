@@ -5,10 +5,12 @@ Operazioni principali:
 """
 
 import io
+import os
 import re
 
 import copy
 import json
+import tempfile
 import uuid
 from typing import Mapping, Optional, Sequence
 
@@ -23,6 +25,8 @@ from .models import (
 from .scanner import extract_expected_columns
 
 logger = get_logger(__name__)
+
+UPLOAD_METADATA_KEY = "eseguibili_upload"
 
 
 # CREATE — clona canvas da progetto arricchisci esistente
@@ -201,12 +205,76 @@ def analyze_file_upload(
     )
 
 
+def persist_upload_file_source(
+    *,
+    eseguibile: eseguibili_db.EseguibileRow,
+    file_content: bytes,
+    filename: str,
+    user_id: str,
+    group_id: str,
+) -> str:
+    """Persist an analyzed upload behind a cross-host file_source id."""
+    from app.core.files import db as files_db
+    from app.core.files.service import file_source_service
+
+    safe_filename = filename or "upload.bin"
+    temp_name = f"__exec_upload_{eseguibile['id']}_{uuid.uuid4().hex[:8]}"
+    file_source = file_source_service.create_from_upload(
+        file_content=io.BytesIO(file_content),
+        filename=safe_filename,
+        name=temp_name,
+        description=f"Upload temporaneo per eseguibile {eseguibile['id']}",
+        group_id=group_id,
+    )
+    file_source_id = (
+        file_source.id if hasattr(file_source, "id") else file_source["id"]
+    )
+
+    try:
+        row = files_db.get_file_source(file_source_id, include_data=False)
+        metadata = dict((row or {}).get("metadata") or {})
+        metadata[UPLOAD_METADATA_KEY] = {
+            "file_source_id": file_source_id,
+            "filename": safe_filename,
+            "eseguibile_id": eseguibile["id"],
+            "user_id": user_id,
+            "group_id": group_id,
+        }
+        files_db.update_file_source_metadata(file_source_id, metadata)
+    except Exception:
+        file_source_service.delete_file_source(file_source_id)
+        raise
+    return file_source_id
+
+
+def load_upload_metadata(file_source_id: str) -> Optional[Mapping[str, object]]:
+    """Load durable upload metadata from the file_source DB row."""
+    from app.core.files import db as files_db
+
+    row = files_db.get_file_source(file_source_id, include_data=False)
+    if not row:
+        return None
+    metadata = row.get("metadata") or {}
+    upload = metadata.get(UPLOAD_METADATA_KEY) if isinstance(metadata, dict) else None
+    if not isinstance(upload, dict):
+        return None
+    return {
+        "file_source_id": file_source_id,
+        "filename": upload.get("filename") or row.get("original_filename"),
+        "eseguibile_id": upload.get("eseguibile_id"),
+        "user_id": upload.get("user_id"),
+        "group_id": upload.get("group_id") or row.get("group_id"),
+    }
+
+
 # EXECUTE — sostituisce sorgente nel canvas e lancia task
 
 def execute(
     eseguibile: eseguibili_db.EseguibileRow,
-    file_path: str,
     column_mapping: Sequence[Mapping[str, str]],
+    file_source_id: Optional[str] = None,
+    file_path: Optional[str] = None,
+    upload_group_id: Optional[str] = None,
     output_format: Optional[str] = None,
     output_name: Optional[str] = None,
 ) -> EseguibileExecutionResult:
@@ -227,8 +295,44 @@ def execute(
     from app.core.files.service import file_source_service
     from app.core.orchestrator.task_service import task_service
 
-    # 1. Carica DataFrame originale
-    df = load_dataframe_from_file(file_path)
+    if not file_source_id and not file_path:
+        raise ValueError("File sorgente non specificato")
+
+    # 1. Carica DataFrame originale. In produzione il caller passa un
+    # file_source_id: il blob viene idratato da DB/object storage in un temp
+    # locale solo per parsing, senza passare path al worker Celery.
+    temp_input_path: Optional[str] = None
+    if file_source_id:
+        blob = file_source_service.get_blob_bytes(
+            file_source_id,
+            expected_group_id=upload_group_id or eseguibile["group_id"],
+        )
+        if not blob:
+            raise ValueError("File sorgente vuoto o non trovato")
+        upload_meta = load_upload_metadata(file_source_id) or {}
+        filename = str(upload_meta.get("filename") or "upload.bin")
+        suffix = f".{filename.rsplit('.', 1)[1]}" if "." in filename else ".bin"
+        tmp = tempfile.NamedTemporaryFile(delete=False, suffix=suffix)
+        try:
+            tmp.write(blob)
+            temp_input_path = tmp.name
+        finally:
+            tmp.close()
+        source_path = temp_input_path
+    else:
+        source_path = file_path
+
+    try:
+        df = load_dataframe_from_file(source_path)
+    finally:
+        if temp_input_path:
+            try:
+                os.unlink(temp_input_path)
+            except OSError as exc:
+                logger.debug(
+                    f"execute: cleanup input idratato fallito per "
+                    f"{temp_input_path}: {exc}"
+                )
     if df is None or df.empty:
         raise ValueError("File sorgente vuoto o illeggibile")
 

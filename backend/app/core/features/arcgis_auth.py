@@ -5,16 +5,26 @@ from __future__ import annotations
 from urllib.parse import urlparse
 import random
 
+import threading
 import time
-from typing import Any, Optional, Protocol
+from typing import Any, Optional, Protocol, TypedDict
 
 import requests
 
 from app.infrastructure.http.session import get_shared_session
 from app.shared.connections.arcgis_connection import ArcGISConnectionInfo
+from app.shared.connections.oauth import (
+    _get_or_refresh_token_record,
+    _invalidate_token_record,
+)
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
+
+
+class TokenRecord(TypedDict):
+    token: str
+    expires_at: float
 
 
 def _mask_secret(value: str, visible: int = 4) -> str:
@@ -78,6 +88,43 @@ class ArcGISAuthMixin:
     """Token cache, authentication, and authenticated request helpers."""
 
     DEFAULT_TIMEOUT = 30
+
+    def _token_cache_lock(self) -> threading.Lock:
+        lock = getattr(self, "_token_cache_thread_lock", None)
+        if lock is None:
+            lock = threading.Lock()
+            setattr(self, "_token_cache_thread_lock", lock)
+        return lock
+
+    def _store_token_record(
+        self,
+        cache_key: str,
+        token: str,
+        expires_at: float,
+    ) -> str:
+        self._token_cache[cache_key] = {
+            "token": token,
+            "expires": expires_at,
+            "expires_at": expires_at,
+        }
+        return token
+
+    def _invalidate_cached_auth_token(
+        self,
+        conn: ArcGISConnectionInfo,
+        cache_key: str,
+    ) -> None:
+        namespace = (
+            "arcgis-client-oauth2"
+            if conn.auth_type == "oauth2"
+            else "arcgis-client-token"
+        )
+        _invalidate_token_record(
+            namespace=namespace,
+            cache_key=cache_key,
+            local_cache=self._token_cache,
+            local_lock=self._token_cache_lock(),
+        )
 
     def _request_with_token(
         self,
@@ -193,7 +240,7 @@ class ArcGISAuthMixin:
                     f"[ARCGIS] 401 sul token corrente, invalido cache e "
                     f"ritento con token fresh. URL: {url}"
                 )
-                self._token_cache.pop(cache_key, None)
+                self._invalidate_cached_auth_token(conn, cache_key)
                 retry_on_401_done = True
                 continue
 
@@ -214,7 +261,7 @@ class ArcGISAuthMixin:
                                 f"scaduto/invalido), refresh + retry. "
                                 f"URL: {url}"
                             )
-                            self._token_cache.pop(cache_key, None)
+                            self._invalidate_cached_auth_token(conn, cache_key)
                             retry_on_401_done = True
                             continue
 
@@ -250,10 +297,24 @@ class ArcGISAuthMixin:
 
         # OAuth2 client_credentials
         if conn.auth_type == "oauth2":
-            return self._authenticate_oauth2(conn, cache_key)
+            return _get_or_refresh_token_record(
+                namespace="arcgis-client-oauth2",
+                cache_key=cache_key,
+                local_cache=self._token_cache,
+                local_lock=self._token_cache_lock(),
+                refresh_threshold_sec=60,
+                fetch_token_record=lambda: self._fetch_oauth2_token_record(conn),
+            )
 
         # Token classico (username/password)
-        return self._authenticate_token(conn, cache_key)
+        return _get_or_refresh_token_record(
+            namespace="arcgis-client-token",
+            cache_key=cache_key,
+            local_cache=self._token_cache,
+            local_lock=self._token_cache_lock(),
+            refresh_threshold_sec=60,
+            fetch_token_record=lambda: self._fetch_classic_token_record(conn),
+        )
 
     def _authenticate_oauth2(
         self,
@@ -266,6 +327,20 @@ class ArcGISAuthMixin:
         POST /sharing/rest/oauth2/token
         grant_type=client_credentials&client_id=xxx&client_secret=xxx
         """
+        record = self._fetch_oauth2_token_record(conn)
+        if not record:
+            raise ConnectionError("OAuth2 fallito: nessun token ricevuto")
+        return self._store_token_record(
+            cache_key,
+            str(record["token"]),
+            float(record["expires_at"]),
+        )
+
+    def _fetch_oauth2_token_record(
+        self,
+        conn: ArcGISConnectionInfo,
+    ) -> TokenRecord:
+        """Fetch diretto del token OAuth2 ArcGIS senza loggare secret."""
 
         parsed = urlparse(conn.server_url)
         oauth_url = f"{parsed.scheme}://{parsed.netloc}/sharing/rest/oauth2/token"
@@ -291,16 +366,14 @@ class ArcGISAuthMixin:
                 token = result["access_token"]
                 expires_in = result.get("expires_in", 7200)  # default 2 ore
 
-                self._token_cache[cache_key] = {
-                    "token": token,
-                    "expires": time.time() + expires_in - 60,  # margine 60s
-                }
-
                 logger.info(
                     f"Token OAuth2 ottenuto per {conn.server_url} "
                     f"(expires_in={expires_in}s)"
                 )
-                return token
+                return {
+                    "token": token,
+                    "expires_at": time.time() + expires_in,
+                }
             error = result.get("error", {})
             error_desc = error.get(
                 "message", result.get("error_description", "Errore OAuth2")
@@ -321,6 +394,20 @@ class ArcGISAuthMixin:
         Prova diverse strategie (referer, requestip) per compatibilita'
         con diversi tipi di server.
         """
+        record = self._fetch_classic_token_record(conn)
+        if not record:
+            raise ConnectionError("Autenticazione fallita: nessun token ricevuto")
+        return self._store_token_record(
+            cache_key,
+            str(record["token"]),
+            float(record["expires_at"]),
+        )
+
+    def _fetch_classic_token_record(
+        self,
+        conn: ArcGISConnectionInfo,
+    ) -> TokenRecord:
+        """Fetch diretto generateToken ArcGIS con strategie legacy."""
         token_url = self._resolve_token_url(conn)
 
         is_online = "arcgis.com" in conn.server_url.lower()
@@ -363,16 +450,14 @@ class ArcGISAuthMixin:
                     expires = result.get("expires", 0)
                     expires_sec = expires / 1000 if expires > 1e10 else expires
 
-                    self._token_cache[cache_key] = {
-                        "token": token,
-                        "expires": expires_sec - 60,
-                    }
-
                     logger.debug(
                         f"Token ottenuto per {conn.server_url} "
                         f"(client={_mask_secret(str(strategy.get('client', '')))})"
                     )
-                    return token
+                    return {
+                        "token": token,
+                        "expires_at": expires_sec,
+                    }
                 error_obj = result.get("error", {})
                 last_error = error_obj.get("message", "Errore sconosciuto")
                 logger.warning(

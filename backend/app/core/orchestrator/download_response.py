@@ -42,7 +42,35 @@ def project_result_response(
 ) -> Response:
     """Build the download response for a project result."""
     root = results_root or settings.RESULTS_DIR
+    latest = results_db.get_latest_result_row(project_id)
+
+    if latest and latest.id:
+        filename = latest.filename or f"{project_id}.{latest.format or 'csv'}"
+        if not requested_file or requested_file == filename:
+            blob = results_blob.get_result_data(latest.id)
+            if blob is not None:
+                return Response(
+                    content=blob,
+                    media_type=mime_for_filename(filename),
+                    headers={
+                        "Content-Disposition": f'attachment; filename="{filename}"',
+                        "Content-Length": str(len(blob)),
+                    },
+                )
+            if not legacy_file_store.legacy_local_result_paths_enabled():
+                raise HTTPException(
+                    404,
+                    f"Blob risultato non disponibile per progetto '{project_id}'",
+                )
+
     if requested_file:
+        if not legacy_file_store.legacy_local_result_paths_enabled():
+            raise HTTPException(
+                410,
+                legacy_file_store.legacy_local_result_paths_disabled_message(
+                    "Download legacy da RESULTS_DIR"
+                ),
+            )
         try:
             target = legacy_file_store.resolve_specific_file(
                 project_id,
@@ -67,6 +95,24 @@ def project_result_response(
             media_type=mime_for_filename(safe_name),
         )
 
+    if not legacy_file_store.legacy_local_result_paths_enabled():
+        if legacy_file_store.has_project_files(project_id, root=root):
+            raise HTTPException(
+                410,
+                legacy_file_store.legacy_local_result_paths_disabled_message(
+                    "Fallback legacy da RESULTS_DIR"
+                ),
+            )
+        if latest and not latest.id:
+            raise HTTPException(
+                404,
+                f"Metadata risultato non valide per progetto '{project_id}'",
+            )
+        raise HTTPException(
+            404,
+            f"Nessun risultato blob trovato per progetto '{project_id}'",
+        )
+
     latest_file = legacy_file_store.resolve_latest_file(project_id, root=root)
     if latest_file is not None:
         return FileResponse(
@@ -75,28 +121,9 @@ def project_result_response(
             media_type=mime_for_filename(latest_file.name),
         )
 
-    latest = results_db.get_latest_result_row(project_id)
     if not latest:
         raise HTTPException(404, f"Nessun risultato trovato per progetto '{project_id}'")
-    if not latest.id:
-        raise HTTPException(
-            404,
-            f"Metadata risultato non valide per progetto '{project_id}'",
-        )
-
-    blob = results_blob.get_result_data(latest.id)
-    if blob is None:
-        raise HTTPException(
-            404,
-            f"Blob risultato non disponibile per progetto '{project_id}'",
-        )
-
-    filename = latest.filename or f"{project_id}.{latest.format or 'csv'}"
-    return Response(
-        content=blob,
-        media_type=mime_for_filename(filename),
-        headers={
-            "Content-Disposition": f'attachment; filename="{filename}"',
-            "Content-Length": str(len(blob)),
-        },
+    raise HTTPException(
+        404,
+        f"Metadata risultato non valide per progetto '{project_id}'",
     )

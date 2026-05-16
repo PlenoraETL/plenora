@@ -20,6 +20,12 @@ from app.core.carica.arcgis_write_boundary import (
     create_default_arcgis_feature_writer,
     execute_carica_arcgis_write,
 )
+from app.core.carica.target_lock import (
+    CaricaTargetLockHandle,
+    acquire_carica_target_lock,
+    release_carica_target_lock,
+    resolve_carica_target_lock,
+)
 
 from workers.celery_app import celery_app, BaseTaskWithRetry
 
@@ -147,7 +153,48 @@ def execute_carica_task(
 
     _update_progress(self, 0, "Inizializzazione CARICA...")
 
+    target_lock_handle: CaricaTargetLockHandle | None = None
     try:
+        write_branch = _select_carica_write_branch(carica_node_data)
+        target_lock_handle = _acquire_target_lock_or_return_busy(
+            carica_node_data=carica_node_data,
+            project_id=project_id,
+            group_id=_group_id,
+            task_id=task_id,
+            run_id=run_id,
+            write_branch=write_branch,
+        )
+        if target_lock_handle is None:
+            lock_target = resolve_carica_target_lock(
+                node_data=carica_node_data,
+                project_id=project_id,
+                group_id=_group_id,
+                write_branch=write_branch,
+            )
+            if lock_target is not None:
+                elapsed_ms = int((_time.time() - _run_start) * 1000)
+                message = (
+                    "Destinazione CARICA gia' in scrittura da un altro task; "
+                    "riprova al termine della run corrente."
+                )
+                _update_progress(self, -1, message)
+                close_run(
+                    run_id=run_id,
+                    status="failure",
+                    duration_ms=elapsed_ms,
+                    error_module="carica",
+                    error_message=message,
+                )
+                return {
+                    "status": "conflict",
+                    "success": False,
+                    "error": "carica_target_locked",
+                    "message": message,
+                    "error_message": message,
+                    "rows_written": 0,
+                    "total_rows": 0,
+                }
+
         _update_progress(self, 5, "Caricamento dati dal nodo Output...")
         df = _load_upstream_data(project_id, canvas, force_recalculate, output_format)
 
@@ -188,8 +235,6 @@ def execute_carica_task(
             self, 10,
             f"Dati caricati: {len(df)} righe. Avvio scrittura..."
         )
-
-        write_branch = _select_carica_write_branch(carica_node_data)
 
         if write_branch == 'datasource':
             result = _execute_datasource_write(self, df, carica_node_data, project_id, task_id)
@@ -277,6 +322,18 @@ def execute_carica_task(
             "total_rows": 0,
         }
     finally:
+        if target_lock_handle is not None:
+            try:
+                released = release_carica_target_lock(target_lock_handle)
+                if not released:
+                    logger.warning(
+                        "CARICA target lock non rilasciato: owner non piu' corrente "
+                        f"(task_id={task_id}, run_id={run_id})"
+                    )
+            except Exception as e:
+                logger.warning(
+                    f"release CARICA target lock fallito: {type(e).__name__}: {e}"
+                )
         # FIX: chiudi le connessioni PostgreSQL thread-local del worker Celery
         # Storia: la migrazione SQLite -> PostgreSQL ha mantenuto lo stesso
         # pattern thread-local, quindi il cleanup resta necessario. Senza
@@ -309,6 +366,55 @@ def _select_carica_write_branch(carica_node_data: JsonObject) -> str:
     if dest_type == 'arcgis' or node_type == 'carica_arcgis':
         return 'arcgis'
     return 'db'
+
+
+def _acquire_target_lock_or_return_busy(
+    *,
+    carica_node_data: JsonObject,
+    project_id: str,
+    group_id: str,
+    task_id: str,
+    run_id: str,
+    write_branch: str,
+) -> CaricaTargetLockHandle | None:
+    """Acquire the distributed destination lock, or None when busy/unknown."""
+    target_lock = resolve_carica_target_lock(
+        node_data=carica_node_data,
+        project_id=project_id,
+        group_id=group_id,
+        write_branch=write_branch,
+    )
+    if target_lock is None:
+        logger.info(
+            "CARICA target lock skipped: destinazione non identificabile "
+            f"(branch={write_branch}, project_id={project_id})"
+        )
+        return None
+
+    ttl_seconds = int(
+        settings.get(
+            "CARICA_TARGET_LOCK_TTL_SECONDS",
+            settings.CELERY_TASK_HARD_LIMIT + 300,
+        )
+    )
+    owner_token = f"task={task_id};run={run_id}"
+    handle = acquire_carica_target_lock(
+        target=target_lock,
+        owner_token=owner_token,
+        ttl_seconds=ttl_seconds,
+    )
+    if handle is None:
+        logger.warning(
+            "CARICA target lock busy "
+            f"(kind={target_lock.kind}, key={target_lock.key}, project_id={project_id})"
+        )
+        return None
+
+    logger.info(
+        "CARICA target lock acquired "
+        f"(kind={target_lock.kind}, key={target_lock.key}, ttl={ttl_seconds}s)"
+    )
+    return handle
 
 
 def _execute_datasource_write(task, df, carica_node_data, project_id, task_id):

@@ -15,6 +15,7 @@ from app.shared.contracts.auth import CurrentUser
 from app.core.auth.auth import require_not_esecutore, get_current_user
 from app.core.orchestrator.router import pipeline_router
 from app.core.results.db import ResultMetadataRow
+from app.core.results.legacy_file_store import LEGACY_LOCAL_RESULT_PATHS_FLAG
 
 
 pytestmark = [
@@ -88,17 +89,17 @@ def test_download_project_result_falls_back_to_db_blob(pipeline_client, tmp_path
     assert 'filename="out.csv"' in response.headers.get("content-disposition", "")
 
 
-def test_download_project_result_filesystem_wins_over_blob_when_present(
+def test_download_project_result_blob_wins_over_filesystem_when_present(
     pipeline_client, tmp_path
 ):
-    """Se il filesystem ha un file (compat pre-R#1), lo si serve senza
-    toccare il DB. Preserva il comportamento legacy per progetti
-    antichi che non sono mai stati migrati al blob DB."""
+    """Il blob DB e' la sorgente canonica anche se esiste un file legacy
+    in RESULTS_DIR. Il filesystem non deve piu' vincere sul blob."""
     project_id = "proj-legacy"
     results_dir = tmp_path / project_id
     results_dir.mkdir(parents=True)
     legacy_file = results_dir / "legacy.csv"
     legacy_file.write_bytes(b"id\n1\n")
+    blob_bytes = b"id\n2\n"
 
     with patch(
         "app.core.orchestrator.router.settings",
@@ -106,14 +107,105 @@ def test_download_project_result_filesystem_wins_over_blob_when_present(
     ), patch(
         "app.core.orchestrator.router._assert_project_group"
     ), patch(
-        "app.core.results.db.get_latest_result_row"
-    ) as mock_latest:
+        "app.core.results.db.get_latest_result_row",
+        return_value=ResultMetadataRow(
+            id="res-latest",
+            project_id=project_id,
+            filename="out.csv",
+            format="csv",
+            size_bytes=len(blob_bytes),
+        ),
+    ) as mock_latest, patch(
+        "app.core.results.blob.get_result_data",
+        return_value=blob_bytes,
+    ):
+        response = pipeline_client.get(f"/api/projects/{project_id}/download")
+
+    assert response.status_code == 200
+    assert response.content == blob_bytes
+    mock_latest.assert_called_once()
+
+
+def test_download_project_result_legacy_filesystem_requires_explicit_dev_flag(
+    pipeline_client, tmp_path, monkeypatch
+):
+    """Senza blob DB, RESULTS_DIR e' solo fallback legacy esplicito:
+    in dev/test serve PLENORA_ALLOW_LEGACY_LOCAL_RESULT_PATHS=1."""
+    project_id = "proj-legacy-only"
+    results_dir = tmp_path / project_id
+    results_dir.mkdir(parents=True)
+    (results_dir / "legacy.csv").write_bytes(b"id\n1\n")
+
+    monkeypatch.setenv("ENVIRONMENT", "development")
+    monkeypatch.delenv(LEGACY_LOCAL_RESULT_PATHS_FLAG, raising=False)
+
+    with patch(
+        "app.core.orchestrator.router.settings",
+        new=SimpleNamespace(RESULTS_DIR=tmp_path),
+    ), patch(
+        "app.core.orchestrator.router._assert_project_group"
+    ), patch(
+        "app.core.results.db.get_latest_result_row",
+        return_value=None,
+    ):
+        response = pipeline_client.get(f"/api/projects/{project_id}/download")
+
+    assert response.status_code == 410
+    assert LEGACY_LOCAL_RESULT_PATHS_FLAG in response.text
+
+
+def test_download_project_result_legacy_filesystem_allowed_in_dev_with_flag(
+    pipeline_client, tmp_path, monkeypatch
+):
+    project_id = "proj-legacy-flag"
+    results_dir = tmp_path / project_id
+    results_dir.mkdir(parents=True)
+    legacy_file = results_dir / "legacy.csv"
+    legacy_file.write_bytes(b"id\n1\n")
+
+    monkeypatch.setenv("ENVIRONMENT", "development")
+    monkeypatch.setenv(LEGACY_LOCAL_RESULT_PATHS_FLAG, "1")
+
+    with patch(
+        "app.core.orchestrator.router.settings",
+        new=SimpleNamespace(RESULTS_DIR=tmp_path),
+    ), patch(
+        "app.core.orchestrator.router._assert_project_group"
+    ), patch(
+        "app.core.results.db.get_latest_result_row",
+        return_value=None,
+    ):
         response = pipeline_client.get(f"/api/projects/{project_id}/download")
 
     assert response.status_code == 200
     assert response.content == b"id\n1\n"
-    # Nessuna query al DB se il filesystem ha il file (fast-path)
-    mock_latest.assert_not_called()
+
+
+@pytest.mark.parametrize("env_name", ["production", "staging"])
+def test_download_project_result_blocks_legacy_filesystem_in_hardened_env_even_with_flag(
+    pipeline_client, tmp_path, monkeypatch, env_name
+):
+    project_id = "proj-legacy-prod"
+    results_dir = tmp_path / project_id
+    results_dir.mkdir(parents=True)
+    (results_dir / "legacy.csv").write_bytes(b"id\n1\n")
+
+    monkeypatch.setenv("ENVIRONMENT", env_name)
+    monkeypatch.setenv(LEGACY_LOCAL_RESULT_PATHS_FLAG, "1")
+
+    with patch(
+        "app.core.orchestrator.router.settings",
+        new=SimpleNamespace(RESULTS_DIR=tmp_path),
+    ), patch(
+        "app.core.orchestrator.router._assert_project_group"
+    ), patch(
+        "app.core.results.db.get_latest_result_row",
+        return_value=None,
+    ):
+        response = pipeline_client.get(f"/api/projects/{project_id}/download")
+
+    assert response.status_code == 410
+    assert "production/cluster" in response.text
 
 
 def test_download_project_result_404_when_nothing_exists(pipeline_client, tmp_path):
