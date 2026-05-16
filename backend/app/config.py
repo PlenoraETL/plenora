@@ -55,6 +55,10 @@ class Settings:
 
         "CELERY_BROKER_URL":            "redis://localhost:6379/0",
         "CELERY_RESULT_BACKEND":        "redis://localhost:6379/0",
+        "CELERY_QUEUE_DEFAULT":         "default",
+        "CELERY_QUEUE_DATA_PLANE":      "data-plane",
+        "CELERY_QUEUE_CONTROL_PLANE":   "control-plane",
+        "CELERY_QUEUE_SCHEDULER":       "scheduler",
         # Production gates: dev/test restano single-node per default.
         # Imposta uno di questi flag a true per forzare le stesse regole
         # di production/staging anche in env non-prod (cluster/multi-pod).
@@ -661,6 +665,22 @@ class Settings:
     @property
     def CELERY_RESULT_BACKEND(self) -> str:
         return self._str_setting("CELERY_RESULT_BACKEND", "redis://localhost:6379/0")
+
+    @property
+    def CELERY_QUEUE_DEFAULT(self) -> str:
+        return self._str_setting("CELERY_QUEUE_DEFAULT", "default")
+
+    @property
+    def CELERY_QUEUE_DATA_PLANE(self) -> str:
+        return self._str_setting("CELERY_QUEUE_DATA_PLANE", "data-plane")
+
+    @property
+    def CELERY_QUEUE_CONTROL_PLANE(self) -> str:
+        return self._str_setting("CELERY_QUEUE_CONTROL_PLANE", "control-plane")
+
+    @property
+    def CELERY_QUEUE_SCHEDULER(self) -> str:
+        return self._str_setting("CELERY_QUEUE_SCHEDULER", "scheduler")
 
     @property
     def CELERY_TASK_TIMEOUT(self) -> int:

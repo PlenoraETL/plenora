@@ -20,6 +20,9 @@ from app.core.projects.canvas_models import ExecuteRequest
 from app.core.orchestrator.task_service import (
     TaskType,
 )
+from app.core.orchestrator.execution_contract import (
+    build_pipeline_execution_contract,
+)
 from app.core.orchestrator.router_mappers import (
     sanitize_task_status_payload,
     task_info_to_dict as _task_info_to_dict,
@@ -147,20 +150,13 @@ def execute_project_pipeline(
             from app.core.projects.service import ProjectService
 
             project_service = ProjectService()
-        metadata = project_service.get_project_metadata(project_id)
-        canvas = project_service.get_project_canvas(project_id)
-        if not metadata or not canvas:
-            raise HTTPException(status_code=404, detail="Progetto non trovato")
-        canvas_payload = (
-            canvas.model_dump() if hasattr(canvas, "model_dump") else canvas
-        )
-        execution_contract = {
-            "project_id": project_id,
-            "project_type": metadata.project_type,
-            "group_id": metadata.group_id,
-            "canvas": canvas_payload,
-            "artifact_refs": {},
-        }
+        try:
+            execution_contract = build_pipeline_execution_contract(
+                project_id=project_id,
+                project_service=project_service,
+            )
+        except LookupError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
         task_info = task_service.create_pipeline_task(
             project_id=project_id,
             force_recalculate=force_recalculate,

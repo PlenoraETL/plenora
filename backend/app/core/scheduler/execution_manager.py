@@ -307,9 +307,19 @@ class ExecutionManager:
             
             orchestrator = self._get_orchestrator()
             force_recalculate = not config.execution.use_cache
-            
-            result = orchestrator.execute_pipeline(
+
+            from app.core.orchestrator.execution_contract import (
+                build_pipeline_execution_contract,
+            )
+            execution_contract = build_pipeline_execution_contract(
                 project_id=project_id,
+                project_service=project_service,
+            )
+
+            result = orchestrator.execute_pipeline_from_contract(
+                project_id=project_id,
+                project_type=str(execution_contract["project_type"]),
+                canvas=execution_contract["canvas"],
                 force_recalculate=force_recalculate,
                 skip_carica=True,  # Lo scheduler gestisce CARICA separatamente
                 run_id=run_id,

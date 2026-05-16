@@ -47,6 +47,19 @@ OTHER_USER_SERVICES = [
 ]
 
 
+@pytest.fixture(autouse=True)
+def _use_in_memory_task_metadata_store(monkeypatch):
+    """Keep N9 launch-contract tests independent from a live Redis broker."""
+    from app.core.orchestrator import task_service as task_service_mod
+    from app.core.orchestrator.task_metadata_store import InMemoryTaskMetadataStore
+
+    monkeypatch.setattr(
+        task_service_mod.task_service,
+        "metadata_store",
+        InMemoryTaskMetadataStore(),
+    )
+
+
 # Helpers â€” bytecode probe (refactor-resilient)
 
 def _underlying(callable_or_task):
@@ -258,7 +271,15 @@ def test_execute_endpoint_passes_current_user_id(monkeypatch):
     from app.core.orchestrator.router import pipeline_router, init_orchestrator
     from tests2.helpers.builders import build_current_user
 
-    init_orchestrator(MagicMock())
+    project_service = MagicMock()
+    project_service.get_project_metadata.return_value = MagicMock(
+        project_type="manipola",
+        group_id="grp-1",
+        retention_n=3,
+    )
+    project_service.get_project_canvas.return_value = {"nodes": [], "edges": []}
+    project_service.get_project_columns_metadata.return_value = []
+    init_orchestrator(MagicMock(project_service=project_service))
 
     fixture_user = build_current_user(user_id="usr_endpoint", role="admin")
     captured = {}

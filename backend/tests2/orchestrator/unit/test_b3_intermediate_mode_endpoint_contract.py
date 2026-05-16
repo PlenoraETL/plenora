@@ -29,8 +29,20 @@ def _build_orchestrator_client(role: str = "admin"):
         pipeline_router, init_orchestrator,
     )
 
+    project_service = MagicMock()
+    project_service.get_project_metadata.return_value = MagicMock(
+        project_type="manipola",
+        group_id="grp-1",
+        retention_n=3,
+    )
+    project_service.get_project_canvas.return_value = {
+        "nodes": [],
+        "edges": [],
+    }
+    project_service.get_project_columns_metadata.return_value = []
+
     # Init orchestrator service mock per `require_service` non sollevi.
-    init_orchestrator(MagicMock())
+    init_orchestrator(MagicMock(project_service=project_service))
 
     app = FastAPI()
     app.dependency_overrides[require_not_esecutore] = lambda: build_current_user(role=role)

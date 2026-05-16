@@ -5,6 +5,7 @@ Broker: redis://localhost:6379/0
 """
 
 from celery import Celery
+from kombu import Queue
 from app.config import settings
 from app.environment import env_flag
 from app.utils.logger import get_logger, get_request_id, set_request_id
@@ -46,6 +47,29 @@ celery_app.conf.update(
     task_soft_time_limit=settings.CELERY_TASK_TIMEOUT - 60,
     task_time_limit=settings.CELERY_TASK_TIMEOUT,
     task_default_rate_limit="100/m",
+    task_default_queue=settings.CELERY_QUEUE_DEFAULT,
+    task_queues=(
+        Queue(settings.CELERY_QUEUE_DEFAULT),
+        Queue(settings.CELERY_QUEUE_DATA_PLANE),
+        Queue(settings.CELERY_QUEUE_CONTROL_PLANE),
+        Queue(settings.CELERY_QUEUE_SCHEDULER),
+    ),
+    task_routes={
+        "pipeline.execute": {"queue": settings.CELERY_QUEUE_DATA_PLANE},
+        "pipeline.preview": {"queue": settings.CELERY_QUEUE_DATA_PLANE},
+        "carica.execute": {"queue": settings.CELERY_QUEUE_DATA_PLANE},
+        "tasks.execute_enrichment": {"queue": settings.CELERY_QUEUE_DATA_PLANE},
+        "tasks.execute_imdf_publish": {"queue": settings.CELERY_QUEUE_DATA_PLANE},
+        "workers.tasks.admin_backup_task.run_manual_backup_task": {
+            "queue": settings.CELERY_QUEUE_CONTROL_PLANE,
+        },
+        "workers.tasks.schedule_task.schedule_pipeline_task": {
+            "queue": settings.CELERY_QUEUE_DATA_PLANE,
+        },
+        "workers.tasks.schedule_task.beat_heartbeat": {
+            "queue": settings.CELERY_QUEUE_SCHEDULER,
+        },
+    },
     broker_connection_retry_on_startup=True,
 )
 

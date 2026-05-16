@@ -142,12 +142,16 @@ def _normalize_execution_contract(
         raise ValueError("execution_contract.canvas is required")
 
     contract: JsonObject = {
+        "schema_version": raw_contract.get("schema_version", 1),
         "project_id": project_id,
         "project_type": project_type,
         "canvas": dict(canvas),
         "group_id": str(raw_contract.get("group_id") or ""),
         "artifact_refs": raw_contract.get("artifact_refs") or {},
     }
+    columns_metadata = raw_contract.get("columns_metadata")
+    if isinstance(columns_metadata, list):
+        contract["columns_metadata"] = columns_metadata
     retention_n = raw_contract.get("retention_n")
     if retention_n is not None:
         contract["retention_n"] = retention_n
