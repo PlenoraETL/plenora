@@ -16,7 +16,6 @@ import ModalWrapper, { ModalButton } from '../common/ModalWrapper';
 import {
   listFeatureConnections,
   createFeatureConnection,
-  testFeatureConnection,
   browseServices,
   browseLayers,
   getLayerSchema,

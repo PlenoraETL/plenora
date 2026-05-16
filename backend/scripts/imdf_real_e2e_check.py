@@ -44,6 +44,7 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import sys
 import tempfile
 import time
@@ -290,7 +291,6 @@ def cleanup_bundle(bundle_task_id: str, plenora_token: str, bundle_dir: Path):
         _log(f"cleanup bundle DELETE non-fatal: {e}")
     # Fallback: cancella la dir direttamente se ancora presente
     if bundle_dir.exists():
-        import shutil
         shutil.rmtree(bundle_dir, ignore_errors=True)
         _log(f"cleanup bundle dir locale: {bundle_dir}")
 

@@ -11,7 +11,7 @@
  *   case 'pivot_mapping':
  *     return <PivotMappingBuilder value={value} onChange={onChange} />;
  */
-import React, { useState, useCallback, useMemo } from 'react';
+import React, { useState, useCallback } from 'react';
 import './PivotMappingBuilder.css';
 
 // Converte dict → array di righe per l'editing interno

@@ -11,7 +11,7 @@
  * Filtri: kind, status (multi), severity (multi), "solo i miei".
  * Ordine: updated_at DESC (backend).
  */
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 import AppSidebar from '../components/AppSidebar';

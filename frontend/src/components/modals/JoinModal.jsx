@@ -9,7 +9,7 @@
  */
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useToast } from '../../hooks/useToast';
-import { getColumnTypeIcon, getColumnTypeLabel } from '../../utils/columnUtils';
+import { getColumnTypeIcon } from '../../utils/columnUtils';
 import ModalWrapper, { ModalButton } from '../common/ModalWrapper';
 import { useConfirm } from '../../context/ConfirmContext';
 import './JoinModal.css';

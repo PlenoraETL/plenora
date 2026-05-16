@@ -13,21 +13,20 @@
  *
  * Route: /arricchisci/:projectId
  */
-import React, { useState, useCallback, useEffect, useMemo, useRef, lazy, Suspense } from 'react';
+import React, { useState, useCallback, useEffect, useRef, lazy, Suspense } from 'react';
 import { addEdge, useReactFlow, ReactFlowProvider, MarkerType } from 'reactflow';
 import 'reactflow/dist/style.css';
 import { useParams, useNavigate } from 'react-router-dom';
 import EditorShell from '../components/editor/EditorShell';
 import { ConfirmProvider } from '../context/ConfirmContext';
 import { executeEnrichmentAsync } from '../api';
-import { getFiles } from '../api/files';
 import { useAuth } from '../context/AuthContext';
 import { useEditorData } from '../hooks/useEditorData';
 import { describeAccessDeniedNodes } from '../utils/canvasAccessControl';
 import AccessDeniedBanner from '../components/editor/AccessDeniedBanner';
 import useCanvasStore from '../store/useCanvasStore';
 import ValidationStatusBadge from '../components/editor/ValidationStatusBadge';
-import { deserializeNodes, createEdgeFromData } from '../utils/nodeFactories';
+import { deserializeNodes } from '../utils/nodeFactories';
 import EditorSidebar from '../components/panels/EditorSidebar';
 import ProjectSourceNode from '../components/nodes/ProjectSourceNode';
 import FileSourceNode from '../components/nodes/FileSourceNode';

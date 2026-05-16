@@ -5,7 +5,7 @@
  * - Admin: vede e gestisce utenti del proprio gruppo
  * - Superadmin: vede tutti gli utenti + gestisce i gruppi
  */
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../hooks/useToast';

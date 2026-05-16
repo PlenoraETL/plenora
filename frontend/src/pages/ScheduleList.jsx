@@ -3,7 +3,7 @@
  * Redesign Plenora: sidebar layout, hex bg, card con accent bar
  * Route: /schedules
  */
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useToast } from '../hooks/useToast';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
