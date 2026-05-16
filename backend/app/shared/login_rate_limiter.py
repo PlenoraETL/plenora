@@ -25,6 +25,15 @@ _client_explicit: bool = False
 _warned_fallback: bool = False
 
 
+def _redis_required() -> bool:
+    try:
+        from app.config import settings
+
+        return bool(settings.get("LOGIN_RL_REDIS_REQUIRED", False))
+    except Exception:
+        return False
+
+
 def _get_client() -> Optional[Any]:
     """Lazy init + cache del client Redis. None se init fallisce.
 
@@ -79,6 +88,18 @@ def _warn_fallback_once(reason: str) -> None:
             "attivo fallback in-memory (comportamento single-node preservato)",
             reason,
         )
+
+
+def _fail_closed(operation: str, reason: str) -> None:
+    logger.error(
+        "login rate limiter: Redis required, %s denied (%s)",
+        operation,
+        reason,
+    )
+    raise HTTPException(
+        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+        detail="Login rate limiter non disponibile.",
+    )
 
 
 def _redis_check(
@@ -158,6 +179,8 @@ def check_rate_limit(
             lockout_s=lockout_seconds,
         )
     except Exception as e:
+        if _redis_required():
+            _fail_closed("check", str(e))
         _warn_fallback_once(str(e))
         fallback(ip)
         return
@@ -178,6 +201,8 @@ def record_failed_login(
     try:
         _redis_record(ip, window_s=window_seconds)
     except Exception as e:
+        if _redis_required():
+            _fail_closed("record", str(e))
         _warn_fallback_once(str(e))
         fallback(ip)
 
@@ -190,6 +215,8 @@ def clear_failed_logins(
     try:
         _redis_clear(ip)
     except Exception as e:
+        if _redis_required():
+            _fail_closed("clear", str(e))
         _warn_fallback_once(str(e))
         fallback(ip)
 

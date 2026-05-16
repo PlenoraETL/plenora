@@ -6,15 +6,16 @@ CanvasGraph - parsed intake object for canvas node/edge graphs.
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
-from typing import Any, Dict, List, Optional
+from typing import Any, List, Optional
 
+from app.shared.contracts.payloads import JsonObject, JsonObjectById, JsonRows
 from app.shared.execution.canvas_node import CanvasNode
 
 
 __all__ = ["CanvasGraph"]
 
 
-def _plain_dict(value: Any) -> Optional[Dict]:
+def _plain_dict(value: Any) -> Optional[JsonObject]:
     if isinstance(value, dict):
         return value
     if hasattr(value, "model_dump"):
@@ -42,10 +43,10 @@ class CanvasGraph:
 
     def __init__(
         self,
-        raw_nodes: List[Dict],
-        raw_map: Dict[str, Dict],
-        typed_map: Dict[str, CanvasNode],
-        edges: List[Dict],
+        raw_nodes: JsonRows,
+        raw_map: JsonObjectById,
+        typed_map: Mapping[str, CanvasNode],
+        edges: JsonRows,
     ) -> None:
         self._raw_nodes = raw_nodes
         self._raw_map = raw_map
@@ -87,9 +88,9 @@ class CanvasGraph:
         converted once via ``model_dump`` so the rest of the graph is
         always plain-dict based. Nodes that are neither are silently skipped.
         """
-        raw_nodes: List[Dict] = []
-        raw_map: Dict[str, Dict] = {}
-        typed_map: Dict[str, CanvasNode] = {}
+        raw_nodes: JsonRows = []
+        raw_map: JsonObjectById = {}
+        typed_map = {}
         for n in nodes:
             raw_dict = _plain_dict(n)
             if raw_dict is None:
@@ -109,7 +110,7 @@ class CanvasGraph:
 
     # lookups
 
-    def raw(self, node_id: str) -> Optional[Dict]:
+    def raw(self, node_id: str) -> Optional[JsonObject]:
         """Return the raw node dict for *node_id*, or None."""
         return self._raw_map.get(node_id)
 
@@ -132,16 +133,16 @@ class CanvasGraph:
         return list(self._typed_map.values())
 
     @property
-    def raw_nodes(self) -> List[Dict]:
+    def raw_nodes(self) -> JsonRows:
         """All accepted raw node dicts, in intake order."""
         return list(self._raw_nodes)
 
     @property
-    def raw_map(self) -> Dict[str, Dict]:
+    def raw_map(self) -> JsonObjectById:
         """Raw dict map ``{node_id: raw_dict}`` for legacy callers."""
         return self._raw_map
 
     @property
-    def edges(self) -> List[Dict]:
+    def edges(self) -> JsonRows:
         """The original edge list."""
         return self._edges

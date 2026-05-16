@@ -6,17 +6,57 @@ from datetime import timedelta
 
 import os
 import subprocess
+import uuid
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import List, Dict, Any, Optional
+from typing import Any, Optional, TypedDict
 
 from app.core.admin_backups.backup_run_store import (
     fetch_latest_backup_run,
     fetch_latest_backup_started_at,
+    fetch_manual_backup_lock,
+    release_manual_backup_lock,
+    set_manual_backup_lock_pid,
+    try_acquire_manual_backup_lock,
 )
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
+
+
+class BackupObjectPayload(TypedDict):
+    key: str
+    size_bytes: int
+    size_mb: float
+    last_modified: str
+    storage_class: str
+
+
+class LastBackupRunStatus(TypedDict):
+    result: str
+    exit_code: int | None
+    started_at: str | None
+    finished_at: str | None
+    duration_sec: float | None
+    bucket_key: str | None
+    size_bytes: int | None
+    error_message: str | None
+    log_tail: list[str]
+
+
+class BackupScheduleInfo(TypedDict):
+    timer_active: bool
+    next_run: str | None
+    last_run: str | None
+    schedule_cron: str
+    description: str
+    timezone: str
+
+
+class ManualBackupTriggerResult(TypedDict):
+    started: bool
+    pid: int | None
+    message: str
 
 
 class AdminBackupDependencyError(RuntimeError):
@@ -95,9 +135,9 @@ from app.infrastructure.storage.cloud_backends import (
 BUCKET = _resolve_backup_bucket_env() or "plenora-backup-112011134642-eu-south-1-an"
 REGION = os.getenv("AWS_REGION", "eu-south-1")
 
-# Lock file per evitare trigger concorrenti via API
-MANUAL_LOCK_FILE = Path("/tmp/plenora-backup-manual.lock")
+# Lock distribuito Postgres per evitare trigger concorrenti via API.
 MANUAL_LOCK_TTL_SEC = 7200  # 2 ore: se un backup e' in corso, il lock scade dopo 2h
+MANUAL_LOG_FILE = Path("/tmp/plenora-backup-manual.log")
 
 # Path dello script backup, risolto relativamente al backend root
 # service.py -> admin_backups -> core -> app -> backend
@@ -108,7 +148,7 @@ BACKUP_SCRIPT = _BACKEND_ROOT / "scripts" / "backup_db.py"
 # ── S3: lista backup ────────────────────────────────────────────────────────
 
 
-def list_backups() -> List[Dict[str, Any]]:
+def list_backups() -> list[BackupObjectPayload]:
     """Lista oggetti del bucket backup con prefix 'plenora_'.
 
     passa per `get_backup_object_storage`
@@ -187,7 +227,7 @@ def list_backups() -> List[Dict[str, Any]]:
 # nodo dove gira il backend
 
 
-def get_last_run_status() -> Dict[str, Any]:
+def get_last_run_status() -> LastBackupRunStatus:
     """Stato dell'ultimo run leggendo plenora.backup_runs.
 
     Returns:
@@ -203,7 +243,7 @@ def get_last_run_status() -> Dict[str, Any]:
           "log_tail": list[str] # ultime righe catturate dallo script
         }
     """
-    out: Dict[str, Any] = {
+    out: LastBackupRunStatus = {
         "result": "unknown",
         "exit_code": None,
         "started_at": None,
@@ -262,7 +302,7 @@ def get_last_run_status() -> Dict[str, Any]:
     return out
 
 
-def get_schedule_info() -> Dict[str, Any]:
+def get_schedule_info() -> BackupScheduleInfo:
     """Info sulla schedule del backup.
 
     La schedule e' gestita a livello di deployment (systemd timer
@@ -318,28 +358,65 @@ def get_schedule_info() -> Dict[str, Any]:
 
 
 def is_manual_backup_running() -> bool:
-    """Verifica se esiste un lock valido (non scaduto) di un trigger manuale."""
-    if not MANUAL_LOCK_FILE.exists():
-        return False
+    """Verifica se esiste un lock DB valido di un trigger manuale."""
     try:
-        age_sec = datetime.now(timezone.utc).timestamp() - MANUAL_LOCK_FILE.stat().st_mtime
-        if age_sec > MANUAL_LOCK_TTL_SEC:
-            # Lock scaduto, lo considero orfano
+        lock = fetch_manual_backup_lock()
+    except Exception as e:
+        logger.warning(f"is_manual_backup_running: query lock fallita: {e}")
+        return False
+
+    if not lock:
+        return False
+
+    try:
+        expires_at = _to_datetime(lock["expires_at"])
+        if expires_at.tzinfo is None:
+            expires_at = expires_at.replace(tzinfo=timezone.utc)
+        if datetime.now(timezone.utc) > expires_at:
+            release_manual_backup_lock(owner_token=lock["owner_token"])
             return False
-        # Verifica che il PID nel lock sia ancora vivo
-        pid = MANUAL_LOCK_FILE.read_text().strip()
-        if pid.isdigit():
-            try:
-                os.kill(int(pid), 0)  # signal 0 = verifica esistenza
-                return True
-            except OSError:
-                return False
-        return False
-    except OSError:
-        return False
+    except (KeyError, TypeError, ValueError, AttributeError) as e:
+        logger.warning(f"is_manual_backup_running: lock non parsabile: {e}")
+        return True
+
+    try:
+        latest_run = fetch_latest_backup_run()
+    except Exception as e:
+        logger.warning(f"is_manual_backup_running: query backup_runs fallita: {e}")
+        return True
+
+    if not latest_run:
+        return True
+
+    started = latest_run.get("started_at")
+    if not started:
+        return True
+
+    try:
+        acquired_at = _to_datetime(lock["acquired_at"])
+        started_at = _to_datetime(started)
+        if acquired_at.tzinfo is None:
+            acquired_at = acquired_at.replace(tzinfo=timezone.utc)
+        if started_at.tzinfo is None:
+            started_at = started_at.replace(tzinfo=timezone.utc)
+    except (TypeError, ValueError, AttributeError) as e:
+        logger.warning(
+            "is_manual_backup_running: timestamp non parsabile "
+            f"(lock={lock!r}, latest_run={latest_run!r}): {e}"
+        )
+        return True
+
+    if started_at < acquired_at:
+        return True
+
+    if latest_run.get("finished_at") is None:
+        return True
+
+    release_manual_backup_lock(owner_token=lock["owner_token"])
+    return False
 
 
-def trigger_manual_backup() -> Dict[str, Any]:
+def trigger_manual_backup() -> ManualBackupTriggerResult:
     """Lancia backup_db.py come processo detached.
 
     Il processo eredita l'env del backend (che include DATABASE_URL caricata
@@ -349,7 +426,46 @@ def trigger_manual_backup() -> Dict[str, Any]:
     Returns:
         {"started": bool, "pid": int | None, "message": str}
     """
-    if is_manual_backup_running():
+    owner_token = uuid.uuid4().hex
+    try:
+        lock = try_acquire_manual_backup_lock(
+            owner_token=owner_token,
+            ttl_seconds=MANUAL_LOCK_TTL_SEC,
+        )
+    except Exception as e:
+        logger.error(f"trigger_manual_backup: lock DB non acquisibile: {e}", exc_info=True)
+        return {
+            "started": False,
+            "pid": None,
+            "message": f"Impossibile acquisire lock backup manuale: {str(e)[:200]}",
+        }
+
+    if lock is None:
+        if is_manual_backup_running():
+            return {
+                "started": False,
+                "pid": None,
+                "message": "Un backup manuale e' gia' in corso. Attendi che finisca.",
+            }
+        # Se il lock era appena diventato stale, tenta una sola acquisizione
+        # dopo la cleanup best-effort fatta da is_manual_backup_running().
+        try:
+            lock = try_acquire_manual_backup_lock(
+                owner_token=owner_token,
+                ttl_seconds=MANUAL_LOCK_TTL_SEC,
+            )
+        except Exception as e:
+            logger.error(
+                f"trigger_manual_backup: retry lock DB fallito: {e}",
+                exc_info=True,
+            )
+            return {
+                "started": False,
+                "pid": None,
+                "message": f"Impossibile acquisire lock backup manuale: {str(e)[:200]}",
+            }
+
+    if lock is None:
         return {
             "started": False,
             "pid": None,
@@ -357,6 +473,7 @@ def trigger_manual_backup() -> Dict[str, Any]:
         }
 
     if not BACKUP_SCRIPT.exists():
+        release_manual_backup_lock(owner_token=owner_token)
         logger.error(f"Script backup non trovato: {BACKUP_SCRIPT}")
         return {
             "started": False,
@@ -369,8 +486,7 @@ def trigger_manual_backup() -> Dict[str, Any]:
         # stdout/stderr -> file dedicato (il trigger non passa da systemd
         # quindi niente journalctl automatico). Il run viene comunque
         # tracciato in plenora.backup_runs come ogni esecuzione dello script
-        log_file = Path("/tmp/plenora-backup-manual.log")
-        with open(log_file, "a") as fp:
+        with open(MANUAL_LOG_FILE, "a") as fp:
             proc = subprocess.Popen(
                 ["python3", str(BACKUP_SCRIPT)],
                 stdout=fp,
@@ -378,8 +494,20 @@ def trigger_manual_backup() -> Dict[str, Any]:
                 start_new_session=True,
                 cwd=str(_BACKEND_ROOT),
             )
-        # Scrivi lock con PID
-        MANUAL_LOCK_FILE.write_text(str(proc.pid))
+        try:
+            pid_updated = set_manual_backup_lock_pid(
+                owner_token=owner_token,
+                pid=proc.pid,
+            )
+            if not pid_updated:
+                logger.warning(
+                    "Backup manuale avviato ma lock DB non aggiornato: "
+                    "owner_token non trovato"
+                )
+        except Exception as e:
+            logger.warning(
+                f"Backup manuale avviato ma update PID lock fallito: {e}"
+            )
         logger.info(f"Backup manuale avviato: pid={proc.pid}")
         return {
             "started": True,
@@ -387,5 +515,9 @@ def trigger_manual_backup() -> Dict[str, Any]:
             "message": f"Backup avviato (pid={proc.pid}). Controlla la lista S3 tra qualche secondo.",
         }
     except Exception as e:
+        try:
+            release_manual_backup_lock(owner_token=owner_token)
+        except Exception:
+            logger.warning("cleanup lock manual backup fallita", exc_info=True)
         logger.error(f"trigger_manual_backup fallito: {e}", exc_info=True)
         return {"started": False, "pid": None, "message": str(e)}

@@ -4,50 +4,41 @@ Router API per il modulo Files.
 Gestione file sorgente per MANIPOLA e ARRICCHISCI.
 """
 
-import json
-import json as _json
-
 from pathlib import Path
-
-from fastapi import APIRouter, UploadFile, File, Form, HTTPException, Query, Depends
 from typing import Optional, List
 
+from fastapi import APIRouter, UploadFile, File, Form, HTTPException, Query, Depends
 
-# Nomi file riservati che NON devono mai diventare il filename finale
-# anche se sopravvivono a Path(name).name
-_FORBIDDEN_BASENAMES = {"", ".", ".."}
-
+from app.config import settings
+from app.core.auth.dependencies import (
+    require_not_esecutore,
+    require_user_or_above,
+)
+from app.core.auth.owner_dependencies import require_file_owner
+from app.core.auth.ownership import (
+    assert_resource_visible,
+    compute_can_edit,
+)
+from app.core.auth.visibility import visible_resource_ids
+from app.core.files.service import FileSourceService, file_source_service
+from app.observability.audit_action import audit_action
+from app.shared import error_codes
+from app.shared.contracts.auth import CurrentUser
+from app.shared.error_envelope import raise_typed_http
+from app.shared.resources.path_policy import assert_path_within as _core_assert
+from app.shared.upload_guards import enforce_upload_size_limit
+from app.utils.logger import get_logger
+from app.core.files import upload_boundary as _upload_boundary
+from .models import (
+    FileSource,
+    FileSourceLayersResponse,
+    FileSourceList,
+    FileSourcePreview,
+)
 
 def _sanitize_upload_filename(raw: Optional[str]) -> str:
-    """Restituisce un nome file safe per il salvataggio su disco.
-
-    - Estrae il basename (rimuove qualsiasi componente di path)
-    - Rifiuta nomi vuoti / "." / ".."
-    - Strippa NUL bytes (filesystem injection)
-    - Strippa whitespace / separatori di path residui
-    Solleva HTTPException 400 se il filename non è valido.
-    """
-    if not raw:
-        raise HTTPException(status_code=400, detail="Nome file non valido")
-    # Normalizza backslash -> forward slash PRIMA di Path(raw).name. Su
-    # POSIX (CI Linux runner, container backend) pathlib.PosixPath non
-    # riconosce '\' come separatore: senza questa pre-normalizzazione
-    # input Windows-style come "..\\nested\\report.csv" sopravvivrebbero
-    # intatti come basename, bypassando il filtro path traversal. Cross
-    # platform safe: input gia' POSIX ('/') resta invariato dopo replace
-    name = Path(raw.replace("\\", "/")).name
-    # Anche dopo Path.name, certi input strani sopravvivono (es. ".." → ".."
-    if name in _FORBIDDEN_BASENAMES:
-        raise HTTPException(status_code=400, detail="Nome file non valido")
-    # NUL byte: alcuni filesystem lo trattano come terminator (path injection
-    if "\x00" in name:
-        raise HTTPException(status_code=400, detail="Nome file contiene caratteri non validi")
-    # Strip aggressivo di whitespace + separatori di path
-    name = name.strip().lstrip("/\\")
-    if not name or name in _FORBIDDEN_BASENAMES:
-        raise HTTPException(status_code=400, detail="Nome file non valido")
-    return name
-
+    """Restituisce un nome file safe per il salvataggio su disco."""
+    return _upload_boundary.sanitize_upload_filename(raw)
 
 def _enforce_upload_size_limit(file: "UploadFile") -> int:
     """Wrapper locale al cap di upload: delega a `app.shared.upload_guards`.
@@ -94,57 +85,8 @@ def _assert_path_within(child: Path, parent: Path, label: str = "Percorso") -> P
             )
         raise HTTPException(status_code=400, detail=f"{label} non valido")
 
-from app.core.files.service import FileSourceService, file_source_service
-from app.config import settings
-from app.utils.logger import get_logger
-from app.shared import error_codes
-from app.shared.error_envelope import raise_typed_http
-from app.observability.audit_action import audit_action
-from app.core.auth.dependencies import (
-    require_not_esecutore,
-    require_user_or_above,
-)
-from app.core.auth.owner_dependencies import require_file_owner
-from app.shared.contracts.auth import CurrentUser
-from app.core.auth.ownership import (
-    assert_resource_visible,
-    compute_can_edit,
-)
-from app.core.auth.visibility import visible_resource_ids
-from app.shared.resources.path_policy import assert_path_within as _core_assert
-from app.shared.upload_guards import enforce_upload_size_limit
-from app.utils.mime_validator import MimeMismatchError, validate_no_executable, validate_upload
-from .models import (
-    FileSource,
-    FileSourceList,
-    FileSourceLayersResponse,
-    FileSourcePreview,
-)
-
 logger = get_logger(__name__)
 
-from app.core.files.db import get_file_source as _get_file_source
-
-
-def _check_file_ownership(file_id: str, group_id: str, is_superadmin: bool = False):
-    """Verifica che il file appartenga al gruppo. Solleva 404 o 403 altrimenti."""
-    if is_superadmin:
-        return
-    row = _get_file_source(file_id, include_data=False)
-    if not row:
-        raise HTTPException(
-            status_code=404,
-            detail={
-                "error": error_codes.FILE_SOURCE_NOT_FOUND,
-                "message": f"File source '{file_id}' non trovato",
-            },
-        )
-    if row.get("group_id") != group_id:
-        raise_typed_http(
-            code=error_codes.ACCESS_DENIED,
-            status_code=403,
-            message="Accesso negato",
-        )
 
 router = APIRouter(prefix="/files", tags=["File Sources"])
 
@@ -167,23 +109,11 @@ def preview_file_temp(
     # interno credenziato
     _enforce_upload_size_limit(file)
 
-    # Block-only MIME validation: blocca eseguibili anche in preview
-    # no persist ma evita di passare un binario al parser, riducendo
-    # superficie RCE da parser bug). Allowlist stretta romperebbe i
-    # passthrough_extensions documentati sotto
-    file.file.seek(0)
-    _content_for_mime = file.file.read()
-    file.file.seek(0)
-    try:
-        validate_no_executable(
-            content=_content_for_mime, filename=file.filename or "upload",
-        )
-    except MimeMismatchError as _mime_err:
-        logger.warning(
-            f"Preview rifiutata (MIME): filename={file.filename!r} "
-            f"user={current_user.username}: {_mime_err}"
-        )
-        raise HTTPException(status_code=400, detail=str(_mime_err))
+    _upload_boundary.validate_preview_content(
+        file,
+        logger=logger,
+        username=current_user.username,
+    )
 
     try:
         result = file_source_service.preview_file_temp(
@@ -194,21 +124,10 @@ def preview_file_temp(
         )
         return result
     except (ValueError, Exception) as e:
-        # File non parsabile (es. ZIP con DXF, archivi generici
-        # Ritorna preview vuota — il file può ancora essere usato da executable
-        file_ext = file.filename.rsplit('.', 1)[-1].lower() if '.' in file.filename else ''
-        passthrough_extensions = ['zip', 'gz', 'tar', '7z', 'rar', 'dxf']
-        
-        if file_ext in passthrough_extensions:
-            return {
-                "columns": [],
-                "rows": [],
-                "total_count": 0,
-                "preview_count": 0,
-                "format": file_ext,
-                "message": f"File .{file_ext} non parsabile come tabulare — utilizzabile con Eseguibile Locale"
-            }
-        
+        passthrough = _upload_boundary.passthrough_preview_response(file.filename)
+        if passthrough is not None:
+            return passthrough
+
         # Per altri formati, rilancia l'errore originale
         if isinstance(e, ValueError):
             raise HTTPException(status_code=400, detail=str(e))
@@ -241,46 +160,30 @@ def upload_file(
         # polyglot, content-extension mismatch. Sostituisce la heuristic
         # pure-Python con `filetype` (zero dep sistema, ~200 MIME noti
         # coprono tutti i formati Plenora
-        _ALLOWED_UPLOAD_EXTENSIONS = {
-            "csv", "xlsx", "xls", "json", "geojson",
-            "gpkg", "shp", "gdb", "zip", "dxf",
-        }
-        file.file.seek(0)
-        content_for_mime = file.file.read()
-        file.file.seek(0)
-        try:
-            validate_upload(
-                content=content_for_mime,
-                filename=filename,
-                allowed_extensions=_ALLOWED_UPLOAD_EXTENSIONS,
-            )
-        except MimeMismatchError as e:
-            logger.warning(
-                f"Upload rifiutato (MIME): filename={filename!r} "
-                f"user={current_user.username}: {e}"
-            )
-            raise HTTPException(status_code=400, detail=str(e))
+        _upload_boundary.validate_upload_content(
+            file,
+            filename=filename,
+            allowed_extensions=_upload_boundary.ALLOWED_UPLOAD_EXTENSIONS,
+            logger=logger,
+            username=current_user.username,
+            context="Upload",
+        )
         
         # File binari/archivio: salva senza parsing (usati da executable
-        binary_extensions = ['.zip', '.gz', '.tar', '.7z', '.rar', '.dxf']
-        if any(filename.lower().endswith(ext) for ext in binary_extensions):
+        if _upload_boundary.is_binary_upload(filename):
             # Prima prova il parsing normale (es. ZIP con shapefile
             try:
                 file.file.seek(0)
                 
-                columns_list_bin = None
-                if selected_columns:
-                    try:
-                        columns_list_bin = json.loads(selected_columns)
-                    except json.JSONDecodeError:
-                        pass
-                
-                srid_int_bin = None
-                if srid:
-                    try:
-                        srid_int_bin = int(srid)
-                    except ValueError:
-                        pass
+                columns_list_bin = _upload_boundary.parse_selected_columns(
+                    selected_columns,
+                    logger=logger,
+                )
+                srid_int_bin = _upload_boundary.parse_optional_int(
+                    srid,
+                    logger=logger,
+                    label="SRID",
+                )
                 
                 file_source = file_source_service.create_from_upload(
                     file_content=file.file,
@@ -316,19 +219,15 @@ def upload_file(
                     group_id=current_user.group_id,
                 )
         
-        columns_list = None
-        if selected_columns:
-            try:
-                columns_list = json.loads(selected_columns)
-            except json.JSONDecodeError:
-                logger.warning(f"Errore parsing selected_columns: {selected_columns}")
-        
-        srid_int = None
-        if srid:
-            try:
-                srid_int = int(srid)
-            except ValueError:
-                logger.warning(f"SRID non valido: {srid}")
+        columns_list = _upload_boundary.parse_selected_columns(
+            selected_columns,
+            logger=logger,
+        )
+        srid_int = _upload_boundary.parse_optional_int(
+            srid,
+            logger=logger,
+            label="SRID",
+        )
         
         file_source = file_source_service.create_from_upload(
             file_content=file.file,
@@ -376,47 +275,28 @@ def upload_multi_layer(
     Returns: lista di FileSource creati, uno per layer.
     """
     try:
-        filename = Path(file.filename).name if file.filename else ""
-        if not filename:
-            raise HTTPException(status_code=400, detail="Nome file non valido")
+        filename = _sanitize_upload_filename(file.filename)
 
         # Size cap pre-read (helper centralizzato, vedi `_enforce_upload_size_limit`
         # Senza questo, il `file.file.read` per il MIME check sotto carica
         # in RAM N GB su qualsiasi POST autenticato user_or_above
         _enforce_upload_size_limit(file)
 
-        # MIME validation content-based (stessa difesa di /upload
-        _ALLOWED_MULTI_LAYER_EXTENSIONS = {"gpkg", "gdb", "zip", "xlsx", "xls"}
-        file.file.seek(0)
-        content_for_mime = file.file.read()
-        file.file.seek(0)
-        try:
-            validate_upload(
-                content=content_for_mime,
-                filename=filename,
-                allowed_extensions=_ALLOWED_MULTI_LAYER_EXTENSIONS,
-            )
-        except MimeMismatchError as e:
-            logger.warning(
-                f"Upload multi-layer rifiutato (MIME): filename={filename!r} "
-                f"user={current_user.username}: {e}"
-            )
-            raise HTTPException(status_code=400, detail=str(e))
+        _upload_boundary.validate_upload_content(
+            file,
+            filename=filename,
+            allowed_extensions=_upload_boundary.ALLOWED_MULTI_LAYER_EXTENSIONS,
+            logger=logger,
+            username=current_user.username,
+            context="Upload multi-layer",
+        )
 
-        try:
-            layers_cfg = _json.loads(layers_config)
-        except _json.JSONDecodeError:
-            raise HTTPException(status_code=400, detail="layers_config non e' JSON valido")
-
-        if not isinstance(layers_cfg, list) or len(layers_cfg) == 0:
-            raise HTTPException(status_code=400, detail="layers_config deve essere un array non vuoto")
-
-        srid_int = None
-        if srid:
-            try:
-                srid_int = int(srid)
-            except ValueError:
-                pass
+        layers_cfg = _upload_boundary.parse_layers_config(layers_config)
+        srid_int = _upload_boundary.parse_optional_int(
+            srid,
+            logger=logger,
+            label="SRID",
+        )
 
         file_sources = file_source_service.create_multi_layer_from_upload(
             file_content=file.file,

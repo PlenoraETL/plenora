@@ -3,7 +3,7 @@ Router API per la consultazione delle run di esecuzione pipeline — PostgreSQL.
 """
 
 import json
-from typing import Optional
+from typing import Any, Optional, TypeAlias
 
 from fastapi import APIRouter, Depends, Query, HTTPException
 from app.config import settings
@@ -23,7 +23,11 @@ from app.shared.error_envelope import raise_typed_http
 router = APIRouter(prefix="/pipeline-runs", tags=["runs"])
 
 
-def _run_to_dict(row: dict) -> dict:
+RunPayload: TypeAlias = dict[str, Any]
+LogPayload: TypeAlias = dict[str, Any]
+
+
+def _run_to_dict(row: RunPayload) -> RunPayload:
     d = dict(row) if row else {}
     if d.get("steps") and isinstance(d["steps"], str):
         try:
@@ -34,7 +38,7 @@ def _run_to_dict(row: dict) -> dict:
     return {k: v for k, v in d.items() if v not in (None, "", [])}
 
 
-def _log_to_dict(row: dict) -> dict:
+def _log_to_dict(row: LogPayload) -> LogPayload:
     d = dict(row) if row else {}
     if d.get("details") and isinstance(d["details"], str):
         try:

@@ -13,13 +13,15 @@ import threading
 import time
 import traceback as _tb
 import uuid as _uuid
+from collections.abc import MutableMapping
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Dict, Any, Optional, List
+from typing import Any, Optional, List
 from workers.celery_app import celery_app
 from app.config import settings
 from app.core.dataframes.values import is_dataframe, is_nonempty_dataframe
+from app.shared.contracts.payloads import JsonObject
 from app.utils.logger import get_logger, open_run, close_run, set_run_context, append_step
 from app.core.arricchisci.enrichment_service import EnrichmentExecutor, generate_error_report
 from app.core.arricchisci.models import EnrichmentOptions
@@ -29,7 +31,7 @@ logger = get_logger(__name__)
 
 def _merge_batch_parallel_node_results(
     common_input_df: object,
-    node_results: Dict[str, Any],
+    node_results: MutableMapping[str, Any],
     node_ids: List[str],
     task_id: str,
 ) -> None:
@@ -46,7 +48,7 @@ def _merge_batch_parallel_node_results(
 
     Args:
         common_input_df: DataFrame di input condiviso dai nodi del batch.
-        node_results: dict {node_id: DataFrame|other} con i risultati dei nodi.
+        node_results: mapping {node_id: DataFrame|other} con i risultati dei nodi.
         node_ids: lista degli id dei nodi del mergiare.
         task_id: id del task Celery, usato nel messaggio diagnostico.
 
@@ -87,7 +89,7 @@ def _merge_batch_parallel_node_results(
 def execute_enrichment_task(
     self,
     project_id: str,
-    canvas: Dict,
+    canvas: JsonObject,
     output_format: str = "csv",
     force_recalculate: bool = False,
     cleanup_file_source_ids: Optional[List[str]] = None,
@@ -95,7 +97,7 @@ def execute_enrichment_task(
     run_id: Optional[str] = None,
     user_id: Optional[str] = None,
     intermediate_mode_override: Optional[str] = None,
-) -> Dict[str, Any]:
+) -> JsonObject:
     """
     Task asincrono per eseguire l'arricchimento dati.
 
@@ -311,7 +313,7 @@ def execute_enrichment_task(
             come return del task. E' l'equivalente async-safe del `return`
             diretto che il vecchio loop faceva in linea.
             """
-            def __init__(self, payload: Dict[str, Any]) -> None:
+            def __init__(self, payload: JsonObject) -> None:
                 self.payload = payload
 
         def _run_single_node(node_id: str, node_progress: int,
@@ -813,7 +815,7 @@ def execute_enrichment_task(
             # result come `result['imdf']`. Il frontend li mostra nei modali
             # del nodo Result senza dover rifetchare il file
             # Sono piccoli (manifest ~10KB, validation ~6KB), inline e' OK
-            imdf_metadata: Optional[Dict[str, Any]] = None
+            imdf_metadata: Optional[JsonObject] = None
             has_imdf_upstream = any(
                 (n.get("output_kind") == "imdf" or (n.get("data") or {}).get("output_kind") == "imdf")
                 for n in nodes
@@ -1297,13 +1299,17 @@ def update_task_progress(
 # l'import canonico.
 
 
-def _trigger_carica_if_present(project_id: str, canvas: Dict, output_format: str = "csv") -> Optional[Dict[str, Any]]:
+def _trigger_carica_if_present(
+    project_id: str,
+    canvas: JsonObject,
+    output_format: str = "csv",
+) -> Optional[JsonObject]:
     """Cerca nodi CARICA (db/arcgis/datasource) collegati al nodo Output e lancia i relativi task.
 
     Replica la logica di OrchestratorService._execute_carica_if_present, ma viene chiamata
     direttamente dal task di enrichment perché /enrich-async non passa per l'orchestrator.
 
-    Returns: dict {"tasks": [{task_id, node_id}, ...], "message": ...} oppure None se
+    Returns: JSON object {"tasks": [{task_id, node_id}, ...], "message": ...} oppure None se
              nessun nodo carica trovato. Il frontend usa questo per fare polling sui task.
     """
     nodes = canvas.get("nodes", []) or []

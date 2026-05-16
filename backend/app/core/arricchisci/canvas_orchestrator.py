@@ -5,7 +5,7 @@ Canvas-based enrichment orchestrator.
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional, TYPE_CHECKING
+from typing import Any, List, Optional, TYPE_CHECKING
 
 from app.core.dataframes.values import is_dataframe
 from app.core.arricchisci.execution_context import (
@@ -17,6 +17,7 @@ from app.core.arricchisci.parallel import (
     execute_parallel_enrichers,
     should_execute_node,
 )
+from app.core.arricchisci.types import JsonObject, JsonObjectById, JsonRows
 from app.shared.execution.canvas_graph import CanvasGraph
 from app.shared.execution.canvas_node import CanvasNode
 from app.shared.execution.graph import kahn_topological_order
@@ -45,8 +46,8 @@ __all__ = [
 
 
 def get_execution_order(
-    nodes: List[Dict],
-    edges: List[Dict],
+    nodes: JsonRows,
+    edges: JsonRows,
 ) -> List[str]:
     """Calcola ordine topologico (algoritmo di Kahn).
 
@@ -75,9 +76,9 @@ def get_execution_order(
 
 def is_file_source_for_file_processor(
     node_id: str,
-    edges: List[Dict],
-    node_map: Dict[str, Dict],
-    api_connections: Dict[str, Dict],
+    edges: JsonRows,
+    node_map: JsonObjectById,
+    api_connections: JsonObjectById,
 ) -> bool:
     """True se il file_source e' input diretto di un nodo api_enrich
     di tipo file-processor (`rest_file`).
@@ -158,8 +159,8 @@ def init_execution_context(
 
 def run_single_enricher(
     svc: "ApiConnectionService",
-    node_data: Dict,
-    api_conns: Dict,
+    node_data: JsonObject,
+    api_conns: JsonObjectById,
     in_df: Any,
 ) -> Any:
     """Esegue un singolo nodo enricher.
@@ -186,13 +187,13 @@ def run_single_enricher(
 def execute_canvas_enrichment(
     svc: "ApiConnectionService",
     project_id: str,
-    canvas: Dict,
+    canvas: JsonObject,
     format: str = "csv",
     force_recalculate: bool = False,
     preview_limit: Optional[int] = None,
     run_id: Optional[str] = None,
     intermediate_mode_override: Optional[str] = None,
-) -> Dict:
+) -> JsonObject:
     """Orchestra l'esecuzione del canvas arricchisci.
 
     Il modulo contiene l'algoritmo canonico di esecuzione canvas.
@@ -243,7 +244,7 @@ def execute_canvas_enrichment(
         )
         logger.info(f"Gruppi di esecuzione: {[(t, len(ids)) for t, ids in groups]}")
 
-        node_results: Dict[str, Any] = {}
+        node_results: JsonObject = {}
 
         for step_type, step_node_ids in groups:
             if step_type == "single":

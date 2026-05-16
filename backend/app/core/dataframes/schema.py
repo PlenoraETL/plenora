@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from typing import Any, Dict, Iterable, List, Mapping, Optional
+from typing import Any, Iterable, List, Mapping, Optional
 
 import pandas as pd
 
@@ -12,6 +12,7 @@ from app.core.resources.column_types import (
     normalize_canvas_type,
     pandas_series_to_canvas_type as _pandas_series_to_canvas_type,
 )
+from app.shared.contracts.payloads import StringMap
 
 _logger = logging.getLogger(__name__)
 
@@ -153,7 +154,7 @@ class ColumnInfoBuilder:
         return columns
 
     @staticmethod
-    def _extract_geometry_columns(gdf: Any, user_srid: Optional[int]) -> Dict[str, str]:
+    def _extract_geometry_columns(gdf: Any, user_srid: Optional[int]) -> StringMap:
         """Estrae colonne geometriche da GeoDataFrame."""
         geom_columns = {}
 

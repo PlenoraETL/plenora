@@ -91,6 +91,11 @@ class Settings:
         # timeout: fallback in-memory (login RL) o fail-open (blacklist
         # read, ADR-0009).
         "LOGIN_RL_REDIS_TIMEOUT_SEC": 1,
+        # Default retrocompatibile: se Redis non e' disponibile, il
+        # login rate limiter usa ancora il fallback in-memory single-node.
+        # In prod/cluster impostare True per fail-closed (nessun login
+        # se il bucket distribuito non e' consultabile).
+        "LOGIN_RL_REDIS_REQUIRED": False,
         "JWT_BLACKLIST_REDIS_TIMEOUT_SEC": 1,
         # Soglia "stale" per la blacklist JWT mostrata nella dashboard
         # admin (`admin_system_status/service.py`). Sopra questa soglia
@@ -117,6 +122,15 @@ class Settings:
 
         "API_TIMEOUT": 30,
         "API_DEFAULT_RATE_LIMIT": 5,
+        # Rate limiter distribuito opzionale per arricchisci. Disabled di
+        # default per preservare il throttling locale esistente; se enabled
+        # usa Redis via CELERY_BROKER_URL per quote globali per API/scope.
+        # REQUIRED=True rende il limiter fail-closed invece di degradare al
+        # fallback locale quando Redis non e' disponibile.
+        "ARRICCHISCI_RATE_LIMIT_REDIS_ENABLED": False,
+        "ARRICCHISCI_RATE_LIMIT_REDIS_REQUIRED": False,
+        "ARRICCHISCI_RATE_LIMIT_REDIS_TIMEOUT_SEC": 1,
+        "ARRICCHISCI_RATE_LIMIT_REDIS_KEY_PREFIX": "plenora:arricchisci:rl",
 
         "SUPPORTED_OUTPUT_FORMATS": [
             "csv", "json", "xlsx", "parquet",

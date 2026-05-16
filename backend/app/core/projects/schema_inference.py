@@ -2,12 +2,18 @@
 
 import json
 from dataclasses import dataclass
-from typing import Callable, Dict, List, Optional, Any, Tuple
+from typing import Dict, List, Optional, Any, Tuple
 
 from app.core.projects.project_context_loader import (
     load_project_source_schema_context,
 )
 from app.core.projects.schema_transform_handlers import TransformSchemaHandlers
+from app.core.projects.types import (
+    EdgesByTarget,
+    SchemaMap,
+    SchemaRows,
+    TransformHandlerRegistry,
+)
 from app.shared.execution.schema_types import ColumnSchema
 from app.utils.logger import get_logger
 
@@ -31,7 +37,7 @@ class SchemaInferenceService:
 
         self._schema_cache: Dict[str, List[ColumnSchema]] = {}
     
-    def infer_all_schemas(self, project_id: str) -> Dict[str, List[dict]]:
+    def infer_all_schemas(self, project_id: str) -> SchemaMap:
         """
         Calcola lo schema per tutti i nodi di un progetto.
         
@@ -63,7 +69,7 @@ class SchemaInferenceService:
         logger.info(f"Schema inferito per {len(result)} nodi")
         return result
     
-    def infer_node_schema(self, project_id: str, node_id: str) -> List[dict]:
+    def infer_node_schema(self, project_id: str, node_id: str) -> SchemaRows:
         """
         Calcola lo schema per un singolo nodo.
         Utile per aggiornamenti incrementali.
@@ -121,7 +127,7 @@ class SchemaInferenceService:
 
     def _build_node_type_handlers(
         self,
-    ) -> Dict[str, Callable[[_NodeSchemaContext], List[ColumnSchema]]]:
+    ) -> TransformHandlerRegistry:
         """Registry node.type -> schema handler.
 
         All node.type-specific inference is registered here. Keep
@@ -362,7 +368,7 @@ class SchemaInferenceService:
     def _build_transform_handlers(
         self,
         edges_by_target: dict,
-    ) -> Dict[str, Callable[[List[List[ColumnSchema]], dict, str], List[ColumnSchema]]]:
+    ) -> TransformHandlerRegistry:
         return self._transform_handlers.build_transform_handlers(edges_by_target)
 
     def _infer_api_enrich_schema(
@@ -433,7 +439,7 @@ class SchemaInferenceService:
         
         return input_schemas
     
-    def _group_edges_by_target(self, edges) -> Dict[str, list]:
+    def _group_edges_by_target(self, edges) -> EdgesByTarget:
         """
         Raggruppa gli edge per nodo target.
         """
@@ -482,7 +488,7 @@ class ConnectionValidator:
         
         return True, None
     
-    def validate_all_connections(self, project_id: str) -> List[dict]:
+    def validate_all_connections(self, project_id: str) -> SchemaRows:
         """
         Valida tutte le connessioni di un progetto.
         

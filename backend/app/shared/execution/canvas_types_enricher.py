@@ -9,14 +9,15 @@ from __future__ import annotations
 import importlib
 
 from collections.abc import Callable
-from typing import Any, Dict
+
+from app.shared.contracts.payloads import JsonObject, StringMap
 
 
 def enrich_canvas_types_from_metadata(
-    carica_node_data: Dict[str, Any],
+    carica_node_data: JsonObject,
     project_id: str,
     columns_metadata_loader: Callable[[str], object],
-) -> Dict[str, Any]:
+) -> JsonObject:
     """Arricchisce in-place `carica_node_data["canvas_types"]` con i tipi
     canvas del project da `projects.columns_metadata`.
 
@@ -47,7 +48,7 @@ def enrich_canvas_types_from_metadata(
 
     node_column_types = carica_node_data.get("canvas_types", {}) or {}
 
-    project_column_types: Dict[str, str] = {}
+    project_column_types: StringMap = {}
     try:
         cols_md = columns_metadata_loader(project_id)
         project_column_types = metadata_to_dict(cols_md)

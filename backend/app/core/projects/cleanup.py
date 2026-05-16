@@ -10,6 +10,7 @@ from app.core.intermediate.cleanup import (
     delete_runs_for_canvases,
 )
 from app.core.projects import db as project_db
+from app.core.projects.types import CleanupReport
 from app.core.results.cleanup import (
     delete_results_for_project,
     delete_results_for_projects,
@@ -35,7 +36,7 @@ class GroupProjectCleanupReport:
     results: int = 0
     intermediate_runs: int = 0
 
-    def as_report(self) -> dict[str, int]:
+    def as_report(self) -> CleanupReport:
         """Return the public group cleanup report keys owned by this boundary."""
         return {
             "projects": self.projects,
@@ -136,7 +137,7 @@ def delete_projects_for_group(
 def delete_projects_for_group_report(
     group_id: str,
     log: CleanupLogger,
-) -> dict[str, int]:
+) -> CleanupReport:
     """Delete group projects and return public cleanup report key counts."""
     return delete_projects_for_group(group_id, log).as_report()
 

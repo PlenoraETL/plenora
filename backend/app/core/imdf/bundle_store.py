@@ -4,9 +4,10 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any, Optional
+from typing import Optional
 
 from app.core.imdf import storage as imdf_storage
+from app.shared.contracts.payloads import JsonObject
 from app.shared.resources.path_policy import validate_imdf_task_id
 from app.shared.resources.file_cleanup import rmtree_safe
 from app.utils.logger import get_logger
@@ -46,7 +47,7 @@ def find_gdb_dir(bundle_dir: Path) -> Optional[Path]:
     return None
 
 
-def read_json_file(bundle_dir: Path, filename: str) -> Optional[dict[str, Any]]:
+def read_json_file(bundle_dir: Path, filename: str) -> Optional[JsonObject]:
     """Read a JSON sidecar from the bundle root, returning None if absent."""
     path = bundle_dir / filename
     if not path.exists():
@@ -59,11 +60,11 @@ def read_json_file(bundle_dir: Path, filename: str) -> Optional[dict[str, Any]]:
     return data if isinstance(data, dict) else None
 
 
-def read_metadata(bundle_dir: Path) -> Optional[dict[str, Any]]:
+def read_metadata(bundle_dir: Path) -> Optional[JsonObject]:
     return read_json_file(bundle_dir, "plenora_metadata.json")
 
 
-def read_remote_metadata(task_id: str) -> Optional[dict[str, Any]]:
+def read_remote_metadata(task_id: str) -> Optional[JsonObject]:
     """Read bundle metadata from object storage without hydrating the archive."""
     try:
         data = imdf_storage.get_meta_only(task_id)
@@ -78,7 +79,7 @@ def list_task_ids() -> list[str]:
     return imdf_storage.list_task_ids()
 
 
-def read_renderers(bundle_dir: Path) -> Optional[dict[str, Any]]:
+def read_renderers(bundle_dir: Path) -> Optional[JsonObject]:
     return read_json_file(bundle_dir, "renderers.json")
 
 

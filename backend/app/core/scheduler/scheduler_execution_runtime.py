@@ -8,15 +8,27 @@ from __future__ import annotations
 
 import time
 from datetime import datetime, timezone
-from typing import Any, Dict, Optional
+from typing import Optional, TypedDict
 
 from app.config import settings
 from app.core.scheduler.job_dispatcher import enqueue_schedule_run
 from app.core.scheduler.models import ScheduleConfig
+from app.core.scheduler.scheduler_lock import LockHeartbeatState as SchedulerHeartbeatState
 from app.utils.logger import close_run, get_logger
 
 
 logger = get_logger(__name__)
+
+
+class SchedulerFailureResult(TypedDict, total=False):
+    """External result payload returned by failed scheduler executions."""
+
+    success: bool
+    status: str
+    error: str
+    message: str
+    log_file: str
+    lock_lost: bool
 
 
 def start_lock_heartbeat(
@@ -24,7 +36,7 @@ def start_lock_heartbeat(
     schedule_id: str,
     interval: Optional[float] = None,
     clock=None,
-) -> Dict[str, Any]:
+) -> SchedulerHeartbeatState:
     """Start the scheduler lock heartbeat and return the live state dict."""
     from app.core.scheduler.scheduler_lock import LockHeartbeat
 
@@ -43,7 +55,7 @@ def start_lock_heartbeat(
     return state
 
 
-def stop_lock_heartbeat(state: Dict[str, Any]) -> None:
+def stop_lock_heartbeat(state: SchedulerHeartbeatState) -> None:
     """Stop a heartbeat state created by start_lock_heartbeat.
 
     Also accepts the legacy state shape used before the LockHeartbeat
@@ -78,7 +90,7 @@ def handle_failure(
     start_time: float,
     run_id: str = "",
     scheduled_for: Optional[str] = None,
-) -> dict:
+) -> SchedulerFailureResult:
     """Finalize a failed scheduler run and decide retry vs terminal failure."""
     total_duration = int((time.time() - start_time) * 1000)
 

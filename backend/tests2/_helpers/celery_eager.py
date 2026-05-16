@@ -163,7 +163,6 @@ def install_enrichment_task_mocks(
     monkeypatch, *, eseguibile_group_id: Optional[str] = "test-group",
     project_group_id: str = "test-group",
     final_df: Any = None,
-    final_file_result: Optional[Dict[str, Any]] = None,
     is_already_completed_returns: bool = False,
     revoked_payload: Optional[Dict[str, Any]] = None,
 ) -> HarnessSpies:
@@ -181,7 +180,6 @@ def install_enrichment_task_mocks(
             invocare il ramo standard end-to-end. Se None il fake api_cs
             solleva _HarnessAbort sul primo loader e il test legge i
             side-effect senza arrivare al ramo finale.
-        final_file_result: idem per il ramo file_result (`is_file_result=True`).
         is_already_completed_returns: forza il return di
             `app.core.intermediate.run_idempotency.is_already_completed`.
         revoked_payload: se non None, `recheck_user_authorized` ritorna

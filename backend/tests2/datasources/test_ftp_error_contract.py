@@ -46,6 +46,7 @@ class _FakeFTP:
         self.connected = True
 
     def login(self, user, passwd):
+        _ = passwd
         if type(self).login_raises:
             raise type(self).login_raises
 

@@ -6,8 +6,10 @@ Keeps database loading behavior isolated from orchestration callers.
 
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Dict, List, Optional
+from typing import List, Optional
 from datetime import datetime, timezone
+
+from app.shared.contracts.payloads import JsonObject
 
 
 class WriteMode(str, Enum):
@@ -148,7 +150,7 @@ class WriteConfig:
     allow_unsafe_append: bool = False
 
     @staticmethod
-    def from_node_data(data: Dict[str, Any]) -> "WriteConfig":
+    def from_node_data(data: JsonObject) -> "WriteConfig":
         """Crea WriteConfig dal campo `data` di un nodo canvas.
 
         Il frontend invia i dati come dizionario JSON. Questo metodo
@@ -189,7 +191,7 @@ class WriteConfig:
             allow_unsafe_append=data.get("allow_unsafe_append") is True,
         )
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> JsonObject:
         """Serializza in dizionario per il canvas JSON."""
         return {
             "connection_id": self.connection_id,
@@ -262,8 +264,8 @@ class ConflictDetail:
         conflict_type: tipo conflitto ("pk_duplicate", "unique_violation")
     """
     row_index: int
-    match_values: Dict[str, Any] = field(default_factory=dict)
-    existing_values: Dict[str, Any] = field(default_factory=dict)
+    match_values: JsonObject = field(default_factory=dict)
+    existing_values: JsonObject = field(default_factory=dict)
     conflict_type: str = "pk_duplicate"
 
 
@@ -290,7 +292,7 @@ class ConflictReport:
     details: List[ConflictDetail] = field(default_factory=list)
     checked_at: Optional[str] = None
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> JsonObject:
         return {
             "has_conflicts": self.has_conflicts,
             "total_conflicts": self.total_conflicts,
@@ -379,7 +381,7 @@ class WriteResult:
         except (ValueError, TypeError):
             return None
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> JsonObject:
         """Serializza per la risposta API e il logging."""
         result = {
             "status": self.status.value,
@@ -463,7 +465,7 @@ class AuditRecord:
             triggered_by=triggered_by,
         )
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> JsonObject:
         return {
             "timestamp": self.timestamp,
             "project_id": self.project_id,

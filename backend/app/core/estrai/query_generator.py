@@ -5,9 +5,10 @@ Keeps this module's responsibility explicit and isolated from adjacent code.
 """
 
 import re
-from typing import List, Dict, Optional, Any
+from typing import Any, List, Optional
 
 from app.core.projects.canvas_models import Node, Edge
+from app.core.estrai.types import JsonObject
 from app.core.estrai.query_filters import WhereClauseBuilder
 from app.core.estrai.query_joins import QueryJoinRenderer
 from app.core.estrai.query_projection import QueryProjectionRenderer
@@ -46,7 +47,7 @@ class QueryGenerator:
         result_node_id: str,
         db_type: str = None,
         db_schema: str = None
-    ) -> Dict[str, Any]:
+    ) -> JsonObject:
         """
         Genera la query SQL completa a partire dal canvas.
 
@@ -188,7 +189,7 @@ class QueryGenerator:
 
     # CONFIGURAZIONE GROUP BY
 
-    def _estrai_config_group_by(self, result_node: Node) -> Dict[str, Any]:
+    def _estrai_config_group_by(self, result_node: Node) -> JsonObject:
         """
         Estrae la configurazione GROUP BY dal nodo risultato.
 
@@ -227,7 +228,7 @@ class QueryGenerator:
 
         return config
 
-    def _estrai_config_order_by(self, result_node: Node) -> Dict[str, Any]:
+    def _estrai_config_order_by(self, result_node: Node) -> JsonObject:
         """
         Estrae la configurazione ORDER BY dal nodo risultato.
 
@@ -260,7 +261,7 @@ class QueryGenerator:
 
         return config
 
-    def _estrai_config_having(self, result_node: Node) -> Dict[str, Any]:
+    def _estrai_config_having(self, result_node: Node) -> JsonObject:
         """
         Estrae la configurazione HAVING dal nodo risultato.
 
@@ -415,7 +416,7 @@ class QueryGenerator:
         self,
         table_nodes: List[Node],
         result_node: Node,
-        group_by_config: Dict[str, Any] = None
+        group_by_config: JsonObject = None
     ) -> str:
         return self._projection_renderer().generate_select(
             table_nodes, result_node, group_by_config
@@ -423,7 +424,7 @@ class QueryGenerator:
 
     def _genera_group_by(
         self,
-        group_by_config: Dict[str, Any],
+        group_by_config: JsonObject,
         table_nodes: List[Node] = None
     ) -> str:
         return self._projection_renderer().generate_group_by(group_by_config, table_nodes)
@@ -432,9 +433,9 @@ class QueryGenerator:
 
     def _genera_order_by(
         self,
-        order_by_config: Dict[str, Any],
+        order_by_config: JsonObject,
         table_nodes: List[Node],
-        group_by_config: Dict[str, Any]
+        group_by_config: JsonObject
     ) -> str:
         return self._projection_renderer().generate_order_by(
             order_by_config, table_nodes, group_by_config
@@ -444,9 +445,9 @@ class QueryGenerator:
 
     def _genera_having(
         self,
-        having_config: Dict[str, Any],
-        group_by_config: Dict[str, Any],
-        params: Dict[str, Any]
+        having_config: JsonObject,
+        group_by_config: JsonObject,
+        params: JsonObject
     ) -> str:
         return self._projection_renderer().generate_having(
             having_config, group_by_config, params
@@ -486,7 +487,7 @@ class QueryGenerator:
 
     # GENERAZIONE CLAUSOLA WHERE
 
-    def _genera_where(self, table_nodes: List[Node], params: Dict[str, Any]) -> str:
+    def _genera_where(self, table_nodes: List[Node], params: JsonObject) -> str:
         return self._where_builder().generate_where(table_nodes, params)
 
     def _crea_condizione(
@@ -495,7 +496,7 @@ class QueryGenerator:
         column: str,
         operator: str,
         value: Any,
-        params: Dict[str, Any],
+        params: JsonObject,
         column_type: str = 'str'
     ) -> str:
         return self._where_builder().create_condition(
@@ -515,7 +516,7 @@ class QueryGenerator:
 
     # ASSEMBLAGGIO QUERY
 
-    def _assembla_query(self, sql_parts: Dict) -> str:
+    def _assembla_query(self, sql_parts: JsonObject) -> str:
         return self._projection_renderer().assemble_query(sql_parts)
 
     # UTILITÀ

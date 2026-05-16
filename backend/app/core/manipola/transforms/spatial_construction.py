@@ -6,6 +6,7 @@ from typing import Optional
 
 from shapely.geometry import LineString, Polygon
 
+from app.core.dataframes.tabular import iter_grouped_dataframes
 from app.core.dataframes.geodata import (
     empty_geodataframe,
     geodataframe_from_rows,
@@ -47,7 +48,7 @@ def op_geo_line_builder(
         gdf = df if is_geodataframe(df) else to_geodataframe(df, geom_column)
         result_rows = []
 
-        for group_val, group_df in gdf.groupby(group_column):
+        for group_val, group_df in iter_grouped_dataframes(gdf, group_column):
             if order_column and order_column in group_df.columns:
                 group_df = group_df.sort_values(by=order_column)
 
@@ -109,7 +110,7 @@ def op_geo_polygon_builder(
         gdf = df if is_geodataframe(df) else to_geodataframe(df, geom_column)
         result_rows = []
 
-        for group_val, group_df in gdf.groupby(group_column):
+        for group_val, group_df in iter_grouped_dataframes(gdf, group_column):
             if order_column and order_column in group_df.columns:
                 group_df = group_df.sort_values(by=order_column)
 

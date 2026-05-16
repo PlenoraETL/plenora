@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from decimal import Decimal
 import math
-from typing import Any, Dict, Optional, TypedDict, cast
+from typing import Optional, TypedDict, cast
 
 from app.core.orchestrator.task_service import TaskInfo, TaskResultPayload
 
@@ -16,14 +17,14 @@ class TaskInfoPublicPayload(TypedDict):
     status: str
     progress: int
     message: str
-    result: Dict[str, Any] | None
+    result: Mapping[str, object] | None
     error: str | None
     created_at: str | None
     started_at: str | None
     completed_at: str | None
 
 
-def task_result_to_dict(result: object) -> Dict[str, Any]:
+def task_result_to_dict(result: object) -> Mapping[str, object]:
     """Convert typed task result metadata at the HTTP/compat boundary."""
     if result is None:
         return {}

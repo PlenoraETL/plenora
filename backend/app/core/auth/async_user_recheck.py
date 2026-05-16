@@ -6,7 +6,7 @@ Contesto: tra submit (endpoint HTTP) e pickup (worker Celery) puo' passare
 
 from __future__ import annotations
 
-from typing import Any, Dict, Optional
+from typing import Optional, TypedDict
 
 from fastapi import HTTPException
 
@@ -18,6 +18,12 @@ from app.core.auth.resource_access import assert_project_access
 logger = get_logger(__name__)
 
 
+class PermissionRevokedResult(TypedDict):
+    status: str
+    success: bool
+    message: str
+
+
 def recheck_user_authorized(
     user_id: Optional[str],
     project_id: str,
@@ -25,7 +31,7 @@ def recheck_user_authorized(
     task_id: str = "",
     run_id: str = "",
     task_name: str = "task",
-) -> Optional[Dict[str, Any]]:
+) -> Optional[PermissionRevokedResult]:
     """Re-verifica permessi user al pickup del worker.
 
     Returns:

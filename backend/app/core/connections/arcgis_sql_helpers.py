@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
-from typing import Dict, Iterator, List, Sequence, Tuple
+from typing import Iterator, List, Sequence, Tuple
 
 from app.shared.connections.arcgis_connection import ArcGISConnectionInfo
 from app.shared.connections.arcgis_provider import ArcGISReadProviderProtocol
+from app.shared.contracts.payloads import IntMap
 from app.shared.connections.arcgis_sql import (
     chunk_arcgis_values,
     quote_arcgis_sql_value,
@@ -28,7 +29,7 @@ def query_oid_by_key(
     layer_url: str,
     match_col: str,
     values: Sequence[object],
-) -> Tuple[Dict[str, int], List[str]]:
+) -> Tuple[IntMap, List[str]]:
     """Resolve ``{business_key: OBJECTID}`` through the ArcGIS provider."""
     return client.query_oid_by_key(conn, layer_url, match_col, values)
 

@@ -6,7 +6,7 @@ Endpoint CRUD progetti, gestione canvas, e inferenza schema.
 
 from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
-from typing import Any, Dict, List, Optional
+from typing import Any, List, Optional
 
 from app.utils.logger import get_logger
 from app.shared import error_codes
@@ -28,6 +28,13 @@ from app.core.auth.owner_dependencies import require_project_owner
 from app.shared.contracts.auth import CurrentUser, group_filter
 from app.core.auth.ownership import assert_group_access
 from app.core.projects.usage import list_owned_project_ids
+from app.core.projects import canvas_access as _canvas_access
+from app.core.projects.types import (
+    CanvasResourceRefs,
+    ColumnMetadataRows,
+    JsonObject,
+    StringMap,
+)
 from .models import ProjectCreate
 
 class ProjectCreateWithCanvas(ProjectCreate):
@@ -58,7 +65,7 @@ def init_projects(project_service: Any) -> None:
 def create_project(
     data: ProjectCreateWithCanvas,
     current_user: CurrentUser = Depends(require_user_or_above),
-) -> dict[str, Any]:
+) -> JsonObject:
     """Crea nuovo progetto. Se canvas è presente lo salva direttamente. Viewer non può creare."""
     metadata = _project_service.create_project(
         data,
@@ -128,7 +135,7 @@ def create_project(
 @router.get("")
 def list_projects(
     current_user: CurrentUser = Depends(require_not_esecutore),
-) -> dict[str, Any]:
+) -> JsonObject:
     """Lista tutti i progetti con source_project_ids per manipola"""
     gid = group_filter(current_user)
     project_list = _project_service.list_projects(group_id=gid)
@@ -186,35 +193,21 @@ def _visible_project_ids_strict(
     owner_group_id: Optional[str],
     is_superadmin: bool,
 ) -> set[str]:
-    """Return visible project ids using ownership-only project visibility.
-
-    I progetti NON hanno tabella `project_shares` (a differenza di
-    file_sources, connections, ecc.): la visibilita' coincide col gruppo
-    proprietario. `visible_resource_ids("projects",...)` solleva
-    `ValueError` perche' "projects" non e' nel whitelist `_SHAREABLE`,
-    rompendo `update_project_canvas` e `_annotate_inaccessible_canvas_refs`
-    con un 500 opaco.
-
-    Questo helper sostituisce quella chiamata per il caso "validazione di
-    una lista di project_id noti": ritorna il sottoinsieme di `project_ids`
-    realmente visibile a `owner_group_id` (stesso group_id) o l'input
-    integrale se `is_superadmin`.
-
-    Uses one `WHERE id IN (...)` query instead of per-id lookups.
-    """
-    ids = {pid for pid in (project_ids or ()) if pid}
-    if not ids:
-        return set()
-    if is_superadmin:
-        return ids
-    if not owner_group_id:
-        return set()
-    return list_owned_project_ids(ids, owner_group_id=owner_group_id)
+    """Return visible project ids using ownership-only project visibility."""
+    return _canvas_access.visible_project_ids_strict(
+        project_ids,
+        owner_group_id=owner_group_id,
+        is_superadmin=is_superadmin,
+        list_owned_project_ids_fn=lambda ids, owner_group_id: list_owned_project_ids(
+            ids,
+            owner_group_id=owner_group_id,
+        ),
+    )
 
 
 def _metadata_group_id(metadata: Any) -> Optional[str]:
     """Return the group id from typed project metadata."""
-    return getattr(metadata, "group_id", None)
+    return _canvas_access.metadata_group_id(metadata)
 
 
 def _annotate_inaccessible_canvas_refs(
@@ -222,125 +215,22 @@ def _annotate_inaccessible_canvas_refs(
     owner_group_id: Optional[str],
     is_superadmin: bool,
 ) -> None:
-    """Annotate serialized canvas nodes whose resources are not visible.
-
-    Per ogni nodo `file_source` con `file_source_id` non visibile, oppure
-    `project_source` con `source_project_id` non visibile, inietta nel
-    sub-dict `data` del nodo:
-      - `access_denied`: True
-      - `access_denied_reason`: stringa breve operativa
-      - `inaccessible_resource_type`: "file_source" | "project_source"
-
-    Non rimuove nodi. Non muta il canvas persistito (riceve un dict gia'
-    `model_dump`-ato). superadmin -> no-op (vede tutto).
-
-    Args:
-        canvas_dict: output di `CanvasState.model_dump` (mutato in-place
-            sul campo `data` dei nodi affected).
-        owner_group_id: gruppo proprietario del progetto (da `metadata`).
-        is_superadmin: True se chi sta caricando e' superadmin.
-    """
-    if is_superadmin or canvas_dict is None or not owner_group_id:
-        return
-    nodes = canvas_dict.get("nodes") or []
-    if not nodes:
-        return
-
-    file_source_ids: set = set()
-    project_ids: set = set()
-    arcgis_connection_ids: set = set()
-    for n in nodes:
-        ntype = n.get("type")
-        ndata = n.get("data") or {}
-        if ntype == "file_source":
-            fsid = n.get("file_source_id") or ndata.get("file_source_id")
-            if fsid:
-                file_source_ids.add(fsid)
-        elif ntype == "project_source":
-            spid = n.get("source_project_id") or ndata.get("source_project_id")
-            if spid:
-                project_ids.add(spid)
-        elif ntype == "carica_arcgis":
-            agid = n.get("arcgis_connection_id") or ndata.get("arcgis_connection_id")
-            if agid:
-                arcgis_connection_ids.add(agid)
-        elif ntype == "imdf_publisher":
-            agid = (
-                n.get("imdf_arcgis_connection_id")
-                or ndata.get("imdf_arcgis_connection_id")
-            )
-            if agid:
-                arcgis_connection_ids.add(agid)
-
-    if not file_source_ids and not project_ids and not arcgis_connection_ids:
-        return  # fast-path: zero DB hit
-
     from app.core.auth.visibility import visible_resource_ids
-    visible_fs = (
-        visible_resource_ids("file_sources", owner_group_id, is_superadmin=False)
-        if file_source_ids
-        else set()
-    )
-    visible_pr = _visible_project_ids_strict(
-        project_ids,
-        owner_group_id=owner_group_id,
-        is_superadmin=False,
-    )
-    visible_ag = (
-        visible_resource_ids("arcgis_connections", owner_group_id, is_superadmin=False)
-        if arcgis_connection_ids
-        else set()
-    )
 
-    # Mutate only the response dict; persisted canvases stay unchanged.
-    for n in nodes:
-        ntype = n.get("type")
-        ndata = n.get("data")
-        if ndata is None:
-            ndata = {}
-            n["data"] = ndata
-        if ntype == "file_source":
-            fsid = n.get("file_source_id") or ndata.get("file_source_id")
-            if fsid and fsid not in visible_fs:
-                ndata["access_denied"] = True
-                ndata["access_denied_reason"] = (
-                    f"File sorgente '{fsid}' non visibile al gruppo del progetto"
-                )
-                ndata["inaccessible_resource_type"] = "file_source"
-        elif ntype == "project_source":
-            spid = n.get("source_project_id") or ndata.get("source_project_id")
-            if spid and spid not in visible_pr:
-                ndata["access_denied"] = True
-                ndata["access_denied_reason"] = (
-                    f"Progetto sorgente '{spid}' non visibile al gruppo del progetto"
-                )
-                ndata["inaccessible_resource_type"] = "project_source"
-        elif ntype == "carica_arcgis":
-            agid = n.get("arcgis_connection_id") or ndata.get("arcgis_connection_id")
-            if agid and agid not in visible_ag:
-                ndata["access_denied"] = True
-                ndata["access_denied_reason"] = (
-                    f"Connessione ArcGIS '{agid}' non visibile al gruppo del progetto"
-                )
-                ndata["inaccessible_resource_type"] = "arcgis_connection"
-        elif ntype == "imdf_publisher":
-            agid = (
-                n.get("imdf_arcgis_connection_id")
-                or ndata.get("imdf_arcgis_connection_id")
-            )
-            if agid and agid not in visible_ag:
-                ndata["access_denied"] = True
-                ndata["access_denied_reason"] = (
-                    f"Connessione ArcGIS '{agid}' non visibile al gruppo del progetto"
-                )
-                ndata["inaccessible_resource_type"] = "arcgis_connection"
+    return _canvas_access.annotate_inaccessible_canvas_refs(
+        canvas_dict,
+        owner_group_id=owner_group_id,
+        is_superadmin=is_superadmin,
+        visible_resource_ids_fn=visible_resource_ids,
+        visible_project_ids_fn=_visible_project_ids_strict,
+    )
 
 
 @router.get("/{project_id}")
 def get_project(
     project_id: str,
     current_user: CurrentUser = Depends(require_not_esecutore),
-) -> dict[str, Any]:
+) -> JsonObject:
     """Ottieni progetto specifico (metadata + canvas + columns_metadata).
 
     Se il canvas in DB e' corrotto, `get_project_canvas` solleva
@@ -379,7 +269,7 @@ def get_project(
 def get_project_raw_canvas(
     project_id: str,
     current_user: CurrentUser = Depends(require_not_esecutore),
-) -> dict[str, Any]:
+) -> JsonObject:
     """Read persisted canvas without CanvasState validation.
 
     Recovery-only endpoint for projects whose normal GET fails with
@@ -481,57 +371,9 @@ class CanvasWithPlugins(BaseModel):
     plugins: Optional[dict] = None
 
 
-def _collect_canvas_resource_refs(canvas: CanvasState) -> dict[str, set[str]]:
-    """Estrae da `canvas` gli id di risorse cross-tenant referenziate dai
-    nodi che le richiedono.
-
-    Returns:
-        dict con chiavi:
-          - "file_sources": set[str] di `file_source_id` referenziati dai
-            nodi `file_source`
-          - "projects": set[str] di `source_project_id` referenziati dai
-            nodi `project_source` (cerca sia `node.source_project_id` sia
-            `node.data.get('source_project_id')`, allineato a `list_projects`
-            che gia' supporta entrambi i path)
-          - "arcgis_connections": set[str] di connection_id ArcGIS
-            referenziati da nodi `carica_arcgis` (`arcgis_connection_id`)
-            o `imdf_publisher` (`imdf_arcgis_connection_id`).
-
-    Used by `update_project_canvas` for cross-tenant checks.
-    """
-    file_source_ids: set = set()
-    project_ids: set = set()
-    arcgis_connection_ids: set = set()
-    for n in canvas.nodes:
-        if n.type == 'file_source':
-            fsid = getattr(n, 'file_source_id', None) or (
-                n.data.get('file_source_id') if getattr(n, 'data', None) else None
-            )
-            if fsid:
-                file_source_ids.add(fsid)
-        elif n.type == 'project_source':
-            spid = getattr(n, 'source_project_id', None) or (
-                n.data.get('source_project_id') if getattr(n, 'data', None) else None
-            )
-            if spid:
-                project_ids.add(spid)
-        elif n.type == 'carica_arcgis':
-            agid = getattr(n, 'arcgis_connection_id', None) or (
-                n.data.get('arcgis_connection_id') if getattr(n, 'data', None) else None
-            )
-            if agid:
-                arcgis_connection_ids.add(agid)
-        elif n.type == 'imdf_publisher':
-            agid = getattr(n, 'imdf_arcgis_connection_id', None) or (
-                n.data.get('imdf_arcgis_connection_id') if getattr(n, 'data', None) else None
-            )
-            if agid:
-                arcgis_connection_ids.add(agid)
-    return {
-        "file_sources": file_source_ids,
-        "projects": project_ids,
-        "arcgis_connections": arcgis_connection_ids,
-    }
+def _collect_canvas_resource_refs(canvas: CanvasState) -> CanvasResourceRefs:
+    """Extract cross-tenant resource ids referenced by a canvas."""
+    return _canvas_access.collect_canvas_resource_refs(canvas)
 
 
 @router.put("/{project_id}/canvas")
@@ -540,7 +382,7 @@ def update_project_canvas(
     project_id: str,
     body: CanvasWithPlugins,
     current_user: CurrentUser = Depends(require_user_or_above),
-) -> dict[str, str]:
+) -> StringMap:
     """Aggiorna canvas di un progetto. Qualsiasi user/admin/superadmin del
     gruppo proprietario (non solo l'owner): in un team i membri lavorano
     sui progetti dei colleghi. L'eliminazione del progetto resta invece
@@ -550,60 +392,7 @@ def update_project_canvas(
 
     canvas = CanvasState(nodes=body.nodes, edges=body.edges)
 
-    # Reject orphan processing nodes before they become runtime failures.
-    _SOURCE_LIKE = {
-        "source", "feature_source", "project_source", "file_source",
-        "staticValues", "datasource_node", "comment",
-    }
-    target_ids = {e.target for e in canvas.edges}
-
-    # Cache lookup api connection -> api_type per evitare query ripetute
-    # nello stesso PUT canvas (utile su canvas con piu' api_enrich).
-    _api_type_cache: Dict[str, Optional[str]] = {}
-
-    def _lookup_api_type(api_id: Optional[str]) -> Optional[str]:
-        if not api_id:
-            return None
-        if api_id in _api_type_cache:
-            return _api_type_cache[api_id]
-        t: Optional[str] = None
-        try:
-            from app.core.arricchisci.api_connector import api_connection_service as _aconn
-            cfg = _aconn.get_api_connection(api_id, include_token=False)
-            t = (cfg or {}).get("api_type")
-        except Exception:
-            t = None
-        _api_type_cache[api_id] = t
-        return t
-
-    def _is_source_like(n) -> bool:
-        if n.type in _SOURCE_LIKE:
-            return True
-        # `api_enrich` con `api_type=generator` e' una sorgente REST: il
-        # runtime (`canvas_orchestrator.run_single_enricher` +
-        # `executor.execute_api_node`) chiama `_execute_api_generator`
-        # con input_df=None, e la response diventa il dataframe.
-        # Distinto da `api_type=enricher` (1 chiamata per riga, richiede
-        # dataframe upstream e quindi un edge incoming).
-        if n.type == "api_enrich":
-            # Il valore puo' essere sul nodo (override esplicito del FE) o
-            # nella api_connection referenziata via api_id. Senza il
-            # fallback su api_id, un canvas valido ("generator" lato API
-            # connection) veniva rifiutato come orfano se il FE non
-            # propagava l'`api_type` sul nodo.
-            node_api_type = getattr(n, "api_type", None)
-            if node_api_type == "generator":
-                return True
-            if not node_api_type:
-                lookup = _lookup_api_type(getattr(n, "api_id", None))
-                if lookup == "generator":
-                    return True
-        return False
-
-    orphans = [
-        n.id for n in canvas.nodes
-        if not _is_source_like(n) and n.id not in target_ids
-    ]
+    orphans = _canvas_access.find_orphan_processing_nodes(canvas)
     if orphans:
         raise HTTPException(
             status_code=400,
@@ -621,40 +410,15 @@ def update_project_canvas(
         from app.core.auth.visibility import visible_resource_ids
         owner_group_id = _metadata_group_id(metadata)
         is_super = current_user.role == "superadmin"
-        invalid_file_sources: set = set()
-        invalid_projects: set = set()
-        invalid_arcgis_connections: set = set()
-        if refs["file_sources"]:
-            visible_fs = visible_resource_ids(
-                "file_sources", owner_group_id, is_superadmin=is_super,
-            )
-            invalid_file_sources = refs["file_sources"] - visible_fs
-        if refs["projects"]:
-            visible_pr = _visible_project_ids_strict(
-                refs["projects"],
-                owner_group_id=owner_group_id,
-                is_superadmin=is_super,
-            )
-            invalid_projects = refs["projects"] - visible_pr
-        if refs["arcgis_connections"]:
-            visible_ag = visible_resource_ids(
-                "arcgis_connections", owner_group_id, is_superadmin=is_super,
-            )
-            invalid_arcgis_connections = refs["arcgis_connections"] - visible_ag
-        if invalid_file_sources or invalid_projects or invalid_arcgis_connections:
-            parts = []
-            if invalid_file_sources:
-                parts.append(
-                    f"file_source: {', '.join(sorted(invalid_file_sources))}"
-                )
-            if invalid_projects:
-                parts.append(
-                    f"project_source: {', '.join(sorted(invalid_projects))}"
-                )
-            if invalid_arcgis_connections:
-                parts.append(
-                    f"arcgis_connection: {', '.join(sorted(invalid_arcgis_connections))}"
-                )
+        invalid_refs = _canvas_access.find_inaccessible_canvas_refs(
+            refs,
+            owner_group_id=owner_group_id,
+            is_superadmin=is_super,
+            visible_resource_ids_fn=visible_resource_ids,
+            visible_project_ids_fn=_visible_project_ids_strict,
+        )
+        parts = _canvas_access.format_inaccessible_canvas_refs(invalid_refs)
+        if parts:
             logger.warning(
                 f"[SECURITY] update_project_canvas blocked cross-tenant refs "
                 f"on {project_id} (owner_group={owner_group_id}): "
@@ -716,7 +480,7 @@ def update_project_canvas(
 
     columns_metadata = []
     try:
-        def _extract_cols(columns: Any) -> list[dict[str, str]]:
+        def _extract_cols(columns: Any) -> ColumnMetadataRows:
             out = []
             for col in (columns or []):
                 if isinstance(col, dict):
@@ -791,7 +555,7 @@ class ValidationRequest(BaseModel):
 def get_all_schemas(
     project_id: str,
     current_user: CurrentUser = Depends(require_not_esecutore),
-) -> dict[str, Any]:
+) -> JsonObject:
     """Ottiene lo schema (colonne + tipi) per tutti i nodi del progetto."""
     if not _schema_service:
         raise_typed_http(
@@ -813,7 +577,7 @@ def get_node_schema(
     project_id: str,
     node_id: str,
     current_user: CurrentUser = Depends(require_not_esecutore),
-) -> dict[str, Any]:
+) -> JsonObject:
     """Ottiene lo schema per un singolo nodo."""
     if not _schema_service:
         raise_typed_http(
@@ -835,7 +599,7 @@ def validate_connection(
     project_id: str,
     request: ValidationRequest,
     current_user: CurrentUser = Depends(require_not_esecutore),
-) -> dict[str, Any]:
+) -> JsonObject:
     """Valida una connessione tra due nodi."""
     if not _validator:
         raise_typed_http(
@@ -861,7 +625,7 @@ def validate_connection(
 def validate_all_connections(
     project_id: str,
     current_user: CurrentUser = Depends(require_not_esecutore),
-) -> dict[str, Any]:
+) -> JsonObject:
     """Valida tutte le connessioni del progetto."""
     if not _validator:
         raise_typed_http(
@@ -883,7 +647,7 @@ def validate_all_connections(
 def admin_cleanup_orphans(
     dry_run: bool = True,
     current_user: CurrentUser = Depends(require_superadmin),
-) -> dict[str, Any]:
+) -> JsonObject:
     """Cleanup degli orfani cross-DB (results.db / intermediate.db).
 
     Trova e cancella righe in `results.db` e `intermediate.db` che fanno

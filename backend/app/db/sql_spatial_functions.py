@@ -5,7 +5,9 @@ The mixin keeps geometric dialect logic outside the main registry/API module
 while depending only on translator methods supplied by ``SqlFunctionTranslator``.
 """
 
-from typing import Any, Dict
+from typing import Any
+
+from app.db.sql_types import SqlParamMap, SqlTranslationMap
 
 
 def _safe_number(value, kind: str = "float"):
@@ -34,7 +36,7 @@ class SqlSpatialFunctionMixin:
 
     def _spatial_translation_for(
         self,
-        translations: Dict[str, str],
+        translations: SqlTranslationMap,
         function_name: str,
     ) -> str:
         db_value = self.db_type.value
@@ -42,7 +44,7 @@ class SqlSpatialFunctionMixin:
             return translations[db_value]
         raise ValueError(f"{function_name} non supportato per {db_value}")
 
-    def _translate_centroid(self, params: Dict, table_alias: str = None) -> str:
+    def _translate_centroid(self, params: SqlParamMap, table_alias: str = None) -> str:
         """Centroide - centro geometrico della geometria."""
         col = self._qualify_column(params["column"], table_alias)
 
@@ -55,7 +57,7 @@ class SqlSpatialFunctionMixin:
         }
         return self._spatial_translation_for(translations, "CENTROID")
 
-    def _translate_buffer(self, params: Dict, table_alias: str = None) -> str:
+    def _translate_buffer(self, params: SqlParamMap, table_alias: str = None) -> str:
         """Buffer - area di distanza attorno alla geometria."""
         col = self._qualify_column(params["column"], table_alias)
         distance = _safe_number(params["distance"], "float")
@@ -69,7 +71,7 @@ class SqlSpatialFunctionMixin:
         }
         return self._spatial_translation_for(translations, "BUFFER")
 
-    def _translate_transform(self, params: Dict, table_alias: str = None) -> str:
+    def _translate_transform(self, params: SqlParamMap, table_alias: str = None) -> str:
         """Riproiezione - trasforma la geometria in un altro CRS."""
         col = self._qualify_column(params["column"], table_alias)
         srid = _safe_number(params["srid"], "int")
@@ -83,7 +85,7 @@ class SqlSpatialFunctionMixin:
         }
         return self._spatial_translation_for(translations, "TRANSFORM")
 
-    def _translate_area(self, params: Dict, table_alias: str = None) -> str:
+    def _translate_area(self, params: SqlParamMap, table_alias: str = None) -> str:
         """Area - superficie del poligono."""
         col = self._qualify_column(params["column"], table_alias)
 
@@ -96,7 +98,7 @@ class SqlSpatialFunctionMixin:
         }
         return self._spatial_translation_for(translations, "AREA")
 
-    def _translate_length(self, params: Dict, table_alias: str = None) -> str:
+    def _translate_length(self, params: SqlParamMap, table_alias: str = None) -> str:
         """Lunghezza - lunghezza della linea."""
         col = self._qualify_column(params["column"], table_alias)
 
@@ -109,7 +111,7 @@ class SqlSpatialFunctionMixin:
         }
         return self._spatial_translation_for(translations, "LENGTH")
 
-    def _translate_perimeter(self, params: Dict, table_alias: str = None) -> str:
+    def _translate_perimeter(self, params: SqlParamMap, table_alias: str = None) -> str:
         """Perimetro - lunghezza del contorno del poligono."""
         col = self._qualify_column(params["column"], table_alias)
 
@@ -122,7 +124,7 @@ class SqlSpatialFunctionMixin:
         }
         return self._spatial_translation_for(translations, "PERIMETER")
 
-    def _translate_simplify(self, params: Dict, table_alias: str = None) -> str:
+    def _translate_simplify(self, params: SqlParamMap, table_alias: str = None) -> str:
         """Semplificazione - riduce i vertici della geometria."""
         col = self._qualify_column(params["column"], table_alias)
         tolerance = _safe_number(params["tolerance"], "float")
@@ -136,7 +138,7 @@ class SqlSpatialFunctionMixin:
         }
         return self._spatial_translation_for(translations, "SIMPLIFY")
 
-    def _translate_convex_hull(self, params: Dict, table_alias: str = None) -> str:
+    def _translate_convex_hull(self, params: SqlParamMap, table_alias: str = None) -> str:
         """Inviluppo convesso - poligono convesso minimo che contiene la geometria."""
         col = self._qualify_column(params["column"], table_alias)
 
@@ -149,7 +151,7 @@ class SqlSpatialFunctionMixin:
         }
         return self._spatial_translation_for(translations, "CONVEX_HULL")
 
-    def _translate_envelope(self, params: Dict, table_alias: str = None) -> str:
+    def _translate_envelope(self, params: SqlParamMap, table_alias: str = None) -> str:
         """Bounding Box - rettangolo di delimitazione minimo (MBR)."""
         col = self._qualify_column(params["column"], table_alias)
 

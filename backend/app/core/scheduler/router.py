@@ -4,97 +4,57 @@ Router API per il modulo Scheduler PLENORA-ETL.
 Owns the HTTP boundary and delegates business logic to services or helpers.
 """
 
-from fastapi import APIRouter, HTTPException, Query, Depends
-from datetime import datetime, timezone
+import json
 from typing import Optional
-from app.config import settings
-from app.utils.logger import get_logger
+
+from fastapi import APIRouter, HTTPException, Query, Depends
+from fastapi.responses import FileResponse, Response
+
 from app.core.auth.dependencies import (
-    require_not_esecutore,
     require_admin,
+    require_not_esecutore,
 )
 from app.core.auth.owner_dependencies import require_schedule_owner
-from app.shared.contracts.auth import CurrentUser, group_filter
 from app.core.auth.ownership import assert_group_access
-from app.shared import error_codes
-from app.shared.error_envelope import raise_typed_http
-from app.observability.audit_action import audit_action
 from app.core.auth.resource_access import assert_project_access
+from app.core.results import store as _results_store
 from app.core.scheduler import db as scheduler_db
-
-logger = get_logger(__name__)
-
+from app.core.scheduler.healthcheck_service import (
+    _as_aware_datetime as _healthcheck_as_aware_datetime,
+    get_beat_healthcheck,
+)
+from app.core.scheduler.log_service import ScheduleLogService
 from app.core.scheduler.models import (
+    BeatHealthcheck,
+    ScheduleCatchupUpdate,
     ScheduleConfig,
     ScheduleCreate,
-    ScheduleUpdate,
     ScheduleList,
-    ScheduleToggle,
-    ScheduleCatchupUpdate,
     ScheduleLogList,
-    BeatHealthcheck,
+    ScheduleToggle,
+    ScheduleUpdate,
 )
+from app.core.scheduler.runs_catalog import ScheduleRunsCatalog
+from app.core.scheduler.schedule_service import ScheduleService
+from app.observability.audit_action import audit_action
+from app.shared import error_codes
+from app.shared.contracts.auth import CurrentUser, group_filter
+from app.shared.error_envelope import raise_typed_http
+from app.utils.logger import get_logger
+
+logger = get_logger(__name__)
 
 router = APIRouter(prefix="/schedules", tags=["schedules"])
 
 
-def _as_aware_datetime(value: object) -> "datetime":
-    if isinstance(value, datetime):
-        dt = value
-    elif isinstance(value, str):
-        dt = datetime.fromisoformat(value)
-    else:
-        raise TypeError(f"expected datetime or ISO string, got {type(value).__name__}")
-    if dt.tzinfo is None:
-        dt = dt.replace(tzinfo=timezone.utc)
-    return dt
+def _as_aware_datetime(value: object):
+    return _healthcheck_as_aware_datetime(value)
 
 
 @router.get("/healthcheck", response_model=BeatHealthcheck)
 async def beat_healthcheck(current_user: CurrentUser = Depends(require_not_esecutore)):
-    """
-    Verifica se Celery Beat (PlenoraBeatScheduler) è attivo.
-    Legge il heartbeat dalla tabella beat_heartbeat nel DB.
-    """
-    try:
-        row = scheduler_db.get_beat_heartbeat()
-
-        if row and row["ts"]:
-            beat_time = _as_aware_datetime(row["ts"])
-            age = (datetime.now(timezone.utc) - beat_time).total_seconds()
-
-            # Conta schedule attivi
-            schedules_count = scheduler_db.count_enabled_schedules()
-
-            if age < 180:
-                # Check task bloccate
-                hard_limit = settings.CELERY_SCHEDULE_HARD_LIMIT
-                stuck_count = scheduler_db.count_stuck_schedules(hard_limit)
-                stuck_msg = f" — {stuck_count} task bloccate" if stuck_count > 0 else ""
-                beat_status = "warning" if stuck_count > 0 else "ok"
-                return BeatHealthcheck(
-                    status=beat_status,
-                    last_beat=beat_time,
-                    message=f"Beat attivo ({int(age)}s fa) — {schedules_count} schedule attivi{stuck_msg}"
-                )
-            else:
-                return BeatHealthcheck(
-                    status="down",
-                    last_beat=beat_time,
-                    message=f"Beat non risponde da {int(age)}s"
-                )
-
-        return BeatHealthcheck(
-            status="unknown",
-            message="Nessun heartbeat trovato. Attendi ~60s dopo l'avvio di Beat."
-        )
-
-    except Exception as e:
-        logger.error(f"[GESTITO] Errore healthcheck Beat: {e}", exc_info=True)
-        return BeatHealthcheck(
-            status="down",
-            message=f"Errore: {str(e)}"
-        )
+    """Verifica se Celery Beat (PlenoraBeatScheduler) e' attivo."""
+    return get_beat_healthcheck()
 
 
 @router.get("", response_model=ScheduleList)
@@ -105,8 +65,6 @@ async def list_schedules(project_id: Optional[str] = Query(None, description="Fi
     Query params:
         project_id: Filtra per progetto specifico (opzionale)
     """
-    from app.core.scheduler.schedule_service import ScheduleService
-    
     try:
         service = ScheduleService()
         gid = group_filter(current_user)
@@ -125,46 +83,15 @@ async def create_schedule(data: ScheduleCreate, current_user: CurrentUser = Depe
     
     Verifica che il progetto esista e ne legge nome e tipo.
     """
-    from app.core.scheduler.schedule_service import ScheduleService
-    from app.core.projects.service import ProjectService
-    
     try:
-        project_service = ProjectService()
         schedule_service = ScheduleService()
-        
-        # Verifica progetto
-        metadata = project_service.get_project_metadata(data.project_id, group_id=current_user.group_id)
-        if not metadata:
-            raise HTTPException(
-                status_code=404,
-                detail={
-                    "error": error_codes.PROJECT_NOT_FOUND,
-                    "message": f"Progetto '{data.project_id}' non trovato",
-                },
-            )
-        
-        # Valida cron expression prima di creare
-        try:
-            from croniter import croniter
-            if not croniter.is_valid(data.cron_expression):
-                raise HTTPException(
-                    status_code=400,
-                    detail=f"Cron expression non valida: '{data.cron_expression}'"
-                )
-        except ImportError:
-            pass  # croniter non disponibile, skip validazione
 
-        # Crea schedule
-        schedule = schedule_service.create_schedule(
+        return schedule_service.create_schedule_for_user(
             schedule_data=data,
-            project_name=metadata.name,
-            project_type=metadata.project_type,
-            group_id=current_user.group_id,  # sempre il gruppo dell'utente che crea
-            created_by=current_user.user_id,  # owner per require_schedule_owner
+            group_id=current_user.group_id,
+            created_by=current_user.user_id,
         )
-        
-        return schedule
-        
+
     except HTTPException:
         raise
     except Exception as e:
@@ -175,7 +102,6 @@ async def create_schedule(data: ScheduleCreate, current_user: CurrentUser = Depe
 @router.get("/{schedule_id}", response_model=ScheduleConfig)
 async def get_schedule(schedule_id: str, current_user: CurrentUser = Depends(require_not_esecutore)):
     """Dettaglio di uno schedule specifico."""
-    from app.core.scheduler.schedule_service import ScheduleService
     try:
         service = ScheduleService()
         row = scheduler_db.get_schedule_row(schedule_id)
@@ -213,8 +139,6 @@ async def update_schedule(schedule_id: str, data: ScheduleUpdate, current_user: 
 
     Solo owner o admin/superadmin. Solo i campi non-null vengono aggiornati.
     """
-    from app.core.scheduler.schedule_service import ScheduleService
-
     try:
         service = ScheduleService()
 
@@ -248,7 +172,6 @@ async def update_schedule(schedule_id: str, data: ScheduleUpdate, current_user: 
 @audit_action(action="schedule.delete", target_param="schedule_id")
 async def delete_schedule(schedule_id: str, current_user: CurrentUser = Depends(require_schedule_owner)):
     """Elimina uno schedule e i suoi log. Solo owner o admin/superadmin."""
-    from app.core.scheduler.schedule_service import ScheduleService
     try:
         service = ScheduleService()
         service.delete_schedule(schedule_id)
@@ -264,7 +187,6 @@ async def delete_schedule(schedule_id: str, current_user: CurrentUser = Depends(
 @audit_action(action="schedule.toggle", target_param="schedule_id")
 async def toggle_schedule(schedule_id: str, data: ScheduleToggle, current_user: CurrentUser = Depends(require_schedule_owner)):
     """Abilita o disabilita uno schedule. Solo owner o admin/superadmin."""
-    from app.core.scheduler.schedule_service import ScheduleService
     try:
         service = ScheduleService()
         # Verifica prima se esiste
@@ -300,7 +222,6 @@ async def update_schedule_catchup(
 ):
     """Abilita/disabilita il catchup dei missed run per uno schedule
     e/o modifica la grace window. Solo owner o admin/superadmin."""
-    from app.core.scheduler.schedule_service import ScheduleService
     try:
         service = ScheduleService()
         result = service.update_catchup_config(
@@ -332,8 +253,6 @@ async def run_schedule_now(schedule_id: str, current_user: CurrentUser = Depends
     2. Invia task a Celery
     3. Salva task_id nel runtime
     """
-    from app.core.scheduler.schedule_service import ScheduleService
-    
     service = ScheduleService()
     schedule = service.get_schedule(schedule_id)
     
@@ -390,9 +309,6 @@ async def download_schedule_output(
     solo: ACL HTTP (group_access), traduzione eccezioni in HTTPException,
     costruzione FileResponse.
     """
-    from app.core.scheduler.schedule_service import ScheduleService
-    from app.core.scheduler.runs_catalog import ScheduleRunsCatalog
-    from fastapi.responses import FileResponse
     try:
         service = ScheduleService()
         schedule = service.get_schedule(schedule_id)
@@ -453,9 +369,6 @@ async def download_schedule_output(
 
         # Blob-only schedules record the exact result_id in the schedule log.
         # Do not fall back to "latest project result": that can cross schedules.
-        from fastapi.responses import Response
-        from app.core.results import store as _results_store
-
         latest_logs = scheduler_db.list_schedule_logs(
             schedule_id=schedule_id,
             events=("PIPELINE_COMPLETED", "PIPELINE_PARTIAL"),
@@ -463,7 +376,6 @@ async def download_schedule_output(
         )
         execution_info = latest_logs[0].get("execution_info") if latest_logs else None
         if isinstance(execution_info, str):
-            import json
             try:
                 execution_info = json.loads(execution_info)
             except json.JSONDecodeError:
@@ -521,8 +433,6 @@ async def list_schedule_runs(schedule_id: str, current_user: CurrentUser = Depen
     Ritorna i timestamp delle esecuzioni con i file disponibili.
     Logica core delegata a `ScheduleRunsCatalog` (R#5 Step B).
     """
-    from app.core.scheduler.schedule_service import ScheduleService
-    from app.core.scheduler.runs_catalog import ScheduleRunsCatalog
     try:
         service = ScheduleService()
         schedule = service.get_schedule(schedule_id)
@@ -591,9 +501,6 @@ async def get_schedule_logs(
     current_user: CurrentUser = Depends(require_not_esecutore),
 ):
     """Log esecuzioni di uno schedule (paginati, più recenti prima)."""
-    from app.core.scheduler.schedule_service import ScheduleService
-    from app.core.scheduler.log_service import ScheduleLogService
-    
     # Verifica schedule esiste
     schedule_service = ScheduleService()
     if not schedule_service.schedule_exists(schedule_id):

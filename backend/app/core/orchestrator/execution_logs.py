@@ -8,6 +8,7 @@ from app.core.orchestrator.execution_log_repository import (
     execute as _execute,
     fetchall as _fetchall,
 )
+from app.shared.contracts.payloads import ObjectRows, StringMap
 
 
 def _utc_now_iso() -> str:
@@ -22,7 +23,7 @@ def log_execution(
     status: str = "running",
     message: str | None = None,
     triggered_by: str | None = None,
-) -> dict[str, str]:
+) -> StringMap:
     """Create an orchestrator execution-log row."""
     now = _utc_now_iso()
     _execute(
@@ -65,7 +66,7 @@ def list_logs(
     group_id: str | None = None,
     limit: int = 50,
     offset: int = 0,
-) -> list[dict[str, object]]:
+) -> ObjectRows:
     """Read orchestrator execution logs with bounded pagination."""
     bounded_limit = max(1, min(int(limit or 50), 500))
     bounded_offset = max(0, int(offset or 0))

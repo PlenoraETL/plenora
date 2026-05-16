@@ -9,9 +9,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from types import MappingProxyType
-from typing import Any, Dict, Iterable, List, Mapping, Optional, Protocol
+from typing import Any, Iterable, List, Mapping, Optional, Protocol
 
 from sqlalchemy import text
+
+from app.db.sql_types import QueryParams
 
 
 class QueryConnection(Protocol):
@@ -89,7 +91,7 @@ class ExecutionContext:
         *,
         connection: QueryConnection,
         sql: str,
-        params: Optional[Dict[str, Any]],
+        params: Optional[QueryParams],
         timeout_seconds: int,
     ) -> "ExecutionContext":
         session = SessionContext.for_connection(
@@ -108,7 +110,7 @@ def build_execution_context(
     *,
     connection: QueryConnection,
     sql: str,
-    params: Optional[Dict[str, Any]],
+    params: Optional[QueryParams],
     logger: SessionLogger,
 ) -> ExecutionContext:
     """Build typed execution/session metadata from runtime settings."""

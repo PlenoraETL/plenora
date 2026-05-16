@@ -13,10 +13,12 @@ from app.core.dataframes.ports import FrameLike
 from app.core.dataframes.tabular import (
     coerce_numeric_series,
     concat_dataframes,
+    drop_duplicate_columns,
     empty_dataframe,
     is_numeric_series,
     merge_dataframes,
     missing_scalar,
+    set_values_where_mask,
 )
 from app.core.resources.exceptions import MemoryLimitExceededError
 from app.utils.logger import get_logger
@@ -167,8 +169,8 @@ def op_join(
     logger.info(f"[JOIN] right cols: {list(right_df.columns)[:10]}, right_on={right_on}")
 
     # Garanzia finale: rimuovi eventuali colonne duplicate residue
-    left_df = left_df.loc[:, ~left_df.columns.duplicated(keep='first')]
-    right_df = right_df.loc[:, ~right_df.columns.duplicated(keep='first')]
+    left_df = drop_duplicate_columns(left_df, keep='first')
+    right_df = drop_duplicate_columns(right_df, keep='first')
 
     # Guard post-rename [internal]: dopo la pre-validation in testa a
     # op_join, la chiave DEVE esistere qui. Se raggiungiamo questo raise
@@ -227,13 +229,19 @@ def op_join(
         left_df[left_on] = left_df[left_on].astype(object)
         right_df[right_on] = right_df[right_on].astype(object)
         if left_null_keys:
-            left_df.loc[left_null_mask, left_on] = [
-                f"{_left_sentinel_prefix}{i}" for i in range(left_null_keys)
-            ]
+            set_values_where_mask(
+                left_df,
+                left_null_mask,
+                left_on,
+                [f"{_left_sentinel_prefix}{i}" for i in range(left_null_keys)],
+            )
         if right_null_keys:
-            right_df.loc[right_null_mask, right_on] = [
-                f"{_right_sentinel_prefix}{i}" for i in range(right_null_keys)
-            ]
+            set_values_where_mask(
+                right_df,
+                right_null_mask,
+                right_on,
+                [f"{_right_sentinel_prefix}{i}" for i in range(right_null_keys)],
+            )
 
     # Esegui merge
     result = merge_dataframes(

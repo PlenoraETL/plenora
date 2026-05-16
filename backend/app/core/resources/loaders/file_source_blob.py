@@ -9,6 +9,7 @@ import time
 from typing import Mapping, Optional, Tuple
 
 from app.core.resources.exceptions import MemoryLimitExceededError
+from app.shared.contracts.payloads import ObjectMap
 
 from app.core.resources.resource_caps import resolve_resource_max_bytes
 from app.core.resources.types import (
@@ -49,7 +50,7 @@ def _fetch_row(
     *,
     max_bytes: int,
     group_id_filter: Optional[str],
-) -> Optional[dict]:
+) -> Optional[ObjectMap]:
     """SELECT row metadata + bounded BYTEA via SQL preflight.
 
     Mirror of ``result_blob._fetch_row``: the BYTEA cap is enforced

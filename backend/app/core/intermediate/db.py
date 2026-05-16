@@ -7,7 +7,7 @@ module remains for tests and old external imports that still patch the
 historical `app.core.intermediate.db` surface.
 """
 
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, TypeAlias
 
 from psycopg2.extras import execute_values
 
@@ -23,6 +23,9 @@ from app.db.pg_connection import (
 )
 
 logger = get_logger(__name__)
+
+IntermediateCompatRow: TypeAlias = Dict[str, Any]
+IntermediateCompatRows: TypeAlias = List[IntermediateCompatRow]
 
 __all__ = [
     "DEFAULT_RUNS_RETENTION",
@@ -74,7 +77,7 @@ DEFAULT_RUNS_RETENTION = _retention.DEFAULT_RUNS_RETENTION
 
 def create_run(run_id: str, canvas_id: str, group_id: str,
                total_nodes: int = 0,
-               user_id: Optional[str] = None) -> Optional[Dict]:
+               user_id: Optional[str] = None) -> Optional[IntermediateCompatRow]:
     """Compatibility facade for run creation."""
     return _run_row_to_dict(
         _runs_db.create_run(
@@ -89,11 +92,11 @@ def create_run(run_id: str, canvas_id: str, group_id: str,
     )
 
 
-def get_run(run_id: str) -> Optional[Dict]:
+def get_run(run_id: str) -> Optional[IntermediateCompatRow]:
     return _run_row_to_dict(_runs_db.get_run(run_id, fetchone_func=fetchone))
 
 
-def list_runs(canvas_id: str, group_id: str, limit: int = 50) -> List[Dict]:
+def list_runs(canvas_id: str, group_id: str, limit: int = 50) -> IntermediateCompatRows:
     return [
         _run_row_to_dict(row)
         for row in _runs_db.list_runs(
@@ -105,7 +108,7 @@ def list_runs(canvas_id: str, group_id: str, limit: int = 50) -> List[Dict]:
     ]
 
 
-def _run_row_to_dict(row: Any) -> Optional[Dict]:
+def _run_row_to_dict(row: Any) -> Optional[IntermediateCompatRow]:
     if row is None:
         return None
     if isinstance(row, _runs_db.RunRow):
@@ -238,7 +241,7 @@ def write_node_snapshot_atomic(
     )
 
 
-def get_node_meta(run_id: str, node_id: str) -> Optional[Dict]:
+def get_node_meta(run_id: str, node_id: str) -> Optional[IntermediateCompatRow]:
     return _node_snapshots_db.get_node_meta(
         run_id,
         node_id,
@@ -246,7 +249,7 @@ def get_node_meta(run_id: str, node_id: str) -> Optional[Dict]:
     )
 
 
-def list_node_meta(run_id: str) -> List[Dict]:
+def list_node_meta(run_id: str) -> IntermediateCompatRows:
     return _node_snapshots_db.list_node_meta(run_id, fetchall_func=fetchall)
 
 
@@ -296,7 +299,7 @@ def get_node_table_rows(
     node_id: str,
     group_id: Optional[str],
     limit: int = None,
-) -> List[Dict]:
+) -> IntermediateCompatRows:
     return _node_snapshots_db.get_node_table_rows(
         run_id,
         node_id,

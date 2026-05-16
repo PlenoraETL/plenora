@@ -43,7 +43,7 @@ def get_result_as_tempfile(project_id: str) -> Optional[Path]:
         return None
 
 
-def get_result_info(project_id: str) -> Optional[dict]:
+def get_result_info(project_id: str) -> Optional[store.ResultMetadataPayload]:
     """Return latest result metadata without blob bytes."""
     try:
         return store.get_latest_result(project_id)

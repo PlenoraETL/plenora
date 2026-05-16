@@ -7,20 +7,22 @@ Mixin RESPONSE_PROCESSING — elaborazione response API per
 from __future__ import annotations
 
 import json
-from typing import Any, Dict, List
+from typing import Any, List
 
+from app.core.dataframes.tabular import set_cell_value
 from app.shared.resources.json_path import (
     extract_json_value as _shared_extract_json_value,
     geojson_to_wkt as _shared_geojson_to_wkt,
 )
 from app.core.arricchisci.response_type_detector import ResponseTypeDetector
+from app.core.arricchisci.types import JsonObject, JsonRows
 from app.utils.logger import get_logger
 
 # Keep the canonical enrichment logger name for existing log consumers.
 logger = get_logger("app.core.arricchisci.enrichment_service")
 
 
-def _geojson_to_wkt(geom: dict) -> str:
+def _geojson_to_wkt(geom: JsonObject) -> str:
     """Converte un dict geometry GeoJSON in WKT."""
     return _shared_geojson_to_wkt(geom)
 
@@ -40,7 +42,7 @@ class EnrichmentResponseProcessingMixin:
             self._response_type_detector_collaborator = detector
         return detector
 
-    def _extract_output(self, data: Any) -> List[Dict]:
+    def _extract_output(self, data: Any) -> JsonRows:
         """Estrae campi output dalla response. Restituisce SEMPRE una lista di dict.
 
         - Con output_mapping vuoto (auto-flatten, B-BE-27):
@@ -97,9 +99,9 @@ class EnrichmentResponseProcessingMixin:
     def _explode_rows(
         self,
         current_data: Any,
-        mappings: List[Dict],
+        mappings: JsonRows,
         contexts: List[Any],
-        rows: List[Dict],
+        rows: JsonRows,
         current_depth: int,
         max_depth: int,
     ) -> None:
@@ -143,7 +145,7 @@ class EnrichmentResponseProcessingMixin:
             new_contexts = contexts + [item]
             self._explode_rows(item, mappings, new_contexts, rows, current_depth + 1, max_depth)
 
-    def _auto_flatten(self, data: Any) -> List[Dict]:
+    def _auto_flatten(self, data: Any) -> JsonRows:
         """Auto-flatten senza output_mapping: restituisce lista di righe.
         Popola self.detected_column_types con i tipi rilevati (es. geometry:point).
         """
@@ -202,16 +204,16 @@ class EnrichmentResponseProcessingMixin:
         """Inferisce tipo colonna da un valore scalare."""
         return self._response_type_detector.infer_scalar_type(value)
 
-    def _flatten_dict(self, data: Dict) -> Dict:
+    def _flatten_dict(self, data: JsonObject) -> JsonObject:
         """Appiattisce un dict: valori scalari diretti, dict/list -> JSON string.
         Fix: interi floats (es 114367654.0) vengono convertiti a int.
         """
         return self._response_type_detector.flatten_dict(data)
 
-    def _apply_result(self, df: Any, idx: int, result: Dict) -> None:
+    def _apply_result(self, df: Any, idx: int, result: JsonObject) -> None:
         """Applica risultato API a una riga del DataFrame."""
         for col_name, value in result.items():
-            df.at[idx, col_name] = value
+            set_cell_value(df, idx, col_name, value)
 
     def _resolve_nested_list(self, data: Any, path: str) -> List[Any]:
         """Risolve un path con [] annidati, restituendo la lista "flat" di tutti

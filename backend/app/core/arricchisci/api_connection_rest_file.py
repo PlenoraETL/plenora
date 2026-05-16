@@ -13,7 +13,7 @@ import time as _time
 
 import io
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Optional
 
 from app.core.dataframes.values import is_dataframe
 from app.core.artifacts import (
@@ -30,6 +30,7 @@ from app.core.arricchisci._api_connection_helpers import _nd
 from app.core.arricchisci.execution_context import (
     ArricchisciExecutionContext,
 )
+from app.core.arricchisci.types import JsonObject, JsonRows
 from app.core.files.exceptions import FileSourceResolutionError
 from app.utils.logger import get_logger
 
@@ -222,11 +223,11 @@ class ApiConnectionRestFileMixin:
     def _build_rest_file_multipart(
         self,
         *,
-        file_fields: List[Dict],
-        static_fields: List[Dict],
+        file_fields: JsonRows,
+        static_fields: JsonRows,
         input_path: Optional[str],
-        extra_files_cfg: Dict,
-        opened_handles: List,
+        extra_files_cfg: JsonObject,
+        opened_handles: list,
         ctx: Optional[ArricchisciExecutionContext] = None,
     ) -> tuple:
         """Costruisce i dict `files` e `data` per `requests.post(multipart)`.
@@ -247,8 +248,8 @@ class ApiConnectionRestFileMixin:
         `opened_handles` e' appended in-place: il caller e' responsabile
         del close nel finally, indipendentemente da success/error.
         """
-        files: Dict = {}
-        data: Dict = {}
+        files: JsonObject = {}
+        data: JsonObject = {}
 
         for ff in file_fields:
             name = ff.get('name')
@@ -342,7 +343,7 @@ class ApiConnectionRestFileMixin:
         return files, data, None
 
     def _parse_rest_file_config(
-        self, api_config: Dict
+        self, api_config: JsonObject
     ) -> tuple:
         """Valida e normalizza la config di un rest_file.
 
@@ -411,7 +412,12 @@ class ApiConnectionRestFileMixin:
         }, None
 
     @staticmethod
-    def _rest_file_error(error_kind: str, message: str, *, user_error: bool = True) -> Dict:
+    def _rest_file_error(
+        error_kind: str,
+        message: str,
+        *,
+        user_error: bool = True,
+    ) -> JsonObject:
         """Return dict standard per errori _execute_rest_file con taxonomy
         `error_kind` (F5 primo batch, 2026-04-24).
 
@@ -428,12 +434,12 @@ class ApiConnectionRestFileMixin:
             "error": message,
         }
 
-    def _execute_rest_file(self, node_data: Dict, api_config: Dict,
-                           nodes: List[Dict], edges: List[Dict],
+    def _execute_rest_file(self, node_data: JsonObject, api_config: JsonObject,
+                           nodes: JsonRows, edges: JsonRows,
                            node_id: str, project_id: str,
-                           node_results: Optional[Dict] = None,
+                           node_results: Optional[JsonObject] = None,
                            *,
-                           ctx: Optional[ArricchisciExecutionContext] = None) -> Dict:
+                           ctx: Optional[ArricchisciExecutionContext] = None) -> JsonObject:
         """
         Esegue un connector REST di tipo "Processore File" (connection_type='rest_file').
 
@@ -535,7 +541,7 @@ class ApiConnectionRestFileMixin:
         # es. Excel di arricchimento per il servizio IMDF). Separato dal
         # file principale che arriva via edge
         extra_files_cfg = node_data.get('extra_files') or {}
-        opened_handles: List = []
+        opened_handles: list = []
 
         # Pre-dichiarazione per il finally: se l'eccezione capita prima
         # del mkdtemp queste variabili devono comunque esistere
@@ -768,8 +774,8 @@ class ApiConnectionRestFileMixin:
 
     def _resolve_file_source_path(
         self,
-        nodes: List[Dict],
-        edges: List[Dict],
+        nodes: JsonRows,
+        edges: JsonRows,
         target_node_id: str,
         *,
         ctx: Optional[ArricchisciExecutionContext] = None,
@@ -847,10 +853,10 @@ class ApiConnectionRestFileMixin:
 
     def _resolve_input_path_for_file_processor(
         self,
-        nodes: List[Dict],
-        edges: List[Dict],
+        nodes: JsonRows,
+        edges: JsonRows,
         target_node_id: str,
-        node_results: Optional[Dict] = None,
+        node_results: Optional[JsonObject] = None,
         materialize_format: str = "xlsx",
         *,
         ctx: Optional[ArricchisciExecutionContext] = None,

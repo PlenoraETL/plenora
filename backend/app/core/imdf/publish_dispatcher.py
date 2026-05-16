@@ -3,13 +3,14 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Protocol
+from typing import Protocol
 
 from app.core.task_runtime.dispatch import (
     TaskDispatchResult,
     TaskRuntime,
     dispatch_task_by_name,
 )
+from app.shared.contracts.payloads import JsonObject
 
 
 @dataclass(frozen=True)
@@ -28,7 +29,7 @@ class ImdfPublishTask(Protocol):
         self,
         *,
         bundle_task_id: str,
-        publisher_config: dict[str, Any],
+        publisher_config: JsonObject,
     ) -> ImdfPublishTaskResult:
         ...
 
@@ -38,7 +39,7 @@ class ImdfPublishRuntime(TaskRuntime, Protocol):
         self,
         name: str,
         *,
-        kwargs: dict[str, Any],
+        kwargs: JsonObject,
     ) -> ImdfPublishTaskResult:
         ...
 
@@ -49,7 +50,7 @@ IMDF_PUBLISH_TASK_NAME = "tasks.execute_imdf_publish"
 def enqueue_imdf_publish(
     *,
     bundle_task_id: str,
-    publisher_config: dict[str, Any],
+    publisher_config: JsonObject,
     task: ImdfPublishTask | None = None,
     runtime: ImdfPublishRuntime | None = None,
 ) -> ImdfPublishJobHandle:

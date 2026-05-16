@@ -8,9 +8,10 @@ import json
 import json as _json
 
 import uuid
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import List, Optional
+from typing import Optional, TypedDict
 
 from app.utils.logger import get_logger
 from app.config import settings
@@ -42,6 +43,20 @@ from app.core.projects.repository import (
 )
 
 logger = get_logger(__name__)
+
+ResultMetadataPublicPayload = Mapping[str, object]
+
+
+class ProjectPublicPayload(TypedDict):
+    metadata: Mapping[str, object]
+    canvas: object
+    id: str
+
+
+class ProjectDependencyPayload(TypedDict):
+    id: str
+    name: str
+    project_type: str
 
 
 @dataclass(frozen=True)
@@ -272,7 +287,11 @@ class ProjectService:
             return None
         return RawProjectCanvas(project_id=str(row["id"]), canvas=row.get("canvas"))
 
-    def get_project(self, project_id: str, group_id: str = None) -> Optional[dict]:
+    def get_project(
+        self,
+        project_id: str,
+        group_id: str = None,
+    ) -> Optional[ProjectPublicPayload]:
         """Carica progetto completo (metadata + canvas).
 
         - group_id=None → no filter (qualsiasi gruppo); il check di accesso
@@ -352,7 +371,11 @@ class ProjectService:
         if chain is not None:
             raise ProjectLineageCycleError(chain)
 
-    def _find_dependent_projects(self, project_id: str, group_id: str = None) -> List[dict]:
+    def _find_dependent_projects(
+        self,
+        project_id: str,
+        group_id: str = None,
+    ) -> list[ProjectDependencyPayload]:
         """Trova progetti manipola/arricchisci che usano `project_id` come sorgente
         in un nodo `project_source` del proprio canvas.
 
@@ -373,7 +396,7 @@ class ProjectService:
             and row.project_type in ("manipola", "arricchisci")
         )
 
-        dependents = []
+        dependents: list[ProjectDependencyPayload] = []
         for cand in rows:
             cand_id = cand.id
             if not cand_id or cand_id == project_id:
@@ -623,7 +646,10 @@ class ProjectService:
         logger.info(f"Risultato salvato: {result_id} ({len(data)} bytes)", op="save_result")
         return result_id
 
-    def get_latest_result(self, project_id: str) -> Optional[dict]:
+    def get_latest_result(
+        self,
+        project_id: str,
+    ) -> Optional[ResultMetadataPublicPayload]:
         """Recupera il risultato più recente (senza blob)."""
         return results_store.get_latest_result(project_id)
 
@@ -631,6 +657,6 @@ class ProjectService:
         """Recupera il blob del risultato per download."""
         return results_store.get_result_data(result_id)
 
-    def list_results(self, project_id: str) -> List[dict]:
+    def list_results(self, project_id: str) -> list[ResultMetadataPublicPayload]:
         """Lista risultati del progetto (senza blob)."""
         return results_store.list_results(project_id)

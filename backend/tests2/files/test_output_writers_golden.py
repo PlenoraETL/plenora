@@ -210,7 +210,7 @@ def test_geojson_writer_compacts_int_properties():
     """Mirror del fix tabular ma su GeoJSON: le ``properties`` devono
     avere ``"age": 34`` non ``34.0`` quando l'int era promosso a float."""
     geopandas = pytest.importorskip("geopandas")
-    shapely = pytest.importorskip("shapely")
+    pytest.importorskip("shapely")
     pytest.importorskip("psycopg2")  # geospatial_io tira la chain DB
     from shapely.geometry import Point
 

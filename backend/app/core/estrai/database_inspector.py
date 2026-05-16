@@ -9,6 +9,7 @@ import sqlite3
 from typing import Dict, List, Optional, TypedDict, Protocol, Callable, Any, Tuple
 from dataclasses import dataclass
 
+from app.core.estrai.types import DatabaseSchema
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -618,7 +619,7 @@ class ResultProcessor:
     """
 
     @staticmethod
-    def process_postgres_rows(rows: List[Tuple]) -> Dict[str, List[ColumnInfo]]:
+    def process_postgres_rows(rows: List[Tuple]) -> DatabaseSchema:
         """
         Processa righe PostgreSQL.
         Formato riga: (table_name, column_name, data_type, udt_name, geom_type, geom_srid)
@@ -632,7 +633,7 @@ class ResultProcessor:
         return tables
 
     @staticmethod
-    def process_mssql_rows(rows: List[Tuple]) -> Dict[str, List[ColumnInfo]]:
+    def process_mssql_rows(rows: List[Tuple]) -> DatabaseSchema:
         """
         Processa righe SQL Server.
         Formato riga: (table_name, column_name, data_type)
@@ -646,7 +647,7 @@ class ResultProcessor:
         return tables
 
     @staticmethod
-    def process_mysql_rows(rows: List[Tuple], has_srid: bool = False) -> Dict[str, List[ColumnInfo]]:
+    def process_mysql_rows(rows: List[Tuple], has_srid: bool = False) -> DatabaseSchema:
         """
         Processa righe MySQL/MariaDB.
         Formato riga: (TABLE_NAME, COLUMN_NAME, DATA_TYPE, COLUMN_TYPE, SRS_ID)
@@ -667,7 +668,7 @@ class ResultProcessor:
         return tables
 
     @staticmethod
-    def process_oracle_rows(rows: List[Tuple]) -> Dict[str, List[ColumnInfo]]:
+    def process_oracle_rows(rows: List[Tuple]) -> DatabaseSchema:
         """
         Processa righe Oracle.
         Formato riga: (TABLE_NAME, COLUMN_NAME, DATA_TYPE, DATA_PRECISION, DATA_SCALE)
@@ -725,7 +726,7 @@ class DatabaseInspector:
         self._mapper = type_mapper or TypeMapper
         self._processor = result_processor or ResultProcessor
 
-    def get_tables_and_columns(self, connection: DatabaseConnection) -> Dict[str, List[ColumnInfo]]:
+    def get_tables_and_columns(self, connection: DatabaseConnection) -> DatabaseSchema:
         """
         Metodo principale: ottiene lo schema completo del database.
 
@@ -748,7 +749,7 @@ class DatabaseInspector:
             raise ValueError(f"Tipo database '{connection.type}' non supportato")
         return metodo(connection)
 
-    def get_views_and_columns(self, connection: DatabaseConnection) -> Dict[str, List[ColumnInfo]]:
+    def get_views_and_columns(self, connection: DatabaseConnection) -> DatabaseSchema:
         """
         Ottiene lo schema di tutte le viste del database.
 
@@ -779,7 +780,7 @@ class DatabaseInspector:
         processor: Callable,
         driver_name: str,
         **processor_kwargs
-    ) -> Dict[str, List[ColumnInfo]]:
+    ) -> DatabaseSchema:
         """
         Helper comune per ispezione con singola query.
 
@@ -812,21 +813,21 @@ class DatabaseInspector:
             raise ImportError(f"Driver {driver_name} non installato")
 
 
-    def _inspect_postgres(self, conn: DatabaseConnection) -> Dict[str, List[ColumnInfo]]:
+    def _inspect_postgres(self, conn: DatabaseConnection) -> DatabaseSchema:
         """Ispeziona PostgreSQL — include tipo geometria e SRID da PostGIS."""
         return self._esegui_ispezione(
             conn, SQLQueries.POSTGRES_COLUMNS,
             self._processor.process_postgres_rows, "PostgreSQL (psycopg2)"
         )
 
-    def _inspect_mssql(self, conn: DatabaseConnection) -> Dict[str, List[ColumnInfo]]:
+    def _inspect_mssql(self, conn: DatabaseConnection) -> DatabaseSchema:
         """Ispeziona SQL Server — usa sys.tables/columns/types."""
         return self._esegui_ispezione(
             conn, SQLQueries.MSSQL_COLUMNS,
             self._processor.process_mssql_rows, "MS SQL (pyodbc)"
         )
 
-    def _inspect_mysql(self, conn: DatabaseConnection) -> Dict[str, List[ColumnInfo]]:
+    def _inspect_mysql(self, conn: DatabaseConnection) -> DatabaseSchema:
         """
         Ispeziona MySQL/MariaDB con rilevamento automatico variante.
 
@@ -865,14 +866,14 @@ class DatabaseInspector:
         except ImportError:
             raise ImportError("Driver MySQL (pymysql) non installato")
 
-    def _inspect_oracle(self, conn: DatabaseConnection) -> Dict[str, List[ColumnInfo]]:
+    def _inspect_oracle(self, conn: DatabaseConnection) -> DatabaseSchema:
         """Ispeziona Oracle — usa USER_TAB_COLUMNS con precision/scale per NUMBER."""
         return self._esegui_ispezione(
             conn, SQLQueries.ORACLE_COLUMNS,
             self._processor.process_oracle_rows, "Oracle (oracledb)"
         )
 
-    def _inspect_sqlite(self, conn: DatabaseConnection) -> Dict[str, List[ColumnInfo]]:
+    def _inspect_sqlite(self, conn: DatabaseConnection) -> DatabaseSchema:
         """
         Ispeziona SQLite — richiede due passaggi:
         1. sqlite_master per l'elenco tabelle
@@ -900,21 +901,21 @@ class DatabaseInspector:
             raise RuntimeError(f"Errore ispezionando SQLite: {e}")
 
 
-    def _inspect_postgres_views(self, conn: DatabaseConnection) -> Dict[str, List[ColumnInfo]]:
+    def _inspect_postgres_views(self, conn: DatabaseConnection) -> DatabaseSchema:
         """Ispeziona viste PostgreSQL — include tipo geometria e SRID da PostGIS."""
         return self._esegui_ispezione(
             conn, SQLQueries.POSTGRES_VIEW_COLUMNS,
             self._processor.process_postgres_rows, "PostgreSQL (psycopg2)"
         )
 
-    def _inspect_mssql_views(self, conn: DatabaseConnection) -> Dict[str, List[ColumnInfo]]:
+    def _inspect_mssql_views(self, conn: DatabaseConnection) -> DatabaseSchema:
         """Ispeziona viste SQL Server — usa sys.views/columns/types."""
         return self._esegui_ispezione(
             conn, SQLQueries.MSSQL_VIEW_COLUMNS,
             self._processor.process_mssql_rows, "MS SQL (pyodbc)"
         )
 
-    def _inspect_mysql_views(self, conn: DatabaseConnection) -> Dict[str, List[ColumnInfo]]:
+    def _inspect_mysql_views(self, conn: DatabaseConnection) -> DatabaseSchema:
         """
         Ispeziona viste MySQL/MariaDB con rilevamento automatico variante.
         Stessa logica di _inspect_mysql ma con query filtrate per viste.
@@ -950,14 +951,14 @@ class DatabaseInspector:
         except ImportError:
             raise ImportError("Driver MySQL (pymysql) non installato")
 
-    def _inspect_oracle_views(self, conn: DatabaseConnection) -> Dict[str, List[ColumnInfo]]:
+    def _inspect_oracle_views(self, conn: DatabaseConnection) -> DatabaseSchema:
         """Ispeziona viste Oracle — usa USER_VIEWS + USER_TAB_COLUMNS."""
         return self._esegui_ispezione(
             conn, SQLQueries.ORACLE_VIEW_COLUMNS,
             self._processor.process_oracle_rows, "Oracle (oracledb)"
         )
 
-    def _inspect_sqlite_views(self, conn: DatabaseConnection) -> Dict[str, List[ColumnInfo]]:
+    def _inspect_sqlite_views(self, conn: DatabaseConnection) -> DatabaseSchema:
         """
         Ispeziona viste SQLite — usa sqlite_master WHERE type='view'.
         Per le colonne usa PRAGMA table_info che funziona anche per le viste.

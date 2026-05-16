@@ -8,6 +8,12 @@ from __future__ import annotations
 
 from typing import Any, Dict, Iterable, List, Mapping, Optional
 
+from app.core.dataframes.tabular import (
+    float_series_non_null_whole_numbers,
+    non_null_head_values,
+)
+from app.shared.contracts.payloads import StringMap, StringRows
+
 
 # Canonical vocabulary + aliases
 
@@ -125,21 +131,16 @@ def pandas_series_to_canvas_type(series: Any) -> str:
     if "int" in dtype_str:
         return "int"
     if "float" in dtype_str:
-        non_null = series.dropna()
-        if len(non_null) > 0:
-            try:
-                if (non_null % 1 == 0).all():
-                    return "int"
-            except (TypeError, ValueError):
-                pass
+        if float_series_non_null_whole_numbers(series):
+            return "int"
         return "real"
     if "bool" in dtype_str:
         return "bool"
     if "datetime" in dtype_str:
         return "date"
     if dtype_str == "object":
-        sample = series.dropna().head(20)
-        if len(sample) == 0:
+        sample = non_null_head_values(series, 20)
+        if not sample:
             return "str"
         all_numeric = True
         for value in sample:
@@ -157,7 +158,7 @@ def pandas_series_to_canvas_type(series: Any) -> str:
 # Shape adapters (list <-> dict)
 
 
-def metadata_to_dict(rows: Iterable[Mapping[str, Any]] | None) -> Dict[str, str]:
+def metadata_to_dict(rows: Iterable[Mapping[str, Any]] | None) -> StringMap:
     """list[{"name","type"}] -> dict{name: type}.
 
     Silently skips malformed rows (missing `name` or `type`, or non-dict):
@@ -178,7 +179,7 @@ def metadata_to_dict(rows: Iterable[Mapping[str, Any]] | None) -> Dict[str, str]
     return out
 
 
-def dict_to_metadata(mapping: Mapping[str, str] | None) -> List[Dict[str, str]]:
+def dict_to_metadata(mapping: Mapping[str, str] | None) -> StringRows:
     """dict{name: type} -> list[{"name","type"}].
 
     Preserves insertion order. Empty name/type pairs are skipped for symmetry

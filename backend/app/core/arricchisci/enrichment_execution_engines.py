@@ -9,10 +9,15 @@ from __future__ import annotations
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, List, Optional, Tuple
 
-from app.core.dataframes.tabular import append_record_rows
+from app.core.dataframes.tabular import (
+    append_record_rows,
+    dataframe_row_by_index,
+    dataframe_row_dict,
+)
 from app.core.arricchisci.models import EnrichmentStats, RowError, RowStatus
+from app.core.arricchisci.types import IndexGroups, JsonObject, JsonRows
 from app.utils.logger import get_logger
 
 # Stesso logger name di `enrichment_service.py` (`__name__` valuta a
@@ -73,7 +78,7 @@ class EnrichmentExecutionEnginesMixin:
     def _build_execution_groups(
         self,
         df: Any,
-    ) -> Dict[str, List[int]]:
+    ) -> IndexGroups:
         if self.options.enable_deduplication:
             return self._group_by_params(df)
         return {str(idx): [idx] for idx in df.index}
@@ -90,7 +95,7 @@ class EnrichmentExecutionEnginesMixin:
         self._cache[cache_key] = api_result
         self._prune_cache_if_needed()
 
-    def _first_result_row(self, api_result) -> Dict:
+    def _first_result_row(self, api_result) -> JsonObject:
         if isinstance(api_result, list):
             return api_result[0] if api_result else {}
         if isinstance(api_result, dict):
@@ -108,7 +113,7 @@ class EnrichmentExecutionEnginesMixin:
         row_indices: List[int],
         error: RowError,
         *,
-        input_params: Optional[Dict] = None,
+        input_params: Optional[JsonObject] = None,
     ) -> None:
         for idx in row_indices:
             errors.append(RowError(
@@ -171,7 +176,7 @@ class EnrichmentExecutionEnginesMixin:
         def process_group(
             cache_key: str,
             row_indices: List[int],
-        ) -> Tuple[str, List[int], Optional[Dict], Optional[RowError], bool]:
+        ) -> Tuple[str, List[int], Optional[JsonObject], Optional[RowError], bool]:
             """Worker function per processare un gruppo.
 
             Double-checked locking per evitare cache stampede:
@@ -179,7 +184,7 @@ class EnrichmentExecutionEnginesMixin:
             solo uno fa la chiamata API — l'altro aspetta e usa il risultato in cache.
             """
             first_idx = row_indices[0]
-            row = df.loc[first_idx]
+            row = dataframe_row_by_index(df, first_idx)
 
             # Costruisci parametri
             params = self._build_params(row)
@@ -306,16 +311,13 @@ class EnrichmentExecutionEnginesMixin:
             self._start_execution_state(df)
         )
 
-        # Rate limiting
-        delay = 1.0 / self.options.rate_limit if self.options.rate_limit > 0 else 0
-
         # Deduplicazione: raggruppa per parametri unici
         unique_groups = self._build_execution_groups(df)
         if self.options.enable_deduplication:
             logger.info(f"Deduplicazione: {len(unique_groups)} combinazioni uniche su {total_rows} righe", op="enrich")
 
         processed = 0
-        _extra_rows: List[Dict] = []  # righe espanse da FeatureCollection o array
+        _extra_rows: JsonRows = []  # righe espanse da FeatureCollection o array
         # Token OAuth2 gestito via cache con expires_at (api_utils.get_cached_oauth2_token
         # Il refresh avviene automaticamente quando serve — non piu counter arbitrario
         _is_oauth2 = self.auth.get("type") in ("oauth2_password", "oauth2_client_credentials")
@@ -327,7 +329,7 @@ class EnrichmentExecutionEnginesMixin:
 
             # Prendi la prima riga del gruppo per i parametri
             first_idx = row_indices[0]
-            row = df.loc[first_idx]
+            row = dataframe_row_by_index(df, first_idx)
 
             # Costruisci parametri
             params = self._build_params(row)
@@ -372,6 +374,7 @@ class EnrichmentExecutionEnginesMixin:
                 continue
 
             # Chiamata API con retry
+            self._rate_limiter.acquire()
             api_result, error = self._call_api_with_retry(params, first_idx)
             stats.api_calls_made += 1
 
@@ -410,7 +413,7 @@ class EnrichmentExecutionEnginesMixin:
                         # FeatureCollection o array: prima feature nella riga esistente
                         # le restanti come righe extra (con i parametri di input replicati
                         self._apply_result(result_df, idx, api_result[0])
-                        input_row_data = result_df.loc[idx].to_dict()
+                        input_row_data = dataframe_row_dict(result_df, idx)
                         for extra_dict in api_result[1:]:
                             new_row = {**input_row_data, **extra_dict}
                             _extra_rows.append(new_row)
@@ -421,10 +424,6 @@ class EnrichmentExecutionEnginesMixin:
 
             processed += len(row_indices)
             self._update_progress(processed, total_rows, stats)
-
-            # Rate limiting
-            if delay > 0:
-                time.sleep(delay)
 
             # Check error threshold
             if (self.options.stop_on_error_threshold > 0 and

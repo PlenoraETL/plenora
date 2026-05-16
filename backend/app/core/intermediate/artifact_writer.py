@@ -11,7 +11,7 @@ import json
 import logging
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Any, Optional
+from typing import Any, Optional, TypeAlias
 
 from app.shared.resources.storage_layout import INTERMEDIATE_PREFIX
 
@@ -20,6 +20,7 @@ logger = logging.getLogger(__name__)
 
 # Manifest version. Bump quando cambia lo schema del manifest
 MANIFEST_VERSION = 1
+ArtifactManifest: TypeAlias = dict[str, Any]
 
 
 @dataclass(frozen=True)
@@ -103,7 +104,7 @@ def _build_manifest(
     column_count: int,
     node_hash: Optional[str],
     hash_algo: Optional[str],
-) -> dict:
+) -> ArtifactManifest:
     return {
         "artifact_version": MANIFEST_VERSION,
         "run_id": run_id,

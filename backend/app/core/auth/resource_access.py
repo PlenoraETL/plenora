@@ -7,15 +7,20 @@ cross-cutting (`project_id`, `file_source_id`) usati dai router HTTP.
 from fastapi import HTTPException
 
 from app.shared.contracts.auth import CurrentUser
+from app.core.files.db import FileSourcePublicRow
 from app.core.auth.ownership import (
     assert_group_access,
     assert_resource_visible,
 )
+from app.core.projects.models import ProjectMetadata
 from app.core.projects.service import ProjectService
 from app.core.files.db import get_file_source as _get_file_source
 
 
-def assert_project_access(project_id: str, current_user: CurrentUser) -> dict:
+def assert_project_access(
+    project_id: str,
+    current_user: CurrentUser,
+) -> ProjectMetadata:
     """Verifica che il progetto esista e appartenga al gruppo dell'utente.
 
     Raises 400 se `project_id` vuoto, 404 se inesistente, 403 se di
@@ -32,7 +37,10 @@ def assert_project_access(project_id: str, current_user: CurrentUser) -> dict:
     return meta
 
 
-def assert_project_visible(project_id: str, current_user: CurrentUser) -> dict:
+def assert_project_visible(
+    project_id: str,
+    current_user: CurrentUser,
+) -> ProjectMetadata:
     """Variante "soft" per endpoint di sola lettura: accetta progetti
     owned + condivisi via sharing. Per operazioni di scrittura usa
     `assert_project_access`."""
@@ -45,7 +53,10 @@ def assert_project_visible(project_id: str, current_user: CurrentUser) -> dict:
     return meta
 
 
-def assert_file_source_access(file_source_id: str, current_user: CurrentUser) -> dict:
+def assert_file_source_access(
+    file_source_id: str,
+    current_user: CurrentUser,
+) -> FileSourcePublicRow:
     """Verifica che il file_source esista e sia visibile all'utente
     (owned + shared via allowed_groups + superadmin bypass).
 

@@ -6,7 +6,6 @@ Catalogo: backend/test-e2e/catalog/auth.yaml
 from __future__ import annotations
 
 import os
-import time
 import uuid
 from typing import Any
 

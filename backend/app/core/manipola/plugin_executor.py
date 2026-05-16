@@ -9,13 +9,16 @@ import json as _json
 import json
 import importlib
 from pathlib import Path
-from typing import Dict, Any, List, Callable, Optional
+from typing import Any, Callable, List, Optional
 
 from app.core.dataframes.ports import FrameLike
+from app.core.manipola.types import JsonObject, RegistryMap, RegistryRows
 from app.core.projects.canvas_models import Node
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
+
+FunctionRegistry = dict[str, Callable[..., Any]]
 
 
 class PluginExecutor:
@@ -62,9 +65,9 @@ class PluginExecutor:
                 )
 
         self.registry_path = registry_path
-        self.registry: Dict[str, Dict] = {}      # transform_id → config completa
-        self.categories: Dict[str, Dict] = {}     # category_id → metadati categoria
-        self.functions: Dict[str, Callable] = {}  # transform_id → funzione Python
+        self.registry: RegistryMap = {}      # transform_id → config completa
+        self.categories: RegistryMap = {}     # category_id → metadati categoria
+        self.functions: FunctionRegistry = {}  # transform_id → funzione Python
 
         self._carica_registry()
         self._carica_funzioni()
@@ -130,19 +133,19 @@ class PluginExecutor:
 
     # INTERROGAZIONE REGISTRY
 
-    def get_registry(self) -> Dict[str, Dict]:
+    def get_registry(self) -> RegistryMap:
         """Restituisce il registry completo (usato dall'API frontend)."""
         return self.registry
 
-    def get_categories(self) -> Dict[str, Dict]:
+    def get_categories(self) -> RegistryMap:
         """Restituisce le categorie definite nel registry."""
         return self.categories
 
-    def get_transform_config(self, transform_id: str) -> Optional[Dict]:
+    def get_transform_config(self, transform_id: str) -> Optional[JsonObject]:
         """Restituisce la configurazione di una singola trasformazione."""
         return self.registry.get(transform_id)
 
-    def get_transforms_by_category(self, category: str) -> Dict[str, Dict]:
+    def get_transforms_by_category(self, category: str) -> RegistryMap:
         """Restituisce tutte le trasformazioni di una categoria."""
         return {
             tid: config
@@ -150,7 +153,7 @@ class PluginExecutor:
             if config.get('category') == category
         }
 
-    def list_transforms(self) -> List[Dict]:
+    def list_transforms(self) -> RegistryRows:
         """Elenca tutte le trasformazioni con informazioni sintetiche per la UI."""
         return [
             {
@@ -215,7 +218,7 @@ class PluginExecutor:
         self,
         transform_id: str,
         inputs: List[FrameLike],
-        params: Dict[str, Any]
+        params: JsonObject
     ) -> FrameLike:
         """
         Esegue una trasformazione con parametri diretti (senza Node).
@@ -225,7 +228,7 @@ class PluginExecutor:
         Args:
             transform_id: ID trasformazione
             inputs: lista DataFrame input
-            params: dict parametri diretti (come se fossero node.data.config)
+            params: mapping parametri diretti (come se fossero node.data.config)
 
         Returns:
             DataFrame risultato
@@ -247,7 +250,11 @@ class PluginExecutor:
 
     # PREPARAZIONE PARAMETRI
 
-    def _prepara_kwargs(self, transform_config: Dict, node_config: Dict) -> Dict[str, Any]:
+    def _prepara_kwargs(
+        self,
+        transform_config: JsonObject,
+        node_config: JsonObject,
+    ) -> JsonObject:
         """
         Prepara i kwargs per la funzione dalla configurazione del nodo.
 
@@ -361,7 +368,7 @@ class PluginExecutor:
 
         return value
 
-    def get_default_config(self, transform_id: str) -> Dict[str, Any]:
+    def get_default_config(self, transform_id: str) -> JsonObject:
         """
         Restituisce la configurazione di default per una trasformazione.
 

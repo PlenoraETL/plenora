@@ -9,8 +9,9 @@ from __future__ import annotations
 import importlib
 import threading
 import time
-from typing import Any, Dict, Optional
+from typing import Any, Optional
 
+from app.shared.contracts.payloads import IntMap, JsonObject
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -39,7 +40,7 @@ _client_explicit: bool = False
 # path). Non vale la pena: se serve storia persistente, meglio log
 # aggregation (Grafana/Loki) sui warning
 _metrics_lock = threading.Lock()
-_metrics: Dict[str, int] = {
+_metrics: IntMap = {
     "write_ok": 0,
     "write_fail": 0,
     "read_ok": 0,
@@ -165,7 +166,7 @@ def is_jti_blacklisted(jti: Optional[str]) -> bool:
         return False
 
 
-def get_metrics() -> Dict[str, Any]:
+def get_metrics() -> JsonObject:
     """Snapshot dei contatori in-process + timestamp last_ok.
 
     Esposto via `admin_system_status.get_blacklist_status` alla
@@ -181,7 +182,7 @@ def get_metrics() -> Dict[str, Any]:
     }
 
 
-def get_blacklist_status(stale_threshold_seconds: int = 1800) -> Dict[str, Any]:
+def get_blacklist_status(stale_threshold_seconds: int = 1800) -> JsonObject:
     """Health probe: tenta un EXISTS su una chiave sentinel.
 
     Ritorna un dict con `status` ∈ {ok, unknown, error} + diagnostica:

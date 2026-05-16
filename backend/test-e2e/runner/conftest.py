@@ -261,6 +261,7 @@ def login_payload(
     Contiene `access_token`, `group_id`, `user_id`, `role` — tutti
     necessari per le fixture che dipendono dal login.
     """
+    assert plenora_app_alive["status"] == "ok"
     payload = {"username": e2e_config.user, "password": e2e_config.password}
     r = http_client.post(f"{API_PREFIX}/auth/login", json=payload)
     if r.status_code >= 400:

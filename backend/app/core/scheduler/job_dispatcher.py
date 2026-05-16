@@ -8,7 +8,7 @@ calling code only depends on the small protocol below.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Protocol
+from typing import Any, Protocol, TypedDict
 
 from app.core.task_runtime.dispatch import (
     TaskDispatchResult,
@@ -58,14 +58,20 @@ class ScheduledJobRuntime(TaskRuntime, Protocol):
         ...
 
 
+class ScheduledRunKwargs(TypedDict, total=False):
+    triggered_by: str
+    retry_attempt: int
+    scheduled_for: str
+
+
 def scheduled_run_kwargs(
     *,
     triggered_by: str,
     retry_attempt: int = 0,
     scheduled_for: str | None = None,
-) -> dict[str, Any]:
+) -> ScheduledRunKwargs:
     """Return the runtime kwargs for a scheduled pipeline task."""
-    dispatch_kwargs: dict[str, Any] = {
+    dispatch_kwargs: ScheduledRunKwargs = {
         "triggered_by": triggered_by,
         "retry_attempt": retry_attempt,
     }

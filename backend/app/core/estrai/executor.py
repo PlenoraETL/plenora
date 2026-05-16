@@ -11,17 +11,21 @@ from typing import Dict, Any, List, Mapping, MutableMapping, Optional, Protocol,
 
 from app.core.projects.canvas_models import CanvasState
 from app.utils.logger import get_logger, append_step
-from app.core.dataframes.frame_io import sanitize_for_json
 from app.core.dataframes.geodata import extract_srid_from_column_type
 from app.core.dataframes.ports import FrameLike
 from app.core.dataframes.schema import series_to_canvas_type
-from app.core.dataframes.tabular import dataframe_from_rows
+from app.core.dataframes.tabular import (
+    dataframe_column_by_position,
+    dataframe_preview_records,
+    dataframe_from_rows,
+)
 from app.infrastructure.security.crypto import CredentialUnavailableError
 from app.shared.resources.metadata import ResourceMetadata, SourceKind
 from app.core.estrai.sql_errors import (
     is_user_error_message as _is_user_error_message,
     translate_sql_error as _traduci_errore_sql,
 )
+from app.core.estrai.types import ColumnMetadataRows, JsonObject, StringMap
 from app.core.resources.column_types import (
     lookup_canvas_column_type,
 )
@@ -204,7 +208,9 @@ def _build_db_preview_resource_from_cursor_schema(
             original_column_name,
         )
         if column_type is None:
-            column_type = _infer_dataframe_column_type(df.iloc[:, index])
+            column_type = _infer_dataframe_column_type(
+                dataframe_column_by_position(df, index)
+            )
         columns_info.append({'name': column_name, 'type': column_type})
 
     return _build_preview_resource(
@@ -279,7 +285,7 @@ class EstraiExecutor:
     def execute(
         self, project_id: str, canvas: CanvasState, run_id: str = None,
         intermediate_mode_override: Optional[str] = None,
-    ) -> Dict[str, Any]:
+    ) -> JsonObject:
         """
         Esegue la query del progetto e salva il file di output.
         Rileva automaticamente se usare percorso SQL o ArcGIS REST.
@@ -338,7 +344,7 @@ class EstraiExecutor:
         self, project_id: str, canvas: CanvasState, result_node, connection,
         metadata=None, run_id: str = None,
         intermediate_mode_override: Optional[str] = None,
-    ) -> Dict[str, Any]:
+    ) -> JsonObject:
         """Percorso esecuzione SQL classico."""
         try:
             query_info = self.generator.generate_sql(
@@ -379,7 +385,13 @@ class EstraiExecutor:
         res['query'] = query_info['sql']
         return res
 
-    def _execute_feature_service(self, project_id: str, canvas: CanvasState, result_node, connection) -> Dict[str, Any]:
+    def _execute_feature_service(
+        self,
+        project_id: str,
+        canvas: CanvasState,
+        result_node,
+        connection,
+    ) -> JsonObject:
         """
         Percorso esecuzione ArcGIS Feature Service.
         
@@ -435,7 +447,7 @@ class EstraiExecutor:
 
     # ANTEPRIMA (PREVIEW
 
-    def preview(self, project_id: str, canvas: CanvasState, limit: int) -> Dict[str, Any]:
+    def preview(self, project_id: str, canvas: CanvasState, limit: int) -> JsonObject:
         """
         Anteprima dati per progetti ESTRAI.
         Rileva automaticamente se usare percorso SQL o ArcGIS REST.
@@ -469,7 +481,14 @@ class EstraiExecutor:
         else:
             return self._preview_database(project_id, canvas, result_node, connection, limit)
 
-    def _preview_database(self, project_id: str, canvas: CanvasState, result_node, connection, limit: int) -> Dict[str, Any]:
+    def _preview_database(
+        self,
+        project_id: str,
+        canvas: CanvasState,
+        result_node,
+        connection,
+        limit: int,
+    ) -> JsonObject:
         """Percorso preview SQL classico."""
         try:
             query_info = self.generator.generate_sql(
@@ -524,7 +543,10 @@ class EstraiExecutor:
                 project_id=project_id,
             )
 
-            rows_json = sanitize_for_json(preview_resource.dataframe.to_dict(orient='records'))
+            rows_json = dataframe_preview_records(
+                preview_resource.dataframe,
+                len(preview_resource.dataframe),
+            )
 
             response: Dict[str, Any] = {
                 "success": True,
@@ -553,7 +575,14 @@ class EstraiExecutor:
             logger.error(f"[GESTITO] Errore preview ESTRAI: {e}", op="preview", exc_info=True)
             return {"success": False, "message": _traduci_errore_sql(str(e))}
 
-    def _preview_feature_service(self, project_id: str, canvas: CanvasState, result_node, connection, limit: int) -> Dict[str, Any]:
+    def _preview_feature_service(
+        self,
+        project_id: str,
+        canvas: CanvasState,
+        result_node,
+        connection,
+        limit: int,
+    ) -> JsonObject:
         """
         Percorso preview ArcGIS Feature Service.
         
@@ -603,7 +632,7 @@ class EstraiExecutor:
             canvas_type_map = self._build_canvas_type_map(canvas)
             columns_info = self._costruisci_colonne_con_tipi_canvas(df, canvas_type_map)
 
-            rows_json = sanitize_for_json(df.to_dict(orient='records'))
+            rows_json = dataframe_preview_records(df, len(df))
 
             response: Dict[str, Any] = {
                 "success": True,
@@ -743,7 +772,7 @@ class EstraiExecutor:
 
     # MAPPA TIPI DAL CANVAS
 
-    def _build_canvas_type_map(self, canvas: CanvasState) -> Dict[str, str]:
+    def _build_canvas_type_map(self, canvas: CanvasState) -> StringMap:
         """
         Costruisce una mappa nome_colonna → tipo_interno dal canvas.
 
@@ -807,7 +836,7 @@ class EstraiExecutor:
 
     def _costruisci_colonne_con_tipi_canvas(
         self, df: FrameLike, canvas_type_map: Dict[str, str]
-    ) -> List[Dict[str, str]]:
+    ) -> ColumnMetadataRows:
         """
         Costruisce la lista colonne con tipi, preferendo quelli del canvas.
 

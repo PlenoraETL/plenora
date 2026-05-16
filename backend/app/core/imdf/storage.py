@@ -10,9 +10,10 @@ import json
 import tempfile
 import zipfile
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import List, Optional
 
 from app.infrastructure.storage.cloud_backends import object_storage_enabled
+from app.shared.contracts.payloads import JsonObject, StringMap
 from app.shared.resources.file_cleanup import rmtree_safe
 from app.shared.resources.storage_layout import IMDF_BUNDLES_PREFIX
 from app.utils.zip_safe import safe_extractall
@@ -54,7 +55,7 @@ def _local_dir(task_id: str) -> Path:
 
 
 
-def save_bundle(task_id: str, local_dir: Path, meta: Optional[Dict[str, Any]] = None) -> Dict[str, str]:
+def save_bundle(task_id: str, local_dir: Path, meta: Optional[JsonObject] = None) -> StringMap:
     """Zippa `local_dir` (bundle estratto dal worker) e carica su S3.
 
     Upload anche il `plenora_metadata.json` separatamente come
@@ -192,7 +193,7 @@ def ensure_local_bundle(task_id: str) -> Path:
             logger.debug(f"[{task_id}] tmp_zip unlink (hydrate) skipped: {type(_ue).__name__}: {_ue}")
 
 
-def get_meta_only(task_id: str) -> Optional[Dict[str, Any]]:
+def get_meta_only(task_id: str) -> Optional[JsonObject]:
     """Legge SOLO `plenora_metadata.json` da S3 (senza download zip).
 
     Usato dal list endpoint per enumerare bundle senza costi di estrazione.

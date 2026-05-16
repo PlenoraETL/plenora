@@ -16,10 +16,11 @@ import psycopg2
 import app.core.files.db as file_sources_db
 from app.core.auth.visibility import is_resource_visible
 from app.core.files.exceptions import FileSourceResolutionError
+from app.shared.contracts.payloads import JsonObject
 from app.utils.logger import get_logger
 
 
-GetFileSource = Callable[[str, bool], Optional[dict[str, Any]]]
+GetFileSource = Callable[[str, bool], Optional[JsonObject]]
 GetFileSourceDir = Callable[[str], Path]
 VisibilityCheck = Callable[..., bool]
 
@@ -29,7 +30,7 @@ logger = get_logger(__name__)
 def _default_get_file_source(
     file_source_id: str,
     include_data: bool = False,
-) -> Optional[dict[str, Any]]:
+) -> Optional[JsonObject]:
     return file_sources_db.get_file_source(
         file_source_id,
         include_data=include_data,

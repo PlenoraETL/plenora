@@ -6,6 +6,7 @@ Domain-agnostic graph utilities.
 from __future__ import annotations
 
 from collections import deque
+from collections.abc import MutableMapping
 from typing import Iterable, List, Literal, Tuple
 
 
@@ -84,11 +85,11 @@ def kahn_topological_order(
     """
     ids: List[str] = list(node_ids)
     id_set = set(ids)
-    in_degree: dict[str, int] = {nid: 0 for nid in ids}
+    in_degree: MutableMapping[str, int] = {nid: 0 for nid in ids}
     # ``out_edges`` is keyed on every node so the inner loop
     # never has to handle KeyError; nodes with zero outgoing
     # edges keep an empty list
-    out_edges: dict[str, List[str]] = {nid: [] for nid in ids}
+    out_edges: MutableMapping[str, List[str]] = {nid: [] for nid in ids}
     for source, target in edges:
         # Edge filter: both endpoints must exist in node_ids
         # Drops "dangling" edges that point at deleted nodes

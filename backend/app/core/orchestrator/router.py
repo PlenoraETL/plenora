@@ -5,10 +5,11 @@ Esecuzione pipeline, preview, download risultati e gestione task Celery.
 """
 
 import time
-from typing import Literal, Optional, Dict, Any, List, Iterator
+from collections.abc import Mapping
+from typing import Literal, Optional, List, Iterator, TypedDict
 
 from fastapi import APIRouter, HTTPException, Depends, BackgroundTasks, Query
-from fastapi.responses import FileResponse, JSONResponse, Response, StreamingResponse
+from fastapi.responses import JSONResponse, Response, StreamingResponse
 from pydantic import BaseModel, field_validator
 
 from app.config import settings
@@ -25,79 +26,32 @@ from app.core.orchestrator.router_mappers import (
     task_result_project_id as _task_result_project_id,
     task_result_to_dict as _task_result_to_dict,
 )
+from app.core.orchestrator import access_control as _access_control
+from app.core.orchestrator.carica_payload_validation import (
+    validate_rest_carica_task_payload,
+)
+from app.core.orchestrator import download_response as _download_response
 from app.utils.router_utils import require_service
 from app.observability.audit_action import audit_action
 from app.core.auth.dependencies import get_current_user, require_not_esecutore
 from app.shared.contracts.auth import CurrentUser
+from app.shared.contracts.payloads import JsonObject
 from app.core.auth.ownership import assert_group_access
 from app.shared.execution.canvas_graph import CanvasGraph
 from app.shared.execution.canvas_types_enricher import enrich_canvas_types_from_metadata
-from app.core.eseguibili import db as eseguibili_db
 from app.core.eseguibili import output_store as _eseg_output_store
-from app.core.results import blob as results_blob
-from app.core.results import db as results_db
 from app.core.results import legacy_file_store
-
-# ── Content-Type per formato file ─────────────────────────────────────────
-_MIME_TYPES = {
-    "csv":     "text/csv",
-    "xlsx":    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-    "json":    "application/json",
-    "geojson": "application/geo+json",
-    "gpkg":    "application/geopackage+sqlite3",
-    "shp":     "application/zip",   # shapefile è sempre zippato
-    "gdb":     "application/zip",
-    "zip":     "application/zip",
-    "parquet": "application/octet-stream",
-}
 
 def _mime_for_filename(filename: str) -> str:
     """Ritorna il Content-Type corretto basandosi sull'estensione del file."""
-    ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
-    return _MIME_TYPES.get(ext, "application/octet-stream")
+    return _download_response.mime_for_filename(filename)
 
 
 logger = get_logger(__name__)
 
-_REST_CARICA_DEST_TYPES = {"rest", "http", "https", "rest_api"}
-
-
-def _nested_carica_value(carica_node_data: Dict[str, Any], key: str) -> Any:
-    if key in carica_node_data:
-        return carica_node_data.get(key)
-    nested = carica_node_data.get("data")
-    if isinstance(nested, dict):
-        return nested.get(key)
-    return None
-
-
-def _rest_carica_parser_input(carica_node_data: Dict[str, Any]) -> Dict[str, Any]:
-    has_rest_config = isinstance(carica_node_data.get("rest_config"), dict)
-    has_rest_alias = isinstance(carica_node_data.get("rest"), dict)
-    if has_rest_config or has_rest_alias:
-        return carica_node_data
-    for key in ("destination", "target"):
-        value = _nested_carica_value(carica_node_data, key)
-        if isinstance(value, dict):
-            return {"rest_config": value}
-    return carica_node_data
-
-
-def _is_rest_carica_destination(carica_node_data: Dict[str, Any]) -> bool:
-    dest_type = _nested_carica_value(carica_node_data, "dest_type")
-    if dest_type is None:
-        dest_type = _nested_carica_value(carica_node_data, "destination_type")
-    return str(dest_type or "").strip().lower() in _REST_CARICA_DEST_TYPES
-
-
-def _validate_rest_carica_task_payload(carica_node_data: Dict[str, Any]) -> None:
-    if not _is_rest_carica_destination(carica_node_data):
-        return
-
-    from app.core.carica.rest_config_parser import parse_carica_rest_config
-
+def _validate_rest_carica_task_payload(carica_node_data: JsonObject) -> None:
     try:
-        parse_carica_rest_config(_rest_carica_parser_input(carica_node_data))
+        validate_rest_carica_task_payload(carica_node_data)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
@@ -109,17 +63,7 @@ def _assert_project_group(project_id: str, current_user: CurrentUser) -> None:
     project_id. Solleva 404 se il progetto non esiste, 403 se appartiene
     a un altro gruppo. Superadmin bypass (assert_group_access lo gestisce).
     """
-    from app.core.projects.service import ProjectService
-    meta = ProjectService().get_project_metadata(project_id)
-    if not meta:
-        raise HTTPException(
-            status_code=404,
-            detail={
-                "error": error_codes.PROJECT_NOT_FOUND,
-                "message": f"Progetto '{project_id}' non trovato",
-            },
-        )
-    assert_group_access(meta, current_user, f"Progetto '{project_id}'")
+    _access_control.assert_project_group(project_id, current_user)
 
 
 def _assert_task_group(task_id: str, current_user: CurrentUser) -> None:
@@ -129,67 +73,7 @@ def _assert_task_group(task_id: str, current_user: CurrentUser) -> None:
     Se il progetto non esiste più (cancellato), solo admin/superadmin possono
     operare sul task.
     """
-    from app.core.orchestrator.task_service import task_service
-    # intent: boundary broad→404 / outcome: fail-closed user-facing + breadcrumb
-    # diagnostico server-side (DB/Redis transient distinguibile in log, non in UX
-    try:
-        task_info = task_service.get_task_status(task_id)
-    except Exception as e:
-        logger.warning(
-            f"[GESTITO] _assert_task_group: lookup task_id={task_id} fallito: {e}",
-            exc_info=True,
-        )
-        raise HTTPException(
-            status_code=404,
-            detail={
-                "error": error_codes.TASK_NOT_FOUND,
-                "message": f"Task '{task_id}' non trovato",
-            },
-        )
-
-    project_id = getattr(task_info, "project_id", None)
-    if not project_id and task_info.result:
-        project_id = _task_result_project_id(task_info.result)
-
-    if not project_id:
-        # Task senza project_id: accessibile solo ad admin+
-        if current_user.role not in ("admin", "superadmin"):
-            raise HTTPException(
-                status_code=404,
-                detail={
-                    "error": error_codes.TASK_NOT_FOUND,
-                    "message": "Task non trovato",
-                },
-            )
-        return
-
-    from app.core.projects.service import ProjectService
-    meta = ProjectService().get_project_metadata(project_id)
-    if meta:
-        assert_group_access(meta, current_user, f"Task '{task_id}'")
-    elif project_id.startswith("exec_"):
-        # Task da eseguibile: il project_id è un eseguibile_id, non un project_id
-        # Verifica accesso tramite la tabella eseguibili (owned + shared
-        from app.core.eseguibili.router import _check_visible
-        record = eseguibili_db.get_eseguibile(project_id)
-        if record:
-            _check_visible(record, current_user)
-        elif current_user.role not in ("admin", "superadmin"):
-            raise HTTPException(
-                status_code=404,
-                detail={
-                    "error": error_codes.TASK_NOT_FOUND,
-                    "message": "Task non trovato",
-                },
-            )
-    elif current_user.role not in ("admin", "superadmin"):
-        raise HTTPException(
-            status_code=404,
-            detail={
-                "error": error_codes.TASK_NOT_FOUND,
-                "message": "Task non trovato",
-            },
-        )
+    _access_control.assert_task_group(task_id, current_user, logger=logger)
 
 
 def _assert_eseguibile_task_owner(
@@ -204,28 +88,22 @@ def _assert_eseguibile_task_owner(
     executable can be run by many users, and the output belongs to the user who
     launched that specific task.
     """
-    owner_meta = _eseg_output_store.load_task_owner(task_id)
-    if owner_meta is None:
-        if current_user.role != "superadmin":
-            raise HTTPException(
-                status_code=404,
-                detail="Output non trovato o scaduto (ownership metadata assente)",
-            )
-        return
-
-    if expected_eseguibile_id and owner_meta.get("eseguibile_id") != expected_eseguibile_id:
-        raise HTTPException(status_code=404, detail="Task non appartiene a questo eseguibile")
-    if owner_meta.get("user_id") != current_user.user_id and current_user.role != "superadmin":
-        raise HTTPException(
-            status_code=403,
-            detail="Output non accessibile (task eseguito da un altro utente)",
-        )
+    _access_control.assert_eseguibile_task_owner(
+        task_id,
+        current_user,
+        expected_eseguibile_id=expected_eseguibile_id,
+    )
 
 
 pipeline_router = APIRouter(prefix="/projects", tags=["orchestrator"])
 tasks_router = APIRouter(prefix="/tasks", tags=["tasks"])
 
 _orchestrator = None
+
+
+class CancelTaskResponse(TypedDict):
+    status: Literal["cancelled"]
+    task_id: str
 
 
 def init_orchestrator(orchestrator: object) -> None:
@@ -250,23 +128,11 @@ def execute_project_pipeline(
         ),
     ),
     current_user: CurrentUser = Depends(require_not_esecutore),
-) -> Dict[str, Any]:
-    """Avvia la pipeline come task Celery asincrono.
-
-    SECURITY: assert_group_access verifica che il progetto appartenga al
-    gruppo dell'utente. Senza questo check, un utente di gruppoA potrebbe
-    eseguire la pipeline di un progetto di gruppoB (cross-tenant execution).
-
-    R-25 PR-B3: il param `intermediate_mode` e' opt-in superadmin per
-    audit run-specific. Il dual-auth (require_not_esecutore PER il
-    base-flow + check superadmin SOLO se override richiesto) preserva
-    la backward-compat: caller esistenti senza param continuano a girare
-    con i loro ruoli abituali.
-    """
+) -> Mapping[str, object]:
+    """Avvia la pipeline come task Celery asincrono."""
     require_service(_orchestrator, "OrchestratorService")
     _assert_project_group(project_id, current_user)
 
-    # Auth gate addizionale solo se intermediate_mode e' valorizzato
     if intermediate_mode is not None and current_user.role != "superadmin":
         raise HTTPException(
             status_code=403,
@@ -282,27 +148,35 @@ def execute_project_pipeline(
             user_id=current_user.user_id,
             intermediate_mode_override=intermediate_mode,
         )
-        result = _task_info_to_dict(task_info)
-        result["async"] = True  # segnala a useExecution di avviare il polling
+        result = dict(_task_info_to_dict(task_info))
+        result["async"] = True
         return result
     except Exception as e:
-        logger.error(f"[CRASH] Errore avvio task execute: {e}", op="execute", project_id=project_id, exc_info=True)
-        raise_typed_http(error_codes.INTERNAL_ERROR, status_code=500, message="Errore interno del server")
+        logger.error(
+            f"[CRASH] Errore avvio task execute: {e}",
+            op="execute",
+            project_id=project_id,
+            exc_info=True,
+        )
+        raise_typed_http(
+            error_codes.INTERNAL_ERROR,
+            status_code=500,
+            message="Errore interno del server",
+        )
 
 
 @pipeline_router.get("/{project_id}/preview")
 def preview_project(
     project_id: str,
-    limit: int = Query(100, ge=1, le=10000, description="Numero righe preview (cap 10k per evitare OOM worker)"),
+    limit: int = Query(
+        100,
+        ge=1,
+        le=10000,
+        description="Numero righe preview (cap 10k per evitare OOM worker)",
+    ),
     current_user: CurrentUser = Depends(require_not_esecutore),
-) -> Dict[str, Any]:
-    """Avvia preview come task Celery asincrono.
-
-    SECURITY: assert_group_access per cross-tenant isolation.
-    N5 (2026-04-17): `limit` ha cap 10k per prevenire DoS via OOM worker.
-    Un attacker con `?limit=999999999` senza cap materializzava milioni di
-    righe in RAM del worker Celery -> crash + rifiuto servizio altri job.
-    """
+) -> Mapping[str, object]:
+    """Avvia preview come task Celery asincrono."""
     require_service(_orchestrator, "OrchestratorService")
     _assert_project_group(project_id, current_user)
     try:
@@ -312,12 +186,21 @@ def preview_project(
             limit=limit,
             user_id=current_user.user_id,
         )
-        result = _task_info_to_dict(task_info)
+        result = dict(_task_info_to_dict(task_info))
         result["async"] = True
         return result
     except Exception as e:
-        logger.error(f"[CRASH] Errore avvio task preview: {e}", op="preview", project_id=project_id, exc_info=True)
-        raise_typed_http(error_codes.INTERNAL_ERROR, status_code=500, message="Errore interno del server")
+        logger.error(
+            f"[CRASH] Errore avvio task preview: {e}",
+            op="preview",
+            project_id=project_id,
+            exc_info=True,
+        )
+        raise_typed_http(
+            error_codes.INTERNAL_ERROR,
+            status_code=500,
+            message="Errore interno del server",
+        )
 
 
 @pipeline_router.get("/{project_id}/download")
@@ -326,91 +209,35 @@ def download_project_result(
     file: Optional[str] = None,
     current_user: CurrentUser = Depends(require_not_esecutore),
 ) -> Response:
-    """
-    Scarica il file risultato di un progetto.
-
-    SECURITY: assert_group_access per cross-tenant isolation. Senza questo
-    check, un utente potrebbe scaricare risultati di progetti di altri tenant.
-
-    Parametri:
-        file: nome file specifico (opzionale) — usato per scaricare file
-              accessori come il report errori di arricchimento.
-              Se omesso, restituisce il file più recente.
-    """
+    """Scarica il file risultato di un progetto."""
     _assert_project_group(project_id, current_user)
     try:
-        if file:
-            try:
-                target = legacy_file_store.resolve_specific_file(
-                    project_id,
-                    file,
-                    root=settings.RESULTS_DIR,
-                )
-            except ValueError:
-                raise_typed_http(
-                    code=error_codes.ACCESS_DENIED,
-                    status_code=403,
-                    message="Accesso negato",
-                )
-            safe_name = target.name if target else file
-            if target is None:
-                raise HTTPException(404, f"File '{safe_name}' non trovato per progetto '{project_id}'")
-            return FileResponse(
-                path=str(target),
-                filename=safe_name,
-                media_type=_mime_for_filename(safe_name),
-            )
-
-        # Fast-path legacy: se il filesystem ha risultati (progetti pre-R#1
-        # mai migrati al result store moderno — DB BYTEA o S3), servi
-        # il file più recente senza toccare il result store
-        latest_file = legacy_file_store.resolve_latest_file(
+        return _download_response.project_result_response(
             project_id,
-            root=settings.RESULTS_DIR,
-        )
-        if latest_file is not None:
-            return FileResponse(
-                path=str(latest_file),
-                filename=latest_file.name,
-                media_type=_mime_for_filename(latest_file.name),
-            )
-
-        # Fallback post-R#1: i result blob vivono nel DB, il file temp è
-        # già stato cancellato da `save_result_blob`. Recupera l'ultimo
-        # result dal service DB e ritorna i bytes inline
-        latest = results_db.get_latest_result_row(project_id)
-        if not latest:
-            raise HTTPException(404, f"Nessun risultato trovato per progetto '{project_id}'")
-        if not latest.id:
-            raise HTTPException(404, f"Metadata risultato non valide per progetto '{project_id}'")
-
-        blob = results_blob.get_result_data(latest.id)
-        if blob is None:
-            raise HTTPException(404, f"Blob risultato non disponibile per progetto '{project_id}'")
-
-        filename = latest.filename or f"{project_id}.{latest.format or 'csv'}"
-        return Response(
-            content=blob,
-            media_type=_mime_for_filename(filename),
-            headers={
-                "Content-Disposition": f'attachment; filename="{filename}"',
-                "Content-Length": str(len(blob)),
-            },
+            requested_file=file,
+            results_root=settings.RESULTS_DIR,
         )
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"[CRASH] Errore download progetto {project_id}: {e}", exc_info=True)
-        raise_typed_http(error_codes.INTERNAL_ERROR, status_code=500, message="Errore interno del server")
+        logger.error(
+            f"[CRASH] Errore download progetto {project_id}: {e}",
+            exc_info=True,
+        )
+        raise_typed_http(
+            error_codes.INTERNAL_ERROR,
+            status_code=500,
+            message="Errore interno del server",
+        )
 
 
 class CreateTaskRequest(BaseModel):
     task_type: TaskType
     project_id: str
-    canvas: Dict[str, Any]
+    canvas: JsonObject
     output_format: str = "csv"
     force_recalculate: bool = False
-    carica_node_data: Optional[Dict[str, Any]] = None
+    carica_node_data: Optional[JsonObject] = None
     triggered_by: str = "manual"
 
 
@@ -421,7 +248,7 @@ class TaskStatusResponse(BaseModel):
     status: str
     progress: float
     message: str
-    result: Optional[Dict[str, Any]] = None
+    result: Optional[JsonObject] = None
     error: Optional[str] = None
     created_at: Optional[str] = None
     started_at: Optional[str] = None
@@ -429,7 +256,7 @@ class TaskStatusResponse(BaseModel):
 
     @field_validator("progress", mode="before")
     @classmethod
-    def coerce_progress_to_int(cls, progress_value: object) -> int:
+    def coerce_progress_to_int(_cls, progress_value: object) -> int:
         """Pydantic v2 è strict: il worker Celery può salvare progress come float (es. 5.0)."""
         try:
             return int(progress_value) if progress_value is not None else 0
@@ -555,7 +382,7 @@ def get_task_status(
 def cancel_task(
     task_id: str,
     current_user: CurrentUser = Depends(get_current_user),
-) -> Dict[str, str]:
+) -> CancelTaskResponse:
     """Annulla un task in esecuzione.
 
     SECURITY: verifica ownership via project_id del task.
@@ -624,7 +451,7 @@ def cleanup_task_completely(
     from app.core.results.cleanup import delete_result
 
     project_id = None
-    task_result_payload: Dict[str, Any] = {}
+    task_result_payload: JsonObject = {}
     try:
         task_info = task_service.get_task_status(task_id)
         project_id = task_info.project_id

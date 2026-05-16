@@ -10,6 +10,8 @@ from typing import Mapping, Protocol, Sequence
 RestScalar = str | int | float | bool | None
 RestRecord = Mapping[str, RestScalar]
 RestJsonValue = RestScalar | dict[str, "RestJsonValue"] | list["RestJsonValue"]
+RestJsonObject = dict[str, RestJsonValue]
+RestHeaders = dict[str, str]
 
 
 class RestSinkMethod(str, Enum):
@@ -223,9 +225,9 @@ class RestFeatureSink:
         size = self._config.batch_size
         return [records[index : index + size] for index in range(0, len(records), size)]
 
-    def _map_record(self, record: RestRecord) -> dict[str, RestJsonValue]:
+    def _map_record(self, record: RestRecord) -> RestJsonObject:
         mapping = self._config.body_mapping
-        payload: dict[str, RestJsonValue] = dict(record) if mapping.include_unmapped else {}
+        payload: RestJsonObject = dict(record) if mapping.include_unmapped else {}
 
         for body_field in mapping.fields:
             value = record.get(body_field.source, body_field.default)
@@ -238,10 +240,10 @@ class RestFeatureSink:
 
         return payload
 
-    def _headers(self) -> dict[str, str]:
+    def _headers(self) -> RestHeaders:
         return {header.name: header.value for header in self._config.headers}
 
-    def _redacted_headers(self) -> dict[str, str]:
+    def _redacted_headers(self) -> RestHeaders:
         return {
             header.name: "***REDACTED***" if header.secret else header.value
             for header in self._config.headers

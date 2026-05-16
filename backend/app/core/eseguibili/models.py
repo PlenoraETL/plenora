@@ -2,8 +2,10 @@
 Modelli Pydantic per il modulo ESEGUIBILI.
 """
 
-from typing import List, Optional, Dict, Any
+from typing import List, Optional
 from pydantic import BaseModel, ConfigDict, Field
+
+from app.shared.contracts.payloads import JsonRows, ObjectMap, ObjectRows, StringMap
 
 
 class ExpectedColumn(BaseModel):
@@ -88,10 +90,10 @@ class ExecuteRequest(BaseModel):
 class AnalyzeUploadResponse(BaseModel):
     """Risposta all'upload di un file per analisi."""
     file_id: str                           # id del FileSource temp
-    detected_columns: List[Dict[str, Any]] # {name, type, sample_values}
+    detected_columns: JsonRows # {name, type, sample_values}
     row_count: int
-    auto_mapping: Dict[str, str] = Field(default_factory=dict)      # {chain_col: file_col} — suggerimento euristico
-    preview_rows: List[Dict[str, Any]] = Field(default_factory=list)  # prime 10 righe
+    auto_mapping: StringMap = Field(default_factory=dict)      # {chain_col: file_col} — suggerimento euristico
+    preview_rows: JsonRows = Field(default_factory=list)  # prime 10 righe
 
 
 class DetectedUploadColumn(BaseModel):
@@ -114,10 +116,10 @@ class AnalyzeFileUploadResult(BaseModel):
     filename: str
     detected_columns: list[DetectedUploadColumn]
     row_count: int
-    auto_mapping: dict[str, str] = Field(default_factory=dict)
-    preview_rows: list[dict[str, object]] = Field(default_factory=list)
+    auto_mapping: StringMap = Field(default_factory=dict)
+    preview_rows: ObjectRows = Field(default_factory=list)
 
-    def to_api_dict(self) -> dict[str, object]:
+    def to_api_dict(self) -> ObjectMap:
         return {
             "file_id": self.file_id,
             "detected_columns": [
@@ -140,5 +142,5 @@ class EseguibileExecutionResult(BaseModel):
     temp_file_source_id: str
     message: str
 
-    def to_api_dict(self) -> dict[str, object]:
+    def to_api_dict(self) -> ObjectMap:
         return self.model_dump(by_alias=True)

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, List, Optional
 import threading
 import uuid as _uuid
 
@@ -25,6 +25,7 @@ from app.core.artifacts import (
 from app.utils.logger import close_run, get_logger, open_run
 
 from .source_loading import load_project_source_artifact
+from .types import FrameMap, JsonObject
 
 
 logger = get_logger(__name__)
@@ -69,7 +70,7 @@ def _node_field(node: Any, key: str, default: Any = None) -> Any:
     return default
 
 
-def _cross_tenant_error(source_project_id: str) -> Dict[str, Any]:
+def _cross_tenant_error(source_project_id: str) -> JsonObject:
     return {
         "success": False,
         "message": (
@@ -145,7 +146,7 @@ def _load_materialized_project_source(
     node: Any,
     source_project_id: str,
     group_id: str,
-    dataframes: Dict[str, Any],
+    dataframes: FrameMap,
 ) -> None:
     node_columns = _node_field(node, "columns", [])
     with materialized as m:
@@ -160,7 +161,7 @@ def _load_materialized_project_source(
 
 def load_project_sources(
     canvas: Any,
-    dataframes: Dict[str, Any],
+    dataframes: FrameMap,
     *,
     force_recalculate: bool,
     pipeline_dispatcher: Optional[PipelineDispatcherProtocol],
@@ -168,7 +169,7 @@ def load_project_sources(
     run_id: Optional[str] = None,
     group_id: Optional[str] = None,
     logger=None,
-) -> Optional[Dict[str, Any]]:
+) -> Optional[JsonObject]:
     """Load ``project_source`` nodes, recomputing upstream projects as needed."""
     del run_id  # The upstream recompute path opens its own cascade run id.
     log = logger or globals()["logger"]

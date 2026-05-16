@@ -7,7 +7,10 @@ parametri (deduplicazione cache key) per `EnrichmentExecutor`.
 from __future__ import annotations
 
 from collections import defaultdict
-from typing import Any, Dict, List
+from typing import Any
+
+from app.core.dataframes.tabular import iter_dataframe_indexed_rows
+from app.core.arricchisci.types import IndexGroups
 
 
 class EnrichmentGroupingMixin:
@@ -16,7 +19,7 @@ class EnrichmentGroupingMixin:
     Pure data grouping in-memory. Zero log, zero side-effects.
     """
 
-    def _group_by_params(self, df: Any) -> Dict[str, List[int]]:
+    def _group_by_params(self, df: Any) -> IndexGroups:
         """
         Raggruppa righe per combinazione unica di parametri (deduplicazione).
 
@@ -29,7 +32,7 @@ class EnrichmentGroupingMixin:
         """
         groups = defaultdict(list)
 
-        for idx, row in df.iterrows():
+        for idx, row in iter_dataframe_indexed_rows(df):
             params = self._build_params(row)
             # Rimuovi API key dalla cache key
             cache_params = {k: v for k, v in params.items()

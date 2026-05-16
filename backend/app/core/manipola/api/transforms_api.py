@@ -5,9 +5,9 @@ Espone il transforms_registry.json al frontend React.
 """
 
 from fastapi import APIRouter, Depends
-from typing import Dict, Any
 
 from app.core.manipola.plugin_executor import get_executor
+from app.core.manipola.types import JsonObject
 from app.core.auth.dependencies import require_not_esecutore
 from app.shared.contracts.auth import CurrentUser
 
@@ -15,7 +15,7 @@ router = APIRouter(prefix="/transforms", tags=["transforms"])
 
 
 @router.get("/registry")
-def get_registry(current_user: CurrentUser = Depends(require_not_esecutore)) -> Dict[str, Any]:
+def get_registry(current_user: CurrentUser = Depends(require_not_esecutore)) -> JsonObject:
     """
     Ritorna il registry completo delle trasformazioni.
 

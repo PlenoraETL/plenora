@@ -12,12 +12,22 @@ import warnings
 import os
 import uuid
 from datetime import datetime, timedelta, timezone
-from typing import Optional
+from typing import Optional, TypedDict
 
 import jwt
 
 
 ALGORITHM = "HS256"
+
+
+class AccessTokenPayload(TypedDict, total=False):
+    sub: str
+    username: str
+    group_id: str
+    role: str
+    exp: int | datetime
+    iat: int | datetime
+    jti: str
 # BE-CONFIG-001B: TTL token migrato a `Settings.DEFAULTS` (default 8h
 # Override env `JWT_EXPIRE_HOURS` continua a funzionare via type coercion
 # `int` in `Settings._converti_tipo_env`. Lettura a import-time: la
@@ -73,7 +83,7 @@ def create_access_token(user_id: str, username: str, group_id: str, role: str) -
     return jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)
 
 
-def decode_token(token: str) -> Optional[dict]:
+def decode_token(token: str) -> Optional[AccessTokenPayload]:
     try:
         return jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
     except jwt.ExpiredSignatureError:

@@ -4,11 +4,13 @@ Cluster PUBLISH_OPS — operazioni di scrittura layer-level su Feature
 Service ArcGIS (create+populate / append / upsert / update).
 """
 
-from typing import Dict, List
+from collections.abc import Mapping
+from typing import Any, List
 
 from app.core.connections.arcgis_publish_modes import publish_existing_layer_mode
 from app.shared.connections.arcgis_connection import ArcGISConnectionInfo
 from app.shared.connections.arcgis_provider import ArcGISServiceAdminProviderProtocol
+from app.shared.contracts.payloads import JsonObject, ObjectMap, StringMap
 from app.utils.logger import get_logger
 
 logger = get_logger("app.core.imdf.arcgis_uploader")
@@ -22,7 +24,7 @@ def _add_layer_to_service(
     layer_name: str,
     layer_id: int,
     srid: int = 4326,
-) -> Dict[str, object]:
+) -> ObjectMap:
     """Aggiunge un layer a un Feature Service esistente.
 
     BE-IMDF-006B: implementation promoted to the provider
@@ -45,10 +47,10 @@ def _add_layer_to_service(
 
 def _publish_mode_existing(
     client, conn, service_url: str, item_id: str, folder_id: str,
-    layers: Dict, layers_present: List[str],
-    mode: str, match_columns: Dict[str, str], target_srid: int,
-    result: Dict, emit, step: int, total_steps: int,
-) -> Dict:
+    layers: Mapping[str, Any], layers_present: List[str],
+    mode: str, match_columns: StringMap, target_srid: int,
+    result: JsonObject, emit, step: int, total_steps: int,
+) -> JsonObject:
     """Esegue la pubblicazione in modalita' `append` / `upsert` / `update`
     su un FS gia' esistente. Ritorna il `result` (mutato) compilato.
 

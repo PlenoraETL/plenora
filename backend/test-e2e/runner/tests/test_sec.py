@@ -5,9 +5,7 @@ Catalogo: backend/test-e2e/catalog/sec.yaml
 
 from __future__ import annotations
 
-import os
 import uuid
-from typing import Iterator
 
 import httpx
 import pytest

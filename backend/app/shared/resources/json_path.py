@@ -7,8 +7,10 @@ import importlib
 import json
 from typing import Any
 
+from app.shared.contracts.payloads import JsonObject
 
-def geojson_to_wkt(geom: dict) -> str:
+
+def geojson_to_wkt(geom: JsonObject) -> str:
     """Convert a GeoJSON geometry dict to WKT using shapely when available."""
     try:
         # Lazy via importlib: engine boundary guard

@@ -155,8 +155,9 @@ def _write_temp_file(tmp_path: Path, name: str, payload: bytes) -> Path:
 # (a) upload OK + DB save OK -> nessun delete
 
 
+@pytest.mark.usefixtures("mock_db_save_ok")
 def test_object_storage_save_ok_does_not_delete(
-    stub_storage_factory, mock_db_save_ok, monkeypatch, tmp_path
+    stub_storage_factory, monkeypatch, tmp_path
 ):
     monkeypatch.setenv("STORAGE_POLICY", "object_storage")
     storage = stub_storage_factory()
@@ -169,8 +170,9 @@ def test_object_storage_save_ok_does_not_delete(
     assert storage.deletes == []  # no compensating delete on happy path
 
 
+@pytest.mark.usefixtures("mock_db_save_ok")
 def test_object_storage_save_ok_closes_result_upload_intent(
-    stub_storage_factory, mock_db_save_ok, monkeypatch, tmp_path
+    stub_storage_factory, monkeypatch, tmp_path
 ):
     import app.core.results.blob_writer as result_blob_writer
 
@@ -201,8 +203,9 @@ def test_object_storage_save_ok_closes_result_upload_intent(
     assert close_calls == ["intent-1"]
 
 
+@pytest.mark.usefixtures("mock_db_save_ok")
 def test_object_storage_save_ok_bytes_path_does_not_delete(
-    stub_storage_factory, mock_db_save_ok, monkeypatch
+    stub_storage_factory, monkeypatch
 ):
     monkeypatch.setenv("STORAGE_POLICY", "object_storage")
     storage = stub_storage_factory()
@@ -214,8 +217,9 @@ def test_object_storage_save_ok_bytes_path_does_not_delete(
     assert storage.deletes == []
 
 
+@pytest.mark.usefixtures("mock_db_save_ok")
 def test_object_storage_upload_failure_leaves_result_upload_intent_pending(
-    stub_storage_factory, mock_db_save_ok, monkeypatch
+    stub_storage_factory, monkeypatch
 ):
     import app.core.results.blob_writer as result_blob_writer
 
@@ -250,8 +254,9 @@ def test_object_storage_upload_failure_leaves_result_upload_intent_pending(
 # (b) upload OK + DB save fails -> delete chiamato + ResultSaveError
 
 
+@pytest.mark.usefixtures("mock_db_save_fails")
 def test_object_storage_db_save_failure_triggers_compensating_delete(
-    stub_storage_factory, mock_db_save_fails, monkeypatch, tmp_path
+    stub_storage_factory, monkeypatch, tmp_path
 ):
     """Path-based: upload riesce, DB save fallisce -> delete best-effort
     e ResultSaveError verso il caller (chain preservata)."""
@@ -269,8 +274,9 @@ def test_object_storage_db_save_failure_triggers_compensating_delete(
     assert uploaded_key == "results/p1/res-orph.bin"
 
 
+@pytest.mark.usefixtures("mock_db_save_fails")
 def test_object_storage_db_save_failure_closes_upload_intent_as_orphan(
-    stub_storage_factory, mock_db_save_fails, monkeypatch
+    stub_storage_factory, monkeypatch
 ):
     import app.core.results.blob_writer as result_blob_writer
 
@@ -320,8 +326,9 @@ def test_close_failed_result_upload_intent_does_not_terminalize_skipped(
     assert orphan_calls == []
 
 
+@pytest.mark.usefixtures("mock_db_save_fails")
 def test_object_storage_db_save_failure_bytes_path_triggers_delete(
-    stub_storage_factory, mock_db_save_fails, monkeypatch
+    stub_storage_factory, monkeypatch
 ):
     """Bytes-based: stesso pattern."""
     monkeypatch.setenv("STORAGE_POLICY", "object_storage")
@@ -340,8 +347,9 @@ def test_object_storage_db_save_failure_bytes_path_triggers_delete(
 #     -> structured log + original DB-save error preserved
 
 
+@pytest.mark.usefixtures("mock_db_save_fails")
 def test_db_save_failure_with_cleanup_failure_logs_orphan_event(
-    stub_storage_factory, mock_db_save_fails, caplog_app, monkeypatch, tmp_path
+    stub_storage_factory, caplog_app, monkeypatch, tmp_path
 ):
     """Quando anche il cleanup delete fallisce, deve emettere log
     `event=storage_compensating_delete_failed` e propagare l'errore DB
@@ -367,8 +375,9 @@ def test_db_save_failure_with_cleanup_failure_logs_orphan_event(
     ), f"missing structured log; got: {messages}"
 
 
+@pytest.mark.usefixtures("mock_db_save_fails")
 def test_db_save_failure_with_cleanup_failure_bytes_path(
-    stub_storage_factory, mock_db_save_fails, caplog_app, monkeypatch
+    stub_storage_factory, caplog_app, monkeypatch
 ):
     monkeypatch.setenv("STORAGE_POLICY", "object_storage")
     storage = stub_storage_factory(delete_should_fail=True)
@@ -390,8 +399,9 @@ def test_db_save_failure_with_cleanup_failure_bytes_path(
 # (c-extra) Successful cleanup also emits structured log
 
 
+@pytest.mark.usefixtures("mock_db_save_fails")
 def test_successful_cleanup_emits_ok_event(
-    stub_storage_factory, mock_db_save_fails, caplog_app, monkeypatch, tmp_path
+    stub_storage_factory, caplog_app, monkeypatch, tmp_path
 ):
     """Anche il successo del cleanup deve essere tracciato per
     osservabilita' (orphan recoveries)."""
@@ -411,8 +421,9 @@ def test_successful_cleanup_emits_ok_event(
 # (d) policy=db -> nessun touch a object storage anche su DB save failure
 
 
+@pytest.mark.usefixtures("mock_db_save_fails")
 def test_db_policy_db_save_failure_does_not_touch_object_storage(
-    stub_storage_factory, mock_db_save_fails, monkeypatch
+    stub_storage_factory, monkeypatch
 ):
     """policy=db, DB save fallisce: il dispatch non passa MAI per
     object storage. Nessuna upload, nessuna delete."""

@@ -13,7 +13,15 @@ from sqlalchemy.engine import Engine
 
 from app.core.carica.ddl_generator import DDLGenerator
 from app.core.carica.models import ConflictDetail, ConflictReport
-from app.core.dataframes.parallel_ops import true_mask_for_frame
+from app.core.dataframes.tabular import (
+    dataframe_row_dict,
+    duplicate_row_count,
+    iter_dataframe_rows,
+    matching_row_indices,
+    row_indices_where_column_in,
+    unique_non_null_column_values,
+    unique_rows_for_columns,
+)
 from app.core.dataframes.values import is_null_scalar
 
 
@@ -107,8 +115,7 @@ class ConflictChecker:
             non il totale dei gruppi).
         """
         try:
-            duplicated = df.duplicated(subset=match_columns, keep='first')
-            dup_count = int(duplicated.sum())
+            dup_count = duplicate_row_count(df, match_columns)
             if dup_count > 0:
                 logger.info(
                     f"Trovati {dup_count} duplicati interni su colonne {match_columns}"
@@ -151,7 +158,7 @@ class ConflictChecker:
         column: str,
     ) -> tuple:
         """Check conflitti su singola colonna match."""
-        values = df[column].dropna().unique().tolist()
+        values = unique_non_null_column_values(df, column)
         if not values:
             return 0, []
 
@@ -178,11 +185,14 @@ class ConflictChecker:
 
         details = []
         if conflicting_values:
-            conflict_mask = df[column].isin(conflicting_values)
-            conflict_indices = df[conflict_mask].index.tolist()
+            conflict_indices = row_indices_where_column_in(
+                df,
+                column,
+                conflicting_values,
+            )
 
             for idx in conflict_indices[:self.MAX_DETAILS]:
-                row = df.loc[idx]
+                row = dataframe_row_dict(df, idx)
                 details.append(ConflictDetail(
                     row_index=int(idx),
                     match_values={column: _serialize_value(row[column])},
@@ -206,7 +216,7 @@ class ConflictChecker:
         """
         full_table = self._qualified_name(schema, table)
 
-        unique_combos = df[match_columns].drop_duplicates()
+        unique_combos = unique_rows_for_columns(df, match_columns)
         if unique_combos.empty:
             return 0, []
 
@@ -237,7 +247,7 @@ class ConflictChecker:
         conflict_count = 0
         details = []
 
-        for _, combo_row in unique_combos.iterrows():
+        for combo_row in iter_dataframe_rows(unique_combos):
             combo_key = tuple(_normalize(combo_row[col]) for col in match_columns)
             if combo_key in existing_set:
                 conflict_count += 1
@@ -246,13 +256,11 @@ class ConflictChecker:
                         col: _serialize_value(combo_row[col])
                         for col in match_columns
                     }
-                    mask = true_mask_for_frame(df)
-                    for col in match_columns:
-                        if is_null_scalar(combo_row[col]):
-                            mask &= df[col].isna()
-                        else:
-                            mask &= (df[col] == combo_row[col])
-                    matching_indices = df[mask].index.tolist()
+                    matching_indices = matching_row_indices(
+                        df,
+                        {col: combo_row[col] for col in match_columns},
+                        limit=5,
+                    )
                     for row_idx in matching_indices[:5]:
                         if len(details) >= self.MAX_DETAILS:
                             break

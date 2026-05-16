@@ -5,7 +5,9 @@ The mixin keeps numeric dialect logic outside the main registry/API module
 while depending only on translator methods supplied by ``SqlFunctionTranslator``.
 """
 
-from typing import Any, Dict
+from typing import Any
+
+from app.db.sql_types import SqlParamMap, SqlTranslationMap
 
 
 def _safe_number(value, kind: str = "float"):
@@ -34,7 +36,7 @@ class SqlNumericFunctionMixin:
 
     def _numeric_translation_for(
         self,
-        translations: Dict[str, str],
+        translations: SqlTranslationMap,
         function_name: str,
     ) -> str:
         db_value = self.db_type.value
@@ -42,7 +44,7 @@ class SqlNumericFunctionMixin:
             return translations[db_value]
         raise ValueError(f"{function_name} non supportato per {db_value}")
 
-    def _translate_round(self, params: Dict, table_alias: str = None) -> str:
+    def _translate_round(self, params: SqlParamMap, table_alias: str = None) -> str:
         """Arrotondamento - al numero di decimali specificato."""
         col = self._qualify_column(params["column"], table_alias)
         decimals = params.get("decimals")
@@ -59,24 +61,24 @@ class SqlNumericFunctionMixin:
             return f"ROUND({col}::numeric, {decimals})"
         return f"ROUND({col}, {decimals})"
 
-    def _translate_abs(self, params: Dict, table_alias: str = None) -> str:
+    def _translate_abs(self, params: SqlParamMap, table_alias: str = None) -> str:
         """Valore assoluto - identico su tutti i database."""
         col = self._qualify_column(params["column"], table_alias)
         return f"ABS({col})"
 
-    def _translate_ceil(self, params: Dict, table_alias: str = None) -> str:
+    def _translate_ceil(self, params: SqlParamMap, table_alias: str = None) -> str:
         """Arrotondamento per eccesso - MSSQL usa CEILING, altri usano CEIL."""
         col = self._qualify_column(params["column"], table_alias)
         if self.db_type.value == "mssql":
             return f"CEILING({col})"
         return f"CEIL({col})"
 
-    def _translate_floor(self, params: Dict, table_alias: str = None) -> str:
+    def _translate_floor(self, params: SqlParamMap, table_alias: str = None) -> str:
         """Arrotondamento per difetto - identico su tutti i database."""
         col = self._qualify_column(params["column"], table_alias)
         return f"FLOOR({col})"
 
-    def _translate_math(self, params: Dict, table_alias: str = None) -> str:
+    def _translate_math(self, params: SqlParamMap, table_alias: str = None) -> str:
         """Operazione aritmetica tra colonne o con valore fisso."""
         col1 = self._qualify_column(params["column1"], table_alias)
         operator = params.get("operator") or "+"
@@ -110,7 +112,7 @@ class SqlNumericFunctionMixin:
 
         return f"({col1} {operator} {second_operand})"
 
-    def _translate_mod(self, params: Dict, table_alias: str = None) -> str:
+    def _translate_mod(self, params: SqlParamMap, table_alias: str = None) -> str:
         """Resto divisione - MSSQL/SQLite usano %, altri MOD()."""
         col = self._qualify_column(params["column"], table_alias)
         divisor = _safe_number(params["divisor"], "float")
@@ -126,23 +128,23 @@ class SqlNumericFunctionMixin:
         }
         return self._numeric_translation_for(translations, "MOD")
 
-    def _translate_power(self, params: Dict, table_alias: str = None) -> str:
+    def _translate_power(self, params: SqlParamMap, table_alias: str = None) -> str:
         """Potenza - POWER() su tutti i database."""
         col = self._qualify_column(params["column"], table_alias)
         exponent = _safe_number(params["exponent"], "float")
         return f"POWER({col}, {exponent})"
 
-    def _translate_sqrt(self, params: Dict, table_alias: str = None) -> str:
+    def _translate_sqrt(self, params: SqlParamMap, table_alias: str = None) -> str:
         """Radice quadrata - SQRT() su tutti i database."""
         col = self._qualify_column(params["column"], table_alias)
         return f"SQRT({col})"
 
-    def _translate_sign(self, params: Dict, table_alias: str = None) -> str:
+    def _translate_sign(self, params: SqlParamMap, table_alias: str = None) -> str:
         """Segno - SIGN() su tutti i database."""
         col = self._qualify_column(params["column"], table_alias)
         return f"SIGN({col})"
 
-    def _translate_greatest(self, params: Dict, table_alias: str = None) -> str:
+    def _translate_greatest(self, params: SqlParamMap, table_alias: str = None) -> str:
         """Massimo tra valori - MSSQL non ha GREATEST nativo pre-2022."""
         values = params["values"]
         if isinstance(values, str):
@@ -158,7 +160,7 @@ class SqlNumericFunctionMixin:
             return f"MAX({', '.join(qualified_values)})"
         return f"GREATEST({', '.join(qualified_values)})"
 
-    def _translate_least(self, params: Dict, table_alias: str = None) -> str:
+    def _translate_least(self, params: SqlParamMap, table_alias: str = None) -> str:
         """Minimo tra valori - MSSQL non ha LEAST nativo pre-2022."""
         values = params["values"]
         if isinstance(values, str):

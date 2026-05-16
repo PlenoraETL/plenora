@@ -3,7 +3,7 @@ Router API per la consultazione dei log — lettura da PostgreSQL.
 """
 
 import json
-from typing import Optional
+from typing import Any, Optional, TypeAlias
 
 from fastapi import APIRouter, Depends, Query
 # the FastAPI auth dependency callables (`get_current_user`
@@ -27,7 +27,10 @@ logger = get_logger(__name__)
 router = APIRouter(prefix="/logs", tags=["logs"])
 
 
-def _row_to_dict(row: dict) -> dict:
+LogEntryPayload: TypeAlias = dict[str, Any]
+
+
+def _row_to_dict(row: LogEntryPayload) -> LogEntryPayload:
     d = dict(row) if row else {}
     # Deserializza details JSON. Se il campo non e' JSON valido lasciamolo
     # come stringa: log di sistema legacy possono avere `details` testuali

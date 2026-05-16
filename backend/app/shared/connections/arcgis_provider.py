@@ -9,21 +9,22 @@ Higher-level services may keep connection-id facades above this boundary.
 
 from __future__ import annotations
 
-from typing import Dict, List, Mapping, Optional, Protocol, Sequence, Tuple, runtime_checkable
+from typing import List, Mapping, Optional, Protocol, Sequence, Tuple, runtime_checkable
 
 from app.shared.connections.arcgis_connection import ArcGISConnectionInfo
+from app.shared.contracts.payloads import IntMap, JsonObject, JsonRows
 
 FeaturePayload = Mapping[str, object]
 ProviderResult = Mapping[str, object]
 LayerRows = Tuple[List[tuple], List[str]]
-OidLookupResult = Tuple[Dict[str, int], List[str]]
+OidLookupResult = Tuple[IntMap, List[str]]
 
 
 @runtime_checkable
 class ArcGISDiscoveryProviderProtocol(Protocol):
     """Feature Service catalog discovery capability."""
 
-    def test_connection(self, conn: ArcGISConnectionInfo) -> dict:
+    def test_connection(self, conn: ArcGISConnectionInfo) -> JsonObject:
         """Validate authentication and basic Feature Service catalog access."""
         ...
 
@@ -33,7 +34,7 @@ class ArcGISDiscoveryProviderProtocol(Protocol):
         folder: str = "",
         _depth: int = 0,
         _max_depth: int = 5,
-    ) -> List[dict]:
+    ) -> JsonRows:
         """List Feature Services available to the connection."""
         ...
 
@@ -41,7 +42,7 @@ class ArcGISDiscoveryProviderProtocol(Protocol):
         """Return whether the connection targets ArcGIS Online."""
         ...
 
-    def list_folders(self, conn: ArcGISConnectionInfo) -> List[dict]:
+    def list_folders(self, conn: ArcGISConnectionInfo) -> JsonRows:
         """List folders available to the connection."""
         ...
 
@@ -53,7 +54,7 @@ class ArcGISDiscoveryProviderProtocol(Protocol):
         """Return an existing user folder id, or create the folder."""
         ...
 
-    def list_user_items(self, conn: ArcGISConnectionInfo) -> List[dict]:
+    def list_user_items(self, conn: ArcGISConnectionInfo) -> JsonRows:
         """List raw content items owned by the connected user."""
         ...
 
@@ -61,7 +62,7 @@ class ArcGISDiscoveryProviderProtocol(Protocol):
         self,
         conn: ArcGISConnectionInfo,
         query: str,
-    ) -> List[dict]:
+    ) -> JsonRows:
         """Search raw portal items with provider-managed pagination."""
         ...
 
@@ -77,7 +78,7 @@ class ArcGISDiscoveryProviderProtocol(Protocol):
         self,
         conn: ArcGISConnectionInfo,
         service_url: str,
-    ) -> List[dict]:
+    ) -> JsonRows:
         """List layers/tables of a Feature Service URL."""
         ...
 
@@ -86,7 +87,7 @@ class ArcGISDiscoveryProviderProtocol(Protocol):
         conn: ArcGISConnectionInfo,
         query: str = "",
         scope: str = "user",
-    ) -> List[dict]:
+    ) -> JsonRows:
         """Search ArcGIS Online Feature Service items in a provider-owned way."""
         ...
 
@@ -110,7 +111,7 @@ class ArcGISReadProviderProtocol(Protocol):
         self,
         conn: ArcGISConnectionInfo,
         layer_url: str,
-    ) -> dict:
+    ) -> JsonObject:
         """Return field schema (fields, spatial reference) for a single layer."""
         ...
 
@@ -121,7 +122,7 @@ class ArcGISReadProviderProtocol(Protocol):
         where: str = "1=1",
         out_fields: str = "*",
         return_geometry: bool = True,
-        geometry_filter: Optional[dict] = None,
+        geometry_filter: Optional[JsonObject] = None,
         result_offset: int = 0,
         result_record_count: Optional[int] = None,
         order_by: Optional[str] = None,
@@ -152,7 +153,7 @@ class ArcGISWriteProviderProtocol(Protocol):
         geometry_column: str = "geometry",
         srid: int = 4326,
         operation: str = "add",
-    ) -> List[dict]:
+    ) -> JsonRows:
         """Convert tabular rows to ESRI JSON feature payloads."""
         ...
 
@@ -220,7 +221,7 @@ class ArcGISServiceAdminProviderProtocol(Protocol):
         self,
         conn: ArcGISConnectionInfo,
         layer_url: str,
-        drawing_info: dict,
+        drawing_info: JsonObject,
     ) -> ProviderResult:
         """Apply renderer/drawingInfo to a layer when the provider supports it."""
         ...

@@ -10,25 +10,51 @@ import time
 import uuid as _uuid
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Dict, Any, Optional
+from typing import Optional, TypedDict
 
 from app.config import settings
-from app.utils.logger import get_logger, open_run, close_run, set_run_context
-
-logger = get_logger(__name__)
-
-from app.core.scheduler.models import ScheduleConfig, LogStep
-from app.core.scheduler.schedule_service import ScheduleService
-from app.core.scheduler.log_service import ScheduleLogService
+from app.core.scheduler import db as scheduler_db
+from app.core.scheduler.artifact_store import ScheduleArtifactStore
 from app.core.scheduler.concurrency_manager import ConcurrencyManager
+from app.core.scheduler.log_service import ScheduleLogService
+from app.core.scheduler.models import ScheduleConfig, LogStep
 from app.core.scheduler.policy_engine import PolicyEngine
+from app.core.scheduler.schedule_service import ScheduleService
 from app.core.scheduler.scheduler_execution_runtime import (
+    SchedulerHeartbeatState,
+    SchedulerFailureResult,
     handle_failure,
     start_lock_heartbeat,
     stop_lock_heartbeat,
 )
 from app.core.scheduler.scheduler_preflight import pre_check_destination_connection
-from app.core.scheduler import db as scheduler_db
+from app.utils.logger import get_logger, open_run, close_run, set_run_context
+
+logger = get_logger(__name__)
+
+
+class SchedulerExecutionResult(TypedDict, total=False):
+    """External result payload returned by scheduler executions."""
+
+    success: bool
+    status: str
+    error: str
+    message: str
+    log_file: str
+    rows_written: int
+    lock_lost: bool
+
+
+class SchedulerCaricaResult(TypedDict, total=False):
+    """Internal result payload returned by scheduler-managed CARICA."""
+
+    success: bool
+    error: str
+    message: str
+    rows_written: int
+    rows_inserted: int
+    rows_updated: int
+    rows_skipped: int
 
 
 class ExecutionManager:
@@ -54,7 +80,6 @@ class ExecutionManager:
         # ConnectionService singleton — riusata in _get_orchestrator
         # _pre_check_connection, _execute_carica
         self._connection_service = None
-        from app.core.scheduler.artifact_store import ScheduleArtifactStore
         self._artifact_store = ScheduleArtifactStore()
 
     def _get_connection_service(self):
@@ -82,11 +107,16 @@ class ExecutionManager:
         )
         return stack.orchestrator
     
-    def _start_lock_heartbeat(self, schedule_id: str, interval: float = None, clock=None) -> Dict[str, Any]:
+    def _start_lock_heartbeat(
+        self,
+        schedule_id: str,
+        interval: Optional[float] = None,
+        clock=None,
+    ) -> SchedulerHeartbeatState:
         """Compatibility wrapper for scheduler_execution_runtime."""
         return start_lock_heartbeat(self.concurrency, schedule_id, interval, clock)
 
-    def _stop_lock_heartbeat(self, state: Dict[str, Any]) -> None:
+    def _stop_lock_heartbeat(self, state: SchedulerHeartbeatState) -> None:
         """Compatibility wrapper for scheduler_execution_runtime."""
         stop_lock_heartbeat(state)
 
@@ -96,7 +126,7 @@ class ExecutionManager:
         triggered_by: str = "cron",
         retry_attempt: int = 0,
         scheduled_for: Optional[str] = None,
-    ) -> Dict[str, Any]:
+    ) -> SchedulerExecutionResult:
         """
         Esegue una pipeline schedulata — metodo principale.
 
@@ -170,7 +200,7 @@ class ExecutionManager:
         # se uno dei due lati ha group_id None/vuoto
         proj_group_id = getattr(project_meta, "group_id", None) or None
 
-        def _isolation_failure(reason: str) -> dict:
+        def _isolation_failure(reason: str) -> SchedulerExecutionResult:
             logger.error(
                 f"Group isolation violation: schedule {schedule_id} "
                 f"(schedule_group={schedule_group_id!r}, project={project_id}, "
@@ -558,7 +588,7 @@ class ExecutionManager:
         config: ScheduleConfig,
         pipeline_result: dict,
         scheduled_for: Optional[str] = None,
-    ) -> dict:
+    ) -> SchedulerCaricaResult:
         """
         Esegue il caricamento su database con la configurazione dello schedule.
 
@@ -722,7 +752,7 @@ class ExecutionManager:
         start_time: float,
         run_id: str = "",
         scheduled_for: Optional[str] = None,
-    ) -> dict:
+    ) -> SchedulerFailureResult:
         """Compatibility wrapper for scheduler_execution_runtime."""
         return handle_failure(
             schedule_service=self.schedule_service,

@@ -10,13 +10,14 @@ from __future__ import annotations
 import csv
 from decimal import Decimal
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Protocol, Tuple
+from typing import Any, List, Optional, Protocol, Tuple
 
 from sqlalchemy import text
 from sqlalchemy.engine import Engine
 
 from app.config import settings
 from app.core.dataframes.tabular import dataframe_from_rows
+from app.db.sql_types import QueryParams
 from app.utils.logger import get_logger
 
 
@@ -150,7 +151,7 @@ def execute_streaming_to_file(
     engine_factory: StreamingEngineFactory,
     connection: StreamingConnection,
     sql: str,
-    params: Optional[Dict[str, Any]],
+    params: Optional[QueryParams],
     output_path: Path,
     output_format: str,
 ) -> Tuple[int, List[str]]:

@@ -4,7 +4,7 @@ Router admin backups — endpoint REST per la gestione backup PG -> S3.
 Tutti gli endpoint richiedono ruolo superadmin.
 """
 
-from typing import Any, Dict
+from typing import TypedDict
 
 from fastapi import APIRouter, Depends, HTTPException
 
@@ -22,10 +22,17 @@ from app.observability.audit_action import audit_action
 router = APIRouter(prefix="/admin/backups", tags=["admin-backups"])
 
 
+class AdminBackupsListResponse(TypedDict):
+    bucket: str
+    region: str
+    count: int
+    items: list[service.BackupObjectPayload]
+
+
 @router.get("")
 def list_backups_endpoint(
     _user: CurrentUser = Depends(require_superadmin),
-) -> Dict[str, Any]:
+) -> AdminBackupsListResponse:
     """Lista dei dump presenti nel bucket S3."""
     # FIXME: #4 (2026-04-23): dep runtime mancante (botocore[crt]) -> 503
     # esplicito invece di lista vuota fuorviante
@@ -75,7 +82,7 @@ def list_backups_endpoint(
 @router.get("/status")
 def backup_status_endpoint(
     _user: CurrentUser = Depends(require_superadmin),
-) -> Dict[str, Any]:
+) -> service.LastBackupRunStatus:
     """Stato dell'ultimo run del service plenora-backup."""
     return service.get_last_run_status()
 
@@ -83,7 +90,7 @@ def backup_status_endpoint(
 @router.get("/schedule")
 def backup_schedule_endpoint(
     _user: CurrentUser = Depends(require_superadmin),
-) -> Dict[str, Any]:
+) -> service.BackupScheduleInfo:
     """Info sul prossimo run schedulato del timer plenora-backup."""
     return service.get_schedule_info()
 
@@ -98,6 +105,6 @@ def backup_trigger_endpoint(
     # "chi ha lanciato il backup" e' la sola informazione interessante
     # RBAC invariato: la dependency e' sempre `require_superadmin`
     current_user: CurrentUser = Depends(require_superadmin),
-) -> Dict[str, Any]:
+) -> service.ManualBackupTriggerResult:
     """Lancia un backup manuale on-demand. Rifiuta se gia' in corso."""
     return service.trigger_manual_backup()

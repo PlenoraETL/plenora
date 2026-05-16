@@ -10,6 +10,7 @@ from app.core.dataframes.ports import FrameLike
 from app.core.dataframes.tabular import (
     coerce_datetime_series,
     coerce_numeric_series,
+    float_series_non_null_whole_numbers,
     is_bool_series,
     is_float_series,
     is_numeric_series,
@@ -89,7 +90,7 @@ def _coerce_fill_value_for_numeric(value: Any, col_name: str, dtype: Any) -> Any
         # pd.to_numeric su scalar puo' ritornare numpy scalar: estrai .item
         # per consistenza tipo-Python (float/int nativo
         return coerced.item() if hasattr(coerced, "item") else coerced
-    # Dict, list, tuple, datetime, ecc.: niente upcast accettabile
+    # Mapping, list, tuple, datetime, ecc.: niente upcast accettabile
     raise ValueError(
         f"op_fill_na: colonna numerica '{col_name}' (dtype={dtype}) "
         f"non puo' essere riempita con valore di tipo {type(value).__name__} "
@@ -241,8 +242,7 @@ def op_type_cast(
             # numerico in stringa si aspetta "34", non "34.0". Se tutti
             # i non-NaN sono interi, formattali senza la coda decimale.
             if is_float_series(col):
-                non_nan = col.dropna()
-                if not non_nan.empty and (non_nan % 1 == 0).all():
+                if float_series_non_null_whole_numbers(col):
                     result[column] = col.apply(
                         lambda x: "" if is_null_scalar(x) else str(int(x))
                     )

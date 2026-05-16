@@ -15,6 +15,7 @@ from typing import Mapping, Optional
 
 from app.config import settings
 from app.core.resources.bounded_reader import read_stream_bounded
+from app.shared.contracts.payloads import ObjectMap
 from app.shared.resources.file_cleanup import rmtree_safe
 from app.utils.logger import get_logger
 
@@ -190,7 +191,7 @@ def find_output_keys(task_id: str) -> list[str]:
     ]
 
 
-def open_stream(key: str) -> dict:
+def open_stream(key: str) -> ObjectMap:
     return storage.open_stream(key)
 
 

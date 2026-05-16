@@ -21,12 +21,37 @@ def _make_service() -> ScheduleService:
     return ScheduleService()
 
 
-def test_update_schedule_clear_destination_disables_precheck(schedule_config):
-    service = _make_service()
+def _row_from_config(schedule_config: object) -> ScheduleRow:
+    return ScheduleRow(
+        id=schedule_config.id,
+        group_id="grp-1",
+        project_id=schedule_config.pipeline.project_id,
+        name=schedule_config.pipeline.project_name or schedule_config.id,
+        cron_expression=schedule_config.schedule.cron_expression,
+        is_enabled=schedule_config.schedule.enabled,
+        config=schedule_config.model_dump(mode="json"),
+        created_at=schedule_config.created_at,
+        updated_at=schedule_config.updated_at,
+        created_by="user-1",
+    )
 
-    with patch.object(service, "get_schedule", return_value=schedule_config), \
-         patch("app.core.scheduler.schedule_service.db.update_schedule") as mock_update, \
-         patch.object(service, "_calculate_next_execution", return_value=datetime.now(timezone.utc)):
+
+def test_update_schedule_clear_destination_disables_precheck(schedule_config, monkeypatch):
+    service = _make_service()
+    calls = []
+
+    def fake_locked_update(schedule_id, callback):
+        calls.append(schedule_id)
+        fields = callback(_row_from_config(schedule_config))
+        calls.append(fields)
+        return _row_from_config(schedule_config) if fields is not None else None
+
+    monkeypatch.setattr(
+        "app.core.scheduler.schedule_service.db.update_schedule_locked",
+        fake_locked_update,
+    )
+
+    with patch.object(service, "_calculate_next_execution", return_value=datetime.now(timezone.utc)):
         updated = service.update_schedule(
             schedule_config.id,
             ScheduleUpdate(clear_destination=True),
@@ -35,19 +60,63 @@ def test_update_schedule_clear_destination_disables_precheck(schedule_config):
     assert updated is not None
     assert updated.destination is None
     assert updated.pre_check.verify_destination_connection is False
-    assert mock_update.called
+    assert calls[0] == schedule_config.id
+    assert calls[1] is not None
+    assert "config" in calls[1]
 
 
-def test_toggle_schedule_refuses_to_enable_orphan(schedule_config):
+def test_toggle_schedule_refuses_to_enable_orphan(schedule_config, monkeypatch):
     service = _make_service()
     schedule_config.runtime.status = "orphan"
+    calls = []
 
-    with patch.object(service, "get_schedule", return_value=schedule_config), \
-         patch("app.core.scheduler.schedule_service.db.update_schedule") as mock_update:
-        result = service.toggle_schedule(schedule_config.id, enabled=True)
+    def fake_locked_update(schedule_id, callback):
+        calls.append(schedule_id)
+        fields = callback(_row_from_config(schedule_config))
+        calls.append(fields)
+        return _row_from_config(schedule_config) if fields is not None else None
+
+    monkeypatch.setattr(
+        "app.core.scheduler.schedule_service.db.update_schedule_locked",
+        fake_locked_update,
+    )
+
+    result = service.toggle_schedule(schedule_config.id, enabled=True)
 
     assert result is None
-    assert not mock_update.called
+    assert calls == [schedule_config.id, None]
+
+
+def test_update_runtime_merges_against_locked_schedule_row(schedule_config, monkeypatch):
+    service = _make_service()
+    schedule_config.runtime.total_runs = 4
+    schedule_config.runtime.success_count = 2
+    captured = {}
+
+    def fail_get_schedule(_schedule_id):
+        raise AssertionError("runtime RMW must use the locked DB row")
+
+    def fake_locked_update(schedule_id, callback):
+        fields = callback(_row_from_config(schedule_config))
+        captured["schedule_id"] = schedule_id
+        captured["fields"] = fields
+        return _row_from_config(schedule_config) if fields is not None else None
+
+    monkeypatch.setattr(service, "get_schedule", fail_get_schedule)
+    monkeypatch.setattr(
+        "app.core.scheduler.schedule_service.db.update_schedule_locked",
+        fake_locked_update,
+    )
+    monkeypatch.setattr(service, "_calculate_next_execution", lambda *_args: None)
+
+    result = service.update_runtime(schedule_config.id, "completed")
+
+    assert result is not None
+    assert result.runtime.total_runs == 5
+    assert result.runtime.success_count == 3
+    assert captured["schedule_id"] == schedule_config.id
+    assert captured["fields"]["config"]["runtime"]["total_runs"] == 5
+    assert captured["fields"]["config"]["runtime"]["success_count"] == 3
 
 
 def test_get_schedule_consumes_typed_schedule_row(schedule_config, monkeypatch):

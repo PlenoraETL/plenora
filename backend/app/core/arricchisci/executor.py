@@ -5,7 +5,7 @@ Keeps API enrichment behavior isolated from orchestration callers.
 """
 
 import time as _time
-from typing import Dict, Any, Optional
+from typing import Optional
 
 from app.core.projects.canvas_models import CanvasState
 from app.config import settings
@@ -17,8 +17,9 @@ from app.core.arricchisci.canvas_orchestrator import (
 )
 from app.core.arricchisci.enrichment_service import EnrichmentExecutor
 from app.core.arricchisci.models import EnrichmentOptions
+from app.core.arricchisci.types import JsonObject
 from app.core.arricchisci.parallel import should_execute_node
-from app.core.dataframes.frame_io import sanitize_for_json
+from app.core.dataframes.tabular import dataframe_preview_records, non_null_head_values
 from app.core.projects.columns_metadata import save_columns_metadata_with_retry
 
 logger = get_logger(__name__)
@@ -39,7 +40,7 @@ class EnrichExecutor:
         format: str = 'csv',
         run_id: str = None,
         intermediate_mode_override: Optional[str] = None,
-    ) -> Dict[str, Any]:
+    ) -> JsonObject:
         """Esegue la pipeline di arricchimento tramite API esterne.
 
         `intermediate_mode_override` (R-25 PR-B2.b): kwarg passing-through
@@ -116,7 +117,7 @@ class EnrichExecutor:
         })
         return res
 
-    def preview(self, project_id: str, canvas: CanvasState, limit: int = 10) -> Dict[str, Any]:
+    def preview(self, project_id: str, canvas: CanvasState, limit: int = 10) -> JsonObject:
         """
         Preview ARRICCHISCI: replica il loop dell'enrichment_task ma in modo sincrono,
         senza Celery, e tronca l'output a `limit` righe.
@@ -254,7 +255,7 @@ class EnrichExecutor:
                 if dtype == "bool":           return "bool"
                 if dtype.startswith("datetime"): return "date"
                 if dtype == "object":
-                    for val in series.dropna().head(3):
+                    for val in non_null_head_values(series, 3):
                         if not isinstance(val, str):
                             break
                         v = val.strip()
@@ -265,7 +266,7 @@ class EnrichExecutor:
                 return "string"
 
             columns = [{"name": c, "type": _col_type(c, preview_df[c])} for c in preview_df.columns]
-            rows = sanitize_for_json(preview_df.to_dict(orient="records"))
+            rows = dataframe_preview_records(result_df, limit)
 
             return {
                 "success": True,

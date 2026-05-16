@@ -6,14 +6,17 @@ Mixin API GENERATOR + API ENRICHER + JSON PATH UTIL per
 
 from __future__ import annotations
 
-import time
-
 import re
-from typing import Any, Dict, List, Optional
+from typing import Any, Optional
 
 import requests
 
-from app.core.dataframes.tabular import dataframe_from_records
+from app.core.dataframes.tabular import (
+    dataframe_first_row_dict,
+    dataframe_from_records,
+    iter_dataframe_indexed_rows,
+    set_cell_value,
+)
 from app.core.dataframes.values import is_null_scalar
 from app.observability.log_sanitization import sanitize_for_log
 from app.core.security.outbound_url import validate_external_url
@@ -21,6 +24,11 @@ from app.infrastructure.http.session import get_shared_session
 from app.shared.resources.json_path import extract_json_value as _shared_extract_json_value
 from app.utils.logger import get_logger
 from app.core.arricchisci.response_parser import ResponseParser, get_preset_config
+from app.core.arricchisci._rate_limiter import (
+    RateLimiter,
+    rate_limit_scope_for_api_config,
+)
+from app.core.arricchisci.types import JsonObject, JsonRows
 from app.core.artifacts.static_parameters import process_static_fields
 
 # Stesso logger name di `api_connector.py` (`__name__` valuta a
@@ -43,8 +51,8 @@ class ApiConnectionGeneratorEnricherMixin:
     # '' (no-pag), 'offset', 'cursor', 'link'
 
     def _paginate_generator_results(
-        self, *, call_fn, pagination: Dict, base_params: Dict
-    ) -> List[Dict]:
+        self, *, call_fn, pagination: JsonObject, base_params: JsonObject
+    ) -> JsonRows:
         """Esegue la paginazione del generator dispatchando su `pagination['type']`.
 
         - `''` (vuoto): singola chiamata, ritorna tutto.
@@ -68,7 +76,7 @@ class ApiConnectionGeneratorEnricherMixin:
 
         page_size = int(pagination.get('page_size', 100))
         max_rows = int(pagination.get('max_rows', 10000))
-        all_rows: List[Dict] = []
+        all_rows: JsonRows = []
         page_num = 0
         MAX_PAGES = max(1, max_rows // max(1, page_size)) + 1
 
@@ -164,7 +172,7 @@ class ApiConnectionGeneratorEnricherMixin:
 
     @staticmethod
     def _substitute_url_path_params(
-        url: str, params: Dict, *, safe: str = "-._~:@!$&'()*+,=;/"
+        url: str, params: JsonObject, *, safe: str = "-._~:@!$&'()*+,=;/"
     ) -> tuple:
         """Sostituisce placeholder `{name}` nel URL con i valori da `params`.
 
@@ -182,7 +190,7 @@ class ApiConnectionGeneratorEnricherMixin:
         `test_api_connection`.
         """
         target_url = url
-        query_params: Dict = {}
+        query_params: JsonObject = {}
         for pname, pvalue in params.items():
             placeholder = f'{{{pname}}}'
             if placeholder in target_url:
@@ -197,12 +205,12 @@ class ApiConnectionGeneratorEnricherMixin:
         *,
         url: str,
         method: str,
-        headers: Dict,
-        call_params: Dict,
+        headers: JsonObject,
+        call_params: JsonObject,
         call_url: Optional[str],
         response_preset: str,
-        response_config: Dict,
-        output_mapping: List[Dict],
+        response_config: JsonObject,
+        output_mapping: JsonRows,
     ) -> tuple:
         """Esegue una singola chiamata del generator e parsa la response.
 
@@ -255,8 +263,8 @@ class ApiConnectionGeneratorEnricherMixin:
         return self._extract_rows_from_response(data, output_mapping), data, resp
 
     def _build_generator_base_params(
-        self, api_config: Dict, input_df: Optional[Any]
-    ) -> Dict:
+        self, api_config: JsonObject, input_df: Optional[Any]
+    ) -> JsonObject:
         """Costruisce i parametri base per `_execute_api_generator`.
 
         Strategie:
@@ -270,7 +278,7 @@ class ApiConnectionGeneratorEnricherMixin:
         """
         auth = api_config.get('auth', {}) or {}
         if input_df is not None and not input_df.empty:
-            row = input_df.iloc[0].to_dict()
+            row = dataframe_first_row_dict(input_df)
             base_params = {
                 k: str(v).strip()
                 for k, v in row.items()
@@ -300,7 +308,7 @@ class ApiConnectionGeneratorEnricherMixin:
 
         return base_params
 
-    def _execute_api_generator(self, api_config: Dict, input_df: Any = None) -> Any:
+    def _execute_api_generator(self, api_config: JsonObject, input_df: Any = None) -> Any:
         """
         Esegue API di tipo 'generator' — genera un DataFrame dalla risposta.
 
@@ -365,7 +373,11 @@ class ApiConnectionGeneratorEnricherMixin:
     # GET/POST → parse → estrai → scrivi colonne. Skip-on-row-error
     # resilience pattern
 
-    def _extract_rows_from_response(self, data: Any, output_mapping: List[Dict]) -> List[Dict]:
+    def _extract_rows_from_response(
+        self,
+        data: Any,
+        output_mapping: JsonRows,
+    ) -> JsonRows:
         """
         Estrae righe dalla response API usando output_mapping semplice.
         
@@ -462,14 +474,14 @@ class ApiConnectionGeneratorEnricherMixin:
         self,
         *,
         row,
-        api_config: Dict,
-        headers: Dict,
-        param_mapping: Dict,
-        output_mapping: List[Dict],
+        api_config: JsonObject,
+        headers: JsonObject,
+        param_mapping: JsonObject,
+        output_mapping: JsonRows,
         method: str,
         url: str,
         idx,
-    ) -> Optional[Dict]:
+    ) -> Optional[JsonObject]:
         """Esegue l'enrichment per una singola riga del DataFrame.
 
         Costruisce parametri (static + mappati da colonne + api_key in
@@ -513,14 +525,19 @@ class ApiConnectionGeneratorEnricherMixin:
             return None
 
         data = response.json()
-        extracted: Dict[str, Any] = {}
+        extracted: JsonObject = {}
         for mapping in output_mapping:
             path = mapping.get('path', '')
             col_name = mapping.get('column', path)
             extracted[col_name] = self._extract_json_value(data, path)
         return extracted
 
-    def _execute_api_enricher(self, df: Any, api_config: Dict, param_mapping: Dict) -> Any:
+    def _execute_api_enricher(
+        self,
+        df: Any,
+        api_config: JsonObject,
+        param_mapping: JsonObject,
+    ) -> Any:
         """
         Esegue API di tipo 'enricher' — arricchisce ogni riga del DataFrame.
         
@@ -562,16 +579,20 @@ class ApiConnectionGeneratorEnricherMixin:
         headers = _get_fresh_headers()
 
         rate_limit = api_config.get('options', {}).get('rate_limit', 5)
-        delay = 1.0 / rate_limit if rate_limit > 0 else 0
+        rate_limiter = RateLimiter(
+            rate_limit,
+            scope=rate_limit_scope_for_api_config(api_config),
+        )
 
         success_count = 0
         error_count = 0
 
-        for idx, row in df.iterrows():
+        for idx, row in iter_dataframe_indexed_rows(df):
             try:
                 if _is_oauth2:
                     headers = _get_fresh_headers()
 
+                rate_limiter.acquire()
                 extracted_values = self._enrich_one_row(
                     row=row,
                     api_config=api_config,
@@ -584,13 +605,10 @@ class ApiConnectionGeneratorEnricherMixin:
                 )
                 if extracted_values is not None:
                     for col_name, value in extracted_values.items():
-                        result_df.at[idx, col_name] = value
+                        set_cell_value(result_df, idx, col_name, value)
                     success_count += 1
                 else:
                     error_count += 1
-
-                if delay > 0:
-                    time.sleep(delay)
 
             except Exception as _row_err:
                 # skip-on-row-error per design (vedi docstring

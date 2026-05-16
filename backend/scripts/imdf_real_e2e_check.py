@@ -49,7 +49,6 @@ import tempfile
 import time
 import traceback
 import uuid
-import zipfile
 from pathlib import Path
 from urllib.parse import quote
 

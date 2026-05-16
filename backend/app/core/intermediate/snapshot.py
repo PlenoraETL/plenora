@@ -10,7 +10,7 @@ import hashlib
 import logging
 import time
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, TypeAlias
 
 from app.core.intermediate import node_snapshots_db as _node_snapshots_db
 from app.core.intermediate import policy as _policy
@@ -21,8 +21,12 @@ from app.core.dataframes.frame_io import (
     dataframe_hash_bytes,
     is_dataframe,
 )
+from app.core.dataframes.tabular import dataframe_head_records
 
 logger = logging.getLogger(__name__)
+
+SnapshotRow: TypeAlias = Dict[str, Any]
+ColumnSchema: TypeAlias = Dict[str, str]
 
 
 def _ms(t0: float) -> float:
@@ -231,9 +235,8 @@ def compute_dataframe_fingerprint(df: Any) -> tuple[str, str]:
 
 # Preview & row-hash helpers (interni
 
-def _build_preview_rows(df: Any, n_rows: int) -> List[Dict]:
-    """Ritorna `df.head(n_rows).to_dict(orient='records')` con
-    `_row_hash` per ogni riga.
+def _build_preview_rows(df: Any, n_rows: int) -> List[SnapshotRow]:
+    """Return preview records with `_row_hash` for each row.
 
     Per riusa `writer.compute_row_hash` per garantire che
     il `row_hash` di una riga preview sia identico a quello legacy
@@ -242,15 +245,13 @@ def _build_preview_rows(df: Any, n_rows: int) -> List[Dict]:
     """
     if df is None or n_rows <= 0:
         return []
-    head = df.head(n_rows)
-    if len(head) == 0:
+    rows = dataframe_head_records(df, n_rows)
+    if not rows:
         return []
 
     cols_sorted = sorted(map(str, df.columns.tolist()))
-    out: List[Dict] = []
-    # `to_dict(orient="records")` sulle prime N righe: O(N), accettabile
-    # con N=500 anche su DataFrame grandi
-    for row in head.to_dict(orient="records"):
+    out: List[SnapshotRow] = []
+    for row in rows:
         out.append({
             "_row_hash": compute_row_hash(row, cols_sorted),
             **row,
@@ -258,7 +259,7 @@ def _build_preview_rows(df: Any, n_rows: int) -> List[Dict]:
     return out
 
 
-def _build_full_rows_legacy(df: Any) -> List[Dict]:
+def _build_full_rows_legacy(df: Any) -> List[SnapshotRow]:
     """Materializza l'intero DataFrame in lista di dict + `_row_hash`.
 
     Equivalente al path legacy `writer.write_node`. SOLO mode
@@ -268,8 +269,8 @@ def _build_full_rows_legacy(df: Any) -> List[Dict]:
         return []
 
     cols_sorted = sorted(map(str, df.columns.tolist()))
-    out: List[Dict] = []
-    for row in df.to_dict(orient="records"):
+    out: List[SnapshotRow] = []
+    for row in dataframe_head_records(df, len(df)):
         out.append({
             "_row_hash": compute_row_hash(row, cols_sorted),
             **row,
@@ -277,7 +278,7 @@ def _build_full_rows_legacy(df: Any) -> List[Dict]:
     return out
 
 
-def _col_schema_from_df(df: Any) -> Dict[str, str]:
+def _col_schema_from_df(df: Any) -> ColumnSchema:
     """`{col_name: dtype_str}` come gia' fatto da writer.write_node."""
     if df is None:
         return {}

@@ -11,7 +11,7 @@ from __future__ import annotations
 import gc
 
 from pathlib import Path
-from typing import Any, Callable, Dict, Optional, Tuple
+from typing import Any, Callable, Optional, Tuple, TypedDict
 
 from app.core.dataframes.tabular import dataframe_preview_records
 from app.core.files.models import FileSourceLayersResponse, FileSourcePreview
@@ -24,6 +24,26 @@ TempFileFor = Callable[[str, Optional[str]], Optional[Path]]
 LoadByFormat = Callable[[Path, str, Optional[str], Optional[str]], Tuple[Any, Optional[Any]]]
 ListLayers = Callable[[Path], list[str]]
 ListSheets = Callable[[Path], list[str]]
+
+
+class FileSourceLayersPayload(TypedDict):
+    file_id: str
+    format: str
+    layers: list[str]
+    sheets: list[str]
+
+
+class FileSourcePreviewColumnPayload(TypedDict):
+    name: str
+    type: str
+
+
+class FileSourcePreviewPayload(TypedDict):
+    file_id: str
+    columns: list[FileSourcePreviewColumnPayload]
+    rows: list[dict[str, object]]
+    total_count: int
+    preview_count: int
 
 
 def _cleanup_temp_path(tmp_path: Path, format_type: str, *, logger: Any) -> None:
@@ -93,7 +113,7 @@ def get_layers_info(
     list_layers: ListLayers,
     list_sheets: ListSheets,
     logger: Any,
-) -> Dict[str, Any]:
+) -> FileSourceLayersPayload:
     """Return layer/sheet metadata for a persisted file source."""
     assert_visible(file_id, expected_group_id or "")
     file_source = get_file_source(file_id)
@@ -141,7 +161,7 @@ def get_preview(
     load_dataframe_for_preview: Callable[
         [str, Optional[str]], Tuple[Any, Optional[Any]]
     ],
-) -> Dict[str, Any]:
+) -> FileSourcePreviewPayload:
     """Return a row preview for a persisted file source."""
     assert_visible(file_id, expected_group_id or "")
     file_source = get_file_source(file_id)

@@ -9,8 +9,9 @@ import time as _time
 import traceback
 import uuid as _uuid
 from pathlib import PurePosixPath
-from typing import Any, Dict, Optional
+from typing import Any, Optional, TypedDict, cast
 
+from app.shared.contracts.payloads import HeadersMap, JsonObject
 from app.utils.logger import get_logger, open_run, close_run, set_run_context, append_step
 from app.config import settings
 from app.core.carica.arcgis_write_boundary import (
@@ -26,6 +27,24 @@ from workers.celery_app import celery_app, BaseTaskWithRetry
 logger = get_logger("workers.carica_task")
 
 
+class CaricaTaskResultPayload(TypedDict, total=False):
+    status: str
+    success: bool
+    message: str
+    error: str
+    error_message: str
+    project_id: str
+    task_id: str
+    run_id: str
+    result_id: str
+    output_file: str
+    output_filename: str
+    rows_written: int
+    rows_count: int
+    columns_count: int
+    total_rows: int
+
+
 @celery_app.task(
     bind=True,
     base=BaseTaskWithRetry,
@@ -39,14 +58,14 @@ logger = get_logger("workers.carica_task")
 def execute_carica_task(
     self,
     project_id: str,
-    canvas: Dict[str, Any],
-    carica_node_data: Dict[str, Any],
+    canvas: JsonObject,
+    carica_node_data: JsonObject,
     output_format: str = "geojson",
     force_recalculate: bool = False,
     triggered_by: str = "manual",
     run_id: Optional[str] = None,
     user_id: Optional[str] = None,
-) -> Dict[str, Any]:
+) -> CaricaTaskResultPayload:
     """Task asincrono per eseguire il caricamento su database.
 
     Retry policy: `max_retries=0` (fail-fast). Un retry automatico
@@ -106,7 +125,7 @@ def execute_carica_task(
     )
     if _revoked is not None:
         _revoked.update({"run_id": run_id, "task_id": task_id, "rows_written": 0})
-        return _revoked
+        return cast(CaricaTaskResultPayload, _revoked)
 
     _group_id = ""
     try:
@@ -278,7 +297,7 @@ def execute_carica_task(
             logger.debug(f"close_connection config fallito: {type(e).__name__}: {e}")
 
 
-def _select_carica_write_branch(carica_node_data: Dict[str, Any]) -> str:
+def _select_carica_write_branch(carica_node_data: JsonObject) -> str:
     """Return the write branch for a CARICA node without executing writes."""
     node_type = carica_node_data.get('type', '')
     dest_type = carica_node_data.get('dest_type', 'db')
@@ -415,10 +434,10 @@ def _execute_db_write(task, df, carica_node_data, project_id, task_id, triggered
 def _execute_rest_write(
     task: Any,
     df: Any,
-    carica_node_data: Dict[str, Any],
+    carica_node_data: JsonObject,
     project_id: str,
     task_id: str,
-) -> Dict[str, Any]:
+) -> CaricaTaskResultPayload:
     """Coordinate REST write progress while the domain owns REST payload writes."""
     _update_progress(task, 15, "Preparazione scrittura REST...")
 
@@ -433,7 +452,7 @@ def _execute_rest_write(
             config=parsed_config.sink_config,
             http_client=create_default_rest_http_client(),
         )
-        result = outcome.to_task_result()
+        result = cast(CaricaTaskResultPayload, outcome.to_task_result())
 
         is_success = result.get("success", False)
         rows = result.get("rows_written", 0) or 0
@@ -470,7 +489,7 @@ class _RequestsRestHttpClient:
         *,
         method: str,
         url: str,
-        headers: Dict[str, str],
+        headers: HeadersMap,
         json: Any,
         timeout: float,
     ) -> Any:
@@ -504,7 +523,7 @@ def create_default_rest_http_client() -> _RequestsRestHttpClient:
 def _execute_arcgis_write(
     task: Any,
     df: Any,
-    carica_node_data: Dict[str, Any],
+    carica_node_data: JsonObject,
     project_id: str,
     task_id: str,
 ) -> CaricaArcGISTaskResult:
@@ -590,7 +609,7 @@ def _update_progress(task, percent: int, message: str):
 
 def _load_upstream_data(
     project_id: str,
-    canvas: Dict[str, Any],
+    canvas: JsonObject,
     force_recalculate: bool,
     output_format: str,
 ) -> Optional[Any]:

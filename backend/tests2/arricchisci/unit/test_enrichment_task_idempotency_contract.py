@@ -10,11 +10,16 @@ import inspect
 
 import pytest
 
-from tests2._helpers.celery_eager import celery_eager
 from workers.tasks.enrichment_task import execute_enrichment_task
 
 
-pytestmark = [pytest.mark.unit, pytest.mark.arricchisci, pytest.mark.contract]
+pytestmark = [
+    pytest.mark.unit,
+    pytest.mark.arricchisci,
+    pytest.mark.contract,
+    pytest.mark.usefixtures("celery_eager"),
+]
+pytest_plugins = ("tests2._helpers.celery_eager",)
 
 
 def test_enrichment_task_accepts_run_id_kwarg():
@@ -28,7 +33,7 @@ def test_enrichment_task_accepts_run_id_kwarg():
 
 
 def test_enrichment_task_invokes_idempotency_check_when_run_id_passed(
-    celery_eager, monkeypatch,
+    monkeypatch,
 ):
     """Behavior: con run_id passato, il task invoca
     `is_already_completed(run_id)` PRIMA di qualsiasi altra logica."""
@@ -63,7 +68,7 @@ def test_enrichment_task_invokes_idempotency_check_when_run_id_passed(
 
 
 def test_enrichment_task_returns_skipped_idempotent_when_already_completed(
-    celery_eager, monkeypatch,
+    monkeypatch,
 ):
     """Behavior: se `is_already_completed` ritorna True per il run_id,
     il task ritorna immediatamente uno status='skipped_idempotent' e

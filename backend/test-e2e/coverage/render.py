@@ -26,7 +26,6 @@ if str(_HERE) not in sys.path:
 from matrices import ALL_MATRICES, Matrix  # noqa: E402
 from coverage_parser import (  # noqa: E402
     CoverageData,
-    CoverageStats,
     TestRef,
     build_coverage,
     cell_key,

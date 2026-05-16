@@ -5,6 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Mapping, Optional, Tuple
 
+from app.shared.contracts.payloads import JsonRows, ObjectMap
+
 
 @dataclass(frozen=True)
 class FolderEnsureResult:
@@ -25,7 +27,7 @@ class ItemListingResult:
 
     items: Tuple[Mapping[str, object], ...]
 
-    def to_compat_list(self) -> list[dict]:
+    def to_compat_list(self) -> JsonRows:
         """Return the legacy list of raw portal item dictionaries."""
         return [dict(item) for item in self.items]
 
@@ -36,7 +38,7 @@ class ItemSearchResult:
 
     items: Tuple[Mapping[str, object], ...]
 
-    def to_compat_list(self) -> list[dict]:
+    def to_compat_list(self) -> JsonRows:
         """Return the legacy list of raw search result dictionaries."""
         return [dict(item) for item in self.items]
 
@@ -48,7 +50,7 @@ class RendererUpdateResult:
     success: bool
     message: str
 
-    def to_compat_dict(self) -> dict:
+    def to_compat_dict(self) -> ObjectMap:
         """Return the legacy ``{success, message}`` provider shape."""
         return {"success": self.success, "message": self.message}
 
@@ -62,7 +64,7 @@ class ItemDeleteResult:
     item_id: str
     response: Optional[Mapping[str, object]] = None
 
-    def to_compat_dict(self) -> dict:
+    def to_compat_dict(self) -> ObjectMap:
         """Return the legacy item delete dictionary shape."""
         result = {
             "success": self.success,

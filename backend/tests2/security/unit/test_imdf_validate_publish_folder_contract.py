@@ -106,7 +106,8 @@ def stub_externals(monkeypatch):
     return {"service_discovery": service_discovery_mod}
 
 
-def test_validate_publish_without_folder_has_no_folder_mismatch(fake_bundle, stub_externals):
+@pytest.mark.usefixtures("stub_externals")
+def test_validate_publish_without_folder_has_no_folder_mismatch(fake_bundle):
     """Comportamento baseline: senza folder nel request, mai warning
     FOLDER_MISMATCH nel report (retrocompat)."""
     from app.core.imdf.validator import validate_publish
@@ -122,7 +123,8 @@ def test_validate_publish_without_folder_has_no_folder_mismatch(fake_bundle, stu
     assert "FOLDER_MISMATCH" not in codes
 
 
-def test_validate_publish_folder_no_existing_fs_no_mismatch(fake_bundle, stub_externals):
+@pytest.mark.usefixtures("stub_externals")
+def test_validate_publish_folder_no_existing_fs_no_mismatch(fake_bundle):
     from app.core.imdf.validator import validate_publish
 
     report = validate_publish(
@@ -136,7 +138,8 @@ def test_validate_publish_folder_no_existing_fs_no_mismatch(fake_bundle, stub_ex
     assert "FOLDER_MISMATCH" not in codes
 
 
-def test_validate_publish_folder_matches_existing_no_warning(fake_bundle, stub_externals, monkeypatch):
+@pytest.mark.usefixtures("stub_externals")
+def test_validate_publish_folder_matches_existing_no_warning(fake_bundle, monkeypatch):
     import app.core.imdf.arcgis.service_discovery as service_discovery_mod
 
     # FS esistente con ownerFolder == "MyFolder"
@@ -158,7 +161,8 @@ def test_validate_publish_folder_matches_existing_no_warning(fake_bundle, stub_e
     assert report["fs_exists"] is True
 
 
-def test_validate_publish_folder_mismatch_emits_warning(fake_bundle, stub_externals, monkeypatch):
+@pytest.mark.usefixtures("stub_externals")
+def test_validate_publish_folder_mismatch_emits_warning(fake_bundle, monkeypatch):
     import app.core.imdf.arcgis.service_discovery as service_discovery_mod
 
     # FS esistente nella folder "OtherFolder", utente chiede "MyFolder"
@@ -185,7 +189,8 @@ def test_validate_publish_folder_mismatch_emits_warning(fake_bundle, stub_extern
     assert folder_issues[0].get("severity") == "warning"
 
 
-def test_validate_publish_folder_id_resolves_to_title_no_warning(fake_bundle, stub_externals, monkeypatch):
+@pytest.mark.usefixtures("stub_externals")
+def test_validate_publish_folder_id_resolves_to_title_no_warning(fake_bundle, monkeypatch):
     """L'API ArcGIS restituisce ownerFolder come folder ID (hash), mentre
     l'utente sceglie una folder per TITLE. Il validator deve risolvere
     l'ID → title via _list_user_folders prima di confrontare. Se la folder
@@ -218,7 +223,8 @@ def test_validate_publish_folder_id_resolves_to_title_no_warning(fake_bundle, st
     )
 
 
-def test_validate_publish_folder_id_mismatch_uses_title_in_message(fake_bundle, stub_externals, monkeypatch):
+@pytest.mark.usefixtures("stub_externals")
+def test_validate_publish_folder_id_mismatch_uses_title_in_message(fake_bundle, monkeypatch):
     """Quando il mismatch è reale, il messaggio di warning deve mostrare
     il title risolto, non l'ID hash."""
     import app.core.imdf.arcgis.service_discovery as service_discovery_mod
@@ -251,7 +257,8 @@ def test_validate_publish_folder_id_mismatch_uses_title_in_message(fake_bundle, 
     assert "hash-abc" not in msg, f"Messaggio NON deve contenere l'id raw. msg={msg}"
 
 
-def test_validate_publish_folder_mismatch_replace_still_ok(fake_bundle, stub_externals, monkeypatch):
+@pytest.mark.usefixtures("stub_externals")
+def test_validate_publish_folder_mismatch_replace_still_ok(fake_bundle, monkeypatch):
     """Anche con folder diverso, replace resta 'ok' (è un warning, non error)."""
     import app.core.imdf.arcgis.service_discovery as service_discovery_mod
 

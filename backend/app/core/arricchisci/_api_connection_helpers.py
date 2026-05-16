@@ -6,14 +6,13 @@ node-data accessor.
 
 from __future__ import annotations
 
-from typing import Dict
-
 from app.infrastructure.security.crypto import (
     CredentialUnavailableError,
     decrypt as _crypto_decrypt,
     encrypt as _crypto_encrypt,
     is_encrypted as _crypto_is_encrypted,
 )
+from app.core.arricchisci.types import JsonObject
 
 
 # Campi sensibili nel blocco auth di una API connection — vengono cifrati
@@ -30,7 +29,7 @@ _AUTH_SENSITIVE_FIELDS = (
 )
 
 
-def _encrypt_auth_in_config(config: Dict) -> Dict:
+def _encrypt_auth_in_config(config: JsonObject) -> JsonObject:
     """Cifra in-place i campi sensibili di config['auth']. Idempotente."""
     auth = config.get("auth")
     if not isinstance(auth, dict):
@@ -42,7 +41,7 @@ def _encrypt_auth_in_config(config: Dict) -> Dict:
     return config
 
 
-def _decrypt_auth_in_config(config: Dict, *, strict: bool = False) -> Dict:
+def _decrypt_auth_in_config(config: JsonObject, *, strict: bool = False) -> JsonObject:
     """Decifra in-place i campi sensibili di config['auth']. Idempotente.
 
     Se ``strict=True``, un campo con prefisso ``enc:`` il cui decrypt ritorna
@@ -67,7 +66,7 @@ def _decrypt_auth_in_config(config: Dict, *, strict: bool = False) -> Dict:
     return config
 
 
-def _nd(node: dict, key: str, default=None):
+def _nd(node: JsonObject, key: str, default=None):
     """Legge un campo flat dal nodo dict, con fallback su node['data'] (backward compat)."""
     val = node.get(key)
     if val is not None:

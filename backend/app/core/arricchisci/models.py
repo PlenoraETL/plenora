@@ -5,9 +5,11 @@ Keeps API enrichment behavior isolated from orchestration callers.
 """
 
 from enum import Enum
-from typing import Dict, List, Optional
+from typing import List, Optional
 from dataclasses import dataclass, field, asdict
 from datetime import datetime, timezone
+
+from app.core.arricchisci.types import JsonObject
 
 
 class RowStatus(str, Enum):
@@ -49,7 +51,7 @@ class BatchConfig:
     method_override: Optional[str] = None
     
     @classmethod
-    def from_dict(cls, data: Dict) -> "BatchConfig":
+    def from_dict(cls, data: JsonObject) -> "BatchConfig":
         """Crea BatchConfig da dizionario (es. da JSON template)."""
         if not data:
             return cls()
@@ -68,7 +70,7 @@ class BatchConfig:
             method_override=data.get("method_override")
         )
     
-    def to_dict(self) -> Dict:
+    def to_dict(self) -> JsonObject:
         return {
             "enabled": self.enabled,
             "max_size": self.max_size,
@@ -89,12 +91,12 @@ class RowError:
     status: RowStatus
     error_message: str
     error_type: str = ""          # es. "timeout", "http_429", "validation"
-    input_params: Dict = field(default_factory=dict)
+    input_params: JsonObject = field(default_factory=dict)
     http_status: Optional[int] = None
     retry_count: int = 0
     timestamp: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
     
-    def to_dict(self) -> Dict:
+    def to_dict(self) -> JsonObject:
         result = asdict(self)
         result["status"] = self.status.value
         return result
@@ -136,7 +138,7 @@ class EnrichmentStats:
             return 0.0
         return self.cached / total_lookups * 100
     
-    def to_dict(self) -> Dict:
+    def to_dict(self) -> JsonObject:
         result = asdict(self)
         result["success_rate"] = round(self.success_rate, 2)
         result["cache_hit_rate"] = round(self.cache_hit_rate, 2)
@@ -188,7 +190,7 @@ class EnrichmentOptions:
     validate_input: bool = True           # Valida input prima di chiamare API
     skip_null_params: bool = True         # Salta righe con parametri nulli
     
-    def to_dict(self) -> Dict:
+    def to_dict(self) -> JsonObject:
         return asdict(self)
 
 
@@ -211,7 +213,7 @@ class EnrichmentResult:
     output_file: Optional[str] = None
     error_report_file: Optional[str] = None
     
-    def to_dict(self) -> Dict:
+    def to_dict(self) -> JsonObject:
         return {
             "success": self.success,
             "stats": self.stats.to_dict(),
@@ -239,11 +241,11 @@ class PreviewResult:
     estimated_total_time_seconds: float
     estimated_api_calls: int          # Dopo deduplicazione
     unique_param_combinations: int    # Combinazioni uniche trovate
-    preview_data: List[Dict] = field(default_factory=list)  # Prime N righe risultato
+    preview_data: list[JsonObject] = field(default_factory=list)  # Prime N righe risultato
     errors: List[RowError] = field(default_factory=list)
     warnings: List[str] = field(default_factory=list)
     
-    def to_dict(self) -> Dict:
+    def to_dict(self) -> JsonObject:
         return {
             "sample_size": self.sample_size,
             "success_count": self.success_count,
@@ -285,7 +287,7 @@ class EnrichmentValidationResult:
     null_param_rows: List[int] = field(default_factory=list)  # Indici righe con param nulli
     warnings: List[str] = field(default_factory=list)
     
-    def to_dict(self) -> Dict:
+    def to_dict(self) -> JsonObject:
         return {
             "valid": self.valid,
             "total_rows": self.total_rows,

@@ -6,17 +6,19 @@ Helper centrale per costruire risposte di errore con shape standard
 
 from __future__ import annotations
 
-from typing import Any, Dict, Mapping, NoReturn, Optional
+from typing import Any, Mapping, NoReturn, Optional
 
 from fastapi import HTTPException
 from fastapi.responses import JSONResponse
+
+from app.shared.contracts.payloads import JsonObject
 
 
 def build_error_envelope_body(
     error: str,
     message: str,
     details: Optional[Mapping[str, Any]] = None,
-) -> Dict[str, Any]:
+) -> JsonObject:
     """Costruisce il body dual-shape dell'error envelope.
 
     Args:
@@ -39,13 +41,13 @@ def build_error_envelope_body(
     (immutabile per convenzione del caller); sharing e' sicuro.
     """
     safe_details = dict(details) if details is not None else {}
-    envelope: Dict[str, Any] = {
+    envelope: JsonObject = {
         "error": error,
         "message": message,
         "details": safe_details,
     }
 
-    mirror: Dict[str, Any] = {
+    mirror: JsonObject = {
         "error": error,
         "message": message,
         "details": safe_details,
@@ -87,7 +89,7 @@ def build_error_response(
 def normalize_http_exception_detail(
     status_code: int,
     detail: Any,
-) -> Dict[str, Any]:
+) -> JsonObject:
     """Normalizza il `detail` di un `HTTPException` nelle 3 chiavi
     canoniche `error`/`message`/`details`.
 
@@ -200,14 +202,14 @@ def raise_typed_http(
     if not message:
         raise ValueError("message must be non-empty")
 
-    safe_details: Dict[str, Any] = {}
+    safe_details: JsonObject = {}
     if details:
         safe_details = {
             k: v for k, v in details.items()
             if k not in ("error", "message")
         }
 
-    detail: Dict[str, Any] = {
+    detail: JsonObject = {
         "error": code,
         "message": message,
         "details": safe_details,

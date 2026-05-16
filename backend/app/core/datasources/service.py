@@ -5,7 +5,7 @@ import uuid
 from io import BytesIO
 from pathlib import Path
 from datetime import datetime, timezone
-from typing import Optional
+from typing import Mapping, Optional, TypeAlias
 
 from app.config import settings
 from app.utils.logger import get_logger
@@ -34,12 +34,13 @@ logger = get_logger(__name__)
 
 # Keep redaction and at-rest encryption field lists in sync.
 _SENSITIVE_FIELDS = ["password", "private_key", "private_key_passphrase", "client_secret"]
+DataSourceRuntimeConfig: TypeAlias = dict[str, object]
 
 
 class DataSourceService:
     """
     CRUD + operazioni file per i Data Source.
-    Configurazioni nel DB (PostgreSQL), scan_state su filesystem (runtime).
+    Configurazioni e scan_state runtime nel DB (PostgreSQL).
     """
 
     def __init__(self) -> None:
@@ -59,7 +60,7 @@ class DataSourceService:
         row: datasource_db.DataSourceRow,
         *,
         strict: bool = False,
-    ) -> Optional[dict[str, object]]:
+    ) -> Optional[DataSourceRuntimeConfig]:
         """Estrae il config dict da una row già fetchata (no re-query).
 
         Equivalente in-memory di _get_full_config ma senza re-fetch dal DB.
@@ -243,7 +244,7 @@ class DataSourceService:
         *,
         layer: Optional[str] = None,
         sheet: Optional[str] = None,
-    ) -> dict:
+    ) -> Mapping[str, object]:
         """Inferisce colonne/formato di un file esposto da un Data Source.
 
         Il datasource resta la boundary di lettura remota; il parsing riusa
@@ -279,9 +280,38 @@ class DataSourceService:
             return ds.file_exists(path)
 
     def get_scan_state(self, ds_id: str) -> ScanState:
+        row = datasource_db.get_scan_state(ds_id)
+        if row and row.scan_state is not None:
+            try:
+                return ScanState(**row.scan_state)
+            except Exception as e:
+                logger.error(
+                    f"[GESTITO] Scan state DB invalido per {ds_id}: {e}. "
+                    "Scan riparte da zero.",
+                    op="get_scan_state",
+                )
+                return ScanState()
+
+        legacy_state = self._load_legacy_scan_state(ds_id)
+        if legacy_state is None:
+            return ScanState()
+        if row:
+            try:
+                datasource_db.save_scan_state(
+                    ds_id,
+                    legacy_state.model_dump(mode="json"),
+                )
+            except Exception as e:
+                logger.warning(
+                    "Migrazione legacy scan_state fallita per %s: %s: %s",
+                    ds_id, type(e).__name__, e,
+                )
+        return legacy_state
+
+    def _load_legacy_scan_state(self, ds_id: str) -> Optional[ScanState]:
         path = self._scan_state_path(ds_id)
         if not path.exists():
-            return ScanState()
+            return None
         try:
             data = json.loads(path.read_text(encoding="utf-8"))
             return ScanState(**data)
@@ -303,15 +333,18 @@ class DataSourceService:
                     f"Rename fallito ({rename_err}): manual cleanup necessario.",
                     op="get_scan_state"
                 )
-            return ScanState()
+            return None
 
     def save_scan_state(self, ds_id: str, state: ScanState) -> None:
-        path = self._scan_state_path(ds_id)
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(
-            json.dumps(state.model_dump(mode="json"), indent=2, ensure_ascii=False, default=str),
-            encoding="utf-8"
+        saved = datasource_db.save_scan_state(
+            ds_id,
+            state.model_dump(mode="json"),
         )
+        if not saved:
+            logger.warning(
+                "Scan state non salvato: datasource %s non trovato nel DB",
+                ds_id,
+            )
 
     def mark_as_processed(self, ds_id: str, filename: str, pipeline_id: str) -> None:
         from app.core.datasources.models import ProcessedEntry, SnapshotEntry
@@ -343,7 +376,12 @@ class DataSourceService:
         self.save_scan_state(ds_id, state)
         logger.info(f"File processato: {filename} (ds={ds_id}, pipeline={pipeline_id})")
 
-    def _get_full_config(self, ds_id: str, *, strict: bool = False) -> Optional[dict[str, object]]:
+    def _get_full_config(
+        self,
+        ds_id: str,
+        *,
+        strict: bool = False,
+    ) -> Optional[DataSourceRuntimeConfig]:
         """Recupera la config completa (con credenziali) dal DB.
 
         I campi sensibili (password, private_key, ...) sono cifrati at-rest

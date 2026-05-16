@@ -5,8 +5,9 @@ Keeps provider-specific behavior behind a narrow integration boundary.
 """
 
 import time
+from collections.abc import Mapping
 from pathlib import Path
-from typing import List, Optional, Dict, Any, Tuple, Protocol
+from typing import List, Optional, Tuple, Protocol
 
 from app.config import settings
 from app.utils.logger import get_logger
@@ -42,6 +43,12 @@ logger = get_logger(__name__)
 # per preservare la superficie importata dai test
 
 DEFAULT_GROUP = "default"
+
+ArcGISServiceInfo = Mapping[str, object]
+ArcGISFolderInfo = Mapping[str, object]
+ArcGISLayerInfo = Mapping[str, object]
+ArcGISLayerSchema = Mapping[str, object]
+ArcGISQueryExecutionResult = Mapping[str, object]
 
 
 def _ensure_default_group() -> None:
@@ -184,7 +191,7 @@ class FeaturesService:
     
     # BROWSE: SERVIZI E LAYER
     
-    def browse_services(self, connection_id: str) -> List[dict]:
+    def browse_services(self, connection_id: str) -> list[ArcGISServiceInfo]:
         """
         Lista i Feature Service disponibili nella connessione.
         
@@ -205,7 +212,7 @@ class FeaturesService:
         conn_info = self._to_connection_info(connection)
         return self._operations.list_services(conn_info)
     
-    def list_folders(self, connection_id: str) -> List[dict]:
+    def list_folders(self, connection_id: str) -> list[ArcGISFolderInfo]:
         """
         Lista le cartelle dell'utente nella connessione ArcGIS.
 
@@ -218,7 +225,12 @@ class FeaturesService:
         conn_info = self._to_connection_info(connection)
         return self._operations.list_folders(conn_info)
 
-    def search_services(self, connection_id: str, query: str = "", scope: str = "user") -> List[dict]:
+    def search_services(
+        self,
+        connection_id: str,
+        query: str = "",
+        scope: str = "user",
+    ) -> list[ArcGISServiceInfo]:
         """
         Cerca Feature Service su ArcGIS Online.
         
@@ -241,7 +253,7 @@ class FeaturesService:
         
         return self._operations.search_services(conn_info, query=query, scope=scope)
     
-    def browse_layers(self, connection_id: str, service_url: str) -> List[dict]:
+    def browse_layers(self, connection_id: str, service_url: str) -> list[ArcGISLayerInfo]:
         """
         Lista i layer di un Feature Service.
         
@@ -261,7 +273,7 @@ class FeaturesService:
         conn_info = self._to_connection_info(connection)
         return self._operations.list_layers(conn_info, service_url)
     
-    def get_layer_schema(self, connection_id: str, layer_url: str) -> dict:
+    def get_layer_schema(self, connection_id: str, layer_url: str) -> ArcGISLayerSchema:
         """
         Recupera lo schema di un layer (campi + metadata).
         
@@ -341,7 +353,7 @@ class FeaturesService:
         max_features: int = None,
         out_sr: int = None,
         geom_column: str = "geometry",
-    ) -> Dict[str, Any]:
+    ) -> ArcGISQueryExecutionResult:
         """
         Query completa con salvataggio file.
         
@@ -509,7 +521,7 @@ class FeaturesService:
         batch_size: Optional[int] = None,
         match_column: str = "",
         column_mappings: ArcGISColumnMappingsInput = None,
-    ) -> dict:
+    ) -> ArcGISFeatureWritePublicResult:
         """
         Scrive features su un layer ArcGIS esistente.
         
@@ -609,7 +621,7 @@ class FeaturesService:
         source_srid: Optional[int] = None,
         folder_id: str = "",
         column_mappings: ArcGISColumnMappingsInput = None,
-    ) -> dict:
+    ) -> ArcGISFeatureWritePublicResult:
         """
         Crea un nuovo Feature Service su ArcGIS Online con dati da file.
 
@@ -683,7 +695,7 @@ class FeaturesService:
         batch_size: Optional[int],
         match_column: str,
         column_mappings: ArcGISColumnMappingsInput,
-    ) -> dict:
+    ) -> ArcGISFeatureWritePublicResult:
         """Shared private write boundary for file-backed and DataFrame-backed writes."""
         return self._writer.write_features_df_core(
             conn_info=conn_info,

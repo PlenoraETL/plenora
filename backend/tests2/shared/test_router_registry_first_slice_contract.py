@@ -256,7 +256,7 @@ def test_bind_router_services_attribute_error_on_missing_field_propagates(
         pytest.param(
             "CONNECTIONS_BINDING",
             ("connection_service", "database_inspector"),
-            lambda only_one: None,
+            lambda _: None,
             id="2arg",
         ),
     ],

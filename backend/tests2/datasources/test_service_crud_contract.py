@@ -290,7 +290,49 @@ def test_create_datasource_generates_id_with_canonical_pattern(monkeypatch):
     assert saved[0]["created_by"] == "user-1"
 
 
-def test_get_scan_state_renames_corrupted_file_and_returns_empty(tmp_path):
+def test_datasource_scan_state_db_boundary_uses_datasources_row(monkeypatch):
+    """scan_state deve passare dal DB domain-owned, non dal JSON locale."""
+    import app.core.datasources.db as datasource_db
+
+    fetch_calls = []
+    execute_calls = []
+
+    def fake_fetchone(query, params=()):
+        fetch_calls.append((query, params))
+        return {
+            "id": "ds-db",
+            "scan_state": {
+                "strategy": "modified_date",
+                "snapshot": [],
+                "processed": [],
+            },
+        }
+
+    class _Result:
+        rowcount = 1
+
+    def fake_execute(query, params=()):
+        execute_calls.append((query, params))
+        return _Result()
+
+    monkeypatch.setattr(datasource_db, "fetchone", fake_fetchone)
+    monkeypatch.setattr(datasource_db, "execute", fake_execute)
+
+    row = datasource_db.get_scan_state("ds-db")
+    saved = datasource_db.save_scan_state("ds-db", {"processed": []})
+
+    assert row is not None
+    assert row.scan_state is not None
+    assert row.scan_state["processed"] == []
+    assert saved is True
+    assert fetch_calls == [
+        ("SELECT id, scan_state FROM datasources WHERE id = %s", ("ds-db",))
+    ]
+    assert execute_calls
+    assert "UPDATE datasources SET scan_state = %s" in execute_calls[0][0]
+
+
+def test_get_scan_state_renames_corrupted_file_and_returns_empty(tmp_path, monkeypatch):
     """Blinda policy recovery (service.py:254-285): JSON corrotto →
     rinomina in ``<name>.broken.<ts>`` + log ERROR + ``ScanState`` vuoto.
 
@@ -307,10 +349,25 @@ def test_get_scan_state_renames_corrupted_file_and_returns_empty(tmp_path):
     """
     from app.core.datasources.service import DataSourceService
     from app.core.datasources.models import ScanState
+    import app.core.datasources.db as datasource_db
 
     service = DataSourceService()
     # Override scan_dir per isolamento completo dal filesystem reale
     service._scan_dir = tmp_path
+    monkeypatch.setattr(
+        datasource_db,
+        "get_scan_state",
+        lambda ds_id: datasource_db.DataSourceScanStateRow(
+            id=ds_id,
+            scan_state=None,
+        ),
+    )
+    save_calls = []
+    monkeypatch.setattr(
+        datasource_db,
+        "save_scan_state",
+        lambda ds_id, state: save_calls.append((ds_id, state)) or True,
+    )
 
     ds_id = "ds-corrupt-test"
     scan_path = tmp_path / f"{ds_id}.json"
@@ -337,9 +394,10 @@ def test_get_scan_state_renames_corrupted_file_and_returns_empty(tmp_path):
     )
     # Il contenuto del .broken deve essere preservato per investigazione admin
     assert "{this is not valid json" in broken_files[0].read_text(encoding="utf-8")
+    assert save_calls == [], "Il JSON legacy corrotto non deve essere migrato nel DB"
 
 
-def test_get_scan_state_returns_empty_when_file_absent(tmp_path):
+def test_get_scan_state_returns_empty_when_file_absent(tmp_path, monkeypatch):
     """Edge case base: path inesistente → ``ScanState`` vuoto, no file create.
 
     Complementare al test precedente: senza questo, un refactor che per errore
@@ -348,9 +406,24 @@ def test_get_scan_state_returns_empty_when_file_absent(tmp_path):
     """
     from app.core.datasources.service import DataSourceService
     from app.core.datasources.models import ScanState
+    import app.core.datasources.db as datasource_db
 
     service = DataSourceService()
     service._scan_dir = tmp_path
+    monkeypatch.setattr(
+        datasource_db,
+        "get_scan_state",
+        lambda ds_id: datasource_db.DataSourceScanStateRow(
+            id=ds_id,
+            scan_state=None,
+        ),
+    )
+    save_calls = []
+    monkeypatch.setattr(
+        datasource_db,
+        "save_scan_state",
+        lambda ds_id, state: save_calls.append((ds_id, state)) or True,
+    )
 
     state = service.get_scan_state("ds-never-existed")
 
@@ -363,3 +436,126 @@ def test_get_scan_state_returns_empty_when_file_absent(tmp_path):
         f"Nessun file deve essere creato per scan_state inesistente. "
         f"Trovati: {[p.name for p in tmp_path.iterdir()]}"
     )
+    assert save_calls == []
+
+
+def test_get_scan_state_prefers_db_state_over_legacy_file(tmp_path, monkeypatch):
+    """DB canonico: se scan_state esiste su Postgres, il file legacy è ignorato."""
+    from app.core.datasources.service import DataSourceService
+    import app.core.datasources.db as datasource_db
+
+    service = DataSourceService()
+    service._scan_dir = tmp_path
+    ds_id = "ds-db-wins"
+    (tmp_path / f"{ds_id}.json").write_text(
+        json.dumps({
+            "processed": [
+                {
+                    "name": "legacy.csv",
+                    "processed_at": "2026-01-01T00:00:00+00:00",
+                    "pipeline_id": "p-old",
+                }
+            ]
+        }),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(
+        datasource_db,
+        "get_scan_state",
+        lambda _ds_id: datasource_db.DataSourceScanStateRow(
+            id=_ds_id,
+            scan_state={
+                "last_check": "2026-01-02T00:00:00+00:00",
+                "strategy": "modified_date",
+                "snapshot": [],
+                "processed": [
+                    {
+                        "name": "db.csv",
+                        "processed_at": "2026-01-02T00:00:00+00:00",
+                        "pipeline_id": "p-db",
+                    }
+                ],
+            },
+        ),
+    )
+
+    state = service.get_scan_state(ds_id)
+
+    assert [entry.name for entry in state.processed] == ["db.csv"]
+
+
+def test_get_scan_state_migrates_valid_legacy_file_when_db_state_null(tmp_path, monkeypatch):
+    """Fallback legacy: file valido viene letto e salvato opportunisticamente su DB."""
+    from app.core.datasources.service import DataSourceService
+    import app.core.datasources.db as datasource_db
+
+    service = DataSourceService()
+    service._scan_dir = tmp_path
+    ds_id = "ds-legacy"
+    (tmp_path / f"{ds_id}.json").write_text(
+        json.dumps({
+            "last_check": "2026-01-03T00:00:00+00:00",
+            "strategy": "modified_date",
+            "snapshot": [],
+            "processed": [
+                {
+                    "name": "legacy.csv",
+                    "processed_at": "2026-01-03T00:00:00+00:00",
+                    "pipeline_id": "p-legacy",
+                }
+            ],
+        }),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(
+        datasource_db,
+        "get_scan_state",
+        lambda _ds_id: datasource_db.DataSourceScanStateRow(
+            id=_ds_id,
+            scan_state=None,
+        ),
+    )
+    saved = []
+    monkeypatch.setattr(
+        datasource_db,
+        "save_scan_state",
+        lambda _ds_id, state: saved.append((_ds_id, state)) or True,
+    )
+
+    state = service.get_scan_state(ds_id)
+
+    assert [entry.name for entry in state.processed] == ["legacy.csv"]
+    assert len(saved) == 1
+    assert saved[0][0] == ds_id
+    assert saved[0][1]["processed"][0]["name"] == "legacy.csv"
+
+
+def test_save_scan_state_writes_db_not_legacy_file(tmp_path, monkeypatch):
+    """save_scan_state non deve più creare il JSON locale come source of truth."""
+    from app.core.datasources.service import DataSourceService
+    from app.core.datasources.models import ScanState
+    import app.core.datasources.db as datasource_db
+
+    service = DataSourceService()
+    service._scan_dir = tmp_path
+    saved = []
+    monkeypatch.setattr(
+        datasource_db,
+        "save_scan_state",
+        lambda ds_id, state: saved.append((ds_id, state)) or True,
+    )
+
+    service.save_scan_state("ds-db", ScanState())
+
+    assert saved == [
+        (
+            "ds-db",
+            {
+                "last_check": None,
+                "strategy": "modified_date",
+                "snapshot": [],
+                "processed": [],
+            },
+        )
+    ]
+    assert list(tmp_path.iterdir()) == []

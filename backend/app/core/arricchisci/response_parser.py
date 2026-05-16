@@ -5,7 +5,8 @@ Progettato per gestire risposte API complesse (es. ItaliaMeteo, GeoJSON)
 """
 
 import re
-from typing import Any, Dict, List
+from typing import Any, List
+from app.core.arricchisci.types import JsonObject, JsonRows
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -20,7 +21,7 @@ class ResponseParser:
     e trasformazioni configurabili.
     """
 
-    def __init__(self, config: Dict = None):
+    def __init__(self, config: JsonObject = None):
         """
         Inizializza il parser con la configurazione di estrazione.
 
@@ -37,7 +38,7 @@ class ResponseParser:
         self.mappings = self.config.get("mappings", [])
         self.transforms = self.config.get("transforms", [])
 
-    def parse(self, data: Any) -> List[Dict]:
+    def parse(self, data: Any) -> JsonRows:
         """
         Esegue il parsing completo della risposta API.
 
@@ -77,7 +78,7 @@ class ResponseParser:
     # ITERAZIONE RICORSIVA
 
     def _itera_ricorsivamente(
-        self, data: Any, livello: int, contesto: Dict, righe: List[Dict]
+        self, data: Any, livello: int, contesto: JsonObject, righe: JsonRows
     ):
         """
         Attraversa ricorsivamente gli array annidati definiti in iterate_on.
@@ -116,7 +117,7 @@ class ResponseParser:
             nuovo_contesto = {**contesto, alias: elemento}
             self._itera_ricorsivamente(elemento, livello + 1, nuovo_contesto, righe)
 
-    def _estrai_riga(self, contesto: Dict) -> Dict:
+    def _estrai_riga(self, contesto: JsonObject) -> JsonObject:
         """
         Estrae una riga applicando i mappings al contesto accumulato.
 
@@ -145,7 +146,7 @@ class ResponseParser:
 
         return riga
 
-    def _estrai_valore_da_contesto(self, contesto: Dict, path: str) -> Any:
+    def _estrai_valore_da_contesto(self, contesto: JsonObject, path: str) -> Any:
         """
         Estrae un valore dal contesto usando un path tipo "station.stat.lat".
 
@@ -304,7 +305,7 @@ class ResponseParser:
 
     # ESTRAZIONE SEMPLICE (senza iterate_on
 
-    def _estrazione_semplice(self, data: Any) -> List[Dict]:
+    def _estrazione_semplice(self, data: Any) -> JsonRows:
         """
         Estrazione diretta senza iterazione su array annidati.
 
@@ -336,7 +337,7 @@ class ResponseParser:
 
     # TRASFORMAZIONI POST-ESTRAZIONE
 
-    def _applica_trasformazioni(self, righe: List[Dict]) -> List[Dict]:
+    def _applica_trasformazioni(self, righe: JsonRows) -> JsonRows:
         """
         Applica le trasformazioni configurate alle righe estratte.
 
@@ -438,7 +439,7 @@ class ResponseParser:
             logger.warning(f"Errore trasformazione '{operazione}': {e}")
             return valore_sorgente
 
-    def _valuta_condizione(self, riga: Dict, condizione: str) -> bool:
+    def _valuta_condizione(self, riga: JsonObject, condizione: str) -> bool:
         """
         Valuta una condizione semplice su una riga.
 
@@ -523,7 +524,7 @@ PRESET_CONFIGS = {
 }
 
 
-def get_preset_config(preset_name: str) -> Dict:
+def get_preset_config(preset_name: str) -> JsonObject:
     """
     Restituisce una copia della configurazione preset per un formato comune.
 

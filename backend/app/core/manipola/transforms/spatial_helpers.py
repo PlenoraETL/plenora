@@ -9,7 +9,10 @@ from typing import Optional
 
 from shapely.geometry.base import BaseGeometry
 
-from app.core.dataframes.geodata import geoseries_from_geometry_values
+from app.core.dataframes.geodata import (
+    geoseries_first_value,
+    geoseries_from_geometry_values,
+)
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -163,7 +166,7 @@ def _buffer_per_row_local_utm(
             row = geoseries_from_geometry_values([geom], crs=src_crs).to_crs(utm)
             buffered = row.buffer(distance, cap_style=cap_style_int)
             back = buffered.to_crs(src_crs)
-            results.append(back.iloc[0])
+            results.append(geoseries_first_value(back))
         except Exception as e:
             logger.warning(f"Buffer per-riga fallito su geometria: {e}")
             results.append(None)

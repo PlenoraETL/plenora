@@ -6,7 +6,7 @@ Endpoints:
 
 import json
 import math
-from typing import Any, List, Optional
+from typing import Any, List, Optional, TypeAlias
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 
@@ -22,6 +22,13 @@ from app.utils.logger import get_logger
 logger = get_logger(__name__)
 
 router = APIRouter(prefix="/runs", tags=["intermediate"])
+
+JsonObject: TypeAlias = dict[str, Any]
+NodeDataResponse: TypeAlias = dict[str, Any]
+CompareL2Response: TypeAlias = dict[str, Any]
+CompareUnavailableDetail: TypeAlias = dict[str, Any]
+RowDiffPayload: TypeAlias = dict[str, Any]
+PinRunResponse: TypeAlias = dict[str, Any]
 
 
 # FIXME: #23 (2026-04-28): JSON spec non ammette NaN / +Inf / -Inf
@@ -91,7 +98,7 @@ def _as_iso(value: Any) -> str:
         return value.isoformat()
     return str(value)
 
-def _run_to_summary(run: dict) -> RunSummary:
+def _run_to_summary(run: runs_db.RunRow) -> RunSummary:
     return RunSummary(
         run_id=run["run_id"],
         canvas_id=run["canvas_id"],
@@ -111,7 +118,7 @@ def _run_to_summary(run: dict) -> RunSummary:
     )
 
 
-def _check_run_access(run_id: str, current_user: CurrentUser) -> dict:
+def _check_run_access(run_id: str, current_user: CurrentUser) -> runs_db.RunRow:
     """Verifica che la run esista e appartenga al gruppo. Ritorna run dict."""
     run = runs_db.get_run(run_id)
     assert_group_access(run, current_user, f"Run {run_id}")
@@ -143,7 +150,7 @@ def get_node_data(
     node_id: str,
     limit: int = Query(default=100, ge=1, le=5000),
     current_user: CurrentUser = Depends(require_not_esecutore),
-) -> dict:
+) -> NodeDataResponse:
     """
     Righe del nodo dallo storage intermediate.
     Ritorna max `limit` righe (default 100).
@@ -342,7 +349,7 @@ def compare_runs_l2(
     run_id_b: str = Query(...),
     node_id: str = Query(...),
     current_user: CurrentUser = Depends(require_not_esecutore),
-) -> dict:
+) -> CompareL2Response:
     """
     Confronto L2 tra due run sullo stesso nodo.
     Ritorna righe aggiunte in B (non presenti in A) e rimosse da A (non
@@ -398,7 +405,12 @@ def compare_runs_l2(
         mode_a = persistence_mode_for_record(meta_a)
         mode_b = persistence_mode_for_record(meta_b)
 
-        def _common(reason: str, message: str, *, diff_available: bool) -> dict:
+        def _common(
+            reason: str,
+            message: str,
+            *,
+            diff_available: bool,
+        ) -> CompareUnavailableDetail:
             return {
                 "run_id_a": run_id_a,
                 "run_id_b": run_id_b,
@@ -491,11 +503,14 @@ def compare_runs_l2(
         # Righe rimosse: in A ma non in B (confronto su row_hash
         # L'indice idx_node_rows_hash su (run_id, node_id, row_hash) rende
         # il NOT EXISTS O(n log m) anche per dataset grandi
+        from app.db import pg_connection as _pg_connection
+
         removed_raw = node_snapshots_db.list_node_row_hash_diff(
             source_run_id=run_id_a,
             compare_run_id=run_id_b,
             node_id=node_id,
             limit=500,
+            fetchall_func=_pg_connection.fetchall,
         )
 
         # Righe aggiunte: in B ma non in A
@@ -504,16 +519,25 @@ def compare_runs_l2(
             compare_run_id=run_id_a,
             node_id=node_id,
             limit=500,
+            fetchall_func=_pg_connection.fetchall,
         )
 
         # Conta totali senza limite
-        count_a = node_snapshots_db.count_node_rows(run_id_a, node_id)
-        count_b = node_snapshots_db.count_node_rows(run_id_b, node_id)
+        count_a = node_snapshots_db.count_node_rows(
+            run_id_a,
+            node_id,
+            fetchone_func=_pg_connection.fetchone,
+        )
+        count_b = node_snapshots_db.count_node_rows(
+            run_id_b,
+            node_id,
+            fetchone_func=_pg_connection.fetchone,
+        )
 
         # Shape del response identico a prima: gli elementi sono dict con
         # le colonne "piatte" della riga. Espandiamo row_data (jsonb) e
         # aggiungiamo _row_hash per retrocompatibilita' col frontend
-        def _expand(r: dict) -> dict:
+        def _expand(r: JsonObject) -> RowDiffPayload:
             data = r.get("row_data") or {}
             if isinstance(data, str):
                 data = json.loads(data)
@@ -565,7 +589,7 @@ def pin_run(
     run_id: str,
     body: PinRequest,
     current_user: CurrentUser = Depends(require_not_esecutore),
-) -> dict:
+) -> PinRunResponse:
     """Pinna o spinna una run — le run pinnate sono escluse dalla retention FIFO."""
     try:
         # Stessa logica di `get_node_data`. Il superadmin puo' pinnare

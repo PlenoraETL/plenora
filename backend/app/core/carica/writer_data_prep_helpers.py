@@ -12,7 +12,13 @@ import json as _json
 from typing import Any, Dict, List, Optional, Sequence
 
 from app.core.carica.models import ColumnMapping
-from app.core.dataframes.values import is_geometry_series, is_null_scalar
+from app.core.dataframes.tabular import (
+    geometry_series_columns_to_wkt,
+    mixed_numeric_string_object_columns,
+    stringify_columns_preserving_nulls,
+)
+from app.core.dataframes.values import is_null_scalar
+from app.shared.contracts.payloads import JsonObject
 
 
 def is_pandas_null(value: Any) -> bool:
@@ -24,46 +30,20 @@ def is_pandas_null(value: Any) -> bool:
 
 def fix_mixed_type_columns(df: Any, logger) -> Any:
     """Force object columns mixing numeric and string values to strings."""
-    for col in df.columns:
-        if df[col].dtype != "object":
-            continue
-
-        non_null = df[col].dropna()
-        if len(non_null) == 0:
-            continue
-
-        sample = non_null.head(1000)
-        has_numeric = False
-        has_string = False
-
-        for val in sample:
-            if isinstance(val, (int, float)):
-                has_numeric = True
-            elif isinstance(val, str):
-                has_string = True
-            if has_numeric and has_string:
-                break
-
-        if has_numeric and has_string:
-            logger.info(
-                f"Colonna '{col}' contiene tipi misti (numeri + stringhe), "
-                f"conversione a TEXT"
-            )
-            mask_null = df[col].isna()
-            df[col] = df[col].astype(str)
-            df.loc[mask_null, col] = None
+    mixed_columns = mixed_numeric_string_object_columns(df)
+    for col in mixed_columns:
+        logger.info(
+            f"Colonna '{col}' contiene tipi misti (numeri + stringhe), "
+            f"conversione a TEXT"
+        )
+    stringify_columns_preserving_nulls(df, mixed_columns)
 
     return df
 
 
 def convert_geoseries_columns_to_wkt(df: Any, logger) -> Any:
     """Convert GeoSeries columns to WKT when geopandas is available."""
-    for col in df.columns:
-        if is_geometry_series(df[col]):
-            df[col] = df[col].apply(
-                lambda g: g.wkt if g is not None and not is_null_scalar(g) else None
-            )
-    return df
+    return geometry_series_columns_to_wkt(df)
 
 
 def prepare_dataframe(df: Any, logger) -> Any:
@@ -129,7 +109,7 @@ def build_params(
     operation: str,
     match_columns: Sequence[str],
     logger,
-) -> Dict[str, Any]:
+) -> JsonObject:
     """Build SQLAlchemy parameters for one DataFrame row."""
     params: Dict[str, Any] = {}
 

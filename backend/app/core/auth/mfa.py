@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import base64
 import io
+from datetime import datetime
 from typing import Optional, TypedDict
 
 import pyotp
@@ -33,7 +34,21 @@ class MFAEnrollment(TypedDict):
     qr_code_png_base64: str
 
 
-def _row_for(user_id: str) -> Optional[dict]:
+class MFARow(TypedDict, total=False):
+    user_id: str
+    secret_encrypted: str
+    enabled: bool
+    enrolled_at: datetime | str | None
+    last_verified_at: datetime | str | None
+
+
+class MFAStatus(TypedDict):
+    enabled: bool
+    enrolled_at: Optional[str]
+    last_verified_at: Optional[str]
+
+
+def _row_for(user_id: str) -> Optional[MFARow]:
     return pg_connection.fetchone(
         "SELECT user_id, secret_encrypted, enabled, enrolled_at, last_verified_at "
         "FROM user_mfa WHERE user_id = %s",
@@ -183,7 +198,7 @@ def _iso(value) -> Optional[str]:
     return value.isoformat()
 
 
-def status(user_id: str) -> dict:
+def status(user_id: str) -> MFAStatus:
     """Snapshot dello stato MFA per l'utente.
 
     Ritorna sempre un dict (mai None). Campi `enrolled_at` e

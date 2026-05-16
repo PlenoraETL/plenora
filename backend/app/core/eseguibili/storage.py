@@ -9,6 +9,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import List
 
+from app.shared.contracts.payloads import ObjectMap
 from app.shared.resources.storage_layout import ESEGUIBILI_OUTPUTS_PREFIX
 from app.utils.logger import get_logger
 
@@ -94,7 +95,7 @@ def find_keys(task_id: str) -> List[str]:
     return [o["key"] for o in objs]
 
 
-def open_stream(key: str) -> dict:
+def open_stream(key: str) -> ObjectMap:
     """Apre uno stream di download. Delega al backend cloud."""
     return _storage().get_object_stream(key)
 

@@ -10,6 +10,7 @@ from app.core.dataframes.ports import FrameLike
 from app.core.dataframes.tabular import (
     coerce_numeric_series,
     dataframe_eval_namespace,
+    series_null_ratio,
 )
 from app.utils.logger import get_logger
 
@@ -57,7 +58,7 @@ _SAFE_PANDAS_ATTRS = frozenset({
 # ListComp, SetComp, DictComp, GeneratorExp
 # NamedExpr (walrus), JoinedStr/FormattedValue (f-string
 # IfExp (ternary), Subscript, Slice
-# List, Tuple, Set, Dict literal
+# List, Tuple, Set, mapping literal
 # Import, ImportFrom, Global, Nonlocal, Delete, Yield, Await, Try
 _ALLOWED_AST_NODES = frozenset({
     # Wrappers / context
@@ -225,8 +226,8 @@ def op_formula(
             if series.dtype == 'object':
                 # Prova conversione a numerico (gestisce formato IT: 1.234,56
                 converted = coerce_numeric_series(series)
-                nan_ratio = converted.isna().sum() / max(len(converted), 1)
-                original_na = series.isna().sum() / max(len(series), 1)
+                nan_ratio = series_null_ratio(converted)
+                original_na = series_null_ratio(series)
                 if nan_ratio - original_na > 0.3:
                     # Troppi NaN nuovi → prova formato italiano
                     # Single-pass regex: rimuove €$ e separatori migliaia, converte , in

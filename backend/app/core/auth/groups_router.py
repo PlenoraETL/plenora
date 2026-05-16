@@ -9,6 +9,7 @@ sono ForwardRef.
 
 from fastapi import APIRouter, Depends
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from typing import TypedDict
 
 from app.core.auth import disclosure as _disclosure
 from app.core.auth.models import (
@@ -35,7 +36,23 @@ groups_router = APIRouter(prefix="/auth/groups", tags=["groups"])
 _security = HTTPBearer(auto_error=False)
 
 
-def _group_response_payload(group: _groups.GroupRow) -> dict[str, str]:
+class GroupResponsePayload(TypedDict):
+    group_id: str
+    name: str
+    description: str
+
+
+class GroupSummaryPayload(TypedDict):
+    projects: int
+    users: int
+    connections: int
+    file_sources: int
+    datasources: int
+    api_connections: int
+    schedules: int
+
+
+def _group_response_payload(group: _groups.GroupRow) -> GroupResponsePayload:
     return {
         "group_id": group.id,
         "name": group.name or "",
@@ -43,7 +60,7 @@ def _group_response_payload(group: _groups.GroupRow) -> dict[str, str]:
     }
 
 
-def _group_summary_payload(summary: _groups.GroupSummaryRow) -> dict[str, int]:
+def _group_summary_payload(summary: _groups.GroupSummaryRow) -> GroupSummaryPayload:
     return {
         "projects": summary.projects,
         "users": summary.users,

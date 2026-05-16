@@ -5,13 +5,14 @@ This module stays independent from QueryExecutor so engine construction can be
 tested without importing the executor orchestration layer.
 """
 
-from typing import Dict, Protocol
+from typing import Protocol
 from urllib.parse import quote_plus
 
 from sqlalchemy import create_engine, text
 from sqlalchemy.engine import Engine
 
 from app.db.query_session import QueryConnection
+from app.shared.contracts.payloads import JsonObject
 from app.utils.logger import get_logger
 
 
@@ -42,7 +43,7 @@ class DefaultEngineFactory:
     _MAX_ENGINES = 50
 
     def __init__(self):
-        self._engine_cache: Dict[str, Engine] = {}
+        self._engine_cache = {}
 
     def _connection_key(self, conn: EngineConnection) -> str:
         """Chiave univoca per identificare una connessione nel pool."""
@@ -133,7 +134,7 @@ class DefaultEngineFactory:
         except ImportError:
             pass
 
-    def _crea_engine_mssql(self, conn_str: str, connect_args: dict) -> Engine:
+    def _crea_engine_mssql(self, conn_str: str, connect_args: JsonObject) -> Engine:
         """
         Crea engine MSSQL con fallback automatico del driver ODBC.
 
@@ -237,7 +238,7 @@ class DefaultEngineFactory:
 
         raise ValueError(f"Tipo database '{conn.type}' non supportato")
 
-    def _ottieni_connect_args(self, conn: EngineConnection) -> dict:
+    def _ottieni_connect_args(self, conn: EngineConnection) -> JsonObject:
         """
         Restituisce gli argomenti di connessione specifici per tipo database.
 

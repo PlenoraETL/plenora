@@ -4,7 +4,7 @@ Orchestratore pipeline — entry point unico per l'esecuzione.
 Keeps this module's responsibility explicit and isolated from adjacent code.
 """
 
-from typing import Dict, Any, Optional
+from typing import Any, Mapping, Optional
 
 from app.core.projects.canvas_models import CanvasState
 from app.core.projects.service import ProjectService
@@ -13,6 +13,7 @@ from app.core.estrai.query_generator import QueryGenerator
 from app.core.connections.service import ConnectionService
 from app.config import settings
 from app.shared import error_codes
+from app.shared.contracts.payloads import JsonObject
 from app.shared.execution.executor_protocol import CanvasExecutorProtocol, ExecutionResult
 from app.utils.logger import get_logger
 
@@ -23,6 +24,7 @@ from app.core.arricchisci.executor import EnrichExecutor
 from app.core.artifacts import PipelineArtifact
 
 logger = get_logger(__name__)
+ExecutorDispatch = Mapping[str, CanvasExecutorProtocol]
 
 
 class OrchestratorService:
@@ -76,7 +78,7 @@ class OrchestratorService:
             )
 
     @property
-    def _executor_dispatch(self) -> Dict[str, CanvasExecutorProtocol]:
+    def _executor_dispatch(self) -> ExecutorDispatch:
         """Typed dispatch table: module_type → CanvasExecutorProtocol.
 
 
@@ -174,7 +176,7 @@ class OrchestratorService:
 
         return artifact
 
-    def execute_preview(self, project_id: str, limit: int = 100) -> Dict[str, Any]:
+    def execute_preview(self, project_id: str, limit: int = 100) -> JsonObject:
         """Esegue una preview dei dati senza salvare file.
 
         NB: la preview non produce artifact, quindi resta un dict raw —
@@ -195,7 +197,7 @@ class OrchestratorService:
 
     # CARICA — Rilevamento e avvio task caricamento su database
 
-    def _execute_carica_if_present(self, project_id: str, canvas: CanvasState) -> Optional[Dict[str, Any]]:
+    def _execute_carica_if_present(self, project_id: str, canvas: CanvasState) -> Optional[JsonObject]:
         """
         Controlla se nel canvas c'è un nodo CARICA collegato al nodo Output.
         Se presente, avvia il task Celery per il caricamento su database.

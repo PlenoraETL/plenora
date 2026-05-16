@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import re
-from typing import Any, Callable, Dict, List
+from typing import Any, Callable, List
+
+from app.core.estrai.types import JsonObject
 
 
 class WhereClauseBuilder:
@@ -23,7 +25,7 @@ class WhereClauseBuilder:
         self._is_valid_identifier = is_valid_identifier
         self._get_node_table_name = get_node_table_name
 
-    def generate_where(self, table_nodes: List[Any], params: Dict[str, Any]) -> str:
+    def generate_where(self, table_nodes: List[Any], params: JsonObject) -> str:
         conditions = []
 
         for node in table_nodes:
@@ -70,7 +72,7 @@ class WhereClauseBuilder:
         column: str,
         operator: str,
         value: Any,
-        params: Dict[str, Any],
+        params: JsonObject,
         column_type: str = "str",
     ) -> str:
         col_ref = f"{table_alias}.{column}"
@@ -292,7 +294,7 @@ class WhereClauseBuilder:
             f"per il dialetto '{db}'. Usare una funzione supportata."
         )
 
-    def create_condition_in(self, col_ref: str, value: Any, params: Dict[str, Any]) -> str:
+    def create_condition_in(self, col_ref: str, value: Any, params: JsonObject) -> str:
         if isinstance(value, str) and "," in value:
             value = [v.strip() for v in value.split(",") if v.strip()]
 

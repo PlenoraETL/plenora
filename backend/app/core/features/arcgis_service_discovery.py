@@ -15,6 +15,7 @@ from app.shared.connections.arcgis_provider_results import (
     ItemSearchResult,
     ServiceNameAvailabilityResult,
 )
+from app.core.features.arcgis_json_types import ArcGISJsonList, ArcGISJsonObject
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -32,7 +33,7 @@ def list_user_folders(
     conn: ArcGISConnectionInfo,
     *,
     folder_filter: FolderFilter = default_user_folder_filter,
-) -> List[dict]:
+) -> ArcGISJsonList:
     """List user folders through the provider with optional caller policy."""
     folders = client.list_folders(conn) or []
     return [folder for folder in folders if folder_filter(folder)]
@@ -54,7 +55,7 @@ def is_service_name_available(
     return client.is_service_name_available(conn, service_name)
 
 
-def enumerate_user_items(client, conn: ArcGISConnectionInfo) -> List[dict]:
+def enumerate_user_items(client, conn: ArcGISConnectionInfo) -> ArcGISJsonList:
     """List raw content items owned by the connected user."""
     return client.list_user_items(conn) or []
 
@@ -63,7 +64,7 @@ def search_user_feature_service_items(
     client,
     conn: ArcGISConnectionInfo,
     service_name: str,
-) -> List[dict]:
+) -> ArcGISJsonList:
     """Find Feature Service items matching a title, service name, or URL."""
     all_items = enumerate_user_items(client, conn)
     feature_services = [
@@ -162,7 +163,7 @@ class ArcGISServiceDiscoveryMixin:
         folder: str = "",
         _depth: int = 0,
         _max_depth: int = 5,
-    ) -> List[dict]:
+    ) -> ArcGISJsonList:
         """List available Feature Services."""
         if self._is_arcgis_online(conn):
             return self._list_services_online(conn, folder=folder)
@@ -186,7 +187,7 @@ class ArcGISServiceDiscoveryMixin:
         self,
         conn: ArcGISConnectionInfo,
         folder: str = "",
-    ) -> List[dict]:
+    ) -> ArcGISJsonList:
         """List user Feature Services through the ArcGIS Online Content API."""
         _ = self.authenticate(conn)
         username = conn.username
@@ -265,7 +266,7 @@ class ArcGISServiceDiscoveryMixin:
         folder_id: str,
         start: int,
         num: int,
-    ) -> dict:
+    ) -> ArcGISJsonObject:
         content_url = (
             f"{base_url}/content/users/{username}/{folder_id}"
             if folder_id
@@ -293,7 +294,7 @@ class ArcGISServiceDiscoveryMixin:
         folder_id: str,
         *,
         num: int,
-    ) -> Tuple[List[dict], List[dict]]:
+    ) -> Tuple[ArcGISJsonList, ArcGISJsonList]:
         items: List[dict] = []
         folders: List[dict] = []
         start = 1
@@ -353,17 +354,17 @@ class ArcGISServiceDiscoveryMixin:
 
         return ItemListingResult(items=tuple(all_items))
 
-    def list_user_items(self, conn: ArcGISConnectionInfo) -> List[dict]:
+    def list_user_items(self, conn: ArcGISConnectionInfo) -> ArcGISJsonList:
         """List raw ArcGIS content items for the connected user."""
         return self._list_user_items_result(conn).to_compat_list()
 
-    def list_folders(self, conn: ArcGISConnectionInfo) -> List[dict]:
+    def list_folders(self, conn: ArcGISConnectionInfo) -> ArcGISJsonList:
         """List user folders, including root as ``{"id": "", "title": "(root)"}``."""
         if self._is_arcgis_online(conn):
             return self._list_folders_online(conn)
         return self._list_folders_server(conn)
 
-    def _list_folders_online(self, conn: ArcGISConnectionInfo) -> List[dict]:
+    def _list_folders_online(self, conn: ArcGISConnectionInfo) -> ArcGISJsonList:
         """List user folders through the ArcGIS Online Content API."""
         _ = self.authenticate(conn)
         username = conn.username
@@ -399,7 +400,7 @@ class ArcGISServiceDiscoveryMixin:
             logger.warning(f"Errore lista folders: {e}")
             return [{"id": "", "title": "(root)"}]
 
-    def _list_folders_server(self, conn: ArcGISConnectionInfo) -> List[dict]:
+    def _list_folders_server(self, conn: ArcGISConnectionInfo) -> ArcGISJsonList:
         """List folders from the ArcGIS Server/Enterprise REST catalog."""
         catalog_url = f"{conn.server_url.rstrip('/')}/rest/services"
 
@@ -579,7 +580,7 @@ class ArcGISServiceDiscoveryMixin:
         self,
         conn: ArcGISConnectionInfo,
         query: str,
-    ) -> List[dict]:
+    ) -> ArcGISJsonList:
         """Search raw portal items with provider-managed pagination."""
         return self._search_items_result(conn, query).to_compat_list()
 
@@ -588,7 +589,7 @@ class ArcGISServiceDiscoveryMixin:
         conn: ArcGISConnectionInfo,
         query: str = "",
         scope: str = "user",
-    ) -> List[dict]:
+    ) -> ArcGISJsonList:
         """Search Feature Services on ArcGIS Online."""
         username = conn.username
         search_parts = ['type:"Feature Service"']
@@ -630,7 +631,7 @@ class ArcGISServiceDiscoveryMixin:
         folder: str = "",
         _depth: int = 0,
         _max_depth: int = 5,
-    ) -> List[dict]:
+    ) -> ArcGISJsonList:
         """List Feature Services from the ArcGIS Server/Enterprise catalog."""
         base = self._get_rest_services_url(conn)
         catalog_url = f"{base}/{folder}" if folder else base

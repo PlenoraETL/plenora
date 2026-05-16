@@ -5,10 +5,18 @@ Keeps transformation behavior isolated from orchestration callers.
 """
 
 import time as _time
-from typing import Dict, Any, List, Optional
+from typing import Any, List, Optional
 
 from app.core.dataframes.ports import FrameLike
-from app.core.dataframes.tabular import empty_dataframe, merge_dataframes
+from app.core.dataframes.tabular import (
+    dataframe_preview_records,
+    empty_dataframe,
+    estimate_merge_output_rows,
+    group_aggregate_as_columns,
+    group_keys_dataframe,
+    group_size_values,
+    merge_dataframes,
+)
 from app.core.projects.canvas_models import CanvasState, Node
 from app.config import settings
 from app.core.projects.execution_context import get_project_group_id
@@ -17,10 +25,7 @@ from app.shared.execution.executor_protocol import PipelineDispatcherProtocol
 from app.shared.execution.graph import kahn_topological_order
 from app.utils.logger import get_logger, append_step
 from app.core.results.pipeline_result import save_pipeline_result_outcome
-from app.core.dataframes.frame_io import (
-    load_dataframe_from_file,
-    sanitize_for_json,
-)
+from app.core.dataframes.frame_io import load_dataframe_from_file
 from app.core.artifacts import SourceLoader, SourceRef
 from app.core.dataframes.geodata import (
     detect_geometry_column,
@@ -50,6 +55,7 @@ from .project_source_runtime import (
     _pop_from_execution_chain,
 )
 from .transform_ordering import sorted_incoming_edges
+from .types import ColumnMetadataRows, FrameMap, JsonObject, JsonRows, StringMap
 
 
 logger = get_logger(__name__)
@@ -76,37 +82,7 @@ def _estimate_merge_output_rows(
     multi-join (`inner`, `left`, `right`, `outer`). It costs O(N+M), but it
     runs before `merge_dataframes` allocates the output frame.
     """
-    join_how = str(how or "inner").lower()
-    if join_how not in {"inner", "left", "right", "outer"}:
-        return None
-    if not join_keys:
-        return None
-
-    left_counts = left.groupby(join_keys, dropna=False).size()
-    right_counts = right.groupby(join_keys, dropna=False).size()
-
-    matched_keys = left_counts.index.intersection(right_counts.index)
-    if len(matched_keys):
-        left_matched = left_counts.loc[matched_keys]
-        right_matched = right_counts.loc[matched_keys]
-        matched_rows = int((left_matched * right_matched).sum())
-        left_matched_input_rows = int(left_matched.sum())
-        right_matched_input_rows = int(right_matched.sum())
-    else:
-        matched_rows = 0
-        left_matched_input_rows = 0
-        right_matched_input_rows = 0
-
-    left_unmatched_rows = len(left) - left_matched_input_rows
-    right_unmatched_rows = len(right) - right_matched_input_rows
-
-    if join_how == "inner":
-        return matched_rows
-    if join_how == "left":
-        return matched_rows + left_unmatched_rows
-    if join_how == "right":
-        return matched_rows + right_unmatched_rows
-    return matched_rows + left_unmatched_rows + right_unmatched_rows
+    return estimate_merge_output_rows(left, right, join_keys, how)
 
 
 def _nf(node: Node, key: str, default: Any = None) -> Any:
@@ -121,7 +97,7 @@ def _nf(node: Node, key: str, default: Any = None) -> Any:
 
 def _applica_crs_da_colonne(
     df: FrameLike,
-    node_columns: Optional[List[Dict[str, Any]]],
+    node_columns: Optional[JsonRows],
     meta: Any = None,
 ) -> FrameLike:
     """
@@ -221,7 +197,7 @@ class ManipolaExecutor:
         force_recalculate: bool = False,
         run_id: Optional[str] = None,
         intermediate_mode_override: Optional[str] = None,
-    ) -> Dict[str, Any]:
+    ) -> JsonObject:
         """Esegue la pipeline completa: carica sorgenti, trasforma, salva.
 
         `intermediate_mode_override` (R-25 PR-B2.b): override per-call della
@@ -348,7 +324,7 @@ class ManipolaExecutor:
 
     # ANTEPRIMA
 
-    def preview(self, project_id: str, canvas: CanvasState, limit: int) -> Dict[str, Any]:
+    def preview(self, project_id: str, canvas: CanvasState, limit: int) -> JsonObject:
         """Preview: stessa pipeline dell'execute ma senza salvataggio."""
         logger.info(f"Preview MANIPOLA: {project_id}", op="preview", project_id=project_id)
         try:
@@ -398,7 +374,7 @@ class ManipolaExecutor:
                 canvas, canvas_graph=canvas_graph
             )
             columns = self._costruisci_colonne_con_tipi(preview_df, canvas_type_map)
-            rows = sanitize_for_json(preview_df.to_dict(orient='records'))
+            rows = dataframe_preview_records(current_df, limit)
 
             return {
                 "success": True, "columns": columns, "rows": rows,
@@ -414,11 +390,11 @@ class ManipolaExecutor:
     def _carica_sorgenti_progetto(
         self,
         canvas: CanvasState,
-        dataframes: Dict[str, FrameLike],
+        dataframes: FrameMap,
         force_recalculate: bool,
         run_id: Optional[str] = None,
         *, group_id: Optional[str] = None,
-    ) -> Optional[Dict[str, Any]]:
+    ) -> Optional[JsonObject]:
         """Carica DataFrame dai progetti sorgente (type=project_source).
 
         SECURITY: verifica che ogni source_project_id appartenga allo stesso
@@ -448,9 +424,9 @@ class ManipolaExecutor:
     def _carica_sorgenti_file(
         self,
         canvas: CanvasState,
-        dataframes: Dict[str, FrameLike],
+        dataframes: FrameMap,
         *, group_id: Optional[str] = None,
-    ) -> Optional[Dict[str, Any]]:
+    ) -> Optional[JsonObject]:
         """Carica DataFrame dai nodi file_source via SourceLoader.
 
         thin delegator. Il body vive in
@@ -497,9 +473,9 @@ class ManipolaExecutor:
     def _carica_sorgenti_datasource(
         self,
         canvas: CanvasState,
-        dataframes: Dict[str, FrameLike],
+        dataframes: FrameMap,
         *, group_id: Optional[str] = None,
-    ) -> Optional[Dict[str, Any]]:
+    ) -> Optional[JsonObject]:
         """Carica DataFrame dai nodi `datasource_node` in `mode=source`.
 
         Body in `app.core.manipola.datasource_node_loading.load_datasource_nodes`.
@@ -517,9 +493,9 @@ class ManipolaExecutor:
     def _carica_sorgenti_statiche(
         self,
         canvas: CanvasState,
-        dataframes: Dict[str, FrameLike],
+        dataframes: FrameMap,
         *, group_id: Optional[str] = None,
-    ) -> Optional[Dict[str, Any]]:
+    ) -> Optional[JsonObject]:
         """Carica DataFrame dai nodi StaticValues via SourceLoader.
 
         Wrapper sottile sopra `SourceLoader._load_static`. Il processing
@@ -562,7 +538,7 @@ class ManipolaExecutor:
     def _applica_trasformazioni(
         self,
         canvas: CanvasState,
-        dataframes: Dict[str, FrameLike],
+        dataframes: FrameMap,
         run_id: Optional[str] = None,
         canvas_graph: Optional[CanvasGraph] = None,
         intermediate_mode_override: Optional[str] = None,
@@ -679,7 +655,7 @@ class ManipolaExecutor:
         # SIGKILL OS
         # Strategia: pre-merge cardinality estimate. Prima di ogni
         # `merge_dataframes`, stimiamo le righe output dalle frequenze delle
-        # join key (`groupby(...).size`). Se la stima supera il cap
+        # join key tramite il boundary dataframe. Se la stima supera il cap
         # solleviamo PRIMA della materializzazione del DataFrame. Reuse
         # del contratto Memory/OOM
         # cross-join 003): stessa eccezione `MemoryLimitExceededError`
@@ -776,7 +752,7 @@ class ManipolaExecutor:
 
     def _gestisci_join_default(
         self,
-        dataframes: Dict[str, FrameLike],
+        dataframes: FrameMap,
     ) -> FrameLike:
         """Singola sorgente: passthrough. Multiple sorgenti senza join: errore."""
         if not dataframes:
@@ -832,18 +808,18 @@ class ManipolaExecutor:
 
             # Esegui aggregazioni colonna (solo se ci sono colonne valide
             if agg_dict:
-                result = df.groupby(group_cols, as_index=False).agg(agg_dict)
+                result = group_aggregate_as_columns(df, group_cols, agg_dict)
                 result = result.rename(columns=rename_dict)
             elif count_aliases:
                 # Solo COUNT(*) richiesti â€” parti da una base con i gruppi
-                result = df.groupby(group_cols, as_index=False).size().drop(columns=['size'])
+                result = group_keys_dataframe(df, group_cols)
             else:
                 # Nessuna aggregazione valida
                 return df
 
             # Aggiungi COUNT(*) per ogni richiesta
             for alias in count_aliases:
-                result[alias] = df.groupby(group_cols).size().values
+                result[alias] = group_size_values(df, group_cols)
 
             return result
 
@@ -860,7 +836,7 @@ class ManipolaExecutor:
         df: FrameLike,
         canvas: Optional[CanvasState] = None,
         canvas_graph: Optional[CanvasGraph] = None,
-    ) -> Dict[str, Any]:
+    ) -> JsonObject:
         """Salva il risultato finale nel formato richiesto."""
         filename = _nf(result_node, 'fileName', 'output')
         fmt      = _nf(result_node, 'format',   'csv')
@@ -932,15 +908,15 @@ class ManipolaExecutor:
         canvas: CanvasState,
         *,
         canvas_graph: Optional[CanvasGraph] = None,
-    ) -> Dict[str, str]:
+    ) -> StringMap:
         """Costruisce mappa colonna->tipo dal canvas. Include suffissi _L/_R per JOIN."""
         return build_canvas_type_map(canvas, canvas_graph=canvas_graph)
 
     def _costruisci_colonne_con_tipi(
         self,
         df: FrameLike,
-        canvas_type_map: Dict[str, str],
-    ) -> List[Dict[str, str]]:
+        canvas_type_map: StringMap,
+    ) -> ColumnMetadataRows:
         """Costruisce lista colonne con tipi. Lookup: canvas -> dtype -> WKT."""
         return build_columns_with_types(df, canvas_type_map, logger=logger)
 

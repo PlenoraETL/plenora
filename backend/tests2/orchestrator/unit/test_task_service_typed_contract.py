@@ -21,6 +21,10 @@ from app.core.orchestrator.task_service import (
     TaskType,
     task_payload_to_celery_kwargs,
 )
+from app.core.orchestrator.task_metadata_store import (
+    InMemoryTaskMetadataStore,
+    PendingTaskMetadata,
+)
 from app.core.orchestrator.router_mappers import task_info_to_dict, task_result_to_dict
 
 
@@ -92,6 +96,35 @@ def test_get_task_status_uses_typed_result_payload_inside_core():
     compat_payload = task_info_to_dict(task_info)
     assert compat_payload["result"] == celery_meta
     assert compat_payload["status"] == "success"
+
+
+def test_get_task_status_uses_pending_metadata_store_before_celery_metadata():
+    metadata_store = InMemoryTaskMetadataStore()
+    metadata_store.put(
+        PendingTaskMetadata(
+            task_id="task-pending-1",
+            project_id="project-pending-1",
+            task_type="preview",
+        )
+    )
+    async_result = SimpleNamespace(
+        state="PENDING",
+        info=None,
+        name=None,
+    )
+
+    with patch(
+        "app.core.task_runtime.orchestrator.AsyncResult",
+        return_value=async_result,
+    ):
+        task_info = TaskService(metadata_store=metadata_store).get_task_status(
+            "task-pending-1"
+        )
+
+    assert task_info.status is TaskStatus.PENDING
+    assert task_info.project_id == "project-pending-1"
+    assert task_info.task_type is TaskType.PREVIEW
+    assert task_info.result is None
 
 
 def test_task_result_payload_normalizes_success_metadata_without_raw_mapping():
@@ -224,7 +257,8 @@ def test_list_active_tasks_returns_typed_task_rows():
         control=SimpleNamespace(inspect=lambda: inspect),
     )
 
-    service = TaskService()
+    metadata_store = InMemoryTaskMetadataStore()
+    service = TaskService(metadata_store=metadata_store)
     service.app = app
 
     tasks = service.list_active_tasks()
@@ -297,7 +331,8 @@ def test_submit_task_launches_celery_and_returns_pending_task_info():
             captured_kwargs.update(kwargs)
             return CeleryLaunchResult(id="task-submit-1")
 
-    service = TaskService()
+    metadata_store = InMemoryTaskMetadataStore()
+    service = TaskService(metadata_store=metadata_store)
     task_info = service.submit_task(
         TaskSubmitRequest(
             celery_task=FakeCeleryTask(),
@@ -325,7 +360,11 @@ def test_submit_task_launches_celery_and_returns_pending_task_info():
         "user_id": "user-1",
         "intermediate_mode_override": None,
     }
-    assert service._task_project_cache["task-submit-1"] == "project-1"
+    assert metadata_store.get("task-submit-1") == PendingTaskMetadata(
+        task_id="task-submit-1",
+        project_id="project-1",
+        task_type="execute",
+    )
 
 
 def test_task_payload_to_celery_kwargs_rejects_unknown_payload():
@@ -350,6 +389,10 @@ def test_task_service_create_methods_stay_lifecycle_only():
 
 def test_task_service_has_no_magic_getattr_compat_layer():
     assert "__getattr__" not in TaskService.__dict__
+
+
+def test_task_service_has_no_process_local_pending_project_cache():
+    assert "_task_project_cache" not in TaskService.__dict__
 
 
 def test_preview_router_uses_task_service_boundary(monkeypatch):

@@ -21,10 +21,12 @@ from app.core.carica.models import (
 )
 from app.core.carica.writer_oracle_redef import execute_oracle_redefinition
 from app.core.carica.writer_batch_loop import run_batched_inserts
+from app.shared.contracts.payloads import IntMap, StringMap
 from app.utils.logger import get_logger, get_request_id, get_user_id
 
 # Keep the canonical writer logger name so existing handlers receive mixin logs.
 logger = get_logger("app.core.carica.writer")
+MssqlNameMapping = Dict[str, Tuple[str, str]]
 
 # Telemetry emits (event=stage_swap.dispatched, ecc.) vanno via stdlib
 # logger con stesso name: i campi `extra` diventano attributi del
@@ -187,7 +189,7 @@ class ReplaceStrategiesMixin:
             f"shadow={stg_table}, backup={backup_table}"
         )
 
-        mssql_name_mapping: Dict[str, Tuple[str, str]] = {}
+        mssql_name_mapping: MssqlNameMapping = {}
         try:
             with self.engine.connect() as conn:
                 if self.db_type == "oracle":
@@ -388,8 +390,8 @@ class ReplaceStrategiesMixin:
         df: Any,
         columns: List[ColumnMapping],
         result: WriteResult,
-        pandas_dtypes: Dict[str, str],
-        max_lengths: Dict[str, int],
+        pandas_dtypes: StringMap,
+        max_lengths: IntMap,
     ) -> WriteResult:
         """REPLACE via stage+swap atomico.
 
@@ -603,7 +605,7 @@ class ReplaceStrategiesMixin:
 
     def _mssql_replicate_schema_to_shadow(
         self, conn, schema: str, src_table: str, stg_table: str,
-    ) -> Dict[str, Tuple[str, str]]:
+    ) -> MssqlNameMapping:
         """MSSQL: `SELECT INTO ... WHERE 1=0` copia solo colonne; PK, UK,
         CHECK e indici NON sono preservati. Introspect sys.* del target
         e applica tutto sulla shadow con suffisso `__stg` per evitare
@@ -625,7 +627,7 @@ class ReplaceStrategiesMixin:
           necessario il cliente usa CREATE mode o li aggiunge a mano)
         """
         suffix = "__stg"
-        mapping: Dict[str, Tuple[str, str]] = {}
+        mapping: MssqlNameMapping = {}
 
         pk_rows = conn.execute(text("""
             SELECT kc.name AS cname,

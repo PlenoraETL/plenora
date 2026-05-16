@@ -7,7 +7,7 @@ Classe base astratta comune a tutti i backend di storage.
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Optional
+from typing import Mapping, Optional, TypedDict
 import fnmatch
 import hashlib
 
@@ -29,6 +29,21 @@ class DataSourcePermissionError(DataSourceError):
     pass
 
 
+class FileInfoPayload(TypedDict):
+    name: str
+    path: str
+    size: int
+    modified_date: str
+    type: str
+    hash: str | None
+
+
+class DataSourceConnectionTestResult(TypedDict):
+    ok: bool
+    message: str
+    details: Mapping[str, object]
+
+
 @dataclass
 class FileInfo:
     """Metadata di un singolo file nello storage."""
@@ -39,7 +54,7 @@ class FileInfo:
     type: str                       # estensione senza punto, lowercase (es. "csv"
     hash: Optional[str] = None      # md5, solo se include_hash=True
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> FileInfoPayload:
         return {
             "name": self.name,
             "path": self.path,
@@ -101,7 +116,7 @@ class DataSourceInterface(ABC):
         """Chiude la connessione. Deve essere idempotente (no exception se già chiusa)."""
 
     @abstractmethod
-    def test_connection(self) -> dict:
+    def test_connection(self) -> DataSourceConnectionTestResult:
         """
         Testa la connessione e ritorna un report strutturato.
 

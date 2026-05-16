@@ -49,7 +49,7 @@ def test_load_file_sources_blocks_invisible_cross_tenant_file():
     executor = ManipolaExecutor(project_service=object())
     dataframes = {}
 
-    with patch("app.core.auth.visibility.is_resource_visible", return_value=False):
+    with patch("app.core.artifacts.source_loader.is_resource_visible", return_value=False):
         result = executor._carica_sorgenti_file(
             _canvas_with_file_source("fs-99"), dataframes,
             group_id="grp-1",
@@ -82,7 +82,7 @@ def test_load_file_sources_ignores_stale_singleton_post_005():
         visibility_called["count"] += 1
         return True  # if ever called, would authorise -- but MUST NOT be called
 
-    with patch("app.core.auth.visibility.is_resource_visible", side_effect=_spy):
+    with patch("app.core.artifacts.source_loader.is_resource_visible", side_effect=_spy):
         # No `group_id=` passed; pre-005 the loader would have used
         # `_current_group_id="stale-grp-LEAK"` to authorise the
         # file_source. Post-005 the chain fail-closes upstream.

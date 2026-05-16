@@ -10,6 +10,7 @@ from app.core.datasources.interface import (
     BackendConfig,
     DataSourceInterface,
     DataSourceConnectionError,
+    DataSourceConnectionTestResult,
     DataSourceFileNotFoundError,
     DataSourcePermissionError,
     FileInfo,
@@ -147,7 +148,7 @@ class SFTPDataSource(DataSourceInterface):
         self._sftp = None
         self._ssh = None
 
-    def test_connection(self) -> dict:
+    def test_connection(self) -> DataSourceConnectionTestResult:
         try:
             self.connect()
             entries = self._sftp.listdir_attr(".")

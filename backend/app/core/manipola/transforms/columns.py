@@ -7,10 +7,11 @@ Keeps transformation behavior isolated from orchestration callers.
 from itertools import compress
 
 import numpy as np
-from typing import Dict, List
+from typing import List
 
 from app.core.dataframes.tabular import empty_object_series, join_columns_as_strings
 from app.core.dataframes.ports import FrameLike
+from app.core.manipola.types import JsonRows
 from app.utils.logger import get_logger
 
 logger = get_logger("app.core.manipola.transforms.base")
@@ -59,7 +60,7 @@ def op_rename(
     df: DataFrame,
     old_name: str = None,
     new_name: str = None,
-    renames: List[Dict[str, str]] = None
+    renames: JsonRows = None
 ) -> DataFrame:
     """
     Rinomina una o più colonne.

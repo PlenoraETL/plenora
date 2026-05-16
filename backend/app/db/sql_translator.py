@@ -7,8 +7,9 @@ Keeps persistence access isolated from service and router layers.
 import json
 import re
 from pathlib import Path
-from typing import Dict, List, Any, Optional
+from typing import List, Optional
 
+from app.shared.contracts.payloads import JsonObject, StringMap
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -78,7 +79,7 @@ class SQLFunctionTranslator:
         """Lista delle categorie di funzioni (es. spatial, string, numeric, date)."""
         return [k for k in self._registry.keys() if k != '_meta']
 
-    def list_functions(self, category: Optional[str] = None) -> List[Dict[str, Any]]:
+    def list_functions(self, category: Optional[str] = None) -> list[JsonObject]:
         """
         Elenca le funzioni disponibili nel registry.
 
@@ -108,7 +109,7 @@ class SQLFunctionTranslator:
 
         return functions
 
-    def get_function_info(self, func_name: str) -> Optional[Dict[str, Any]]:
+    def get_function_info(self, func_name: str) -> Optional[JsonObject]:
         """
         Recupera la definizione completa di una funzione dal registry.
 
@@ -197,9 +198,9 @@ class SQLFunctionTranslator:
 
     def _risolvi_parametri(
         self,
-        definizioni_param: List[Dict],
-        params_forniti: Dict[str, Any]
-    ) -> Dict[str, Any]:
+        definizioni_param: list[JsonObject],
+        params_forniti: JsonObject,
+    ) -> JsonObject:
         """
         Risolve i parametri applicando i valori di default dalla definizione.
 
@@ -232,7 +233,7 @@ class SQLFunctionTranslator:
 
         return resolved
 
-    def _applica_template(self, template: str, params: Dict[str, Any]) -> str:
+    def _applica_template(self, template: str, params: JsonObject) -> str:
         """
         Sostituisce i placeholder nel template SQL con i valori dei parametri.
 
@@ -274,7 +275,7 @@ class SQLFunctionTranslator:
         self,
         expression: str,
         db_type: str,
-        column_map: Optional[Dict[str, str]] = None
+        column_map: Optional[StringMap] = None
     ) -> str:
         """
         Traduce un'espressione SQL complessa contenente più funzioni annidate.
@@ -500,6 +501,6 @@ def get_spatial_condition(predicate: str, db_type: str, geom1: str, geom2: str, 
     return sql_translator.get_spatial_predicate(predicate, db_type, geom1, geom2, **params)
 
 
-def list_sql_functions(category: Optional[str] = None) -> List[Dict]:
+def list_sql_functions(category: Optional[str] = None) -> list[JsonObject]:
     """Shortcut: elenca le funzioni disponibili nel registry, opzionalmente filtrate per categoria."""
     return sql_translator.list_functions(category)

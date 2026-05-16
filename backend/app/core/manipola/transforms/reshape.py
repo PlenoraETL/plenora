@@ -4,21 +4,18 @@ Cluster RESHAPE — operazioni di trasformazione struttura tabella.
 Keeps transformation behavior isolated from orchestration callers.
 """
 
-from typing import Dict, List, Optional, Union
+from typing import List, Optional, Union
 
 from app.core.dataframes.ports import FrameLike
 from app.core.dataframes.tabular import (
-    constant_object_series,
-    dataframe_from_mapping,
-    dataframe_from_rows,
+    concat_non_null_as_strings,
     empty_dataframe,
-    false_boolean_series,
     is_multiindex,
-    is_numeric_series,
     melt_dataframe,
-    object_series,
     pivot_table_dataframe,
+    table_diff_dataframe,
 )
+from app.core.manipola.types import StringMap
 from app.utils.logger import get_logger
 
 logger = get_logger("app.core.manipola.transforms.base")
@@ -42,7 +39,7 @@ def op_pivot(
     pivot_col: str,
     value_col: str,
     aggr_func: str = "first",
-    mapping: Optional[Dict[str, str]] = None
+    mapping: Optional[StringMap] = None
 ) -> DataFrame:
     """
     Tabella pivot: trasforma righe in colonne.
@@ -125,7 +122,7 @@ def op_pivot(
 
         if aggr_func_lower == 'concat':
             # Aggregazione speciale: concatena come stringa separata da virgola
-            agg_fn = lambda x: ', '.join(x.dropna().astype(str))
+            agg_fn = concat_non_null_as_strings
         elif aggr_func_lower in ('first', 'last', 'max', 'min', 'sum', 'mean', 'count'):
             agg_fn = aggr_func_lower
         else:
@@ -280,149 +277,20 @@ def op_table_diff(
     only_old_cols = [c for c in old_value_cols if c not in new_value_cols]
     only_new_cols = [c for c in new_value_cols if c not in old_value_cols]
 
-    merged = old_df.merge(
+    result_df, status_counts = table_diff_dataframe(
+        old_df,
         new_df,
-        on=key_cols,
-        how='outer',
-        suffixes=('_OLD', '_NEW'),
-        indicator=True
+        key_cols=key_cols,
+        common_value_cols=common_value_cols,
+        only_old_cols=only_old_cols,
+        only_new_cols=only_new_cols,
+        include_unchanged=include_unchanged,
+        separator=sep,
     )
 
-    # Prima: iterrows su ogni riga con confronto cella-per-cella Python
-    # Su 1M righe -> timeout garantito
-    # Ora: boolean masks pandas + 1 pass per raccogliere le colonne cambiate
-    # costretto ad iterare, ma su un DataFrame piccolo di boolean
-
-    merge_type = merged['_merge']
-    mask_deleted = merge_type == 'left_only'
-    mask_added = merge_type == 'right_only'
-    mask_both = merge_type == 'both'
-
-    # Per ogni common_value_col, calcola maschera "e' cambiato" vectorized
-    # Regole (preservate dal comportamento precedente
-    # entrambi NaN -> uguali (non changed
-    # uno NaN e l'altro no -> changed
-    # entrambi numerici -> abs(diff) > 1e-9
-    # altrimenti -> str(old) != str(new
-    changed_masks = {}
-    for c in common_value_cols:
-        old_s = merged[f'{c}_OLD']
-        new_s = merged[f'{c}_NEW']
-        both_nan = old_s.isna() & new_s.isna()
-        one_nan = old_s.isna() ^ new_s.isna()
-        if is_numeric_series(old_s) and is_numeric_series(new_s):
-            # Confronto numerico con tolleranza 1e-9
-            numeric_diff = (old_s.fillna(0) - new_s.fillna(0)).abs() > 1e-9
-            # Se uno solo e' NaN -> changed (one_nan), altrimenti solo se diff > tol
-            col_changed = one_nan | (numeric_diff & ~both_nan)
-        else:
-            # Confronto stringa (fallback generico
-            str_diff = old_s.astype(str) != new_s.astype(str)
-            col_changed = one_nan | (str_diff & ~both_nan & ~one_nan)
-        changed_masks[c] = col_changed
-
-    changed_df = (
-        dataframe_from_mapping(changed_masks, index=merged.index)
-        if common_value_cols
-        else dataframe_from_mapping(index=merged.index)
-    )
-
-    # Status per riga
-    any_changed = (
-        changed_df.any(axis=1)
-        if len(changed_df.columns)
-        else false_boolean_series(merged.index)
-    )
-    status = constant_object_series('UNCHANGED', merged.index)
-    status[mask_deleted] = 'DELETED'
-    status[mask_added] = 'ADDED'
-    status[mask_both & any_changed] = 'MODIFIED'
-
-    # Filtra UNCHANGED se non richiesti
-    if include_unchanged != "yes":
-        keep = status != 'UNCHANGED'
-        merged = merged[keep]
-        changed_df = changed_df.loc[keep] if len(changed_df.columns) else changed_df
-        status = status[keep]
-
-    if len(merged) == 0:
+    if len(result_df) == 0:
         logger.info("Table Diff: nessuna differenza trovata")
-        return dataframe_from_rows(
-            [],
-            columns=key_cols + common_value_cols + ['_diff_status', '_diff_columns', '_diff_old_values']
-        )
-
-    # Costruzione result_df vectorized
-    result_df = dataframe_from_mapping(index=merged.index)
-    for k in key_cols:
-        result_df[k] = merged[k]
-
-    # Per ADDED e MODIFIED prendi _NEW; per DELETED prendi _OLD
-    # Uso np.where per selezione vectorized
-    import numpy as np
-    is_deleted = (status == 'DELETED').values
-    for c in common_value_cols:
-        old_col = f'{c}_OLD'
-        new_col = f'{c}_NEW'
-        result_df[c] = np.where(is_deleted, merged[old_col], merged[new_col])
-    for c in only_old_cols:
-        if c in merged.columns:
-            result_df[c] = merged[c]
-    for c in only_new_cols:
-        if c in merged.columns:
-            result_df[c] = merged[c]
-
-    # _diff_columns e _diff_old_values solo per MODIFIED — vectorized
-    # via stack+groupby.agg(join). Niente loop Python (pandas internals in C
-    diff_columns_col = object_series([None] * len(merged), index=merged.index)
-    diff_old_values_col = object_series([None] * len(merged), index=merged.index)
-
-    modified_mask = status == 'MODIFIED'
-    if modified_mask.any() and common_value_cols:
-        cd_mod = changed_df.loc[modified_mask]  # n_mod, n_cols) bool
-
-        # ── _diff_columns ──────────────────────────────────────────────
-        # Stack: (row, col) -> bool. Filtra True, groupby row e join level 1
-        stacked = cd_mod.stack()
-        trues = stacked[stacked]
-        if len(trues) > 0:
-            diff_cols_per_row = (
-                trues.reset_index(level=1)
-                .groupby(level=0)[trues.index.names[1] or 'level_1']
-                .agg(sep.join)
-                .reindex(cd_mod.index, fill_value='')
-            )
-            diff_columns_col.loc[modified_mask] = diff_cols_per_row.values
-
-        # ── _diff_old_values ───────────────────────────────────────────
-        # DataFrame parallelo di old values stringificati, stessa shape di cd_mod
-        old_df = dataframe_from_mapping(index=cd_mod.index)
-        for c in common_value_cols:
-            ov = merged.loc[modified_mask, f'{c}_OLD']
-            # Vectorized: NaN -> '', altrimenti str
-            old_df[c] = ov.where(ov.notna(), '').astype(str)
-            # Rimuovi le occorrenze di 'nan' che astype(str) su float puo' produrre
-            # solo dove ov era effettivamente NaN — gia' gestito da where
-
-        if len(trues) > 0:
-            # Allinea old values con le posizioni True usando stesso MultiIndex
-            old_stacked = old_df.stack()
-            old_at_changes = old_stacked.loc[trues.index]
-            diff_old_per_row = (
-                old_at_changes.groupby(level=0)
-                .agg(sep.join)
-                .reindex(cd_mod.index, fill_value='')
-            )
-            diff_old_values_col.loc[modified_mask] = diff_old_per_row.values
-
-    result_df['_diff_status'] = status.values
-    result_df['_diff_columns'] = diff_columns_col.values
-    result_df['_diff_old_values'] = diff_old_values_col.values
-    # Ripulisci l'index (merged ha index ereditato, non serve al consumer
-    result_df = result_df.reset_index(drop=True)
-
-    # Statistiche
-    status_counts = result_df['_diff_status'].value_counts().to_dict()
+        return result_df
     logger.info(
         f"Table Diff completato: {len(result_df)} righe totali — "
         f"ADDED: {status_counts.get('ADDED', 0)}, "

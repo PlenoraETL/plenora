@@ -32,6 +32,7 @@ _WAVE_A_TARGETS: tuple[str, ...] = (
     "app/core/features/arcgis_feature_operations.py",
     "app/core/features/arcgis_writer_boundary.py",
     "app/core/features/features_service.py",
+    "app/core/orchestrator/carica_payload_validation.py",
     "app/core/orchestrator/task_service.py",
     "app/core/orchestrator/router_mappers.py",
     "app/core/orchestrator/router.py",
@@ -40,25 +41,8 @@ _WAVE_A_TARGETS: tuple[str, ...] = (
 
 _EXPECTED_WAVE_A_BROAD_DICT_RETURNS: frozenset[BroadDictReturn] = frozenset(
     {
-        BroadDictReturn("workers/tasks/carica_task.py", "execute_carica_task", "Dict[str, Any]"),
-        BroadDictReturn("workers/tasks/carica_task.py", "_execute_rest_write", "Dict[str, Any]"),
-        BroadDictReturn("app/core/features/features_service.py", "FeaturesService.browse_services", "List[dict]"),
-        BroadDictReturn("app/core/features/features_service.py", "FeaturesService.list_folders", "List[dict]"),
-        BroadDictReturn("app/core/features/features_service.py", "FeaturesService.search_services", "List[dict]"),
-        BroadDictReturn("app/core/features/features_service.py", "FeaturesService.browse_layers", "List[dict]"),
-        BroadDictReturn("app/core/features/features_service.py", "FeaturesService.get_layer_schema", "dict"),
-        BroadDictReturn("app/core/features/features_service.py", "FeaturesService.execute_query", "Dict[str, Any]"),
-        BroadDictReturn("app/core/features/features_service.py", "FeaturesService.write_features", "dict"),
-        BroadDictReturn("app/core/features/features_service.py", "FeaturesService.create_service", "dict"),
-        BroadDictReturn("app/core/features/features_service.py", "FeaturesService._write_features_df_core", "dict"),
         # _resolve_objectids_for_update rimosso dal cleanup features_service:
         # ratchet sceso. Mantenere fuori per evitare drift inverso.
-        BroadDictReturn("app/core/orchestrator/task_service.py", "ActiveTaskInfo.to_dict", "Dict[str, str]"),
-        BroadDictReturn("app/core/orchestrator/router_mappers.py", "task_result_to_dict", "Dict[str, Any]"),
-        BroadDictReturn("app/core/orchestrator/router.py", "_rest_carica_parser_input", "Dict[str, Any]"),
-        BroadDictReturn("app/core/orchestrator/router.py", "execute_project_pipeline", "Dict[str, Any]"),
-        BroadDictReturn("app/core/orchestrator/router.py", "preview_project", "Dict[str, Any]"),
-        BroadDictReturn("app/core/orchestrator/router.py", "cancel_task", "Dict[str, str]"),
     }
 )
 

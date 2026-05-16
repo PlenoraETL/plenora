@@ -8,13 +8,14 @@ from fastapi import APIRouter, HTTPException, Depends
 from app.shared import error_codes
 from app.shared.error_envelope import raise_typed_http
 from pydantic import BaseModel
-from typing import Dict, Any, Optional
+from typing import Optional
 
 from app.db.sql_functions import (
     get_function_catalog,
     translate_calculated_column,
 )
 from app.core.auth.dependencies import require_not_esecutore
+from app.core.estrai.types import JsonObject
 from app.shared.contracts.auth import CurrentUser
 from app.utils.logger import get_logger
 
@@ -39,7 +40,9 @@ class TranslateResponse(BaseModel):
 
 
 @functions_router.get("/catalog")
-async def get_catalog(current_user: CurrentUser = Depends(require_not_esecutore)) -> Dict[str, Any]:
+async def get_catalog(
+    current_user: CurrentUser = Depends(require_not_esecutore),
+) -> JsonObject:
     """Catalogo completo funzioni SQL disponibili."""
     catalog = get_function_catalog()
     

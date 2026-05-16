@@ -9,7 +9,11 @@ import uuid
 from typing import List, Optional
 
 from app.core.dataframes.ports import FrameLike
-from app.core.dataframes.tabular import coerce_datetime_series
+from app.core.dataframes.tabular import (
+    coerce_datetime_series,
+    group_cumcount_series,
+    sort_rows_reset_index,
+)
 from app.utils.logger import get_logger
 
 logger = get_logger("app.core.manipola.transforms.base")
@@ -47,12 +51,19 @@ def op_add_row_number(
 
         # Ordinamento opzionale
         if order_column and order_column in result.columns:
-            result.sort_values(by=order_column, ascending=ascending, inplace=True)
-            result.reset_index(drop=True, inplace=True)
+            result = sort_rows_reset_index(
+                result,
+                by=order_column,
+                ascending=ascending,
+            )
 
         if partition_column and partition_column in result.columns:
             # Numerazione all'interno di ogni gruppo
-            result[output_column] = result.groupby(partition_column).cumcount() + start
+            result[output_column] = group_cumcount_series(
+                result,
+                partition_column,
+                start,
+            )
         else:
             # Numerazione globale
             result[output_column] = range(start, start + len(result))

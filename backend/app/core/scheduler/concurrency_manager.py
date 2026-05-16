@@ -5,7 +5,7 @@ Lock e coda memorizzati nella tabella `scheduler_locks` nel database PostgreSQL.
 """
 
 from datetime import datetime, timedelta, timezone
-from typing import Literal
+from typing import Literal, TypedDict
 
 import psycopg2
 import psycopg2.errors
@@ -32,6 +32,11 @@ LOCK_TTL_SECONDS = settings.SCHEDULE_LOCK_TTL_SECONDS
 # di margine se il primo fallisce per transient. Default: 180s (3 min
 # = 3 refresh nel TTL 10 min, margine 3x
 LOCK_HEARTBEAT_INTERVAL_SECONDS = settings.SCHEDULE_LOCK_HEARTBEAT_INTERVAL_SECONDS
+
+
+class ConcurrencyStatusPayload(TypedDict):
+    locked: bool
+    queue_size: int
 
 
 class ConcurrencyManager:
@@ -269,7 +274,7 @@ class ConcurrencyManager:
         logger.info(f"Lock rilasciato: {schedule_id} (coda rimanente: {remaining})")
         return True
 
-    def get_status(self, schedule_id: str) -> dict:
+    def get_status(self, schedule_id: str) -> ConcurrencyStatusPayload:
         lock_key  = f"scheduler:lock:{schedule_id}"
         queue_key = f"scheduler:queue:{schedule_id}"
         return {

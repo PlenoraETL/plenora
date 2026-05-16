@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from typing import Any
-
 from psycopg2 import Error as PsycopgError
 
 from app.core.scheduler import db as scheduler_db
@@ -16,7 +14,10 @@ logger = get_logger(__name__)
 class ScheduleRunLogStore:
     """Read-only schedule log boundary consumed by ScheduleRunsCatalog."""
 
-    def list_completed_runs(self, schedule_id: str) -> list[dict[str, Any]]:
+    def list_completed_runs(
+        self,
+        schedule_id: str,
+    ) -> list[scheduler_db.ScheduleLogRow]:
         try:
             return scheduler_db.list_schedule_logs(
                 schedule_id=schedule_id,

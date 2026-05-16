@@ -4,11 +4,12 @@ Cluster SQL_HELPERS — quoting valori SQL ArcGIS-safe + chunking generico
 + batch-resolution OBJECTID via business-key.
 """
 
-from typing import Dict, List, Sequence, Tuple
+from typing import List, Sequence, Tuple
 
 import app.core.connections.arcgis_sql_helpers as _arcgis_sql_helpers
 from app.shared.connections.arcgis_connection import ArcGISConnectionInfo
 from app.shared.connections.arcgis_provider import ArcGISReadProviderProtocol
+from app.shared.contracts.payloads import IntMap
 
 
 def _quote_sql_value(v) -> str:
@@ -45,7 +46,7 @@ def _query_oid_by_key(
     layer_url: str,
     match_col: str,
     values: Sequence[object],
-) -> Tuple[Dict[str, int], List[str]]:
+) -> Tuple[IntMap, List[str]]:
     """Costruisce un dict {str(match_val): OBJECTID} interrogando il FS per
     le features con `match_col IN (values)`. Batcha la query su WHERE da 200.
 

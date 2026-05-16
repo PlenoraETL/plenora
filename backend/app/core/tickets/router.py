@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import io
 from dataclasses import asdict
-from typing import Any, Dict, Optional
+from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, File, HTTPException, Response, UploadFile
 from fastapi.encoders import jsonable_encoder
@@ -17,8 +17,10 @@ from pydantic import BaseModel, Field
 from app.core.auth.dependencies import get_current_user
 from app.core.files import db as files_db
 from app.shared.contracts.auth import CurrentUser
+from app.core.tickets import attachment_boundary as _attachment_boundary
 from app.core.tickets import db as tdb
 from app.core.tickets import service as svc
+from app.shared.contracts.payloads import JsonObject
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -53,11 +55,11 @@ from app.config import settings as _settings_cfg
 _MAX_ATTACHMENT_SIZE_BYTES = int(_settings_cfg.get("TICKET_ATTACHMENT_MAX_BYTES"))
 
 
-def _row_dict(row: object) -> Dict[str, Any]:
+def _row_dict(row: object) -> JsonObject:
     return jsonable_encoder(asdict(row))
 
 
-def _ticket_details_dict(details: svc.TicketDetails) -> Dict[str, Any]:
+def _ticket_details_dict(details: svc.TicketDetails) -> JsonObject:
     return {
         "ticket": _row_dict(details.ticket),
         "comments": [_row_dict(comment) for comment in details.comments],
@@ -106,7 +108,7 @@ class CommentCreateRequest(BaseModel):
 
 
 @router.get("/meta")
-def get_meta(_user: CurrentUser = Depends(_require_not_esecutore)) -> Dict[str, Any]:
+def get_meta(_user: CurrentUser = Depends(_require_not_esecutore)) -> JsonObject:
     """Enum di supporto per popolare dropdown frontend.
 
     Sono esposti in un endpoint dedicato (invece che hardcoded nel FE)
@@ -125,7 +127,7 @@ def get_meta(_user: CurrentUser = Depends(_require_not_esecutore)) -> Dict[str, 
 
 
 @router.get("/counts")
-def get_counts(current_user: CurrentUser = Depends(_require_not_esecutore)) -> Dict[str, Any]:
+def get_counts(current_user: CurrentUser = Depends(_require_not_esecutore)) -> JsonObject:
     """Counts per badge sidebar e card dashboard.
 
     Scope:
@@ -177,7 +179,7 @@ def get_counts(current_user: CurrentUser = Depends(_require_not_esecutore)) -> D
 def create_ticket_endpoint(
     payload: TicketCreateRequest,
     current_user: CurrentUser = Depends(_require_not_esecutore),
-) -> Dict[str, Any]:
+) -> JsonObject:
     ticket = svc.create_ticket(
         kind=payload.kind,
         title=payload.title,
@@ -200,7 +202,7 @@ def list_tickets_endpoint(
     mine: bool = False,
     limit: int = 500,
     current_user: CurrentUser = Depends(_require_not_esecutore),
-) -> Dict[str, Any]:
+) -> JsonObject:
     status_list = [s.strip() for s in status.split(",")] if status else None
     sev_list = [s.strip() for s in severity.split(",")] if severity else None
     tickets = svc.list_tickets_for(
@@ -219,7 +221,7 @@ def list_tickets_endpoint(
 def get_ticket_endpoint(
     ticket_id: str,
     current_user: CurrentUser = Depends(_require_not_esecutore),
-) -> Dict[str, Any]:
+) -> JsonObject:
     return _ticket_details_dict(svc.get_ticket_with_details(ticket_id, current_user))
 
 
@@ -228,7 +230,7 @@ def update_ticket_endpoint(
     ticket_id: str,
     payload: TicketUpdateRequest,
     current_user: CurrentUser = Depends(_require_not_esecutore),
-) -> Dict[str, Any]:
+) -> JsonObject:
     ticket = svc.update_ticket(
         ticket_id,
         actor=current_user,
@@ -250,7 +252,7 @@ def add_comment_endpoint(
     ticket_id: str,
     payload: CommentCreateRequest,
     current_user: CurrentUser = Depends(_require_not_esecutore),
-) -> Dict[str, Any]:
+) -> JsonObject:
     return _row_dict(svc.add_comment(ticket_id, payload.body, current_user))
 
 
@@ -262,7 +264,7 @@ async def upload_attachment_endpoint(
     ticket_id: str,
     file: UploadFile = File(...),
     current_user: CurrentUser = Depends(_require_not_esecutore),
-) -> Dict[str, Any]:
+) -> JsonObject:
     """Upload allegato al ticket.
 
     Allowlist:
@@ -277,33 +279,14 @@ async def upload_attachment_endpoint(
     # Read + size check (PRIMA della validazione MIME per evitare di
     # leggere file giganti di cui poi rifiutiamo l'estensione
     content = await file.read()
-    if len(content) > _MAX_ATTACHMENT_SIZE_BYTES:
-        raise HTTPException(
-            413,
-            f"Allegato troppo grande ({len(content)} bytes). "
-            f"Limite: {_MAX_ATTACHMENT_SIZE_BYTES} bytes",
-        )
-    if not content:
-        raise HTTPException(400, "File allegato vuoto")
-
-    # Validazione MIME content-based (filetype
-    # rifiuta eseguibili rinominati, polyglot, content-extension mismatch
-    # Pre-fix: solo allowlist estensione + warning su content_type del client
-    # ignorabile da chiunque controlli il browser
-    from app.utils.mime_validator import MimeMismatchError, validate_upload
-    try:
-        validate_upload(
-            content=content,
-            filename=filename,
-            allowed_extensions=set(_ALLOWED_EXTENSIONS.keys()),
-        )
-    except MimeMismatchError as e:
-        logger.warning(
-            f"Upload allegato ticket rifiutato (MIME): {filename!r} "
-            f"by={current_user.username}: {e}",
-            op="ticket_attach_reject",
-        )
-        raise HTTPException(400, str(e))
+    _attachment_boundary.validate_attachment_upload(
+        content=content,
+        filename=filename,
+        max_bytes=_MAX_ATTACHMENT_SIZE_BYTES,
+        allowed_extensions=set(_ALLOWED_EXTENSIONS.keys()),
+        logger=logger,
+        username=current_user.username,
+    )
 
     # Salva via file_service (riusa storage dispatch DB/S3
     from app.core.files.service import FileSourceService
@@ -410,17 +393,12 @@ def download_attachment_endpoint(
     filename = fs_row.get("original_filename") or "attachment"
     fmt = (fs_row.get("format") or "").lower()
 
-    # Content-Type dall'allowlist (resta autoritativa anche in download
-    mime = _ALLOWED_EXTENSIONS.get(fmt) or "application/octet-stream"
-    # Immagini inline, log/txt forzati come download
-    disposition = "inline" if mime.startswith("image/") else "attachment"
-
-    # filename sanitizzato per header (virgolette + no newline
-    safe_name = filename.replace('"', "").replace("\r", "").replace("\n", "")
-    headers = {
-        "Content-Disposition": f'{disposition}; filename="{safe_name}"',
-        "Content-Length": str(len(blob)),
-    }
+    mime, headers = _attachment_boundary.download_headers(
+        filename=filename,
+        fmt=fmt,
+        blob_size=len(blob),
+        allowed_extensions=_ALLOWED_EXTENSIONS,
+    )
     return Response(content=blob, media_type=mime, headers=headers)
 
 

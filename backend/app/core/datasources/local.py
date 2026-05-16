@@ -10,6 +10,7 @@ from app.core.datasources.interface import (
     BackendConfig,
     DataSourceInterface,
     DataSourceConnectionError,
+    DataSourceConnectionTestResult,
     DataSourceFileNotFoundError,
     DataSourcePermissionError,
     FileInfo,
@@ -83,7 +84,7 @@ class LocalDataSource(DataSourceInterface):
     def disconnect(self) -> None:
         self._connected = False
 
-    def test_connection(self) -> dict:
+    def test_connection(self) -> DataSourceConnectionTestResult:
         try:
             self.connect()
             root = self.config.root_path

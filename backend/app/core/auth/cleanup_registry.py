@@ -5,7 +5,7 @@ from __future__ import annotations
 import time
 from collections.abc import Callable, Mapping, MutableMapping, Sequence
 from dataclasses import dataclass
-from typing import Protocol
+from typing import Protocol, TypeAlias
 
 from app.core.arricchisci.cleanup import delete_api_connections_for_group
 from app.core.auth.user_cleanup import delete_users_for_group
@@ -34,6 +34,8 @@ GROUP_CLEANUP_REPORT_KEYS: tuple[str, ...] = (
     "intermediate_runs",
     "log_runs",
 )
+
+GroupCleanupReport: TypeAlias = dict[str, int]
 
 
 class CleanupLogger(Protocol):
@@ -152,7 +154,7 @@ def delete_intermediate_runs_for_group_project(project_id: str) -> int:
     return delete_project_runs(project_id)
 
 
-def build_empty_group_cleanup_report() -> dict[str, int]:
+def build_empty_group_cleanup_report() -> GroupCleanupReport:
     return dict.fromkeys(GROUP_CLEANUP_REPORT_KEYS, 0)
 
 

@@ -8,13 +8,22 @@ execution flow does not own daemon/thread mechanics.
 from __future__ import annotations
 
 import threading
-from typing import Any, Dict, Optional
+from typing import Optional, TypedDict
 
 from app.shared.clock import Clock, WALL_CLOCK
 from app.utils.logger import get_logger
 
 
 logger = get_logger(__name__)
+
+
+class LockHeartbeatState(TypedDict, total=False):
+    """Mutable scheduler lock heartbeat state shared with ExecutionManager."""
+
+    stop_event: threading.Event
+    lock_lost: bool
+    thread: threading.Thread
+    _hb: object
 
 
 class LockHeartbeat:
@@ -32,7 +41,7 @@ class LockHeartbeat:
         self._interval = interval
         self._stop_event = threading.Event()
         self._clock: Clock = clock if clock is not None else WALL_CLOCK
-        self._state: Dict[str, Any] = {
+        self._state: LockHeartbeatState = {
             "stop_event": self._stop_event,
             "lock_lost": False,
         }
@@ -56,7 +65,7 @@ class LockHeartbeat:
         if self._thread is not None and self._thread.is_alive():
             self._thread.join(timeout=5.0)
 
-    def get_state_dict(self) -> Dict[str, Any]:
+    def get_state_dict(self) -> LockHeartbeatState:
         """Return the live mutable state reference used by ExecutionManager."""
         return self._state
 

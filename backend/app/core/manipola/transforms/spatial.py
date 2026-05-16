@@ -9,12 +9,15 @@ from typing import List, Optional
 from app.utils.logger import get_logger
 from app.core.dataframes.ports import FrameLike
 from app.core.dataframes.geodata import (
+    active_geometry_value_at,
     empty_geodataframe,
     ensure_same_crs,
+    geodataframe_drop_duplicates_reset_index,
     geodataframe_from_geometry_series,
     geodataframe_sjoin,
     geodataframe_sjoin_nearest,
     is_geodataframe,
+    set_active_geometry_value_at,
     to_geodataframe,
 )
 from app.core.manipola.transforms.spatial_helpers import (
@@ -842,7 +845,7 @@ def op_geo_within(
         result = joined[keep_cols].copy()
 
         # Rimuovi duplicati (una geometria puÃ² essere within piÃ¹ poligoni sovrapposti
-        result = result.drop_duplicates().reset_index(drop=True)
+        result = geodataframe_drop_duplicates_reset_index(result)
 
         # Assicura geometria attiva valida
         result = _ensure_active_geometry(result)
@@ -1087,15 +1090,15 @@ def op_geo_clean_topology(
         # Step 1: make_valid su tutte le geometrie
         if HAS_MAKE_VALID:
             for idx in result.index:
-                geom = result.at[idx, result.geometry.name]
+                geom = active_geometry_value_at(result, idx)
                 if geom is not None and not geom.is_valid:
-                    result.at[idx, result.geometry.name] = _make_valid(geom)
+                    set_active_geometry_value_at(result, idx, _make_valid(geom))
                     fixed_count += 1
         else:
             for idx in result.index:
-                geom = result.at[idx, result.geometry.name]
+                geom = active_geometry_value_at(result, idx)
                 if geom is not None and not geom.is_valid:
-                    result.at[idx, result.geometry.name] = geom.buffer(0)
+                    set_active_geometry_value_at(result, idx, geom.buffer(0))
                     fixed_count += 1
 
         # Step 2: chiudi micro-gap con buffer positivo/negativo

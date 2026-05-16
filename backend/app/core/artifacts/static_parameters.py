@@ -4,12 +4,14 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any, Iterable, Mapping
+from typing import Any, Iterable, Mapping, TypeAlias
 
 from app.utils.logger import get_logger
 from app.utils.template_variables import process_template_variables
 
 logger = get_logger(__name__)
+
+StaticParameterValues: TypeAlias = dict[str, Any]
 
 
 @dataclass(frozen=True)
@@ -54,10 +56,10 @@ def _cast_static_value(value: Any, field_type: str, field_name: str) -> Any:
 def process_static_fields(
     fields: Iterable[Mapping[str, Any] | StaticParameterField],
     reference_date: datetime | None = None,
-) -> dict[str, Any]:
+) -> StaticParameterValues:
     """Resolve template variables and explicit field types for static fields."""
 
-    result: dict[str, Any] = {}
+    result: StaticParameterValues = {}
 
     for raw_field in fields:
         field = StaticParameterField.from_raw(raw_field)

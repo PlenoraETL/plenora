@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import time as _time_mod
 
-from typing import Any, Dict, Optional
+from typing import Any, Optional
 
 from app.config import settings
 from app.core.artifacts import SourceLoader, SourceLoadingError, SourceRef
@@ -16,6 +16,7 @@ from app.core.arricchisci._api_connection_helpers import _nd
 from app.core.arricchisci.execution_context import (
     ArricchisciExecutionContext,
 )
+from app.core.arricchisci.types import JsonObject
 from app.core.arricchisci.project_access import load_project_access_context
 from app.core.arricchisci.source_project_store import (
     fetch_project_and_latest_result_timestamps,
@@ -232,7 +233,7 @@ class ApiConnectionSourceLoadingMixin:
 
     def _load_source_project(
         self,
-        node_data: Dict,
+        node_data: JsonObject,
         force_recalculate: bool = False,
         *,
         ctx: ArricchisciExecutionContext,
@@ -353,7 +354,7 @@ class ApiConnectionSourceLoadingMixin:
 
     def _load_file_source(
         self,
-        node_data: Dict,
+        node_data: JsonObject,
         *,
         ctx: ArricchisciExecutionContext,
     ) -> Any:
@@ -428,7 +429,7 @@ class ApiConnectionSourceLoadingMixin:
 
     def _load_static_values(
         self,
-        node_data: Dict,
+        node_data: JsonObject,
         *,
         ctx: Optional[ArricchisciExecutionContext] = None,
     ) -> Any:

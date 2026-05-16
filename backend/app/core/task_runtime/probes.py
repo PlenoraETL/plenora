@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from app.shared.contracts.payloads import JsonObject
+
 
 class CeleryAppUnavailable(RuntimeError):
     """Raised when the Celery application cannot be imported."""
@@ -47,7 +49,7 @@ class RedisRuntimePort:
         )
         return int(redis_client.llen(queue_name))
 
-    def info(self, *, timeout: int = 2) -> dict[str, Any]:
+    def info(self, *, timeout: int = 2) -> JsonObject:
         """Return Redis INFO for the broker."""
         _redis = _redis_module()
         client = _redis.Redis.from_url(
@@ -78,7 +80,7 @@ def get_redis_runtime_port() -> RedisRuntimePort:
 def inspect_celery_workers(
     *,
     timeout: float = 2.0,
-) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any]]:
+) -> tuple[JsonObject, JsonObject, JsonObject]:
     """Return active tasks, stats and active queues from Celery inspect."""
     try:
         from workers.celery_app import celery_app
@@ -97,7 +99,7 @@ def get_celery_queue_depth(queue_name: str = "celery") -> int:
     return get_redis_runtime_port().queue_depth(queue_name)
 
 
-def get_redis_info() -> dict[str, Any]:
+def get_redis_info() -> JsonObject:
     """Return Redis INFO for the configured Celery broker."""
     return get_redis_runtime_port().info()
 

@@ -2,15 +2,16 @@
 
 from __future__ import annotations
 
-from typing import Optional
+from typing import Optional, TypeAlias
 
 from app.core.results.blob import get_result_data as _get_result_data
 from app.core.results import db as results_db
 
 ResultMetadataRow = results_db.ResultMetadataRow
+ResultMetadataPayload: TypeAlias = dict[str, object]
 
 
-def _metadata_public_payload(row: ResultMetadataRow) -> dict[str, object]:
+def _metadata_public_payload(row: ResultMetadataRow) -> ResultMetadataPayload:
     """Serialize result metadata at the legacy result-store boundary."""
     values: dict[str, object] = {
         "id": row.id,
@@ -84,7 +85,7 @@ def save_result(
     created_by: Optional[str] = None,
     storage_key: Optional[str] = None,
     size_bytes: Optional[int] = None,
-) -> Optional[dict[str, object]]:
+) -> Optional[ResultMetadataPayload]:
     """Persist result metadata through the results domain boundary."""
     row = results_db.save_result_row(
         result_id=result_id,
@@ -122,13 +123,13 @@ def get_result_row(result_id: str) -> Optional[ResultMetadataRow]:
 def get_latest_result(
     project_id: str,
     group_id: Optional[str] = None,
-) -> Optional[dict[str, object]]:
+) -> Optional[ResultMetadataPayload]:
     """Return latest result metadata for a project as a legacy dict."""
     row = results_db.get_latest_result_row(project_id, group_id=group_id)
     return _metadata_public_payload(row) if row else None
 
 
-def list_results(project_id: str) -> list[dict[str, object]]:
+def list_results(project_id: str) -> list[ResultMetadataPayload]:
     """Return result metadata rows for a project as legacy dicts."""
     return [_metadata_public_payload(row) for row in results_db.list_result_rows(project_id)]
 

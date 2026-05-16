@@ -5,12 +5,15 @@ Keeps database loading behavior isolated from orchestration callers.
 """
 
 import re
-from typing import Any, Dict, List, Optional, Tuple
+from collections.abc import Mapping
+from typing import Any, List, Optional, Tuple
 
 from app.core.carica.models import ColumnMapping
 from app.core.dataframes.schema import series_to_canvas_type
+from app.core.dataframes.tabular import non_null_head_values
 from app.core.dataframes.values import is_geometry_series
 from app.core.resources.column_types import normalize_canvas_type
+from app.shared.contracts.payloads import StringMap, StringRows
 
 
 # Nomi colonna che indicano una geometria (case-insensitive
@@ -39,8 +42,8 @@ class ColumnMapper:
     def auto_map(
         self,
         df: Any,
-        existing_columns: Optional[List[Dict[str, str]]] = None,
-        canvas_types: Optional[Dict[str, str]] = None,
+        existing_columns: Optional[StringRows] = None,
+        canvas_types: Optional[StringMap] = None,
         srid: int = 4326,
     ) -> List[ColumnMapping]:
         """Genera automaticamente il mapping colonne.
@@ -171,7 +174,7 @@ class ColumnMapper:
     def suggest_match_columns(
         self,
         mappings: List[ColumnMapping],
-        existing_columns: Optional[List[Dict[str, str]]] = None,
+        existing_columns: Optional[StringRows] = None,
     ) -> List[str]:
         """Suggerisce le colonne per il match (UPDATE/UPSERT).
 
@@ -230,7 +233,7 @@ class ColumnMapper:
         # Più robusto della regex: "POINT" fallisce, "POINT(9 45)" passa
         try:
             from shapely import wkt as _wkt
-            sample = series.dropna().head(5)
+            sample = non_null_head_values(series, 5)
             wkt_count = 0
             for val in sample:
                 try:
@@ -277,7 +280,7 @@ class ColumnMapper:
     def _find_matching_column(
         self,
         source_name: str,
-        existing_map: Dict[str, Dict],
+        existing_map: Mapping[str, StringMap],
     ) -> Optional[str]:
         """Trova una colonna esistente che matcha per nome.
 

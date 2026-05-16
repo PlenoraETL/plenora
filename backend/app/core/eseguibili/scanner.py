@@ -6,6 +6,8 @@ Scansiona tutti i nodi `api_enrich` del canvas e raccoglie le colonne input
 
 import re
 from typing import Any, Dict, List, Set
+
+from app.shared.contracts.payloads import JsonObject, JsonRows
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -26,7 +28,7 @@ def _expand_mapping_columns(mapping_value: Any) -> List[str]:
     return [mapping_value]
 
 
-def extract_expected_columns(canvas: Dict[str, Any]) -> List[Dict[str, Any]]:
+def extract_expected_columns(canvas: JsonObject) -> JsonRows:
     """Analizza un canvas arricchisci e ritorna la lista delle colonne attese.
 
     Args:

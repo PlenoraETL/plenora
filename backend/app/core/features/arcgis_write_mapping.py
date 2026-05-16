@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from typing import Mapping, Sequence
 
 from app.core.dataframes.ports import FrameLike
+from app.core.dataframes.tabular import select_and_rename_columns
 
 
 @dataclass(frozen=True)
@@ -120,8 +121,11 @@ class ArcGISWriteMappingContract:
                 mapped_geometry_column = mapping.dest_column
                 break
 
-        mapped_df = df.loc[:, selected_columns].copy()
-        mapped_df = mapped_df.rename(columns=rename_map)
+        mapped_df = select_and_rename_columns(
+            df,
+            selected_columns,
+            rename_map=rename_map,
+        )
         if mapped_geometry_column != geometry_column and hasattr(mapped_df, "set_geometry"):
             mapped_df = mapped_df.set_geometry(mapped_geometry_column)
 

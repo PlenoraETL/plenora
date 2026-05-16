@@ -86,8 +86,9 @@ def _make_request(bundle_task_id: str = "task-test"):
 
 
 
+@pytest.mark.usefixtures("fake_validator")
 def test_validate_publish_cached_locally_returns_report(
-    fake_settings, fake_validator, superadmin, monkeypatch
+    fake_settings, superadmin, monkeypatch
 ):
     """Cache hit: bundle gia' presente localmente. Hydrate viene comunque
     chiamato (idempotenza), no-op nel caso reale (cache hit). Validator
@@ -114,8 +115,9 @@ def test_validate_publish_cached_locally_returns_report(
 
 
 
+@pytest.mark.usefixtures("fake_validator")
 def test_validate_publish_hydrates_from_s3_when_cache_miss(
-    fake_settings, fake_validator, superadmin, monkeypatch
+    fake_settings, superadmin, monkeypatch
 ):
     """Cache miss: bundle solo-S3, hydrate scarica e popola la cache,
     validator vede dir popolata, report valido (NON BUNDLE_MISSING).
@@ -148,8 +150,9 @@ def test_validate_publish_hydrates_from_s3_when_cache_miss(
 
 
 
+@pytest.mark.usefixtures("fake_validator")
 def test_validate_publish_returns_bundle_missing_when_s3_empty(
-    fake_settings, fake_validator, superadmin, monkeypatch
+    fake_settings, superadmin, monkeypatch
 ):
     """Bundle assente ovunque: hydrate solleva FileNotFoundError, _hydrate_
     local_cache silent pass (router.py:72-74), exists() resta False, validator
@@ -171,8 +174,9 @@ def test_validate_publish_returns_bundle_missing_when_s3_empty(
 
 
 
+@pytest.mark.usefixtures("fake_validator")
 def test_validate_publish_keeps_bundle_missing_on_hydrate_exception(
-    fake_settings, fake_validator, superadmin, monkeypatch
+    fake_settings, superadmin, monkeypatch
 ):
     """Hydrate solleva exception non-FileNotFoundError (network 5xx, S3
     timeout, credenziali rifiutate, ...). _hydrate_local_cache logga

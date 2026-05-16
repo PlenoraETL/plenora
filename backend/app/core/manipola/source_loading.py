@@ -6,9 +6,10 @@ Manipola source-loading helpers — separation slice.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, Dict, Optional, Sequence
+from typing import Any, Optional, Sequence
 
-from app.core.dataframes.frame_io import filter_visible_columns
+from app.core.dataframes.frame_io import drop_duplicate_columns, filter_visible_columns
+from app.core.manipola.types import ColumnMetadataRows, FrameMap, JsonObject, JsonRows
 from app.utils.logger import get_logger
 from app.shared.resources.metadata import LoadedResource, ResourceMetadata
 
@@ -21,8 +22,8 @@ _DEFAULT_LOGGER = get_logger(__name__)
 
 def _metadata_columns_from_node_columns(
     node_columns: Sequence[Any] | None,
-) -> list[dict[str, str]]:
-    columns: list[dict[str, str]] = []
+) -> ColumnMetadataRows:
+    columns: ColumnMetadataRows = []
     for col in node_columns or []:
         if isinstance(col, dict):
             name = col.get("alias") or col.get("name", "")
@@ -37,7 +38,7 @@ def _metadata_columns_from_node_columns(
 
 def load_project_source_artifact(
     path: Path,
-    node_columns: Sequence[dict[str, Any]] | None,
+    node_columns: JsonRows | None,
     *,
     source_project_id: str,
     group_id: str,
@@ -56,7 +57,7 @@ def load_project_source_artifact(
 
     df = load_dataframe_from_file(path)
     data = filter_visible_columns(df, node_columns)
-    data = data.loc[:, ~data.columns.duplicated(keep="first")]
+    data = drop_duplicate_columns(data, keep="first")
     metadata = ResourceMetadata.from_columns_list(
         _metadata_columns_from_node_columns(node_columns),
         source_kind="project",
@@ -70,12 +71,12 @@ def load_project_source_artifact(
 
 def load_file_sources(
     canvas,
-    dataframes: Dict[str, Any],
+    dataframes: FrameMap,
     *,
     group_id: Optional[str],
     logger=None,
-    metadata_map: Optional[Dict[str, Any]] = None,
-) -> Optional[Dict[str, Any]]:
+    metadata_map: Optional[FrameMap] = None,
+) -> Optional[JsonObject]:
     """Carica DataFrame dai nodi ``file_source`` via ``SourceLoader``.
 
     Behaviour-preserving separation of the body previously

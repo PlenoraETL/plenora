@@ -10,13 +10,14 @@ from urllib.parse import quote as _quote
 import re
 
 import time
-from typing import Dict, Optional, Tuple
+from typing import Optional, Tuple
 
 import requests
 
 from app.infrastructure.http.session import (
     get_shared_session,
 )
+from app.core.arricchisci.types import JsonObject
 from app.observability.log_sanitization import (
     sanitize_for_log,
     sanitize_url_for_log,
@@ -41,9 +42,9 @@ class EnrichmentRetryHttpMixin:
 
     def _call_api_with_retry(
         self,
-        params: Dict,
+        params: JsonObject,
         row_index: int
-    ) -> Tuple[Optional[Dict], Optional[RowError]]:
+    ) -> Tuple[Optional[JsonObject], Optional[RowError]]:
         """
         Chiama API con retry e exponential backoff.
 

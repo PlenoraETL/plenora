@@ -5,11 +5,12 @@ from __future__ import annotations
 import uuid
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Mapping, Optional
+from typing import Any, List, Mapping, Optional
 
 from app.db.pg_connection import (
     fetchone, fetchall, execute, transaction,
 )
+from app.shared.contracts.payloads import IntMap, JsonObject
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -274,7 +275,7 @@ def update_ticket(
     if not current:
         return None
 
-    fields: Dict[str, Any] = {}
+    fields: JsonObject = {}
     if status is not None:
         fields["status"] = status
     if severity is not None:
@@ -348,7 +349,7 @@ def counts_by_severity(
     *,
     group_id: Optional[str] = None,
     status_in: Optional[List[str]] = None,
-) -> Dict[str, int]:
+) -> IntMap:
     """Breakdown counts per severity (per card dashboard). Esclude soft-deleted."""
     clauses: List[str] = ["deleted_at IS NULL"]
     params: List[Any] = []

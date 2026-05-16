@@ -2,13 +2,12 @@
 
 from __future__ import annotations
 
-from typing import Any
-
 from app.core.connections.service import _decrypt_password
 from app.db.pg_connection import fetchone
+from app.shared.contracts.payloads import JsonObject
 
 
-def fetch_connection_config(connection_id: str) -> dict[str, Any] | None:
+def fetch_connection_config(connection_id: str) -> JsonObject | None:
     row = fetchone("SELECT * FROM connections WHERE id = %s", (connection_id,))
     if not row:
         return None

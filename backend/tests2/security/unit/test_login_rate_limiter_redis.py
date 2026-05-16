@@ -233,6 +233,42 @@ def test_fallback_called_when_redis_client_is_none(rl_no_redis):
     assert calls == [("check", "ip-x"), ("record", "ip-x"), ("clear", "ip-x")]
 
 
+@pytest.mark.parametrize("operation", ["check", "record", "clear"])
+def test_redis_required_fails_closed_without_fallback(rl_no_redis, monkeypatch, operation):
+    """Con LOGIN_RL_REDIS_REQUIRED=true Redis down blocca il login path.
+
+    Il default resta retrocompatibile (test sopra), ma i deploy cluster
+    possono impedire il fallback in-memory single-node.
+    """
+    rl = rl_no_redis
+    monkeypatch.setenv("LOGIN_RL_REDIS_REQUIRED", "true")
+    fallback_called = []
+
+    def fb(ip):
+        fallback_called.append(ip)
+
+    with pytest.raises(HTTPException) as exc:
+        if operation == "check":
+            rl.check_rate_limit(
+                "ip-required",
+                max_attempts=10,
+                window_seconds=60,
+                lockout_seconds=300,
+                fallback=fb,
+            )
+        elif operation == "record":
+            rl.record_failed_login(
+                "ip-required",
+                window_seconds=60,
+                fallback=fb,
+            )
+        else:
+            rl.clear_failed_logins("ip-required", fallback=fb)
+
+    assert exc.value.status_code == 503
+    assert fallback_called == []
+
+
 def test_fallback_called_when_redis_pipeline_raises():
     """Se Redis e' "online" ma l'I/O solleva (es. timeout, server error),
     cadiamo sul fallback. Simulato con un client che esplode su `pipeline()`.

@@ -10,19 +10,15 @@ import dis
 
 import pytest
 
-# Import fixture come simbolo locale per discovery pytest senza conftest:
-# pytest scopre fixture per nome solo se sono visibili al top-level del file
-# di test (o tramite conftest.py). Senza questa import, i test che usano
-# `celery_eager` come parametro falliscono con `fixture not found`.
-from tests2._helpers.celery_eager import celery_eager  # noqa: F401
-
 
 pytestmark = [
     pytest.mark.unit,
     pytest.mark.arricchisci,
     pytest.mark.security,
     pytest.mark.regression,
+    pytest.mark.usefixtures("celery_eager"),
 ]
+pytest_plugins = ("tests2._helpers.celery_eager",)
 
 
 # 1. Static guard: nessun singleton modulo-level
@@ -51,7 +47,7 @@ def test_execute_enrichment_task_does_not_import_singleton():
 
 
 def test_execute_enrichment_task_instantiates_local_api_service(
-    celery_eager, monkeypatch,
+    monkeypatch,
 ):
     """Il task DEVE creare un'istanza locale `ApiConnectionService()`."""
     from tests2._helpers.celery_eager import (
@@ -78,7 +74,7 @@ def test_execute_enrichment_task_instantiates_local_api_service(
 
 
 def test_execute_enrichment_task_passes_ctx_with_group_id_to_loaders(
-    celery_eager, monkeypatch,
+    monkeypatch,
 ):
     """BE-GO-READY-TRANSFORMATION-ENGINE-030A: post-migrazione il
     worker NON muta piu' `svc._current_group_id` ne' chiama
@@ -148,7 +144,7 @@ def test_execute_enrichment_task_passes_ctx_with_group_id_to_loaders(
 
 
 def test_execute_enrichment_task_propagates_result_id_in_dataframe_branch(
-    celery_eager, monkeypatch,
+    monkeypatch,
 ):
     """Regression guard: il ramo DataFrame del task DEVE includere
     `result_id` nel dict ritornato. Senza, `/api/tasks/{id}/download`
@@ -198,7 +194,7 @@ def _walk_co_consts(code):
 
 
 def test_execute_enrichment_task_propagates_result_id_in_file_branch(
-    celery_eager, monkeypatch,
+    monkeypatch,
 ):
     """Regression guard: il ramo file_result DEVE includere `result_id`.
 
@@ -278,7 +274,7 @@ def test_update_task_progress_accepts_explicit_task_id():
 
 
 def test_execute_enrichment_task_propagates_task_id_in_progress_calls(
-    celery_eager, monkeypatch,
+    monkeypatch,
 ):
     """Regression guard: tutti i call site di `update_task_progress`
     dentro `execute_enrichment_task` devono passare `task_id=task_id`.
@@ -321,7 +317,7 @@ def test_execute_enrichment_task_propagates_task_id_in_progress_calls(
 
 
 def test_execute_enrichment_task_eseguibile_branch_fetches_group_id(
-    celery_eager, monkeypatch,
+    monkeypatch,
 ):
     """Regression guard BUG-ESEG-GROUP: il branch `is_eseguibile=True`
     deve recuperare il `_group_id` dalla tabella `eseguibili` e

@@ -7,7 +7,7 @@ Questo modulo contiene le funzioni helper utilizzate da:
 import threading as _threading
 
 import re
-from typing import Any, Dict, List, Optional, Set, Tuple
+from typing import Any, List, Optional, Set, Tuple
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from app.core.dataframes.parallel_ops import (
@@ -20,6 +20,7 @@ from app.core.dataframes.parallel_ops import (
     should_execute_first_row,
     validate_and_merge_parallel_columns,
 )
+from app.core.arricchisci.types import JsonObject, JsonObjectById, JsonRows
 from app.shared.execution.canvas_node import CanvasNode
 from app.utils.logger import get_logger
 
@@ -28,7 +29,7 @@ logger = get_logger(__name__)
 
 # EXECUTE_IF — conditional skip
 
-def _parse_execute_if(node_data: Dict):
+def _parse_execute_if(node_data: JsonObject):
     """Parsa la condizione execute_if e ritorna (col, expected, negate) o None se assente."""
     condition = node_data.get("execute_if")
     if not condition:
@@ -46,7 +47,7 @@ def _parse_execute_if(node_data: Dict):
     return col.strip(), expected.strip().lower(), negate
 
 
-def get_execute_mask(node_data: Dict, input_df: Any) -> Any:
+def get_execute_mask(node_data: JsonObject, input_df: Any) -> Any:
     """Ritorna una maschera booleana per-riga del DataFrame.
 
     Per ogni riga: True se il nodo deve essere eseguito su quella riga,
@@ -60,12 +61,12 @@ def get_execute_mask(node_data: Dict, input_df: Any) -> Any:
         # Nessuna condizione → tutte le righe
 
 
-def should_execute_node(node_data: Dict, input_df: Any) -> bool:
+def should_execute_node(node_data: JsonObject, input_df: Any) -> bool:
     """Valuta la condizione `execute_if` di un nodo api_enrich.
 
     Sintassi di execute_if:
-      - "colonna=valore" → True se input_df[colonna].iloc[0] == valore
-      - "colonna!=valore" → True se input_df[colonna].iloc[0] != valore
+      - "colonna=valore" → True se la prima riga ha quel valore
+      - "colonna!=valore" → True se la prima riga ha un valore diverso
       - None / assente → True (sempre eseguire)
 
     Per decisione per-riga usare `get_execute_mask` che ritorna un
@@ -77,7 +78,7 @@ def should_execute_node(node_data: Dict, input_df: Any) -> bool:
 
 # PARALLEL GROUPS — raggruppamento nodi indipendenti
 
-def _extract_consumed_columns(node_data: Dict) -> Set[str]:
+def _extract_consumed_columns(node_data: JsonObject) -> Set[str]:
     """Estrae le colonne del DataFrame che un nodo api_enrich effettivamente legge.
 
     Analizza param_mapping:
@@ -97,14 +98,14 @@ def _extract_consumed_columns(node_data: Dict) -> Set[str]:
     return cols
 
 
-def _extract_produced_columns(node_data: Dict) -> Set[str]:
+def _extract_produced_columns(node_data: JsonObject) -> Set[str]:
     """Estrae le colonne che un nodo api_enrich aggiunge al DataFrame."""
     om = CanvasNode(node_data).get_field("output_mapping") or []
     return {m.get("column", "") for m in om if m.get("column")}
 
 
 def _node_may_explode_cardinality(
-    node: Dict, api_connections: Optional[Dict[str, Dict]] = None
+    node: JsonObject, api_connections: Optional[JsonObjectById] = None
 ) -> bool:
     """RB.#15 (2026-04-28): True se il nodo api_enrich puo' produrre piu'
     righe in output rispetto all'input (cardinality-changing).
@@ -169,9 +170,9 @@ def _node_may_explode_cardinality(
 
 def compute_parallel_groups(
     execution_order: List[str],
-    nodes: List[Dict],
-    edges: List[Dict],
-    api_connections: Optional[Dict[str, Dict]] = None,
+    nodes: JsonRows,
+    edges: JsonRows,
+    api_connections: Optional[JsonObjectById] = None,
 ) -> List[Tuple[str, List[str]]]:
     """Raggruppa i nodi dell'execution_order in step sequenziali o paralleli.
 
@@ -229,7 +230,7 @@ def compute_parallel_groups(
     current_batch: List[str] = []
     current_batch_produces: Set[str] = set()
 
-    def _is_file_processor(n: Dict) -> bool:
+    def _is_file_processor(n: JsonObject) -> bool:
         """True se il nodo e' api_enrich con connector rest_file.
 
         Richiede `api_connections` nel closure: senza, ritorna sempre False
@@ -312,11 +313,11 @@ def compute_parallel_groups(
 def execute_parallel_enrichers(
     node_ids: List[str],
     input_df: Any,
-    node_map: Dict[str, Dict],
-    api_connections: Dict[str, Dict],
+    node_map: JsonObjectById,
+    api_connections: JsonObjectById,
     execute_single_fn,
     max_workers: int = 10,
-) -> Tuple[Dict[str, Any], Optional[str]]:
+) -> Tuple[JsonObject, Optional[str]]:
     """Esegue un gruppo di nodi api_enrich in parallelo sullo stesso input_df.
 
     Args:
@@ -361,7 +362,7 @@ def execute_parallel_enrichers(
             return node_id, None, str(e)
 
     # Esecuzione
-    node_results: Dict[str, Optional[Any]] = {}
+    node_results: JsonObject = {}
     first_error = None
 
     if len(node_ids) <= 1:

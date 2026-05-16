@@ -34,7 +34,7 @@ le strutture interne, quindi e' sicuro chiamarlo piu' volte.
 from __future__ import annotations
 
 import copy
-from typing import Any, Optional
+from typing import Optional
 from uuid import uuid4
 
 

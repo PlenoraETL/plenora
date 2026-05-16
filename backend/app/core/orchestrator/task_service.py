@@ -3,10 +3,15 @@
 from __future__ import annotations
 
 from types import MappingProxyType
-from typing import Dict, Mapping, Optional, List, Protocol, TypeAlias
+from typing import Mapping, Optional, List, Protocol, TypeAlias, TypedDict
 from datetime import datetime, timezone
 from enum import Enum
 from dataclasses import dataclass
+from app.core.orchestrator.task_metadata_store import (
+    PendingTaskMetadata,
+    TaskMetadataStore,
+    default_task_metadata_store,
+)
 from app.core.task_runtime import CeleryTaskRuntime, TaskRuntimePort
 from app.utils.logger import get_logger
 
@@ -14,6 +19,14 @@ logger = get_logger(__name__)
 
 JsonPrimitive: TypeAlias = str | int | float | bool | None
 JsonValue: TypeAlias = JsonPrimitive | list["JsonValue"] | dict[str, "JsonValue"]
+JsonMapping: TypeAlias = Mapping[str, JsonValue]
+
+
+class ActiveTaskPublicPayload(TypedDict):
+    task_id: str
+    name: str
+    worker: str
+    status: str
 
 
 class TaskStatus(str, Enum):
@@ -52,7 +65,7 @@ class CeleryLaunchTask(Protocol):
 @dataclass(frozen=True)
 class EnrichmentTaskPayload:
     project_id: str
-    canvas: dict[str, JsonValue]
+    canvas: JsonMapping
     output_format: str = "csv"
     force_recalculate: bool = False
     cleanup_file_source_ids: Optional[list[str]] = None
@@ -64,8 +77,8 @@ class EnrichmentTaskPayload:
 @dataclass(frozen=True)
 class CaricaTaskPayload:
     project_id: str
-    canvas: dict[str, JsonValue]
-    carica_node_data: dict[str, JsonValue]
+    canvas: JsonMapping
+    carica_node_data: JsonMapping
     output_format: str = "geojson"
     force_recalculate: bool = False
     triggered_by: str = "manual"
@@ -285,7 +298,7 @@ class ActiveTaskInfo:
             status=status,
         )
 
-    def to_dict(self) -> Dict[str, str]:
+    def to_dict(self) -> ActiveTaskPublicPayload:
         return {
             "task_id": self.task_id,
             "name": self.name,
@@ -297,23 +310,13 @@ class ActiveTaskInfo:
 class TaskService:
     """Servizio per gestione task asincroni."""
 
-    # Cache locale task_id → project_id per risolvere il project_id
-    # anche quando il task è in stato PENDING (Celery non ha ancora metadata
-    # Risolve la race condition: frontend fa polling subito dopo la creazione
-    # ma il worker non ha ancora scritto project_id nel result backend
-    _task_project_cache: Dict[str, str] = {}
-    _CACHE_MAX_SIZE = 500
-
-    def _prune_cache(self):
-        """Rimuove le entry più vecchie se la cache supera il limite."""
-        if len(self._task_project_cache) > self._CACHE_MAX_SIZE:
-            excess = len(self._task_project_cache) - self._CACHE_MAX_SIZE // 2
-            keys = list(self._task_project_cache.keys())[:excess]
-            for k in keys:
-                self._task_project_cache.pop(k, None)
-
-    def __init__(self, runtime: TaskRuntimePort | None = None):
+    def __init__(
+        self,
+        runtime: TaskRuntimePort | None = None,
+        metadata_store: TaskMetadataStore | None = None,
+    ):
         self.runtime = runtime or CeleryTaskRuntime()
+        self.metadata_store = metadata_store or default_task_metadata_store()
 
     @property
     def app(self) -> object:
@@ -337,8 +340,13 @@ class TaskService:
             f"per progetto {request.project_id}"
         )
 
-        self._task_project_cache[result.id] = request.project_id
-        self._prune_cache()
+        self.metadata_store.put(
+            PendingTaskMetadata(
+                task_id=result.id,
+                project_id=request.project_id,
+                task_type=request.task_type.value,
+            )
+        )
 
         return TaskInfo(
             task_id=result.id,
@@ -353,7 +361,7 @@ class TaskService:
     def create_enrichment_task(
         self,
         project_id: str,
-        canvas: Dict,
+        canvas: JsonMapping,
         output_format: str = "csv",
         force_recalculate: bool = False,
         cleanup_file_source_ids: Optional[List[str]] = None,
@@ -385,8 +393,8 @@ class TaskService:
     def create_carica_task(
         self,
         project_id: str,
-        canvas: Dict,
-        carica_node_data: Dict,
+        canvas: JsonMapping,
+        carica_node_data: JsonMapping,
         output_format: str = "geojson",
         force_recalculate: bool = False,
         triggered_by: str = "manual",
@@ -538,13 +546,21 @@ class TaskService:
         project_id = ""
         if isinstance(task_result, TaskResultPayload):
             project_id = task_result.project_id
-        # Fallback alla cache locale (risolve PENDING prima che il worker scriva metadata
+
+        pending_metadata = None
         if not project_id:
-            project_id = self._task_project_cache.get(task_id, "")
+            pending_metadata = self.metadata_store.get(task_id)
+            if pending_metadata is not None:
+                project_id = pending_metadata.project_id
         
         # Determina task_type dal nome del task Celery
         # Nomi registrati: "pipeline.execute", "pipeline.preview", "carica.execute", "tasks.execute_enrichment"
         task_type = TaskType.EXECUTE  # default più sensato per pipeline
+        if pending_metadata is not None:
+            try:
+                task_type = TaskType(pending_metadata.task_type)
+            except ValueError:
+                task_type = TaskType.EXECUTE
         if hasattr(result, 'name') and result.name:
             name_lower = result.name.lower()
             if 'carica' in name_lower:

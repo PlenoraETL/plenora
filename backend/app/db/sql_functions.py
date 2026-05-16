@@ -4,7 +4,8 @@ Catalogo funzioni SQL astratte e traduttore multi-database per PLENORA-ETL.
 Keeps persistence access isolated from service and router layers.
 """
 
-from typing import Dict, List, Optional, Any
+from collections.abc import Mapping
+from typing import Any, List, Optional
 from enum import Enum
 from dataclasses import dataclass
 
@@ -12,6 +13,8 @@ from app.db.sql_date_functions import SqlDateFunctionMixin
 from app.db.sql_numeric_functions import SqlNumericFunctionMixin
 from app.db.sql_spatial_functions import SqlSpatialFunctionMixin
 from app.db.sql_string_functions import SqlStringFunctionMixin
+from app.db.sql_types import SqlParamMap
+from app.shared.contracts.payloads import JsonObject
 
 
 def _sql_escape(value: str) -> str:
@@ -245,7 +248,7 @@ class FunctionDef:
 
 # CATALOGO FUNZIONI DISPONIBILI
 
-FUNCTION_CATALOG: Dict[str, FunctionDef] = {
+FUNCTION_CATALOG: dict[str, FunctionDef] = {
 
 
     "CENTROID": FunctionDef(
@@ -716,7 +719,7 @@ class SqlFunctionTranslator(
         """
         self.db_type = db_type
 
-    def translate(self, function_name: str, params: Dict[str, Any], table_alias: str = None) -> str:
+    def translate(self, function_name: str, params: SqlParamMap, table_alias: str = None) -> str:
         """
         Traduce una funzione astratta in SQL.
 
@@ -798,7 +801,7 @@ class SqlFunctionTranslator(
 
     # FUNZIONI CONDIZIONALI (nuove
 
-    def _translate_coalesce(self, params: Dict, table_alias: str = None) -> str:
+    def _translate_coalesce(self, params: SqlParamMap, table_alias: str = None) -> str:
         """Primo valore non NULL: colonne qualificate e literal SQL sicuri."""
         valori = params["values"]
         if isinstance(valori, str):
@@ -815,13 +818,13 @@ class SqlFunctionTranslator(
                 out_parts.append(self._qualify_column(v_str, table_alias))
         return f"COALESCE({', '.join(out_parts)})"
 
-    def _translate_nullif(self, params: Dict, table_alias: str = None) -> str:
+    def _translate_nullif(self, params: SqlParamMap, table_alias: str = None) -> str:
         """NULL se uguale — NULLIF() identico su tutti i database."""
         col = self._qualify_column(params["column"], table_alias)
         valore = _sql_escape(params["value"])
         return f"NULLIF({col}, '{valore}')"
 
-    def _translate_case_when(self, params: Dict, table_alias: str = None) -> str:
+    def _translate_case_when(self, params: SqlParamMap, table_alias: str = None) -> str:
         """Espressione condizionale CASE WHEN — identica su tutti i database."""
         col = self._qualify_column(params["column"], table_alias)
         # N2: whitelist su operator (finiva raw in f-string
@@ -831,7 +834,7 @@ class SqlFunctionTranslator(
         valore_falso = _sql_escape(params.get("else_value", "NULL"))
         return f"CASE WHEN {col} {operatore} '{confronto}' THEN '{valore_vero}' ELSE '{valore_falso}' END"
 
-    def _translate_iif(self, params: Dict, table_alias: str = None) -> str:
+    def _translate_iif(self, params: SqlParamMap, table_alias: str = None) -> str:
         """If inline — MSSQL/SQLite hanno IIF, altri usano CASE WHEN."""
         col = self._qualify_column(params["column"], table_alias)
         # N2: whitelist su operator (finiva raw in f-string
@@ -851,7 +854,7 @@ class SqlFunctionTranslator(
 
     # FUNZIONI CONVERSIONE / CAST (nuove
 
-    def _translate_to_integer(self, params: Dict, table_alias: str = None) -> str:
+    def _translate_to_integer(self, params: SqlParamMap, table_alias: str = None) -> str:
         """Conversione a intero — sintassi CAST diversa per database."""
         col = self._qualify_column(params["column"], table_alias)
         traduzioni = {
@@ -863,7 +866,7 @@ class SqlFunctionTranslator(
         }
         return self._ottieni_traduzione(traduzioni, "TO_INTEGER")
 
-    def _translate_to_float(self, params: Dict, table_alias: str = None) -> str:
+    def _translate_to_float(self, params: SqlParamMap, table_alias: str = None) -> str:
         """Conversione a decimale — sintassi CAST diversa per database."""
         col = self._qualify_column(params["column"], table_alias)
         traduzioni = {
@@ -875,7 +878,7 @@ class SqlFunctionTranslator(
         }
         return self._ottieni_traduzione(traduzioni, "TO_FLOAT")
 
-    def _translate_to_string(self, params: Dict, table_alias: str = None) -> str:
+    def _translate_to_string(self, params: SqlParamMap, table_alias: str = None) -> str:
         """Conversione a stringa — sintassi diversa per database."""
         col = self._qualify_column(params["column"], table_alias)
         traduzioni = {
@@ -887,7 +890,7 @@ class SqlFunctionTranslator(
         }
         return self._ottieni_traduzione(traduzioni, "TO_STRING")
 
-    def _translate_to_date(self, params: Dict, table_alias: str = None) -> str:
+    def _translate_to_date(self, params: SqlParamMap, table_alias: str = None) -> str:
         """Conversione a data — con formato opzionale."""
         col = self._qualify_column(params["column"], table_alias)
         formato = params.get("format")
@@ -911,7 +914,11 @@ class SqlFunctionTranslator(
 
     # HELPER INTERNO
 
-    def _ottieni_traduzione(self, traduzioni: Dict[DbType, str], nome_funzione: str) -> str:
+    def _ottieni_traduzione(
+        self,
+        traduzioni: Mapping[DbType, str],
+        nome_funzione: str,
+    ) -> str:
         """
         Helper per restituire la traduzione corretta dal dizionario.
 
@@ -932,7 +939,7 @@ class SqlFunctionTranslator(
 
 # FUNZIONI HELPER PUBBLICHE
 
-def get_function_catalog() -> Dict[str, dict]:
+def get_function_catalog() -> JsonObject:
     """
     Restituisce il catalogo funzioni in formato serializzabile per il frontend.
 
@@ -942,7 +949,7 @@ def get_function_catalog() -> Dict[str, dict]:
     Returns:
         Dizionario {nome_funzione: {...dettagli...}}.
     """
-    risultato = {}
+    risultato: JsonObject = {}
     for nome, func_def in FUNCTION_CATALOG.items():
         risultato[nome] = {
             "name": func_def.name,
@@ -981,7 +988,7 @@ def get_translator(db_type: str) -> SqlFunctionTranslator:
 def translate_calculated_column(
     db_type: str,
     column_name: str,
-    expression: dict,
+    expression: JsonObject,
     table_alias: str = None
 ) -> str:
     """
@@ -1057,7 +1064,7 @@ def _wrappa_geometria_come_wkt(db_type: str, espressione_geom: str) -> str:
 
 def _translate_expression(
     traduttore: SqlFunctionTranslator,
-    expression: dict,
+    expression: Any,
     table_alias: str = None
 ) -> str:
     """

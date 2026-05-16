@@ -5,7 +5,7 @@ from __future__ import annotations
 import ast
 import sys
 from pathlib import Path
-from typing import Iterable, List, Tuple
+from typing import Iterable, List
 
 
 # Path radice da scansionare (relative a backend/)

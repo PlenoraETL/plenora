@@ -8,19 +8,20 @@ from datetime import datetime, timezone
 from typing import Any
 
 from app.db.pg_connection import execute, fetchall, fetchone
+from app.core.arricchisci.types import JsonObject
 
 
 @dataclass(frozen=True)
 class ApiConnectionRow:
     id: str
     group_id: str
-    config: dict[str, Any]
+    config: JsonObject
     created_at: str | None = None
     updated_at: str | None = None
     created_by: str | None = None
 
 
-def _decode_config(raw_config: Any) -> dict[str, Any]:
+def _decode_config(raw_config: Any) -> JsonObject:
     if raw_config is None:
         return {}
     if isinstance(raw_config, dict):
@@ -30,7 +31,7 @@ def _decode_config(raw_config: Any) -> dict[str, Any]:
     return {}
 
 
-def _row_from_record(record: dict[str, Any]) -> ApiConnectionRow:
+def _row_from_record(record: JsonObject) -> ApiConnectionRow:
     return ApiConnectionRow(
         id=str(record.get("id") or ""),
         group_id=str(record.get("group_id") or ""),
@@ -71,7 +72,7 @@ def list_api_connection_rows(group_id: str | None = None) -> list[ApiConnectionR
 def save_api_connection_row(
     api_id: str,
     group_id: str,
-    config: dict[str, Any],
+    config: JsonObject,
     created_by: str | None = None,
 ) -> ApiConnectionRow:
     now = datetime.now(timezone.utc).isoformat()
@@ -87,7 +88,7 @@ def save_api_connection_row(
     return row
 
 
-def update_api_connection_row(api_id: str, config: dict[str, Any]) -> ApiConnectionRow | None:
+def update_api_connection_row(api_id: str, config: JsonObject) -> ApiConnectionRow | None:
     now = datetime.now(timezone.utc).isoformat()
     execute(
         "UPDATE api_connections SET config = %s, updated_at = %s WHERE id = %s",

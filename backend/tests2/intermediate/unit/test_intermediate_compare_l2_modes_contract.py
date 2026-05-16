@@ -339,7 +339,7 @@ def test_l2_full_pg_vs_preview_only_symmetric(superadmin_user):
 #    "non disponibile" su "mode mismatch")
 
 
-def test_l2_mixed_metadata_full_pg_returns_metadata_reason(superdmin_or_admin: bool = False):
+def test_l2_mixed_metadata_full_pg_returns_metadata_reason():
     """Quando uno dei due e' metadata_only il reason giusto e'
     `metadata_only_no_rows`, non `mode_mismatch`. La precedenza
     e' deterministica: metadata_only ha priorita' (motivo specifico)."""

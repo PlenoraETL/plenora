@@ -5,23 +5,24 @@ OAuth and token management helpers shared by API connectors.
 import base64
 import threading
 import time
-from typing import Any, Callable, Dict, Optional
+from typing import Callable, Optional
 
 import requests
 
 from app.infrastructure.http.session import get_shared_session
+from app.shared.contracts.payloads import HeadersMap, JsonObject, StringMap
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
 
 
 # Cache thread-safe per token ArcGIS (un token per token_url/username).
-_ARCGIS_TOKEN_CACHE: Dict[str, Dict[str, Any]] = {}
+_ARCGIS_TOKEN_CACHE: dict[str, JsonObject] = {}
 _ARCGIS_TOKEN_LOCK = threading.Lock()
 
 
 # Cache thread-safe per token OAuth2 (lifecycle basato su expires_at).
-_OAUTH2_TOKEN_CACHE: Dict[str, Dict[str, Any]] = {}
+_OAUTH2_TOKEN_CACHE: dict[str, JsonObject] = {}
 _OAUTH2_TOKEN_LOCK = threading.Lock()
 _OAUTH2_REFRESH_THRESHOLD_SEC = 60
 
@@ -30,7 +31,7 @@ def _get_shared_session() -> requests.Session:
     return get_shared_session()
 
 
-def _oauth2_cache_key(auth: Dict) -> str:
+def _oauth2_cache_key(auth: JsonObject) -> str:
     """Chiave cache univoca per un set di credenziali OAuth2."""
     auth_type = auth.get("type", "")
     token_url = auth.get("token_url", "")
@@ -41,7 +42,7 @@ def _oauth2_cache_key(auth: Dict) -> str:
     return f"{auth_type}|{token_url}|{identifier}"
 
 
-def get_cached_oauth2_token(auth: Dict) -> Optional[str]:
+def get_cached_oauth2_token(auth: JsonObject) -> Optional[str]:
     """Ritorna un token OAuth2 valido, rinnovandolo solo se sta per scadere."""
     auth_type = auth.get("type", "")
     if auth_type not in ("oauth2_password", "oauth2_client_credentials"):
@@ -80,14 +81,14 @@ def get_cached_oauth2_token(auth: Dict) -> Optional[str]:
         return token
 
 
-def invalidate_oauth2_token(auth: Dict) -> None:
+def invalidate_oauth2_token(auth: JsonObject) -> None:
     """Forza invalidazione cache per un set di credenziali."""
     cache_key = _oauth2_cache_key(auth)
     with _OAUTH2_TOKEN_LOCK:
         _OAUTH2_TOKEN_CACHE.pop(cache_key, None)
 
 
-def _fetch_oauth2_password_token(auth: Dict) -> Optional[Dict]:
+def _fetch_oauth2_password_token(auth: JsonObject) -> Optional[JsonObject]:
     """Fetch diretto di un token password grant."""
     token_url = auth.get("token_url", "")
     username = auth.get("username", "")
@@ -101,7 +102,7 @@ def _fetch_oauth2_password_token(auth: Dict) -> Optional[Dict]:
         return None
 
     try:
-        payload: Dict[str, str] = {
+        payload: StringMap = {
             "grant_type": "password",
             "username": username,
             "password": password,
@@ -133,7 +134,7 @@ def _fetch_oauth2_password_token(auth: Dict) -> Optional[Dict]:
         return None
 
 
-def _fetch_oauth2_client_credentials_token(auth: Dict) -> Optional[Dict]:
+def _fetch_oauth2_client_credentials_token(auth: JsonObject) -> Optional[JsonObject]:
     """Fetch diretto di un token client_credentials grant."""
     token_url = auth.get("token_url", "")
     client_id = auth.get("client_id", "")
@@ -172,7 +173,7 @@ def _fetch_oauth2_client_credentials_token(auth: Dict) -> Optional[Dict]:
         return None
 
 
-def get_arcgis_token(auth: Dict) -> Optional[str]:
+def get_arcgis_token(auth: JsonObject) -> Optional[str]:
     """
     Ottiene un token di autenticazione ArcGIS Token Service (ESRI).
     """
@@ -261,15 +262,15 @@ def get_arcgis_token(auth: Dict) -> Optional[str]:
 
 
 def prepare_headers(
-    auth: Dict,
-    custom_headers: Dict = None,
+    auth: JsonObject,
+    custom_headers: Optional[HeadersMap] = None,
     *,
-    oauth2_token_getter: Callable[[Dict], Optional[str]] = get_cached_oauth2_token,
-) -> Dict:
+    oauth2_token_getter: Callable[[JsonObject], Optional[str]] = get_cached_oauth2_token,
+) -> HeadersMap:
     """
     Prepara headers HTTP per chiamata API REST.
     """
-    headers: Dict = {
+    headers: HeadersMap = {
         "Accept": "application/json",
         "User-Agent": "PLENORA-ETL/1.0",
     }

@@ -4,11 +4,19 @@ Cluster AGGREGATION — operazioni analytics: group-by, sort, dedup, window.
 Keeps transformation behavior isolated from orchestration callers.
 """
 
-from typing import Dict, List
+from typing import List
 
 from app.core.dataframes.ports import FrameLike
-from app.core.dataframes.tabular import is_multiindex
+from app.core.dataframes.tabular import (
+    drop_duplicate_rows_reset_index,
+    group_aggregate_reset,
+    group_size_reset,
+    is_multiindex,
+    sort_rows_reset_index,
+    window_function_values,
+)
 from app.core.dataframes.values import is_null_scalar
+from app.core.manipola.types import JsonRows, StringMap
 from app.utils.logger import get_logger
 
 logger = get_logger("app.core.manipola.transforms.base")
@@ -22,7 +30,7 @@ DataFrame = FrameLike
 def op_aggregate(
     df: DataFrame,
     group_by: List[str],
-    aggregations: List[Dict[str, str]] = None
+    aggregations: JsonRows = None
 ) -> DataFrame:
     """
     Raggruppa dati e applica funzioni di aggregazione.
@@ -54,7 +62,7 @@ def op_aggregate(
         # perdere righe silenziosamente (default pandas e' dropna=True che
         # le scarta — comportamento sorprendente per chi aggrega
         if not aggregations:
-            result = df.groupby(group_by, dropna=False).size().reset_index(name='count')
+            result = group_size_reset(df, group_by, name="count", dropna=False)
             logger.info(f"Aggregate (count): {len(df)} -> {len(result)} righe")
             return result
 
@@ -110,10 +118,10 @@ def op_aggregate(
 
         if not agg_dict:
             logger.warning("agg_dict vuoto dopo parsing aggregazioni! Fallback a count")
-            result = df.groupby(group_by, dropna=False).size().reset_index(name='count')
+            result = group_size_reset(df, group_by, name="count", dropna=False)
         else:
             logger.info(f"agg_dict finale: {agg_dict}")
-            result = df.groupby(group_by, dropna=False).agg(agg_dict).reset_index()
+            result = group_aggregate_reset(df, group_by, agg_dict, dropna=False)
             # Flatten multi-index columns
             if is_multiindex(result.columns):
                 result.columns = ['_'.join(col).strip('_') for col in result.columns]
@@ -123,7 +131,7 @@ def op_aggregate(
         # COUNT(id)) o `<col>_<func>` (MultiIndex flat), entrambi
         # poco leggibili. Il FE permette di specificare `alias`
         # nell'AggregationListInput; lo applichiamo qui post-agg.
-        renames: Dict[str, str] = {}
+        renames: StringMap = {}
         for agg in aggregations:
             alias = (agg.get("alias") or "").strip()
             if not alias:
@@ -177,7 +185,7 @@ def op_sort(
         return df
 
     try:
-        result = df.sort_values(by=columns, ascending=ascending).reset_index(drop=True)
+        result = sort_rows_reset_index(df, by=columns, ascending=ascending)
         return result
     except Exception as e:
         logger.error(f"[CRASH] Errore Sort: {e}", exc_info=True)
@@ -209,7 +217,11 @@ def op_distinct(
 
         keep_val = False if keep == 'false' else keep
 
-        result = df.drop_duplicates(subset=subset, keep=keep_val).reset_index(drop=True)
+        result = drop_duplicate_rows_reset_index(
+            df,
+            subset=subset,
+            keep=keep_val,
+        )
         logger.info(f"Distinct: {len(df)} -> {len(result)} righe")
         return result
 
@@ -253,7 +265,7 @@ def op_dedup_advanced(
 
         # Ordina prima della deduplicazione se richiesto
         if order_column and order_column in result.columns:
-            result.sort_values(by=order_column, ascending=ascending, inplace=True)
+            result = sort_rows_reset_index(result, by=order_column, ascending=ascending)
 
         # Filtra subset a colonne esistenti
         valid_subset = None
@@ -262,8 +274,11 @@ def op_dedup_advanced(
             if not valid_subset:
                 valid_subset = None
 
-        result.drop_duplicates(subset=valid_subset, keep=keep, inplace=True)
-        result.reset_index(drop=True, inplace=True)
+        result = drop_duplicate_rows_reset_index(
+            result,
+            subset=valid_subset,
+            keep=keep,
+        )
 
         logger.info(
             f"DedupAdvanced completato: {original_len} -> {len(result)} righe "
@@ -334,45 +349,69 @@ def op_window_function(
             result.reset_index(drop=True, inplace=True)
 
         if function == "rank":
-            if group_by and group_by in result.columns:
-                result[out_col] = result.groupby(group_by)[column].rank(method="min")
-            else:
-                result[out_col] = result[column].rank(method="min")
+            result[out_col] = window_function_values(
+                result,
+                column,
+                function,
+                group_by=group_by,
+                offset=offset,
+            )
         elif function == "dense_rank":
-            if group_by and group_by in result.columns:
-                result[out_col] = result.groupby(group_by)[column].rank(method="dense")
-            else:
-                result[out_col] = result[column].rank(method="dense")
+            result[out_col] = window_function_values(
+                result,
+                column,
+                function,
+                group_by=group_by,
+                offset=offset,
+            )
         elif function == "cumsum":
-            if group_by and group_by in result.columns:
-                result[out_col] = result.groupby(group_by)[column].cumsum()
-            else:
-                result[out_col] = result[column].cumsum()
+            result[out_col] = window_function_values(
+                result,
+                column,
+                function,
+                group_by=group_by,
+                offset=offset,
+            )
         elif function == "cumcount":
-            if group_by and group_by in result.columns:
-                result[out_col] = result.groupby(group_by).cumcount()
-            else:
-                result[out_col] = range(len(result))
+            result[out_col] = window_function_values(
+                result,
+                column,
+                function,
+                group_by=group_by,
+                offset=offset,
+            )
         elif function == "lag":
-            if group_by and group_by in result.columns:
-                result[out_col] = result.groupby(group_by)[column].shift(offset)
-            else:
-                result[out_col] = result[column].shift(offset)
+            result[out_col] = window_function_values(
+                result,
+                column,
+                function,
+                group_by=group_by,
+                offset=offset,
+            )
         elif function == "lead":
-            if group_by and group_by in result.columns:
-                result[out_col] = result.groupby(group_by)[column].shift(-offset)
-            else:
-                result[out_col] = result[column].shift(-offset)
+            result[out_col] = window_function_values(
+                result,
+                column,
+                function,
+                group_by=group_by,
+                offset=offset,
+            )
         elif function == "pct_change":
-            if group_by and group_by in result.columns:
-                result[out_col] = result.groupby(group_by)[column].pct_change()
-            else:
-                result[out_col] = result[column].pct_change()
+            result[out_col] = window_function_values(
+                result,
+                column,
+                function,
+                group_by=group_by,
+                offset=offset,
+            )
         elif function == "running_mean":
-            if group_by and group_by in result.columns:
-                result[out_col] = result.groupby(group_by)[column].expanding().mean().reset_index(level=0, drop=True)
-            else:
-                result[out_col] = result[column].expanding().mean()
+            result[out_col] = window_function_values(
+                result,
+                column,
+                function,
+                group_by=group_by,
+                offset=offset,
+            )
 
         logger.info(
             f"WindowFunction completato: {function}('{column}') -> '{out_col}'"

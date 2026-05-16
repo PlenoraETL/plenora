@@ -153,6 +153,7 @@ CREATE TABLE IF NOT EXISTS "plenora"."datasources" (
     "name" "text" NOT NULL,
     "ds_type" "text" NOT NULL,
     "config" "jsonb" NOT NULL,
+    "scan_state" "jsonb",
     "created_at" timestamp with time zone DEFAULT "now"() NOT NULL,
     "updated_at" timestamp with time zone DEFAULT "now"() NOT NULL,
     "created_by" "text"

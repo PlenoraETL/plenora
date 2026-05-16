@@ -4,7 +4,7 @@ Policy Engine per lo Scheduler PLENORA-ETL.
 Keeps this module's responsibility explicit and isolated from adjacent code.
 """
 
-from typing import Optional, Tuple, Literal
+from typing import Literal, Optional, Tuple, TypedDict
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -14,6 +14,20 @@ from app.core.scheduler.models import (
     ScheduleErrorPolicy,
     ScheduleConflictPolicy,
 )
+
+
+class FailurePolicyDecision(TypedDict):
+    action: Literal["retry", "give_up"]
+    wait_seconds: int
+    attempt: int
+    event: Literal["RETRY_SCHEDULED", "RETRY_EXHAUSTED"]
+    log_level: Literal["WARNING", "ERROR"]
+
+
+class SuccessPolicyDecision(TypedDict):
+    status: Literal["completed", "partial"]
+    event: Literal["PIPELINE_COMPLETED", "PIPELINE_PARTIAL"]
+    log_level: Literal["INFO", "WARNING"]
 
 
 class PolicyEngine:
@@ -121,7 +135,7 @@ class PolicyEngine:
         config: ScheduleConfig,
         current_attempt: int,
         error_message: str
-    ) -> dict:
+    ) -> FailurePolicyDecision:
         """
         Decisione completa dopo un fallimento.
         
@@ -159,7 +173,7 @@ class PolicyEngine:
     def decide_after_success(
         rows_written: int = 0,
         rows_skipped: int = 0
-    ) -> dict:
+    ) -> SuccessPolicyDecision:
         """
         Decisione completa dopo un successo.
         

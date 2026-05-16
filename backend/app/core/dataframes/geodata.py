@@ -114,6 +114,64 @@ def geodataframe_overlay(
     return gpd.overlay(left, right, how=how, keep_geom_type=keep_geom_type)
 
 
+def geodataframe_drop_duplicates_reset_index(df: Any) -> Any:
+    """Drop duplicate geospatial rows and reset positional index."""
+    return df.drop_duplicates().reset_index(drop=True)
+
+
+def geodataframe_group_size_named(df: Any, by: str, name: str) -> Any:
+    """Return a named group-size series for a geospatial frame."""
+    return df.groupby(by).size().rename(name)
+
+
+def geodataframe_group_aggregate_named(
+    df: Any,
+    by: str,
+    column: str,
+    func: str,
+    name: str,
+) -> Any:
+    """Return a named group aggregate series for a geospatial frame."""
+    return df.groupby(by)[column].agg(func).rename(name)
+
+
+def geoseries_first_value(values: Any) -> Any:
+    """Return the first value from a GeoSeries-like object."""
+    return values.iloc[0]
+
+
+def active_geometry_value_at(df: Any, index: Any) -> Any:
+    """Return the active geometry value at an index."""
+    return df.at[index, df.geometry.name]
+
+
+def set_active_geometry_value_at(df: Any, index: Any, value: Any) -> None:
+    """Set the active geometry value at an index."""
+    df.at[index, df.geometry.name] = value
+
+
+def geodataframe_majority_geometry_type(df: Any) -> tuple[str | None, set[str], int | None]:
+    """Return majority geometry type, unique geometry types, and EPSG code."""
+    majority_type = None
+    unique_types: set[str] = set()
+    srid = None
+    if is_geodataframe(df) and df.geometry is not None and len(df) > 0:
+        geom_types = df.geometry.dropna().geom_type
+        if len(geom_types) > 0:
+            majority_type = geom_types.value_counts().idxmax()
+            unique_types = set(geom_types)
+        if df.crs:
+            srid = df.crs.to_epsg()
+    return majority_type, unique_types, srid
+
+
+def geodataframe_total_bounds(df: Any) -> Any:
+    """Return total bounds for non-null active geometries."""
+    if is_geodataframe(df) and df.geometry is not None and len(df) > 0:
+        return df.geometry.dropna().total_bounds
+    return None
+
+
 def parse_geometry(value: Any) -> Optional[Any]:
     """
     Converte un valore in un oggetto geometria Shapely.

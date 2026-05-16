@@ -6,8 +6,9 @@ Canvas executor protocol - shared execution contract.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Dict, Optional, Protocol, runtime_checkable
+from typing import Any, Optional, Protocol, runtime_checkable
 
+from app.shared.contracts.payloads import JsonObject
 from app.shared.execution.payloads import ArtifactPayload, _check_payload_safe
 
 
@@ -51,7 +52,7 @@ class ExecutionResult:
     success: bool
     message: Optional[str] = None
     error: Optional[str] = None
-    payload: Dict[str, Any] = field(default_factory=dict)
+    payload: JsonObject = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         _check_payload_safe(self.payload)
@@ -80,14 +81,14 @@ class ExecutionResult:
 
     # converter
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> JsonObject:
         """Reconstruct a backward-compatible dict for downstream consumers.
 
         ``PipelineArtifact.from_executor_result`` and legacy callers that
         read ``result["success"]`` all receive the same shape they would
         from the raw executor dict.
         """
-        out: Dict[str, Any] = {"success": self.success}
+        out: JsonObject = {"success": self.success}
         if self.message is not None:
             out["message"] = self.message
         if self.error is not None:
@@ -125,7 +126,7 @@ class CanvasExecutorProtocol(Protocol):
 
     Usage - typed dispatch table in OrchestratorService::
 
-        executors: Dict[str, CanvasExecutorProtocol] = {
+        executors: Mapping[str, CanvasExecutorProtocol] = {
             "estrai": self.estrai_executor,
             "manipola": self.manipola_executor,
             "arricchisci": self.enrich_executor,
@@ -144,7 +145,7 @@ class CanvasExecutorProtocol(Protocol):
       for failures. Engines differ on ``message`` vs ``error`` key
       name; ``ExecutionResult.from_executor_dict`` normalises both.
     - Target return type is ``ExecutionResult``; current impls may still
-      return ``Dict[str, Any]`` - normalize at the orchestrator boundary.
+      return JSON-like mappings - normalize at the orchestrator boundary.
     """
 
     def execute(
@@ -153,7 +154,7 @@ class CanvasExecutorProtocol(Protocol):
         canvas: Any,
         run_id: Optional[str] = None,
         intermediate_mode_override: Optional[str] = None,
-    ) -> "ExecutionResult | Dict[str, Any]":
+    ) -> "ExecutionResult | JsonObject":
         """Run the full pipeline: load sources -> process -> persist result.
 
         Returns ``{"success": True, ...}`` on success or
@@ -171,7 +172,7 @@ class CanvasExecutorProtocol(Protocol):
         project_id: str,
         canvas: Any,
         limit: int,
-    ) -> Dict[str, Any]:
+    ) -> JsonObject:
         """Run the pipeline without persisting. Truncate output to ``limit`` rows.
 
         Returns ``{"success": True, "columns": [...], "rows": [...], ...}``

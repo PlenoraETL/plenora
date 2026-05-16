@@ -5,7 +5,7 @@ from __future__ import annotations
 import os
 import tempfile
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Optional
 
 from app.core.auth.visibility import is_resource_visible
 from app.core.datasources.service import datasource_service
@@ -13,6 +13,7 @@ from app.core.dataframes.frame_io import (
     filter_visible_columns,
     load_dataframe_from_file,
 )
+from app.core.manipola.types import FrameMap, JsonObject
 from app.utils.logger import get_logger
 
 
@@ -57,11 +58,11 @@ def _suffix_for(node, file_path: str) -> str:
 
 def load_datasource_nodes(
     canvas,
-    dataframes: Dict[str, Any],
+    dataframes: FrameMap,
     *,
     group_id: Optional[str],
     logger=None,
-) -> Optional[Dict[str, Any]]:
+) -> Optional[JsonObject]:
     """Load source-mode datasource nodes into ``dataframes``."""
     log = logger or _DEFAULT_LOGGER
 

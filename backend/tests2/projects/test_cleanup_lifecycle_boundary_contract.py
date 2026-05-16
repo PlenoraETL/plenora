@@ -172,9 +172,9 @@ def test_results_cleanup_boundary_lists_project_ids(monkeypatch) -> None:
     from app.core.results import cleanup
 
     monkeypatch.setattr(
-        cleanup,
-        "fetchall",
-        lambda sql: [
+        cleanup.cleanup_repository,
+        "list_distinct_project_id_rows",
+        lambda: [
             {"project_id": "project-a"},
             ("project-b",),
             {"project_id": None},
@@ -189,12 +189,8 @@ def test_intermediate_cleanup_boundary_lists_canvas_ids(monkeypatch) -> None:
 
     monkeypatch.setattr(
         cleanup,
-        "fetchall",
-        lambda sql: [
-            {"canvas_id": "canvas-a"},
-            ("canvas-b",),
-            {"canvas_id": None},
-        ],
+        "_list_canvas_ids_with_runs",
+        lambda: ["canvas-a", "canvas-b"],
     )
 
     assert cleanup.list_canvas_ids_with_runs() == ["canvas-a", "canvas-b"]

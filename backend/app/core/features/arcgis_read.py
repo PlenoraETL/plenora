@@ -12,6 +12,11 @@ from app.shared.connections.arcgis_sql import (
 )
 from app.shared.connections.esri_json import EsriJsonConverter
 from app.shared.connections.esri_types import EsriTypeMapper
+from app.core.features.arcgis_json_types import (
+    ArcGISJsonList,
+    ArcGISJsonObject,
+    ArcGISQueryOidMap,
+)
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -34,7 +39,7 @@ class ArcGISReadQueryMixin:
         self,
         conn: ArcGISConnectionInfo,
         service_url: str
-    ) -> List[dict]:
+    ) -> ArcGISJsonList:
         """
         Lista i layer di un Feature Service.
 
@@ -129,7 +134,7 @@ class ArcGISReadQueryMixin:
         self,
         conn: ArcGISConnectionInfo,
         layer_url: str
-    ) -> dict:
+    ) -> ArcGISJsonObject:
         """
         Recupera lo schema completo di un layer (campi, tipi, capabilities).
 
@@ -301,7 +306,7 @@ class ArcGISReadQueryMixin:
         layer_url: str,
         match_col: str,
         values: Sequence[object],
-    ) -> Tuple[Dict[str, int], List[str]]:
+    ) -> Tuple[ArcGISQueryOidMap, List[str]]:
         """Resolve ``{business_key: OBJECTID}`` from a Feature Service layer."""
         token = self.authenticate(conn)
         referer_headers = {"Referer": conn.server_url}

@@ -8,7 +8,7 @@ from __future__ import annotations
 import os
 import time
 import uuid
-from typing import Any, Iterator
+from typing import Any
 
 import httpx
 import pytest

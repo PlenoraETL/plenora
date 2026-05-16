@@ -4,11 +4,14 @@ from __future__ import annotations
 
 from app.core.auth import cleanup_registry
 from app.core.auth import db as auth_db
-from app.core.auth.cleanup_registry import delete_intermediate_runs_for_group_project
+from app.core.auth.cleanup_registry import (
+    GroupCleanupReport,
+    delete_intermediate_runs_for_group_project,
+)
 from app.utils.logger import get_logger
 
 
-def delete_group_cascade(group_id: str) -> dict[str, int]:
+def delete_group_cascade(group_id: str) -> GroupCleanupReport:
     """
     Cascade delete a group and related domain/config data.
 

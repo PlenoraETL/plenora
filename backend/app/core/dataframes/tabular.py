@@ -6,16 +6,20 @@ from decimal import Decimal
 import io
 import json
 from pathlib import Path
-from typing import Any, Dict, Iterable, Iterator, List
+from collections.abc import Mapping
+from typing import Any, Iterable, Iterator, List
 
 import numpy as np
 import pandas as pd
 
+from app.shared.contracts.payloads import IntMap, JsonObject, JsonRows, StringMap
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
 
 JsonPrimitive = str | int | float | bool | None
+RestRecord = Mapping[str, JsonPrimitive]
+RestRecords = tuple[RestRecord, ...]
 
 
 def _read_csv_safe(file_path: Path) -> pd.DataFrame:
@@ -124,7 +128,7 @@ def tabular_dataframe_to_bytes(df: pd.DataFrame, formato: str) -> bytes:
 
 def filter_visible_columns(
     df: pd.DataFrame,
-    node_columns: List[Dict[str, Any]],
+    node_columns: JsonRows,
 ) -> pd.DataFrame:
     """Filter a DataFrame to visible canvas columns."""
     if not node_columns:
@@ -156,7 +160,7 @@ def filter_visible_columns(
     return result
 
 
-def sanitize_for_json(rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+def sanitize_for_json(rows: JsonRows) -> JsonRows:
     """Make row dictionaries safe for JSON serialization."""
     try:
         from shapely.geometry.base import BaseGeometry
@@ -223,9 +227,9 @@ def _rest_json_safe_value(value: object) -> JsonPrimitive:
     return str(value)
 
 
-def dataframe_to_rest_records(df: pd.DataFrame) -> tuple[dict[str, JsonPrimitive], ...]:
+def dataframe_to_rest_records(df: pd.DataFrame) -> RestRecords:
     """Return records safe for generic REST JSON payloads."""
-    records: list[dict[str, JsonPrimitive]] = []
+    records: list[RestRecord] = []
     for raw_record in df.to_dict(orient="records"):
         records.append(
             {
@@ -236,13 +240,415 @@ def dataframe_to_rest_records(df: pd.DataFrame) -> tuple[dict[str, JsonPrimitive
     return tuple(records)
 
 
-def dataframe_preview_records(df: pd.DataFrame, limit: int) -> List[Dict[str, Any]]:
+def dataframe_preview_records(df: pd.DataFrame, limit: int) -> JsonRows:
     """Return JSON-safe preview records for a frame-like pandas object."""
     preview_df = df.head(limit)
     return sanitize_for_json(preview_df.to_dict(orient="records"))
 
 
-def append_record_rows(df: pd.DataFrame, rows: List[Dict[str, Any]]) -> pd.DataFrame:
+def dataframe_records(df: pd.DataFrame) -> JsonRows:
+    """Return JSON-safe record dictionaries for a full frame-like object."""
+    return sanitize_for_json(df.to_dict(orient="records"))
+
+
+def dataframe_row_dict(df: pd.DataFrame, index: Any) -> JsonObject:
+    """Return a row dictionary by dataframe index."""
+    return df.loc[index].to_dict()
+
+
+def dataframe_row_by_index(df: pd.DataFrame, index: Any) -> Any:
+    """Return a row object by dataframe index."""
+    return df.loc[index]
+
+
+def dataframe_first_row_dict(df: pd.DataFrame) -> JsonObject:
+    """Return the first row as a dictionary."""
+    return df.iloc[0].to_dict()
+
+
+def dataframe_first_column(df: pd.DataFrame) -> Any:
+    """Return the first column from a dataframe-like object."""
+    return df.iloc[:, 0]
+
+
+def dataframe_column_by_position(df: pd.DataFrame, index: int) -> Any:
+    """Return a column by positional index."""
+    return df.iloc[:, index]
+
+
+def iter_dataframe_indexed_rows(df: pd.DataFrame) -> Iterator[tuple[Any, Any]]:
+    """Yield ``(index, row)`` pairs preserving current engine row semantics."""
+    for idx, row in df.iterrows():
+        yield idx, row
+
+
+def set_cell_value(df: pd.DataFrame, index: Any, column: str, value: Any) -> None:
+    """Set one dataframe cell through the current engine."""
+    df.at[index, column] = value
+
+
+def set_values_where_mask(
+    df: pd.DataFrame,
+    mask: Any,
+    column: str,
+    value: Any,
+) -> None:
+    """Set a column value for rows selected by a boolean mask."""
+    df.loc[mask, column] = value
+
+
+def sample_dataframe(
+    df: pd.DataFrame,
+    *,
+    n: int,
+    random_state: int | None = None,
+) -> pd.DataFrame:
+    """Sample rows through the current dataframe engine."""
+    return df.sample(n=n, random_state=random_state)
+
+
+def sample_rows_reset_index(
+    df: pd.DataFrame,
+    *,
+    n: int | None = None,
+    frac: float | None = None,
+    random_state: int | None = None,
+) -> pd.DataFrame:
+    """Sample rows and reset to a default positional index."""
+    if frac is not None:
+        return df.sample(frac=frac, random_state=random_state).reset_index(drop=True)
+    return df.sample(n=n, random_state=random_state).reset_index(drop=True)
+
+
+def null_count_for_columns(df: pd.DataFrame, columns: Iterable[str]) -> int:
+    """Count null values across existing columns."""
+    total = 0
+    for col in columns:
+        if col in df.columns:
+            total += int(df[col].isna().sum())
+    return total
+
+
+def duplicate_row_count(df: pd.DataFrame, subset: Iterable[str]) -> int:
+    """Count duplicate rows for the selected subset, excluding first hits."""
+    duplicated = df.duplicated(subset=list(subset), keep="first")
+    return int(duplicated.sum())
+
+
+def unique_non_null_column_values(df: pd.DataFrame, column: str) -> List[Any]:
+    """Return unique non-null values for one column."""
+    return df[column].dropna().unique().tolist()
+
+
+def duplicate_non_null_value_count(df: pd.DataFrame, column: str) -> int:
+    """Count duplicated non-null values in one column."""
+    return int(df[column].duplicated(keep=False).sum() - df[column].isna().sum())
+
+
+def filter_rows_by_column_predicate(
+    df: pd.DataFrame,
+    column: str,
+    predicate: Any,
+) -> pd.DataFrame:
+    """Filter rows by applying a predicate to a column."""
+    return df[df[column].apply(predicate)]
+
+
+def row_indices_where_column_in(
+    df: pd.DataFrame,
+    column: str,
+    values: Iterable[Any],
+) -> List[Any]:
+    """Return row indices whose column value is in the given value set."""
+    return df[df[column].isin(set(values))].index.tolist()
+
+
+def unique_rows_for_columns(df: pd.DataFrame, columns: Iterable[str]) -> pd.DataFrame:
+    """Return unique rows for a column subset."""
+    return df[list(columns)].drop_duplicates()
+
+
+def drop_duplicate_rows_reset_index(
+    df: pd.DataFrame,
+    *,
+    subset: Iterable[str] | None = None,
+    keep: str | bool = "first",
+) -> pd.DataFrame:
+    """Drop duplicate rows and reset to a default positional index."""
+    subset_list = list(subset) if subset is not None else None
+    return df.drop_duplicates(subset=subset_list, keep=keep).reset_index(drop=True)
+
+
+def drop_duplicate_columns(df: pd.DataFrame, *, keep: str = "first") -> pd.DataFrame:
+    """Drop duplicate-named columns preserving the selected occurrence."""
+    return df.loc[:, ~df.columns.duplicated(keep=keep)]
+
+
+def sort_rows_reset_index(
+    df: pd.DataFrame,
+    *,
+    by: str | Iterable[str],
+    ascending: bool = True,
+) -> pd.DataFrame:
+    """Sort rows and reset to a default positional index."""
+    return df.sort_values(by=by, ascending=ascending).reset_index(drop=True)
+
+
+def group_size_reset(
+    df: pd.DataFrame,
+    group_by: Iterable[str],
+    *,
+    name: str = "count",
+    dropna: bool = False,
+) -> pd.DataFrame:
+    """Group rows and return group sizes as a normal dataframe."""
+    return df.groupby(list(group_by), dropna=dropna).size().reset_index(name=name)
+
+
+def group_aggregate_reset(
+    df: pd.DataFrame,
+    group_by: Iterable[str],
+    agg_dict: JsonObject,
+    *,
+    dropna: bool = False,
+) -> pd.DataFrame:
+    """Group rows and aggregate through the current dataframe engine."""
+    return df.groupby(list(group_by), dropna=dropna).agg(agg_dict).reset_index()
+
+
+def group_aggregate_as_columns(
+    df: pd.DataFrame,
+    group_by: Iterable[str],
+    agg_dict: JsonObject,
+) -> pd.DataFrame:
+    """Group rows with ``as_index=False`` and aggregate columns."""
+    return df.groupby(list(group_by), as_index=False).agg(agg_dict)
+
+
+def group_keys_dataframe(df: pd.DataFrame, group_by: Iterable[str]) -> pd.DataFrame:
+    """Return one row per group key as a normal dataframe."""
+    return df.groupby(list(group_by), as_index=False).size().drop(columns=["size"])
+
+
+def group_size_values(df: pd.DataFrame, group_by: Iterable[str]) -> Any:
+    """Return size values for groups in current engine order."""
+    return df.groupby(list(group_by)).size().values
+
+
+def iter_grouped_dataframes(df: pd.DataFrame, by: str) -> Iterator[tuple[Any, pd.DataFrame]]:
+    """Yield grouped dataframe pairs through the current engine."""
+    for key, group in df.groupby(by):
+        yield key, group
+
+
+def group_named_aggregate_merge(
+    df: pd.DataFrame,
+    group_by: str,
+    agg_dict: JsonObject,
+    *,
+    how: str = "left",
+    dropna: bool = False,
+) -> pd.DataFrame:
+    """Compute named group aggregations and merge them back to the frame."""
+    grouped = df.groupby(group_by, dropna=dropna).agg(**agg_dict)
+    return df.merge(grouped, on=group_by, how=how)
+
+
+def group_cumcount_series(df: pd.DataFrame, partition_column: str, start: int = 1) -> Any:
+    """Return a one-based cumulative row counter within each group."""
+    return df.groupby(partition_column).cumcount() + start
+
+
+def window_function_values(
+    df: pd.DataFrame,
+    column: str,
+    function: str,
+    *,
+    group_by: str | None = None,
+    offset: int = 1,
+) -> Any:
+    """Compute supported window-function values for one column."""
+    if group_by and group_by in df.columns:
+        grouped = df.groupby(group_by)
+        if function == "rank":
+            return grouped[column].rank(method="min")
+        if function == "dense_rank":
+            return grouped[column].rank(method="dense")
+        if function == "cumsum":
+            return grouped[column].cumsum()
+        if function == "cumcount":
+            return grouped.cumcount()
+        if function == "lag":
+            return grouped[column].shift(offset)
+        if function == "lead":
+            return grouped[column].shift(-offset)
+        if function == "pct_change":
+            return grouped[column].pct_change()
+        if function == "running_mean":
+            return grouped[column].expanding().mean().reset_index(level=0, drop=True)
+
+    if function == "rank":
+        return df[column].rank(method="min")
+    if function == "dense_rank":
+        return df[column].rank(method="dense")
+    if function == "cumsum":
+        return df[column].cumsum()
+    if function == "cumcount":
+        return range(len(df))
+    if function == "lag":
+        return df[column].shift(offset)
+    if function == "lead":
+        return df[column].shift(-offset)
+    if function == "pct_change":
+        return df[column].pct_change()
+    if function == "running_mean":
+        return df[column].expanding().mean()
+    raise ValueError(f"Unsupported window function: {function}")
+
+
+def series_null_ratio(values: Any) -> float:
+    """Return null ratio for a series-like value."""
+    return float(values.isna().sum()) / max(len(values), 1)
+
+
+def estimate_merge_output_rows(
+    left: pd.DataFrame,
+    right: pd.DataFrame,
+    join_keys: Iterable[str],
+    how: str,
+) -> int | None:
+    """Estimate equality-merge output rows for supported join types."""
+    join_how = str(how or "inner").lower()
+    if join_how not in {"inner", "left", "right", "outer"}:
+        return None
+    keys = list(join_keys)
+    if not keys:
+        return None
+
+    left_counts = left.groupby(keys, dropna=False).size()
+    right_counts = right.groupby(keys, dropna=False).size()
+
+    matched_keys = left_counts.index.intersection(right_counts.index)
+    if len(matched_keys):
+        left_matched = left_counts.loc[matched_keys]
+        right_matched = right_counts.loc[matched_keys]
+        matched_rows = int((left_matched * right_matched).sum())
+        left_matched_input_rows = int(left_matched.sum())
+        right_matched_input_rows = int(right_matched.sum())
+    else:
+        matched_rows = 0
+        left_matched_input_rows = 0
+        right_matched_input_rows = 0
+
+    left_unmatched_rows = len(left) - left_matched_input_rows
+    right_unmatched_rows = len(right) - right_matched_input_rows
+
+    if join_how == "inner":
+        return matched_rows
+    if join_how == "left":
+        return matched_rows + left_unmatched_rows
+    if join_how == "right":
+        return matched_rows + right_unmatched_rows
+    return matched_rows + left_unmatched_rows + right_unmatched_rows
+
+
+def matching_row_indices(
+    df: pd.DataFrame,
+    match_values: JsonObject,
+    *,
+    limit: int | None = None,
+) -> List[Any]:
+    """Return indices whose row values match all criteria, including nulls."""
+    mask = pd.Series(True, index=df.index)
+    for col, value in match_values.items():
+        try:
+            is_null = bool(pd.isna(value))
+        except (TypeError, ValueError):
+            is_null = False
+        if is_null:
+            mask &= df[col].isna()
+        else:
+            mask &= df[col] == value
+    indices = df[mask].index.tolist()
+    return indices if limit is None else indices[:limit]
+
+
+def non_null_head_values(values: Any, limit: int) -> List[Any]:
+    """Return the first non-null values from a series-like object."""
+    return list(values.dropna().head(limit))
+
+
+def mixed_numeric_string_object_columns(
+    df: pd.DataFrame,
+    *,
+    sample_size: int = 1000,
+) -> List[str]:
+    """Find object columns mixing numeric and string values."""
+    mixed_columns: List[str] = []
+    for col in df.columns:
+        if df[col].dtype != "object":
+            continue
+        sample = non_null_head_values(df[col], sample_size)
+        if not sample:
+            continue
+        has_numeric = False
+        has_string = False
+        for val in sample:
+            if isinstance(val, (int, float)):
+                has_numeric = True
+            elif isinstance(val, str):
+                has_string = True
+            if has_numeric and has_string:
+                mixed_columns.append(col)
+                break
+    return mixed_columns
+
+
+def stringify_columns_preserving_nulls(
+    df: pd.DataFrame,
+    columns: Iterable[str],
+) -> pd.DataFrame:
+    """Convert selected columns to strings while preserving null sentinels."""
+    for col in columns:
+        mask_null = df[col].isna()
+        df[col] = df[col].astype(str)
+        df.loc[mask_null, col] = None
+    return df
+
+
+def geometry_series_columns_to_wkt(df: pd.DataFrame) -> pd.DataFrame:
+    """Convert GeoSeries-like columns to WKT strings."""
+    from app.core.dataframes.values import is_geometry_series, is_null_scalar
+
+    for col in df.columns:
+        if is_geometry_series(df[col]):
+            df[col] = df[col].apply(
+                lambda g: g.wkt if g is not None and not is_null_scalar(g) else None
+            )
+    return df
+
+
+def select_and_rename_columns(
+    df: pd.DataFrame,
+    columns: Iterable[str],
+    *,
+    rename_map: StringMap | None = None,
+) -> pd.DataFrame:
+    """Select existing columns and optionally rename them."""
+    selected = [col for col in columns if col in df.columns]
+    result = df[selected]
+    if rename_map:
+        applicable = {
+            old_name: new_name
+            for old_name, new_name in rename_map.items()
+            if old_name in result.columns
+        }
+        if applicable:
+            result = result.rename(columns=applicable)
+    return result
+
+
+def append_record_rows(df: pd.DataFrame, rows: JsonRows) -> pd.DataFrame:
     """Append record dictionaries to a DataFrame preserving legacy concat behavior."""
     if not rows:
         return df
@@ -271,12 +677,12 @@ def null_row_indices_for_columns(df: pd.DataFrame, columns: List[str]) -> List[A
     return df.index[null_mask].tolist()
 
 
-def dataframe_head_records(df: pd.DataFrame, limit: int) -> List[Dict[str, Any]]:
+def dataframe_head_records(df: pd.DataFrame, limit: int) -> JsonRows:
     """Return raw record dictionaries for the first rows of a DataFrame."""
     return df.head(limit).to_dict(orient="records")
 
 
-def dataframe_from_records(rows: List[Dict[str, Any]]) -> pd.DataFrame:
+def dataframe_from_records(rows: JsonRows) -> pd.DataFrame:
     """Build a DataFrame from record dictionaries."""
     return pd.DataFrame(rows) if rows else pd.DataFrame()
 
@@ -346,7 +752,7 @@ def missing_scalar() -> Any:
     return pd.NA
 
 
-def dataframe_eval_namespace() -> dict[str, Any]:
+def dataframe_eval_namespace() -> JsonObject:
     """Return dataframe-engine names intentionally exposed to formula eval."""
     return {"pd": pd}
 
@@ -359,7 +765,7 @@ def coerce_datetime_series(
     dayfirst: bool = False,
 ) -> Any:
     """Convert values to pandas datetime with invalid entries coerced."""
-    kwargs: dict[str, Any] = {"errors": errors}
+    kwargs: JsonObject = {"errors": errors}
     if format:
         kwargs["format"] = format
     if dayfirst:
@@ -389,7 +795,7 @@ def cut_numeric_series(
     )
 
 
-def normalize_json_records(records: List[Dict[str, Any]], max_level: int = 1) -> Any:
+def normalize_json_records(records: JsonRows, max_level: int = 1) -> Any:
     """Normalize JSON-like record dictionaries into a flat DataFrame."""
     return pd.json_normalize(records, max_level=max_level)
 
@@ -424,6 +830,135 @@ def join_columns_as_strings(df: pd.DataFrame, separator: str) -> Any:
     return df.fillna("").astype(str).agg(separator.join, axis=1)
 
 
+def concat_non_null_as_strings(values: Any, separator: str = ", ") -> str:
+    """Concatenate non-null series values as strings."""
+    return separator.join(values.dropna().astype(str))
+
+
+def table_diff_dataframe(
+    old_df: pd.DataFrame,
+    new_df: pd.DataFrame,
+    *,
+    key_cols: list[str],
+    common_value_cols: list[str],
+    only_old_cols: list[str],
+    only_new_cols: list[str],
+    include_unchanged: str = "no",
+    separator: str = "#",
+) -> tuple[pd.DataFrame, IntMap]:
+    """Vectorized table-diff implementation for MANIPOLA."""
+    merged = old_df.merge(
+        new_df,
+        on=key_cols,
+        how="outer",
+        suffixes=("_OLD", "_NEW"),
+        indicator=True,
+    )
+
+    merge_type = merged["_merge"]
+    mask_deleted = merge_type == "left_only"
+    mask_added = merge_type == "right_only"
+    mask_both = merge_type == "both"
+
+    changed_masks = {}
+    for col in common_value_cols:
+        old_s = merged[f"{col}_OLD"]
+        new_s = merged[f"{col}_NEW"]
+        both_nan = old_s.isna() & new_s.isna()
+        one_nan = old_s.isna() ^ new_s.isna()
+        if is_numeric_series(old_s) and is_numeric_series(new_s):
+            numeric_diff = (old_s.fillna(0) - new_s.fillna(0)).abs() > 1e-9
+            col_changed = one_nan | (numeric_diff & ~both_nan)
+        else:
+            str_diff = old_s.astype(str) != new_s.astype(str)
+            col_changed = one_nan | (str_diff & ~both_nan & ~one_nan)
+        changed_masks[col] = col_changed
+
+    changed_df = (
+        dataframe_from_mapping(changed_masks, index=merged.index)
+        if common_value_cols
+        else dataframe_from_mapping(index=merged.index)
+    )
+
+    any_changed = (
+        changed_df.any(axis=1)
+        if len(changed_df.columns)
+        else false_boolean_series(merged.index)
+    )
+    status = constant_object_series("UNCHANGED", merged.index)
+    status[mask_deleted] = "DELETED"
+    status[mask_added] = "ADDED"
+    status[mask_both & any_changed] = "MODIFIED"
+
+    if include_unchanged != "yes":
+        keep = status != "UNCHANGED"
+        merged = merged[keep]
+        changed_df = changed_df.loc[keep] if len(changed_df.columns) else changed_df
+        status = status[keep]
+
+    if len(merged) == 0:
+        columns = key_cols + common_value_cols + [
+            "_diff_status",
+            "_diff_columns",
+            "_diff_old_values",
+        ]
+        return dataframe_from_rows([], columns), {}
+
+    result_df = dataframe_from_mapping(index=merged.index)
+    for key_col in key_cols:
+        result_df[key_col] = merged[key_col]
+
+    is_deleted = (status == "DELETED").values
+    for col in common_value_cols:
+        old_col = f"{col}_OLD"
+        new_col = f"{col}_NEW"
+        result_df[col] = np.where(is_deleted, merged[old_col], merged[new_col])
+    for col in only_old_cols:
+        if col in merged.columns:
+            result_df[col] = merged[col]
+    for col in only_new_cols:
+        if col in merged.columns:
+            result_df[col] = merged[col]
+
+    diff_columns_col = object_series([None] * len(merged), index=merged.index)
+    diff_old_values_col = object_series([None] * len(merged), index=merged.index)
+
+    modified_mask = status == "MODIFIED"
+    if modified_mask.any() and common_value_cols:
+        cd_mod = changed_df.loc[modified_mask]
+        stacked = cd_mod.stack()
+        trues = stacked[stacked]
+        if len(trues) > 0:
+            diff_cols_per_row = (
+                trues.reset_index(level=1)
+                .groupby(level=0)[trues.index.names[1] or "level_1"]
+                .agg(separator.join)
+                .reindex(cd_mod.index, fill_value="")
+            )
+            diff_columns_col.loc[modified_mask] = diff_cols_per_row.values
+
+            old_values_df = dataframe_from_mapping(index=cd_mod.index)
+            for col in common_value_cols:
+                old_values = merged.loc[modified_mask, f"{col}_OLD"]
+                old_values_df[col] = old_values.where(old_values.notna(), "").astype(str)
+
+            old_stacked = old_values_df.stack()
+            old_at_changes = old_stacked.loc[trues.index]
+            diff_old_per_row = (
+                old_at_changes.groupby(level=0)
+                .agg(separator.join)
+                .reindex(cd_mod.index, fill_value="")
+            )
+            diff_old_values_col.loc[modified_mask] = diff_old_per_row.values
+
+    result_df["_diff_status"] = status.values
+    result_df["_diff_columns"] = diff_columns_col.values
+    result_df["_diff_old_values"] = diff_old_values_col.values
+    result_df = result_df.reset_index(drop=True)
+    status_counts = result_df["_diff_status"].value_counts().to_dict()
+    return result_df, status_counts
+
+
 def is_numeric_series(values: Any) -> bool:
     """Return True when values have a pandas numeric dtype."""
     return bool(pd.api.types.is_numeric_dtype(values))
@@ -437,6 +972,12 @@ def is_bool_series(values: Any) -> bool:
 def is_float_series(values: Any) -> bool:
     """Return True when values have a pandas float dtype."""
     return bool(pd.api.types.is_float_dtype(values))
+
+
+def float_series_non_null_whole_numbers(values: Any) -> bool:
+    """Return True when all non-null float values are whole numbers."""
+    non_null = values.dropna()
+    return bool(not non_null.empty and (non_null % 1 == 0).all())
 
 
 def is_multiindex(value: Any) -> bool:
@@ -460,7 +1001,9 @@ __all__ = [
     "_compact_whole_number_floats",
     "_read_csv_safe",
     "concat_dataframes",
+    "concat_non_null_as_strings",
     "cut_numeric_series",
+    "dataframe_column_by_position",
     "dataframe_from_records",
     "dataframe_from_mapping",
     "dataframe_from_rows",
@@ -468,29 +1011,68 @@ __all__ = [
     "dataframe_hash_bytes",
     "dataframe_preview_records",
     "dataframe_head_records",
+    "dataframe_first_column",
+    "dataframe_first_row_dict",
+    "dataframe_records",
+    "dataframe_row_by_index",
+    "dataframe_row_dict",
     "dataframe_to_rest_records",
     "coerce_datetime_series",
     "coerce_numeric_series",
+    "duplicate_row_count",
+    "duplicate_non_null_value_count",
+    "drop_duplicate_columns",
+    "drop_duplicate_rows_reset_index",
     "drop_rows_reset_index",
     "empty_dataframe",
     "empty_object_series",
     "false_boolean_series",
     "filter_visible_columns",
+    "filter_rows_by_column_predicate",
+    "float_series_non_null_whole_numbers",
+    "geometry_series_columns_to_wkt",
+    "group_aggregate_as_columns",
+    "group_aggregate_reset",
+    "group_keys_dataframe",
+    "group_cumcount_series",
+    "group_size_reset",
+    "group_size_values",
+    "group_named_aggregate_merge",
     "is_bool_series",
     "is_dataframe",
     "is_float_series",
     "is_multiindex",
     "is_numeric_series",
+    "iter_grouped_dataframes",
+    "iter_dataframe_indexed_rows",
     "iter_dataframe_rows",
     "join_columns_as_strings",
     "constant_object_series",
+    "estimate_merge_output_rows",
+    "matching_row_indices",
     "melt_dataframe",
     "merge_dataframes",
     "missing_scalar",
+    "mixed_numeric_string_object_columns",
+    "non_null_head_values",
     "normalize_json_records",
+    "null_count_for_columns",
     "null_row_indices_for_columns",
     "object_series",
     "pivot_table_dataframe",
+    "sample_dataframe",
+    "sample_rows_reset_index",
     "sanitize_for_json",
+    "select_and_rename_columns",
+    "row_indices_where_column_in",
+    "set_cell_value",
+    "set_values_where_mask",
+    "sort_rows_reset_index",
+    "series_null_ratio",
+    "stringify_columns_preserving_nulls",
     "tabular_dataframe_to_bytes",
+    "table_diff_dataframe",
+    "unique_non_null_column_values",
+    "unique_rows_for_columns",
+    "window_function_values",
 ]

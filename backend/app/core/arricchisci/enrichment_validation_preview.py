@@ -12,6 +12,7 @@ from typing import Any, List
 from app.core.dataframes.tabular import (
     dataframe_head_records,
     null_row_indices_for_columns,
+    sample_dataframe,
 )
 from app.core.arricchisci.models import (
     EnrichmentValidationResult,
@@ -129,7 +130,7 @@ class EnrichmentValidationPreviewMixin:
 
         # Campiona righe
         if len(df) > sample_size:
-            sample_df = df.sample(n=sample_size, random_state=42)
+            sample_df = sample_dataframe(df, n=sample_size, random_state=42)
         else:
             sample_df = df.copy()
 

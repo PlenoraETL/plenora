@@ -23,8 +23,6 @@ config + roundtrip su un set documentato di extra noti.
 
 from __future__ import annotations
 
-import pytest
-
 from app.core.projects.canvas_models import Column
 
 

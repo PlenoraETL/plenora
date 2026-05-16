@@ -11,6 +11,7 @@ schema generation con `TypeAdapter is not fully defined`.
 """
 
 import uuid
+from typing import TypedDict
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
@@ -37,7 +38,17 @@ users_router = APIRouter(prefix="/auth/users", tags=["users"])
 _security = HTTPBearer(auto_error=False)
 
 
-def _user_response_payload(user: _users_dal.UserRow) -> dict[str, object]:
+class UserResponsePayload(TypedDict):
+    id: str
+    username: str
+    email: str | None
+    group_id: str
+    role: str
+    is_active: bool
+    created_at: str
+
+
+def _user_response_payload(user: _users_dal.UserRow) -> UserResponsePayload:
     return {
         "id": user.id,
         "username": user.username,

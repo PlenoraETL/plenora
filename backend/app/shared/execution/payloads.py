@@ -6,7 +6,9 @@ Typed payload value objects for canvas execution results.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Dict, Optional
+from typing import Optional
+
+from app.shared.contracts.payloads import JsonObject
 
 
 __all__ = ["ArtifactPayload"]
@@ -19,7 +21,7 @@ __all__ = ["ArtifactPayload"]
 _UNSAFE_PAYLOAD_MODULES = frozenset({"pandas", "geopandas", "polars"})
 
 
-def _check_payload_safe(payload: Dict[str, Any]) -> None:
+def _check_payload_safe(payload: JsonObject) -> None:
     """Raise ``ValueError`` if any top-level payload value is unsafe.
 
     Unsafe: DataFrame/Series (pandas/geopandas/polars), raw ``bytes`` /
@@ -87,7 +89,7 @@ class ArtifactPayload:
     run_id: Optional[str] = None
 
     @classmethod
-    def from_payload_dict(cls, d: Dict[str, Any]) -> "ArtifactPayload":
+    def from_payload_dict(cls, d: JsonObject) -> "ArtifactPayload":
         """Extract known artifact keys from a payload dict.
 
         Unknown keys are silently ignored; the caller retains them in
@@ -102,9 +104,9 @@ class ArtifactPayload:
             run_id=d.get("run_id") or None,
         )
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> JsonObject:
         """Return only non-None fields for dict-compat reconstruction."""
-        out: Dict[str, Any] = {}
+        out: JsonObject = {}
         if self.result_id is not None:
             out["result_id"] = self.result_id
         if self.output_path is not None:

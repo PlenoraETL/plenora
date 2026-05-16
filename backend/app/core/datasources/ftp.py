@@ -35,6 +35,7 @@ from app.core.datasources.interface import (
     BackendConfig,
     DataSourceInterface,
     DataSourceConnectionError,
+    DataSourceConnectionTestResult,
     DataSourceFileNotFoundError,
     DataSourcePermissionError,
     FileInfo,
@@ -111,7 +112,7 @@ class FTPDataSource(DataSourceInterface):
                     logger.warning("FTP close fallito: %s", e2)
             self._ftp = None
 
-    def test_connection(self) -> dict:
+    def test_connection(self) -> DataSourceConnectionTestResult:
         try:
             self.connect()
             files = self._ftp.nlst()

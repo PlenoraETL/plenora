@@ -7,10 +7,16 @@ Esegue un controllo read-only (senza side effect su ArcGIS) prima della
 from typing import Any, Dict, Optional
 
 from app.utils.logger import get_logger
+from app.core.dataframes.tabular import (
+    duplicate_non_null_value_count,
+    null_count_for_columns,
+    unique_non_null_column_values,
+)
 from app.shared.connections.arcgis_connection import ArcGISConnectionInfo
 from app.shared.connections.arcgis_provider import ArcGISProviderProtocol
 from app.shared.connections.esri_system_fields import is_esri_system_field as _is_system_field
 from app.shared.connections.esri_types import EsriTypeMapper
+from app.shared.contracts.payloads import JsonObject, StringMap
 
 logger = get_logger(__name__)
 
@@ -58,9 +64,9 @@ def validate_publish(
     connection_id: str,
     fs_name: str,
     mode: str = "replace",
-    match_columns: Optional[Dict[str, str]] = None,
+    match_columns: Optional[StringMap] = None,
     folder: Optional[str] = None,
-) -> Dict[str, Any]:
+) -> JsonObject:
     """Esegue la validazione e ritorna un dict report.
 
     Args:
@@ -397,8 +403,7 @@ def validate_publish(
                 # il publish procede comunque
                 match_col = layer_report["match_column"]
                 if match_col and match_col in gdf.columns:
-                    vals_series = gdf[match_col].dropna()
-                    vals_unique = list(vals_series.unique().tolist())
+                    vals_unique = unique_non_null_column_values(gdf, match_col)
                     if vals_unique:
                         total_overlap = 0
                         check_failed_msg = None
@@ -464,8 +469,7 @@ def validate_publish(
                     # usato sia per upsert.will_delete sia per update.will_update
                     # Usiamo POST /query con returnCountOnly (_count_features_where_via_post
                     # per evitare il bug GET/JSONDecodeError
-                    vals_series = gdf[match_col].dropna()
-                    vals_unique = vals_series.unique().tolist()
+                    vals_unique = unique_non_null_column_values(gdf, match_col)
                     total_match_hits = 0
                     match_query_failed = False
                     try:
@@ -555,7 +559,7 @@ def validate_publish(
                         info["max_len"] = None
                 # Null count
                 try:
-                    info["null_count"] = int(series.isna().sum())
+                    info["null_count"] = null_count_for_columns(gdf, [col])
                 except Exception:
                     info["null_count"] = 0
                 bundle_fields_info[col] = info
@@ -688,7 +692,7 @@ def validate_publish(
         # ── 4c. Data quality sul bundle ──────────────────────────
         match_col = layer_report["match_column"]
         if match_col and match_col in gdf.columns:
-            null_count = int(gdf[match_col].isna().sum())
+            null_count = null_count_for_columns(gdf, [match_col])
             if null_count > 0:
                 # update e upsert non tollerano NULL sulla business key
                 sev = "error" if mode in ("upsert", "update") else "warning"
@@ -700,8 +704,7 @@ def validate_publish(
                            if mode in ("upsert", "update") else "")
                     )
                 })
-            dup_count = int(gdf[match_col].duplicated(keep=False).sum()
-                            - gdf[match_col].isna().sum())
+            dup_count = duplicate_non_null_value_count(gdf, match_col)
             if dup_count > 0:
                 if mode == "update":
                     # Strict: duplicati → errore (race condition in updateFeatures
@@ -722,7 +725,7 @@ def validate_publish(
 
         # Geometry nulla
         if "geometry" in gdf.columns:
-            null_geom = int(gdf["geometry"].isna().sum())
+            null_geom = null_count_for_columns(gdf, ["geometry"])
             if null_geom > 0:
                 layer_report["data_issues"].append({
                     "severity": "warning", "code": "NULL_GEOMETRY",

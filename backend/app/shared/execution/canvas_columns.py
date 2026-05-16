@@ -7,15 +7,15 @@ Motivazione
 from __future__ import annotations
 
 from collections.abc import Callable
-from typing import Any, Dict, List
 
+from app.shared.contracts.payloads import JsonObjectById, JsonRows
 from app.utils.logger import get_logger
 
 
 logger = get_logger(__name__)
 
 
-def _existing_by_name(result_node: object) -> Dict[str, Dict[str, Any]]:
+def _existing_by_name(result_node: object) -> JsonObjectById:
     """Estrae le customizzazioni utente (alias, visible) dal
     result_node corrente, indicizzate per nome colonna originale.
 
@@ -27,7 +27,7 @@ def _existing_by_name(result_node: object) -> Dict[str, Dict[str, Any]]:
     elif hasattr(result_node, "data") and result_node.data:
         columns = result_node.data.get("columns", []) or []
 
-    out: Dict[str, Dict[str, Any]] = {}
+    out: JsonObjectById = {}
     for c in columns:
         if isinstance(c, dict):
             name = c.get("name", "")
@@ -54,7 +54,7 @@ def compute_result_columns(
     project_id: str,
     project_service: object,
     schema_inference_service_factory: Callable[[object], object],
-) -> List[Dict[str, Any]]:
+) -> JsonRows:
     """Computa le colonne autorevoli del result_node via BFS backward.
 
     Delega la logica per-node-type a `SchemaInferenceService`.
@@ -106,7 +106,7 @@ def compute_result_columns(
     # Preserva alias + visible dell'utente per nome
     user_overrides = _existing_by_name(result_node)
 
-    out: List[Dict[str, Any]] = []
+    out: JsonRows = []
     for col in schema:
         override = user_overrides.get(col.name, {})
         out.append({

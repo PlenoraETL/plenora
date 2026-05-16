@@ -332,30 +332,27 @@ def test_artifact_reader_no_temp_file_fallback():
 
 
 def test_preview_parser_module_owns_pandas_import_edge():
-    """016 contract: the leaf parser module exists and is the
-    canonical owner of the pandas import boundary for the
-    intermediate preview path."""
+    """016/step-2 contract: the leaf parser module exists, but the
+    concrete dataframe engine stays behind app.core.dataframes."""
     assert _PREVIEW_PARSER_PY.exists(), (
         "app/core/intermediate/preview_parser.py must exist (016 "
-        "moved pandas-bound parsing into this leaf module)"
+        "moved parquet preview parsing into this leaf module)"
     )
     text = _PREVIEW_PARSER_PY.read_text(encoding="utf-8")
-    assert "import pandas" in text, (
-        "preview_parser.py must own the pandas import (it is the "
-        "single allowed pandas surface for the preview path)"
+    code_only = python_code_only(text)
+    assert "import pandas" not in code_only and "from pandas" not in code_only, (
+        "preview_parser.py must not import pandas directly; dataframe "
+        "conversion belongs to app.core.dataframes."
+    )
+    assert "from app.core.dataframes.tabular import" in text, (
+        "preview_parser.py must delegate dataframe preview materialization "
+        "through app.core.dataframes.tabular."
     )
 
 
 def test_no_other_intermediate_module_imports_pandas():
-    """016 contract: aside from ``preview_parser.py``, no module
-    under ``app/core/intermediate/`` may import pandas. The
-    pre-016 lazy import inside ``artifact_reader.py`` was the
-    last legitimate exception; with that gone, the boundary is a
-    single module. (``snapshot.py`` imports pandas inside the
-    write path -- intentional and out of scope; this lock targets
-    the *read/preview* surface and excludes ``snapshot.py``
-    explicitly so it can be tightened in a future stream.)"""
-    allowed = {"__init__.py", "preview_parser.py", "snapshot.py"}
+    """Step-2 contract: no intermediate module imports pandas directly."""
+    allowed = {"__init__.py"}
     offenders: list[str] = []
     for path in _INTERMEDIATE_PKG.glob("*.py"):
         if path.name in allowed:
@@ -368,10 +365,8 @@ def test_no_other_intermediate_module_imports_pandas():
             offenders.append(path.name)
     assert not offenders, (
         f"Intermediate read-path module(s) {offenders} import pandas. "
-        "The 016 boundary requires that pandas live ONLY in "
-        "preview_parser.py for the read/preview surface. Move the "
-        "pandas-bound work into a leaf parser/helper or delegate via "
-        "`preview_parser.parse_parquet_preview`."
+        "Step 2 requires pandas to live behind app.core.dataframes; "
+        "delegate dataframe-bound work through the dataframe boundary."
     )
 
 

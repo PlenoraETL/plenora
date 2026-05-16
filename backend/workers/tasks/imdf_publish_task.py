@@ -6,10 +6,10 @@ Workflow
 
 import time
 from datetime import datetime, timezone
-from typing import Any, Dict
 
 from app.config import settings
 from app.core.imdf import bundle_store
+from app.shared.contracts.payloads import JsonObject
 from app.utils.logger import get_logger
 from workers.celery_app import celery_app
 
@@ -34,15 +34,15 @@ def _update_progress(task, progress: int, message: str, is_error: bool = False):
 def execute_imdf_publish_task(
     self,
     bundle_task_id: str,
-    publisher_config: Dict[str, Any],
-) -> Dict[str, Any]:
+    publisher_config: JsonObject,
+) -> JsonObject:
     """Pubblica un bundle IMDF persistito su ArcGIS.
 
     Args:
         bundle_task_id: task_id del precedente arricchimento IMDF. La funzione
             risolve la cartella `IMDF_BUNDLES_DIR/{bundle_task_id}/` e cerca
             il .gdb + renderers.json al suo interno.
-        publisher_config: dict con:
+        publisher_config: JSON object con:
             - connection_id (str, richiesto)
             - folder (str, opzionale)
             - fs_name (str, richiesto)

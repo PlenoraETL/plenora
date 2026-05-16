@@ -9,7 +9,7 @@ from __future__ import annotations
 import gzip
 import json
 from datetime import datetime, timezone
-from typing import Callable, Literal, TypedDict
+from typing import Callable, Literal, Mapping, TypedDict
 
 from app.infrastructure.storage.cloud_backends import ObjectStorage
 
@@ -39,6 +39,8 @@ _TS_COLUMN_BY_TABLE: dict[str, str] = {
     "logs": "ts",
     "audit_actions": "timestamp",
 }
+
+LogArchiveRow = Mapping[str, object]
 
 
 # Helpers (private) — serializzazione NDJSON gzip
@@ -97,7 +99,7 @@ def _json_default(obj: object) -> str:
     )
 
 
-def _serialize_rows(rows: list[dict], table: str) -> bytes:
+def _serialize_rows(rows: list[LogArchiveRow], table: str) -> bytes:
     """Serializza un batch di righe in NDJSON UTF-8 compresso gzip.
 
     Shape (O-ARC §5.1): una riga NDJSON per riga DB, keyset canonico per
@@ -258,7 +260,7 @@ class LogArchiveWriter:
         self,
         table: Literal["logs", "audit_actions"],
         cutoff_ts: datetime,
-        select_rows: Callable[[datetime, int], list[dict]],
+        select_rows: Callable[[datetime, int], list[LogArchiveRow]],
         retention_bypass_execute: Callable[[str, tuple], None],
         run_date: datetime | None = None,
     ) -> ArchiveResult:
@@ -284,7 +286,7 @@ class LogArchiveWriter:
             Datetime tz-aware. Un datetime naive (tzinfo=None) solleva
             `ValueError`.
         select_rows
-            Callable `(cutoff_ts, batch_size) -> list[dict]`. Il
+            Callable `(cutoff_ts, batch_size) -> list[LogArchiveRow]`. Il
             chiamante e' responsabile dell'ordinamento stabile
             `ORDER BY ts ASC, id ASC LIMIT batch_size` e dell'apertura
             eventuale di una transazione di sola lettura.

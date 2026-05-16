@@ -9,6 +9,7 @@ from app.core.features.arcgis_writer_boundary import (
     ArcGISColumnMappingsInput,
     normalize_arcgis_column_mappings,
 )
+from app.core.features.arcgis_json_types import ArcGISJsonList, ArcGISJsonObject
 from app.shared.connections.arcgis_connection import ArcGISConnectionInfo
 from app.shared.connections.arcgis_provider import (
     ArcGISReadProviderProtocol,
@@ -41,7 +42,7 @@ class ArcGISFeatureWriteService:
         layer_url: str,
         object_ids: Optional[List[int]] = None,
         where: Optional[str] = None,
-    ) -> dict:
+    ) -> ArcGISJsonObject:
         result = self._client.delete_features(
             conn_info,
             layer_url,
@@ -65,7 +66,7 @@ class ArcGISFeatureWriteService:
         source_srid: Optional[int] = None,
         folder_id: str = "",
         column_mappings: ArcGISColumnMappingsInput = None,
-    ) -> dict:
+    ) -> ArcGISJsonObject:
         if source_srid and hasattr(df, "set_crs") and (getattr(df, "crs", None) is None):
             df = df.set_crs(epsg=source_srid)
             logger.info(f"CRS impostato da source_srid: EPSG:{source_srid}")
@@ -94,7 +95,7 @@ class ArcGISFeatureWriteService:
         batch_size: Optional[int],
         match_column: str,
         column_mappings: ArcGISColumnMappingsInput,
-    ) -> dict:
+    ) -> ArcGISJsonObject:
         if source_srid and hasattr(df, "set_crs") and getattr(df, "crs", None) is None:
             df = df.set_crs(epsg=source_srid)
             logger.info(f"CRS impostato da source_srid: EPSG:{source_srid}")
@@ -230,7 +231,12 @@ class ArcGISFeatureWriteService:
         raise ValueError(f"Operazione non supportata: {operation}")
 
     @staticmethod
-    def write_result(action: str, result: dict, count_key: str, total: int) -> dict:
+    def write_result(
+        action: str,
+        result: dict,
+        count_key: str,
+        total: int,
+    ) -> ArcGISJsonObject:
         count = result.get(count_key, 0)
         return {
             "success": result["success"],
@@ -246,7 +252,7 @@ class ArcGISFeatureWriteService:
         layer_url: str,
         features: List[dict],
         match_column: str,
-    ) -> Tuple[List[dict], List[dict]]:
+    ) -> Tuple[ArcGISJsonList, ArcGISJsonList]:
         match_values = []
         for feature in features:
             match_value = feature.get("attributes", {}).get(match_column)
@@ -287,7 +293,7 @@ class ArcGISFeatureWriteService:
         layer_url: str,
         features: List[dict],
         match_column: str,
-    ) -> List[dict]:
+    ) -> ArcGISJsonList:
         match_values = []
         for feature in features:
             match_value = feature.get("attributes", {}).get(match_column)

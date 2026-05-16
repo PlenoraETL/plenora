@@ -5,7 +5,7 @@ Keeps database loading behavior isolated from orchestration callers.
 """
 
 from abc import ABC, abstractmethod
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from typing import Any, Callable, List, Optional, Tuple
 
 from app.core.carica.models import (
     ColumnMapping,
@@ -14,6 +14,7 @@ from app.core.carica.models import (
     WriteResult,
     BatchProgress,
 )
+from app.shared.contracts.payloads import StringRows
 
 
 class DestinationWriter(ABC):
@@ -60,7 +61,7 @@ class DestinationWriter(ABC):
         ...
 
     @abstractmethod
-    def get_existing_columns(self) -> List[Dict[str, str]]:
+    def get_existing_columns(self) -> StringRows:
         """Recupera lo schema della tabella destinazione se esiste.
 
         Returns:

@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import re
-from typing import TYPE_CHECKING, Callable, Dict, List
+from typing import TYPE_CHECKING, List
 
+from app.core.projects.types import TransformHandlerRegistry
 from app.core.projects.schema_formula_handlers import FormulaSchemaHandlers
 from app.core.projects.schema_geo_handlers import GeoSchemaHandlers
 from app.core.projects.schema_join_handlers import JoinSchemaHandlers
@@ -44,7 +45,7 @@ class TransformSchemaHandlers:
     def build_transform_handlers(
         self,
         edges_by_target: dict,
-    ) -> Dict[str, Callable[[List[List[ColumnSchema]], dict, str], List[ColumnSchema]]]:
+    ) -> TransformHandlerRegistry:
         """Public dispatcher boundary for SchemaInferenceService composition."""
         return self._build_transform_handlers(edges_by_target)
 
@@ -59,7 +60,7 @@ class TransformSchemaHandlers:
     def _build_transform_handlers(
         self,
         edges_by_target: dict,
-    ) -> Dict[str, Callable[[List[List[ColumnSchema]], dict, str], List[ColumnSchema]]]:
+    ) -> TransformHandlerRegistry:
         """Registry transform_op -> schema handler.
 
         Tutti gli handler esposti dal registry condividono la firma

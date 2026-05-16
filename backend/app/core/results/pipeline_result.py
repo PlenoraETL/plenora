@@ -5,11 +5,14 @@ from __future__ import annotations
 import shutil
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, Optional
+from typing import Optional, TypeAlias
 
 from app.config import settings
 from app.core.results.blob_writer import save_result_blob_from_bytes
 from app.core.results.temp_paths import make_pipeline_fs_temp_dir
+
+
+PipelineResultPayload: TypeAlias = dict[str, str]
 
 
 @dataclass(frozen=True)
@@ -20,7 +23,9 @@ class PipelineResultSave:
     output_filename: str
 
 
-def pipeline_result_save_legacy_payload(outcome: PipelineResultSave) -> Dict[str, str]:
+def pipeline_result_save_legacy_payload(
+    outcome: PipelineResultSave,
+) -> PipelineResultPayload:
     """Serialize the public save_pipeline_result compatibility payload."""
     return {
         "result_id": outcome.result_id,
@@ -37,7 +42,7 @@ def save_pipeline_result(
     group_id: Optional[str] = None,
     geom_column: Optional[str] = None,
     crs: str = "EPSG:4326",
-) -> Dict[str, str]:
+) -> PipelineResultPayload:
     """Compatibility wrapper returning legacy dict result metadata."""
     outcome = save_pipeline_result_outcome(
         project_id=project_id,

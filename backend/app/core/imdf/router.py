@@ -14,13 +14,15 @@ from pydantic import BaseModel, Field
 
 from app.config import settings
 from app.core.auth.dependencies import get_current_user
-from app.shared.contracts.auth import CurrentUser
 from app.core.auth.ownership import assert_resource_visible
+from app.shared.contracts.auth import CurrentUser
+from app.shared.contracts.payloads import JsonObject, StringMap
 from app.shared import error_codes
 from app.shared.error_envelope import raise_typed_http
 from app.observability.audit_action import audit_action
 from app.core.imdf import project_access
 from app.core.imdf import bundle_store as _imdf_bundle_store
+from app.core.imdf import bundle_access as _bundle_access
 from app.core.imdf.validator import validate_publish
 from app.utils.logger import get_logger
 
@@ -46,16 +48,10 @@ def _safe_bundle_dir(bundle_task_id: str) -> Path:
     Raises:
         HTTPException 400 se l'id e' malformato o tenta di uscire dalla root.
     """
-    try:
-        return _imdf_bundle_store.resolve_bundle_dir(
-            bundle_task_id,
-            root=settings.IMDF_BUNDLES_DIR,
-        )
-    except ValueError:
-        raise HTTPException(
-            status_code=400,
-            detail="bundle_task_id non valido (ammessi solo [A-Za-z0-9_-])",
-        )
+    return _bundle_access.safe_bundle_dir(
+        bundle_task_id,
+        root=settings.IMDF_BUNDLES_DIR,
+    )
 
 
 def _hydrate_local_cache(bundle_task_id: str) -> None:
@@ -68,21 +64,11 @@ def _hydrate_local_cache(bundle_task_id: str) -> None:
     No-op su cache hit (local dir popolata).
     Silent pass su errori: il codice downstream gestisce i 404 come prima.
     """
-    try:
-        from app.config import settings as runtime_settings
-
-        if runtime_settings.IMDF_BUNDLES_DIR.resolve() == settings.IMDF_BUNDLES_DIR.resolve():
-            _imdf_bundle_store.ensure_local_bundle(bundle_task_id)
-        else:
-            _imdf_bundle_store.ensure_local_bundle(
-                bundle_task_id,
-                root=settings.IMDF_BUNDLES_DIR,
-            )
-    except FileNotFoundError:
-        # Bundle davvero assente — downstream gestisce 404 via file checks
-        pass
-    except (OSError, RuntimeError, ValueError) as e:
-        logger.warning(f"[{bundle_task_id}] hydrate cache fallita (non-fatal): {e}")
+    _bundle_access.hydrate_local_cache(
+        bundle_task_id,
+        root=settings.IMDF_BUNDLES_DIR,
+        logger=logger,
+    )
 
 
 def _assert_bundle_group_access(bundle_dir: Path, current_user: CurrentUser) -> None:
@@ -100,62 +86,12 @@ def _assert_bundle_group_access(bundle_dir: Path, current_user: CurrentUser) -> 
 
     Raises HTTPException 403/404 se accesso non consentito.
     """
-    if current_user.role == "superadmin":
-        return
-
-    meta = _imdf_bundle_store.read_metadata(bundle_dir)
-    if meta is None:
-        logger.warning(
-            f"_assert_bundle_group_access: bundle '{bundle_dir.name}' senza "
-            f"plenora_metadata.json — accesso NEGATO a utente "
-            f"'{current_user.username}' (fail-closed)"
-        )
-        raise HTTPException(
-            status_code=403,
-            detail="Bundle senza metadata di ownership: accesso non consentito",
-        )
-
-    try:
-        bundle_project_id = meta.get("project_id")
-    except (AttributeError, TypeError) as e:
-        logger.warning(
-            f"plenora_metadata.json illeggibile ({bundle_dir.name}): {e} — "
-            f"accesso NEGATO (fail-closed)"
-        )
-        raise HTTPException(
-            status_code=403,
-            detail="Metadata bundle illeggibile: accesso non consentito",
-        )
-
-    if not bundle_project_id:
-        logger.warning(
-            f"plenora_metadata.json senza project_id ({bundle_dir.name}) — "
-            f"accesso NEGATO (fail-closed)"
-        )
-        raise HTTPException(
-            status_code=403,
-            detail="Bundle senza project_id: accesso non consentito",
-        )
-
-    try:
-        project = project_access.get_project_for_bundle(bundle_project_id)
-        if not project:
-            raise HTTPException(
-                status_code=404,
-                detail={
-                    "error": error_codes.PROJECT_NOT_FOUND,
-                    "message": f"Progetto '{bundle_project_id}' del bundle non trovato",
-                },
-            )
-        assert_resource_visible(project, "projects", current_user, "Progetto")
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"_assert_bundle_group_access: errore verifica: {e}", exc_info=True)
-        raise HTTPException(
-            status_code=500,
-            detail="Errore verifica accesso bundle"
-        )
+    _bundle_access.assert_bundle_group_access(
+        bundle_dir,
+        current_user,
+        logger=logger,
+        visible_checker=assert_resource_visible,
+    )
 
 
 # ══════════════════════════════════════════════════════════════════════
@@ -183,7 +119,7 @@ class ImdfPublishRequest(BaseModel):
     apply_renderers: bool = Field(
         False, description="Applica stili del renderers.json (solo modalita' replace)"
     )
-    match_columns: Optional[Dict[str, str]] = Field(
+    match_columns: Optional[StringMap] = Field(
         None,
         description="Override per-layer delle colonne business-key (solo upsert). "
                     "Chiavi: Localita, OperaPrincipale, Livello, Locale, Details",
@@ -196,7 +132,7 @@ class ImdfValidateRequest(BaseModel):
     connection_id: str
     fs_name: str
     mode: str = "replace"
-    match_columns: Optional[Dict[str, str]] = None
+    match_columns: Optional[StringMap] = None
     folder: Optional[str] = None
 
 
@@ -214,7 +150,7 @@ class ImdfBundleSummary(BaseModel):
     size_mb:     float
     age_hours:   Optional[float] = None
     saved_at:    Optional[str] = None
-    validation_summary: Optional[Dict[str, Any]] = None
+    validation_summary: Optional[JsonObject] = None
     # Conteggi layer IMDF (da plenora_metadata.json o fallback dal
     # counting dei .geojson). None se non determinabili
     building_count: Optional[int] = None

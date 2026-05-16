@@ -9,9 +9,10 @@ from __future__ import annotations
 import hashlib
 import json
 import re
-from typing import Any, Dict, List, Optional
+from typing import Any, List, Optional
 
 from app.core.dataframes.values import is_null_scalar, to_python_scalar
+from app.core.arricchisci.types import JsonObject
 from app.utils.logger import get_logger
 
 # Stesso logger name di `enrichment_service.py` (`__name__` valuta a
@@ -84,7 +85,7 @@ class EnrichmentTemplateParamsMixin:
         out_parts.append(template[last_end:])
         return "".join(out_parts)
 
-    def _build_params(self, row: Any) -> Dict[str, Any]:
+    def _build_params(self, row: Any) -> JsonObject:
         """
         Costruisce parametri API dalla riga DataFrame.
 
@@ -156,7 +157,7 @@ class EnrichmentTemplateParamsMixin:
 
         return params
 
-    def _has_null_params(self, params: Dict) -> bool:
+    def _has_null_params(self, params: JsonObject) -> bool:
         """Verifica se ci sono parametri OBBLIGATORI nulli (esclusa API key).
 
         Se le definizioni dei parametri sono disponibili (api_config["parameters"]),
@@ -176,7 +177,7 @@ class EnrichmentTemplateParamsMixin:
         return False
 
     @staticmethod
-    def _make_cache_key(params: Dict) -> str:
+    def _make_cache_key(params: JsonObject) -> str:
         """Genera chiave cache da parametri."""
         # Ordina per consistenza
         sorted_items = sorted(params.items())

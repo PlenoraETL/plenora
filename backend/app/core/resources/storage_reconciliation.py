@@ -14,6 +14,7 @@ from datetime import datetime
 from typing import Any, Literal, Mapping, Optional
 
 from app.core.resources import storage_reconciliation_store as _store
+from app.shared.contracts.payloads import IntMap
 
 
 logger = logging.getLogger(__name__)
@@ -905,7 +906,7 @@ _COUNT_PENDING_BY_OPERATION_SQL = (
 )
 
 
-def count_pending_by_operation() -> dict[str, int]:
+def count_pending_by_operation() -> IntMap:
     """Read-only count di righe `state='pending'` raggruppate per
     `operation` (today: `'delete'` | `'upload_intent'`).
 

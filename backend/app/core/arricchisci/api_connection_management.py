@@ -10,7 +10,7 @@ import json
 import uuid
 from copy import deepcopy
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from typing import Any, Optional
 
 import requests
 
@@ -19,6 +19,7 @@ from app.core.arricchisci._api_connection_helpers import (
     _decrypt_auth_in_config,
     _encrypt_auth_in_config,
 )
+from app.core.arricchisci.types import JsonObject, JsonObjectById, JsonRows
 import app.core.arricchisci.db as db_svc
 from app.core.security.outbound_url import validate_external_url
 from app.infrastructure.http.session import get_shared_session
@@ -41,7 +42,7 @@ class ApiConnectionManagementMixin:
 
     # CRUD CONNESSIONI API — storage PostgreSQL tramite db_service
 
-    def _mask_credentials(self, config: Dict) -> Dict:
+    def _mask_credentials(self, config: JsonObject) -> JsonObject:
         """Oscura token/password/client_secret nella risposta API."""
         config = deepcopy(config)
         if 'auth' in config:
@@ -58,11 +59,11 @@ class ApiConnectionManagementMixin:
         return config
 
     @staticmethod
-    def _config_from_api_connection_row(row: db_svc.ApiConnectionRow) -> Dict[str, Any]:
+    def _config_from_api_connection_row(row: db_svc.ApiConnectionRow) -> JsonObject:
         return deepcopy(row.config or {})
 
     @staticmethod
-    def _normalize_auth_schema(config: Dict[str, Any]) -> Dict[str, Any]:
+    def _normalize_auth_schema(config: JsonObject) -> JsonObject:
         """Map OpenAPI-style api_key fields to runtime auth fields."""
         auth = config.get("auth")
         if not isinstance(auth, dict) or auth.get("type") != "api_key":
@@ -83,7 +84,7 @@ class ApiConnectionManagementMixin:
         *,
         include_token: bool = False,
         strict: bool = False,
-    ) -> Dict[str, Any]:
+    ) -> JsonObject:
         config = self._config_from_api_connection_row(row)
         config["id"] = row.id or config.get("id")
         config["group_id"] = row.group_id
@@ -94,7 +95,12 @@ class ApiConnectionManagementMixin:
             )
         return self._mask_credentials(self._normalize_auth_schema(config))
 
-    def list_api_connections(self, category: str = None, connection_type: str = None, group_id: str = None) -> List[Dict]:
+    def list_api_connections(
+        self,
+        category: str = None,
+        connection_type: str = None,
+        group_id: str = None,
+    ) -> JsonRows:
         """Lista tutte le API connections dal DB.
 
         group_id=None → no filter (used by superadmin and by allowed_groups path).
@@ -123,7 +129,7 @@ class ApiConnectionManagementMixin:
         )
         return connections
 
-    def list_api_connections_decrypted(self, group_id: str = None) -> Dict[str, Dict]:
+    def list_api_connections_decrypted(self, group_id: str = None) -> JsonObjectById:
         """Lista API connections con credenziali decifrate (per uso interno).
 
         Fix N+1: era un loop di get_api_connection(id, include_token=True).
@@ -145,7 +151,13 @@ class ApiConnectionManagementMixin:
             result[api_id] = config
         return result
 
-    def get_api_connection(self, api_id: str, include_token: bool = False, *, strict: bool = False) -> Optional[Dict]:
+    def get_api_connection(
+        self,
+        api_id: str,
+        include_token: bool = False,
+        *,
+        strict: bool = False,
+    ) -> Optional[JsonObject]:
         """Ottiene una API connection specifica dal DB.
 
         Se ``include_token=True`` decifra i campi auth sensibili (per uso
@@ -168,7 +180,7 @@ class ApiConnectionManagementMixin:
             strict=strict,
         )
 
-    def create_api_connection(self, data: Dict) -> Dict:
+    def create_api_connection(self, data: JsonObject) -> JsonObject:
         """Crea una nuova API connection nel DB."""
         api_id = f"api_{uuid.uuid4().hex[:12]}"
         config = {
@@ -216,7 +228,11 @@ class ApiConnectionManagementMixin:
         # Restituisci la versione mascherata al client (mai esporre cifrato/chiaro al caller
         return self._public_config_from_api_connection_row(row, include_token=False)
 
-    def update_api_connection(self, api_id: str, data: Dict) -> Optional[Dict]:
+    def update_api_connection(
+        self,
+        api_id: str,
+        data: JsonObject,
+    ) -> Optional[JsonObject]:
         """Aggiorna una API connection esistente nel DB.
 
         I campi auth sensibili sono cifrati at-rest. Il flusso è:
@@ -299,7 +315,10 @@ class ApiConnectionManagementMixin:
     # permettere la configurazione dell'output mapping nel frontend
 
     @staticmethod
-    def _build_test_call_params(config: Dict, test_params: Optional[Dict]) -> Dict:
+    def _build_test_call_params(
+        config: JsonObject,
+        test_params: Optional[JsonObject],
+    ) -> JsonObject:
         """Costruisce i parametri per `test_api_connection`.
 
         Merge di:
@@ -321,7 +340,7 @@ class ApiConnectionManagementMixin:
             if dval not in (None, ""):
                 raw_params[pname] = dval
 
-        params: Dict = {}
+        params: JsonObject = {}
         for k, v in raw_params.items():
             if isinstance(v, str) and '{{' in v:
                 fields = [{'name': k, 'value': v}]
@@ -332,7 +351,10 @@ class ApiConnectionManagementMixin:
         return params
 
     @staticmethod
-    def _inject_auth_query_params(auth: Dict, params: Dict) -> Optional[Dict]:
+    def _inject_auth_query_params(
+        auth: JsonObject,
+        params: JsonObject,
+    ) -> Optional[JsonObject]:
         """Inietta nei query params le credenziali in-query dell'auth.
 
         Modifica `params` in place. Ritorna `None` su success, oppure
@@ -396,7 +418,12 @@ class ApiConnectionManagementMixin:
                 f"Risposta non è JSON valido (Content-Type: {content_type}): {e}"
             )
 
-    def test_api_connection(self, api_id: str = None, config: Dict = None, test_params: Dict = None) -> Dict:
+    def test_api_connection(
+        self,
+        api_id: str = None,
+        config: Optional[JsonObject] = None,
+        test_params: Optional[JsonObject] = None,
+    ) -> JsonObject:
         """
         Testa una connessione API con parametri di prova.
 

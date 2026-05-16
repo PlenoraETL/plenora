@@ -7,7 +7,7 @@ target table per DatabaseWriter.
 from __future__ import annotations
 
 import time
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, List, Optional, Tuple
 
 from sqlalchemy import text
 
@@ -19,6 +19,7 @@ from app.core.carica.models import (
     WriteMode,
     WriteResult,
 )
+from app.shared.contracts.payloads import IntMap, StringMap
 from app.utils.logger import get_logger
 
 # Keep the canonical writer logger name so existing handlers receive mixin logs.
@@ -141,8 +142,8 @@ class WriterPreflightLifecycleMixin:
     def create_table(
         self,
         columns: List[ColumnMapping],
-        pandas_dtypes: Optional[Dict[str, str]] = None,
-        max_lengths: Optional[Dict[str, int]] = None,
+        pandas_dtypes: Optional[StringMap] = None,
+        max_lengths: Optional[IntMap] = None,
     ) -> bool:
         """Crea la tabella destinazione.
 

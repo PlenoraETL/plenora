@@ -8,9 +8,29 @@ import json
 import threading
 import uuid
 from datetime import datetime, timezone
-from typing import Dict, List, Optional
+from typing import Callable, Dict, List, Mapping, Optional
 
 from app.config import settings
+from app.core.scheduler import db
+from app.core.scheduler.log_service import ScheduleLogService
+from app.core.scheduler.models import (
+    LastExecution,
+    ScheduleConcurrency,
+    ScheduleConfig,
+    ScheduleConflictPolicy,
+    ScheduleCreate,
+    ScheduleErrorPolicy,
+    ScheduleExecution,
+    ScheduleFrequency,
+    ScheduleList,
+    SchedulePipeline,
+    SchedulePreCheck,
+    ScheduleRuntime,
+    ScheduleUpdate,
+)
+from app.core.projects.service import ProjectService
+from app.shared import error_codes
+from fastapi import HTTPException
 from app.utils.logger import get_logger
 
 
@@ -61,21 +81,6 @@ def detect_missed_run(
         return None
 
     return expected_last
-from app.core.scheduler.models import (
-    ScheduleConfig,
-    ScheduleCreate,
-    ScheduleUpdate,
-    ScheduleList,
-    SchedulePipeline,
-    ScheduleFrequency,
-    ScheduleExecution,
-    ScheduleConcurrency,
-    SchedulePreCheck,
-    ScheduleErrorPolicy,
-    ScheduleConflictPolicy,
-    ScheduleRuntime,
-)
-from app.core.scheduler import db
 
 logger = get_logger(__name__)
 
@@ -124,22 +129,39 @@ class ScheduleService:
             logger.error(f"[GESTITO] Errore parsing schedule {row.id}: {e}", exc_info=True)
             return None
 
-    def _config_to_db(self, config: ScheduleConfig, group_id: str) -> dict:
-        """Prepara i dati per il salvataggio nel DB."""
-        return {
-            "schedule_id": config.id,
-            "group_id": group_id,
-            "project_id": config.pipeline.project_id,
-            "name": config.pipeline.project_name or config.id,
-            "cron_expression": config.schedule.cron_expression,
-            "is_enabled": config.schedule.enabled,
-            "config": config.model_dump(mode='json'),
-        }
-
     def get_schedule(self, schedule_id: str) -> Optional[ScheduleConfig]:
         """Carica un singolo schedule per ID."""
         row = db.get_schedule_row(schedule_id)
         return self._row_to_config(row)
+
+    def _update_config_locked(
+        self,
+        schedule_id: str,
+        mutate_config: Callable[[ScheduleConfig], bool],
+        fields_for_config: Optional[Callable[[ScheduleConfig], Mapping[str, object]]] = None,
+    ) -> Optional[ScheduleConfig]:
+        """Apply a schedule config mutation under the DB row lock."""
+        updated_config: Optional[ScheduleConfig] = None
+
+        def _locked_update(row: db.ScheduleRow) -> Optional[Mapping[str, object]]:
+            nonlocal updated_config
+            config = self._row_to_config(row)
+            if not config:
+                return None
+            if not mutate_config(config):
+                return None
+
+            config.updated_at = datetime.now(timezone.utc)
+            fields: dict[str, object] = {"config": config.model_dump(mode="json")}
+            if fields_for_config is not None:
+                fields.update(fields_for_config(config))
+            updated_config = config
+            return fields
+
+        row = db.update_schedule_locked(schedule_id, _locked_update)
+        if row is None:
+            return None
+        return updated_config
 
     def list_schedules(self, project_id: Optional[str] = None,
                        group_id: str = None) -> ScheduleList:
@@ -160,6 +182,48 @@ class ScheduleService:
 
     def schedule_exists(self, schedule_id: str) -> bool:
         return db.get_schedule_row(schedule_id) is not None
+
+    def create_schedule_for_user(
+        self,
+        schedule_data: ScheduleCreate,
+        *,
+        group_id: str,
+        created_by: str,
+    ) -> ScheduleConfig:
+        """Create a schedule from the public request boundary."""
+        metadata = ProjectService().get_project_metadata(
+            schedule_data.project_id,
+            group_id=group_id,
+        )
+        if not metadata:
+            raise HTTPException(
+                status_code=404,
+                detail={
+                    "error": error_codes.PROJECT_NOT_FOUND,
+                    "message": f"Progetto '{schedule_data.project_id}' non trovato",
+                },
+            )
+
+        self._validate_cron_expression(schedule_data.cron_expression)
+        return self.create_schedule(
+            schedule_data=schedule_data,
+            project_name=metadata.name,
+            project_type=metadata.project_type,
+            group_id=group_id,
+            created_by=created_by,
+        )
+
+    def _validate_cron_expression(self, cron_expression: str) -> None:
+        try:
+            from croniter import croniter
+        except ImportError:
+            return
+
+        if not croniter.is_valid(cron_expression):
+            raise HTTPException(
+                status_code=400,
+                detail=f"Cron expression non valida: '{cron_expression}'",
+            )
 
     def create_schedule(self, schedule_data: ScheduleCreate,
                         project_name: str = "", project_type: str = "estrai",
@@ -223,51 +287,52 @@ class ScheduleService:
     def update_schedule(self, schedule_id: str,
                         update_data: ScheduleUpdate) -> Optional[ScheduleConfig]:
         """Aggiorna uno schedule esistente."""
-        config = self.get_schedule(schedule_id)
+        def _mutate(config: ScheduleConfig) -> bool:
+            if update_data.project_id is not None:
+                config.pipeline.project_id = update_data.project_id
+            if update_data.cron_expression is not None:
+                config.schedule.cron_expression = update_data.cron_expression
+            if update_data.timezone is not None:
+                config.schedule.timezone = update_data.timezone
+            if update_data.description is not None:
+                config.schedule.description = update_data.description
+            if update_data.use_cache is not None:
+                config.execution.use_cache = update_data.use_cache
+            if update_data.clear_destination:
+                config.destination = None
+                config.pre_check.verify_destination_connection = False
+            elif update_data.destination is not None:
+                config.destination = update_data.destination
+                config.pre_check.verify_destination_connection = True
+            if update_data.max_retries is not None:
+                config.on_error.max_retries = update_data.max_retries
+            if update_data.retry_backoff_seconds is not None:
+                config.on_error.retry_backoff_seconds = update_data.retry_backoff_seconds
+            if update_data.append_conflicts is not None:
+                config.conflict_policy.append_conflicts = update_data.append_conflicts
+            if update_data.log_skipped_rows is not None:
+                config.conflict_policy.log_skipped_rows = update_data.log_skipped_rows
+            if update_data.concurrency_max_queue is not None:
+                config.concurrency.max_queue_size = update_data.concurrency_max_queue
+
+            next_exec = self._calculate_next_execution(
+                config.schedule.cron_expression,
+                config.schedule.timezone
+            )
+            if next_exec:
+                config.runtime.next_execution = next_exec
+            return True
+
+        config = self._update_config_locked(
+            schedule_id,
+            _mutate,
+            lambda cfg: {
+                "cron_expression": cfg.schedule.cron_expression,
+                "is_enabled": cfg.schedule.enabled,
+            },
+        )
         if not config:
             return None
-
-        if update_data.project_id is not None:
-            config.pipeline.project_id = update_data.project_id
-        if update_data.cron_expression is not None:
-            config.schedule.cron_expression = update_data.cron_expression
-        if update_data.timezone is not None:
-            config.schedule.timezone = update_data.timezone
-        if update_data.description is not None:
-            config.schedule.description = update_data.description
-        if update_data.use_cache is not None:
-            config.execution.use_cache = update_data.use_cache
-        if update_data.clear_destination:
-            config.destination = None
-            config.pre_check.verify_destination_connection = False
-        elif update_data.destination is not None:
-            config.destination = update_data.destination
-            config.pre_check.verify_destination_connection = True
-        if update_data.max_retries is not None:
-            config.on_error.max_retries = update_data.max_retries
-        if update_data.retry_backoff_seconds is not None:
-            config.on_error.retry_backoff_seconds = update_data.retry_backoff_seconds
-        if update_data.append_conflicts is not None:
-            config.conflict_policy.append_conflicts = update_data.append_conflicts
-        if update_data.log_skipped_rows is not None:
-            config.conflict_policy.log_skipped_rows = update_data.log_skipped_rows
-        if update_data.concurrency_max_queue is not None:
-            config.concurrency.max_queue_size = update_data.concurrency_max_queue
-
-        config.updated_at = datetime.now(timezone.utc)
-
-        next_exec = self._calculate_next_execution(
-            config.schedule.cron_expression,
-            config.schedule.timezone
-        )
-        if next_exec:
-            config.runtime.next_execution = next_exec
-
-        # Aggiorna cron e is_enabled nel DB oltre al config JSON
-        db.update_schedule(schedule_id,
-                           cron_expression=config.schedule.cron_expression,
-                           is_enabled=config.schedule.enabled,
-                           config=config.model_dump(mode='json'))
         logger.info(f"Schedule aggiornato: {schedule_id}")
         return config
 
@@ -283,15 +348,14 @@ class ScheduleService:
 
         Ritorna None se lo schedule non esiste.
         """
-        config = self.get_schedule(schedule_id)
+        def _mutate(config: ScheduleConfig) -> bool:
+            config.schedule.catchup_missed_runs = enabled
+            config.schedule.catchup_grace_hours = grace_hours
+            return True
+
+        config = self._update_config_locked(schedule_id, _mutate)
         if not config:
             return None
-
-        config.schedule.catchup_missed_runs = enabled
-        config.schedule.catchup_grace_hours = grace_hours
-        config.updated_at = datetime.now(timezone.utc)
-
-        db.update_schedule(schedule_id, config=config.model_dump(mode='json'))
         logger.info(
             f"Schedule {schedule_id} catchup aggiornato: "
             f"enabled={enabled}, grace_hours={grace_hours}"
@@ -300,31 +364,32 @@ class ScheduleService:
 
     def toggle_schedule(self, schedule_id: str, enabled: bool) -> Optional[ScheduleConfig]:
         """Abilita o disabilita uno schedule."""
-        config = self.get_schedule(schedule_id)
+        def _mutate(config: ScheduleConfig) -> bool:
+            if enabled and config.runtime.status == "orphan":
+                logger.warning(f"Impossibile abilitare schedule orfano {schedule_id}")
+                return False
+
+            config.schedule.enabled = enabled
+            config.runtime.status = "idle" if enabled else "disabled"
+
+            if enabled:
+                next_exec = self._calculate_next_execution(
+                    config.schedule.cron_expression,
+                    config.schedule.timezone
+                )
+                if next_exec:
+                    config.runtime.next_execution = next_exec
+            else:
+                config.runtime.next_execution = None
+            return True
+
+        config = self._update_config_locked(
+            schedule_id,
+            _mutate,
+            lambda _cfg: {"is_enabled": enabled},
+        )
         if not config:
             return None
-
-        if enabled and config.runtime.status == "orphan":
-            logger.warning(f"Impossibile abilitare schedule orfano {schedule_id}")
-            return None
-
-        config.schedule.enabled = enabled
-        config.runtime.status = "idle" if enabled else "disabled"
-        config.updated_at = datetime.now(timezone.utc)
-
-        if enabled:
-            next_exec = self._calculate_next_execution(
-                config.schedule.cron_expression,
-                config.schedule.timezone
-            )
-            if next_exec:
-                config.runtime.next_execution = next_exec
-        else:
-            config.runtime.next_execution = None
-
-        db.update_schedule(schedule_id,
-                           is_enabled=enabled,
-                           config=config.model_dump(mode='json'))
         logger.info(f"Schedule {'abilitato' if enabled else 'disabilitato'}: {schedule_id}")
         return config
 
@@ -338,7 +403,6 @@ class ScheduleService:
         db.delete_schedule(schedule_id)
 
         try:
-            from app.core.scheduler.log_service import ScheduleLogService
             log_service = ScheduleLogService()
             deleted_logs = log_service.delete_schedule_logs(schedule_id)
             logger.info(f"Schedule eliminato: {schedule_id} ({deleted_logs} log rimossi)")
@@ -356,47 +420,24 @@ class ScheduleService:
     def mark_as_orphan(self, schedule_id: str) -> Optional[ScheduleConfig]:
         """Segna uno schedule come orfano (progetto eliminato).
 
-        Read-modify-write protetto da lock per-schedule contro race con
-        update_runtime / set_runtime_status / toggle_schedule.
+        Read-modify-write protetto da row lock DB contro race con
+        update_runtime / set_runtime_status / toggle_schedule su altri pod.
         """
-        with self._get_schedule_lock(schedule_id):
-            config = self.get_schedule(schedule_id)
-            if not config:
-                return None
-
+        def _mutate(config: ScheduleConfig) -> bool:
             config.schedule.enabled = False
             config.runtime.status = "orphan"
             config.runtime.next_execution = None
-            config.updated_at = datetime.now(timezone.utc)
+            return True
 
-            db.update_schedule(schedule_id,
-                               is_enabled=False,
-                               config=config.model_dump(mode='json'))
-            logger.warning(f"Schedule orfano: {schedule_id}")
-            return config
-
-    def check_orphans(self) -> List[str]:
-        """Verifica tutti gli schedule e segna come orfani quelli con progetto eliminato.
-
-        Fix N+1: era un loop con project_exists per ogni schedule. Ora fa una
-        sola query per avere tutti i project_id esistenti.
-        """
-        orphaned = []
-        schedule_list = self.list_schedules()
-
-        # Fetch tutti gli ID progetto esistenti in un set
-        existing_project_ids = db.list_project_ids()
-
-        for schedule in schedule_list.schedules:
-            if schedule.runtime.status == "orphan":
-                continue
-            if schedule.pipeline.project_id not in existing_project_ids:
-                self.mark_as_orphan(schedule.id)
-                orphaned.append(schedule.id)
-
-        if orphaned:
-            logger.warning(f"Trovati {len(orphaned)} schedule orfani: {orphaned}")
-        return orphaned
+        config = self._update_config_locked(
+            schedule_id,
+            _mutate,
+            lambda _cfg: {"is_enabled": False},
+        )
+        if not config:
+            return None
+        logger.warning(f"Schedule orfano: {schedule_id}")
+        return config
 
     def get_schedules_for_project(
         self, project_id: str, group_id: Optional[str] = None,
@@ -420,39 +461,29 @@ class ScheduleService:
                            current_task_id: str = None) -> Optional[ScheduleConfig]:
         """Aggiorna solo lo stato runtime (transizioni leggere).
 
-        Read-modify-write protetto da lock per-schedule.
+        Read-modify-write protetto da row lock DB.
         """
-        with self._get_schedule_lock(schedule_id):
-            config = self.get_schedule(schedule_id)
-            if not config:
-                return None
-
+        def _mutate(config: ScheduleConfig) -> bool:
             config.runtime.status = status
             if current_task_id is not None:
                 config.runtime.current_task_id = current_task_id
-            config.updated_at = datetime.now(timezone.utc)
+            return True
 
-            db.update_schedule(schedule_id, config=config.model_dump(mode='json'))
-            return config
+        return self._update_config_locked(schedule_id, _mutate)
 
     def update_runtime(self, schedule_id: str, status: str,
                        last_execution: Optional[dict] = None) -> Optional[ScheduleConfig]:
         """Aggiorna lo stato runtime dopo un'esecuzione completata.
 
-        Read-modify-write protetto da lock per-schedule contro race su
-        counter (success_count, failure_count, consecutive_failures) e
+        Read-modify-write protetto da row lock DB contro race cross-process
+        su counter (success_count, failure_count, consecutive_failures) e
         next_execution.
         """
-        with self._get_schedule_lock(schedule_id):
-            config = self.get_schedule(schedule_id)
-            if not config:
-                return None
-
+        def _mutate(config: ScheduleConfig) -> bool:
             config.runtime.status = status
             config.runtime.current_task_id = None
 
             if last_execution:
-                from app.core.scheduler.models import LastExecution
                 config.runtime.last_execution = LastExecution(**last_execution)
 
             config.runtime.total_runs += 1
@@ -474,9 +505,9 @@ class ScheduleService:
                 if next_exec:
                     config.runtime.next_execution = next_exec
 
-            config.updated_at = datetime.now(timezone.utc)
-            db.update_schedule(schedule_id, config=config.model_dump(mode='json'))
-            return config
+            return True
+
+        return self._update_config_locked(schedule_id, _mutate)
 
     # HELPER INTERNI
 

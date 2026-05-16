@@ -205,25 +205,6 @@ def test_storage_key_dispatch_lives_in_exactly_one_module():
     by `'data = row.get("data")'` — the inline dispatch. The shim
     must NOT contain those tokens any longer."""
     assert not (_BACKEND_ROOT / "app" / "db" / "results_db_service.py").exists()
-    return
-    code_only = _python_code_only(text)
-
-    # The post-pilot shim delegates to the loader. The dispatch
-    # tokens live in the loader, not here.
-    forbidden_in_shim = (
-        # original dispatch branch in get_result_data
-        '_s3_download_bytes(storage_key)',
-        # original BYTEA fallback line
-        'isinstance(data, memoryview)',
-        # original SQL with explicit storage_key column join
-        'SELECT data, storage_key FROM results',
-    )
-    offenders = [t for t in forbidden_in_shim if t in code_only]
-    assert not offenders, (
-        "Deleted results DB facade dispatch tokens "
-        f"reappeared: {offenders}. Either the migration regressed or a "
-        "new inline dispatch was added; consolidate via the loader."
-    )
 
 
 def test_loader_owns_the_dispatch_tokens():

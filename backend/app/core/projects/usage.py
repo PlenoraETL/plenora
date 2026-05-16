@@ -9,6 +9,7 @@ from __future__ import annotations
 from collections.abc import Iterable
 
 from app.core.projects import db as project_db
+from app.core.projects.types import ProjectUsageRows
 
 
 def list_owned_project_ids(
@@ -27,7 +28,7 @@ def list_owned_project_ids(
     )
 
 
-def list_projects_using_connection(connection_id: str) -> list[dict[str, object]]:
+def list_projects_using_connection(connection_id: str) -> ProjectUsageRows:
     return [
         {
             "id": row.id,
@@ -41,7 +42,7 @@ def list_projects_using_connection(connection_id: str) -> list[dict[str, object]
     ]
 
 
-def list_projects_with_canvas_for_datasource_check() -> list[dict[str, object]]:
+def list_projects_with_canvas_for_datasource_check() -> ProjectUsageRows:
     return [
         {
             "id": row.id,

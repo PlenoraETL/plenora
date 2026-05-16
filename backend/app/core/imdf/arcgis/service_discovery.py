@@ -2,11 +2,12 @@
 Cluster SERVICE_DISCOVERY - IMDF folder + Feature Service discovery policy.
 """
 
-from typing import List, Optional, Tuple
+from typing import Optional, Tuple
 
 import app.core.connections.arcgis_service_discovery as _arcgis_discovery
 from app.shared.connections.arcgis_connection import ArcGISConnectionInfo
 from app.shared.connections.arcgis_provider import ArcGISDiscoveryProviderProtocol
+from app.shared.contracts.payloads import JsonRows
 from app.utils.logger import get_logger
 
 logger = get_logger("app.core.imdf.arcgis_uploader")
@@ -26,7 +27,7 @@ def _is_imdf_user_folder(folder: dict) -> bool:
 def _list_user_folders(
     client: ArcGISDiscoveryProviderProtocol,
     conn: ArcGISConnectionInfo,
-) -> List[dict]:
+) -> JsonRows:
     """Read-only IMDF adapter for ArcGIS folder listing."""
     try:
         return _arcgis_discovery.list_user_folders(
@@ -64,7 +65,7 @@ def _is_service_name_available(
 def _enumerate_all_user_items(
     client: ArcGISDiscoveryProviderProtocol,
     conn: ArcGISConnectionInfo,
-) -> List[dict]:
+) -> JsonRows:
     """Enumerate all current-user portal items through the provider."""
     try:
         return _arcgis_discovery.enumerate_user_items(client, conn)

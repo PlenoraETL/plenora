@@ -6,6 +6,12 @@ from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Protocol
 
 from app.core.connections.arcgis_sql_helpers import chunked, quote_sql_value
+from app.core.dataframes.tabular import (
+    duplicate_non_null_value_count,
+    filter_rows_by_column_predicate,
+    null_count_for_columns,
+    unique_non_null_column_values,
+)
 from app.core.dataframes.values import is_null_scalar
 from app.shared.connections.arcgis_connection import ArcGISConnectionInfo
 from app.shared.connections.arcgis_provider import (
@@ -103,7 +109,7 @@ def _update_existing_layer(
         outcome.errors.append(f"match column '{match_col}' assente nel GDB")
         strict_fail = True
     else:
-        null_count = int(gdf[match_col].isna().sum())
+        null_count = null_count_for_columns(gdf, [match_col])
         if null_count > 0:
             outcome.errors.append(
                 f"{null_count} feature con '{match_col}' NULL - "
@@ -111,10 +117,7 @@ def _update_existing_layer(
             )
             strict_fail = True
 
-        dup_count = int(
-            gdf[match_col].duplicated(keep=False).sum()
-            - gdf[match_col].isna().sum()
-        )
+        dup_count = duplicate_non_null_value_count(gdf, match_col)
         if dup_count > 0:
             outcome.errors.append(
                 f"{dup_count} feature con '{match_col}' duplicato - "
@@ -126,7 +129,7 @@ def _update_existing_layer(
         outcome.skipped_count = int(len(gdf))
         return
 
-    values = gdf[match_col].dropna().unique().tolist()
+    values = unique_non_null_column_values(gdf, match_col)
     oid_by_key: Dict[str, int] = {}
     if values:
         oid_by_key, query_errors = client.query_oid_by_key(
@@ -151,13 +154,13 @@ def _update_existing_layer(
         outcome.skipped_count = int(len(gdf))
         return
 
-    gdf_valid = gdf[
-        gdf[match_col].apply(
-            lambda value: value is not None
-            and not is_null_scalar(value)
-            and str(value) in oid_by_key
-        )
-    ]
+    gdf_valid = filter_rows_by_column_predicate(
+        gdf,
+        match_col,
+        lambda value: value is not None
+        and not is_null_scalar(value)
+        and str(value) in oid_by_key,
+    )
     missing_rows = int(len(gdf) - len(gdf_valid))
     if missing_rows > 0:
         outcome.errors.append(
@@ -215,7 +218,7 @@ def _delete_existing_matches_for_upsert(
         outcome.errors.append(f"colonna '{match_col}' assente nel GDB (skip)")
         return
 
-    values = gdf[match_col].dropna().unique().tolist()
+    values = unique_non_null_column_values(gdf, match_col)
     for batch in chunked(values, 200):
         where = f"{match_col} IN ({','.join(quote_sql_value(value) for value in batch)})"
         try:

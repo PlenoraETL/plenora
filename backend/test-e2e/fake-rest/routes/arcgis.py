@@ -221,7 +221,6 @@ def layer_descriptor(
 def layer_query(
     service_name: str,
     where: str = Query(default="1=1"),
-    outFields: str = Query(default="*"),
     f: str = Query(default="json"),
     returnCountOnly: bool = Query(default=False),
     token: Optional[str] = Query(default=None),

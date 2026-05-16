@@ -3,9 +3,15 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Optional
+from typing import Optional, TypedDict
 
 from app.core.scheduler import db as scheduler_db
+
+
+class SchedulerOwnershipResource(TypedDict):
+    id: str
+    group_id: Optional[str]
+    created_by: Optional[str]
 
 
 @dataclass(frozen=True)
@@ -14,7 +20,7 @@ class ScheduleOwnerContext:
     group_id: Optional[str]
     created_by: Optional[str]
 
-    def ownership_resource(self) -> dict[str, object]:
+    def ownership_resource(self) -> SchedulerOwnershipResource:
         return {
             "id": self.schedule_id,
             "group_id": self.group_id,

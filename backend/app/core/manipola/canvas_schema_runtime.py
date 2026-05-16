@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional
+from typing import Any, Optional
 
 from app.shared.execution.canvas_graph import CanvasGraph
 from app.core.projects.canvas_models import CanvasState
 from app.shared.resources.metadata import ResourceMetadata
+from app.core.dataframes.tabular import non_null_head_values
+from app.core.manipola.types import ColumnMetadataRows, StringMap
 
 
 def extract_srid_from_canvas(
@@ -37,9 +39,9 @@ def build_canvas_type_map(
     canvas: CanvasState,
     *,
     canvas_graph: Optional[CanvasGraph] = None,
-) -> Dict[str, str]:
+) -> StringMap:
     """Build a column-name to type map from canvas columns and calculated columns."""
-    type_map: Dict[str, str] = {}
+    type_map: StringMap = {}
     graph = canvas_graph or CanvasGraph.from_canvas(canvas)
     for node in graph.nodes:
         columns = node.get_field("columns")
@@ -73,10 +75,10 @@ def build_canvas_type_map(
 
 def build_columns_with_types(
     df: Any,
-    canvas_type_map: Dict[str, str],
+    canvas_type_map: StringMap,
     *,
     logger: Any = None,
-) -> List[Dict[str, str]]:
+) -> ColumnMetadataRows:
     """Build preview column descriptors using canvas metadata before dtype fallback."""
     columns = []
     lower_map = {k.lower(): v for k, v in canvas_type_map.items()}
@@ -117,19 +119,19 @@ def detect_geometry_from_content(
     """Detect WKT or Shapely geometry values from a DataFrame column sample."""
     try:
         if col_name.lower() in ("geometry", "geom", "the_geom", "shape"):
-            sample = df[col_name].dropna().head(1)
-            if not sample.empty:
-                sample_value = sample.iloc[0]
+            sample = non_null_head_values(df[col_name], 1)
+            if sample:
+                sample_value = sample[0]
                 if hasattr(sample_value, "geom_type"):
                     return "geometry"
                 sample_text = str(sample_value).upper().strip()
                 if sample_text and sample_text[0] in "PLMG":
                     return "geometry"
 
-        sample = df[col_name].dropna().head(1)
-        if sample.empty:
+        sample = non_null_head_values(df[col_name], 1)
+        if not sample:
             return "str"
-        sample_value = sample.iloc[0]
+        sample_value = sample[0]
 
         if hasattr(sample_value, "geom_type"):
             return "geometry"

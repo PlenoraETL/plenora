@@ -20,6 +20,7 @@ from app.core.datasources.interface import (
     BackendConfig,
     DataSourceInterface,
     DataSourceConnectionError,
+    DataSourceConnectionTestResult,
     DataSourceFileNotFoundError,
     DataSourcePermissionError,
     FileInfo,
@@ -137,7 +138,7 @@ class SharePointDataSource(DataSourceInterface):
     def disconnect(self) -> None:
         self._ctx = None
 
-    def test_connection(self) -> dict:
+    def test_connection(self) -> DataSourceConnectionTestResult:
         try:
             self.connect()
             web = self._ctx.web

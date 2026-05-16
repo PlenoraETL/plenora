@@ -8,7 +8,7 @@ from urllib.parse import urlparse
 
 import json
 import time  # noqa: F401 (legacy monkeypatch compatibility for auth backoff)
-from typing import Dict, List, Mapping, Optional, Sequence, Tuple
+from typing import Dict, Mapping, Optional, Sequence, Tuple
 
 import requests
 
@@ -34,11 +34,21 @@ from app.core.features.arcgis_feature_write_methods import (
     AddLayerResult,  # noqa: F401 (public compatibility re-export)
     ArcGISFeatureWriteMethodsMixin,
 )
+from app.core.features.arcgis_json_types import (
+    ArcGISJsonList,
+    ArcGISJsonObject,
+)
 from app.core.features.arcgis_rest_write import (
     ArcGISAddToDefinitionRequest,
     ArcGISCreateServiceRequest,
     ArcGISUpdateDefinitionRequest,
 )
+from app.core.dataframes.geodata import (
+    geodataframe_majority_geometry_type,
+    geodataframe_total_bounds,
+    is_geodataframe as _is_geodataframe,
+)
+from app.core.dataframes.tabular import iter_dataframe_indexed_rows, non_null_head_values
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -105,7 +115,7 @@ class ArcGISClient(
         geometry_column: str = "geometry",
         srid: int = 4326,
         operation: str = "add",
-    ) -> List[dict]:
+    ) -> ArcGISJsonList:
         """
         Converte un DataFrame/GeoDataFrame in una lista di features Esri JSON.
         
@@ -128,7 +138,6 @@ class ArcGISClient(
         is_geodataframe = False
         
         try:
-            from app.core.dataframes.geodata import is_geodataframe as _is_geodataframe
             if _is_geodataframe(df) and df.geometry is not None:
                 is_geodataframe = True
                 has_geometry = True
@@ -143,7 +152,7 @@ class ArcGISClient(
         spatial_ref = {"wkid": srid}
         features = []
         
-        for idx, row in df.iterrows():
+        for idx, row in iter_dataframe_indexed_rows(df):
             feature = {"attributes": {}}
             
             skip_cols = {geometry_column, "geometry"}
@@ -180,7 +189,7 @@ class ArcGISClient(
         return features
     
     @staticmethod
-    def _shapely_to_esri(geom, spatial_ref: dict) -> dict:
+    def _shapely_to_esri(geom, spatial_ref: dict) -> ArcGISJsonObject | None:
         """
         Converte una geometria Shapely in formato Esri JSON.
         
@@ -256,7 +265,7 @@ class ArcGISClient(
         return mapping.get(geom_type, "esriGeometryPolygon")
     
     @staticmethod
-    def _python_type_to_esri_field(col_name: str, dtype) -> dict:
+    def _python_type_to_esri_field(col_name: str, dtype) -> ArcGISJsonObject:
         """Converte tipo colonna pandas → definizione campo Esri."""
         dtype_str = str(dtype)
         
@@ -270,7 +279,7 @@ class ArcGISClient(
             return {"name": col_name, "type": "esriFieldTypeString", "alias": col_name, "length": 255}
     
     @staticmethod
-    def _default_drawing_info(geom_type: str) -> dict:
+    def _default_drawing_info(geom_type: str) -> ArcGISJsonObject:
         """Genera drawingInfo con stile di default visibile per il tipo di geometria."""
         # Colore fill: blu semitrasparente — outline: blu scuro
         fill_color = [51, 136, 255, 130]    # #3388FF ~50% alpha
@@ -337,7 +346,7 @@ class ArcGISClient(
         geometry_column: str = "geometry",
         srid: int = 4326,
         folder_id: str = "",
-    ) -> dict:
+    ) -> ArcGISJsonObject:
         """
         Crea un nuovo Feature Service su ArcGIS Online con layer e schema
         derivati dal DataFrame.
@@ -438,29 +447,25 @@ class ArcGISClient(
         # tutte le altre fallirebbero in addFeatures
         geom_type = "esriGeometryPolygon"  # default
         try:
-            from app.core.dataframes.geodata import is_geodataframe as _is_geodataframe
-            if _is_geodataframe(df) and df.geometry is not None and len(df) > 0:
-                geom_types = df.geometry.dropna().geom_type
-                if len(geom_types) > 0:
-                    majority_type = geom_types.value_counts().idxmax()
-                    geom_type = self._esri_geometry_type(majority_type)
-                    # NOTE: se c'e' mix di tipi (ArcGIS non li supporta
-                    unique_types = set(geom_types)
-                    if len(unique_types) > 1:
-                        logger.warning(
-                            f"create_service: DataFrame contiene {len(unique_types)} "
-                            f"tipi di geometria diversi ({unique_types}), usato il "
-                            f"maggioritario '{majority_type}'. Le feature di tipo "
-                            f"diverso potrebbero fallire in addFeatures."
-                        )
-                if df.crs:
-                    srid = df.crs.to_epsg() or srid
+            majority_type, unique_types, detected_srid = geodataframe_majority_geometry_type(df)
+            if majority_type:
+                geom_type = self._esri_geometry_type(majority_type)
+                if len(unique_types) > 1:
+                    logger.warning(
+                        f"create_service: DataFrame contiene {len(unique_types)} "
+                        f"tipi di geometria diversi ({unique_types}), usato il "
+                        f"maggioritario '{majority_type}'. Le feature di tipo "
+                        f"diverso potrebbero fallire in addFeatures."
+                    )
+            if detected_srid:
+                srid = detected_srid or srid
         except IndexError:
             pass
         
         if not geom_type.startswith("esri") and geometry_column in df.columns:
             from shapely import wkt
-            sample = df[geometry_column].dropna().iloc[0] if len(df) > 0 else None
+            sample_values = non_null_head_values(df[geometry_column], 1)
+            sample = sample_values[0] if sample_values else None
             if sample:
                 try:
                     geom = wkt.loads(str(sample))
@@ -482,9 +487,8 @@ class ArcGISClient(
             "spatialReference": {"wkid": srid},
         }
         try:
-            from app.core.dataframes.geodata import is_geodataframe as _is_geodataframe
-            if _is_geodataframe(df) and df.geometry is not None and len(df) > 0:
-                bounds = df.geometry.dropna().total_bounds  # minx, miny, maxx, maxy
+            bounds = geodataframe_total_bounds(df)
+            if bounds is not None:
                 if len(bounds) == 4 and all(abs(b) < 1e15 for b in bounds):
                     extent = {
                         "xmin": float(bounds[0]),
@@ -496,9 +500,9 @@ class ArcGISClient(
                     logger.debug(f"Extent calcolato dai dati: {extent}")
             elif geometry_column in df.columns:
                 from shapely import wkt as _wkt
-                geom_series = df[geometry_column].dropna()
-                if len(geom_series) > 0:
-                    geoms = [_wkt.loads(str(g)) for g in geom_series.head(1000)]
+                geom_values = non_null_head_values(df[geometry_column], 1000)
+                if geom_values:
+                    geoms = [_wkt.loads(str(g)) for g in geom_values]
                     from shapely.ops import unary_union as _union
                     combined = _union(geoms)
                     b = combined.bounds  # minx, miny, maxx, maxy
@@ -615,7 +619,7 @@ class ArcGISClient(
             "errors": write_result.get("errors", []),
         }
 
-    def test_connection(self, conn: ArcGISConnectionInfo) -> dict:
+    def test_connection(self, conn: ArcGISConnectionInfo) -> ArcGISJsonObject:
         """
         Testa la connessione ArcGIS.
         
@@ -726,7 +730,7 @@ class ArcGISClient(
         conn: ArcGISConnectionInfo,
         layer_url: str,
         drawing_info: dict,
-    ) -> dict:
+    ) -> ArcGISJsonObject:
         """Apply renderer/drawingInfo and return the legacy dict shape."""
         return self._renderer_update_result(conn, layer_url, drawing_info).to_compat_dict()
 
@@ -779,7 +783,7 @@ class ArcGISClient(
         conn: ArcGISConnectionInfo,
         layer_url: str,
         drawing_info: Mapping[str, object],
-    ) -> dict:
+    ) -> ArcGISJsonObject:
         """
         Aggiorna il renderer di un layer tramite layer-level updateDefinition.
 
@@ -882,7 +886,7 @@ class ArcGISClient(
         self,
         conn: ArcGISConnectionInfo,
         item_id: str,
-    ) -> dict:
+    ) -> ArcGISJsonObject:
         """Delete a portal item permanently and return the legacy dict shape."""
         return self._delete_item_permanently_result(conn, item_id).to_compat_dict()
 

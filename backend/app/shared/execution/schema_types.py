@@ -9,6 +9,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Optional
 
+from app.shared.contracts.payloads import ObjectMap
+
 
 @dataclass
 class ColumnSchema:
@@ -19,7 +21,7 @@ class ColumnSchema:
     source_node: Optional[str] = None
     is_calculated: bool = False
 
-    def to_dict(self) -> dict[str, object]:
+    def to_dict(self) -> ObjectMap:
         return {
             "name": self.name,
             "type": self.type,

@@ -6,14 +6,19 @@ Keeps transformation behavior isolated from orchestration callers.
 
 import json
 
-from typing import Any, Dict, List, Optional
+from typing import Any, List, Optional
 
 from app.core.dataframes.ports import FrameLike
 from app.core.dataframes.tabular import (
     concat_dataframes,
     cut_numeric_series,
+    group_named_aggregate_merge,
+    iter_grouped_dataframes,
     normalize_json_records,
+    sample_dataframe,
+    sample_rows_reset_index,
 )
+from app.core.manipola.types import JsonObject
 from app.utils.logger import get_logger
 
 logger = get_logger("app.core.manipola.transforms.base")
@@ -54,7 +59,7 @@ def op_sample(
         if stratify_column and stratify_column in result.columns:
             # Campionamento stratificato: proporzioni uguali da ogni gruppo
             groups = []
-            for _, group in result.groupby(stratify_column):
+            for _, group in iter_grouped_dataframes(result, stratify_column):
                 if fraction is not None:
                     group_n = max(1, int(len(group) * fraction))
                 else:
@@ -62,16 +67,24 @@ def op_sample(
                     group_n = max(1, int(n * len(group) / max(len(result), 1)))
 
                 group_n = min(group_n, len(group))
-                groups.append(group.sample(n=group_n, random_state=random_state))
+                groups.append(sample_dataframe(group, n=group_n, random_state=random_state))
 
             result = concat_dataframes(groups, ignore_index=True)
         else:
             if fraction is not None:
                 fraction = max(0.0, min(1.0, fraction))
-                result = result.sample(frac=fraction, random_state=random_state).reset_index(drop=True)
+                result = sample_rows_reset_index(
+                    result,
+                    frac=fraction,
+                    random_state=random_state,
+                )
             else:
                 n = min(n, len(result))
-                result = result.sample(n=n, random_state=random_state).reset_index(drop=True)
+                result = sample_rows_reset_index(
+                    result,
+                    n=n,
+                    random_state=random_state,
+                )
 
         logger.info(f"Sample: {len(df)} -> {len(result)} righe")
         return result
@@ -87,7 +100,7 @@ def op_sample(
 def op_lookup(
     df: DataFrame,
     column: str,
-    mapping: Dict[str, Any],
+    mapping: JsonObject,
     default: Any = None,
     output_column: Optional[str] = None
 ) -> DataFrame:
@@ -329,8 +342,13 @@ def op_statistics(
                     agg_dict[f"{prefix}{stat_name}"] = (column, stat_funcs[stat_name])
 
             # Calcola con NamedAgg
-            grouped = df.groupby(group_by, dropna=False).agg(**agg_dict)
-            result = result.merge(grouped, on=group_by, how="left")
+            result = group_named_aggregate_merge(
+                result,
+                group_by,
+                agg_dict,
+                how="left",
+                dropna=False,
+            )
 
         else:
             # Statistiche globali — aggiungi come colonna costante

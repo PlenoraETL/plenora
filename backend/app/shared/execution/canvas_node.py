@@ -6,6 +6,8 @@ Canvas nodes arrive as plain dicts from the frontend/DB with a two-level
 from __future__ import annotations
 from typing import Any, Optional
 
+from app.shared.contracts.payloads import JsonObject
+
 
 class CanvasNode:
     """Thin typed wrapper around a canvas node dict.
@@ -19,7 +21,7 @@ class CanvasNode:
 
     __slots__ = ("_node",)
 
-    def __init__(self, node: dict) -> None:
+    def __init__(self, node: JsonObject) -> None:
         if not isinstance(node, dict):
             raise TypeError(f"CanvasNode expects a dict, got {type(node).__name__}")
         self._node = node
@@ -33,7 +35,7 @@ class CanvasNode:
         return self._node.get("type")
 
     @property
-    def data(self) -> dict:
+    def data(self) -> JsonObject:
         d = self._node.get("data")
         return d if isinstance(d, dict) else {}
 

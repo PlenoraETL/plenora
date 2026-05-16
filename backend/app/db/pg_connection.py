@@ -4,13 +4,14 @@ import os
 import threading
 from contextlib import contextmanager
 from dataclasses import dataclass
-from typing import Dict, List, Optional, Tuple
+from typing import Optional
 
 import psycopg2
 import psycopg2.extras
 import psycopg2.pool
 
 from app.utils.logger import get_logger
+from app.shared.contracts.payloads import JsonObject, JsonRows
 
 logger = get_logger(__name__)
 
@@ -276,7 +277,7 @@ def get_pool_headroom() -> PoolHeadroom:
     return PoolHeadroom(max=_POOL_MAX, in_use=in_use, free=free)
 
 
-def _adapt_params(sql: str, params: tuple) -> Tuple[str, tuple]:
+def _adapt_params(sql: str, params: tuple) -> tuple[str, tuple]:
     """Reject legacy SQLite-style placeholders.
 
     `pg_connection` is the PostgreSQL boundary and must receive native
@@ -291,7 +292,7 @@ def _adapt_params(sql: str, params: tuple) -> Tuple[str, tuple]:
     return sql, params
 
 
-def fetchone(sql: str, params: tuple = ()) -> Optional[Dict]:
+def fetchone(sql: str, params: tuple = ()) -> Optional[JsonObject]:
     """Esegue query e ritorna la prima riga come dict, o None."""
     sql, params = _adapt_params(sql, params)
     conn = get_connection()
@@ -308,7 +309,7 @@ def fetchone(sql: str, params: tuple = ()) -> Optional[Dict]:
         put_connection(conn)
 
 
-def fetchall(sql: str, params: tuple = ()) -> List[Dict]:
+def fetchall(sql: str, params: tuple = ()) -> JsonRows:
     """Esegue query e ritorna tutte le righe come lista di dict."""
     sql, params = _adapt_params(sql, params)
     conn = get_connection()
@@ -349,7 +350,7 @@ def execute(sql: str, params: tuple = ()):
         put_connection(conn)
 
 
-def executemany(sql: str, params_list: List[tuple]) -> None:
+def executemany(sql: str, params_list: list[tuple]) -> None:
     """Esegue una query con molti set di parametri."""
     sql, _ = _adapt_params(sql, ())
     conn = get_connection()

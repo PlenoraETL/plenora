@@ -13,6 +13,8 @@ from app.core.manipola.transforms.spatial_helpers import _ensure_active_geometry
 from app.core.dataframes.geodata import (
     empty_geodataframe,
     ensure_same_crs,
+    geodataframe_group_aggregate_named,
+    geodataframe_group_size_named,
     geodataframe_clip,
     geodataframe_overlay,
     geodataframe_sjoin,
@@ -330,7 +332,7 @@ def op_geo_count_points_in_polygons(
         )
 
         # Conteggio punti per poligono
-        counts = joined.groupby("index_right").size().rename(count_column)
+        counts = geodataframe_group_size_named(joined, "index_right", count_column)
 
         # Aggregazione opzionale
         agg_series = None
@@ -338,10 +340,12 @@ def op_geo_count_points_in_polygons(
             valid_funcs = {"sum": "sum", "mean": "mean", "min": "min", "max": "max"}
             func = valid_funcs.get(aggregate_func, "sum")
             agg_col_name = f"{aggregate_column}_{func}"
-            agg_series = (
-                joined.groupby("index_right")[aggregate_column]
-                .agg(func)
-                .rename(agg_col_name)
+            agg_series = geodataframe_group_aggregate_named(
+                joined,
+                "index_right",
+                aggregate_column,
+                func,
+                agg_col_name,
             )
 
         # Unisci al GeoDataFrame dei poligoni

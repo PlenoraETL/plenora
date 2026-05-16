@@ -4,14 +4,17 @@ Cluster FILTERING — selezione righe e logica condizionale colonna.
 Keeps transformation behavior isolated from orchestration callers.
 """
 
-from typing import Any, Dict, List
+from typing import Any
 
 from app.core.dataframes.ports import FrameLike
 from app.core.dataframes.tabular import (
     coerce_numeric_series,
     false_boolean_series,
     is_numeric_series,
+    set_values_where_mask,
+    unique_non_null_column_values,
 )
+from app.core.manipola.types import JsonRows
 from app.utils.logger import get_logger
 
 logger = get_logger("app.core.manipola.transforms.base")
@@ -117,7 +120,7 @@ def op_filter(
 def op_conditional(
     df: DataFrame,
     column: str,
-    conditions: List[Dict[str, Any]],
+    conditions: JsonRows,
     default_value: str = "",
     output_column: str = "result"
 ) -> DataFrame:
@@ -149,7 +152,7 @@ def op_conditional(
 
     try:
         # Log diagnostico: valori unici della colonna sorgente
-        unique_vals = result[column].dropna().unique()
+        unique_vals = unique_non_null_column_values(result, column)
         logger.info(f"Conditional: colonna '{column}' - {len(unique_vals)} valori unici, sample: {list(unique_vals[:10])}, dtype: {result[column].dtype}")
 
         # Inizializza con default
@@ -168,7 +171,7 @@ def op_conditional(
                 mask = _evaluate_condition(col_values, op, val)
                 match_count = mask.sum()
                 total_matched += match_count
-                result.loc[mask, output_column] = res
+                set_values_where_mask(result, mask, output_column, res)
                 logger.info(f"Conditional:   {op} '{val}' -> '{res}' : {match_count} righe matchate")
             except Exception as e:
                 logger.warning(f"Conditional: errore condizione {op} {val}: {e}")

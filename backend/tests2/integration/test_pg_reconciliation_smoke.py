@@ -198,7 +198,8 @@ def _make_write_config(dest_table: str) -> WriteConfig:
 # Test: smoke reconciliation 10k righe
 
 @_SKIP_NO_DB_LIVE_OPT_IN
-def test_pg_reconciliation_smoke_10k_rows(pg_ext_reachable):
+@pytest.mark.usefixtures("pg_ext_reachable")
+def test_pg_reconciliation_smoke_10k_rows():
     """Source PG -> DatabaseWriter -> Dest PG. Reconciliation 3-metriche.
 
     Volume: 10k righe (sopra `batch_size=1000`, esercita il bulk path

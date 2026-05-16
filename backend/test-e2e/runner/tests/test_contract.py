@@ -93,9 +93,9 @@ def _maybe_id(body: Any) -> str | None:
 @pytest.mark.contract
 @pytest.mark.profile_core
 @pytest.mark.requires_app
+@pytest.mark.usefixtures("plenora_app_alive")
 def test_ct_001_login_response_shape(
     e2e_config,
-    plenora_app_alive,
     http_client: httpx.Client,
 ) -> None:
     """CT-001 — `POST /api/auth/login` shape conforme a TokenResponse.

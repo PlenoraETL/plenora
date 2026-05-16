@@ -5,9 +5,11 @@ The mixin keeps date dialect logic outside the main registry/API module while
 depending only on the translator methods supplied by ``SqlFunctionTranslator``.
 """
 
-from typing import Any, Dict
+from typing import Any
 
 import re as _re
+
+from app.db.sql_types import SqlParamMap, SqlTranslationMap
 
 
 class SqlDateFunctionMixin:
@@ -17,7 +19,7 @@ class SqlDateFunctionMixin:
 
     def _date_translation_for(
         self,
-        translations: Dict[str, str],
+        translations: SqlTranslationMap,
         function_name: str,
     ) -> str:
         db_value = self.db_type.value
@@ -25,7 +27,7 @@ class SqlDateFunctionMixin:
             return translations[db_value]
         raise ValueError(f"{function_name} non supportato per {db_value}")
 
-    def _translate_year(self, params: Dict, table_alias: str = None) -> str:
+    def _translate_year(self, params: SqlParamMap, table_alias: str = None) -> str:
         """Estrazione anno - PostgreSQL/Oracle: EXTRACT, MSSQL/MySQL: YEAR(), SQLite: STRFTIME."""
         col = self._qualify_column(params["column"], table_alias)
         traduzioni = {
@@ -37,7 +39,7 @@ class SqlDateFunctionMixin:
         }
         return self._date_translation_for(traduzioni, "YEAR")
 
-    def _translate_month(self, params: Dict, table_alias: str = None) -> str:
+    def _translate_month(self, params: SqlParamMap, table_alias: str = None) -> str:
         """Estrazione mese - stessi dialetti di YEAR."""
         col = self._qualify_column(params["column"], table_alias)
         traduzioni = {
@@ -49,7 +51,7 @@ class SqlDateFunctionMixin:
         }
         return self._date_translation_for(traduzioni, "MONTH")
 
-    def _translate_day(self, params: Dict, table_alias: str = None) -> str:
+    def _translate_day(self, params: SqlParamMap, table_alias: str = None) -> str:
         """Estrazione giorno - stessi dialetti di YEAR."""
         col = self._qualify_column(params["column"], table_alias)
         traduzioni = {
@@ -61,7 +63,7 @@ class SqlDateFunctionMixin:
         }
         return self._date_translation_for(traduzioni, "DAY")
 
-    def _translate_now(self, params: Dict, table_alias: str = None) -> str:
+    def _translate_now(self, params: SqlParamMap, table_alias: str = None) -> str:
         """Data/ora corrente - sintassi specifica per ogni database."""
         traduzioni = {
             "postgres": "NOW()",
@@ -72,7 +74,7 @@ class SqlDateFunctionMixin:
         }
         return self._date_translation_for(traduzioni, "NOW")
 
-    def _translate_current_date(self, params: Dict, table_alias: str = None) -> str:
+    def _translate_current_date(self, params: SqlParamMap, table_alias: str = None) -> str:
         """Data corrente - sintassi specifica per ogni database."""
         traduzioni = {
             "postgres": "CURRENT_DATE",
@@ -83,7 +85,7 @@ class SqlDateFunctionMixin:
         }
         return self._date_translation_for(traduzioni, "CURRENT_DATE")
 
-    def _translate_date_diff(self, params: Dict, table_alias: str = None) -> str:
+    def _translate_date_diff(self, params: SqlParamMap, table_alias: str = None) -> str:
         """Differenza tra date in giorni."""
         col1 = self._qualify_column(params["column"], table_alias)
         col2 = self._qualify_column(params["column2"], table_alias)
@@ -96,7 +98,7 @@ class SqlDateFunctionMixin:
         }
         return self._date_translation_for(traduzioni, "DATE_DIFF")
 
-    def _translate_date_add(self, params: Dict, table_alias: str = None) -> str:
+    def _translate_date_add(self, params: SqlParamMap, table_alias: str = None) -> str:
         """Aggiunta intervallo a data - sintassi molto diversa per ogni DB."""
         col = self._qualify_column(params["column"], table_alias)
         _VALID_UNITS = {"year", "month", "day", "hour", "minute", "second", "week"}
@@ -118,7 +120,7 @@ class SqlDateFunctionMixin:
         }
         return self._date_translation_for(traduzioni, "DATE_ADD")
 
-    def _translate_date_trunc(self, params: Dict, table_alias: str = None) -> str:
+    def _translate_date_trunc(self, params: SqlParamMap, table_alias: str = None) -> str:
         """Tronca data a unita - sintassi molto diversa per ogni DB."""
         col = self._qualify_column(params["column"], table_alias)
         unita = str(params["unit"]).lower()
@@ -145,7 +147,7 @@ class SqlDateFunctionMixin:
         }
         return formati.get(unita, f"DATE({col})")
 
-    def _translate_date_format(self, params: Dict, table_alias: str = None) -> str:
+    def _translate_date_format(self, params: SqlParamMap, table_alias: str = None) -> str:
         """Formatta data come stringa - ogni DB ha il suo sistema di formattazione."""
         col = self._qualify_column(params["column"], table_alias)
         fmt = params["format"]
@@ -164,7 +166,7 @@ class SqlDateFunctionMixin:
         }
         return self._date_translation_for(traduzioni, "DATE_FORMAT")
 
-    def _translate_extract(self, params: Dict, table_alias: str = None) -> str:
+    def _translate_extract(self, params: SqlParamMap, table_alias: str = None) -> str:
         """Estrazione parte da data - generalizzazione di YEAR/MONTH/DAY."""
         col = self._qualify_column(params["column"], table_alias)
         ammesse = {"year", "month", "day", "hour", "minute", "second"}

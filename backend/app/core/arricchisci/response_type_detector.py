@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
-from typing import Any, Dict, MutableMapping
+from typing import Any, MutableMapping
+
+from app.core.arricchisci.types import JsonObject
 
 
 @dataclass
@@ -47,7 +49,7 @@ class ResponseTypeDetector:
             return self.detected_column_types.pop("_tmp", "geometry")
         return "str"
 
-    def flatten_dict(self, data: Dict) -> Dict:
+    def flatten_dict(self, data: JsonObject) -> JsonObject:
         """Flatten one response row: scalars pass through, nested data becomes JSON."""
         result = {}
         for key, value in data.items():

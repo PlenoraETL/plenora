@@ -33,6 +33,7 @@ from app.core.features.models import (
     BrowseLayersResponse,
 )
 from app.core.features.features_service import FeaturesService
+from app.core.features.arcgis_json_types import ArcGISJsonObject
 from app.shared import error_codes
 from app.shared.error_envelope import raise_typed_http
 from app.observability.audit_action import audit_action
@@ -62,7 +63,7 @@ def get_service() -> FeaturesService:
 
 # HELPER
 
-def _mask_secrets(conn: ArcGISConnection) -> dict:
+def _mask_secrets(conn: ArcGISConnection) -> ArcGISJsonObject:
     """Oscura `password` e `client_secret` nelle response API delle
     connessioni ArcGIS: senza questa maschera un utente che legge la
     connection vedrebbe in chiaro il secret OAuth, anche se il DB e'

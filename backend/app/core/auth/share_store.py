@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Iterable
-from typing import Any
+from typing import TypedDict, cast
 
 from app.db.pg_connection import (
     fetchone as _pg_fetchone,
@@ -12,16 +12,21 @@ from app.db.pg_connection import (
 )
 
 
+class ShareableResourceOwnerRow(TypedDict):
+    id: str
+    group_id: str | None
+
+
 def fetch_shareable_resource_owner(
     resource_table: str,
     resource_id: str,
-) -> dict[str, Any] | None:
+) -> ShareableResourceOwnerRow | None:
     """Load the owner group row for a shareable resource."""
     row = _pg_fetchone(
         f"SELECT id, group_id FROM {resource_table} WHERE id = %s",
         (resource_id,),
     )
-    return dict(row) if row else None
+    return cast(ShareableResourceOwnerRow, dict(row)) if row else None
 
 
 def fetch_visible_resource_ids(

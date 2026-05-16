@@ -10,6 +10,7 @@ import unicodedata
 from typing import Any, List
 
 from app.core.dataframes.ports import FrameLike
+from app.core.dataframes.tabular import dataframe_first_column
 from app.core.dataframes.values import is_null_scalar
 from app.utils.logger import get_logger
 
@@ -182,7 +183,7 @@ def op_string_extract(
             out_col = output_column if output_column else f"{column}_extracted"
             extracted = text_series.str.extract(pattern, expand=True)
             if not extracted.empty:
-                result[out_col] = extracted.iloc[:, 0]
+                result[out_col] = dataframe_first_column(extracted)
             else:
                 result[out_col] = None
             logger.info(

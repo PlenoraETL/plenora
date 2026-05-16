@@ -6,7 +6,7 @@ Keeps database loading behavior isolated from orchestration callers.
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional
+from typing import Any, List, Optional
 
 from app.core.carica.models import ColumnMapping
 from app.core.carica.writer_data_prep_helpers import (
@@ -15,6 +15,7 @@ from app.core.carica.writer_data_prep_helpers import (
     geometry_to_wkt,
     prepare_dataframe,
 )
+from app.shared.contracts.payloads import JsonObject
 from app.utils.logger import get_logger
 
 # Same logger name as `database_writer.py`: tests and runtime log consumers attach
@@ -46,6 +47,6 @@ class DataPrepMixin:
         row: Any,
         columns: List[ColumnMapping],
         operation: str,
-    ) -> Dict[str, Any]:
+    ) -> JsonObject:
         """Costruisce i parametri per una singola riga."""
         return build_params(row, columns, operation, self.config.match_columns, logger)

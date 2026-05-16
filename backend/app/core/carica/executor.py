@@ -20,6 +20,7 @@ from app.core.carica.models import (
 from app.core.carica.connection_store import fetch_connection_config
 from app.core.intermediate import run_idempotency
 from app.db.query_executor import DefaultEngineFactory
+from app.shared.contracts.payloads import JsonObject, StringRows
 from app.utils.logger import get_logger
 from app.utils.logger import get_logger as _get_logger
 
@@ -33,7 +34,7 @@ def _short_err(e: Exception, max_len: int = 120) -> str:
 
 def _resolve_aliases_in_mappings(
     mappings: List[ColumnMapping],
-    available_cols: Optional[List[Dict[str, Any]]],
+    available_cols: Optional[StringRows],
     project_id: str = "",
 ) -> None:
     """Corregge `dest_column` quando il DataFrame usa alias.
@@ -75,7 +76,7 @@ def _resolve_aliases_in_mappings(
 logger = get_logger("app.core.carica.executor")
 
 
-def _dict_to_conn_obj(connection: Dict[str, Any]):
+def _dict_to_conn_obj(connection: JsonObject):
     """
     Converte un dict di connessione in un oggetto con attributi.
 
@@ -120,7 +121,7 @@ class CaricaExecutor:
     def execute(
         self,
         df: Any,
-        node_data: Dict[str, Any],
+        node_data: JsonObject,
         project_id: str = "",
         progress_callback: Optional[Callable] = None,
         triggered_by: str = "manual",
@@ -244,7 +245,7 @@ class CaricaExecutor:
 
         return result
 
-    def _get_connection(self, connection_id: str) -> Dict[str, Any]:
+    def _get_connection(self, connection_id: str) -> JsonObject:
         """Recupera la configurazione di connessione."""
         if self.connection_service:
             conn = self.connection_service.get_connection(connection_id)
@@ -262,7 +263,7 @@ class CaricaExecutor:
 
         raise ValueError(f"Connessione '{connection_id}' non trovata")
 
-    def _create_engine(self, connection: Dict[str, Any]):
+    def _create_engine(self, connection: JsonObject):
         """Crea un engine SQLAlchemy dalla connessione."""
         if self.engine_factory:
             return self.engine_factory.create_engine(connection)
@@ -273,7 +274,7 @@ class CaricaExecutor:
         except ImportError:
             return self._build_engine_manual(connection)
 
-    def _build_engine_manual(self, conn: Dict[str, Any]):
+    def _build_engine_manual(self, conn: JsonObject):
         """Costruisce engine SQLAlchemy manualmente."""
         from sqlalchemy import create_engine
 

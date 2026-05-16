@@ -19,7 +19,7 @@ from app.core.auth.ownership import (
     compute_can_edit,
 )
 from pydantic import BaseModel
-from typing import Dict, List, Literal, Optional
+from typing import List, Literal, Optional
 
 from app.utils.logger import get_logger
 from app.utils.router_utils import require_service
@@ -31,6 +31,7 @@ from app.infrastructure.security.crypto import CredentialUnavailableError
 from app.core.arricchisci.api_connector import api_connection_service
 from app.core.arricchisci.enrichment_service import EnrichmentExecutor
 from app.core.arricchisci.models import EnrichmentOptions
+from app.core.arricchisci.types import StringMap
 from app.core.projects.exceptions import CanvasCorruptedError
 from app.core.artifacts import (
     LatestProjectArtifactRef,
@@ -38,11 +39,14 @@ from app.core.artifacts import (
     SourceLoadingError,
     SourceRef,
 )
+from app.core.arricchisci import enrichment_preflight as _enrichment_preflight
+from app.core.arricchisci.source_request_loader import load_request_data
+from app.core.arricchisci.types import JsonObject
 from app.core.auth.visibility import visible_resource_ids
 from app.core.security.outbound_url import validate_external_url
 
 
-def _load_request_data(request, current_user) -> dict:
+def _load_request_data(request, current_user) -> JsonObject:
     """Carica i dati sorgente per validate/estimate enrichment.
 
     Dispatcher 2-vie:
@@ -69,18 +73,12 @@ def _load_request_data(request, current_user) -> dict:
     Eccezioni `SourceLoadingError` propagate al caller (validate /
     estimate le traducono in HTTPException 400).
     """
-    if request.file_source_id:
-        ref = SourceRef(file_source_id=request.file_source_id)
-    elif request.project_id:
-        ref = SourceRef(
-            project=LatestProjectArtifactRef(project_id=request.project_id)
-        )
-    else:
-        return None
-    return SourceLoader().load(
-        ref,
-        expected_group_id=current_user.group_id,
-        is_superadmin=current_user.role == "superadmin",
+    return load_request_data(
+        request,
+        current_user,
+        source_loader_cls=SourceLoader,
+        source_ref_cls=SourceRef,
+        latest_project_artifact_ref_cls=LatestProjectArtifactRef,
     )
 
 logger = get_logger(__name__)
@@ -102,7 +100,7 @@ def init_arricchisci(project_service, api_connection_service) -> None:
     _api_connection_service = api_connection_service
 
 
-def _check_api_connection_ownership(api_id: str, current_user: CurrentUser) -> dict:
+def _check_api_connection_ownership(api_id: str, current_user: CurrentUser) -> JsonObject:
     """Verifica modifiability sull'API connection (per operazioni di SCRITTURA).
 
     Usa hierarchical ownership (assert_can_modify): 404 se non esiste, 403 se
@@ -116,7 +114,7 @@ def _check_api_connection_ownership(api_id: str, current_user: CurrentUser) -> d
     return connection
 
 
-def _check_api_connection_visible(api_id: str, current_user: CurrentUser) -> dict:
+def _check_api_connection_visible(api_id: str, current_user: CurrentUser) -> JsonObject:
     """Verifica visibilità sull'API connection (per operazioni di LETTURA: validate,
     estimate, preview, test, get).
 
@@ -128,7 +126,7 @@ def _check_api_connection_visible(api_id: str, current_user: CurrentUser) -> dic
     return connection
 
 
-def _check_project_ownership(project_id: str, current_user: CurrentUser) -> dict:
+def _check_project_ownership(project_id: str, current_user: CurrentUser) -> JsonObject:
     """Verifica che il progetto appartenga al gruppo dell'utente.
 
     Ritorna i metadata del progetto.
@@ -155,7 +153,7 @@ def _validate_external_url(url: str) -> None:
 
 
 @api_connections_router.post("/api-connections/fetch-openapi-schema")
-async def fetch_openapi_schema(body: FetchSchemaRequest, user: CurrentUser = Depends(require_not_esecutore)):
+async def fetch_openapi_schema(body: FetchSchemaRequest, _user: CurrentUser = Depends(require_not_esecutore)):
     """Proxy per scaricare un OpenAPI schema da URL esterno, bypassando CORS.
 
     SECURITY:
@@ -192,20 +190,20 @@ async def fetch_openapi_schema(body: FetchSchemaRequest, user: CurrentUser = Dep
 class ValidateRequest(BaseModel):
     project_id: str
     api_id: str
-    param_mapping: Dict[str, str]
+    param_mapping: StringMap
     file_source_id: Optional[str] = None
     static_columns: Optional[List[str]] = None
     # static_parameters: dict {param_name: fixed_value}. Quando passato, le
     # sue chiavi sono trattate come 'colonne statiche' al pari di
     # static_columns. Evita di dover passare due liste in sync (lato FE) per
     # ogni nodo api_enrich.
-    static_parameters: Optional[Dict[str, str]] = None
+    static_parameters: Optional[StringMap] = None
 
 
 class EstimateRequest(BaseModel):
     project_id: str
     api_id: str
-    param_mapping: Dict[str, str]
+    param_mapping: StringMap
     file_source_id: Optional[str] = None
 
 
@@ -251,133 +249,22 @@ async def validate_enrichment(
         if request.file_source_id:
             assert_file_source_access(request.file_source_id, current_user)
 
-        # Verifica che tutti i parametri required dell'API abbiano un mapping non vuoto
-        # Quando l'utente lascia "-- colonna --" nel dropdown, il frontend omette
-        # la chiave dal JSON (undefined → dropped by JSON.stringify), quindi il
-        # param_mapping arriva incompleto senza che il backend se ne accorga
-        required_params = [
-            p["name"] for p in (api_conn.get("parameters") or [])
-            if p.get("required", False)
-        ]
-        # FIX 5: static_columns può essere derivato anche da static_parameters.keys()
-        # Storico: il FE doveva mantenere 2 liste separate in sync. Ora il
-        # backend accetta entrambi i campi nella richiesta e li unisce.
-        static_cols_pre = set(request.static_columns or []) | set(
-            (request.static_parameters or {}).keys()
+        required_error = _enrichment_preflight.required_mapping_error(
+            request,
+            api_conn,
         )
-        unmapped_required = [
-            p for p in required_params
-            if not request.param_mapping.get(p)          # mancante o stringa vuota
-            and p not in static_cols_pre                  # non è un parametro statico
-        ]
-        if unmapped_required:
-            return ValidateResponse(
-                valid=False,
-                total_rows=0, valid_rows=0, invalid_rows=0,
-                missing_columns=unmapped_required,
-                null_param_rows_count=0,
-                warnings=[
-                    f"Parametri obbligatori senza mapping: {', '.join(unmapped_required)}"
-                ]
-            )
+        if required_error is not None:
+            return required_error
 
-        # api_type=generator: il nodo e' una source standalone (1 call
-        # HTTP -> N righe), non c'e' un dataframe di input da validare.
-        # Skippa il caricamento dati e ritorna valid; senza, il
-        # `_load_request_data` per project_id tenta di caricare
-        # l'ultimo result_blob del progetto (potenzialmente corrotto o
-        # dell'execute precedente), facendo fallire la pre-flight UI.
-        # Il warning "Estrazione REST" e' contrattuale: il FE lo usa
-        # per discriminare "total_rows=0 atteso" da "progetto vuoto".
         if (api_conn.get("api_type") or "enricher") == "generator":
-            return ValidateResponse(
-                valid=True,
-                total_rows=0, valid_rows=0, invalid_rows=0,
-                missing_columns=[],
-                null_param_rows_count=0,
-                warnings=[
-                    "Estrazione REST: il numero di righe sara' "
-                    "determinato dalla risposta dell'API."
-                ],
-            )
+            return _enrichment_preflight.generator_validate_response()
 
         try:
             df = _load_request_data(request, current_user)
         except SourceLoadingError as e:
             raise HTTPException(status_code=400, detail=str(e))
 
-        if df is None or df.empty:
-            static_cols = set(request.static_columns or [])
-            all_static = all(col in static_cols for col in request.param_mapping.values())
-
-            # B-BE-58: se df è vuoto ma esiste (0 righe), le colonne mappate potrebbero
-            # comunque esistere nell'header — non segnalarle come mancanti
-            # Distingui df=None (sorgente non trovata) da df.empty (file con 0 righe
-            if df is not None and df.empty:
-                # File caricato con 0 righe: verifica colonne dall'header
-                missing = [col for col in request.param_mapping.values()
-                           if col not in static_cols and col not in df.columns]
-                return ValidateResponse(
-                    valid=len(missing) == 0,
-                    total_rows=0, valid_rows=0, invalid_rows=0,
-                    missing_columns=missing,
-                    null_param_rows_count=0,
-                    warnings=["File sorgente vuoto (0 righe) — nessun dato da arricchire"]
-                )
-
-            # df is None: sorgente non trovata, validazione solo configurazione
-            return ValidateResponse(
-                valid=all_static or len(request.param_mapping) == 0,
-                total_rows=0, valid_rows=0, invalid_rows=0,
-                missing_columns=[] if all_static else list(request.param_mapping.values()),
-                null_param_rows_count=0,
-                warnings=["Nessun dato trovato nel progetto - validazione solo configurazione"] if not all_static else []
-            )
-        
-        missing_columns = []
-        static_cols = set(request.static_columns or [])
-        
-        for api_param, df_column in request.param_mapping.items():
-            if df_column in static_cols:
-                continue
-            if df_column not in df.columns:
-                missing_columns.append(df_column)
-        
-        # Se ci sono colonne mancanti, ritorna subito: il conteggio null
-        # non è significativo e potrebbe confondere l'utente
-        if missing_columns:
-            return ValidateResponse(
-                valid=False,
-                total_rows=len(df),
-                valid_rows=0,
-                invalid_rows=len(df),
-                missing_columns=missing_columns,
-                null_param_rows_count=0,
-                warnings=[f"Colonne mancanti nel dataset: {', '.join(missing_columns)}"]
-            )
-        
-        null_count = 0
-        for df_column in request.param_mapping.values():
-            if df_column in df.columns:
-                null_count += df[df_column].isna().sum()
-        
-        total_rows = len(df)
-        null_rows = int(null_count)
-        valid_rows = total_rows - null_rows if null_rows < total_rows else 0
-        
-        warnings = []
-        if null_rows > 0:
-            warnings.append(f"{null_rows} valori null nei parametri mappati — quelle righe verranno saltate")
-        
-        return ValidateResponse(
-            valid=True,
-            total_rows=total_rows,
-            valid_rows=valid_rows,
-            invalid_rows=null_rows,
-            missing_columns=[],
-            null_param_rows_count=null_rows,
-            warnings=warnings
-        )
+        return _enrichment_preflight.build_validate_response(request, df)
         
     except HTTPException:
         raise
@@ -410,32 +297,13 @@ async def estimate_enrichment(
         except SourceLoadingError as e:
             raise HTTPException(status_code=400, detail=str(e))
 
-        if df is None or df.empty:
-            return EstimateResponse(
-                total_rows=0, unique_combinations=0, estimated_api_calls=0,
-                estimated_time_seconds=0, estimated_time_formatted="0s",
-                deduplication_savings_percent=0
-            )
-        
-        total_rows = len(df)
-        executor = EnrichmentExecutor(
-            api_config=api_config,
-            param_mapping=request.param_mapping,
-            options=EnrichmentOptions(enable_deduplication=True)
-        )
-        
-        unique_combinations = executor._count_unique_combinations(df)
-        rate_limit = api_config.get("options", {}).get("rate_limit", 5)
-        estimated_time = unique_combinations / rate_limit if rate_limit > 0 else unique_combinations
-        savings = ((total_rows - unique_combinations) / total_rows * 100) if total_rows > 0 else 0
-        
-        return EstimateResponse(
-            total_rows=total_rows,
-            unique_combinations=unique_combinations,
-            estimated_api_calls=unique_combinations,
-            estimated_time_seconds=estimated_time,
-            estimated_time_formatted=_format_time(estimated_time),
-            deduplication_savings_percent=round(savings, 1)
+        return _enrichment_preflight.build_estimate_response(
+            request,
+            api_config,
+            df,
+            executor_cls=EnrichmentExecutor,
+            options_cls=EnrichmentOptions,
+            format_time=_format_time,
         )
         
     except HTTPException:
@@ -491,7 +359,7 @@ def get_api_connection(api_id: str, current_user: CurrentUser = Depends(require_
 
 @api_connections_router.post("/api-connections", status_code=201)
 @audit_action(action="api_connection.create")
-def create_api_connection(data: dict, current_user: CurrentUser = Depends(require_admin)):
+def create_api_connection(data: JsonObject, current_user: CurrentUser = Depends(require_admin)):
     """Crea una nuova API connection. Solo admin/superadmin.
 
     `connection_type='executable'` non è più supportato (rimosso per
@@ -518,7 +386,11 @@ def create_api_connection(data: dict, current_user: CurrentUser = Depends(requir
 
 @api_connections_router.put("/api-connections/{api_id}")
 @audit_action(action="api_connection.update", target_param="api_id")
-def update_api_connection(api_id: str, data: dict, current_user: CurrentUser = Depends(require_admin)):
+def update_api_connection(
+    api_id: str,
+    data: JsonObject,
+    current_user: CurrentUser = Depends(require_admin),
+):
     """Aggiorna una API connection esistente. Solo admin/superadmin.
 
     `connection_type='executable'` non è più supportato (rimosso per
@@ -700,7 +572,7 @@ def delete_api_connection(api_id: str, current_user: CurrentUser = Depends(requi
 
 @api_connections_router.post("/api-connections/test")
 def test_api_config(
-    data: dict,
+    data: JsonObject,
     current_user: CurrentUser = Depends(require_not_esecutore),
 ):
     """Testa una configurazione API senza salvarla.
@@ -736,7 +608,7 @@ def test_api_config(
 @audit_action(action="api_connection.test", target_param="api_id")
 def test_api_connection(
     api_id: str,
-    body: dict = None,
+    body: Optional[JsonObject] = None,
     current_user: CurrentUser = Depends(require_not_esecutore),
 ):
     """Testa una API connection salvata per ID.

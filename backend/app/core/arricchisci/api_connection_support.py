@@ -10,12 +10,13 @@ import shutil
 
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, List, Optional
 
 from app.core.dataframes.values import is_nonempty_dataframe
 from app.utils.logger import get_logger
 from app.core.results.blob_writer import save_result_blob
 from app.core.results.pipeline_result import save_pipeline_result_outcome
+from app.core.arricchisci.types import JsonObject, JsonRows
 
 # Stesso logger name di `api_connector.py` (`__name__` valuta a
 # `"app.core.arricchisci.api_connector"`). Singleton stdlib per nome →
@@ -32,7 +33,12 @@ class ApiConnectionSupportMixin:
 
     # FIELD_INTROSPECTION — analisi struttura JSON response per UI output mapping
 
-    def _extract_available_fields(self, data: Any, prefix: str = "", max_depth: int = 3) -> List[Dict]:
+    def _extract_available_fields(
+        self,
+        data: Any,
+        prefix: str = "",
+        max_depth: int = 3,
+    ) -> JsonRows:
         """
         Estrae i campi disponibili da una risposta JSON.
         
@@ -104,7 +110,7 @@ class ApiConnectionSupportMixin:
 
         return fields
 
-    def _extract_geojson_fields(self, data: Any) -> List[Dict]:
+    def _extract_geojson_fields(self, data: Any) -> JsonRows:
         """Estrae campi da GeoJSON FeatureCollection."""
         fields = []
 
@@ -195,8 +201,8 @@ class ApiConnectionSupportMixin:
 
     def _find_final_result(
         self,
-        node_results: Dict[str, Any],
-        result_node: Optional[Dict],
+        node_results: JsonObject,
+        result_node: Optional[JsonObject],
         execution_order: List[str],
     ) -> Any:
         """Risolve il risultato finale della pipeline.
@@ -223,8 +229,8 @@ class ApiConnectionSupportMixin:
         return None
 
     def _build_file_result_response(
-        self, final_result: Dict, project_id: str
-    ) -> Dict:
+        self, final_result: JsonObject, project_id: str
+    ) -> JsonObject:
         """Costruisce la response dict per un risultato file-based
         (tipicamente `_execute_rest_file` con `is_file_result=True`).
 
@@ -285,7 +291,7 @@ class ApiConnectionSupportMixin:
         output_name: str,
         output_format: str,
         project_id: str,
-    ) -> Dict:
+    ) -> JsonObject:
         """Salva il DataFrame finale nel formato richiesto, persiste il
         blob, costruisce la response dict standard.
 

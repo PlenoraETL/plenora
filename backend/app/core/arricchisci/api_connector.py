@@ -4,10 +4,12 @@ Servizio gestione connessioni API esterne per arricchimento dati.
 Keeps API enrichment behavior isolated from orchestration callers.
 """
 
-from typing import Dict, Optional
+from typing import Optional
 
 from app.config import settings
 from app.utils.logger import get_logger
+from app.core.arricchisci.types import JsonObject
+from app.shared.contracts.payloads import HeadersMap
 from app.shared.connections.oauth import (
     prepare_headers as _shared_prepare_headers,
 )
@@ -125,10 +127,10 @@ class ApiConnectionService(
         self.results_dir = settings.RESULTS_DIR
 
 
-    def execute_enrichment(self, project_id: str, canvas: Dict, format: str = 'csv',
+    def execute_enrichment(self, project_id: str, canvas: JsonObject, format: str = 'csv',
                           force_recalculate: bool = False, preview_limit: int = None,
                           run_id: str = None,
-                          intermediate_mode_override: Optional[str] = None) -> Dict:
+                          intermediate_mode_override: Optional[str] = None) -> JsonObject:
         """Public service facade for canvas enrichment execution.
 
         The module-level orchestrator contains the execution algorithm;
@@ -150,7 +152,11 @@ class ApiConnectionService(
         )
 
 
-    def _prepare_headers(self, auth: Dict, custom_headers: Dict = None) -> Dict:
+    def _prepare_headers(
+        self,
+        auth: JsonObject,
+        custom_headers: Optional[HeadersMap] = None,
+    ) -> HeadersMap:
         """Prepara headers HTTP per chiamata API. Delegato a shared/api_utils."""
         return _shared_prepare_headers(auth, custom_headers)
 

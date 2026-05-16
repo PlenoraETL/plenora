@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Dict, List
+from typing import TYPE_CHECKING, List
+
+from app.core.projects.types import ColumnMetadataRows
 
 if TYPE_CHECKING:
     from app.shared.execution.schema_types import ColumnSchema
@@ -148,7 +150,7 @@ class ReshapeSchemaHandlers:
     def _normalize_output_columns(
         self,
         raw,
-    ) -> List[Dict[str, str]]:
+    ) -> ColumnMetadataRows:
         """Normalize output_columns to List[{name, type}]."""
         if raw is None:
             return []
@@ -158,7 +160,7 @@ class ReshapeSchemaHandlers:
         if not isinstance(raw, list):
             return []
 
-        out: List[Dict[str, str]] = []
+        out: ColumnMetadataRows = []
         for entry in raw:
             if isinstance(entry, str):
                 s = entry.strip()

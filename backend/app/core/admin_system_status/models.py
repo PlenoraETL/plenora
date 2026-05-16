@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Literal, TypeAlias
+from typing import Literal, Mapping, TypeAlias
 
 from pydantic import BaseModel, ConfigDict
 
@@ -137,7 +137,7 @@ class AdminStatusBlock(BaseModel):
     def __contains__(self, key: object) -> bool:
         return key in self.to_api_dict()
 
-    def to_api_dict(self) -> dict[str, object]:
+    def to_api_dict(self) -> Mapping[str, object]:
         return self.model_dump(exclude_unset=True)
 
 
@@ -162,7 +162,7 @@ class SystemStatusPayload(BaseModel):
     def __contains__(self, key: object) -> bool:
         return key in self.to_api_dict()
 
-    def to_api_dict(self) -> dict[str, object]:
+    def to_api_dict(self) -> Mapping[str, object]:
         return {
             "generated_at": self.generated_at.isoformat(),
             "backup": self.backup.to_api_dict(),

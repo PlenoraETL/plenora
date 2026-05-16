@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from typing import Optional
 
 from app.core.projects import db as project_db
+from app.core.projects.types import OwnershipResource
 
 
 @dataclass(frozen=True)
@@ -20,7 +21,7 @@ class ProjectOwnerContext:
     group_id: Optional[str]
     created_by: Optional[str]
 
-    def ownership_resource(self) -> dict[str, object]:
+    def ownership_resource(self) -> OwnershipResource:
         return {
             "id": self.project_id,
             "group_id": self.group_id,
@@ -56,7 +57,7 @@ def load_project_owner_context(project_id: str) -> Optional[ProjectOwnerContext]
     )
 
 
-def load_project_visibility_resource(project_id: str) -> dict[str, object] | None:
+def load_project_visibility_resource(project_id: str) -> OwnershipResource | None:
     """Load the project resource shape consumed by shared visibility checks."""
     context = load_project_owner_context(project_id)
     if context is None:

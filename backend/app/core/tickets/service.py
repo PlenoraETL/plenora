@@ -7,11 +7,12 @@ Policy RBAC:
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional, Protocol, Tuple
+from typing import Any, List, Optional, Protocol, Tuple
 
 from fastapi import HTTPException
 
 from app.shared.contracts.auth import CurrentUser
+from app.shared.contracts.payloads import StringRows
 from app.core.tickets import db as tdb
 from app.core.tickets import errors as ticket_errors
 from app.utils.logger import get_logger
@@ -501,7 +502,7 @@ def delete_ticket(
     return DeleteTicketResult(ok=True, hard=False, orphaned_file_source_ids=[])
 
 
-def _category_display() -> List[Dict[str, str]]:
+def _category_display() -> StringRows:
     """Ritorna la lista categorie con label human-readable (per dropdown FE)."""
     labels = {
         "auth": "Autenticazione",

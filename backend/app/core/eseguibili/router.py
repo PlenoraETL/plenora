@@ -277,13 +277,6 @@ def _load_task_owner(task_id: str) -> Optional[Mapping[str, object]]:
     )
 
 
-def _delete_task_owner(task_id: str) -> None:
-    _output_store.delete_task_owner(
-        task_id,
-        outputs_dir=settings.ESEGUIBILI_OUTPUTS_DIR,
-    )
-
-
 @router.post("/{eseguibile_id}/analyze-upload", response_model=AnalyzeUploadResponse)
 @audit_action(action="eseguibile.analyze_upload", target_param="eseguibile_id")
 async def analyze_upload(

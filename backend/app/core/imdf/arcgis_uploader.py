@@ -6,7 +6,8 @@ Orchestrator end-to-end (Fase 1B):
 
 from __future__ import annotations
 
-from typing import Dict, Optional
+from collections.abc import Mapping
+from typing import Any, Dict, Optional
 
 from app.core.connections.arcgis_connection_resolver import resolve_arcgis_connection
 from app.core.imdf.arcgis import (
@@ -14,6 +15,7 @@ from app.core.imdf.arcgis import (
     service_discovery as _service_discovery,
     service_lifecycle as _service_lifecycle,
 )
+from app.shared.contracts.payloads import JsonObject, StringMap
 from app.utils.logger import get_logger
 
 
@@ -40,16 +42,16 @@ PUBLISH_MODES = ("replace", "append", "upsert", "update")
 
 def upload_imdf_layers(
     connection_id: str,
-    layers: Dict,
+    layers: Mapping[str, Any],
     fs_name: str,
     folder_name: Optional[str] = None,
     apply_renderers: bool = False,
-    renderers_data: Optional[Dict] = None,
+    renderers_data: Optional[JsonObject] = None,
     target_srid: int = 4326,
     progress_callback=None,
     mode: str = "replace",
-    match_columns: Optional[Dict[str, str]] = None,
-) -> Dict:
+    match_columns: Optional[StringMap] = None,
+) -> JsonObject:
     """Pubblica i 5 layer IMDF su un Feature Service ArcGIS.
 
     Args:

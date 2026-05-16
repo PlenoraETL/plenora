@@ -13,6 +13,8 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Mapping, Optional, Sequence
 
+from app.core.features.arcgis_json_types import ArcGISJsonObject
+
 
 class ArcGISFeatureEditOperation(str, Enum):
     """Layer-level FeatureServer write endpoints."""
@@ -44,7 +46,7 @@ class ArcGISCreateServiceRequest:
             user_path = f"{user_path}/{self.folder_id}"
         return f"{user_path}/createService"
 
-    def body(self) -> dict[str, object]:
+    def body(self) -> ArcGISJsonObject:
         return {
             "createParameters": json.dumps(dict(self.create_parameters)),
             "outputType": "featureService",
@@ -62,7 +64,7 @@ class ArcGISAddToDefinitionRequest:
     def endpoint(self) -> str:
         return f"{self.admin_url.rstrip('/')}/addToDefinition"
 
-    def body(self) -> dict[str, object]:
+    def body(self) -> ArcGISJsonObject:
         return {"addToDefinition": json.dumps(dict(self.definition)), "f": "json"}
 
 
@@ -76,7 +78,7 @@ class ArcGISUpdateDefinitionRequest:
     def endpoint(self) -> str:
         return f"{self.admin_url.rstrip('/')}/updateDefinition"
 
-    def body(self) -> dict[str, object]:
+    def body(self) -> ArcGISJsonObject:
         return {"updateDefinition": json.dumps(dict(self.definition)), "f": "json"}
 
 
@@ -91,7 +93,7 @@ class ArcGISFeatureBatchWriteRequest:
     def endpoint(self) -> str:
         return f"{self.layer_url.rstrip('/')}/{self.operation.value}"
 
-    def body(self) -> dict[str, object]:
+    def body(self) -> ArcGISJsonObject:
         return {"features": json.dumps(list(self.features)), "f": "json"}
 
 
@@ -106,7 +108,7 @@ class ArcGISDeleteFeaturesRequest:
     def endpoint(self) -> str:
         return f"{self.layer_url.rstrip('/')}/deleteFeatures"
 
-    def body(self) -> dict[str, object]:
+    def body(self) -> ArcGISJsonObject:
         data: dict[str, object] = {"f": "json"}
         if self.object_ids:
             data["objectIds"] = ",".join(str(oid) for oid in self.object_ids)
@@ -131,7 +133,7 @@ class ArcGISApplyEditsRequest:
     def endpoint(self) -> str:
         return f"{self.layer_url.rstrip('/')}/applyEdits"
 
-    def body(self) -> dict[str, object]:
+    def body(self) -> ArcGISJsonObject:
         if not self.adds and not self.updates and not self.deletes:
             raise ValueError("applyEdits richiede almeno un add, update o delete")
 
@@ -158,7 +160,7 @@ class ArcGISFeatureWriteResult:
     count: int
     errors: tuple[Mapping[str, object], ...] = ()
 
-    def to_compat_dict(self) -> dict[str, object]:
+    def to_compat_dict(self) -> ArcGISJsonObject:
         return {
             "success": self.success,
             self.count_key: self.count,
@@ -176,7 +178,7 @@ class ArcGISApplyEditsResult:
     deleted_count: int = 0
     errors: tuple[Mapping[str, object], ...] = ()
 
-    def to_compat_dict(self) -> dict[str, object]:
+    def to_compat_dict(self) -> ArcGISJsonObject:
         return {
             "success": self.success,
             "added_count": self.added_count,
@@ -269,4 +271,3 @@ def _result_sequence(value: object) -> tuple[Mapping[str, object], ...]:
     if not isinstance(value, Sequence) or isinstance(value, (str, bytes)):
         return ()
     return tuple(dict(item) for item in value if isinstance(item, Mapping))
-

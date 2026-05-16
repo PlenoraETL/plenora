@@ -10,11 +10,15 @@ from __future__ import annotations
 import decimal
 
 import json
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, TypeAlias
 
 from psycopg2.extras import execute_values
 
 from app.db.pg_connection import fetchall, fetchone, execute, transaction
+
+NodeMetaRow: TypeAlias = Dict[str, object]
+NodeTableRow: TypeAlias = Dict[str, object]
+SpecialFloatSentinel: TypeAlias = Dict[str, str]
 
 
 def upsert_node_meta(
@@ -176,7 +180,7 @@ def get_node_meta(
     node_id: str,
     *,
     fetchone_func=fetchone,
-) -> Optional[Dict]:
+) -> Optional[NodeMetaRow]:
     row = fetchone_func(
         "SELECT * FROM node_meta WHERE run_id = %s AND node_id = %s",
         (run_id, node_id),
@@ -189,7 +193,7 @@ def get_node_meta(
     return row
 
 
-def list_node_meta(run_id: str, *, fetchall_func=fetchall) -> List[Dict]:
+def list_node_meta(run_id: str, *, fetchall_func=fetchall) -> List[NodeMetaRow]:
     rows = fetchall_func("SELECT * FROM node_meta WHERE run_id = %s", (run_id,))
     for row in rows:
         if row.get("col_schema"):
@@ -205,7 +209,7 @@ _SPECIAL_FLOAT_TAG_INF_POS = "+inf"
 _SPECIAL_FLOAT_TAG_INF_NEG = "-inf"
 
 
-def _make_special_float_sentinel(tag: str) -> dict:
+def _make_special_float_sentinel(tag: str) -> SpecialFloatSentinel:
     return {_SPECIAL_FLOAT_KEY: tag}
 
 
@@ -388,7 +392,7 @@ def get_node_table_rows(
     *,
     fetchone_func=fetchone,
     fetchall_func=fetchall,
-) -> List[Dict]:
+) -> List[NodeTableRow]:
     """Read persisted node rows after verifying run ownership."""
     if group_id is None:
         run = fetchone_func("SELECT run_id FROM runs WHERE run_id = %s", (run_id,))
@@ -430,7 +434,7 @@ def list_node_row_hash_diff(
     node_id: str,
     limit: int = 500,
     fetchall_func=fetchall,
-) -> List[Dict]:
+) -> List[NodeTableRow]:
     """Rows present in source run/node but absent from compare by row_hash."""
     return fetchall_func(
         """

@@ -7,9 +7,10 @@ Keeps database loading behavior isolated from orchestration callers.
 import re
 import re as _re
 
-from typing import Dict, List, Optional, Tuple
+from typing import List, Optional, Tuple
 
 from app.core.carica.models import ColumnMapping
+from app.shared.contracts.payloads import IntMap, StringMap
 
 
 PANDAS_TO_SQL = {
@@ -241,8 +242,8 @@ class DDLGenerator:
         schema: str,
         table: str,
         columns: List[ColumnMapping],
-        pandas_dtypes: Optional[Dict[str, str]] = None,
-        max_lengths: Optional[Dict[str, int]] = None,
+        pandas_dtypes: Optional[StringMap] = None,
+        max_lengths: Optional[IntMap] = None,
     ) -> str:
         """Genera l'istruzione CREATE TABLE completa.
 

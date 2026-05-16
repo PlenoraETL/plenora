@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from app.core.dataframes.frame_io import load_dataframe_from_file
+from app.shared.contracts.payloads import JsonObject
 from app.utils.zip_safe import safe_extractall
 from app.utils.logger import get_logger
 
@@ -76,17 +77,17 @@ class ImdfBundle:
         if self.tmp_dir and self.tmp_dir.exists():
             shutil.rmtree(self.tmp_dir, ignore_errors=True)
 
-    def manifest(self) -> Dict:
+    def manifest(self) -> JsonObject:
         if self.manifest_path and self.manifest_path.exists():
             return json.loads(self.manifest_path.read_text(encoding="utf-8"))
         return {}
 
-    def validation(self) -> Dict:
+    def validation(self) -> JsonObject:
         if self.validation_path and self.validation_path.exists():
             return json.loads(self.validation_path.read_text(encoding="utf-8"))
         return {}
 
-    def renderers(self) -> Dict:
+    def renderers(self) -> JsonObject:
         if self.renderers_path and self.renderers_path.exists():
             return json.loads(self.renderers_path.read_text(encoding="utf-8"))
         return {}

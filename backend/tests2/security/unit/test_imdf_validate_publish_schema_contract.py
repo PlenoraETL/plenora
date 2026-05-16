@@ -152,7 +152,8 @@ def _layer_issue_codes(report, layer_name="Locale"):
     return []
 
 
-def test_shape_double_underscore_fields_not_reported(fake_bundle, stub_externals_with_fs_schema):
+@pytest.mark.usefixtures("stub_externals_with_fs_schema")
+def test_shape_double_underscore_fields_not_reported(fake_bundle):
     """Shape__Area / Shape__Length devono essere ignorati come system field
     (oggi sono SYS con singolo underscore e quindi non matchano)."""
     from app.core.imdf.validator import validate_publish
@@ -173,7 +174,8 @@ def test_shape_double_underscore_fields_not_reported(fake_bundle, stub_externals
     )
 
 
-def test_objectid_not_reported_in_schema(fake_bundle, stub_externals_with_fs_schema):
+@pytest.mark.usefixtures("stub_externals_with_fs_schema")
+def test_objectid_not_reported_in_schema(fake_bundle):
     """OBJECTID è già gestito, non deve apparire."""
     from app.core.imdf.validator import validate_publish
     report = validate_publish(
@@ -190,7 +192,8 @@ def test_objectid_not_reported_in_schema(fake_bundle, stub_externals_with_fs_sch
     assert oid_issues == [], f"OBJECTID non deve essere segnalato. Trovati: {oid_issues}"
 
 
-def test_type_mismatch_other_non_match_col_silenced(fake_bundle, stub_externals_with_fs_schema):
+@pytest.mark.usefixtures("stub_externals_with_fs_schema")
+def test_type_mismatch_other_non_match_col_silenced(fake_bundle):
     """Quando il FS ritorna un type non classificato ('other') per un campo
     che NON è match_column, il validator NON deve emettere TYPE_MISMATCH
     (rumore senza valore per l'utente)."""
@@ -392,7 +395,8 @@ def test_append_no_duplicates_no_warning(fake_bundle, monkeypatch):
     assert dup == [], f"Nessun duplicato atteso ma trovato: {dup}"
 
 
-def test_type_mismatch_other_on_match_col_still_error(fake_bundle, stub_externals_with_fs_schema, monkeypatch):
+@pytest.mark.usefixtures("stub_externals_with_fs_schema")
+def test_type_mismatch_other_on_match_col_still_error(fake_bundle, monkeypatch):
     """Ma se il campo 'other' è proprio la match_column, il rischio è
     concreto (chiave di confronto non classificabile) → resta error."""
     # Uso mode=upsert così `match_column` viene usato; DEFAULT_MATCH_COLUMNS

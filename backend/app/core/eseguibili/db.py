@@ -10,14 +10,14 @@ import json
 import uuid
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Mapping, Optional
+from typing import Any, Mapping, Optional
 
 from app.db import pg_connection as db
 from app.db.sql_safety import safe_set_clause
+from app.shared.contracts.payloads import JsonObject, JsonRows
 
 
-JsonObject = Dict[str, Any]
-ExpectedColumns = List[Dict[str, Any]]
+ExpectedColumns = JsonRows
 
 
 @dataclass(frozen=True)
@@ -195,8 +195,8 @@ def eseguibile_source_ref_row_from_db(
 
 def create_eseguibile(
     name: str,
-    canvas: Dict[str, Any],
-    expected_columns: List[Dict[str, Any]],
+    canvas: JsonObject,
+    expected_columns: ExpectedColumns,
     group_id: str,
     created_by: str,
     description: str = "",
@@ -246,7 +246,7 @@ def get_eseguibile(eid: str, group_id: str = None) -> Optional[EseguibileRow]:
     return eseguibile_row_from_db(row) if row else None
 
 
-def list_eseguibili(group_id: Optional[str] = None) -> List[EseguibileSummaryRow]:
+def list_eseguibili(group_id: Optional[str] = None) -> list[EseguibileSummaryRow]:
     """Lista eseguibili, opzionalmente filtrati per gruppo.
 
     Non carica canvas/expected_columns per la summary (prestazioni).
@@ -270,7 +270,7 @@ def list_eseguibili(group_id: Optional[str] = None) -> List[EseguibileSummaryRow
     return [eseguibile_summary_row_from_db(row) for row in rows]
 
 
-def list_eseguibili_by_source(source_canvas_id: str) -> List[EseguibileSourceRefRow]:
+def list_eseguibili_by_source(source_canvas_id: str) -> list[EseguibileSourceRefRow]:
     """Ritorna gli eseguibili pubblicati a partire dal progetto indicato.
 
     Restituisce solo id e name (sufficienti per messaggi di errore).

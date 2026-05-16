@@ -6,19 +6,10 @@ from __future__ import annotations
 
 from typing import List, Optional, Tuple
 
+from app.shared.contracts.payloads import JsonObject, JsonRows
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
-
-
-def _is_missing_value(value: object) -> bool:
-    if value is None:
-        return True
-    try:
-        comparison = value != value
-    except (TypeError, ValueError):
-        return False
-    return isinstance(comparison, bool) and comparison
 
 
 class EsriJsonConverter:
@@ -36,8 +27,8 @@ class EsriJsonConverter:
 
     @staticmethod
     def features_to_rows(
-        features: List[dict],
-        fields: List[dict],
+        features: JsonRows,
+        fields: JsonRows,
         include_geometry: bool = True,
         geometry_type: str = "",
     ) -> Tuple[List[tuple], List[str]]:
@@ -79,7 +70,7 @@ class EsriJsonConverter:
         return rows, columns
 
     @staticmethod
-    def _geometry_to_wkt(geom: dict, geometry_type: str = "") -> Optional[str]:
+    def _geometry_to_wkt(geom: JsonObject, geometry_type: str = "") -> Optional[str]:
         """
         Converte una geometria Esri JSON in WKT.
 
@@ -140,99 +131,5 @@ class EsriJsonConverter:
         except (KeyError, IndexError, TypeError) as e:
             logger.warning(f"Errore conversione geometria a WKT: {e}")
             return None
-
-    @staticmethod
-    def geodataframe_to_esri_features(
-        gdf,
-        geometry_column: str = "geometry",
-        object_id_field: str = None,
-    ) -> List[dict]:
-        """
-        Converte un GeoDataFrame in lista di features Esri JSON.
-
-        Args:
-            gdf: GeoDataFrame sorgente
-            geometry_column: nome colonna geometria
-            object_id_field: se presente, include nell'output per update
-
-        Returns:
-            Lista di features nel formato Esri JSON
-        """
-        _ = object_id_field
-        features = []
-
-        for idx, row in gdf.iterrows():
-            feature = {"attributes": {}}
-
-            for col in gdf.columns:
-                if col == geometry_column:
-                    continue
-                attribute_value = row[col]
-                # Converti tipi numpy/pandas in tipi Python nativi
-                if _is_missing_value(attribute_value):
-                    feature["attributes"][col] = None
-                elif hasattr(attribute_value, "item"):
-                    feature["attributes"][col] = attribute_value.item()
-                else:
-                    feature["attributes"][col] = attribute_value
-
-            # Converti geometria
-            if geometry_column in gdf.columns and hasattr(gdf, "geometry"):
-                geom = row[geometry_column]
-                if geom is not None and not geom.is_empty:
-                    feature["geometry"] = EsriJsonConverter._shapely_to_esri(geom)
-
-            features.append(feature)
-
-        return features
-
-    @staticmethod
-    def _shapely_to_esri(geom) -> Optional[dict]:
-        """
-        Converte una geometria Shapely in formato Esri JSON.
-
-        Args:
-            geom: oggetto geometria Shapely
-
-        Returns:
-            Dizionario Esri JSON della geometria
-        """
-        try:
-            geom_type = geom.geom_type
-
-            if geom_type == "Point":
-                return {"x": geom.x, "y": geom.y}
-
-            elif geom_type == "MultiPoint":
-                return {"points": [[p.x, p.y] for p in geom.geoms]}
-
-            elif geom_type == "LineString":
-                return {"paths": [list(geom.coords)]}
-
-            elif geom_type == "MultiLineString":
-                return {"paths": [list(line.coords) for line in geom.geoms]}
-
-            elif geom_type == "Polygon":
-                rings = [list(geom.exterior.coords)]
-                for interior in geom.interiors:
-                    rings.append(list(interior.coords))
-                return {"rings": rings}
-
-            elif geom_type == "MultiPolygon":
-                rings = []
-                for poly in geom.geoms:
-                    rings.append(list(poly.exterior.coords))
-                    for interior in poly.interiors:
-                        rings.append(list(interior.coords))
-                return {"rings": rings}
-
-            else:
-                logger.warning(f"Tipo geometria non supportato per Esri JSON: {geom_type}")
-                return None
-
-        except Exception as e:
-            logger.warning(f"Errore conversione geometria Shapely -> Esri JSON: {e}")
-            return None
-
 
 __all__ = ["EsriJsonConverter"]

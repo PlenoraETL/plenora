@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 import re
-from typing import Any, Dict, Optional
+from collections.abc import Mapping
+from typing import Any, Optional
 
 
 SENSITIVE_KEY_PATTERNS = (
@@ -47,10 +48,10 @@ def sanitize_url_for_log(url: str) -> str:
     return url
 
 
-def sanitize_for_log(data: Any, auth: Optional[Dict[str, Any]] = None) -> Any:
+def sanitize_for_log(data: Any, auth: Optional[Mapping[str, Any]] = None) -> Any:
     """Return a copy of ``data`` with sensitive dict values redacted."""
     extra_keys = set()
-    if isinstance(auth, dict):
+    if isinstance(auth, Mapping):
         key_name = auth.get("key_name")
         if key_name:
             extra_keys.add(str(key_name).lower())

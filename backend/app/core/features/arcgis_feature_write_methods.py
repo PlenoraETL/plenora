@@ -20,7 +20,12 @@ from app.core.features.arcgis_rest_write import (
     parse_delete_features_result,
     parse_feature_edit_result,
 )
+from app.core.features.arcgis_json_types import ArcGISJsonObject
 from app.shared.connections.arcgis_connection import ArcGISConnectionInfo
+from app.core.dataframes.geodata import (
+    geodataframe_majority_geometry_type,
+    geodataframe_total_bounds,
+)
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -38,7 +43,7 @@ class AddLayerResult:
     feature_count: int
     errors: Tuple[str, ...] = ()
 
-    def to_compat_dict(self) -> dict:
+    def to_compat_dict(self) -> ArcGISJsonObject:
         """Return the pre-BE-IMDF-006B legacy dict shape."""
         return {
             "success": self.success,
@@ -56,7 +61,7 @@ class ArcGISFeatureWriteMethodsMixin:
         layer_url: str,
         features: List[dict],
         batch_size: int = None,
-    ) -> dict:
+    ) -> ArcGISJsonObject:
         """Add ESRI JSON features to a layer."""
         return self._write_batch(
             conn,
@@ -72,7 +77,7 @@ class ArcGISFeatureWriteMethodsMixin:
         layer_url: str,
         features: List[dict],
         batch_size: int = None,
-    ) -> dict:
+    ) -> ArcGISJsonObject:
         """Update ESRI JSON features in a layer."""
         return self._write_batch(
             conn,
@@ -88,7 +93,7 @@ class ArcGISFeatureWriteMethodsMixin:
         layer_url: str,
         object_ids: List[int] = None,
         where: str = None,
-    ) -> dict:
+    ) -> ArcGISJsonObject:
         """Delete features from a layer by ObjectID list or WHERE clause."""
         referer_headers = {"Referer": conn.server_url}
         request = ArcGISDeleteFeaturesRequest(
@@ -126,7 +131,7 @@ class ArcGISFeatureWriteMethodsMixin:
         deletes: Optional[List[int]] = None,
         rollback_on_failure: bool = True,
         use_global_ids: bool = False,
-    ) -> dict:
+    ) -> ArcGISJsonObject:
         """Apply mixed layer edits through the ArcGIS ``applyEdits`` endpoint."""
         referer_headers = {"Referer": conn.server_url}
         request = ArcGISApplyEditsRequest(
@@ -164,7 +169,7 @@ class ArcGISFeatureWriteMethodsMixin:
         operation: ArcGISFeatureEditOperation | str,
         features: List[dict],
         batch_size: int = None,
-    ) -> dict:
+    ) -> ArcGISJsonObject:
         """Execute add/update writes in ArcGIS-compatible batches."""
         operation = ArcGISFeatureEditOperation(operation)
         referer_headers = {"Referer": conn.server_url}
@@ -244,27 +249,22 @@ class ArcGISFeatureWriteMethodsMixin:
         srid: int = 4326,
     ) -> AddLayerResult:
         """Add one layer to an existing Feature Service."""
-        from app.core.dataframes.geodata import is_geodataframe
-
         token = self.authenticate(conn)
         referer = {"Referer": conn.server_url}
         admin_url = service_url.replace("/rest/services/", "/rest/admin/services/")
 
         geom_type = "esriGeometryPolygon"
-        if is_geodataframe(gdf) and len(gdf) > 0 and gdf.geometry is not None:
-            geom_types = gdf.geometry.dropna().geom_type
-            if len(geom_types) > 0:
-                majority_type = geom_types.value_counts().idxmax()
-                geom_type = self._esri_geometry_type(majority_type)
-                unique_types = set(geom_types)
-                if len(unique_types) > 1:
-                    logger.warning(
-                        f"add_layer_to_service('{layer_name}'): DataFrame ha "
-                        f"{len(unique_types)} tipi di geometria ({unique_types}); "
-                        f"usato '{majority_type}', le altre potrebbero fallire."
-                    )
-            if gdf.crs:
-                srid = gdf.crs.to_epsg() or srid
+        majority_type, unique_types, detected_srid = geodataframe_majority_geometry_type(gdf)
+        if majority_type:
+            geom_type = self._esri_geometry_type(majority_type)
+            if len(unique_types) > 1:
+                logger.warning(
+                    f"add_layer_to_service('{layer_name}'): DataFrame ha "
+                    f"{len(unique_types)} tipi di geometria ({unique_types}); "
+                    f"usato '{majority_type}', le altre potrebbero fallire."
+                )
+        if detected_srid:
+            srid = detected_srid or srid
 
         fields = [
             {
@@ -287,8 +287,8 @@ class ArcGISFeatureWriteMethodsMixin:
             "spatialReference": {"wkid": srid},
         }
         try:
-            if is_geodataframe(gdf) and gdf.geometry is not None and len(gdf) > 0:
-                bounds = gdf.geometry.dropna().total_bounds
+            bounds = geodataframe_total_bounds(gdf)
+            if bounds is not None:
                 if len(bounds) == 4 and all(abs(b) < 1e15 for b in bounds):
                     extent = {
                         "xmin": float(bounds[0]),

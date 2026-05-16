@@ -11,6 +11,7 @@ from typing import Any, Dict, List, Tuple
 from sqlalchemy import text
 
 from app.core.carica.models import ColumnMapping
+from app.shared.contracts.payloads import IntMap, StringMap, StringRows
 from app.utils.logger import get_logger
 
 # Keep the canonical writer logger name so existing handlers receive mixin logs.
@@ -50,7 +51,7 @@ class SchemaIntrospectionMixin:
             logger.error(f"[CRASH] Errore verifica esistenza tabella: {e}", exc_info=True)
             raise
 
-    def get_existing_columns(self) -> List[Dict[str, str]]:
+    def get_existing_columns(self) -> StringRows:
         """Recupera le colonne della tabella destinazione.
 
         Solleva l'eccezione sottostante se la query non e' eseguibile;
@@ -131,7 +132,7 @@ class SchemaIntrospectionMixin:
         self,
         prepared_df: Any,
         columns: List[ColumnMapping],
-    ) -> Tuple[Dict[str, str], Dict[str, int]]:
+    ) -> Tuple[StringMap, IntMap]:
         """Calcola `(real_dtypes, max_lengths)` per `generate_create_table`.
 
         Helper privato, pura computazione, nessun side-effect, nessuna

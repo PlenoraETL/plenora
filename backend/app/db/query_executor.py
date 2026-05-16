@@ -6,7 +6,7 @@ Gestisce l'esecuzione di query su tutti i database supportati tramite
 
 import time
 from pathlib import Path
-from typing import List, Dict, Any, Optional, Tuple, Protocol
+from typing import Any, List, Optional, Protocol, Tuple
 from dataclasses import dataclass, field
 
 from sqlalchemy import text
@@ -23,6 +23,8 @@ from app.db.query_session import (
 )
 from app.db.query_result_persistence import QueryResultPersistence
 from app.db.query_streaming import execute_streaming_to_file
+from app.db.sql_types import QueryParams, QueryTimings
+from app.shared.contracts.payloads import JsonObject
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -70,7 +72,7 @@ class QueryResult:
     columns: List[str] = field(default_factory=list)
     output_path: str = ""
     project_id: str = ""
-    timings: Dict[str, float] = field(default_factory=dict)
+    timings: QueryTimings = field(default_factory=dict)
     result_id: Optional[str] = None
 
 
@@ -120,7 +122,7 @@ class ResultBuilder:
         columns: List[str],
         output_path: str,
         project_id: str,
-        timings: Dict[str, float],
+        timings: QueryTimings,
         result_id: Optional[str] = None,
     ) -> QueryResult:
         """Costruisce un risultato di successo con tutti i dettagli.
@@ -149,7 +151,7 @@ class ResultBuilder:
         )
 
     @staticmethod
-    def to_dict(result: QueryResult) -> Dict[str, Any]:
+    def to_dict(result: QueryResult) -> JsonObject:
         """
         Converte un QueryResult in dizionario per la risposta API.
 
@@ -265,7 +267,7 @@ class QueryExecutor:
         self,
         connection: DatabaseConnection,
         sql: str,
-        params: Optional[Dict[str, Any]],
+        params: Optional[QueryParams],
     ) -> ExecutionContext:
         """Build typed execution/session metadata for one query."""
         return build_execution_context(
@@ -281,7 +283,7 @@ class QueryExecutor:
         self,
         connection: DatabaseConnection,
         sql: str,
-        params: Optional[Dict[str, Any]] = None
+        params: Optional[QueryParams] = None
     ) -> Tuple[List[tuple], List[str]]:
         """
         Esegue una query SQL e restituisce i risultati grezzi.
@@ -345,7 +347,7 @@ class QueryExecutor:
         self,
         connection: DatabaseConnection,
         sql: str,
-        params: Optional[Dict[str, Any]],
+        params: Optional[QueryParams],
         output_path: "Path",
         output_format: str,
     ) -> Tuple[int, List[str]]:
@@ -366,13 +368,13 @@ class QueryExecutor:
         project_id: str,
         output_filename: str,
         output_format: str = "csv",
-        params: Optional[Dict[str, Any]] = None,
+        params: Optional[QueryParams] = None,
         geom_column: Optional[str] = None,
         group_id: Optional[str] = None,
         run_id: Optional[str] = None,
         node_id: Optional[str] = None,
         intermediate_mode_override: Optional[str] = None,
-    ) -> Dict[str, Any]:
+    ) -> JsonObject:
         """
         Esegue una query SQL, salva i risultati su file e restituisce i metadata.
 

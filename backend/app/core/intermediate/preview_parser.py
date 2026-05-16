@@ -8,6 +8,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
+from app.core.dataframes.tabular import dataframe_head_records
+
 
 @dataclass
 class ParquetPreview:
@@ -162,7 +164,7 @@ def parse_parquet_preview(
         ) from e
 
     try:
-        rows = head_df.to_dict(orient="records")
+        rows = dataframe_head_records(head_df, len(head_df))
     except Exception as e:
         raise ParquetPreviewParseError(
             stage="to_dict",

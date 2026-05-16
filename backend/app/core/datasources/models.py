@@ -147,7 +147,7 @@ class SnapshotEntry(BaseModel):
 class ScanState(BaseModel):
     """
     Stato runtime per rilevamento file nuovi da parte dello scheduler.
-    Salvato in data/datasources/<id>/scan_state.json
+    Salvato in PostgreSQL su datasources.scan_state.
     """
     last_check: Optional[datetime] = None
     strategy: Literal["modified_date", "inventory", "pattern"] = "modified_date"

@@ -14,6 +14,7 @@ from app.core.connections.rest_sink import (
     RestSinkWriteResult,
 )
 from app.core.dataframes.tabular import dataframe_to_rest_records
+from app.shared.contracts.payloads import ObjectMap
 from app.utils.logger import get_logger
 
 
@@ -27,7 +28,7 @@ class RestBatchSummary:
     sent_count: int
     error: str
 
-    def to_task_result(self) -> dict[str, object]:
+    def to_task_result(self) -> ObjectMap:
         return {
             "success": self.success,
             "status_code": self.status_code,
@@ -52,8 +53,8 @@ class CaricaRestWriteOutcome:
     error: str = ""
     error_message: str = ""
 
-    def to_task_result(self) -> dict[str, object]:
-        result: dict[str, object] = {
+    def to_task_result(self) -> ObjectMap:
+        result: ObjectMap = {
             "status": self.status,
             "success": self.success,
             "rows_written": self.rows_written,

@@ -7,9 +7,11 @@ Centralizza la decisione "questo snapshot va registrato? in che mode?".
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Optional
+from typing import Any, Optional, TypeAlias
 
 from app.core.intermediate.exceptions import IntermediateSettingsError
+
+IntermediateSettingsSnapshot: TypeAlias = dict[str, Any]
 
 
 # Costanti / valori ammessi
@@ -171,7 +173,7 @@ def _skip(reason: str) -> IntermediatePolicy:
 
 # Lettura settings (lazy
 
-def _read_settings() -> dict:
+def _read_settings() -> IntermediateSettingsSnapshot:
     """Snapshot dei valori settings rilevanti.
 
     Lettura lazy via `app.config.settings.get(...)` per rispettare

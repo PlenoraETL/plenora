@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 import re
-from typing import Any, Callable, Dict, List
+from typing import Callable, List
 
 from app.db.sql_functions import translate_calculated_column
 from app.db.sql_translator import sql_translator
+from app.core.estrai.types import JsonObject, StringMap
 from app.core.projects.canvas_models import Node
 from app.utils.logger import get_logger
 
@@ -26,7 +27,7 @@ class QueryProjectionRenderer:
         self,
         table_nodes: List[Node],
         result_node: Node,
-        group_by_config: Dict[str, Any] = None,
+        group_by_config: JsonObject = None,
     ) -> str:
         """
         Genera la clausola SELECT con colonne visibili, alias e colonne calcolate.
@@ -118,7 +119,7 @@ class QueryProjectionRenderer:
     def generate_select_with_groupby(
         self,
         table_nodes: List[Node],
-        group_by_config: Dict[str, Any],
+        group_by_config: JsonObject,
     ) -> str:
         """Genera SELECT per query con GROUP BY."""
         columns = []
@@ -170,7 +171,7 @@ class QueryProjectionRenderer:
 
     def generate_group_by(
         self,
-        group_by_config: Dict[str, Any],
+        group_by_config: JsonObject,
         table_nodes: List[Node] = None,
     ) -> str:
         """Genera clausola GROUP BY con colonne qualificate."""
@@ -198,9 +199,9 @@ class QueryProjectionRenderer:
 
     def generate_order_by(
         self,
-        order_by_config: Dict[str, Any],
+        order_by_config: JsonObject,
         table_nodes: List[Node],
-        group_by_config: Dict[str, Any],
+        group_by_config: JsonObject,
     ) -> str:
         """Genera la clausola ORDER BY."""
         if not order_by_config.get("enabled") or not order_by_config.get("columns"):
@@ -240,9 +241,9 @@ class QueryProjectionRenderer:
 
     def generate_having(
         self,
-        having_config: Dict[str, Any],
-        group_by_config: Dict[str, Any],
-        params: Dict[str, Any],
+        having_config: JsonObject,
+        group_by_config: JsonObject,
+        params: JsonObject,
     ) -> str:
         """Genera la clausola HAVING."""
         if not having_config.get("enabled") or not having_config.get("conditions"):
@@ -290,7 +291,7 @@ class QueryProjectionRenderer:
         except (ValueError, KeyError):
             return f"ST_AsText({col_ref})"
 
-    def assemble_query(self, sql_parts: Dict) -> str:
+    def assemble_query(self, sql_parts: JsonObject) -> str:
         """Assembla le parti SQL in una query completa."""
         query = "SELECT "
 
@@ -328,7 +329,7 @@ class QueryProjectionRenderer:
 
         return query
 
-    def _visible_column_table_map(self, table_nodes: List[Node]) -> Dict[str, str]:
+    def _visible_column_table_map(self, table_nodes: List[Node]) -> StringMap:
         table_map = {}
         for node in table_nodes:
             table_alias = node.alias or self._get_node_table_name(node)

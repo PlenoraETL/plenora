@@ -5,10 +5,9 @@ Owns the HTTP boundary and delegates business logic to services or helpers.
 """
 
 from urllib.parse import quote_plus as _qp
-import re
 
 from app.utils.logger import get_logger
-from typing import Any, Dict, List, Optional
+from typing import List, Optional
 
 from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
@@ -20,14 +19,12 @@ from app.core.carica.executor import CaricaExecutor, _dict_to_conn_obj
 from app.core.carica.database_writer import DatabaseWriter
 from app.core.carica.column_mapper import ColumnMapper
 from app.core.carica.conflict_checker import ConflictChecker
+from app.core.carica import conflict_request_loader as _conflict_request_loader
 from app.core.carica.ddl_generator import DDLGenerator
 from app.core.carica.models import WriteConfig
-from app.core.dataframes.schema import empty_dataframe_from_column_metadata
-from app.core.dataframes.tabular import dataframe_from_records, dataframe_from_rows
 from app.core.artifacts import (
     LatestProjectArtifactRef,
     SourceLoader,
-    SourceLoadingError,
     SourceRef,
 )
 from app.core.connections import errors as connection_errors
@@ -35,6 +32,7 @@ from app.core.connections.service import ConnectionService as _CS
 from app.core.resources.column_types import metadata_to_dict
 from app.db.query_executor import DefaultEngineFactory
 from app.shared import error_codes
+from app.shared.contracts.payloads import JsonObject, JsonRows, StringRows
 from app.core.auth.resource_access import assert_project_visible
 from app.shared.error_envelope import raise_typed_http
 
@@ -66,14 +64,14 @@ class AutoMappingRequest(BaseModel):
     srid: int = 4326
     # Le colonne del DataFrame vengono passate come lista
     # il DataFrame vero non è serializzabile via API
-    source_columns: List[Dict[str, str]] = []
+    source_columns: StringRows = []
 
 
 class ValidateRequest(BaseModel):
     """Richiesta per validazione configurazione."""
     connection_id: str
-    node_data: Dict[str, Any]
-    source_columns: List[Dict[str, str]] = []
+    node_data: JsonObject
+    source_columns: StringRows = []
     total_rows: int = 0
 
 
@@ -85,7 +83,7 @@ class ConflictCheckRequest(BaseModel):
     match_columns: List[str]
     project_id: Optional[str] = None
     df_match_columns: Optional[List[str]] = None
-    sample_values: List[Dict[str, Any]] = []
+    sample_values: JsonRows = []
     # Sorgente diretta: il backend interroga il DB sorgente senza esecuzione previa
     source_connection_id: Optional[str] = None
     source_schema: Optional[str] = None
@@ -107,7 +105,7 @@ class TableListResponse(BaseModel):
 
 class ColumnListResponse(BaseModel):
     """Risposta lista colonne."""
-    columns: List[Dict[str, str]]
+    columns: StringRows
     table_name: str
 
 
@@ -188,6 +186,8 @@ async def auto_mapping(request: AutoMappingRequest, current_user: CurrentUser = 
     riceve il mapping proposto che l'utente può modificare.
     """
     try:
+        from app.core.dataframes.schema import empty_dataframe_from_column_metadata
+
         # Ricostruisci un DataFrame vuoto con le colonne sorgente
         # per il mapping servono solo i nomi e i tipi). La dispatch
         # canvas-type -> pandas dtype resta confinata in app.core.dataframes.
@@ -271,92 +271,20 @@ async def check_conflicts(request: ConflictCheckRequest, current_user: CurrentUs
 
         checker = ConflictChecker(engine, db_type)
 
-        if request.sample_values:
-            # Check su campione esplicito inviato dal frontend
-            df = dataframe_from_records(request.sample_values)
-        elif request.source_connection_id and request.source_table:
-            # Query diretta al DB sorgente — non richiede esecuzione previa della pipeline
-            src_conn = _get_connection(request.source_connection_id)
-            src_engine = _create_engine(src_conn)
-            _ident_re = re.compile(r'^[A-Za-z_][A-Za-z0-9_]*$')
-            src_schema = request.source_schema or "public"
-            src_table = request.source_table
-            src_cols = request.source_match_columns or request.match_columns
-            # Validazione identificatori per prevenire SQL injection
-            for ident in [src_schema, src_table] + list(src_cols):
-                if not _ident_re.match(ident):
-                    raise HTTPException(400, f"Nome identificatore non valido: {ident}")
-            from sqlalchemy import text
-            from sqlalchemy.sql import quoted_name
-            q_schema = quoted_name(src_schema, quote=True)
-            q_table = quoted_name(src_table, quote=True)
-            quoted_cols = ", ".join(quoted_name(c, quote=True) for c in src_cols)
-            src_query = f"SELECT DISTINCT {quoted_cols} FROM {q_schema}.{q_table}"
-            logger.info("[C07-SRC] Query sorgente diretta eseguita")
-            with src_engine.connect() as src_conn_obj:
-                result_proxy = src_conn_obj.execute(text(src_query))
-                rows = result_proxy.fetchall()
-                col_names = list(result_proxy.keys())
-            df = dataframe_from_rows(rows, col_names)
-            # Rinomina colonne sorgente → nomi DB destinazione (match_columns
-            if request.source_match_columns and request.source_match_columns != request.match_columns:
-                rename_map = dict(zip(request.source_match_columns, request.match_columns))
-                df = df.rename(columns=rename_map)
-            logger.info(f"[C07-SRC] DataFrame sorgente: {len(df)} righe distinte")
-        elif request.project_id:
-            # Authz: verifica che l'utente abbia accesso al progetto prima
-            # di leggerne il result blob. Senza questo check, chiunque con
-            # accesso a una connection di destinazione potrebbe leggere
-            # l'output di un progetto di un altro gruppo conoscendone l'id
-            assert_project_visible(request.project_id, current_user)
-
-            # Defense-in-depth core-level: il SourceLoader propaga
-            # expected_group_id al resolver, che applica il check
-            # cross-tenant fail-closed anche se l'ACL HTTP a monte
-            # venisse bypassata da chiamate interne future
-            try:
-                df = SourceLoader().load(
-                    SourceRef(project=LatestProjectArtifactRef(project_id=request.project_id)),
-                    expected_group_id=current_user.group_id,
-                )
-            except SourceLoadingError as e:
-                raise HTTPException(status_code=403, detail=str(e))
-
-            if df is not None:
-                # Usa df_match_columns (alias) per leggere il DataFrame
-                logger.info(f"[C07] match_columns={request.match_columns} df_match_columns={request.df_match_columns}")
-                df_cols = request.df_match_columns or request.match_columns
-                available_match = [c for c in df_cols if c in df.columns]
-                if available_match:
-                    # Rinomina le colonne alias → nomi DB per il checker
-                    col_rename = {}
-                    if request.df_match_columns:
-                        for db_col, df_col in zip(request.match_columns, request.df_match_columns):
-                            if df_col != db_col and df_col in df.columns:
-                                col_rename[df_col] = db_col
-                    df = df[available_match]
-                    if col_rename:
-                        df = df.rename(columns=col_rename)
-                else:
-                    df = dataframe_from_rows([], request.match_columns)
-            else:
-                return {
-                    "has_conflicts": False,
-                    "total_conflicts": 0,
-                    "internal_duplicates": 0,
-                    "db_conflicts": 0,
-                    "details": [],
-                    "message": "Nessun output disponibile. Esegui prima la pipeline.",
-                }
-        else:
-            return {
-                "has_conflicts": False,
-                "total_conflicts": 0,
-                "internal_duplicates": 0,
-                "db_conflicts": 0,
-                "details": [],
-                "message": "Nessun dato da verificare. Esegui prima la pipeline.",
-            }
+        conflict_input = _conflict_request_loader.load_conflict_input(
+            request,
+            current_user,
+            get_connection=_get_connection,
+            create_engine=_create_engine,
+            project_visible_checker=assert_project_visible,
+            source_loader_cls=SourceLoader,
+            source_ref_cls=SourceRef,
+            latest_project_artifact_ref_cls=LatestProjectArtifactRef,
+            logger=logger,
+        )
+        if conflict_input.early_response is not None:
+            return conflict_input.early_response
+        df = conflict_input.dataframe
 
         report = checker.check(
             df,
@@ -374,7 +302,7 @@ async def check_conflicts(request: ConflictCheckRequest, current_user: CurrentUs
 
 # HELPER
 
-def _get_connection(connection_id: str) -> Dict[str, Any]:
+def _get_connection(connection_id: str) -> JsonObject:
     """Recupera la configurazione di connessione come dizionario."""
     if _connection_service:
         conn = _connection_service.get_connection(connection_id)
@@ -395,7 +323,7 @@ def _get_connection(connection_id: str) -> Dict[str, Any]:
     )
 
 
-def _create_engine(connection: Dict[str, Any]):
+def _create_engine(connection: JsonObject):
     """Crea engine SQLAlchemy dalla connessione."""
     try:
         factory = DefaultEngineFactory()

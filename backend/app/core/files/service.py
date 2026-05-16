@@ -24,12 +24,11 @@ from app.core.files.preview_temp import preview_file_temp as _preview_file_temp
 from app.core.files.raw_upload import create_raw_from_upload as _create_raw_from_upload
 from app.core.files.source_blob import get_blob_from_db as _read_blob_from_db
 from app.core.files.source_blob import temp_file_for
-from app.core.files.source_metadata import delete_file_source as _delete_file_source
-from app.core.files.source_metadata import get_file_source as _read_file_source
-from app.core.files.source_metadata import list_file_sources as _list_file_sources
-from app.core.files.source_metadata import update_file_source as _update_file_source
+from app.core.files import source_metadata as _source_metadata
 from app.core.files.source_read import get_layers_info as _read_layers_info
 from app.core.files.source_read import get_preview as _read_preview
+from app.core.files.source_read import FileSourceLayersPayload, FileSourcePreviewPayload
+from app.core.files.preview_temp import FilePreviewTempPayload
 from app.core.files.source_read import load_dataframe as _read_dataframe
 from app.core.files.storage_dispatch import BlobDispatchResult, dispatch_blob_storage
 from app.core.files.upload import mkdtemp_writable
@@ -341,7 +340,7 @@ class FileSourceService:
         )
 
     def get_file_source(self, file_id: str) -> Optional[FileSource]:
-        return _read_file_source(
+        return _source_metadata.get_file_source(
             file_id,
             db_get_file_source=files_db.get_file_source,
             file_source_model=FileSource,
@@ -350,7 +349,7 @@ class FileSourceService:
         )
 
     def delete_file_source(self, file_id: str) -> bool:
-        return _delete_file_source(
+        return _source_metadata.delete_file_source(
             file_id,
             db_get_file_source=files_db.get_file_source,
             db_delete_file_source=files_db.delete_file_source,
@@ -359,7 +358,7 @@ class FileSourceService:
 
     def list_file_sources(self, group_id: str = None) -> Any:
         file_source_list_model = FileSourceList if _USE_APP_MODELS else None
-        return _list_file_sources(
+        return _source_metadata.list_file_sources(
             group_id,
             db_list_file_sources=files_db.list_file_sources,
             get_file_source_by_id=self.get_file_source,
@@ -489,7 +488,7 @@ class FileSourceService:
 
     def update_file_source(self, file_id: str, data: Any) -> Optional[FileSource]:
         from app.config import settings
-        return _update_file_source(
+        return _source_metadata.update_file_source(
             file_id,
             data,
             get_file_source_by_id=self.get_file_source,
@@ -507,7 +506,7 @@ class FileSourceService:
 
     def get_layers_info(
         self, file_id: str, expected_group_id: str = None,
-    ) -> Dict[str, Any]:
+    ) -> FileSourceLayersPayload:
         """Delegate to `source_read.get_layers_info`.
 
         N1: `expected_group_id` obbligatorio per fail-closed check.
@@ -525,7 +524,7 @@ class FileSourceService:
 
     def get_preview(
         self, file_id: str, limit: int = 100, expected_group_id: str = None,
-    ) -> Dict[str, Any]:
+    ) -> FileSourcePreviewPayload:
         """Delegate to `source_read.get_preview`.
 
         N1: `expected_group_id` obbligatorio per fail-closed check.
@@ -543,7 +542,13 @@ class FileSourceService:
             ),
         )
 
-    def preview_file_temp(self, file_content: BinaryIO, filename: str, layer: str = None, sheet: str = None) -> dict:
+    def preview_file_temp(
+        self,
+        file_content: BinaryIO,
+        filename: str,
+        layer: str = None,
+        sheet: str = None,
+    ) -> FilePreviewTempPayload:
         return _preview_file_temp(
             file_content,
             filename,
@@ -563,6 +568,10 @@ def _create_production_service() -> FileSourceService:
     if _get_logger is not None:
         logger = _get_logger(__name__)
         return FileSourceService(logger=logger)
+    return FileSourceService()
+
+
+def create_file_service() -> FileSourceService:
     return FileSourceService()
 
 

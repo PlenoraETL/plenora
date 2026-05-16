@@ -5,9 +5,13 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from types import MappingProxyType
-from typing import Any, Callable, Mapping, Optional
+from typing import Any, Callable, Mapping, Optional, TypeAlias
 
 from app.db.pg_connection import execute, fetchall, fetchone
+
+RunRowPayload: TypeAlias = dict[str, Any]
+
+
 @dataclass(frozen=True, slots=True)
 class RunRow:
     """Typed representation of a row from intermediate.runs."""
@@ -68,8 +72,8 @@ class RunRow:
             _present_fields=frozenset(data.keys()),
         )
 
-    def as_dict(self) -> dict[str, Any]:
-        row: dict[str, Any] = {
+    def as_dict(self) -> RunRowPayload:
+        row: RunRowPayload = {
             field_name: getattr(self, field_name)
             for field_name in _RUN_ROW_FIELD_NAMES
             if field_name in self._present_fields

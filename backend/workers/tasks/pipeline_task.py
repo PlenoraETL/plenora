@@ -7,8 +7,9 @@ from pathlib import Path as _Path
 import time as _time
 import traceback as _traceback
 import uuid as _uuid
-from typing import Any, Dict, Optional, Protocol
+from typing import Any, Optional, Protocol
 
+from app.shared.contracts.payloads import JsonObject
 from workers.celery_app import celery_app, BaseTaskWithRetry
 from app.utils.logger import get_logger, open_run, close_run, set_run_context, get_steps
 from app.config import settings
@@ -17,7 +18,7 @@ logger = get_logger("workers.pipeline_task")
 
 
 class _ProgressTask(Protocol):
-    def update_state(self, *, state: str, meta: Dict[str, Any]) -> None:
+    def update_state(self, *, state: str, meta: JsonObject) -> None:
         ...
 
 
@@ -58,7 +59,7 @@ def _build_orchestrator() -> Any:
     )
 
 
-def _get_project_info(project_id: str) -> Dict[str, Any]:
+def _get_project_info(project_id: str) -> JsonObject:
     """Legge metadata progetto tramite il boundary runtime del dominio projects."""
     try:
         from app.core.projects.runtime_context import get_project_runtime_context
@@ -106,7 +107,7 @@ def execute_pipeline_task(
     run_id: Optional[str] = None,
     user_id: Optional[str] = None,
     intermediate_mode_override: Optional[str] = None,
-) -> Dict[str, Any]:
+) -> JsonObject:
     """Task asincrono per eseguire la pipeline completa di un progetto.
 
     Idempotency: se `run_id` viene passato dall'esterno
@@ -408,7 +409,7 @@ def preview_pipeline_task(
     project_id: str,
     limit: int = settings.MAX_PREVIEW_ROWS,
     user_id: Optional[str] = None,
-) -> Dict[str, Any]:
+) -> JsonObject:
     """Task asincrono per preview pipeline."""
     task_id = self.request.id
     logger.info(f"Task PREVIEW {task_id} avviato per progetto {project_id}")

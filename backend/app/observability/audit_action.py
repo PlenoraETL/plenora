@@ -10,10 +10,12 @@ import functools
 import inspect
 import threading
 import time
-from typing import Any, Callable, Dict, Optional, Tuple
+from collections.abc import Mapping
+from typing import Any, Callable, Optional
 
 from fastapi import HTTPException
 
+from app.shared.contracts.payloads import IntMap, JsonObject
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -23,7 +25,7 @@ logger = get_logger(__name__)
 # Esposti via get_metrics per integrazione futura con admin_system_status
 
 _metrics_lock = threading.Lock()
-_metrics: Dict[str, int] = {
+_metrics: IntMap = {
     "write_ok": 0,
     "write_fail": 0,
     "skipped": 0,
@@ -40,7 +42,7 @@ def _record_metric(name: str, mark_ok: bool = False) -> None:
             _last_ok_epoch = time.time()
 
 
-def get_metrics() -> Dict[str, Any]:
+def get_metrics() -> JsonObject:
     """Snapshot contatori + timestamp ultima write riuscita.
 
     Mirror del pattern `token_blacklist.get_metrics`; consumabile da
@@ -62,7 +64,7 @@ def _reset_metrics_for_tests() -> None:
         _last_ok_epoch = None
 
 
-def _extract_user_id(kwargs: Dict[str, Any]) -> Optional[str]:
+def _extract_user_id(kwargs: Mapping[str, Any]) -> Optional[str]:
     """Legge `current_user.user_id` da kwargs se presente e non vuoto.
 
     None (anonimo/sistema) se:
@@ -80,7 +82,7 @@ def _extract_user_id(kwargs: Dict[str, Any]) -> Optional[str]:
     return None
 
 
-def _extract_ip_address(kwargs: Dict[str, Any]) -> Optional[str]:
+def _extract_ip_address(kwargs: Mapping[str, Any]) -> Optional[str]:
     """Legge `request.client.host` da kwargs se `request: Request` e' presente.
 
     None se:
@@ -101,7 +103,7 @@ def _extract_ip_address(kwargs: Dict[str, Any]) -> Optional[str]:
 
 
 def _extract_target(
-    kwargs: Dict[str, Any], target_param: Optional[str]
+    kwargs: Mapping[str, Any], target_param: Optional[str]
 ) -> Optional[str]:
     """Estrae il target dal kwarg specificato dal decorator.
 
@@ -139,7 +141,7 @@ _INSERT_SQL = (
 )
 
 
-def _execute_write(sql: str, params: Tuple[Any, ...]) -> None:
+def _execute_write(sql: str, params: tuple[Any, ...]) -> None:
     """Indirection layer con lazy import di `pg_connection`.
 
     Isolato in funzione dedicata cosi' i test possono monkeypatch-are

@@ -42,12 +42,7 @@ _WAVE_B_TARGETS: tuple[str, ...] = (
 
 
 _EXPECTED_WAVE_B_BROAD_DICT_RETURNS: frozenset[BroadDictReturn] = frozenset(
-    {
-        BroadDictReturn("app/core/projects/service.py", "ProjectService.get_project", "Optional[dict]"),
-        BroadDictReturn("app/core/projects/service.py", "ProjectService._find_dependent_projects", "List[dict]"),
-        BroadDictReturn("app/core/projects/service.py", "ProjectService.get_latest_result", "Optional[dict]"),
-        BroadDictReturn("app/core/projects/service.py", "ProjectService.list_results", "List[dict]"),
-    }
+    {}
 )
 
 
@@ -102,6 +97,7 @@ _DONE_ZERO_BROAD_DICT_MODULES: frozenset[str] = frozenset(
         "app/core/eseguibili/router.py",
         "app/core/eseguibili/service.py",
         "app/core/projects/db.py",
+        "app/core/projects/service.py",
         "app/core/results/db.py",
     }
 )

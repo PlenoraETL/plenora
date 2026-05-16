@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
-from typing import Callable, List, Optional, Tuple
+from typing import Callable, Optional, Tuple
 
 from app.shared.connections.arcgis_connection import ArcGISConnectionInfo
 from app.shared.connections.arcgis_provider import ArcGISDiscoveryProviderProtocol
+from app.shared.contracts.payloads import JsonRows
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -23,7 +24,7 @@ def list_user_folders(
     conn: ArcGISConnectionInfo,
     *,
     folder_filter: FolderFilter = default_user_folder_filter,
-) -> List[dict]:
+) -> JsonRows:
     """List user folders through the provider with optional caller policy."""
     folders = client.list_folders(conn) or []
     return [folder for folder in folders if folder_filter(folder)]
@@ -52,7 +53,7 @@ def is_service_name_available(
 def enumerate_user_items(
     client: ArcGISDiscoveryProviderProtocol,
     conn: ArcGISConnectionInfo,
-) -> List[dict]:
+) -> JsonRows:
     """List raw content items owned by the connected user."""
     return client.list_user_items(conn) or []
 
@@ -61,7 +62,7 @@ def search_user_feature_service_items(
     client: ArcGISDiscoveryProviderProtocol,
     conn: ArcGISConnectionInfo,
     service_name: str,
-) -> List[dict]:
+) -> JsonRows:
     """Find Feature Service items matching a title, service name, or URL."""
     all_items = enumerate_user_items(client, conn)
     feature_services = [

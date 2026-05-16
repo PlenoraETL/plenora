@@ -8,9 +8,10 @@ import hashlib
 import re
 
 import numpy as np
-from typing import Any, Dict, List
+from typing import Any, List
 
 from app.core.dataframes.tabular import empty_object_series
+from app.core.manipola.types import JsonRows
 from app.utils.logger import get_logger
 
 logger = get_logger("app.core.manipola.transforms.base")
@@ -196,7 +197,7 @@ MASK_FUNCTIONS = {
 
 def op_mask_data(
     df: DataFrame,
-    maskings: List[Dict[str, Any]],
+    maskings: JsonRows,
     overwrite: bool = False
 ) -> DataFrame:
     """

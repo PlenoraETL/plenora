@@ -59,7 +59,10 @@ class FileSourceRow(TypedDict, total=False):
     created_by: Optional[str]
 
 
-def _validate_row(row: Dict[str, Any], *, context: str) -> None:
+FileSourcePublicRow = FileSourceRow
+
+
+def _validate_row(row: FileSourceRow, *, context: str) -> None:
     """Valida l'invariante "data o storage_key non-None" su una row.
 
     Usato da `save_file_source` e `save_file_sources_batch` per
@@ -78,7 +81,11 @@ def _validate_row(row: Dict[str, Any], *, context: str) -> None:
         )
 
 
-def get_file_source(file_id: str, include_data: bool = False, group_id: str = None) -> Optional[Dict]:
+def get_file_source(
+    file_id: str,
+    include_data: bool = False,
+    group_id: str = None,
+) -> Optional[FileSourcePublicRow]:
     """Recupera file source. group_id=None → no filter (backward compat)."""
     if include_data:
         if group_id:
@@ -113,7 +120,7 @@ def get_file_source(file_id: str, include_data: bool = False, group_id: str = No
     return row
 
 
-def list_file_sources(group_id: Optional[str] = None) -> List[Dict]:
+def list_file_sources(group_id: Optional[str] = None) -> list[FileSourcePublicRow]:
     """Lista file_sources. group_id=None → no filter (usato da superadmin)."""
     if group_id is None:
         return fetchall(
@@ -146,7 +153,7 @@ def save_file_source(file_id: str, group_id: str, name: str, original_filename: 
                      fmt: str, data: Optional[bytes] = None,
                      metadata: dict = None, created_by: str = None,
                      storage_key: Optional[str] = None,
-                     size_bytes: Optional[int] = None) -> Dict:
+                     size_bytes: Optional[int] = None) -> FileSourcePublicRow:
     """Salva/aggiorna file_source.
 
     Dispatch FS-B1-large:

@@ -37,14 +37,7 @@ from runner.parametrize import (
     parametrize_write_modes,
 )
 
-# Le fixture parametrizzate (`db_connection_for_dialect`, ecc.) vengono
-# importate qui per essere visibili a pytest senza modificare conftest.py.
-# Pytest le raccoglie da qualsiasi import nel test module.
-from runner.parametrized_fixtures import (  # noqa: F401  (fixture import)
-    api_conn_for_auth_style,
-    datasource_for_format,
-    db_connection_for_dialect,
-)
+pytest_plugins = ("runner.parametrized_fixtures",)
 
 
 # ── Builders availability ─────────────────────────────────────────────

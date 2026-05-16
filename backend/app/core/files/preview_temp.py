@@ -13,7 +13,7 @@ import tempfile
 
 import logging
 from pathlib import Path
-from typing import BinaryIO, Optional
+from typing import BinaryIO, Optional, TypedDict
 
 from app.core.files.load_dispatch import load_by_format
 from app.shared.resources.file_cleanup import rmtree_safe
@@ -21,6 +21,19 @@ from app.utils.mime_validator import MimeMismatchError, validate_no_executable
 
 
 _logger_module = logging.getLogger(__name__)
+
+
+class FilePreviewTempColumnPayload(TypedDict):
+    name: str
+    type: str
+
+
+class FilePreviewTempPayload(TypedDict):
+    columns: list[FilePreviewTempColumnPayload]
+    row_count: int
+    format: str
+    layers: list[str]
+    sheets: list[str]
 
 
 def _rmtree_safe(path, _retries: int = 3) -> None:
@@ -39,7 +52,7 @@ def preview_file_temp(
     logger,
     layer: Optional[str] = None,
     sheet: Optional[str] = None,
-) -> dict:
+) -> FilePreviewTempPayload:
     """
     Preview temporanea di un file prima dell'upload definitivo.
 

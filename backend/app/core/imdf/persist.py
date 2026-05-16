@@ -11,6 +11,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, Optional
 
+from app.shared.contracts.payloads import JsonObject
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -35,7 +36,7 @@ def persist_imdf_bundle_to_disk(
     task_id: str,
     project_id: Optional[str],
     dest_root: Optional[Path] = None,
-) -> Dict[str, Any]:
+) -> JsonObject:
     """Sposta il contenuto di `bundle.tmp_dir` in
     `IMDF_BUNDLES_DIR/{task_id}/` e scrive `plenora_metadata.json` nella
     root della destinazione.

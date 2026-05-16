@@ -10,7 +10,7 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Iterable, Mapping, Optional, cast
+from typing import Callable, Iterable, Mapping, Optional, TypedDict, cast
 
 from app.db import pg_connection as pg
 from app.db.sql_safety import safe_set_clause
@@ -38,6 +38,10 @@ def put_connection(conn) -> None:
 
 def close_connection() -> None:
     pg.close_connection()
+
+
+def transaction():
+    return pg.transaction()
 
 
 @dataclass(frozen=True)
@@ -71,20 +75,42 @@ class ScheduleRow:
         )
 
 
+class ScheduleLogRow(TypedDict, total=False):
+    """Read model for the schedule_logs table row shape."""
+
+    log_id: str
+    schedule_id: str
+    timestamp: datetime | str
+    timestamp_str: str
+    level: str
+    event: str
+    triggered_by: str
+    steps: object
+    total_duration_ms: int
+    error_message: Optional[str]
+    schedule_info: object
+    pipeline_info: object
+    execution_info: object
+
+
 def _decode_schedule_config(row: dict[str, object]) -> None:
     if isinstance(row.get("config"), str):
         row["config"] = json.loads(cast(str, row["config"]))
 
 
+def _schedule_row(row: Mapping[str, object]) -> ScheduleRow:
+    decoded = dict(row)
+    _decode_schedule_config(decoded)
+    return ScheduleRow.from_mapping(decoded)
+
+
 def _schedule_rows(rows: Iterable[Mapping[str, object]]) -> list[ScheduleRow]:
-    return [ScheduleRow.from_mapping(row) for row in rows]
+    return [_schedule_row(row) for row in rows]
 
 
 def get_schedule_row(schedule_id: str) -> Optional[ScheduleRow]:
     row = fetchone("SELECT * FROM schedules WHERE id = %s", (schedule_id,))
-    if row:
-        _decode_schedule_config(row)
-    return ScheduleRow.from_mapping(row) if row else None
+    return _schedule_row(row) if row else None
 
 
 def list_schedule_rows(group_id: str) -> list[ScheduleRow]:
@@ -92,8 +118,6 @@ def list_schedule_rows(group_id: str) -> list[ScheduleRow]:
         "SELECT * FROM schedules WHERE group_id = %s ORDER BY created_at DESC",
         (group_id,),
     )
-    for row in rows:
-        _decode_schedule_config(row)
     return _schedule_rows(rows)
 
 
@@ -132,18 +156,58 @@ def save_schedule(
     return row
 
 
+def _prepare_schedule_update_fields(fields: Mapping[str, object]) -> Mapping[str, object]:
+    update_fields = dict(fields)
+    if "config" in update_fields and isinstance(update_fields["config"], dict):
+        update_fields["config"] = json.dumps(update_fields["config"])
+    if "is_enabled" in update_fields:
+        update_fields["is_enabled"] = bool(update_fields["is_enabled"])
+    update_fields["updated_at"] = datetime.now(timezone.utc).isoformat()
+    return update_fields
+
+
 def update_schedule(
     schedule_id: str,
     **fields: object,
 ) -> Optional[ScheduleRow]:
-    if "config" in fields and isinstance(fields["config"], dict):
-        fields["config"] = json.dumps(fields["config"])
-    if "is_enabled" in fields:
-        fields["is_enabled"] = bool(fields["is_enabled"])
-    fields["updated_at"] = datetime.now(timezone.utc).isoformat()
-    set_clause, vals = safe_set_clause("schedules", fields)
+    update_fields = _prepare_schedule_update_fields(fields)
+    set_clause, vals = safe_set_clause("schedules", update_fields)
     execute(f"UPDATE schedules SET {set_clause} WHERE id = %s", vals + (schedule_id,))
     return get_schedule_row(schedule_id)
+
+
+ScheduleUpdateCallback = Callable[[ScheduleRow], Optional[Mapping[str, object]]]
+
+
+def update_schedule_locked(
+    schedule_id: str,
+    update_fields: ScheduleUpdateCallback,
+) -> Optional[ScheduleRow]:
+    """Atomically read, merge, and write a schedule row.
+
+    The callback receives the current row while PostgreSQL holds a
+    row-level lock. Returning ``None`` aborts the update without changing
+    the row. Exceptions propagate and rollback the transaction.
+    """
+    with transaction() as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT * FROM schedules WHERE id = %s FOR UPDATE", (schedule_id,))
+            row = cur.fetchone()
+            if not row:
+                return None
+
+            fields = update_fields(_schedule_row(row))
+            if fields is None:
+                return None
+
+            normalized = _prepare_schedule_update_fields(fields)
+            set_clause, vals = safe_set_clause("schedules", normalized)
+            cur.execute(
+                f"UPDATE schedules SET {set_clause} WHERE id = %s RETURNING *",
+                vals + (schedule_id,),
+            )
+            updated = cur.fetchone()
+            return _schedule_row(updated) if updated else None
 
 
 def delete_schedule(schedule_id: str) -> bool:
@@ -213,8 +277,11 @@ def insert_schedule_log(
     )
 
 
-def get_schedule_log_row(log_id: str) -> Optional[dict]:
-    return fetchone("SELECT * FROM schedule_logs WHERE log_id = %s", (log_id,))
+def get_schedule_log_row(log_id: str) -> Optional[ScheduleLogRow]:
+    return cast(
+        Optional[ScheduleLogRow],
+        fetchone("SELECT * FROM schedule_logs WHERE log_id = %s", (log_id,)),
+    )
 
 
 def count_schedule_log_rows(
@@ -241,27 +308,36 @@ def list_schedule_log_rows(
     page_size: int,
     offset: int,
     event_filter: Optional[str] = None,
-) -> list[dict]:
+) -> list[ScheduleLogRow]:
     if event_filter:
-        return fetchall(
-            "SELECT * FROM schedule_logs "
-            "WHERE schedule_id = %s AND event = %s "
-            "ORDER BY timestamp DESC LIMIT %s OFFSET %s",
-            (schedule_id, event_filter, page_size, offset),
+        return cast(
+            list[ScheduleLogRow],
+            fetchall(
+                "SELECT * FROM schedule_logs "
+                "WHERE schedule_id = %s AND event = %s "
+                "ORDER BY timestamp DESC LIMIT %s OFFSET %s",
+                (schedule_id, event_filter, page_size, offset),
+            ),
         )
-    return fetchall(
-        "SELECT * FROM schedule_logs "
-        "WHERE schedule_id = %s "
-        "ORDER BY timestamp DESC LIMIT %s OFFSET %s",
-        (schedule_id, page_size, offset),
+    return cast(
+        list[ScheduleLogRow],
+        fetchall(
+            "SELECT * FROM schedule_logs "
+            "WHERE schedule_id = %s "
+            "ORDER BY timestamp DESC LIMIT %s OFFSET %s",
+            (schedule_id, page_size, offset),
+        ),
     )
 
 
-def get_latest_schedule_log_row(schedule_id: str) -> Optional[dict]:
-    return fetchone(
-        "SELECT * FROM schedule_logs WHERE schedule_id = %s "
-        "ORDER BY timestamp DESC LIMIT 1",
-        (schedule_id,),
+def get_latest_schedule_log_row(schedule_id: str) -> Optional[ScheduleLogRow]:
+    return cast(
+        Optional[ScheduleLogRow],
+        fetchone(
+            "SELECT * FROM schedule_logs WHERE schedule_id = %s "
+            "ORDER BY timestamp DESC LIMIT 1",
+            (schedule_id,),
+        ),
     )
 
 
@@ -280,7 +356,7 @@ def list_schedule_logs(
     schedule_id: str,
     events: Optional[Iterable[str]] = None,
     limit: int = 200,
-) -> list[dict]:
+) -> list[ScheduleLogRow]:
     """Lista entries di `schedule_logs` per uno schedule.
 
     Usato da `ScheduleRunsCatalog.list_runs` per popolare lo storico
@@ -319,9 +395,9 @@ def list_schedule_logs(
             "ORDER BY timestamp DESC LIMIT %s",
             (schedule_id, limit),
         )
-    out: list[dict] = []
+    out: list[ScheduleLogRow] = []
     for r in rows:
-        d = dict(r)
+        d = cast(ScheduleLogRow, dict(r))
         # Convenienza per i caller filesystem-style: stringa
         # YYYYMMDD_HHMMSS dal timestamp DB.
         ts = d.get("timestamp")

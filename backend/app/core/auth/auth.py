@@ -1,7 +1,7 @@
 """JWT authentication router and public auth-domain exports."""
 
 from datetime import datetime, timezone
-from typing import Optional
+from typing import Optional, TypedDict
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.security import HTTPAuthorizationCredentials
@@ -118,8 +118,17 @@ from app.core.auth.models import (  # noqa: F401 (explicit public auth API)
     MFAStatusResponse,
 )
 
+class UserResponsePayload(TypedDict):
+    id: str
+    username: str
+    email: str | None
+    group_id: str
+    role: str
+    is_active: bool
+    created_at: str
 
-def _user_response_payload(user: db.UserRow) -> dict[str, object]:
+
+def _user_response_payload(user: db.UserRow) -> UserResponsePayload:
     return {
         "id": user.id,
         "username": user.username,

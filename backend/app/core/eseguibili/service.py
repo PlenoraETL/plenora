@@ -5,7 +5,6 @@ Operazioni principali:
 """
 
 import io
-import math
 import re
 
 import copy
@@ -133,6 +132,7 @@ def analyze_file_upload(
         dict con file_id, detected_columns, row_count, auto_mapping, preview_rows
     """
     from app.core.dataframes.frame_io import load_dataframe_from_file
+    from app.core.dataframes.tabular import dataframe_preview_records, non_null_head_values
 
     df = load_dataframe_from_file(file_path)
     if df is None or df.empty:
@@ -152,7 +152,7 @@ def analyze_file_upload(
             col_type = "bool"
         else:
             col_type = "str"
-        sample_values = df[col].dropna().head(3).astype(str).tolist()
+        sample_values = [str(value) for value in non_null_head_values(df[col], 3)]
         detected.append(
             DetectedUploadColumn(
                 name=str(col),
@@ -186,17 +186,7 @@ def analyze_file_upload(
                 break
 
     # Preview prime 10 righe (serializzabili
-    preview_df = df.head(10)
-    # Converti a dict JSON-safe: NaN → None
-    preview_rows: list[dict[str, object]] = []
-    for row in preview_df.to_dict(orient="records"):
-        clean = {}
-        for k, v in row.items():
-            if isinstance(v, float) and math.isnan(v):
-                clean[k] = None
-            else:
-                clean[k] = v
-        preview_rows.append(clean)
+    preview_rows = dataframe_preview_records(df, 10)
 
     file_id = f"esec_upload_{uuid.uuid4().hex[:12]}"
 

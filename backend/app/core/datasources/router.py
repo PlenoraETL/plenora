@@ -4,11 +4,9 @@ PLENORA-ETL — Router Data Source
 Endpoints CRUD per la gestione dei Data Source e operazioni sui file.
 """
 
-import json as _json
-
 from fastapi import APIRouter, HTTPException, Query, UploadFile, File, Depends
 from fastapi.responses import Response
-from typing import Optional, List, Dict
+from typing import Optional
 
 from app.utils.logger import get_logger
 from app.core.datasources import errors as datasource_errors
@@ -42,6 +40,7 @@ from app.core.datasources.interface import (
     DataSourcePermissionError,
 )
 from app.core.datasources.service import DataSourceService
+from app.core.datasources import dependency_checks as _dependency_checks
 from app.core.auth.visibility import visible_resource_ids
 from app.core.projects import usage as project_usage
 
@@ -226,73 +225,15 @@ def delete_datasource(ds_id: str, current_user: CurrentUser = Depends(require_ad
         )
 
 
-def _find_projects_using_datasource(ds_id: str) -> List[Dict[str, str]]:
-    """Cerca progetti il cui canvas contiene un nodo che referenzia ds_id.
-
-    Fix N+1: era 1 + N query (list + get_project per ognuno). Ora fa UNA sola
-    query che carica id, name, project_type, canvas in un solo colpo.
-
-    6.3: ogni per-row skip (JSON malformato, eccezione inattesa)
-    emette un ``logger.warning`` breadcrumb con ``project_id`` (vincolo
-    §5.1.4 kickoff: optional feature + breadcrumb identificante). Se
-    *tutte* le rows falliscono il check, il helper solleva ``RuntimeError``
-    per segnalare al caller che non e' stato possibile escludere
-    dipendenze. Sollevamento intenzionale con built-in: sentinel interno
-    al batch, non va esteso oltre questo scope.
-    """
-    # PR-δ: includere group_id nella SELECT per consentire al caller di
-    # filtrare le dipendenze visibili al chiamante (no leak nomi
-    # cross-tenant nell'errore 409
-    rows = project_usage.list_projects_with_canvas_for_datasource_check()
-    using = []
-    check_failures = 0
-    for row in rows:
-        row_id = row.get("id")
-        try:
-            canvas = row.get("canvas") or {}
-            if isinstance(canvas, str):
-                try:
-                    canvas = _json.loads(canvas)
-                except Exception as _json_err:
-                    logger.warning(
-                        f"_find_projects_using_datasource: canvas JSON "
-                        f"malformato per progetto {row_id}: {_json_err}"
-                    )
-                    check_failures += 1
-                    continue
-            nodes = canvas.get("nodes") or [] if isinstance(canvas, dict) else []
-            for n in nodes:
-                if not isinstance(n, dict):
-                    continue
-                top_ds = n.get("datasource_id")
-                nested = n.get("data") or {}
-                nested_ds = nested.get("datasource_id") if isinstance(nested, dict) else None
-                if top_ds == ds_id or nested_ds == ds_id:
-                    using.append({
-                        "id": row["id"],
-                        "name": row["name"],
-                        "project_type": row.get("project_type", ""),
-                        "group_id": row.get("group_id", ""),
-                    })
-                    break
-        except Exception as _row_err:
-            logger.warning(
-                f"_find_projects_using_datasource: errore check canvas "
-                f"progetto {row_id}: {_row_err}"
-            )
-            check_failures += 1
-            continue
-
-    # Fail-closed se TUTTE le rows hanno fallito il check: in quel caso
-    # il helper non puo' dire se il datasource e' usato o no, e il caller
-    # deve rifiutare la delete con 500 invece di procedere silent
-    if rows and check_failures == len(rows):
-        raise RuntimeError(
-            f"Impossibile verificare dipendenze datasource: "
-            f"{check_failures} progetto/i non checkabili"
-        )
-    return using
-
+def _find_projects_using_datasource(
+    ds_id: str,
+) -> list[_dependency_checks.ProjectDatasourceDependency]:
+    """Cerca progetti il cui canvas contiene un nodo che referenzia ds_id."""
+    return _dependency_checks.find_projects_using_datasource(
+        ds_id,
+        rows_loader=project_usage.list_projects_with_canvas_for_datasource_check,
+        logger=logger,
+    )
 
 @router.post("/{ds_id}/test", response_model=DataSourceTestResult)
 @audit_action(action="datasource.test", target_param="ds_id")

@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from typing import Optional, cast
 
 from app.core.files import db as files_db
+from app.shared.contracts.payloads import ObjectMap
 
 
 @dataclass(frozen=True)
@@ -14,7 +15,7 @@ class FileOwnerContext:
     group_id: Optional[str]
     created_by: Optional[str]
 
-    def ownership_resource(self) -> dict[str, object]:
+    def ownership_resource(self) -> ObjectMap:
         return {
             "id": self.file_id,
             "group_id": self.group_id,

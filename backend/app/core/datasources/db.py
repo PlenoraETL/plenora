@@ -5,10 +5,14 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Mapping, Optional, cast
+from typing import Mapping, Optional, TypeAlias, cast
 
 from app.db.pg_connection import execute, fetchall, fetchone
 from app.db.sql_safety import safe_set_clause
+
+
+DataSourceConfig: TypeAlias = Mapping[str, object]
+ScanStatePayload: TypeAlias = Mapping[str, object]
 
 
 def _required_str(row: Mapping[str, object], key: str) -> str:
@@ -28,7 +32,7 @@ def _optional_str(value: object, *, field_name: str) -> str | None:
     return value
 
 
-def _config_from_raw(value: object) -> dict[str, object]:
+def _config_from_raw(value: object) -> DataSourceConfig:
     if value is None:
         return {}
     parsed = value
@@ -36,6 +40,23 @@ def _config_from_raw(value: object) -> dict[str, object]:
         parsed = json.loads(value)
     if not isinstance(parsed, dict):
         return {}
+    return dict(cast(Mapping[str, object], parsed))
+
+
+def _optional_mapping_from_raw(
+    value: object,
+    *,
+    field_name: str,
+) -> Mapping[str, object] | None:
+    if value is None:
+        return None
+    parsed = value
+    if isinstance(value, str):
+        parsed = json.loads(value)
+    if not isinstance(parsed, dict):
+        raise ValueError(
+            f"Malformed datasource DB row: {field_name} must be a JSON object or null"
+        )
     return dict(cast(Mapping[str, object], parsed))
 
 
@@ -47,10 +68,11 @@ class DataSourceRow:
     group_id: str
     name: str
     ds_type: str
-    config: dict[str, object]
+    config: DataSourceConfig
     created_at: object | None = None
     updated_at: object | None = None
     created_by: str | None = None
+    scan_state: ScanStatePayload | None = None
 
     @classmethod
     def from_mapping(cls, row: Mapping[str, object]) -> "DataSourceRow":
@@ -63,6 +85,28 @@ class DataSourceRow:
             created_at=row.get("created_at"),
             updated_at=row.get("updated_at"),
             created_by=_optional_str(row.get("created_by"), field_name="created_by"),
+            scan_state=_optional_mapping_from_raw(
+                row.get("scan_state"),
+                field_name="scan_state",
+            ),
+        )
+
+
+@dataclass(frozen=True)
+class DataSourceScanStateRow:
+    """Datasource scan-state projection for scheduler runtime reads."""
+
+    id: str
+    scan_state: ScanStatePayload | None
+
+    @classmethod
+    def from_mapping(cls, row: Mapping[str, object]) -> "DataSourceScanStateRow":
+        return cls(
+            id=_required_str(row, "id"),
+            scan_state=_optional_mapping_from_raw(
+                row.get("scan_state"),
+                field_name="scan_state",
+            ),
         )
 
 
@@ -138,4 +182,24 @@ def update_datasource(ds_id: str, **fields: object) -> None:
 
 def delete_datasource(ds_id: str) -> bool:
     cur = execute("DELETE FROM datasources WHERE id = %s", (ds_id,))
+    return cur.rowcount > 0
+
+
+def get_scan_state(ds_id: str) -> Optional[DataSourceScanStateRow]:
+    row = fetchone(
+        "SELECT id, scan_state FROM datasources WHERE id = %s",
+        (ds_id,),
+    )
+    return DataSourceScanStateRow.from_mapping(row) if row else None
+
+
+def save_scan_state(ds_id: str, state: Mapping[str, object]) -> bool:
+    cur = execute(
+        "UPDATE datasources SET scan_state = %s, updated_at = %s WHERE id = %s",
+        (
+            json.dumps(dict(state)),
+            datetime.now(timezone.utc).isoformat(),
+            ds_id,
+        ),
+    )
     return cur.rowcount > 0

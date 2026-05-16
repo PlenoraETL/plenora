@@ -1,6 +1,10 @@
 """
 Auth in-memory rate-limit fallback — typed boundary.
 
+Used only when `LOGIN_RL_REDIS_REQUIRED` is false or Redis is not enabled in
+the shared login limiter. Cluster deployments should enable Redis-required
+mode so this store remains a development/single-node compatibility path.
+
 """
 
 from __future__ import annotations
@@ -8,8 +12,8 @@ from __future__ import annotations
 import threading
 import time
 from collections import defaultdict
+from collections.abc import MutableMapping
 from dataclasses import dataclass, field
-from typing import Dict, List
 
 
 __all__ = [
@@ -53,7 +57,7 @@ class InMemoryRateLimitFallback:
     """
 
     lock: threading.Lock = field(default_factory=threading.Lock)
-    failed_attempts: Dict[str, List[float]] = field(
+    failed_attempts: MutableMapping[str, list[float]] = field(
         default_factory=lambda: defaultdict(list)
     )
 

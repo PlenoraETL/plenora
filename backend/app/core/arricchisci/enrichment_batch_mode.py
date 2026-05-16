@@ -7,10 +7,11 @@ Mixin BATCH_MODE — esecuzione API per
 from __future__ import annotations
 
 import time
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, List, Optional, Tuple
 
 import requests
 
+from app.core.dataframes.tabular import iter_dataframe_indexed_rows
 from app.infrastructure.http.session import get_shared_session
 from app.utils.logger import get_logger
 
@@ -20,6 +21,7 @@ from app.core.arricchisci.models import (
     RowError,
     RowStatus,
 )
+from app.core.arricchisci.types import JsonObject, JsonRows
 
 # Stesso logger name di `enrichment_service.py` (`__name__` valuta a
 # `"app.core.arricchisci.enrichment_service"`). Singleton stdlib per
@@ -67,7 +69,7 @@ class EnrichmentBatchModeMixin:
 
         # Costruisci lista di (idx, params) per tutte le righe valide
         rows_to_process = []
-        for idx, row in df.iterrows():
+        for idx, row in iter_dataframe_indexed_rows(df):
             params = self._build_params(row)
 
             if self.options.skip_null_params and self._has_null_params(params):
@@ -181,9 +183,9 @@ class EnrichmentBatchModeMixin:
 
     def _call_batch_api(
         self,
-        batch_params: List[Dict],
+        batch_params: JsonRows,
         batch_indices: List[int]
-    ) -> Tuple[Optional[List[Dict]], Optional[RowError]]:
+    ) -> Tuple[Optional[JsonRows], Optional[RowError]]:
         """
         Chiama API retry.
 
@@ -305,7 +307,7 @@ class EnrichmentBatchModeMixin:
             last_error.status = RowStatus.RETRY_EXHAUSTED
         return None, last_error
 
-    def _build_batch_payload(self, batch_params: List[Dict]) -> Dict:
+    def _build_batch_payload(self, batch_params: JsonRows) -> JsonObject:
         """
         Costruisce payload per chiamata batch.
 
@@ -348,7 +350,7 @@ class EnrichmentBatchModeMixin:
 
         return payload
 
-    def _extract_batch_output(self, data: Any) -> List[Dict]:
+    def _extract_batch_output(self, data: Any) -> JsonRows:
         """
         Estrae array di risultati dalla risposta batch.
 

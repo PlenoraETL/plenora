@@ -71,9 +71,9 @@ def _rng(seed: int) -> np.random.Generator:
     return np.random.default_rng(seed)
 
 
-def make_pandas_df(n: int, seed: int = 42, include_geo: bool = False) -> pd.DataFrame:
+def make_pandas_df(n: int, seed: int = 42) -> pd.DataFrame:
     """DataFrame con mix di tipi tipici ETL: int, float, str, date, bool.
-    Nessuna dipendenza su shapely se include_geo=False."""
+    Nessuna dipendenza su shapely."""
     rng = _rng(seed)
     data = {
         "id": np.arange(n, dtype=np.int64),

@@ -20,7 +20,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Dict, Iterable, List, Optional, Tuple
 
-from matrices import ALL_MATRICES, Matrix
+from matrices import ALL_MATRICES
 
 
 # Path canonici (relativi alla root di test-e2e/, calcolata da __file__).

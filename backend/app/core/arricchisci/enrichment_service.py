@@ -9,7 +9,7 @@ import csv
 import json
 import threading
 import urllib3
-from typing import Dict, Any, Optional, List, Tuple, Callable
+from typing import Any, Optional, List, Tuple, Callable
 from datetime import datetime, timezone
 from collections import deque
 
@@ -20,8 +20,12 @@ from app.core.arricchisci.models import (
     RowError, EnrichmentStats, EnrichmentOptions,
     EnrichmentResult, BatchConfig
 )
+from app.core.arricchisci.types import JsonObject, JsonObjectById, StringMap
 from app.utils.logger import get_logger
-from app.core.arricchisci._rate_limiter import RateLimiter as _RateLimiter
+from app.core.arricchisci._rate_limiter import (
+    RateLimiter as _RateLimiter,
+    rate_limit_scope_for_api_config as _rate_limit_scope_for_api_config,
+)
 from app.shared.connections.oauth import (
     prepare_headers as _shared_prepare_headers,
 )
@@ -92,8 +96,8 @@ class EnrichmentExecutor(
     
     def __init__(
         self,
-        api_config: Dict,
-        param_mapping: Dict,
+        api_config: JsonObject,
+        param_mapping: JsonObject,
         options: EnrichmentOptions = None,
         progress_callback: Callable[[int, str], None] = None
     ):
@@ -106,7 +110,7 @@ class EnrichmentExecutor(
         """
         self.api_config = api_config
         # API parameter defaults are used unless the node overrides them.
-        derived_mapping: Dict[str, Any] = {}
+        derived_mapping: JsonObject = {}
         for pdef in (api_config.get("parameters") or []):
             if not isinstance(pdef, dict):
                 continue
@@ -122,7 +126,7 @@ class EnrichmentExecutor(
         self.progress_callback = progress_callback
         
         # Cache per deduplicazione (thread-safe, bounded LRU-style
-        self._cache: Dict[str, Dict] = {}
+        self._cache: JsonObjectById = {}
         self._cache_lock = threading.Lock()
         self._cache_hits = 0
         self._CACHE_MAX_SIZE = 5000
@@ -168,11 +172,14 @@ class EnrichmentExecutor(
         self._headers = self._prepare_headers()
 
         # Tipi colonna rilevati durante auto-flatten (usato per aggiornare schema_fields
-        self.detected_column_types: Dict[str, str] = {}
+        self.detected_column_types: StringMap = {}
         self._response_type_detector_collaborator = ResponseTypeDetector(self.detected_column_types)
         
         # Rate limiter
-        self._rate_limiter = _RateLimiter(self.options.rate_limit)
+        self._rate_limiter = _RateLimiter(
+            self.options.rate_limit,
+            scope=_rate_limit_scope_for_api_config(api_config),
+        )
         
         batch_data = api_config.get("batch", {})
         self.batch_config = BatchConfig.from_dict(batch_data)
@@ -229,7 +236,7 @@ class EnrichmentExecutor(
         )
     
 
-    def _prepare_headers(self) -> Dict:
+    def _prepare_headers(self) -> JsonObject:
         """Prepara headers HTTP. Delegato a shared/connections/oauth."""
         return _shared_prepare_headers(self.auth)
 
@@ -249,7 +256,7 @@ class EnrichmentExecutor(
 def generate_error_report(
     errors: List[RowError],
     output_path: str,
-    auth: Optional[Dict[str, Any]] = None,
+    auth: Optional[JsonObject] = None,
 ) -> str:
     """
     Genera report CSV degli errori di arricchimento.
