@@ -11,10 +11,10 @@ import warnings as _warnings
 
 import functools
 import logging
-import os
+from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import List, Protocol, TypedDict, runtime_checkable
+from typing import Any, List, Protocol, TypedDict, runtime_checkable
 
 logger = logging.getLogger(__name__)
 
@@ -405,11 +405,105 @@ class MinioObjectStorage(AwsS3ObjectStorage):
         return {"StorageClass": "STANDARD"}
 
 
-# Factory — dispatch via CLOUD_PROVIDER env
+# Factory - dispatch via typed storage config
+
+
+_TRUTHY = ("true", "1", "yes")
+
+
+def _optional_str(value: Any) -> "str | None":
+    if value is None:
+        return None
+    text = str(value).strip()
+    return text or None
+
+
+@dataclass(frozen=True)
+class StorageBackendConfig:
+    cloud_provider: str
+    aws_region: str
+    object_storage_enabled: bool
+    object_storage_backend: "str | None"
+    storage_policy: str
+    object_storage_bucket: "str | None"
+    plenora_artifact_bucket: "str | None"
+    backup_bucket: "str | None"
+    backup_s3_bucket: "str | None"
+    minio_endpoint_url: "str | None"
+    minio_access_key: "str | None"
+    minio_secret_key: "str | None"
+    log_archive_enabled: bool
+    log_archive_bucket: "str | None"
+    log_archive_key_prefix: Any
+    raw_result_s3_threshold_bytes: Any
+    raw_file_source_s3_threshold_bytes: Any
+    raw_result_db_hard_cap_bytes: Any
+    raw_log_archive_batch_rows: Any
+    raw_audit_retention_days: Any
+
+
+def _settings():
+    from app.config import settings
+
+    return settings
+
+
+def _get_setting(name: str, default: Any = None) -> Any:
+    settings_obj = _settings()
+    getter = getattr(settings_obj, "get", None)
+    if callable(getter):
+        return getter(name, default)
+    return getattr(settings_obj, name, default)
+
+
+def _get_raw_setting(name: str, default: Any = None) -> Any:
+    settings_obj = _settings()
+    getter = getattr(settings_obj, "get_raw", None)
+    if callable(getter):
+        return getter(name, default)
+    return getattr(settings_obj, name, default)
+
+
+def _get_bool_setting(name: str, default: bool) -> bool:
+    value = _get_setting(name, default)
+    if isinstance(value, bool):
+        return value
+    if value is None:
+        return default
+    return str(value).strip().lower() in _TRUTHY
+
+
+def _storage_config() -> StorageBackendConfig:
+    return StorageBackendConfig(
+        cloud_provider=(_optional_str(_get_setting("CLOUD_PROVIDER", "aws")) or "aws").lower(),
+        aws_region=_optional_str(_get_setting("AWS_REGION", "eu-south-1")) or "eu-south-1",
+        object_storage_enabled=_get_bool_setting("OBJECT_STORAGE_ENABLED", True),
+        object_storage_backend=_optional_str(_get_setting("OBJECT_STORAGE_BACKEND")),
+        storage_policy=(
+            _optional_str(_get_setting("STORAGE_POLICY", "hybrid")) or "hybrid"
+        ).lower(),
+        object_storage_bucket=_optional_str(_get_setting("OBJECT_STORAGE_BUCKET")),
+        plenora_artifact_bucket=_optional_str(_get_setting("PLENORA_ARTIFACT_BUCKET")),
+        backup_bucket=_optional_str(_get_setting("BACKUP_BUCKET")),
+        backup_s3_bucket=_optional_str(_get_setting("BACKUP_S3_BUCKET")),
+        minio_endpoint_url=_optional_str(_get_setting("MINIO_ENDPOINT_URL")),
+        minio_access_key=_optional_str(_get_setting("MINIO_ACCESS_KEY")),
+        minio_secret_key=_optional_str(_get_setting("MINIO_SECRET_KEY")),
+        log_archive_enabled=_get_bool_setting("LOG_ARCHIVE_ENABLED", False),
+        log_archive_bucket=_optional_str(_get_setting("LOG_ARCHIVE_BUCKET")),
+        log_archive_key_prefix=_get_raw_setting("LOG_ARCHIVE_KEY_PREFIX"),
+        raw_result_s3_threshold_bytes=_get_raw_setting("RESULT_S3_THRESHOLD_BYTES"),
+        raw_file_source_s3_threshold_bytes=_get_raw_setting(
+            "FILE_SOURCE_S3_THRESHOLD_BYTES"
+        ),
+        raw_result_db_hard_cap_bytes=_get_raw_setting("RESULT_DB_HARD_CAP_BYTES"),
+        raw_log_archive_batch_rows=_get_raw_setting("LOG_ARCHIVE_BATCH_ROWS"),
+        raw_audit_retention_days=_get_raw_setting("AUDIT_RETENTION_DAYS"),
+    )
 
 
 def _get_provider() -> str:
-    return os.getenv("CLOUD_PROVIDER", "aws").lower()
+    return _storage_config().cloud_provider
 
 
 def get_secrets_backend() -> SecretsBackend:
@@ -430,7 +524,7 @@ def get_secrets_backend() -> SecretsBackend:
     provider = _get_provider()
     if provider == "aws":
         return AwsSsmSecretsBackend(
-            region=os.getenv("AWS_REGION", "eu-south-1"),
+            region=_storage_config().aws_region,
         )
     if provider == "minio":
         raise ValueError(
@@ -457,24 +551,14 @@ class ObjectStorageDisabledError(RuntimeError):
 def _read_object_storage_capability() -> dict:
     """Lettura settings capability object storage.
 
-    Usa `os.getenv` direttamente (con default coerenti con
-    `app.config.Settings.DEFAULTS`) per non dipendere dal singleton
-    Settings: alcuni test patchano `app.config.settings` con stub
-    minimali che non implementano `.get`. La capability deve restare
-    valutabile in quei contesti senza false positive.
-
     Fallback a CLOUD_PROVIDER quando `OBJECT_STORAGE_BACKEND` non e'
     settato.
     """
-    enabled_raw = os.getenv("OBJECT_STORAGE_ENABLED")
-    if enabled_raw is None:
-        enabled = True
-    else:
-        enabled = str(enabled_raw).strip().lower() in ("true", "1", "yes")
-
-    backend = os.getenv("OBJECT_STORAGE_BACKEND") or None
+    cfg = _storage_config()
+    enabled = cfg.object_storage_enabled
+    backend = cfg.object_storage_backend
     if backend is None:
-        provider = _get_provider()
+        provider = cfg.cloud_provider
         if provider == "aws":
             backend = "s3"
         elif provider == "minio":
@@ -500,7 +584,7 @@ def object_storage_enabled() -> bool:
     return cap["enabled"] and cap["backend"] not in ("none", "")
 
 
-def _resolve_runtime_bucket() -> "str | None":
+def _resolve_runtime_bucket(config: "StorageBackendConfig | None" = None) -> "str | None":
     """Bucket per runtime artifacts.
 
     Priorita':
@@ -512,13 +596,14 @@ def _resolve_runtime_bucket() -> "str | None":
 
     None se nessuno e' settato (factory solleva).
     """
-    bucket = os.getenv("OBJECT_STORAGE_BUCKET")
+    cfg = config or _storage_config()
+    bucket = cfg.object_storage_bucket
     if bucket:
-        return str(bucket)
-    bucket = os.getenv("PLENORA_ARTIFACT_BUCKET")
+        return bucket
+    bucket = cfg.plenora_artifact_bucket
     if bucket:
-        return str(bucket)
-    legacy = os.getenv("BACKUP_BUCKET") or os.getenv("BACKUP_S3_BUCKET")
+        return bucket
+    legacy = cfg.backup_bucket or cfg.backup_s3_bucket
     if legacy:
         logger.warning(
             "OBJECT_STORAGE_BUCKET non configurato: fallback su "
@@ -531,14 +616,15 @@ def _resolve_runtime_bucket() -> "str | None":
     return None
 
 
-def _resolve_backup_bucket() -> "str | None":
+def _resolve_backup_bucket(config: "StorageBackendConfig | None" = None) -> "str | None":
     """Bucket dedicato backup amministrativi.
 
     Solo `BACKUP_BUCKET` / `BACKUP_S3_BUCKET` (legacy). Mai fallback
     su OBJECT_STORAGE_BUCKET: i due bucket sono semanticamente distinti
     per IAM boundary e lifecycle policy.
     """
-    return os.getenv("BACKUP_BUCKET") or os.getenv("BACKUP_S3_BUCKET")
+    cfg = config or _storage_config()
+    return cfg.backup_bucket or cfg.backup_s3_bucket
 
 
 def _build_object_storage(bucket: str, *, region_default: str) -> ObjectStorage:
@@ -548,16 +634,17 @@ def _build_object_storage(bucket: str, *, region_default: str) -> ObjectStorage:
     compat: `aws -> AwsS3ObjectStorage`, `minio -> MinioObjectStorage`.
     Caller assicura `object_storage_enabled=True` prima di chiamare.
     """
-    provider = _get_provider()
+    cfg = _storage_config()
+    provider = cfg.cloud_provider
     if provider == "aws":
         return AwsS3ObjectStorage(
             bucket=bucket,
-            region=os.getenv("AWS_REGION", region_default),
+            region=cfg.aws_region or region_default,
         )
     if provider == "minio":
-        endpoint_url = os.getenv("MINIO_ENDPOINT_URL")
-        access_key = os.getenv("MINIO_ACCESS_KEY")
-        secret_key = os.getenv("MINIO_SECRET_KEY")
+        endpoint_url = cfg.minio_endpoint_url
+        access_key = cfg.minio_access_key
+        secret_key = cfg.minio_secret_key
         if not endpoint_url:
             raise ValueError("CLOUD_PROVIDER=minio richiede MINIO_ENDPOINT_URL.")
         if not access_key:
@@ -569,7 +656,7 @@ def _build_object_storage(bucket: str, *, region_default: str) -> ObjectStorage:
             endpoint_url=endpoint_url,
             access_key=access_key,
             secret_key=secret_key,
-            region=os.getenv("AWS_REGION", "us-east-1"),
+            region=cfg.aws_region or "us-east-1",
         )
     raise ValueError(f"CLOUD_PROVIDER non supportato: {provider!r}")
 
@@ -695,9 +782,10 @@ def get_log_archive_storage() -> ObjectStorage:
                               design il bucket archive e' nuovo)
         AWS_REGION — default eu-south-1
     """
-    provider = _get_provider()
+    cfg = _storage_config()
+    provider = cfg.cloud_provider
     if provider == "aws":
-        bucket = os.getenv("LOG_ARCHIVE_BUCKET")
+        bucket = cfg.log_archive_bucket
         if not bucket:
             raise ValueError(
                 "LOG_ARCHIVE_BUCKET non configurato (richiesto quando "
@@ -705,7 +793,7 @@ def get_log_archive_storage() -> ObjectStorage:
             )
         return AwsS3ObjectStorage(
             bucket=bucket,
-            region=os.getenv("AWS_REGION", "eu-south-1"),
+            region=cfg.aws_region or "eu-south-1",
         )
     # Estendere qui per Azure / GCP (stesso pattern di get_object_storage
     raise ValueError(f"CLOUD_PROVIDER non supportato: {provider!r}")
@@ -769,7 +857,7 @@ def validate_storage_config() -> None:
         # invece di crashare loud al boot). Il runtime path consuma il
         # valore via `settings.LOG_ARCHIVE_BATCH_ROWS` property come da
         # ADR-0021
-        raw = os.getenv(name)
+        raw = raw_values.get(name)
         if raw is None:
             return
         try:
@@ -780,14 +868,23 @@ def validate_storage_config() -> None:
         if value <= 0:
             _fail(f"{name}={value} deve essere > 0.")
 
-    policy = (os.getenv("STORAGE_POLICY") or "hybrid").strip().lower()
+    cfg = _storage_config()
+    raw_values = {
+        "RESULT_S3_THRESHOLD_BYTES": cfg.raw_result_s3_threshold_bytes,
+        "FILE_SOURCE_S3_THRESHOLD_BYTES": cfg.raw_file_source_s3_threshold_bytes,
+        "RESULT_DB_HARD_CAP_BYTES": cfg.raw_result_db_hard_cap_bytes,
+        "LOG_ARCHIVE_BATCH_ROWS": cfg.raw_log_archive_batch_rows,
+        "AUDIT_RETENTION_DAYS": cfg.raw_audit_retention_days,
+    }
+
+    policy = cfg.storage_policy
     if policy not in VALID_STORAGE_POLICIES:
         _fail(
             f"STORAGE_POLICY={policy!r} non valido. "
             f"Valori ammessi: {', '.join(VALID_STORAGE_POLICIES)}."
         )
 
-    provider = (os.getenv("CLOUD_PROVIDER") or "aws").strip().lower()
+    provider = cfg.cloud_provider
     if provider not in KNOWN_PROVIDERS:
         _fail(
             f"CLOUD_PROVIDER={provider!r} sconosciuto. "
@@ -800,7 +897,7 @@ def validate_storage_config() -> None:
             f"{', '.join(IMPLEMENTED_PROVIDERS)}."
         )
 
-    bucket = os.getenv("BACKUP_BUCKET") or os.getenv("BACKUP_S3_BUCKET")
+    bucket = _resolve_backup_bucket(cfg)
 
     if policy == "db":
         # NOTE: non-blocking: bucket + provider cloud settati ma policy=db
@@ -831,10 +928,7 @@ def validate_storage_config() -> None:
         # diverso, IAM/lifecycle distinti). Con `hybrid` il fallback
         # NOTE: legacy resta consentito per retro-compat dev/test
         if policy == "object_storage":
-            runtime_bucket = (
-                os.getenv("OBJECT_STORAGE_BUCKET")
-                or os.getenv("PLENORA_ARTIFACT_BUCKET")
-            )
+            runtime_bucket = cfg.object_storage_bucket or cfg.plenora_artifact_bucket
             if not runtime_bucket:
                 _fail(
                     "STORAGE_POLICY=object_storage richiede "
@@ -848,8 +942,7 @@ def validate_storage_config() -> None:
             # OBJECT_STORAGE_ENABLED deve essere true: senza la capability
             # i writer dei nuovi result fallirebbero comunque al primo upload
             # meglio fail-fast al boot con messaggio operativo
-            enabled_raw = (os.getenv("OBJECT_STORAGE_ENABLED") or "true").strip().lower()
-            if enabled_raw not in ("true", "1", "yes"):
+            if not cfg.object_storage_enabled:
                 _fail(
                     "STORAGE_POLICY=object_storage richiede "
                     "OBJECT_STORAGE_ENABLED=true. Con la capability "
@@ -864,7 +957,7 @@ def validate_storage_config() -> None:
                 "MINIO_ACCESS_KEY",
                 "MINIO_SECRET_KEY",
             ):
-                if not os.getenv(name):
+                if not getattr(cfg, name.lower()):
                     _fail(
                         f"CLOUD_PROVIDER=minio richiede {name} configurato."
                     )
@@ -878,8 +971,7 @@ def validate_storage_config() -> None:
     if policy in ("db", "hybrid"):
         _check_positive_int("RESULT_DB_HARD_CAP_BYTES")
 
-    archive_enabled_raw = (os.getenv("LOG_ARCHIVE_ENABLED") or "false").strip().lower()
-    if archive_enabled_raw in ("true", "1", "yes"):
+    if cfg.log_archive_enabled:
         # 1. STORAGE_POLICY deve essere object_storage o hybrid
         if policy == "db":
             _fail(
@@ -896,7 +988,7 @@ def validate_storage_config() -> None:
             )
         # 3. LOG_ARCHIVE_BUCKET required (intenzionalmente fuori da
         # Settings.DEFAULTS, required-if-enabled per design A3
-        log_archive_bucket = os.getenv("LOG_ARCHIVE_BUCKET")
+        log_archive_bucket = cfg.log_archive_bucket
         if not log_archive_bucket:
             _fail(
                 "LOG_ARCHIVE_ENABLED=true richiede LOG_ARCHIVE_BUCKET "
@@ -919,7 +1011,7 @@ def validate_storage_config() -> None:
         # NOTA (BE-CONFIG-001E + ADR-0021): `os.getenv` diretto per design
         # boot-time fail-fast (vedi `_check_positive_int`). Runtime via
         # `settings.LOG_ARCHIVE_KEY_PREFIX` property
-        log_archive_prefix = os.getenv("LOG_ARCHIVE_KEY_PREFIX")
+        log_archive_prefix = cfg.log_archive_key_prefix
         if log_archive_prefix and not log_archive_prefix.endswith("/"):
             _fail(
                 f"LOG_ARCHIVE_KEY_PREFIX={log_archive_prefix!r} non valido: "
@@ -933,7 +1025,7 @@ def validate_storage_config() -> None:
         # NOTA (BE-CONFIG-001E + ADR-0021): `os.getenv` diretto per design
         # boot-time fail-fast (vedi `_check_positive_int`). Runtime via
         # `settings.AUDIT_RETENTION_DAYS` property
-        audit_retention_raw = os.getenv("AUDIT_RETENTION_DAYS")
+        audit_retention_raw = cfg.raw_audit_retention_days
         if audit_retention_raw is not None:
             try:
                 audit_retention_value = int(audit_retention_raw)

@@ -38,7 +38,7 @@ Entrambi sono in `requirements.txt` — se il modulo importa ma la lib manca (ve
 - `/api/admin/backups/schedule` ritorna metadati statici dalla env var `BACKUP_SCHEDULE_CRON` (default `0 2 * * *`), non interroga il runtime schedulatore
 
 **Quello che resta host-local** (fuori scope observability, da migrare quando si va in container-multi-pod):
-- `POST /api/admin/backups/trigger` lancia `backup_db.py` via `subprocess.Popen` locale + lock file `/tmp/plenora-backup-manual.lock`. In multi-pod va spostato su un task Celery
+- `POST /api/admin/backups/trigger` lancia `backup_db.py` via `subprocess.Popen` locale. Il lock manuale e' distribuito su Postgres (`admin_backup_manual_locks`), mentre il log `/tmp/plenora-backup-manual.log` resta diagnostica host-local. In multi-pod il trigger va comunque spostato su Celery/K8s Job per non legare l'esecuzione al pod API
 - La schedulazione reale dei job (systemd timer oggi, Celery beat / K8s CronJob in container) e' questione di deployment, non di codice
 
 ---

@@ -12,7 +12,7 @@ Il backend e' gia' orientato al multi-replica su tre assi importanti:
 
 I punti ancora critici per una vera orizzontalizzazione sono:
 
-1. filesystem locale ancora usato come cache o staging operativo (`DATA_DIR/temp`, `FILES_DIR`, `IMDF_BUNDLES_DIR`, `ESEGUIBILI_OUTPUTS_DIR`, datasource scan state, backup lock/log);
+1. filesystem locale ancora usato come cache o staging operativo (`DATA_DIR/temp`, `FILES_DIR`, `IMDF_BUNDLES_DIR`, `ESEGUIBILI_OUTPUTS_DIR`, datasource scan state, backup manual log);
 2. fallback in-memory per sicurezza o UX (`login_rate_limiter`, JWT metrics, task project cache);
 3. lock process-local usati come guard solo intra-processo (`ScheduleService._schedule_locks`, vari singleton/router service);
 4. scheduler beat single-leader gia' gestito via Redis, ma da rendere requisito hard in produzione;
@@ -117,6 +117,7 @@ I punti ancora critici per una vera orizzontalizzazione sono:
 ### `backend/app/infrastructure/storage/cloud_backends.py`
 
 - Buona astrazione S3/MinIO e capability `OBJECT_STORAGE_ENABLED`.
+- La config storage passa da `StorageBackendConfig` popolato tramite `Settings`; il modulo non legge piu' direttamente `os.getenv`, mentre i validator fail-fast usano `Settings.get_raw` per distinguere unset da malformed.
 - Punto di scala: `_client()` crea client boto3 per chiamata. Funziona, ma a throughput alto conviene client cache per processo con timeout/retry espliciti anche runtime, non solo readiness.
 - `validate_storage_config` richiede ancora bucket backup legacy in alcuni casi hybrid: verificare che `OBJECT_STORAGE_BUCKET` sia il canonico runtime.
 
@@ -194,8 +195,8 @@ I punti ancora critici per una vera orizzontalizzazione sono:
 ### `backend/app/core/admin_backups/*`, `backend/scripts/backup_db.py`, `backend/deploy/systemd/*`
 
 - Stato run backup su DB e lista backup da object storage: buono.
-- `admin_backups/service.py` usa lock/log in `/tmp/plenora-backup-manual.*` e `subprocess.Popen`. In cluster questo e' per-nodo: due API pod possono avviare backup manuali concorrenti.
-- Spostare il lock manuale in Postgres/advisory lock o delegare backup a Celery/K8s Job con idempotency key.
+- `admin_backups/service.py` usa lock manuale su Postgres (`admin_backup_manual_locks`), quindi due API pod non possono avviare backup manuali concorrenti. Il log manuale resta in `/tmp/plenora-backup-manual.log` ed e' solo diagnostica host-local.
+- Follow-up deployment: delegare il trigger backup a Celery/K8s Job con idempotency key se si vuole evitare `subprocess.Popen` locale sui pod API.
 - systemd units sono single-host. In Kubernetes sostituire con CronJob/Job e non usare `systemctl/journalctl` come fonte di verita.
 
 ### `backend/app/core/admin_system_status/*`, `backend/app/observability/*`
@@ -234,8 +235,8 @@ I punti ancora critici per una vera orizzontalizzazione sono:
 
 - `OrchestratorService` mantiene default builder fuori da `__init__` per compatibilita'. La chiusura completa Go-ready e' far arrivare sempre un dispatch `Mapping[str, CanvasExecutorProtocol]` dalla runtime composition factory, senza fallback impliciti nei service.
 - `threading.local` resta tollerato solo nei due adapter indicati. Non introdurre nuovi usi per contesto runtime; preferire ContextVar, parametri espliciti o stato condiviso DB/Redis/object storage.
-- `cloud_backends.py` mantiene molte letture raw env per validazione boot-time e compat storage. Restano ammesse solo perche' documentate come boundary; nuovi consumer runtime devono passare da `Settings.DEFAULTS` + `settings.get(...)`.
-- I residui multi-host piu' importanti restano quelli gia' elencati nelle priorita': lock backup manuale in `/tmp`, pending task metadata process-local, update scheduler cross-process safe, datasource scan state locale, e fallback in-memory security-sensitive.
+- `cloud_backends.py` consuma config tramite `StorageBackendConfig` e `Settings`; il raw access per i validator fail-fast e' centralizzato in `Settings.get_raw`.
+- I residui multi-host piu' importanti restano quelli gia' elencati nelle priorita': pending task metadata process-local, update scheduler cross-process safe, datasource scan state locale, fallback in-memory security-sensitive e trigger backup manuale ancora locale al pod API.
 
 ## Priorita consigliate
 
@@ -243,7 +244,6 @@ P0:
 
 - Rendere Redis e object storage requisiti hard in produzione cluster.
 - Tenere `SCHEDULE_BEAT_LEADER_FAIL_OPEN=false`.
-- Spostare lock backup manuale da `/tmp` a Postgres/advisory lock.
 - Persistire pending task metadata fuori dalla cache locale di `TaskService`.
 
 P1:

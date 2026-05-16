@@ -573,6 +573,14 @@ class Settings:
             return self._converti_tipo_env(key, env_value)
         return self.DEFAULTS.get(key, default)
 
+    def get_raw(self, key: str, default: Any = None) -> Any:
+        """Return the raw environment value without DEFAULTS/type coercion.
+
+        Boot validators use this when they must distinguish unset from
+        malformed values while keeping raw env access inside Settings.
+        """
+        return os.getenv(key, default)
+
     def _converti_tipo_env(self, key: str, env_value: str) -> Any:
         default_value = self.DEFAULTS.get(key)
         if isinstance(default_value, bool):

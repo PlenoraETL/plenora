@@ -72,9 +72,9 @@ def test_value_error_str_e_lock_exists_in_catalog_test():
 # Allowlist per `os.getenv` in `backend/app/`.
 #
 # Razionale per file (ADR-0021 + BE_RULES sez. 6 "Config boundary"):
-# - `app/config.py`: Settings.DEFAULTS infrastructure entry point. The only
-#   direct read left here is `Settings.get`, so runtime config overrides keep
-#   one typed path.
+# - `app/config.py`: Settings.DEFAULTS infrastructure entry point. The direct
+#   reads left here are `Settings.get` and `Settings.get_raw`, so runtime
+#   config overrides and boot validators keep one typed/raw path.
 # - `app/config_env_loader.py`: dotenv/bootstrap env loading boundary. It owns
 #   the raw `ENVIRONMENT`/`ENV` distinction needed before Settings exists.
 # - `app/startup_validation.py`: explicit bootstrap validation boundary.
@@ -82,10 +82,6 @@ def test_value_error_str_e_lock_exists_in_catalog_test():
 #   (deve distinguere "user did set" vs "default" ⇒ os.getenv diretto).
 # - `app/db/pg_connection.py`: DB connection bootstrap (DATABASE_URL
 #   fail-fast).
-# - `app/infrastructure/storage/cloud_backends.py`: boot-time storage validation;
-#   `validate_storage_config` deve distinguere "user explicitly set"
-#   vs "Settings default" — Settings.get swallows malformed input.
-#   Documentato come eccezione esplicita ADR-0021.
 # - `app/infrastructure/security/crypto.py`: secret/key loading at module load.
 # - `app/core/auth/jwt_token.py`: JWT secret loading at module load.
 # - `app/shared/request_utils.py`: TRUSTED_PROXIES infra config (1
@@ -99,17 +95,16 @@ def test_value_error_str_e_lock_exists_in_catalog_test():
 #   BE-GO-READY-CONFIG-BOUNDARY-001 (BACKUP_BUCKET delega a
 #   `cloud_backends._resolve_backup_bucket`; le 2 schedule string
 #   sono migrate a `Settings.DEFAULTS`). Il legacy `BACKUP_S3_REGION`
-#   era un dead alias e viene retirato. `AWS_REGION` resta DEPLOY_INFRA
-#   env-only per coerenza con il pattern in `cloud_backends._build_object_storage`.
+#   era un dead alias e viene retirato. `AWS_REGION` resta DEPLOY_INFRA,
+#   letto tramite Settings nel boundary storage.
 # - `app/core/auth/smoke_seed.py`: docker smoke seed boundary; deve
 #   distinguere variabili esplicitamente settate dal default runtime.
 ALLOWLIST_GETENV_COUNTS: Dict[str, int] = {
-    "app/config.py": 1,
+    "app/config.py": 2,
     "app/config_env_loader.py": 2,
     "app/startup_validation.py": 2,
     "app/db/migrations_runner.py": 1,
     "app/db/pg_connection.py": 3,
-    "app/infrastructure/storage/cloud_backends.py": 30,
     "app/infrastructure/security/crypto.py": 4,
     "app/core/auth/jwt_token.py": 3,
     "app/shared/request_utils.py": 1,
