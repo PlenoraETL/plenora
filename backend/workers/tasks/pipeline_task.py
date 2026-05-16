@@ -7,6 +7,7 @@ from pathlib import Path as _Path
 import time as _time
 import traceback as _traceback
 import uuid as _uuid
+from collections.abc import Mapping as _Mapping
 from typing import Any, Optional, Protocol
 
 from app.shared.contracts.payloads import JsonObject
@@ -118,6 +119,41 @@ def _resolve_intermediate_retention_n(project_id: str) -> int | None:
         return None
 
 
+def _normalize_execution_contract(
+    raw_contract: Any,
+    *,
+    expected_project_id: str,
+) -> JsonObject | None:
+    """Validate the optional control-plane to data-plane execution contract."""
+    if raw_contract is None:
+        return None
+    if not isinstance(raw_contract, _Mapping):
+        raise ValueError("execution_contract must be a JSON object")
+
+    project_id = str(raw_contract.get("project_id") or expected_project_id)
+    if project_id != expected_project_id:
+        raise ValueError("execution_contract project_id mismatch")
+
+    project_type = raw_contract.get("project_type")
+    canvas = raw_contract.get("canvas")
+    if not isinstance(project_type, str) or not project_type:
+        raise ValueError("execution_contract.project_type is required")
+    if not isinstance(canvas, _Mapping):
+        raise ValueError("execution_contract.canvas is required")
+
+    contract: JsonObject = {
+        "project_id": project_id,
+        "project_type": project_type,
+        "canvas": dict(canvas),
+        "group_id": str(raw_contract.get("group_id") or ""),
+        "artifact_refs": raw_contract.get("artifact_refs") or {},
+    }
+    retention_n = raw_contract.get("retention_n")
+    if retention_n is not None:
+        contract["retention_n"] = retention_n
+    return contract
+
+
 @celery_app.task(
     bind=True,
     base=BaseTaskWithRetry,
@@ -134,6 +170,7 @@ def execute_pipeline_task(
     run_id: Optional[str] = None,
     user_id: Optional[str] = None,
     intermediate_mode_override: Optional[str] = None,
+    execution_contract: Optional[JsonObject] = None,
 ) -> JsonObject:
     """Task asincrono per eseguire la pipeline completa di un progetto.
 
@@ -193,7 +230,13 @@ def execute_pipeline_task(
     )
     _update_progress(self, 0, "Inizializzazione pipeline...")
 
-    project_info = _get_project_info(project_id)
+    contract = _normalize_execution_contract(
+        execution_contract,
+        expected_project_id=project_id,
+    )
+    project_info = (
+        contract if contract is not None else _get_project_info(project_id)
+    )
     group_id = project_info.get("group_id", "")
     module   = project_info.get("project_type", "")
     retention_n = project_info.get("retention_n")
@@ -228,13 +271,24 @@ def execute_pipeline_task(
         orchestrator = _build_orchestrator()
 
         _update_progress(self, 10, "Esecuzione pipeline...")
-        result = orchestrator.execute_pipeline(
-            project_id,
-            force_recalculate=force_recalculate,
-            skip_carica=False,
-            run_id=run_id,
-            intermediate_mode_override=intermediate_mode_override,
-        )
+        if contract is not None:
+            result = orchestrator.execute_pipeline_from_contract(
+                project_id=project_id,
+                project_type=str(contract["project_type"]),
+                canvas=contract["canvas"],
+                force_recalculate=force_recalculate,
+                skip_carica=False,
+                run_id=run_id,
+                intermediate_mode_override=intermediate_mode_override,
+            )
+        else:
+            result = orchestrator.execute_pipeline(
+                project_id,
+                force_recalculate=force_recalculate,
+                skip_carica=False,
+                run_id=run_id,
+                intermediate_mode_override=intermediate_mode_override,
+            )
 
         elapsed_ms = int((_time.time() - _run_start) * 1000)
 

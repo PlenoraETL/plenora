@@ -372,6 +372,27 @@ def test_task_payload_to_celery_kwargs_rejects_unknown_payload():
         task_payload_to_celery_kwargs(object())  # type: ignore[arg-type]
 
 
+def test_pipeline_payload_includes_execution_contract_only_when_present():
+    contract = {
+        "project_id": "project-1",
+        "project_type": "estrai",
+        "group_id": "grp-1",
+        "canvas": {"nodes": [], "edges": []},
+        "artifact_refs": {},
+    }
+
+    kwargs = dict(
+        task_payload_to_celery_kwargs(
+            PipelineTaskPayload(
+                project_id="project-1",
+                execution_contract=contract,
+            )
+        )
+    )
+
+    assert kwargs["execution_contract"] == contract
+
+
 def test_task_service_create_methods_stay_lifecycle_only():
     create_methods = {
         name

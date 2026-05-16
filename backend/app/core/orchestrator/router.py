@@ -142,15 +142,37 @@ def execute_project_pipeline(
     try:
         from app.core.orchestrator.task_service import task_service
         force_recalculate = request.force_recalculate if request else False
+        project_service = getattr(_orchestrator, "project_service", None)
+        if project_service is None:
+            from app.core.projects.service import ProjectService
+
+            project_service = ProjectService()
+        metadata = project_service.get_project_metadata(project_id)
+        canvas = project_service.get_project_canvas(project_id)
+        if not metadata or not canvas:
+            raise HTTPException(status_code=404, detail="Progetto non trovato")
+        canvas_payload = (
+            canvas.model_dump() if hasattr(canvas, "model_dump") else canvas
+        )
+        execution_contract = {
+            "project_id": project_id,
+            "project_type": metadata.project_type,
+            "group_id": metadata.group_id,
+            "canvas": canvas_payload,
+            "artifact_refs": {},
+        }
         task_info = task_service.create_pipeline_task(
             project_id=project_id,
             force_recalculate=force_recalculate,
             user_id=current_user.user_id,
             intermediate_mode_override=intermediate_mode,
+            execution_contract=execution_contract,
         )
         result = dict(_task_info_to_dict(task_info))
         result["async"] = True
         return result
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(
             f"[CRASH] Errore avvio task execute: {e}",

@@ -140,6 +140,56 @@ class OrchestratorService:
     # PUNTI DI INGRESSO
     # Metodi chiamati da main.py per eseguire o visualizzare in anteprima
 
+    def _check_pipeline_memory(self) -> None:
+        # RSS guard pre-stage: se il worker e' gia' sovraccarico, fallisce
+        # early con 503 invece di avviare una pipeline pesante che farebbe
+        # OOM kernel SIGKILL. Guard disabilitabile via cap <= 0.
+        try:
+            from app.core.resources.memory_guard import check_worker_rss
+            from app.config import settings as _settings
+            _rss_cap = int(_settings.get("WORKER_RSS_MAX_BYTES", 1_500_000_000))
+            check_worker_rss(cap_bytes=_rss_cap, stage="pipeline_execute")
+        except ImportError:
+            pass  # memory_guard non disponibile, skip
+
+    def _coerce_canvas(self, canvas: CanvasState | Mapping[str, Any]) -> CanvasState:
+        if isinstance(canvas, CanvasState):
+            return canvas
+        return CanvasState.model_validate(canvas)
+
+    def execute_pipeline_from_contract(
+        self,
+        project_id: str,
+        project_type: str,
+        canvas: CanvasState | Mapping[str, Any],
+        force_recalculate: bool = False,
+        skip_carica: bool = False,
+        run_id: str = None,
+        intermediate_mode_override: Optional[str] = None,
+    ) -> PipelineArtifact:
+        """Execute a data-plane contract supplied by the control plane.
+
+        This path does not read project metadata/canvas from ``ProjectService``.
+        It is the boundary a future Go control plane can call through Celery:
+        the worker receives an immutable JSON canvas plus the project type and
+        runs the Python data engine only.
+        """
+        logger.info(
+            f"Esecuzione pipeline da contract: {project_id}",
+            op="execute",
+            project_id=project_id,
+        )
+        self._check_pipeline_memory()
+        return self._execute_loaded_pipeline(
+            project_id=project_id,
+            project_type=project_type,
+            canvas=self._coerce_canvas(canvas),
+            force_recalculate=force_recalculate,
+            skip_carica=skip_carica,
+            run_id=run_id,
+            intermediate_mode_override=intermediate_mode_override,
+        )
+
     def execute_pipeline(self, project_id: str, force_recalculate: bool = False, skip_carica: bool = False, run_id: str = None, intermediate_mode_override: Optional[str] = None) -> PipelineArtifact:
         """Punto di ingresso principale: decide se estrarre, manipolare o arricchire.
 
@@ -156,17 +206,7 @@ class OrchestratorService:
             run_id: ID run intermediate storage (opzionale, passato da pipeline_task)
         """
         logger.info(f"Esecuzione pipeline progetto: {project_id}", op="execute", project_id=project_id)
-
-        # RSS guard pre-stage: se il worker e' gia' sovraccarico, fallisce
-        # early con 503 invece di avviare una pipeline pesante che farebbe
-        # OOM kernel SIGKILL. Guard disabilitabile via cap <= 0
-        try:
-            from app.core.resources.memory_guard import check_worker_rss
-            from app.config import settings as _settings
-            _rss_cap = int(_settings.get("WORKER_RSS_MAX_BYTES", 1_500_000_000))
-            check_worker_rss(cap_bytes=_rss_cap, stage="pipeline_execute")
-        except ImportError:
-            pass  # memory_guard non disponibile, skip
+        self._check_pipeline_memory()
 
         metadata = self.project_service.get_project_metadata(project_id)
         canvas = self.project_service.get_project_canvas(project_id)
@@ -178,18 +218,39 @@ class OrchestratorService:
             )
 
 
-        if metadata.project_type not in self._executor_dispatch:
+        return self._execute_loaded_pipeline(
+            project_id=project_id,
+            project_type=metadata.project_type,
+            canvas=canvas,
+            force_recalculate=force_recalculate,
+            skip_carica=skip_carica,
+            run_id=run_id,
+            intermediate_mode_override=intermediate_mode_override,
+        )
+
+    def _execute_loaded_pipeline(
+        self,
+        *,
+        project_id: str,
+        project_type: str,
+        canvas: CanvasState,
+        force_recalculate: bool,
+        skip_carica: bool,
+        run_id: str = None,
+        intermediate_mode_override: Optional[str] = None,
+    ) -> PipelineArtifact:
+        if project_type not in self._executor_dispatch:
             return PipelineArtifact.failure(
                 project_id=project_id,
-                message=f"Tipo progetto '{metadata.project_type}' non supportato",
+                message=f"Tipo progetto '{project_type}' non supportato",
             )
 
-        if metadata.project_type == "estrai":
+        if project_type == "estrai":
             executor_result = self.estrai_executor.execute(
                 project_id, canvas, run_id=run_id,
                 intermediate_mode_override=intermediate_mode_override,
             )
-        elif metadata.project_type == "manipola":
+        elif project_type == "manipola":
             executor_result = self.manipola_executor.execute(
                 project_id, canvas, force_recalculate, run_id=run_id,
                 intermediate_mode_override=intermediate_mode_override,

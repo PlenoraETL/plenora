@@ -92,6 +92,7 @@ class PipelineTaskPayload:
     triggered_by: str = "manual"
     user_id: Optional[str] = None
     intermediate_mode_override: Optional[str] = None
+    execution_contract: Optional[JsonMapping] = None
 
 
 @dataclass(frozen=True)
@@ -149,15 +150,16 @@ def task_payload_to_celery_kwargs(
             }
         )
     if isinstance(payload, PipelineTaskPayload):
-        return MappingProxyType(
-            {
-                "project_id": payload.project_id,
-                "force_recalculate": payload.force_recalculate,
-                "triggered_by": payload.triggered_by,
-                "user_id": payload.user_id,
-                "intermediate_mode_override": payload.intermediate_mode_override,
-            }
-        )
+        kwargs: dict[str, JsonValue] = {
+            "project_id": payload.project_id,
+            "force_recalculate": payload.force_recalculate,
+            "triggered_by": payload.triggered_by,
+            "user_id": payload.user_id,
+            "intermediate_mode_override": payload.intermediate_mode_override,
+        }
+        if payload.execution_contract is not None:
+            kwargs["execution_contract"] = payload.execution_contract
+        return MappingProxyType(kwargs)
     if isinstance(payload, PreviewTaskPayload):
         return MappingProxyType(
             {
@@ -426,6 +428,7 @@ class TaskService:
         triggered_by: str = "manual",
         user_id: Optional[str] = None,
         intermediate_mode_override: Optional[str] = None,
+        execution_contract: Optional[JsonMapping] = None,
     ) -> TaskInfo:
         """Crea e avvia un task di esecuzione pipeline (ESTRAI/MANIPOLA/ARRICCHISCI).
 
@@ -448,6 +451,7 @@ class TaskService:
                     triggered_by=triggered_by,
                     user_id=user_id,
                     intermediate_mode_override=intermediate_mode_override,
+                    execution_contract=execution_contract,
                 ),
                 queued_message="Pipeline in coda...",
                 log_label="execute",

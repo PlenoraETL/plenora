@@ -96,6 +96,48 @@ def test_orchestrator_accepts_injected_executors_without_default_construction(
     ]
 
 
+def test_orchestrator_executes_control_plane_contract_without_project_lookup(
+    monkeypatch,
+) -> None:
+    from app.core.projects.canvas_models import CanvasState
+    from app.core.orchestrator.service import OrchestratorService
+
+    project_service = MagicMock()
+    project_service.get_project_metadata.side_effect = AssertionError(
+        "contract path must not load project metadata"
+    )
+    project_service.get_project_canvas.side_effect = AssertionError(
+        "contract path must not load project canvas"
+    )
+
+    estrai_executor = _FakeExecutor()
+    svc = OrchestratorService(
+        project_service=project_service,
+        executor=MagicMock(),
+        generator=MagicMock(),
+        connection_service=MagicMock(),
+        estrai_executor=estrai_executor,
+        manipola_executor=_FakeExecutor(),
+        enrich_executor=_FakeExecutor(),
+    )
+    svc._find_all_carica_nodes = MagicMock(return_value=[])
+
+    artifact = svc.execute_pipeline_from_contract(
+        project_id="proj-contract",
+        project_type="estrai",
+        canvas={"nodes": [], "edges": []},
+        run_id="run-contract",
+    )
+
+    assert artifact.success is True
+    args, kwargs = estrai_executor.execute_calls[0]
+    assert args[0] == "proj-contract"
+    assert isinstance(args[1], CanvasState)
+    assert kwargs["run_id"] == "run-contract"
+    project_service.get_project_metadata.assert_not_called()
+    project_service.get_project_canvas.assert_not_called()
+
+
 def test_orchestrator_preview_uses_injected_dispatch_executor(monkeypatch) -> None:
     from app.core.orchestrator.service import OrchestratorService
 

@@ -85,6 +85,7 @@ I punti ancora da governare operativamente per una vera orizzontalizzazione sono
 ### `backend/app/core/orchestrator/*`
 
 - `task_service.py`: pending metadata (`task_id -> project_id/task_type`) e' persistito tramite `task_metadata_store.py` su Redis usando `CELERY_BROKER_URL`, con TTL allineato a `CELERY_RESULT_EXPIRES`. Il default runtime e' Redis-only: lo store in-memory resta solo test double esplicito, non fallback automatico dev/prod.
+- `PipelineTaskPayload` puo' trasportare un `execution_contract` gia' risolto dal control plane (`project_type`, `canvas`, `group_id`, `artifact_refs`). Quando presente, `workers.tasks.pipeline_task` chiama `OrchestratorService.execute_pipeline_from_contract()` e non rilegge metadata/canvas progetto dal DB: questo e' il primo boundary Control Plane (Go-ready) -> Data Plane Python.
 - `router.py`: cleanup/download usa result_id/object storage quando possibile, ma mantiene compat path su `RESULTS_DIR`.
 - `service.py`: orchestration stateless; ok.
 
