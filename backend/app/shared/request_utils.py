@@ -7,7 +7,6 @@ Qui convergono le utility che servono a piu' di un router/middleware
 from __future__ import annotations
 
 import ipaddress
-import os
 from functools import lru_cache
 from typing import Optional, TYPE_CHECKING
 
@@ -64,7 +63,7 @@ def _parse_trusted_proxies() -> tuple[set[str], list]:
     l'env a runtime tramite monkeypatch, la chiave del cache cambia
     automaticamente e il parse viene rifatto.
     """
-    raw = os.getenv("TRUSTED_PROXIES", _DEFAULT_TRUSTED_PROXIES)
+    raw = get_env("TRUSTED_PROXIES", _DEFAULT_TRUSTED_PROXIES) or _DEFAULT_TRUSTED_PROXIES
     exact_frozen, networks_tuple = _parse_trusted_proxies_cached(raw)
     return set(exact_frozen), list(networks_tuple)
 
@@ -156,3 +155,4 @@ def get_client_ip(request: "Request") -> str:
             return client_ip
 
     return peer
+from app.environment import get_env

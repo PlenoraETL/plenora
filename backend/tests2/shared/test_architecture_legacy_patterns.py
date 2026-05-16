@@ -94,15 +94,7 @@ def test_value_error_str_e_lock_exists_in_catalog_test():
 #   distinguere variabili esplicitamente settate dal default runtime.
 ALLOWLIST_GETENV_COUNTS: Dict[str, int] = {
     "app/config.py": 2,
-    "app/config_env_loader.py": 2,
-    "app/startup_validation.py": 2,
-    "app/db/migrations_runner.py": 1,
-    "app/db/pg_connection.py": 3,
-    "app/infrastructure/security/crypto.py": 4,
-    "app/core/auth/jwt_token.py": 3,
-    "app/shared/request_utils.py": 1,
-    "app/utils/zip_safe.py": 1,
-    "app/core/auth/smoke_seed.py": 3,
+    "app/environment.py": 1,
 }
 
 
@@ -191,14 +183,9 @@ def test_os_getenv_only_at_boundary_modules():
 
 
 # Inventory esplicito per `threading.local` in `backend/app/`.
-#
-# Razionale:
-# - `app/db/pg_connection.py`: transaction state thread-local legato al
-#   connection pool per processo. Legacy DB adapter documentato; non e'
-#   lock distribuito.
-ALLOWLIST_THREADING_LOCAL_COUNTS: Dict[str, int] = {
-    "app/db/pg_connection.py": 1,
-}
+# Baseline pulita: `pg_connection.transaction()` e' alias di
+# `unit_of_work()` e non mantiene piu' stato thread-local.
+ALLOWLIST_THREADING_LOCAL_COUNTS: Dict[str, int] = {}
 
 
 def _get_threading_local_call_names(tree: ast.AST) -> Tuple[Set[str], Set[str]]:
@@ -563,16 +550,15 @@ def test_raise_typed_http_uses_catalog_constant_only():
 
 def test_scanners_find_expected_baseline_files():
     """Sanity: lo scanner Rule 2 trova almeno i file core boundary
-    (config.py, config_env_loader.py). Se questo fail, lo scanner e' rotto e i
+    (config.py, environment.py). Se questo fail, lo scanner e' rotto e i
     drift sopra sono illusori."""
     found = _scan_getenv()
     assert "app/config.py" in found
-    assert "app/config_env_loader.py" in found
+    assert "app/environment.py" in found
 
 
-def test_scanner_threading_local_finds_legacy_adapters():
-    """Sanity: lo scanner Rule 3 trova i due adapter legacy
-    documentati."""
+def test_scanner_threading_local_baseline_is_empty():
+    """Sanity: lo scanner Rule 3 mantiene pulita la baseline."""
     found = _scan_threading_local()
     assert found == ALLOWLIST_THREADING_LOCAL_COUNTS
 

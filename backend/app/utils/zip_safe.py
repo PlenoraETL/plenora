@@ -4,11 +4,11 @@ zip_safe.py — Estrazione ZIP con guard contro path traversal (zip slip)
 e contro zip bomb (size cap pre-extract + file count + compression ratio).
 """
 
-import os
 import zipfile
 from pathlib import Path
 from typing import Union
 
+from app.environment import get_env
 from app.shared.resources.path_policy import assert_path_within
 
 
@@ -43,7 +43,7 @@ def _get_caps() -> tuple[int, int, int, int]:
     non viene esplicitamente abbassato).
     """
     def _env_int(name: str, default: int) -> int:
-        val = os.getenv(name)
+        val = get_env(name)
         if not val:
             return default
         try:

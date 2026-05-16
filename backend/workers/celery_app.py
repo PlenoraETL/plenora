@@ -4,10 +4,9 @@ Configurazione applicazione Celery — broker e backend su Redis.
 Broker: redis://localhost:6379/0
 """
 
-import os
-
 from celery import Celery
 from app.config import settings
+from app.environment import env_flag
 from app.utils.logger import get_logger, get_request_id, set_request_id
 
 logger = get_logger(__name__)
@@ -51,7 +50,7 @@ celery_app.conf.update(
 )
 
 
-if os.getenv("PLENORA_CLEANROOM_BEAT_PING") == "1":
+if env_flag("PLENORA_CLEANROOM_BEAT_PING"):
     from celery.schedules import schedule as _celery_schedule
 
     celery_app.conf.beat_schedule = {

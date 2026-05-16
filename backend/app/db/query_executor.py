@@ -22,7 +22,7 @@ from app.db.query_session import (
     normalize_result_columns,
 )
 from app.db.query_result_persistence import QueryResultPersistence
-from app.db.query_streaming import execute_streaming_to_file
+from app.db.query_streaming import QueryStreamingWriter
 from app.db.sql_types import QueryParams, QueryTimings
 from app.shared.contracts.payloads import JsonObject
 from app.utils.logger import get_logger
@@ -130,6 +130,22 @@ class QueryPersistenceProtocol(Protocol):
         group_id: Optional[str],
         geom_column: Optional[str],
     ):
+        ...
+
+
+class QueryStreamingWriterProtocol(Protocol):
+    """Streaming query execution port for formats that can be chunk-written."""
+
+    def execute(
+        self,
+        *,
+        engine_factory: EngineFactoryProtocol,
+        connection: DatabaseConnection,
+        sql: str,
+        params: Optional[QueryParams],
+        output_path: Path,
+        output_format: str,
+    ) -> Tuple[int, List[str]]:
         ...
 
 
@@ -241,6 +257,7 @@ class QueryExecutor:
         logger: LoggerProtocol = None,
         results_dir: Path = None,
         result_persistence: QueryPersistenceProtocol = None,
+        streaming_writer: QueryStreamingWriterProtocol = None,
     ):
         """
         Inizializza l'executor con le dipendenze iniettate.
@@ -254,16 +271,21 @@ class QueryExecutor:
             logger: Logger per messaggi di info/error/debug.
             results_dir: Directory base per i file di output.
             result_persistence: porta di persistenza Rows/DataFrame -> result blob.
+            streaming_writer: porta SQL -> stream/file chunked per CSV/Parquet.
         """
         self._engine_factory = engine_factory or DefaultEngineFactory()
         self._save = save_function or self._salvataggio_default
         self._logger = logger or NullLogger()
-        self._results_dir = results_dir or Path("/tmp/results")
+        if results_dir is None:
+            from app.config import settings
+            results_dir = Path(settings.TEMP_DIR)
+        self._results_dir = Path(results_dir)
 
         # Componenti interni (funzioni pure senza stato
         self._result_builder = ResultBuilder
         self._df_builder = DataFrameBuilder
         self._result_persistence = result_persistence or QueryResultPersistence()
+        self._streaming_writer = streaming_writer or QueryStreamingWriter()
 
     @staticmethod
     def _salvataggio_default(
@@ -384,13 +406,8 @@ class QueryExecutor:
         output_path: "Path",
         output_format: str,
     ) -> Tuple[int, List[str]]:
-        """Compatibility delegate for CSV/Parquet streaming extraction.
-
-        TODO: GO-PORT-DISK-DEPENDENCY - this boundary still writes chunks to a
-        Path because the current persistence adapter expects a materialized
-        file. The next cut should expose Rows -> writer/stream directly.
-        """
-        return execute_streaming_to_file(
+        """Delegate CSV/Parquet streaming extraction to the streaming port."""
+        return self._streaming_writer.execute(
             engine_factory=self._engine_factory,
             connection=connection,
             sql=sql,
@@ -443,10 +460,6 @@ class QueryExecutor:
         Returns:
             Dizionario con: success, message, rows_count, columns, output_path, timings.
         """
-        # TODO: GO-PORT-QUERY-RESPONSIBILITY - keep reducing this method toward
-        # SQL -> rows/stream only; persistence already sits behind
-        # QueryPersistenceProtocol and should move to the caller/orchestrator in
-        # the Go port.
         timings = {}
         inizio_totale = time.time()
 
@@ -595,6 +608,7 @@ def create_executor(
     results_dir: Path = None,
     logger: LoggerProtocol = None,
     result_persistence: QueryPersistenceProtocol = None,
+    streaming_writer: QueryStreamingWriterProtocol = None,
 ) -> QueryExecutor:
     """
     Factory function per creare un QueryExecutor con Dependency Injection.
@@ -608,6 +622,7 @@ def create_executor(
         results_dir: Directory base per i file di output.
         logger: Logger per i messaggi.
         result_persistence: porta esplicita per salvare result blob.
+        streaming_writer: porta esplicita per stream chunked SQL -> output.
 
     Returns:
         Istanza di QueryExecutor configurata.
@@ -618,4 +633,5 @@ def create_executor(
         results_dir=results_dir,
         logger=logger,
         result_persistence=result_persistence,
+        streaming_writer=streaming_writer,
     )

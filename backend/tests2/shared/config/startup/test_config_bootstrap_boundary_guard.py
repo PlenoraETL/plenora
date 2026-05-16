@@ -126,8 +126,8 @@ def test_config_env_loader_owns_dotenv_loading_behavior():
         "def should_load_dotenv(",
         "def load_backend_dotenv(",
         "load_dotenv(",
-        'os.getenv("ENVIRONMENT"',
-        'os.getenv("ENV"',
+        "from app.environment import environment_name",
+        "environment_name()",
     ):
         assert marker in text, (
             "app.config_env_loader must own dotenv loading and raw environment "
@@ -157,7 +157,6 @@ def test_startup_validation_owns_redis_and_filesystem_bootstrap_work():
         "def ensure_redis(",
         "def ensure_redis_wsl_fallback(",
         "socket.create_connection",
-        "subprocess.Popen",
         "shutil.rmtree",
         "DATA_DIR",
     ):

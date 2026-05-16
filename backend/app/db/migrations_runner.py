@@ -6,12 +6,12 @@ Motivazione (C8-nit)
 
 from __future__ import annotations
 
-import os
 import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import List, Optional
 
+from app.environment import get_env
 from app.utils.logger import get_logger
 
 
@@ -49,7 +49,7 @@ class MigrationStatus:
 
 def _resolved_schema() -> str:
     """Schema applicativo come da env (default `plenora`)."""
-    return os.getenv("DB_SCHEMA", "plenora")
+    return get_env("DB_SCHEMA", "plenora") or "plenora"
 
 
 def ensure_schema(schema: Optional[str] = None) -> str:

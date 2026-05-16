@@ -34,6 +34,34 @@ class StreamingEngineFactory(Protocol):
     def create_engine(self, conn: StreamingConnection) -> Engine: ...
 
 
+class QueryStreamingWriter:
+    """Rows-to-file adapter for streamable query formats.
+
+    The disk materialization is intentionally isolated here because CSV and
+    Parquet libraries still require a concrete writable target. QueryExecutor
+    depends on this adapter as a port instead of owning filesystem writes.
+    """
+
+    def execute(
+        self,
+        *,
+        engine_factory: StreamingEngineFactory,
+        connection: StreamingConnection,
+        sql: str,
+        params: Optional[QueryParams],
+        output_path: Path,
+        output_format: str,
+    ) -> Tuple[int, List[str]]:
+        return execute_streaming_to_file(
+            engine_factory=engine_factory,
+            connection=connection,
+            sql=sql,
+            params=params,
+            output_path=output_path,
+            output_format=output_format,
+        )
+
+
 def _max_streaming_rows() -> int:
     return int(getattr(settings, "ESTRAI_MAX_ROWS", 5_000_000) or 0)
 

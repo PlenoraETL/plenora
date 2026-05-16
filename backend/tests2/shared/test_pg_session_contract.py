@@ -8,19 +8,6 @@ import pytest
 pytestmark = [pytest.mark.unit, pytest.mark.shared, pytest.mark.contract]
 
 
-class _NoThreadLocal:
-    def __getattribute__(self, name: str):
-        if name.startswith("__"):
-            return object.__getattribute__(self, name)
-        raise AssertionError(f"thread-local state was read: {name}")
-
-    def __setattr__(self, name: str, value: object) -> None:
-        if name.startswith("__"):
-            object.__setattr__(self, name, value)
-            return
-        raise AssertionError(f"thread-local state was written: {name}")
-
-
 class _StubCursor:
     def __init__(self, conn: "_StubConn") -> None:
         self._conn = conn
@@ -86,7 +73,6 @@ def test_explicit_unit_of_work_commits_without_thread_local(monkeypatch):
 
     conn = _StubConn(fetchone_row={"id": "u1"})
     returned: list[_StubConn] = []
-    monkeypatch.setattr(pg, "_transaction_state", _NoThreadLocal())
     monkeypatch.setattr(pg, "get_connection", lambda: conn)
     monkeypatch.setattr(pg, "put_connection", returned.append)
 
@@ -108,7 +94,6 @@ def test_explicit_unit_of_work_rolls_back_and_releases_on_error(monkeypatch):
 
     conn = _StubConn()
     returned: list[_StubConn] = []
-    monkeypatch.setattr(pg, "_transaction_state", _NoThreadLocal())
     monkeypatch.setattr(pg, "get_connection", lambda: conn)
     monkeypatch.setattr(pg, "put_connection", returned.append)
 
@@ -127,7 +112,6 @@ def test_explicit_unit_of_work_rolls_back_when_commit_fails(monkeypatch):
 
     conn = _StubConn(commit_error=RuntimeError("commit failed"))
     returned: list[_StubConn] = []
-    monkeypatch.setattr(pg, "_transaction_state", _NoThreadLocal())
     monkeypatch.setattr(pg, "get_connection", lambda: conn)
     monkeypatch.setattr(pg, "put_connection", returned.append)
 

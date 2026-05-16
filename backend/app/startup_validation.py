@@ -20,6 +20,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from app.config_env_loader import DOTENV_DISABLED_ENVS
+from app.environment import environment_name
 
 
 logger = logging.getLogger(__name__)
@@ -40,7 +41,7 @@ _REDIS_URL_KEYS = (
 
 
 def _env_name() -> str:
-    return os.getenv("ENVIRONMENT", os.getenv("ENV", "development")).lower()
+    return environment_name()
 
 
 def _as_bool(value: Any) -> bool:

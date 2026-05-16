@@ -1,8 +1,6 @@
 """PostgreSQL connection pool and DAL query helper entry point."""
 
-import os
 import threading
-from contextlib import contextmanager
 from dataclasses import dataclass
 from typing import Any, Optional
 
@@ -10,6 +8,7 @@ import psycopg2
 import psycopg2.extras
 import psycopg2.pool
 
+from app.environment import get_env
 from app.utils.logger import get_logger
 from app.shared.contracts.payloads import JsonObject, JsonRows
 
@@ -23,7 +22,7 @@ def _read_int_env(name: str, default: int) -> int:
     """Legge una env var come intero. Se la conversione fallisce
     (stringa non numerica, vuota), solleva RuntimeError con messaggio
     esplicito invece di propagare ValueError oscuro."""
-    raw = os.getenv(name)
+    raw = get_env(name)
     if raw is None or raw == "":
         return default
     try:
@@ -89,7 +88,7 @@ def _load_pool_config() -> None:
     if _POOL_CONFIG_LOADED:
         return
 
-    database_url = os.getenv("DATABASE_URL")
+    database_url = get_env("DATABASE_URL")
     if not database_url:
         raise RuntimeError("DATABASE_URL non configurato. Imposta la variabile d'ambiente.")
 
@@ -105,7 +104,7 @@ def _load_pool_config() -> None:
     )
 
     _DATABASE_URL = database_url
-    _DB_SCHEMA = os.getenv("DB_SCHEMA", "plenora")
+    _DB_SCHEMA = get_env("DB_SCHEMA", "plenora") or "plenora"
     _POOL_MIN = pool_min
     _POOL_MAX = pool_max
     _IDLE_IN_TRANSACTION_MS = idle_in_transaction_ms
@@ -115,13 +114,6 @@ def _load_pool_config() -> None:
 
 _pool: Optional[psycopg2.pool.ThreadedConnectionPool] = None
 _pool_lock = threading.Lock()
-# Legacy adapter state for `transaction()`.
-#
-# New repository code should prefer the explicit `PgSession` /
-# `UnitOfWork` path below.  The thread-local guard stays confined to the
-# historical raw-connection transaction helper so existing callers keep
-# their behavior while new code can pass an explicit DB context.
-_transaction_state = threading.local()
 
 
 def _get_pool() -> psycopg2.pool.ThreadedConnectionPool:
@@ -444,35 +436,15 @@ def executemany(sql: str, params_list: list[tuple]) -> None:
         session.executemany(sql, params_list)
 
 
-@contextmanager
 def transaction():
-    """Context manager per transazioni esplicite.
+    """Compatibility alias for an explicit PostgreSQL UnitOfWork.
 
-    Uso:
-        with transaction as conn:
-            conn.execute("INSERT ...")
-            conn.execute("UPDATE ...")
-        # auto-commit alla fine, rollback su exception
+    Historical callers used ``transaction()`` as a raw-connection context
+    manager.  It now yields ``PgSession`` and shares the same explicit,
+    process-state-free lifecycle as ``unit_of_work()``. New code should
+    depend on ``unit_of_work()`` directly.
     """
-    if getattr(_transaction_state, "active", False):
-        raise RuntimeError(
-            "Nested pg_connection.transaction() is not supported. "
-            "Pass the existing transaction connection through the call chain "
-            "or add explicit savepoint support at this boundary."
-        )
-    conn = get_connection()
-    _transaction_state.active = True
-    try:
-        yield conn
-        conn.commit()
-    except Exception:
-        conn.rollback()
-        raise
-    finally:
-        try:
-            put_connection(conn)
-        finally:
-            _transaction_state.active = False
+    return unit_of_work()
 
 
 # ── Init DB (crea tabelle se non esistono) ──────────────────────────────────

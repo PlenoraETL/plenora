@@ -298,7 +298,7 @@ class PostgresLogHandler(logging.Handler):
 
     def emit(self, record: logging.LogRecord) -> None:
         try:
-            from app.db.pg_connection import unit_of_work
+            from app.db.pg_connection import execute as pg_execute
             timestamp = datetime.fromtimestamp(record.created).strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3]
             level_name = record.levelname
             module = _resolve_module(record.name)
@@ -342,24 +342,23 @@ class PostgresLogHandler(logging.Handler):
                     "".join(traceback.format_exception(*record.exc_info)).strip()
                 )
 
-            with unit_of_work() as session:
-                session.execute(
-                    "INSERT INTO logs (ts, level, module, op, msg, project_id, group_id, run_id, node_id, details, error) "
-                    "VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)",
-                    (
-                        timestamp,
-                        level_name,
-                        module,
-                        operation,
-                        log_message,
-                        project_id,
-                        group_id,
-                        run_id,
-                        node_id,
-                        details_json,
-                        error_text,
-                    )
+            pg_execute(
+                "INSERT INTO logs (ts, level, module, op, msg, project_id, group_id, run_id, node_id, details, error) "
+                "VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)",
+                (
+                    timestamp,
+                    level_name,
+                    module,
+                    operation,
+                    log_message,
+                    project_id,
+                    group_id,
+                    run_id,
+                    node_id,
+                    details_json,
+                    error_text,
                 )
+            )
         except Exception:
             self.handleError(record)
 
@@ -377,15 +376,14 @@ class PostgresLogHandler(logging.Handler):
         N9: `user_id` viene persistito per audit (chi ha lanciato la run).
         None per task cron/scheduled senza user umano dietro.
         """
-        from app.db.pg_connection import unit_of_work
+        from app.db.pg_connection import execute as pg_execute
         ts_start = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3]
-        with unit_of_work() as session:
-            session.execute(
-                "INSERT INTO log_runs "
-                "(run_id, project_id, group_id, module, triggered_by, ts_start, status, user_id) "
-                "VALUES (%s,%s,%s,%s,%s,%s,'running',%s) ON CONFLICT DO NOTHING",
-                (run_id, project_id, group_id, module, triggered_by, ts_start, user_id),
-            )
+        pg_execute(
+            "INSERT INTO log_runs "
+            "(run_id, project_id, group_id, module, triggered_by, ts_start, status, user_id) "
+            "VALUES (%s,%s,%s,%s,%s,%s,'running',%s) ON CONFLICT DO NOTHING",
+            (run_id, project_id, group_id, module, triggered_by, ts_start, user_id),
+        )
 
     def close_run(
         self,
@@ -401,13 +399,12 @@ class PostgresLogHandler(logging.Handler):
         debug_payload: Optional[dict[str, object]] = None,
     ) -> None:
         """Chiude una run aggiornando tutti i campi di esito."""
-        from app.db.pg_connection import unit_of_work
+        from app.db.pg_connection import execute as pg_execute
         ts_end = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3]
         steps_json = json.dumps(steps or [], ensure_ascii=False, default=str)
         payload_json = json.dumps(debug_payload, ensure_ascii=False, default=str) if debug_payload else None
-        with unit_of_work() as session:
-            session.execute(
-                """UPDATE log_runs SET
+        pg_execute(
+            """UPDATE log_runs SET
                 ts_end        = %s,
                 status        = %s,
                 rows_in       = %s,
@@ -419,12 +416,12 @@ class PostgresLogHandler(logging.Handler):
                 error_message = %s,
                 debug_payload = %s
             WHERE run_id = %s""",
-                (
-                    ts_end, status, rows_in, rows_out, duration_ms,
-                    steps_json, error_node_id, error_module, error_message,
-                    payload_json, run_id,
-                ),
-            )
+            (
+                ts_end, status, rows_in, rows_out, duration_ms,
+                steps_json, error_node_id, error_module, error_message,
+                payload_json, run_id,
+            ),
+        )
 
 
 def _resolve_module(name: str) -> str:

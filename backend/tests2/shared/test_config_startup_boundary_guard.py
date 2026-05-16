@@ -51,7 +51,6 @@ def test_startup_validation_owns_operational_boot_checks():
         "def ensure_redis_wsl_fallback(",
         "shutil.rmtree",
         "socket.create_connection",
-        "subprocess.Popen",
     ):
         assert marker in text, (
             f"app.startup_validation must own startup behavior marker {marker!r}."

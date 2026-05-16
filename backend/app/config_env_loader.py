@@ -8,8 +8,9 @@ Settings object can stay focused on values and type conversion.
 from __future__ import annotations
 
 import logging
-import os
 from pathlib import Path
+
+from app.environment import environment_name
 
 
 DOTENV_DISABLED_ENVS: tuple[str, ...] = ("production", "prod", "staging", "stage")
@@ -18,7 +19,7 @@ _ENV_LOAD_ATTEMPTED = False
 
 def should_load_dotenv() -> bool:
     """Return True when the current environment may read `backend/.env`."""
-    env_name = os.getenv("ENVIRONMENT", os.getenv("ENV", "development")).lower()
+    env_name = environment_name()
     return env_name not in DOTENV_DISABLED_ENVS
 
 

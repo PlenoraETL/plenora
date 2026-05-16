@@ -9,7 +9,7 @@ from fastapi.security import HTTPAuthorizationCredentials
 # Import esplicito di app.config per side effect: garantisce che backend/.env
 # sia stato caricato via python-dotenv PRIMA che leggiamo JWT_SECRET_KEY a
 # livello di modulo. Senza questo, se auth.py venisse importato prima di
-# app.config, la lettura di os.getenv("JWT_SECRET_KEY") sotto sarebbe fatta
+# app.config, la lettura raw del secret JWT sotto sarebbe fatta
 # su un environment in cui il .env non è ancora stato applicato
 from app.config import settings as _settings
 from app.core.auth import db

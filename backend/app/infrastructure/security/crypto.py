@@ -8,11 +8,11 @@ from __future__ import annotations
 
 import base64
 import hashlib
-import os
 from typing import Optional
 
 from cryptography.fernet import Fernet, InvalidToken
 
+from app.environment import environment_name, get_env
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -73,10 +73,10 @@ def _get_raw_key() -> str:
     # Unica env crypto supportata: PLENORA_ENCRYPTION_KEY. Gli alias legacy
     # URBY_ENCRYPTION_KEY e CONN_ENCRYPT_KEY sono stati rimossi il 2026-04-23
     env_name = "PLENORA_ENCRYPTION_KEY"
-    val = os.getenv(env_name)
+    val = get_env(env_name)
     found = (env_name, val) if val else None
 
-    env = os.getenv("ENVIRONMENT", os.getenv("ENV", "development")).lower()
+    env = environment_name()
     # Simmetrico a _DOTENV_DISABLED_ENVS di config.py:26 — entrambi gli
     # ambienti "hardened" (prod + staging) devono fail-fast su missing
     # key / dev-default. Chiude S1 runtime_config_audit.md
@@ -111,7 +111,7 @@ def _get_raw_key() -> str:
         )
 
     # Opt-in per developer che vogliono replicare il fail-fast di prod
-    if os.getenv("PLENORA_DISABLE_DEFAULT_KEY") == "1":
+    if get_env("PLENORA_DISABLE_DEFAULT_KEY") == "1":
         raise RuntimeError(
             "[PLENORA-ETL] Nessuna chiave di cifratura e PLENORA_DISABLE_DEFAULT_KEY=1. "
             "Imposta PLENORA_ENCRYPTION_KEY o rimuovi PLENORA_DISABLE_DEFAULT_KEY."

@@ -16,13 +16,13 @@ pytestmark = [pytest.mark.unit, pytest.mark.contract]
 
 
 def _install_fake_pg(monkeypatch):
-    """Sostituisce `app.db.pg_connection.execute/fetchone/fetchall` con
+    """Sostituisce il boundary `app.core.scheduler.db` con
     mock capturabili. Ritorna un `state` dict con:
       - `rows`: lista di row dict fake (popolabile dal test)
       - `executions`: lista di (sql, args) chiamate da execute()
       - `execute_rowcount`: rowcount default ritornato da execute
     """
-    import app.db.pg_connection as pg
+    import app.core.scheduler.db as scheduler_db
 
     state = {
         "rows": [],
@@ -44,9 +44,9 @@ def _install_fake_pg(monkeypatch):
         state["executions"].append(("FETCHALL", sql, args))
         return list(state["rows"])
 
-    monkeypatch.setattr(pg, "execute", fake_execute)
-    monkeypatch.setattr(pg, "fetchone", fake_fetchone)
-    monkeypatch.setattr(pg, "fetchall", fake_fetchall)
+    monkeypatch.setattr(scheduler_db, "execute", fake_execute)
+    monkeypatch.setattr(scheduler_db, "fetchone", fake_fetchone)
+    monkeypatch.setattr(scheduler_db, "fetchall", fake_fetchall)
     return state
 
 
@@ -188,9 +188,9 @@ def test_get_logs_paginated(monkeypatch):
             for i in range(20)
         ]
 
-    import app.db.pg_connection as pg
-    monkeypatch.setattr(pg, "fetchone", fake_fetchone)
-    monkeypatch.setattr(pg, "fetchall", fake_fetchall)
+    import app.core.scheduler.db as scheduler_db
+    monkeypatch.setattr(scheduler_db, "fetchone", fake_fetchone)
+    monkeypatch.setattr(scheduler_db, "fetchall", fake_fetchall)
 
     svc = ScheduleLogService()
     result = svc.get_logs("schedule_abc", page=1, page_size=20)
@@ -217,9 +217,9 @@ def test_get_logs_status_filter_matches_pipeline_event(monkeypatch):
         captured_args["page"] = (sql, args)
         return []
 
-    import app.db.pg_connection as pg
-    monkeypatch.setattr(pg, "fetchone", fake_fetchone)
-    monkeypatch.setattr(pg, "fetchall", fake_fetchall)
+    import app.core.scheduler.db as scheduler_db
+    monkeypatch.setattr(scheduler_db, "fetchone", fake_fetchone)
+    monkeypatch.setattr(scheduler_db, "fetchall", fake_fetchall)
 
     svc = ScheduleLogService()
     svc.get_logs("schedule_x", status_filter="success")

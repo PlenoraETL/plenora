@@ -50,10 +50,10 @@ def load_project_source_artifact(
     legacy DataFrame/CRS behavior while avoiding a second metadata guess in
     ``_applica_crs_da_colonne``.
 
-    TODO: GO-PORT-DISK-DEPENDENCY - project_source artifacts still enter this
-    adapter as a local Path because pandas/geopandas loaders require path-like
-    inputs for some formats. Keep the Path dependency contained here; callers
-    should move toward bytes/stream resources.
+    Disk dependency is intentionally contained in this adapter because
+    pandas/geopandas loaders still require path-like inputs for some formats.
+    Callers pass resource references; this boundary owns the final
+    materialization step.
     """
     from app.core.manipola.executor import (
         _applica_crs_da_colonne,

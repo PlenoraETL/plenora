@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import os
-import tempfile
 from pathlib import Path
 from typing import Optional
 
@@ -14,6 +12,10 @@ from app.core.dataframes.frame_io import (
     load_dataframe_from_file,
 )
 from app.core.manipola.types import FrameMap, JsonObject
+from app.core.results.temp_paths import (
+    cleanup_path_only_adapter,
+    write_path_only_adapter_bytes,
+)
 from app.utils.logger import get_logger
 
 
@@ -153,17 +155,11 @@ def load_datasource_nodes(
                 ),
             }
 
-        # Materialize on disk so `load_dataframe_from_file` can pick
-        # the parser by extension. NamedTemporaryFile with delete=False
-        # because Windows requires the handle closed before reopen and
-        # the parsers reopen the path internally.
+        # Materialize at the path-only adapter boundary so
+        # `load_dataframe_from_file` can pick the parser by extension.
         suffix = _suffix_for(node, file_path)
         try:
-            with tempfile.NamedTemporaryFile(
-                suffix=suffix, delete=False
-            ) as tmp:
-                tmp.write(content)
-                tmp_path = Path(tmp.name)
+            tmp_path = write_path_only_adapter_bytes(content, suffix=suffix)
             parse_options = _nf(node, "parse_options") or {}
             try:
                 df = load_dataframe_from_file(
@@ -172,11 +168,9 @@ def load_datasource_nodes(
                     layer=parse_options.get("layer"),
                 )
             finally:
-                try:
-                    os.unlink(tmp_path)
-                except OSError as cleanup_err:
+                if not cleanup_path_only_adapter(tmp_path):
                     log.warning(
-                        f"Cleanup tempfile {tmp_path} fallito: {cleanup_err}"
+                        f"Cleanup path-only adapter {tmp_path} fallito"
                     )
         except Exception as e:
             log.error(

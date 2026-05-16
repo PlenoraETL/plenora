@@ -52,8 +52,8 @@ I punti ancora da governare operativamente per una vera orizzontalizzazione sono
 
 - PG pool singleton per processo (`ThreadedConnectionPool`), fork-safe per Celery con `discard_pool_after_fork`.
 - Punto di scala: il limite effettivo e' aggregato su processi/pod. Non aumentare repliche senza ridurre `DB_POOL_MAX` o introdurre PgBouncer.
-- `threading.local` per transaction state e' per-process/thread; ok, ma non sostituisce lock distribuiti.
-- `PgSession`/`unit_of_work()` sono il boundary esplicito per il porting Go. I wrapper legacy `execute`/`fetchone` passano gia' da `unit_of_work`, ma i nuovi repository dovrebbero ricevere sessione esplicita invece di importare helper globali.
+- Nessun `threading.local`: `transaction()` e' alias compatibile di `unit_of_work()` e produce una `PgSession` esplicita.
+- `PgSession`/`unit_of_work()` sono il boundary esplicito per il porting Go. I wrapper compat `execute`/`fetchone` passano da `unit_of_work`, ma i nuovi repository dovrebbero ricevere sessione esplicita invece di importare helper globali.
 
 ### `backend/app/utils/logger.py`
 
@@ -162,14 +162,14 @@ I punti ancora da governare operativamente per una vera orizzontalizzazione sono
 - `project_source_runtime.py`: catena esecuzione migrata a `ContextVar`; niente `threading.local` nel runtime Manipola.
 - `plugin_executor.py`: singleton executor process-local; ok se i plugin sono stateless. Se plugin scrivono su disco, vanno auditati separatamente.
 - `ManipolaExecutor` riceve ora un `group_id_resolver` iniettabile: la risoluzione tenant resta un boundary esplicito e testabile, non un lookup nascosto hardcoded nel core trasformazioni.
-- `source_loading.load_project_source_artifact()` e' marcato `GO-PORT-DISK-DEPENDENCY`: i `Path` restano confinati all'adapter pandas/geopandas finche' i loader non passano a bytes/stream.
+- `source_loading.load_project_source_artifact()` confina la dipendenza da `Path` nell'adapter pandas/geopandas. I caller lavorano con resource reference; la materializzazione finale resta in un solo boundary.
 - Rischio principale: memoria per worker, non coerenza distribuita.
 
 ### `backend/app/core/estrai/*`, `backend/app/db/query_executor.py`
 
 - Query execution stateless rispetto al backend; dati da DB esterni.
 - `query_executor.py`: per CSV/Parquet streaming migliora scalabilita; per formati non streamable materializza tutto in RAM fino a `ESTRAI_MAX_ROWS`.
-- La persistenza query e' ora dietro `QueryPersistenceProtocol`, iniettabile nel costruttore. `execute_raw` resta il boundary SQL -> rows; `execute_query` e `_execute_streaming_to_file` sono marcati come cut incrementali verso Rows/stream -> writer fuori dall'executor.
+- La persistenza query e' dietro `QueryPersistenceProtocol`, iniettabile nel costruttore. Lo streaming CSV/Parquet e' dietro `QueryStreamingWriter`, quindi l'executor non possiede piu' direttamente il writer filesystem.
 - `query_engines.py`: SQLAlchemy pool per engine; moltiplica connessioni verso sorgenti esterne quando aumentano worker.
 
 ### `backend/app/core/carica/*`
@@ -231,7 +231,7 @@ I punti ancora da governare operativamente per una vera orizzontalizzazione sono
 - `app/main.py` non legge piu' direttamente `os.getenv`: delega ad `app.app_factory.create_app` e mantiene solo il path storico `app.main:app` con re-export dei runtime service.
 - `app/app_factory.py` e' ora l'app composition boundary; le due letture raw env per docs/redoc sono allowlistate e documentate come boot-time boundary.
 - Lo scanner `os.getenv` ora intercetta anche alias (`import os as ...`) e import diretti (`from os import getenv`), quindi nuovi raw env read fuori allowlist non possono bypassare il lock.
-- L'inventory `threading.local` e' esplicito e limitato al legacy DB adapter `app/db/pg_connection.py`.
+- La baseline `threading.local` e' zero nel backend applicativo: il DB adapter non mantiene piu' transaction state thread-local.
 - `OrchestratorService.__init__` e' fuori dal pattern piu' rischioso: non costruisce piu' direttamente executor concreti nel constructor path, e il guardrail mantiene la baseline pulita per i service migrati.
 - La baseline router -> `app.db.pg_connection` resta chiusa a zero import diretti.
 - `app.runtime.services` resta la composition boundary per i servizi gia' migrati: `main.py` consuma il container e non costruisce inline i service condivisi.
@@ -239,10 +239,10 @@ I punti ancora da governare operativamente per una vera orizzontalizzazione sono
 ### Remaining
 
 - `OrchestratorService` mantiene default builder fuori da `__init__` per compatibilita'. La chiusura completa Go-ready e' far arrivare sempre un dispatch `Mapping[str, CanvasExecutorProtocol]` dalla runtime composition factory, senza fallback impliciti nei service.
-- `threading.local` resta tollerato solo nel DB adapter legacy indicato. Non introdurre nuovi usi per contesto runtime; preferire ContextVar, parametri espliciti o stato condiviso DB/Redis/object storage.
 - `cloud_backends.py` consuma config tramite `StorageBackendConfig` e `Settings`; il raw access per i validator fail-fast e' centralizzato in `Settings.get_raw`.
 - `TaskService` non usa piu' `_task_project_cache`: il metadata dei task pending e' su Redis-only nel default runtime, coperto da contract test.
 - Il trigger backup manuale passa da Celery task: l'API pod non avvia piu' subprocess locali.
+- `os.getenv` e' confinato a `app/config.py` e al boundary `app/environment.py`; i moduli bootstrap/security/auth/infra passano dal boundary comune.
 - I residui multi-host piu' importanti restano quelli gia' elencati nelle priorita': compat filesystem per artifact legacy/cache e alcuni fallback dev-only documentati.
 
 ## Priorita consigliate

@@ -9,7 +9,6 @@ from __future__ import annotations
 import secrets
 import warnings
 
-import os
 import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Optional, TypedDict
@@ -35,14 +34,15 @@ class AccessTokenPayload(TypedDict, total=False):
 # da test-contract `test_jwt_token_module_contract`). Importare settings
 # inizializza app.config prima delle letture env sottostanti.
 from app.config import settings as _settings
+from app.environment import environment_name, get_env
 ACCESS_TOKEN_EXPIRE_HOURS = int(_settings.get("JWT_EXPIRE_HOURS"))
 
-_jwt_env_value = os.getenv("JWT_SECRET_KEY", "").strip()
+_jwt_env_value = (get_env("JWT_SECRET_KEY", "") or "").strip()
 
 if _jwt_env_value:
     SECRET_KEY = _jwt_env_value
 else:
-    _env = os.getenv("ENVIRONMENT", os.getenv("ENV", "development")).lower()
+    _env = environment_name()
     if _env in ("production", "prod", "staging"):
         # RuntimeError invece di SystemExit: catturabile dai test, gestibile
         # dal framework FastAPI/uvicorn invece di kill brutale del processo

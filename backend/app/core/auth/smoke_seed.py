@@ -6,10 +6,10 @@ inside the backend container by CI before `scripts/docker-api-smoke.sh`.
 
 from __future__ import annotations
 
-import os
 import uuid
 
 from app.core.auth import db
+from app.environment import environment_name, get_env
 from app.shared.password_hashing import hash_password
 
 
@@ -18,14 +18,14 @@ DEFAULT_USERNAME = "smoke-user"
 
 
 def _required_env(name: str, default: str | None = None) -> str:
-    value = os.getenv(name, default)
+    value = get_env(name, default)
     if value:
         return value
     raise SystemExit(f"{name} is required for Docker API smoke seeding")
 
 
 def _assert_non_prod() -> None:
-    env_name = os.getenv("ENVIRONMENT", os.getenv("ENV", "development")).lower()
+    env_name = environment_name()
     if env_name in {"production", "prod", "staging", "stage"}:
         raise SystemExit("Refusing to seed smoke credentials in production/staging")
 

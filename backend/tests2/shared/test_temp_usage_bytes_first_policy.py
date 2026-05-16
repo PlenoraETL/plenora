@@ -433,13 +433,6 @@ _TEMP_INVENTORY: dict[tuple[str, int], tuple[str, str]] = {
         "Bytes API not available for these drivers; tempfile is "
         "the structural adapter at the source-loading boundary.",
     ),
-    ("app/core/manipola/datasource_node_loading.py", 162): (
-        "PATH_REQUIRED_FILE",
-        "Manipola datasource node blob materialization: downloaded "
-        "file_source bytes are staged to a NamedTemporaryFile so the "
-        "format-aware dataframe loader can parse by extension. The "
-        "temporary path is caller-owned and removed after loading.",
-    ),
     ("app/core/dataframes/geospatial_io.py", 326): (
         "DIR_MULTIFILE",
         "Shapefile WRITE: gdf.to_file emits multi-file shapefile "
