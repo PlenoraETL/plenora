@@ -10,7 +10,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Optional
 
-from app.db.pg_connection import execute, fetchall, fetchone
+from app.db.pg_connection import PgSession, unit_of_work
 
 __all__ = [
     "ResultMetadataRow",
@@ -104,70 +104,99 @@ def save_result_row(
     if resolved_size_bytes is None:
         resolved_size_bytes = len(data) if data else 0
 
-    execute(
-        "INSERT INTO results (id, project_id, group_id, filename, format, data, "
-        "size_bytes, rows_count, created_at, created_by, storage_key) "
-        "VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) "
-        "ON CONFLICT (id) DO UPDATE SET data=EXCLUDED.data, size_bytes=EXCLUDED.size_bytes, "
-        "rows_count=EXCLUDED.rows_count, created_at=EXCLUDED.created_at, "
-        "storage_key=EXCLUDED.storage_key",
-        (
-            result_id,
-            project_id,
-            group_id,
-            filename,
-            fmt,
-            data,
-            resolved_size_bytes,
-            rows_count,
-            now,
-            created_by,
-            storage_key,
-        ),
-    )
+    with unit_of_work() as session:
+        session.execute(
+            "INSERT INTO results (id, project_id, group_id, filename, format, data, "
+            "size_bytes, rows_count, created_at, created_by, storage_key) "
+            "VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) "
+            "ON CONFLICT (id) DO UPDATE SET data=EXCLUDED.data, size_bytes=EXCLUDED.size_bytes, "
+            "rows_count=EXCLUDED.rows_count, created_at=EXCLUDED.created_at, "
+            "storage_key=EXCLUDED.storage_key",
+            (
+                result_id,
+                project_id,
+                group_id,
+                filename,
+                fmt,
+                data,
+                resolved_size_bytes,
+                rows_count,
+                now,
+                created_by,
+                storage_key,
+            ),
+        )
     return get_result_row(result_id)
 
 
-def get_result_row(result_id: str) -> Optional[ResultMetadataRow]:
+def get_result_row(
+    result_id: str,
+    *,
+    session: PgSession | None = None,
+) -> Optional[ResultMetadataRow]:
     """Return typed result metadata by id."""
-    row = fetchone(
-        "SELECT id, project_id, group_id, filename, format, size_bytes, "
-        "rows_count, created_at, storage_key "
-        "FROM results WHERE id = %s",
-        (result_id,),
-    )
-    if row is None:
-        return None
-    return ResultMetadataRow.from_mapping(row)
+    def _read(active_session: PgSession) -> Optional[ResultMetadataRow]:
+        row = active_session.fetchone(
+            "SELECT id, project_id, group_id, filename, format, size_bytes, "
+            "rows_count, created_at, storage_key "
+            "FROM results WHERE id = %s",
+            (result_id,),
+        )
+        if row is None:
+            return None
+        return ResultMetadataRow.from_mapping(row)
+
+    if session is not None:
+        return _read(session)
+    with unit_of_work() as active_session:
+        return _read(active_session)
 
 
 def get_latest_result_row(
     project_id: str,
     group_id: Optional[str] = None,
+    *,
+    session: PgSession | None = None,
 ) -> Optional[ResultMetadataRow]:
     """Return latest typed result metadata for a project."""
-    if group_id:
-        row = fetchone(
-            "SELECT id, project_id, group_id, filename, format, size_bytes, rows_count, created_at "
-            "FROM results WHERE project_id = %s AND group_id = %s ORDER BY created_at DESC LIMIT 1",
-            (project_id, group_id),
-        )
-    else:
-        row = fetchone(
-            "SELECT id, project_id, group_id, filename, format, size_bytes, rows_count, created_at "
-            "FROM results WHERE project_id = %s ORDER BY created_at DESC LIMIT 1",
+    def _read(active_session: PgSession) -> Optional[ResultMetadataRow]:
+        if group_id:
+            row = active_session.fetchone(
+                "SELECT id, project_id, group_id, filename, format, size_bytes, rows_count, created_at "
+                "FROM results WHERE project_id = %s AND group_id = %s ORDER BY created_at DESC LIMIT 1",
+                (project_id, group_id),
+            )
+        else:
+            row = active_session.fetchone(
+                "SELECT id, project_id, group_id, filename, format, size_bytes, rows_count, created_at "
+                "FROM results WHERE project_id = %s ORDER BY created_at DESC LIMIT 1",
+                (project_id,),
+            )
+        if row is None:
+            return None
+        return ResultMetadataRow.from_mapping(row)
+
+    if session is not None:
+        return _read(session)
+    with unit_of_work() as active_session:
+        return _read(active_session)
+
+
+def list_result_rows(
+    project_id: str,
+    *,
+    session: PgSession | None = None,
+) -> list[ResultMetadataRow]:
+    """Return typed result metadata rows for a project, newest first."""
+    def _read(active_session: PgSession) -> list[ResultMetadataRow]:
+        rows = active_session.fetchall(
+            "SELECT id, project_id, filename, format, size_bytes, rows_count, created_at "
+            "FROM results WHERE project_id = %s ORDER BY created_at DESC",
             (project_id,),
         )
-    if row is None:
-        return None
-    return ResultMetadataRow.from_mapping(row)
+        return _result_metadata_rows(rows)
 
-
-def list_result_rows(project_id: str) -> list[ResultMetadataRow]:
-    """Return typed result metadata rows for a project, newest first."""
-    rows = fetchall(
-        "SELECT id, project_id, filename, format, size_bytes, rows_count, created_at "
-        "FROM results WHERE project_id = %s ORDER BY created_at DESC",
-        (project_id,),
-    )
-    return _result_metadata_rows(rows)
+    if session is not None:
+        return _read(session)
+    with unit_of_work() as active_session:
+        return _read(active_session)

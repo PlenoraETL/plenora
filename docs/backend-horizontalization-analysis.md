@@ -92,7 +92,8 @@ I punti ancora da governare operativamente per una vera orizzontalizzazione sono
 
 - `blob_writer.py`: buon punto di orizzontalizzazione. Salva in DB o object storage e registra upload intent per reconciliation.
 - `pipeline_result.py`: per `gpkg`/`shp` usa temp locale solo per serializzare, poi salva bytes come result blob. Ok se il temp e' effimero.
-- `legacy_file_store.py`, `temp_paths.py`, `result_reader.py`: compat filesystem/temp. Tenerli solo per migrazione o path legacy; non usarli come fonte canonica.
+- `legacy_file_store.py`, `temp_paths.py`, `result_reader.py`: compat filesystem/temp. I local result path legacy sono opt-in esplicito fuori cluster/prod; non dipendono piu' da euristiche dev/test.
+- `db.py` e `cleanup_repository.py`: repository result migrati a `unit_of_work()`/`PgSession` espliciti, senza import diretto dei wrapper legacy `execute/fetchone/fetchall`.
 - `cleanup.py`: usa `FOR UPDATE` e reconciliation, buono per concorrenza.
 
 ### `backend/app/core/files/*`
@@ -158,7 +159,7 @@ I punti ancora da governare operativamente per una vera orizzontalizzazione sono
 ### `backend/app/core/manipola/*`
 
 - Trasformazioni prevalentemente in-memory pandas/geopandas: orizzontalizzabili via Celery workers, ma non condividono stato.
-- `project_source_runtime.py`: `threading.local` per catena esecuzione; ok per isolamento per thread, non e' stato globale.
+- `project_source_runtime.py`: catena esecuzione migrata a `ContextVar`; niente `threading.local` nel runtime Manipola.
 - `plugin_executor.py`: singleton executor process-local; ok se i plugin sono stateless. Se plugin scrivono su disco, vanno auditati separatamente.
 - `ManipolaExecutor` riceve ora un `group_id_resolver` iniettabile: la risoluzione tenant resta un boundary esplicito e testabile, non un lookup nascosto hardcoded nel core trasformazioni.
 - `source_loading.load_project_source_artifact()` e' marcato `GO-PORT-DISK-DEPENDENCY`: i `Path` restano confinati all'adapter pandas/geopandas finche' i loader non passano a bytes/stream.
@@ -230,7 +231,7 @@ I punti ancora da governare operativamente per una vera orizzontalizzazione sono
 - `app/main.py` non legge piu' direttamente `os.getenv`: delega ad `app.app_factory.create_app` e mantiene solo il path storico `app.main:app` con re-export dei runtime service.
 - `app/app_factory.py` e' ora l'app composition boundary; le due letture raw env per docs/redoc sono allowlistate e documentate come boot-time boundary.
 - Lo scanner `os.getenv` ora intercetta anche alias (`import os as ...`) e import diretti (`from os import getenv`), quindi nuovi raw env read fuori allowlist non possono bypassare il lock.
-- L'inventory `threading.local` e' esplicito e limitato a due adapter legacy documentati: `app/db/pg_connection.py` e `app/core/manipola/project_source_runtime.py`.
+- L'inventory `threading.local` e' esplicito e limitato al legacy DB adapter `app/db/pg_connection.py`.
 - `OrchestratorService.__init__` e' fuori dal pattern piu' rischioso: non costruisce piu' direttamente executor concreti nel constructor path, e il guardrail mantiene la baseline pulita per i service migrati.
 - La baseline router -> `app.db.pg_connection` resta chiusa a zero import diretti.
 - `app.runtime.services` resta la composition boundary per i servizi gia' migrati: `main.py` consuma il container e non costruisce inline i service condivisi.
@@ -238,17 +239,13 @@ I punti ancora da governare operativamente per una vera orizzontalizzazione sono
 ### Remaining
 
 - `OrchestratorService` mantiene default builder fuori da `__init__` per compatibilita'. La chiusura completa Go-ready e' far arrivare sempre un dispatch `Mapping[str, CanvasExecutorProtocol]` dalla runtime composition factory, senza fallback impliciti nei service.
-- `threading.local` resta tollerato solo nei due adapter indicati. Non introdurre nuovi usi per contesto runtime; preferire ContextVar, parametri espliciti o stato condiviso DB/Redis/object storage.
+- `threading.local` resta tollerato solo nel DB adapter legacy indicato. Non introdurre nuovi usi per contesto runtime; preferire ContextVar, parametri espliciti o stato condiviso DB/Redis/object storage.
 - `cloud_backends.py` consuma config tramite `StorageBackendConfig` e `Settings`; il raw access per i validator fail-fast e' centralizzato in `Settings.get_raw`.
 - `TaskService` non usa piu' `_task_project_cache`: il metadata dei task pending e' su Redis-only nel default runtime, coperto da contract test.
 - Il trigger backup manuale passa da Celery task: l'API pod non avvia piu' subprocess locali.
 - I residui multi-host piu' importanti restano quelli gia' elencati nelle priorita': compat filesystem per artifact legacy/cache e alcuni fallback dev-only documentati.
 
 ## Priorita consigliate
-
-P1:
-
-- Valutare se rimuovere del tutto i fallback in-memory non-prod o mantenerli come DX locale.
 
 P2:
 

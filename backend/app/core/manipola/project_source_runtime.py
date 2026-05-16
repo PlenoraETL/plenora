@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
+from contextvars import ContextVar
 from pathlib import Path
 from typing import Any, List, Optional
-import threading
 import uuid as _uuid
 
 from app.core.intermediate.run_lifecycle import (
@@ -31,25 +31,27 @@ from .types import FrameMap, JsonObject
 logger = get_logger(__name__)
 
 
-# Runtime cross-project cycle guard. The chain is thread-local because worker
-# processes/threads can execute unrelated project graphs concurrently.
-_manipola_execution_chain = threading.local()
+# Runtime cross-project cycle guard. ContextVar keeps unrelated async/task
+# contexts isolated without tying the state to a physical thread.
+_manipola_execution_chain: ContextVar[tuple[str, ...]] = ContextVar(
+    "manipola_execution_chain",
+    default=(),
+)
 
 
 def _get_execution_chain() -> List[str]:
-    if not hasattr(_manipola_execution_chain, "projects"):
-        _manipola_execution_chain.projects = []
-    return _manipola_execution_chain.projects
+    return list(_manipola_execution_chain.get())
 
 
 def _push_to_execution_chain(project_id: str) -> None:
-    _get_execution_chain().append(project_id)
+    chain = _manipola_execution_chain.get()
+    _manipola_execution_chain.set((*chain, project_id))
 
 
 def _pop_from_execution_chain(project_id: str) -> None:
-    chain = _get_execution_chain()
+    chain = _manipola_execution_chain.get()
     if chain and chain[-1] == project_id:
-        chain.pop()
+        _manipola_execution_chain.set(chain[:-1])
 
 
 def _assert_no_lineage_cycle_on_chain(source_project_id: str) -> None:

@@ -22,18 +22,40 @@ _RESULTS_CORE_TYPED_ROW_PATHS = (
 )
 
 
+class _FakeUnitOfWork:
+    def __init__(self, session):
+        self.session = session
+
+    def __enter__(self):
+        return self.session
+
+    def __exit__(self, *_exc):
+        return False
+
+
+class _FakeResultSession:
+    def __init__(self, calls, *, fetchone_row=None, fetchall_rows=None):
+        self.calls = calls
+        self.fetchone_row = fetchone_row
+        self.fetchall_rows = fetchall_rows or []
+
+    def execute(self, sql: str, params: tuple[object, ...]) -> None:
+        self.calls.append(("execute", sql, params))
+
+    def fetchone(self, sql: str, params: tuple[object, ...]) -> dict[str, object]:
+        self.calls.append(("fetchone", sql, params))
+        return self.fetchone_row if self.fetchone_row is not None else {"id": params[0]}
+
+    def fetchall(self, sql: str, params: tuple[object, ...]) -> list[dict[str, object]]:
+        self.calls.append(("fetchall", sql, params))
+        return list(self.fetchall_rows)
+
+
 def test_result_metadata_sql_lives_in_core_results_db(monkeypatch):
     calls: list[tuple[str, str, tuple[object, ...]]] = []
 
-    def _execute(sql: str, params: tuple[object, ...]) -> None:
-        calls.append(("execute", sql, params))
-
-    def _fetchone(sql: str, params: tuple[object, ...]) -> dict[str, object]:
-        calls.append(("fetchone", sql, params))
-        return {"id": params[0]}
-
-    monkeypatch.setattr(results_db, "execute", _execute)
-    monkeypatch.setattr(results_db, "fetchone", _fetchone)
+    session = _FakeResultSession(calls)
+    monkeypatch.setattr(results_db, "unit_of_work", lambda: _FakeUnitOfWork(session))
 
     saved_row = results_db.save_result_row(
         result_id="res-1",
@@ -90,16 +112,12 @@ def test_result_metadata_sql_lives_in_core_results_db(monkeypatch):
 def test_result_metadata_reads_use_core_sql(monkeypatch):
     calls: list[tuple[str, str, tuple[object, ...]]] = []
 
-    def _fetchone(sql: str, params: tuple[object, ...]) -> dict[str, object]:
-        calls.append(("fetchone", sql, params))
-        return {"id": "latest"}
-
-    def _fetchall(sql: str, params: tuple[object, ...]) -> list[dict[str, object]]:
-        calls.append(("fetchall", sql, params))
-        return [{"id": "latest"}]
-
-    monkeypatch.setattr(results_db, "fetchone", _fetchone)
-    monkeypatch.setattr(results_db, "fetchall", _fetchall)
+    session = _FakeResultSession(
+        calls,
+        fetchone_row={"id": "latest"},
+        fetchall_rows=[{"id": "latest"}],
+    )
+    monkeypatch.setattr(results_db, "unit_of_work", lambda: _FakeUnitOfWork(session))
 
     result_row = results_db.get_result_row("res-1")
     latest_group_row = results_db.get_latest_result_row("proj-1", group_id="grp-1")
@@ -138,7 +156,8 @@ def test_result_metadata_row_is_typed_read_only_boundary(monkeypatch):
             "storage_key": "results/proj-1/res-1.bin",
         }
 
-    monkeypatch.setattr(results_db, "fetchone", _fetchone)
+    session = _FakeResultSession(calls=[], fetchone_row=_fetchone("", ()))
+    monkeypatch.setattr(results_db, "unit_of_work", lambda: _FakeUnitOfWork(session))
 
     row = results_db.get_result_row("res-1")
 

@@ -196,12 +196,8 @@ def test_os_getenv_only_at_boundary_modules():
 # - `app/db/pg_connection.py`: transaction state thread-local legato al
 #   connection pool per processo. Legacy DB adapter documentato; non e'
 #   lock distribuito.
-# - `app/core/manipola/project_source_runtime.py`: catena sorgenti
-#   Manipola isolata per thread durante l'esecuzione. Legacy execution
-#   adapter documentato; non e' stato condiviso multi-replica.
 ALLOWLIST_THREADING_LOCAL_COUNTS: Dict[str, int] = {
     "app/db/pg_connection.py": 1,
-    "app/core/manipola/project_source_runtime.py": 1,
 }
 
 

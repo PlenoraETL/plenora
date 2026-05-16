@@ -50,3 +50,26 @@ def test_delete_output_file_is_project_scoped(tmp_path):
 
     assert legacy_file_store.delete_output_file("p1", "out.csv", root=tmp_path)
     assert not target.exists()
+
+
+def test_legacy_local_result_paths_are_explicit_opt_in(monkeypatch):
+    from app.core.results import legacy_file_store
+
+    monkeypatch.setenv("ENVIRONMENT", "custom-review-env")
+    monkeypatch.delenv(legacy_file_store.LEGACY_LOCAL_RESULT_PATHS_FLAG, raising=False)
+
+    assert legacy_file_store.legacy_local_result_paths_enabled() is False
+
+    monkeypatch.setenv(legacy_file_store.LEGACY_LOCAL_RESULT_PATHS_FLAG, "1")
+
+    assert legacy_file_store.legacy_local_result_paths_enabled() is True
+
+
+def test_legacy_local_result_paths_blocked_in_cluster_even_with_flag(monkeypatch):
+    from app.core.results import legacy_file_store
+
+    monkeypatch.setenv("ENVIRONMENT", "development")
+    monkeypatch.setenv("KUBERNETES_SERVICE_HOST", "10.0.0.1")
+    monkeypatch.setenv(legacy_file_store.LEGACY_LOCAL_RESULT_PATHS_FLAG, "1")
+
+    assert legacy_file_store.legacy_local_result_paths_enabled() is False

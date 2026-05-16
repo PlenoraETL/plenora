@@ -13,7 +13,6 @@ from app.shared.resources.path_policy import assert_path_within
 
 LEGACY_LOCAL_RESULT_PATHS_FLAG = "PLENORA_ALLOW_LEGACY_LOCAL_RESULT_PATHS"
 
-_LOCAL_FALLBACK_ENVS = {"dev", "development", "local", "test", "testing"}
 _HARDENED_ENVS = {"production", "prod", "staging", "stage"}
 _TRUE_VALUES = {"1", "true", "yes", "on"}
 
@@ -31,10 +30,8 @@ def is_cluster_or_prod() -> bool:
 
 
 def legacy_local_result_paths_enabled() -> bool:
-    """Allow legacy local paths only in local/dev/test with explicit opt-in."""
+    """Allow legacy local paths only with explicit opt-in outside hardened envs."""
     if is_cluster_or_prod():
-        return False
-    if _environment_name() not in _LOCAL_FALLBACK_ENVS:
         return False
     raw_flag = settings.get(LEGACY_LOCAL_RESULT_PATHS_FLAG, "")
     return str(raw_flag).strip().lower() in _TRUE_VALUES
@@ -49,8 +46,8 @@ def legacy_local_result_paths_disabled_message(use_case: str) -> str:
         )
     return (
         f"{use_case} disabilitato: impostare "
-        f"{LEGACY_LOCAL_RESULT_PATHS_FLAG}=1 solo in development/test "
-        "per abilitare il fallback legacy locale"
+        f"{LEGACY_LOCAL_RESULT_PATHS_FLAG}=1 solo in ambienti non cluster "
+        "per abilitare il fallback legacy locale esplicito"
     )
 
 
