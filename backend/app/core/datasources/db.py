@@ -7,12 +7,27 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Mapping, Optional, TypeAlias, cast
 
-from app.db.pg_connection import execute, fetchall, fetchone
+from app.db.pg_connection import unit_of_work
 from app.db.sql_safety import safe_set_clause
 
 
 DataSourceConfig: TypeAlias = Mapping[str, object]
 ScanStatePayload: TypeAlias = Mapping[str, object]
+
+
+def _fetchone(sql: str, params: tuple = ()) -> Mapping[str, object] | None:
+    with unit_of_work() as session:
+        return session.fetchone(sql, params)
+
+
+def _fetchall(sql: str, params: tuple = ()) -> list[Mapping[str, object]]:
+    with unit_of_work() as session:
+        return session.fetchall(sql, params)
+
+
+def _execute(sql: str, params: tuple = ()):
+    with unit_of_work() as session:
+        return session.execute(sql, params)
 
 
 def _required_str(row: Mapping[str, object], key: str) -> str:
@@ -119,20 +134,20 @@ def get_datasource(
     group_id: str | None = None,
 ) -> Optional[DataSourceRow]:
     if group_id:
-        row = fetchone(
+        row = _fetchone(
             "SELECT * FROM datasources WHERE id = %s AND group_id = %s",
             (ds_id, group_id),
         )
     else:
-        row = fetchone("SELECT * FROM datasources WHERE id = %s", (ds_id,))
+        row = _fetchone("SELECT * FROM datasources WHERE id = %s", (ds_id,))
     return _optional_datasource_row(row)
 
 
 def list_datasources(group_id: str | None = None) -> list[DataSourceRow]:
     if group_id is None:
-        rows = fetchall("SELECT * FROM datasources ORDER BY name")
+        rows = _fetchall("SELECT * FROM datasources ORDER BY name")
     else:
-        rows = fetchall(
+        rows = _fetchall(
             "SELECT * FROM datasources WHERE group_id = %s ORDER BY name",
             (group_id,),
         )
@@ -148,7 +163,7 @@ def save_datasource(
     created_by: str | None = None,
 ) -> DataSourceRow:
     now = datetime.now(timezone.utc).isoformat()
-    execute(
+    _execute(
         "INSERT INTO datasources (id, group_id, name, ds_type, config, created_at, updated_at, created_by) "
         "VALUES (%s,%s,%s,%s,%s,%s,%s,%s) ON CONFLICT (id) DO UPDATE SET "
         "name=EXCLUDED.name, ds_type=EXCLUDED.ds_type, config=EXCLUDED.config, updated_at=EXCLUDED.updated_at",
@@ -177,16 +192,16 @@ def update_datasource(ds_id: str, **fields: object) -> None:
         update_fields["config"] = json.dumps(dict(update_fields["config"]))
     update_fields["updated_at"] = datetime.now(timezone.utc).isoformat()
     set_clause, params = safe_set_clause("datasources", update_fields)
-    execute(f"UPDATE datasources SET {set_clause} WHERE id = %s", params + (ds_id,))
+    _execute(f"UPDATE datasources SET {set_clause} WHERE id = %s", params + (ds_id,))
 
 
 def delete_datasource(ds_id: str) -> bool:
-    cur = execute("DELETE FROM datasources WHERE id = %s", (ds_id,))
+    cur = _execute("DELETE FROM datasources WHERE id = %s", (ds_id,))
     return cur.rowcount > 0
 
 
 def get_scan_state(ds_id: str) -> Optional[DataSourceScanStateRow]:
-    row = fetchone(
+    row = _fetchone(
         "SELECT id, scan_state FROM datasources WHERE id = %s",
         (ds_id,),
     )
@@ -194,7 +209,7 @@ def get_scan_state(ds_id: str) -> Optional[DataSourceScanStateRow]:
 
 
 def save_scan_state(ds_id: str, state: Mapping[str, object]) -> bool:
-    cur = execute(
+    cur = _execute(
         "UPDATE datasources SET scan_state = %s, updated_at = %s WHERE id = %s",
         (
             json.dumps(dict(state)),

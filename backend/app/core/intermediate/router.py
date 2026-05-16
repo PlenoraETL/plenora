@@ -503,14 +503,11 @@ def compare_runs_l2(
         # Righe rimosse: in A ma non in B (confronto su row_hash
         # L'indice idx_node_rows_hash su (run_id, node_id, row_hash) rende
         # il NOT EXISTS O(n log m) anche per dataset grandi
-        from app.db import pg_connection as _pg_connection
-
         removed_raw = node_snapshots_db.list_node_row_hash_diff(
             source_run_id=run_id_a,
             compare_run_id=run_id_b,
             node_id=node_id,
             limit=500,
-            fetchall_func=_pg_connection.fetchall,
         )
 
         # Righe aggiunte: in B ma non in A
@@ -519,19 +516,16 @@ def compare_runs_l2(
             compare_run_id=run_id_a,
             node_id=node_id,
             limit=500,
-            fetchall_func=_pg_connection.fetchall,
         )
 
         # Conta totali senza limite
         count_a = node_snapshots_db.count_node_rows(
             run_id_a,
             node_id,
-            fetchone_func=_pg_connection.fetchone,
         )
         count_b = node_snapshots_db.count_node_rows(
             run_id_b,
             node_id,
-            fetchone_func=_pg_connection.fetchone,
         )
 
         # Shape del response identico a prima: gli elementi sono dict con

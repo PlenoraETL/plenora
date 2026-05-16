@@ -14,11 +14,26 @@ from typing import Dict, List, Optional, TypeAlias
 
 from psycopg2.extras import execute_values
 
-from app.db.pg_connection import fetchall, fetchone, execute, transaction
+from app.db.pg_connection import unit_of_work
 
 NodeMetaRow: TypeAlias = Dict[str, object]
 NodeTableRow: TypeAlias = Dict[str, object]
 SpecialFloatSentinel: TypeAlias = Dict[str, str]
+
+
+def _fetchone(sql: str, params: tuple = ()) -> Optional[Dict[str, object]]:
+    with unit_of_work() as session:
+        return session.fetchone(sql, params)
+
+
+def _fetchall(sql: str, params: tuple = ()) -> List[Dict[str, object]]:
+    with unit_of_work() as session:
+        return session.fetchall(sql, params)
+
+
+def _execute(sql: str, params: tuple = ()):
+    with unit_of_work() as session:
+        return session.execute(sql, params)
 
 
 def upsert_node_meta(
@@ -31,7 +46,7 @@ def upsert_node_meta(
     status: str = None,
     error_msg: str = None,
     *,
-    execute_func=execute,
+    execute_func=_execute,
 ) -> None:
     execute_func(
         """INSERT INTO node_meta
@@ -92,7 +107,7 @@ def upsert_node_meta_extended(
     artifact_format: Optional[str] = None,
     artifact_status: Optional[str] = None,
     artifact_error: Optional[str] = None,
-    execute_func=execute,
+    execute_func=_execute,
 ) -> None:
     """UPSERT node_meta with the current snapshot persistence schema."""
     execute_func(
@@ -138,7 +153,7 @@ def write_node_snapshot_atomic(
     artifact_format: Optional[str] = None,
     artifact_status: Optional[str] = None,
     artifact_error: Optional[str] = None,
-    transaction_func=transaction,
+    transaction_func=unit_of_work,
     execute_values_func=execute_values,
 ) -> None:
     """Atomically write `node_rows` plus extended `node_meta`."""
@@ -179,7 +194,7 @@ def get_node_meta(
     run_id: str,
     node_id: str,
     *,
-    fetchone_func=fetchone,
+    fetchone_func=_fetchone,
 ) -> Optional[NodeMetaRow]:
     row = fetchone_func(
         "SELECT * FROM node_meta WHERE run_id = %s AND node_id = %s",
@@ -193,7 +208,7 @@ def get_node_meta(
     return row
 
 
-def list_node_meta(run_id: str, *, fetchall_func=fetchall) -> List[NodeMetaRow]:
+def list_node_meta(run_id: str, *, fetchall_func=_fetchall) -> List[NodeMetaRow]:
     rows = fetchall_func("SELECT * FROM node_meta WHERE run_id = %s", (run_id,))
     for row in rows:
         if row.get("col_schema"):
@@ -339,7 +354,7 @@ def insert_node_rows(
     rows: List[Dict],
     col_schema: dict,
     *,
-    transaction_func=transaction,
+    transaction_func=unit_of_work,
     execute_values_func=execute_values,
 ) -> None:
     """Idempotently bulk insert node rows for one run/node pair."""
@@ -361,7 +376,7 @@ def write_node_atomic(
     exec_time: Optional[float] = None,
     status: Optional[str] = None,
     error_msg: Optional[str] = None,
-    transaction_func=transaction,
+    transaction_func=unit_of_work,
     execute_values_func=execute_values,
 ) -> None:
     """Atomically write legacy `node_rows` plus base `node_meta`."""
@@ -390,8 +405,8 @@ def get_node_table_rows(
     group_id: Optional[str],
     limit: int = None,
     *,
-    fetchone_func=fetchone,
-    fetchall_func=fetchall,
+    fetchone_func=_fetchone,
+    fetchall_func=_fetchall,
 ) -> List[NodeTableRow]:
     """Read persisted node rows after verifying run ownership."""
     if group_id is None:
@@ -433,7 +448,7 @@ def list_node_row_hash_diff(
     compare_run_id: str,
     node_id: str,
     limit: int = 500,
-    fetchall_func=fetchall,
+    fetchall_func=_fetchall,
 ) -> List[NodeTableRow]:
     """Rows present in source run/node but absent from compare by row_hash."""
     return fetchall_func(
@@ -457,7 +472,7 @@ def count_node_rows(
     run_id: str,
     node_id: str,
     *,
-    fetchone_func=fetchone,
+    fetchone_func=_fetchone,
 ) -> int:
     """Count persisted rows for one run/node."""
     row = fetchone_func(

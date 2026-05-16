@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from app.db import pg_connection
+from app.db.pg_connection import unit_of_work
 from app.db.cleanup_sql import rowcount
 
 
@@ -26,7 +26,8 @@ _DELETE_GROUP_ROWS_SQL: dict[GroupCleanupTable, str] = {
 def delete_group_rows_for_table(table: GroupCleanupTable, group_id: str) -> int:
     """Delete group-owned rows from an allowed cleanup table."""
     sql = _DELETE_GROUP_ROWS_SQL[table]
-    return rowcount(pg_connection.execute(sql, (group_id,)))
+    with unit_of_work() as session:
+        return rowcount(session.execute(sql, (group_id,)))
 
 
 __all__ = ["GroupCleanupTable", "delete_group_rows_for_table"]

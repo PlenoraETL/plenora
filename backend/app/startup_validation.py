@@ -12,9 +12,7 @@ from urllib.parse import urlparse
 import shutil
 import socket
 import stat
-import subprocess
 import sys
-import time
 
 import logging
 import os
@@ -208,28 +206,17 @@ def ensure_redis_wsl_fallback(
     errors: list,
     warnings: list,
 ) -> None:
-    """Opportunistically start Redis through WSL for local Windows dev only."""
+    """Reject implicit process spawning; Redis must be started externally."""
 
-    logger.info("Redis non raggiungibile - avvio via WSL (dev Windows)...")
-    try:
-        subprocess.Popen(
-            ["wsl", "redis-server", "--daemonize", "yes"],
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-        )
-        for _ in range(10):
-            time.sleep(0.5)
-            if redis_ping():
-                logger.info("Redis avviato con successo via WSL")
-                return
-        warnings.append("Redis avviato via WSL ma non risponde dopo 5s")
-    except FileNotFoundError:
-        errors.append(
-            "Redis non attivo e WSL non disponibile. "
-            "Avvia Redis manualmente: wsl redis-server --daemonize yes"
-        )
-    except Exception as exc:
-        errors.append(f"Impossibile avviare Redis via WSL: {exc}")
+    if redis_ping():
+        return
+    warnings.append(
+        "Fallback WSL Redis disabilitato: lo startup non avvia processi figli."
+    )
+    errors.append(
+        "Redis non attivo. Avvia Redis esternamente prima del backend "
+        "(es. wsl redis-server --daemonize yes in sviluppo locale)."
+    )
 
 
 def _validate_data_dir(settings: Any, errors: list) -> None:

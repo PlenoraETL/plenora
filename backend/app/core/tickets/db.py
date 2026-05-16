@@ -7,13 +7,26 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any, List, Mapping, Optional
 
-from app.db.pg_connection import (
-    fetchone, fetchall, execute, transaction,
-)
+from app.db.pg_connection import unit_of_work
 from app.shared.contracts.payloads import IntMap, JsonObject
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
+
+
+def fetchone(sql: str, params: tuple = ()) -> JsonObject | None:
+    with unit_of_work() as session:
+        return session.fetchone(sql, params)
+
+
+def fetchall(sql: str, params: tuple = ()) -> list[JsonObject]:
+    with unit_of_work() as session:
+        return session.fetchall(sql, params)
+
+
+def execute(sql: str, params: tuple = ()):
+    with unit_of_work() as session:
+        return session.execute(sql, params)
 
 
 @dataclass(frozen=True)
@@ -377,7 +390,7 @@ def add_comment(ticket_id: str, author_id: str, body: str) -> CommentRow:
     """Aggiunge un commento + tocca updated_at del ticket."""
     cid = str(uuid.uuid4())
     now = datetime.now(timezone.utc)
-    with transaction() as conn:
+    with unit_of_work() as conn:
         with conn.cursor() as cur:
             cur.execute(
                 "INSERT INTO ticket_comments (id, ticket_id, author_id, body, created_at) "

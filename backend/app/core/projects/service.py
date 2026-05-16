@@ -27,7 +27,7 @@ from app.core.projects.canvas_models import (
 from app.core.auth import db as _groups
 from app.core.eseguibili.db import list_eseguibili_by_source
 from app.core.projects import db as project_db
-from app.db import pg_connection
+from app.db.pg_connection import unit_of_work
 from app.core.results import store as results_store
 from app.core.projects.domain import build_project_id, resolve_project_group_id
 from app.core.projects.lineage import detect_project_lineage_cycle
@@ -274,15 +274,17 @@ class ProjectService:
         accidentally bypass project ownership checks.
         """
         if group_id:
-            row = pg_connection.fetchone(
-                "SELECT id, canvas FROM projects WHERE id = %s AND group_id = %s",
-                (project_id, group_id),
-            )
+            with unit_of_work() as session:
+                row = session.fetchone(
+                    "SELECT id, canvas FROM projects WHERE id = %s AND group_id = %s",
+                    (project_id, group_id),
+                )
         else:
-            row = pg_connection.fetchone(
-                "SELECT id, canvas FROM projects WHERE id = %s",
-                (project_id,),
-            )
+            with unit_of_work() as session:
+                row = session.fetchone(
+                    "SELECT id, canvas FROM projects WHERE id = %s",
+                    (project_id,),
+                )
         if not row:
             return None
         return RawProjectCanvas(project_id=str(row["id"]), canvas=row.get("canvas"))

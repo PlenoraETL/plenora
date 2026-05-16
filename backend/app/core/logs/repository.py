@@ -4,15 +4,17 @@ from __future__ import annotations
 
 from typing import Any, TypeAlias
 
-import app.db.pg_connection as pg_connection
+from app.db.pg_connection import unit_of_work
 
 
 LogRepositoryRow: TypeAlias = dict[str, Any]
 
 
 def fetchone(sql: str, params: tuple[Any, ...] = ()) -> LogRepositoryRow | None:
-    return pg_connection.fetchone(sql, params)
+    with unit_of_work() as session:
+        return session.fetchone(sql, params)
 
 
 def fetchall(sql: str, params: tuple[Any, ...] = ()) -> list[LogRepositoryRow]:
-    return pg_connection.fetchall(sql, params)
+    with unit_of_work() as session:
+        return session.fetchall(sql, params)

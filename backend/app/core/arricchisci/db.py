@@ -7,8 +7,23 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any
 
-from app.db.pg_connection import execute, fetchall, fetchone
+from app.db.pg_connection import unit_of_work
 from app.core.arricchisci.types import JsonObject
+
+
+def _fetchone(sql: str, params: tuple = ()) -> JsonObject | None:
+    with unit_of_work() as session:
+        return session.fetchone(sql, params)
+
+
+def _fetchall(sql: str, params: tuple = ()) -> list[JsonObject]:
+    with unit_of_work() as session:
+        return session.fetchall(sql, params)
+
+
+def _execute(sql: str, params: tuple = ()):
+    with unit_of_work() as session:
+        return session.execute(sql, params)
 
 
 @dataclass(frozen=True)
@@ -47,12 +62,12 @@ def get_api_connection_row(
     group_id: str | None = None,
 ) -> ApiConnectionRow | None:
     if group_id:
-        record = fetchone(
+        record = _fetchone(
             "SELECT * FROM api_connections WHERE id = %s AND group_id = %s",
             (api_id, group_id),
         )
     else:
-        record = fetchone("SELECT * FROM api_connections WHERE id = %s", (api_id,))
+        record = _fetchone("SELECT * FROM api_connections WHERE id = %s", (api_id,))
     if not record:
         return None
     return _row_from_record(record)
@@ -60,9 +75,9 @@ def get_api_connection_row(
 
 def list_api_connection_rows(group_id: str | None = None) -> list[ApiConnectionRow]:
     if group_id is None:
-        records = fetchall("SELECT * FROM api_connections ORDER BY created_at DESC")
+        records = _fetchall("SELECT * FROM api_connections ORDER BY created_at DESC")
     else:
-        records = fetchall(
+        records = _fetchall(
             "SELECT * FROM api_connections WHERE group_id = %s ORDER BY created_at DESC",
             (group_id,),
         )
@@ -76,7 +91,7 @@ def save_api_connection_row(
     created_by: str | None = None,
 ) -> ApiConnectionRow:
     now = datetime.now(timezone.utc).isoformat()
-    execute(
+    _execute(
         "INSERT INTO api_connections (id, group_id, config, created_at, updated_at, created_by) "
         "VALUES (%s,%s,%s,%s,%s,%s) ON CONFLICT (id) DO UPDATE SET "
         "config=EXCLUDED.config, updated_at=EXCLUDED.updated_at",
@@ -90,7 +105,7 @@ def save_api_connection_row(
 
 def update_api_connection_row(api_id: str, config: JsonObject) -> ApiConnectionRow | None:
     now = datetime.now(timezone.utc).isoformat()
-    execute(
+    _execute(
         "UPDATE api_connections SET config = %s, updated_at = %s WHERE id = %s",
         (json.dumps(config), now, api_id),
     )
@@ -98,5 +113,5 @@ def update_api_connection_row(api_id: str, config: JsonObject) -> ApiConnectionR
 
 
 def delete_api_connection(api_id: str) -> bool:
-    cur = execute("DELETE FROM api_connections WHERE id = %s", (api_id,))
+    cur = _execute("DELETE FROM api_connections WHERE id = %s", (api_id,))
     return cur.rowcount > 0

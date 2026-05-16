@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Mapping, Optional
 
-from app.db import pg_connection
+from app.db.pg_connection import unit_of_work
 
 
 def fetch_result_blob_lookup_row(
@@ -12,4 +12,5 @@ def fetch_result_blob_lookup_row(
     params: tuple,
 ) -> Optional[Mapping[str, object]]:
     """Fetch the result blob metadata/data row through the DB boundary."""
-    return pg_connection.fetchone(sql, params)
+    with unit_of_work() as session:
+        return session.fetchone(sql, params)

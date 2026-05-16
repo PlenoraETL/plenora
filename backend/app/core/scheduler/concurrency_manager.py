@@ -131,8 +131,7 @@ class ConcurrencyManager:
         Prima: SELECT + INSERT OR REPLACE non atomici → due thread che
         leggevano value=2 sovrascrivevano entrambi a value=3 invece di 4.
         """
-        conn = db.get_connection()
-        try:
+        with db.transaction() as conn:
             with conn.cursor() as cur:
                 cur.execute(
                     "INSERT INTO scheduler_locks (key, value, expires_at) "
@@ -145,24 +144,14 @@ class ConcurrencyManager:
                     (key,)
                 )
                 row = cur.fetchone()
-            conn.commit()
             return int(row["value"]) if row else 0
-        except Exception:
-            try:
-                conn.rollback()
-            except Exception:
-                pass
-            raise
-        finally:
-            db.put_connection(conn)
 
     def _decr(self, key: str) -> int:
         """Decrementa contatore atomicamente. Rimuove se arriva a 0.
 
         Stesso pattern atomic di _incr: UPDATE ... RETURNING.
         """
-        conn = db.get_connection()
-        try:
+        with db.transaction() as conn:
             with conn.cursor() as cur:
                 cur.execute(
                     "UPDATE scheduler_locks SET value = CAST(value AS INTEGER) - 1 "
@@ -171,7 +160,6 @@ class ConcurrencyManager:
                 )
                 row = cur.fetchone()
             if row is None:
-                conn.commit()
                 return 0
             new_val = int(row["value"])
             if new_val == 0:
@@ -181,16 +169,7 @@ class ConcurrencyManager:
                         "WHERE key = %s AND CAST(value AS INTEGER) = 0",
                         (key,)
                     )
-            conn.commit()
             return new_val
-        except Exception:
-            try:
-                conn.rollback()
-            except Exception:
-                pass
-            raise
-        finally:
-            db.put_connection(conn)
 
     def _delete(self, key: str):
         db.execute("DELETE FROM scheduler_locks WHERE key = %s", (key,))

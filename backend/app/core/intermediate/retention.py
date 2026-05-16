@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Callable, Dict, List
 
 from app.core.resources import storage_reconciliation as reconciliation
-from app.db.pg_connection import fetchall, transaction
+from app.db.pg_connection import unit_of_work
 from app.infrastructure.storage import compensation as storage_compensation
 from app.utils.logger import get_logger
 
@@ -19,12 +19,17 @@ DeleteRun = Callable[[str], None]
 DEFAULT_RUNS_RETENTION = 5
 
 
+def _fetchall(sql: str, params: tuple = ()) -> List[Dict]:
+    with unit_of_work() as session:
+        return session.fetchall(sql, params)
+
+
 def list_canvas_ids_with_runs(
     *,
     fetchall_func: FetchAll | None = None,
 ) -> list[str]:
     """Return distinct canvas IDs that currently have intermediate runs."""
-    fetchall_boundary = fetchall_func or fetchall
+    fetchall_boundary = fetchall_func or _fetchall
     rows = fetchall_boundary("SELECT DISTINCT canvas_id FROM runs", ())
     canvas_ids: list[str] = []
     for row in rows:
@@ -86,8 +91,8 @@ def _delete_run(
     logger_obj=None,
 ) -> None:
     """Delete one run and track object-storage artifact cleanup."""
-    fetchall_boundary = fetchall_func or fetchall
-    transaction_boundary = transaction_func or transaction
+    fetchall_boundary = fetchall_func or _fetchall
+    transaction_boundary = transaction_func or unit_of_work
     log = logger_obj or logger
 
     artifact_rows = fetchall_boundary(
@@ -159,7 +164,7 @@ def delete_all_runs_for_canvas(
     logger_obj=None,
 ) -> int:
     """Delete all runs for a canvas and return the successful delete count."""
-    fetchall_boundary = fetchall_func or fetchall
+    fetchall_boundary = fetchall_func or _fetchall
     delete_boundary = delete_run_func or _delete_run
     log = logger_obj or logger
     try:

@@ -9,8 +9,8 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any, Optional
 
-import app.db.pg_connection as db
 from app.core.features.models import ArcGISConnection, ArcGISCreate, ArcGISList, ArcGISUpdate
+from app.db.pg_connection import unit_of_work
 from app.infrastructure.security.crypto import decrypt as _decrypt
 from app.infrastructure.security.crypto import encrypt as _encrypt
 from app.utils.logger import get_logger
@@ -20,6 +20,21 @@ logger = get_logger(__name__)
 DEFAULT_GROUP = "default"
 
 _SENSITIVE_FIELDS = ("password", "client_secret")
+
+
+def _fetchone(sql: str, params: tuple = ()) -> dict[str, Any] | None:
+    with unit_of_work() as session:
+        return session.fetchone(sql, params)
+
+
+def _fetchall(sql: str, params: tuple = ()) -> list[dict[str, Any]]:
+    with unit_of_work() as session:
+        return session.fetchall(sql, params)
+
+
+def _execute(sql: str, params: tuple = ()):
+    with unit_of_work() as session:
+        return session.execute(sql, params)
 
 
 def _as_datetime(value: Any) -> datetime:
@@ -32,7 +47,7 @@ def _as_datetime(value: Any) -> datetime:
 
 def ensure_default_group() -> None:
     now = datetime.now(timezone.utc).isoformat()
-    db.execute(
+    _execute(
         "INSERT INTO groups (id, name, description, created_at, updated_at) "
         "VALUES (%s,%s,%s,%s,%s) ON CONFLICT (id) DO NOTHING",
         (DEFAULT_GROUP, "Default", "Gruppo default", now, now),
@@ -89,7 +104,7 @@ def create_connection(
     enc_password = _encrypt(data.password or "") or ""
     enc_client_secret = _encrypt(data.client_secret or "") or ""
 
-    db.execute(
+    _execute(
         """
         INSERT INTO arcgis_connections
         (id, group_id, name, description, server_url, server_type, auth_type,
@@ -116,15 +131,15 @@ def create_connection(
     )
 
     logger.info(f"Connessione ArcGIS creata: {connection_id} (group {group_id})", op="create")
-    row = db.fetchone("SELECT * FROM arcgis_connections WHERE id = %s", (connection_id,))
+    row = _fetchone("SELECT * FROM arcgis_connections WHERE id = %s", (connection_id,))
     return row_to_connection(dict(row))
 
 
 def list_connections(group_id: Optional[str] = None) -> ArcGISList:
     if group_id is None:
-        rows = db.fetchall("SELECT * FROM arcgis_connections ORDER BY updated_at DESC")
+        rows = _fetchall("SELECT * FROM arcgis_connections ORDER BY updated_at DESC")
     else:
-        rows = db.fetchall(
+        rows = _fetchall(
             "SELECT * FROM arcgis_connections WHERE group_id = %s ORDER BY updated_at DESC",
             (group_id,),
         )
@@ -132,12 +147,12 @@ def list_connections(group_id: Optional[str] = None) -> ArcGISList:
 
 
 def get_connection(connection_id: str) -> Optional[ArcGISConnection]:
-    row = db.fetchone("SELECT * FROM arcgis_connections WHERE id = %s", (connection_id,))
+    row = _fetchone("SELECT * FROM arcgis_connections WHERE id = %s", (connection_id,))
     return row_to_connection(dict(row)) if row else None
 
 
 def update_connection(connection_id: str, data: ArcGISUpdate) -> Optional[ArcGISConnection]:
-    if not db.fetchone("SELECT id FROM arcgis_connections WHERE id = %s", (connection_id,)):
+    if not _fetchone("SELECT id FROM arcgis_connections WHERE id = %s", (connection_id,)):
         return None
 
     update_data = data.model_dump(exclude_unset=True)
@@ -174,13 +189,13 @@ def update_connection(connection_id: str, data: ArcGISUpdate) -> Optional[ArcGIS
 
     sets.append("updated_at = %s")
     params.extend([now, connection_id])
-    db.execute(f"UPDATE arcgis_connections SET {', '.join(sets)} WHERE id = %s", params)
+    _execute(f"UPDATE arcgis_connections SET {', '.join(sets)} WHERE id = %s", tuple(params))
     return get_connection(connection_id)
 
 
 def delete_connection(connection_id: str) -> bool:
-    if not db.fetchone("SELECT id FROM arcgis_connections WHERE id = %s", (connection_id,)):
+    if not _fetchone("SELECT id FROM arcgis_connections WHERE id = %s", (connection_id,)):
         return False
-    db.execute("DELETE FROM arcgis_connections WHERE id = %s", (connection_id,))
+    _execute("DELETE FROM arcgis_connections WHERE id = %s", (connection_id,))
     logger.info(f"Connessione ArcGIS eliminata: {connection_id}", op="delete")
     return True

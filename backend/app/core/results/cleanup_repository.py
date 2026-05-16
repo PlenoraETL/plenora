@@ -5,7 +5,6 @@ from __future__ import annotations
 from collections.abc import Iterator
 from typing import Any
 
-from app.db.pg_connection import transaction as _transaction
 from app.db.pg_connection import unit_of_work
 
 
@@ -17,4 +16,4 @@ def list_distinct_project_id_rows() -> list[Any]:
 
 def transaction() -> Iterator[Any]:
     """Open the DB transaction used by result cleanup lifecycle code."""
-    return _transaction()
+    return unit_of_work()

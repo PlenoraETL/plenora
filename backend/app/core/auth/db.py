@@ -40,7 +40,7 @@ def _coerce_timestamp_to_str(value: Any) -> Any:
 
 _TimestampStr = Annotated[StrictStr, BeforeValidator(_coerce_timestamp_to_str)]
 
-from app.db.pg_connection import execute, fetchall, fetchone
+from app.db.pg_connection import unit_of_work
 from app.db.sql_safety import safe_set_clause
 
 
@@ -141,18 +141,33 @@ def hydrate_group_summary_row(row: Mapping[str, Any] | None) -> GroupSummaryRow:
     return GroupSummaryRow(**parsed.model_dump())
 
 
+def _fetchone(sql: str, params: tuple = ()) -> Mapping[str, Any] | None:
+    with unit_of_work() as session:
+        return session.fetchone(sql, params)
+
+
+def _fetchall(sql: str, params: tuple = ()) -> list[Mapping[str, Any]]:
+    with unit_of_work() as session:
+        return session.fetchall(sql, params)
+
+
+def _execute(sql: str, params: tuple = ()):
+    with unit_of_work() as session:
+        return session.execute(sql, params)
+
+
 def get_user(user_id: str) -> Optional[UserRow]:
-    row = fetchone("SELECT * FROM users WHERE id = %s", (user_id,))
+    row = _fetchone("SELECT * FROM users WHERE id = %s", (user_id,))
     return hydrate_user_row(row)
 
 
 def get_user_by_username(username: str) -> Optional[UserRow]:
-    row = fetchone("SELECT * FROM users WHERE username = %s", (username,))
+    row = _fetchone("SELECT * FROM users WHERE username = %s", (username,))
     return hydrate_user_row(row)
 
 
 def list_users(group_id: str) -> list[UserRow]:
-    rows = fetchall(
+    rows = _fetchall(
         "SELECT id, username, email, group_id, role, is_active, created_at "
         "FROM users WHERE group_id = %s ORDER BY username",
         (group_id,),
@@ -161,7 +176,7 @@ def list_users(group_id: str) -> list[UserRow]:
 
 
 def list_all_users() -> list[UserRow]:
-    rows = fetchall("SELECT * FROM users ORDER BY username")
+    rows = _fetchall("SELECT * FROM users ORDER BY username")
     return [row for row in (hydrate_user_row(row) for row in rows) if row is not None]
 
 
@@ -174,7 +189,7 @@ def create_user(
     email: str = "",
 ) -> UserRow:
     now = _now_iso()
-    execute(
+    _execute(
         "INSERT INTO users (id, username, password_hash, email, group_id, "
         "role, is_active, created_at, updated_at) "
         "VALUES (%s,%s,%s,%s,%s,%s,TRUE,%s,%s)",
@@ -205,35 +220,35 @@ def update_user(
         fields["group_id"] = group_id
     fields["updated_at"] = _now_iso()
     set_clause, vals = safe_set_clause("users", fields)
-    execute(f"UPDATE users SET {set_clause} WHERE id = %s", vals + (user_id,))
+    _execute(f"UPDATE users SET {set_clause} WHERE id = %s", vals + (user_id,))
     return get_user(user_id)
 
 
 def update_user_password(user_id: str, password_hash: str) -> None:
-    execute(
+    _execute(
         "UPDATE users SET password_hash = %s, updated_at = %s WHERE id = %s",
         (password_hash, _now_iso(), user_id),
     )
 
 
 def delete_user(user_id: str) -> bool:
-    cur = execute("DELETE FROM users WHERE id = %s", (user_id,))
+    cur = _execute("DELETE FROM users WHERE id = %s", (user_id,))
     return cur.rowcount > 0
 
 
 def get_group(group_id: str) -> Optional[GroupRow]:
-    row = fetchone("SELECT * FROM groups WHERE id = %s", (group_id,))
+    row = _fetchone("SELECT * FROM groups WHERE id = %s", (group_id,))
     return hydrate_group_row(row)
 
 
 def list_groups() -> list[GroupRow]:
-    rows = fetchall("SELECT * FROM groups ORDER BY name")
+    rows = _fetchall("SELECT * FROM groups ORDER BY name")
     return [row for row in (hydrate_group_row(row) for row in rows) if row is not None]
 
 
 def create_group(group_id: str, name: str, description: str = "") -> GroupRow:
     now = _now_iso()
-    execute(
+    _execute(
         "INSERT INTO groups (id, name, description, created_at, updated_at) "
         "VALUES (%s,%s,%s,%s,%s)",
         (group_id, name, description, now, now),
@@ -245,7 +260,7 @@ def create_group(group_id: str, name: str, description: str = "") -> GroupRow:
 
 
 def get_group_summary(group_id: str) -> GroupSummaryRow:
-    row = fetchone(
+    row = _fetchone(
         "SELECT "
         "(SELECT COUNT(*) FROM projects WHERE group_id = %s) AS projects, "
         "(SELECT COUNT(*) FROM users WHERE group_id = %s) AS users, "
@@ -260,7 +275,7 @@ def get_group_summary(group_id: str) -> GroupSummaryRow:
 
 
 def delete_group(group_id: str) -> bool:
-    cur = execute("DELETE FROM groups WHERE id = %s", (group_id,))
+    cur = _execute("DELETE FROM groups WHERE id = %s", (group_id,))
     return cur.rowcount > 0
 
 

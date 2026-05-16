@@ -5,6 +5,7 @@ PlenoraBeatScheduler — subclass di celery.beat.Scheduler con:
 """
 
 import json
+import importlib
 import os
 import os as _os
 import socket
@@ -35,6 +36,43 @@ _LEADER_LOCK_TTL_SECONDS = 120
 _LEADER_METRICS_HASH = "scheduler:beat:leader:transitions"
 _LEADER_METRICS_CURRENT_ID = "scheduler:beat:leader:current_leader_id"
 _LEADER_METRICS_LAST_TRANSITION_AT = "scheduler:beat:leader:last_transition_at"
+
+_PG_CONNECTION_MODULE = importlib.import_module("app.db.pg_connection")
+_ORIGINAL_PG_FETCHALL = getattr(_PG_CONNECTION_MODULE, "fetchall")
+_ORIGINAL_PG_EXECUTE = getattr(_PG_CONNECTION_MODULE, "execute")
+_ORIGINAL_PG_TRANSACTION = getattr(_PG_CONNECTION_MODULE, "transaction")
+
+
+def _pg_fetchall(sql: str, params: tuple = ()):
+    patched = getattr(_PG_CONNECTION_MODULE, "fetchall")
+    if patched is not _ORIGINAL_PG_FETCHALL:
+        return patched(sql, params)
+
+    from app.db.pg_connection import unit_of_work
+
+    with unit_of_work() as session:
+        return session.fetchall(sql, params)
+
+
+def _pg_execute(sql: str, params: tuple = ()):
+    patched = getattr(_PG_CONNECTION_MODULE, "execute")
+    if patched is not _ORIGINAL_PG_EXECUTE:
+        return patched(sql, params)
+
+    from app.db.pg_connection import unit_of_work
+
+    with unit_of_work() as session:
+        return session.execute(sql, params)
+
+
+def _pg_transaction():
+    patched = getattr(_PG_CONNECTION_MODULE, "transaction")
+    if patched is not _ORIGINAL_PG_TRANSACTION:
+        return patched()
+
+    from app.db.pg_connection import unit_of_work
+
+    return unit_of_work()
 
 
 class PlenoraBeatScheduler(Scheduler):
@@ -288,10 +326,9 @@ class PlenoraBeatScheduler(Scheduler):
         Robustezza: errori DB non crashano il tick (swallowed + loggati).
         """
         try:
-            from app.db.pg_connection import fetchall
             from app.core.scheduler.schedule_service import detect_missed_run
 
-            rows = fetchall(
+            rows = _pg_fetchall(
                 "SELECT id, cron_expression, last_run, config "
                 "FROM schedules WHERE is_enabled = TRUE"
             )
@@ -371,9 +408,8 @@ class PlenoraBeatScheduler(Scheduler):
         un eventuale duplicato al drop di un catchup legittimo).
         """
         try:
-            from app.db.pg_connection import fetchall
             window_start = now - timedelta(hours=self._CATCHUP_DEDUPE_WINDOW_HOURS)
-            rows = fetchall(
+            rows = _pg_fetchall(
                 "SELECT COUNT(*) AS count FROM schedule_catchup_history "
                 "WHERE schedule_id = %s AND scheduled_for = %s "
                 "AND emitted_at >= %s",
@@ -388,9 +424,8 @@ class PlenoraBeatScheduler(Scheduler):
     def _catchup_runaway_exceeded(self, schedule_id: str, now: datetime) -> bool:
         """True se lo schedule ha >= cap catchup emessi nella finestra."""
         try:
-            from app.db.pg_connection import fetchall
             window_start = now - timedelta(minutes=self._CATCHUP_RUNAWAY_WINDOW_MIN)
-            rows = fetchall(
+            rows = _pg_fetchall(
                 "SELECT COUNT(*) AS count FROM schedule_catchup_history "
                 "WHERE schedule_id = %s AND emitted_at >= %s",
                 (schedule_id, window_start.isoformat()),
@@ -406,7 +441,6 @@ class PlenoraBeatScheduler(Scheduler):
     def _emit_single_catchup(self, schedule_id: str, expected_last: datetime,
                              now: datetime) -> None:
         """Emette il task di catchup + update last_run + audit insert."""
-        from app.db.pg_connection import execute
         scheduled_for_iso = expected_last.isoformat()
 
         logger.info(
@@ -438,7 +472,7 @@ class PlenoraBeatScheduler(Scheduler):
         # Audit is fail-open for the tick; failure can cause a duplicate
         # catchup because history-based dedupe will miss this emit.
         try:
-            execute(
+            _pg_execute(
                 "INSERT INTO schedule_catchup_history "
                 "(schedule_id, emitted_at, scheduled_for, leader_id) "
                 "VALUES (%s, %s, %s, %s)",
@@ -456,8 +490,7 @@ class PlenoraBeatScheduler(Scheduler):
     def _sync_from_db(self) -> None:
         """Carica/aggiorna gli schedule attivi dal DB."""
         try:
-            from app.db.pg_connection import fetchall
-            rows = fetchall(
+            rows = _pg_fetchall(
                 "SELECT id, name, cron_expression, project_id, is_enabled, last_run FROM schedules WHERE is_enabled = TRUE"
             )
 
@@ -560,9 +593,8 @@ class PlenoraBeatScheduler(Scheduler):
     def _write_heartbeat(self) -> None:
         """Scrive il timestamp heartbeat nel DB (usato dall'healthcheck)."""
         try:
-            from app.db.pg_connection import execute
             now = datetime.now(timezone.utc).isoformat()
-            execute(
+            _pg_execute(
                 "INSERT INTO beat_heartbeat (id, ts) VALUES ('beat', %s) "
                 "ON CONFLICT (id) DO UPDATE SET ts = EXCLUDED.ts",
                 (now,)
@@ -580,9 +612,8 @@ class PlenoraBeatScheduler(Scheduler):
         self._last_stuck_check = now
 
         try:
-            from app.db.pg_connection import execute, fetchall
             # Lock con expires_at nel passato sono scaduti ma non puliti
-            rows = fetchall(
+            rows = _pg_fetchall(
                 "SELECT key, value, expires_at FROM scheduler_locks "
                 "WHERE expires_at IS NOT NULL AND expires_at < NOW()"
             )
@@ -593,7 +624,7 @@ class PlenoraBeatScheduler(Scheduler):
                         f"(valore={row['value']}, scaduto={row['expires_at']})"
                     )
                 # Pulisci lock scaduti
-                execute("DELETE FROM scheduler_locks WHERE expires_at IS NOT NULL AND expires_at < NOW()")
+                _pg_execute("DELETE FROM scheduler_locks WHERE expires_at IS NOT NULL AND expires_at < NOW()")
                 logger.info(f"[STUCK] Rimossi {len(rows)} lock scaduti")
 
             # Controlla schedule con last_status = 'running' da più del hard limit
@@ -607,7 +638,7 @@ class PlenoraBeatScheduler(Scheduler):
             # `INTERVAL '%s seconds'` con placeholder DENTRO il literal
             # SQL e' invalid PostgreSQL syntax. Usiamo `make_interval`
             # che accetta placeholder standard
-            stuck = fetchall(
+            stuck = _pg_fetchall(
                 "SELECT id, name FROM schedules "
                 "WHERE last_status = 'running' "
                 "AND last_run IS NOT NULL "
@@ -838,7 +869,6 @@ class PlenoraBeatScheduler(Scheduler):
         try:
             from app.infrastructure.storage.cloud_backends import get_log_archive_storage
             from app.core.scheduler.log_archive import LogArchiveWriter
-            from app.db.pg_connection import fetchall, transaction
 
             cutoff = datetime.now(timezone.utc) - timedelta(days=days)
             storage = get_log_archive_storage()
@@ -853,7 +883,7 @@ class PlenoraBeatScheduler(Scheduler):
                 # plenora.logs (stesso pattern di _cleanup_old_logs
                 # ORDER BY stabile (ts, id) richiesto dal writer per non
                 # saltare righe fra iterazioni successive
-                return fetchall(
+                return _pg_fetchall(
                     "SELECT * FROM logs WHERE ts < %s "
                     "ORDER BY ts ASC, id ASC LIMIT %s",
                     (cutoff_ts, batch_size),
@@ -863,7 +893,7 @@ class PlenoraBeatScheduler(Scheduler):
                 # Una nuova tx per batch: SET LOCAL + DELETE sullo stesso
                 # cursor (pattern _cleanup_old_logs), altrimenti il trigger
                 # plenora.block_log_modifications scatta sulla DELETE
-                with transaction() as conn:
+                with _pg_transaction() as conn:
                     with conn.cursor() as cur:
                         cur.execute(
                             "SET LOCAL plenora.retention_cleanup = 'true'"
@@ -886,7 +916,6 @@ class PlenoraBeatScheduler(Scheduler):
             # ADR-0014 §B. Best-effort: un fallimento observability non
             # contamina lo stato "archive ok" (slot gia' aggiornato sopra
             try:
-                from app.db.pg_connection import execute as pg_execute
                 obs_ts = datetime.now(timezone.utc).strftime(
                     "%Y-%m-%dT%H:%M:%S.%f"
                 )[:-3]
@@ -897,7 +926,7 @@ class PlenoraBeatScheduler(Scheduler):
                     "object_keys": list(result["object_keys"]),
                     "batch_runs": len(result["object_keys"]),
                 }, default=str)
-                pg_execute(
+                _pg_execute(
                     "INSERT INTO logs (ts, level, module, op, msg, "
                     "project_id, group_id, run_id, node_id, details, error) "
                     "VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)",
@@ -934,13 +963,12 @@ class PlenoraBeatScheduler(Scheduler):
             days = int(getattr(settings, "LOG_RETENTION_DAYS", 30) or 30)
             if days <= 0:
                 return  # retention disabilitata
-            from app.db.pg_connection import fetchall
             # Niente schema hard-coded `plenora.`: il pool apre le
             # connessioni con `search_path=<_DB_SCHEMA>,public`, quindi
             # ci riferiamo alla tabella `logs` senza prefisso e PostgreSQL
             # la risolve nello schema corrente. Cosi' se DB_SCHEMA punta
             # a `plenora_staging`, la retention lavora sullo schema giusto
-            before = fetchall(
+            before = _pg_fetchall(
                 "SELECT COUNT(*) AS c FROM logs WHERE ts < now() - make_interval(days => %s)",
                 (days,),
             )[0]["c"]
@@ -949,8 +977,7 @@ class PlenoraBeatScheduler(Scheduler):
                 # `execute` apre/committa una tx per call, azzerando SET LOCAL
                 # Il flag consente a policy/trigger PG di distinguere il
                 # cleanup schedulato dalle DELETE applicative
-                from app.db.pg_connection import transaction
-                with transaction() as conn:
+                with _pg_transaction() as conn:
                     with conn.cursor() as cur:
                         cur.execute("SET LOCAL plenora.retention_cleanup = 'true'")
                         cur.execute(
@@ -1008,7 +1035,6 @@ class PlenoraBeatScheduler(Scheduler):
         try:
             from app.infrastructure.storage.cloud_backends import get_log_archive_storage
             from app.core.scheduler.log_archive import LogArchiveWriter
-            from app.db.pg_connection import fetchall, transaction
 
             cutoff = datetime.now(timezone.utc) - timedelta(days=days)
             storage = get_log_archive_storage()
@@ -1022,7 +1048,7 @@ class PlenoraBeatScheduler(Scheduler):
                 # Schema-agnostic: search_path del pool risolve
                 # `audit_actions` a plenora.audit_actions. Colonna
                 # temporale = `timestamp` (O-ARC assunzione #4
-                return fetchall(
+                return _pg_fetchall(
                     "SELECT * FROM audit_actions WHERE timestamp < %s "
                     "ORDER BY timestamp ASC, id ASC LIMIT %s",
                     (cutoff_ts, batch_size),
@@ -1033,7 +1059,7 @@ class PlenoraBeatScheduler(Scheduler):
                 # cursor (pattern _cleanup_old_logs / _archive_old_logs
                 # altrimenti il trigger plenora.block_log_modifications
                 # scatta sulla DELETE
-                with transaction() as conn:
+                with _pg_transaction() as conn:
                     with conn.cursor() as cur:
                         cur.execute(
                             "SET LOCAL plenora.retention_cleanup = 'true'"
@@ -1054,7 +1080,6 @@ class PlenoraBeatScheduler(Scheduler):
             # va sempre su plenora.logs). Shape identica al handler
             # canonico (utils/logger.py:340-344). ADR-0014 §B
             try:
-                from app.db.pg_connection import execute as pg_execute
                 obs_ts = datetime.now(timezone.utc).strftime(
                     "%Y-%m-%dT%H:%M:%S.%f"
                 )[:-3]
@@ -1065,7 +1090,7 @@ class PlenoraBeatScheduler(Scheduler):
                     "object_keys": list(result["object_keys"]),
                     "batch_runs": len(result["object_keys"]),
                 }, default=str)
-                pg_execute(
+                _pg_execute(
                     "INSERT INTO logs (ts, level, module, op, msg, "
                     "project_id, group_id, run_id, node_id, details, error) "
                     "VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)",

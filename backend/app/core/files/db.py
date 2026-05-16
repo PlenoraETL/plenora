@@ -6,7 +6,7 @@ import json
 from typing import Any, Dict, List, Optional, TypedDict
 
 from app.core.resources import storage_reconciliation as reconciliation
-from app.db.pg_connection import fetchone, fetchall, execute, transaction
+from app.db.pg_connection import unit_of_work
 from app.infrastructure.storage import compensation as storage_compensation
 from app.utils.logger import get_logger
 
@@ -62,6 +62,21 @@ class FileSourceRow(TypedDict, total=False):
 FileSourcePublicRow = FileSourceRow
 
 
+def _fetchone(sql: str, params: tuple = ()) -> Optional[FileSourcePublicRow]:
+    with unit_of_work() as session:
+        return session.fetchone(sql, params)
+
+
+def _fetchall(sql: str, params: tuple = ()) -> list[FileSourcePublicRow]:
+    with unit_of_work() as session:
+        return session.fetchall(sql, params)
+
+
+def _execute(sql: str, params: tuple = ()):
+    with unit_of_work() as session:
+        return session.execute(sql, params)
+
+
 def _validate_row(row: FileSourceRow, *, context: str) -> None:
     """Valida l'invariante "data o storage_key non-None" su una row.
 
@@ -89,23 +104,23 @@ def get_file_source(
     """Recupera file source. group_id=None → no filter (backward compat)."""
     if include_data:
         if group_id:
-            row = fetchone(
+            row = _fetchone(
                 "SELECT * FROM file_sources WHERE id = %s AND group_id = %s",
                 (file_id, group_id),
             )
         else:
-            row = fetchone(
+            row = _fetchone(
                 "SELECT * FROM file_sources WHERE id = %s",
                 (file_id,),
             )
     elif group_id:
-        row = fetchone(
+        row = _fetchone(
             "SELECT id, group_id, name, original_filename, format, size_bytes, metadata, created_at, created_by "
             "FROM file_sources WHERE id = %s AND group_id = %s",
             (file_id, group_id),
         )
     else:
-        row = fetchone(
+        row = _fetchone(
             "SELECT id, group_id, name, original_filename, format, size_bytes, metadata, created_at, created_by "
             "FROM file_sources WHERE id = %s",
             (file_id,),
@@ -123,10 +138,10 @@ def get_file_source(
 def list_file_sources(group_id: Optional[str] = None) -> list[FileSourcePublicRow]:
     """Lista file_sources. group_id=None → no filter (usato da superadmin)."""
     if group_id is None:
-        return fetchall(
+        return _fetchall(
             "SELECT id, group_id, name, original_filename, format, size_bytes, created_at, created_by FROM file_sources ORDER BY created_at DESC"
         )
-    return fetchall(
+    return _fetchall(
         "SELECT id, group_id, name, original_filename, format, size_bytes, created_at, created_by FROM file_sources WHERE group_id = %s ORDER BY created_at DESC",
         (group_id,)
     )
@@ -134,7 +149,7 @@ def list_file_sources(group_id: Optional[str] = None) -> list[FileSourcePublicRo
 
 def list_file_source_ids_for_group(group_id: str) -> List[str]:
     """List file_source ids owned by a group for storage-aware cleanup."""
-    rows = fetchall(
+    rows = _fetchall(
         "SELECT id FROM file_sources WHERE group_id = %s ORDER BY id",
         (group_id,),
     )
@@ -171,7 +186,7 @@ def save_file_source(file_id: str, group_id: str, name: str, original_filename: 
     )
     now = datetime.now(timezone.utc).isoformat()
     effective_size = size_bytes if size_bytes is not None else (len(data) if data else 0)
-    execute(
+    _execute(
         "INSERT INTO file_sources (id, group_id, name, original_filename, format, data, storage_key, size_bytes, metadata, created_at, updated_at, created_by) "
         "VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) ON CONFLICT (id) DO UPDATE SET "
         "name=EXCLUDED.name, original_filename=EXCLUDED.original_filename, format=EXCLUDED.format, "
@@ -250,14 +265,14 @@ def save_file_sources_batch(rows: List[FileSourceRow]) -> None:
         for r in rows
     ]
 
-    with transaction() as conn:
+    with unit_of_work() as conn:
         with conn.cursor() as cur:
             cur.executemany(sql, params_list)
 
 
 def update_file_source_metadata(file_id: str, metadata: dict) -> None:
     now = datetime.now(timezone.utc).isoformat()
-    execute(
+    _execute(
         "UPDATE file_sources SET metadata = %s, updated_at = %s WHERE id = %s",
         (json.dumps(metadata), now, file_id)
     )
@@ -311,7 +326,7 @@ def delete_file_source(file_id: str) -> bool:
     # storage_key None) — neither needs reconciliation
     reconciliation_ref = None
 
-    with transaction() as conn:
+    with unit_of_work() as conn:
         with conn.cursor() as cur:
             cur.execute(
                 "SELECT storage_key FROM file_sources WHERE id = %s FOR UPDATE",

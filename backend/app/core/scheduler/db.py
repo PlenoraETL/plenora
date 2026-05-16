@@ -12,36 +12,39 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Callable, Iterable, Mapping, Optional, TypedDict, cast
 
-from app.db import pg_connection as pg
+from app.db.pg_connection import unit_of_work
 from app.db.sql_safety import safe_set_clause
 
 
 def execute(sql: str, args: tuple | None = None):
-    return pg.execute(sql, args)
+    with unit_of_work() as session:
+        return session.execute(sql, args or ())
 
 
 def fetchone(sql: str, args: tuple | None = None):
-    return pg.fetchone(sql, args)
+    with unit_of_work() as session:
+        return session.fetchone(sql, args or ())
 
 
 def fetchall(sql: str, args: tuple | None = None):
-    return pg.fetchall(sql, args)
+    with unit_of_work() as session:
+        return session.fetchall(sql, args or ())
 
 
 def get_connection():
-    return pg.get_connection()
+    raise RuntimeError("Use transaction()/unit_of_work() instead of raw connections")
 
 
 def put_connection(conn) -> None:
-    pg.put_connection(conn)
+    return None
 
 
 def close_connection() -> None:
-    pg.close_connection()
+    return None
 
 
 def transaction():
-    return pg.transaction()
+    return unit_of_work()
 
 
 @dataclass(frozen=True)

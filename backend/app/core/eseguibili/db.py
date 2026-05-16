@@ -12,12 +12,27 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any, Mapping, Optional
 
-from app.db import pg_connection as db
+from app.db.pg_connection import unit_of_work
 from app.db.sql_safety import safe_set_clause
 from app.shared.contracts.payloads import JsonObject, JsonRows
 
 
 ExpectedColumns = JsonRows
+
+
+def _fetchone(sql: str, params: tuple = ()) -> JsonObject | None:
+    with unit_of_work() as session:
+        return session.fetchone(sql, params)
+
+
+def _fetchall(sql: str, params: tuple = ()) -> JsonRows:
+    with unit_of_work() as session:
+        return session.fetchall(sql, params)
+
+
+def _execute(sql: str, params: tuple = ()):
+    with unit_of_work() as session:
+        return session.execute(sql, params)
 
 
 @dataclass(frozen=True)
@@ -208,7 +223,7 @@ def create_eseguibile(
     """Crea un nuovo eseguibile. Ritorna il record creato."""
     eid = f"exec_{uuid.uuid4().hex[:12]}"
     now = _now()
-    db.execute(
+    _execute(
         """
         INSERT INTO eseguibili (
             id, name, description, canvas, expected_columns,
@@ -237,12 +252,12 @@ def get_eseguibile(eid: str, group_id: str = None) -> Optional[EseguibileRow]:
     Passare group_id dal router per defense-in-depth multi-tenant.
     """
     if group_id:
-        row = db.fetchone(
+        row = _fetchone(
             "SELECT * FROM eseguibili WHERE id = %s AND group_id = %s",
             (eid, group_id)
         )
     else:
-        row = db.fetchone("SELECT * FROM eseguibili WHERE id = %s", (eid,))
+        row = _fetchone("SELECT * FROM eseguibili WHERE id = %s", (eid,))
     return eseguibile_row_from_db(row) if row else None
 
 
@@ -253,7 +268,7 @@ def list_eseguibili(group_id: Optional[str] = None) -> list[EseguibileSummaryRow
     Usa get_eseguibile per i dettagli completi.
     """
     if group_id:
-        rows = db.fetchall(
+        rows = _fetchall(
             """SELECT id, name, description, default_output_format, default_output_name,
                       icon, source_canvas_id, group_id, created_by, created_at, updated_at,
                       expected_columns
@@ -261,7 +276,7 @@ def list_eseguibili(group_id: Optional[str] = None) -> list[EseguibileSummaryRow
             (group_id,)
         )
     else:
-        rows = db.fetchall(
+        rows = _fetchall(
             """SELECT id, name, description, default_output_format, default_output_name,
                       icon, source_canvas_id, group_id, created_by, created_at, updated_at,
                       expected_columns
@@ -275,7 +290,7 @@ def list_eseguibili_by_source(source_canvas_id: str) -> list[EseguibileSourceRef
 
     Restituisce solo id e name (sufficienti per messaggi di errore).
     """
-    rows = db.fetchall(
+    rows = _fetchall(
         "SELECT id, name FROM eseguibili WHERE source_canvas_id = %s",
         (source_canvas_id,)
     )
@@ -294,7 +309,7 @@ def update_eseguibile(eid: str, **fields: object) -> Optional[EseguibileRow]:
         return get_eseguibile(eid)
     to_update["updated_at"] = _now()
     set_clause, vals = safe_set_clause("eseguibili", to_update)
-    db.execute(f"UPDATE eseguibili SET {set_clause} WHERE id = %s", vals + (eid,))
+    _execute(f"UPDATE eseguibili SET {set_clause} WHERE id = %s", vals + (eid,))
     return get_eseguibile(eid)
 
 
@@ -303,5 +318,5 @@ def delete_eseguibile(eid: str) -> bool:
     # db.execute non restituisce rowcount in modo uniforme, verifichiamo prima
     if get_eseguibile(eid) is None:
         return False
-    db.execute("DELETE FROM eseguibili WHERE id = %s", (eid,))
+    _execute("DELETE FROM eseguibili WHERE id = %s", (eid,))
     return True

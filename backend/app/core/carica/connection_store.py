@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 from app.core.connections.service import _decrypt_password
-from app.db.pg_connection import fetchone
+from app.db.pg_connection import unit_of_work
 from app.shared.contracts.payloads import JsonObject
 
 
 def fetch_connection_config(connection_id: str) -> JsonObject | None:
-    row = fetchone("SELECT * FROM connections WHERE id = %s", (connection_id,))
+    with unit_of_work() as session:
+        row = session.fetchone("SELECT * FROM connections WHERE id = %s", (connection_id,))
     if not row:
         return None
 

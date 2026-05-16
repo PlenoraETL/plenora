@@ -8,7 +8,22 @@ from dataclasses import dataclass
 from typing import Mapping, Optional
 
 from app.db.sql_safety import safe_set_clause
-from app.db.pg_connection import execute, fetchall, fetchone
+from app.db.pg_connection import unit_of_work
+
+
+def _fetchone(sql: str, params: tuple = ()) -> Mapping[str, object] | None:
+    with unit_of_work() as session:
+        return session.fetchone(sql, params)
+
+
+def _fetchall(sql: str, params: tuple = ()) -> list[Mapping[str, object]]:
+    with unit_of_work() as session:
+        return session.fetchall(sql, params)
+
+
+def _execute(sql: str, params: tuple = ()):
+    with unit_of_work() as session:
+        return session.execute(sql, params)
 
 
 def _required_str(row: Mapping[str, object], key: str) -> str:
@@ -136,12 +151,12 @@ def get_connection_config(
     group_id: str | None = None,
 ) -> Optional[ConnectionConfigRow]:
     if group_id:
-        row = fetchone(
+        row = _fetchone(
             "SELECT * FROM connections WHERE id = %s AND group_id = %s",
             (conn_id, group_id),
         )
     else:
-        row = fetchone("SELECT * FROM connections WHERE id = %s", (conn_id,))
+        row = _fetchone("SELECT * FROM connections WHERE id = %s", (conn_id,))
     return _optional_connection_row(row)
 
 
@@ -160,7 +175,7 @@ def create_connection(
     created_by: str | None = None,
 ) -> ConnectionConfigRow:
     now = datetime.now(timezone.utc).isoformat()
-    execute(
+    _execute(
         "INSERT INTO connections (id, group_id, name, db_type, host, port, database, db_schema, username, password, extra, created_at, updated_at, created_by) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)",
         (
             conn_id,
@@ -191,20 +206,20 @@ def update_connection(conn_id: str, **fields: object) -> Optional[ConnectionConf
         update_fields["extra"] = json.dumps(dict(update_fields["extra"]))
     update_fields["updated_at"] = datetime.now(timezone.utc).isoformat()
     set_clause, vals = safe_set_clause("connections", update_fields)
-    execute(f"UPDATE connections SET {set_clause} WHERE id = %s", vals + (conn_id,))
+    _execute(f"UPDATE connections SET {set_clause} WHERE id = %s", vals + (conn_id,))
     return get_connection_config(conn_id)
 
 
 def delete_connection(conn_id: str) -> bool:
-    cur = execute("DELETE FROM connections WHERE id = %s", (conn_id,))
+    cur = _execute("DELETE FROM connections WHERE id = %s", (conn_id,))
     return cur.rowcount > 0
 
 
 def list_connection_configs(group_id: str | None = None) -> list[ConnectionConfigRow]:
     if group_id is None:
-        rows = fetchall("SELECT * FROM connections ORDER BY name")
+        rows = _fetchall("SELECT * FROM connections ORDER BY name")
     else:
-        rows = fetchall(
+        rows = _fetchall(
             "SELECT * FROM connections WHERE group_id = %s ORDER BY name",
             (group_id,),
         )
@@ -212,7 +227,7 @@ def list_connection_configs(group_id: str | None = None) -> list[ConnectionConfi
 
 
 def get_arcgis_connection_row(connection_id: str) -> Optional[ArcGISConnectionRow]:
-    row = fetchone("SELECT * FROM arcgis_connections WHERE id = %s", (connection_id,))
+    row = _fetchone("SELECT * FROM arcgis_connections WHERE id = %s", (connection_id,))
     if row is None:
         return None
     return ArcGISConnectionRow.from_mapping(row)

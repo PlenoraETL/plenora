@@ -149,9 +149,10 @@ def _execute_write(sql: str, params: tuple[Any, ...]) -> None:
     `app.db.pg_connection` esegue al top-level. Pattern coerente con
     `token_blacklist._get_client` (lazy import interna a funzione).
     """
-    from app.db import pg_connection
+    from app.db.pg_connection import unit_of_work
 
-    pg_connection.execute(sql, params)
+    with unit_of_work() as session:
+        session.execute(sql, params)
 
 
 def _write_audit_row(

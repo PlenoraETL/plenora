@@ -9,7 +9,7 @@ import json
 from typing import Mapping
 from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
 
-from app.db import pg_connection as db
+from app.db.pg_connection import unit_of_work
 from app.utils.logger import get_logger
 
 
@@ -98,8 +98,7 @@ def acquire_carica_target_lock(
     now = datetime.now(timezone.utc)
     expires_at = now + timedelta(seconds=ttl)
 
-    conn = db.get_connection()
-    try:
+    with unit_of_work() as conn:
         with conn.cursor() as cur:
             cur.execute(
                 f"""
@@ -143,12 +142,6 @@ def acquire_carica_target_lock(
                 ),
             )
             row = cur.fetchone()
-        conn.commit()
-    except Exception:
-        conn.rollback()
-        raise
-    finally:
-        db.put_connection(conn)
 
     if not row:
         return None
@@ -157,8 +150,7 @@ def acquire_carica_target_lock(
 
 def release_carica_target_lock(handle: CaricaTargetLockHandle) -> bool:
     """Release a lock only if the caller still owns the row."""
-    conn = db.get_connection()
-    try:
+    with unit_of_work() as conn:
         with conn.cursor() as cur:
             cur.execute(
                 f"""
@@ -169,13 +161,7 @@ def release_carica_target_lock(handle: CaricaTargetLockHandle) -> bool:
                 (handle.target.key, handle.owner_token),
             )
             rowcount = cur.rowcount
-        conn.commit()
-        return rowcount > 0
-    except Exception:
-        conn.rollback()
-        raise
-    finally:
-        db.put_connection(conn)
+    return rowcount > 0
 
 
 def _tenant_scope(*, project_id: str, group_id: str) -> Mapping[str, str]:

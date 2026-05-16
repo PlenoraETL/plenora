@@ -13,7 +13,7 @@ from typing import Optional, TypedDict
 import pyotp
 import qrcode
 
-from app.db import pg_connection
+from app.db.pg_connection import unit_of_work
 from app.infrastructure.security.crypto import decrypt, encrypt
 from app.utils.logger import get_logger
 
@@ -49,11 +49,12 @@ class MFAStatus(TypedDict):
 
 
 def _row_for(user_id: str) -> Optional[MFARow]:
-    return pg_connection.fetchone(
-        "SELECT user_id, secret_encrypted, enabled, enrolled_at, last_verified_at "
-        "FROM user_mfa WHERE user_id = %s",
-        (user_id,),
-    )
+    with unit_of_work() as session:
+        return session.fetchone(
+            "SELECT user_id, secret_encrypted, enabled, enrolled_at, last_verified_at "
+            "FROM user_mfa WHERE user_id = %s",
+            (user_id,),
+        )
 
 
 def is_enabled(user_id: str) -> bool:
@@ -84,7 +85,8 @@ def generate_enrollment(user_id: str, username: str) -> MFAEnrollment:
     secret = pyotp.random_base32()
     secret_encrypted = encrypt(secret)
 
-    pg_connection.execute(
+    with unit_of_work() as session:
+        session.execute(
         """
         INSERT INTO user_mfa (user_id, secret_encrypted, enabled, created_at, updated_at)
         VALUES (%s, %s, FALSE, NOW(), NOW())
@@ -95,7 +97,7 @@ def generate_enrollment(user_id: str, username: str) -> MFAEnrollment:
             updated_at = NOW()
         """,
         (user_id, secret_encrypted),
-    )
+        )
 
     totp = pyotp.TOTP(secret)
     provisioning_uri = totp.provisioning_uri(name=username, issuer_name=TOTP_ISSUER)
@@ -143,11 +145,12 @@ def verify_code(user_id: str, code: str) -> bool:
     totp = pyotp.TOTP(secret)
     if not totp.verify(code, valid_window=TOTP_WINDOW):
         return False
-    pg_connection.execute(
-        "UPDATE user_mfa SET last_verified_at = NOW(), updated_at = NOW() "
-        "WHERE user_id = %s",
-        (user_id,),
-    )
+    with unit_of_work() as session:
+        session.execute(
+            "UPDATE user_mfa SET last_verified_at = NOW(), updated_at = NOW() "
+            "WHERE user_id = %s",
+            (user_id,),
+        )
     return True
 
 
@@ -159,12 +162,13 @@ def verify_enrollment(user_id: str, code: str) -> bool:
     """
     if not verify_code(user_id, code):
         return False
-    pg_connection.execute(
-        "UPDATE user_mfa "
-        "SET enabled = TRUE, enrolled_at = COALESCE(enrolled_at, NOW()), updated_at = NOW() "
-        "WHERE user_id = %s",
-        (user_id,),
-    )
+    with unit_of_work() as session:
+        session.execute(
+            "UPDATE user_mfa "
+            "SET enabled = TRUE, enrolled_at = COALESCE(enrolled_at, NOW()), updated_at = NOW() "
+            "WHERE user_id = %s",
+            (user_id,),
+        )
     logger.info(f"MFA enrollment activated for user {user_id}", op="mfa_enroll_activated")
     return True
 
@@ -180,10 +184,11 @@ def disable(user_id: str, code: str) -> bool:
     """
     if not verify_code(user_id, code):
         return False
-    pg_connection.execute(
-        "DELETE FROM user_mfa WHERE user_id = %s",
-        (user_id,),
-    )
+    with unit_of_work() as session:
+        session.execute(
+            "DELETE FROM user_mfa WHERE user_id = %s",
+            (user_id,),
+        )
     logger.info(f"MFA disabled for user {user_id}", op="mfa_disable")
     return True
 

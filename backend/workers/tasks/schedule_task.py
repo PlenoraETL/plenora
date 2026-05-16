@@ -120,13 +120,14 @@ def beat_heartbeat():
     Scrive timestamp nel DB PostgreSQL (usato dall'healthcheck).
     """
     try:
-        from app.db.pg_connection import execute
+        from app.db.pg_connection import unit_of_work
         now = datetime.now(timezone.utc).isoformat()
-        execute(
-            "INSERT INTO beat_heartbeat (id, ts) VALUES ('beat', %s) "
-            "ON CONFLICT (id) DO UPDATE SET ts = EXCLUDED.ts",
-            (now,)
-        )
+        with unit_of_work() as session:
+            session.execute(
+                "INSERT INTO beat_heartbeat (id, ts) VALUES ('beat', %s) "
+                "ON CONFLICT (id) DO UPDATE SET ts = EXCLUDED.ts",
+                (now,)
+            )
     except Exception as e:
         # Breadcrumb obbligatorio: la tabella beat_heartbeat e' letta
         # dall'healthcheck — un silent swallow qui nasconde un DB down

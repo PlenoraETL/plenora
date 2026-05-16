@@ -11,7 +11,7 @@ from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from datetime import datetime, timezone
 
-from app.db.pg_connection import execute, fetchall, fetchone, transaction
+from app.db.pg_connection import unit_of_work
 from app.db.sql_safety import safe_set_clause
 from app.utils.logger import get_logger
 
@@ -75,6 +75,21 @@ def _optional_int(row: Mapping[str, object], key: str) -> int | None:
     if isinstance(value, bool) or not isinstance(value, int):
         raise ValueError(f"Malformed project DB row: {key} must be an int or null")
     return value
+
+
+def _fetchone(sql: str, params: tuple = ()) -> Mapping[str, object] | None:
+    with unit_of_work() as session:
+        return session.fetchone(sql, params)
+
+
+def _fetchall(sql: str, params: tuple = ()) -> list[Mapping[str, object]]:
+    with unit_of_work() as session:
+        return session.fetchall(sql, params)
+
+
+def _execute(sql: str, params: tuple = ()):
+    with unit_of_work() as session:
+        return session.execute(sql, params)
 
 
 def delete_comparison_keys(canvas_id: str, node_id: str | None = None) -> None:
@@ -207,12 +222,12 @@ class ProjectRepository:
         node_id: str | None = None,
     ) -> None:
         if node_id:
-            execute(
+            _execute(
                 "DELETE FROM comparison_keys WHERE canvas_id = %s AND node_id = %s",
                 (canvas_id, node_id),
             )
         else:
-            execute("DELETE FROM comparison_keys WHERE canvas_id = %s", (canvas_id,))
+            _execute("DELETE FROM comparison_keys WHERE canvas_id = %s", (canvas_id,))
 
     def get_project_row(
         self,
@@ -220,12 +235,12 @@ class ProjectRepository:
         group_id: str | None = None,
     ) -> ProjectDetailRow | None:
         if group_id:
-            row = fetchone(
+            row = _fetchone(
                 "SELECT * FROM projects WHERE id = %s AND group_id = %s",
                 (project_id, group_id),
             )
         else:
-            row = fetchone("SELECT * FROM projects WHERE id = %s", (project_id,))
+            row = _fetchone("SELECT * FROM projects WHERE id = %s", (project_id,))
         if row and row.get("canvas"):
             canvas = row["canvas"]
             # psycopg2 auto-deserializes JSONB columns into Python dicts after
@@ -255,7 +270,7 @@ class ProjectRepository:
         if group_id is None:
             if project_type:
                 return _project_rows(
-                    fetchall(
+                    _fetchall(
                         "SELECT id, group_id, name, project_type, connection_id, "
                         "created_at, updated_at, created_by FROM projects "
                         "WHERE project_type = %s ORDER BY updated_at DESC",
@@ -263,7 +278,7 @@ class ProjectRepository:
                     )
                 )
             return _project_rows(
-                fetchall(
+                _fetchall(
                     "SELECT id, group_id, name, project_type, connection_id, "
                     "created_at, updated_at, created_by FROM projects "
                     "ORDER BY updated_at DESC"
@@ -271,7 +286,7 @@ class ProjectRepository:
             )
         if project_type:
             return _project_rows(
-                fetchall(
+                _fetchall(
                     "SELECT id, group_id, name, project_type, connection_id, "
                     "created_at, updated_at, created_by FROM projects "
                     "WHERE group_id = %s AND project_type = %s ORDER BY updated_at DESC",
@@ -279,7 +294,7 @@ class ProjectRepository:
                 )
             )
         return _project_rows(
-            fetchall(
+            _fetchall(
                 "SELECT id, group_id, name, project_type, connection_id, "
                 "created_at, updated_at, created_by FROM projects "
                 "WHERE group_id = %s ORDER BY updated_at DESC",
@@ -298,7 +313,7 @@ class ProjectRepository:
     ) -> ProjectDetailRow:
         now = datetime.now(timezone.utc).isoformat()
         canvas = json.dumps({"nodes": [], "edges": []})
-        execute(
+        _execute(
             "INSERT INTO projects (id, group_id, name, project_type, canvas, "
             "connection_id, created_at, updated_at, created_by) "
             "VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s)",
@@ -330,21 +345,21 @@ class ProjectRepository:
             fields["canvas"] = json.dumps(fields["canvas"])
         fields["updated_at"] = datetime.now(timezone.utc).isoformat()
         set_clause, vals = safe_set_clause("projects", fields)
-        execute(f"UPDATE projects SET {set_clause} WHERE id = %s", vals + (project_id,))
+        _execute(f"UPDATE projects SET {set_clause} WHERE id = %s", vals + (project_id,))
         return get_project_row(project_id)
 
     def delete_project(self, project_id: str, group_id: str | None = None) -> bool:
         if group_id:
-            cur = execute(
+            cur = _execute(
                 "DELETE FROM projects WHERE id = %s AND group_id = %s",
                 (project_id, group_id),
             )
         else:
-            cur = execute("DELETE FROM projects WHERE id = %s", (project_id,))
+            cur = _execute("DELETE FROM projects WHERE id = %s", (project_id,))
         return cur.rowcount > 0
 
     def get_project_retention_n(self, project_id: str) -> int | None:
-        row = fetchone("SELECT retention_n FROM projects WHERE id = %s", (project_id,))
+        row = _fetchone("SELECT retention_n FROM projects WHERE id = %s", (project_id,))
         if not row:
             return None
         return _optional_int(row, "retention_n")
@@ -359,7 +374,7 @@ class ProjectRepository:
         if not ids or not owner_group_id:
             return set()
         placeholders = ",".join(["%s"] * len(ids))
-        rows = fetchall(
+        rows = _fetchall(
             f"SELECT id FROM projects WHERE id IN ({placeholders}) AND group_id = %s",
             tuple(ids) + (owner_group_id,),
         )
@@ -368,7 +383,7 @@ class ProjectRepository:
     def list_project_ids_for_group(self, group_id: str) -> set[str]:
         if not group_id:
             return set()
-        rows = fetchall(
+        rows = _fetchall(
             "SELECT id FROM projects WHERE group_id = %s",
             (group_id,),
         )
@@ -379,7 +394,7 @@ class ProjectRepository:
         connection_id: str,
     ) -> list[ProjectDependencyRow]:
         return _project_dependency_rows(
-            fetchall(
+            _fetchall(
                 "SELECT id, name, project_type, group_id "
                 "FROM projects WHERE connection_id = %s",
                 (connection_id,),
@@ -388,7 +403,7 @@ class ProjectRepository:
 
     def list_project_canvas_check_rows(self) -> list[ProjectCanvasCheckRow]:
         return _project_canvas_check_rows(
-            fetchall("SELECT id, name, project_type, canvas, group_id FROM projects")
+            _fetchall("SELECT id, name, project_type, canvas, group_id FROM projects")
         )
 
     def update_project_canvas_key_atomic(
@@ -398,7 +413,7 @@ class ProjectRepository:
         value: object,
     ) -> bool:
         now = datetime.now(timezone.utc).isoformat()
-        with transaction() as conn:
+        with unit_of_work() as conn:
             with conn.cursor() as cur:
                 cur.execute(
                     "SELECT canvas FROM projects WHERE id = %s FOR UPDATE",

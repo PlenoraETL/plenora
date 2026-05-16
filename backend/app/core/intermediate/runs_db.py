@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 from types import MappingProxyType
 from typing import Any, Callable, Mapping, Optional, TypeAlias
 
-from app.db.pg_connection import execute, fetchall, fetchone
+from app.db.pg_connection import unit_of_work
 
 RunRowPayload: TypeAlias = dict[str, Any]
 
@@ -124,6 +124,21 @@ _ALLOWED_RUN_UPDATE_FIELDS = {
 }
 
 
+def _fetchone(sql: str, params: tuple = ()) -> Optional[Mapping[str, Any]]:
+    with unit_of_work() as session:
+        return session.fetchone(sql, params)
+
+
+def _fetchall(sql: str, params: tuple = ()) -> list[Mapping[str, Any]]:
+    with unit_of_work() as session:
+        return session.fetchall(sql, params)
+
+
+def _execute(sql: str, params: tuple = ()) -> object:
+    with unit_of_work() as session:
+        return session.execute(sql, params)
+
+
 def create_run(
     run_id: str,
     canvas_id: str,
@@ -135,7 +150,7 @@ def create_run(
     get_run_func: GetRun | None = None,
 ) -> Optional[RunRow]:
     """Create a new row in intermediate.runs."""
-    execute_boundary = execute_func or execute
+    execute_boundary = execute_func or _execute
     get_run_boundary = get_run_func or get_run
     now = datetime.now(timezone.utc).isoformat()
     execute_boundary(
@@ -152,7 +167,7 @@ def get_run(
     *,
     fetchone_func: FetchOne | None = None,
 ) -> Optional[RunRow]:
-    fetchone_boundary = fetchone_func or fetchone
+    fetchone_boundary = fetchone_func or _fetchone
     return _hydrate_run(
         fetchone_boundary("SELECT * FROM runs WHERE run_id = %s", (run_id,))
     )
@@ -166,7 +181,7 @@ def list_runs(
     fetchall_func: FetchAll | None = None,
 ) -> list[RunRow]:
     """List runs for a canvas, isolated by group, newest first."""
-    fetchall_boundary = fetchall_func or fetchall
+    fetchall_boundary = fetchall_func or _fetchall
     if group_id is None:
         rows = fetchall_boundary(
             "SELECT * FROM runs WHERE canvas_id = %s ORDER BY timestamp DESC LIMIT %s",
@@ -202,7 +217,7 @@ def update_run(
             f"Consentiti: {_ALLOWED_RUN_UPDATE_FIELDS}"
         )
     set_clause = ", ".join(f"{k} = %s" for k in fields)
-    execute_boundary = execute_func or execute
+    execute_boundary = execute_func or _execute
     execute_boundary(
         f"UPDATE runs SET {set_clause} WHERE run_id = %s",
         tuple(fields.values()) + (run_id,),
@@ -217,7 +232,7 @@ def pin_run(
     execute_func: Execute | None = None,
 ) -> bool:
     """Pin or unpin a run, optionally scoped by group."""
-    execute_boundary = execute_func or execute
+    execute_boundary = execute_func or _execute
     if group_id is None:
         cur = execute_boundary(
             "UPDATE runs SET pinned = %s WHERE run_id = %s",
