@@ -42,6 +42,9 @@ def _build_orchestrator() -> Any:
     from app.core.features.features_service import FeaturesService
     from app.db.query_executor import create_executor
     from app.core.orchestrator.service import OrchestratorService
+    from app.core.estrai.executor import EstraiExecutor
+    from app.core.manipola.executor import ManipolaExecutor
+    from app.core.arricchisci.executor import EnrichExecutor
     from app.core.dataframes.frame_io import save_dataframe
 
     project_service = ProjectService()
@@ -50,13 +53,37 @@ def _build_orchestrator() -> Any:
     executor = create_executor(save_function=save_dataframe)
     features_service = FeaturesService(save_function=save_dataframe)
 
-    return OrchestratorService(
+    orchestrator = None
+
+    def dispatch_pipeline(*args: Any, **kwargs: Any) -> Any:
+        if orchestrator is None:
+            raise RuntimeError("Orchestrator dispatcher used before wiring")
+        return orchestrator.execute_pipeline(*args, **kwargs)
+
+    estrai_executor = EstraiExecutor(
         project_service=project_service,
         executor=executor,
         generator=generator,
         connection_service=connection_service,
         features_service=features_service,
     )
+    manipola_executor = ManipolaExecutor(
+        project_service=project_service,
+        pipeline_dispatcher=dispatch_pipeline,
+    )
+    enrich_executor = EnrichExecutor(project_service=project_service)
+
+    orchestrator = OrchestratorService(
+        project_service=project_service,
+        executor=executor,
+        generator=generator,
+        connection_service=connection_service,
+        features_service=features_service,
+        estrai_executor=estrai_executor,
+        manipola_executor=manipola_executor,
+        enrich_executor=enrich_executor,
+    )
+    return orchestrator
 
 
 def _get_project_info(project_id: str) -> JsonObject:

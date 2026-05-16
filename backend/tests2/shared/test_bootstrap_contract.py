@@ -37,6 +37,7 @@ def _restore_real_bootstrap_module():
 _BACKEND_ROOT = Path(__file__).resolve().parent.parent.parent
 _BOOTSTRAP_PY = _BACKEND_ROOT / "app" / "bootstrap.py"
 _MAIN_PY = _BACKEND_ROOT / "app" / "main.py"
+_APP_FACTORY_PY = _BACKEND_ROOT / "app" / "app_factory.py"
 
 
 def _read(p: Path) -> str:
@@ -374,24 +375,29 @@ def test_bootstrap_propagates_init_all_dbs_error(monkeypatch):
     )
 
 
-# 5. main.py delegates to bootstrap (source-bound)
+# 5. app_factory.py delegates to bootstrap (source-bound)
 
 
-def test_main_py_imports_bootstrap_and_calls_it_at_module_load():
-    """`main.py` must contain a single call to the bootstrap boundary
-    at module level. The 4 inline statements must be gone."""
-    text = _read(_MAIN_PY)
+def test_app_factory_imports_bootstrap_and_calls_it_in_factory_path():
+    """`app_factory.py` must call the bootstrap boundary from create_app.
+
+    `main.py` keeps `app = create_app()` for ASGI compatibility; the side
+    effect belongs to the explicit factory path, not scattered module code.
+    """
+    text = _read(_APP_FACTORY_PY)
 
     # Import + call present.
     assert "from app.bootstrap import bootstrap" in text, (
-        "main.py must import the bootstrap boundary."
+        "app_factory.py must import the bootstrap boundary."
     )
-    # Call site exists at module level (not inside a function/class).
-    # Match pattern: `_bootstrap()` or `bootstrap()` at indent 0 anywhere
-    # before the FastAPI app construction.
-    bootstrap_call = re.search(r"^_bootstrap\(\)$", text, flags=re.MULTILINE)
+    assert "def create_app(" in text
+    bootstrap_call = re.search(
+        r"^\s{4}resolved_deps\.bootstrap\(\)\s*$",
+        text,
+        flags=re.MULTILINE,
+    )
     assert bootstrap_call is not None, (
-        "main.py must call `_bootstrap()` at module level."
+        "app_factory.py must call `resolved_deps.bootstrap()` inside create_app()."
     )
 
 
@@ -425,10 +431,10 @@ def test_teardown_is_idempotent_under_current_close_contract(monkeypatch):
 
 
 def test_main_lifespan_delegates_to_teardown_source_bound():
-    text = _read(_MAIN_PY)
+    text = _read(_APP_FACTORY_PY)
 
-    assert "teardown as _teardown" in text
-    assert "_teardown()" in text
+    assert "from app.bootstrap import bootstrap, teardown" in text
+    assert "resolved_deps.teardown()" in text
     code_only = _strip_line_comments(text)
     assert "close_pool()" not in code_only
     assert "from app.db.pg_connection import close_pool" not in code_only
@@ -452,27 +458,27 @@ def _strip_line_comments(text: str) -> str:
     return "\n".join(out_lines)
 
 
-def test_main_py_no_longer_inlines_the_four_steps():
+def test_app_factory_no_longer_inlines_the_four_steps():
     """The 4 statements that bootstrap() now owns must be removed
-    from `main.py`'s top-level (comments mentioning the names are OK)."""
-    code_only = _strip_line_comments(_read(_MAIN_PY))
+    from the app factory (comments mentioning the names are OK)."""
+    code_only = _strip_line_comments(_read(_APP_FACTORY_PY))
 
     # `settings.validate_startup()` should no longer appear inline.
     assert "settings.validate_startup()" not in code_only, (
-        "main.py must delegate validate_startup() to bootstrap()."
+        "app_factory.py must delegate validate_startup() to bootstrap()."
     )
     # `validate_storage_config()` likewise.
     assert "validate_storage_config()" not in code_only, (
-        "main.py must delegate validate_storage_config() to bootstrap()."
+        "app_factory.py must delegate validate_storage_config() to bootstrap()."
     )
     # `init_all_dbs()` likewise.
     assert "init_all_dbs()" not in code_only, (
-        "main.py must delegate init_all_dbs() to bootstrap()."
+        "app_factory.py must delegate init_all_dbs() to bootstrap()."
     )
     # The 3 SSL pops must not be inline anymore.
     for key in ("REQUESTS_CA_BUNDLE", "SSL_CERT_FILE", "CURL_CA_BUNDLE"):
         assert f"os.environ.pop('{key}'" not in code_only, (
-            f"main.py must delegate the {key} pop to bootstrap()."
+            f"app_factory.py must delegate the {key} pop to bootstrap()."
         )
         assert f'os.environ.pop("{key}"' not in code_only
 

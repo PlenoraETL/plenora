@@ -252,14 +252,14 @@ def test_envelope_does_not_leak_absolute_path(memory_limit_app):
 # 5. Source-bound: handler registrato in main.py
 
 
-def test_main_py_registers_memory_limit_exceeded_handler():
+def test_app_factory_registers_memory_limit_exceeded_handler():
     """Lock source-bound: `app/main.py` deve registrare il
     `MemoryLimitExceededError` handler."""
-    main_py = (
+    app_factory_py = (
         Path(__file__).resolve().parent.parent.parent
-        / "app" / "main.py"
+        / "app" / "app_factory.py"
     )
-    src = main_py.read_text(encoding="utf-8")
+    src = app_factory_py.read_text(encoding="utf-8")
     assert "@app.exception_handler(MemoryLimitExceededError)" in src
     # Import dell'eccezione dal modulo shared.
     assert "MemoryLimitExceededError" in src

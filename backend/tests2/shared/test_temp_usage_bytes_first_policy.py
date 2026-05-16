@@ -20,6 +20,7 @@ _APP = _BACKEND_ROOT / "app"
 _WORKERS = _BACKEND_ROOT / "workers"
 _TEMP_TARGETS = {"NamedTemporaryFile", "mkdtemp", "TemporaryDirectory"}
 _VALID_TEMP_CATEGORIES = {
+    "PATH_ONLY_ADAPTER",
     "PATH_REQUIRED_FILE",
     "DIR_MULTIFILE",
     "STAGING_INGESTION",
@@ -269,11 +270,11 @@ def test_resource_engine_loader_marks_path_mode_as_fallback():
 
 
 def test_temp_inventory_classification_buckets_match_brief():
-    """Lock: the four inventory categories
-    (PATH_REQUIRED_FILE / DIR_MULTIFILE / STAGING_INGESTION /
-    MIGRATION_CANDIDATE) cover the four-bucket classification
+    """Lock: the inventory categories distinguish path-only adapters
+    from persistent local state and still cover the four-bucket classification
     asked by BE-GO-READY-RESOURCE-ENGINE-014:
 
+      - centralized path-only adapter    -> PATH_ONLY_ADAPTER
       - unavoidable parser/library         -> PATH_REQUIRED_FILE
                                               + DIR_MULTIFILE
       - easy bytes migration               -> MIGRATION_CANDIDATE
@@ -285,7 +286,7 @@ def test_temp_inventory_classification_buckets_match_brief():
                                               inventoried)
 
     The test asserts every category currently in use is one of
-    the four; a future "DEAD_COMPAT" addition would require an
+    the explicit set; a future "DEAD_COMPAT" addition would require an
     explicit decision to add a 5th bucket here.
     """
     used_categories = {cat for (cat, _) in _TEMP_INVENTORY.values()}
@@ -368,19 +369,18 @@ _TEMP_INVENTORY: dict[tuple[str, int], tuple[str, str]] = {
     # was deleted as dead code. R-021.1 is closed; the typed
     # replacement is `ResultBlobLoader._materialize_to_temp_path`,
     # already inventoried below as PATH_REQUIRED_FILE.
-    ("app/core/eseguibili/router.py", 336): (
-        "PATH_REQUIRED_FILE",
-        "Eseguibile output materialization: temp path written to "
-        "FastAPI StreamingResponse via FileResponse. Path "
-        "structurally required by FileResponse contract.",
+    ("app/core/results/temp_paths.py", 46): (
+        "PATH_ONLY_ADAPTER",
+        "Centralized tempdir helper for path-only adapters. It creates "
+        "short-lived directories under settings.TEMP_DIR for result streaming "
+        "and other adapters; durable state must be persisted separately.",
     ),
-    ("app/core/eseguibili/service.py", 315): (
-        "PATH_REQUIRED_FILE",
-        "Eseguibile upload hydration: file_source bytes are materialized "
-        "to a short-lived local path only so the existing multi-format "
-        "dataframe parser can inspect CSV/XLSX/geospatial uploads. The "
-        "path is not handed to Celery and is unlinked immediately after "
-        "parsing.",
+    ("app/core/results/temp_paths.py", 63): (
+        "PATH_ONLY_ADAPTER",
+        "Centralized byte-to-path adapter helper for libraries that require "
+        "a local filesystem path. Current eseguibili hydration/analyze upload "
+        "callers use it under settings.TEMP_DIR with explicit prefix and "
+        "cleanup; this is not canonical local state.",
     ),
     ("app/core/imdf/storage.py", 95): (
         "DIR_MULTIFILE",
@@ -525,7 +525,7 @@ def test_temp_materialization_inventory_is_complete():
 
 
 def test_temp_inventory_entries_have_valid_category_and_rationale():
-    """Every inventory entry MUST use one of the 4 valid
+    """Every inventory entry MUST use one of the valid
     categories and carry a non-trivial rationale (no empty
     string, no bare TODO, at least 30 chars).
     """

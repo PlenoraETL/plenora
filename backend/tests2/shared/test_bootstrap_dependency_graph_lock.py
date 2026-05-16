@@ -35,7 +35,7 @@ def _restore_real_bootstrap_module():
 
 _BACKEND_ROOT = Path(__file__).resolve().parent.parent.parent
 _BOOTSTRAP_PY = _BACKEND_ROOT / "app" / "bootstrap.py"
-_MAIN_PY = _BACKEND_ROOT / "app" / "main.py"
+_APP_FACTORY_PY = _BACKEND_ROOT / "app" / "app_factory.py"
 
 
 def _read(p: Path) -> str:
@@ -130,20 +130,24 @@ def test_bootstrap_completion_flag_is_set_last_in_source():
 # 2. Source-bound: main.py calls _bootstrap() BEFORE router imports
 
 
-def test_main_py_bootstrap_runs_before_router_imports():
+def test_app_factory_bootstrap_runs_before_core_imports():
     """`app/main.py` must call `_bootstrap()` before importing any
     router module (`app.core.<module>.router` or `*_router`). The
     bootstrap function is the boundary that initialises DB / Redis /
     storage; routers loaded before it would import a half-configured
     app."""
-    src = _read(_MAIN_PY)
+    src = _read(_APP_FACTORY_PY)
 
     # Locate the line that invokes the bootstrap function. The line
     # is `_bootstrap()` on its own (the import alias is documented
     # at the top of main.py). Tolerate whitespace.
-    bootstrap_call = re.search(r"^_bootstrap\(\)\s*$", src, re.MULTILINE)
+    bootstrap_call = re.search(
+        r"^\s{4}resolved_deps\.bootstrap\(\)\s*$",
+        src,
+        re.MULTILINE,
+    )
     assert bootstrap_call is not None, (
-        "Expected `_bootstrap()` call line in app/main.py. "
+        "Expected `resolved_deps.bootstrap()` call line in app/app_factory.py. "
         "The dependency graph requires this single named entry."
     )
     boot_call_idx = bootstrap_call.start()
@@ -151,7 +155,7 @@ def test_main_py_bootstrap_runs_before_router_imports():
     # Find every `from app.core.X.router import ...` /
     # `from app.core.auth.<routerfile> import ...` etc.
     router_import_pattern = re.compile(
-        r"^from\s+app\.core\.[\w\.]+\s+import\s+[\w\.,\s\(\)]+",
+        r"^\s*from\s+app\.core\.[\w\.]+\s+import\s+[\w\.,\s\(\)]+",
         re.MULTILINE,
     )
     router_imports = [
@@ -178,24 +182,27 @@ def test_main_py_bootstrap_runs_before_router_imports():
         )
 
 
-def test_main_py_imports_bootstrap_before_calling_it():
+def test_app_factory_resolves_deps_before_calling_bootstrap():
     """The `from app.bootstrap import bootstrap as _bootstrap` line
     must come before the `_bootstrap()` call. Defensive — this could
     only break if someone reorders main.py blindly."""
-    src = _read(_MAIN_PY)
+    src = _read(_APP_FACTORY_PY)
 
-    import_match = re.search(
-        r"^from\s+app\.bootstrap\s+import\s+bootstrap\s+as\s+_bootstrap.*$",
+    deps_match = re.search(
+        r"^\s{4}resolved_deps\s*=\s*deps\s+or\s+_default_deps\(\)\s*$",
         src,
         re.MULTILINE,
     )
-    assert import_match is not None, (
-        "Expected `from app.bootstrap import bootstrap as _bootstrap` "
-        "line in app/main.py."
+    assert deps_match is not None, (
+        "Expected create_app() to resolve `resolved_deps` before bootstrap."
     )
-    call_match = re.search(r"^_bootstrap\(\)\s*$", src, re.MULTILINE)
+    call_match = re.search(
+        r"^\s{4}resolved_deps\.bootstrap\(\)\s*$",
+        src,
+        re.MULTILINE,
+    )
     assert call_match is not None
-    assert import_match.start() < call_match.start()
+    assert deps_match.start() < call_match.start()
 
 
 # 3. Behavioural: is_bootstrapped() False → True transition

@@ -218,6 +218,25 @@ I punti ancora critici per una vera orizzontalizzazione sono:
 - Terraform/containers sono compatibili con scale-out se runtime env e bucket sono condivisi.
 - Le systemd unit e runbook restano single-node operational model.
 
+## Stato aggiornato guardrail Go-ready (2026-05-16)
+
+### Closed
+
+- `app/main.py` non legge piu' direttamente `os.getenv`: delega ad `app.app_factory.create_app` e mantiene solo il path storico `app.main:app` con re-export dei runtime service.
+- `app/app_factory.py` e' ora l'app composition boundary; le due letture raw env per docs/redoc sono allowlistate e documentate come boot-time boundary.
+- Lo scanner `os.getenv` ora intercetta anche alias (`import os as ...`) e import diretti (`from os import getenv`), quindi nuovi raw env read fuori allowlist non possono bypassare il lock.
+- L'inventory `threading.local` e' esplicito e limitato a due adapter legacy documentati: `app/db/pg_connection.py` e `app/core/manipola/project_source_runtime.py`.
+- `OrchestratorService.__init__` e' fuori dal pattern piu' rischioso: non costruisce piu' direttamente executor concreti nel constructor path, e il guardrail mantiene la baseline pulita per i service migrati.
+- La baseline router -> `app.db.pg_connection` resta chiusa a zero import diretti.
+- `app.runtime.services` resta la composition boundary per i servizi gia' migrati: `main.py` consuma il container e non costruisce inline i service condivisi.
+
+### Remaining
+
+- `OrchestratorService` mantiene default builder fuori da `__init__` per compatibilita'. La chiusura completa Go-ready e' far arrivare sempre un dispatch `Mapping[str, CanvasExecutorProtocol]` dalla runtime composition factory, senza fallback impliciti nei service.
+- `threading.local` resta tollerato solo nei due adapter indicati. Non introdurre nuovi usi per contesto runtime; preferire ContextVar, parametri espliciti o stato condiviso DB/Redis/object storage.
+- `cloud_backends.py` mantiene molte letture raw env per validazione boot-time e compat storage. Restano ammesse solo perche' documentate come boundary; nuovi consumer runtime devono passare da `Settings.DEFAULTS` + `settings.get(...)`.
+- I residui multi-host piu' importanti restano quelli gia' elencati nelle priorita': lock backup manuale in `/tmp`, pending task metadata process-local, update scheduler cross-process safe, datasource scan state locale, e fallback in-memory security-sensitive.
+
 ## Priorita consigliate
 
 P0:

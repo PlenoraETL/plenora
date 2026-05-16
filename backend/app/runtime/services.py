@@ -100,7 +100,10 @@ def build_orchestrator_stack(
     """
     # Lazy imports keep this module cheap to load for contract tests.
     from app.core.estrai.query_generator import QueryGenerator
+    from app.core.estrai.executor import EstraiExecutor
     from app.core.features.features_service import FeaturesService
+    from app.core.manipola.executor import ManipolaExecutor
+    from app.core.arricchisci.executor import EnrichExecutor
     from app.core.orchestrator.service import OrchestratorService
     from app.db.query_executor import QueryExecutor
     from app.core.connections.service import ConnectionService
@@ -118,12 +121,35 @@ def build_orchestrator_stack(
     )
     features_service = FeaturesService(save_function=save_function)
 
+    orchestrator = None
+
+    def dispatch_pipeline(*args: Any, **kwargs: Any) -> Any:
+        if orchestrator is None:
+            raise RuntimeError("Orchestrator dispatcher used before wiring")
+        return orchestrator.execute_pipeline(*args, **kwargs)
+
+    estrai_executor = EstraiExecutor(
+        project_service=project_service,
+        executor=query_executor,
+        generator=query_generator,
+        connection_service=resolved_connection_service,
+        features_service=features_service,
+    )
+    manipola_executor = ManipolaExecutor(
+        project_service=project_service,
+        pipeline_dispatcher=dispatch_pipeline,
+    )
+    enrich_executor = EnrichExecutor(project_service=project_service)
+
     orchestrator = OrchestratorService(
         project_service=project_service,
         executor=query_executor,
         generator=query_generator,
         connection_service=resolved_connection_service,
         features_service=features_service,
+        estrai_executor=estrai_executor,
+        manipola_executor=manipola_executor,
+        enrich_executor=enrich_executor,
     )
 
     return OrchestratorStack(

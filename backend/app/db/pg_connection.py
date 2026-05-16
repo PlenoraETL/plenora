@@ -4,7 +4,7 @@ import os
 import threading
 from contextlib import contextmanager
 from dataclasses import dataclass
-from typing import Optional
+from typing import Any, Optional
 
 import psycopg2
 import psycopg2.extras
@@ -115,6 +115,12 @@ def _load_pool_config() -> None:
 
 _pool: Optional[psycopg2.pool.ThreadedConnectionPool] = None
 _pool_lock = threading.Lock()
+# Legacy adapter state for `transaction()`.
+#
+# New repository code should prefer the explicit `PgSession` /
+# `UnitOfWork` path below.  The thread-local guard stays confined to the
+# historical raw-connection transaction helper so existing callers keep
+# their behavior while new code can pass an explicit DB context.
 _transaction_state = threading.local()
 
 
@@ -292,77 +298,150 @@ def _adapt_params(sql: str, params: tuple) -> tuple[str, tuple]:
     return sql, params
 
 
-def fetchone(sql: str, params: tuple = ()) -> Optional[JsonObject]:
-    """Esegue query e ritorna la prima riga come dict, o None."""
-    sql, params = _adapt_params(sql, params)
-    conn = get_connection()
-    try:
-        with conn.cursor() as cur:
+class _ExecuteResult:
+    """Small legacy-compatible execute result after cursor close."""
+
+    def __init__(self, rowcount: int) -> None:
+        self.rowcount = rowcount
+
+    def fetchone(self) -> None:
+        return None
+
+
+class PgSession:
+    """Explicit PostgreSQL session passed through repository call chains.
+
+    The session wraps one checked-out connection.  It exposes typed query
+    helpers and transaction controls without relying on `threading.local`.
+    `UnitOfWork` owns checkout/release and calls commit/rollback on exit.
+    """
+
+    def __init__(self, conn: Any) -> None:
+        self._conn = conn
+        self._closed = False
+
+    def _ensure_open(self) -> None:
+        if self._closed:
+            raise RuntimeError("PgSession is closed")
+
+    def close(self) -> None:
+        self._closed = True
+
+    def cursor(self) -> Any:
+        """Return a raw psycopg cursor context manager for advanced callers."""
+        self._ensure_open()
+        return self._conn.cursor()
+
+    def commit(self) -> None:
+        self._ensure_open()
+        self._conn.commit()
+
+    def rollback(self) -> None:
+        self._ensure_open()
+        self._conn.rollback()
+
+    def fetchone(self, sql: str, params: tuple = ()) -> Optional[JsonObject]:
+        """Execute a query and return the first row as a dict, or None."""
+        self._ensure_open()
+        sql, params = _adapt_params(sql, params)
+        with self._conn.cursor() as cur:
             cur.execute(sql, params)
             row = cur.fetchone()
-            conn.commit()
             return dict(row) if row else None
-    except Exception:
-        conn.rollback()
-        raise
-    finally:
-        put_connection(conn)
+
+    def fetchall(self, sql: str, params: tuple = ()) -> JsonRows:
+        """Execute a query and return all rows as a list of dicts."""
+        self._ensure_open()
+        sql, params = _adapt_params(sql, params)
+        with self._conn.cursor() as cur:
+            cur.execute(sql, params)
+            return [dict(r) for r in cur.fetchall()]
+
+    def execute(self, sql: str, params: tuple = ()) -> _ExecuteResult:
+        """Execute a write query and return a legacy rowcount wrapper."""
+        self._ensure_open()
+        sql, params = _adapt_params(sql, params)
+        with self._conn.cursor() as cur:
+            cur.execute(sql, params)
+            return _ExecuteResult(cur.rowcount)
+
+    def executemany(self, sql: str, params_list: list[tuple]) -> None:
+        """Execute a query with many parameter sets."""
+        self._ensure_open()
+        sql, _ = _adapt_params(sql, ())
+        with self._conn.cursor() as cur:
+            cur.executemany(sql, params_list)
+
+
+class UnitOfWork:
+    """Context manager for an explicit PostgreSQL unit of work."""
+
+    def __init__(self) -> None:
+        self._conn: Any | None = None
+        self._session: PgSession | None = None
+
+    def __enter__(self) -> PgSession:
+        if self._session is not None:
+            raise RuntimeError("UnitOfWork is already active")
+        conn = get_connection()
+        self._conn = conn
+        self._session = PgSession(conn)
+        return self._session
+
+    def __exit__(self, exc_type: Any, exc: Any, tb: Any) -> None:
+        conn = self._conn
+        session = self._session
+        try:
+            if conn is None:
+                return
+            if exc_type is None:
+                try:
+                    conn.commit()
+                except Exception:
+                    conn.rollback()
+                    raise
+            else:
+                conn.rollback()
+        finally:
+            if session is not None:
+                session.close()
+            if conn is not None:
+                put_connection(conn)
+            self._conn = None
+            self._session = None
+
+
+def unit_of_work() -> UnitOfWork:
+    """Create an explicit PostgreSQL UnitOfWork.
+
+    This is the Go-readiness path for repositories: pass the yielded
+    `PgSession` explicitly instead of depending on module/thread state.
+    """
+    return UnitOfWork()
+
+
+def fetchone(sql: str, params: tuple = ()) -> Optional[JsonObject]:
+    """Esegue query e ritorna la prima riga come dict, o None."""
+    with unit_of_work() as session:
+        return session.fetchone(sql, params)
 
 
 def fetchall(sql: str, params: tuple = ()) -> JsonRows:
     """Esegue query e ritorna tutte le righe come lista di dict."""
-    sql, params = _adapt_params(sql, params)
-    conn = get_connection()
-    try:
-        with conn.cursor() as cur:
-            cur.execute(sql, params)
-            rows = cur.fetchall()
-            conn.commit()
-            return [dict(r) for r in rows]
-    except Exception:
-        conn.rollback()
-        raise
-    finally:
-        put_connection(conn)
+    with unit_of_work() as session:
+        return session.fetchall(sql, params)
 
 
 def execute(sql: str, params: tuple = ()):
     """Esegue una query di scrittura (INSERT/UPDATE/DELETE). Ritorna il cursor."""
-    sql, params = _adapt_params(sql, params)
-    conn = get_connection()
-    try:
-        with conn.cursor() as cur:
-            cur.execute(sql, params)
-            conn.commit()
-            # Wrapper minimale che espone solo `rowcount` + `fetchone`
-            # ai chiamanti che storicamente usavano un cursor
-            # post-commit. La connessione viene rilasciata dal `finally`
-            class _Result:
-                def __init__(self, rc):
-                    self.rowcount = rc
-                def fetchone(self):
-                    return None
-            return _Result(cur.rowcount)
-    except Exception:
-        conn.rollback()
-        raise
-    finally:
-        put_connection(conn)
+    with unit_of_work() as session:
+        return session.execute(sql, params)
 
 
 def executemany(sql: str, params_list: list[tuple]) -> None:
     """Esegue una query con molti set di parametri."""
-    sql, _ = _adapt_params(sql, ())
-    conn = get_connection()
-    try:
-        with conn.cursor() as cur:
-            cur.executemany(sql, params_list)
-            conn.commit()
-    except Exception:
-        conn.rollback()
-        raise
-    finally:
-        put_connection(conn)
+    with unit_of_work() as session:
+        session.executemany(sql, params_list)
 
 
 @contextmanager

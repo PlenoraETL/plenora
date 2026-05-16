@@ -19,6 +19,7 @@ pytestmark = [pytest.mark.unit, pytest.mark.shared, pytest.mark.contract]
 
 _BACKEND_ROOT = Path(__file__).resolve().parent.parent.parent
 _MAIN_PY = _BACKEND_ROOT / "app" / "main.py"
+_APP_FACTORY_PY = _BACKEND_ROOT / "app" / "app_factory.py"
 _RUNTIME_SERVICES_PY = _BACKEND_ROOT / "app" / "runtime" / "services.py"
 _RUNTIME_FIELD_NAMES = (
     "project_service",
@@ -90,7 +91,7 @@ def test_runtime_services_is_frozen():
 
 
 def test_build_runtime_services_constructs_in_canonical_order():
-    """The orchestrator MUST receive the 5 prior services as
+    """The orchestrator MUST receive prior services and executors as
     keyword arguments. Locking via MagicMock-based capture ensures
     that a future refactor reordering construction would surface as
     a missing-kwarg `TypeError` or as a divergent assertion here.
@@ -103,6 +104,9 @@ def test_build_runtime_services_constructs_in_canonical_order():
     generator_instance = MagicMock(name="QueryGenerator_inst")
     executor_instance = MagicMock(name="QueryExecutor_inst")
     features_instance = MagicMock(name="FeaturesService_inst")
+    estrai_executor_instance = MagicMock(name="EstraiExecutor_inst")
+    manipola_executor_instance = MagicMock(name="ManipolaExecutor_inst")
+    enrich_executor_instance = MagicMock(name="EnrichExecutor_inst")
     orchestrator_instance = MagicMock(name="OrchestratorService_inst")
 
     def _ProjectService():
@@ -133,9 +137,33 @@ def test_build_runtime_services_constructs_in_canonical_order():
         features_instance.save_function = save_function
         return features_instance
 
+    def _EstraiExecutor(*, project_service, executor, generator,
+                        connection_service, features_service):
+        construction_order.append("EstraiExecutor")
+        assert project_service is project_instance
+        assert executor is executor_instance
+        assert generator is generator_instance
+        assert connection_service is connection_instance
+        assert features_service is features_instance
+        return estrai_executor_instance
+
+    def _ManipolaExecutor(*, project_service, pipeline_dispatcher):
+        construction_order.append("ManipolaExecutor")
+        assert project_service is project_instance
+        assert callable(pipeline_dispatcher)
+        manipola_executor_instance.pipeline_dispatcher = pipeline_dispatcher
+        return manipola_executor_instance
+
+    def _EnrichExecutor(*, project_service):
+        construction_order.append("EnrichExecutor")
+        assert project_service is project_instance
+        return enrich_executor_instance
+
     def _OrchestratorService(*, project_service, executor, generator,
-                              connection_service, features_service):
-        # Locked: orchestrator receives the 5 services by keyword.
+                              connection_service, features_service,
+                              estrai_executor, manipola_executor,
+                              enrich_executor):
+        # Locked: orchestrator receives services and executor deps by keyword.
         construction_order.append("OrchestratorService")
         # Identity check: orchestrator gets the EXACT instances built
         # earlier, not new ones. This rejects a refactor that
@@ -145,6 +173,9 @@ def test_build_runtime_services_constructs_in_canonical_order():
         assert generator is generator_instance
         assert connection_service is connection_instance
         assert features_service is features_instance
+        assert estrai_executor is estrai_executor_instance
+        assert manipola_executor is manipola_executor_instance
+        assert enrich_executor is enrich_executor_instance
         return orchestrator_instance
 
     fake_settings = SimpleNamespace(DATA_DIR=Path("/tmp/plenora"))
@@ -165,6 +196,9 @@ def test_build_runtime_services_constructs_in_canonical_order():
         patch("app.core.estrai.query_generator.QueryGenerator", _QueryGenerator),
         patch("app.db.query_executor.QueryExecutor", _QueryExecutor),
         patch("app.core.features.features_service.FeaturesService", _FeaturesService),
+        patch("app.core.estrai.executor.EstraiExecutor", _EstraiExecutor),
+        patch("app.core.manipola.executor.ManipolaExecutor", _ManipolaExecutor),
+        patch("app.core.arricchisci.executor.EnrichExecutor", _EnrichExecutor),
         patch("app.core.orchestrator.service.OrchestratorService", _OrchestratorService),
         patch(
             "app.core.arricchisci.api_connector.api_connection_service",
@@ -254,14 +288,14 @@ def test_build_runtime_services_kw_only():
 # 3. main.py consumes the factory; module-globals re-export from container
 
 
-def test_main_py_consumes_runtime_services_factory():
-    """Source-bound: `app/main.py` invokes `build_runtime_services`
-    instead of constructing the 7 services inline. Drift guard."""
-    src = _read(_MAIN_PY)
+def test_app_factory_consumes_runtime_services_factory():
+    """Source-bound: `app/app_factory.py` invokes `build_runtime_services`
+    instead of constructing shared services inline. Drift guard."""
+    src = _read(_APP_FACTORY_PY)
 
     # Factory consumed.
     assert "from app.runtime import build_runtime_services" in src
-    assert "build_runtime_services(" in src
+    assert "resolved_deps.build_runtime_services(" in src
 
     # Module-globals are still defined (monkeypatch surface), but
     # they MUST be derived from the container â€” not constructed
@@ -277,10 +311,10 @@ def test_main_py_consumes_runtime_services_factory():
     )
     for pat in forbidden_inline:
         assert pat not in src, (
-            f"app/main.py still constructs `{pat.rstrip('(')}` inline. "
+            f"app/app_factory.py still constructs `{pat.rstrip('(')}` inline. "
             "Construction has moved into "
-            "`app.runtime.build_runtime_services`; main.py should "
-            "consume the returned container."
+            "`app.runtime.build_runtime_services`; app_factory.py should "
+            "consume the returned runtime container."
         )
 
 
@@ -296,7 +330,8 @@ def test_main_py_rebinds_globals_from_runtime_container():
     """
     src = _read(_MAIN_PY)
 
-    assert "_runtime_services = build_runtime_services(" in src
+    assert "app = create_app()" in src
+    assert "_runtime_services = app.state.runtime_services" in src
     # Each field is rebound at module level.
     for name in _RUNTIME_FIELD_NAMES:
         assert f"{name} = _runtime_services.{name}" in src, (

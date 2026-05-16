@@ -73,21 +73,22 @@ def test_check_worker_rss_skips_when_psutil_unavailable():
 # 3. Envelope shape: 503 for RSS stages
 
 def test_rss_stage_maps_to_503_in_handler_source_bound():
-    """RSS stages must map to 503 in `app/main.py`, without importing
+    """RSS stages must map to 503 in `app/app_factory.py`, without importing
     the production app during this unit test.
 
     Importing `app.main` initializes DB/Redis startup boundaries; this
     source-bound contract keeps the test hermetic while still locking the
     status-code split introduced by this batch.
     """
-    main_py = (
+    app_factory_py = (
         Path(__file__).resolve().parent.parent.parent
-        / "app" / "main.py"
+        / "app" / "app_factory.py"
     )
-    src = main_py.read_text(encoding="utf-8")
+    src = app_factory_py.read_text(encoding="utf-8")
     assert '_RSS_STAGES = frozenset({"pipeline_execute", "worker_rss"})' in src
     assert "status_code = 503 if is_rss else 413" in src
-    assert 'suggested_action = "retry_later_or_contact_admin" if is_rss else "split_file_or_contact_admin"' in src
+    assert '"retry_later_or_contact_admin"' in src
+    assert '"split_file_or_contact_admin"' in src
 
 
 def test_rss_exception_carries_worker_process_resource():

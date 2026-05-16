@@ -9,8 +9,6 @@ from app.core.features.arcgis_writer_boundary import (
     ArcGISColumnMappingsInput,
     ArcGISFeatureWriter,
 )
-from app.core.features.features_service import FeaturesService
-from app.core.dataframes.frame_io import save_dataframe
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -141,6 +139,9 @@ class CaricaArcGISWriteOutcome:
 
 def create_default_arcgis_feature_writer() -> ArcGISFeatureWriter:
     """Build the generic ArcGIS feature writer used by CARICA."""
+    from app.core.dataframes.frame_io import save_dataframe
+    from app.core.features.features_service import FeaturesService
+
     return FeaturesService(save_function=save_dataframe)
 
 

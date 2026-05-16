@@ -7,7 +7,6 @@ Endpoint:
 import json as _json
 
 import os
-import tempfile
 from pathlib import Path
 from fastapi import APIRouter, HTTPException, Depends, UploadFile, File, BackgroundTasks
 from typing import List, Mapping, Optional
@@ -26,6 +25,10 @@ from app.config import settings
 from app.utils.logger import get_logger
 from app.observability.audit_action import audit_action
 from app.core.auth.visibility import visible_resource_ids
+from app.core.results.temp_paths import (
+    cleanup_path_only_adapter,
+    write_path_only_adapter_bytes,
+)
 from app.shared.error_sanitizer import sanitize_http_detail
 from app.shared.upload_guards import enforce_upload_size_limit
 from app.shared import error_codes
@@ -328,14 +331,7 @@ async def analyze_upload(
     # contenuto in RAM, evitando DoS interno credenziato via upload N GB
     enforce_upload_size_limit(file)
 
-    # Salva in temp dir
-    tmp_dir = settings.DATA_DIR / "temp" / "eseguibili_uploads"
-    tmp_dir.mkdir(parents=True, exist_ok=True)
-
     suffix = Path(file.filename).suffix or ".bin"
-    tmp_file = tempfile.NamedTemporaryFile(
-        delete=False, suffix=suffix, dir=str(tmp_dir)
-    )
     try:
         content = await file.read()
         # Block-only mode: il file viene salvato su disk e parsato dal
@@ -354,23 +350,11 @@ async def analyze_upload(
                 f"Upload eseguibile analyze rifiutato (MIME): "
                 f"eseguibile={eseguibile_id} user={current_user.username}: {e}"
             )
-            tmp_file.close()
-            try:
-                os.unlink(tmp_file.name)
-            except Exception as _unlink_err:
-                logger.debug(
-                    f"analyze_upload: cleanup tmp post-MIME-reject best-effort "
-                    f"fallito per {tmp_file.name}: {_unlink_err}"
-                )
             # 6.2: sanitize detail prima di esporlo al client
             raise HTTPException(
                 status_code=400, detail=sanitize_http_detail(str(e)),
             )
-        tmp_file.write(content)
-    finally:
-        tmp_file.close()
-    try:
-        tmp_path = tmp_file.name
+        tmp_path = str(write_path_only_adapter_bytes(content, suffix=suffix))
 
         try:
             result = eseguibili_service.analyze_file_upload(
@@ -380,12 +364,10 @@ async def analyze_upload(
             )
         except ValueError as e:
             # Cleanup file temp se analisi fallisce
-            try:
-                os.unlink(tmp_path)
-            except Exception as _unlink_err:
+            if not cleanup_path_only_adapter(tmp_path):
                 logger.debug(
                     f"analyze_upload: cleanup tmp post-ValueError best-effort "
-                    f"fallito per {tmp_path}: {_unlink_err}"
+                    f"fallito per {tmp_path}"
                 )
             # 6.2: sanitize detail (analyze_file_upload puo'
             # includere path temp + output pyproj/gdal
@@ -403,12 +385,10 @@ async def analyze_upload(
         result = result.model_copy(
             update={"file_id": durable_file_id, "file_path": ""}
         )
-        try:
-            os.unlink(tmp_path)
-        except Exception as _unlink_err:
+        if not cleanup_path_only_adapter(tmp_path):
             logger.debug(
                 f"analyze_upload: cleanup tmp post-persist best-effort "
-                f"fallito per {tmp_path}: {_unlink_err}"
+                f"fallito per {tmp_path}"
             )
 
         return result.to_api_dict()
@@ -418,10 +398,7 @@ async def analyze_upload(
     except Exception as e:
         tmp_path_for_cleanup = locals().get("tmp_path")
         if tmp_path_for_cleanup:
-            try:
-                os.unlink(tmp_path_for_cleanup)
-            except Exception:
-                pass
+            cleanup_path_only_adapter(tmp_path_for_cleanup)
         logger.error(f"[CRASH] Errore analyze upload: {e}", exc_info=True)
         raise_typed_http(error_codes.INTERNAL_ERROR, status_code=500, message="Errore interno del server")
 

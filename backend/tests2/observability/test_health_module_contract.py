@@ -757,12 +757,12 @@ def test_check_object_storage_does_not_import_boto3_directly():
 # 9. Source-bound: main.py delegates to gather_*, no inline _check_*
 
 
-def test_main_py_delegates_health_routes_to_health_module():
-    main_py = (
+def test_app_factory_delegates_health_routes_to_health_module():
+    app_factory_py = (
         Path(__file__).resolve().parent.parent.parent
-        / "app" / "main.py"
+        / "app" / "app_factory.py"
     )
-    src = main_py.read_text(encoding="utf-8")
+    src = app_factory_py.read_text(encoding="utf-8")
     # Le route delegano agli helper estratti.
     assert "gather_liveness" in src
     assert "gather_readiness" in src

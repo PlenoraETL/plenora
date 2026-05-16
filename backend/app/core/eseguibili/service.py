@@ -5,15 +5,17 @@ Operazioni principali:
 """
 
 import io
-import os
 import re
 
 import copy
 import json
-import tempfile
 import uuid
 from typing import Mapping, Optional, Sequence
 
+from app.core.results.temp_paths import (
+    cleanup_path_only_adapter,
+    write_path_only_adapter_bytes,
+)
 from app.utils.logger import get_logger
 
 from . import db as eseguibili_db
@@ -312,12 +314,7 @@ def execute(
         upload_meta = load_upload_metadata(file_source_id) or {}
         filename = str(upload_meta.get("filename") or "upload.bin")
         suffix = f".{filename.rsplit('.', 1)[1]}" if "." in filename else ".bin"
-        tmp = tempfile.NamedTemporaryFile(delete=False, suffix=suffix)
-        try:
-            tmp.write(blob)
-            temp_input_path = tmp.name
-        finally:
-            tmp.close()
+        temp_input_path = str(write_path_only_adapter_bytes(blob, suffix=suffix))
         source_path = temp_input_path
     else:
         source_path = file_path
@@ -326,12 +323,10 @@ def execute(
         df = load_dataframe_from_file(source_path)
     finally:
         if temp_input_path:
-            try:
-                os.unlink(temp_input_path)
-            except OSError as exc:
+            if not cleanup_path_only_adapter(temp_input_path):
                 logger.debug(
                     f"execute: cleanup input idratato fallito per "
-                    f"{temp_input_path}: {exc}"
+                    f"{temp_input_path}"
                 )
     if df is None or df.empty:
         raise ValueError("File sorgente vuoto o illeggibile")

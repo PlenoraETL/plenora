@@ -368,17 +368,17 @@ def test_envelope_response_is_json_content_type(envelope_app):
 # 4. Source-bound checks — i 3 handler sono registrati in main.py
 
 
-def test_main_py_registers_envelope_handlers():
+def test_app_factory_registers_envelope_handlers():
     """Lock source-bound: `app/main.py` deve registrare i 3 handler
     target del pilot. Drift detection se qualcuno rimuove o
     rinomina i decoratori."""
     from pathlib import Path
 
-    main_py = (
+    app_factory_py = (
         Path(__file__).resolve().parent.parent.parent
-        / "app" / "main.py"
+        / "app" / "app_factory.py"
     )
-    src = main_py.read_text(encoding="utf-8")
+    src = app_factory_py.read_text(encoding="utf-8")
     assert "@app.exception_handler(Exception)" in src
     assert "@app.exception_handler(StarletteHTTPException)" in src
     assert "@app.exception_handler(RequestValidationError)" in src

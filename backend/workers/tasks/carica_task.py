@@ -9,17 +9,11 @@ import time as _time
 import traceback
 import uuid as _uuid
 from pathlib import PurePosixPath
-from typing import Any, Optional, TypedDict, cast
+from typing import Any, Mapping, Optional, TypedDict, cast
 
 from app.shared.contracts.payloads import HeadersMap, JsonObject
 from app.utils.logger import get_logger, open_run, close_run, set_run_context, append_step
 from app.config import settings
-from app.core.carica.arcgis_write_boundary import (
-    CaricaArcGISWriteRequest,
-    CaricaArcGISTaskResult,
-    create_default_arcgis_feature_writer,
-    execute_carica_arcgis_write,
-)
 from app.core.carica.target_lock import (
     CaricaTargetLockHandle,
     acquire_carica_target_lock,
@@ -31,6 +25,24 @@ from workers.celery_app import celery_app, BaseTaskWithRetry
 
 
 logger = get_logger("workers.carica_task")
+
+
+def create_default_arcgis_feature_writer() -> Any:
+    """Lazy wrapper kept patchable without importing ArcGIS services at registration."""
+    from app.core.carica.arcgis_write_boundary import (
+        create_default_arcgis_feature_writer as _create_default,
+    )
+
+    return _create_default()
+
+
+def execute_carica_arcgis_write(**kwargs: Any) -> Any:
+    """Lazy wrapper kept patchable without importing ArcGIS services at registration."""
+    from app.core.carica.arcgis_write_boundary import (
+        execute_carica_arcgis_write as _execute_boundary,
+    )
+
+    return _execute_boundary(**kwargs)
 
 
 class CaricaTaskResultPayload(TypedDict, total=False):
@@ -632,8 +644,10 @@ def _execute_arcgis_write(
     carica_node_data: JsonObject,
     project_id: str,
     task_id: str,
-) -> CaricaArcGISTaskResult:
+) -> Mapping[str, object]:
     """Coordinate ArcGIS write progress while the domain owns provider writes."""
+    from app.core.carica.arcgis_write_boundary import CaricaArcGISWriteRequest
+
     _update_progress(task, 15, "Preparazione scrittura ArcGIS...")
 
     operation = carica_node_data.get("arcgis_operation", "add")

@@ -77,7 +77,6 @@ def test_value_error_str_e_lock_exists_in_catalog_test():
 #   one typed path.
 # - `app/config_env_loader.py`: dotenv/bootstrap env loading boundary. It owns
 #   the raw `ENVIRONMENT`/`ENV` distinction needed before Settings exists.
-# - `app/main.py`: startup boot, env diagnostics.
 # - `app/startup_validation.py`: explicit bootstrap validation boundary.
 # - `app/db/migrations_runner.py`: bootstrap migrations runner
 #   (deve distinguere "user did set" vs "default" ⇒ os.getenv diretto).
@@ -107,7 +106,6 @@ def test_value_error_str_e_lock_exists_in_catalog_test():
 ALLOWLIST_GETENV_COUNTS: Dict[str, int] = {
     "app/config.py": 1,
     "app/config_env_loader.py": 2,
-    "app/main.py": 2,
     "app/startup_validation.py": 2,
     "app/db/migrations_runner.py": 1,
     "app/db/pg_connection.py": 3,
@@ -121,15 +119,43 @@ ALLOWLIST_GETENV_COUNTS: Dict[str, int] = {
 }
 
 
-def _is_os_getenv(node: ast.AST) -> bool:
+def _get_os_getenv_call_names(tree: ast.AST) -> Tuple[Set[str], Set[str]]:
+    """Return accepted module aliases and direct function aliases.
+
+    This deliberately catches bypasses such as `import os as _os` and
+    `from os import getenv as env`. New raw env reads must still be
+    classified in `ALLOWLIST_GETENV_COUNTS`.
+    """
+    os_module_names = {"os"}
+    getenv_names: Set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                if alias.name == "os":
+                    os_module_names.add(alias.asname or alias.name)
+        elif isinstance(node, ast.ImportFrom) and node.module == "os":
+            for alias in node.names:
+                if alias.name == "getenv":
+                    getenv_names.add(alias.asname or alias.name)
+    return os_module_names, getenv_names
+
+
+def _is_os_getenv(
+    node: ast.AST,
+    *,
+    os_module_names: Set[str],
+    getenv_names: Set[str],
+) -> bool:
     if not isinstance(node, ast.Call):
         return False
     f = node.func
+    if isinstance(f, ast.Name):
+        return f.id in getenv_names
     if not isinstance(f, ast.Attribute):
         return False
     if f.attr != "getenv":
         return False
-    return isinstance(f.value, ast.Name) and f.value.id == "os"
+    return isinstance(f.value, ast.Name) and f.value.id in os_module_names
 
 
 def _scan_getenv() -> Dict[str, int]:
@@ -138,7 +164,16 @@ def _scan_getenv() -> Dict[str, int]:
         tree = _parse(p)
         if tree is None:
             continue
-        n = sum(1 for node in ast.walk(tree) if _is_os_getenv(node))
+        os_module_names, getenv_names = _get_os_getenv_call_names(tree)
+        n = sum(
+            1
+            for node in ast.walk(tree)
+            if _is_os_getenv(
+                node,
+                os_module_names=os_module_names,
+                getenv_names=getenv_names,
+            )
+        )
         if n:
             counts[_rel(p)] = n
     return counts
@@ -165,7 +200,174 @@ def test_os_getenv_only_at_boundary_modules():
     )
 
 
-# Rule 3 — `app.db.pg_connection` direct access from routers
+# Rule 3 — `threading.local` legacy adapter inventory
+
+
+# Inventory esplicito per `threading.local` in `backend/app/`.
+#
+# Razionale:
+# - `app/db/pg_connection.py`: transaction state thread-local legato al
+#   connection pool per processo. Legacy DB adapter documentato; non e'
+#   lock distribuito.
+# - `app/core/manipola/project_source_runtime.py`: catena sorgenti
+#   Manipola isolata per thread durante l'esecuzione. Legacy execution
+#   adapter documentato; non e' stato condiviso multi-replica.
+ALLOWLIST_THREADING_LOCAL_COUNTS: Dict[str, int] = {
+    "app/db/pg_connection.py": 1,
+    "app/core/manipola/project_source_runtime.py": 1,
+}
+
+
+def _get_threading_local_call_names(tree: ast.AST) -> Tuple[Set[str], Set[str]]:
+    threading_module_names = {"threading"}
+    local_names: Set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                if alias.name == "threading":
+                    threading_module_names.add(alias.asname or alias.name)
+        elif isinstance(node, ast.ImportFrom) and node.module == "threading":
+            for alias in node.names:
+                if alias.name == "local":
+                    local_names.add(alias.asname or alias.name)
+    return threading_module_names, local_names
+
+
+def _is_threading_local(
+    node: ast.AST,
+    *,
+    threading_module_names: Set[str],
+    local_names: Set[str],
+) -> bool:
+    if not isinstance(node, ast.Call):
+        return False
+    f = node.func
+    if isinstance(f, ast.Name):
+        return f.id in local_names
+    if not isinstance(f, ast.Attribute):
+        return False
+    if f.attr != "local":
+        return False
+    return isinstance(f.value, ast.Name) and f.value.id in threading_module_names
+
+
+def _scan_threading_local() -> Dict[str, int]:
+    counts: Dict[str, int] = {}
+    for p in _iter_py(_APP_ROOT):
+        tree = _parse(p)
+        if tree is None:
+            continue
+        threading_module_names, local_names = _get_threading_local_call_names(tree)
+        n = sum(
+            1
+            for node in ast.walk(tree)
+            if _is_threading_local(
+                node,
+                threading_module_names=threading_module_names,
+                local_names=local_names,
+            )
+        )
+        if n:
+            counts[_rel(p)] = n
+    return counts
+
+
+def test_threading_local_only_legacy_adapters():
+    """Lock/inventory: `threading.local` resta confinato ai legacy
+    adapter documentati in `ALLOWLIST_THREADING_LOCAL_COUNTS`.
+
+    Nuovi usi sono sospetti in ottica Go-ready: spesso nascondono
+    stato process-local/thread-local che non scala fra repliche.
+    Classificare esplicitamente ogni nuovo caso o migrare a
+    ContextVar, parametri espliciti, DB/Redis/object storage."""
+    found = _scan_threading_local()
+    assert found == ALLOWLIST_THREADING_LOCAL_COUNTS, (
+        "Drift `threading.local` rilevato in `backend/app/`.\n"
+        f"Atteso: {ALLOWLIST_THREADING_LOCAL_COUNTS}\n"
+        f"Trovato: {found}\n"
+        "Action: se e' un legacy adapter inevitabile, aggiorna "
+        "l'inventory con razionale; altrimenti rimuovi lo stato "
+        "thread-local dal path runtime Go-ready."
+    )
+
+
+# Rule 4 — concrete executor construction inside service `__init__`
+
+
+# Inventory dei service che costruiscono executor concreti nel proprio
+# `__init__`. Questo pattern rende il wiring meno Go-ready perche' lega
+# lifecycle e composizione a un service invece che alla composition root.
+#
+# Baseline corrente: pulita. `OrchestratorService.__init__` e' migrato
+# a injection opzionale; eventuali default builder restano fuori
+# dall'inizializzatore e non devono rientrare nel constructor path.
+ALLOWLIST_SERVICE_INIT_EXECUTOR_CALLS: Set[Tuple[str, str, str, int]] = set()
+
+
+def _call_name(node: ast.Call) -> str | None:
+    f = node.func
+    if isinstance(f, ast.Name):
+        return f.id
+    if isinstance(f, ast.Attribute):
+        return f.attr
+    return None
+
+
+def _is_service_class_name(name: str) -> bool:
+    return name.endswith("Service") or name == "OrchestratorService"
+
+
+def _scan_service_init_executor_calls() -> Set[Tuple[str, str, str, int]]:
+    hits: Set[Tuple[str, str, str, int]] = set()
+    for p in _iter_py(_APP_ROOT):
+        tree = _parse(p)
+        if tree is None:
+            continue
+        rel = _rel(p)
+        for class_node in ast.walk(tree):
+            if not isinstance(class_node, ast.ClassDef):
+                continue
+            if not _is_service_class_name(class_node.name):
+                continue
+            init_node = next(
+                (
+                    item
+                    for item in class_node.body
+                    if isinstance(item, ast.FunctionDef) and item.name == "__init__"
+                ),
+                None,
+            )
+            if init_node is None:
+                continue
+            for node in ast.walk(init_node):
+                if not isinstance(node, ast.Call):
+                    continue
+                name = _call_name(node)
+                if name and name.endswith("Executor"):
+                    hits.add((rel, class_node.name, name, node.lineno))
+    return hits
+
+
+def test_service_init_concrete_executor_inventory_locked():
+    """Lock: i service non devono introdurre nuove istanziazioni di
+    executor concreti dentro `__init__`.
+
+    I domini gia' migrati devono comporre executor nella composition
+    root (`app.runtime.services`) e iniettarli. La baseline rimasta e'
+    un inventory legacy esplicito; drift in piu' segnala regressione,
+    drift in meno richiede aggiornamento del lock."""
+    found = _scan_service_init_executor_calls()
+    assert found == ALLOWLIST_SERVICE_INIT_EXECUTOR_CALLS, (
+        "Drift service `__init__` -> concrete executor rilevato.\n"
+        f"Atteso: {sorted(ALLOWLIST_SERVICE_INIT_EXECUTOR_CALLS)}\n"
+        f"Trovato: {sorted(found)}\n"
+        "Action: sposta la costruzione nella runtime composition "
+        "factory e inietta un protocol/dispatch, oppure aggiorna "
+        "l'inventory con razionale se il caso resta legacy."
+    )
+
+
+# Rule 5 — `app.db.pg_connection` direct access from routers
 
 
 # Allowlist: router legacy che importano `app.db.pg_connection`
@@ -247,7 +449,7 @@ def test_pg_connection_not_imported_from_new_routers():
     )
 
 
-# Rule 4 — `app.main` imports inside shared/unit tests
+# Rule 6 — `app.main` imports inside shared/unit tests
 
 
 # Allowlist test file che importano `app.main`. Razionale:
@@ -313,7 +515,7 @@ def test_app_main_not_imported_from_new_unit_tests():
     )
 
 
-# Rule 5 — `raise_typed_http(code="...")` literal vs catalog constant
+# Rule 7 — `raise_typed_http(code="...")` literal vs catalog constant
 
 
 def _extract_code_arg(call: ast.Call) -> ast.AST | None:
@@ -378,11 +580,25 @@ def test_raise_typed_http_uses_catalog_constant_only():
 
 def test_scanners_find_expected_baseline_files():
     """Sanity: lo scanner Rule 2 trova almeno i file core boundary
-    (config.py, main.py). Se questo fail, lo scanner e' rotto e i
+    (config.py, config_env_loader.py). Se questo fail, lo scanner e' rotto e i
     drift sopra sono illusori."""
     found = _scan_getenv()
     assert "app/config.py" in found
-    assert "app/main.py" in found
+    assert "app/config_env_loader.py" in found
+
+
+def test_scanner_threading_local_finds_legacy_adapters():
+    """Sanity: lo scanner Rule 3 trova i due adapter legacy
+    documentati."""
+    found = _scan_threading_local()
+    assert found == ALLOWLIST_THREADING_LOCAL_COUNTS
+
+
+def test_scanner_service_init_executor_baseline_is_empty():
+    """Sanity: lo scanner Rule 4 mantiene pulita la baseline dei
+    service `__init__`."""
+    found = _scan_service_init_executor_calls()
+    assert found == set()
 
 
 def test_scanner_pg_connection_router_baseline_is_empty():

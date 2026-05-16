@@ -316,41 +316,43 @@ def test_router_registry_does_not_import_router_modules_at_top_level():
     )
 
 
-def test_main_py_imports_all_bindings_and_dispatcher():
-    """Positive lock: main imports every binding and invokes the dispatcher."""
-    src = _read_source("app/main.py")
+def test_app_factory_imports_all_bindings_and_dispatcher():
+    """Positive lock: app factory imports every binding and invokes dispatcher."""
+    src = _read_source("app/app_factory.py")
 
     for binding_attr, *_ in [case.values for case in BINDING_CASES]:
-        assert binding_attr in src, f"app/main.py must import {binding_attr}"
-    assert "bind_router_services(" in src, "app/main.py must invoke bind_router_services()"
+        assert binding_attr in src, f"app/app_factory.py must import {binding_attr}"
+    assert "bind_router_services(" in src, (
+        "app/app_factory.py must invoke bind_router_services()"
+    )
 
 
-def test_main_py_does_not_import_router_init_symbols():
-    """Router-side init symbols must no longer appear in main.py imports."""
-    imported = _imported_names(_read_source("app/main.py"))
+def test_app_factory_does_not_import_router_init_symbols():
+    """Router-side init symbols must no longer appear in app_factory imports."""
+    imported = _imported_names(_read_source("app/app_factory.py"))
     forbidden = {init_name for _, _, _, _, init_name, _ in [case.values for case in BINDING_CASES]}
 
     assert forbidden.isdisjoint(imported), (
-        "app/main.py must not import router init functions directly: "
+        "app/app_factory.py must not import router init functions directly: "
         f"{sorted(forbidden & imported)}"
     )
 
 
-def test_main_py_has_no_legacy_direct_router_init_literals():
-    """Exact old procedural call shapes stay out of app/main.py."""
-    src = _read_source("app/main.py")
+def test_app_factory_has_no_legacy_direct_router_init_literals():
+    """Exact old procedural call shapes stay out of app/app_factory.py."""
+    src = _read_source("app/app_factory.py")
 
     for binding_attr, _, _, _, init_name, bad_call in [case.values for case in BINDING_CASES]:
         assert bad_call not in src, (
-            "app/main.py should call router init through "
-            f"bind_router_services(_runtime_services, {binding_attr}) "
+            "app/app_factory.py should call router init through "
+            f"bind_router_services(runtime_services, {binding_attr}) "
             f"instead of {bad_call}"
         )
 
 
-def test_main_py_init_block_has_no_procedural_router_init_calls():
-    """There must be zero procedural router-side init calls in app/main.py."""
-    tree = ast.parse(_read_source("app/main.py"))
+def test_app_factory_init_block_has_no_procedural_router_init_calls():
+    """There must be zero procedural router-side init calls in app_factory.py."""
+    tree = ast.parse(_read_source("app/app_factory.py"))
     forbidden_router_inits = {
         init_name for _, _, _, _, init_name, _ in [case.values for case in BINDING_CASES]
     }
@@ -362,7 +364,7 @@ def test_main_py_init_block_has_no_procedural_router_init_calls():
                 violations.append((node.lineno, node.func.id))
 
     assert not violations, (
-        "app/main.py still contains procedural router-side init calls:\n"
+        "app/app_factory.py still contains procedural router-side init calls:\n"
         + "\n".join(f"  line {ln}: {name}(...)" for ln, name in violations)
         + "\nRoute through bind_router_services(_runtime_services, <NAME>_BINDING)."
     )
@@ -394,23 +396,23 @@ def test_routers_do_not_import_from_main(router_path):
     )
 
 
-def test_main_py_init_order_is_canonical():
+def test_app_factory_init_order_is_canonical():
     """Source-bound startup order lock for the 6 typed bindings."""
-    src = _read_source("app/main.py")
+    src = _read_source("app/app_factory.py")
     markers = [
-        ("CONNECTIONS_BINDING", "bind_router_services(_runtime_services, CONNECTIONS_BINDING)"),
-        ("PROJECTS_BINDING", "bind_router_services(_runtime_services, PROJECTS_BINDING)"),
-        ("ARRICCHISCI_BINDING", "bind_router_services(_runtime_services, ARRICCHISCI_BINDING)"),
-        ("DATASOURCES_BINDING", "bind_router_services(_runtime_services, DATASOURCES_BINDING)"),
-        ("CARICA_BINDING", "bind_router_services(_runtime_services, CARICA_BINDING)"),
-        ("ORCHESTRATOR_BINDING", "bind_router_services(_runtime_services, ORCHESTRATOR_BINDING)"),
+        ("CONNECTIONS_BINDING", "bind_router_services(runtime_services, CONNECTIONS_BINDING)"),
+        ("PROJECTS_BINDING", "bind_router_services(runtime_services, PROJECTS_BINDING)"),
+        ("ARRICCHISCI_BINDING", "bind_router_services(runtime_services, ARRICCHISCI_BINDING)"),
+        ("DATASOURCES_BINDING", "bind_router_services(runtime_services, DATASOURCES_BINDING)"),
+        ("CARICA_BINDING", "bind_router_services(runtime_services, CARICA_BINDING)"),
+        ("ORCHESTRATOR_BINDING", "bind_router_services(runtime_services, ORCHESTRATOR_BINDING)"),
     ]
 
     positions = []
     for label, literal in markers:
         idx = src.find(literal)
         assert idx >= 0, (
-            f"Expected `{literal}` in app/main.py; bootstrap order "
+            f"Expected `{literal}` in app/app_factory.py; bootstrap order "
             f"marker `{label}` is missing or changed shape."
         )
         positions.append((label, idx))
