@@ -16,6 +16,8 @@ pytestmark = [pytest.mark.unit, pytest.mark.contract]
 _BACKEND_ROOT = Path(__file__).resolve().parents[3]
 _RUNTIME_SERVICES = _BACKEND_ROOT / "app" / "runtime" / "services.py"
 _PIPELINE_TASK = _BACKEND_ROOT / "workers" / "tasks" / "pipeline_task.py"
+_CARICA_TASK = _BACKEND_ROOT / "workers" / "tasks" / "carica_task.py"
+_ORCHESTRATOR_SERVICE = _BACKEND_ROOT / "app" / "core" / "orchestrator" / "service.py"
 
 
 class _FakeExecutor:
@@ -36,31 +38,10 @@ class _FakeExecutor:
         return {"success": True, "rows": [{"id": 1}]}
 
 
-def test_orchestrator_accepts_injected_executors_without_default_construction(
-    monkeypatch,
-) -> None:
+def test_orchestrator_accepts_injected_executors_without_default_construction() -> None:
     """Injected executor protocols are enough to run, no concrete builders needed."""
     from app.core.artifacts.types import PipelineArtifact
     from app.core.orchestrator.service import OrchestratorService
-
-    def _forbidden_default_builder(self):
-        raise AssertionError("OrchestratorService constructed a concrete executor")
-
-    monkeypatch.setattr(
-        OrchestratorService,
-        "_build_default_estrai_executor",
-        _forbidden_default_builder,
-    )
-    monkeypatch.setattr(
-        OrchestratorService,
-        "_build_default_manipola_executor",
-        _forbidden_default_builder,
-    )
-    monkeypatch.setattr(
-        OrchestratorService,
-        "_build_default_enrich_executor",
-        _forbidden_default_builder,
-    )
 
     project_service = MagicMock()
     canvas = MagicMock()
@@ -94,6 +75,18 @@ def test_orchestrator_accepts_injected_executors_without_default_construction(
             {"run_id": "run-di", "intermediate_mode_override": "none"},
         )
     ]
+
+
+def test_orchestrator_rejects_missing_executor_dispatch() -> None:
+    from app.core.orchestrator.service import OrchestratorService
+
+    with pytest.raises(TypeError, match="estrai_executor"):
+        OrchestratorService(  # type: ignore[call-arg]
+            project_service=MagicMock(),
+            executor=MagicMock(),
+            generator=MagicMock(),
+            connection_service=MagicMock(),
+        )
 
 
 def test_orchestrator_executes_control_plane_contract_without_project_lookup(
@@ -138,24 +131,8 @@ def test_orchestrator_executes_control_plane_contract_without_project_lookup(
     project_service.get_project_canvas.assert_not_called()
 
 
-def test_orchestrator_preview_uses_injected_dispatch_executor(monkeypatch) -> None:
+def test_orchestrator_preview_uses_injected_dispatch_executor() -> None:
     from app.core.orchestrator.service import OrchestratorService
-
-    monkeypatch.setattr(
-        OrchestratorService,
-        "_build_default_estrai_executor",
-        lambda self: pytest.fail("default estrai builder called"),
-    )
-    monkeypatch.setattr(
-        OrchestratorService,
-        "_build_default_manipola_executor",
-        lambda self: pytest.fail("default manipola builder called"),
-    )
-    monkeypatch.setattr(
-        OrchestratorService,
-        "_build_default_enrich_executor",
-        lambda self: pytest.fail("default enrich builder called"),
-    )
 
     project_service = MagicMock()
     canvas = MagicMock()
@@ -193,3 +170,12 @@ def test_runtime_and_worker_factories_pass_explicit_executors_to_orchestrator() 
         assert "estrai_executor=estrai_executor" in src, label
         assert "manipola_executor=manipola_executor" in src, label
         assert "enrich_executor=enrich_executor" in src, label
+
+
+def test_orchestrator_has_no_default_executor_builders_left() -> None:
+    service_src = _ORCHESTRATOR_SERVICE.read_text(encoding="utf-8")
+    carica_task_src = _CARICA_TASK.read_text(encoding="utf-8")
+
+    assert "_build_default_" not in service_src
+    assert "build_orchestrator_stack(" in carica_task_src
+    assert "OrchestratorService(" not in carica_task_src

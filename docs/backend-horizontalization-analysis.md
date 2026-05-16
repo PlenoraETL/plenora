@@ -12,7 +12,7 @@ Il backend e' gia' orientato al multi-replica su tre assi importanti:
 
 I punti ancora da governare operativamente per una vera orizzontalizzazione sono:
 
-1. filesystem locale ancora usato come cache o staging operativo (`DATA_DIR/temp`, `FILES_DIR`, `IMDF_BUNDLES_DIR`, `ESEGUIBILI_OUTPUTS_DIR`);
+1. filesystem locale ancora usato solo come cache o staging ricostruibile (`DATA_DIR/temp`, `FILES_DIR`, `IMDF_BUNDLES_DIR`, `ESEGUIBILI_OUTPUTS_DIR`);
 2. fallback in-memory confinati a dev/single-host (`login_rate_limiter`, JWT metrics);
 3. lock process-local usati come guard solo intra-processo in singleton/cache non canonici;
 4. scheduler beat single-leader gestito via Redis e bloccato fail-closed in produzione;
@@ -96,14 +96,14 @@ I punti ancora da governare operativamente per una vera orizzontalizzazione sono
 - `task_service.py`: pending metadata (`task_id -> project_id/task_type`) e' persistito tramite `task_metadata_store.py` su Redis usando `CELERY_BROKER_URL`, con TTL allineato a `CELERY_RESULT_EXPIRES`. Il default runtime e' Redis-only: lo store in-memory resta solo test double esplicito, non fallback automatico dev/prod.
 - `execution_contract.py`: il contratto API Control Plane -> Worker Data Plane e' ora un builder esplicito, non JSON assemblato nel router. Include `schema_version`, `project_id`, `project_type`, `group_id`, `canvas`, `columns_metadata`, `artifact_refs` estratti dal canvas (`file_sources`, `project_sources`, `result_refs`) e retention opzionale. Questo rende il futuro Control Plane Go compatibile con gli stessi worker Python senza importare logica Python di progetto.
 - `PipelineTaskPayload` puo' trasportare un `execution_contract` gia' risolto dal control plane. Quando presente, `workers.tasks.pipeline_task` chiama `OrchestratorService.execute_pipeline_from_contract()` e non rilegge metadata/canvas progetto dal DB: questo e' il primo boundary Control Plane (Go-ready) -> Data Plane Python.
-- `router.py`: cleanup/download usa result_id/object storage quando possibile, ma mantiene compat path su `RESULTS_DIR`.
+- `router.py`: download progetto usa solo result_id/blob/object storage; il fallback path su `RESULTS_DIR` e' rimosso dal comportamento API.
 - `service.py`: orchestration stateless; ok.
 
 ### `backend/app/core/results/*`
 
 - `blob_writer.py`: buon punto di orizzontalizzazione. Salva in DB o object storage e registra upload intent per reconciliation.
 - `pipeline_result.py`: per `gpkg`/`shp` usa temp locale solo per serializzare, poi salva bytes come result blob. Ok se il temp e' effimero.
-- `legacy_file_store.py`, `temp_paths.py`, `result_reader.py`: compat filesystem/temp. I local result path legacy sono opt-in esplicito fuori cluster/prod; non dipendono piu' da euristiche dev/test.
+- `legacy_file_store.py`, `temp_paths.py`, `result_reader.py`: compat filesystem/temp confinata ad adapter interni. I router non usano piu' `RESULTS_DIR` come fallback download/input operativo.
 - `db.py` e `cleanup_repository.py`: repository result migrati a `unit_of_work()`/`PgSession` espliciti, senza import diretto dei wrapper legacy `execute/fetchone/fetchall`.
 - `cleanup.py`: usa `FOR UPDATE` e reconciliation, buono per concorrenza.
 
@@ -137,7 +137,7 @@ I punti ancora da governare operativamente per una vera orizzontalizzazione sono
 ### `backend/app/core/eseguibili/*`
 
 - `storage.py`: output su object storage, buono.
-- `output_store.py`: owner sidecar salvato sia su object storage sia su filesystem locale fallback. In cluster il fallback locale non e' affidabile; rendere object storage/DB obbligatorio per ownership.
+- `output_store.py`: owner sidecar dei task su object storage only; se object storage non e' disponibile il salvataggio fallisce loud. Il filesystem locale resta solo cleanup di residui legacy, non read/write fallback di ownership.
 - `router.py`: upload temporanei in `DATA_DIR/temp/eseguibili_uploads`; ok se immediatamente passati a Celery e cleanup beat e' per-nodo. Meglio evitare path locali fra API e worker se worker sta su altro host.
 
 ### `backend/app/core/imdf/*`
@@ -193,7 +193,7 @@ I punti ancora da governare operativamente per una vera orizzontalizzazione sono
 
 - ArcGIS client/service sono singleton per processo ma stateless rispetto al dato canonico.
 - OAuth token fetch usa lock in-process; non c'e' token cache distribuita. Se molti pod fanno refresh insieme, possibile thundering herd.
-- `features/routes.py` puo' accettare `input_path` whitelist locale; per cluster preferire `project_id`/result blob.
+- `features/routes.py` non accetta piu' `input_path` locale: le scritture ArcGIS devono passare da `project_id`/result blob.
 
 ### `backend/app/core/projects/*`
 
@@ -243,26 +243,24 @@ I punti ancora da governare operativamente per una vera orizzontalizzazione sono
 - `app/app_factory.py` e' ora l'app composition boundary; le due letture raw env per docs/redoc sono allowlistate e documentate come boot-time boundary.
 - Lo scanner `os.getenv` ora intercetta anche alias (`import os as ...`) e import diretti (`from os import getenv`), quindi nuovi raw env read fuori allowlist non possono bypassare il lock.
 - La baseline `threading.local` e' zero nel backend applicativo: il DB adapter non mantiene piu' transaction state thread-local.
-- `OrchestratorService.__init__` e' fuori dal pattern piu' rischioso: non costruisce piu' direttamente executor concreti nel constructor path, e il guardrail mantiene la baseline pulita per i service migrati.
+- `OrchestratorService` richiede executor espliciti dalla runtime composition factory: non esistono piu' default builder nel service e anche il worker CARICA passa da `build_orchestrator_stack()`.
 - La baseline router -> `app.db.pg_connection` resta chiusa a zero import diretti.
 - `app.runtime.services` resta la composition boundary per i servizi gia' migrati: `main.py` consuma il container e non costruisce inline i service condivisi.
-
-### Remaining
-
-- `OrchestratorService` mantiene default builder fuori da `__init__` per compatibilita'. La chiusura completa Go-ready e' far arrivare sempre un dispatch `Mapping[str, CanvasExecutorProtocol]` dalla runtime composition factory, senza fallback impliciti nei service.
 - `cloud_backends.py` consuma config tramite `StorageBackendConfig` e `Settings`; il raw access per i validator fail-fast e' centralizzato in `Settings.get_raw`.
 - `TaskService` non usa piu' `_task_project_cache`: il metadata dei task pending e' su Redis-only nel default runtime, coperto da contract test.
 - Il contratto di esecuzione pipeline e' stato estratto in `app.core.orchestrator.execution_contract`: l'endpoint HTTP costruisce un payload self-contained e il worker lo valida/preserva con `schema_version`, `columns_metadata` e `artifact_refs`.
 - Celery ha code configurabili per Data Plane, Control Plane e Scheduler, quindi i workload pesanti pandas/GDAL possono essere scalati separatamente dai task amministrativi e dal beat/scheduler.
 - Il trigger backup manuale passa da Celery task: l'API pod non avvia piu' subprocess locali.
 - `os.getenv` e' confinato a `app/config.py` e al boundary `app/environment.py`; i moduli bootstrap/security/auth/infra passano dal boundary comune.
-- I residui multi-host piu' importanti restano quelli gia' elencati nelle priorita': compat filesystem per artifact legacy/cache e alcuni fallback dev-only documentati.
+
+### Remaining
+
+- I residui multi-host rimasti sono operativi: cache/staging locale ricostruibile e cleanup per nodo. Non restano fallback API basati su filesystem locale.
 
 ## Priorita consigliate
 
 P2:
 
-- Eliminare o confinare legacy `RESULTS_DIR` e `input_path` filesystem.
 - Aggiungere lifecycle object storage per IMDF/eseguibili/intermediate/result.
 - Aggiungere PgBouncer o ridurre pool per pod.
 - Rendere admin status esplicitamente multi-replica/cluster-aware.

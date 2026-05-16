@@ -4,8 +4,6 @@ Endpoint FastAPI per il modulo Features (ArcGIS Feature Service).
 Owns the HTTP boundary and delegates business logic to services or helpers.
 """
 
-from pathlib import Path as _Path
-
 from fastapi import APIRouter, HTTPException, Query, Depends
 from pydantic import BaseModel, Field
 from typing import Dict, Optional, List
@@ -38,12 +36,10 @@ from app.shared import error_codes
 from app.shared.error_envelope import raise_typed_http
 from app.observability.audit_action import audit_action
 from app.core.auth.resource_access import assert_project_visible
-from app.shared.resources.path_policy import assert_path_within
 from app.shared.error_sanitizer import sanitize_http_detail
 from app.core.artifacts import ArtifactResolver, LatestProjectArtifactRef
 from app.core.artifacts.types import MaterializedArtifact
 from app.core.auth.visibility import visible_resource_ids
-from app.core.results import legacy_file_store
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -323,7 +319,7 @@ class WriteRequest(BaseModel):
     layer_url: str  # URL completo del layer (es. .../FeatureServer/0
     operation: str = "add"  # add, update, upsert, delete
     upsert: bool = False  # Compat shorthand: true forces operation="upsert"
-    input_path: str = ""  # Fallback legacy locale solo con opt-in dev/test
+    input_path: str = ""  # Deprecated: local filesystem input is disabled
     project_id: str = ""  # Sorgente canonica: ultimo result blob del progetto
     geometry_column: str = "geometry"
     source_srid: Optional[int] = None  # SRID sorgente (dal nodo pipeline
@@ -339,7 +335,7 @@ class CreateServiceRequest(BaseModel):
     connection_id: str
     service_name: str
     layer_name: str = "Layer 0"
-    input_path: str = ""  # Fallback legacy locale solo con opt-in dev/test
+    input_path: str = ""  # Deprecated: local filesystem input is disabled
     project_id: str = ""  # Sorgente canonica: ultimo result blob del progetto
     geometry_column: str = "geometry"
     source_srid: Optional[int] = None  # SRID sorgente (dal nodo pipeline
@@ -364,10 +360,8 @@ def _resolve_input_path(
       - `project_id` valorizzato → risolve l'ultimo output via
         `ArtifactResolver.materialize_latest` con tenant binding
         fail-closed
-      - `input_path` valorizzato → fallback legacy locale: ammesso
-        solo in dev/test con PLENORA_ALLOW_LEGACY_LOCAL_RESULT_PATHS=1,
-        poi validato contro whitelist
-        (RESULTS_DIR / TEMP_DIR / DATA_DIR / FILE_SOURCES_DIR)
+      - `input_path` valorizzato → rifiutato. Il filesystem locale non e'
+        una sorgente orizzontalizzabile per API multi-pod.
       - entrambi vuoti → `ValueError("Specificare project_id o input_path")`
 
     `expected_group_id` keyword-only required: senza tenant binding
@@ -382,7 +376,7 @@ def _resolve_input_path(
       - `input_path UNC non consentito` (UNC paths)
       - `input_path non consentito: ...` (fuori whitelist)
       - `input_path non valido: ...` (malformed)
-      - `input_path locale disabilitato: ...` (fallback non abilitato)
+      - `input_path locale disabilitato: ...` (fallback rimosso)
       - `Specificare project_id o input_path` (entrambi vuoti)
       - `FileNotFoundError` (project_id valido, no output)
     """
@@ -391,8 +385,6 @@ def _resolve_input_path(
             "_resolve_input_path: expected_group_id obbligatorio "
             "(defense-in-depth)"
         )
-    from app.config import settings
-
     if project_id:
         # Defense-in-depth: l'ACL a livello router (assert_project_visible
         # gia' garantisce la visibilita', ma passare expected_group_id al
@@ -409,39 +401,10 @@ def _resolve_input_path(
         raise FileNotFoundError(f"Nessun output trovato per progetto: {project_id}")
 
     if input_path:
-        if not legacy_file_store.legacy_local_result_paths_enabled():
-            raise ValueError(
-                legacy_file_store.legacy_local_result_paths_disabled_message(
-                    "input_path locale"
-                )
-            )
-
-        # Whitelist di directory in cui e' lecito leggere file
-        _allowed_roots = []
-        for attr in ("RESULTS_DIR", "TEMP_DIR", "DATA_DIR", "FILE_SOURCES_DIR"):
-            try:
-                val = getattr(settings, attr, None)
-                if val:
-                    _allowed_roots.append(_Path(val).resolve())
-            except Exception:
-                pass
-
-        # Validazione delegata a `assert_path_within`. Catturiamo
-        # ValueError e re-raise con i messaggi specifici di questo
-        # endpoint per preservare il contratto observable
-        try:
-            candidate = assert_path_within(input_path, _allowed_roots)
-        except ValueError as e:
-            msg = str(e)
-            if "UNC" in msg:
-                raise ValueError("input_path UNC non consentito") from e
-            if "fuori dai trusted roots" in msg:
-                raise ValueError(
-                    "input_path non consentito: deve essere dentro una "
-                    "directory di lavoro del backend (results/temp/data)"
-                ) from e
-            raise ValueError(f"input_path non valido: {e}") from e
-        return MaterializedArtifact(path=candidate, is_temporary=False)
+        raise ValueError(
+            "input_path locale disabilitato: usare project_id/result blob "
+            "come sorgente canonica"
+        )
 
     raise ValueError("Specificare project_id o input_path")
 

@@ -24,6 +24,35 @@ _EXECUTION_RESULT_INTERNAL_FILES = (
 )
 
 
+def _make_orchestrator(project_service, **executor_overrides):
+    from app.core.orchestrator.service import OrchestratorService
+
+    executors = {
+        "estrai_executor": _ExecutorStub(),
+        "manipola_executor": _ExecutorStub(),
+        "enrich_executor": _ExecutorStub(),
+    }
+    executors.update(executor_overrides)
+    return OrchestratorService(
+        project_service=project_service,
+        executor=MagicMock(),
+        generator=MagicMock(),
+        connection_service=MagicMock(),
+        **executors,
+    )
+
+
+class _ExecutorStub:
+    def __init__(self, result=None):
+        self._result = result if result is not None else {"success": True}
+
+    def execute(self, *args, **kwargs):
+        return self._result
+
+    def preview(self, *args, **kwargs):
+        return {"success": True, "rows": []}
+
+
 # from_executor_dict - happy path (success)
 
 def test_from_dict_success_extracts_typed_fields():
@@ -133,26 +162,19 @@ def test_execution_result_is_frozen():
 def test_orchestrator_execute_pipeline_passes_through_via_execution_result():
     """execute_pipeline wraps executor dict via ExecutionResult before
     constructing PipelineArtifact - payload keys survive unchanged."""
-    from app.core.orchestrator.service import OrchestratorService
     from app.core.artifacts.types import PipelineArtifact
 
     mock_ps = MagicMock()
     mock_ps.get_project_metadata.return_value = MagicMock(project_type="estrai")
     mock_ps.get_project_canvas.return_value = MagicMock()
 
-    svc = OrchestratorService(
-        project_service=mock_ps,
-        executor=MagicMock(),
-        generator=MagicMock(),
-        connection_service=MagicMock(),
-    )
-    svc.estrai_executor = MagicMock()
-    svc.estrai_executor.execute.return_value = {
+    estrai_executor = _ExecutorStub({
         "success": True,
         "result_id": "res-e-1",
         "rows_count": 5,
         "format": "csv",
-    }
+    })
+    svc = _make_orchestrator(mock_ps, estrai_executor=estrai_executor)
     svc._find_all_carica_nodes = MagicMock(return_value=[])
 
     artifact = svc.execute_pipeline("proj-x")
@@ -166,8 +188,6 @@ def test_orchestrator_execute_pipeline_passes_through_via_execution_result():
 
 def test_orchestrator_execute_pipeline_accepts_native_execution_result_without_to_dict(monkeypatch):
     """execute_pipeline keeps native ExecutionResult through the service boundary."""
-    from app.core.orchestrator.service import OrchestratorService
-
     def fail_to_dict(_result: ExecutionResult) -> dict[str, object]:
         raise AssertionError("orchestrator service called ExecutionResult.to_dict()")
 
@@ -183,14 +203,8 @@ def test_orchestrator_execute_pipeline_accepts_native_execution_result_without_t
         payload={"result_id": "res-native-service", "rows_count": 11},
     )
 
-    svc = OrchestratorService(
-        project_service=mock_ps,
-        executor=MagicMock(),
-        generator=MagicMock(),
-        connection_service=MagicMock(),
-    )
-    svc.estrai_executor = MagicMock()
-    svc.estrai_executor.execute.return_value = native_result
+    estrai_executor = _ExecutorStub(native_result)
+    svc = _make_orchestrator(mock_ps, estrai_executor=estrai_executor)
     svc._find_all_carica_nodes = MagicMock(return_value=[])
 
     artifact = svc.execute_pipeline("proj-native-service")
@@ -252,25 +266,18 @@ def test_internal_execution_result_path_has_no_to_dict_callsite():
 
 def test_orchestrator_execute_pipeline_error_key_preserved():
     """Arricchisci-style 'error' key survives the ExecutionResult boundary."""
-    from app.core.orchestrator.service import OrchestratorService
     from app.core.artifacts.types import PipelineArtifact
 
     mock_ps = MagicMock()
     mock_ps.get_project_metadata.return_value = MagicMock(project_type="arricchisci")
     mock_ps.get_project_canvas.return_value = MagicMock()
 
-    svc = OrchestratorService(
-        project_service=mock_ps,
-        executor=MagicMock(),
-        generator=MagicMock(),
-        connection_service=MagicMock(),
-    )
-    svc.enrich_executor = MagicMock()
-    svc.enrich_executor.execute.return_value = {
+    enrich_executor = _ExecutorStub({
         "success": False,
         "error": "Errore chiamata API upstream: timeout",
         "user_error": True,
-    }
+    })
+    svc = _make_orchestrator(mock_ps, enrich_executor=enrich_executor)
     svc._find_all_carica_nodes = MagicMock(return_value=[])
 
     artifact = svc.execute_pipeline("proj-y")
@@ -442,27 +449,20 @@ def test_orchestrator_artifact_payload_accessible_after_execute_pipeline():
     Integration: verifies the real caller path from orchestrator through
     PipelineArtifact.from_execution_result uses the typed boundary.
     """
-    from app.core.orchestrator.service import OrchestratorService
     from app.core.artifacts.types import PipelineArtifact
 
     mock_ps = MagicMock()
     mock_ps.get_project_metadata.return_value = MagicMock(project_type="estrai")
     mock_ps.get_project_canvas.return_value = MagicMock()
 
-    svc = OrchestratorService(
-        project_service=mock_ps,
-        executor=MagicMock(),
-        generator=MagicMock(),
-        connection_service=MagicMock(),
-    )
     raw_executor_dict = {
         "success": True,
         "result_id": "typed-r-1",
         "rows_count": 7,
         "format": "csv",
     }
-    svc.estrai_executor = MagicMock()
-    svc.estrai_executor.execute.return_value = raw_executor_dict
+    estrai_executor = _ExecutorStub(raw_executor_dict)
+    svc = _make_orchestrator(mock_ps, estrai_executor=estrai_executor)
     svc._find_all_carica_nodes = MagicMock(return_value=[])
 
     artifact = svc.execute_pipeline("proj-typed")

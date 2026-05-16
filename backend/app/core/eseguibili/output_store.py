@@ -112,28 +112,14 @@ def save_task_owner(
     )
     payload = json.dumps(asdict(owner)).encode("utf-8")
 
-    errors: list[Exception] = []
     try:
         storage.save_bytes(task_id, OWNER_SIDECAR_FILENAME, payload)
     except Exception as exc:
-        errors.append(exc)
-        logger.warning(
+        logger.error(
             f"save task owner sidecar su object storage fallito per "
             f"task_id={task_id}: {exc}"
         )
-
-    try:
-        path = task_owner_path(task_id, outputs_dir=outputs_dir)
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_bytes(payload)
-    except Exception as exc:
-        errors.append(exc)
-        logger.warning(
-            f"save task owner locale fallito per task_id={task_id}: {exc}"
-        )
-
-    if len(errors) == 2:
-        raise errors[-1]
+        raise
 
 
 def load_task_owner(
@@ -150,18 +136,7 @@ def load_task_owner(
             f"load task owner sidecar da object storage fallito per "
             f"task_id={task_id}: {exc}"
         )
-
-    path = task_owner_path(task_id, outputs_dir=outputs_dir)
-    if not path.exists():
-        return None
-    try:
-        return _load_owner_payload(path.read_bytes())
-    except Exception as exc:
-        logger.warning(
-            f"load task owner locale fallito per task_id={task_id}: "
-            f"{type(exc).__name__}: {exc}"
-        )
-        return None
+    return None
 
 
 def delete_task_owner(task_id: str, *, outputs_dir: Path | None = None) -> None:

@@ -16,6 +16,35 @@ from app.core.artifacts.types import PipelineArtifact, RunArtifactRef
 pytestmark = [pytest.mark.unit, pytest.mark.contract]
 
 
+def _make_orchestrator(project_service, **executor_overrides):
+    from app.core.orchestrator.service import OrchestratorService
+
+    executors = {
+        "estrai_executor": _ExecutorStub(),
+        "manipola_executor": _ExecutorStub(),
+        "enrich_executor": _ExecutorStub(),
+    }
+    executors.update(executor_overrides)
+    return OrchestratorService(
+        project_service=project_service,
+        executor=MagicMock(),
+        generator=MagicMock(),
+        connection_service=MagicMock(),
+        **executors,
+    )
+
+
+class _ExecutorStub:
+    def __init__(self, result=None):
+        self._result = result if result is not None else {"success": True}
+
+    def execute(self, *args, **kwargs):
+        return self._result
+
+    def preview(self, *args, **kwargs):
+        return {"success": True, "rows": []}
+
+
 # 1. artifact_kind derivation
 
 
@@ -172,8 +201,6 @@ def test_to_run_artifact_ref_none_raises():
 def test_orchestrator_wraps_estrai_executor_result_as_blob_artifact():
     """End-to-end sul path execute_pipeline: wrap corretto del dict
     ritornato da EstraiExecutor."""
-    from app.core.orchestrator.service import OrchestratorService
-
     mock_project_service = MagicMock()
     mock_project_service.get_project_metadata.return_value = MagicMock(
         project_type="estrai"
@@ -187,15 +214,11 @@ def test_orchestrator_wraps_estrai_executor_result_as_blob_artifact():
         "output_filename": "estrai.csv",
     }
 
-    svc = OrchestratorService(
-        project_service=mock_project_service,
-        executor=MagicMock(),
-        generator=MagicMock(),
-        connection_service=MagicMock(),
+    estrai_executor = _ExecutorStub(fake_estrai_result)
+    svc = _make_orchestrator(
+        mock_project_service,
+        estrai_executor=estrai_executor,
     )
-    # Sostituisci l'executor-specifico con un mock che ritorna il dict noto
-    svc.estrai_executor = MagicMock()
-    svc.estrai_executor.execute = MagicMock(return_value=fake_estrai_result)
 
     # Niente CARICA → _find_all_carica_nodes ritorna []
     svc._find_all_carica_nodes = MagicMock(return_value=[])
@@ -214,8 +237,6 @@ def test_orchestrator_wraps_estrai_executor_result_as_blob_artifact():
 
 def test_orchestrator_wraps_failure_result_as_none_artifact():
     """Executor fallito → artifact con success=False, kind=none."""
-    from app.core.orchestrator.service import OrchestratorService
-
     mock_project_service = MagicMock()
     mock_project_service.get_project_metadata.return_value = MagicMock(
         project_type="manipola"
@@ -227,14 +248,11 @@ def test_orchestrator_wraps_failure_result_as_none_artifact():
         "message": "Errore sorgente non raggiungibile",
     }
 
-    svc = OrchestratorService(
-        project_service=mock_project_service,
-        executor=MagicMock(),
-        generator=MagicMock(),
-        connection_service=MagicMock(),
+    manipola_executor = _ExecutorStub(fake_failure)
+    svc = _make_orchestrator(
+        mock_project_service,
+        manipola_executor=manipola_executor,
     )
-    svc.manipola_executor = MagicMock()
-    svc.manipola_executor.execute = MagicMock(return_value=fake_failure)
     svc._find_all_carica_nodes = MagicMock(return_value=[])
 
     artifact = svc.execute_pipeline("p1")
@@ -248,8 +266,6 @@ def test_orchestrator_wraps_failure_result_as_none_artifact():
 def test_orchestrator_preserves_carica_info_on_wrapped_artifact():
     """Se il pipeline triggerra un CARICA, il task_info viene aggiunto
     all'artifact come dict['carica'] — verificato post-wrap."""
-    from app.core.orchestrator.service import OrchestratorService
-
     mock_project_service = MagicMock()
     mock_project_service.get_project_metadata.return_value = MagicMock(
         project_type="arricchisci"
@@ -258,14 +274,11 @@ def test_orchestrator_preserves_carica_info_on_wrapped_artifact():
 
     fake_result = {"success": True, "result_id": "res-enr-1"}
 
-    svc = OrchestratorService(
-        project_service=mock_project_service,
-        executor=MagicMock(),
-        generator=MagicMock(),
-        connection_service=MagicMock(),
+    enrich_executor = _ExecutorStub(fake_result)
+    svc = _make_orchestrator(
+        mock_project_service,
+        enrich_executor=enrich_executor,
     )
-    svc.enrich_executor = MagicMock()
-    svc.enrich_executor.execute = MagicMock(return_value=fake_result)
     # Simula presenza di CARICA
     svc._execute_carica_if_present = MagicMock(return_value={
         "tasks": [{"task_id": "ct-1", "node_id": "carica-a"}],

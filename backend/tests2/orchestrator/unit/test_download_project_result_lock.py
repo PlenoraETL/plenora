@@ -15,7 +15,6 @@ from app.shared.contracts.auth import CurrentUser
 from app.core.auth.auth import require_not_esecutore, get_current_user
 from app.core.orchestrator.router import pipeline_router
 from app.core.results.db import ResultMetadataRow
-from app.core.results.legacy_file_store import LEGACY_LOCAL_RESULT_PATHS_FLAG
 
 
 pytestmark = [
@@ -126,18 +125,14 @@ def test_download_project_result_blob_wins_over_filesystem_when_present(
     mock_latest.assert_called_once()
 
 
-def test_download_project_result_legacy_filesystem_requires_explicit_dev_flag(
-    pipeline_client, tmp_path, monkeypatch
+def test_download_project_result_ignores_legacy_filesystem_without_blob(
+    pipeline_client, tmp_path
 ):
-    """Senza blob DB, RESULTS_DIR e' solo fallback legacy esplicito:
-    in dev/test serve PLENORA_ALLOW_LEGACY_LOCAL_RESULT_PATHS=1."""
+    """Senza blob DB, RESULTS_DIR non e' piu' un fallback operativo."""
     project_id = "proj-legacy-only"
     results_dir = tmp_path / project_id
     results_dir.mkdir(parents=True)
     (results_dir / "legacy.csv").write_bytes(b"id\n1\n")
-
-    monkeypatch.setenv("ENVIRONMENT", "development")
-    monkeypatch.delenv(LEGACY_LOCAL_RESULT_PATHS_FLAG, raising=False)
 
     with patch(
         "app.core.orchestrator.router.settings",
@@ -150,11 +145,11 @@ def test_download_project_result_legacy_filesystem_requires_explicit_dev_flag(
     ):
         response = pipeline_client.get(f"/api/projects/{project_id}/download")
 
-    assert response.status_code == 410
-    assert LEGACY_LOCAL_RESULT_PATHS_FLAG in response.text
+    assert response.status_code == 404
+    assert "Nessun risultato blob" in response.text
 
 
-def test_download_project_result_legacy_filesystem_allowed_in_dev_with_flag(
+def test_download_project_result_legacy_filesystem_flag_is_ignored(
     pipeline_client, tmp_path, monkeypatch
 ):
     project_id = "proj-legacy-flag"
@@ -163,8 +158,7 @@ def test_download_project_result_legacy_filesystem_allowed_in_dev_with_flag(
     legacy_file = results_dir / "legacy.csv"
     legacy_file.write_bytes(b"id\n1\n")
 
-    monkeypatch.setenv("ENVIRONMENT", "development")
-    monkeypatch.setenv(LEGACY_LOCAL_RESULT_PATHS_FLAG, "1")
+    monkeypatch.setenv("PLENORA_ALLOW_LEGACY_LOCAL_RESULT_PATHS", "1")
 
     with patch(
         "app.core.orchestrator.router.settings",
@@ -177,8 +171,8 @@ def test_download_project_result_legacy_filesystem_allowed_in_dev_with_flag(
     ):
         response = pipeline_client.get(f"/api/projects/{project_id}/download")
 
-    assert response.status_code == 200
-    assert response.content == b"id\n1\n"
+    assert response.status_code == 404
+    assert "Nessun risultato blob" in response.text
 
 
 @pytest.mark.parametrize("env_name", ["production", "staging"])
@@ -191,7 +185,7 @@ def test_download_project_result_blocks_legacy_filesystem_in_hardened_env_even_w
     (results_dir / "legacy.csv").write_bytes(b"id\n1\n")
 
     monkeypatch.setenv("ENVIRONMENT", env_name)
-    monkeypatch.setenv(LEGACY_LOCAL_RESULT_PATHS_FLAG, "1")
+    monkeypatch.setenv("PLENORA_ALLOW_LEGACY_LOCAL_RESULT_PATHS", "1")
 
     with patch(
         "app.core.orchestrator.router.settings",
@@ -204,8 +198,8 @@ def test_download_project_result_blocks_legacy_filesystem_in_hardened_env_even_w
     ):
         response = pipeline_client.get(f"/api/projects/{project_id}/download")
 
-    assert response.status_code == 410
-    assert "production/cluster" in response.text
+    assert response.status_code == 404
+    assert "Nessun risultato blob" in response.text
 
 
 def test_download_project_result_404_when_nothing_exists(pipeline_client, tmp_path):

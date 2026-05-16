@@ -9,7 +9,6 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any, Mapping, Optional, Protocol
 
 from app.core.projects.canvas_models import CanvasState
-from app.config import settings
 from app.shared import error_codes
 from app.shared.contracts.payloads import JsonObject
 from app.shared.execution.executor_protocol import CanvasExecutorProtocol, ExecutionResult
@@ -64,22 +63,20 @@ class OrchestratorService:
         generator: QueryGenerator,
         connection_service: ConnectionService,
         features_service=None,
-        estrai_executor: Optional[EstraiExecutorProtocol] = None,
-        manipola_executor: Optional[TransformExecutorProtocol] = None,
-        enrich_executor: Optional[TransformExecutorProtocol] = None,
+        *,
+        estrai_executor: EstraiExecutorProtocol,
+        manipola_executor: TransformExecutorProtocol,
+        enrich_executor: TransformExecutorProtocol,
     ):
         self.project_service = project_service
         self.executor = executor
         self.generator = generator
         self.connection_service = connection_service
         self.features_service = features_service
-        self.results_base_dir = settings.RESULTS_DIR
 
-        self.estrai_executor = estrai_executor or self._build_default_estrai_executor()
-        self.manipola_executor = (
-            manipola_executor or self._build_default_manipola_executor()
-        )
-        self.enrich_executor = enrich_executor or self._build_default_enrich_executor()
+        self.estrai_executor = estrai_executor
+        self.manipola_executor = manipola_executor
+        self.enrich_executor = enrich_executor
 
         for _mtype, _exc in [
             ("estrai",      self.estrai_executor),
@@ -90,30 +87,6 @@ class OrchestratorService:
                 f"Executor for '{_mtype}' ({type(_exc).__name__}) does not "
                 f"satisfy CanvasExecutorProtocol (missing execute or preview)"
             )
-
-    def _build_default_estrai_executor(self) -> EstraiExecutorProtocol:
-        from app.core.estrai.executor import EstraiExecutor
-
-        return EstraiExecutor(
-            project_service=self.project_service,
-            executor=self.executor,
-            generator=self.generator,
-            connection_service=self.connection_service,
-            features_service=self.features_service,
-        )
-
-    def _build_default_manipola_executor(self) -> TransformExecutorProtocol:
-        from app.core.manipola.executor import ManipolaExecutor
-
-        return ManipolaExecutor(
-            project_service=self.project_service,
-            pipeline_dispatcher=self.execute_pipeline,
-        )
-
-    def _build_default_enrich_executor(self) -> TransformExecutorProtocol:
-        from app.core.arricchisci.executor import EnrichExecutor
-
-        return EnrichExecutor(project_service=self.project_service)
 
     @property
     def _executor_dispatch(self) -> ExecutorDispatch:

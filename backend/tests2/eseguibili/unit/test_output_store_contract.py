@@ -3,11 +3,15 @@
 from __future__ import annotations
 
 from io import BytesIO
+from pathlib import Path
 
 import pytest
 
 
 pytestmark = [pytest.mark.unit, pytest.mark.eseguibili, pytest.mark.contract]
+
+_BACKEND_ROOT = Path(__file__).resolve().parents[3]
+_OUTPUT_STORE = _BACKEND_ROOT / "app" / "core" / "eseguibili" / "output_store.py"
 
 
 class _FakeStorage:
@@ -53,7 +57,7 @@ def test_save_and_load_task_owner_uses_object_storage_sidecar(fake_storage, tmp_
 
     key = "eseguibili-outputs/task-1/__owner.json"
     assert key in fake_storage.objects
-    assert (tmp_path / ".owners" / "task-1.json").exists()
+    assert not (tmp_path / ".owners" / "task-1.json").exists()
 
     owner = output_store.load_task_owner("task-1", outputs_dir=tmp_path)
 
@@ -61,6 +65,39 @@ def test_save_and_load_task_owner_uses_object_storage_sidecar(fake_storage, tmp_
     assert owner["task_id"] == "task-1"
     assert owner["eseguibile_id"] == "exe-1"
     assert owner["user_id"] == "user-1"
+
+
+def test_save_task_owner_fails_closed_when_object_storage_unavailable(
+    monkeypatch,
+    tmp_path,
+):
+    from app.core.eseguibili import output_store
+    from app.core.eseguibili import storage
+
+    monkeypatch.setattr(
+        storage,
+        "save_bytes",
+        lambda *args, **kwargs: (_ for _ in ()).throw(
+            RuntimeError("object storage down")
+        ),
+    )
+
+    with pytest.raises(RuntimeError, match="object storage down"):
+        output_store.save_task_owner(
+            "task-1",
+            "exe-1",
+            "user-1",
+            outputs_dir=tmp_path,
+        )
+
+    assert not (tmp_path / ".owners" / "task-1.json").exists()
+
+
+def test_task_owner_store_has_no_local_read_write_fallback() -> None:
+    src = _OUTPUT_STORE.read_text(encoding="utf-8")
+
+    assert "path.write_bytes(payload)" not in src
+    assert "return _load_owner_payload(path.read_bytes())" not in src
 
 
 def test_find_output_keys_filters_owner_sidecar(fake_storage):

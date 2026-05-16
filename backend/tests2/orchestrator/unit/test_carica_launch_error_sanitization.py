@@ -14,6 +14,17 @@ import pytest
 pytestmark = [pytest.mark.unit, pytest.mark.contract]
 
 
+class _ExecutorStub:
+    def __init__(self, result=None):
+        self._result = result if result is not None else {"success": True}
+
+    def execute(self, *args, **kwargs):
+        return self._result
+
+    def preview(self, *args, **kwargs):
+        return {"success": True, "rows": []}
+
+
 def _make_orchestrator_with_carica_node():
     """Builder: OrchestratorService con manipola_executor mockato a success,
     _find_all_carica_nodes con 1 nodo, canvas mock."""
@@ -25,15 +36,15 @@ def _make_orchestrator_with_carica_node():
     )
     mock_project_service.get_project_canvas.return_value = MagicMock()
 
+    estrai_executor = _ExecutorStub({"success": True, "result_id": "res-1"})
     svc = OrchestratorService(
         project_service=mock_project_service,
         executor=MagicMock(),
         generator=MagicMock(),
         connection_service=MagicMock(),
-    )
-    svc.estrai_executor = MagicMock()
-    svc.estrai_executor.execute = MagicMock(
-        return_value={"success": True, "result_id": "res-1"}
+        estrai_executor=estrai_executor,
+        manipola_executor=_ExecutorStub(),
+        enrich_executor=_ExecutorStub(),
     )
 
     # 1 nodo CARICA fittizio collegato all'output

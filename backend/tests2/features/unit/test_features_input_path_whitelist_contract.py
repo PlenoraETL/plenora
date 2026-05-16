@@ -4,7 +4,6 @@ Tests the features input path whitelist behavior.
 Locks backend contracts and regression boundaries for the current architecture.
 """
 
-from types import SimpleNamespace
 from unittest.mock import patch
 
 import pytest
@@ -26,55 +25,22 @@ pytestmark = [pytest.mark.unit, pytest.mark.features, pytest.mark.security, pyte
     ],
 )
 def test_resolve_input_path_rejects_paths_outside_whitelist(monkeypatch, tmp_path, bad_path):
-    import app.config as config_mod
-    from app.core.results.legacy_file_store import LEGACY_LOCAL_RESULT_PATHS_FLAG
-
-    settings = SimpleNamespace(
-        RESULTS_DIR=tmp_path / "results",
-        TEMP_DIR=tmp_path / "temp",
-        DATA_DIR=tmp_path / "data",
-        FILE_SOURCES_DIR=tmp_path / "file_sources",
-    )
-    for root in (settings.RESULTS_DIR, settings.TEMP_DIR, settings.DATA_DIR, settings.FILE_SOURCES_DIR):
-        root.mkdir(parents=True, exist_ok=True)
-
-    monkeypatch.setattr(config_mod, "settings", settings)
-    monkeypatch.setenv("ENVIRONMENT", "development")
-    monkeypatch.setenv(LEGACY_LOCAL_RESULT_PATHS_FLAG, "1")
-
-    with pytest.raises(ValueError, match="non consentito"):
+    with pytest.raises(ValueError, match="input_path locale disabilitato"):
         _resolve_input_path(bad_path, project_id="", expected_group_id="grp-test")
 
 
-def test_resolve_input_path_accepts_path_inside_whitelist(monkeypatch, tmp_path):
-    import app.config as config_mod
-    from app.core.results.legacy_file_store import LEGACY_LOCAL_RESULT_PATHS_FLAG
-
-    results_dir = tmp_path / "results"
-    results_dir.mkdir(parents=True, exist_ok=True)
-    allowed_file = results_dir / "proj-1" / "output.parquet"
+def test_resolve_input_path_rejects_path_inside_former_whitelist(tmp_path):
+    """Local filesystem input is removed, even for formerly whitelisted paths."""
+    allowed_file = tmp_path / "results" / "proj-1" / "output.parquet"
     allowed_file.parent.mkdir(parents=True, exist_ok=True)
     allowed_file.write_text("ok", encoding="utf-8")
 
-    settings = SimpleNamespace(
-        RESULTS_DIR=results_dir,
-        TEMP_DIR=tmp_path / "temp",
-        DATA_DIR=tmp_path / "data",
-        FILE_SOURCES_DIR=tmp_path / "file_sources",
-    )
-    for root in (settings.TEMP_DIR, settings.DATA_DIR, settings.FILE_SOURCES_DIR):
-        root.mkdir(parents=True, exist_ok=True)
-
-    monkeypatch.setattr(config_mod, "settings", settings)
-    monkeypatch.setenv("ENVIRONMENT", "development")
-    monkeypatch.setenv(LEGACY_LOCAL_RESULT_PATHS_FLAG, "1")
-
-    resolved = _resolve_input_path(
-        str(allowed_file), project_id="", expected_group_id="grp-test",
-    )
-
-    assert resolved.path == allowed_file.resolve()
-    assert resolved.is_temporary is False
+    with pytest.raises(ValueError, match="input_path locale disabilitato"):
+        _resolve_input_path(
+            str(allowed_file),
+            project_id="",
+            expected_group_id="grp-test",
+        )
 
 
 # Refactor #2 cleanup: expected_group_id keyword-only required
@@ -96,64 +62,14 @@ def test_resolve_input_path_rejects_blank_expected_group_id():
         _resolve_input_path("", project_id="proj-1", expected_group_id=None)  # type: ignore[arg-type]
 
 
-def test_resolve_input_path_maps_generic_path_policy_error_to_invalid(monkeypatch, tmp_path):
-    import app.config as config_mod
-    from app.core.results.legacy_file_store import LEGACY_LOCAL_RESULT_PATHS_FLAG
-
-    settings = SimpleNamespace(
-        RESULTS_DIR=tmp_path / "results",
-        TEMP_DIR=tmp_path / "temp",
-        DATA_DIR=tmp_path / "data",
-        FILE_SOURCES_DIR=tmp_path / "file_sources",
-    )
-    for root in (
-        settings.RESULTS_DIR,
-        settings.TEMP_DIR,
-        settings.DATA_DIR,
-        settings.FILE_SOURCES_DIR,
-    ):
-        root.mkdir(parents=True, exist_ok=True)
-
-    monkeypatch.setattr(config_mod, "settings", settings)
-    monkeypatch.setenv("ENVIRONMENT", "development")
-    monkeypatch.setenv(LEGACY_LOCAL_RESULT_PATHS_FLAG, "1")
-
-    with patch(
-        "app.core.features.routes.assert_path_within",
-        side_effect=ValueError("path non valido: nul byte"),
-    ):
-        with pytest.raises(ValueError, match="input_path non valido"):
-            _resolve_input_path(
-                "bad",
-                project_id="",
-                expected_group_id="grp-test",
-            )
-
-
 def test_resolve_input_path_blocks_local_path_without_explicit_dev_flag(monkeypatch, tmp_path):
-    import app.config as config_mod
-    from app.core.results.legacy_file_store import LEGACY_LOCAL_RESULT_PATHS_FLAG
-
     results_dir = tmp_path / "results"
     results_dir.mkdir(parents=True, exist_ok=True)
     local_file = results_dir / "proj-1" / "output.csv"
     local_file.parent.mkdir(parents=True, exist_ok=True)
     local_file.write_text("ok", encoding="utf-8")
 
-    monkeypatch.setattr(
-        config_mod,
-        "settings",
-        SimpleNamespace(
-            RESULTS_DIR=results_dir,
-            TEMP_DIR=tmp_path / "temp",
-            DATA_DIR=tmp_path / "data",
-            FILE_SOURCES_DIR=tmp_path / "file_sources",
-        ),
-    )
-    monkeypatch.setenv("ENVIRONMENT", "development")
-    monkeypatch.delenv(LEGACY_LOCAL_RESULT_PATHS_FLAG, raising=False)
-
-    with pytest.raises(ValueError, match="PLENORA_ALLOW_LEGACY_LOCAL_RESULT_PATHS=1"):
+    with pytest.raises(ValueError, match="input_path locale disabilitato"):
         _resolve_input_path(
             str(local_file),
             project_id="",
@@ -165,27 +81,13 @@ def test_resolve_input_path_blocks_local_path_without_explicit_dev_flag(monkeypa
 def test_resolve_input_path_blocks_local_path_in_hardened_env_even_with_flag(
     monkeypatch, tmp_path, env_name
 ):
-    import app.config as config_mod
-    from app.core.results.legacy_file_store import LEGACY_LOCAL_RESULT_PATHS_FLAG
-
     local_file = tmp_path / "results" / "proj-1" / "output.csv"
     local_file.parent.mkdir(parents=True, exist_ok=True)
     local_file.write_text("ok", encoding="utf-8")
 
-    monkeypatch.setattr(
-        config_mod,
-        "settings",
-        SimpleNamespace(
-            RESULTS_DIR=tmp_path / "results",
-            TEMP_DIR=tmp_path / "temp",
-            DATA_DIR=tmp_path / "data",
-            FILE_SOURCES_DIR=tmp_path / "file_sources",
-        ),
-    )
     monkeypatch.setenv("ENVIRONMENT", env_name)
-    monkeypatch.setenv(LEGACY_LOCAL_RESULT_PATHS_FLAG, "1")
 
-    with pytest.raises(ValueError, match="production/cluster"):
+    with pytest.raises(ValueError, match="input_path locale disabilitato"):
         _resolve_input_path(
             str(local_file),
             project_id="",

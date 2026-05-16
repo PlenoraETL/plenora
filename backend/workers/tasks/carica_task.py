@@ -793,29 +793,17 @@ def _load_upstream_data(
 
         # Nessun risultato in cache o force_recalculate → riesegui pipeline
 
-        from app.core.orchestrator.service import OrchestratorService
-        from app.core.projects.service import ProjectService
-        from app.core.connections.service import ConnectionService
-        from app.core.estrai.query_generator import QueryGenerator
-        from app.db.query_executor import create_executor
-        from app.core.features.features_service import FeaturesService
         from app.core.dataframes.frame_io import save_dataframe
+        from app.runtime.services import build_orchestrator_stack
 
-        project_service = ProjectService()
-        connection_service = ConnectionService()
-        # FIX: passa save_function=save_dataframe altrimenti il blob non viene salvato
-        # e get_result_as_tempfile restituisce None dopo il ricalcolo
-        executor = create_executor(save_function=save_dataframe)
-        generator = QueryGenerator()
-        features_service = FeaturesService(save_function=save_dataframe)
-
-        orchestrator = OrchestratorService(
-            project_service=project_service,
-            executor=executor,
-            generator=generator,
-            connection_service=connection_service,
-            features_service=features_service,
+        # Runtime composition owns the executor graph. CARICA must not rely on
+        # OrchestratorService fallback builders, otherwise the worker path
+        # diverges from the API/data-plane contract wiring.
+        orchestrator_stack = build_orchestrator_stack(
+            settings=settings,
+            save_function=save_dataframe,
         )
+        orchestrator = orchestrator_stack.orchestrator
 
         result = orchestrator.execute_pipeline(
             project_id=project_id,
