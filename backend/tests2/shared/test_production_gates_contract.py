@@ -27,6 +27,9 @@ def _clean_gate_env(monkeypatch):
         "OBJECT_STORAGE_BUCKET",
         "SCHEDULE_BEAT_LEADER_FAIL_OPEN",
         "LOGIN_RL_REDIS_REQUIRED",
+        "ARRICCHISCI_RATE_LIMIT_REDIS_ENABLED",
+        "ARRICCHISCI_RATE_LIMIT_REDIS_REQUIRED",
+        "ADMIN_BACKUP_LOCAL_TRIGGER_ENABLED",
         "STORAGE_POLICY",
     ):
         monkeypatch.delenv(name, raising=False)
@@ -46,6 +49,9 @@ def _set_cluster_safe_env(monkeypatch, *, environment: str = "production") -> No
     monkeypatch.setenv("OBJECT_STORAGE_BUCKET", "runtime-artifacts")
     monkeypatch.setenv("SCHEDULE_BEAT_LEADER_FAIL_OPEN", "false")
     monkeypatch.setenv("LOGIN_RL_REDIS_REQUIRED", "true")
+    monkeypatch.setenv("ARRICCHISCI_RATE_LIMIT_REDIS_ENABLED", "true")
+    monkeypatch.setenv("ARRICCHISCI_RATE_LIMIT_REDIS_REQUIRED", "true")
+    monkeypatch.setenv("ADMIN_BACKUP_LOCAL_TRIGGER_ENABLED", "false")
     monkeypatch.setenv("STORAGE_POLICY", "hybrid")
 
 
@@ -66,6 +72,9 @@ def test_server_envs_enable_production_gates(monkeypatch, environment):
     assert "CELERY_RESULT_BACKEND" in joined
     assert "OBJECT_STORAGE_BUCKET" in joined
     assert "LOGIN_RL_REDIS_REQUIRED" in joined
+    assert "ARRICCHISCI_RATE_LIMIT_REDIS_ENABLED" in joined
+    assert "ARRICCHISCI_RATE_LIMIT_REDIS_REQUIRED" in joined
+    assert "ADMIN_BACKUP_LOCAL_TRIGGER_ENABLED" in joined
 
 
 @pytest.mark.parametrize(
@@ -147,6 +156,27 @@ def test_login_rate_limiter_must_require_redis(monkeypatch):
     errors = _errors_for_current_env()
 
     assert any("LOGIN_RL_REDIS_REQUIRED" in error for error in errors)
+
+
+def test_arricchisci_rate_limiter_must_use_required_redis(monkeypatch):
+    _set_cluster_safe_env(monkeypatch)
+    monkeypatch.setenv("ARRICCHISCI_RATE_LIMIT_REDIS_ENABLED", "false")
+    monkeypatch.setenv("ARRICCHISCI_RATE_LIMIT_REDIS_REQUIRED", "false")
+
+    errors = _errors_for_current_env()
+    joined = "\n".join(errors)
+
+    assert "ARRICCHISCI_RATE_LIMIT_REDIS_ENABLED" in joined
+    assert "ARRICCHISCI_RATE_LIMIT_REDIS_REQUIRED" in joined
+
+
+def test_admin_backup_local_trigger_must_be_disabled(monkeypatch):
+    _set_cluster_safe_env(monkeypatch)
+    monkeypatch.setenv("ADMIN_BACKUP_LOCAL_TRIGGER_ENABLED", "true")
+
+    errors = _errors_for_current_env()
+
+    assert any("ADMIN_BACKUP_LOCAL_TRIGGER_ENABLED" in error for error in errors)
 
 
 def test_storage_policy_db_is_rejected_for_cluster(monkeypatch):

@@ -10,12 +10,12 @@ Il backend e' gia' orientato al multi-replica su tre assi importanti:
 - task asincroni su Celery con Redis broker/result backend;
 - result/file_source/eseguibili/IMDF/intermediate artifact migrati o predisposti verso object storage runtime.
 
-I punti ancora critici per una vera orizzontalizzazione sono:
+I punti ancora da governare operativamente per una vera orizzontalizzazione sono:
 
-1. filesystem locale ancora usato come cache o staging operativo (`DATA_DIR/temp`, `FILES_DIR`, `IMDF_BUNDLES_DIR`, `ESEGUIBILI_OUTPUTS_DIR`, datasource scan state, backup manual log);
-2. fallback in-memory per sicurezza o UX (`login_rate_limiter`, JWT metrics, task project cache);
+1. filesystem locale ancora usato come cache o staging operativo (`DATA_DIR/temp`, `FILES_DIR`, `IMDF_BUNDLES_DIR`, `ESEGUIBILI_OUTPUTS_DIR`);
+2. fallback in-memory confinati a dev/single-host (`login_rate_limiter`, JWT metrics);
 3. lock process-local usati come guard solo intra-processo (`ScheduleService._schedule_locks`, vari singleton/router service);
-4. scheduler beat single-leader gia' gestito via Redis, ma da rendere requisito hard in produzione;
+4. scheduler beat single-leader gestito via Redis e bloccato fail-closed in produzione;
 5. tuning aggregato pool DB/HTTP per numero di pod/processi, per evitare che lo scale-out saturi Postgres o provider esterni;
 6. datasource `local` valido solo se montato identicamente su ogni worker.
 
@@ -76,8 +76,8 @@ I punti ancora critici per una vera orizzontalizzazione sono:
 ### `backend/app/core/scheduler/*`
 
 - `concurrency_manager.py`: lock e coda scheduler su Postgres (`scheduler_locks`), buono per multi-worker.
-- `schedule_service.py`: usa `threading.RLock` process-local per read-modify-write del JSON config. Il commento dice che la sicurezza cross-process e' demandata al DB, ma `update_schedule` in `db.py` non usa `FOR UPDATE` o versione ottimistica. Rischio lost update fra due API replica.
-- `db.py`: `update_schedule` e' semplice `UPDATE ... WHERE id`; per cluster aggiungere transazione con `SELECT ... FOR UPDATE`, campo `version`, o update JSON parziale atomico.
+- `schedule_service.py`: gli update read-modify-write del JSON config passano da `db.update_schedule_locked()`, che usa `SELECT ... FOR UPDATE` dentro transazione. Il lock Python resta solo guard intra-processo per oggetti locali, non source-of-truth.
+- `db.py`: `update_schedule_locked()` e' il boundary cluster-safe per read-modify-write; `update_schedule()` resta helper low-level per update puntuali gia' materializzati.
 - `execution_manager.py`: heartbeat lock durante run schedulate, buono. Materializza alcuni blob in `RESULTS_DIR` per archive: residuo filesystem.
 - `artifact_store.py`, `run_archive_store.py`: dipendono da `RESULTS_DIR`; da spostare su result blob/object storage o trattare come compat legacy.
 
@@ -136,21 +136,21 @@ I punti ancora critici per una vera orizzontalizzazione sono:
 ### `backend/app/core/datasources/*`
 
 - `local.py`: rischio principale. Path locali sono accessibili solo al nodo corrente; il codice emette advisory ma consente l'uso. In cluster usare solo UNC/NFS/EFS montato identico, oppure SFTP/FTP/SharePoint.
-- `service.py`: `scan_state` su `DATA_DIR/datasources_scan/*.json`, quindi nodo-locale. Da spostare in DB se scansioni/processed state devono essere globali.
+- `service.py`: `scan_state` e processed state sono su PostgreSQL (`datasources.scan_state`). Il fallback legacy su `DATA_DIR/datasources_scan/*.json` e' stato rimosso: il datasource service non tocca piu' filesystem locale per lo stato di scan.
 - `ftp.py`, `sftp.py`, `sharepoint.py`: naturalmente multi-host se credenziali e rete sono uguali.
 
 ### `backend/app/core/auth/*`, `backend/app/shared/login_rate_limiter.py`, `backend/app/shared/token_blacklist.py`
 
 - JWT e utenti su DB; ok.
-- `login_rate_limiter.py`: Redis-backed, ma fallback in-memory. In cluster il fallback rende il rate limit per-pod, aggirabile ruotando replica. In produzione security-sensitive: fail-closed o degradazione controllata, non fallback.
-- `rate_limit_fallback.py`: `_STORE` process-local; solo fallback.
+- `login_rate_limiter.py`: Redis-backed; il fallback in-memory resta solo dev/single-host perche' production/staging/cluster richiedono `LOGIN_RL_REDIS_REQUIRED=true` via startup gate.
+- `rate_limit_fallback.py`: `_STORE` process-local; solo fallback non-prod.
 - `token_blacklist.py`: blacklist su Redis, ma read fail-open e metriche in-process. Logout write fallisce loud, ma check token con Redis down non revoca. Valutare fail-closed per ruoli admin/superadmin.
 - MFA su DB; ok.
 
 ### `backend/app/core/arricchisci/*`
 
 - `enrichment_service.py`: cache dedup, stats e rate limiter sono per istanza/task/processo. Non garantiscono rate limit globale verso API esterne.
-- `_rate_limiter.py`: token bucket in-memory. In cluster moltiplica il rate effettivo per numero di worker. Per provider con quote rigide usare Redis token bucket o coda dedicata per provider.
+- `_rate_limiter.py`: token bucket locale resta default dev, ma production/staging/cluster richiedono `ARRICCHISCI_RATE_LIMIT_REDIS_ENABLED=true` e `ARRICCHISCI_RATE_LIMIT_REDIS_REQUIRED=true`, quindi le quote verso provider esterni sono globali tra pod/worker.
 - `api_connection_rest_file.py`: molti path sono stati refactorati verso in-memory/object storage; residui `mkdtemp` sono staging locale.
 - `parallel.py`, `enrichment_execution_engines.py`: thread locali per parallelismo intra-task; ok ma moltiplicano consumo HTTP/RAM.
 
@@ -195,8 +195,8 @@ I punti ancora critici per una vera orizzontalizzazione sono:
 ### `backend/app/core/admin_backups/*`, `backend/scripts/backup_db.py`, `backend/deploy/systemd/*`
 
 - Stato run backup su DB e lista backup da object storage: buono.
-- `admin_backups/service.py` usa lock manuale su Postgres (`admin_backup_manual_locks`), quindi due API pod non possono avviare backup manuali concorrenti. Il log manuale resta in `/tmp/plenora-backup-manual.log` ed e' solo diagnostica host-local.
-- Follow-up deployment: delegare il trigger backup a Celery/K8s Job con idempotency key se si vuole evitare `subprocess.Popen` locale sui pod API.
+- `admin_backups/service.py` usa lock manuale su Postgres (`admin_backup_manual_locks`), quindi due API pod non possono avviare backup manuali concorrenti. Il trigger locale via `subprocess.Popen` e il log `/tmp/plenora-backup-manual.log` sono ora dev/single-host only: in production/staging/cluster `ADMIN_BACKUP_LOCAL_TRIGGER_ENABLED` deve essere false e lo startup gate fallisce se resta true.
+- Follow-up deployment: eseguire il backup tramite scheduler/job di deployment (Celery worker dedicato o K8s Job) quando serve un trigger manuale in cluster.
 - systemd units sono single-host. In Kubernetes sostituire con CronJob/Job e non usare `systemctl/journalctl` come fonte di verita.
 
 ### `backend/app/core/admin_system_status/*`, `backend/app/observability/*`
@@ -237,21 +237,14 @@ I punti ancora critici per una vera orizzontalizzazione sono:
 - `threading.local` resta tollerato solo nei due adapter indicati. Non introdurre nuovi usi per contesto runtime; preferire ContextVar, parametri espliciti o stato condiviso DB/Redis/object storage.
 - `cloud_backends.py` consuma config tramite `StorageBackendConfig` e `Settings`; il raw access per i validator fail-fast e' centralizzato in `Settings.get_raw`.
 - `TaskService` non usa piu' `_task_project_cache`: il metadata dei task pending e' su Redis con fallback locale solo dev/test, coperto da contract test.
-- I residui multi-host piu' importanti restano quelli gia' elencati nelle priorita': update scheduler cross-process safe, datasource scan state locale, fallback in-memory security-sensitive e trigger backup manuale ancora locale al pod API.
+- Il trigger backup manuale locale e' dev/single-host only: `ADMIN_BACKUP_LOCAL_TRIGGER_ENABLED=true` e' vietato da startup gate in production/staging/cluster, quindi l'API pod non avvia piu' subprocess locali in multi-pod.
+- I residui multi-host piu' importanti restano quelli gia' elencati nelle priorita': compat filesystem per artifact legacy/cache e alcuni fallback dev-only documentati.
 
 ## Priorita consigliate
 
-P0:
-
-- Rendere Redis e object storage requisiti hard in produzione cluster.
-- Tenere `SCHEDULE_BEAT_LEADER_FAIL_OPEN=false`.
-
 P1:
 
-- Rendere `ScheduleService` update cross-process safe con `FOR UPDATE` o versioning.
-- Spostare `datasources_scan` da filesystem a DB.
-- Rendere rate limit login fail-closed o Redis-required in produzione.
-- Introdurre rate limiter distribuito per arricchimenti verso API con quota globale.
+- Valutare se rimuovere del tutto i fallback in-memory non-prod o mantenerli come DX locale.
 
 P2:
 

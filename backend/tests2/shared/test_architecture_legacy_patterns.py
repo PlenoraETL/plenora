@@ -88,15 +88,8 @@ def test_value_error_str_e_lock_exists_in_catalog_test():
 #   read, lru_cache su raw value).
 # - `app/utils/zip_safe.py`: zip uncompressed-bytes cap env reads
 #   (operator-tunable).
-# - `app/core/admin_backups/service.py`: 1 env read residua per
-#   `AWS_REGION` (DEPLOY_INFRA). I 4 reads `BACKUP_BUCKET` /
-#   `BACKUP_S3_BUCKET` / `BACKUP_SCHEDULE_CRON` /
-#   `BACKUP_SCHEDULE_DESCRIPTION` sono stati chiusi in
-#   BE-GO-READY-CONFIG-BOUNDARY-001 (BACKUP_BUCKET delega a
-#   `cloud_backends._resolve_backup_bucket`; le 2 schedule string
-#   sono migrate a `Settings.DEFAULTS`). Il legacy `BACKUP_S3_REGION`
-#   era un dead alias e viene retirato. `AWS_REGION` resta DEPLOY_INFRA,
-#   letto tramite Settings nel boundary storage.
+# - `app/core/admin_backups/service.py`: chiuso a zero raw env read; bucket,
+#   region, schedule e trigger policy passano da Settings/storage boundary.
 # - `app/core/auth/smoke_seed.py`: docker smoke seed boundary; deve
 #   distinguere variabili esplicitamente settate dal default runtime.
 ALLOWLIST_GETENV_COUNTS: Dict[str, int] = {
@@ -109,7 +102,6 @@ ALLOWLIST_GETENV_COUNTS: Dict[str, int] = {
     "app/core/auth/jwt_token.py": 3,
     "app/shared/request_utils.py": 1,
     "app/utils/zip_safe.py": 1,
-    "app/core/admin_backups/service.py": 1,
     "app/core/auth/smoke_seed.py": 3,
 }
 

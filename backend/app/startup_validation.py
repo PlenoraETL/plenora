@@ -137,6 +137,28 @@ def validate_production_gates(settings: Any, errors: list[str]) -> None:
             "o cluster: il fallback in-memory non e' coerente con piu' pod."
         )
 
+    if not _as_bool(settings.get("ARRICCHISCI_RATE_LIMIT_REDIS_ENABLED", False)):
+        errors.append(
+            "ARRICCHISCI_RATE_LIMIT_REDIS_ENABLED deve essere true in "
+            "production/staging o cluster: il rate limit verso provider "
+            "esterni deve essere globale tra pod/worker."
+        )
+
+    if not _as_bool(settings.get("ARRICCHISCI_RATE_LIMIT_REDIS_REQUIRED", False)):
+        errors.append(
+            "ARRICCHISCI_RATE_LIMIT_REDIS_REQUIRED deve essere true in "
+            "production/staging o cluster: il fallback locale moltiplica "
+            "le quote per numero di repliche."
+        )
+
+    if _as_bool(settings.get("ADMIN_BACKUP_LOCAL_TRIGGER_ENABLED", True)):
+        errors.append(
+            "ADMIN_BACKUP_LOCAL_TRIGGER_ENABLED deve essere false in "
+            "production/staging o cluster: il trigger manuale locale usa "
+            "subprocess sul pod API; usa scheduler/job di deployment per "
+            "eseguire backup."
+        )
+
     storage_policy = (
         str(settings.get("STORAGE_POLICY", "hybrid") or "hybrid")
         .strip()

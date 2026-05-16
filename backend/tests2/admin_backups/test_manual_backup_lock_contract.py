@@ -10,6 +10,16 @@ import pytest
 pytestmark = [pytest.mark.unit, pytest.mark.contract]
 
 
+@pytest.fixture(autouse=True)
+def _manual_trigger_dev_env(monkeypatch):
+    monkeypatch.setenv("ENVIRONMENT", "development")
+    monkeypatch.delenv("CLUSTER_MODE", raising=False)
+    monkeypatch.delenv("PLENORA_CLUSTER_MODE", raising=False)
+    monkeypatch.delenv("MULTI_POD_MODE", raising=False)
+    monkeypatch.delenv("PLENORA_MULTI_POD", raising=False)
+    monkeypatch.setenv("ADMIN_BACKUP_LOCAL_TRIGGER_ENABLED", "true")
+
+
 def _lock_row(*, acquired_at: datetime | None = None, expires_at: datetime | None = None):
     now = datetime.now(timezone.utc)
     return {
@@ -66,6 +76,47 @@ def test_trigger_manual_backup_rejects_when_db_lock_is_active(monkeypatch):
         "pid": None,
         "message": "Un backup manuale e' gia' in corso. Attendi che finisca.",
     }
+    popen.assert_not_called()
+
+
+def test_trigger_manual_backup_refuses_api_local_spawn_when_disabled(monkeypatch):
+    from app.core.admin_backups import service
+
+    monkeypatch.setenv("ADMIN_BACKUP_LOCAL_TRIGGER_ENABLED", "false")
+    acquire = MagicMock()
+    popen = MagicMock()
+    monkeypatch.setattr(service, "try_acquire_manual_backup_lock", acquire)
+    monkeypatch.setattr(service.subprocess, "Popen", popen)
+
+    out = service.trigger_manual_backup()
+
+    assert out == {
+        "started": False,
+        "pid": None,
+        "message": (
+            "Trigger backup manuale locale disabilitato in questa "
+            "configurazione. Usa lo scheduler/job di deployment."
+        ),
+    }
+    acquire.assert_not_called()
+    popen.assert_not_called()
+
+
+def test_trigger_manual_backup_refuses_api_local_spawn_in_cluster(monkeypatch):
+    from app.core.admin_backups import service
+
+    monkeypatch.setenv("CLUSTER_MODE", "true")
+    acquire = MagicMock()
+    popen = MagicMock()
+    monkeypatch.setattr(service, "try_acquire_manual_backup_lock", acquire)
+    monkeypatch.setattr(service.subprocess, "Popen", popen)
+
+    out = service.trigger_manual_backup()
+
+    assert out["started"] is False
+    assert out["pid"] is None
+    assert "Trigger backup manuale locale disabilitato" in out["message"]
+    acquire.assert_not_called()
     popen.assert_not_called()
 
 

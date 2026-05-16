@@ -332,28 +332,25 @@ def test_datasource_scan_state_db_boundary_uses_datasources_row(monkeypatch):
     assert "UPDATE datasources SET scan_state = %s" in execute_calls[0][0]
 
 
-def test_get_scan_state_renames_corrupted_file_and_returns_empty(tmp_path, monkeypatch):
-    """Blinda policy recovery (service.py:254-285): JSON corrotto →
-    rinomina in ``<name>.broken.<ts>`` + log ERROR + ``ScanState`` vuoto.
+def test_datasource_service_has_no_scan_state_filesystem_fallback():
+    """scan_state runtime deve restare DB-only in ottica multi-pod."""
+    from pathlib import Path
 
-    Il rename È il punto chiave. Prima del fix, il comportamento era
-    "warning + silent return empty": il file corrotto restava su disco,
-    ogni call successiva re-incontrava lo stesso errore, lo scan era
-    "rotto" fino al manual cleanup admin.
+    source = Path("backend/app/core/datasources/service.py").read_text(encoding="utf-8")
 
-    Con il rename, la successiva get_scan_state vede "no file" → riparte
-    pulita. Il file `.broken.<ts>` resta sul disco per investigazione.
+    assert "datasources_scan" not in source
+    assert "_scan_dir" not in source
+    assert "_scan_state_path" not in source
+    assert "_load_legacy_scan_state" not in source
 
-    Regressione: un merge futuro che togliesse il ``path.rename`` (magari
-    perché "sembra aggressivo") riporterebbe il silent-corrupt di prima.
-    """
+
+def test_get_scan_state_ignores_corrupted_legacy_file_and_returns_empty(tmp_path, monkeypatch):
+    """Il runtime DB-only ignora qualunque file legacy locale corrotto."""
     from app.core.datasources.service import DataSourceService
     from app.core.datasources.models import ScanState
     import app.core.datasources.db as datasource_db
 
     service = DataSourceService()
-    # Override scan_dir per isolamento completo dal filesystem reale
-    service._scan_dir = tmp_path
     monkeypatch.setattr(
         datasource_db,
         "get_scan_state",
@@ -382,18 +379,14 @@ def test_get_scan_state_renames_corrupted_file_and_returns_empty(tmp_path, monke
     )
     assert state.processed == []
 
-    # Il file originale NON deve più esistere (è stato rinominato)
-    assert not scan_path.exists(), (
-        "File corrotto DEVE essere rinominato — non deve più esistere con nome originale"
+    assert scan_path.exists(), (
+        "Il fallback filesystem e' rimosso: il file legacy non deve essere toccato."
     )
-    # Deve esistere esattamente un file .broken.<ts>
     broken_files = list(tmp_path.glob(f"{ds_id}.json.broken.*"))
-    assert len(broken_files) == 1, (
-        f"Atteso esattamente 1 file .broken.<ts>, trovati: "
+    assert len(broken_files) == 0, (
+        f"Non devono essere creati file .broken.<ts>, trovati: "
         f"{[f.name for f in broken_files]}"
     )
-    # Il contenuto del .broken deve essere preservato per investigazione admin
-    assert "{this is not valid json" in broken_files[0].read_text(encoding="utf-8")
     assert save_calls == [], "Il JSON legacy corrotto non deve essere migrato nel DB"
 
 
@@ -409,7 +402,6 @@ def test_get_scan_state_returns_empty_when_file_absent(tmp_path, monkeypatch):
     import app.core.datasources.db as datasource_db
 
     service = DataSourceService()
-    service._scan_dir = tmp_path
     monkeypatch.setattr(
         datasource_db,
         "get_scan_state",
@@ -445,7 +437,6 @@ def test_get_scan_state_prefers_db_state_over_legacy_file(tmp_path, monkeypatch)
     import app.core.datasources.db as datasource_db
 
     service = DataSourceService()
-    service._scan_dir = tmp_path
     ds_id = "ds-db-wins"
     (tmp_path / f"{ds_id}.json").write_text(
         json.dumps({
@@ -484,13 +475,12 @@ def test_get_scan_state_prefers_db_state_over_legacy_file(tmp_path, monkeypatch)
     assert [entry.name for entry in state.processed] == ["db.csv"]
 
 
-def test_get_scan_state_migrates_valid_legacy_file_when_db_state_null(tmp_path, monkeypatch):
-    """Fallback legacy: file valido viene letto e salvato opportunisticamente su DB."""
+def test_get_scan_state_ignores_valid_legacy_file_when_db_state_null(tmp_path, monkeypatch):
+    """Fallback legacy rimosso: file valido non viene letto ne' migrato."""
     from app.core.datasources.service import DataSourceService
     import app.core.datasources.db as datasource_db
 
     service = DataSourceService()
-    service._scan_dir = tmp_path
     ds_id = "ds-legacy"
     (tmp_path / f"{ds_id}.json").write_text(
         json.dumps({
@@ -524,10 +514,8 @@ def test_get_scan_state_migrates_valid_legacy_file_when_db_state_null(tmp_path, 
 
     state = service.get_scan_state(ds_id)
 
-    assert [entry.name for entry in state.processed] == ["legacy.csv"]
-    assert len(saved) == 1
-    assert saved[0][0] == ds_id
-    assert saved[0][1]["processed"][0]["name"] == "legacy.csv"
+    assert state.processed == []
+    assert saved == []
 
 
 def test_save_scan_state_writes_db_not_legacy_file(tmp_path, monkeypatch):
@@ -537,7 +525,6 @@ def test_save_scan_state_writes_db_not_legacy_file(tmp_path, monkeypatch):
     import app.core.datasources.db as datasource_db
 
     service = DataSourceService()
-    service._scan_dir = tmp_path
     saved = []
     monkeypatch.setattr(
         datasource_db,

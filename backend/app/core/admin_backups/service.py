@@ -3,14 +3,13 @@
 from __future__ import annotations
 
 from datetime import timedelta
-
-import os
 import subprocess
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Optional, TypedDict
 
+from app.config import settings
 from app.core.admin_backups.backup_run_store import (
     fetch_latest_backup_run,
     fetch_latest_backup_started_at,
@@ -131,9 +130,10 @@ from app.infrastructure.storage.cloud_backends import (
     aws_credentials_error_message,
     get_backup_object_storage,
 )
+from app.startup_validation import production_gates_required
 
 BUCKET = _resolve_backup_bucket_env() or "plenora-backup-112011134642-eu-south-1-an"
-REGION = os.getenv("AWS_REGION", "eu-south-1")
+REGION = settings.get("AWS_REGION", "eu-south-1")
 
 # Lock distribuito Postgres per evitare trigger concorrenti via API.
 MANUAL_LOCK_TTL_SEC = 7200  # 2 ore: se un backup e' in corso, il lock scade dopo 2h
@@ -317,7 +317,6 @@ def get_schedule_info() -> BackupScheduleInfo:
         timer_active (bool), next_run (ISO), last_run (ISO), schedule_cron,
         description, timezone.
     """
-    from app.config import settings
     schedule_cron = settings.get("BACKUP_SCHEDULE_CRON", "0 2 * * *")
     description = settings.get(
         "BACKUP_SCHEDULE_DESCRIPTION",
@@ -355,6 +354,13 @@ def get_schedule_info() -> BackupScheduleInfo:
 
 
 # ── Trigger manuale ─────────────────────────────────────────────────────────
+
+
+def local_manual_backup_trigger_enabled() -> bool:
+    """Return True only when the legacy API-local trigger is allowed."""
+
+    enabled = bool(settings.get("ADMIN_BACKUP_LOCAL_TRIGGER_ENABLED", True))
+    return enabled and not production_gates_required(settings)
 
 
 def is_manual_backup_running() -> bool:
@@ -426,6 +432,16 @@ def trigger_manual_backup() -> ManualBackupTriggerResult:
     Returns:
         {"started": bool, "pid": int | None, "message": str}
     """
+    if not local_manual_backup_trigger_enabled():
+        return {
+            "started": False,
+            "pid": None,
+            "message": (
+                "Trigger backup manuale locale disabilitato in questa "
+                "configurazione. Usa lo scheduler/job di deployment."
+            ),
+        }
+
     owner_token = uuid.uuid4().hex
     try:
         lock = try_acquire_manual_backup_lock(

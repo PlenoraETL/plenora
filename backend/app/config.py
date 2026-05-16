@@ -509,10 +509,16 @@ class Settings:
         # unset, e devono essere overridabili via env per allineare il
         # display alla schedule effettivamente configurata sul deployment
         # NOTA: `BACKUP_BUCKET`, `BACKUP_S3_BUCKET`, `AWS_REGION` restano
-        # DEPLOY_INFRA env-only (gia' centralizzati in
-        # `cloud_backends._resolve_backup_bucket` / `_build_object_storage`
+        # DEPLOY_INFRA env-only, ma i consumer passano da Settings/storage
+        # boundary (`cloud_backends._resolve_backup_bucket`,
+        # `_build_object_storage`, admin backup service).
         "BACKUP_SCHEDULE_CRON": "0 2 * * *",
         "BACKUP_SCHEDULE_DESCRIPTION": "Daily 02:00 UTC (+ jitter fino a 5 min)",
+        # Trigger manuale legacy eseguito localmente dal pod API tramite
+        # subprocess. Comodo in dev/single-host, ma da disabilitare in
+        # production/staging/cluster: il backup deve partire da scheduler
+        # deployment-level, Celery worker dedicato o K8s Job.
+        "ADMIN_BACKUP_LOCAL_TRIGGER_ENABLED": True,
 
         # Bucket dedicato runtime artifact intermedi (full_artifact
         # Separato da BACKUP_BUCKET (IAM boundary distinto) e dal

@@ -181,7 +181,6 @@ def test_service_mark_as_processed_logs_debug_on_snapshot_failure(
     import app.core.datasources.db as datasource_db
 
     service = DataSourceService()
-    service._scan_dir = tmp_path
     monkeypatch.setattr(
         datasource_db,
         "get_scan_state",

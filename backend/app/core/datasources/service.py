@@ -1,6 +1,5 @@
 """Data source configuration service and runtime file operations."""
 
-import json
 import uuid
 from io import BytesIO
 from pathlib import Path
@@ -42,9 +41,6 @@ class DataSourceService:
     CRUD + operazioni file per i Data Source.
     Configurazioni e scan_state runtime nel DB (PostgreSQL).
     """
-
-    def __init__(self) -> None:
-        self._scan_dir: Path = settings.DATA_DIR / "datasources_scan"
 
     def list_datasources(self, group_id: Optional[str] = None) -> DataSourceList:
         rows = datasource_db.list_datasources(group_id)
@@ -162,9 +158,6 @@ class DataSourceService:
         if not datasource_db.get_datasource(ds_id):
             return False
         datasource_db.delete_datasource(ds_id)
-        scan_path = self._scan_state_path(ds_id)
-        if scan_path.exists():
-            scan_path.unlink()
         logger.info(f"Data Source eliminato: {ds_id}")
         return True
 
@@ -292,48 +285,7 @@ class DataSourceService:
                 )
                 return ScanState()
 
-        legacy_state = self._load_legacy_scan_state(ds_id)
-        if legacy_state is None:
-            return ScanState()
-        if row:
-            try:
-                datasource_db.save_scan_state(
-                    ds_id,
-                    legacy_state.model_dump(mode="json"),
-                )
-            except Exception as e:
-                logger.warning(
-                    "Migrazione legacy scan_state fallita per %s: %s: %s",
-                    ds_id, type(e).__name__, e,
-                )
-        return legacy_state
-
-    def _load_legacy_scan_state(self, ds_id: str) -> Optional[ScanState]:
-        path = self._scan_state_path(ds_id)
-        if not path.exists():
-            return None
-        try:
-            data = json.loads(path.read_text(encoding="utf-8"))
-            return ScanState(**data)
-        except Exception as e:
-            # Rename corrupt scan state so the next scan can start cleanly while
-            # preserving the broken file for investigation.
-            ts = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
-            broken_path = path.with_name(f"{path.name}.broken.{ts}")
-            try:
-                path.rename(broken_path)
-                logger.error(
-                    f"[GESTITO] Scan state corrotto per {ds_id}: {e}. "
-                    f"File rinominato in {broken_path.name}, scan riparte da zero.",
-                    op="get_scan_state"
-                )
-            except Exception as rename_err:
-                logger.error(
-                    f"[GESTITO] Scan state corrotto per {ds_id}: {e}. "
-                    f"Rename fallito ({rename_err}): manual cleanup necessario.",
-                    op="get_scan_state"
-                )
-            return None
+        return ScanState()
 
     def save_scan_state(self, ds_id: str, state: ScanState) -> None:
         saved = datasource_db.save_scan_state(
@@ -414,9 +366,6 @@ class DataSourceService:
             from app.core.datasources.interface import DataSourceError
             raise DataSourceError(f"Data Source '{ds_id}' non trovato")
         return create_backend(config)
-
-    def _scan_state_path(self, ds_id: str) -> Path:
-        return self._scan_dir / f"{ds_id}.json"
 
     def _generate_id(self, name: str) -> str:
         timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
