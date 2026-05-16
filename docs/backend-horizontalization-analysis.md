@@ -14,7 +14,7 @@ I punti ancora da governare operativamente per una vera orizzontalizzazione sono
 
 1. filesystem locale ancora usato come cache o staging operativo (`DATA_DIR/temp`, `FILES_DIR`, `IMDF_BUNDLES_DIR`, `ESEGUIBILI_OUTPUTS_DIR`);
 2. fallback in-memory confinati a dev/single-host (`login_rate_limiter`, JWT metrics);
-3. lock process-local usati come guard solo intra-processo (`ScheduleService._schedule_locks`, vari singleton/router service);
+3. lock process-local usati come guard solo intra-processo in singleton/cache non canonici;
 4. scheduler beat single-leader gestito via Redis e bloccato fail-closed in produzione;
 5. tuning aggregato pool DB/HTTP per numero di pod/processi, per evitare che lo scale-out saturi Postgres o provider esterni;
 6. datasource `local` valido solo se montato identicamente su ogni worker.
@@ -53,6 +53,7 @@ I punti ancora da governare operativamente per una vera orizzontalizzazione sono
 - PG pool singleton per processo (`ThreadedConnectionPool`), fork-safe per Celery con `discard_pool_after_fork`.
 - Punto di scala: il limite effettivo e' aggregato su processi/pod. Non aumentare repliche senza ridurre `DB_POOL_MAX` o introdurre PgBouncer.
 - `threading.local` per transaction state e' per-process/thread; ok, ma non sostituisce lock distribuiti.
+- `PgSession`/`unit_of_work()` sono il boundary esplicito per il porting Go. I wrapper legacy `execute`/`fetchone` passano gia' da `unit_of_work`, ma i nuovi repository dovrebbero ricevere sessione esplicita invece di importare helper globali.
 
 ### `backend/app/utils/logger.py`
 
@@ -76,14 +77,14 @@ I punti ancora da governare operativamente per una vera orizzontalizzazione sono
 ### `backend/app/core/scheduler/*`
 
 - `concurrency_manager.py`: lock e coda scheduler su Postgres (`scheduler_locks`), buono per multi-worker.
-- `schedule_service.py`: gli update read-modify-write del JSON config passano da `db.update_schedule_locked()`, che usa `SELECT ... FOR UPDATE` dentro transazione. Il lock Python resta solo guard intra-processo per oggetti locali, non source-of-truth.
+- `schedule_service.py`: gli update read-modify-write del JSON config passano da `db.update_schedule_locked()`, che usa `SELECT ... FOR UPDATE` dentro transazione. Il vecchio `_schedule_locks` process-local e' stato rimosso: la sincronizzazione canonica e' solo DB.
 - `db.py`: `update_schedule_locked()` e' il boundary cluster-safe per read-modify-write; `update_schedule()` resta helper low-level per update puntuali gia' materializzati.
 - `execution_manager.py`: heartbeat lock durante run schedulate, buono. Materializza alcuni blob in `RESULTS_DIR` per archive: residuo filesystem.
 - `artifact_store.py`, `run_archive_store.py`: dipendono da `RESULTS_DIR`; da spostare su result blob/object storage o trattare come compat legacy.
 
 ### `backend/app/core/orchestrator/*`
 
-- `task_service.py`: pending metadata (`task_id -> project_id/task_type`) e' persistito tramite `task_metadata_store.py` su Redis usando `CELERY_BROKER_URL`, con TTL allineato a `CELERY_RESULT_EXPIRES`. Il fallback in-memory resta confinato a dev/test; in production/staging o cluster il `put` fallisce loud se Redis non e' disponibile, evitando task `PENDING` non autorizzabili su altre repliche.
+- `task_service.py`: pending metadata (`task_id -> project_id/task_type`) e' persistito tramite `task_metadata_store.py` su Redis usando `CELERY_BROKER_URL`, con TTL allineato a `CELERY_RESULT_EXPIRES`. Il default runtime e' Redis-only: lo store in-memory resta solo test double esplicito, non fallback automatico dev/prod.
 - `router.py`: cleanup/download usa result_id/object storage quando possibile, ma mantiene compat path su `RESULTS_DIR`.
 - `service.py`: orchestration stateless; ok.
 
@@ -159,12 +160,15 @@ I punti ancora da governare operativamente per una vera orizzontalizzazione sono
 - Trasformazioni prevalentemente in-memory pandas/geopandas: orizzontalizzabili via Celery workers, ma non condividono stato.
 - `project_source_runtime.py`: `threading.local` per catena esecuzione; ok per isolamento per thread, non e' stato globale.
 - `plugin_executor.py`: singleton executor process-local; ok se i plugin sono stateless. Se plugin scrivono su disco, vanno auditati separatamente.
+- `ManipolaExecutor` riceve ora un `group_id_resolver` iniettabile: la risoluzione tenant resta un boundary esplicito e testabile, non un lookup nascosto hardcoded nel core trasformazioni.
+- `source_loading.load_project_source_artifact()` e' marcato `GO-PORT-DISK-DEPENDENCY`: i `Path` restano confinati all'adapter pandas/geopandas finche' i loader non passano a bytes/stream.
 - Rischio principale: memoria per worker, non coerenza distribuita.
 
 ### `backend/app/core/estrai/*`, `backend/app/db/query_executor.py`
 
 - Query execution stateless rispetto al backend; dati da DB esterni.
 - `query_executor.py`: per CSV/Parquet streaming migliora scalabilita; per formati non streamable materializza tutto in RAM fino a `ESTRAI_MAX_ROWS`.
+- La persistenza query e' ora dietro `QueryPersistenceProtocol`, iniettabile nel costruttore. `execute_raw` resta il boundary SQL -> rows; `execute_query` e `_execute_streaming_to_file` sono marcati come cut incrementali verso Rows/stream -> writer fuori dall'executor.
 - `query_engines.py`: SQLAlchemy pool per engine; moltiplica connessioni verso sorgenti esterne quando aumentano worker.
 
 ### `backend/app/core/carica/*`
@@ -195,8 +199,8 @@ I punti ancora da governare operativamente per una vera orizzontalizzazione sono
 ### `backend/app/core/admin_backups/*`, `backend/scripts/backup_db.py`, `backend/deploy/systemd/*`
 
 - Stato run backup su DB e lista backup da object storage: buono.
-- `admin_backups/service.py` usa lock manuale su Postgres (`admin_backup_manual_locks`), quindi due API pod non possono avviare backup manuali concorrenti. Il trigger locale via `subprocess.Popen` e il log `/tmp/plenora-backup-manual.log` sono ora dev/single-host only: in production/staging/cluster `ADMIN_BACKUP_LOCAL_TRIGGER_ENABLED` deve essere false e lo startup gate fallisce se resta true.
-- Follow-up deployment: eseguire il backup tramite scheduler/job di deployment (Celery worker dedicato o K8s Job) quando serve un trigger manuale in cluster.
+- `admin_backups/service.py` usa lock manuale su Postgres (`admin_backup_manual_locks`), quindi due API pod non possono avviare backup manuali concorrenti. Il trigger manuale non usa piu' `subprocess.Popen` dal pod API: se `ADMIN_BACKUP_MANUAL_TRIGGER_ENABLED=true`, accoda `workers.tasks.admin_backup_task.run_manual_backup_task` su Celery e il worker rilascia il lock a fine run.
+- Follow-up deployment: in Kubernetes si puo' sostituire il worker Celery con K8s Job dedicato mantenendo lo stesso lock/idempotency boundary.
 - systemd units sono single-host. In Kubernetes sostituire con CronJob/Job e non usare `systemctl/journalctl` come fonte di verita.
 
 ### `backend/app/core/admin_system_status/*`, `backend/app/observability/*`
@@ -236,8 +240,8 @@ I punti ancora da governare operativamente per una vera orizzontalizzazione sono
 - `OrchestratorService` mantiene default builder fuori da `__init__` per compatibilita'. La chiusura completa Go-ready e' far arrivare sempre un dispatch `Mapping[str, CanvasExecutorProtocol]` dalla runtime composition factory, senza fallback impliciti nei service.
 - `threading.local` resta tollerato solo nei due adapter indicati. Non introdurre nuovi usi per contesto runtime; preferire ContextVar, parametri espliciti o stato condiviso DB/Redis/object storage.
 - `cloud_backends.py` consuma config tramite `StorageBackendConfig` e `Settings`; il raw access per i validator fail-fast e' centralizzato in `Settings.get_raw`.
-- `TaskService` non usa piu' `_task_project_cache`: il metadata dei task pending e' su Redis con fallback locale solo dev/test, coperto da contract test.
-- Il trigger backup manuale locale e' dev/single-host only: `ADMIN_BACKUP_LOCAL_TRIGGER_ENABLED=true` e' vietato da startup gate in production/staging/cluster, quindi l'API pod non avvia piu' subprocess locali in multi-pod.
+- `TaskService` non usa piu' `_task_project_cache`: il metadata dei task pending e' su Redis-only nel default runtime, coperto da contract test.
+- Il trigger backup manuale passa da Celery task: l'API pod non avvia piu' subprocess locali.
 - I residui multi-host piu' importanti restano quelli gia' elencati nelle priorita': compat filesystem per artifact legacy/cache e alcuni fallback dev-only documentati.
 
 ## Priorita consigliate

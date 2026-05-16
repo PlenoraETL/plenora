@@ -514,11 +514,9 @@ class Settings:
         # `_build_object_storage`, admin backup service).
         "BACKUP_SCHEDULE_CRON": "0 2 * * *",
         "BACKUP_SCHEDULE_DESCRIPTION": "Daily 02:00 UTC (+ jitter fino a 5 min)",
-        # Trigger manuale legacy eseguito localmente dal pod API tramite
-        # subprocess. Comodo in dev/single-host, ma da disabilitare in
-        # production/staging/cluster: il backup deve partire da scheduler
-        # deployment-level, Celery worker dedicato o K8s Job.
-        "ADMIN_BACKUP_LOCAL_TRIGGER_ENABLED": True,
+        # Trigger manuale backup via boundary asincrono. Il servizio API
+        # accoda un task Celery; non avvia processi figli locali.
+        "ADMIN_BACKUP_MANUAL_TRIGGER_ENABLED": True,
 
         # Bucket dedicato runtime artifact intermedi (full_artifact
         # Separato da BACKUP_BUCKET (IAM boundary distinto) e dal

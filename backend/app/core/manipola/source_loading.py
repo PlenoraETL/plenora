@@ -49,6 +49,11 @@ def load_project_source_artifact(
     ``ResourceMetadata`` derived at the loader boundary. This preserves the
     legacy DataFrame/CRS behavior while avoiding a second metadata guess in
     ``_applica_crs_da_colonne``.
+
+    TODO: GO-PORT-DISK-DEPENDENCY - project_source artifacts still enter this
+    adapter as a local Path because pandas/geopandas loaders require path-like
+    inputs for some formats. Keep the Path dependency contained here; callers
+    should move toward bytes/stream resources.
     """
     from app.core.manipola.executor import (
         _applica_crs_da_colonne,

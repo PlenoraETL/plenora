@@ -5,10 +5,9 @@ Keeps this module's responsibility explicit and isolated from adjacent code.
 """
 
 import json
-import threading
 import uuid
 from datetime import datetime, timezone
-from typing import Callable, Dict, List, Mapping, Optional
+from typing import Callable, List, Mapping, Optional
 
 from app.config import settings
 from app.core.scheduler import db
@@ -93,24 +92,6 @@ class ScheduleService:
     """
 
     DEFAULT_GROUP = settings.DEFAULT_GROUP
-
-    # Process-local guard for read-modify-write updates on the JSON config blob.
-    # Cross-process safety is handled by DB boundaries, not this RLock.
-    _schedule_locks_lock = threading.Lock()
-    _schedule_locks: Dict[str, threading.RLock] = {}
-
-    @classmethod
-    def _get_schedule_lock(cls, schedule_id: str) -> threading.RLock:
-        """Restituisce (creando se necessario) il lock per uno schedule_id.
-
-        Pattern double-checked locking sul lock dei lock.
-        """
-        with cls._schedule_locks_lock:
-            lock = cls._schedule_locks.get(schedule_id)
-            if lock is None:
-                lock = threading.RLock()
-                cls._schedule_locks[schedule_id] = lock
-        return lock
 
     def _generate_schedule_id(self) -> str:
         short_uuid = str(uuid.uuid4())[:12]
@@ -408,10 +389,6 @@ class ScheduleService:
             logger.info(f"Schedule eliminato: {schedule_id} ({deleted_logs} log rimossi)")
         except Exception as e:
             logger.warning(f"Schedule eliminato ma errore pulizia log: {e}")
-
-        # Cleanup lock in-memory per evitare accumulo di lock orfani
-        with self._schedule_locks_lock:
-            self._schedule_locks.pop(schedule_id, None)
 
         return True
 

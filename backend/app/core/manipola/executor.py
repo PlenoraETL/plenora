@@ -152,9 +152,11 @@ class ManipolaExecutor:
         self,
         project_service: object,
         pipeline_dispatcher: Optional[PipelineDispatcherProtocol] = None,
+        group_id_resolver: Any = None,
     ) -> None:
         self.project_service = project_service
         self.pipeline_dispatcher = pipeline_dispatcher
+        self.group_id_resolver = group_id_resolver
         self.results_base_dir = settings.RESULTS_DIR
 
     def set_pipeline_dispatcher(self, dispatcher: PipelineDispatcherProtocol) -> None:
@@ -181,7 +183,8 @@ class ManipolaExecutor:
         """
         resolved: Optional[str]
         try:
-            resolved = get_project_group_id(project_id)
+            resolver = self.group_id_resolver or get_project_group_id
+            resolved = resolver(project_id)
         except Exception as e:
             logger.error(f"[GESTITO] Impossibile determinare group_id per {project_id}: {e}", exc_info=True)
             resolved = None

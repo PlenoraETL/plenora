@@ -40,6 +40,22 @@ def test_load_file_sources_fails_closed_when_current_group_is_unknown():
     assert dataframes == {}
 
 
+def test_security_context_resolver_is_injected_boundary():
+    calls = []
+
+    def resolver(project_id: str) -> str:
+        calls.append(project_id)
+        return "grp-injected"
+
+    executor = ManipolaExecutor(
+        project_service=object(),
+        group_id_resolver=resolver,
+    )
+
+    assert executor._init_security_context("project-1", strict=True) == "grp-injected"
+    assert calls == ["project-1"]
+
+
 def test_load_file_sources_blocks_invisible_cross_tenant_file():
     """BE-GO-READY-TRANSFORMATION-ENGINE-005: production callers
     pass ``group_id`` explicitly (set in ``execute``/``preview`` via

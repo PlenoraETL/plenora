@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
@@ -17,7 +18,7 @@ def _manual_trigger_dev_env(monkeypatch):
     monkeypatch.delenv("PLENORA_CLUSTER_MODE", raising=False)
     monkeypatch.delenv("MULTI_POD_MODE", raising=False)
     monkeypatch.delenv("PLENORA_MULTI_POD", raising=False)
-    monkeypatch.setenv("ADMIN_BACKUP_LOCAL_TRIGGER_ENABLED", "true")
+    monkeypatch.setenv("ADMIN_BACKUP_MANUAL_TRIGGER_ENABLED", "true")
 
 
 def _lock_row(*, acquired_at: datetime | None = None, expires_at: datetime | None = None):
@@ -31,33 +32,36 @@ def _lock_row(*, acquired_at: datetime | None = None, expires_at: datetime | Non
     }
 
 
-def test_trigger_manual_backup_uses_db_lock_before_spawn(monkeypatch, tmp_path):
+def test_admin_backup_service_does_not_spawn_local_processes():
+    source = Path("backend/app/core/admin_backups/service.py").read_text(
+        encoding="utf-8"
+    )
+
+    assert "subprocess.Popen" not in source
+    assert "BACKUP_SCRIPT" not in source
+    assert "MANUAL_LOG_FILE" not in source
+
+
+def test_trigger_manual_backup_uses_db_lock_before_enqueue(monkeypatch):
     from app.core.admin_backups import service
 
-    script = tmp_path / "backup_db.py"
-    script.write_text("print('ok')\n", encoding="utf-8")
-    log_file = tmp_path / "manual.log"
-
-    monkeypatch.setattr(service, "BACKUP_SCRIPT", script)
-    monkeypatch.setattr(service, "MANUAL_LOG_FILE", log_file)
-
     acquire = MagicMock(return_value=_lock_row())
-    set_pid = MagicMock(return_value=True)
-    popen = MagicMock(return_value=SimpleNamespace(pid=12345))
+    apply_async = MagicMock(return_value=SimpleNamespace(id="backup-task-1"))
 
     monkeypatch.setattr(service, "try_acquire_manual_backup_lock", acquire)
-    monkeypatch.setattr(service, "set_manual_backup_lock_pid", set_pid)
-    monkeypatch.setattr(service.subprocess, "Popen", popen)
+    monkeypatch.setattr(
+        "workers.tasks.admin_backup_task.run_manual_backup_task.apply_async",
+        apply_async,
+    )
 
     out = service.trigger_manual_backup()
 
     assert out["started"] is True
-    assert out["pid"] == 12345
+    assert out["pid"] is None
+    assert out["task_id"] == "backup-task-1"
     acquire.assert_called_once()
-    popen.assert_called_once()
-    set_pid.assert_called_once_with(
-        owner_token=acquire.call_args.kwargs["owner_token"],
-        pid=12345,
+    apply_async.assert_called_once_with(
+        kwargs={"owner_token": acquire.call_args.kwargs["owner_token"]}
     )
 
 
@@ -66,58 +70,69 @@ def test_trigger_manual_backup_rejects_when_db_lock_is_active(monkeypatch):
 
     monkeypatch.setattr(service, "try_acquire_manual_backup_lock", lambda **_: None)
     monkeypatch.setattr(service, "is_manual_backup_running", lambda: True)
-    popen = MagicMock()
-    monkeypatch.setattr(service.subprocess, "Popen", popen)
+    apply_async = MagicMock()
+    monkeypatch.setattr(
+        "workers.tasks.admin_backup_task.run_manual_backup_task.apply_async",
+        apply_async,
+    )
 
     out = service.trigger_manual_backup()
 
     assert out == {
         "started": False,
         "pid": None,
+        "task_id": None,
         "message": "Un backup manuale e' gia' in corso. Attendi che finisca.",
     }
-    popen.assert_not_called()
+    apply_async.assert_not_called()
 
 
-def test_trigger_manual_backup_refuses_api_local_spawn_when_disabled(monkeypatch):
+def test_trigger_manual_backup_refuses_enqueue_when_disabled(monkeypatch):
     from app.core.admin_backups import service
 
-    monkeypatch.setenv("ADMIN_BACKUP_LOCAL_TRIGGER_ENABLED", "false")
+    monkeypatch.setenv("ADMIN_BACKUP_MANUAL_TRIGGER_ENABLED", "false")
     acquire = MagicMock()
-    popen = MagicMock()
+    apply_async = MagicMock()
     monkeypatch.setattr(service, "try_acquire_manual_backup_lock", acquire)
-    monkeypatch.setattr(service.subprocess, "Popen", popen)
+    monkeypatch.setattr(
+        "workers.tasks.admin_backup_task.run_manual_backup_task.apply_async",
+        apply_async,
+    )
 
     out = service.trigger_manual_backup()
 
     assert out == {
         "started": False,
         "pid": None,
+        "task_id": None,
         "message": (
-            "Trigger backup manuale locale disabilitato in questa "
+            "Trigger backup manuale disabilitato in questa "
             "configurazione. Usa lo scheduler/job di deployment."
         ),
     }
     acquire.assert_not_called()
-    popen.assert_not_called()
+    apply_async.assert_not_called()
 
 
-def test_trigger_manual_backup_refuses_api_local_spawn_in_cluster(monkeypatch):
+def test_trigger_manual_backup_can_enqueue_in_cluster(monkeypatch):
     from app.core.admin_backups import service
 
     monkeypatch.setenv("CLUSTER_MODE", "true")
-    acquire = MagicMock()
-    popen = MagicMock()
+    acquire = MagicMock(return_value=_lock_row())
+    apply_async = MagicMock(return_value=SimpleNamespace(id="backup-task-cluster"))
     monkeypatch.setattr(service, "try_acquire_manual_backup_lock", acquire)
-    monkeypatch.setattr(service.subprocess, "Popen", popen)
+    monkeypatch.setattr(
+        "workers.tasks.admin_backup_task.run_manual_backup_task.apply_async",
+        apply_async,
+    )
 
     out = service.trigger_manual_backup()
 
-    assert out["started"] is False
+    assert out["started"] is True
     assert out["pid"] is None
-    assert "Trigger backup manuale locale disabilitato" in out["message"]
-    acquire.assert_not_called()
-    popen.assert_not_called()
+    assert out["task_id"] == "backup-task-cluster"
+    acquire.assert_called_once()
+    apply_async.assert_called_once()
 
 
 def test_is_manual_backup_running_releases_lock_after_finished_run(monkeypatch):

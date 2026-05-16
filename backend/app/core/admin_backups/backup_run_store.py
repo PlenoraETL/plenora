@@ -112,18 +112,6 @@ def try_acquire_manual_backup_lock(
         put_connection(conn)
 
 
-def set_manual_backup_lock_pid(*, owner_token: str, pid: int) -> bool:
-    from app.db.pg_connection import execute
-
-    cur = execute(
-        "UPDATE admin_backup_manual_locks "
-        "SET owner_pid = %s, updated_at = now() "
-        "WHERE lock_name = %s AND owner_token = %s",
-        (pid, MANUAL_BACKUP_LOCK_NAME, owner_token),
-    )
-    return bool(getattr(cur, "rowcount", 0))
-
-
 def release_manual_backup_lock(*, owner_token: str | None = None) -> bool:
     from app.db.pg_connection import execute
 

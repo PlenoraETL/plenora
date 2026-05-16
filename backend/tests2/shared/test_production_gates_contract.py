@@ -29,7 +29,6 @@ def _clean_gate_env(monkeypatch):
         "LOGIN_RL_REDIS_REQUIRED",
         "ARRICCHISCI_RATE_LIMIT_REDIS_ENABLED",
         "ARRICCHISCI_RATE_LIMIT_REDIS_REQUIRED",
-        "ADMIN_BACKUP_LOCAL_TRIGGER_ENABLED",
         "STORAGE_POLICY",
     ):
         monkeypatch.delenv(name, raising=False)
@@ -51,7 +50,6 @@ def _set_cluster_safe_env(monkeypatch, *, environment: str = "production") -> No
     monkeypatch.setenv("LOGIN_RL_REDIS_REQUIRED", "true")
     monkeypatch.setenv("ARRICCHISCI_RATE_LIMIT_REDIS_ENABLED", "true")
     monkeypatch.setenv("ARRICCHISCI_RATE_LIMIT_REDIS_REQUIRED", "true")
-    monkeypatch.setenv("ADMIN_BACKUP_LOCAL_TRIGGER_ENABLED", "false")
     monkeypatch.setenv("STORAGE_POLICY", "hybrid")
 
 
@@ -74,7 +72,6 @@ def test_server_envs_enable_production_gates(monkeypatch, environment):
     assert "LOGIN_RL_REDIS_REQUIRED" in joined
     assert "ARRICCHISCI_RATE_LIMIT_REDIS_ENABLED" in joined
     assert "ARRICCHISCI_RATE_LIMIT_REDIS_REQUIRED" in joined
-    assert "ADMIN_BACKUP_LOCAL_TRIGGER_ENABLED" in joined
 
 
 @pytest.mark.parametrize(
@@ -168,15 +165,6 @@ def test_arricchisci_rate_limiter_must_use_required_redis(monkeypatch):
 
     assert "ARRICCHISCI_RATE_LIMIT_REDIS_ENABLED" in joined
     assert "ARRICCHISCI_RATE_LIMIT_REDIS_REQUIRED" in joined
-
-
-def test_admin_backup_local_trigger_must_be_disabled(monkeypatch):
-    _set_cluster_safe_env(monkeypatch)
-    monkeypatch.setenv("ADMIN_BACKUP_LOCAL_TRIGGER_ENABLED", "true")
-
-    errors = _errors_for_current_env()
-
-    assert any("ADMIN_BACKUP_LOCAL_TRIGGER_ENABLED" in error for error in errors)
 
 
 def test_storage_policy_db_is_rejected_for_cluster(monkeypatch):

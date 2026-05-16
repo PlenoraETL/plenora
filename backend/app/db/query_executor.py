@@ -102,6 +102,37 @@ class SaveFunctionProtocol(Protocol):
     ) -> Path: ...
 
 
+class QueryPersistenceProtocol(Protocol):
+    """Persistence port for extracted query results."""
+
+    def streaming_output_path(self, output_filename: str, output_format: str) -> Path:
+        ...
+
+    def persist_streamed_file(
+        self,
+        *,
+        project_id: str,
+        output_path: Path,
+        output_format: str,
+        rows_count: int,
+        group_id: Optional[str],
+    ):
+        ...
+
+    def persist_dataframe_result(
+        self,
+        *,
+        project_id: str,
+        df: FrameLike,
+        output_format: str,
+        filename_stem: str,
+        rows_count: int,
+        group_id: Optional[str],
+        geom_column: Optional[str],
+    ):
+        ...
+
+
 class NullLogger:
     """Logger silenzioso per test — non produce output."""
     def info(self, msg: str, *args: Any) -> None: pass
@@ -208,7 +239,8 @@ class QueryExecutor:
         engine_factory: EngineFactoryProtocol = None,
         save_function: SaveFunctionProtocol = None,
         logger: LoggerProtocol = None,
-        results_dir: Path = None
+        results_dir: Path = None,
+        result_persistence: QueryPersistenceProtocol = None,
     ):
         """
         Inizializza l'executor con le dipendenze iniettate.
@@ -221,6 +253,7 @@ class QueryExecutor:
             save_function: Funzione per salvare DataFrame su file.
             logger: Logger per messaggi di info/error/debug.
             results_dir: Directory base per i file di output.
+            result_persistence: porta di persistenza Rows/DataFrame -> result blob.
         """
         self._engine_factory = engine_factory or DefaultEngineFactory()
         self._save = save_function or self._salvataggio_default
@@ -230,7 +263,7 @@ class QueryExecutor:
         # Componenti interni (funzioni pure senza stato
         self._result_builder = ResultBuilder
         self._df_builder = DataFrameBuilder
-        self._result_persistence = QueryResultPersistence()
+        self._result_persistence = result_persistence or QueryResultPersistence()
 
     @staticmethod
     def _salvataggio_default(
@@ -351,7 +384,12 @@ class QueryExecutor:
         output_path: "Path",
         output_format: str,
     ) -> Tuple[int, List[str]]:
-        """Compatibility delegate for CSV/Parquet streaming extraction."""
+        """Compatibility delegate for CSV/Parquet streaming extraction.
+
+        TODO: GO-PORT-DISK-DEPENDENCY - this boundary still writes chunks to a
+        Path because the current persistence adapter expects a materialized
+        file. The next cut should expose Rows -> writer/stream directly.
+        """
         return execute_streaming_to_file(
             engine_factory=self._engine_factory,
             connection=connection,
@@ -405,6 +443,10 @@ class QueryExecutor:
         Returns:
             Dizionario con: success, message, rows_count, columns, output_path, timings.
         """
+        # TODO: GO-PORT-QUERY-RESPONSIBILITY - keep reducing this method toward
+        # SQL -> rows/stream only; persistence already sits behind
+        # QueryPersistenceProtocol and should move to the caller/orchestrator in
+        # the Go port.
         timings = {}
         inizio_totale = time.time()
 
@@ -551,7 +593,8 @@ def create_executor(
     engine_factory: EngineFactoryProtocol = None,
     save_function: SaveFunctionProtocol = None,
     results_dir: Path = None,
-    logger: LoggerProtocol = None
+    logger: LoggerProtocol = None,
+    result_persistence: QueryPersistenceProtocol = None,
 ) -> QueryExecutor:
     """
     Factory function per creare un QueryExecutor con Dependency Injection.
@@ -564,6 +607,7 @@ def create_executor(
         save_function: Funzione per salvare DataFrame.
         results_dir: Directory base per i file di output.
         logger: Logger per i messaggi.
+        result_persistence: porta esplicita per salvare result blob.
 
     Returns:
         Istanza di QueryExecutor configurata.
@@ -572,5 +616,6 @@ def create_executor(
         engine_factory=engine_factory,
         save_function=save_function,
         results_dir=results_dir,
-        logger=logger
+        logger=logger,
+        result_persistence=result_persistence,
     )

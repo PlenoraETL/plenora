@@ -3,10 +3,8 @@
 from __future__ import annotations
 
 from datetime import timedelta
-import subprocess
 import uuid
 from datetime import datetime, timezone
-from pathlib import Path
 from typing import Any, Optional, TypedDict
 
 from app.config import settings
@@ -15,7 +13,6 @@ from app.core.admin_backups.backup_run_store import (
     fetch_latest_backup_started_at,
     fetch_manual_backup_lock,
     release_manual_backup_lock,
-    set_manual_backup_lock_pid,
     try_acquire_manual_backup_lock,
 )
 from app.utils.logger import get_logger
@@ -55,6 +52,7 @@ class BackupScheduleInfo(TypedDict):
 class ManualBackupTriggerResult(TypedDict):
     started: bool
     pid: int | None
+    task_id: str | None
     message: str
 
 
@@ -130,19 +128,12 @@ from app.infrastructure.storage.cloud_backends import (
     aws_credentials_error_message,
     get_backup_object_storage,
 )
-from app.startup_validation import production_gates_required
 
 BUCKET = _resolve_backup_bucket_env() or "plenora-backup-112011134642-eu-south-1-an"
 REGION = settings.get("AWS_REGION", "eu-south-1")
 
 # Lock distribuito Postgres per evitare trigger concorrenti via API.
 MANUAL_LOCK_TTL_SEC = 7200  # 2 ore: se un backup e' in corso, il lock scade dopo 2h
-MANUAL_LOG_FILE = Path("/tmp/plenora-backup-manual.log")
-
-# Path dello script backup, risolto relativamente al backend root
-# service.py -> admin_backups -> core -> app -> backend
-_BACKEND_ROOT = Path(__file__).resolve().parents[3]
-BACKUP_SCRIPT = _BACKEND_ROOT / "scripts" / "backup_db.py"
 
 
 # ── S3: lista backup ────────────────────────────────────────────────────────
@@ -356,11 +347,10 @@ def get_schedule_info() -> BackupScheduleInfo:
 # ── Trigger manuale ─────────────────────────────────────────────────────────
 
 
-def local_manual_backup_trigger_enabled() -> bool:
-    """Return True only when the legacy API-local trigger is allowed."""
+def manual_backup_trigger_enabled() -> bool:
+    """Return True when the manual backup API trigger is enabled."""
 
-    enabled = bool(settings.get("ADMIN_BACKUP_LOCAL_TRIGGER_ENABLED", True))
-    return enabled and not production_gates_required(settings)
+    return bool(settings.get("ADMIN_BACKUP_MANUAL_TRIGGER_ENABLED", True))
 
 
 def is_manual_backup_running() -> bool:
@@ -423,21 +413,18 @@ def is_manual_backup_running() -> bool:
 
 
 def trigger_manual_backup() -> ManualBackupTriggerResult:
-    """Lancia backup_db.py come processo detached.
-
-    Il processo eredita l'env del backend (che include DATABASE_URL caricata
-    al boot da .env). Il processo sopravvive al riavvio del backend grazie a
-    start_new_session=True.
+    """Accoda il backup manuale su Celery.
 
     Returns:
-        {"started": bool, "pid": int | None, "message": str}
+        {"started": bool, "pid": None, "task_id": str | None, "message": str}
     """
-    if not local_manual_backup_trigger_enabled():
+    if not manual_backup_trigger_enabled():
         return {
             "started": False,
             "pid": None,
+            "task_id": None,
             "message": (
-                "Trigger backup manuale locale disabilitato in questa "
+                "Trigger backup manuale disabilitato in questa "
                 "configurazione. Usa lo scheduler/job di deployment."
             ),
         }
@@ -453,6 +440,7 @@ def trigger_manual_backup() -> ManualBackupTriggerResult:
         return {
             "started": False,
             "pid": None,
+            "task_id": None,
             "message": f"Impossibile acquisire lock backup manuale: {str(e)[:200]}",
         }
 
@@ -461,6 +449,7 @@ def trigger_manual_backup() -> ManualBackupTriggerResult:
             return {
                 "started": False,
                 "pid": None,
+                "task_id": None,
                 "message": "Un backup manuale e' gia' in corso. Attendi che finisca.",
             }
         # Se il lock era appena diventato stale, tenta una sola acquisizione
@@ -478,6 +467,7 @@ def trigger_manual_backup() -> ManualBackupTriggerResult:
             return {
                 "started": False,
                 "pid": None,
+                "task_id": None,
                 "message": f"Impossibile acquisire lock backup manuale: {str(e)[:200]}",
             }
 
@@ -485,50 +475,25 @@ def trigger_manual_backup() -> ManualBackupTriggerResult:
         return {
             "started": False,
             "pid": None,
+            "task_id": None,
             "message": "Un backup manuale e' gia' in corso. Attendi che finisca.",
         }
 
-    if not BACKUP_SCRIPT.exists():
-        release_manual_backup_lock(owner_token=owner_token)
-        logger.error(f"Script backup non trovato: {BACKUP_SCRIPT}")
-        return {
-            "started": False,
-            "pid": None,
-            "message": f"Script non trovato: {BACKUP_SCRIPT}",
-        }
-
     try:
-        # start_new_session=True: detach dal backend, sopravvive al riavvio
-        # stdout/stderr -> file dedicato (il trigger non passa da systemd
-        # quindi niente journalctl automatico). Il run viene comunque
-        # tracciato in plenora.backup_runs come ogni esecuzione dello script
-        with open(MANUAL_LOG_FILE, "a") as fp:
-            proc = subprocess.Popen(
-                ["python3", str(BACKUP_SCRIPT)],
-                stdout=fp,
-                stderr=subprocess.STDOUT,
-                start_new_session=True,
-                cwd=str(_BACKEND_ROOT),
-            )
-        try:
-            pid_updated = set_manual_backup_lock_pid(
-                owner_token=owner_token,
-                pid=proc.pid,
-            )
-            if not pid_updated:
-                logger.warning(
-                    "Backup manuale avviato ma lock DB non aggiornato: "
-                    "owner_token non trovato"
-                )
-        except Exception as e:
-            logger.warning(
-                f"Backup manuale avviato ma update PID lock fallito: {e}"
-            )
-        logger.info(f"Backup manuale avviato: pid={proc.pid}")
+        from workers.tasks.admin_backup_task import run_manual_backup_task
+
+        async_result = run_manual_backup_task.apply_async(
+            kwargs={"owner_token": owner_token}
+        )
+        logger.info("Backup manuale Celery accodato: task_id=%s", async_result.id)
         return {
             "started": True,
-            "pid": proc.pid,
-            "message": f"Backup avviato (pid={proc.pid}). Controlla la lista S3 tra qualche secondo.",
+            "pid": None,
+            "task_id": async_result.id,
+            "message": (
+                f"Backup accodato su Celery (task_id={async_result.id}). "
+                "Controlla la lista S3 tra qualche secondo."
+            ),
         }
     except Exception as e:
         try:
@@ -536,4 +501,4 @@ def trigger_manual_backup() -> ManualBackupTriggerResult:
         except Exception:
             logger.warning("cleanup lock manual backup fallita", exc_info=True)
         logger.error(f"trigger_manual_backup fallito: {e}", exc_info=True)
-        return {"started": False, "pid": None, "message": str(e)}
+        return {"started": False, "pid": None, "task_id": None, "message": str(e)}

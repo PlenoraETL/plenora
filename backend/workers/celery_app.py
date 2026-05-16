@@ -23,6 +23,7 @@ celery_app = Celery(
         "workers.tasks.enrichment_task",
         "workers.tasks.carica_task",
         "workers.tasks.schedule_task",
+        "workers.tasks.admin_backup_task",
         "workers.tasks.pipeline_task",
         "workers.tasks.imdf_publish_task",
         "workers.tasks.cleanroom_task",

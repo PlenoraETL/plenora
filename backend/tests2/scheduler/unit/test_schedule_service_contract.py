@@ -5,6 +5,7 @@ Locks backend contracts and regression boundaries for the current architecture.
 """
 
 from datetime import datetime, timezone
+from pathlib import Path
 from unittest.mock import patch
 
 import pytest
@@ -34,6 +35,16 @@ def _row_from_config(schedule_config: object) -> ScheduleRow:
         updated_at=schedule_config.updated_at,
         created_by="user-1",
     )
+
+
+def test_schedule_service_has_no_process_local_schedule_locks():
+    source = Path("backend/app/core/scheduler/schedule_service.py").read_text(
+        encoding="utf-8"
+    )
+
+    assert "_schedule_locks" not in source
+    assert "threading.RLock" not in source
+    assert "threading.Lock" not in source
 
 
 def test_update_schedule_clear_destination_disables_precheck(schedule_config, monkeypatch):

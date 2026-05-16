@@ -151,14 +151,6 @@ def validate_production_gates(settings: Any, errors: list[str]) -> None:
             "le quote per numero di repliche."
         )
 
-    if _as_bool(settings.get("ADMIN_BACKUP_LOCAL_TRIGGER_ENABLED", True)):
-        errors.append(
-            "ADMIN_BACKUP_LOCAL_TRIGGER_ENABLED deve essere false in "
-            "production/staging o cluster: il trigger manuale locale usa "
-            "subprocess sul pod API; usa scheduler/job di deployment per "
-            "eseguire backup."
-        )
-
     storage_policy = (
         str(settings.get("STORAGE_POLICY", "hybrid") or "hybrid")
         .strip()
