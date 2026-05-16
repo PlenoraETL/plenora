@@ -90,7 +90,7 @@ def _make_manager_for_success_path(schedule_config) -> ExecutionManager:
     )
 
     fake_orchestrator = MagicMock()
-    fake_orchestrator.execute_pipeline = MagicMock(
+    fake_orchestrator.execute_pipeline_from_contract = MagicMock(
         return_value=_make_orchestrator_result()
     )
     manager._get_orchestrator = MagicMock(return_value=fake_orchestrator)
@@ -129,6 +129,11 @@ def test_execute_persists_scheduled_for_in_schedule_info_and_execution_info(
         project_service_cls.return_value.get_project_metadata.return_value = (
             _project_meta("grp-A")
         )
+        project_service_cls.return_value.get_project_canvas.return_value = {
+            "nodes": [],
+            "edges": [],
+        }
+        project_service_cls.return_value.get_project_columns_metadata.return_value = []
         result = manager.execute(
             "sch-1",
             triggered_by="catchup",
@@ -171,6 +176,11 @@ def test_execute_propagates_scheduled_for_to_carica_kwarg(schedule_config):
         project_service_cls.return_value.get_project_metadata.return_value = (
             _project_meta("grp-A")
         )
+        project_service_cls.return_value.get_project_canvas.return_value = {
+            "nodes": [],
+            "edges": [],
+        }
+        project_service_cls.return_value.get_project_columns_metadata.return_value = []
         manager.execute(
             "sch-1",
             triggered_by="catchup",
@@ -203,6 +213,11 @@ def test_execute_with_scheduled_for_none_persists_none_in_log_entry(
         project_service_cls.return_value.get_project_metadata.return_value = (
             _project_meta("grp-A")
         )
+        project_service_cls.return_value.get_project_canvas.return_value = {
+            "nodes": [],
+            "edges": [],
+        }
+        project_service_cls.return_value.get_project_columns_metadata.return_value = []
         result = manager.execute("sch-1", triggered_by="cron")
 
     assert result["success"] is True

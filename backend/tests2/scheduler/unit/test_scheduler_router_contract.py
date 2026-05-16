@@ -121,6 +121,63 @@ def test_download_blob_only_run_uses_schedule_result_id(current_user, tmp_path):
     assert "blob.csv" in response.headers.get("content-disposition", "")
 
 
+def test_download_specific_blob_only_run_uses_requested_result_id(
+    current_user, tmp_path,
+):
+    client = _build_client(current_user)
+
+    schedule_id = "schedule_123456789abc"
+    project_id = "proj-1"
+    schedule_cfg = SimpleNamespace(pipeline=SimpleNamespace(project_id=project_id))
+    result_rows = {
+        "res-old": SimpleNamespace(
+            id="res-old",
+            project_id=project_id,
+            filename="old.csv",
+            size_bytes=6,
+        ),
+        "res-new": SimpleNamespace(
+            id="res-new",
+            project_id=project_id,
+            filename="new.csv",
+            size_bytes=6,
+        ),
+    }
+
+    def fake_get_result_row(result_id):
+        return result_rows.get(result_id)
+
+    def fake_get_result_data(result_id, group_id=None):
+        assert group_id == "grp-1"
+        return {"res-old": b"old\n", "res-new": b"new\n"}[result_id]
+
+    logs = [
+        {
+            "timestamp_str": "20260402_060000",
+            "execution_info": {"result_id": "res-new"},
+        },
+        {
+            "timestamp_str": "20260401_060000",
+            "execution_info": {"result_id": "res-old"},
+        },
+    ]
+
+    with patch("app.core.scheduler.schedule_service.ScheduleService.get_schedule", return_value=schedule_cfg), \
+         patch("app.core.scheduler.db.get_schedule_row", return_value=SimpleNamespace(id=schedule_id, group_id="grp-1")), \
+         patch("app.core.scheduler.db.list_schedule_logs", return_value=logs), \
+         patch("app.core.results.store.get_result_row", side_effect=fake_get_result_row), \
+         patch("app.core.results.store.get_result_data", side_effect=fake_get_result_data), \
+         patch("app.config.settings", new=SimpleNamespace(RESULTS_DIR=tmp_path)):
+        response = client.get(
+            f"/api/schedules/{schedule_id}/download",
+            params={"run": "20260401_060000"},
+        )
+
+    assert response.status_code == 200
+    assert response.content == b"old\n"
+    assert "old.csv" in response.headers.get("content-disposition", "")
+
+
 def test_download_blob_only_run_rejects_cross_project_result(current_user, tmp_path):
     client = _build_client(current_user)
 
@@ -160,6 +217,33 @@ def test_list_runs_returns_archived_runs_with_sizes(current_user, tmp_path):
     assert payload["runs_count"] == 1
     assert payload["runs"][0]["timestamp"] == "20260402_060000"
     assert payload["runs"][0]["files"][0]["name"] == "output.csv"
+
+
+def test_list_runs_returns_blob_backed_runs_with_sizes(current_user, tmp_path):
+    client = _build_client(current_user)
+    schedule_id = "schedule_123456789abc"
+    project_id = "proj-1"
+    schedule_cfg = SimpleNamespace(pipeline=SimpleNamespace(project_id=project_id))
+    result_row = SimpleNamespace(
+        id="res-1",
+        project_id=project_id,
+        filename="blob.csv",
+        size_bytes=8,
+    )
+
+    with patch("app.core.scheduler.schedule_service.ScheduleService.get_schedule", return_value=schedule_cfg), \
+         patch("app.core.scheduler.db.get_schedule_row", return_value=SimpleNamespace(id=schedule_id, group_id="grp-1")), \
+         patch("app.core.scheduler.db.list_schedule_logs", return_value=[{"timestamp_str": "20260402_060000", "execution_info": {"result_id": "res-1"}}]), \
+         patch("app.core.results.store.get_result_row", return_value=result_row), \
+         patch("app.config.settings", new=SimpleNamespace(RESULTS_DIR=tmp_path)):
+        response = client.get(f"/api/schedules/{schedule_id}/runs")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["runs_count"] == 1
+    assert payload["runs"][0]["timestamp"] == "20260402_060000"
+    assert payload["runs"][0]["files"][0]["name"] == "blob.csv"
+    assert payload["runs"][0]["files"][0]["size_bytes"] == 8
 
 
 def test_list_runs_returns_empty_payload_when_no_archived_runs(current_user):

@@ -4,8 +4,6 @@ Execution Manager per lo Scheduler PLENORA-ETL.
 Keeps this module's responsibility explicit and isolated from adjacent code.
 """
 
-import shutil as _shutil
-
 import time
 import uuid as _uuid
 from datetime import datetime, timezone
@@ -14,7 +12,6 @@ from typing import Optional, TypedDict
 
 from app.config import settings
 from app.core.scheduler import db as scheduler_db
-from app.core.scheduler.artifact_store import ScheduleArtifactStore
 from app.core.scheduler.concurrency_manager import ConcurrencyManager
 from app.core.scheduler.log_service import ScheduleLogService
 from app.core.scheduler.models import ScheduleConfig, LogStep
@@ -80,7 +77,6 @@ class ExecutionManager:
         # ConnectionService singleton — riusata in _get_orchestrator
         # _pre_check_connection, _execute_carica
         self._connection_service = None
-        self._artifact_store = ScheduleArtifactStore()
 
     def _get_connection_service(self):
         """ConnectionService lazy singleton per questa istanza di ExecutionManager."""
@@ -347,64 +343,22 @@ class ExecutionManager:
                 rows=rows
             ))
 
-            # Step OUTPUT (file salvato dall'orchestrator
-            # `output_path` e' la chiave canonica (scritta da tutti gli
-            # executor); Path.name estrae il basename per l'archivio
+            # Step OUTPUT: il payload canonico e' il result blob registrato in
+            # `results` e referenziato nel log schedule via execution_info.
+            # Non copiamo piu' in RESULTS_DIR/runs: in cluster il filesystem
+            # locale non e' condiviso e non puo' essere source of truth.
             output_path_str = result.output_path or ""
             output_file = Path(output_path_str).name if output_path_str else ""
-
-            # Arricchisci salva direttamente come blob nel DB (via
-            # save_result_blob) senza scrivere in results/{project_id}/
-            # Se non c'e' output_path ma il result ha un artifact
-            # risolvibile (result_id), lo materializziamo qui su
-            # filesystem prima di archiviare, altrimenti lo scheduler
-            # archivierebbe una cartella vuota e la lista runs sarebbe
-            # sempre vuota
-            if not output_file:
-                try:
-                    from app.core.artifacts import (
-                        ArtifactResolver, ArtifactResolutionError,
-                    )
-                    ref = result.to_run_artifact_ref()
-                    if ref is not None:
-                        materialized = ArtifactResolver().materialize_run(ref)
-                        with materialized as m:
-                            if m.path:
-                                # Copia nella project output dir con nome
-                                # basename del blob materializzato
-                                from app.config import settings as _s
-                                dest_dir = Path(_s.RESULTS_DIR) / project_id
-                                dest_dir.mkdir(parents=True, exist_ok=True)
-                                dest_path = dest_dir / Path(m.path).name
-                                _shutil.copy2(m.path, dest_path)
-                                output_file = dest_path.name
-                                logger.info(
-                                    f"Output materializzato da blob per "
-                                    f"archive: {dest_path}"
-                                )
-                except ArtifactResolutionError as _re:
-                    logger.warning(
-                        f"Materializzazione blob per archive fallita: {_re}"
-                    )
-                except Exception as _me:
-                    logger.warning(
-                        f"Errore materializzazione output per archive: {_me}",
-                        exc_info=True,
-                    )
-
-            # L'orchestrator salva in results/{project_id}/ (sovrascrive
-            # Lo scheduler copia in results/{project_id}/runs/{schedule}/{timestamp}/
-            archived_path = self._artifact_store.archive(
-                project_id=project_id,
-                schedule_id=schedule_id,
-                output_file=output_file
+            output_ref = (
+                f"result:{result.result_id}"
+                if result.result_id else output_file or "N/A"
             )
             
             steps.append(LogStep(
                 step="OUTPUT",
                 status="success",
                 duration_ms=0,
-                file=archived_path or output_file or "N/A"
+                file=output_ref,
             ))
             
             rows_written = 0

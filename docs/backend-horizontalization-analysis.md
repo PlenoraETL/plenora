@@ -88,8 +88,8 @@ I punti ancora da governare operativamente per una vera orizzontalizzazione sono
 - `schedule_service.py`: gli update read-modify-write del JSON config passano da `db.update_schedule_locked()`, che usa `SELECT ... FOR UPDATE` dentro transazione. Il vecchio `_schedule_locks` process-local e' stato rimosso: la sincronizzazione canonica e' solo DB.
 - `db.py`: `update_schedule_locked()` e' il boundary cluster-safe per read-modify-write; `update_schedule()` resta helper low-level per update puntuali gia' materializzati.
 - `execution_manager.py`: le run schedulate costruiscono lo stesso `execution_contract` delle run HTTP e chiamano `execute_pipeline_from_contract()`, quindi anche questo path non dipende piu' dal lookup canvas/metadata dentro l'orchestrator.
-- `execution_manager.py`: heartbeat lock durante run schedulate, buono. Materializza alcuni blob in `RESULTS_DIR` per archive: residuo filesystem.
-- `artifact_store.py`, `run_archive_store.py`: dipendono da `RESULTS_DIR`; da spostare su result blob/object storage o trattare come compat legacy.
+- `execution_manager.py`: heartbeat lock durante run schedulate, buono. Non materializza piu' result blob in `RESULTS_DIR` per archive: il riferimento canonico resta `execution_info.result_id` nel log schedule.
+- `runs_catalog.py`: lista e download run schedulate leggono prima da `schedule_logs.execution_info.result_id` + metadata/blob `results`, quindi il path cluster-safe e' DB/object-storage backed. `run_archive_store.py` e `artifact_store.py` restano compat legacy filesystem per run pre-migrazione gia' archiviate su disco, non piu' source of truth per nuove run.
 
 ### `backend/app/core/orchestrator/*`
 

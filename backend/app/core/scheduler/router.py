@@ -47,6 +47,36 @@ logger = get_logger(__name__)
 router = APIRouter(prefix="/schedules", tags=["schedules"])
 
 
+def _download_result_file(
+    *,
+    result_id: str,
+    project_id: str,
+    schedule_id: str,
+    group_id: str | None,
+) -> Response:
+    result_row = _results_store.get_result_row(result_id)
+    if result_row is None or result_row.project_id != project_id:
+        raise HTTPException(
+            status_code=404,
+            detail=(
+                f"Nessun output disponibile per lo schedule '{schedule_id}'. "
+                f"Esegui lo schedule almeno una volta per generare un output."
+            ),
+        )
+    result_bytes = _results_store.get_result_data(result_id, group_id=group_id)
+    if result_bytes is None:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Blob risultato '{result_id}' non disponibile",
+        )
+    filename = result_row.filename or f"{schedule_id}.bin"
+    return Response(
+        content=result_bytes,
+        media_type="application/octet-stream",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
 def _as_aware_datetime(value: object):
     return _healthcheck_as_aware_datetime(value)
 
@@ -332,7 +362,7 @@ async def download_schedule_output(
         # Branch 1: run specifica via ?run=... — sanitize + lookup nel catalog
         if run:
             try:
-                run_dir = catalog.get_run_dir(project_id, schedule_id, run)
+                selected_run = catalog.get_run(project_id, schedule_id, run)
             except ValueError:
                 raise HTTPException(status_code=400, detail="Parametro 'run' non valido")
             except FileNotFoundError:
@@ -340,7 +370,21 @@ async def download_schedule_output(
                     status_code=404,
                     detail=f"Run '{run}' non trovata per schedule '{schedule_id}'",
                 )
-            out_file = catalog.first_file_in(run_dir)
+            first_run_file = selected_run.files[0] if selected_run.files else None
+            if first_run_file is not None and first_run_file.result_id:
+                return _download_result_file(
+                    result_id=first_run_file.result_id,
+                    project_id=project_id,
+                    schedule_id=schedule_id,
+                    group_id=getattr(_sched_row, "group_id", None),
+                )
+
+            if selected_run.path is None:
+                raise HTTPException(
+                    status_code=404,
+                    detail=f"Nessun file nella run '{run}'",
+                )
+            out_file = catalog.first_file_in(selected_run.path)
             if out_file is None:
                 raise HTTPException(
                     status_code=404,
@@ -357,8 +401,18 @@ async def download_schedule_output(
         # QUESTO schedule. Niente `get_latest_result(project_id)`, che
         # ritornerebbe l'ultimo del progetto includendo anche altri
         # schedule o esecuzioni manuali (race cross-schedule
-        latest_run = catalog.latest_run_dir(project_id, schedule_id)
-        out_file = catalog.first_file_in(latest_run) if latest_run else None
+        latest_run = catalog.latest_run(project_id, schedule_id)
+        first_run_file = latest_run.files[0] if latest_run and latest_run.files else None
+        if first_run_file is not None and first_run_file.result_id:
+            return _download_result_file(
+                result_id=first_run_file.result_id,
+                project_id=project_id,
+                schedule_id=schedule_id,
+                group_id=getattr(_sched_row, "group_id", None),
+            )
+
+        latest_run_dir = catalog.latest_run_dir(project_id, schedule_id)
+        out_file = catalog.first_file_in(latest_run_dir) if latest_run_dir else None
         if out_file is not None:
             return FileResponse(
                 path=str(out_file),
@@ -394,29 +448,11 @@ async def download_schedule_output(
                 ),
             )
 
-        latest_row = _results_store.get_result_row(result_id)
-        if latest_row is None or latest_row.project_id != project_id:
-            raise HTTPException(
-                status_code=404,
-                detail=(
-                    f"Nessun output disponibile per lo schedule '{schedule_id}'. "
-                    f"Esegui lo schedule almeno una volta per generare un output."
-                ),
-            )
-        latest_bytes = _results_store.get_result_data(
-            result_id,
+        return _download_result_file(
+            result_id=result_id,
+            project_id=project_id,
+            schedule_id=schedule_id,
             group_id=getattr(_sched_row, "group_id", None),
-        )
-        if latest_bytes is None:
-            raise HTTPException(
-                status_code=404,
-                detail=f"Blob risultato '{result_id}' non disponibile",
-            )
-        filename = latest_row.filename or f"{schedule_id}.bin"
-        return Response(
-            content=latest_bytes,
-            media_type="application/octet-stream",
-            headers={"Content-Disposition": f'attachment; filename="{filename}"'},
         )
     except HTTPException:
         raise

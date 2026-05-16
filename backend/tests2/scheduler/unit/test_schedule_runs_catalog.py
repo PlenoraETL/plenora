@@ -124,6 +124,126 @@ def test_list_runs_includes_file_metadata(runs_layout):
     assert first_run.total_size_bytes > 0
 
 
+def test_list_runs_includes_db_result_backed_runs(monkeypatch, tmp_path):
+    """DB/result-backed runs must be listed even when RESULTS_DIR is empty."""
+    result_row = type(
+        "ResultRow",
+        (),
+        {
+            "project_id": "proj-1",
+            "filename": "blob.csv",
+            "size_bytes": 12,
+        },
+    )()
+    monkeypatch.setattr(
+        "app.core.results.store.get_result_row",
+        lambda result_id: result_row if result_id == "res-1" else None,
+    )
+
+    log_store = type(
+        "LogStore",
+        (),
+        {
+            "list_completed_runs": lambda self, schedule_id: [
+                {
+                    "timestamp_str": "20260402_060000",
+                    "execution_info": {"result_id": "res-1"},
+                }
+            ],
+        },
+    )()
+    catalog = ScheduleRunsCatalog(results_dir=tmp_path, log_store=log_store)
+
+    runs = catalog.list_runs("proj-1", "schedule_abc")
+
+    assert len(runs) == 1
+    assert runs[0].timestamp == "20260402_060000"
+    assert runs[0].result_id == "res-1"
+    assert runs[0].files == (
+        RunFileInfo(name="blob.csv", size_bytes=12, result_id="res-1"),
+    )
+
+
+def test_list_runs_prefers_db_result_over_legacy_filesystem_run(
+    monkeypatch,
+    tmp_path,
+):
+    """A result-backed log is the canonical archive when timestamps collide."""
+    results = tmp_path / "results"
+    legacy_run_dir = results / "proj-1" / "runs" / "abc" / "20260402_060000"
+    legacy_run_dir.mkdir(parents=True)
+    (legacy_run_dir / "legacy.csv").write_text("old", encoding="utf-8")
+
+    result_row = type(
+        "ResultRow",
+        (),
+        {
+            "project_id": "proj-1",
+            "filename": "blob.csv",
+            "size_bytes": 12,
+        },
+    )()
+    monkeypatch.setattr(
+        "app.core.results.store.get_result_row",
+        lambda result_id: result_row if result_id == "res-1" else None,
+    )
+    log_store = type(
+        "LogStore",
+        (),
+        {
+            "list_completed_runs": lambda self, schedule_id: [
+                {
+                    "timestamp_str": "20260402_060000",
+                    "execution_info": {"result_id": "res-1"},
+                }
+            ],
+        },
+    )()
+    catalog = ScheduleRunsCatalog(results_dir=results, log_store=log_store)
+
+    runs = catalog.list_runs("proj-1", "schedule_abc")
+
+    assert len(runs) == 1
+    assert runs[0].result_id == "res-1"
+    assert runs[0].files == (
+        RunFileInfo(name="blob.csv", size_bytes=12, result_id="res-1"),
+    )
+
+
+def test_get_run_returns_db_result_backed_run(monkeypatch, tmp_path):
+    result_row = type(
+        "ResultRow",
+        (),
+        {
+            "project_id": "proj-1",
+            "filename": "blob.csv",
+            "size_bytes": 12,
+        },
+    )()
+    monkeypatch.setattr(
+        "app.core.results.store.get_result_row",
+        lambda result_id: result_row,
+    )
+    log_store = type(
+        "LogStore",
+        (),
+        {
+            "list_completed_runs": lambda self, schedule_id: [
+                {
+                    "timestamp_str": "20260402_060000",
+                    "execution_info": {"result_id": "res-1"},
+                }
+            ],
+        },
+    )()
+    catalog = ScheduleRunsCatalog(results_dir=tmp_path, log_store=log_store)
+
+    run = catalog.get_run("proj-1", "schedule_abc", "20260402_060000")
+
+    assert run.result_id == "res-1"
+    assert run.files[0].result_id == "res-1"
+
+
 def test_list_runs_excludes_non_directories(tmp_path):
     """Un file casuale dentro runs_dir non deve essere elencato come run."""
     results = tmp_path / "results"

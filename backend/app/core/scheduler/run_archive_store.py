@@ -17,6 +17,7 @@ class RunFileInfo:
 
     name: str
     size_bytes: int
+    result_id: Optional[str] = None
 
 
 @dataclass(frozen=True)
@@ -24,8 +25,9 @@ class RunInfo:
     """Snapshot of an archived scheduled run."""
 
     timestamp: str
-    path: Path
+    path: Optional[Path]
     files: Tuple[RunFileInfo, ...] = field(default_factory=tuple)
+    result_id: Optional[str] = None
 
     @property
     def total_size_bytes(self) -> int:
