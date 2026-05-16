@@ -83,7 +83,7 @@ I punti ancora critici per una vera orizzontalizzazione sono:
 
 ### `backend/app/core/orchestrator/*`
 
-- `task_service.py`: `_task_project_cache` e' process-local, usata per mostrare `project_id` mentre Celery e' ancora `PENDING`. In cluster il polling puo' arrivare su un'altra replica e perdere questa informazione. Persistire pending metadata in Redis/DB o leggere headers/kwargs Celery.
+- `task_service.py`: pending metadata (`task_id -> project_id/task_type`) e' persistito tramite `task_metadata_store.py` su Redis usando `CELERY_BROKER_URL`, con TTL allineato a `CELERY_RESULT_EXPIRES`. Il fallback in-memory resta confinato a dev/test; in production/staging o cluster il `put` fallisce loud se Redis non e' disponibile, evitando task `PENDING` non autorizzabili su altre repliche.
 - `router.py`: cleanup/download usa result_id/object storage quando possibile, ma mantiene compat path su `RESULTS_DIR`.
 - `service.py`: orchestration stateless; ok.
 
@@ -236,7 +236,8 @@ I punti ancora critici per una vera orizzontalizzazione sono:
 - `OrchestratorService` mantiene default builder fuori da `__init__` per compatibilita'. La chiusura completa Go-ready e' far arrivare sempre un dispatch `Mapping[str, CanvasExecutorProtocol]` dalla runtime composition factory, senza fallback impliciti nei service.
 - `threading.local` resta tollerato solo nei due adapter indicati. Non introdurre nuovi usi per contesto runtime; preferire ContextVar, parametri espliciti o stato condiviso DB/Redis/object storage.
 - `cloud_backends.py` consuma config tramite `StorageBackendConfig` e `Settings`; il raw access per i validator fail-fast e' centralizzato in `Settings.get_raw`.
-- I residui multi-host piu' importanti restano quelli gia' elencati nelle priorita': pending task metadata process-local, update scheduler cross-process safe, datasource scan state locale, fallback in-memory security-sensitive e trigger backup manuale ancora locale al pod API.
+- `TaskService` non usa piu' `_task_project_cache`: il metadata dei task pending e' su Redis con fallback locale solo dev/test, coperto da contract test.
+- I residui multi-host piu' importanti restano quelli gia' elencati nelle priorita': update scheduler cross-process safe, datasource scan state locale, fallback in-memory security-sensitive e trigger backup manuale ancora locale al pod API.
 
 ## Priorita consigliate
 
@@ -244,7 +245,6 @@ P0:
 
 - Rendere Redis e object storage requisiti hard in produzione cluster.
 - Tenere `SCHEDULE_BEAT_LEADER_FAIL_OPEN=false`.
-- Persistire pending task metadata fuori dalla cache locale di `TaskService`.
 
 P1:
 
