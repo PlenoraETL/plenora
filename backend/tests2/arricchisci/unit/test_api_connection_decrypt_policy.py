@@ -1,5 +1,5 @@
 """
-Contract test Bug #2 (2026-04-23): test_api_connection decrypt-fail policy.
+Contract test: test_api_connection decrypt-fail policy.
 
 Blinda il contratto: quando un campo auth cifrato e' non decriptabile
 """
@@ -23,7 +23,7 @@ def _ensure_database_url_for_module_import(monkeypatch):
 
 
 def test_decrypt_auth_in_config_strict_raises_on_undecryptable_field():
-    """Bug #2: _decrypt_auth_in_config(strict=True) con campo enc:
+    """_decrypt_auth_in_config(strict=True) con campo enc:
     non decriptabile → CredentialUnavailableError (invece di None silent)."""
     from app.core.arricchisci._api_connection_helpers import _decrypt_auth_in_config
 
@@ -42,7 +42,7 @@ def test_decrypt_auth_in_config_strict_raises_on_undecryptable_field():
 
 
 def test_decrypt_auth_in_config_non_strict_sets_field_to_none():
-    """Bug #2 guard: retro-compat — senza strict, decrypt fallito lascia
+    """Retro-compat: senza strict, decrypt fallito lascia
     None nel campo. Serve per non rompere flussi di enrichment runtime
     (list_api_connections_decrypted) che hanno altre forme di recovery."""
     from app.core.arricchisci._api_connection_helpers import _decrypt_auth_in_config
@@ -60,7 +60,7 @@ def test_decrypt_auth_in_config_non_strict_sets_field_to_none():
 
 
 def test_test_api_connection_propagates_credential_error_for_router():
-    """Bug #2: test_api_connection(api_id) con secret non decriptabile →
+    """test_api_connection(api_id) con secret non decriptabile ->
     CredentialUnavailableError propagato; il router cattura e 422."""
     from app.core.arricchisci.api_connector import ApiConnectionService
 

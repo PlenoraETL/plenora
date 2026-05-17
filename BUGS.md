@@ -6,44 +6,6 @@ before adding a new `FIXME #N`, `BUG #N`, or `BUG.md #N` marker.
 
 ## Tracked Markers
 
-### #1 - Connection credential unavailable handling
-
-Credential lookup/decrypt failures should surface as explicit client errors
-instead of propagating `None` or ambiguous service failures.
-
-Current references:
-- `backend/app/core/connections/router.py`
-- `backend/app/core/connections/service.py`
-
-### #2 - Corrupted encrypted datasource/API credentials
-
-Encrypted auth fields that cannot be decrypted must fail predictably with a
-strict credential policy and a clear API response.
-
-Current references:
-- `backend/app/core/arricchisci/api_connection_management.py`
-- `backend/app/core/arricchisci/router.py`
-- `backend/app/core/datasources/router.py`
-- `backend/app/core/datasources/service.py`
-- `backend/tests2/datasources/test_service_crypto_contract.py`
-
-### #4 - Admin backup runtime dependency degradation
-
-Admin backup routes must degrade to a 503-style response when optional backup
-runtime dependencies are unavailable.
-
-Current references:
-- `backend/app/core/admin_backups/router.py`
-
-### #6 - Duplicate SQL result column names
-
-SQL joins can produce duplicate column names; preview and result payloads must
-deduplicate before building column metadata or record dictionaries.
-
-Current references:
-- `backend/app/core/estrai/executor.py`
-- `backend/tests2/estrai/unit/test_preview_dedup_columns_contract.py`
-
 ### #7 - Compatibility coverage for older canvas resource IDs
 
 Some saved canvases still contain `urby-*` resource identifiers and need
@@ -93,25 +55,6 @@ into security-sensitive flows.
 
 Current references:
 - `backend/tests2/security/unit/test_c11_contract.py`
-
-### #23 - JSON non-finite number compliance
-
-Intermediate API responses must handle `NaN`, `+Inf`, and `-Inf` because they
-are not valid JSON values.
-
-Current references:
-- `backend/app/core/intermediate/router.py`
-
-### #24 - Intermediate fingerprint mode policy
-
-Intermediate snapshot fingerprinting has a global/sample mode transition and
-sample-row policy that must stay explicit until fully settled.
-
-Current references:
-- `backend/app/config.py`
-- `backend/app/core/intermediate/policy.py`
-- `backend/tests2/estrai/unit/test_estrai_snapshot_routing_contract.py`
-- `backend/tests2/intermediate/unit/test_snapshot_policy_contract.py`
 
 ### #25 - Manipola upstream fallback behavior
 

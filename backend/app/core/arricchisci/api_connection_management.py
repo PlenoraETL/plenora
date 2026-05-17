@@ -167,9 +167,9 @@ class ApiConnectionManagementMixin:
 
         Se ``strict=True`` (valido solo con include_token=True), un campo
         cifrato il cui decrypt ritorna None solleva ``CredentialUnavailableError``
-        invece di propagare None. Usato dal path test_api_connection
-        (Bug #2, 2026-04-23) per fallire esplicitamente invece di eseguire
-        chiamate HTTP con auth invalida silenziosa.
+        invece di propagare None. Usato dal path test_api_connection per fallire
+        esplicitamente invece di eseguire chiamate HTTP con auth invalida
+        silenziosa.
         """
         row = db_svc.get_api_connection_row(api_id)
         if not row:

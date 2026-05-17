@@ -218,8 +218,7 @@ def decrypt_dict_fields(d: dict, fields: list[str], *, strict: bool = False) -> 
 
     Se ``strict=True``, per ogni campo con prefisso ``enc:`` il cui
     ``decrypt`` ritorna None la funzione solleva ``CredentialUnavailableError``.
-    Usato nei path di test per non propagare silenziosamente stato invalido
-    (vedi Bug #1 + #2 del 2026-04-23).
+    Usato nei path di test per non propagare silenziosamente stato invalido.
     """
     for f in fields:
         if f in d and isinstance(d.get(f), str):

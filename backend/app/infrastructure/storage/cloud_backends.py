@@ -532,8 +532,8 @@ def get_secrets_backend() -> SecretsBackend:
             "solo object storage; secrets richiedono CLOUD_PROVIDER=aws. "
             "Decoupling secrets/object-storage provider e' follow-up A1."
         )
-    # TODO: add Azure Key Vault / GCP Secret Manager backends when those
-    # providers are supported by deployment profiles
+    # Future extension point: Azure Key Vault / GCP Secret Manager backends
+    # when those providers are supported by deployment profiles.
     raise ValueError(f"CLOUD_PROVIDER non supportato: {provider!r}")
 
 

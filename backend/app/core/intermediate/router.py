@@ -31,13 +31,10 @@ RowDiffPayload: TypeAlias = dict[str, Any]
 PinRunResponse: TypeAlias = dict[str, Any]
 
 
-# FIXME: #23 (2026-04-28): JSON spec non ammette NaN / +Inf / -Inf
-# `node_snapshots_db.get_node_table_rows` ricostruisce questi valori dai sentinel
-# JSONB persistiti (`_from_jsonable_value`) per garantire hash
-# roundtrip-safe. Sul boundary HTTP non serve quella semantica
-# FastAPI/json.dumps(allow_nan=False) solleva ValueError. Mappiamo
-# qui i non-finite float a None *solo nella response*. Niente
-# mutazione di node_rows, niente impatto sull'hash
+# `node_snapshots_db.get_node_table_rows` ricostruisce NaN/+Inf/-Inf dai
+# sentinel JSONB persistiti per garantire hash roundtrip-safe. Sul boundary
+# HTTP quei float non sono JSON-compliant, quindi li mappiamo a None solo nella
+# response. Niente mutazione di node_rows, niente impatto sull'hash.
 def _sanitize_for_json(value: Any) -> Any:
     """Mappa NaN/+Inf/-Inf a None ricorsivamente.
 
@@ -175,7 +172,7 @@ def get_node_data(
         # metadata_only -> 200 con rows=[] + warning
         # full_pg / preview_only / NULL -> read da node_rows (legacy
         # Tutti i path sanitizzano NaN/Inf via `_sanitize_for_json`
-        # Bug #23) prima del JSONResponse
+        # prima del JSONResponse.
         from app.core.intermediate.policy import (
             persistence_mode_for_record,
             MODE_FULL_ARTIFACT,
@@ -264,8 +261,8 @@ def get_node_data(
                 limit=limit,
             )
 
-        # FIXME: #23: NaN / +Inf / -Inf non sono JSON compliant
-        # Vale per tutte le sorgenti (node_rows, artifact, fallback
+        # Vale per tutte le sorgenti (node_rows, artifact, fallback):
+        # NaN / +Inf / -Inf non sono JSON-compliant.
         rows = _sanitize_for_json(rows)
         col_schema = _sanitize_for_json(col_schema)
 
@@ -543,7 +540,7 @@ def compare_runs_l2(
         # Sanitize NaN/+Inf/-Inf nelle righe espanse: i record possono
         # contenere sentinel JSONB ricostruiti come float speciali (vedi
         # `_from_jsonable_value` nei branch consumer di `node_rows`
-        # Sul boundary HTTP non sono JSON-compliant. Bug #23 invariato
+        # Sul boundary HTTP non sono JSON-compliant.
         removed_list = _sanitize_for_json(removed_list)
         added_list = _sanitize_for_json(added_list)
 

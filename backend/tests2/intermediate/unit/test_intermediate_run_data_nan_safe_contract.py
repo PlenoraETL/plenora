@@ -1,5 +1,5 @@
 """
-Contract test Bug #23 — `GET /api/runs/.../nodes/.../data` deve
+Contract test: `GET /api/runs/.../nodes/.../data` deve
 
 sanitizzare NaN / +Inf / -Inf prima di restituire JSON.
 """

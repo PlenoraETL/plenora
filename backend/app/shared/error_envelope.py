@@ -219,3 +219,14 @@ def raise_typed_http(
             status_code=status_code, detail=detail, headers=dict(headers)
         )
     raise HTTPException(status_code=status_code, detail=detail)
+
+
+def raise_credential_unavailable(exc: Exception) -> NoReturn:
+    """Raise the canonical HTTP response for unavailable secrets.
+
+    This helper intentionally keeps ``detail`` as a string because several
+    router-level contract tests mount routes without the global envelope
+    handler. In the full app the central handler still normalizes the
+    response shape.
+    """
+    raise HTTPException(status_code=422, detail=str(exc))

@@ -18,9 +18,10 @@ pytestmark = [pytest.mark.unit, pytest.mark.contract]
 # list_backups — path degraded (boto3/S3)
 
 
-def test_list_backups_when_boto3_missing_returns_empty():
-    """ImportError su boto3 → [] (non solleva)."""
+def test_list_backups_when_boto3_missing_raises_dependency_error():
+    """ImportError su runtime storage -> AdminBackupDependencyError."""
     from app.core.admin_backups import service
+    from app.core.admin_backups.service import AdminBackupDependencyError
 
     fake_storage = MagicMock()
     fake_storage.list_objects.side_effect = ImportError("No module named 'boto3'")
@@ -29,9 +30,10 @@ def test_list_backups_when_boto3_missing_returns_empty():
         "app.core.admin_backups.service.get_backup_object_storage",
         return_value=fake_storage,
     ):
-        out = service.list_backups()
+        with pytest.raises(AdminBackupDependencyError) as exc_info:
+            service.list_backups()
 
-    assert out == []
+    assert "boto3" in str(exc_info.value)
 
 
 def test_list_backups_when_client_error_returns_empty():
@@ -51,9 +53,9 @@ def test_list_backups_when_client_error_returns_empty():
 
 
 def test_list_backups_raises_on_missing_dependency():
-    """Bug #4 (2026-04-23): MissingDependencyException (es. botocore[crt]
-    assente per SSO provider) → AdminBackupDependencyError esplicito,
-    NON lista vuota silenziosa. Il router traduce in HTTP 503."""
+    """MissingDependencyException (es. botocore[crt] assente per SSO
+    provider) -> AdminBackupDependencyError esplicito. Il router traduce
+    in HTTP 503."""
     from app.core.admin_backups import service
     from app.core.admin_backups.service import AdminBackupDependencyError
     from botocore.exceptions import MissingDependencyException
@@ -230,8 +232,9 @@ def test_list_backups_sorts_newest_first():
 def test_last_run_status_when_db_raises_returns_unknown():
     from app.core.admin_backups import service
 
-    with patch(
-        "app.db.pg_connection.fetchone",
+    with patch.object(
+        service,
+        "fetch_latest_backup_run",
         side_effect=ConnectionError("postgres unreachable"),
     ):
         out = service.get_last_run_status()
@@ -245,7 +248,7 @@ def test_last_run_status_when_db_raises_returns_unknown():
 def test_last_run_status_when_no_runs_registered():
     from app.core.admin_backups import service
 
-    with patch("app.db.pg_connection.fetchone", return_value=None):
+    with patch.object(service, "fetch_latest_backup_run", return_value=None):
         out = service.get_last_run_status()
 
     assert out["result"] == "unknown"
@@ -272,7 +275,7 @@ def test_last_run_status_success_with_duration():
                     "[2026-04-18T02:03:30Z] [INFO] backup completato con successo",
         "error_message": None,
     }
-    with patch("app.db.pg_connection.fetchone", return_value=row):
+    with patch.object(service, "fetch_latest_backup_run", return_value=row):
         out = service.get_last_run_status()
 
     assert out["result"] == "success"
@@ -301,7 +304,7 @@ def test_last_run_status_failed_with_error():
         "log_tail": "[2026-04-18T02:00:05Z] [ERROR] pg_dump fallito",
         "error_message": "pg_dump fallito (exit 1)",
     }
-    with patch("app.db.pg_connection.fetchone", return_value=row):
+    with patch.object(service, "fetch_latest_backup_run", return_value=row):
         out = service.get_last_run_status()
 
     assert out["result"] == "failed"
@@ -325,7 +328,7 @@ def test_last_run_status_running_has_no_duration():
         "log_tail": None,
         "error_message": None,
     }
-    with patch("app.db.pg_connection.fetchone", return_value=row):
+    with patch.object(service, "fetch_latest_backup_run", return_value=row):
         out = service.get_last_run_status()
 
     assert out["result"] == "running"
@@ -360,7 +363,7 @@ def test_last_run_status_duration_with_iso_string_timestamps():
         "log_tail": None,
         "error_message": None,
     }
-    with patch("app.db.pg_connection.fetchone", return_value=row):
+    with patch.object(service, "fetch_latest_backup_run", return_value=row):
         out = service.get_last_run_status()
 
     assert out["result"] == "success"
@@ -391,7 +394,7 @@ def test_last_run_status_duration_unparsable_iso_string_logs_warning():
         "log_tail": None,
         "error_message": None,
     }
-    with patch("app.db.pg_connection.fetchone", return_value=row):
+    with patch.object(service, "fetch_latest_backup_run", return_value=row):
         out = service.get_last_run_status()
 
     # No crash, no traceback all'utente

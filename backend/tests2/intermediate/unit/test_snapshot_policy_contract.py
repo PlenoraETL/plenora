@@ -28,7 +28,6 @@ def _settings_baseline(**overrides) -> dict:
         "arricchisci_checkpoints": "final_only",
         "artifact_bucket": None,
         "artifact_prefix": "intermediate",
-        # FIXME: #24: nuove settings fingerprint mode + sample rows
         "fingerprint_mode": "sample",
         "fingerprint_sample_rows": 1000,
     }
@@ -39,6 +38,19 @@ def _settings_baseline(**overrides) -> dict:
 def test_validate_settings_baseline_ok():
     from app.core.intermediate.policy import validate_intermediate_settings
     validate_intermediate_settings(_settings_baseline())  # no raise
+
+
+def test_resolve_fingerprint_policy_returns_explicit_hash_algo():
+    from app.core.intermediate.policy import resolve_fingerprint_policy
+
+    sample = resolve_fingerprint_policy(_settings_baseline())
+    full = resolve_fingerprint_policy(_settings_baseline(fingerprint_mode="full"))
+
+    assert sample.mode == "sample"
+    assert sample.sample_rows == 1000
+    assert sample.hash_algo == "pandas_sample_hash_v1"
+    assert full.mode == "full"
+    assert full.hash_algo == "pandas_hash_v1"
 
 
 def test_validate_settings_rejects_full_artifact_when_object_storage_disabled():
@@ -349,7 +361,7 @@ def test_checkpoint_skip_does_not_touch_dataframe_or_db():
 
 
 def test_fingerprint_deterministic_on_identical_dataframe():
-    """Bug #24: API ora ritorna `(hex_digest, hash_algo)`. Determinismo
+    """API ritorna `(hex_digest, hash_algo)`. Determinismo
     invariato."""
     from app.core.intermediate.snapshot import compute_dataframe_fingerprint
     df = pd.DataFrame({"a": [1, 2, 3], "b": ["x", "y", "z"]})
@@ -421,8 +433,8 @@ def test_record_final_metadata_only_zero_rows_real_count_hash_present():
     assert handle.persisted_rows_count == 0
     assert handle.preview_truncated is False  # in metadata_only non c'e' preview
     assert handle.node_hash and len(handle.node_hash) == 64
-    # FIXME: #24: default fingerprint mode = "sample" -> hash_algo
-    # = pandas_sample_hash_v1. Audit forte richiede mode="full".
+    # Default fingerprint mode = "sample" -> hash_algo =
+    # pandas_sample_hash_v1. Audit forte richiede mode="full".
     assert handle.hash_algo == "pandas_sample_hash_v1"
 
     # DB call: rows_to_persist vuoto, row_count reale, node_hash presente.

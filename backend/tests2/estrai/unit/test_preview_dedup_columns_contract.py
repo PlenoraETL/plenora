@@ -1,7 +1,5 @@
 """
-Contract test — RB.3 (2026-04-27) duplicate columns nella preview ESTRAI.
-
-BUG.md #6:
+Contract test: duplicate columns nella preview ESTRAI.
 """
 
 from __future__ import annotations
@@ -83,7 +81,7 @@ def test_dedup_dataframe_no_duplicates_returns_same_frame_no_warnings():
 
 
 def test_dedup_dataframe_with_duplicates_preserves_all_columns():
-    """Caso reale (BUG.md #6): JOIN SQL senza alias produce due colonne 'id'.
+    """Caso reale: JOIN SQL senza alias produce due colonne 'id'.
     Previous behavior: df.to_dict scartava la seconda silenziosamente.
     Current contract: tutte le 3 colonne preservate, warning visibile."""
     # Costruisco DataFrame con 2 colonne 'id' (impossibile con dict literal,

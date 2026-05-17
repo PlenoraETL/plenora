@@ -46,8 +46,8 @@ def _decrypt_auth_in_config(config: JsonObject, *, strict: bool = False) -> Json
 
     Se ``strict=True``, un campo con prefisso ``enc:`` il cui decrypt ritorna
     None solleva ``CredentialUnavailableError`` invece di silenziosamente
-    valorizzare il campo a None. Usato dal path test_api_connection (Bug #2,
-    2026-04-23) per non inviare chiamate HTTP con Authorization: "Bearer None".
+    valorizzare il campo a None. Usato dal path test_api_connection per non
+    inviare chiamate HTTP con Authorization: "Bearer None".
     """
     auth = config.get("auth")
     if not isinstance(auth, dict):

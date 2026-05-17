@@ -226,7 +226,7 @@ def test_full_artifact_complete_returns_parquet_preview(superadmin_user):
 
 def test_full_artifact_complete_sanitizes_nan_and_inf(superadmin_user):
     """NaN / Inf nel Parquet devono essere sanitizzati a null come per
-    il path node_rows (Bug #23)."""
+    il path node_rows."""
     client = build_client(superadmin_user)
 
     df = pd.DataFrame({
@@ -262,7 +262,7 @@ def test_full_artifact_complete_sanitizes_nan_and_inf(superadmin_user):
     assert body["rows"][0]["value"] is None
     assert body["rows"][1]["value"] is None
     assert body["rows"][2]["value"] == 3.14
-    # Strict json roundtrip OK (Bug #23)
+    # Strict json roundtrip OK.
     parsed = json.loads(response.content)
     assert all(
         r["value"] is None or isinstance(r["value"], float)

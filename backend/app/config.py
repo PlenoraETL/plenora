@@ -479,8 +479,7 @@ class Settings:
         # per supporto multi-formato senza schema change
         "INTERMEDIATE_FULL_ARTIFACT_FORMAT": "parquet",
 
-        # TODO: tune node_hash calculation mode if exact run diffs become required.
-        # del DataFrame al checkpoint/final snapshot
+        # Node hash calculation mode for checkpoint/final snapshot.
         # "sample": hash di (schema, len(df), df.head(N)). Costo
         # ~10-20 ms anche su DataFrame da 275k righe (vs 1.0-1.5 s
         # del full-DF su DF grandi). Trade-off: cambi che toccano

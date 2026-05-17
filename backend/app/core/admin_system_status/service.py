@@ -502,8 +502,8 @@ def get_host_resources() -> AdminStatusBlock:
         usage_path = _disk_usage_probe_path(data_dir_path)
         # R-2 (2026-04-27): psutil.disk_usage emette
         # `SystemError("argument 1 (impossible<bad format char>)")` su Windows
-        # locale (telemetria locale post-diagnostic patch). Causa probabile
-        # FIXME: /edge case in psutil._psplatform (Windows) sulla `struct` C
+        # locale (telemetria locale post-diagnostic patch). Causa probabile:
+        # edge case in psutil._psplatform (Windows) sulla `struct` C.
         # Fallback: `shutil.disk_usage` (stdlib) usa GetDiskFreeSpaceExW
         # diretto e non passa per psutil. Se anche shutil fallisce -> graceful
         # con log enriched

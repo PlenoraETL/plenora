@@ -1,5 +1,5 @@
 """
-Contract test Bug #1 (2026-04-23): test_connection password None/corrotta → 422.
+Contract test: test_connection password None/corrotta -> 422.
 
 Blinda il contratto: l'endpoint POST /api/connections/{id}/test non deve
 """
@@ -53,7 +53,7 @@ def client_with_service(current_user: CurrentUser, monkeypatch) -> tuple:
 
 
 def test_test_connection_password_null_returns_422(client_with_service):
-    """Bug #1: password=NULL nel DB → CredentialUnavailableError → 422."""
+    """Password NULL nel DB -> CredentialUnavailableError -> 422."""
     client, mock_service = client_with_service
     mock_service.get_connection.side_effect = CredentialUnavailableError(
         "connection 'conn-1': password non configurata"
@@ -66,7 +66,7 @@ def test_test_connection_password_null_returns_422(client_with_service):
 
 
 def test_test_connection_decrypt_failure_returns_422(client_with_service):
-    """Bug #1: password cifrata ma decrypt ritorna None → 422."""
+    """Password cifrata ma decrypt ritorna None -> 422."""
     client, mock_service = client_with_service
     mock_service.get_connection.side_effect = CredentialUnavailableError(
         "connection 'conn-1': password non decriptabile "
@@ -80,7 +80,7 @@ def test_test_connection_decrypt_failure_returns_422(client_with_service):
 
 
 def test_put_connection_credential_error_returns_422(client_with_service):
-    """Bug #1: PUT sullo stesso record rotto → 422 consistente."""
+    """PUT sullo stesso record rotto -> 422 consistente."""
     client, mock_service = client_with_service
     mock_service.get_connection.side_effect = CredentialUnavailableError(
         "connection 'conn-1': password non decriptabile"

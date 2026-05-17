@@ -11,7 +11,8 @@ from typing import Optional
 from app.utils.logger import get_logger
 from app.core.datasources import errors as datasource_errors
 from app.shared import error_codes
-from app.shared.error_envelope import raise_typed_http
+from app.shared.error_envelope import raise_credential_unavailable, raise_typed_http
+from app.infrastructure.security.crypto import CredentialUnavailableError
 from app.observability.audit_action import audit_action
 from app.core.auth.dependencies import (
     require_not_esecutore,
@@ -241,13 +242,10 @@ def test_connection(ds_id: str, current_user: CurrentUser = Depends(require_not_
     """Testa la connessione di un Data Source. Read-only su risorsa visibile."""
     existing = _svc().get_datasource(ds_id)
     assert_resource_visible(existing, "datasources", current_user, "Data Source")
-    # FIXME: #2 (2026-04-23): credenziale cifrata non decriptabile → 422
-    # non 200-OK fasullo ne' 500 ASGI
-    from app.infrastructure.security.crypto import CredentialUnavailableError
     try:
         return _svc().test_connection(ds_id)
     except CredentialUnavailableError as e:
-        raise HTTPException(status_code=422, detail=str(e))
+        raise_credential_unavailable(e)
 
 
 # OPERAZIONI FILE

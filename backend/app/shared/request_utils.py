@@ -142,7 +142,7 @@ def get_client_ip(request: "Request") -> str:
     Usato da:
       - `auth.py` rate-limit login per-IP (shared bucket DoS se mal
         risolto: tutti gli attacchi diventerebbero 127.0.0.1)
-      - audit log / access log (TODO: integrare)
+      - audit log / access log integration points
     """
     peer = request.client.host if request.client else None
     if peer is None:

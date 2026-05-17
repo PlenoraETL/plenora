@@ -86,8 +86,11 @@ def dispatch_blob_storage(
         if intent_id is not None:
             try:
                 reconciliation.mark_done(intent_id)
-            except Exception:
-                pass
+            except Exception as mark_err:
+                logger.warning(
+                    f"[FS-B1-large] upload_intent cleanup fallito per "
+                    f"{file_id}: {mark_err}"
+                )
         raise
 
     logger.info(

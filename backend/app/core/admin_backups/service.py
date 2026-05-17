@@ -59,9 +59,8 @@ class ManualBackupTriggerResult(TypedDict):
 class AdminBackupDependencyError(RuntimeError):
     """Raised quando una dipendenza AWS runtime manca (es. botocore[crt]).
 
-    Bug #4 (2026-04-23): distingue l'errore "dep mancante" (503 Service
-    Unavailable con detail operativo) da altri fallimenti transitori (auth
-    S3, network, ecc.) che continuano a restituire [] via except Exception.
+    Distingue l'errore "dep mancante" (503 Service Unavailable con detail
+    operativo) da altri fallimenti transitori (auth S3, network, ecc.).
     """
 
 
@@ -182,6 +181,12 @@ def list_backups() -> list[BackupObjectPayload]:
         result.sort(key=lambda o: o["last_modified"], reverse=True)
         return result
     except Exception as e:
+        if isinstance(e, ImportError):
+            logger.error(
+                f"list_backups fallito per dep runtime mancante: {e}",
+                exc_info=True,
+            )
+            raise AdminBackupDependencyError(str(e)) from e
         try:
             from botocore.exceptions import MissingDependencyException
             if isinstance(e, MissingDependencyException):
@@ -190,8 +195,11 @@ def list_backups() -> list[BackupObjectPayload]:
                     exc_info=True,
                 )
                 raise AdminBackupDependencyError(str(e)) from e
-        except ImportError:
-            pass  # botocore non importabile: improbabile qui, degrada
+        except ImportError as import_error:
+            logger.debug(
+                "list_backups: botocore non importabile durante la "
+                f"classificazione errore backup: {import_error}"
+            )
         # RB.2 (2026-04-27): credenziali AWS scadute / SSO refresh required
         # > 503 con detail strutturato. Niente lista vuota fuorviante
         hint = aws_credentials_error_message(e)

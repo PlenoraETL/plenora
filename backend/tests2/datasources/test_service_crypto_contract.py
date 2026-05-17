@@ -293,11 +293,8 @@ def test_update_nonexistent_datasource_returns_none_no_db_write(service, fake_db
     )
 
 
-# FIXME: #2 (2026-04-23): test_connection decrypt-fail policy
-
-
 def test_get_full_config_strict_raises_on_undecryptable_field(service, monkeypatch):
-    """Bug #2: _get_full_config(strict=True) con campo cifrato corrotto →
+    """_get_full_config(strict=True) con campo cifrato corrotto ->
     CredentialUnavailableError invece di passare None al backend."""
     import app.core.datasources.db as datasource_db
 
@@ -332,7 +329,7 @@ def test_get_full_config_strict_raises_on_undecryptable_field(service, monkeypat
 
 
 def test_get_full_config_non_strict_returns_none_field_silently(service, monkeypatch):
-    """Bug #2 guard: retro-compat — senza strict=True, decrypt fallito
+    """Retro-compat: senza strict=True, decrypt fallito
     ritorna None nel campo (comportamento Previous behavior per path NON-test).
     Serve per non rompere list_datasources / get_datasource / enrichment runtime."""
     import app.core.datasources.db as datasource_db

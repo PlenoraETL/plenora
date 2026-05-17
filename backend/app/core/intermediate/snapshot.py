@@ -118,12 +118,10 @@ def _compute_dataframe_fingerprint_full(df: Any) -> str:
 def _compute_dataframe_fingerprint_sample(df: Any, sample_rows: int) -> str:
     """Algoritmo `pandas_sample_hash_v1`: hash sample-based.
 
-    Bug #24 (perf, 2026-04-28). Trade-off:
-      + costo O(min(n, sample_rows) * cols) -> circa 10-20 ms anche su DF
-        grandi
-      - cambi che toccano SOLO righe oltre la N-esima possono non
-        essere rilevati al checkpoint (audit alto livello, non
-        equivalence check)
+    Trade-off:
+      + costo O(min(n, sample_rows) * cols), basso anche su DF grandi
+      - cambi che toccano solo righe oltre la N-esima possono non essere
+        rilevati al checkpoint. Audit forte richiede mode="full".
 
     1. Schema payload identico al full mode.
     2. Row count payload: stringa decimale (cambi di cardinalita'
@@ -191,20 +189,14 @@ def compute_dataframe_fingerprint(df: Any) -> tuple[str, str]:
         rilevati anche con sample.
       - `df.head(N)` e' deterministico (no shuffle, no random seed).
     """
-    # Risoluzione mode + sample size dalla policy (lazy lettura env
-    cfg = _policy._read_settings()
-    mode = (cfg.get("fingerprint_mode") or _policy.FINGERPRINT_MODE_SAMPLE)
-    sample_rows = int(cfg.get("fingerprint_sample_rows") or 1000)
+    fingerprint_policy = _policy.resolve_fingerprint_policy()
+    mode = fingerprint_policy.mode
+    sample_rows = fingerprint_policy.sample_rows
 
     if df is None:
         # None DF: stesso digest legacy, ma algo riflette la mode
         digest_hex = hashlib.sha256(b"none-df").hexdigest()
-        algo = (
-            _policy.HASH_ALGO_PANDAS_SAMPLE_V1
-            if mode == _policy.FINGERPRINT_MODE_SAMPLE
-            else _policy.HASH_ALGO_PANDAS_HASH_V1
-        )
-        return digest_hex, algo
+        return digest_hex, fingerprint_policy.hash_algo
 
     if not is_dataframe(df):
         # Coercion difensiva
@@ -214,12 +206,7 @@ def compute_dataframe_fingerprint(df: Any) -> tuple[str, str]:
             digest_hex = hashlib.sha256(
                 f"non-dataframe:{type(df).__name__}".encode("utf-8")
             ).hexdigest()
-            algo = (
-                _policy.HASH_ALGO_PANDAS_SAMPLE_V1
-                if mode == _policy.FINGERPRINT_MODE_SAMPLE
-                else _policy.HASH_ALGO_PANDAS_HASH_V1
-            )
-            return digest_hex, algo
+            return digest_hex, fingerprint_policy.hash_algo
 
     if mode == _policy.FINGERPRINT_MODE_FULL:
         return (

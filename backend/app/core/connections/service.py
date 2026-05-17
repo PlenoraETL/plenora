@@ -87,8 +87,6 @@ class ConnectionService:
         if mask_password:
             display_password = "***"
         else:
-            # FIXME: Return HTTP 422 for missing/corrupt credentials instead
-            # of letting Pydantic turn None passwords into a 500.
             if raw_password is None:
                 raise CredentialUnavailableError(
                     f"connection '{row.id}': password non configurata"

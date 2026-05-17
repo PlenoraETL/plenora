@@ -24,7 +24,7 @@ from typing import List, Literal, Optional
 from app.utils.logger import get_logger
 from app.utils.router_utils import require_service
 from app.shared import error_codes
-from app.shared.error_envelope import raise_typed_http
+from app.shared.error_envelope import raise_credential_unavailable, raise_typed_http
 from app.observability.audit_action import audit_action
 from app.core.auth.resource_access import assert_file_source_access, assert_project_visible
 from app.infrastructure.security.crypto import CredentialUnavailableError
@@ -596,10 +596,9 @@ def test_api_config(
         return _api_connection_service.test_api_connection(config=config, test_params=test_params)
     except HTTPException:
         raise
+    except CredentialUnavailableError as e:
+        raise_credential_unavailable(e)
     except Exception as e:
-        # FIXME: #2 (2026-04-23): CredentialUnavailableError → 422 esplicito
-        if isinstance(e, CredentialUnavailableError):
-            raise HTTPException(status_code=422, detail=str(e))
         logger.error(f"[CRASH] Errore test API config: {e}", exc_info=True)
         raise_typed_http(error_codes.INTERNAL_ERROR, status_code=500, message="Errore interno del server")
 
@@ -623,10 +622,9 @@ def test_api_connection(
         return _api_connection_service.test_api_connection(api_id=api_id, test_params=test_params)
     except HTTPException:
         raise
+    except CredentialUnavailableError as e:
+        raise_credential_unavailable(e)
     except Exception as e:
-        # FIXME: #2 (2026-04-23): CredentialUnavailableError → 422 esplicito
-        if isinstance(e, CredentialUnavailableError):
-            raise HTTPException(status_code=422, detail=str(e))
         logger.error(f"[CRASH] Errore test API connection {api_id}: {e}", exc_info=True)
         raise_typed_http(error_codes.INTERNAL_ERROR, status_code=500, message="Errore interno del server")
 

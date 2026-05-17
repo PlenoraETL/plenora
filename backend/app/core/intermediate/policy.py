@@ -94,13 +94,11 @@ MANIPOLA_CRITICAL_TRANSFORMS = frozenset({
     "geo_line_builder", "geo_polygon_builder",
 })
 
-# Hash algo versione corrente. Persistito in node_meta.hash_algo
-# FIXME: #24 (2026-04-28): la mode globale `INTERMEDIATE_FINGERPRINT_MODE`
-# decide quale algoritmo applicare al checkpoint
-# "sample" -> HASH_ALGO_PANDAS_SAMPLE_V1 (default operativo
-# "full" -> HASH_ALGO_PANDAS_HASH_V1 (audit forte
-# `node_meta.hash_algo` riflette quello effettivamente usato per il
-# record, cosi' un consumer downstream sa se confrontare apple-to-apple
+# Hash algo versione corrente. Persistito in node_meta.hash_algo.
+# `INTERMEDIATE_FINGERPRINT_MODE` decide quale algoritmo applicare:
+# "sample" -> HASH_ALGO_PANDAS_SAMPLE_V1 (default operativo)
+# "full" -> HASH_ALGO_PANDAS_HASH_V1 (audit forte).
+# `node_meta.hash_algo` riflette quello effettivamente usato per il record.
 HASH_ALGO_PANDAS_HASH_V1 = "pandas_hash_v1"
 HASH_ALGO_PANDAS_SAMPLE_V1 = "pandas_sample_hash_v1"
 
@@ -149,6 +147,47 @@ class IntermediatePolicy:
         return self.should_record_meta
 
 
+@dataclass(frozen=True)
+class FingerprintPolicy:
+    """Resolved snapshot fingerprint settings."""
+
+    mode: str
+    sample_rows: int
+    hash_algo: str
+
+
+def resolve_fingerprint_policy(values: Optional[dict] = None) -> FingerprintPolicy:
+    """Validate and resolve fingerprint mode/sample settings."""
+    cfg = values if values is not None else _read_settings()
+    fp_mode = cfg.get("fingerprint_mode")
+    if fp_mode not in SUPPORTED_FINGERPRINT_MODES:
+        raise IntermediateSettingsError(
+            f"INTERMEDIATE_FINGERPRINT_MODE={fp_mode!r} non riconosciuto. "
+            f"Valori ammessi: {sorted(SUPPORTED_FINGERPRINT_MODES)}."
+        )
+    fp_sample = cfg.get("fingerprint_sample_rows")
+    try:
+        fp_sample_int = int(fp_sample)
+    except (TypeError, ValueError):
+        raise IntermediateSettingsError(
+            f"INTERMEDIATE_FINGERPRINT_SAMPLE_ROWS={fp_sample!r} non e' un intero."
+        ) from None
+    if fp_sample_int <= 0:
+        raise IntermediateSettingsError(
+            f"INTERMEDIATE_FINGERPRINT_SAMPLE_ROWS={fp_sample_int} deve essere > 0."
+        )
+    hash_algo = (
+        HASH_ALGO_PANDAS_SAMPLE_V1
+        if fp_mode == FINGERPRINT_MODE_SAMPLE
+        else HASH_ALGO_PANDAS_HASH_V1
+    )
+    return FingerprintPolicy(
+        mode=fp_mode,
+        sample_rows=fp_sample_int,
+        hash_algo=hash_algo,
+    )
+
+
 # Sentinel "nessuna registrazione". Riusato per evitare allocazione di
 # nuove istanze nel hot path checkpoint-skip
 _POLICY_SKIP_TEMPLATE = IntermediatePolicy(
@@ -189,7 +228,6 @@ def _read_settings() -> IntermediateSettingsSnapshot:
         "arricchisci_checkpoints": settings.get("ARRICCHISCI_INTERMEDIATE_CHECKPOINTS"),
         "artifact_bucket": settings.get("PLENORA_ARTIFACT_BUCKET"),
         "artifact_prefix": settings.get("INTERMEDIATE_ARTIFACT_PREFIX"),
-        # FIXME: #24
         "fingerprint_mode": settings.get("INTERMEDIATE_FINGERPRINT_MODE"),
         "fingerprint_sample_rows": settings.get("INTERMEDIATE_FINGERPRINT_SAMPLE_ROWS"),
     }
@@ -268,24 +306,7 @@ def validate_intermediate_settings(values: Optional[dict] = None) -> None:
             f"Valori ammessi: {sorted(SUPPORTED_FINAL_ONLY_CHECKPOINTS)}."
         )
 
-    # FIXME: #24: fingerprint mode + sample rows
-    fp_mode = cfg.get("fingerprint_mode")
-    if fp_mode not in SUPPORTED_FINGERPRINT_MODES:
-        raise IntermediateSettingsError(
-            f"INTERMEDIATE_FINGERPRINT_MODE={fp_mode!r} non riconosciuto. "
-            f"Valori ammessi: {sorted(SUPPORTED_FINGERPRINT_MODES)}."
-        )
-    fp_sample = cfg.get("fingerprint_sample_rows")
-    try:
-        fp_sample_int = int(fp_sample)
-    except (TypeError, ValueError):
-        raise IntermediateSettingsError(
-            f"INTERMEDIATE_FINGERPRINT_SAMPLE_ROWS={fp_sample!r} non e' un intero."
-        ) from None
-    if fp_sample_int <= 0:
-        raise IntermediateSettingsError(
-            f"INTERMEDIATE_FINGERPRINT_SAMPLE_ROWS={fp_sample_int} deve essere > 0."
-        )
+    resolve_fingerprint_policy(cfg)
 
     # PLENORA_ARTIFACT_BUCKET e INTERMEDIATE_ARTIFACT_PREFIX sono ora
     # consumati dal path full_artifact

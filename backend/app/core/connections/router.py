@@ -21,7 +21,7 @@ from app.core.connections import errors as connection_errors
 from app.utils.router_utils import require_service
 from app.shared import error_codes
 from app.infrastructure.security.crypto import CredentialUnavailableError
-from app.shared.error_envelope import raise_typed_http
+from app.shared.error_envelope import raise_credential_unavailable, raise_typed_http
 from app.observability.audit_action import audit_action
 from app.core.auth.visibility import visible_resource_ids
 from app.core.projects import usage as project_usage
@@ -113,11 +113,10 @@ def update_connection(
     """Aggiorna connessione esistente. Solo admin/superadmin del gruppo, e
     solo se non creata da un superadmin (hierarchical ownership)."""
     require_service(_connection_service, "ConnectionService")
-    # FIXME: #1: get_connection raise CredentialUnavailableError su password None/corrotta
     try:
         existing = _connection_service.get_connection(connection_id)
     except CredentialUnavailableError as e:
-        raise HTTPException(status_code=422, detail=str(e))
+        raise_credential_unavailable(e)
     assert_can_modify(existing, current_user, "Connessione")
     conn = _connection_service.update_connection(connection_id, data)
     if not conn:
@@ -149,7 +148,7 @@ def delete_connection(
     try:
         existing = _connection_service.get_connection(connection_id)
     except CredentialUnavailableError as e:
-        raise HTTPException(status_code=422, detail=str(e))
+        raise_credential_unavailable(e)
     assert_can_modify(existing, current_user, "Connessione")
 
     # Check dipendenze: progetti che usano questa connessione
@@ -207,17 +206,15 @@ def test_connection(
 ):
     """Testa una connessione database. Visibile a chi vede la risorsa (owned + shared)."""
     require_service(_connection_service, "ConnectionService")
-    # FIXME: #1 (2026-04-23): password=None o decrypt-fail → 422 esplicito
-    # non 500 da Pydantic ValidationError
     try:
         existing = _connection_service.get_connection(connection_id)
     except CredentialUnavailableError as e:
-        raise HTTPException(status_code=422, detail=str(e))
+        raise_credential_unavailable(e)
     assert_resource_visible(existing, "connections", current_user, "Connessione")
     try:
         return _connection_service.test_connection(connection_id)
     except CredentialUnavailableError as e:
-        raise HTTPException(status_code=422, detail=str(e))
+        raise_credential_unavailable(e)
 
 
 @router.get("/connections/{connection_id}/tables")
@@ -231,7 +228,7 @@ def get_connection_tables(
     try:
         connection = _connection_service.get_connection(connection_id)
     except CredentialUnavailableError as e:
-        raise HTTPException(status_code=422, detail=str(e))
+        raise_credential_unavailable(e)
     assert_resource_visible(connection, "connections", current_user, "Connessione")
 
     try:

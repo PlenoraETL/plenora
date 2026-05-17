@@ -123,9 +123,9 @@ def _dedup_dataframe_columns_for_serialization(
     ritorna ``(df_dedup, warnings)``. Senza duplicati, ritorna il df
     originale e una lista vuota.
 
-    Risolve BUG.md #6: la proiezione record con colonne duplicate puo'
-    perdere silenziosamente colonne. Qui rinominiamo invece di scartare,
-    cosi' nessuna colonna sparisce dalla preview.
+    La proiezione record con colonne duplicate puo' perdere silenziosamente
+    colonne. Qui rinominiamo invece di scartare, cosi' nessuna colonna
+    sparisce dalla preview.
 
     Tipica causa upstream: JOIN SQL senza alias espliciti che produce
     due colonne con lo stesso nome (es. ``a.id`` e ``b.id``).
@@ -529,9 +529,9 @@ class EstraiExecutor:
 
             df = dataframe_from_rows(rows, list(columns))
 
-            # FIXME(BUG.md #6): dedup colonne duplicate PRIMA di costruire
-            # columns_info e PRIMA della proiezione record, altrimenti
-            # il dataframe engine puo' scartarle silenziosamente.
+            # Deduplica colonne duplicate PRIMA di costruire columns_info e
+            # PRIMA della proiezione record, altrimenti il dataframe engine
+            # puo' scartarle silenziosamente.
             df, dedup_warnings = _dedup_dataframe_columns_for_serialization(df)
 
             canvas_type_map = self._build_canvas_type_map(canvas)
@@ -625,8 +625,8 @@ class EstraiExecutor:
 
             df = dataframe_from_rows(rows, list(columns))
 
-            # FIXME(BUG.md #6): dedup colonne duplicate PRIMA di columns_info e to_dict
-            # vedi _preview_database per il razionale
+            # Deduplica colonne duplicate PRIMA di columns_info e to_dict; vedi
+            # _preview_database per il razionale.
             df, dedup_warnings = _dedup_dataframe_columns_for_serialization(df)
 
             canvas_type_map = self._build_canvas_type_map(canvas)

@@ -162,7 +162,7 @@ def test_estrai_metadata_only_writes_meta_and_hash_no_rows(monkeypatch):
     assert captured["rows_to_persist"] == []
     assert captured["persistence_mode"] == "metadata_only"
     assert captured["node_hash"] is not None
-    # FIXME: #24: default fingerprint mode = sample.
+    # Default fingerprint mode = sample.
     assert captured["hash_algo"] == "pandas_sample_hash_v1"
 
 

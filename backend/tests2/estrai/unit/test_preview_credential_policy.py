@@ -1,5 +1,5 @@
 """
-Contract test — Bug preview/execute consumer post-#6 cluster (2026-04-23).
+Contract test: preview/execute credential consumer policy.
 
 Blinda: quando `connection_service.get_connection` raise
 """
@@ -62,7 +62,7 @@ def executor_with_failing_connection(mock_metadata, mock_canvas):
 def test_preview_returns_user_error_when_credential_unavailable(
     executor_with_failing_connection, mock_canvas
 ):
-    """Bug post-#6: preview DEVE tradurre CredentialUnavailableError
+    """Preview DEVE tradurre CredentialUnavailableError
     in result-dict user_error, non bubblare al worker."""
     result = executor_with_failing_connection.preview(
         project_id="proj-1",
@@ -79,7 +79,7 @@ def test_preview_returns_user_error_when_credential_unavailable(
 def test_execute_returns_user_error_when_credential_unavailable(
     executor_with_failing_connection, mock_canvas
 ):
-    """Bug post-#6 simmetrico: execute() stesso gap, stesso fix."""
+    """execute() deve applicare la stessa policy."""
     result = executor_with_failing_connection.execute(
         project_id="proj-1",
         canvas=mock_canvas,

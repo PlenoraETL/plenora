@@ -1,5 +1,5 @@
 """
-Contract test Bug #24 — sampled fingerprint per checkpoint snapshots.
+Contract test: sampled fingerprint per checkpoint snapshots.
 
 Previous behavior: `compute_dataframe_fingerprint` faceva
 """

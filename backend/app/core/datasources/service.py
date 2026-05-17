@@ -162,8 +162,6 @@ class DataSourceService:
         return True
 
     def test_connection(self, ds_id: str) -> DataSourceTestResult:
-        # FIXME: strict=True surfaces broken encrypted credentials as HTTP 422
-        # instead of a false-success connection test.
         config = self._get_full_config(ds_id, strict=True)
         if not config:
             return DataSourceTestResult(
@@ -346,8 +344,8 @@ class DataSourceService:
 
         Se ``strict=True``, il decrypt di un campo cifrato che torna None
         (chiave crypto mancante/sbagliata o token Fernet corrotto) solleva
-        ``CredentialUnavailableError``. Usato dal path test_connection
-        (Bug #2, 2026-04-23) per non rispondere 200-OK con secret silent-None.
+        ``CredentialUnavailableError``. Usato dal path test_connection per non
+        rispondere 200-OK con secret silent-None.
         """
         row = datasource_db.get_datasource(ds_id)
         if not row:

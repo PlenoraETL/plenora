@@ -34,11 +34,6 @@ def list_backups_endpoint(
     _user: CurrentUser = Depends(require_superadmin),
 ) -> AdminBackupsListResponse:
     """Lista dei dump presenti nel bucket S3."""
-    # FIXME: #4 (2026-04-23): dep runtime mancante (botocore[crt]) -> 503
-    # esplicito invece di lista vuota fuorviante
-    # RB.2 (2026-04-27): credenziali AWS scadute -> 503 strutturato con
-    # messaggio operativo (cattura LoginRefreshRequired / NoCredentialsError /
-    # TokenRetrievalError / AccessDenied refresh-token, vedi service.py
     try:
         items = service.list_backups()
     except AdminBackupDisabledError as e:
