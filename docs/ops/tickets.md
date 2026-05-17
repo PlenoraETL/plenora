@@ -226,10 +226,10 @@ Per ora il volume atteso (~centinaia/anno) non giustifica un cleanup automatico.
 
 ## Link
 
-- Codice: [`app/core/tickets/`](../../backend/app/core/tickets/)
-- DB layer: [`app/db/tickets_db_service.py`](../../backend/app/db/tickets_db_service.py)
-- Exception shared: [`app/shared/exceptions.py`](../../backend/app/shared/exceptions.py)
+- Codice: [`app/core/tickets/router.py`](../../backend/app/core/tickets/router.py), [`service.py`](../../backend/app/core/tickets/service.py)
+- DB layer: [`app/core/tickets/db.py`](../../backend/app/core/tickets/db.py)
+- Ticket errors: [`app/core/tickets/errors.py`](../../backend/app/core/tickets/errors.py)
 - Migration: [`migrations/2026-04-18_add_tickets.sql`](../../backend/migrations/2026-04-18_add_tickets.sql)
-- Test backend: [`tests2/tickets/`](../../backend/tests2/tickets/)
+- Test backend: [`tests2/tickets/test_tickets_rbac_contract.py`](../../backend/tests2/tickets/test_tickets_rbac_contract.py)
 - Test frontend: `frontend/tests/pages/TicketsList.contract.test.jsx`
 - Pagine UI: `/tickets` (lista), `/tickets/{id}` (dettaglio)

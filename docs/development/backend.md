@@ -63,6 +63,34 @@ Run broader suites when touching:
 
 ---
 
+## Static Analysis
+
+Run the Python hygiene gate before opening a PR that touches backend code:
+
+```bash
+python -m ruff check backend/app backend/workers backend/scripts backend/tests2 scripts --select F401,F403,F405,F811,F821,F841
+python -m pyflakes backend/app backend/workers backend/scripts backend/tests2 scripts
+```
+
+Use Vulture only as an audit aid, not as an automatic deletion rule:
+
+```bash
+python -m vulture backend/app backend/workers backend/scripts scripts --min-confidence 60
+```
+
+Expected interpretation:
+
+- Ruff and Pyflakes findings are actionable unless a line is deliberately
+  excluded with a narrow reason.
+- Vulture has many false positives in this backend: FastAPI route handlers,
+  Celery tasks, Pydantic model fields, middleware hooks, registry methods and
+  reflection-based call sites often look unused statically.
+- Keep imports at module top by default. Local imports are acceptable for
+  circular-import breaks, optional/heavy providers, bootstrap boundaries, or
+  test monkeypatch isolation.
+
+---
+
 ## Current Architecture Direction
 
 Backend work is converging from vertical feature modules toward horizontal

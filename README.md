@@ -49,6 +49,27 @@ Extended setup:
 
 ---
 
+## Local Quality Gates
+
+Backend hygiene:
+
+```bash
+python -m ruff check backend/app backend/workers backend/scripts backend/tests2 scripts --select F401,F403,F405,F811,F821,F841
+python -m pyflakes backend/app backend/workers backend/scripts backend/tests2 scripts
+```
+
+Frontend build:
+
+```bash
+cd frontend
+npm run build
+```
+
+See [docs/development/contributing.md](docs/development/contributing.md)
+for the full contributor workflow.
+
+---
+
 ## Documentation
 
 All canonical documentation lives under [docs/](docs/).

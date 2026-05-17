@@ -20,6 +20,8 @@ test-e2e/coverage/
 
 ## Le 5 matrici
 
+Output corrente: [matrix.md](matrix.md).
+
 | name          | rows                     | cols                      | descrizione |
 |---------------|--------------------------|---------------------------|-------------|
 | `extraction`  | source (DB, file, REST)  | dataset_block (base/edge/null/volume/streaming) | Per ogni sorgente, quali tipi di dato estraiamo. |

@@ -4,8 +4,11 @@ Schema portato manualmente su 4 dialetti (PostgreSQL, MySQL, Oracle,
 SQL Server) per validare end-to-end ogni operazione che plenora
 espone (estrai, manipola, arricchisci, carica).
 
-I file `expected/` documentano i risultati attesi delle query più
-importanti — riferimento canonico per i test e2e.
+I file [`expected/`](expected/README.md) documentano i risultati attesi
+delle query più importanti — riferimento canonico per i test e2e. La
+lista query renderizzata vive in [expected/queries/INDEX.md](expected/queries/INDEX.md).
+Il generatore deterministico dei seed vive in
+[seed_generator/README.md](seed_generator/README.md).
 
 ## Schema
 

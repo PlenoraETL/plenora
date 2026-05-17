@@ -5,8 +5,8 @@ Checklist operativa pre/post deploy + rollback manuale minimo.
 > Questa checklist copre il deploy di un **update** su un host già
 > installato. Per la prima installazione di un host nuovo (clean
 > install) usa [install-non-docker.md](install-non-docker.md);
-> il path Docker non è ancora implementato, vedi
-> [install-docker.md](install-docker.md).
+> per il path Docker usa [install-docker.md](install-docker.md) e la sua
+> acceptance gate dedicata.
 
 Riferimenti:
 - `incident_response.md` — incident framework generale
@@ -31,8 +31,13 @@ versionato; secret operativi (PEM, AWS) restano per-operatore via env.
 
 ### 1.2 Test locale
 
+- [ ] Backend static hygiene verde:
+  `python -m ruff check backend/app backend/workers backend/scripts backend/tests2 scripts --select F401,F403,F405,F811,F821,F841`
+- [ ] Backend pyflakes verde:
+  `python -m pyflakes backend/app backend/workers backend/scripts backend/tests2 scripts`
 - [ ] Backend pytest verde: `cd backend && pytest tests2/ -c tests2/pytest.ini`
 - [ ] Frontend vitest verde: `cd frontend && npm test`
+- [ ] Frontend build verde: `cd frontend && npm run build`
 - [ ] (opzionale) B-2 functional manual run via `gh workflow run ci-functional.yml`
   pre-merge per cambi rilevanti su `app/core/arricchisci/`,
   `app/core/scheduler/`, `app/db/`

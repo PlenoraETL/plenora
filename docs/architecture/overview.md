@@ -115,8 +115,8 @@ Clean installation work has two tracks:
 
 - single-machine installation with PostgreSQL, Redis, backend, worker, beat,
   and frontend;
-- Docker installation with backend services already scaffolded and frontend
-  Docker packaging still tracked as a gap.
+- Docker installation with backend, worker, beat, PostgreSQL, Redis, and
+  frontend image/static delivery documented in the compose path.
 
 The release target is not only "starts locally"; it must be reproducible on
 a clean machine.

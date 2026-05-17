@@ -444,4 +444,4 @@ Dopo ogni intervento DR:
 - IAM policies + SSM setup: [deploy/iam/README.md](../../backend/deploy/iam/README.md)
 - Script di backup: [scripts/backup_db.py](../../backend/scripts/backup_db.py)
 - Script di verifica restore: [scripts/test_restore.py](../../backend/scripts/test_restore.py)
-- Astrazione cloud: [app/shared/cloud_backends.py](../../backend/app/shared/cloud_backends.py)
+- Astrazione cloud: [app/infrastructure/storage/cloud_backends.py](../../backend/app/infrastructure/storage/cloud_backends.py)

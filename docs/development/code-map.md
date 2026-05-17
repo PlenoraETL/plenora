@@ -621,16 +621,16 @@ Intervento/confini: unico punto di encrypt/decrypt - non reimplementare crypto a
 
 ## Storage result e runtime object storage <a id="sharedstorageresults"></a>
 
-Entry-point: `backend/app/utils/result_store.py`, `backend/app/db/results_db_service.py`, `backend/app/shared/cloud_backends.py`
+Entry-point: `backend/app/core/results/blob_writer.py`, `backend/app/core/results/db.py`, `backend/app/infrastructure/storage/cloud_backends.py`
 
 Responsabilita: salva e legge result finali, separando catalogo DB e payload runtime. In `STORAGE_POLICY=object_storage` i nuovi result devono andare sempre su runtime object storage; il fallback BYTEA resta solo per compatibility read.
 
 | file | funzioni/classi chiave | cosa guardare |
 |---|---|---|
-| `app/utils/result_store.py` | `save_result_blob`, `save_result_blob_from_bytes`, `ResultSaveError`, `_storage_policy`, `_should_use_object_storage`, `_apply_results_retention` | writer result policy-aware |
-| `app/db/results_db_service.py` | `save_result`, `get_latest_result`, `get_result_data`, `delete_results_for_project`, `_s3_download_bytes`, `_s3_delete_best_effort` | catalogo result + reader compatibility |
-| `app/shared/cloud_backends.py` | `ObjectStorage`, `ObjectStorageDisabledError`, `object_storage_enabled`, `get_runtime_object_storage`, `get_backup_object_storage`, `get_log_archive_storage`, `validate_storage_config` | factory e gate object storage |
-| `app/config/storage_config.py` | `StoragePolicy`, `StorageProvider`, `get_storage_policy`, `get_storage_provider` | policy storage dichiarativa |
+| `app/core/results/blob_writer.py` | `save_result_blob`, `save_result_blob_from_bytes`, `ResultSaveError`, `_storage_policy`, `_should_use_object_storage`, `_apply_results_retention` | writer result policy-aware |
+| `app/core/results/db.py` | `save_result`, `get_latest_result`, `get_result_data`, `delete_results_for_project`, object-storage reader helpers | catalogo result + reader compatibility |
+| `app/infrastructure/storage/cloud_backends.py` | `ObjectStorage`, `ObjectStorageDisabledError`, `object_storage_enabled`, `get_runtime_object_storage`, `get_backup_object_storage`, `get_log_archive_storage`, `validate_storage_config` | factory e gate object storage |
+| `app/config.py` | `StoragePolicy`, `StorageProvider`, storage env accessors | policy storage dichiarativa |
 
 Keywords: `STORAGE_POLICY`, `OBJECT_STORAGE_BUCKET`, `PLENORA_ARTIFACT_BUCKET`, `OBJECT_STORAGE_ENABLED`, `get_runtime_object_storage`, `backend=object_storage`, `backend=db_legacy`, `storage_key`, `delete_results_for_project`
 
@@ -668,11 +668,11 @@ Responsabilita: client HTTP verso il backend FastAPI; centralizza auth, errori, 
 
 File principali:
 - core HTTP (toccare quando serve auth/header/error globali):
-  - `client.js` - client HTTP base con interceptor auth (token JWT)
   - `http.js` - helper request/response e gestione errori HTTP
   - `config.js` - base URL e config runtime
   - `errors.js` - mapping errori backend -> errori UI
   - `index.js` - barrel export
+  - `openapiClient.js` - loader OpenAPI opt-in per contract test/drift checks; non e' importato dal runtime app
 - client per modulo backend (top-7 piu' usati):
   - `projects.js` - CRUD progetti/canvas
   - `connections.js` - connessioni DB
@@ -685,7 +685,7 @@ File principali:
 
 Keywords: `client`, `http`, `config`, `errors`, `projects`, `connections`, `apiConnections`, `features`, `enrichment`, `schedules`, `runs`
 
-Intervento/confini: unico punto di contatto col backend; auth/error handling vivono in `client`/`http`/`errors`. Non duplicare fetch nei componenti o nelle pagine. Nuovi endpoint backend -> nuova funzione nel client per-modulo corrispondente. Mai chiamare `fetch`/`axios` direttamente fuori da `api/`.
+Intervento/confini: unico punto di contatto col backend; auth/error handling vivono in `http`/`errors`. Non duplicare fetch nei componenti o nelle pagine. Nuovi endpoint backend -> nuova funzione nel client per-modulo corrispondente. Mai chiamare `fetch`/`axios` direttamente fuori da `api/`, salvo helper contract/test-only come `openapiClient.js`.
 
 ---
 
@@ -731,7 +731,7 @@ Sintesi trasversale dei confini operativi piu' importanti del repo. Toccarli sen
 - **`backend/app/core/intermediate/`** = contratto dati tra step pipeline. Estrai/Manipola/Arricchisci/Carica scambiano dataset *solo* tramite intermediate. Cambiare lo schema `RunSummary`/`node_meta` o il formato di `write_node`/`compute_row_hash` significa rompere tutti gli step a valle.
 - **Storage result/runtime object storage**: in `STORAGE_POLICY=object_storage`, i nuovi result non vanno mai in BYTEA. Il DB conserva metadata + `storage_key`; `data` BYTEA e' solo compatibility read path. Runtime artifacts/result usano `OBJECT_STORAGE_BUCKET`/`PLENORA_ARTIFACT_BUCKET`, non `BACKUP_BUCKET`.
 - **`backend/app/infrastructure/security/crypto.py`** = unico punto di crypto-at-rest. Env canonica unica `PLENORA_ENCRYPTION_KEY` (gli alias ritirati sono rimossi dal 2026-04-23). Qualsiasi nuovo segreto persistito passa da `encrypt`/`decrypt`/`encrypt_dict_fields`. Mai reimplementare Fernet altrove ne reintrodurre fallback runtime.
-- **`frontend/src/api/`** = unico punto HTTP del frontend. Pagine, componenti e store NON chiamano `fetch`/`axios` direttamente; auth/header/error globali vivono in `client.js`/`http.js`/`errors.js`.
+- **`frontend/src/api/`** = unico punto HTTP del frontend. Pagine, componenti e store NON chiamano `fetch`/`axios` direttamente; auth/header/error globali vivono in `http.js`/`errors.js`. `openapiClient.js` e' contract/test-only e non fa parte del runtime app graph.
 - **`backend/app/core/orchestrator/`** coordina, non duplica logica step. Nuovi pezzi di pipeline vanno nel modulo step (`estrai`/`manipola`/`arricchisci`/`carica` + executor dedicato), non in `OrchestratorService`. Cancel/cleanup task devono restare idempotenti.
 - **`backend/app/core/scheduler/`** passa sempre da `orchestrator` per eseguire la pipeline. Mai eseguire step direttamente dallo scheduler. `concurrency_manager` e `policy_engine` non vanno bypassati: nuovi tipi di policy vanno la' dentro, non nel router.
 - **`backend/app/core/features/`** governa il contratto ArcGIS. I response model `WriteFeaturesResponse` e `CreateServiceResponse` sono consumati da test e frontend: cambiarne shape e' un breaking change. Token come `?token=` query param, mai header. Output sempre via `_mask_secrets` per non leakare credenziali.

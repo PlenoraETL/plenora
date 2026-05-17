@@ -162,7 +162,7 @@ Il container `sftp` accetta entrambe le modalità:
     passphrase `plenora_passphrase_test`
 
 Le chiavi sono **fake test-only**, generate per questo repo e committate
-intenzionalmente. Vedi `sftp/keys/README.md`.
+intenzionalmente. Vedi [sftp/keys/README.md](sftp/keys/README.md).
 
 ## Cosa manca / opzionale
 

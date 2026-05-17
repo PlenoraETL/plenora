@@ -84,11 +84,32 @@ npx vitest run tests/api/<file>.test.js
 Run `npm run build` for broad UI, routing, bundling, or dependency changes.
 Use screenshot/Playwright verification only for layout-sensitive work.
 
+## Static Checks
+
+There is no ESLint configuration in the repository today. The baseline
+frontend quality gate is:
+
+```bash
+cd frontend
+npm run build
+npx vitest run tests/api tests/components tests/pages tests/hooks
+```
+
+For dependency reachability audits, use the app entry point
+`src/index.jsx`. A file that is not reachable from that graph is not
+necessarily removable if tests import it as a contract helper.
+
+Current special case:
+
+- `src/api/openapiClient.js` is not used by the runtime bundle, but it is a
+  contract/test utility for OpenAPI drift checks and is covered by
+  `tests/api/openapiClient.contract.test.js`.
+
 ## Docker Status
 
-Backend Docker scaffolding exists. Frontend Docker packaging is still a
-tracked gap and must be completed before a full clean Docker installation
-can be called release-ready.
+The frontend has a Docker/nginx delivery path in the root compose setup.
+Treat it as release-ready only after the acceptance gate in
+`docs/ops/install-docker.md` passes on a clean Linux host.
 
 ## References
 

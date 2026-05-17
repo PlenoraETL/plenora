@@ -29,7 +29,7 @@ _NON_DOCKER = _REPO_ROOT / "docs" / "ops" / "install-non-docker.md"
 @pytest.fixture(scope="module")
 def doc_text() -> str:
     assert _DRY_RUN.is_file(), (
-        f"docs/ops/install-marco-dry-run.md must exist - "
+        "docs/ops/install-marco-dry-run.md must exist - "
         "INSTALLATION-024 added the operator dry-run pack. If it "
         "has been deleted, the install-non-docker.md cross-link "
         "(section 13.4 + section 14) must be removed in the same "

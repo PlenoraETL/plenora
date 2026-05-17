@@ -123,6 +123,25 @@ npm run build
 Contract tests are useful when they enforce an architectural rule. Avoid
 tests that only pin implementation noise.
 
+## Static Analysis
+
+Run the lightweight hygiene gates before a PR that touches Python:
+
+```bash
+python -m ruff check backend/app backend/workers backend/scripts backend/tests2 scripts --select F401,F403,F405,F811,F821,F841
+python -m pyflakes backend/app backend/workers backend/scripts backend/tests2 scripts
+```
+
+Use Vulture for manual investigation only:
+
+```bash
+python -m vulture backend/app backend/workers backend/scripts scripts --min-confidence 60
+```
+
+Do not delete files or public symbols solely because Vulture reports them.
+This repo has deliberate dynamic surfaces: FastAPI routes, Celery tasks,
+Pydantic models, middleware hooks, registries, and contract-test helpers.
+
 ## Documentation
 
 Update docs in the same change when behavior, installation, architecture, or

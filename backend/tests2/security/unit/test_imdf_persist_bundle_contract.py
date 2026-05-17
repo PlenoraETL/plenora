@@ -6,8 +6,12 @@ Contract test per la persistenza di un ImdfBundle su disco. La logica
 import json
 import shutil
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import pytest
+
+if TYPE_CHECKING:
+    from app.core.imdf.loader import ImdfBundle
 
 
 pytestmark = [pytest.mark.unit, pytest.mark.security, pytest.mark.contract, pytest.mark.regression]

@@ -65,7 +65,7 @@ Out of scope:
 | DR drill evidence | Playbook exists but needs a real run. | Execute and record one drill. |
 | SBOM automation | Manual process exists; automation still pending. | Add CI generation or release checklist gate. |
 | Container scanning | Not yet canonical. | Add Trivy/Semgrep/Bandit or accepted alternative. |
-| Frontend Docker delivery | Docker path incomplete. | Close frontend compose/static delivery gap. |
+| Docker release evidence | Compose path exists, but real-host validation evidence is still required. | Run and record the Docker acceptance gate on a clean Linux host. |
 
 ## References
 

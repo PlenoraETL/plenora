@@ -67,7 +67,7 @@ Lette da `.env` via systemd unit wrapper o SSM secrets (vedi `deploy/iam/README.
 
 | Variabile | Default | Consumato da |
 |---|---|---|
-| `STORAGE_POLICY` | `hybrid` (`object_storage` raccomandato in prod cloud) | `app/utils/result_store.py`, `app/shared/cloud_backends.py` |
+| `STORAGE_POLICY` | `hybrid` (`object_storage` raccomandato in prod cloud) | `app/core/results/blob_writer.py`, `app/infrastructure/storage/cloud_backends.py` |
 | `OBJECT_STORAGE_ENABLED` | `true` | Gate capability object storage runtime; con `STORAGE_POLICY=object_storage` deve essere true |
 | `OBJECT_STORAGE_BUCKET` | -- (obbligatoria in `object_storage`) | Bucket runtime per result, file sources e artifact intermedi |
 | `PLENORA_ARTIFACT_BUCKET` | alias di `OBJECT_STORAGE_BUCKET` | Alias operativo per artifact runtime |
@@ -78,7 +78,7 @@ Lette da `.env` via systemd unit wrapper o SSM secrets (vedi `deploy/iam/README.
 | `BACKUP_SCHEMA` | `plenora` | `scripts/backup_db.py` (vuoto → full DB dump) |
 | `BACKUP_PG_DUMP_TIMEOUT_SEC` | `3600` | `scripts/backup_db.py` |
 | `BACKUP_S3_UPLOAD_TIMEOUT_SEC` | `1800` | `scripts/backup_db.py` |
-| `CLOUD_PROVIDER` | `aws` | `app/shared/cloud_backends.py` factory (dispatch backend object storage + secrets) |
+| `CLOUD_PROVIDER` | `aws` | `app/infrastructure/storage/cloud_backends.py` factory (dispatch backend object storage + secrets) |
 | `IMDF_BUNDLES_DIR` | — (config `settings`) | Cache locale bundle IMDF (TTL 48h via beat scheduler) |
 | `IMDF_BUNDLE_TTL_HOURS` | `48` | Cleanup cache locale IMDF |
 
@@ -213,4 +213,4 @@ Notifiche email: hook `TicketNotifier` predisposto, default no-op. Vedi `tickets
 - Ticketing system: [tickets.md](tickets.md)
 - Systemd units: [../../backend/deploy/systemd/](../../backend/deploy/systemd/)
 - IAM setup: [../../backend/deploy/iam/](../../backend/deploy/iam/)
-- Cloud abstraction: [../../backend/app/shared/cloud_backends.py](../../backend/app/shared/cloud_backends.py)
+- Cloud abstraction: [../../backend/app/infrastructure/storage/cloud_backends.py](../../backend/app/infrastructure/storage/cloud_backends.py)

@@ -3,6 +3,13 @@
 Stack autocontenuto per i test end-to-end di plenora: dati di prova,
 file di input multi-formato, infrastruttura docker e fake server REST.
 
+## Stato documenti
+
+La fonte corrente del catalogo e' `catalog/*.yaml`, renderizzata in
+`test-e2e.md`. `test-e2e_LEGACY.md` e' storico pre-migrazione e non deve
+essere aggiornato. `procedura.md` e' una nota operativa di bootstrap del
+runner, non una checklist release.
+
 ## Layout
 
 ```
@@ -14,6 +21,18 @@ test-e2e/
 ```
 
 Ogni sottocartella ha un proprio `README.md` con il dettaglio.
+
+Documenti operativi:
+
+- [RUN.md](RUN.md): comandi rapidi per avviare lo stack e lanciare i test.
+- [catalog/README.md](catalog/README.md): catalogo YAML e render del catalogo.
+- [coverage/README.md](coverage/README.md): generazione della matrice di coverage.
+- [coverage/matrix.md](coverage/matrix.md): matrice renderizzata corrente.
+- [docker/README.md](docker/README.md): stack Docker dei servizi fixture.
+- [fake-rest/README.md](fake-rest/README.md): server REST fake per sorgenti esterne.
+- [runner/README.md](runner/README.md): harness esecutivo E2E.
+- [sql/README.md](sql/README.md): schema e seed cross-dialect.
+- [files/README.md](files/README.md): fixture file multi-formato.
 
 ## Avvio veloce
 

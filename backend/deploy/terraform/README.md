@@ -30,7 +30,7 @@ Scope pieno IaC = lavoro successivo dopo che la baseline lifecycle e' stabile.
 
 Lo state Terraform vive su S3 + DynamoDB. Queste risorse vanno create una
 sola volta con lo script in `bootstrap/`. Istruzioni complete in
-`bootstrap/README.md`.
+[bootstrap/README.md](bootstrap/README.md).
 
 ```bash
 cd deploy/terraform/bootstrap

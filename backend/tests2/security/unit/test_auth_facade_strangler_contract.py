@@ -214,7 +214,7 @@ def test_phase2_migrated_file_does_not_import_banned_names_from_facade(
         f"{path.relative_to(_BACKEND_ROOT)} pulls typed-context banned "
         f"names from the facade:\n"
         + "\n".join(f"  line {ln}: {nm}" for ln, nm in violations)
-        + f"\nLeaf sources: CurrentUser ← app.core.auth.models; "
+        + "\nLeaf sources: CurrentUser ← app.core.auth.models; "
         "assert_group_access / assert_resource_visible ← "
         "app.core.auth.ownership."
     )
@@ -242,7 +242,7 @@ def test_phase3_migrated_file_does_not_import_banned_names_from_facade(
         f"{path.relative_to(_BACKEND_ROOT)} pulls Phase-3 banned "
         f"names from the facade:\n"
         + "\n".join(f"  line {ln}: {nm}" for ln, nm in violations)
-        + f"\nLeaf sources: CurrentUser ← app.core.auth.models; "
+        + "\nLeaf sources: CurrentUser ← app.core.auth.models; "
         "assert_group_access / assert_resource_visible / "
         "assert_can_modify / compute_can_edit ← app.core.auth.ownership."
     )
@@ -273,7 +273,7 @@ def test_phase4_migrated_file_does_not_import_banned_names_from_facade(
         f"{path.relative_to(_BACKEND_ROOT)} pulls Phase-4 banned "
         f"names from the facade:\n"
         + "\n".join(f"  line {ln}: {nm}" for ln, nm in violations)
-        + f"\nLeaf sources: CurrentUser ← app.core.auth.models; "
+        + "\nLeaf sources: CurrentUser ← app.core.auth.models; "
         "ownership helpers ← app.core.auth.ownership."
     )
 
@@ -304,7 +304,7 @@ def test_phase5_migrated_file_does_not_import_banned_names_from_facade(
         f"{path.relative_to(_BACKEND_ROOT)} pulls typed-context banned "
         f"names from the facade:\n"
         + "\n".join(f"  line {ln}: {nm}" for ln, nm in violations)
-        + f"\nLeaf sources: CurrentUser ← app.core.auth.models; "
+        + "\nLeaf sources: CurrentUser ← app.core.auth.models; "
         "ownership helpers ← app.core.auth.ownership."
     )
 

@@ -87,8 +87,8 @@ def _table_exists(table_name: str) -> bool:
         cur = conn.cursor()
         try:
             cur.execute(
-                f"SELECT COUNT(*) FROM information_schema.tables "
-                f"WHERE table_schema = 'dbo' AND table_name = ?",
+                "SELECT COUNT(*) FROM information_schema.tables "
+                "WHERE table_schema = 'dbo' AND table_name = ?",
                 (table_name,),
             )
             return int(cur.fetchone()[0]) > 0

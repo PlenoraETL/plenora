@@ -50,7 +50,7 @@ dual-shape error envelope removal (40+ test BE + 7 consumer FE).
 - Horizontal backend engine boundaries.
 - Resource and artifact safety.
 - Clean installation on a fresh Linux host.
-- Docker validation, including the remaining frontend delivery gap.
+- Docker validation on a clean Linux host, including frontend static delivery.
 - Documentation cleanup and removal of obsolete operational noise.
 
 ## Where To Look

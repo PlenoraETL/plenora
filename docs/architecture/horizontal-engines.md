@@ -219,8 +219,8 @@ Canonical surfaces:
 - `app/core/intermediate/retention.py`
 - `app/shared/resources/metadata.py`
 - `app/shared/resources/file_cleanup.py`
-- `app/shared/cloud_backends.py`
-- `app/shared/storage_reconciliation.py`
+- `app/infrastructure/storage/cloud_backends.py`
+- `app/core/resources/storage_reconciliation.py`
 
 Current contracts:
 
@@ -306,9 +306,10 @@ Canonical surfaces:
 Current state:
 
 - Non-Docker single-machine installation is the most detailed runbook.
-- Docker scaffold exists for backend, worker, beat, Postgres, and Redis.
-- Frontend Docker image is still a known gap until explicitly added and
-  validated.
+- Docker scaffold exists for backend, worker, beat, Postgres, Redis, and the
+  frontend nginx image.
+- The Docker path still requires real-host acceptance before being treated as
+  a release operations path.
 - Linux validation is required before calling the install path stable.
 
 Rules:

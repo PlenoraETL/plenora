@@ -13,8 +13,8 @@ with the root [README](../../README.md) and the operations docs.
 - Optional native libraries for geospatial formats, depending on the work:
   GDAL, Fiona, Shapely, libspatialindex, libpq
 
-Docker is supported as a backend scaffold and cleanroom target, but the
-frontend image is still a tracked gap.
+Docker is supported as a cleanroom target through the compose path documented
+in the ops install guide.
 
 ## Clone
 
@@ -138,9 +138,9 @@ Default UI: `http://localhost:5173`.
 
 ## Docker Cleanroom
 
-Backend Docker scaffolding is available through the root Docker files and
-the install docs. A full Docker release requires the frontend image and a
-validated end-to-end compose run.
+Docker scaffolding is available through the root Docker files and the install
+docs. Treat Docker as release-ready only after the acceptance gate in
+`install-docker.md` has passed on a clean Linux host.
 
 See:
 
@@ -154,9 +154,12 @@ Use targeted tests during normal development:
 ```bash
 cd backend
 pytest tests2/<domain>/<file>.py -v
+python -m ruff check backend/app backend/workers backend/scripts backend/tests2 scripts --select F401,F403,F405,F811,F821,F841
+python -m pyflakes backend/app backend/workers backend/scripts backend/tests2 scripts
 
 cd frontend
 npx vitest run tests/<area>/<file>.test.jsx
+npm run build
 ```
 
 Run wider suites when touching shared runtime, auth, installation, or

@@ -110,8 +110,8 @@ def test_login_rate_limit_is_isolated_per_xff_ip(client_with_auth_router):
     # dovrebbe ricevere 401 (credenziali wrong), NON 429
     r = _login_fail(client_with_auth_router, "10.0.0.2")
     assert r.status_code == 401, (
-        f"IP 10.0.0.2 non dovrebbe essere rate-limited dagli attempts di "
-        f"10.0.0.1 — se questo fallisce, il bucket e' condiviso (Previous behavior)"
+        "IP 10.0.0.2 non dovrebbe essere rate-limited dagli attempts di "
+        "10.0.0.1 — se questo fallisce, il bucket e' condiviso (Previous behavior)"
     )
 
 
