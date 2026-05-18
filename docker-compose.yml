@@ -10,8 +10,9 @@
 #   - frontend   : Vite production build served by nginx (:3000 -> :80)
 #
 # MinIO and the systemd backup unit are intentionally OUT of this
-# scaffold (target shape lives in docs/ops/install-docker.md section
-# "Target shape"). This compose intentionally provides the minimum to
+# scaffold (target shape lives in docs/ops/install-docker.md and the
+# single-server runbook in docs/ops/install-docker-single-server.md). This
+# compose intentionally provides the minimum to
 # exercise the smoke harness from docs/ops/install-marco-dry-run.md.
 #
 # Production caveat: STORAGE_POLICY=db means BYTEA-only blob path.

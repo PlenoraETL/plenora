@@ -18,7 +18,9 @@ The rule is simple:
 | Backend development | [Backend guide](development/backend.md) |
 | Frontend development | [Frontend guide](development/frontend.md) |
 | Clean install, single machine | [Non-Docker install](ops/install-non-docker.md) |
-| Clean install, Docker | [Docker install](ops/install-docker.md) |
+| Clean install, Docker | [Docker install procedures](ops/install-docker.md) |
+| Clean install, single-server Docker | [Single-server Docker install](ops/install-docker-single-server.md) |
+| Clean install, multi-server Docker | [Multi-server Docker install](ops/install-docker-multi-server.md) |
 
 ## Canonical Product Docs
 
@@ -52,7 +54,9 @@ Use the architecture overview and ADR registry for current architecture.
 ## Canonical Operations Docs
 
 - [Clean install, non-Docker](ops/install-non-docker.md)
-- [Clean install, Docker](ops/install-docker.md)
+- [Docker install procedures](ops/install-docker.md)
+- [Clean install, single-server Docker](ops/install-docker-single-server.md)
+- [Clean install, multi-server Docker](ops/install-docker-multi-server.md)
 - [Runtime prerequisites](ops/runtime-prereqs.md)
 - [Runbook](ops/runbook.md)
 - [Deploy checklist](ops/deploy-checklist.md)
