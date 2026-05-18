@@ -1,7 +1,6 @@
 # Single-Server Docker Install
 
-Canonical path for one Linux host running the full Plenora stack with Docker
-Compose.
+Canonical path for one host running the full Plenora stack with Docker Compose.
 
 This procedure uses the root `docker-compose.yml` and starts:
 
@@ -53,6 +52,47 @@ Record the full commit hash in the validation report.
 
 ## 3. Environment
 
+Automated path:
+
+```bash
+bash scripts/install-docker.sh --check
+bash scripts/install-docker.sh
+```
+
+Windows with Docker Desktop:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/install-docker.ps1 -Check
+powershell -ExecutionPolicy Bypass -File scripts/install-docker.ps1
+```
+
+Fresh Linux Debian/Ubuntu host:
+
+```bash
+bash scripts/install-docker.sh --install-deps
+```
+
+Fresh Windows host with winget:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/install-docker.ps1 -InstallDeps
+```
+
+Both installers:
+
+- create `.env.docker` from `.env.docker.example` if missing;
+- preserve existing non-empty secrets;
+- generate `PLENORA_ENCRYPTION_KEY` and `JWT_SECRET_KEY` if empty;
+- run `docker compose config`;
+- build backend and frontend images;
+- start Postgres, Redis, backend, worker, beat, and frontend;
+- check Python DB providers: PostgreSQL, MySQL/MariaDB, Oracle, and SQL Server
+  Python driver;
+- run health, readiness, frontend, and worker smoke checks unless smoke is
+  skipped.
+
+Manual path:
+
 ```bash
 cp .env.docker.example .env.docker
 python3 -c "from cryptography.fernet import Fernet; print('PLENORA_ENCRYPTION_KEY=' + Fernet.generate_key().decode())" >> .env.docker
@@ -66,6 +106,16 @@ For a remote host, set the frontend build URL before building:
 
 ```bash
 export FRONTEND_VITE_API_URL=http://<host-ip-or-dns>:5004
+```
+
+With the installer:
+
+```bash
+bash scripts/install-docker.sh --frontend-api-url http://<host-ip-or-dns>:5004
+```
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/install-docker.ps1 -FrontendApiUrl http://<host-ip-or-dns>:5004
 ```
 
 For local validation on the same machine, the compose default
@@ -98,6 +148,16 @@ Expected:
 If `odbc_drivers=[]`, PostgreSQL/MySQL/Oracle can still work, but SQL Server
 connection tests will return a controlled failure telling the operator to
 install the Microsoft ODBC driver.
+
+To make the installer fail when SQL Server ODBC is missing:
+
+```bash
+bash scripts/install-docker.sh --require-sqlserver-odbc
+```
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/install-docker.ps1 -RequireSqlServerOdbc
+```
 
 For a SQL Server-capable custom backend image on Debian 12/bookworm, use a
 derived image or add the equivalent package install to `backend/Dockerfile`:

@@ -45,6 +45,25 @@ docker compose version
 docker network ls
 ```
 
+For Linux hosts, the single-server installer can be used as a host bootstrap
+and preflight helper:
+
+```bash
+bash scripts/install-docker.sh --install-deps --check
+```
+
+For Windows Docker Desktop hosts:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/install-docker.ps1 -InstallDeps -Check
+```
+
+Do not run the full single-server installer on every multi-server host: it
+starts the compose-local Postgres and Redis services. In a multi-server
+topology, shared PostgreSQL, Redis, and object storage are provisioned once and
+then referenced by backend, worker, beat, and frontend hosts through explicit
+network URLs.
+
 On the operator workstation:
 
 ```bash

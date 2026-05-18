@@ -9,7 +9,7 @@ Use one of these procedures:
 
 | Target | Procedure |
 |---|---|
-| One Linux server, one Docker Engine, local compose-managed Postgres/Redis | [Single-server Docker install](install-docker-single-server.md) |
+| One server, one Docker Engine, local compose-managed Postgres/Redis | [Single-server Docker install](install-docker-single-server.md) |
 | Multiple Docker hosts or separated Docker roles, shared Postgres/Redis/object storage | [Multi-server Docker install](install-docker-multi-server.md) |
 
 ## Decision Rule
@@ -25,6 +25,39 @@ Do not mix the two procedures halfway. The root `docker-compose.yml` is the
 single-server scaffold. The multi-server procedure intentionally uses explicit
 per-role Docker commands and external dependencies because compose service DNS
 names such as `postgres` and `redis` are local to one compose network.
+
+## Automated Installers
+
+Single-server Docker has executable installers:
+
+```bash
+bash scripts/install-docker.sh --check
+bash scripts/install-docker.sh
+```
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/install-docker.ps1 -Check
+powershell -ExecutionPolicy Bypass -File scripts/install-docker.ps1
+```
+
+Use `--install-deps` on Linux Debian/Ubuntu to install Git, curl, Python 3,
+Docker Engine, and the Docker Compose v2 plugin through apt. Use `-InstallDeps`
+on Windows to install Git and Docker Desktop through winget.
+
+For remote frontend builds:
+
+```bash
+bash scripts/install-docker.sh --frontend-api-url http://<host-ip-or-dns>:5004
+```
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/install-docker.ps1 -FrontendApiUrl http://<host-ip-or-dns>:5004
+```
+
+If SQL Server connections must be validated during install, add
+`--require-sqlserver-odbc` on Linux or `-RequireSqlServerOdbc` on Windows. This
+fails the provider check unless the backend image exposes Microsoft ODBC Driver
+18 or 17 through `pyodbc.drivers()`.
 
 ## Status today (command-first, executable scaffold)
 
