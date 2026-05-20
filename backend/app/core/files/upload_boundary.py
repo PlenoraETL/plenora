@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any, Optional, TypedDict
+from typing import Any, Optional
+from typing_extensions import TypedDict
 
 from fastapi import HTTPException, UploadFile
 

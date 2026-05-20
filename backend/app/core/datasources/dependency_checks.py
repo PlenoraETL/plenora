@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 import json
-from typing import Any, Callable, TypedDict
+from typing import Any, Callable
+from typing_extensions import TypedDict
 
 
 class ProjectCanvasRow(TypedDict, total=False):

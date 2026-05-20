@@ -10,7 +10,8 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Callable, Iterable, Mapping, Optional, TypedDict, cast
+from typing import Callable, Iterable, Mapping, Optional, cast
+from typing_extensions import TypedDict
 
 from app.db.pg_connection import unit_of_work
 from app.db.sql_safety import safe_set_clause

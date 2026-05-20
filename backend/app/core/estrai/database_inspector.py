@@ -6,7 +6,8 @@ Keeps this module's responsibility explicit and isolated from adjacent code.
 
 import sqlite3
 
-from typing import Dict, List, Optional, TypedDict, Protocol, Callable, Any, Tuple
+from typing import Dict, List, Optional, Protocol, Callable, Any, Tuple
+from typing_extensions import TypedDict
 from dataclasses import dataclass
 
 from app.core.estrai.types import DatabaseSchema

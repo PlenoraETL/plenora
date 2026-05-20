@@ -17,6 +17,7 @@ const MultiJoinNode = memo(({ data, id }) => {
   // Configurazione
   const config = data.config || {};
   const joinKeys = config.join_keys || [];
+  const joinKeyIds = config.join_key_ids || [];
   const joinType = config.join_type || 'inner';
   const [isRunHistoryOpen, setIsRunHistoryOpen] = useState(false);
   const projectId = useCanvasStore(s => s.projectId);
@@ -38,7 +39,11 @@ const MultiJoinNode = memo(({ data, id }) => {
       
       // Colonne del nodo sorgente (output del predecessore)
       const cols = sourceNode.data?.columns || [];
-      const columnNames = cols.map(c => typeof c === 'string' ? c : (c.alias || c.name));
+      const columnItems = cols.map(c => (
+        typeof c === 'string'
+          ? { name: c, id: null }
+          : { ...c, name: c.alias || c.name, id: c.id || c.column_id || null }
+      ));
       
       // Nome sorgente
       let name = sourceNode.data?.source_project_id || 
@@ -54,7 +59,7 @@ const MultiJoinNode = memo(({ data, id }) => {
         id: sourceNode.id,
         name,
         type: sourceNode.type,
-        columns: columnNames
+        columns: columnItems
       };
     }).filter(Boolean);
   }, [id, getEdges, getNodes, data.inputColumns]); // Trigger anche su inputColumns change
@@ -65,7 +70,7 @@ const MultiJoinNode = memo(({ data, id }) => {
     // Trova colonne presenti in TUTTE le sorgenti
     const firstCols = sources[0]?.columns || [];
     return firstCols.filter(col =>
-      sources.every(src => src.columns.includes(col))
+      sources.every(src => src.columns.some(c => c.name === col.name))
     );
   }, [sources]);
 
@@ -74,15 +79,23 @@ const MultiJoinNode = memo(({ data, id }) => {
   const confirm        = useConfirm();
 
   const updateConfig = useCallback((field, value) => {
-    updateNodeData(id, { config: { ...config, [field]: value } });
+    const patch = typeof field === 'object' && field !== null
+      ? field
+      : { [field]: value };
+    updateNodeData(id, { config: { ...config, ...patch } });
   }, [id, updateNodeData, config]);
 
-  const toggleJoinKey = useCallback((colName) => {
+  const toggleJoinKey = useCallback((col) => {
+    const colName = typeof col === 'string' ? col : col.name;
+    const colId = typeof col === 'string' ? null : col.id;
     const newKeys = joinKeys.includes(colName)
       ? joinKeys.filter(k => k !== colName)
       : [...joinKeys, colName];
-    updateConfig('join_keys', newKeys);
-  }, [joinKeys, updateConfig]);
+    const newIds = joinKeys.includes(colName)
+      ? joinKeyIds.filter((_, idx) => joinKeys[idx] !== colName)
+      : [...joinKeyIds, colId].filter(Boolean);
+    updateConfig({ join_keys: newKeys, join_key_ids: newIds });
+  }, [joinKeys, joinKeyIds, updateConfig]);
 
   const handleDelete = useCallback(async (e) => {
     e.stopPropagation();
@@ -115,9 +128,9 @@ const MultiJoinNode = memo(({ data, id }) => {
     // Poi le altre colonne da ogni sorgente
     sources.forEach(src => {
       src.columns.forEach(col => {
-        if (!seen.has(col)) {
-          seen.add(col);
-          result.push(col);
+        if (!seen.has(col.name)) {
+          seen.add(col.name);
+          result.push(col.name);
         }
       });
     });
@@ -226,7 +239,7 @@ const MultiJoinNode = memo(({ data, id }) => {
                     >
                       <option value="">⬅ Sinistra</option>
                       {(sources[0]?.columns || []).map(col => (
-                        <option key={col} value={col}>{col}</option>
+                        <option key={col.id || col.name} value={col.name}>{col.name}</option>
                       ))}
                     </select>
                     <span className="multi-join-node__pair-arrow">=</span>
@@ -242,7 +255,7 @@ const MultiJoinNode = memo(({ data, id }) => {
                     >
                       <option value="">➡ Destra</option>
                       {(sources[1]?.columns || []).map(col => (
-                        <option key={col} value={col}>{col}</option>
+                        <option key={col.id || col.name} value={col.name}>{col.name}</option>
                       ))}
                     </select>
                     <button
@@ -324,13 +337,13 @@ const MultiJoinNode = memo(({ data, id }) => {
                   <div className="multi-join-node__keys nodrag">
                     {commonColumns.map(col => (
                       <label 
-                        key={col} 
+                        key={col.id || col.name} 
                         className="multi-join-node__key-item nodrag"
                         onClick={(e) => e.stopPropagation()}
                       >
                         <input
                           type="checkbox"
-                          checked={joinKeys.includes(col)}
+                          checked={joinKeys.includes(col.name)}
                           onChange={(e) => {
                             e.stopPropagation();
                             toggleJoinKey(col);
@@ -339,7 +352,7 @@ const MultiJoinNode = memo(({ data, id }) => {
                           onMouseDown={(e) => e.stopPropagation()}
                           className="nodrag nopan"
                         />
-                        <span className="multi-join-node__key-name">{col}</span>
+                        <span className="multi-join-node__key-name">{col.name}</span>
                       </label>
                     ))}
                   </div>

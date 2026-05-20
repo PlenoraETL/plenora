@@ -126,6 +126,55 @@ def tabular_dataframe_to_bytes(df: pd.DataFrame, formato: str) -> bytes:
     raise ValueError(f"Formato '{formato}' non supportato")
 
 
+def make_unique_column_names(
+    columns: Iterable[Any],
+) -> tuple[list[str], list[tuple[str, str]]]:
+    """Return stable, public-safe column names.
+
+    Duplicate names are suffixed with ``_2``, ``_3``, ... while preserving
+    order. Existing names are reserved up front, so ``["id", "id", "id_2"]``
+    becomes ``["id", "id_3", "id_2"]`` instead of reintroducing a collision.
+    """
+    original = [str(col) for col in columns]
+    reserved = set(original)
+    used: set[str] = set()
+    counters: dict[str, int] = {}
+    unique: list[str] = []
+    renames: list[tuple[str, str]] = []
+
+    for name in original:
+        if name not in used:
+            used.add(name)
+            counters.setdefault(name, 1)
+            unique.append(name)
+            continue
+
+        suffix = counters.get(name, 1)
+        while True:
+            suffix += 1
+            candidate = f"{name}_{suffix}"
+            if candidate not in used and candidate not in reserved:
+                break
+        counters[name] = suffix
+        used.add(candidate)
+        unique.append(candidate)
+        renames.append((name, candidate))
+
+    return unique, renames
+
+
+def rename_duplicate_columns(
+    df: pd.DataFrame,
+) -> tuple[pd.DataFrame, list[tuple[str, str]]]:
+    """Rename duplicate DataFrame columns without dropping data."""
+    unique_columns, renames = make_unique_column_names(df.columns)
+    if not renames:
+        return df, []
+    renamed = df.copy()
+    renamed.columns = unique_columns
+    return renamed, renames
+
+
 def filter_visible_columns(
     df: pd.DataFrame,
     node_columns: JsonRows,
@@ -1047,6 +1096,7 @@ __all__ = [
     "iter_dataframe_indexed_rows",
     "iter_dataframe_rows",
     "join_columns_as_strings",
+    "make_unique_column_names",
     "constant_object_series",
     "estimate_merge_output_rows",
     "matching_row_indices",
@@ -1064,6 +1114,7 @@ __all__ = [
     "sample_rows_reset_index",
     "sanitize_for_json",
     "select_and_rename_columns",
+    "rename_duplicate_columns",
     "row_indices_where_column_in",
     "set_cell_value",
     "set_values_where_mask",

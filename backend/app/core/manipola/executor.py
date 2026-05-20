@@ -25,7 +25,7 @@ from app.shared.execution.executor_protocol import PipelineDispatcherProtocol
 from app.shared.execution.graph import kahn_topological_order
 from app.utils.logger import get_logger, append_step
 from app.core.results.pipeline_result import save_pipeline_result_outcome
-from app.core.dataframes.frame_io import load_dataframe_from_file
+from app.core.dataframes.frame_io import load_dataframe_from_file, rename_duplicate_columns
 from app.core.artifacts import SourceLoader, SourceRef
 from app.core.dataframes.geodata import (
     detect_geometry_column,
@@ -37,7 +37,7 @@ from app.core.intermediate.snapshot import (
     record_final_snapshot,
 )
 from app.core.resources.exceptions import MemoryLimitExceededError
-from app.core.projects.columns_metadata import save_columns_metadata_with_retry
+from app.core.output_contract import build_output_contract
 from app.shared.resources.metadata import ResourceMetadata
 from .plugin_executor import get_executor
 from .source_loading import load_file_sources
@@ -262,6 +262,7 @@ class ManipolaExecutor:
         try:
             current_df = self._applica_trasformazioni(
                 canvas, dataframes, run_id=run_id,
+                project_id=project_id,
                 canvas_graph=canvas_graph,
                 intermediate_mode_override=intermediate_mode_override,
             )
@@ -299,21 +300,59 @@ class ManipolaExecutor:
             except Exception as _iex:
                 logger.warning(f"Intermediate write result node fallita (non bloccante): {_iex}")
 
+        current_df, renamed_columns = rename_duplicate_columns(current_df)
+        if renamed_columns:
+            logger.warning(
+                "MANIPOLA result con colonne duplicate normalizzate: "
+                + ", ".join(f"{old}->{new}" for old, new in renamed_columns),
+                op="execute",
+                project_id=project_id,
+            )
+
         save_result = self._salva_risultato(
             project_id, result_node, current_df, canvas, canvas_graph=canvas_graph
         )
 
         # Keep project_source reuse aligned with the actual persisted schema.
-        # Non-transient metadata failures propagate so Celery marks the run failed.
         if save_result.get("success"):
-            _col_meta = [
-                {"name": c, "type": str(current_df[c].dtype)} for c in current_df.columns
+            result_columns = [
+                {"name": c, "type": str(current_df[c].dtype)}
+                for c in current_df.columns
             ]
-            save_columns_metadata_with_retry(
-                project_service=self.project_service,
+            try:
+                from app.core.projects.schema_inference import SchemaInferenceService
+
+                schema_service = SchemaInferenceService(self.project_service)
+                nodes_by_id = {n.id: n for n in canvas.nodes}
+                edges_by_target = schema_service._group_edges_by_target(canvas.edges)
+                result_node_schema = schema_service._infer_node_schema(
+                    node=result_node,
+                    nodes_by_id=nodes_by_id,
+                    edges_by_target=edges_by_target,
+                    project_id=project_id,
+                )
+                by_name = {col.name: col for col in result_node_schema}
+                result_columns = [
+                    {
+                        "id": getattr(by_name.get(c), "id", None),
+                        "source_name": getattr(by_name.get(c), "source_name", None) or c,
+                        "name": c,
+                        "type": str(current_df[c].dtype),
+                    }
+                    for c in current_df.columns
+                ]
+            except Exception as exc:
+                logger.warning(
+                    f"output_contract: schema id non disponibili, uso colonne DataFrame: {exc}"
+                )
+            output_contract = build_output_contract(
                 project_id=project_id,
-                columns_metadata=_col_meta,
-                logger=logger,
+                result_columns=result_columns,
+                previous_contract=self.project_service.get_project_output_contract(project_id),
+            )
+            self.project_service.update_project_output_contract(
+                project_id,
+                output_contract.model_dump(),
             )
 
         append_step({
@@ -360,7 +399,7 @@ class ManipolaExecutor:
                 return {"success": False, "message": "Nessun dato sorgente disponibile"}
 
             current_df = self._applica_trasformazioni(
-                canvas, dataframes, canvas_graph=canvas_graph
+                canvas, dataframes, project_id=project_id, canvas_graph=canvas_graph
             )
             if current_df is None:
                 return {"success": False, "message": "Nessun dato prodotto dalla pipeline"}
@@ -543,6 +582,7 @@ class ManipolaExecutor:
         canvas: CanvasState,
         dataframes: FrameMap,
         run_id: Optional[str] = None,
+        project_id: Optional[str] = None,
         canvas_graph: Optional[CanvasGraph] = None,
         intermediate_mode_override: Optional[str] = None,
     ) -> Optional[FrameLike]:
@@ -567,6 +607,21 @@ class ManipolaExecutor:
         
         current_df = None
         graph = canvas_graph or CanvasGraph.from_canvas(canvas)
+        schema_service = None
+        schema_nodes_by_id = None
+        schema_edges_by_target = None
+        if project_id:
+            try:
+                from app.core.projects.schema_inference import SchemaInferenceService
+
+                schema_service = SchemaInferenceService(self.project_service)
+                schema_service._schema_cache = {}
+                schema_nodes_by_id = {n.id: n for n in canvas.nodes}
+                schema_edges_by_target = schema_service._group_edges_by_target(canvas.edges)
+            except Exception as exc:
+                logger.warning(
+                    f"Schema runtime non disponibile per risoluzione column_id: {exc}"
+                )
 
         for node in sorted_nodes:
             # Trova input per questo nodo - ORDINA per targetHandle o posizione Y
@@ -577,6 +632,29 @@ class ManipolaExecutor:
             if not inputs:
                 logger.warning(f"Nodo {node.id} senza input, skip")
                 continue
+
+            if schema_service and schema_nodes_by_id is not None and schema_edges_by_target is not None:
+                try:
+                    input_columns = []
+                    for edge in incoming:
+                        source_node = schema_nodes_by_id.get(edge.source)
+                        if not source_node:
+                            continue
+                        source_schema = schema_service._infer_node_schema(
+                            node=source_node,
+                            nodes_by_id=schema_nodes_by_id,
+                            edges_by_target=schema_edges_by_target,
+                            project_id=project_id,
+                        )
+                        input_columns.extend(col.to_dict() for col in source_schema)
+                    if node.data is None:
+                        node.data = {}
+                    if isinstance(node.data, dict):
+                        node.data["inputColumns"] = input_columns
+                except Exception as exc:
+                    logger.warning(
+                        f"Risoluzione inputColumns fallita per nodo {node.id}: {exc}"
+                    )
             
             if node.type == "multi_join":
                 # Esegui multi-join
@@ -626,6 +704,18 @@ class ManipolaExecutor:
             return inputs[0] if inputs else empty_dataframe()
 
         join_keys = _nf(node, 'join_keys') or (node.data or {}).get('config', {}).get('join_keys', [])
+        join_key_ids = _nf(node, 'join_key_ids') or (node.data or {}).get('config', {}).get('join_key_ids', [])
+        if join_key_ids and isinstance(node.data, dict):
+            id_to_name = {
+                str(col.get("id") or col.get("column_id")): str(col.get("name"))
+                for col in (node.data.get("inputColumns") or [])
+                if isinstance(col, dict) and (col.get("id") or col.get("column_id")) and col.get("name")
+            }
+            resolved_keys = [
+                id_to_name.get(str(column_id), join_keys[idx] if idx < len(join_keys) else None)
+                for idx, column_id in enumerate(join_key_ids)
+            ]
+            join_keys = [key for key in resolved_keys if key]
         join_type = _nf(node, 'multi_join_type') or (node.data or {}).get('config', {}).get('join_type', 'inner')
 
         if not join_keys:

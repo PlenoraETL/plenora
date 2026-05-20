@@ -177,42 +177,38 @@ def test_compute_result_columns_includes_api_enrich_added_columns():
     assert by_name["lat"]["type"] == "float"
 
 
-# Test 4 — project_source preferisce result_node.columns quando presente
+# Test 4 — project_source legge solo l'output_contract pubblico
 
 
-def test_infer_project_source_schema_prefers_result_node_columns_over_metadata(
+def test_infer_project_source_schema_reads_output_contract(
     monkeypatch,
 ):
-    """Quando il canvas del progetto sorgente ha
-    `nodes[result].columns` popolato (post-C9), questo prevale su
-    `canvas.columns_metadata` (anche se lo metadata e' stale)."""
     svc = _svc()
 
-    # Stub the current project metadata DB boundary: il source progetto ha result.columns
-    # corrette (4 col) e columns_metadata stale (2 col legacy).
-    fake_canvas = {
-        "nodes": [
+    output_contract = {
+        "schema_version": 1,
+        "producer_project_id": "src-proj-1",
+        "revision": 3,
+        "columns": [
             {
-                "id": "src1",
-                "type": "file_source",
-                "columns": [{"name": "id", "type": "int", "visible": True}],
+                "id": "col-id",
+                "source_name": "id",
+                "physical_name": "myid",
+                "display_name": "myid",
+                "type": {"logical": "integer"},
+                "ordinal": 0,
+                "status": "active",
             },
             {
-                "id": "res1",
-                "type": "result",
-                "columns": [
-                    {"name": "id", "type": "int", "visible": True},
-                    {"name": "lat", "type": "float", "visible": True},
-                    {"name": "risk", "type": "str", "visible": True},
-                    {"name": "score", "type": "float", "visible": True},
-                ],
+                "id": "col-score",
+                "source_name": "score",
+                "physical_name": "score",
+                "display_name": "score",
+                "type": {"logical": "number"},
+                "ordinal": 1,
+                "status": "active",
             },
         ],
-        "columns_metadata": [
-            # STALE — solo 2 col, perse risk/score
-            {"name": "id", "type": "int"},
-            {"name": "lat", "type": "float"},
-        ],
     }
 
     from app.core.projects.project_context_loader import (
@@ -220,144 +216,37 @@ def test_infer_project_source_schema_prefers_result_node_columns_over_metadata(
     )
     monkeypatch.setattr(
         "app.core.projects.schema_inference.load_project_source_schema_context",
-        lambda pid: ProjectSourceSchemaContext(project_id=pid, canvas=fake_canvas),
+        lambda pid: ProjectSourceSchemaContext(
+            project_id=pid,
+            output_contract=output_contract,
+        ),
     )
     ps_node = _node("ps1", "project_source", source_project_id="src-proj-1")
     schema = svc._infer_project_source_schema(ps_node)
 
     names = [c.name for c in schema]
-    # Deve restituire le 4 col del result_node, non le 2 stale di metadata
-    assert names == ["id", "lat", "risk", "score"], names
+    assert names == ["myid", "score"], names
+    assert [c.type for c in schema] == ["integer", "number"]
 
 
-# Test 5 — project_source fallback su columns_metadata se result.columns vuoto
+# Test 5 — project_source fallisce loud senza output_contract
 
 
-def test_infer_project_source_schema_fallback_to_columns_metadata_when_result_empty(
+def test_infer_project_source_schema_requires_output_contract(
     monkeypatch,
 ):
-    """Compat legacy: progetti pre-C9 / canvas mai salvati hanno
-    `result_node.columns = []` ma `columns_metadata` popolato. Il
-    reader cade su metadata."""
     svc = _svc()
-
-    fake_canvas = {
-        "nodes": [
-            {
-                "id": "res1",
-                "type": "result",
-                "columns": [],  # NOTE: legacy / mai computed
-            }
-        ],
-        "columns_metadata": [
-            {"name": "id", "type": "int"},
-            {"name": "value", "type": "str"},
-        ],
-    }
 
     from app.core.projects.project_context_loader import (
         ProjectSourceSchemaContext,
     )
     monkeypatch.setattr(
         "app.core.projects.schema_inference.load_project_source_schema_context",
-        lambda pid: ProjectSourceSchemaContext(project_id=pid, canvas=fake_canvas),
+        lambda pid: ProjectSourceSchemaContext(
+            project_id=pid,
+            output_contract=None,
+        ),
     )
     ps_node = _node("ps1", "project_source", source_project_id="src-proj-1")
-    schema = svc._infer_project_source_schema(ps_node)
-
-    names = [c.name for c in schema]
-    assert names == ["id", "value"], names
-
-
-# Test 6 — rollback semantica fuori scope: alias non usato come nome
-# Previous behavior `columns_metadata` non aveva campo `alias`, quindi il consumer
-# riceveva sempre `name`. Il primo tentativo di Fix 2 introduceva
-# `col_name = alias or name`: scope-creep che avrebbe rotto i consumer
-# che matchano via `visible_columns` (set di `name`). Rollback in commit
-# 2c0a071 ripristina la semantica 1:1 con Previous behavior.
-
-
-def test_infer_project_source_schema_does_not_rename_columns_via_alias(
-    monkeypatch,
-):
-    """Anche se result_node.columns ha `alias`, il consumer riceve
-    `name` (compat 1:1 con Previous behavior che leggeva da columns_metadata)."""
-    svc = _svc()
-
-    fake_canvas = {
-        "nodes": [
-            {
-                "id": "res1",
-                "type": "result",
-                "columns": [
-                    # User ha rinominato "x" → "X_renamed" via alias
-                    {"name": "x", "alias": "X_renamed", "type": "int", "visible": True},
-                    {"name": "y", "type": "str", "visible": True},
-                ],
-            }
-        ],
-        "columns_metadata": [],
-    }
-
-    from app.core.projects.project_context_loader import (
-        ProjectSourceSchemaContext,
-    )
-    monkeypatch.setattr(
-        "app.core.projects.schema_inference.load_project_source_schema_context",
-        lambda pid: ProjectSourceSchemaContext(project_id=pid, canvas=fake_canvas),
-    )
-    ps_node = _node("ps1", "project_source", source_project_id="src-proj-1")
-    schema = svc._infer_project_source_schema(ps_node)
-
-    names = [c.name for c in schema]
-    assert names == ["x", "y"], names
-    assert "X_renamed" not in names
-
-
-# Test 7 — rollback semantica fuori scope: niente filtro intrinseco visible=False
-# Previous behavior `columns_metadata` non aveva campo `visible`, quindi tutte le
-# colonne dei metadata venivano sempre emesse. Il primo tentativo di
-# Fix 2 introduceva `if not col.get("visible", True): continue` che
-# avrebbe nascosto colonne Previous behavior sempre visibili. Rollback ripristina:
-# il filtro visibility resta SOLO via `node_columns` (lato consumer
-# project_source), non via campo intrinseco della colonna source.
-
-
-def test_infer_project_source_schema_does_not_filter_by_intrinsic_visible_flag(
-    monkeypatch,
-):
-    """Una colonna con `visible: False` in result_node.columns deve
-    comunque essere emessa, perche' Previous behavior (lettura da metadata senza
-    campo visible) la includeva sempre. Il filtraggio visibility
-    avviene solo via project_source node.columns (consumer-side)."""
-    svc = _svc()
-
-    fake_canvas = {
-        "nodes": [
-            {
-                "id": "res1",
-                "type": "result",
-                "columns": [
-                    {"name": "shown", "type": "int", "visible": True},
-                    # visible: False — il consumer deve comunque vederla
-                    {"name": "hidden_in_source", "type": "str", "visible": False},
-                ],
-            }
-        ],
-        "columns_metadata": [],
-    }
-
-    from app.core.projects.project_context_loader import (
-        ProjectSourceSchemaContext,
-    )
-    monkeypatch.setattr(
-        "app.core.projects.schema_inference.load_project_source_schema_context",
-        lambda pid: ProjectSourceSchemaContext(project_id=pid, canvas=fake_canvas),
-    )
-    # Consumer node senza filtro proprio (node.columns vuoto): tutte
-    # le colonne del source devono passare.
-    ps_node = _node("ps1", "project_source", source_project_id="src-proj-1")
-    schema = svc._infer_project_source_schema(ps_node)
-
-    names = [c.name for c in schema]
-    assert names == ["shown", "hidden_in_source"], names
+    with pytest.raises(ValueError, match="output_contract"):
+        svc._infer_project_source_schema(ps_node)

@@ -17,9 +17,21 @@ DRY_RUN=0
 CHECK_ONLY=0
 INSTALL_DEPS=0
 SKIP_SMOKE=0
+SKIP_ADMIN_BOOTSTRAP=0
 REQUIRE_SQLSERVER_ODBC=0
 FRONTEND_VITE_API_URL="${FRONTEND_VITE_API_URL:-}"
+BOOTSTRAP_ADMIN_USERNAME="${PLENORA_BOOTSTRAP_ADMIN_USERNAME:-${PLENORA_ADMIN_USERNAME:-}}"
+BOOTSTRAP_ADMIN_PASSWORD="${PLENORA_BOOTSTRAP_ADMIN_PASSWORD:-${PLENORA_ADMIN_PASSWORD:-}}"
+BOOTSTRAP_ADMIN_GROUP_ID="${PLENORA_BOOTSTRAP_ADMIN_GROUP_ID:-root}"
+PLENORA_WORKER_REPLICAS="${PLENORA_WORKER_REPLICAS:-}"
+PLENORA_DOCKER_NETWORK="${PLENORA_DOCKER_NETWORK:-plenora}"
+PLENORA_DOCKER_SUBNET="${PLENORA_DOCKER_SUBNET:-172.28.0.0/16}"
+COMPOSE_FILE="${COMPOSE_FILE:-docker-compose.yml}"
 DOCKER_CMD=()
+
+export PLENORA_DOCKER_NETWORK
+export PLENORA_DOCKER_SUBNET
+export COMPOSE_FILE
 
 usage() {
     cat <<'USAGE'
@@ -33,6 +45,8 @@ Usage:
   bash scripts/install-docker.sh --frontend-api-url http://<host>:5004
   bash scripts/install-docker.sh --require-sqlserver-odbc
   bash scripts/install-docker.sh --skip-smoke
+  bash scripts/install-docker.sh --admin-username admin
+  bash scripts/install-docker.sh --worker-replicas 2
 
 Options:
   --check
@@ -54,6 +68,45 @@ Options:
 
   --skip-smoke
       Build and start the stack, but skip HTTP and worker smoke checks.
+
+  --admin-username USERNAME
+      Superadmin username to create or update. If omitted in an interactive
+      terminal, the installer prompts and defaults to "admin".
+
+  --admin-password PASSWORD
+      Superadmin password to create or update. Prefer the environment variable
+      PLENORA_BOOTSTRAP_ADMIN_PASSWORD to avoid shell history exposure.
+
+  --admin-group-id GROUP_ID
+      Group id for the bootstrap superadmin. Default: root.
+
+  --skip-admin-bootstrap
+      Do not prompt for or create a superadmin user.
+
+  --worker-replicas N
+      Number of Celery worker containers to run. Default: 1.
+
+Environment overrides:
+  PLENORA_BOOTSTRAP_ADMIN_USERNAME / PLENORA_BOOTSTRAP_ADMIN_PASSWORD
+      Non-interactive superadmin bootstrap credentials.
+
+  PLENORA_BOOTSTRAP_ADMIN_GROUP_ID
+      Group id used by the bootstrap superadmin. Default: root.
+
+  PLENORA_WORKER_REPLICAS
+      Number of Celery worker containers to run. Default: 1.
+
+  PLENORA_DOCKER_NETWORK
+      External Docker bridge network used by the compose stack.
+      Default: plenora
+
+  PLENORA_DOCKER_SUBNET
+      Subnet used when the installer creates PLENORA_DOCKER_NETWORK.
+      Default: 172.28.0.0/16
+
+  COMPOSE_FILE
+      Compose file used by the installer. Default: docker-compose.yml.
+      The default intentionally ignores local docker-compose.override.yml files.
 
 Source of truth:
   docs/ops/install-docker-single-server.md
@@ -137,6 +190,30 @@ while [ $# -gt 0 ]; do
         --skip-smoke)
             SKIP_SMOKE=1
             shift
+            ;;
+        --admin-username)
+            [ $# -ge 2 ] || die "--admin-username requires a value."
+            BOOTSTRAP_ADMIN_USERNAME="$2"
+            shift 2
+            ;;
+        --admin-password)
+            [ $# -ge 2 ] || die "--admin-password requires a value."
+            BOOTSTRAP_ADMIN_PASSWORD="$2"
+            shift 2
+            ;;
+        --admin-group-id)
+            [ $# -ge 2 ] || die "--admin-group-id requires a value."
+            BOOTSTRAP_ADMIN_GROUP_ID="$2"
+            shift 2
+            ;;
+        --skip-admin-bootstrap)
+            SKIP_ADMIN_BOOTSTRAP=1
+            shift
+            ;;
+        --worker-replicas)
+            [ $# -ge 2 ] || die "--worker-replicas requires a value."
+            PLENORA_WORKER_REPLICAS="$2"
+            shift 2
             ;;
         --help|-h)
             usage
@@ -232,6 +309,23 @@ preflight() {
     command -v curl >/dev/null 2>&1 || die "curl not found; needed for health smoke checks."
 }
 
+ensure_docker_network() {
+    log_step "Docker network"
+
+    log "+ ${DOCKER_CMD[*]} network inspect ${PLENORA_DOCKER_NETWORK}"
+    if [ "$DRY_RUN" -eq 1 ]; then
+        log "+ ${DOCKER_CMD[*]} network create --driver bridge --subnet ${PLENORA_DOCKER_SUBNET} ${PLENORA_DOCKER_NETWORK}  # if missing"
+        return 0
+    fi
+
+    if "${DOCKER_CMD[@]}" network inspect "$PLENORA_DOCKER_NETWORK" >/dev/null 2>&1; then
+        log "Docker network ${PLENORA_DOCKER_NETWORK} already exists."
+        return 0
+    fi
+
+    run_docker network create --driver bridge --subnet "$PLENORA_DOCKER_SUBNET" "$PLENORA_DOCKER_NETWORK"
+}
+
 env_value() {
     local key="$1"
     awk -F= -v key="$key" '
@@ -316,10 +410,167 @@ ensure_env_docker() {
     if [ -z "$(env_value JWT_SECRET_KEY)" ]; then
         set_env_value JWT_SECRET_KEY "$(new_jwt_secret)"
     fi
+    if [ "$(env_value STORAGE_POLICY)" = "db" ] && [ -z "$(env_value OBJECT_STORAGE_ENABLED)" ]; then
+        set_env_value OBJECT_STORAGE_ENABLED "false"
+    fi
     chmod 600 ".env.docker" || true
 
     [ -n "$(env_value PLENORA_ENCRYPTION_KEY)" ] || die "PLENORA_ENCRYPTION_KEY is still empty in .env.docker."
     [ -n "$(env_value JWT_SECRET_KEY)" ] || die "JWT_SECRET_KEY is still empty in .env.docker."
+}
+
+validate_positive_int() {
+    local name="$1"
+    local value="$2"
+    case "$value" in
+        ''|*[!0-9]*)
+            die "${name} must be a positive integer."
+            ;;
+    esac
+    if [ "$value" -le 0 ]; then
+        die "${name} must be greater than zero."
+    fi
+}
+
+collect_runtime_choices() {
+    log_step "Runtime choices"
+
+    if [ "$DRY_RUN" -eq 1 ]; then
+        log "+ choose Celery worker replicas (default: 1)"
+        [ -n "$PLENORA_WORKER_REPLICAS" ] || PLENORA_WORKER_REPLICAS=1
+        validate_positive_int "PLENORA_WORKER_REPLICAS" "$PLENORA_WORKER_REPLICAS"
+        log "Celery worker replicas: ${PLENORA_WORKER_REPLICAS}"
+        return 0
+    fi
+
+    if [ -z "$PLENORA_WORKER_REPLICAS" ] && [ -t 0 ]; then
+        printf "Celery worker replicas [1]: "
+        read -r PLENORA_WORKER_REPLICAS
+    fi
+    PLENORA_WORKER_REPLICAS="${PLENORA_WORKER_REPLICAS:-1}"
+    validate_positive_int "PLENORA_WORKER_REPLICAS" "$PLENORA_WORKER_REPLICAS"
+    log "Celery worker replicas: ${PLENORA_WORKER_REPLICAS}"
+}
+
+collect_admin_bootstrap_credentials() {
+    log_step "Bootstrap superadmin"
+
+    if [ "$SKIP_ADMIN_BOOTSTRAP" -eq 1 ]; then
+        log "Superadmin bootstrap skipped."
+        return 0
+    fi
+
+    if [ "$DRY_RUN" -eq 1 ]; then
+        log "+ prompt for superadmin username/password if not provided"
+        log "+ seed or update superadmin after backend is healthy"
+        return 0
+    fi
+
+    if [ -z "$BOOTSTRAP_ADMIN_USERNAME" ] && [ -t 0 ]; then
+        printf "Superadmin username [admin]: "
+        read -r BOOTSTRAP_ADMIN_USERNAME
+        BOOTSTRAP_ADMIN_USERNAME="${BOOTSTRAP_ADMIN_USERNAME:-admin}"
+    fi
+
+    if [ -z "$BOOTSTRAP_ADMIN_PASSWORD" ] && [ -t 0 ]; then
+        local password_confirm=""
+        while true; do
+            printf "Superadmin password (min 12 chars): "
+            read -r -s BOOTSTRAP_ADMIN_PASSWORD
+            printf '\n'
+            printf "Confirm superadmin password: "
+            read -r -s password_confirm
+            printf '\n'
+            if [ "$BOOTSTRAP_ADMIN_PASSWORD" != "$password_confirm" ]; then
+                log "Passwords do not match; try again."
+                BOOTSTRAP_ADMIN_PASSWORD=""
+                continue
+            fi
+            if [ "${#BOOTSTRAP_ADMIN_PASSWORD}" -lt 12 ]; then
+                log "Password must be at least 12 characters; try again."
+                BOOTSTRAP_ADMIN_PASSWORD=""
+                continue
+            fi
+            break
+        done
+    fi
+
+    if [ -z "$BOOTSTRAP_ADMIN_USERNAME" ] || [ -z "$BOOTSTRAP_ADMIN_PASSWORD" ]; then
+        SKIP_ADMIN_BOOTSTRAP=1
+        log "Superadmin bootstrap skipped: credentials were not provided and stdin is not interactive."
+        log "Set PLENORA_BOOTSTRAP_ADMIN_USERNAME and PLENORA_BOOTSTRAP_ADMIN_PASSWORD for non-interactive installs."
+        return 0
+    fi
+
+    if [ "${#BOOTSTRAP_ADMIN_PASSWORD}" -lt 12 ]; then
+        die "superadmin password must be at least 12 characters."
+    fi
+}
+
+seed_bootstrap_superadmin() {
+    if [ "$SKIP_ADMIN_BOOTSTRAP" -eq 1 ]; then
+        return 0
+    fi
+
+    log_step "Seed superadmin"
+    log "+ ${DOCKER_CMD[*]} compose exec -T -e PLENORA_BOOTSTRAP_ADMIN_USERNAME -e PLENORA_BOOTSTRAP_ADMIN_PASSWORD -e PLENORA_BOOTSTRAP_ADMIN_GROUP_ID backend python -c <bootstrap-script>"
+    if [ "$DRY_RUN" -eq 1 ]; then
+        return 0
+    fi
+
+    export PLENORA_BOOTSTRAP_ADMIN_USERNAME="$BOOTSTRAP_ADMIN_USERNAME"
+    export PLENORA_BOOTSTRAP_ADMIN_PASSWORD="$BOOTSTRAP_ADMIN_PASSWORD"
+    export PLENORA_BOOTSTRAP_ADMIN_GROUP_ID="$BOOTSTRAP_ADMIN_GROUP_ID"
+
+    local script
+    script='import os, uuid
+from app.core.auth import db
+from app.shared.password_hashing import hash_password
+
+username = os.environ["PLENORA_BOOTSTRAP_ADMIN_USERNAME"]
+password = os.environ["PLENORA_BOOTSTRAP_ADMIN_PASSWORD"]
+group_id = os.environ.get("PLENORA_BOOTSTRAP_ADMIN_GROUP_ID") or "root"
+
+if not username.strip():
+    raise SystemExit("bootstrap superadmin username is empty")
+if len(password) < 12:
+    raise SystemExit("bootstrap superadmin password must be at least 12 characters")
+if not group_id.strip():
+    raise SystemExit("bootstrap superadmin group id is empty")
+
+if db.get_group(group_id) is None:
+    db.create_group(group_id, "Root", "Bootstrap superadmin group")
+
+existing = db.get_user_by_username(username)
+if existing is None:
+    db.create_user(
+        user_id=f"bootstrap-{uuid.uuid4()}",
+        username=username,
+        password_hash=hash_password(password),
+        group_id=group_id,
+        role="superadmin",
+        email="admin@example.local",
+    )
+else:
+    db.update_user(existing.id, is_active=True, role="superadmin", group_id=group_id)
+    db.update_user_password(existing.id, hash_password(password))
+
+print(f"Superadmin ready: username={username} role=superadmin group_id={group_id}")'
+
+    "${DOCKER_CMD[@]}" compose exec -T \
+        -e PLENORA_BOOTSTRAP_ADMIN_USERNAME \
+        -e PLENORA_BOOTSTRAP_ADMIN_PASSWORD \
+        -e PLENORA_BOOTSTRAP_ADMIN_GROUP_ID \
+        backend python -c "$script"
+    local rc=$?
+
+    unset PLENORA_BOOTSTRAP_ADMIN_PASSWORD
+    BOOTSTRAP_ADMIN_PASSWORD=""
+
+    if [ "$rc" -ne 0 ]; then
+        printf 'ERROR: docker command failed with exit code %s: bootstrap superadmin\n' "$rc" >&2
+        exit "$rc"
+    fi
 }
 
 provider_check() {
@@ -362,6 +613,9 @@ if [ "$CHECK_ONLY" -eq 1 ]; then
 fi
 
 ensure_env_docker
+ensure_docker_network
+collect_runtime_choices
+collect_admin_bootstrap_credentials
 
 if [ -n "$FRONTEND_VITE_API_URL" ]; then
     export FRONTEND_VITE_API_URL
@@ -369,11 +623,12 @@ if [ -n "$FRONTEND_VITE_API_URL" ]; then
 fi
 
 log_step "Build and start single-server stack"
-run_docker compose config
+run_docker compose config --quiet
 run_docker compose build backend frontend
 run_docker compose up -d postgres redis
 run_docker compose up -d --wait backend
-run_docker compose up -d worker beat
+seed_bootstrap_superadmin
+run_docker compose up -d --scale worker="$PLENORA_WORKER_REPLICAS" worker beat
 run_docker compose up -d --wait frontend
 
 provider_check

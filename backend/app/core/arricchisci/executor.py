@@ -20,7 +20,7 @@ from app.core.arricchisci.models import EnrichmentOptions
 from app.core.arricchisci.types import JsonObject
 from app.core.arricchisci.parallel import should_execute_node
 from app.core.dataframes.tabular import dataframe_preview_records, non_null_head_values
-from app.core.projects.columns_metadata import save_columns_metadata_with_retry
+from app.core.output_contract import build_output_contract
 
 logger = get_logger(__name__)
 
@@ -90,17 +90,47 @@ class EnrichExecutor:
                     "message": f"Arricchimento completato: {result.get('rows_processed', 0)} righe processate",
                 }
 
-                # Allinea columns_metadata del progetto allo schema reale del DataFrame finale
-                # Fix desincronizzazione UI/DB del nodo result — il file xlsx era già corretto
-                # ma columns_metadata restava stale e rompeva il riuso come project_source
-                # Helper condiviso: retry transient + raise non-transient (vedi core/projects/columns_metadata.py
-                cm = result.get("columns_metadata") or []
-                if cm:
-                    save_columns_metadata_with_retry(
-                        project_service=self.project_service,
+                result_columns = [
+                    {"name": col, "type": "str"}
+                    for col in (result.get("columns") or [])
+                ]
+                try:
+                    from app.core.projects.schema_inference import SchemaInferenceService
+
+                    schema_service = SchemaInferenceService(self.project_service)
+                    nodes_by_id = {n.id: n for n in canvas.nodes}
+                    edges_by_target = schema_service._group_edges_by_target(canvas.edges)
+                    result_node = next((n for n in canvas.nodes if n.type == "result"), None)
+                    if result_node is not None:
+                        result_schema = schema_service._infer_node_schema(
+                            node=result_node,
+                            nodes_by_id=nodes_by_id,
+                            edges_by_target=edges_by_target,
+                            project_id=project_id,
+                        )
+                        by_name = {col.name: col for col in result_schema}
+                        result_columns = [
+                            {
+                                "id": getattr(by_name.get(col), "id", None),
+                                "source_name": getattr(by_name.get(col), "source_name", None) or col,
+                                "name": col,
+                                "type": "str",
+                            }
+                            for col in (result.get("columns") or [])
+                        ]
+                except Exception as exc:
+                    logger.warning(
+                        f"output_contract arricchisci: schema id non disponibili: {exc}"
+                    )
+                if result_columns:
+                    output_contract = build_output_contract(
                         project_id=project_id,
-                        columns_metadata=cm,
-                        logger=logger,
+                        result_columns=result_columns,
+                        previous_contract=self.project_service.get_project_output_contract(project_id),
+                    )
+                    self.project_service.update_project_output_contract(
+                        project_id,
+                        output_contract.model_dump(),
                     )
         else:
             res = {
@@ -234,7 +264,10 @@ class EnrichExecutor:
                     if input_edge:
                         result_df = node_results.get(input_edge["source"])
 
-            if result_df is None or (hasattr(result_df, 'empty') and result_df.empty):
+            if result_df is None:
+                return {"success": False, "message": "Nessun dato prodotto dalla preview"}
+            result_columns = list(getattr(result_df, "columns", []))
+            if hasattr(result_df, 'empty') and result_df.empty and not result_columns:
                 return {"success": False, "message": "Nessun dato prodotto dalla preview"}
 
             total_count = len(result_df)

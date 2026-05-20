@@ -67,7 +67,8 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 # Runtime native libs only (no -dev headers). libpq5 e' richiesto da
 # psycopg2 wheels at runtime; libgdal* + libmagic1 mirror il build
-# stage. curl resta per la probe HEALTHCHECK.
+# stage. curl resta per la probe HEALTHCHECK. msodbcsql18 registra il
+# driver ODBC usato dai provider SQL Server via pyodbc.
 #
 # postgresql-client-17 fornisce `pg_dump` / `pg_restore` allineati al
 # server PG 17 dell'image `postgres:17-alpine`. Senza un major-match
@@ -86,8 +87,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
        | gpg --dearmor -o /usr/share/keyrings/postgresql.gpg \
     && echo "deb [signed-by=/usr/share/keyrings/postgresql.gpg] https://apt.postgresql.org/pub/repos/apt bookworm-pgdg main" \
        > /etc/apt/sources.list.d/pgdg.list \
-    && apt-get update && apt-get install -y --no-install-recommends \
+    && curl -fsSL https://packages.microsoft.com/keys/microsoft.asc \
+       | gpg --dearmor -o /usr/share/keyrings/microsoft.gpg \
+    && echo "deb [signed-by=/usr/share/keyrings/microsoft.gpg] https://packages.microsoft.com/debian/12/prod bookworm main" \
+       > /etc/apt/sources.list.d/microsoft-prod.list \
+    && ACCEPT_EULA=Y apt-get update && ACCEPT_EULA=Y apt-get install -y --no-install-recommends \
         postgresql-client-17 \
+        unixodbc \
+        msodbcsql18 \
     && apt-get purge -y --auto-remove gnupg \
     && rm -rf /var/lib/apt/lists/*
 

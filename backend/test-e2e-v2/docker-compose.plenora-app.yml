@@ -1,0 +1,37 @@
+# Optional override for running the Plenora app against the v2 test fixtures.
+#
+# Usage from repo root:
+#   docker compose -f docker-compose.yml \
+#     -f backend/test-e2e-v2/docker-compose.plenora-app.yml \
+#     up -d --no-deps backend worker
+#
+# This file is intentionally not named docker-compose.override.yml, so it is
+# never loaded by accident during normal installs.
+
+services:
+  postgres:
+    networks:
+      default:
+        aliases:
+          - plenora-db
+
+  backend:
+    environment:
+      DATABASE_URL: postgresql://plenora:plenora@plenora-db:5432/plenora
+      PLENORA_ALLOW_PRIVATE_NETWORK_OUTBOUND: "1"
+    networks:
+      - default
+      - plenora-test
+
+  worker:
+    environment:
+      DATABASE_URL: postgresql://plenora:plenora@plenora-db:5432/plenora
+      PLENORA_ALLOW_PRIVATE_NETWORK_OUTBOUND: "1"
+    networks:
+      - default
+      - plenora-test
+
+networks:
+  plenora-test:
+    external: true
+    name: ${PLENORA_TEST_NETWORK:-plenora-test}

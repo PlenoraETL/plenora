@@ -1,7 +1,8 @@
 """JWT authentication router and public auth-domain exports."""
 
 from datetime import datetime, timezone
-from typing import Optional, TypedDict
+from typing import Optional
+from typing_extensions import TypedDict
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.security import HTTPAuthorizationCredentials

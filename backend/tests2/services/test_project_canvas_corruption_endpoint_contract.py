@@ -48,7 +48,7 @@ def app_with_handler(monkeypatch):
     }
     fake_metadata.group_id = "g1"
     fake_svc.get_project_metadata.return_value = fake_metadata
-    fake_svc.get_project_columns_metadata.return_value = None
+    fake_svc.get_project_output_contract.return_value = None
 
     # Il core del test: get_project_canvas solleva CanvasCorruptedError
     fake_svc.get_project_canvas.side_effect = CanvasCorruptedError(

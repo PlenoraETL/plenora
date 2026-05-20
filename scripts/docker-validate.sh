@@ -50,6 +50,10 @@
 set -uo pipefail
 
 DRY_RUN=0
+PLENORA_DOCKER_NETWORK="${PLENORA_DOCKER_NETWORK:-plenora}"
+COMPOSE_FILE="${COMPOSE_FILE:-docker-compose.yml}"
+export PLENORA_DOCKER_NETWORK
+export COMPOSE_FILE
 
 usage() {
     cat <<'USAGE'
@@ -143,6 +147,19 @@ if [ "$DRY_RUN" -eq 0 ] && [ ! -f ".env.docker" ]; then
     echo "         cp .env.docker.example .env.docker" >&2
     echo "         # then add PLENORA_ENCRYPTION_KEY and JWT_SECRET_KEY" >&2
     echo "         chmod 600 .env.docker" >&2
+    exit 2
+fi
+
+# Pre-flight 5: the compose stack uses one explicit external bridge
+# network so every service joins the same predictable Docker network.
+# The installer creates it; this validation script only verifies it
+# exists because the validation contract is non-destructive.
+if [ "$DRY_RUN" -eq 0 ] && ! docker network inspect "$PLENORA_DOCKER_NETWORK" >/dev/null 2>&1; then
+    echo "ERROR: Docker network '$PLENORA_DOCKER_NETWORK' not found." >&2
+    echo "       Create it via the installer:" >&2
+    echo "         bash scripts/install-docker.sh --skip-smoke" >&2
+    echo "       Or manually:" >&2
+    echo "         docker network create --driver bridge --subnet 172.28.0.0/16 $PLENORA_DOCKER_NETWORK" >&2
     exit 2
 fi
 
@@ -389,8 +406,8 @@ report_docker_path_status() {
 
 report_docker_path_status
 
-run_step 1 "config (no apply)" -- \
-    docker compose config
+run_step 1 "config validation (no apply, no env dump)" -- \
+    docker compose config --quiet
 
 run_step 2 "build backend + frontend images" -- \
     docker compose build backend frontend

@@ -44,9 +44,24 @@ class _ProjectService:
             }
         )
 
-    def get_project_columns_metadata(self, project_id: str):
+    def get_project_output_contract(self, project_id: str):
         assert project_id == "project-1"
-        return [{"name": "city", "type": "str"}]
+        return {
+            "schema_version": 1,
+            "producer_project_id": "project-1",
+            "revision": 1,
+            "columns": [
+                {
+                    "id": "col-city",
+                    "source_name": "city",
+                    "physical_name": "city",
+                    "display_name": "city",
+                    "type": {"logical": "string", "nullable": True},
+                    "ordinal": 0,
+                    "status": "active",
+                }
+            ],
+        }
 
 
 def test_build_pipeline_execution_contract_is_self_contained():
@@ -84,7 +99,22 @@ def test_build_pipeline_execution_contract_is_self_contained():
             ],
             "edges": [],
         },
-        "columns_metadata": [{"name": "city", "type": "str"}],
+        "output_contract": {
+            "schema_version": 1,
+            "producer_project_id": "project-1",
+            "revision": 1,
+            "columns": [
+                {
+                    "id": "col-city",
+                    "source_name": "city",
+                    "physical_name": "city",
+                    "display_name": "city",
+                    "type": {"logical": "string", "nullable": True},
+                    "ordinal": 0,
+                    "status": "active",
+                }
+            ],
+        },
         "artifact_refs": {
             "file_sources": [
                 {"node_id": "file-1", "file_source_id": "fs-1"},
@@ -126,7 +156,19 @@ def test_pipeline_worker_preserves_contract_schema_extensions():
             "project_type": "manipola",
             "group_id": "group-1",
             "canvas": {"nodes": [], "edges": []},
-            "columns_metadata": [{"name": "city", "type": "str"}],
+            "output_contract": {
+                "columns": [
+                    {
+                        "id": "col-city",
+                        "source_name": "city",
+                        "physical_name": "city",
+                        "display_name": "city",
+                        "type": {"logical": "string"},
+                        "ordinal": 0,
+                        "status": "active",
+                    }
+                ]
+            },
             "artifact_refs": {"source-1": "s3://bucket/key"},
             "retention_n": 3,
         },
@@ -140,7 +182,19 @@ def test_pipeline_worker_preserves_contract_schema_extensions():
         "canvas": {"nodes": [], "edges": []},
         "group_id": "group-1",
         "artifact_refs": {"source-1": "s3://bucket/key"},
-        "columns_metadata": [{"name": "city", "type": "str"}],
+        "output_contract": {
+            "columns": [
+                {
+                    "id": "col-city",
+                    "source_name": "city",
+                    "physical_name": "city",
+                    "display_name": "city",
+                    "type": {"logical": "string"},
+                    "ordinal": 0,
+                    "status": "active",
+                }
+            ]
+        },
         "retention_n": 3,
     }
 

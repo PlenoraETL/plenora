@@ -2,10 +2,19 @@
 
 from __future__ import annotations
 
+import uuid
 from typing import TYPE_CHECKING, List
 
 if TYPE_CHECKING:
     from app.shared.execution.schema_types import ColumnSchema
+
+
+def _stable_calculated_column_id(node_id: str, output_key: str) -> str:
+    return f"col_{uuid.uuid5(uuid.NAMESPACE_URL, f'manipola:{node_id}:{output_key}').hex}"
+
+
+def _stable_calculated_source_name(node_id: str, output_key: str) -> str:
+    return f"calculated:{node_id}:{output_key}"
 
 
 class FormulaSchemaHandlers:
@@ -23,12 +32,7 @@ class FormulaSchemaHandlers:
         if not input_schemas:
             return []
 
-        result = [self._column_schema_cls(
-            name=col.name,
-            type=col.type,
-            source_node=node_id,
-            is_calculated=col.is_calculated,
-        ) for col in input_schemas[0]]
+        result = self._copy_schema(input_schemas[0], node_id)
 
         new_col = config.get("new_column", "calculated")
         output_type = config.get("output_type", "real")
@@ -38,6 +42,8 @@ class FormulaSchemaHandlers:
             result.append(self._column_schema_cls(
                 name=new_col,
                 type=output_type,
+                id=_stable_calculated_column_id(node_id, "formula"),
+                source_name=_stable_calculated_source_name(node_id, "formula"),
                 source_node=node_id,
                 is_calculated=True,
             ))
@@ -56,18 +62,15 @@ class FormulaSchemaHandlers:
 
         output_col = config.get("output_column", "result")
 
-        result = [self._column_schema_cls(
-            name=col.name,
-            type=col.type,
-            source_node=node_id,
-            is_calculated=col.is_calculated,
-        ) for col in input_schemas[0]]
+        result = self._copy_schema(input_schemas[0], node_id)
 
         existing_names = {col.name for col in result}
         if output_col not in existing_names:
             result.append(self._column_schema_cls(
                 name=output_col,
                 type="str",
+                id=_stable_calculated_column_id(node_id, "conditional"),
+                source_name=_stable_calculated_source_name(node_id, "conditional"),
                 source_node=node_id,
                 is_calculated=True,
             ))

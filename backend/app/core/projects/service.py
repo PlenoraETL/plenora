@@ -11,7 +11,8 @@ import uuid
 from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Optional, TypedDict
+from typing import Optional
+from typing_extensions import TypedDict
 
 from app.utils.logger import get_logger
 from app.config import settings
@@ -245,7 +246,7 @@ class ProjectService:
             )
 
         try:
-            return CanvasState(**canvas_data)
+            canvas = CanvasState(**canvas_data)
         except (TypeError, ValueError) as e:
             logger.error(
                 f"Canvas con schema non valido per {project_id}: {e}",
@@ -259,6 +260,20 @@ class ProjectService:
                 reason=f"schema non valido ({reason_str})",
                 original_error=e,
             )
+        try:
+            from app.core.output_contract import sync_canvas_with_output_contracts
+            sync_canvas_with_output_contracts(
+                canvas=canvas,
+                project_id=project_id,
+                project_service=self,
+            )
+        except Exception as e:
+            logger.warning(
+                f"sync output_contract canvas fallito per {project_id}: {e}",
+                op="get_project_canvas",
+                exc_info=True,
+            )
+        return canvas
 
     def get_project_raw_canvas(
         self,
@@ -329,6 +344,23 @@ class ProjectService:
             project_id, canvas=canvas.model_dump()
         )
         return updated_row is not None
+
+    def get_project_output_contract(self, project_id: str) -> dict | None:
+        row = project_db.get_project_row(project_id)
+        if not row:
+            return None
+        contract = row.output_contract
+        return contract if isinstance(contract, dict) else None
+
+    def update_project_output_contract(
+        self,
+        project_id: str,
+        output_contract: dict,
+    ) -> bool:
+        return project_db.update_project_output_contract_row(
+            project_id,
+            output_contract=output_contract,
+        ) is not None
 
     def _assert_no_lineage_cycle(self, project_id: str, canvas: CanvasState) -> None:
         """Verifica che salvare `canvas` per `project_id` non introduca
@@ -578,51 +610,6 @@ class ProjectService:
     def project_exists(self, project_id: str) -> bool:
         """Verifica se il progetto esiste."""
         return project_db.get_project_row(project_id) is not None
-
-    def get_project_columns_metadata(self, project_id: str) -> list:
-        """Recupera i metadati delle colonne dal canvas del progetto (DB).
-
-        Sono salvati come `canvas["columns_metadata"]` da update_project_columns_metadata.
-        """
-        row = project_db.get_project_row(project_id)
-        if not row:
-            return []
-        canvas = row.canvas or {}
-        if isinstance(canvas, str):
-            try:
-                canvas = json.loads(canvas)
-            except json.JSONDecodeError:
-                return []
-        return canvas.get("columns_metadata", []) if isinstance(canvas, dict) else []
-
-    def update_project_columns_metadata(self, project_id: str, columns_metadata: list) -> bool:
-        """Salva i metadati delle colonne nel canvas del progetto (DB).
-
-        Operazione atomica: usa `update_project_canvas_key_atomic` (SELECT
-        FOR UPDATE + merge + UPDATE in transazione) per evitare lost
-        update quando executor ESTRAI e altri writer (es. utente che
-        modifica canvas da UI, altri worker Celery paralleli) concorrono
-        sullo stesso progetto.
-
-        Ritorna True se il progetto esiste ed e' stato aggiornato, False
-        se il progetto non esiste.
-
-        **NON** cattura eccezioni DB/transient: queste propagano al caller.
-        Motivazione: il helper `app.core.projects.columns_metadata
-        .save_columns_metadata_with_retry` fa retry selettivo sulle
-        eccezioni transient (OperationalError, DeadlockDetected, ecc.) e,
-        dopo i retry, solleva `ColumnsMetadataSaveError` esplicito per far
-        fallire il task Celery invece di ritornare SUCCESS con metadata
-        stale. Un wrapper try/except qui dentro avrebbe trasformato un
-        transient in un `return False` silenzioso, disabilitando il retry
-        e re-introducendo un silent-fallback sui metadata stale.
-
-        Tutti i call-site (estrai/manipola/arricchisci/enrichment_task)
-        passano dall'helper condiviso — niente try/except locali.
-        """
-        return self._project_repository.update_canvas_key(
-            project_id, "columns_metadata", columns_metadata
-        )
 
     def save_result(
         self,

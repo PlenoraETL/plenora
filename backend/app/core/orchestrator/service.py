@@ -303,14 +303,16 @@ class OrchestratorService:
                     nested_data = {}
                 safe_nested = {k: v for k, v in nested_data.items() if k not in _NODE_RESERVED_FIELDS}
                 carica_node_data = {**node_dict, **safe_nested}
-                # N11: arricchisci canvas_types da projects.columns_metadata
+                # Arricchisci canvas_types dal contratto pubblico del progetto
                 # per evitare che CARICA perda il tipo semantico quando MANIPOLA
-                # promuove silenziosamente int->float per NaN
-                from app.shared.execution.canvas_types_enricher import enrich_canvas_types_from_metadata
-                enrich_canvas_types_from_metadata(
+                # promuove silenziosamente int->float per NaN.
+                from app.shared.execution.output_contract_types_enricher import (
+                    enrich_canvas_types_from_output_contract,
+                )
+                enrich_canvas_types_from_output_contract(
                     carica_node_data,
                     project_id,
-                    self.project_service.get_project_columns_metadata,
+                    self.project_service.get_project_output_contract,
                 )
                 logger.info(
                     f"Nodo {carica_node.id} — connection_id: '{carica_node_data.get('connection_id', 'MANCANTE')}', "

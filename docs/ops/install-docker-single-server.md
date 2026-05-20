@@ -15,7 +15,7 @@ This procedure uses the root `docker-compose.yml` and starts:
 
 The install is green only when:
 
-- `docker compose config` succeeds;
+- `docker compose config --quiet` succeeds;
 - backend and frontend images build;
 - Postgres and Redis become healthy;
 - backend `/health` and `/ready` return HTTP 200;
@@ -83,7 +83,13 @@ Both installers:
 - create `.env.docker` from `.env.docker.example` if missing;
 - preserve existing non-empty secrets;
 - generate `PLENORA_ENCRYPTION_KEY` and `JWT_SECRET_KEY` if empty;
-- run `docker compose config`;
+- create the external Docker bridge network `plenora` if missing;
+- set `OBJECT_STORAGE_ENABLED=false` when `STORAGE_POLICY=db` and the key is
+  missing, so the local DB-only scaffold does not require cloud credentials;
+- prompt for the number of Celery worker containers, defaulting to one worker;
+- prompt for a bootstrap superadmin username/password on interactive installs,
+  then create or update that user after the backend is healthy;
+- run `docker compose config --quiet`;
 - build backend and frontend images;
 - start Postgres, Redis, backend, worker, beat, and frontend;
 - check Python DB providers: PostgreSQL, MySQL/MariaDB, Oracle, and SQL Server
@@ -120,6 +126,45 @@ powershell -ExecutionPolicy Bypass -File scripts/install-docker.ps1 -FrontendApi
 
 For local validation on the same machine, the compose default
 `http://localhost:5004` is correct.
+
+Interactive installs ask for the first superadmin credentials. The username
+defaults to `admin`; the password is not written to `.env.docker`.
+
+For non-interactive installs:
+
+```bash
+export PLENORA_BOOTSTRAP_ADMIN_USERNAME=admin
+export PLENORA_BOOTSTRAP_ADMIN_PASSWORD='<strong-password>'
+bash scripts/install-docker.sh
+```
+
+To skip user creation:
+
+```bash
+bash scripts/install-docker.sh --skip-admin-bootstrap
+```
+
+Interactive installs ask how many Celery worker containers to run. The default
+is `1`. For non-interactive installs:
+
+```bash
+export PLENORA_WORKER_REPLICAS=2
+bash scripts/install-docker.sh
+```
+
+The single-server stack attaches every service to the external Docker network
+`plenora`. The Linux installer creates it with subnet `172.28.0.0/16` if it is
+missing. Override these defaults before running the installer if that subnet
+conflicts with the host:
+
+```bash
+export PLENORA_DOCKER_NETWORK=plenora
+export PLENORA_DOCKER_SUBNET=172.28.0.0/16
+bash scripts/install-docker.sh
+```
+
+The installer and validation script default to `COMPOSE_FILE=docker-compose.yml`
+so local `docker-compose.override.yml` files do not affect a clean install.
 
 ## 4. Database Provider Libraries
 
@@ -193,7 +238,7 @@ specific thick-mode feature or legacy network setup requires it.
 ## 5. Validate Compose
 
 ```bash
-docker compose config
+docker compose config --quiet
 ```
 
 ## 6. Build And Start
@@ -202,7 +247,7 @@ docker compose config
 docker compose build backend frontend
 docker compose up -d postgres redis
 docker compose up -d --wait backend
-docker compose up -d worker beat
+docker compose up -d --scale worker=1 worker beat
 docker compose up -d --wait frontend
 ```
 

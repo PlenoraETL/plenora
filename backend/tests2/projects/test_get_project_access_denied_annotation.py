@@ -82,7 +82,7 @@ def test_get_project_annotates_inaccessible_file_source_node():
     fake_svc = MagicMock()
     fake_svc.get_project_metadata.return_value = metadata
     fake_svc.get_project_canvas.return_value = canvas
-    fake_svc.get_project_columns_metadata.return_value = []
+    fake_svc.get_project_output_contract.return_value = []
 
     def _fake_visible(resource_table, group_id, is_superadmin=False):
         if resource_table == "file_sources":
@@ -127,7 +127,7 @@ def test_get_project_annotates_inaccessible_project_source_node():
     fake_svc = MagicMock()
     fake_svc.get_project_metadata.return_value = metadata
     fake_svc.get_project_canvas.return_value = canvas
-    fake_svc.get_project_columns_metadata.return_value = []
+    fake_svc.get_project_output_contract.return_value = []
 
     def _fake_visible(resource_table, group_id, is_superadmin=False):
         return set()
@@ -161,7 +161,7 @@ def test_get_project_does_not_annotate_clean_canvas():
     fake_svc = MagicMock()
     fake_svc.get_project_metadata.return_value = metadata
     fake_svc.get_project_canvas.return_value = canvas
-    fake_svc.get_project_columns_metadata.return_value = []
+    fake_svc.get_project_output_contract.return_value = []
 
     def _fake_visible(resource_table, group_id, is_superadmin=False):
         if resource_table == "file_sources":
@@ -189,7 +189,7 @@ def test_get_project_does_not_annotate_for_superadmin():
     fake_svc = MagicMock()
     fake_svc.get_project_metadata.return_value = metadata
     fake_svc.get_project_canvas.return_value = canvas
-    fake_svc.get_project_columns_metadata.return_value = []
+    fake_svc.get_project_output_contract.return_value = []
 
     visible_spy = MagicMock(return_value=set())
 
@@ -213,7 +213,7 @@ def test_get_project_does_not_persist_canvas_during_get():
     fake_svc = MagicMock()
     fake_svc.get_project_metadata.return_value = metadata
     fake_svc.get_project_canvas.return_value = canvas
-    fake_svc.get_project_columns_metadata.return_value = []
+    fake_svc.get_project_output_contract.return_value = []
 
     def _fake_visible(resource_table, group_id, is_superadmin=False):
         if resource_table == "file_sources":
@@ -249,7 +249,7 @@ def test_get_project_skips_visibility_check_when_no_cross_tenant_refs():
     fake_svc = MagicMock()
     fake_svc.get_project_metadata.return_value = metadata
     fake_svc.get_project_canvas.return_value = canvas
-    fake_svc.get_project_columns_metadata.return_value = []
+    fake_svc.get_project_output_contract.return_value = []
 
     visible_spy = MagicMock(return_value=set())
 
@@ -313,7 +313,7 @@ def test_get_project_annotates_inaccessible_arcgis_connection_on_carica_arcgis_n
     fake_svc = MagicMock()
     fake_svc.get_project_metadata.return_value = metadata
     fake_svc.get_project_canvas.return_value = canvas
-    fake_svc.get_project_columns_metadata.return_value = []
+    fake_svc.get_project_output_contract.return_value = []
 
     def _fake_visible(resource_table, group_id, is_superadmin=False):
         if resource_table == "arcgis_connections":
@@ -343,7 +343,7 @@ def test_get_project_annotates_inaccessible_arcgis_connection_on_imdf_publisher_
     fake_svc = MagicMock()
     fake_svc.get_project_metadata.return_value = metadata
     fake_svc.get_project_canvas.return_value = canvas
-    fake_svc.get_project_columns_metadata.return_value = []
+    fake_svc.get_project_output_contract.return_value = []
 
     def _fake_visible(resource_table, group_id, is_superadmin=False):
         if resource_table == "arcgis_connections":
@@ -381,7 +381,7 @@ def test_get_project_does_not_annotate_arcgis_connection_when_visible():
     fake_svc = MagicMock()
     fake_svc.get_project_metadata.return_value = metadata
     fake_svc.get_project_canvas.return_value = canvas
-    fake_svc.get_project_columns_metadata.return_value = []
+    fake_svc.get_project_output_contract.return_value = []
 
     def _fake_visible(resource_table, group_id, is_superadmin=False):
         if resource_table == "arcgis_connections":
@@ -406,7 +406,7 @@ def test_get_project_does_not_annotate_arcgis_connection_for_superadmin():
     fake_svc = MagicMock()
     fake_svc.get_project_metadata.return_value = metadata
     fake_svc.get_project_canvas.return_value = canvas
-    fake_svc.get_project_columns_metadata.return_value = []
+    fake_svc.get_project_output_contract.return_value = []
 
     visible_spy = MagicMock(return_value=set())
 
@@ -429,7 +429,7 @@ def test_get_project_does_not_persist_canvas_during_arcgis_annotation():
     fake_svc = MagicMock()
     fake_svc.get_project_metadata.return_value = metadata
     fake_svc.get_project_canvas.return_value = canvas
-    fake_svc.get_project_columns_metadata.return_value = []
+    fake_svc.get_project_output_contract.return_value = []
 
     def _fake_visible(resource_table, group_id, is_superadmin=False):
         if resource_table == "arcgis_connections":

@@ -9,7 +9,8 @@ from __future__ import annotations
 import gzip
 import json
 from datetime import datetime, timezone
-from typing import Callable, Literal, Mapping, TypedDict
+from typing import Callable, Literal, Mapping
+from typing_extensions import TypedDict
 
 from app.infrastructure.storage.cloud_backends import ObjectStorage
 

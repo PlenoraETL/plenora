@@ -1,8 +1,7 @@
 """Schema inference across project canvas graphs."""
-
-import json
 from dataclasses import dataclass
 from typing import Dict, List, Optional, Any, Tuple
+import uuid
 
 from app.core.projects.project_context_loader import (
     load_project_source_schema_context,
@@ -18,6 +17,58 @@ from app.shared.execution.schema_types import ColumnSchema
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
+
+
+SCALAR_COLUMN_CONFIG_KEYS = frozenset({
+    "aggregate_column",
+    "by_column",
+    "column",
+    "geom_column",
+    "geometry_column",
+    "group_by",
+    "group_column",
+    "id_column",
+    "index_col",
+    "input_geom",
+    "lat_column",
+    "left_geom",
+    "left_geom_column",
+    "left_on",
+    "lon_column",
+    "mask_geom",
+    "old_name",
+    "order_column",
+    "partition_column",
+    "pivot_col",
+    "point_geom_column",
+    "polygon_geom_column",
+    "right_geom",
+    "right_geom_column",
+    "right_on",
+    "source_column",
+    "stratify_column",
+    "target_column",
+    "value_col",
+    "wkt_column",
+})
+
+LIST_COLUMN_CONFIG_KEYS = frozenset({
+    "column_order",
+    "columns",
+    "compare_columns",
+    "group_by",
+    "group_by_columns",
+    "id_columns",
+    "join_keys",
+    "left_keys",
+    "right_keys",
+    "subset",
+    "value_columns",
+})
+
+
+def _stable_column_id(*parts: str) -> str:
+    return f"col_{uuid.uuid5(uuid.NAMESPACE_URL, ':'.join(parts)).hex}"
 
 
 @dataclass(frozen=True)
@@ -220,6 +271,8 @@ class SchemaInferenceService:
             columns.append(ColumnSchema(
                 name=col.alias or col.name,
                 type=col.type or "str",
+                id=getattr(col, "id", None) or _stable_column_id(node.id, col.name),
+                source_name=col.name,
                 source_node=node.id,
                 is_calculated=False
             ))
@@ -231,6 +284,7 @@ class SchemaInferenceService:
             columns.append(ColumnSchema(
                 name=calc.get("name", "calculated"),
                 type=calc.get("output_type", "str"),
+                source_name=calc.get("name", "calculated"),
                 source_node=node.id,
                 is_calculated=True
             ))
@@ -239,8 +293,8 @@ class SchemaInferenceService:
     
     def _infer_project_source_schema(self, node) -> List[ColumnSchema]:
         """
-        Schema per nodo project_source (riferimento a progetto ESTRAI).
-        Legge i metadati delle colonne dal progetto referenziato.
+        Schema per nodo project_source.
+        Legge esclusivamente l'output_contract pubblico del progetto sorgente.
         """
         source_project_id = None
         
@@ -256,61 +310,63 @@ class SchemaInferenceService:
             return []
 
         try:
-            canvas = source_context.canvas
-            if isinstance(canvas, str):
-                try:
-                    canvas = json.loads(canvas)
-                except json.JSONDecodeError as _e:
-                    logger.warning(
-                        f"Canvas corrotto per project_source {source_project_id}: {_e}. "
-                        f"Schema vuoto."
-                    )
-                    return []
-            if not isinstance(canvas, dict):
+            output_contract = source_context.output_contract
+            if not isinstance(output_contract, dict):
                 logger.warning(
-                    f"Canvas con tipo inatteso per project_source {source_project_id}: "
-                    f"{type(canvas).__name__}. Schema vuoto."
+                    f"output_contract mancante per project_source {source_project_id}. "
+                    "Schema vuoto."
                 )
                 return []
-
-            # Prefer persisted result node columns; fall back to legacy
-            # columns_metadata without recomputing across project boundaries.
-            primary_columns = []
-            for n in canvas.get("nodes", []) or []:
-                if not isinstance(n, dict):
-                    continue
-                if n.get("type") != "result":
-                    continue
-                cols = n.get("columns") or []
-                if not cols and isinstance(n.get("data"), dict):
-                    cols = n["data"].get("columns") or []
-                primary_columns = [c for c in cols if isinstance(c, dict)]
-                break
-
-            columns_metadata = (
-                primary_columns
-                if primary_columns
-                else canvas.get("columns_metadata", [])
-            )
-
+            contract_columns = [
+                c for c in (output_contract.get("columns") or [])
+                if isinstance(c, dict) and c.get("status", "active") == "active"
+            ]
             node_columns = node.columns or (node.data.get("columns") if node.data else None) or []
-            visible_columns = None
+            visible_ids = set()
+            visible_names = set()
             if node_columns:
-                visible_columns = {
-                    col["name"] for col in node_columns
-                    if col.get("visible", True)
-                }
+                for raw_col in node_columns:
+                    col = raw_col
+                    if not isinstance(col, dict):
+                        col = {
+                            "id": getattr(raw_col, "id", None),
+                            "column_id": getattr(raw_col, "column_id", None),
+                            "name": getattr(raw_col, "name", None),
+                            "source_name": getattr(raw_col, "source_name", None),
+                            "display_name": getattr(raw_col, "display_name", None),
+                            "visible": getattr(raw_col, "visible", True),
+                        }
+                    if not col.get("visible", True):
+                        continue
+                    col_id = col.get("id") or col.get("column_id")
+                    if col_id:
+                        visible_ids.add(str(col_id))
+                    for name_key in ("source_name", "name", "display_name"):
+                        name = col.get(name_key)
+                        if name:
+                            visible_names.add(str(name))
 
             columns = []
-            for col in columns_metadata:
-                col_name = col.get("name", "")
+            for col in contract_columns:
+                col_id = col.get("id")
+                col_name = col.get("physical_name") or col.get("display_name") or col.get("source_name") or ""
 
-                if visible_columns and col_name not in visible_columns:
+                if visible_ids and str(col_id) not in visible_ids:
+                    continue
+                if (
+                    not visible_ids
+                    and visible_names
+                    and str(col.get("source_name") or "") not in visible_names
+                    and str(col_name) not in visible_names
+                    and str(col.get("display_name") or "") not in visible_names
+                ):
                     continue
 
                 columns.append(ColumnSchema(
                     name=col_name,
-                    type=col.get("type", "str"),
+                    type=(col.get("type") or {}).get("logical", "string"),
+                    id=col_id,
+                    source_name=col.get("source_name") or col_name,
                     source_node=node.id,
                     is_calculated=False
                 ))
@@ -335,6 +391,8 @@ class SchemaInferenceService:
                     columns.append(ColumnSchema(
                         name=col.get("name", ""),
                         type=col.get("type", "str"),
+                        id=col.get("id") or col.get("column_id"),
+                        source_name=col.get("source_name") or col.get("name", ""),
                         source_node=node.id,
                         is_calculated=False
                     ))
@@ -353,6 +411,7 @@ class SchemaInferenceService:
         """
         config = node.config or (node.data.get("config", {}) if node.data else {})
         transform_op = node.transform_op or (node.data.get("transform_op") if node.data else None)
+        config = self._resolve_schema_config_column_refs(config, input_schemas)
 
         if not transform_op:
             logger.warning(f"Transform {node.id} senza transform_op")
@@ -364,6 +423,136 @@ class SchemaInferenceService:
             logger.warning(f"Operazione {transform_op} non gestita - passthrough")
             return self._transform_handlers.schema_passthrough(input_schemas, node.id)
         return handler(input_schemas, config, node.id)
+
+    def _resolve_schema_config_column_refs(
+        self,
+        config: dict,
+        input_schemas: List[List[ColumnSchema]],
+    ) -> dict:
+        if not isinstance(config, dict):
+            return config
+        id_to_name = {
+            str(getattr(col, "id", "")): col.name
+            for schema in input_schemas
+            for col in schema
+            if getattr(col, "id", None)
+        }
+        legacy_candidates: dict[str, set[str]] = {}
+        for schema in input_schemas:
+            for col in schema:
+                source_name = getattr(col, "source_name", None)
+                if source_name and source_name != col.name:
+                    legacy_candidates.setdefault(str(source_name), set()).add(col.name)
+        legacy_name_to_name = {
+            legacy: next(iter(names))
+            for legacy, names in legacy_candidates.items()
+            if len(names) == 1
+        }
+        if not id_to_name and not legacy_name_to_name:
+            return config
+
+        out = dict(config)
+        for key, value in list(out.items()):
+            if key.endswith("_column_id"):
+                base = key[:-10]
+                if base in out and value:
+                    out[base] = id_to_name.get(str(value), out[base])
+            elif key.endswith("_column_ids"):
+                base = key[:-11]
+                if base in out and isinstance(value, list) and value:
+                    current_values = out.get(base)
+                    if not isinstance(current_values, list):
+                        current_values = []
+                    out[base] = [
+                        id_to_name.get(str(column_id), current_values[idx] if idx < len(current_values) else None)
+                        for idx, column_id in enumerate(value)
+                    ]
+
+        for key, value in list(out.items()):
+            if not isinstance(value, list):
+                continue
+            if key in {"aggregations", "aggs"}:
+                out[key] = [
+                    self._resolve_schema_dict_ref(item, id_to_name, "column")
+                    for item in value
+                ]
+            elif key == "renames":
+                out[key] = [
+                    self._resolve_schema_dict_ref(item, id_to_name, "old_name", "old_name_id")
+                    for item in value
+                ]
+            elif key == "maskings":
+                out[key] = [
+                    self._resolve_schema_dict_ref(item, id_to_name, "column")
+                    for item in value
+                ]
+
+        if legacy_name_to_name:
+            for key, value in list(out.items()):
+                if key in SCALAR_COLUMN_CONFIG_KEYS and isinstance(value, str):
+                    out[key] = legacy_name_to_name.get(value, value)
+                elif key in LIST_COLUMN_CONFIG_KEYS and isinstance(value, list):
+                    out[key] = [
+                        legacy_name_to_name.get(item, item) if isinstance(item, str) else item
+                        for item in value
+                    ]
+                elif key in {"aggregations", "aggs"} and isinstance(value, list):
+                    out[key] = [
+                        self._resolve_schema_dict_legacy_name(
+                            item,
+                            legacy_name_to_name,
+                            "column",
+                        )
+                        for item in value
+                    ]
+                elif key == "renames" and isinstance(value, list):
+                    out[key] = [
+                        self._resolve_schema_dict_legacy_name(
+                            item,
+                            legacy_name_to_name,
+                            "old_name",
+                        )
+                        for item in value
+                    ]
+                elif key == "maskings" and isinstance(value, list):
+                    out[key] = [
+                        self._resolve_schema_dict_legacy_name(
+                            item,
+                            legacy_name_to_name,
+                            "column",
+                        )
+                        for item in value
+                    ]
+        return out
+
+    @staticmethod
+    def _resolve_schema_dict_ref(
+        item: Any,
+        id_to_name: dict[str, str],
+        name_field: str,
+        id_field: str = "column_id",
+    ) -> Any:
+        if not isinstance(item, dict):
+            return item
+        out = dict(item)
+        column_id = out.get(id_field)
+        if column_id and str(column_id) in id_to_name:
+            out[name_field] = id_to_name[str(column_id)]
+        return out
+
+    @staticmethod
+    def _resolve_schema_dict_legacy_name(
+        item: Any,
+        legacy_name_to_name: dict[str, str],
+        name_field: str,
+    ) -> Any:
+        if not isinstance(item, dict):
+            return item
+        out = dict(item)
+        value = out.get(name_field)
+        if isinstance(value, str) and value in legacy_name_to_name:
+            out[name_field] = legacy_name_to_name[value]
+        return out
 
     def _build_transform_handlers(
         self,
@@ -384,6 +573,8 @@ class SchemaInferenceService:
         result = [ColumnSchema(
             name=col.name,
             type=col.type,
+            id=col.id,
+            source_name=col.source_name,
             source_node=node.id,
             is_calculated=col.is_calculated
         ) for col in base_schema]
@@ -404,6 +595,7 @@ class SchemaInferenceService:
             result.append(ColumnSchema(
                 name=name,
                 type=mapping.get("type", "str"),
+                source_name=name,
                 source_node=node.id,
                 is_calculated=True,
             ))

@@ -231,6 +231,19 @@ export default function AppSidebar({ counts = {} }) {
             </div>
           </div>
         )}
+        {role.isSuperadmin(user) && (
+          <div
+            className="app-sidebar__user-row app-sidebar__user-row--admin"
+            onClick={() => navigate('/admin/runtime-config')}
+            title="Configurazione runtime"
+          >
+            <div className="app-sidebar__avatar app-sidebar__avatar--admin">⚙️</div>
+            <div className="app-sidebar__user-info">
+              <div className="app-sidebar__user-name">Config Runtime</div>
+              <div className="app-sidebar__user-role">read-only · superadmin</div>
+            </div>
+          </div>
+        )}
         <div className="app-sidebar__user-row">
           <div className="app-sidebar__avatar">
             {(user?.username || 'U').slice(0, 2).toUpperCase()}

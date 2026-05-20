@@ -222,10 +222,18 @@ const ManipolaEditorContent = () => {
     // (snapshot React aggiornato) per evitare il loop nodes->effect->setNodes.
   }, [edges, schemas, setNodes, edgesRef]);
 
+  const handleAutosaveError = useCallback((err) => {
+    console.warn('[ManipolaEditor] Autosave non completato:', err?.message || err);
+  }, []);
+
   const handleUpdateProjectSource = useCallback((nodeId, projectSourceId) => {
     updateNodeData(nodeId, { source_project_id: projectSourceId });
-    setTimeout(() => { handleSaveQuiet().then(() => refreshSchemas()); }, 100);
-  }, [updateNodeData, refreshSchemas, handleSaveQuiet]);
+    setTimeout(() => {
+      handleSaveQuiet()
+        .then(() => refreshSchemas())
+        .catch(handleAutosaveError);
+    }, 100);
+  }, [updateNodeData, refreshSchemas, handleSaveQuiet, handleAutosaveError]);
 
   const handleUpdateProjectSourceColumns = useCallback((nodeId, columns) => {
     updateNodeData(nodeId, { columns });
@@ -239,22 +247,29 @@ const ManipolaEditorContent = () => {
         n.id === nodeId ? { ...n, data: { ...n.data, columns } } : n
       );
       propagateColumns(updatedNodes, edgesRef.current);
-      handleSaveQuiet().then(() => refreshSchemas());
+      handleSaveQuiet()
+        .then(() => refreshSchemas())
+        .catch(handleAutosaveError);
     }, 100);
-  }, [updateNodeData, propagateColumns, refreshSchemas, handleSaveQuiet]);
+  }, [updateNodeData, propagateColumns, refreshSchemas, handleSaveQuiet, handleAutosaveError]);
 
   const handleUpdateTransform = useCallback((nodeId, newData) => {
     updateNodeData(nodeId, newData);
     // Costruiamo i nodi aggiornati inline invece di aspettare nodesRef.current
     // (che viene aggiornato dall'useEffect solo al prossimo render)
+    //
+    // Non autosalviamo ogni micro-update del form transform: controlli come
+    // aggregation_list emettono piu' patch ravvicinate e i save concorrenti
+    // possono arrivare fuori ordine, ripristinando configurazioni vecchie
+    // dopo un save manuale. Il canvas resta dirty e viene salvato dal pulsante
+    // Salva o dal pre-flight di execute/preview.
     setTimeout(() => {
       const updatedNodes = nodesRef.current.map(n =>
         n.id === nodeId ? { ...n, data: { ...n.data, ...newData } } : n
       );
       propagateColumns(updatedNodes, edgesRef.current);
-      handleSaveQuiet().then(() => refreshSchemas());
     }, 50);
-  }, [updateNodeData, propagateColumns, refreshSchemas, handleSaveQuiet]);
+  }, [updateNodeData, propagateColumns]);
 
   // handleUpdateProjectSource/Columns/FileSource/Transform rimangono perché
   // fanno side-effect (refreshSchemas, propagateColumns) registrati in setEditorActions
@@ -331,16 +346,24 @@ const ManipolaEditorContent = () => {
   const onConnect = useCallback((params) => {
     setEdges(eds => {
       const newEdges = addEdge({ ...params, ...defaultEdgeOptions }, eds);
-      setTimeout(() => { propagateColumns(nodesRef.current, newEdges); handleSaveQuiet().then(() => refreshSchemas()); }, 50);
+      setTimeout(() => {
+        propagateColumns(nodesRef.current, newEdges);
+        handleSaveQuiet()
+          .then(() => refreshSchemas())
+          .catch(handleAutosaveError);
+      }, 50);
       return newEdges;
     });
-  }, [setEdges, propagateColumns, refreshSchemas, handleSaveQuiet]);
+  }, [setEdges, propagateColumns, refreshSchemas, handleSaveQuiet, handleAutosaveError]);
 
   const onEdgeContextMenu = useCallback((event, edge) => {
     event.preventDefault();
     setEdges(eds => eds.filter(e => e.id !== edge.id));
-    setTimeout(() => { propagateColumns(nodesRef.current, edgesRef.current); handleSaveQuiet(); }, 50);
-  }, [setEdges, propagateColumns, handleSaveQuiet]);
+    setTimeout(() => {
+      propagateColumns(nodesRef.current, edgesRef.current);
+      handleSaveQuiet().catch(handleAutosaveError);
+    }, 50);
+  }, [setEdges, propagateColumns, handleSaveQuiet, handleAutosaveError]);
 
   const getPos = () => getViewportCenter({ screenToFlowPosition });
 
@@ -435,9 +458,13 @@ const ManipolaEditorContent = () => {
 
     if (newNode) {
       setNodes(nds => nds.concat(newNode));
-      setTimeout(() => { handleSaveQuiet().then(() => refreshSchemas()); }, 100);
+      setTimeout(() => {
+        handleSaveQuiet()
+          .then(() => refreshSchemas())
+          .catch(handleAutosaveError);
+      }, 100);
     }
-  }, [screenToFlowPosition, setNodes, handleUpdateProjectSource, handleUpdateProjectSourceColumns, handleUpdateFileSourceColumns, refreshSchemas, handleSaveQuiet]);
+  }, [screenToFlowPosition, setNodes, handleUpdateProjectSource, handleUpdateProjectSourceColumns, handleUpdateFileSourceColumns, refreshSchemas, handleSaveQuiet, handleAutosaveError]);
 
   const handleBack = () => navigate('/');
   const hasResultNode  = nodes.some(n => n.type === 'result');

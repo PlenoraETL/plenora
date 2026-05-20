@@ -52,7 +52,7 @@ def test_project_router_list_get_and_update_stay_off_legacy_get_project(
     service.list_projects.return_value = SimpleNamespace(projects=[_metadata()])
     service.get_project_metadata.return_value = _metadata()
     service.get_project_canvas.return_value = CanvasState()
-    service.get_project_columns_metadata.return_value = []
+    service.get_project_output_contract.return_value = None
     service.update_canvas.return_value = True
 
     monkeypatch.setattr(router_mod, "_project_service", service)
@@ -69,7 +69,7 @@ def test_project_router_list_get_and_update_stay_off_legacy_get_project(
     )
 
     assert listed["projects"][0]["id"] == "proj-1"
-    assert set(detail) == {"metadata", "canvas", "columns_metadata"}
+    assert set(detail) == {"metadata", "canvas", "output_contract"}
     assert detail["metadata"]["id"] == "proj-1"
     assert updated == {"status": "ok", "project_id": "proj-1"}
     service.get_project.assert_not_called()

@@ -17,7 +17,7 @@ class ProjectExecutionContractService(Protocol):
     def get_project_canvas(self, project_id: str) -> Any:
         ...
 
-    def get_project_columns_metadata(self, project_id: str) -> Any:
+    def get_project_output_contract(self, project_id: str) -> Any:
         ...
 
 
@@ -27,10 +27,6 @@ def _as_json_object(value: Any, *, field_name: str) -> JsonObject:
     if not isinstance(value, Mapping):
         raise ValueError(f"{field_name} must resolve to a JSON object")
     return dict(value)
-
-
-def _as_json_list(value: Any) -> list[Any]:
-    return list(value) if isinstance(value, list) else []
 
 
 def _node_field(node: Mapping[str, Any], field_name: str) -> Any:
@@ -105,10 +101,7 @@ def build_pipeline_execution_contract(
     if not metadata or not canvas:
         raise LookupError("Progetto non trovato")
 
-    try:
-        columns_metadata = project_service.get_project_columns_metadata(project_id)
-    except AttributeError:
-        columns_metadata = []
+    output_contract = project_service.get_project_output_contract(project_id)
 
     project_type = str(getattr(metadata, "project_type", "") or "")
     if not project_type:
@@ -121,7 +114,7 @@ def build_pipeline_execution_contract(
         "project_type": project_type,
         "group_id": str(getattr(metadata, "group_id", "") or ""),
         "canvas": canvas_payload,
-        "columns_metadata": _as_json_list(columns_metadata),
+        "output_contract": output_contract if isinstance(output_contract, Mapping) else None,
         "artifact_refs": _build_artifact_refs(canvas_payload),
     }
 

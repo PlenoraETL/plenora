@@ -149,9 +149,9 @@ def _normalize_execution_contract(
         "group_id": str(raw_contract.get("group_id") or ""),
         "artifact_refs": raw_contract.get("artifact_refs") or {},
     }
-    columns_metadata = raw_contract.get("columns_metadata")
-    if isinstance(columns_metadata, list):
-        contract["columns_metadata"] = columns_metadata
+    output_contract = raw_contract.get("output_contract")
+    if isinstance(output_contract, _Mapping):
+        contract["output_contract"] = dict(output_contract)
     retention_n = raw_contract.get("retention_n")
     if retention_n is not None:
         contract["retention_n"] = retention_n

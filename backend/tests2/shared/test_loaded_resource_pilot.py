@@ -73,7 +73,7 @@ def test_load_with_metadata_returns_loaded_resource():
         result = loader.load_with_metadata(
             ref,
             expected_group_id="grp-1",
-            columns_metadata=_COLUMNS,
+            resource_columns=_COLUMNS,
         )
 
     mock_load.assert_called_once_with(
@@ -85,7 +85,7 @@ def test_load_with_metadata_returns_loaded_resource():
     assert result.data is df
 
 
-# 3. metadata carries geometry_column and crs_epsg from columns_metadata
+# 3. metadata carries geometry_column and crs_epsg from resource_columns
 
 
 def test_load_with_metadata_populates_resource_metadata():
@@ -100,7 +100,7 @@ def test_load_with_metadata_populates_resource_metadata():
         result = loader.load_with_metadata(
             ref,
             expected_group_id="grp-1",
-            columns_metadata=_COLUMNS,
+            resource_columns=_COLUMNS,
         )
 
     assert isinstance(result.metadata, ResourceMetadata)
@@ -109,7 +109,7 @@ def test_load_with_metadata_populates_resource_metadata():
     assert result.metadata.source_kind == "file"
 
 
-# 4. columns_metadata=None produces LoadedResource with metadata=None
+# 4. resource_columns=None produces LoadedResource with metadata=None
 
 
 def test_load_with_metadata_none_columns_gives_none_metadata():
@@ -124,7 +124,7 @@ def test_load_with_metadata_none_columns_gives_none_metadata():
         result = loader.load_with_metadata(
             ref,
             expected_group_id="grp-1",
-            columns_metadata=None,
+            resource_columns=None,
         )
 
     assert isinstance(result, LoadedResource)
@@ -147,7 +147,7 @@ def test_load_with_metadata_project_ref_sets_project_source_kind():
         result = loader.load_with_metadata(
             ref,
             expected_group_id="grp-1",
-            columns_metadata=[{"name": "a", "type": "str"}],
+            resource_columns=[{"name": "a", "type": "str"}],
         )
 
     assert isinstance(result.metadata, ResourceMetadata)
@@ -192,9 +192,9 @@ def test_source_kind_for_static_ref():
 # 8. Static source kind coverage (059-W1 expansion)
 
 
-def test_static_source_no_columns_metadata_gives_none():
+def test_static_source_no_resource_columns_gives_none():
     """Static values carry schema in static_fields, not canvas columns.
-    When no columns_metadata is supplied (the typical case), metadata=None.
+    When no resource_columns is supplied (the typical case), metadata=None.
     """
     from app.core.artifacts import SourceLoader
     from app.shared.resources.metadata import LoadedResource
@@ -207,15 +207,15 @@ def test_static_source_no_columns_metadata_gives_none():
         result = loader.load_with_metadata(
             ref,
             expected_group_id="grp-1",
-            columns_metadata=None,
+            resource_columns=None,
         )
 
     assert isinstance(result, LoadedResource)
     assert result.metadata is None
 
 
-def test_static_source_with_columns_metadata_gives_static_source_kind():
-    """When a caller explicitly provides columns_metadata for a static ref,
+def test_static_source_with_resource_columns_gives_static_source_kind():
+    """When a caller explicitly provides resource_columns for a static ref,
     metadata is built with source_kind='static' — not silently coerced to 'file'.
     """
     from app.core.artifacts import SourceLoader
@@ -229,7 +229,7 @@ def test_static_source_with_columns_metadata_gives_static_source_kind():
         result = loader.load_with_metadata(
             ref,
             expected_group_id="grp-1",
-            columns_metadata=[
+            resource_columns=[
                 {"name": "label", "type": "str"},
                 {"name": "value", "type": "int"},
             ],

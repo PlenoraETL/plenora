@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Sequence, TypedDict, cast
+from typing import Sequence, cast
+from typing_extensions import TypedDict
 
 from app.db.pg_connection import unit_of_work
 

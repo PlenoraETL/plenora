@@ -14,8 +14,10 @@ const RenameListInput = ({ value, onChange, columns }) => {
   const [csvText, setCsvText] = useState('');
   const [csvError, setCsvError] = useState('');
 
+  const columnKey = (col) => col?.id || col?.column_id || col?.name;
+
   const addRename = () => {
-    onChange([...renames, { old_name: '', new_name: '' }]);
+    onChange([...renames, { old_name: '', old_name_id: null, new_name: '' }]);
   };
 
   const loadAllColumns = () => {
@@ -24,7 +26,7 @@ const RenameListInput = ({ value, onChange, columns }) => {
     // Aggiungi solo quelle mancanti
     const newEntries = columns
       .filter(col => !existing.has(col.name))
-      .map(col => ({ old_name: col.name, new_name: '' }));
+      .map(col => ({ old_name: col.name, old_name_id: columnKey(col), new_name: '' }));
     if (newEntries.length === 0) return;
     onChange([...renames.filter(r => r.old_name), ...newEntries]);
   };
@@ -67,7 +69,8 @@ const RenameListInput = ({ value, onChange, columns }) => {
         errors.push(`Riga ${i + 1}: "${oldName}" non trovata nelle colonne`);
       }
 
-      parsed.push({ old_name: oldName, new_name: newName });
+      const matched = columns.find(c => c.name === oldName);
+      parsed.push({ old_name: oldName, old_name_id: columnKey(matched) || null, new_name: newName });
     }
 
     if (parsed.length > 0) {
@@ -87,6 +90,10 @@ const RenameListInput = ({ value, onChange, columns }) => {
   const updateRename = (idx, field, newValue) => {
     const updated = [...renames];
     updated[idx] = { ...updated[idx], [field]: newValue };
+    if (field === 'old_name') {
+      const selectedColumn = columns.find(col => col.name === newValue);
+      updated[idx].old_name_id = columnKey(selectedColumn) || null;
+    }
     onChange(updated);
   };
 
@@ -105,7 +112,7 @@ const RenameListInput = ({ value, onChange, columns }) => {
           >
             <option value="">Colonna...</option>
             {columns.map((col, cidx) => (
-              <option key={`${col.name}-${cidx}`} value={col.name}>{col.name}</option>
+              <option key={`${columnKey(col)}-${cidx}`} value={col.name}>{col.name}</option>
             ))}
           </select>
           <span className="rename-list-input__arrow">→</span>

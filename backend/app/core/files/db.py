@@ -3,7 +3,8 @@
 from datetime import datetime, timezone
 
 import json
-from typing import Any, Dict, List, Optional, TypedDict
+from typing import Any, Dict, List, Optional
+from typing_extensions import TypedDict
 
 from app.core.resources import storage_reconciliation as reconciliation
 from app.db.pg_connection import unit_of_work

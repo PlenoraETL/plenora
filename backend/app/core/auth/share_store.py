@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 from collections.abc import Iterable
-from typing import TypedDict, cast
+from typing import cast
+from typing_extensions import TypedDict
 
 from app.db.pg_connection import (
     fetchone as _pg_fetchone,

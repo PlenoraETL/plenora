@@ -341,7 +341,8 @@ def op_geo_simplify(
     try:
         gdf = df if is_geodataframe(df) else to_geodataframe(df, geom_column)
 
-        gdf['geometry'] = gdf.geometry.simplify(tolerance, preserve_topology=preserve_topology)
+        geom_col_name = gdf.geometry.name
+        gdf[geom_col_name] = gdf.geometry.simplify(tolerance, preserve_topology=preserve_topology)
 
         logger.info(f"Simplify completato: tolerance={tolerance}")
         return gdf
@@ -776,16 +777,18 @@ def op_geo_make_valid(
             return result
 
         if HAS_MAKE_VALID:
+            geom_col_name = result.geometry.name
             if HAS_SHAPELY2:
-                result['geometry'] = shapely.make_valid(result.geometry)
+                result[geom_col_name] = shapely.make_valid(result.geometry)
             else:
-                result['geometry'] = result.geometry.apply(
+                result[geom_col_name] = result.geometry.apply(
                     lambda geom: _make_valid(geom) if geom is not None and not geom.is_valid else geom
                 )
         else:
             # Fallback: buffer(0) corregge molti problemi topologici
             logger.info("shapely.validation.make_valid non disponibile, uso buffer(0)")
-            result['geometry'] = result.geometry.apply(
+            geom_col_name = result.geometry.name
+            result[geom_col_name] = result.geometry.apply(
                 lambda geom: geom.buffer(0) if geom is not None and not geom.is_valid else geom
             )
 
@@ -990,7 +993,7 @@ def op_geo_voronoi(
             result_rows.append(matched_poly)
 
         result = gdf.copy()
-        result['geometry'] = result_rows
+        result[result.geometry.name] = result_rows
 
         logger.info(f"Voronoi completato: {len(result)} poligoni generati")
         return result

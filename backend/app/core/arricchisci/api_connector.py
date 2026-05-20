@@ -38,10 +38,9 @@ from app.core.arricchisci.api_connection_support import (
 )
 
 
-# B3-B.4b boundary: cluster SOURCE_LOADING / TENANCY (6 metodi
+# B3-B.4b boundary: cluster SOURCE_LOADING / TENANCY (5 metodi
 # `_assert_source_project_in_tenant`, `_recompute_upstream_project`
-# `_filesystem_fallback_load_project`, `_load_source_project`
-# `_load_file_source`, `_load_static_values`) + SSRF (1 metodo
+# `_load_source_project`, `_load_file_source`, `_load_static_values`) + SSRF (1 metodo
 # `_validate_outbound_url`, `@staticmethod`) spostato in
 # `app.core.arricchisci.api_connection_source_loading.ApiConnectionSourceLoadingMixin`
 # previous implementation B3-B.4a ha modernizzato

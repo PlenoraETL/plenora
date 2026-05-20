@@ -39,6 +39,8 @@ backups/
 
 # Unit test / coverage reports
 htmlcov/
+playwright-report/
+test-results/
 .tox/
 .nox/
 .coverage

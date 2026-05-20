@@ -5,7 +5,8 @@ from __future__ import annotations
 from datetime import timedelta
 import uuid
 from datetime import datetime, timezone
-from typing import Any, Optional, TypedDict
+from typing import Any, Optional
+from typing_extensions import TypedDict
 
 from app.config import settings
 from app.core.admin_backups.backup_run_store import (

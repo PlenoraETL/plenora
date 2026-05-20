@@ -18,6 +18,7 @@ from app.core.dataframes.tabular import (
     dataframe_column_by_position,
     dataframe_preview_records,
     dataframe_from_rows,
+    make_unique_column_names,
 )
 from app.infrastructure.security.crypto import CredentialUnavailableError
 from app.shared.resources.metadata import ResourceMetadata, SourceKind
@@ -96,24 +97,7 @@ def _dedup_column_names(columns: List[str]) -> Tuple[List[str], List[Tuple[str, 
         ``(original_name, new_name)`` per ogni colonna rinominata.
         Se non ci sono duplicati, `new_columns == columns` e `renames` e' [].
     """
-    seen: Dict[str, int] = {}
-    new_columns: List[str] = []
-    renames: List[Tuple[str, str]] = []
-    for col in columns:
-        if col not in seen:
-            seen[col] = 1
-            new_columns.append(col)
-            continue
-        # Duplicato: incrementa il counter finche' il nuovo nome e' libero
-        # necessario quando un suffisso candidato e' gia' un altro nome
-        candidate = None
-        while candidate is None or candidate in seen:
-            seen[col] += 1
-            candidate = f"{col}_{seen[col]}"
-        seen[candidate] = 1
-        new_columns.append(candidate)
-        renames.append((col, candidate))
-    return new_columns, renames
+    return make_unique_column_names(columns)
 
 
 def _dedup_dataframe_columns_for_serialization(
@@ -709,38 +693,44 @@ class EstraiExecutor:
     # SALVATAGGIO TIPI COLONNE
 
     def _salva_tipi_colonne_da_canvas(self, project_id: str, canvas: CanvasState, res: Dict):
-        """Salva i tipi colonne definiti nel canvas nei metadati del progetto.
+        """Salva l'output_contract del progetto.
 
         Usa ricerca case-insensitive per gestire differenze di naming tra
         canvas e output (es. Oracle restituisce nomi UPPERCASE).
 
-        La logica retry+backoff+raise vive in
-        `app.core.projects.columns_metadata.save_columns_metadata_with_retry`:
-        unica fonte di verita' condivisa con manipola/arricchisci/
-        enrichment_task. Vedi quel modulo per la classificazione delle
-        eccezioni transient vs non-transient.
-
-        Pre-fix: qualsiasi eccezione era catchata con warning silenzioso
-        → downstream riceveva tipi fallback `str`, numeri/date diventavano
-        testo nel CARICA target, nessun segnale all'utente.
+        L'output_contract e' il boundary pubblico tra progetti. Il canvas
+        resta stato editor.
         """
-        from app.core.projects.columns_metadata import save_columns_metadata_with_retry
+        from app.core.output_contract import build_output_contract
 
         canvas_type_map = self._build_canvas_type_map(canvas)
+        result_columns_by_physical = {}
+        result_node = next((n for n in canvas.nodes if n.type == "result"), None)
+        for canvas_col in (getattr(result_node, "columns", None) or []):
+            physical_name = getattr(canvas_col, "alias", None) or getattr(canvas_col, "name", None)
+            if physical_name:
+                result_columns_by_physical[str(physical_name)] = canvas_col
 
         col_names = res.get("columns", [])
-        columns_metadata = []
+        result_columns = []
         for col in col_names:
+            canvas_col = result_columns_by_physical.get(str(col))
+            if canvas_col is not None:
+                result_columns.append(canvas_col)
+                continue
             col_type = lookup_canvas_column_type(col, canvas_type_map) or 'str'
-            columns_metadata.append({"name": col, "type": col_type})
+            result_columns.append({"name": col, "type": col_type})
 
-        save_columns_metadata_with_retry(
-            project_service=self.project_service,
+        output_contract = build_output_contract(
             project_id=project_id,
-            columns_metadata=columns_metadata,
-            logger=logger,
+            result_columns=result_columns,
+            previous_contract=self.project_service.get_project_output_contract(project_id),
         )
-        res['columns_metadata'] = columns_metadata
+        self.project_service.update_project_output_contract(
+            project_id,
+            output_contract.model_dump(),
+        )
+        res["output_contract"] = output_contract.model_dump()
 
     # SQL HELPERS (per percorso database
 

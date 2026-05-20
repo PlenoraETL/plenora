@@ -100,11 +100,60 @@ const DynamicConfig = ({
     
     return inputColumns;
   };
+
+  const columnKey = (col) => col?.id || col?.column_id || null;
+
+  const expressionHasToken = (expression, token) => {
+    if (!expression || !token || typeof expression !== 'string') return false;
+    if (expression.includes(`\`${token}\``)) return true;
+    if (expression.includes(`['${token}']`)) return true;
+    if (expression.includes(`["${token}"]`)) return true;
+    if (/^[A-Za-z_][A-Za-z0-9_]*$/.test(token)) {
+      return new RegExp(`\\b${escapeRegExp(token)}\\b`).test(expression);
+    }
+    return expression.includes(token);
+  };
+
+  const rewriteExpressionToken = (expression, oldName, newName) => {
+    if (!expression || !oldName || !newName || oldName === newName) return expression;
+    let rewritten = expression
+      .replaceAll(`\`${oldName}\``, `\`${newName}\``)
+      .replaceAll(`['${oldName}']`, `['${newName}']`)
+      .replaceAll(`["${oldName}"]`, `["${newName}"]`);
+    if (/^[A-Za-z_][A-Za-z0-9_]*$/.test(oldName)) {
+      rewritten = rewritten.replace(
+        new RegExp(`\\b${escapeRegExp(oldName)}\\b`, 'g'),
+        newName
+      );
+    }
+    return rewritten;
+  };
+
+  const collectExpressionRefs = (expression) => {
+    if (!expression || typeof expression !== 'string') return [];
+    return inputColumns
+      .filter(col => {
+        if (!columnKey(col)) return false;
+        const names = [col.name, col.source_name, col.display_name].filter(Boolean);
+        return names.some(name => expressionHasToken(expression, String(name)));
+      })
+      .map(col => ({ id: columnKey(col), name: col.name }));
+  };
   
   // Handler per aggiornamento parametro
-  const handleParamChange = (paramId, value) => {
+  const handleParamChange = (param, value, meta = null) => {
     if (updateConfig) {
-      updateConfig(paramId, value);
+      const patch = { [param.id]: value };
+      if (param.type === 'column' || param.type === 'geometry_column') {
+        patch[`${param.id}_column_id`] = columnKey(meta);
+      } else if (param.type === 'columns' || param.type === 'column_order') {
+        patch[`${param.id}_column_ids`] = Array.isArray(meta)
+          ? meta.map(columnKey).filter(Boolean)
+          : [];
+      } else if (param.type === 'expression') {
+        patch[`${param.id}_column_refs`] = collectExpressionRefs(value);
+      }
+      updateConfig(patch);
     }
   };
 
@@ -121,11 +170,113 @@ const DynamicConfig = ({
       if (current) continue;
       const candidates = getColumnsForParam(param);
       if (candidates.length === 1) {
-        updateConfig(param.id, candidates[0].name);
+        updateConfig({
+          [param.id]: candidates[0].name,
+          [`${param.id}_column_id`]: columnKey(candidates[0]),
+        });
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visibleParams, geometryColumns, inputColumns, leftColumns, rightColumns, config]);
+
+  useEffect(() => {
+    if (!updateConfig) return;
+    const patch = {};
+    for (const param of visibleParams) {
+      const columnsForParam = getColumnsForParam(param);
+      if ((param.type === 'column' || param.type === 'geometry_column') && config[param.id] && !config[`${param.id}_column_id`]) {
+        const match = columnsForParam.find(col => col.name === config[param.id]);
+        const key = columnKey(match);
+        if (key) patch[`${param.id}_column_id`] = key;
+      }
+      if ((param.type === 'columns' || param.type === 'column_order') && Array.isArray(config[param.id]) && !config[`${param.id}_column_ids`]) {
+        const ids = config[param.id]
+          .map(name => columnKey(columnsForParam.find(col => col.name === name)))
+          .filter(Boolean);
+        if (ids.length) patch[`${param.id}_column_ids`] = ids;
+      }
+      if (param.type === 'expression' && config[param.id] && !config[`${param.id}_column_refs`]) {
+        const refs = collectExpressionRefs(config[param.id]);
+        if (refs.length) patch[`${param.id}_column_refs`] = refs;
+      }
+    }
+    if (Object.keys(patch).length > 0) {
+      updateConfig(patch);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visibleParams, inputColumns, leftColumns, rightColumns, geometryColumns]);
+
+  useEffect(() => {
+    if (!updateConfig) return;
+
+    const patch = {};
+    for (const param of visibleParams) {
+      if (param.type !== 'expression') continue;
+      const expression = config[param.id];
+      if (!expression || typeof expression !== 'string') continue;
+
+      let nextExpression = expression;
+      const refsKey = `${param.id}_column_refs`;
+      const refs = Array.isArray(config[refsKey]) ? config[refsKey] : [];
+      const columnsForParam = getColumnsForParam(param);
+      const byId = new Map(
+        columnsForParam
+          .map(col => [columnKey(col), col])
+          .filter(([key]) => Boolean(key))
+      );
+
+      const nextRefs = [];
+      for (const ref of refs) {
+        if (!ref || !ref.id) continue;
+        const current = byId.get(ref.id);
+        if (!current?.name) continue;
+        nextExpression = rewriteExpressionToken(
+          nextExpression,
+          ref.name,
+          current.name
+        );
+        nextRefs.push({ id: ref.id, name: current.name });
+      }
+
+      if (nextRefs.length === 0) {
+        const legacyToCurrent = new Map();
+        columnsForParam.forEach(col => {
+          if (!col?.name) return;
+          [col.source_name, col.display_name].forEach(oldName => {
+            if (!oldName || oldName === col.name) return;
+            const key = String(oldName);
+            const currentValue = legacyToCurrent.get(key);
+            if (currentValue && currentValue !== col.name) {
+              legacyToCurrent.set(key, null);
+            } else if (!legacyToCurrent.has(key)) {
+              legacyToCurrent.set(key, String(col.name));
+            }
+          });
+        });
+        legacyToCurrent.forEach((currentName, legacyName) => {
+          if (!currentName) return;
+          nextExpression = rewriteExpressionToken(
+            nextExpression,
+            legacyName,
+            currentName
+          );
+        });
+      }
+
+      const refreshedRefs = collectExpressionRefs(nextExpression);
+      if (nextExpression !== expression) {
+        patch[param.id] = nextExpression;
+      }
+      if (JSON.stringify(refreshedRefs) !== JSON.stringify(refs)) {
+        patch[refsKey] = refreshedRefs;
+      }
+    }
+
+    if (Object.keys(patch).length > 0) {
+      updateConfig(patch);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visibleParams, inputColumns, leftColumns, rightColumns, geometryColumns, config]);
   
   return (
     <div className="dynamic-config">
@@ -158,7 +309,7 @@ const DynamicConfig = ({
                 key={param.id}
                 param={enrichedParam}
                 value={config[param.id]}
-                onChange={(value) => handleParamChange(param.id, value)}
+                onChange={(value, meta) => handleParamChange(param, value, meta)}
                 columns={getColumnsForParam(param)}
               />
             );
@@ -168,5 +319,9 @@ const DynamicConfig = ({
     </div>
   );
 };
+
+function escapeRegExp(value) {
+  return String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
 
 export default DynamicConfig;

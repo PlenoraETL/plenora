@@ -8,7 +8,8 @@ from __future__ import annotations
 import base64
 import io
 from datetime import datetime
-from typing import Optional, TypedDict
+from typing import Optional
+from typing_extensions import TypedDict
 
 import pyotp
 import qrcode

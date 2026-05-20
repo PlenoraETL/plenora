@@ -418,6 +418,10 @@ class SQLFunctionTranslator:
         - touches → ST_Touches
         - crosses → ST_Crosses
         - overlaps → ST_Overlaps
+        - equals → ST_Equals
+        - disjoint → ST_Disjoint
+        - covers → ST_Covers
+        - coveredby → ST_CoveredBy
 
         Args:
             predicate: nome del predicato (case-insensitive)
@@ -439,7 +443,11 @@ class SQLFunctionTranslator:
             'dwithin': 'ST_DWithin',
             'touches': 'ST_Touches',
             'crosses': 'ST_Crosses',
-            'overlaps': 'ST_Overlaps'
+            'overlaps': 'ST_Overlaps',
+            'equals': 'ST_Equals',
+            'disjoint': 'ST_Disjoint',
+            'covers': 'ST_Covers',
+            'coveredby': 'ST_CoveredBy',
         }
 
         func_name = predicate_map.get(predicate.lower())

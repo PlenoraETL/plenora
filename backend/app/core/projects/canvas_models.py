@@ -71,6 +71,7 @@ class Column(BaseModel):
     FE che si aspetta ``columns[i].fromApi`` per i fixed-param marker.
     """
     model_config = ConfigDict(extra="allow")
+    id: Optional[str] = None
     name: str
     alias: Optional[str] = None
     visible: bool = True
@@ -215,6 +216,7 @@ class Node(BaseModel):
     relationships: Optional[List[dict]] = []
 
     source_project_id: Optional[str] = None
+    source_freshness: Optional[dict] = None
 
     file_source_id: Optional[str] = None
 
@@ -336,12 +338,15 @@ class Node(BaseModel):
     write_mode: Optional[WriteModeLiteral] = "create"
     column_mappings: Optional[List[dict]] = []
     match_columns: Optional[List[str]] = []
+    update_columns: Optional[List[str]] = []
     batch_size: Optional[int] = 1000
     transaction_mode: Optional[TransactionModeLiteral] = "all_or_nothing"
     create_spatial_index: Optional[bool] = True
     conflict_policy: Optional[ConflictPolicyLiteral] = "abort"
+    if_table_exists: Optional[Literal["error", "replace"]] = "error"
     create_unique_index: Optional[bool] = False
     unique_key_column: Optional[str] = None
+    allow_unsafe_append: Optional[bool] = False
 
     arcgis_connection_id: Optional[str] = None
     arcgis_service_url: Optional[str] = None
@@ -366,6 +371,7 @@ class Node(BaseModel):
     rest_success_statuses: Optional[List[int]] = None
 
     join_keys: Optional[List[str]] = []
+    join_key_ids: Optional[List[str]] = []
     multi_join_type: Optional[MultiJoinTypeLiteral] = "inner"
 
     mode: Optional[Literal["source", "carica"]] = None
@@ -380,7 +386,7 @@ class Node(BaseModel):
     parse_options: Optional[dict] = {}
     dest_folder: Optional[str] = None
     dest_filename: Optional[str] = None
-    dest_format: Optional[Literal["csv", "xlsx", "geojson", "gpkg"]] = None
+    dest_format: Optional[Literal["csv", "xlsx", "json", "geojson", "gpkg"]] = None
 
     text: Optional[str] = None
     title: Optional[str] = None
@@ -441,7 +447,9 @@ class Edge(BaseModel):
     is_spatial: Optional[bool] = False
     spatial_predicate: Optional[Literal[
         "ST_Intersects", "ST_Within", "ST_Contains",
-        "ST_DWithin", "ST_Touches", "ST_Overlaps"
+        "ST_DWithin", "ST_Touches", "ST_Overlaps",
+        "ST_Crosses", "ST_Equals", "ST_Disjoint",
+        "ST_Covers", "ST_CoveredBy",
     ]] = None
     source_geom_column: Optional[str] = None
     target_geom_column: Optional[str] = None

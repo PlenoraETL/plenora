@@ -11,7 +11,8 @@ from __future__ import annotations
 import gc
 
 from pathlib import Path
-from typing import Any, Callable, Optional, Tuple, TypedDict
+from typing import Any, Callable, Optional, Tuple
+from typing_extensions import TypedDict
 
 from app.core.dataframes.tabular import dataframe_preview_records
 from app.core.files.models import FileSourceLayersResponse, FileSourcePreview

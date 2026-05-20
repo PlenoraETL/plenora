@@ -55,6 +55,8 @@ def resolve_carica_target_lock(
         target = _rest_target(node_data)
     elif write_branch == "arcgis":
         target = _arcgis_target(node_data)
+    elif write_branch == "datasource":
+        target = _datasource_target(node_data)
     else:
         return None
 
@@ -232,6 +234,24 @@ def _arcgis_target(node_data: Mapping[str, object]) -> Mapping[str, object] | No
         "kind": "arcgis",
         "connection_id": connection_id,
         "layer_url": normalized_url,
+    }
+
+
+def _datasource_target(node_data: Mapping[str, object]) -> Mapping[str, object] | None:
+    datasource_id = _non_empty_string(node_data.get("datasource_id"))
+    if not datasource_id:
+        return None
+    dest_folder = _non_empty_string(node_data.get("dest_folder"))
+    dest_filename = _non_empty_string(node_data.get("dest_filename"))
+    dest_format = _non_empty_string(node_data.get("dest_format")) or "csv"
+    if not dest_filename:
+        return None
+    return {
+        "kind": "datasource",
+        "datasource_id": datasource_id,
+        "dest_folder": dest_folder,
+        "dest_filename": dest_filename,
+        "dest_format": dest_format,
     }
 
 

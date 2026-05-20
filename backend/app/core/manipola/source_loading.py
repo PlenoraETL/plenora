@@ -8,7 +8,8 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any, Optional, Sequence
 
-from app.core.dataframes.frame_io import drop_duplicate_columns, filter_visible_columns
+from app.core.dataframes.frame_io import filter_visible_columns, rename_duplicate_columns
+from app.core.output_contract import ensure_dataframe_matches_contract
 from app.core.manipola.types import ColumnMetadataRows, FrameMap, JsonObject, JsonRows
 from app.utils.logger import get_logger
 from app.shared.resources.metadata import LoadedResource, ResourceMetadata
@@ -61,8 +62,18 @@ def load_project_source_artifact(
     )
 
     df = load_dataframe_from_file(path)
+    ensure_dataframe_matches_contract(
+        dataframe_columns=df.columns,
+        node_columns=node_columns or [],
+        source_project_id=source_project_id,
+    )
     data = filter_visible_columns(df, node_columns)
-    data = drop_duplicate_columns(data, keep="first")
+    data, renamed_columns = rename_duplicate_columns(data)
+    if renamed_columns:
+        _DEFAULT_LOGGER.warning(
+            "project_source con colonne duplicate normalizzate: "
+            + ", ".join(f"{old}->{new}" for old, new in renamed_columns),
+        )
     metadata = ResourceMetadata.from_columns_list(
         _metadata_columns_from_node_columns(node_columns),
         source_kind="project",
@@ -176,7 +187,7 @@ def load_file_sources(
             loaded = loader.load_with_metadata(
                 ref,
                 expected_group_id=group_id,
-                columns_metadata=_meta_input,
+                resource_columns=_meta_input,
             )
         except SourceLoadingError as e:
             # Visibility block or materialization error: the

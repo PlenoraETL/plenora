@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Optional, TypedDict
+from typing import Optional
+from typing_extensions import TypedDict
 
 from app.core.scheduler import db as scheduler_db
 

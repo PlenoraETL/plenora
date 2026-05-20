@@ -256,6 +256,10 @@ function JoinModal({ edge, sourceNode, targetNode, onSave, onCancel, isEditing =
     { value: 'ST_Touches', label: 'Tocca', description: 'Le geometrie si toccano al bordo' },
     { value: 'ST_Crosses', label: 'Attraversa', description: 'Le geometrie si incrociano' },
     { value: 'ST_Overlaps', label: 'Sovrappone', description: 'Le geometrie si sovrappongono parzialmente' },
+    { value: 'ST_Equals', label: 'Uguale', description: 'Le geometrie sono spazialmente uguali' },
+    { value: 'ST_Disjoint', label: 'Disgiunto', description: 'Le geometrie non hanno punti in comune' },
+    { value: 'ST_Covers', label: 'Copre', description: 'La prima geometria copre la seconda' },
+    { value: 'ST_CoveredBy', label: 'Coperto da', description: 'La prima geometria è coperta dalla seconda' },
     { value: 'ST_DWithin', label: 'Entro distanza', description: 'Geometrie entro una distanza specificata' }
   ];
 

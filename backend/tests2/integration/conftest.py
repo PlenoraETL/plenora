@@ -49,7 +49,6 @@ _DEVELOPER_NIGHTLY_FILES = frozenset({
     "test_arricchisci_file_source_execute_roundtrip.py",
     "test_canvas_result_columns_roundtrip.py",
     "test_manipola_formula_roundtrip.py",
-    "test_project_columns_metadata_atomic_integration.py",
     "test_project_source_cross_tenant_contract.py",
     "test_project_source_latest_artifact_roundtrip.py",
     "test_project_source_missing_latest_contract.py",

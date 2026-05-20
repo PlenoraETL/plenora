@@ -60,10 +60,9 @@ class ColumnMeta:
 class ResourceMetadata:
     """Immutable metadata envelope that travels with a data resource.
 
-    Replaces the implicit CRS/geometry encoding that today lives inside
-    type strings like ``geometry:polygon:4326`` (persisted in
-    ``projects.canvas.columns_metadata``). Explicit fields let callers
-    do a plain attribute read instead of parsing a string.
+    Replaces implicit CRS/geometry encoding inside type strings like
+    ``geometry:polygon:4326``. Explicit fields let callers do a plain
+    attribute read instead of parsing a string.
 
     The envelope is a pure value object: no I/O, no DB, no framework
     imports. It can be constructed at the point of schema inference and
@@ -129,8 +128,7 @@ class ResourceMetadata:
     def to_columns_list(self) -> list[dict]:
         """Serialise back to ``[{"name": str, "type": str}]``.
 
-        Suitable for passing to ``save_columns_metadata_with_retry`` or
-        writing into ``canvas.columns_metadata`` unchanged.
+        Suitable for wire formats that expect ``[{"name": str, "type": str}]``.
         """
         return [{"name": col.name, "type": col.type} for col in self.columns]
 

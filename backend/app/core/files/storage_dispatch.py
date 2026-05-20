@@ -6,7 +6,8 @@ database BYTEA payloads or object-storage artifacts.
 
 from __future__ import annotations
 
-from typing import Any, Optional, TypedDict
+from typing import Any, Optional
+from typing_extensions import TypedDict
 
 from app.core.resources import storage_reconciliation as reconciliation
 from app.infrastructure.storage import cloud_backends

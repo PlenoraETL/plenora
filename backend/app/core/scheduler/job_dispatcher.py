@@ -8,7 +8,8 @@ calling code only depends on the small protocol below.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Protocol, TypedDict
+from typing import Any, Protocol
+from typing_extensions import TypedDict
 
 from app.core.task_runtime.dispatch import (
     TaskDispatchResult,

@@ -4,7 +4,8 @@ Policy Engine per lo Scheduler PLENORA-ETL.
 Keeps this module's responsibility explicit and isolated from adjacent code.
 """
 
-from typing import Literal, Optional, Tuple, TypedDict
+from typing import Literal, Optional, Tuple
+from typing_extensions import TypedDict
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)

@@ -323,13 +323,15 @@ class ApiConnectionManagementMixin:
 
         Merge di:
         - `test_params` (forniti dall'utente, hanno priorita')
+        - `config['static_parameters']` (gli stessi usati in esecuzione)
         - `config['parameters']` con `default_value` (fixed params come
           `f=json`, `outFields=*`, ecc.) — riempiono solo i mancanti.
 
         Poi processa i template `{{NOW}}`, `{{NOW-2h}}` ecc. su valori
         string via `process_static_fields`.
         """
-        raw_params = dict(test_params or {})
+        raw_params = dict(config.get("static_parameters") or {})
+        raw_params.update(test_params or {})
         for p in (config.get("parameters") or []):
             if not isinstance(p, dict):
                 continue

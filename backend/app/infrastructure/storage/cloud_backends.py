@@ -14,7 +14,8 @@ import logging
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Any, List, Protocol, TypedDict, runtime_checkable
+from typing import Any, List, Protocol, runtime_checkable
+from typing_extensions import TypedDict
 
 logger = logging.getLogger(__name__)
 

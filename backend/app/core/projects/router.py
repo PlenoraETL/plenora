@@ -31,7 +31,6 @@ from app.core.projects.usage import list_owned_project_ids
 from app.core.projects import canvas_access as _canvas_access
 from app.core.projects.types import (
     CanvasResourceRefs,
-    ColumnMetadataRows,
     JsonObject,
     StringMap,
 )
@@ -231,7 +230,7 @@ def get_project(
     project_id: str,
     current_user: CurrentUser = Depends(require_not_esecutore),
 ) -> JsonObject:
-    """Ottieni progetto specifico (metadata + canvas + columns_metadata).
+    """Ottieni progetto specifico (metadata + canvas + output_contract).
 
     Se il canvas in DB e' corrotto, `get_project_canvas` solleva
     `CanvasCorruptedError` e l'handler globale restituisce un errore
@@ -248,7 +247,34 @@ def get_project(
     assert_group_access(metadata, current_user, f"Progetto '{project_id}'")
 
     canvas = _project_service.get_project_canvas(project_id)
-    columns_metadata = _project_service.get_project_columns_metadata(project_id)
+    output_contract = _project_service.get_project_output_contract(project_id)
+
+    if canvas is not None:
+        try:
+            from app.core.output_contract import sync_canvas_with_output_contracts
+            sync_canvas_with_output_contracts(
+                canvas=canvas,
+                project_id=project_id,
+                project_service=_project_service,
+            )
+        except Exception as exc:
+            logger.warning(
+                f"sync output_contract canvas fallito per {project_id}: {exc}",
+                exc_info=True,
+            )
+        try:
+            from app.core.projects.source_freshness import (
+                annotate_canvas_project_source_freshness,
+            )
+            annotate_canvas_project_source_freshness(
+                canvas,
+                expected_group_id=_metadata_group_id(metadata),
+            )
+        except Exception as exc:
+            logger.warning(
+                f"annotazione freshness project_source fallita per {project_id}: {exc}",
+                exc_info=True,
+            )
 
     canvas_dict = canvas.model_dump() if canvas else None
     if canvas_dict is not None:
@@ -261,7 +287,7 @@ def get_project(
     return {
         "metadata": metadata.model_dump(),
         "canvas": canvas_dict,
-        "columns_metadata": columns_metadata
+        "output_contract": output_contract,
     }
 
 
@@ -392,6 +418,19 @@ def update_project_canvas(
 
     canvas = CanvasState(nodes=body.nodes, edges=body.edges)
 
+    try:
+        from app.core.output_contract import sync_canvas_with_output_contracts
+        sync_canvas_with_output_contracts(
+            canvas=canvas,
+            project_id=project_id,
+            project_service=_project_service,
+        )
+    except Exception as exc:
+        logger.warning(
+            f"sync output_contract canvas fallito per {project_id}: {exc}",
+            exc_info=True,
+        )
+
     orphans = _canvas_access.find_orphan_processing_nodes(canvas)
     if orphans:
         raise HTTPException(
@@ -437,6 +476,10 @@ def update_project_canvas(
 
     # Backend recomputes result columns before persisting to avoid stale
     # frontend-provided canvas columns.
+    # Do not update output_contract here: it describes the materialized
+    # artifact produced by an execution, while this endpoint only persists
+    # editor state. Updating it from canvas inference can make downstream
+    # projects consume a schema that does not match the latest saved result.
     try:
         from app.shared.execution.canvas_columns import (
             compute_result_columns,
@@ -465,6 +508,17 @@ def update_project_canvas(
         )
 
     try:
+        from app.core.projects.source_freshness import (
+            clear_canvas_project_source_freshness,
+        )
+        clear_canvas_project_source_freshness(canvas)
+    except Exception as exc:
+        logger.warning(
+            f"clear freshness project_source fallito per {project_id}: {exc}",
+            exc_info=True,
+        )
+
+    try:
         if not _project_service.update_canvas(project_id, canvas):
             raise HTTPException(
                 status_code=404,
@@ -477,69 +531,6 @@ def update_project_canvas(
         raise
     except ProjectLineageCycleError as e:
         raise HTTPException(400, str(e)) from e
-
-    columns_metadata = []
-    try:
-        def _extract_cols(columns: Any) -> ColumnMetadataRows:
-            out = []
-            for col in (columns or []):
-                if isinstance(col, dict):
-                    if col.get('visible') == False:
-                        continue
-                    col_name = col.get('alias') or col.get('name', '')
-                    col_type = col.get('type', 'str')
-                    if col_name:
-                        out.append({"name": col_name, "type": col_type})
-                elif hasattr(col, 'name'):
-                    if hasattr(col, 'visible') and col.visible == False:
-                        continue
-                    col_name = getattr(col, 'alias', None) or col.name
-                    col_type = getattr(col, 'type', 'str')
-                    if col_name:
-                        out.append({"name": col_name, "type": col_type})
-                elif isinstance(col, str):
-                    out.append({"name": col, "type": "str"})
-            return out
-
-        result_node = next((n for n in canvas.nodes if n.type == 'result'), None)
-
-        if not result_node:
-            for n in reversed(canvas.nodes):
-                if n.type in ('transform', 'table', 'source') and (n.columns or (n.data and n.data.get('columns'))):
-                    result_node = n
-                    break
-
-        if result_node:
-            columns = result_node.columns or (result_node.data.get('columns', []) if result_node.data else [])
-            columns_metadata = _extract_cols(columns)
-
-        # Per canvas ARRICCHISCI: ricava colonne da sorgenti + output_mapping api_enrich
-        if not columns_metadata:
-            seen = set()
-            for n in canvas.nodes:
-                node_data = n.data or {}
-                node_type = n.type
-
-                if node_type in ('project_source', 'file_source', 'staticValues'):
-                    src_cols = n.columns or node_data.get('columns', [])
-                    for c in _extract_cols(src_cols):
-                        if c['name'] not in seen:
-                            columns_metadata.append(c)
-                            seen.add(c['name'])
-
-                if node_type == 'api_enrich':
-                    for mapping in (node_data.get('output_mapping') or []):
-                        col_name = mapping.get('column') or mapping.get('target_column') or mapping.get('name', '')
-                        col_type = mapping.get('type', 'str')
-                        if col_name and col_name not in seen:
-                            columns_metadata.append({"name": col_name, "type": col_type})
-                            seen.add(col_name)
-
-        if columns_metadata:
-            _project_service.update_project_columns_metadata(project_id, columns_metadata)
-
-    except Exception as e:
-        logger.warning(f"Errore estrazione columns_metadata: {e}")
 
     return {"status": "ok", "project_id": project_id}
 

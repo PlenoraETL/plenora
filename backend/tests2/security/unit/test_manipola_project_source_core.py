@@ -131,7 +131,7 @@ def test_load_project_sources_fail_closed_when_source_project_missing():
 # Refactor #3 fix CRS: _carica_sorgenti_file riapplica _applica_crs_da_colonne
 
 
-def test_load_file_sources_reapplies_crs_from_node_columns_metadata():
+def test_load_file_sources_reapplies_crs_from_node_resource_columns():
     """Previous behavior dopo Refactor #3 il branch file_source di
     _carica_sorgenti_file non chiamava piu' _applica_crs_da_colonne,
     quindi un file caricato come DataFrame piatto (senza geometria

@@ -8,7 +8,8 @@ from __future__ import annotations
 
 import time
 from datetime import datetime, timezone
-from typing import Optional, TypedDict
+from typing import Optional
+from typing_extensions import TypedDict
 
 from app.config import settings
 from app.core.scheduler.job_dispatcher import enqueue_schedule_run

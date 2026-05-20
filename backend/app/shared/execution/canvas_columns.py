@@ -36,6 +36,8 @@ def _existing_by_name(result_node: object) -> JsonObjectById:
             out[name] = {
                 "alias": c.get("alias"),
                 "visible": c.get("visible", True),
+                "id": c.get("id"),
+                "source_name": c.get("source_name"),
             }
         elif hasattr(c, "name"):
             name = c.name or ""
@@ -44,6 +46,8 @@ def _existing_by_name(result_node: object) -> JsonObjectById:
             out[name] = {
                 "alias": getattr(c, "alias", None),
                 "visible": getattr(c, "visible", True),
+                "id": getattr(c, "id", None),
+                "source_name": getattr(c, "source_name", None),
             }
     return out
 
@@ -110,6 +114,8 @@ def compute_result_columns(
     for col in schema:
         override = user_overrides.get(col.name, {})
         out.append({
+            "id": getattr(col, "id", None) or override.get("id"),
+            "source_name": getattr(col, "source_name", None) or override.get("source_name") or col.name,
             "name": col.name,
             "type": col.type or "str",
             "alias": override.get("alias"),

@@ -359,9 +359,20 @@ def _oauth2_cache_key(auth: JsonObject) -> str:
     token_url = auth.get("token_url", "")
     if auth_type == "oauth2_password":
         identifier = auth.get("username", "")
+        secret_material = "|".join([
+            str(auth.get("client_id", "")),
+            str(auth.get("client_secret", "")),
+            str(auth.get("password", "")),
+            str(auth.get("scope", "")),
+        ])
     else:
         identifier = auth.get("client_id", "")
-    return f"{auth_type}|{token_url}|{identifier}"
+        secret_material = "|".join([
+            str(auth.get("client_secret", "")),
+            str(auth.get("scope", "")),
+        ])
+    secret_hash = hashlib.sha256(secret_material.encode("utf-8")).hexdigest()[:16]
+    return f"{auth_type}|{token_url}|{identifier}|{secret_hash}"
 
 
 def _api_timeout_seconds() -> int:
@@ -512,7 +523,14 @@ def get_arcgis_token(auth: JsonObject) -> Optional[str]:
         logger.warning("ArcGIS token: token_url o username mancante")
         return None
 
-    cache_key = f"{token_url}|{username}"
+    secret_material = "|".join([
+        str(password),
+        str(auth.get("client", "requestip")),
+        str(auth.get("referer", "")),
+        str(auth.get("ip", "")),
+    ])
+    secret_hash = hashlib.sha256(secret_material.encode("utf-8")).hexdigest()[:16]
+    cache_key = f"{token_url}|{username}|{secret_hash}"
 
     def _fetch_record() -> Optional[JsonObject]:
         client_mode = auth.get("client", "requestip")

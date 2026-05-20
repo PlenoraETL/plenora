@@ -55,6 +55,11 @@ function extractErrorCode(err) {
   }
   return null;
 }
+
+function isObjectStorageDisabled(code) {
+  return code === 'object_storage_disabled';
+}
+
 function fmtDate(iso) {
   if (!iso) return '—';
   try {
@@ -149,6 +154,7 @@ export default function AdminBackupsPage() {
   const [schedule, setSchedule] = useState(null);
   const [loading, setLoading] = useState(true);
   const [triggering, setTriggering] = useState(false);
+  const [backupUnavailable, setBackupUnavailable] = useState(null);
   // RB.#10: stato dedicato per credenziali AWS scadute. Bloccato in
   // banner persistente + nessun auto-refresh finche' l'operatore non
   // clicca "Riprova" (dopo aver fatto `aws sso login` lato server).
@@ -160,29 +166,54 @@ export default function AdminBackupsPage() {
 
   const loadAll = useCallback(async () => {
     setLoading(true);
-    try {
-      const [list, st, sch] = await Promise.all([
-        listBackups(),
-        getBackupStatus(),
-        getBackupSchedule(),
-      ]);
-      setData(list);
-      setStatus(st);
-      setSchedule(sch);
-      // Reset stato AWS-error se eravamo in errore e ora la chiamata torna OK.
+    const [listResult, statusResult, scheduleResult] = await Promise.allSettled([
+      listBackups(),
+      getBackupStatus(),
+      getBackupSchedule(),
+    ]);
+
+    let handledStorageDisabled = false;
+    let handledAwsCredentials = false;
+    let genericError = null;
+
+    if (listResult.status === 'fulfilled') {
+      setData(listResult.value);
+      setBackupUnavailable(null);
       setAwsCredentialsError(null);
-    } catch (e) {
-      const code = extractErrorCode(e);
-      const message = extractErrorMessage(e);
-      if (code === 'aws_credentials_expired') {
-        // Banner persistente, no toast effimero. Stop auto-refresh.
+    } else {
+      const code = extractErrorCode(listResult.reason);
+      const message = extractErrorMessage(listResult.reason);
+      if (isObjectStorageDisabled(code)) {
+        handledStorageDisabled = true;
+        setBackupUnavailable(message);
+        setAwsCredentialsError(null);
+        setData(null);
+      } else if (code === 'aws_credentials_expired') {
+        handledAwsCredentials = true;
         setAwsCredentialsError(message);
+        setBackupUnavailable(null);
       } else {
-        toast.error(message);
+        genericError = message;
       }
-    } finally {
-      setLoading(false);
     }
+
+    if (statusResult.status === 'fulfilled') {
+      setStatus(statusResult.value);
+    } else if (!handledStorageDisabled && !handledAwsCredentials) {
+      genericError = genericError || extractErrorMessage(statusResult.reason);
+    }
+
+    if (scheduleResult.status === 'fulfilled') {
+      setSchedule(scheduleResult.value);
+    } else if (!handledStorageDisabled && !handledAwsCredentials) {
+      genericError = genericError || extractErrorMessage(scheduleResult.reason);
+    }
+
+    if (genericError) {
+      toast.error(genericError);
+    }
+
+    setLoading(false);
   }, [toast]);
 
   useEffect(() => {
@@ -227,8 +258,12 @@ export default function AdminBackupsPage() {
     } catch (e) {
       const code = extractErrorCode(e);
       const message = extractErrorMessage(e);
-      if (code === 'aws_credentials_expired') {
+      if (isObjectStorageDisabled(code)) {
+        setBackupUnavailable(message);
+        setAwsCredentialsError(null);
+      } else if (code === 'aws_credentials_expired') {
         setAwsCredentialsError(message);
+        setBackupUnavailable(null);
       } else {
         toast.error(message);
       }
@@ -283,12 +318,28 @@ export default function AdminBackupsPage() {
             <button
               className="ab__btn ab__btn--primary"
               onClick={handleTrigger}
-              disabled={triggering || loading}
+              disabled={triggering || loading || Boolean(backupUnavailable) || Boolean(awsCredentialsError)}
             >
               {triggering ? 'Avvio...' : '⚡ Esegui backup ora'}
             </button>
           </div>
         </header>
+
+        {backupUnavailable && (
+          <section className="ab__disabled-panel" aria-live="polite">
+            <div className="ab__disabled-title">Backup S3 non configurato</div>
+            <p className="ab__disabled-text">{backupUnavailable}</p>
+            <p className="ab__disabled-text">
+              Nel profilo Docker locale l'app gira in modalita' DB-only. Questa
+              pagina resta disattivata finche' non configuri object storage.
+            </p>
+            <div className="ab__disabled-codes">
+              <code>OBJECT_STORAGE_ENABLED=true</code>
+              <code>BACKUP_BUCKET=&lt;bucket&gt;</code>
+              <code>CLOUD_PROVIDER=aws|minio</code>
+            </div>
+          </section>
+        )}
 
         <section className="ab__cards">
           <StatusCard status={status} />
@@ -301,6 +352,10 @@ export default function AdminBackupsPage() {
           </h2>
           {loading && !data ? (
             <div className="ab__loading">Caricamento...</div>
+          ) : backupUnavailable ? (
+            <div className="ab__empty ab__empty--disabled">
+              Lista backup non disponibile in questo deployment.
+            </div>
           ) : data?.items?.length > 0 ? (
             <table className="ab__table">
               <thead>

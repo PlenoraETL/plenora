@@ -129,7 +129,7 @@ def test_canvas_put_accepts_source_nodes_without_incoming_edges():
     fake_svc = MagicMock()
     fake_svc.get_project_metadata.return_value = {"id": "p1", "group_id": "g1"}
     fake_svc.update_canvas.return_value = True
-    fake_svc.update_project_columns_metadata.return_value = None
+    fake_svc.update_project_output_contract.return_value = None
 
     body = CanvasWithPlugins(
         nodes=[
@@ -174,7 +174,7 @@ def _rb4_make_svc(owner_group_id: str = "g1"):
         "group_id": owner_group_id,
     }
     fake_svc.update_canvas.return_value = True
-    fake_svc.update_project_columns_metadata.return_value = None
+    fake_svc.update_project_output_contract.return_value = None
     return fake_svc
 
 

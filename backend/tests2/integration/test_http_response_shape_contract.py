@@ -136,7 +136,7 @@ def test_get_project_response_has_expected_shape(
             timeout=10.0,
         )
         assert status == 200
-        assert set(body.keys()) == {"metadata", "canvas", "columns_metadata"}
+        assert set(body.keys()) == {"metadata", "canvas", "output_contract"}
         assert set(body["metadata"].keys()) >= {
             "id",
             "name",
@@ -148,7 +148,7 @@ def test_get_project_response_has_expected_shape(
         assert body["metadata"]["id"] == project_id
         assert body["canvas"]["nodes"][0]["id"] == "result-1"
         assert body["canvas"]["nodes"][0]["fileName"] == "shape_contract"
-        assert isinstance(body["columns_metadata"], list)
+        assert body["output_contract"] is None or isinstance(body["output_contract"], dict)
 
 
 def test_get_task_status_response_has_expected_shape(

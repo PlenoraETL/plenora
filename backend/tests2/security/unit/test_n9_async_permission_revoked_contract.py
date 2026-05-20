@@ -278,7 +278,7 @@ def test_execute_endpoint_passes_current_user_id(monkeypatch):
         retention_n=3,
     )
     project_service.get_project_canvas.return_value = {"nodes": [], "edges": []}
-    project_service.get_project_columns_metadata.return_value = []
+    project_service.get_project_output_contract.return_value = []
     init_orchestrator(MagicMock(project_service=project_service))
 
     fixture_user = build_current_user(user_id="usr_endpoint", role="admin")

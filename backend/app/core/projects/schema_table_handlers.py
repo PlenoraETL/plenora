@@ -28,20 +28,29 @@ class TableSchemaHandlers:
 
         group_by = config.get("group_by", [])
         aggs = config.get("aggs", {})
+        aggregations = config.get("aggregations")
 
         result = []
 
         for col_name in group_by:
             if col_name in input_by_name:
                 col = input_by_name[col_name]
-                result.append(self._column_schema_cls(
-                    name=col_name,
-                    type=col.type,
-                    source_node=node_id,
-                    is_calculated=False,
-                ))
+                result.append(self._copy_column(col, node_id, is_calculated=False))
 
-        for col_name, agg_func in aggs.items():
+        agg_items = []
+        if isinstance(aggregations, list):
+            for agg in aggregations:
+                if not isinstance(agg, dict):
+                    continue
+                col_name = agg.get("column")
+                agg_func = agg.get("function", "count")
+                alias = agg.get("alias")
+                if col_name:
+                    agg_items.append((col_name, agg_func, alias))
+        elif isinstance(aggs, dict):
+            agg_items = [(col_name, agg_func, None) for col_name, agg_func in aggs.items()]
+
+        for col_name, agg_func, alias in agg_items:
             orig_col = input_by_name.get(col_name)
 
             if agg_func in ("count", "nunique", "size"):
@@ -55,8 +64,9 @@ class TableSchemaHandlers:
             else:
                 out_type = "str"
 
+            output_name = alias or col_name
             result.append(self._column_schema_cls(
-                name=col_name,
+                name=output_name,
                 type=out_type,
                 source_node=node_id,
                 is_calculated=True,
@@ -93,24 +103,14 @@ class TableSchemaHandlers:
             result = []
             for col in input_schemas[0]:
                 if col.name in common_cols:
-                    result.append(self._column_schema_cls(
-                        name=col.name,
-                        type=col.type,
-                        source_node=node_id,
-                        is_calculated=col.is_calculated,
-                    ))
+                    result.append(self._copy_column(col, node_id))
             return result
 
         seen = {}
         for schema in input_schemas:
             for col in schema:
                 if col.name not in seen:
-                    seen[col.name] = self._column_schema_cls(
-                        name=col.name,
-                        type=col.type,
-                        source_node=node_id,
-                        is_calculated=col.is_calculated,
-                    )
+                    seen[col.name] = self._copy_column(col, node_id)
         return list(seen.values())
 
     def _schema_distinct(
@@ -125,12 +125,7 @@ class TableSchemaHandlers:
         if not input_schemas:
             return []
 
-        return [self._column_schema_cls(
-            name=col.name,
-            type=col.type,
-            source_node=node_id,
-            is_calculated=col.is_calculated,
-        ) for col in input_schemas[0]]
+        return self._copy_schema(input_schemas[0], node_id)
 
     def _schema_reorder_columns(
         self,
@@ -156,12 +151,7 @@ class TableSchemaHandlers:
         else:
             ordered = [c.name for c in input_schema]
 
-        return [self._column_schema_cls(
-            name=by_name[name].name,
-            type=by_name[name].type,
-            source_node=node_id,
-            is_calculated=by_name[name].is_calculated,
-        ) for name in ordered if name in by_name]
+        return [self._copy_column(by_name[name], node_id) for name in ordered if name in by_name]
 
     def _schema_statistics(
         self,

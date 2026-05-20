@@ -8,6 +8,7 @@ import json as _json
 
 import json
 import importlib
+import re
 from pathlib import Path
 from typing import Any, Callable, List, Optional
 
@@ -198,6 +199,7 @@ class PluginExecutor:
 
         # Estrai configurazione dal nodo canvas (formato flat o legacy data wrapper
         node_config = node.config or (node.data.get('config', {}) if node.data else {})
+        node_config = self._resolve_column_references(node_config, node, config)
         kwargs = self._prepara_kwargs(config, node_config)
 
 
@@ -310,6 +312,253 @@ class PluginExecutor:
             kwargs[param_id] = value
 
         return kwargs
+
+    def _resolve_column_references(
+        self,
+        node_config: JsonObject,
+        node: Node,
+        transform_config: Optional[JsonObject] = None,
+    ) -> JsonObject:
+        """Resolve stored column ids to current runtime column names.
+
+        The UI stores both the visible name and a stable ``*_column_id``
+        companion. Names are still passed to transform functions because
+        pandas DataFrames are name-based, but the id companion lets the
+        config survive upstream alias/name changes.
+        """
+        if not isinstance(node_config, dict):
+            return node_config
+
+        resolved = dict(node_config)
+        id_to_name, legacy_name_to_name = self._column_reference_maps(node)
+        if not id_to_name and not legacy_name_to_name:
+            return resolved
+
+        def by_id(column_id: Any, fallback: Any = None) -> Any:
+            if not column_id:
+                return fallback
+            return id_to_name.get(str(column_id), fallback)
+
+        for key, value in list(resolved.items()):
+            if key.endswith("_column_id"):
+                base = key[:-10]
+                if base in resolved:
+                    resolved[base] = by_id(value, resolved[base])
+            elif key.endswith("_column_ids"):
+                base = key[:-11]
+                if base in resolved and isinstance(value, list) and value:
+                    current_values = resolved.get(base)
+                    if not isinstance(current_values, list):
+                        current_values = []
+                    resolved[base] = [
+                        by_id(column_id, current_values[idx] if idx < len(current_values) else None)
+                        for idx, column_id in enumerate(value)
+                    ]
+
+        for key, value in list(resolved.items()):
+            if isinstance(value, list):
+                if key in {"aggregations", "aggs"}:
+                    resolved[key] = [
+                        self._resolve_dict_column_ref(item, id_to_name, "column")
+                        for item in value
+                    ]
+                elif key == "renames":
+                    resolved[key] = [
+                        self._resolve_dict_column_ref(item, id_to_name, "old_name", "old_name_id")
+                        for item in value
+                    ]
+                elif key == "maskings":
+                    resolved[key] = [
+                        self._resolve_dict_column_ref(item, id_to_name, "column")
+                        for item in value
+                    ]
+
+        resolved = self._resolve_legacy_param_names(
+            resolved,
+            transform_config or {},
+            legacy_name_to_name,
+        )
+
+        for key, value in list(resolved.items()):
+            if not key.endswith("_column_refs") or not isinstance(value, list):
+                continue
+            expression_key = key[:-12]
+            expression = resolved.get(expression_key)
+            if isinstance(expression, str):
+                resolved[expression_key] = self._rewrite_expression_refs(
+                    expression,
+                    value,
+                    id_to_name,
+                )
+
+        for param in (transform_config or {}).get("parameters", []) or []:
+            if not isinstance(param, dict) or param.get("type") != "expression":
+                continue
+            expression_key = param.get("id")
+            expression = resolved.get(expression_key)
+            if isinstance(expression, str):
+                resolved[expression_key] = self._rewrite_expression_legacy_names(
+                    expression,
+                    legacy_name_to_name,
+                )
+
+        return resolved
+
+    def _column_reference_maps(self, node: Node) -> tuple[dict[str, str], dict[str, str]]:
+        data = node.data if isinstance(node.data, dict) else {}
+        raw_columns = []
+        for field in ("inputColumns", "columns"):
+            value = data.get(field)
+            if isinstance(value, list):
+                raw_columns.extend(value)
+
+        id_to_name: dict[str, str] = {}
+        legacy_candidates: dict[str, set[str]] = {}
+        for col in raw_columns:
+            if not isinstance(col, dict):
+                continue
+            col_id = col.get("id") or col.get("column_id")
+            name = col.get("name")
+            if col_id and name:
+                id_to_name[str(col_id)] = str(name)
+            if not name:
+                continue
+            current_name = str(name)
+            for legacy_key in ("source_name",):
+                legacy_name = col.get(legacy_key)
+                if legacy_name and str(legacy_name) != current_name:
+                    legacy_candidates.setdefault(str(legacy_name), set()).add(current_name)
+
+        legacy_name_to_name = {
+            legacy: next(iter(names))
+            for legacy, names in legacy_candidates.items()
+            if len(names) == 1
+        }
+        return id_to_name, legacy_name_to_name
+
+    def _resolve_legacy_param_names(
+        self,
+        resolved: JsonObject,
+        transform_config: JsonObject,
+        legacy_name_to_name: dict[str, str],
+    ) -> JsonObject:
+        if not legacy_name_to_name:
+            return resolved
+
+        out = dict(resolved)
+        for param in transform_config.get("parameters", []) or []:
+            if not isinstance(param, dict):
+                continue
+            param_id = param.get("id")
+            param_type = param.get("type")
+            if not param_id or param_id not in out:
+                continue
+            value = out.get(param_id)
+            if param_type in {"column", "geometry_column"} and isinstance(value, str):
+                out[param_id] = legacy_name_to_name.get(value, value)
+            elif param_type in {"columns", "column_order"} and isinstance(value, list):
+                out[param_id] = [
+                    legacy_name_to_name.get(item, item) if isinstance(item, str) else item
+                    for item in value
+                ]
+            elif param_type == "aggregation_list" and isinstance(value, list):
+                out[param_id] = [
+                    self._resolve_dict_legacy_name(item, legacy_name_to_name, "column")
+                    for item in value
+                ]
+
+        for key, value in list(out.items()):
+            if key in {"aggregations", "aggs"} and isinstance(value, list):
+                out[key] = [
+                    self._resolve_dict_legacy_name(item, legacy_name_to_name, "column")
+                    for item in value
+                ]
+            elif key == "renames" and isinstance(value, list):
+                out[key] = [
+                    self._resolve_dict_legacy_name(item, legacy_name_to_name, "old_name")
+                    for item in value
+                ]
+            elif key == "maskings" and isinstance(value, list):
+                out[key] = [
+                    self._resolve_dict_legacy_name(item, legacy_name_to_name, "column")
+                    for item in value
+                ]
+
+        return out
+
+    def _resolve_dict_column_ref(
+        self,
+        item: Any,
+        id_to_name: dict[str, str],
+        name_field: str,
+        id_field: str = "column_id",
+    ) -> Any:
+        if not isinstance(item, dict):
+            return item
+        out = dict(item)
+        column_id = out.get(id_field)
+        if column_id and str(column_id) in id_to_name:
+            out[name_field] = id_to_name[str(column_id)]
+        return out
+
+    def _resolve_dict_legacy_name(
+        self,
+        item: Any,
+        legacy_name_to_name: dict[str, str],
+        name_field: str,
+    ) -> Any:
+        if not isinstance(item, dict):
+            return item
+        out = dict(item)
+        value = out.get(name_field)
+        if isinstance(value, str) and value in legacy_name_to_name:
+            out[name_field] = legacy_name_to_name[value]
+        return out
+
+    def _rewrite_expression_refs(
+        self,
+        expression: str,
+        refs: list[Any],
+        id_to_name: dict[str, str],
+    ) -> str:
+        rewritten = expression
+        for ref in refs:
+            if not isinstance(ref, dict):
+                continue
+            old_name = str(ref.get("name") or "")
+            new_name = id_to_name.get(str(ref.get("id") or ""))
+            if not old_name or not new_name or old_name == new_name:
+                continue
+            rewritten = rewritten.replace(f"`{old_name}`", f"`{new_name}`")
+            rewritten = rewritten.replace(f"['{old_name}']", f"['{new_name}']")
+            rewritten = rewritten.replace(f'["{old_name}"]', f'["{new_name}"]')
+            if old_name.isidentifier():
+                rewritten = re.sub(
+                    rf"\b{re.escape(old_name)}\b",
+                    new_name,
+                    rewritten,
+                )
+        return rewritten
+
+    def _rewrite_expression_legacy_names(
+        self,
+        expression: str,
+        legacy_name_to_name: dict[str, str],
+    ) -> str:
+        rewritten = expression
+        for old_name, new_name in legacy_name_to_name.items():
+            if not old_name or not new_name or old_name == new_name:
+                continue
+            rewritten = rewritten.replace(f"`{old_name}`", f"`{new_name}`")
+            rewritten = rewritten.replace(f"['{old_name}']", f"['{new_name}']")
+            rewritten = rewritten.replace(f'["{old_name}"]', f'["{new_name}"]')
+            if old_name.isidentifier():
+                rewritten = re.sub(
+                    rf"\b{re.escape(old_name)}\b",
+                    new_name,
+                    rewritten,
+                )
+        return rewritten
 
     def _converti_valore(self, value: Any, param_type: Optional[str]) -> Any:
         """

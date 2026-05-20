@@ -14,8 +14,8 @@ from app.core.intermediate.run_lifecycle import (
 )
 from app.core.projects.execution_context import get_upstream_run_context
 from app.core.projects.lineage import ProjectLineageCycleError
+from app.core.projects.source_freshness import get_project_source_freshness
 from app.shared.execution.executor_protocol import PipelineDispatcherProtocol
-from app.core.dataframes.frame_io import find_latest_output_file
 from app.core.artifacts import (
     ArtifactResolver,
     ArtifactResolutionError,
@@ -151,6 +151,18 @@ def _load_materialized_project_source(
     dataframes: FrameMap,
 ) -> None:
     node_columns = _node_field(node, "columns", [])
+    from app.core.projects.service import ProjectService
+    from app.core.output_contract import node_columns_from_contract
+
+    output_contract = ProjectService().get_project_output_contract(source_project_id)
+    if not output_contract:
+        raise ValueError(
+            f"output_contract mancante per progetto sorgente {source_project_id}"
+        )
+    node_columns = node_columns_from_contract(
+        output_contract,
+        previous_node_columns=node_columns,
+    )
     with materialized as m:
         loaded = load_project_source_artifact(
             m.path,
@@ -174,6 +186,7 @@ def load_project_sources(
 ) -> Optional[JsonObject]:
     """Load ``project_source`` nodes, recomputing upstream projects as needed."""
     del run_id  # The upstream recompute path opens its own cascade run id.
+    del results_base_dir  # Project sources resolve through artifact store only.
     log = logger or globals()["logger"]
     source_nodes = [n for n in canvas.nodes if n.type == "project_source"]
 
@@ -194,6 +207,16 @@ def load_project_sources(
             log.warning(f"Nodo {node.id}: source_project_id mancante")
             continue
 
+        freshness = get_project_source_freshness(
+            source_project_id,
+            expected_group_id=executing_group_id,
+        )
+        if freshness and freshness.stale and not force_recalculate:
+            return {
+                "success": False,
+                "message": freshness.message,
+            }
+
         if not force_recalculate:
             try:
                 materialized = ArtifactResolver().materialize_latest(
@@ -208,21 +231,6 @@ def load_project_sources(
                     op="execute",
                 )
                 return _cross_tenant_error(source_project_id)
-
-            if materialized is None:
-                output_dir = results_base_dir / source_project_id
-                fs_file = find_latest_output_file(output_dir)
-                if fs_file:
-                    log.warning(
-                        f"[COMPAT-RESIDUE] manipola._carica_sorgenti_progetto: "
-                        f"filesystem fallback scattato per "
-                        f"source_project={source_project_id} file={fs_file} - "
-                        f"progetto upstream senza blob DB, pre-migrazione"
-                    )
-                    materialized = MaterializedArtifact(
-                        path=Path(fs_file),
-                        is_temporary=False,
-                    )
 
             if materialized is not None:
                 try:

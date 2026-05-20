@@ -34,23 +34,13 @@ class JoinSchemaHandlers:
 
         for col in left_schema:
             new_name = f"{col.name}_L" if col.name != left_on else col.name
-            result.append(self._column_schema_cls(
-                name=new_name,
-                type=col.type,
-                source_node=node_id,
-                is_calculated=col.is_calculated,
-            ))
+            result.append(self._copy_column(col, node_id, name=new_name))
 
         for col in right_schema:
             if col.name == right_on and left_on == right_on:
                 continue
             new_name = col.name if col.name == right_on else f"{col.name}_R"
-            result.append(self._column_schema_cls(
-                name=new_name,
-                type=col.type,
-                source_node=node_id,
-                is_calculated=col.is_calculated,
-            ))
+            result.append(self._copy_column(col, node_id, name=new_name))
 
         return result
 
@@ -72,20 +62,10 @@ class JoinSchemaHandlers:
         result: List[ColumnSchema] = []
         for col in left_schema:
             new_name = f"{col.name}_x" if col.name in collisions else col.name
-            result.append(self._column_schema_cls(
-                name=new_name,
-                type=col.type,
-                source_node=node_id,
-                is_calculated=col.is_calculated,
-            ))
+            result.append(self._copy_column(col, node_id, name=new_name))
         for col in right_schema:
             new_name = f"{col.name}_y" if col.name in collisions else col.name
-            result.append(self._column_schema_cls(
-                name=new_name,
-                type=col.type,
-                source_node=node_id,
-                is_calculated=col.is_calculated,
-            ))
+            result.append(self._copy_column(col, node_id, name=new_name))
         return result
 
     def _schema_lookup(
@@ -160,12 +140,7 @@ class JoinSchemaHandlers:
         right_post: List[ColumnSchema] = []
         for col in right_schema:
             new_name = key_rename.get(col.name, col.name)
-            right_post.append(self._column_schema_cls(
-                name=new_name,
-                type=col.type,
-                source_node=col.source_node,
-                is_calculated=col.is_calculated,
-            ))
+            right_post.append(self._copy_column(col, getattr(col, "source_node", None) or node_id, name=new_name))
         right_post_by_name = {c.name: c for c in right_post}
 
         key_cols = list(left_keys)
@@ -186,36 +161,16 @@ class JoinSchemaHandlers:
         result: List[ColumnSchema] = []
         for k in key_cols:
             col = left_by_name[k]
-            result.append(self._column_schema_cls(
-                name=k,
-                type=col.type,
-                source_node=node_id,
-                is_calculated=False,
-            ))
+            result.append(self._copy_column(col, node_id, is_calculated=False))
         for c in common_value_cols:
             col = left_by_name[c]
-            result.append(self._column_schema_cls(
-                name=c,
-                type=col.type,
-                source_node=node_id,
-                is_calculated=False,
-            ))
+            result.append(self._copy_column(col, node_id, is_calculated=False))
         for c in only_old_cols:
             col = left_by_name[c]
-            result.append(self._column_schema_cls(
-                name=c,
-                type=col.type,
-                source_node=node_id,
-                is_calculated=False,
-            ))
+            result.append(self._copy_column(col, node_id, is_calculated=False))
         for c in only_new_cols:
             col = right_post_by_name[c]
-            result.append(self._column_schema_cls(
-                name=c,
-                type=col.type,
-                source_node=node_id,
-                is_calculated=False,
-            ))
+            result.append(self._copy_column(col, node_id, is_calculated=False))
         for fixed in ("_diff_status", "_diff_columns", "_diff_old_values"):
             result.append(self._column_schema_cls(
                 name=fixed,

@@ -33,6 +33,7 @@ __all__ = [
     "list_owned_project_ids",
     "list_project_ids_for_group",
     "list_projects",
+    "update_project_output_contract_row",
     "update_project_row",
     "update_project_canvas_key_atomic",
 ]
@@ -137,6 +138,7 @@ class ProjectDetailRow:
     created_at: datetime | str | None
     updated_at: datetime | str | None
     created_by: str | None
+    output_contract: object | None = None
     description: str | None = None
     retention_n: int | None = None
 
@@ -148,6 +150,7 @@ class ProjectDetailRow:
             name=_required_str(row, "name"),
             project_type=_required_str(row, "project_type"),
             canvas=row.get("canvas"),
+            output_contract=row.get("output_contract"),
             connection_id=_optional_str(row, "connection_id"),
             created_at=_optional_datetime_or_str(row, "created_at"),
             updated_at=_optional_datetime_or_str(row, "updated_at"),
@@ -260,6 +263,21 @@ class ProjectRepository:
                         exc,
                     )
                     row["canvas"] = {"nodes": [], "edges": []}
+        if row and row.get("output_contract"):
+            contract = row["output_contract"]
+            if isinstance(contract, (dict, list)):
+                row["output_contract"] = contract
+            else:
+                try:
+                    row["output_contract"] = json.loads(contract)
+                except (json.JSONDecodeError, TypeError) as exc:
+                    logger.warning(
+                        "Corrupted output_contract in DB for project %s: %s. "
+                        "Falling back to null contract.",
+                        project_id,
+                        exc,
+                    )
+                    row["output_contract"] = None
         return ProjectDetailRow.from_mapping(row) if row else None
 
     def list_projects(
@@ -315,14 +333,15 @@ class ProjectRepository:
         canvas = json.dumps({"nodes": [], "edges": []})
         _execute(
             "INSERT INTO projects (id, group_id, name, project_type, canvas, "
-            "connection_id, created_at, updated_at, created_by) "
-            "VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s)",
+            "output_contract, connection_id, created_at, updated_at, created_by) "
+            "VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)",
             (
                 project_id,
                 group_id,
                 name,
                 project_type,
                 canvas,
+                None,
                 connection_id,
                 now,
                 now,
@@ -343,9 +362,23 @@ class ProjectRepository:
     ) -> ProjectDetailRow | None:
         if "canvas" in fields and isinstance(fields["canvas"], dict):
             fields["canvas"] = json.dumps(fields["canvas"])
+        if "output_contract" in fields and isinstance(fields["output_contract"], dict):
+            fields["output_contract"] = json.dumps(fields["output_contract"])
         fields["updated_at"] = datetime.now(timezone.utc).isoformat()
         set_clause, vals = safe_set_clause("projects", fields)
         _execute(f"UPDATE projects SET {set_clause} WHERE id = %s", vals + (project_id,))
+        return get_project_row(project_id)
+
+    def update_project_output_contract_row(
+        self,
+        project_id: str,
+        output_contract: Mapping[str, object],
+    ) -> ProjectDetailRow | None:
+        """Persist runtime output schema without touching editor updated_at."""
+        _execute(
+            "UPDATE projects SET output_contract = %s WHERE id = %s",
+            (json.dumps(output_contract), project_id),
+        )
         return get_project_row(project_id)
 
     def delete_project(self, project_id: str, group_id: str | None = None) -> bool:
@@ -489,6 +522,16 @@ def update_project_row(
     **fields: object,
 ) -> ProjectDetailRow | None:
     return project_repository.update_project_row(project_id, **fields)
+
+
+def update_project_output_contract_row(
+    project_id: str,
+    output_contract: Mapping[str, object],
+) -> ProjectDetailRow | None:
+    return project_repository.update_project_output_contract_row(
+        project_id,
+        output_contract,
+    )
 
 
 def delete_project(project_id: str, group_id: str | None = None) -> bool:

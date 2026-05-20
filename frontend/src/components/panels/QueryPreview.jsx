@@ -403,8 +403,9 @@ function highlightSQL(sql) {
     // Funzioni di trasformazione
     'TRIM', 'LTRIM', 'RTRIM', 'UPPER', 'LOWER', 'COALESCE',
     // Funzioni spaziali PostGIS
-    'ST_Intersects', 'ST_Contains', 'ST_Within', 'ST_Touches', 'ST_Crosses', 
-    'ST_Overlaps', 'ST_DWithin', 'ST_Distance', 'ST_Buffer', 'ST_Centroid'
+    'ST_Intersects', 'ST_Contains', 'ST_Within', 'ST_Touches', 'ST_Crosses',
+    'ST_Overlaps', 'ST_Equals', 'ST_Disjoint', 'ST_Covers', 'ST_CoveredBy',
+    'ST_DWithin', 'ST_Distance', 'ST_Buffer', 'ST_Centroid'
   ];
   
   const lines = sql.split('\n');

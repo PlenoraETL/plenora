@@ -96,6 +96,7 @@ CREATE TABLE IF NOT EXISTS "plenora"."projects" (
     "name" "text" NOT NULL,
     "project_type" "text" NOT NULL,
     "canvas" "jsonb" DEFAULT '{"edges": [], "nodes": []}'::"jsonb" NOT NULL,
+    "output_contract" "jsonb",
     "connection_id" "text",
     "created_at" timestamp with time zone DEFAULT "now"() NOT NULL,
     "updated_at" timestamp with time zone DEFAULT "now"() NOT NULL,
@@ -1018,4 +1019,3 @@ EXCEPTION
     WHEN undefined_object THEN NULL;
     WHEN invalid_schema_name THEN NULL;
 END $$;
-

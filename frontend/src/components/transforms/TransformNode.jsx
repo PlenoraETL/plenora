@@ -191,10 +191,14 @@ const TransformNode = memo(({ data, id }) => {
   };
 
   const updateConfig = (field, value) => {
-    updateNodeData(id, { config: { ...config, [field]: value } });
+    const patch = typeof field === 'object' && field !== null
+      ? field
+      : { [field]: value };
+    const nextConfig = { ...config, ...patch };
+    updateNodeData(id, { config: nextConfig });
     setTimeout(() => {
       const onUpdateTransform = useCanvasStore.getState().editorActionsRef?.current?.onUpdateTransform;
-      if (onUpdateTransform) onUpdateTransform(id, { config: { ...config, [field]: value } });
+      if (onUpdateTransform) onUpdateTransform(id, { config: nextConfig });
     }, 0);
   };
 

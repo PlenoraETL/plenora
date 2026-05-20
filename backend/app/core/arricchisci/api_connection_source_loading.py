@@ -18,15 +18,16 @@ from app.core.arricchisci.execution_context import (
 )
 from app.core.arricchisci.types import JsonObject
 from app.core.arricchisci.project_access import load_project_access_context
-from app.core.arricchisci.source_project_store import (
-    fetch_project_and_latest_result_timestamps,
-)
 from app.core.dataframes.frame_io import (
     filter_visible_columns,
-    find_latest_output_file,
-    load_dataframe_from_file,
     save_dataframe as _save_df,
 )
+from app.core.output_contract import (
+    ensure_dataframe_matches_contract,
+    node_columns_from_contract,
+)
+from app.core.projects.service import ProjectService
+from app.core.projects.source_freshness import get_project_source_freshness
 from app.core.security.outbound_url import check_outbound_address
 from app.utils.logger import get_logger
 
@@ -140,7 +141,12 @@ class ApiConnectionSourceLoadingMixin:
                 f"'{source_project_id}' non appartiene al tuo gruppo."
             )
 
-    def _upstream_blob_is_stale(self, source_project_id: str) -> bool:
+    def _upstream_blob_is_stale(
+        self,
+        source_project_id: str,
+        *,
+        expected_group_id: str | None = None,
+    ) -> bool:
         """True quando il canvas dell'upstream e' stato aggiornato dopo
         l'ultimo blob risultato.
 
@@ -151,14 +157,11 @@ class ApiConnectionSourceLoadingMixin:
         MANIPOLA leggesse colonne fantasma dell'ARR upstream.
         """
         try:
-            row = fetch_project_and_latest_result_timestamps(source_project_id)
-            if not row:
-                return False
-            proj_ts = row.get("proj_ts")
-            blob_ts = row.get("blob_ts")
-            if not proj_ts or not blob_ts:
-                return False
-            return proj_ts > blob_ts
+            freshness = get_project_source_freshness(
+                source_project_id,
+                expected_group_id=expected_group_id,
+            )
+            return bool(freshness and freshness.stale)
         except Exception as e:
             # Failure mode safe: niente staleness, flusso normale prosegue
             logger.warning(
@@ -199,37 +202,6 @@ class ApiConnectionSourceLoadingMixin:
             raise ValueError(
                 f"Errore progetto sorgente: {upstream_result.get('message')}"
             )
-
-    def _filesystem_fallback_load_project(
-        self, source_project_id: str, output_dir
-    ) -> Any:
-        """Carica l'ultimo output di `source_project_id` dal filesystem.
-
-        Tentativo 3 (last resort) di `_load_source_project`: usato quando
-        ne' il blob DB ne' il recompute upstream hanno prodotto un df.
-        Tipico di progetti pre-R#1 che avevano output solo su disco,
-        mai migrato al DB blob. Oggi `save_result_blob` cancella sempre
-        il file temp dopo il save, quindi il percorso "file su disco
-        ma blob DB assente" non dovrebbe piu' accadere per progetti
-        nuovi. Il fallback resta come compat residuo — se non scatta
-        mai per un periodo di osservazione puo' essere rimosso.
-
-        Emette `logger.warning` con tag `[COMPAT-RESIDUE]` quando lo
-        scatta: grep-ami i log di prod per verificare se e' ancora vivo.
-        """
-        if output_dir is None:
-            raise ValueError(f"Nessun output per progetto '{source_project_id}'")
-        output_file = find_latest_output_file(output_dir)
-        if not output_file:
-            raise ValueError(f"Nessun output per progetto '{source_project_id}'")
-
-        logger.warning(
-            f"[COMPAT-RESIDUE] api_connector._filesystem_fallback_load_project "
-            f"scattato per project_id={source_project_id} file={output_file} — "
-            f"questo fallback e' pensato per progetti pre-R#1 non migrati al "
-            f"DB blob. Se scatta regolarmente in prod, indagare."
-        )
-        return load_dataframe_from_file(output_file)
 
     def _load_source_project(
         self,
@@ -278,8 +250,17 @@ class ApiConnectionSourceLoadingMixin:
         # formule downstream non riflettono il nuovo schema). In quel
         # caso saltiamo il tentativo 1 e forziamo il recompute per non
         # propagare dati obsoleti a MANIPOLA / risultato.
-        upstream_stale = self._upstream_blob_is_stale(source_project_id)
+        upstream_stale = self._upstream_blob_is_stale(
+            source_project_id,
+            expected_group_id=executing_group_id,
+        )
         if upstream_stale:
+            freshness = get_project_source_freshness(
+                source_project_id,
+                expected_group_id=executing_group_id,
+            )
+            if freshness and not force_recalculate:
+                raise ValueError(freshness.message)
             logger.info(
                 f"Upstream blob stale per {source_project_id}: "
                 f"recompute forzato (canvas modificato dopo l'ultimo run)"
@@ -300,19 +281,9 @@ class ApiConnectionSourceLoadingMixin:
                     f"'{source_project_id}': {e}"
                 ) from e
 
-        # Path su disco usato sia per il check "directory esistente"
-        # sia per il fallback filesystem. Calcolato solo se serve
-        output_dir = (
-            self.results_dir / source_project_id
-            if self.results_dir is not None
-            else None
-        )
-
-        # Tentativo 2: recompute upstream (orchestrator standalone
-        if df is None and (
-            force_recalculate or upstream_stale
-            or output_dir is None or not output_dir.exists()
-        ):
+        # Tentativo 2: recompute upstream quando richiesto, quando lo
+        # schema e' stale, o quando non esiste ancora un latest artifact.
+        if df is None:
             self._assert_source_project_in_tenant(
                 source_project_id, executing_group_id
             )
@@ -333,14 +304,26 @@ class ApiConnectionSourceLoadingMixin:
                     f"'{source_project_id}': {e}"
                 ) from e
 
-        # Tentativo 3: fallback filesystem (retention DB scaduta ecc
         if df is None:
-            df = self._filesystem_fallback_load_project(
-                source_project_id, output_dir
-            )
+            raise ValueError(f"Nessun output per progetto '{source_project_id}'")
 
-        # Post-processing: filtro colonne visibili
-        node_columns = node_data.get('columns', [])
+        output_contract = ProjectService().get_project_output_contract(
+            source_project_id
+        )
+        if not output_contract:
+            raise ValueError(
+                f"output_contract mancante per progetto sorgente "
+                f"{source_project_id}"
+            )
+        node_columns = node_columns_from_contract(
+            output_contract,
+            previous_node_columns=node_data.get('columns', []),
+        )
+        ensure_dataframe_matches_contract(
+            dataframe_columns=df.columns,
+            node_columns=node_columns,
+            source_project_id=source_project_id,
+        )
         df = filter_visible_columns(df, node_columns)
 
         duration_ms = round((_time_mod.monotonic() - _t0) * 1000, 1)

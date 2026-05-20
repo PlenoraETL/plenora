@@ -8,7 +8,8 @@ import time
 import uuid as _uuid
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Optional, TypedDict
+from typing import Optional
+from typing_extensions import TypedDict
 
 from app.config import settings
 from app.core.scheduler import db as scheduler_db

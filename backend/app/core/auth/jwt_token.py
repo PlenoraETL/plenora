@@ -11,7 +11,8 @@ import warnings
 
 import uuid
 from datetime import datetime, timedelta, timezone
-from typing import Optional, TypedDict
+from typing import Optional
+from typing_extensions import TypedDict
 
 import jwt
 

@@ -6,7 +6,8 @@ Esecuzione pipeline, preview, download risultati e gestione task Celery.
 
 import time
 from collections.abc import Mapping
-from typing import Literal, Optional, List, Iterator, TypedDict
+from typing import Literal, Optional, List, Iterator
+from typing_extensions import TypedDict
 
 from fastapi import APIRouter, HTTPException, Depends, BackgroundTasks, Query
 from fastapi.responses import JSONResponse, Response, StreamingResponse
@@ -41,7 +42,6 @@ from app.shared.contracts.auth import CurrentUser
 from app.shared.contracts.payloads import JsonObject
 from app.core.auth.ownership import assert_group_access
 from app.shared.execution.canvas_graph import CanvasGraph
-from app.shared.execution.canvas_types_enricher import enrich_canvas_types_from_metadata
 from app.core.eseguibili import output_store as _eseg_output_store
 from app.core.results import legacy_file_store
 
@@ -326,10 +326,14 @@ def create_task(
             _validate_rest_carica_task_payload(request.carica_node_data)
             from app.core.projects.service import ProjectService
 
-            enrich_canvas_types_from_metadata(
+            from app.shared.execution.output_contract_types_enricher import (
+                enrich_canvas_types_from_output_contract,
+            )
+
+            enrich_canvas_types_from_output_contract(
                 request.carica_node_data,
                 request.project_id,
-                ProjectService().get_project_columns_metadata,
+                ProjectService().get_project_output_contract,
             )
             task_info = task_service.create_carica_task(
                 project_id=request.project_id,

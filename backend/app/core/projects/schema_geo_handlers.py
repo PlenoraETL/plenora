@@ -30,12 +30,7 @@ class GeoSchemaHandlers:
         
         # Tutte le colonne da sinistra
         for col in left_schema:
-            result.append(self._column_schema_cls(
-                name=col.name,
-                type=col.type,
-                source_node=node_id,
-                is_calculated=col.is_calculated
-            ))
+            result.append(self._copy_column(col, node_id))
         
         # Colonne da destra (con suffisso per evitare conflitti
         left_names = {col.name for col in left_schema}
@@ -43,12 +38,7 @@ class GeoSchemaHandlers:
             new_name = col.name
             if new_name in left_names:
                 new_name = f"{col.name}_right"
-            result.append(self._column_schema_cls(
-                name=new_name,
-                type=col.type,
-                source_node=node_id,
-                is_calculated=col.is_calculated
-            ))
+            result.append(self._copy_column(col, node_id, name=new_name))
         
         # GeoPandas aggiunge index_right
         result.append(self._column_schema_cls(
@@ -79,12 +69,7 @@ class GeoSchemaHandlers:
         output_col = config.get("output_column", "buffer_geom")
         
         # Copia tutte le colonne esistenti
-        result = [self._column_schema_cls(
-            name=col.name,
-            type=col.type,
-            source_node=node_id,
-            is_calculated=col.is_calculated
-        ) for col in input_schemas[0]]
+        result = self._copy_schema(input_schemas[0], node_id)
         
         # Se output_column è diverso, aggiungi nuova colonna
         if output_col and output_col != geom_col:
@@ -101,11 +86,8 @@ class GeoSchemaHandlers:
             # Sostituisci la geometria esistente
             for i, col in enumerate(result):
                 if col.name == geom_col:
-                    result[i] = self._column_schema_cls(
-                        name=col.name,
-                        type="geometry:polygon",
-                        source_node=node_id,
-                        is_calculated=True
+                    result[i] = self._copy_column(
+                        col, node_id, type_="geometry:polygon", is_calculated=True
                     )
                     break
         
@@ -129,12 +111,7 @@ class GeoSchemaHandlers:
         output_col = config.get("output_column", "centroid")
         
         # Copia tutte le colonne esistenti
-        result = [self._column_schema_cls(
-            name=col.name,
-            type=col.type,
-            source_node=node_id,
-            is_calculated=col.is_calculated
-        ) for col in input_schemas[0]]
+        result = self._copy_schema(input_schemas[0], node_id)
         
         # Se output_column è diverso, aggiungi nuova colonna
         if output_col and output_col != geom_col:
@@ -150,11 +127,8 @@ class GeoSchemaHandlers:
             # Sostituisci la geometria esistente
             for i, col in enumerate(result):
                 if col.name == geom_col:
-                    result[i] = self._column_schema_cls(
-                        name=col.name,
-                        type="geometry:point",
-                        source_node=node_id,
-                        is_calculated=True
+                    result[i] = self._copy_column(
+                        col, node_id, type_="geometry:point", is_calculated=True
                     )
                     break
         
@@ -172,12 +146,7 @@ class GeoSchemaHandlers:
         if not input_schemas:
             return []
         
-        result = [self._column_schema_cls(
-            name=col.name,
-            type=col.type,
-            source_node=node_id,
-            is_calculated=col.is_calculated
-        ) for col in input_schemas[0]]
+        result = self._copy_schema(input_schemas[0], node_id)
         
         area_col = config.get("output_column", "area_m2")
         
@@ -228,12 +197,7 @@ class GeoSchemaHandlers:
         if by_column:
             for col in input_schemas[0]:
                 if col.name == by_column:
-                    result.append(self._column_schema_cls(
-                        name=col.name,
-                        type=col.type,
-                        source_node=node_id,
-                        is_calculated=False
-                    ))
+                    result.append(self._copy_column(col, node_id, is_calculated=False))
                     break
         
         # Aggiungi colonna geometria
@@ -261,12 +225,7 @@ class GeoSchemaHandlers:
         geom_col = config.get("geom_column", "geometry")
         output_col = config.get("output_column", "convex_hull")
         
-        result = [self._column_schema_cls(
-            name=col.name,
-            type=col.type,
-            source_node=node_id,
-            is_calculated=col.is_calculated
-        ) for col in input_schemas[0]]
+        result = self._copy_schema(input_schemas[0], node_id)
         
         # Aggiungi nuova colonna se diversa
         if output_col and output_col != geom_col:
@@ -303,12 +262,7 @@ class GeoSchemaHandlers:
         
         # Colonne da sinistra
         for col in left_schema:
-            result.append(self._column_schema_cls(
-                name=col.name,
-                type=col.type,
-                source_node=node_id,
-                is_calculated=col.is_calculated
-            ))
+            result.append(self._copy_column(col, node_id))
         
         # Colonne da destra (con suffisso per evitare conflitti
         left_names = {col.name for col in left_schema}
@@ -319,12 +273,7 @@ class GeoSchemaHandlers:
             new_name = col.name
             if new_name in left_names:
                 new_name = f"{col.name}_2"
-            result.append(self._column_schema_cls(
-                name=new_name,
-                type=col.type,
-                source_node=node_id,
-                is_calculated=col.is_calculated
-            ))
+            result.append(self._copy_column(col, node_id, name=new_name))
         
         return result
 
@@ -341,12 +290,7 @@ class GeoSchemaHandlers:
         output_col = config.get("output_column", "geometry")
         crs = config.get("crs", "EPSG:4326")
         
-        result = [self._column_schema_cls(
-            name=col.name,
-            type=col.type,
-            source_node=node_id,
-            is_calculated=col.is_calculated
-        ) for col in input_schemas[0]]
+        result = self._copy_schema(input_schemas[0], node_id)
         
         existing_names = {col.name for col in result}
         if output_col not in existing_names:
@@ -670,7 +614,9 @@ class GeoSchemaHandlers:
         group_type = input_by_name[group_col].type if group_col in input_by_name else "str"
 
         result: List[ColumnSchema] = [
-            self._column_schema_cls(
+            self._copy_column(input_by_name[group_col], node_id, is_calculated=False)
+            if group_col in input_by_name
+            else self._column_schema_cls(
                 name=group_col,
                 type=group_type,
                 source_node=node_id,
@@ -720,11 +666,8 @@ class GeoSchemaHandlers:
         else:
             for i, col in enumerate(result):
                 if col.name == geom_col:
-                    result[i] = self._column_schema_cls(
-                        name=col.name,
-                        type="geometry:point",
-                        source_node=node_id,
-                        is_calculated=True,
+                    result[i] = self._copy_column(
+                        col, node_id, type_="geometry:point", is_calculated=True
                     )
                     break
         return result
@@ -766,11 +709,8 @@ class GeoSchemaHandlers:
         else:
             for i, col in enumerate(result):
                 if col.name == geom_col:
-                    result[i] = self._column_schema_cls(
-                        name=col.name,
-                        type="geometry",
-                        source_node=node_id,
-                        is_calculated=True,
+                    result[i] = self._copy_column(
+                        col, node_id, type_="geometry", is_calculated=True
                     )
                     break
         return result
@@ -801,11 +741,8 @@ class GeoSchemaHandlers:
         result = self._copy_schema(input_schemas[0], node_id)
         for i, col in enumerate(result):
             if col.name == geom_col:
-                result[i] = self._column_schema_cls(
-                    name=col.name,
-                    type="geometry:polygon",
-                    source_node=node_id,
-                    is_calculated=True,
+                result[i] = self._copy_column(
+                    col, node_id, type_="geometry:polygon", is_calculated=True
                 )
                 break
         return result
@@ -859,12 +796,7 @@ class GeoSchemaHandlers:
             new_name = (
                 f"{col.name}_right" if col.name in left_names else col.name
             )
-            result.append(self._column_schema_cls(
-                name=new_name,
-                type=col.type,
-                source_node=node_id,
-                is_calculated=col.is_calculated,
-            ))
+            result.append(self._copy_column(col, node_id, name=new_name))
 
         output_col = config.get("output_column") or "distance_m"
         if output_col and output_col not in {c.name for c in result}:

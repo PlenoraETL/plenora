@@ -94,7 +94,7 @@ I punti ancora da governare operativamente per una vera orizzontalizzazione sono
 ### `backend/app/core/orchestrator/*`
 
 - `task_service.py`: pending metadata (`task_id -> project_id/task_type`) e' persistito tramite `task_metadata_store.py` su Redis usando `CELERY_BROKER_URL`, con TTL allineato a `CELERY_RESULT_EXPIRES`. Il default runtime e' Redis-only: lo store in-memory resta solo test double esplicito, non fallback automatico dev/prod.
-- `execution_contract.py`: il contratto API Control Plane -> Worker Data Plane e' ora un builder esplicito, non JSON assemblato nel router. Include `schema_version`, `project_id`, `project_type`, `group_id`, `canvas`, `columns_metadata`, `artifact_refs` estratti dal canvas (`file_sources`, `project_sources`, `result_refs`) e retention opzionale. Questo rende il futuro Control Plane Go compatibile con gli stessi worker Python senza importare logica Python di progetto.
+- `execution_contract.py`: il contratto API Control Plane -> Worker Data Plane e' ora un builder esplicito, non JSON assemblato nel router. Include `schema_version`, `project_id`, `project_type`, `group_id`, `canvas`, `output_contract`, `artifact_refs` estratti dal canvas (`file_sources`, `project_sources`, `result_refs`) e retention opzionale. Questo rende il futuro Control Plane Go compatibile con gli stessi worker Python senza importare logica Python di progetto.
 - `PipelineTaskPayload` puo' trasportare un `execution_contract` gia' risolto dal control plane. Quando presente, `workers.tasks.pipeline_task` chiama `OrchestratorService.execute_pipeline_from_contract()` e non rilegge metadata/canvas progetto dal DB: questo e' il primo boundary Control Plane (Go-ready) -> Data Plane Python.
 - `router.py`: download progetto usa solo result_id/blob/object storage; il fallback path su `RESULTS_DIR` e' rimosso dal comportamento API.
 - `service.py`: orchestration stateless; ok.
@@ -248,7 +248,7 @@ I punti ancora da governare operativamente per una vera orizzontalizzazione sono
 - `app.runtime.services` resta la composition boundary per i servizi gia' migrati: `main.py` consuma il container e non costruisce inline i service condivisi.
 - `cloud_backends.py` consuma config tramite `StorageBackendConfig` e `Settings`; il raw access per i validator fail-fast e' centralizzato in `Settings.get_raw`.
 - `TaskService` non usa piu' `_task_project_cache`: il metadata dei task pending e' su Redis-only nel default runtime, coperto da contract test.
-- Il contratto di esecuzione pipeline e' stato estratto in `app.core.orchestrator.execution_contract`: l'endpoint HTTP costruisce un payload self-contained e il worker lo valida/preserva con `schema_version`, `columns_metadata` e `artifact_refs`.
+- Il contratto di esecuzione pipeline e' stato estratto in `app.core.orchestrator.execution_contract`: l'endpoint HTTP costruisce un payload self-contained e il worker lo valida/preserva con `schema_version`, `output_contract` e `artifact_refs`.
 - Celery ha code configurabili per Data Plane, Control Plane e Scheduler, quindi i workload pesanti pandas/GDAL possono essere scalati separatamente dai task amministrativi e dal beat/scheduler.
 - Il trigger backup manuale passa da Celery task: l'API pod non avvia piu' subprocess locali.
 - `os.getenv` e' confinato a `app/config.py` e al boundary `app/environment.py`; i moduli bootstrap/security/auth/infra passano dal boundary comune.

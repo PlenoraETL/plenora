@@ -87,6 +87,7 @@ class QueryGenerator:
         unsupported_sources = [
             n for n in nodes
             if n.type in {"staticValues", "datasourceNode", "datasource_node"}
+            and not self._is_datasource_carica_target(n)
         ]
         if unsupported_sources:
             ids = ", ".join(n.id for n in unsupported_sources)
@@ -334,6 +335,15 @@ class QueryGenerator:
                     queue.append(edge.source)
 
         return table_nodes
+
+    @staticmethod
+    def _is_datasource_carica_target(node: Node) -> bool:
+        """True for datasource nodes used as CARICA destinations, not sources."""
+        data = node.data if isinstance(node.data, dict) else {}
+        mode = getattr(node, "mode", None) or data.get("mode")
+        dest_filename = getattr(node, "dest_filename", None) or data.get("dest_filename")
+        dest_format = getattr(node, "dest_format", None) or data.get("dest_format")
+        return str(mode or "").lower() == "carica" or bool(dest_filename and dest_format)
 
     def _riordina_per_dipendenze_join(
         self,

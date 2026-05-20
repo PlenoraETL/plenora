@@ -105,6 +105,38 @@ def test_execute_streaming_to_file_writes_csv_chunks(tmp_path, monkeypatch):
     ]
 
 
+def test_execute_streaming_to_file_disambiguates_duplicate_headers(tmp_path, monkeypatch):
+    monkeypatch.setenv("ESTRAI_MAX_ROWS", "10000")
+
+    fake_result = _FakeResult(
+        columns=["id", "name", "id", "name"],
+        chunks=[
+            [(1, "roma", 10, "lazio")],
+            [],
+        ],
+    )
+    factory = _make_factory_with_result(fake_result)
+    conn = MagicMock()
+    conn.type = "postgres"
+
+    out = tmp_path / "out.csv"
+    row_count, columns = execute_streaming_to_file(
+        engine_factory=factory,
+        connection=conn,
+        sql="SELECT * FROM joined",
+        params=None,
+        output_path=out,
+        output_format="csv",
+    )
+
+    assert row_count == 1
+    assert columns == ["id", "name", "id_2", "name_2"]
+    assert out.read_text(encoding="utf-8").splitlines() == [
+        "id,name,id_2,name_2",
+        "1,roma,10,lazio",
+    ]
+
+
 def test_execute_streaming_to_file_writes_parquet_chunks(tmp_path, monkeypatch):
     pa = pytest.importorskip("pyarrow")
     pq = pytest.importorskip("pyarrow.parquet")

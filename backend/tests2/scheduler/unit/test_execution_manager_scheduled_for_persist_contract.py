@@ -133,7 +133,7 @@ def test_execute_persists_scheduled_for_in_schedule_info_and_execution_info(
             "nodes": [],
             "edges": [],
         }
-        project_service_cls.return_value.get_project_columns_metadata.return_value = []
+        project_service_cls.return_value.get_project_output_contract.return_value = []
         result = manager.execute(
             "sch-1",
             triggered_by="catchup",
@@ -180,7 +180,7 @@ def test_execute_propagates_scheduled_for_to_carica_kwarg(schedule_config):
             "nodes": [],
             "edges": [],
         }
-        project_service_cls.return_value.get_project_columns_metadata.return_value = []
+        project_service_cls.return_value.get_project_output_contract.return_value = []
         manager.execute(
             "sch-1",
             triggered_by="catchup",
@@ -217,7 +217,7 @@ def test_execute_with_scheduled_for_none_persists_none_in_log_entry(
             "nodes": [],
             "edges": [],
         }
-        project_service_cls.return_value.get_project_columns_metadata.return_value = []
+        project_service_cls.return_value.get_project_output_contract.return_value = []
         result = manager.execute("sch-1", triggered_by="cron")
 
     assert result["success"] is True

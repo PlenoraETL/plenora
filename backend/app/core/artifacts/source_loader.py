@@ -35,7 +35,7 @@ def _source_kind_for_ref(ref: SourceRef) -> str:
     - ``"project"`` -> ``"project"``
     - ``"static"`` -> ``"static"`` (single-row key-value DataFrame; typically
       no canvas column definitions are available, so metadata will be ``None``
-      in practice unless the caller explicitly supplies ``columns_metadata``).
+      in practice unless the caller explicitly supplies resource columns).
     - any future kind falls back to ``"file"`` (safe default until extended).
     """
     kind = ref.kind()
@@ -273,14 +273,14 @@ class SourceLoader:
         ref: SourceRef,
         *,
         expected_group_id: str,
-        columns_metadata: Optional[list] = None,
+        resource_columns: Optional[list] = None,
         is_superadmin: bool = False,
     ) -> "LoadedResource":
         """Load ``ref`` and return a typed ``LoadedResource`` envelope.
 
         Delegates to ``load`` for the actual data fetch (all existing
         cross-tenant and visibility guarantees apply). When
-        ``columns_metadata`` is supplied, constructs a ``ResourceMetadata``
+        ``resource_columns`` is supplied, constructs a ``ResourceMetadata``
         envelope from it at load time - producers no longer need to
         reconstruct it downstream from legacy ``node_columns`` dicts.
 
@@ -288,7 +288,7 @@ class SourceLoader:
             ref: source reference (file / project / static).
             expected_group_id: tenant binding, forwarded verbatim to
                 ``load``.
-            columns_metadata: optional ``[{"name": str, "type": str}]``
+            resource_columns: optional ``[{"name": str, "type": str}]``
                 list. When present, ``LoadedResource.metadata`` is
                 populated. When absent, ``metadata`` is ``None``.
                 For static-source refs this is typically ``None`` because
@@ -300,7 +300,7 @@ class SourceLoader:
         Returns:
             ``LoadedResource(data=..., metadata=...)`` - data is the
             same object ``load`` would have returned; metadata is a
-            ``ResourceMetadata`` built from ``columns_metadata`` or
+            ``ResourceMetadata`` built from ``resource_columns`` or
             ``None``.
         """
         data = self.load(
@@ -310,9 +310,9 @@ class SourceLoader:
         )
 
         metadata: Optional[ResourceMetadata] = None
-        if columns_metadata is not None:
+        if resource_columns is not None:
             metadata = ResourceMetadata.from_columns_list(
-                columns_metadata,
+                resource_columns,
                 source_kind=_source_kind_for_ref(ref),
             )
 

@@ -7,7 +7,8 @@ Classe base astratta comune a tutti i backend di storage.
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Mapping, Optional, TypedDict
+from typing import Mapping, Optional
+from typing_extensions import TypedDict
 import fnmatch
 import hashlib
 

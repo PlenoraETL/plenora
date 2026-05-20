@@ -8,7 +8,8 @@ execution flow does not own daemon/thread mechanics.
 from __future__ import annotations
 
 import threading
-from typing import Optional, TypedDict
+from typing import Optional
+from typing_extensions import TypedDict
 
 from app.shared.clock import Clock, WALL_CLOCK
 from app.utils.logger import get_logger

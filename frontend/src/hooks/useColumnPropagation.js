@@ -119,8 +119,6 @@ export const useColumnPropagation = (setNodes) => {
       } else if (node.type === 'transform' && node.data?.transform_op === 'join') {
         // CASO SPECIALE: Join - applica suffissi _L e _R come il backend
         const config = node.data?.config || {};
-        const leftOn = config.left_on;
-        const rightOn = config.right_on;
         
         // Ordina edges per targetHandle per determinare left/right
         const sortedEdges = [...incomingEdges].sort((a, b) => {
@@ -135,6 +133,8 @@ export const useColumnPropagation = (setNodes) => {
         
         const leftCols = sortedEdges.length > 0 ? (outputColumnsMap.get(sortedEdges[0].source) || []) : [];
         const rightCols = sortedEdges.length > 1 ? (outputColumnsMap.get(sortedEdges[1].source) || []) : [];
+        const leftOn = resolveColumnName(leftCols, config.left_on_column_id, config.left_on);
+        const rightOn = resolveColumnName(rightCols, config.right_on_column_id, config.right_on);
         
         // inputColumns separati per mostrare nel nodo (con marker left/right)
         inputColumns = [
@@ -164,12 +164,34 @@ export const useColumnPropagation = (setNodes) => {
       const newOutputColumns = outputColumnsMap.get(node.id) || [];
       
       // Confronta per evitare update inutili
-      const currentInputNames = (node.data?.inputColumns || []).map(c => c.name).join(',');
-      const currentOutputNames = (node.data?.columns || []).map(c => typeof c === 'string' ? c : c.name).join(',');
-      const newInputNames = newInputColumns.map(c => c.name).join(',');
-      const newOutputNames = newOutputColumns.map(c => c.name).join(',');
+      const colSignature = (col) => {
+        if (typeof col === 'string') return col;
+        return `${col.id || col.column_id || ''}:${col.name}`;
+      };
+      const currentInputNames = (node.data?.inputColumns || []).map(colSignature).join(',');
+      const currentOutputNames = (node.data?.columns || []).map(colSignature).join(',');
+      const newInputNames = newInputColumns.map(colSignature).join(',');
+      const newOutputNames = newOutputColumns.map(colSignature).join(',');
+      const syncedConfig = syncConfigColumnReferences(
+        node.data?.config,
+        newInputColumns
+      );
+      const configChanged = syncedConfig !== node.data?.config;
       
-      if (currentInputNames === newInputNames && currentOutputNames === newOutputNames) {
+      if (isSourceNode(node)) {
+        if (currentInputNames === newInputNames) {
+          return node;
+        }
+        return {
+          ...node,
+          data: {
+            ...node.data,
+            inputColumns: newInputColumns
+          }
+        };
+      }
+
+      if (currentInputNames === newInputNames && currentOutputNames === newOutputNames && !configChanged) {
         return node; // Nessun cambiamento
       }
       
@@ -178,7 +200,8 @@ export const useColumnPropagation = (setNodes) => {
         data: {
           ...node.data,
           inputColumns: newInputColumns,
-          columns: newOutputColumns
+          columns: newOutputColumns,
+          ...(configChanged ? { config: syncedConfig } : {})
         }
       };
     }));
@@ -194,10 +217,25 @@ export const useColumnPropagation = (setNodes) => {
  */
 function extractSourceColumns(node) {
   const cols = node.data?.columns || [];
-  return cols.map(c => ({
-    name: typeof c === 'string' ? c : (c.alias || c.name),
-    type: typeof c === 'string' ? 'str' : (c.type || 'str')
-  }));
+  return cols.map(c => {
+    if (typeof c === 'string') {
+      return { name: c, type: 'str' };
+    }
+    return {
+      id: c.id || c.column_id,
+      column_id: c.column_id || c.id,
+      source_name: c.source_name,
+      display_name: c.display_name,
+      name: c.alias || c.name,
+      type: c.type || 'str'
+    };
+  });
+}
+
+function isSourceNode(node) {
+  return node.type === 'project_source' || node.type === 'file_source'
+    || node.type === 'staticValues'
+    || node.type === 'datasourceNode' || node.type === 'datasource_node';
 }
 
 /**
@@ -207,9 +245,7 @@ function computeOutputColumns(node, inputColumns) {
   const nodeType = node.type;
   
   // Nodi sorgente: usano le loro colonne salvate.
-  if (nodeType === 'project_source' || nodeType === 'file_source'
-      || nodeType === 'staticValues'
-      || nodeType === 'datasourceNode' || nodeType === 'datasource_node') {
+  if (isSourceNode(node)) {
     return extractSourceColumns(node);
   }
   
@@ -255,14 +291,14 @@ function applyTransformation(node, inputColumns) {
     
     case 'drop':
     case 'drop_columns': {
-      const dropCols = config.columns || [];
+      const dropCols = resolveColumnNameList(inputColumns, config.columns_column_ids, config.columns || []);
       result = result.filter(c => !dropCols.includes(c.name));
       break;
     }
     
     case 'select':
     case 'select_columns': {
-      const selectCols = config.columns || [];
+      const selectCols = resolveColumnNameList(inputColumns, config.columns_column_ids, config.columns || []);
       if (selectCols.length > 0) {
         result = result.filter(c => selectCols.includes(c.name));
       }
@@ -273,19 +309,20 @@ function applyTransformation(node, inputColumns) {
       // Supporto lista rinominazioni
       if (config.renames && Array.isArray(config.renames)) {
         config.renames.forEach(r => {
-          const oldName = r.old_name;
+          const oldName = resolveColumnName(inputColumns, r.old_name_id, r.old_name);
           const newName = r.new_name;
           if (oldName && newName) {
             result = result.map(c => 
-              c.name === oldName ? { ...c, name: newName } : c
+              c.name === oldName ? { ...c, name: newName, display_name: newName } : c
             );
           }
         });
       }
       // Retrocompatibilità singola rinominazione
       else if (config.old_name && config.new_name) {
+        const oldName = resolveColumnName(inputColumns, config.old_name_column_id, config.old_name);
         result = result.map(c => 
-          c.name === config.old_name ? { ...c, name: config.new_name } : c
+          c.name === oldName ? { ...c, name: config.new_name, display_name: config.new_name } : c
         );
       }
       break;
@@ -334,7 +371,7 @@ function applyTransformation(node, inputColumns) {
     case 'aggregate': {
       // Aggregate cambia lo schema:
       // Output = group_by columns + aggregated columns
-      const groupBy = config.group_by || [];
+      const groupBy = resolveColumnNameList(inputColumns, config.group_by_column_ids, config.group_by || []);
       const aggregations = config.aggregations || [];
       
       result = [];
@@ -351,7 +388,7 @@ function applyTransformation(node, inputColumns) {
       
       // Aggiungi colonne aggregate
       aggregations.forEach(agg => {
-        const colName = agg.column;
+        const colName = resolveColumnName(inputColumns, agg.column_id, agg.column);
         const func = agg.function || 'count';
         // Nome output potrebbe essere colonna_funzione o solo colonna
         const outputName = aggregations.filter(a => a.column === colName).length > 1 
@@ -519,7 +556,11 @@ function computeMultiJoinOutput(node, sourcesColumns) {
   }
   
   const config = node.data?.config || {};
-  const joinKeys = config.join_keys || [];
+  const joinKeys = resolveColumnNameList(
+    sourcesColumns.flat(),
+    config.join_key_ids,
+    config.join_keys || []
+  );
   
   // Risultato finale
   const result = [];
@@ -564,6 +605,7 @@ function computeMultiJoinOutput(node, sourcesColumns) {
       }
       
       result.push({
+        ...col,
         name: finalName,
         type: col.type || 'str'
       });
@@ -592,10 +634,10 @@ function computeJoinOutput(leftCols, rightCols, leftOn, rightOn) {
   leftCols.forEach(col => {
     if (col.name === leftOn) {
       // La chiave di join mantiene il nome originale
-      result.push({ name: col.name, type: col.type || 'str', source: 'left' });
+      result.push({ ...col, name: col.name, type: col.type || 'str', source: 'left' });
     } else {
       // Tutte le altre colonne ricevono suffisso _L
-      result.push({ name: `${col.name}_L`, type: col.type || 'str', source: 'left' });
+      result.push({ ...col, name: `${col.name}_L`, type: col.type || 'str', source: 'left' });
     }
   });
   
@@ -607,10 +649,166 @@ function computeJoinOutput(leftCols, rightCols, leftOn, rightOn) {
       return;
     }
     // Tutte le altre colonne ricevono suffisso _R
-    result.push({ name: `${col.name}_R`, type: col.type || 'str', source: 'right' });
+    result.push({ ...col, name: `${col.name}_R`, type: col.type || 'str', source: 'right' });
   });
   
   return result;
+}
+
+function columnKey(col) {
+  return col?.id || col?.column_id || null;
+}
+
+function syncConfigColumnReferences(config, columns) {
+  if (!config || typeof config !== 'object' || Array.isArray(config)) {
+    return config;
+  }
+
+  let changed = false;
+  const next = { ...config };
+  const byId = new Map(
+    (columns || [])
+      .map(col => [columnKey(col), col])
+      .filter(([key]) => Boolean(key))
+  );
+
+  Object.entries(config).forEach(([key, refs]) => {
+    if (!key.endsWith('_column_refs') || !Array.isArray(refs)) return;
+    const expressionKey = key.slice(0, -12);
+    const expression = next[expressionKey];
+    if (typeof expression !== 'string') return;
+
+    let nextExpression = expression;
+    const nextRefs = [];
+    refs.forEach(ref => {
+      if (!ref?.id) return;
+      const current = byId.get(ref.id);
+      if (!current?.name) return;
+      nextExpression = rewriteExpressionToken(
+        nextExpression,
+        ref.name,
+        current.name
+      );
+      nextRefs.push({ id: ref.id, name: current.name });
+    });
+
+    if (nextExpression !== expression) {
+      next[expressionKey] = nextExpression;
+      changed = true;
+    }
+    if (JSON.stringify(nextRefs) !== JSON.stringify(refs)) {
+      next[key] = nextRefs;
+      changed = true;
+    }
+  });
+
+  ['formula'].forEach(expressionKey => {
+    const expression = next[expressionKey];
+    if (typeof expression !== 'string' || !expression) return;
+    const refsKey = `${expressionKey}_column_refs`;
+    if (Array.isArray(next[refsKey]) && next[refsKey].length > 0) return;
+
+    let nextExpression = expression;
+    legacyNameMap(columns).forEach((currentName, legacyName) => {
+      nextExpression = rewriteExpressionToken(
+        nextExpression,
+        legacyName,
+        currentName
+      );
+    });
+
+    const refs = collectExpressionRefs(nextExpression, columns);
+    if (nextExpression !== expression) {
+      next[expressionKey] = nextExpression;
+      changed = true;
+    }
+    if (refs.length > 0) {
+      next[refsKey] = refs;
+      changed = true;
+    }
+  });
+
+  return changed ? next : config;
+}
+
+function legacyNameMap(columns) {
+  const candidates = new Map();
+  (columns || []).forEach(col => {
+    if (!col?.name) return;
+    [col.source_name, col.display_name].forEach(oldName => {
+      if (!oldName || oldName === col.name) return;
+      const key = String(oldName);
+      const currentValue = candidates.get(key);
+      if (currentValue && currentValue !== col.name) {
+        candidates.set(key, null);
+      } else if (!candidates.has(key)) {
+        candidates.set(key, String(col.name));
+      }
+    });
+  });
+  for (const [key, value] of [...candidates.entries()]) {
+    if (!value) candidates.delete(key);
+  }
+  return candidates;
+}
+
+function collectExpressionRefs(expression, columns) {
+  if (!expression || typeof expression !== 'string') return [];
+  return (columns || [])
+    .filter(col => {
+      if (!columnKey(col)) return false;
+      const names = [col.name, col.source_name, col.display_name].filter(Boolean);
+      return names.some(name => expressionHasToken(expression, String(name)));
+    })
+    .map(col => ({ id: columnKey(col), name: col.name }));
+}
+
+function expressionHasToken(expression, token) {
+  if (!expression || !token || typeof expression !== 'string') return false;
+  if (expression.includes(`\`${token}\``)) return true;
+  if (expression.includes(`['${token}']`)) return true;
+  if (expression.includes(`["${token}"]`)) return true;
+  if (/^[A-Za-z_][A-Za-z0-9_]*$/.test(token)) {
+    return new RegExp(`\\b${escapeRegExp(token)}\\b`).test(expression);
+  }
+  return expression.includes(token);
+}
+
+function rewriteExpressionToken(expression, oldName, newName) {
+  if (!expression || !oldName || !newName || oldName === newName) return expression;
+  let rewritten = expression
+    .replaceAll(`\`${oldName}\``, `\`${newName}\``)
+    .replaceAll(`['${oldName}']`, `['${newName}']`)
+    .replaceAll(`["${oldName}"]`, `["${newName}"]`);
+  if (/^[A-Za-z_][A-Za-z0-9_]*$/.test(oldName)) {
+    rewritten = rewritten.replace(
+      new RegExp(`\\b${escapeRegExp(oldName)}\\b`, 'g'),
+      newName
+    );
+  }
+  return rewritten;
+}
+
+function escapeRegExp(value) {
+  return String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function resolveColumnName(columns, columnId, fallbackName) {
+  if (columnId) {
+    const found = columns.find(col => columnKey(col) === columnId);
+    if (found?.name) return found.name;
+  }
+  return fallbackName;
+}
+
+function resolveColumnNameList(columns, columnIds, fallbackNames) {
+  const names = Array.isArray(fallbackNames) ? fallbackNames : [];
+  if (!Array.isArray(columnIds) || columnIds.length === 0) {
+    return names;
+  }
+  return columnIds
+    .map((columnId, idx) => resolveColumnName(columns, columnId, names[idx]))
+    .filter(Boolean);
 }
 
 export default useColumnPropagation;

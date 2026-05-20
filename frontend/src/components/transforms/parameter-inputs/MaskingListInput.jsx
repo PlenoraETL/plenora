@@ -17,13 +17,19 @@ const MaskingListInput = ({ value, onChange, columns }) => {
     { value: 'custom', label: '⚙️ Personalizzato' }
   ];
 
+  const columnKey = (col) => col?.id || col?.column_id || col?.name;
+
   const addMasking = () => {
-    onChange([...maskings, { column: '', mask_type: 'cf', chars_start: 3, chars_end: 3, mask_char: '*' }]);
+    onChange([...maskings, { column: '', column_id: null, mask_type: 'cf', chars_start: 3, chars_end: 3, mask_char: '*' }]);
   };
 
   const updateMasking = (idx, field, newValue) => {
     const updated = [...maskings];
     updated[idx] = { ...updated[idx], [field]: newValue };
+    if (field === 'column') {
+      const selectedColumn = columns.find(col => col.name === newValue);
+      updated[idx].column_id = columnKey(selectedColumn) || null;
+    }
     onChange(updated);
   };
 
@@ -43,7 +49,7 @@ const MaskingListInput = ({ value, onChange, columns }) => {
             >
               <option value="">Colonna</option>
               {columns.map((col, cidx) => (
-                <option key={`${col.name}-${cidx}`} value={col.name}>{col.name}</option>
+                <option key={`${columnKey(col)}-${cidx}`} value={col.name}>{col.name}</option>
               ))}
             </select>
             <select

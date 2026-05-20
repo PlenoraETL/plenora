@@ -7,7 +7,8 @@ import random
 
 import threading
 import time
-from typing import Any, Optional, Protocol, TypedDict
+from typing import Any, Optional, Protocol
+from typing_extensions import TypedDict
 
 import requests
 

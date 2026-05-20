@@ -9,7 +9,7 @@ sono ForwardRef.
 
 from fastapi import APIRouter, Depends
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-from typing import TypedDict
+from typing_extensions import TypedDict
 
 from app.core.auth import disclosure as _disclosure
 from app.core.auth.models import (

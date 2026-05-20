@@ -194,8 +194,8 @@ async def auto_mapping(request: AutoMappingRequest, current_user: CurrentUser = 
         df = empty_dataframe_from_column_metadata(request.source_columns)
 
         # Canvas types (dict form del tipo semantico) per rilevare geometrie
-        # `source_columns` arriva gia' come list[{"name","type"}] (columns_metadata
-        # shape) — l'adapter fa la sola conversione di forma
+        # `source_columns` arriva gia' come list[{"name","type"}]:
+        # l'adapter fa la sola conversione di forma.
         canvas_types = metadata_to_dict(request.source_columns)
 
         # Recupera colonne esistenti se la tabella è specificata

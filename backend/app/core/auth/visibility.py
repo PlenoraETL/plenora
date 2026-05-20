@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from typing import Optional, TypedDict, cast
+from typing import Optional, cast
+from typing_extensions import TypedDict
 
 from app.core.auth import share_store
 

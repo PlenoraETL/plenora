@@ -103,6 +103,8 @@ services:
     # command. Production should use prefork (target shape).
     entrypoint: ["python", "-m", "celery", "-A", "workers.celery_app", "worker"]
     command: ["--pool=solo", "--loglevel=info"]
+    healthcheck:
+      disable: true
     restart: unless-stopped
 
   beat:
@@ -130,6 +132,8 @@ services:
     # is safe (additional replicas go to standby) but unnecessary.
     entrypoint: ["python", "-m", "celery", "-A", "workers.celery_app", "beat"]
     command: ["-S", "workers.beat_scheduler.PlenoraBeatScheduler", "--loglevel=info"]
+    healthcheck:
+      disable: true
     restart: unless-stopped
 
   frontend:
@@ -150,3 +154,8 @@ volumes:
   postgres-data:
   redis-data:
   data-dir:
+
+networks:
+  default:
+    name: ${PLENORA_DOCKER_NETWORK:-plenora}
+    external: true

@@ -16,6 +16,7 @@ class FormatDetector:
         '.xls': 'xlsx',
         '.json': 'json',
         '.geojson': 'geojson',
+        '.parquet': 'parquet',
         '.gpkg': 'gpkg',
         '.shp': 'shp',
         '.gdb': 'gdb',
@@ -36,7 +37,7 @@ class FormatDetector:
     @classmethod
     def is_tabular(cls, format_type: str) -> bool:
         """Verifica se formato e' tabellare"""
-        return format_type in ['csv', 'xlsx', 'json']
+        return format_type in ['csv', 'xlsx', 'json', 'parquet']
 
 
 class FileIdGenerator:

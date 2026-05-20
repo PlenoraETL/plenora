@@ -33,7 +33,6 @@ _DOMAIN_EXCEPTION_NAMES = {
     "AuthDomainError",
     "AuthResourceNotFoundError",
     "CanvasCorruptedError",
-    "ColumnsMetadataSaveError",
     "ExecutionContextError",
     "FileSourceResolutionError",
     "IntermediateSettingsError",

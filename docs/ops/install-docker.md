@@ -44,6 +44,25 @@ Use `--install-deps` on Linux Debian/Ubuntu to install Git, curl, Python 3,
 Docker Engine, and the Docker Compose v2 plugin through apt. Use `-InstallDeps`
 on Windows to install Git and Docker Desktop through winget.
 
+On Linux, the installer prompts for the first superadmin username/password
+during interactive installs. For unattended installs, set:
+
+```bash
+export PLENORA_BOOTSTRAP_ADMIN_USERNAME=admin
+export PLENORA_BOOTSTRAP_ADMIN_PASSWORD='<strong-password>'
+bash scripts/install-docker.sh
+```
+
+Use `--skip-admin-bootstrap` to leave the user table empty.
+
+The Linux installer also asks for the number of Celery worker containers.
+Default is one worker. For unattended installs:
+
+```bash
+export PLENORA_WORKER_REPLICAS=2
+bash scripts/install-docker.sh
+```
+
 For remote frontend builds:
 
 ```bash
@@ -67,7 +86,7 @@ BE-GO-READY-INSTALL-010-LINUX-EXECUTION-PACK.
 |---|---|---|
 | prereqs | `docker --version`, `docker compose version` | NO (scaffold) |
 | env decisions | create `.env.docker` from `.env.docker.example` | NO (scaffold) |
-| install | `docker compose config` and `docker compose build backend frontend` | NO (scaffold) |
+| install | `docker compose config --quiet` and `docker compose build backend frontend` | NO (scaffold) |
 | smoke | `bash scripts/docker-validate.sh` | NO (scaffold) |
 | health/ready | `curl -fsS http://127.0.0.1:5004/health` and `/ready` | NO (scaffold) |
 | Celery check | `cleanroom.ping` through the worker | NO (scaffold) |
@@ -110,7 +129,7 @@ docker compose version
 
 Expected output checklist:
 
-1. **`docker compose config`**
+1. **`docker compose config --quiet`**
    Expected: compose resolves without missing env/file errors.
 2. **`docker compose build backend frontend`**
    Expected: backend and frontend images build successfully.

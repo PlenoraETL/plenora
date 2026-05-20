@@ -38,11 +38,11 @@ class _StubLoader:
     def load(self, ref, *, expected_group_id, is_superadmin=False):
         return self._df
 
-    def load_with_metadata(self, ref, *, expected_group_id, columns_metadata=None, is_superadmin=False):
+    def load_with_metadata(self, ref, *, expected_group_id, resource_columns=None, is_superadmin=False):
         from app.shared.resources.metadata import LoadedResource, ResourceMetadata
         metadata = None
-        if columns_metadata is not None:
-            metadata = ResourceMetadata.from_columns_list(columns_metadata, source_kind="file")
+        if resource_columns is not None:
+            metadata = ResourceMetadata.from_columns_list(resource_columns, source_kind="file")
         return LoadedResource(data=self._df, metadata=metadata)
 
 
@@ -91,7 +91,7 @@ def test_metadata_map_not_populated_on_load_error():
     from app.core.artifacts import SourceLoadingError
 
     class _FailLoader:
-        def load_with_metadata(self, ref, *, expected_group_id, columns_metadata=None, is_superadmin=False):
+        def load_with_metadata(self, ref, *, expected_group_id, resource_columns=None, is_superadmin=False):
             raise SourceLoadingError("Accesso negato: il file sorgente 'fs-1'")
 
     node = _Node(columns=[{"name": "geometry", "type": "geometry:polygon:4326"}])

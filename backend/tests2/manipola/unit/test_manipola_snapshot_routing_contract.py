@@ -69,7 +69,10 @@ def _reset_policy_cache():
 
 def _executor() -> ManipolaExecutor:
     """Executor con project_service stub."""
-    return ManipolaExecutor(project_service=object())
+    project_service = MagicMock()
+    project_service.get_project_output_contract.return_value = None
+    project_service.update_project_output_contract.return_value = True
+    return ManipolaExecutor(project_service=project_service)
 
 
 def _df(n: int = 5) -> pd.DataFrame:
@@ -345,8 +348,6 @@ def test_result_node_uses_record_final_snapshot():
         executor, "_salva_risultato", return_value={"success": True, "rows_count": 100},
     ), patch(
         "app.core.manipola.executor.record_final_snapshot", final_spy,
-    ), patch(
-        "app.core.manipola.executor.save_columns_metadata_with_retry",
     ), _patch_settings():
         executor.execute("proj-1", canvas, run_id="run-1")
 

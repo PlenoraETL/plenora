@@ -162,8 +162,7 @@ def metadata_to_dict(rows: Iterable[Mapping[str, Any]] | None) -> StringMap:
     """list[{"name","type"}] -> dict{name: type}.
 
     Silently skips malformed rows (missing `name` or `type`, or non-dict):
-    callers are already best-effort (for example columns_metadata read from
-    potentially legacy canvas data). Preserves input order for consumers that
+    callers are already best-effort. Preserves input order for consumers that
     expect stable order (Python 3.7+ ordered dict).
     """
     out: Dict[str, str] = {}

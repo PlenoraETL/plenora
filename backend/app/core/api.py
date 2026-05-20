@@ -3,6 +3,7 @@
 from fastapi import APIRouter
 
 from app.core.admin_backups.router import router as admin_backups_router
+from app.core.admin_runtime_config.router import router as admin_runtime_config_router
 from app.core.admin_system_status.router import router as admin_system_status_router
 from app.core.arricchisci.router import (
     api_connections_router,
@@ -92,6 +93,9 @@ api_router.include_router(admin_backups_router)
 
 # Admin System Status dashboard: superadmin only.
 api_router.include_router(admin_system_status_router)
+
+# Admin Runtime Config: superadmin only, read-only.
+api_router.include_router(admin_runtime_config_router)
 
 # Tickets: tech debt e user support, RBAC nel router.
 api_router.include_router(tickets_router)

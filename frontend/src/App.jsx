@@ -35,6 +35,7 @@ const DataSourceManager    = React.lazy(() => import('./pages/DataSourceManager'
 const UserManager          = React.lazy(() => import('./pages/UserManager'));
 const AdminBackupsPage     = React.lazy(() => import('./pages/AdminBackupsPage'));
 const AdminSystemStatusPage = React.lazy(() => import('./pages/AdminSystemStatusPage'));
+const AdminRuntimeConfigPage = React.lazy(() => import('./pages/AdminRuntimeConfigPage'));
 const EseguibiliList       = React.lazy(() => import('./pages/EseguibiliList'));
 const EsecutoreHome        = React.lazy(() => import('./pages/EsecutoreHome'));
 const TicketsList          = React.lazy(() => import('./pages/TicketsList'));
@@ -124,6 +125,7 @@ function AppRoutes() {
       <Route path="/admin/users" element={<AdminRoute><UserManager /></AdminRoute>} />
       <Route path="/admin/backups" element={<SuperadminRoute><AdminBackupsPage /></SuperadminRoute>} />
       <Route path="/admin/system-status" element={<SuperadminRoute><AdminSystemStatusPage /></SuperadminRoute>} />
+      <Route path="/admin/runtime-config" element={<SuperadminRoute><AdminRuntimeConfigPage /></SuperadminRoute>} />
       <Route path="/eseguibili" element={<ProtectedRoute><EseguibiliList /></ProtectedRoute>} />
       <Route path="/tickets" element={<ProtectedRoute><TicketsList /></ProtectedRoute>} />
       <Route path="/tickets/:id" element={<ProtectedRoute><TicketDetail /></ProtectedRoute>} />

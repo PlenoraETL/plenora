@@ -5,7 +5,8 @@ from __future__ import annotations
 from collections.abc import Mapping
 from decimal import Decimal
 import math
-from typing import Optional, TypedDict, cast
+from typing import Optional, cast
+from typing_extensions import TypedDict
 
 from app.core.orchestrator.task_service import TaskInfo, TaskResultPayload
 

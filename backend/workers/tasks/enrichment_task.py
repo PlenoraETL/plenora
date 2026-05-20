@@ -117,7 +117,7 @@ def execute_enrichment_task(
             per rimuovere i file temporanei creati durante l'esecuzione on-demand.
         is_eseguibile: True quando il task gira per un "eseguibile" pubblicato.
             In questa modalita' il task NON scrive nulla su DB (runs, log_runs,
-            results, node_rows, columns_metadata): persiste l'output su disco in
+            results, node_rows, output_contract): persiste l'output su disco in
             ESEGUIBILI_OUTPUTS_DIR/{task_id}/ e il frontend lo scarica via
             GET /api/eseguibili/{id}/download/{task_id}, che elimina il file
             dopo l'invio. Un cleanup periodico (celery beat) rimuove eventuali
@@ -1021,21 +1021,25 @@ def execute_enrichment_task(
             saved_path = Path(saved["output_filename"])
             logger.info(f"[Task {task_id}] Risultato persistito: {result_id}")
 
-            # Helper condiviso (retry transient + raise non-transient): se fallisce
-            # in modo permanente, ColumnsMetadataSaveError propaga al try/except
-            # esterno di Celery che marca il task FAILED — pre-fix il warning
-            # silenzioso lasciava il task SUCCESS con metadata stale
             from app.core.projects.service import ProjectService as _ProjSvc
-            from app.core.projects.columns_metadata import save_columns_metadata_with_retry
-            _col_meta = [{"name": col, "type": str(final_df[col].dtype)} for col in final_df.columns]
-            save_columns_metadata_with_retry(
-                project_service=_ProjSvc(),
+            from app.core.output_contract import build_output_contract
+            _project_service = _ProjSvc()
+            output_contract = build_output_contract(
                 project_id=project_id,
-                columns_metadata=_col_meta,
-                logger=logger,
-                op=f"enrichment_task[{task_id}]:save_columns_metadata",
+                result_columns=[
+                    {"name": col, "type": str(final_df[col].dtype)}
+                    for col in final_df.columns
+                ],
+                previous_contract=_project_service.get_project_output_contract(project_id),
             )
-            logger.info(f"[Task {task_id}] columns_metadata salvato: {len(_col_meta)} colonne")
+            _project_service.update_project_output_contract(
+                project_id,
+                output_contract.model_dump(),
+            )
+            logger.info(
+                f"[Task {task_id}] output_contract salvato: "
+                f"{len(output_contract.columns)} colonne"
+            )
 
         update_task_progress(self, 100, "Completato!", task_id=task_id)
 
@@ -1293,9 +1297,8 @@ def update_task_progress(
 # `_load_static_values` su di essa. Questo garantisce isolamento del
 # tenant binding (`_current_group_id`) fra task concorrenti sullo stesso
 # worker process Celery (prefork riusa i fork
-# `find_latest_output_file` e `load_dataframe_from_file` erano gia'
-# semplici alias del boundary dataframe: i call site usano direttamente
-# l'import canonico.
+# I fallback filesystem legacy per project_source sono rimossi: i progetti
+# downstream consumano solo latest artifact + output_contract.
 
 
 def _trigger_carica_if_present(

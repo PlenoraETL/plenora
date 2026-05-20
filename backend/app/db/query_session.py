@@ -13,6 +13,7 @@ from typing import Any, Iterable, List, Mapping, Optional, Protocol
 
 from sqlalchemy import text
 
+from app.core.dataframes.tabular import make_unique_column_names
 from app.db.sql_types import QueryParams
 
 
@@ -184,5 +185,8 @@ def normalize_result_columns(
 ) -> List[str]:
     """Return result column names with provider-specific normalization."""
     if context.provider == "oracle":
-        return [column.lower() for column in columns]
-    return list(columns)
+        normalized = [column.lower() for column in columns]
+    else:
+        normalized = list(columns)
+    unique_columns, _renames = make_unique_column_names(normalized)
+    return unique_columns

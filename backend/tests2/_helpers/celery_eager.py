@@ -130,7 +130,7 @@ class HarnessSpies:
     intermediate_run_creates: List[Dict[str, Any]] = field(default_factory=list)
     saved_pipeline_results: List[Dict[str, Any]] = field(default_factory=list)
     saved_result_blobs: List[Dict[str, Any]] = field(default_factory=list)
-    columns_metadata_saves: List[Dict[str, Any]] = field(default_factory=list)
+    output_contract_saves: List[Dict[str, Any]] = field(default_factory=list)
 
 
 def _make_tracked_api_cs(spies: HarnessSpies):
@@ -250,6 +250,16 @@ def install_enrichment_task_mocks(
             spies.project_metadata_calls.append(project_id)
             return _FakeProjectMeta(project_group_id)
 
+        def get_project_output_contract(self, project_id):
+            return None
+
+        def update_project_output_contract(self, project_id, output_contract):
+            spies.output_contract_saves.append({
+                "project_id": project_id,
+                "output_contract": output_contract,
+            })
+            return True
+
     monkeypatch.setattr(
         "app.core.projects.service.ProjectService", _FakeProjectService,
     )
@@ -292,16 +302,7 @@ def install_enrichment_task_mocks(
         "app.core.results.blob_writer.save_result_blob", _fake_save_result_blob,
     )
 
-    # 10. columns_metadata
-    def _fake_save_cols(**kwargs):
-        spies.columns_metadata_saves.append(kwargs)
-
-    monkeypatch.setattr(
-        "app.core.projects.columns_metadata.save_columns_metadata_with_retry",
-        _fake_save_cols,
-    )
-
-    # 11. snapshot / writer.close_run (lazy intermediate)
+    # 10. snapshot / writer.close_run (lazy intermediate)
     snap_name = "app.core.intermediate.snapshot"
     if snap_name in sys.modules:
         monkeypatch.setattr(

@@ -38,6 +38,7 @@ class TransformSchemaHandlers:
     def _configure_handler(self, handler: object) -> None:
         """Give composed handlers the shared schema-construction helpers."""
         handler._column_schema_cls = self._column_schema_cls
+        handler._copy_column = self._copy_column
         handler._copy_schema = self._copy_schema
         handler._normalize_str_list = self._normalize_str_list
         handler._schema_passthrough = self._schema_passthrough
@@ -224,18 +225,19 @@ class TransformSchemaHandlers:
         
         # Supporta entrambi i formati di config
         rename_map = config.get("columns", {})
+        if not rename_map and isinstance(config.get("renames"), list):
+            rename_map = {
+                r.get("old_name"): r.get("new_name")
+                for r in config.get("renames", [])
+                if isinstance(r, dict) and r.get("old_name") and r.get("new_name")
+            }
         if not rename_map and config.get("old_name") and config.get("new_name"):
             rename_map = {config["old_name"]: config["new_name"]}
         
         result = []
         for col in input_schemas[0]:
             new_name = rename_map.get(col.name, col.name)
-            result.append(self._column_schema_cls(
-                name=new_name,
-                type=col.type,
-                source_node=node_id,
-                is_calculated=col.is_calculated
-            ))
+            result.append(self._copy_column(col, node_id, name=new_name))
         
         return result
     
@@ -257,12 +259,7 @@ class TransformSchemaHandlers:
         result = []
         for col in input_schemas[0]:
             if col.name not in drop_cols:
-                result.append(self._column_schema_cls(
-                    name=col.name,
-                    type=col.type,
-                    source_node=node_id,
-                    is_calculated=col.is_calculated
-                ))
+                result.append(self._copy_column(col, node_id))
         
         return result
     
@@ -278,12 +275,7 @@ class TransformSchemaHandlers:
         if not input_schemas:
             return []
         
-        result = [self._column_schema_cls(
-            name=col.name,
-            type=col.type,
-            source_node=node_id,
-            is_calculated=col.is_calculated
-        ) for col in input_schemas[0]]
+        result = self._copy_schema(input_schemas[0], node_id)
         
         # Aggiungi nuove colonne
         new_columns = config.get("new_columns", [])
@@ -314,12 +306,7 @@ class TransformSchemaHandlers:
         
         output_col = config.get("output_column", "md5_hash")
         
-        result = [self._column_schema_cls(
-            name=col.name,
-            type=col.type,
-            source_node=node_id,
-            is_calculated=col.is_calculated
-        ) for col in input_schemas[0]]
+        result = self._copy_schema(input_schemas[0], node_id)
         
         result.append(self._column_schema_cls(
             name=output_col,
@@ -343,12 +330,7 @@ class TransformSchemaHandlers:
         overwrite = config.get("overwrite", False)
         maskings = config.get("maskings", [])
         
-        result = [self._column_schema_cls(
-            name=col.name,
-            type=col.type,
-            source_node=node_id,
-            is_calculated=col.is_calculated
-        ) for col in input_schemas[0]]
+        result = self._copy_schema(input_schemas[0], node_id)
         
         if not overwrite:
             existing_names = {col.name for col in result}
@@ -395,19 +377,9 @@ class TransformSchemaHandlers:
         result = []
         for col in input_schemas[0]:
             if col.name == target_column:
-                result.append(self._column_schema_cls(
-                    name=col.name,
-                    type=new_type,
-                    source_node=node_id,
-                    is_calculated=True
-                ))
+                result.append(self._copy_column(col, node_id, type_=new_type, is_calculated=True))
             else:
-                result.append(self._column_schema_cls(
-                    name=col.name,
-                    type=col.type,
-                    source_node=node_id,
-                    is_calculated=col.is_calculated
-                ))
+                result.append(self._copy_column(col, node_id))
         
         return result
     
@@ -424,12 +396,7 @@ class TransformSchemaHandlers:
         overwrite = config.get("overwrite", True)
         columns = config.get("columns", [])
         
-        result = [self._column_schema_cls(
-            name=col.name,
-            type=col.type,
-            source_node=node_id,
-            is_calculated=col.is_calculated
-        ) for col in input_schemas[0]]
+        result = self._copy_schema(input_schemas[0], node_id)
         
         if not overwrite:
             existing_names = {col.name for col in result}
@@ -737,24 +704,14 @@ class TransformSchemaHandlers:
         if target == column:
             for i, col in enumerate(result):
                 if col.name == column:
-                    result[i] = self._column_schema_cls(
-                        name=col.name,
-                        type="str",
-                        source_node=node_id,
-                        is_calculated=True,
-                    )
+                    result[i] = self._copy_column(col, node_id, type_="str", is_calculated=True)
                     break
             return result
 
         if target in existing_names:
             for i, col in enumerate(result):
                 if col.name == target:
-                    result[i] = self._column_schema_cls(
-                        name=col.name,
-                        type="str",
-                        source_node=node_id,
-                        is_calculated=True,
-                    )
+                    result[i] = self._copy_column(col, node_id, type_="str", is_calculated=True)
                     break
         else:
             result.append(self._column_schema_cls(
@@ -792,12 +749,36 @@ class TransformSchemaHandlers:
         """Helper pure: ricrea lo schema con `source_node` aggiornato a
         `node_id`. Estratto per evitare la replica del list-comprehension
         in tutti gli handler nuovi."""
-        return [self._column_schema_cls(
-            name=col.name,
-            type=col.type,
-            source_node=node_id,
-            is_calculated=col.is_calculated,
+        return [self._copy_column(
+            col,
+            node_id,
         ) for col in schema]
+
+    def _copy_column(
+        self,
+        col: ColumnSchema,
+        node_id: str,
+        *,
+        name: str | None = None,
+        type_: str | None = None,
+        is_calculated: bool | None = None,
+    ) -> ColumnSchema:
+        """Copy a schema column preserving stable identity metadata."""
+        return self._column_schema_cls(
+            name=col.name,
+            type=type_ or col.type,
+            id=getattr(col, "id", None),
+            source_name=getattr(col, "source_name", None) or col.name,
+            source_node=node_id,
+            is_calculated=col.is_calculated if is_calculated is None else is_calculated,
+        ) if name is None else self._column_schema_cls(
+            name=name,
+            type=type_ or col.type,
+            id=getattr(col, "id", None),
+            source_name=getattr(col, "source_name", None) or col.name,
+            source_node=node_id,
+            is_calculated=col.is_calculated if is_calculated is None else is_calculated,
+        )
 
     # METODI DI SUPPORTO
 
@@ -812,9 +793,4 @@ class TransformSchemaHandlers:
         if not input_schemas:
             return []
         
-        return [self._column_schema_cls(
-            name=col.name,
-            type=col.type,
-            source_node=node_id,
-            is_calculated=col.is_calculated
-        ) for col in input_schemas[0]]
+        return self._copy_schema(input_schemas[0], node_id)

@@ -84,7 +84,15 @@ class WriterPreflightLifecycleMixin:
             WriteMode.UPSERT, WriteMode.TRUNCATE_INSERT
         ) and self.config.column_mappings and exists:
             try:
-                existing_col_names = {c["name"] for c in self.get_existing_columns()}
+                normalize_col = (
+                    (lambda value: str(value).upper())
+                    if getattr(self, "db_type", "").lower() == "oracle"
+                    else str
+                )
+                existing_col_names = {
+                    normalize_col(c["name"])
+                    for c in self.get_existing_columns()
+                }
             except Exception as e:
                 return False, (
                     f"Lettura colonne tabella "
@@ -95,7 +103,7 @@ class WriterPreflightLifecycleMixin:
                 invalid = [
                     cm.dest_column
                     for cm in self.config.column_mappings
-                    if not cm.skip and cm.dest_column not in existing_col_names
+                    if not cm.skip and normalize_col(cm.dest_column) not in existing_col_names
                 ]
                 if invalid:
                     return False, (

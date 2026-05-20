@@ -78,41 +78,8 @@ class ProjectCleanupPartialError(Exception):
         )
 
 
-class ColumnsMetadataSaveError(Exception):
-    """Raised when saving project canvas columns_metadata fails permanently."""
-
-    def __init__(
-        self,
-        project_id: str,
-        reason: str,
-        attempts: int = 1,
-        result_already_persisted: bool = True,
-    ):
-        self.project_id = project_id
-        self.reason = reason
-        self.attempts = attempts
-        self.result_already_persisted = result_already_persisted
-
-        persisted_note = (
-            "Il risultato (blob) e' gia' salvato nel DB e puo' essere "
-            "scaricato. "
-            if result_already_persisted
-            else ""
-        )
-        super().__init__(
-            f"Save columns_metadata fallito per progetto '{project_id}' "
-            f"dopo {attempts} tentativi: {reason}. "
-            f"{persisted_note}"
-            f"I tipi colonna NON sono stati aggiornati: il lineage "
-            f"downstream (manipola/carica che usano questo progetto "
-            f"come source) potrebbe usare fallback 'str' invece dei "
-            f"tipi reali. Rilanciare l'esecuzione per ricreare i metadata."
-        )
-
-
 __all__ = [
     "CanvasCorruptedError",
-    "ColumnsMetadataSaveError",
     "ProjectCleanupPartialError",
     "ProjectHasDependenciesError",
     "ProjectLineageCycleError",

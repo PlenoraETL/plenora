@@ -14,6 +14,7 @@ import requests
 from app.core.dataframes.tabular import (
     dataframe_first_row_dict,
     dataframe_from_records,
+    dataframe_from_rows,
     iter_dataframe_indexed_rows,
     set_cell_value,
 )
@@ -366,6 +367,16 @@ class ApiConnectionGeneratorEnricherMixin:
             pagination=pagination,
             base_params=base_params,
         )
+        if not all_rows and output_mapping:
+            columns = []
+            seen = set()
+            for mapping in output_mapping:
+                column = mapping.get("column") or mapping.get("path")
+                if column and column not in seen:
+                    columns.append(column)
+                    seen.add(column)
+            if columns:
+                return dataframe_from_rows([], columns)
         return dataframe_from_records(all_rows)
 
     # API ENRICHER

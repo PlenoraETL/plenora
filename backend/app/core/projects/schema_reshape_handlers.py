@@ -55,12 +55,7 @@ class ReshapeSchemaHandlers:
         result: List[ColumnSchema] = []
         for c in id_cols:
             col = by_name[c]
-            result.append(self._column_schema_cls(
-                name=c,
-                type=col.type,
-                source_node=node_id,
-                is_calculated=False,
-            ))
+            result.append(self._copy_column(col, node_id, is_calculated=False))
         result.append(self._column_schema_cls(
             name=var_name,
             type="str",
@@ -126,12 +121,7 @@ class ReshapeSchemaHandlers:
         id_column = config.get("id_column") or ""
         if id_column and id_column in input_by_name:
             col = input_by_name[id_column]
-            result.append(self._column_schema_cls(
-                name=id_column,
-                type=col.type,
-                source_node=node_id,
-                is_calculated=False,
-            ))
+            result.append(self._copy_column(col, node_id, is_calculated=False))
             seen.add(id_column)
 
         for entry in output_cols:

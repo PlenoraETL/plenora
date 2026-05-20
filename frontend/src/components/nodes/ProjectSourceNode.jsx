@@ -44,48 +44,60 @@ const ProjectSourceNode = ({ id, data }) => {
     
     try {
       const projectData = await getProject(projectId);
-      
-      // Estrai nome file output dal nodo result
-      let outputFileName = null;
-      if (projectData.canvas?.nodes) {
-        const resultNode = projectData.canvas.nodes.find(n => n.type === 'result');
-        if (resultNode?.fileName && resultNode?.format) {
-          outputFileName = `${resultNode.fileName}.${resultNode.format}`;
-        }
-      }
-      if (outputFileName) {
-        projectData.output_file = outputFileName;
-      }
-      
       setSelectedProject(projectData);
+      const { updateNodeData } = useCanvasStore.getState();
       
-      // Costruisci colonne con tipi normalizzati
+      // Costruisci colonne dal contratto pubblico del progetto sorgente.
       let columnsWithTypes = [];
-      
-      if (projectData.columns_metadata && projectData.columns_metadata.length > 0) {
-        columnsWithTypes = projectData.columns_metadata.map(col => ({
-          name: col.name,
-          type: normalizeColumnType(col),
-          visible: true
-        }));
-      } else if (projectData.canvas?.nodes) {
-        columnsWithTypes = extractColumnsFromCanvas(projectData.canvas);
+
+      const contractColumns = projectData.output_contract?.columns || [];
+      if (contractColumns.length > 0) {
+        columnsWithTypes = contractColumns
+          .filter(col => col.status !== 'removed' && col.status !== 'deleted')
+          .map(col => {
+            const name = col.physical_name || col.display_name || col.source_name;
+            const logicalType = col.type?.logical || 'string';
+            return {
+              id: col.id,
+              column_id: col.id,
+              source_name: col.source_name,
+              display_name: col.display_name || name,
+              name,
+              type: normalizeColumnType({ type: logicalType }),
+              visible: true
+            };
+          })
+          .filter(col => col.id && col.name);
+      } else {
+        setError('Contratto output mancante: esegui prima il progetto sorgente.');
+        updateNodeData(id, { columns: [] });
       }
       
       // Usa updateNodeData dallo store direttamente — funziona in tutti gli editor
-      const { updateNodeData } = useCanvasStore.getState();
       if (columnsWithTypes.length > 0) {
         if (data.columns && data.columns.length > 0) {
           const existingVisibility = {};
           data.columns.forEach(col => {
-            existingVisibility[col.name] = col.visible;
+            const key = col.id || col.column_id;
+            if (key) {
+              existingVisibility[key] = col.visible;
+            }
+            [col.source_name, col.name, col.display_name].forEach(name => {
+              if (name) {
+                existingVisibility[String(name)] = col.visible;
+              }
+            });
           });
           
           columnsWithTypes = columnsWithTypes.map(col => ({
             ...col,
-            visible: existingVisibility[col.name] !== undefined 
-              ? existingVisibility[col.name] 
-              : col.visible
+            visible: existingVisibility[col.id] !== undefined
+              ? existingVisibility[col.id]
+              : existingVisibility[col.source_name] !== undefined
+                ? existingVisibility[col.source_name]
+                : existingVisibility[col.name] !== undefined
+                  ? existingVisibility[col.name]
+                  : col.visible
           }));
         }
         
@@ -100,80 +112,10 @@ const ProjectSourceNode = ({ id, data }) => {
     }
   };
 
-  const extractColumnsFromCanvas = (canvas) => {
-    const nodes = canvas.nodes || [];
-    const edges = canvas.edges || [];
-    
-    const resultNode = nodes.find(n => n.type === 'result');
-    
-    const extractFromArray = (columns) => {
-      return columns.map(col => {
-        if (typeof col === 'string') {
-          return { name: col, type: 'str', visible: true };
-        }
-        return {
-          name: col.name,
-          type: normalizeColumnType(col),
-          visible: col.visible !== false
-        };
-      });
-    };
-    
-    if (resultNode?.data?.columns && resultNode.data.columns.length > 0) {
-      return extractFromArray(resultNode.data.columns);
-    }
-    if (resultNode?.columns && resultNode.columns.length > 0) {
-      return extractFromArray(resultNode.columns);
-    }
-    if (resultNode) {
-      const incomingEdge = edges.find(e => e.target === resultNode.id);
-      if (incomingEdge) {
-        const sourceNode = nodes.find(n => n.id === incomingEdge.source);
-        if (sourceNode?.data?.columns && sourceNode.data.columns.length > 0) {
-          return extractFromArray(sourceNode.data.columns);
-        }
-      }
-    }
-    for (const node of nodes) {
-      if (node.data?.columns && node.data.columns.length > 0) {
-        return extractFromArray(node.data.columns);
-      }
-      if (node.columns && node.columns.length > 0) {
-        return extractFromArray(node.columns);
-      }
-    }
-
-    // B-FE-51: fallback per canvas ARRICCHISCI — result node non ha colonne proprie.
-    // Ricava colonne da: sorgenti (project_source/file_source) + output_mapping degli api_enrich.
-    const seen = new Set();
-    const arricchisciCols = [];
-    for (const node of nodes) {
-      const d = node.data || {};
-      if (['project_source', 'file_source', 'staticValues'].includes(node.type)) {
-        const srcCols = d.columns || node.columns || [];
-        extractFromArray(srcCols).forEach(c => {
-          if (!seen.has(c.name)) { arricchisciCols.push(c); seen.add(c.name); }
-        });
-      }
-      if (node.type === 'api_enrich') {
-        (d.output_mapping || []).forEach(m => {
-          const name = m.column || m.target_column || m.name;
-          if (name && !seen.has(name)) {
-            arricchisciCols.push({ name, type: m.type || 'str', visible: true });
-            seen.add(name);
-          }
-        });
-      }
-    }
-    if (arricchisciCols.length > 0) return arricchisciCols;
-
-    return [];
-  };
-
-  const handleToggleColumn = (colName) => {
+  const handleToggleColumn = (columnId) => {
     if (!data.columns) return;
-    const updatedColumns = data.columns.map(col => 
-      col.name === colName ? { ...col, visible: !col.visible } : col
+    const updatedColumns = data.columns.map(col =>
+      (col.id || col.column_id) === columnId ? { ...col, visible: !col.visible } : col
     );
     useCanvasStore.getState().updateNodeData(id, { columns: updatedColumns });
   };
@@ -191,6 +133,7 @@ const ProjectSourceNode = ({ id, data }) => {
 
   const projectName = selectedProject?.metadata?.name || selectedProject?.name || data.source_project_id?.split('_')[0] || 'Caricamento...';
   const projectType = selectedProject?.metadata?.project_type;
+  const sourceFreshness = data.source_freshness;
 
   return (
     <div className="project-source-node">
@@ -247,6 +190,16 @@ const ProjectSourceNode = ({ id, data }) => {
           </div>
         )}
 
+        {sourceFreshness?.stale && !data.access_denied && (
+          <div
+            className="project-source-node__warning"
+            role="alert"
+            title={sourceFreshness.message || 'Progetto sorgente da rieseguire'}
+          >
+            {sourceFreshness.message || 'Progetto sorgente modificato: rieseguilo prima di usare questo nodo.'}
+          </div>
+        )}
+
         {/* Colonne */}
         {columns.length > 0 && !loading && (
           <>
@@ -258,11 +211,12 @@ const ProjectSourceNode = ({ id, data }) => {
             {visibleColumns.map((col, idx) => {
               const colType = normalizeColumnType(col);
               const isVisible = col.visible !== false;
+              const columnId = col.id || col.column_id;
               return (
                 <div
-                  key={idx}
+                  key={columnId || idx}
                   className={`project-source-node__column ${!isVisible ? 'project-source-node__column--hidden' : ''}`}
-                  onClick={() => handleToggleColumn(col.name)}
+                  onClick={() => handleToggleColumn(columnId)}
                 >
                   {/* Icona tipo */}
                   <span 
@@ -318,12 +272,6 @@ const ProjectSourceNode = ({ id, data }) => {
           </div>
         )}
 
-        {/* Info progetto */}
-        {selectedProject && !loading && selectedProject.output_file && (
-          <div className="project-source-node__info">
-            <span className="project-source-node__info-file">📄 {selectedProject.output_file}</span>
-          </div>
-        )}
       </div>
 
       {/* Handle output */}

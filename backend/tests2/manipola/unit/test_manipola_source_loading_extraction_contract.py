@@ -206,7 +206,7 @@ def test_helper_passes_explicit_group_id_to_source_loader():
             ref,
             *,
             expected_group_id,
-            columns_metadata=None,
+            resource_columns=None,
             is_superadmin=False,
         ):
             from app.shared.resources.metadata import LoadedResource

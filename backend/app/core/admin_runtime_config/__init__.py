@@ -1,0 +1,2 @@
+"""Admin runtime configuration boundary."""
+

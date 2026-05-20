@@ -74,6 +74,9 @@ class DefaultDataLoader:
             # per lasciare a pandas l'inferenza.
             return pd.read_json(path)
 
+    def load_parquet(self, path: Path) -> pd.DataFrame:
+        return pd.read_parquet(path)
+
     def load_geospatial(self, path: Path, layer: Optional[str] = None) -> Any:
         import geopandas as gpd
 

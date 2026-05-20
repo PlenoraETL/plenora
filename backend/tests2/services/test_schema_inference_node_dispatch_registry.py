@@ -308,10 +308,26 @@ def test_project_source_node_registry_handler_uses_project_context_boundary(
         calls.append(project_id)
         return SimpleNamespace(
             project_id=project_id,
-            canvas={
-                "columns_metadata": [
-                    {"name": "id", "type": "int"},
-                    {"name": "hidden", "type": "str"},
+            output_contract={
+                "columns": [
+                    {
+                        "id": "col-id",
+                        "source_name": "id",
+                        "physical_name": "id",
+                        "display_name": "id",
+                        "type": {"logical": "int"},
+                        "ordinal": 0,
+                        "status": "active",
+                    },
+                    {
+                        "id": "col-hidden",
+                        "source_name": "hidden",
+                        "physical_name": "hidden",
+                        "display_name": "hidden",
+                        "type": {"logical": "str"},
+                        "ordinal": 1,
+                        "status": "active",
+                    },
                 ],
             },
         )

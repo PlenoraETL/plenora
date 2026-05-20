@@ -61,10 +61,11 @@ def test_mysql_execute_returns_downloadable_project_result(
                 assert result["rows_count"] == 2
                 assert result["output_file"] == "mysql_preview.csv"
                 assert result["columns"] == ["id", "city", "score"]
-                assert result["columns_metadata"] == [
-                    {"name": "id", "type": "int"},
-                    {"name": "city", "type": "str"},
-                    {"name": "score", "type": "int"},
+                contract_columns = result["output_contract"]["columns"]
+                assert [c["physical_name"] for c in contract_columns] == [
+                    "id",
+                    "city",
+                    "score",
                 ]
                 assert "FROM" in result["query"]
                 assert seeded["table_name"] in result["query"]

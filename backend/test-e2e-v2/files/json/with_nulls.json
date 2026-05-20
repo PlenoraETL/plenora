@@ -1,0 +1,47 @@
+[
+  {
+    "id": 1,
+    "city_id": 1,
+    "full_name": "Anna Rossi",
+    "email": "anna.rossi@example.com",
+    "age": null,
+    "signup_date": "2023-01-15",
+    "status": "active"
+  },
+  {
+    "id": 2,
+    "city_id": 1,
+    "full_name": "Marco Bianchi",
+    "email": "marco.bianchi@example.com",
+    "age": 41,
+    "signup_date": null,
+    "status": "active"
+  },
+  {
+    "id": 3,
+    "city_id": 1,
+    "full_name": "Giulia Verdi",
+    "email": "giulia.verdi@example.com",
+    "age": null,
+    "signup_date": "2023-03-10",
+    "status": null
+  },
+  {
+    "id": 4,
+    "city_id": null,
+    "full_name": "Paolo Ferrari",
+    "email": "paolo.ferrari@example.com",
+    "age": 52,
+    "signup_date": "2023-04-05",
+    "status": "active"
+  },
+  {
+    "id": 5,
+    "city_id": 4,
+    "full_name": "Laura Romano",
+    "email": "laura.romano@example.com",
+    "age": 45,
+    "signup_date": "2023-05-12",
+    "status": "inactive"
+  }
+]

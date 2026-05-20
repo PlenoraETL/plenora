@@ -12155,7 +12155,7 @@
         ]
       },
       "get": {
-        "description": "Ottieni progetto specifico (metadata + canvas + columns_metadata).\n\nSe il canvas in DB e' corrotto, `get_project_canvas` solleva\n`CanvasCorruptedError` e l'handler globale restituisce un errore\nesplicito invece di sostituirlo con un canvas vuoto.\n\nCanvas contenenti riferimenti cross-tenant\na file_source / source_project (es. progetti duplicati o condivisi tra\ngruppi diversi) sono ritornati as-is dal DB,\nma i nodi affected vengono marcati con `data.access_denied = True`.\nIl frontend usa il flag per disabilitare run/preview e mostrare un\nwarning all'utente. Nessuna mutazione del canvas persistito.",
+        "description": "Ottieni progetto specifico (metadata + canvas + output_contract).\n\nSe il canvas in DB e' corrotto, `get_project_canvas` solleva\n`CanvasCorruptedError` e l'handler globale restituisce un errore\nesplicito invece di sostituirlo con un canvas vuoto.\n\nCanvas contenenti riferimenti cross-tenant\na file_source / source_project (es. progetti duplicati o condivisi tra\ngruppi diversi) sono ritornati as-is dal DB,\nma i nodi affected vengono marcati con `data.access_denied = True`.\nIl frontend usa il flag per disabilitare run/preview e mostrare un\nwarning all'utente. Nessuna mutazione del canvas persistito.",
         "operationId": "get_project_api_projects__project_id__get",
         "parameters": [
           {

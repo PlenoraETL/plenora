@@ -18,6 +18,7 @@ const ColumnSelector = ({
   filter = null,
   sourceLabel = null  // "⬅ SX" o "➡ DX" per indicare provenienza
 }) => {
+  const columnKey = (col) => col?.id || col?.column_id || col?.name;
   // Filtra colonne se necessario
   const filteredColumns = filter
     ? columns.filter(col => {
@@ -52,7 +53,16 @@ const ColumnSelector = ({
           value=""
           onChange={(e) => {
             if (e.target.value && !selectedValues.includes(e.target.value)) {
-              onChange([...selectedValues, e.target.value]);
+              const selectedColumn = filteredColumns.find(col => col.name === e.target.value);
+              const nextValues = [...selectedValues, e.target.value];
+              const nextColumns = nextValues
+                .map(name => filteredColumns.find(col => col.name === name))
+                .filter(Boolean);
+              if (selectedColumn) {
+                onChange(nextValues, nextColumns);
+              } else {
+                onChange(nextValues, nextColumns);
+              }
             }
           }}
           className="parameter-input__field"
@@ -61,7 +71,7 @@ const ColumnSelector = ({
           {filteredColumns
             .filter(col => !selectedValues.includes(col.name))
             .map((col, idx) => (
-              <option key={`${col.name}-${idx}`} value={col.name}>
+              <option key={`${columnKey(col)}-${idx}`} value={col.name}>
                 {sourceLabel ? `${sourceLabel} ` : ''}{col.name} ({col.type || 'str'})
               </option>
             ))
@@ -74,12 +84,15 @@ const ColumnSelector = ({
   return (
     <select
       value={value || ''}
-      onChange={(e) => onChange(e.target.value)}
+      onChange={(e) => {
+        const selectedColumn = filteredColumns.find(col => col.name === e.target.value);
+        onChange(e.target.value, selectedColumn || null);
+      }}
       className="parameter-input__field"
     >
       <option value="">{placeholder}</option>
       {filteredColumns.map((col, idx) => (
-        <option key={`${col.name}-${idx}`} value={col.name}>
+        <option key={`${columnKey(col)}-${idx}`} value={col.name}>
           {sourceLabel ? `${sourceLabel} ` : ''}{col.name} ({col.type || 'str'})
         </option>
       ))}

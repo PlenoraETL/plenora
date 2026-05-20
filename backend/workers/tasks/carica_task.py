@@ -9,7 +9,8 @@ import time as _time
 import traceback
 import uuid as _uuid
 from pathlib import PurePosixPath
-from typing import Any, Mapping, Optional, TypedDict, cast
+from typing import Any, Mapping, Optional, cast
+from typing_extensions import TypedDict
 
 from app.shared.contracts.payloads import HeadersMap, JsonObject
 from app.utils.logger import get_logger, open_run, close_run, set_run_context, append_step
@@ -284,6 +285,11 @@ def execute_carica_task(
         # progress UI via _update_progress, log_service.create_log_entry
         # Contiene str(e) intenzionalmente per postmortem admin
         error_msg_internal = f"Errore task CARICA: {str(e)}"
+        public_error_message = "Errore task CARICA (consulta log)"
+        public_error_code = "carica_task_fatal"
+        if isinstance(e, ValueError) and "[UNSAFE WRITE CONFIG]" in str(e):
+            public_error_message = str(e)
+            public_error_code = "carica_unsafe_write_config"
         error_trace = traceback.format_exc()
         elapsed_ms = int((_time.time() - _run_start) * 1000)
         logger.error(f"[CRASH] {error_msg_internal}\n{error_trace}")
@@ -319,16 +325,16 @@ def execute_carica_task(
             error_message=error_msg_internal,
             debug_payload=debug_payload,
         )
-        _update_progress(self, -1, error_msg_internal)
+        _update_progress(self, -1, public_error_message)
         # intent: boundary top-level task Celery / outcome: fail-closed sanitizzato
         # Il return dict finisce in Redis via AsyncResult → FE: niente str(e
         # error_details=error_trace preservato come canale diagnostic separato
         return {
             "status": "write_error",
             "success": False,
-            "error": "carica_task_fatal",
-            "message": "Errore task CARICA (consulta log)",
-            "error_message": "Errore task CARICA (consulta log)",
+            "error": public_error_code,
+            "message": public_error_message,
+            "error_message": public_error_message,
             "error_details": error_trace,
             "rows_written": 0,
             "total_rows": 0,

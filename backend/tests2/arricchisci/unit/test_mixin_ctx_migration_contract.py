@@ -554,25 +554,32 @@ def test_arricchisci_project_access_uses_local_boundary_not_projects_db_get_proj
     )
 
 
-def test_source_loading_stale_check_uses_local_source_project_store(monkeypatch):
-    """The project/blob timestamp lookup stays behind arricchisci's DB boundary."""
+def test_source_loading_stale_check_uses_shared_project_source_freshness(monkeypatch):
+    """The project/blob freshness lookup is shared across project_source users."""
     from app.core.arricchisci import api_connection_source_loading as mod
     from app.core.arricchisci.api_connection_source_loading import (
         ApiConnectionSourceLoadingMixin,
     )
 
-    calls: list[str] = []
+    class _Freshness:
+        stale = True
+
+    calls: list[tuple[str, str | None]] = []
     monkeypatch.setattr(
         mod,
-        "fetch_project_and_latest_result_timestamps",
-        lambda project_id: calls.append(project_id)
-        or {"proj_ts": 2, "blob_ts": 1},
+        "get_project_source_freshness",
+        lambda project_id, expected_group_id=None: calls.append(
+            (project_id, expected_group_id)
+        ) or _Freshness(),
     )
 
     svc = ApiConnectionSourceLoadingMixin()
 
-    assert svc._upstream_blob_is_stale("proj-1") is True
-    assert calls == ["proj-1"]
+    assert svc._upstream_blob_is_stale(
+        "proj-1",
+        expected_group_id="group-1",
+    ) is True
+    assert calls == [("proj-1", "group-1")]
 
 
 def test_source_loading_has_no_direct_pg_connection_import():

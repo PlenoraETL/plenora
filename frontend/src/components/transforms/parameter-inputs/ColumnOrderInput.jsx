@@ -23,7 +23,7 @@ const ColumnOrderInput = ({ value, onChange, columns }) => {
   // Inizializza automaticamente se value è vuoto e ci sono colonne
   useEffect(() => {
     if ((!value || (Array.isArray(value) && value.length === 0)) && columns.length > 0) {
-      onChange(columns.map(c => c.name));
+      onChange(columns.map(c => c.name), columns);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [columns]);
@@ -47,7 +47,7 @@ const ColumnOrderInput = ({ value, onChange, columns }) => {
     const updated = [...orderedCols];
     const [moved] = updated.splice(dragIdx, 1);
     updated.splice(targetIdx, 0, moved);
-    onChange(updated);
+    onChange(updated, updated.map(name => columns.find(c => c.name === name)).filter(Boolean));
     setDragIdx(null);
     setDragOverIdx(null);
   };
@@ -62,14 +62,14 @@ const ColumnOrderInput = ({ value, onChange, columns }) => {
     if (idx === 0) return;
     const updated = [...orderedCols];
     [updated[idx - 1], updated[idx]] = [updated[idx], updated[idx - 1]];
-    onChange(updated);
+    onChange(updated, updated.map(name => columns.find(c => c.name === name)).filter(Boolean));
   };
 
   const moveDown = (idx) => {
     if (idx >= orderedCols.length - 1) return;
     const updated = [...orderedCols];
     [updated[idx], updated[idx + 1]] = [updated[idx + 1], updated[idx]];
-    onChange(updated);
+    onChange(updated, updated.map(name => columns.find(c => c.name === name)).filter(Boolean));
   };
 
   // Trova tipo colonna
@@ -128,3 +128,4 @@ const ColumnOrderInput = ({ value, onChange, columns }) => {
 };
 
 export default ColumnOrderInput;
+  const columnKey = (col) => col?.id || col?.column_id || col?.name;

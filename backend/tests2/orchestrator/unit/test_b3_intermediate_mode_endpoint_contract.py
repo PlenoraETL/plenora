@@ -39,7 +39,7 @@ def _build_orchestrator_client(role: str = "admin"):
         "nodes": [],
         "edges": [],
     }
-    project_service.get_project_columns_metadata.return_value = []
+    project_service.get_project_output_contract.return_value = []
 
     # Init orchestrator service mock per `require_service` non sollevi.
     init_orchestrator(MagicMock(project_service=project_service))

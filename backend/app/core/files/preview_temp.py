@@ -13,7 +13,8 @@ import tempfile
 
 import logging
 from pathlib import Path
-from typing import BinaryIO, Optional, TypedDict
+from typing import BinaryIO, Optional
+from typing_extensions import TypedDict
 
 from app.core.files.load_dispatch import load_by_format
 from app.shared.resources.file_cleanup import rmtree_safe

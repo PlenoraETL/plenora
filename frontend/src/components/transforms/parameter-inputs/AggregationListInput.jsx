@@ -13,13 +13,19 @@ const AggregationListInput = ({ value, onChange, columns }) => {
   const aggregations = Array.isArray(value) ? value : [];
   const aggFunctions = ['count', 'sum', 'mean', 'min', 'max', 'first', 'last', 'concat'];
 
+  const columnKey = (col) => col?.id || col?.column_id || col?.name;
+
   const addAggregation = () => {
-    onChange([...aggregations, { column: '', function: 'count', alias: '' }]);
+    onChange([...aggregations, { column: '', column_id: null, function: 'count', alias: '' }]);
   };
 
   const updateAggregation = (idx, field, newValue) => {
     const updated = [...aggregations];
     updated[idx] = { ...updated[idx], [field]: newValue };
+    if (field === 'column') {
+      const selectedColumn = columns.find(col => col.name === newValue);
+      updated[idx].column_id = columnKey(selectedColumn) || null;
+    }
     // Se cambia funzione a concat, aggiungi default params
     if (field === 'function' && newValue === 'concat') {
       updated[idx] = {
@@ -46,7 +52,7 @@ const AggregationListInput = ({ value, onChange, columns }) => {
           >
             <option value="">Colonna</option>
             {columns.map((col, cidx) => (
-              <option key={`${col.name}-${cidx}`} value={col.name}>{col.name}</option>
+              <option key={`${columnKey(col)}-${cidx}`} value={col.name}>{col.name}</option>
             ))}
           </select>
           <select

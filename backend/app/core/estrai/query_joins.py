@@ -68,25 +68,30 @@ class QueryJoinRenderer:
         Supporta join su attributi, join spaziali e CROSS JOIN espliciti.
         """
         edge = None
+        table_node_ids = {n.id for n in all_nodes}
+        table_edges = [
+            e for e in edges
+            if e.source in table_node_ids and e.target in table_node_ids
+        ]
 
         if processed_ids:
             edge = next(
-                (e for e in edges
+                (e for e in table_edges
                  if e.target == node.id and e.source in processed_ids),
                 None
             )
             if not edge:
                 edge = next(
-                    (e for e in edges
+                    (e for e in table_edges
                      if e.source == node.id and e.target in processed_ids),
                     None
                 )
 
         if not edge:
             edge = next(
-                (e for e in edges if e.target == node.id and e.source != node.id),
+                (e for e in table_edges if e.target == node.id and e.source != node.id),
                 next(
-                    (e for e in edges if e.source == node.id and e.target != node.id),
+                    (e for e in table_edges if e.source == node.id and e.target != node.id),
                     None
                 )
             )
@@ -296,6 +301,10 @@ class QueryJoinRenderer:
                     parts.append(f"{col_expr} {operator} '{safe_value}'")
 
         if not parts:
-            return "1=1"
+            raise ValueError(
+                "JOIN senza condizioni: configura colonne di join, "
+                "join_conditions oppure usa join_type='cross' se il prodotto "
+                "cartesiano e' intenzionale."
+            )
 
         return " AND ".join(parts)

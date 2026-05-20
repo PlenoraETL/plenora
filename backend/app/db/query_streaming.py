@@ -16,7 +16,7 @@ from sqlalchemy import text
 from sqlalchemy.engine import Engine
 
 from app.config import settings
-from app.core.dataframes.tabular import dataframe_from_rows
+from app.core.dataframes.tabular import dataframe_from_rows, make_unique_column_names
 from app.db.sql_types import QueryParams
 from app.utils.logger import get_logger
 
@@ -110,8 +110,9 @@ def _configure_session(conn: Any, connection: StreamingConnection) -> None:
 def _columns_from_result(result: Any, connection: StreamingConnection) -> List[str]:
     columns = [desc[0] for desc in result.cursor.description]
     if connection.type == "oracle":
-        return [c.lower() for c in columns]
-    return columns
+        columns = [c.lower() for c in columns]
+    unique_columns, _renames = make_unique_column_names(columns)
+    return unique_columns
 
 
 def _compact_decimal(value: Decimal) -> str:

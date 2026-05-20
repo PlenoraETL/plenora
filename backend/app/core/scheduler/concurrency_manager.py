@@ -5,7 +5,8 @@ Lock e coda memorizzati nella tabella `scheduler_locks` nel database PostgreSQL.
 """
 
 from datetime import datetime, timedelta, timezone
-from typing import Literal, TypedDict
+from typing import Literal
+from typing_extensions import TypedDict
 
 import psycopg2
 import psycopg2.errors

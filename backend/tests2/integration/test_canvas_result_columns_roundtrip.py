@@ -100,7 +100,7 @@ def test_put_canvas_injects_computed_columns_into_result_node():
     fake_project_service = MagicMock()
     fake_project_service.get_project_metadata.return_value = _fake_metadata("p1")
     fake_project_service.update_canvas.side_effect = capture_update_canvas
-    fake_project_service.update_project_columns_metadata.return_value = None
+    fake_project_service.update_project_output_contract.return_value = None
 
     # Patch moduli level dei service nel router
     with patch("app.core.projects.router._project_service", fake_project_service):
@@ -110,6 +110,7 @@ def test_put_canvas_injects_computed_columns_into_result_node():
         )
 
     assert resp.get("status") == "ok"
+    fake_project_service.update_project_output_contract.assert_not_called()
     canvas = captured.get("canvas")
     assert canvas is not None, "update_canvas non invocato"
 
@@ -160,13 +161,14 @@ def test_put_canvas_preserves_user_alias_on_recompute():
     fake_project_service = MagicMock()
     fake_project_service.get_project_metadata.return_value = _fake_metadata("p1")
     fake_project_service.update_canvas.side_effect = capture_update_canvas
-    fake_project_service.update_project_columns_metadata.return_value = None
+    fake_project_service.update_project_output_contract.return_value = None
 
     with patch("app.core.projects.router._project_service", fake_project_service):
         update_project_canvas(
             project_id="p1", body=body, current_user=_FakeCurrentUser(),
         )
 
+    fake_project_service.update_project_output_contract.assert_not_called()
     canvas = captured["canvas"]
     result_node = next(n for n in canvas.nodes if n.type == "result")
     by_name = {c.name: c for c in result_node.columns}

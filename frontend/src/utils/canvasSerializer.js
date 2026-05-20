@@ -103,12 +103,14 @@ const serializers = {
       .filter(p => p && p.left && p.right && p.left === p.right)
       .map(p => p.left);
     const explicitKeys = cfg.join_keys ?? node.data?.join_keys ?? [];
+    const explicitKeyIds = cfg.join_key_ids ?? node.data?.join_key_ids ?? [];
     const mergedKeys = [
       ...new Set([...(explicitKeys || []), ...derivedKeys]),
     ];
     return {
       id: node.id, type: 'multi_join', position: node.position,
       join_keys:       mergedKeys,
+      join_key_ids:    explicitKeyIds,
       multi_join_type: cfg.join_type ?? node.data?.multi_join_type ?? 'inner',
     };
   },

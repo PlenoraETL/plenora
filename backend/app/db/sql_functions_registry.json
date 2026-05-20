@@ -142,6 +142,126 @@
         "sqlite": "Distance({geom1}, {geom2}) <= {distance}"
       }
     },
+    "ST_Equals": {
+      "description": "Verifica se due geometrie sono spazialmente uguali",
+      "category": "spatial",
+      "params": [
+        {
+          "name": "geom1",
+          "type": "geometry",
+          "required": true
+        },
+        {
+          "name": "geom2",
+          "type": "geometry",
+          "required": true
+        }
+      ],
+      "returns": "boolean",
+      "dialects": {
+        "postgres": "ST_Equals({geom1}, {geom2})",
+        "mssql": "{geom1}.STEquals({geom2}) = 1",
+        "mysql": "ST_Equals({geom1}, {geom2})",
+        "oracle": "SDO_RELATE({geom1}, {geom2}, 'mask=EQUAL') = 'TRUE'",
+        "sqlite": "Equals({geom1}, {geom2})"
+      }
+    },
+    "ST_Disjoint": {
+      "description": "Verifica se due geometrie non hanno punti in comune",
+      "category": "spatial",
+      "params": [
+        {
+          "name": "geom1",
+          "type": "geometry",
+          "required": true
+        },
+        {
+          "name": "geom2",
+          "type": "geometry",
+          "required": true
+        }
+      ],
+      "returns": "boolean",
+      "dialects": {
+        "postgres": "ST_Disjoint({geom1}, {geom2})",
+        "mssql": "{geom1}.STDisjoint({geom2}) = 1",
+        "mysql": "ST_Disjoint({geom1}, {geom2})",
+        "oracle": "SDO_RELATE({geom1}, {geom2}, 'mask=ANYINTERACT') = 'FALSE'",
+        "sqlite": "Disjoint({geom1}, {geom2})"
+      }
+    },
+    "ST_Crosses": {
+      "description": "Verifica se due geometrie si attraversano",
+      "category": "spatial",
+      "params": [
+        {
+          "name": "geom1",
+          "type": "geometry",
+          "required": true
+        },
+        {
+          "name": "geom2",
+          "type": "geometry",
+          "required": true
+        }
+      ],
+      "returns": "boolean",
+      "dialects": {
+        "postgres": "ST_Crosses({geom1}, {geom2})",
+        "mssql": "({geom1}.STIntersects({geom2}) = 1 AND {geom1}.STWithin({geom2}) = 0 AND {geom2}.STWithin({geom1}) = 0 AND {geom1}.STIntersection({geom2}).STDimension() = CASE WHEN {geom1}.STDimension() < {geom2}.STDimension() THEN {geom1}.STDimension() ELSE {geom2}.STDimension() END)",
+        "mysql": "ST_Crosses({geom1}, {geom2})",
+        "oracle": "SDO_RELATE({geom1}, {geom2}, 'mask=OVERLAPBDYDISJOINT') = 'TRUE'",
+        "sqlite": "Crosses({geom1}, {geom2})"
+      }
+    },
+    "ST_Covers": {
+      "description": "Verifica se geom1 copre geom2",
+      "category": "spatial",
+      "params": [
+        {
+          "name": "geom1",
+          "type": "geometry",
+          "required": true
+        },
+        {
+          "name": "geom2",
+          "type": "geometry",
+          "required": true
+        }
+      ],
+      "returns": "boolean",
+      "dialects": {
+        "postgres": "ST_Covers({geom1}, {geom2})",
+        "mssql": "({geom1}.STContains({geom2}) = 1 OR {geom1}.STEquals({geom2}) = 1)",
+        "mysql": "(ST_Contains({geom1}, {geom2}) OR ST_Equals({geom1}, {geom2}))",
+        "oracle": "SDO_RELATE({geom1}, {geom2}, 'mask=COVERS+CONTAINS+EQUAL') = 'TRUE'",
+        "sqlite": "Covers({geom1}, {geom2})"
+      }
+    },
+    "ST_CoveredBy": {
+      "description": "Verifica se geom1 e' coperta da geom2",
+      "category": "spatial",
+      "params": [
+        {
+          "name": "geom1",
+          "type": "geometry",
+          "required": true
+        },
+        {
+          "name": "geom2",
+          "type": "geometry",
+          "required": true
+        }
+      ],
+      "returns": "boolean",
+      "dialects": {
+        "postgres": "ST_CoveredBy({geom1}, {geom2})",
+        "mssql": "({geom1}.STWithin({geom2}) = 1 OR {geom1}.STEquals({geom2}) = 1)",
+        "mysql": "(ST_Within({geom1}, {geom2}) OR ST_Equals({geom1}, {geom2}))",
+        "oracle": "SDO_RELATE({geom1}, {geom2}, 'mask=COVEREDBY+INSIDE+EQUAL') = 'TRUE'",
+        "sqlite": "CoveredBy({geom1}, {geom2})"
+      }
+    },
     "ST_Distance": {
       "description": "Calcola distanza tra due geometrie",
       "category": "spatial",
@@ -572,7 +692,7 @@
       "returns": "boolean",
       "dialects": {
         "postgres": "ST_Touches({geom1}, {geom2})",
-        "mssql": "{geom1}.STTouches({geom2}) = 1",
+        "mssql": "({geom1}.STDistance({geom2}) = 0 AND {geom1}.STIntersects({geom2}) = 0 AND {geom1}.STEquals({geom2}) = 0)",
         "mysql": "ST_Touches({geom1}, {geom2})",
         "oracle": "SDO_RELATE({geom1}, {geom2}, 'mask=TOUCH') = 'TRUE'",
         "sqlite": "Touches({geom1}, {geom2})"

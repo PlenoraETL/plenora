@@ -1,0 +1,169 @@
+name: plenora-test
+
+services:
+  postgres:
+    image: postgis/postgis:17-3.5
+    container_name: plenora-test-postgres
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-plenora}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-plenora_test_pwd}
+      POSTGRES_DB: ${POSTGRES_DB:-plenora_test}
+    ports:
+      - "${PLENORA_TEST_POSTGRES_HOST_PORT:-55432}:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./postgres/init:/docker-entrypoint-initdb.d:ro
+      - ./sql/postgres:/seed:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  mysql:
+    image: mysql:8.4
+    container_name: plenora-test-mysql
+    profiles: ["cross-db"]
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-plenora_test_root}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-plenora_test}
+      MYSQL_USER: ${MYSQL_USER:-plenora}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-plenora_test_pwd}
+    ports:
+      - "${PLENORA_TEST_MYSQL_HOST_PORT:-53306}:3306"
+    volumes:
+      - mysql-data:/var/lib/mysql
+      - ./mysql/init:/docker-entrypoint-initdb.d:ro
+      - ./sql/mysql:/seed:ro
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+      - --cte-max-recursion-depth=10000
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-p$${MYSQL_ROOT_PASSWORD}"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+
+  sqlserver:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    container_name: plenora-test-sqlserver
+    profiles: ["cross-db"]
+    environment:
+      ACCEPT_EULA: "Y"
+      MSSQL_SA_PASSWORD: ${MSSQL_SA_PASSWORD:-PlenoraTest!2026}
+      MSSQL_PID: Developer
+    ports:
+      - "${PLENORA_TEST_SQLSERVER_HOST_PORT:-51433}:1433"
+    volumes:
+      - sqlserver-data:/var/opt/mssql
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$${MSSQL_SA_PASSWORD}" -C -Q "SELECT 1" || /opt/mssql-tools/bin/sqlcmd -S localhost -U sa -P "$${MSSQL_SA_PASSWORD}" -Q "SELECT 1"
+      interval: 10s
+      timeout: 5s
+      retries: 20
+      start_period: 30s
+
+  sqlserver-init:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    container_name: plenora-test-sqlserver-init
+    profiles: ["cross-db"]
+    depends_on:
+      sqlserver:
+        condition: service_healthy
+    environment:
+      MSSQL_SA_PASSWORD: ${MSSQL_SA_PASSWORD:-PlenoraTest!2026}
+      MSSQL_DATABASE: ${MSSQL_DATABASE:-plenora_test}
+    volumes:
+      - ./sql/sqlserver:/seed:ro
+      - ./sqlserver/init.sh:/init.sh:ro
+    entrypoint: ["/bin/bash", "/init.sh"]
+    restart: "no"
+
+  oracle:
+    image: gvenzl/oracle-free:23-full-faststart
+    container_name: plenora-test-oracle
+    profiles: ["cross-db"]
+    environment:
+      ORACLE_PASSWORD: ${ORACLE_PASSWORD:-plenora_test_pwd}
+      ORACLE_DATABASE: ${ORACLE_DATABASE:-plenora_test}
+      APP_USER: ${ORACLE_APP_USER:-plenora}
+      APP_USER_PASSWORD: ${ORACLE_APP_USER_PASSWORD:-plenora_test_pwd}
+    ports:
+      - "${PLENORA_TEST_ORACLE_HOST_PORT:-51521}:1521"
+    volumes:
+      - oracle-data:/opt/oracle/oradata
+      - ./oracle/init:/container-entrypoint-initdb.d:ro
+      - ./sql/oracle:/seed:ro
+    healthcheck:
+      test: ["CMD", "healthcheck.sh"]
+      interval: 30s
+      timeout: 10s
+      retries: 30
+      start_period: 120s
+
+  fake-rest:
+    build:
+      context: ./fake-rest
+      dockerfile: Dockerfile
+    image: plenora-test-fake-rest:latest
+    container_name: plenora-test-fake-rest
+    ports:
+      - "${PLENORA_TEST_FAKE_REST_HOST_PORT:-58080}:8080"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  ftp:
+    image: delfer/alpine-ftp-server:latest
+    container_name: plenora-test-ftp
+    environment:
+      USERS: "${FTP_USER:-tester}|${FTP_PASSWORD:-plenora_ftp_pwd}|/home/${FTP_USER:-tester}"
+      ADDRESS: ${FTP_ADDRESS:-plenora-test-ftp}
+      MIN_PORT: ${FTP_PASSIVE_MIN_PORT:-21000}
+      MAX_PORT: ${FTP_PASSIVE_MAX_PORT:-21010}
+    ports:
+      - "${PLENORA_TEST_FTP_HOST_PORT:-2121}:21"
+      - "${PLENORA_TEST_FTP_PASSIVE_PORTS:-21000-21010}:21000-21010"
+    volumes:
+      - ftp-data:/home
+      - ./files:/home/tester/fixtures:ro
+    healthcheck:
+      test: ["CMD-SHELL", "netstat -ln | grep ':21 ' || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  sftp:
+    image: atmoz/sftp:alpine
+    container_name: plenora-test-sftp
+    command: "${SFTP_USER:-tester}:${SFTP_PASSWORD:-plenora_sftp_pwd}:1001:100:e2e_final_write"
+    ports:
+      - "${PLENORA_TEST_SFTP_HOST_PORT:-2222}:22"
+    volumes:
+      - sftp-data:/home
+      - ./files:/home/tester/fixtures:ro
+      - ./sftp/keys/id_rsa_test.pub:/home/tester/.ssh/keys/id_rsa_test.pub:ro
+      - ./sftp/keys/id_rsa_test_passphrase.pub:/home/tester/.ssh/keys/id_rsa_test_passphrase.pub:ro
+    healthcheck:
+      test: ["CMD-SHELL", "nc -z localhost 22 || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+volumes:
+  postgres-data:
+  mysql-data:
+  sqlserver-data:
+  oracle-data:
+  ftp-data:
+  sftp-data:
+
+networks:
+  default:
+    name: ${PLENORA_TEST_NETWORK:-plenora-test}
+    driver: bridge

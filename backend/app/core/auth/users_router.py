@@ -11,7 +11,7 @@ schema generation con `TypeAdapter is not fully defined`.
 """
 
 import uuid
-from typing import TypedDict
+from typing_extensions import TypedDict
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
