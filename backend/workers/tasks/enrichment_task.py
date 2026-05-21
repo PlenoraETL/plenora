@@ -84,7 +84,7 @@ def _merge_batch_parallel_node_results(
         node_results[nid] = merged
 
 
-@celery_app.task(bind=True, name="tasks.execute_enrichment")
+@celery_app.task(bind=True, name="tasks.execute_enrichment", max_retries=0)
 def execute_enrichment_task(
     self,
     project_id: str,

@@ -22,13 +22,28 @@ import { useState, useCallback, useMemo } from 'react';
  * @returns {Object} Oggetto con metodi per gestire le modali
  */
 export function useMultiModal(modalNames = []) {
-  // Stato iniziale: tutte le modali chiuse
+  // Stato iniziale: tutte le modali chiuse.
+  // Pre-fix il `useMemo` aveva deps `[]`: catturava solo il primo
+  // render. Se il caller passava un array diverso in render successivi
+  // (es. feature flag condizionale che aggiunge un modale), il nuovo
+  // nome non veniva inizializzato → `isOpen('newModal')` ritornava
+  // `undefined → false` ma `open('newModal')` produceva uno state
+  // shape incompleto.
+  //
+  // Soluzione: dep stabilizzata come join sui nomi (string primitiva,
+  // confronto referenziale e' OK su Reacto identity). Cambio reale del
+  // set di modali → recompute; identity-only change → no-op.
+  const namesKey = modalNames.join(',');
   const initialState = useMemo(() => {
     return modalNames.reduce((acc, name) => {
       acc[name] = false;
       return acc;
     }, {});
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // namesKey copre la semantica di `modalNames` come dep — usarlo
+    // direttamente eviterebbe il recompute ad ogni nuova array
+    // identity (modalNames literal inline = nuovo array per render).
+  }, [namesKey]);
 
   const [modals, setModals] = useState(initialState);
 

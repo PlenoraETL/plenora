@@ -8,6 +8,7 @@ calling code only depends on the small protocol below.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from typing import Any, Protocol
 from typing_extensions import TypedDict
 
@@ -71,13 +72,22 @@ def scheduled_run_kwargs(
     retry_attempt: int = 0,
     scheduled_for: str | None = None,
 ) -> ScheduledRunKwargs:
-    """Return the runtime kwargs for a scheduled pipeline task."""
+    """Return the runtime kwargs for a scheduled pipeline task.
+
+    `scheduled_for` deve essere SEMPRE valorizzato a dispatch-time:
+    fissarlo qui (e non lazy nel task) garantisce che retry Celery
+    dello stesso task vedano lo stesso timestamp, e quindi la chiave
+    idempotency CARICA (`schedule-{id}-{scheduled_for}-carica`) resti
+    stabile. Pre-fix il task ricalcolava `datetime.now()` ad ogni
+    invocazione → chiave diversa ad ogni retry → scritture duplicate.
+    """
+    if scheduled_for is None:
+        scheduled_for = datetime.now(timezone.utc).isoformat()
     dispatch_kwargs: ScheduledRunKwargs = {
         "triggered_by": triggered_by,
         "retry_attempt": retry_attempt,
+        "scheduled_for": scheduled_for,
     }
-    if scheduled_for:
-        dispatch_kwargs["scheduled_for"] = scheduled_for
     return dispatch_kwargs
 
 

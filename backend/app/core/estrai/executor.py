@@ -337,6 +337,14 @@ class EstraiExecutor:
                 db_schema=connection.db_schema
             )
         except Exception as e:
+            # Pre-fix nessun logger qui: errori non-SQL (KeyError nel
+            # generator, bug interni, ecc.) sparivano dal log aggregato.
+            # Allinea al pattern di `_execute_feature_service` e
+            # `_preview_database` che loggano sempre con exc_info.
+            logger.error(
+                f"[CRASH] Errore generazione SQL: {e}",
+                op="execute", project_id=project_id, exc_info=True,
+            )
             return {"success": False, "message": f"Errore generazione SQL: {e}"}
 
         geom_column = None

@@ -265,12 +265,27 @@ class EnrichExecutor:
                         if isinstance(result_df, dict):
                             result_df = None
                     else:
-                        # Enricher standard — stesso path del task reale
-                        raw_output_mapping = node_data.get("output_mapping") or api_config.get("output_mapping", [])
-                        seen_cols = set()
-                        deduped = [m for m in (raw_output_mapping or [])
-                                   if m.get("column") or m.get("path") not in seen_cols
-                                   and not seen_cols.add(m.get("column") or m.get("path"))]
+                        # Enricher standard — stesso path del task reale.
+                        # Dedup esplicito via loop (era una list-comprehension
+                        # con bug di precedenza: `m.get("column") or
+                        # m.get("path") not in seen_cols` valutava come
+                        # `column OR (path not in seen)`, quindi quando
+                        # `column` era truthy la dedup non scattava mai
+                        # e duplicati passavano all'EnrichmentExecutor che
+                        # sovrascriveva celle con valori later-in-list).
+                        raw_output_mapping = (
+                            node_data.get("output_mapping")
+                            or api_config.get("output_mapping", [])
+                            or []
+                        )
+                        seen_cols: set[str] = set()
+                        deduped: list = []
+                        for m in raw_output_mapping:
+                            key = m.get("column") or m.get("path")
+                            if key in seen_cols:
+                                continue
+                            seen_cols.add(key)
+                            deduped.append(m)
 
                         exec_options = EnrichmentOptions(
                             enable_deduplication=True,

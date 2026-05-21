@@ -52,11 +52,24 @@ def schedule_pipeline_task(
     Returns:
         Dict con risultato esecuzione
     """
-    # Stable scheduled_for values keep CARICA idempotency keys stable across
-    # retries of the same scheduler tick. Independent manual runs get fresh
-    # timestamps and therefore distinct run_ids.
+    # `scheduled_for` viene SEMPRE valorizzato a dispatch-time da
+    # `job_dispatcher.scheduled_run_kwargs` (commit 2026-05-21). Ricevere
+    # None qui significa che il task e' stato dispatched bypassando il
+    # dispatcher canonico (path legacy o test diretti): fallback a now()
+    # come last-resort + warning per visibilita' al monitoring.
+    #
+    # Pre-fix questo blocco veniva eseguito ad ogni invocazione del task
+    # (anche su retry-celery dello stesso schedule_id) generando un
+    # nuovo timestamp → la chiave idempotency CARICA
+    # `schedule-{id}-{scheduled_for}-carica` cambiava → guard
+    # idempotency non scattava → scrittura duplicata sul DB di
+    # destinazione.
     if scheduled_for is None:
         scheduled_for = datetime.now(timezone.utc).isoformat()
+        logger.warning(
+            f"[GESTITO] schedule_task {schedule_id}: scheduled_for None — "
+            f"dispatcher non canonico? Fallback a now()={scheduled_for}."
+        )
 
     logger.info(
         f"Task schedule avviato: {schedule_id} "

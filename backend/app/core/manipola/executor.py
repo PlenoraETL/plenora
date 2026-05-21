@@ -1037,14 +1037,25 @@ class ManipolaExecutor:
                 crs = f"EPSG:{srid}"
 
         try:
-            # Leggi group_id del progetto per isolamento corretto dei risultati
+            # Leggi group_id del progetto per isolamento corretto dei risultati.
+            # Pre-fix il broad `except Exception: pass` silenziava errori DB
+            # (es. PG irraggiungibile al lookup metadati), facendo proseguire
+            # `save_pipeline_result_outcome` con `group_id=None` —
+            # potenziale violazione di isolamento tenant. Loggiamo come
+            # WARNING per visibilita' operativa; il save procede comunque
+            # con group_id=None preservando l'invariante "salvataggio
+            # best-effort" del path attuale.
             group_id = None
             try:
                 metadata = self.project_service.get_project_metadata(project_id)
                 if metadata:
                     group_id = getattr(metadata, 'group_id', None)
-            except Exception:
-                pass
+            except Exception as meta_err:
+                logger.warning(
+                    f"[GESTITO] group_id non recuperabile per {project_id}: "
+                    f"{meta_err}; salvataggio procede con group_id=None.",
+                    op="execute", project_id=project_id, exc_info=True,
+                )
 
             # Single entry-point: in-memory per csv/xlsx/json/parquet/
             # geojson (zero temp), filesystem fallback interno per
@@ -1070,6 +1081,14 @@ class ManipolaExecutor:
                 "message": f"Salvato {len(df)} righe in {saved.output_filename}"
             }
         except Exception as e:
+            # Pre-fix nessun logger qui: errori I/O (MinIO down, disco
+            # pieno, S3 5xx) sparivano dal log aggregato e il triage in
+            # produzione era impossibile. Allinea al pattern di
+            # `carica/executor.py` che logga sempre su save failure.
+            logger.error(
+                f"[CRASH] Errore salvataggio MANIPOLA: {e}",
+                op="execute", project_id=project_id, exc_info=True,
+            )
             return {"success": False, "message": f"Errore salvataggio: {e}"}
 
     def _estrai_srid_da_canvas(
