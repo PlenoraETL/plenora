@@ -1,8 +1,7 @@
 # Plenora Test E2E V2
 
-Stack Docker autoconsistente per le fixture di test. Non monta file da
-`backend/test-e2e`, quindi la vecchia cartella potra' essere rimossa quando
-questa V2 sara' completa.
+Stack Docker autoconsistente per le fixture di test. Questa e' la suite E2E
+attiva e sostituisce il vecchio harness `backend/test-e2e`.
 
 ## Servizi
 

@@ -88,7 +88,7 @@ fall into distinct classes:
   docs under `docs/`;
 - ADRs, which are append-only;
 - local README files next to backend, deploy, script, and test packages;
-- generated or historical test-catalog material under `backend/test-e2e/`.
+- the active backend E2E v2 harness under `backend/test-e2e-v2/`.
 
 Local package docs that are intentionally kept outside `docs/`:
 
@@ -103,25 +103,17 @@ Local package docs that are intentionally kept outside `docs/`:
 - [Backend performance tests](../backend/tests2/performance/README.md)
 - [Frontend unit/contract tests](../frontend/tests/README.md)
 - [Frontend Playwright tests](../frontend/e2e/README.md)
-- [Backend E2E harness](../backend/test-e2e/README.md)
-- [Backend E2E runner](../backend/test-e2e/runner/README.md)
-- [Backend E2E catalog](../backend/test-e2e/catalog/README.md)
-- [Backend E2E docker stack](../backend/test-e2e/docker/README.md)
-- [Backend E2E coverage](../backend/test-e2e/coverage/README.md)
-- [Backend E2E SQL fixtures](../backend/test-e2e/sql/README.md)
-- [Backend E2E expected SQL outputs](../backend/test-e2e/sql/expected/README.md)
-- [Backend E2E fake REST fixture](../backend/test-e2e/fake-rest/README.md)
-- [Backend E2E file fixtures](../backend/test-e2e/files/README.md)
+- [Backend E2E v2 harness](../backend/test-e2e-v2/README.md)
+- [Backend E2E v2 runner](../backend/test-e2e-v2/test/README.md)
+- [Backend E2E v2 SQL fixtures](../backend/test-e2e-v2/sql/README.md)
+- [Backend E2E v2 fake REST fixture](../backend/test-e2e-v2/fake-rest/README.md)
+- [Backend E2E v2 file fixtures](../backend/test-e2e-v2/files/README.md)
 - [Backend performance query notes](../backend/scripts/perf_queries/README.md)
 
 Historical or generated Markdown that should not be edited as live guidance:
 
-- [Legacy E2E monolith](../backend/test-e2e/test-e2e_LEGACY.md): historical
-  backup before the YAML catalog split.
-- [Rendered E2E catalog](../backend/test-e2e/test-e2e.md): generated from
-  `backend/test-e2e/catalog/*.yaml`.
-- [E2E bootstrap procedure](../backend/test-e2e/procedura.md): planning note
-  for building the executable runner, not a release checklist.
+- The legacy `backend/test-e2e/` harness was removed after migration to
+  `backend/test-e2e-v2/`.
 
 Unlinked planning notes should be deleted or promoted into a canonical doc.
 
