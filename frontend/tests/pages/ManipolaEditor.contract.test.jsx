@@ -132,6 +132,7 @@ vi.mock('../../src/hooks', () => ({
       }
     },
   }),
+  useUnsavedChangesGuard: () => ({ confirmNavigation: () => true }),
 }));
 
 vi.mock('../../src/hooks/useColumnPropagation', () => ({

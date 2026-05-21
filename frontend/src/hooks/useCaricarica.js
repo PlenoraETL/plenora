@@ -93,13 +93,10 @@ export function useCaricarica(projectId, options = {}) {
       setProgressMessage('Esecuzione query...');
       const canvas = getCanvas ? getCanvas() : { nodes: [], edges: [] };
 
-      const executeResult = await executeProjectQuery(projectId, {
-          nodes: canvas.nodes,
-          edges: canvas.edges
-        });
-      if (!executeResult.success) {
-        throw new Error(executeResult.message || 'Errore esecuzione query');
-      }
+      // executeProjectQuery e' async (ritorna {task_id, status, async}) — l'esito
+      // viene riportato implicitamente: in caso di HTTP error axios solleva e
+      // cade nel catch piu' in basso. La risposta non ha un campo .success.
+      await executeProjectQuery(projectId);
 
       // 3. Avvia task CARICA
       setProgressMessage('Avvio caricamento...');

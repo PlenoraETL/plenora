@@ -169,10 +169,16 @@ class EnrichmentOptions:
     max_retries: int = 3
     retry_backoff_factor: float = 2.0     # Exponential backoff
     retry_on_status: List[int] = field(default_factory=lambda: [429, 500, 502, 503, 504])
-    
+
     # Rate limiting
     rate_limit: float = 5.0               # Richieste/secondo
     respect_retry_after: bool = True      # Rispetta header Retry-After
+    # Cap (secondi) sul valore Retry-After accettato. Un server malevolo o
+    # malfunzionante puo' rispondere Retry-After: 86400 (24h) e bloccare
+    # un worker Celery per l'intera giornata. Default 300s = 5 minuti:
+    # tollerante per backoff legittimi (es. quote refresh oraria) ma
+    # taglia gli abusi. Vedi enrichment_retry_http.py _call_api_with_retry.
+    max_retry_after_seconds: int = 300
     
     # Parallelismo
     parallel_workers: int = 1             # Numero worker paralleli (1 = sequenziale

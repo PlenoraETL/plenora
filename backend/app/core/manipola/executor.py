@@ -85,6 +85,25 @@ def _estimate_merge_output_rows(
     return estimate_merge_output_rows(left, right, join_keys, how)
 
 
+def _failure_step(message: str, step_start: float) -> JsonObject:
+    """Emette `append_step` di failure manipola + ritorna il dict da
+    `return`-are dal chiamante.
+
+    Single-source dello shape "step di failure" usato da tutti i branch
+    di errore di `execute()`. Pre-fix esistevano 3 inline duplicates +
+    2 early-return che lo SKIPPAVANO (bug 5 cluster silent-except).
+    Concentrare lo shape qui evita futuri "branch dimenticati".
+    """
+    append_step({
+        "module":      "manipola",
+        "status":      "failure",
+        "rows_out":    0,
+        "duration_ms": int((_time.time() - step_start) * 1000),
+        "error":       message,
+    })
+    return {"success": False, "message": message}
+
+
 def _nf(node: Node, key: str, default: Any = None) -> Any:
     """Legge un campo flat dal nodo Pydantic, con fallback su node.data (backward compat)."""
     field_value = getattr(node, key, None)
@@ -266,23 +285,46 @@ class ManipolaExecutor:
                 canvas_graph=canvas_graph,
                 intermediate_mode_override=intermediate_mode_override,
             )
+        except MemoryLimitExceededError as mem_err:
+            # `MemoryLimitExceededError` NON e' una sottoclasse di
+            # `ValueError`: senza handler esplicito (pre-fix) sfuggiva al
+            # catch sottostante e propagava al worker Celery senza
+            # `append_step`, rendendo impossibile il triage. Stage info
+            # nel messaggio per distinguere da OOM generici nei log.
+            stage = getattr(mem_err, "stage", "unknown")
+            return _failure_step(
+                f"Memoria insufficiente durante manipolazione "
+                f"(stage={stage}): {mem_err}",
+                _step_start,
+            )
         except ValueError as e:
-            append_step({
-                "module":      "manipola",
-                "status":      "failure",
-                "rows_out":    0,
-                "duration_ms": int((_time.time() - _step_start) * 1000),
-                "error":       str(e),
-            })
-            return {"success": False, "message": str(e)}
+            return _failure_step(str(e), _step_start)
         if current_df is None:
-            return {"success": False, "message": "Nessun dato prodotto dalla manipolazione"}
+            # Failure path "trasformazioni hanno prodotto None" — pre-fix
+            # questo early-return saltava `append_step`, lasciando la run
+            # log inconsistente con gli altri rami di failure.
+            return _failure_step(
+                "Nessun dato prodotto dalla manipolazione", _step_start,
+            )
 
         result_node = next((n for n in canvas.nodes if n.type == "result"), None)
         if not result_node:
-            return {"success": False, "message": "Nodo risultato non trovato"}
+            return _failure_step("Nodo risultato non trovato", _step_start)
 
-        current_df = self._applica_group_by(current_df, result_node)
+        try:
+            current_df = self._applica_group_by(current_df, result_node)
+        except MemoryLimitExceededError as mem_err:
+            stage = getattr(mem_err, "stage", "group_by")
+            return _failure_step(
+                f"Memoria insufficiente durante GROUP BY (stage={stage}): "
+                f"{mem_err}",
+                _step_start,
+            )
+        except ValueError as e:
+            # `_applica_group_by` ora solleva ValueError su config invalide
+            # (colonne inesistenti, aggregations vuote). Pre-fix swallowava
+            # ed esponeva i dati raw come output, corruzione silente.
+            return _failure_step(str(e), _step_start)
 
         if run_id and current_df is not None:
             try:
@@ -430,8 +472,24 @@ class ManipolaExecutor:
                 "total_count": total_count, "preview_count": len(rows),
                 "truncated": truncated
             }
+        except ValueError as user_err:
+            # ValueError = errore di configurazione utente (es. GROUP BY su
+            # colonne inesistenti). E' "gestito" perche' atteso: log a
+            # WARNING senza stack trace e' sufficiente per triage.
+            logger.warning(
+                f"[GESTITO] Preview MANIPOLA fallita per config: {user_err}",
+                op="preview", project_id=project_id,
+            )
+            return {"success": False, "message": str(user_err)}
         except Exception as e:
-            logger.warning(f"[GESTITO] Errore preview MANIPOLA: {e}", op="preview")
+            # Eccezione non prevista (KeyError, TypeError, bug di codice):
+            # log a ERROR con exc_info=True per consentire il triage.
+            # Pre-fix: `logger.warning` senza `exc_info` mascherava i bug
+            # di codice come "warnings ignorabili" nel log aggregato.
+            logger.error(
+                f"[CRASH] Preview MANIPOLA: {e}",
+                op="preview", project_id=project_id, exc_info=True,
+            )
             return {"success": False, "message": str(e)}
 
     # CARICAMENTO SORGENTI
@@ -875,57 +933,84 @@ class ManipolaExecutor:
     # GROUP BY
 
     def _applica_group_by(self, df: FrameLike, result_node: Node) -> FrameLike:
-        """Applica GROUP BY dal nodo risultato (count, sum, mean, min, max, std)."""
+        """Applica GROUP BY dal nodo risultato (count, sum, mean, min, max, std).
+
+        Contratto failure-visibility (vedi
+        `tests2/manipola/unit/test_executor_failure_visibility_contract.py`):
+
+        - GROUP BY non richiesto (flag disabled, oppure ne' group_cols ne'
+          aggregations) → ritorna `df` invariato (no-op intenzionale).
+        - GROUP BY richiesto ma config invalida (colonne inesistenti,
+          aggregations vuote o tutte invalide) → solleva `ValueError`.
+          `execute()` lo cattura e produce `{success: False}` con
+          `append_step` di failure: l'utente vede l'errore invece di
+          ricevere dati non aggregati.
+        - Errore runtime (pandas raise, casting fallito, ...) →
+          eccezione propaga, `execute()` la registra come failure.
+
+        Pre-fix: un `except Exception: return df` swallowed l'errore e
+        persisteva i dati raw come "output ufficiale" della run.
+        """
         if not _nf(result_node, 'group_by_enabled', False):
             return df
-        group_cols = _nf(result_node, 'group_by_columns', [])
+        group_cols_cfg = _nf(result_node, 'group_by_columns', [])
         aggregations = _nf(result_node, 'aggregations', [])
-        if not group_cols and not aggregations:
+        if not group_cols_cfg and not aggregations:
             return df
 
-        try:
-            group_cols = [c for c in group_cols if c in df.columns]
-            if not group_cols:
-                return df
+        # User-config: colonne richieste che non esistono nel df.
+        # Failure visibile invece di silent fallback al df non aggregato.
+        missing = [c for c in group_cols_cfg if c not in df.columns]
+        group_cols = [c for c in group_cols_cfg if c in df.columns]
+        if not group_cols:
+            raise ValueError(
+                "GROUP BY: nessuna delle colonne configurate esiste nel "
+                f"DataFrame ({missing!r}). Verifica i nomi nel nodo Output."
+            )
 
-            # Separa aggregazioni count da quelle su colonne specifiche
-            count_aliases = []
-            agg_dict, rename_dict = {}, {}
+        # Separa aggregazioni count da quelle su colonne specifiche.
+        count_aliases = []
+        agg_dict, rename_dict = {}, {}
+        invalid_aggs: list[str] = []
 
-            for agg in aggregations:
-                col  = agg.get('column')
-                func = agg.get('function', 'count')
-                alias = agg.get('alias', f"{col}_{func}")
+        for agg in aggregations:
+            col  = agg.get('column')
+            func = agg.get('function', 'count')
+            alias = agg.get('alias', f"{col}_{func}")
 
-                if func == 'count':
-                    # COUNT(*) via groupby.size â€” non dipende da una
-                    # colonna specifica, non perde righe sul gruppo
-                    count_aliases.append(alias)
-                elif func in ['sum', 'mean', 'min', 'max', 'std']:
-                    if col in df.columns:
-                        agg_dict[col] = func
-                        rename_dict[col] = alias
-
-            # Esegui aggregazioni colonna (solo se ci sono colonne valide
-            if agg_dict:
-                result = group_aggregate_as_columns(df, group_cols, agg_dict)
-                result = result.rename(columns=rename_dict)
-            elif count_aliases:
-                # Solo COUNT(*) richiesti â€” parti da una base con i gruppi
-                result = group_keys_dataframe(df, group_cols)
+            if func == 'count':
+                # COUNT(*) via groupby.size — non dipende da una colonna
+                # specifica, non perde righe sul gruppo.
+                count_aliases.append(alias)
+            elif func in ['sum', 'mean', 'min', 'max', 'std']:
+                if col in df.columns:
+                    agg_dict[col] = func
+                    rename_dict[col] = alias
+                else:
+                    invalid_aggs.append(f"{func}({col!r})")
             else:
-                # Nessuna aggregazione valida
-                return df
+                invalid_aggs.append(f"{func!r} (funzione non supportata)")
 
-            # Aggiungi COUNT(*) per ogni richiesta
-            for alias in count_aliases:
-                result[alias] = group_size_values(df, group_cols)
+        if not agg_dict and not count_aliases:
+            # User-config: tutte le aggregazioni sono invalide. Failure
+            # visibile — pre-fix silent return-of-df produceva output non
+            # aggregato.
+            raise ValueError(
+                "GROUP BY: nessuna aggregazione valida — verifica colonne "
+                f"e funzioni nel nodo Output. Invalide: {invalid_aggs!r}"
+            )
 
-            return result
+        if agg_dict:
+            result = group_aggregate_as_columns(df, group_cols, agg_dict)
+            result = result.rename(columns=rename_dict)
+        else:
+            # Solo COUNT(*) richiesti — parti da una base con i gruppi.
+            result = group_keys_dataframe(df, group_cols)
 
-        except Exception as e:
-            logger.error(f"[CRASH] Errore GROUP BY: {e}", exc_info=True)
-            return df
+        for alias in count_aliases:
+            result[alias] = group_size_values(df, group_cols)
+
+        return result
 
     # SALVATAGGIO
 

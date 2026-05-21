@@ -150,6 +150,7 @@ vi.mock('../../src/hooks', () => ({
       }
     },
   }),
+  useUnsavedChangesGuard: () => ({ confirmNavigation: () => true }),
   useCaricarica: () => ({
     showModal: false,
     closeModal: vi.fn(),

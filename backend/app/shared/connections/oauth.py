@@ -8,10 +8,12 @@ import json
 import threading
 import time
 import uuid
+import warnings as _warnings
 from typing import Any, Callable, MutableMapping, Optional
 
 import requests
 
+from app.core.security.tls_policy import resolve_tls_verify
 from app.infrastructure.http.session import get_shared_session
 from app.shared.contracts.payloads import HeadersMap, JsonObject, StringMap
 from app.utils.logger import get_logger
@@ -546,24 +548,26 @@ def get_arcgis_token(auth: JsonObject) -> Optional[str]:
         elif client_mode == "ip":
             payload["ip"] = auth.get("ip", "")
 
-        verify_ssl = auth.get("verify_ssl", True)
+        verify_ssl = resolve_tls_verify(
+            auth.get("verify_ssl", True), context="ArcGIS token"
+        )
         try:
-            if not verify_ssl:
-                try:
+            # Filtro warning SSL solo nello scope del POST (dev only, quando
+            # verify_ssl=False sopravvive a _resolve_tls_verify). Niente
+            # `urllib3.disable_warnings` globale — quello sopprimerebbe i
+            # warning per l'intero processo e mascherebbe future regressioni
+            # TLS in altri moduli.
+            with _warnings.catch_warnings():
+                if not verify_ssl:
                     from urllib3.exceptions import InsecureRequestWarning
-                    import urllib3
-
-                    urllib3.disable_warnings(InsecureRequestWarning)
-                except Exception:
-                    pass
-
-            response = requests.post(
-                token_url,
-                data=payload,
-                headers={"Content-Type": "application/x-www-form-urlencoded"},
-                timeout=_api_timeout_seconds(),
-                verify=verify_ssl,
-            )
+                    _warnings.simplefilter("ignore", InsecureRequestWarning)
+                response = requests.post(
+                    token_url,
+                    data=payload,
+                    headers={"Content-Type": "application/x-www-form-urlencoded"},
+                    timeout=_api_timeout_seconds(),
+                    verify=verify_ssl,
+                )
             if response.status_code != 200:
                 logger.warning("ArcGIS token fallito: HTTP %s", response.status_code)
                 return None

@@ -36,3 +36,4 @@ export { useConfirmModal }                          from './useConfirmModal';
 export { useToast }                                 from './useToast';
 export { useEditorData }                            from './useEditorData';
 export { useTaskPolling }                           from './useTaskPolling';
+export { useUnsavedChangesGuard }                   from './useUnsavedChangesGuard';

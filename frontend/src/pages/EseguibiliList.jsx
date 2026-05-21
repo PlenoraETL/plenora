@@ -67,7 +67,8 @@ function EseguibiliList() {
     setProjectSearch('');
     try {
       const all = await listProjects();
-      setArricchisciProjects(all.filter(p => p.project_type === 'arricchisci'));
+      const projects = all?.projects || [];
+      setArricchisciProjects(projects.filter(p => p.project_type === 'arricchisci'));
     } catch (e) {
       toast.error('Errore caricamento progetti: ' + (e?.message || 'errore sconosciuto'));
     } finally {

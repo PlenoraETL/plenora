@@ -28,7 +28,7 @@ import '../components/nodes/DataSourceNode.css';
 import { calculateOutputColumnsRecursive } from '../utils/columnUtils';
 import { createEdgeFromData, deserializeNodes } from '../utils/nodeFactories';
 import { getLayerSchema } from '../api/features';
-import { usePreview, useExecution, useCanvasValidation, useEdgeHandlers, useCanvasCore, useCaricarica, useCanvasSave } from '../hooks';
+import { usePreview, useExecution, useCanvasValidation, useEdgeHandlers, useCanvasCore, useCaricarica, useCanvasSave, useUnsavedChangesGuard } from '../hooks';
 import { useEditorData } from '../hooks/useEditorData';
 import { describeAccessDeniedNodes } from '../utils/canvasAccessControl';
 import AccessDeniedBanner from '../components/editor/AccessDeniedBanner';
@@ -303,7 +303,8 @@ function EstraiEditor() {
     event.preventDefault();
     event.dataTransfer.dropEffect = 'move';
   }, []);
-  const handleBack              = () => navigate('/');
+  const { confirmNavigation } = useUnsavedChangesGuard();
+  const handleBack              = () => { if (confirmNavigation()) navigate('/'); };
   const filteredTables          = Object.keys(catalog).filter(t => t.toLowerCase().includes(searchQuery.toLowerCase()));
   const sourceNodes             = nodes.filter(n => n.type === 'tableNode' || n.type === 'source');
   const tablesInCanvas          = new Set(sourceNodes.map(n => n.data.table_name).filter(Boolean));
@@ -350,7 +351,7 @@ function EstraiEditor() {
           <button type="button" className="estrai-toolbar__btn estrai-toolbar__btn--back" onClick={handleBack}>
             ← Indietro
           </button>
-          <button type="button" className="estrai-toolbar__btn estrai-toolbar__btn--connections" onClick={() => navigate('/connections')}>
+          <button type="button" className="estrai-toolbar__btn estrai-toolbar__btn--connections" onClick={() => { if (confirmNavigation()) navigate('/connections'); }}>
             🔌 Connessioni
           </button>
         </div>
@@ -587,7 +588,7 @@ function EstraiEditor() {
             <button
               type="button"
               className="estrai-sidebar__logout"
-              onClick={() => { logout(); navigate('/login'); }}
+              onClick={() => { if (confirmNavigation()) { logout(); navigate('/login'); } }}
               title="Logout"
             >
               ⏻

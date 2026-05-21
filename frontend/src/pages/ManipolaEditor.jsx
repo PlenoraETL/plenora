@@ -37,7 +37,7 @@ const ExecutionModal = lazy(() => import('../components/modals/ExecutionModal'))
 import StaticValuesNode from '../components/nodes/StaticValuesNode';
 import AnnotationNode from '../components/nodes/AnnotationNode';
 import DataSourceNode from '../components/nodes/DataSourceNode';
-import { useSchemaInference, usePreview, useExecution, useCanvasCore, useCanvasSave } from '../hooks';
+import { useSchemaInference, usePreview, useExecution, useCanvasCore, useCanvasSave, useUnsavedChangesGuard } from '../hooks';
 import { useEditorData } from '../hooks/useEditorData';
 import useCanvasStore from '../store/useCanvasStore';
 import ValidationStatusBadge from '../components/editor/ValidationStatusBadge';
@@ -452,7 +452,8 @@ const ManipolaEditorContent = () => {
     }
   }, [screenToFlowPosition, setNodes, handleUpdateProjectSource, handleUpdateProjectSourceColumns, handleUpdateFileSourceColumns, refreshSchemas, handleSaveQuiet, handleAutosaveError]);
 
-  const handleBack = () => navigate('/');
+  const { confirmNavigation } = useUnsavedChangesGuard();
+  const handleBack = () => { if (confirmNavigation()) navigate('/'); };
   const hasResultNode  = nodes.some(n => n.type === 'result');
   const hasCaricanNode = nodes.some(n => n.type === 'carica');
 

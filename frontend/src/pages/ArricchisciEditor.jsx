@@ -44,7 +44,7 @@ const ExecutionModal = lazy(() => import('../components/modals/ExecutionModal'))
 const PreviewModal = lazy(() => import('../components/modals/PreviewModal'));
 const ConnectionSelectorModal = lazy(() => import('../components/arricchisci/ConnectionSelectorModal'));
 const EnrichmentConfirmModal = lazy(() => import('../components/modals/EnrichmentConfirmModal'));
-import { usePreview, useExecution, useCanvasCore, useMultiModal, useEnrichmentValidation, useCaricarica, useCanvasSave } from '../hooks';
+import { usePreview, useExecution, useCanvasCore, useMultiModal, useEnrichmentValidation, useCaricarica, useCanvasSave, useUnsavedChangesGuard } from '../hooks';
 import { useToast } from '../hooks/useToast';
 import { useTheme } from '../hooks/useTheme';
 import '../styles/ArricchisciEditor.css';
@@ -464,7 +464,8 @@ const ArricchisciEditorContent = () => {
     if (newNode) setNodes(nds => nds.concat(newNode));
   }, [screenToFlowPosition, setNodes]);
 
-  const handleBack     = () => navigate('/');
+  const { confirmNavigation } = useUnsavedChangesGuard();
+  const handleBack     = () => { if (confirmNavigation()) navigate('/'); };
   const hasResultNode  = nodes.some(n => n.type === 'result');
   const hasCaricanNode = nodes.some(n => n.type === 'carica');
   const hasCaricanArcGISNode = nodes.some(n => n.type === 'carica_arcgis' || n.type === 'caricaArcgis');

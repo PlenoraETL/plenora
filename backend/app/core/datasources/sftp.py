@@ -15,6 +15,7 @@ from app.core.datasources.interface import (
     DataSourcePermissionError,
     FileInfo,
 )
+from app.core.security.tls_policy import is_prod_like_env
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -73,7 +74,17 @@ class SFTPDataSource(DataSourceInterface):
         password = extra.get("password", "")
         private_key_pem = extra.get("private_key", "")
         passphrase = extra.get("private_key_passphrase") or None
-        policy = extra.get("host_key_policy", "auto_add")
+        # Host-key policy default env-aware:
+        #  - prod/staging -> "reject" (MitM-safe, richiede known_hosts)
+        #  - dev/test     -> "auto_add" (preserva ergonomia legacy)
+        # Valore esplicito in `extra["host_key_policy"]` ha sempre precedenza
+        # — i test contract esistenti (`test_sftp_security_contract.py`)
+        # restano verdi perche' settano la policy esplicita.
+        raw_policy = extra.get("host_key_policy")
+        if raw_policy is None:
+            policy = "reject" if is_prod_like_env() else "auto_add"
+        else:
+            policy = raw_policy
 
         if not host:
             raise DataSourceConnectionError("Host SFTP non configurato")
@@ -85,6 +96,16 @@ class SFTPDataSource(DataSourceInterface):
                 ssh.load_system_host_keys()
                 ssh.set_missing_host_key_policy(paramiko.RejectPolicy())
             else:
+                # AutoAddPolicy accetta silenziosamente qualsiasi host key
+                # (incluso un attaccante MitM). Log esplicito per security
+                # monitoring: in prod/staging questo path richiede config
+                # esplicita "auto_add", quindi e' un opt-in consapevole.
+                logger.warning(
+                    "[SECURITY] SFTP %s:%d usa AutoAddPolicy — host key non "
+                    "verificata, rischio MitM. Per blindare imposta "
+                    "host_key_policy='reject' e popola known_hosts.",
+                    host, port,
+                )
                 ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
 
             kwargs = {"hostname": host, "port": port, "username": username, "timeout": 15}

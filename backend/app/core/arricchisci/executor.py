@@ -135,15 +135,39 @@ class EnrichExecutor:
                         f"output_contract arricchisci: schema id non disponibili: {exc}"
                     )
                 if result_columns:
-                    output_contract = build_output_contract(
-                        project_id=project_id,
-                        result_columns=result_columns,
-                        previous_contract=self.project_service.get_project_output_contract(project_id),
-                    )
-                    self.project_service.update_project_output_contract(
-                        project_id,
-                        output_contract.model_dump(),
-                    )
+                    # Il blob di arricchimento e' GIA' stato salvato a monte
+                    # da `api_connector.execute_enrichment` (irreversibile a
+                    # questo punto). Se l'aggiornamento del contract fallisce
+                    # qui, il blob resta persistito ma il progetto continua
+                    # ad esporre l'output_contract precedente — situazione
+                    # ambigua ma preferibile a far crashare l'intero `execute`
+                    # (e perdere l'append_step di success). Logghiamo come
+                    # ERROR (non WARNING: e' un drift di schema osservabile
+                    # da downstream) e mettiamo un segnale esplicito nel
+                    # `res` cosi' caller/UI sanno che il contract e' stale.
+                    # Pre-fix: nessun try/except → eccezione propagava al
+                    # task Celery, append_step di success non veniva mai
+                    # emesso, e il blob restava orfano dal contract.
+                    try:
+                        output_contract = build_output_contract(
+                            project_id=project_id,
+                            result_columns=result_columns,
+                            previous_contract=self.project_service.get_project_output_contract(project_id),
+                        )
+                        self.project_service.update_project_output_contract(
+                            project_id,
+                            output_contract.model_dump(),
+                        )
+                    except Exception as contract_err:
+                        logger.error(
+                            f"[CRASH] update_project_output_contract fallito "
+                            f"post-arricchimento: blob persistito, contract "
+                            f"resta stale. Caller deve gestire drift: "
+                            f"{contract_err}",
+                            op="execute", project_id=project_id, exc_info=True,
+                        )
+                        res["contract_update_failed"] = True
+                        res["contract_update_error"] = str(contract_err)
         else:
             res = {
                 "success": False,

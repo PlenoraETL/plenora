@@ -8,13 +8,14 @@ import csv
 
 import json
 import threading
-import urllib3
 from typing import Any, Optional, List, Tuple, Callable
 from datetime import datetime, timezone
 from collections import deque
 
-# Disabilita SSL warnings (fix Windows
-urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+# Nessuna chiamata HTTP in questo modulo usa `verify=False`. La precedente
+# `urllib3.disable_warnings(InsecureRequestWarning)` a livello di import
+# sopprimeva globalmente i warning SSL per tutto il processo — rimossa per
+# preservare segnali diagnostici di security monitoring su future regressioni.
 
 from app.core.arricchisci.models import (
     RowError, EnrichmentStats, EnrichmentOptions,
@@ -29,6 +30,7 @@ from app.core.arricchisci._rate_limiter import (
 from app.shared.connections.oauth import (
     prepare_headers as _shared_prepare_headers,
 )
+from app.core.security.outbound_url import validate_external_url
 from app.observability.log_sanitization import (
     sanitize_for_log,
 )
@@ -142,6 +144,14 @@ class EnrichmentExecutor(
         # Estrai config API
         endpoint = api_config.get("endpoint", {})
         self.url = endpoint.get("url", "")
+        # Anti-SSRF gate per il path enricher per-riga. Gli altri path
+        # (rest_file, generator, test_connection) chiamano gia' la primitiva;
+        # questo era l'unico path di produzione che ne era privo. URL vuota
+        # e' tollerata qui (caller failo gia' fail-fast piu' a valle); per
+        # URL non vuote validate_external_url solleva ValueError che
+        # propaga al boundary chiamante (`build_executor` / endpoint).
+        if self.url:
+            validate_external_url(self.url)
         self.method = endpoint.get("method", "GET").upper()
         # Accept both OpenAPI-style and runtime api_key field names.
         raw_auth = dict(api_config.get("auth") or {})

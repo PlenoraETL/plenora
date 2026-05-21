@@ -22,6 +22,7 @@ from app.observability.log_sanitization import (
     sanitize_for_log,
     sanitize_url_for_log,
 )
+from app.core.security.tls_policy import resolve_tls_verify
 from app.shared.connections.oauth import get_arcgis_token
 from app.utils.logger import get_logger
 
@@ -32,6 +33,50 @@ from app.core.arricchisci.models import RowError, RowStatus
 # nome → record indistinguibili dai consumer che attaccano handler /
 # filtrano per nome canonico
 logger = get_logger("app.core.arricchisci.enrichment_service")
+
+
+_RETRY_AFTER_FALLBACK_SECONDS = 60
+"""Default usato quando il server non manda Retry-After con 429."""
+
+
+def _clamp_retry_after(raw_header: Optional[str], *, max_seconds: int) -> int:
+    """Parsa il valore dell'header Retry-After (HTTP 429) e lo clampa.
+
+    Funzione pura (no I/O, no stato) — testabile in isolamento e mappabile
+    direttamente in Go come `func clampRetryAfter(raw string, max int) int`.
+
+    Threat: un server malevolo o malfunzionante puo' rispondere
+    `Retry-After: 86400` (24 ore) e parcheggiare un worker Celery per
+    l'intera giornata, esaurendo la capacita' del pool. Il clamp limita
+    il blast radius a `max_seconds`.
+
+    Args:
+        raw_header: valore raw dell'header. Se None/vuoto/non-int, ritorna
+            il fallback `_RETRY_AFTER_FALLBACK_SECONDS` clampato.
+            NOTA: RFC 7231 ammette anche date-string HTTP-date come valore;
+            qui supportiamo solo il formato delta-seconds (interi), che e'
+            quello usato dal 99% dei servizi REST moderni.
+        max_seconds: cap superiore (tipicamente
+            `EnrichmentOptions.max_retry_after_seconds`).
+
+    Returns:
+        Numero intero di secondi nell'intervallo [0, max_seconds].
+    """
+    if max_seconds < 0:
+        max_seconds = 0
+    if raw_header is None:
+        candidate = _RETRY_AFTER_FALLBACK_SECONDS
+    else:
+        try:
+            candidate = int(str(raw_header).strip())
+        except (TypeError, ValueError):
+            # Formato HTTP-date o malformato: degrada al fallback. Non
+            # spendiamo cicli a parsare le date (raro nei servizi REST,
+            # e il caller di fallback e' comunque ragionevole).
+            candidate = _RETRY_AFTER_FALLBACK_SECONDS
+    if candidate < 0:
+        candidate = 0
+    return min(candidate, max_seconds)
 
 
 class EnrichmentRetryHttpMixin:
@@ -57,7 +102,14 @@ class EnrichmentRetryHttpMixin:
             try:
                 start_time = time.time()
 
-                ssl_verify = not getattr(self.options, 'disable_ssl_verify', False)
+                # disable_ssl_verify e' user-config (EnrichmentOptions); il
+                # gate `resolve_tls_verify` lo forza a True in prod/staging
+                # (signal MITM-prevention) e lo permette solo con opt-in env
+                # esplicito (`PLENORA_ALLOW_TLS_BYPASS=1`) o ENVIRONMENT=dev.
+                ssl_verify = resolve_tls_verify(
+                    not getattr(self.options, 'disable_ssl_verify', False),
+                    context="API enricher per-row",
+                )
 
                 # Sostituisci path params nell'URL ({ip}, {coordinates}, ecc
                 call_url = self.url
@@ -117,7 +169,10 @@ class EnrichmentRetryHttpMixin:
                     with self._stats_lock:
                         self._rate_limit_hits_observed += 1
                     if self.options.respect_retry_after:
-                        retry_after = int(response.headers.get("Retry-After", 60))
+                        retry_after = _clamp_retry_after(
+                            response.headers.get("Retry-After"),
+                            max_seconds=self.options.max_retry_after_seconds,
+                        )
                         time.sleep(retry_after)
 
                     last_error = RowError(

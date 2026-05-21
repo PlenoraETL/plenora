@@ -117,6 +117,7 @@ vi.mock('../../src/hooks', () => ({
       }
     },
   }),
+  useUnsavedChangesGuard: () => ({ confirmNavigation: () => true }),
   useMultiModal: () => modalsMock,
   useEnrichmentValidation: () => ({
     validation: null,
