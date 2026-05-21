@@ -11,6 +11,7 @@ import { useNavigate, Navigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { role } from '../utils/permissions';
 import { useTheme } from '../hooks/useTheme';
+import PlenoraLogo from '../components/common/PlenoraLogo';
 import '../styles/LoginPage.css';
 
 // Helper: dove mandare l'utente dopo il login in base al ruolo.
@@ -154,16 +155,12 @@ export default function LoginPage() {
 
           {/* Logo */}
           <div className="lp__logo">
-            <svg width="260" height="72" viewBox="0 0 350 90" xmlns="http://www.w3.org/2000/svg">
-              <polygon points="16,58 52,40 88,58 52,76" fill="rgba(245,166,35,0.10)"  stroke="#F5A623" strokeWidth="1.4" strokeLinejoin="round"/>
-              <polygon points="16,44 52,26 88,44 52,62" fill="rgba(155,109,255,0.10)" stroke="#9B6DFF" strokeWidth="1.4" strokeLinejoin="round"/>
-              <polygon points="16,30 52,12 88,30 52,48" fill="rgba(52,193,122,0.12)"  stroke="#34C17A" strokeWidth="2"   strokeLinejoin="round"/>
-              <line x1="16" y1="30" x2="16" y2="58" stroke="rgba(255,255,255,0.08)" strokeWidth="1"/>
-              <line x1="88" y1="30" x2="88" y2="58" stroke="rgba(255,255,255,0.08)" strokeWidth="1"/>
-              <line x1="52" y1="48" x2="52" y2="76" stroke="rgba(255,255,255,0.06)" strokeWidth="1"/>
-              <text x="108" y="46" fontFamily="'Syne',sans-serif" fontSize="34" fontWeight="800" letterSpacing="-1.5" fill={theme === "light" ? "#0B1120" : "#FFFFFF"}>Plen</text>
-              <text x="222" y="46" fontFamily="'Syne',sans-serif" fontSize="34" fontWeight="800" letterSpacing="-1.5" fill="#4B8BFF">ora</text>
-            </svg>
+            <PlenoraLogo
+              width={260}
+              height={72}
+              gridLines="full"
+              plenFill={theme === "light" ? "#0B1120" : "#FFFFFF"}
+            />
           </div>
 
           {/* Headline */}

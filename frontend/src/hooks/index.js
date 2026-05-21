@@ -38,3 +38,4 @@ export { useEditorData }                            from './useEditorData';
 export { useTaskPolling }                           from './useTaskPolling';
 export { useUnsavedChangesGuard }                   from './useUnsavedChangesGuard';
 export { useMountedRef }                            from './useMountedRef';
+export { useValidationHighlights }                  from './useValidationHighlights';

@@ -17,6 +17,7 @@ import { useToast } from '../../hooks/useToast';
 import { useTaskPolling } from '../../hooks/useTaskPolling';
 import useDialogFocus from '../../hooks/useDialogFocus';
 import PermissionRevokedBanner from '../common/PermissionRevokedBanner';
+import { toastApiError } from '../../utils/toastApiError';
 import './EseguibileExecuteWizard.css';
 
 const OUTPUT_FORMATS = [
@@ -192,7 +193,7 @@ function EseguibileExecuteWizard({ eseguibileId, onClose, onAfterDownload = null
       // il trasferimento.
       if (onClose) onClose();
     } catch (e) {
-      toast.error('Errore download: ' + (e?.message || 'errore sconosciuto'));
+      toastApiError(toast, e, 'Errore download');
     }
   };
 

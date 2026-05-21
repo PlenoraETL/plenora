@@ -133,6 +133,7 @@ vi.mock('../../src/hooks', () => ({
     },
   }),
   useUnsavedChangesGuard: () => ({ confirmNavigation: () => true }),
+  useValidationHighlights: () => undefined,
 }));
 
 vi.mock('../../src/hooks/useColumnPropagation', () => ({

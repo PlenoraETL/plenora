@@ -24,6 +24,7 @@ import AppSidebar from '../components/AppSidebar';
 import ThemeToggle from '../components/common/ThemeToggle';
 import { useTheme } from '../hooks/useTheme';
 import { can, role } from '../utils/permissions';
+import { toastApiError } from '../utils/toastApiError';
 import '../styles/ProjectList.css';
 function ProjectList() {
   const toast    = useToast();
@@ -136,7 +137,7 @@ function ProjectList() {
       toast.success('Eseguibile eliminato');
       loadData();
     } catch (err) {
-      toast.error('Errore eliminazione: ' + (err?.message || 'errore sconosciuto'));
+      toastApiError(toast, err, 'Errore eliminazione');
     }
   };
 

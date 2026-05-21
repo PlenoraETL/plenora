@@ -25,18 +25,18 @@ import { useHexCanvas } from '../utils/hexCanvas';
 import EseguibileExecuteWizard from '../components/eseguibili/EseguibileExecuteWizard';
 import ChangePasswordModal from '../components/ChangePasswordModal';
 import { useTheme } from '../hooks/useTheme';
+import PlenoraLogo from '../components/common/PlenoraLogo';
+import { toastApiError } from '../utils/toastApiError';
 import './EsecutoreHome.css';
 function Logo() {
   const { theme } = useTheme();
   const isDark = theme !== 'light';
   return (
-    <svg width="120" height="32" viewBox="0 0 350 90" xmlns="http://www.w3.org/2000/svg">
-      <polygon points="16,58 52,40 88,58 52,76" fill="rgba(245,166,35,0.10)"  stroke="#F5A623" strokeWidth="1.4" strokeLinejoin="round"/>
-      <polygon points="16,44 52,26 88,44 52,62" fill="rgba(155,109,255,0.10)" stroke="#9B6DFF" strokeWidth="1.4" strokeLinejoin="round"/>
-      <polygon points="16,30 52,12 88,30 52,48" fill="rgba(52,193,122,0.12)"  stroke="#34C17A" strokeWidth="2"   strokeLinejoin="round"/>
-      <text x="108" y="46" fontFamily="'Syne',sans-serif" fontSize="34" fontWeight="800" letterSpacing="-1.5" fill={isDark ? '#FFFFFF' : '#0B1120'}>Plen</text>
-      <text x="220" y="46" fontFamily="'Syne',sans-serif" fontSize="34" fontWeight="800" letterSpacing="-1.5" fill="#4B8BFF">ora</text>
-    </svg>
+    <PlenoraLogo
+      width={120}
+      height={32}
+      plenFill={isDark ? '#FFFFFF' : '#0B1120'}
+    />
   );
 }
 function EseguibileCard({ item, onRun }) {
@@ -94,7 +94,7 @@ function EsecutoreHome() {
       const data = await listEseguibili();
       setItems(Array.isArray(data) ? data : []);
     } catch (e) {
-      toast.error('Errore caricamento eseguibili: ' + (e?.message || ''));
+      toastApiError(toast, e, 'Errore caricamento eseguibili');
     } finally {
       setLoading(false);
     }

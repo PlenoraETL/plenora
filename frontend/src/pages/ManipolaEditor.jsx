@@ -30,6 +30,7 @@ import CaricanNode from '../components/nodes/CaricanNode';
 import CaricanArcGISNode from '../components/nodes/CaricanArcGISNode';
 import '../components/nodes/CaricanArcGISNode.css';
 import EditorSidebar from '../components/panels/EditorSidebar';
+import PlenoraLogo from '../components/common/PlenoraLogo';
 
 // Modali lazy-loaded
 const PreviewModal = lazy(() => import('../components/modals/PreviewModal'));
@@ -37,7 +38,7 @@ const ExecutionModal = lazy(() => import('../components/modals/ExecutionModal'))
 import StaticValuesNode from '../components/nodes/StaticValuesNode';
 import AnnotationNode from '../components/nodes/AnnotationNode';
 import DataSourceNode from '../components/nodes/DataSourceNode';
-import { useSchemaInference, usePreview, useExecution, useCanvasCore, useCanvasSave, useUnsavedChangesGuard } from '../hooks';
+import { useSchemaInference, usePreview, useExecution, useCanvasCore, useCanvasSave, useUnsavedChangesGuard, useValidationHighlights } from '../hooks';
 import { useEditorData } from '../hooks/useEditorData';
 import useCanvasStore from '../store/useCanvasStore';
 import ValidationStatusBadge from '../components/editor/ValidationStatusBadge';
@@ -317,28 +318,9 @@ const ManipolaEditorContent = () => {
     useCanvasStore.getState().setConnections(connections);
   }, [connections]);
 
-  // Dopo che ResultNode esegue validation (manuale, execute, preview), lo store
-  // contiene i nodeId con issue. Applichiamo un outline amber ai nodi coinvolti.
-  const validationHighlights = useCanvasStore(s => s.validationHighlights);
-
-  useEffect(() => {
-    if (!validationHighlights || validationHighlights.length === 0) {
-      // Rimuovi eventuali highlight precedenti
-      setNodes(nds => nds.map(n => {
-        if (!n.style?.border?.includes('#FBBF24')) return n;
-        const { border, boxShadow, ...restStyle } = n.style || {};
-        return { ...n, style: Object.keys(restStyle).length ? restStyle : undefined };
-      }));
-      return;
-    }
-    const highlightSet = new Set(validationHighlights);
-    setNodes(nds => nds.map(n => ({
-      ...n,
-      style: highlightSet.has(n.id)
-        ? { ...n.style, border: '2px solid #FBBF24', boxShadow: '0 0 8px rgba(251,191,36,0.25)' }
-        : n.style,
-    })));
-  }, [validationHighlights, setNodes]);
+  // Outline amber sui nodi con issue di validazione (popolati dallo store
+  // da ResultNode.runValidation). Hook condiviso con ArricchisciEditor.
+  useValidationHighlights(setNodes);
 
   const onConnect = useCallback((params) => {
     setEdges(eds => {
@@ -476,14 +458,7 @@ const ManipolaEditorContent = () => {
     <div className="manipola-toolbar">
         <div className="manipola-toolbar__left">
           <div className="manipola-toolbar__logo">
-            <svg width="90" height="28" viewBox="0 0 350 90" xmlns="http://www.w3.org/2000/svg">
-              <polygon points="16,58 52,40 88,58 52,76" fill="rgba(245,166,35,0.10)"  stroke="#F5A623" strokeWidth="1.4" strokeLinejoin="round"/>
-              <polygon points="16,44 52,26 88,44 52,62" fill="rgba(155,109,255,0.10)" stroke="#9B6DFF" strokeWidth="1.4" strokeLinejoin="round"/>
-              <polygon points="16,30 52,12 88,30 52,48" fill="rgba(52,193,122,0.12)"  stroke="#34C17A" strokeWidth="2"   strokeLinejoin="round"/>
-              <line x1="16" y1="30" x2="16" y2="58" stroke="rgba(255,255,255,0.08)" strokeWidth="1"/>
-              <text x="108" y="46" fontFamily="'Syne',sans-serif" fontSize="34" fontWeight="800" letterSpacing="-1.5" className="manipola-toolbar__logo-text">Plen</text>
-              <text x="222" y="46" fontFamily="'Syne',sans-serif" fontSize="34" fontWeight="800" letterSpacing="-1.5" fill="#4B8BFF">ora</text>
-            </svg>
+            <PlenoraLogo gridLines="left" plenClassName="manipola-toolbar__logo-text" />
           </div>
           <div className="manipola-toolbar__sep" />
           <button type="button" className="manipola-toolbar__btn manipola-toolbar__btn--back" onClick={handleBack}>← Indietro</button>

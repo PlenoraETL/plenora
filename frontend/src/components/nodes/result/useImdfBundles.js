@@ -45,6 +45,7 @@
 import { useState, useEffect } from 'react';
 import useCanvasStore from '../../../store/useCanvasStore';
 import { useToast } from '../../../hooks/useToast';
+import { toastApiError } from '../../../utils/toastApiError';
 import {
   listImdfBundles,
   getImdfBundleMetadata,
@@ -149,7 +150,7 @@ export function useImdfBundles({ isImdfMode }) {
       if (selectedBundleId === tid) setSelectedBundleId(null);
     } catch (e) {
       console.error('deleteImdfBundle:', e);
-      toast.error(`Errore cancellazione bundle: ${e?.message || 'errore sconosciuto'}`);
+      toastApiError(toast, e, 'Errore cancellazione bundle');
     }
   };
 

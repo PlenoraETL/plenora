@@ -34,18 +34,17 @@ import { can, role } from '../utils/permissions';
 import { getTicketsCounts } from '../api/tickets';
 import ChangePasswordModal from './ChangePasswordModal';
 import { useTheme } from '../hooks/useTheme';
+import PlenoraLogo from './common/PlenoraLogo';
 import './AppSidebar.css';
 function Logo() {
   const { theme } = useTheme();
   const isDark = theme !== 'light';
   return (
-    <svg width="130" height="36" viewBox="0 0 350 90" xmlns="http://www.w3.org/2000/svg">
-      <polygon points="16,58 52,40 88,58 52,76" fill="rgba(245,166,35,0.10)"  stroke="#F5A623" strokeWidth="1.4" strokeLinejoin="round"/>
-      <polygon points="16,44 52,26 88,44 52,62" fill="rgba(155,109,255,0.10)" stroke="#9B6DFF" strokeWidth="1.4" strokeLinejoin="round"/>
-      <polygon points="16,30 52,12 88,30 52,48" fill="rgba(52,193,122,0.12)"  stroke="#34C17A" strokeWidth="2"   strokeLinejoin="round"/>
-      <text x="108" y="46" fontFamily="'Syne',sans-serif" fontSize="34" fontWeight="800" letterSpacing="-1.5" fill={isDark ? '#FFFFFF' : '#0B1120'}>Plen</text>
-      <text x="220" y="46" fontFamily="'Syne',sans-serif" fontSize="34" fontWeight="800" letterSpacing="-1.5" fill="#4B8BFF">ora</text>
-    </svg>
+    <PlenoraLogo
+      width={130}
+      height={36}
+      plenFill={isDark ? '#FFFFFF' : '#0B1120'}
+    />
   );
 }
 // Le sezioni della dashboard (workspace) sono identificate da hash:

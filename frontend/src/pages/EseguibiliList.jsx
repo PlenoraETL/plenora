@@ -19,6 +19,7 @@ import { role } from '../utils/permissions';
 import ConfirmDialog from '../components/common/ConfirmDialog';
 import { useConfirmModal } from '../hooks/useConfirmModal';
 import useDialogFocus from '../hooks/useDialogFocus';
+import { toastApiError } from '../utils/toastApiError';
 import './EseguibiliList.css';
 
 function EseguibiliList() {
@@ -53,7 +54,7 @@ function EseguibiliList() {
       const data = await listEseguibili();
       setItems(data);
     } catch (e) {
-      toast.error('Errore caricamento eseguibili: ' + (e?.message || 'errore sconosciuto'));
+      toastApiError(toast, e, 'Errore caricamento eseguibili');
     } finally {
       setLoading(false);
     }
@@ -70,7 +71,7 @@ function EseguibiliList() {
       const projects = all?.projects || [];
       setArricchisciProjects(projects.filter(p => p.project_type === 'arricchisci'));
     } catch (e) {
-      toast.error('Errore caricamento progetti: ' + (e?.message || 'errore sconosciuto'));
+      toastApiError(toast, e, 'Errore caricamento progetti');
     } finally {
       setLoadingProjects(false);
     }
@@ -89,7 +90,7 @@ function EseguibiliList() {
       toast.success('Eseguibile eliminato');
       loadItems();
     } catch (e) {
-      toast.error('Errore eliminazione: ' + (e?.message || 'errore sconosciuto'));
+      toastApiError(toast, e, 'Errore eliminazione');
     }
   };
 
