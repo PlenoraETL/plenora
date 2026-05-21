@@ -6,8 +6,9 @@ Policy
 from __future__ import annotations
 
 import base64
+import hashlib
 import io
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 from typing_extensions import TypedDict
 
@@ -27,6 +28,69 @@ TOTP_ISSUER = "URBY-ETL"
 # RFC 6238 §5.2 permette max 1 step di drift. Valori >1 aumentano la finestra
 # di replay e non sono raccomandati
 TOTP_WINDOW = 1
+
+# TTL della blacklist anti-replay (vedi `_register_used_code`).
+# Vita massima logica di un codice TOTP = (1 + TOTP_WINDOW + 1) * 30 s:
+# step corrente + step precedente accettato + margine di sicurezza per
+# clock drift. Le righe scadute vengono ignorate dalle query e ripulite
+# dal vacuum periodico (vedi `vacuum_expired_used_codes`).
+_REPLAY_BLACKLIST_TTL = timedelta(seconds=(2 + TOTP_WINDOW) * 30)
+
+
+def _hash_used_code(user_id: str, code: str) -> str:
+    """Hash deterministico per la blacklist anti-replay.
+
+    SHA-256 di `user_id:code` — il code TOTP e' gia' specifico dello step
+    (RFC 6238), quindi includere lo step nel hash sarebbe ridondante.
+    Hashare evita di salvare il codice in chiaro nel DB.
+    """
+    payload = f"{user_id}:{code}".encode("utf-8")
+    return hashlib.sha256(payload).hexdigest()
+
+
+def _try_register_used_code(user_id: str, code: str) -> bool:
+    """Registra (user_id, code_hash) come "usato" nella blacklist
+    short-lived. Ritorna True se il codice non era stato visto in
+    finestra valida, False se gia' usato (replay).
+
+    Atomic via `INSERT ... ON CONFLICT DO NOTHING RETURNING 1`: nessuna
+    race con un secondo verify in parallelo. Se la INSERT non affetta
+    righe (conflict gia' esistente nella PK composta), il caller deve
+    rifiutare il codice.
+
+    Side effect: ignora le righe scadute (expires_at <= NOW) sovrascrivendole
+    in INSERT ON CONFLICT con un nuovo TTL — il codice puo' essere
+    riusato DOPO che e' scaduto come step TOTP, ma non entro la finestra.
+    """
+    code_hash = _hash_used_code(user_id, code)
+    expires_at = datetime.now(timezone.utc) + _REPLAY_BLACKLIST_TTL
+    with unit_of_work() as session:
+        row = session.fetchone(
+            """
+            INSERT INTO plenora.user_mfa_used_codes
+                (user_id, code_hash, expires_at)
+            VALUES (%s, %s, %s)
+            ON CONFLICT (user_id, code_hash) DO UPDATE
+                SET expires_at = EXCLUDED.expires_at
+                WHERE plenora.user_mfa_used_codes.expires_at <= NOW()
+            RETURNING 1
+            """,
+            (user_id, code_hash, expires_at),
+        )
+    # RETURNING e' presente sia su INSERT che su UPDATE-when-expired.
+    # Se entrambi i path non producono righe → row None → conflict
+    # attivo (entro TTL) → codice gia' usato → replay.
+    return row is not None
+
+
+def vacuum_expired_used_codes() -> int:
+    """Cleanup periodico delle righe scadute. Best-effort, chiamabile da
+    cron / healthcheck. Ritorna il numero di righe cancellate.
+    """
+    with unit_of_work() as session:
+        return session.execute(
+            "DELETE FROM plenora.user_mfa_used_codes WHERE expires_at <= NOW()"
+        ) or 0
 
 
 class MFAEnrollment(TypedDict):
@@ -145,6 +209,17 @@ def verify_code(user_id: str, code: str) -> bool:
         return False
     totp = pyotp.TOTP(secret)
     if not totp.verify(code, valid_window=TOTP_WINDOW):
+        return False
+    # Anti-replay (RFC 6238 §5): un codice gia' usato in finestra valida
+    # NON deve essere accettato di nuovo. `_try_register_used_code` e' una
+    # INSERT atomica su (user_id, code_hash): se il codice e' gia' presente
+    # entro il TTL, la INSERT non produce righe → replay → reject.
+    if not _try_register_used_code(user_id, code):
+        logger.warning(
+            f"MFA replay blocked for user {user_id} (code already used "
+            f"within TOTP window)",
+            op="mfa_replay_blocked",
+        )
         return False
     with unit_of_work() as session:
         session.execute(

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from contextvars import ContextVar
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any, List, Optional
 import uuid as _uuid
 
@@ -256,12 +257,31 @@ def load_project_sources(
             log,
         )
 
-        upstream = pipeline_dispatcher(
-            source_project_id,
-            force_recalculate=True,
-            run_id=upstream_run_id,
-        )
-        _close_upstream_run(upstream_run_id, upstream, upstream_retention_n, log)
+        # try/finally garantisce che _close_upstream_run venga chiamata
+        # anche se pipeline_dispatcher solleva eccezione. Pre-fix la
+        # mancata chiusura lasciava la run upstream in stato 'running'
+        # permanente nel checkpoint store (lifecycle leak).
+        upstream: Any = None
+        try:
+            upstream = pipeline_dispatcher(
+                source_project_id,
+                force_recalculate=True,
+                run_id=upstream_run_id,
+            )
+        finally:
+            if upstream is None:
+                # pipeline_dispatcher ha sollevato; sentinel di failure
+                # cosi' _close_upstream_run logga 'failure' invece di
+                # accedere ad attributi su None.
+                upstream = SimpleNamespace(
+                    success=False,
+                    message="Eccezione non gestita in pipeline_dispatcher",
+                    rows_count=0,
+                    output_path=None,
+                )
+            _close_upstream_run(
+                upstream_run_id, upstream, upstream_retention_n, log,
+            )
 
         if not upstream.success:
             return {

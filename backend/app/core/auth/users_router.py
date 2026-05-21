@@ -21,6 +21,7 @@ from app.core.auth.models import (
     ResetPasswordRequest,
     UserCreate,
     UserResponse,
+    UserUpdateRequest,
 )
 from app.shared.contracts.auth import CurrentUser
 from app.core.auth.roles import ROLES_ADMIN_OR_ABOVE, VALID_ROLES
@@ -134,20 +135,20 @@ def create_user(data: UserCreate, current_user: CurrentUser = Depends(require_ad
 
 @users_router.put("/{user_id}", response_model=UserResponse)
 @audit_action(action="user.update", target_param="user_id")
-def update_user(user_id: str, data: dict,
+def update_user(user_id: str, data: UserUpdateRequest,
                 current_user: CurrentUser = Depends(require_admin)):
     """
     Aggiorna utente.
     superadmin → può cambiare role e group_id
     admin → solo email e is_active, solo nel proprio gruppo
 
-    SECURITY hardening:
-      - Whitelist dei campi consentiti per ruolo
-      - Type checking di ogni campo (no coercion silenziosa)
-      - Validazione email format (base)
-      - Validazione role contro VALID_ROLES
-      - Verifica esistenza group_id se passato
-      - Self-demotion: un utente non può modificare il proprio ruolo né disabilitare se stesso
+    Body schema: `UserUpdateRequest` (Pydantic, extra="forbid"). Type
+    check + format validation gestiti dal modello; il router applica solo
+    la whitelist per-ruolo, il check di esistenza del group_id e i
+    self-modify guard.
+
+    Pre-fix il body era `dict` raw: shape/type non documentati in
+    OpenAPI, validation duplicata in 4 punti con check manuali.
     """
     target = _users_dal.get_user(user_id)
     if not target:
@@ -155,52 +156,30 @@ def update_user(user_id: str, data: dict,
     if current_user.role != "superadmin" and target.group_id != current_user.group_id:
         _disclosure.raise_disclosure(_disclosure.access_denied())
 
-    # Fail-fast sui campi sensibili non gestiti qui: meglio errore esplicito
-    # del drop silenzioso. Storicamente il frontend mandava `password` nel
-    # payload di PUT e il backend lo scartava senza segnalare: l'utente
-    # credeva di aver cambiato password mentre restava la vecchia
-    if "password" in data:
-        raise HTTPException(
-            status_code=400,
-            detail="Per cambiare password usa POST /users/{id}/reset-password",
-        )
-    # group_id non e' aggiornabile qui: spostare un utente tra gruppi
-    # e' operazione separata (nessun endpoint implementato oggi
-    if "group_id" in data and current_user.role != "superadmin":
+    # `exclude_unset=True` distingue "non passato" da "passato come None":
+    # solo i campi presenti nel body originale finiscono in `data_dict`.
+    data_dict = data.model_dump(exclude_unset=True)
+
+    # group_id non e' aggiornabile da admin non-super (whitelist per-ruolo,
+    # non check di shape — resta nel router).
+    if "group_id" in data_dict and current_user.role != "superadmin":
         _disclosure.raise_disclosure(_disclosure.field_role_restricted_group_id())
 
-    allowed = ["email", "is_active"]
+    allowed = {"email", "is_active"}
     if current_user.role == "superadmin":
-        allowed += ["role", "group_id"]
+        allowed |= {"role", "group_id"}
 
-    fields = {k: v for k, v in data.items() if k in allowed}
+    fields = {k: v for k, v in data_dict.items() if k in allowed}
     if not fields:
         raise HTTPException(status_code=400, detail="Nessun campo aggiornabile fornito")
 
-    # Type checking strict (no coercion automatica
-    if "email" in fields:
-        if not isinstance(fields["email"], str) or not fields["email"]:
-            raise HTTPException(status_code=400, detail="email deve essere una stringa non vuota")
-        # Validazione formato base — non perfetta ma blocca payload assurdi
-        if "@" not in fields["email"] or "." not in fields["email"].split("@")[-1]:
-            raise HTTPException(status_code=400, detail="Formato email non valido")
-    if "is_active" in fields:
-        if not isinstance(fields["is_active"], bool):
-            raise HTTPException(status_code=400, detail="is_active deve essere un booleano")
-    if "role" in fields:
-        if not isinstance(fields["role"], str):
-            raise HTTPException(status_code=400, detail="role deve essere una stringa")
-        if fields["role"] not in VALID_ROLES:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Ruolo non valido: '{fields['role']}'. Validi: {VALID_ROLES}",
-            )
-    if "group_id" in fields:
-        if not isinstance(fields["group_id"], str) or not fields["group_id"]:
-            raise HTTPException(status_code=400, detail="group_id deve essere una stringa non vuota")
-        # Verifica che il gruppo esista — evita di mettere utenti in gruppi orfani
-        if not _groups_dal.get_group(fields["group_id"]):
-            raise HTTPException(status_code=400, detail=f"Gruppo '{fields['group_id']}' non trovato")
+    # Esistenza del group_id richiede lookup DB → resta nel router
+    # (validazione di shape gia' fatta dal modello).
+    if "group_id" in fields and not _groups_dal.get_group(fields["group_id"]):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Gruppo '{fields['group_id']}' non trovato",
+        )
 
     # Self-demotion guard: un utente non può abbassarsi i privilegi né disabilitarsi
     if user_id == current_user.user_id:

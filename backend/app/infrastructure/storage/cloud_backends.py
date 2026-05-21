@@ -199,6 +199,50 @@ class AwsSsmSecretsBackend:
         return out
 
 
+def _assert_upload_integrity(
+    *,
+    client: Any,
+    bucket: str,
+    key: str,
+    expected_size: int,
+) -> None:
+    """Verifica post-upload che l'oggetto in bucket abbia esattamente la
+    size attesa. Funzione pura riusabile da qualsiasi backend S3-compatible.
+
+    In caso di mismatch tenta cleanup best-effort dell'oggetto corrotto
+    (cosi' non resta orphan in bucket) e solleva `StorageIntegrityError`.
+    Se anche il cleanup fallisce, l'oggetto resta in bucket ma viene
+    comunque sollevata l'eccezione: il caller marca artifact_status=
+    "failed" e il riconciliator notera' l'orphan al prossimo sweep.
+    """
+    try:
+        head = client.head_object(Bucket=bucket, Key=key)
+    except Exception as head_err:
+        # head_object subito dopo upload deve sempre succeedere (eventual
+        # consistency S3/MinIO e' read-after-write per nuovi oggetti).
+        # Se fallisce, qualcosa di grave: cleanup + raise.
+        try:
+            client.delete_object(Bucket=bucket, Key=key)
+        except Exception:
+            pass
+        raise StorageIntegrityError(
+            f"head_object post-upload fallito per key={key!r}: "
+            f"{type(head_err).__name__}: {head_err}"
+        ) from head_err
+
+    actual_size = head.get("ContentLength")
+    if actual_size != expected_size:
+        try:
+            client.delete_object(Bucket=bucket, Key=key)
+        except Exception:
+            pass
+        raise StorageIntegrityError(
+            f"Upload size mismatch per key={key!r}: "
+            f"atteso {expected_size} bytes, head_object riporta "
+            f"{actual_size} bytes. Oggetto eliminato per evitare orphan."
+        )
+
+
 class AwsS3ObjectStorage:
     """AWS S3.
 
@@ -246,17 +290,27 @@ class AwsS3ObjectStorage:
         )
 
     def upload_bytes(self, data: bytes, key: str) -> None:
-        """Upload bytes via `upload_fileobj` + TransferConfig.
+        """Upload bytes via `upload_fileobj` + TransferConfig + integrity
+        verification post-upload.
 
-        Differenza con `put_object(Body=bytes)` (che avevo prima):
+        Differenza con `put_object(Body=bytes)`:
           - put_object e' limitato a 5GB per PUT singolo
           - upload_fileobj usa S3Transfer internamente, fa multipart
             upload automatico sopra `multipart_threshold` (8MB default)
           - Nessun cap pratico: S3 multipart supporta fino a 5TB
 
+        Integrity check: dopo l'upload, `head_object` verifica che
+        `ContentLength` corrisponda a `len(data)`. Su mismatch viene
+        eliminato l'oggetto (best-effort) e sollevato `StorageIntegrityError`.
+        Threat coperto: silent data corruption che boto3 non rileva
+        autonomamente (chunks troncati, streaming I/O instabile su MinIO,
+        backend S3-compatible con checksum disabilitato).
+
         Equivalenti cross-provider:
-          - Azure Blob: `BlobClient.upload_blob(data)` auto-chunking
-          - GCS: `blob.upload_from_string(data)` resumable upload nativo
+          - Azure Blob: `BlobClient.upload_blob(data)` auto-chunking +
+            `get_blob_properties` per size verification
+          - GCS: `blob.upload_from_string(data)` resumable upload nativo +
+            `blob.reload()` per size verification
         """
         from boto3.s3.transfer import TransferConfig
         client = self._client()
@@ -264,12 +318,19 @@ class AwsS3ObjectStorage:
             multipart_threshold=8 * 1024 * 1024,
             multipart_chunksize=8 * 1024 * 1024,
         )
+        expected_size = len(data)
         client.upload_fileobj(
             io.BytesIO(data),
             self.bucket,
             key,
             ExtraArgs=self._extra_args(),
             Config=config,
+        )
+        _assert_upload_integrity(
+            client=client,
+            bucket=self.bucket,
+            key=key,
+            expected_size=expected_size,
         )
 
     def download(self, key: str, local_path: Path) -> None:
@@ -546,6 +607,23 @@ class ObjectStorageDisabledError(RuntimeError):
     I caller devono trattarlo come "feature non disponibile in questo
     deployment" e produrre una risposta operativa (503 / messaggio
     user-facing chiaro), non come bug applicativo.
+    """
+
+
+class StorageIntegrityError(RuntimeError):
+    """Raised quando un upload completa senza eccezione boto3 ma la
+    verifica post-upload rileva una corruzione (size mismatch, oggetto
+    mancante, ETag inatteso).
+
+    Threat model coperto: `upload_fileobj` di boto3 solleva su errori di
+    rete/HTTP, ma NON su silent data corruption (chunks corrotti accettati
+    da S3-compatibles con checksum disabilitato, byte mancanti per
+    streaming I/O instabile, eccetera). Senza un check end-to-end
+    l'artifact veniva marcato `artifact_status="complete"` anche su upload
+    corrotto, e i downstream readers leggevano dati malformati.
+
+    Il caller deve trattarlo come failure di upload: lo storage prova
+    a fare cleanup dell'oggetto orphan ma la cancellazione e' best-effort.
     """
 
 

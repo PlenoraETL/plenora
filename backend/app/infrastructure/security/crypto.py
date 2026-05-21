@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import base64
 import hashlib
+import secrets
 from typing import Optional
 
 from cryptography.fernet import Fernet, InvalidToken
@@ -36,13 +37,26 @@ class CredentialUnavailableError(Exception):
 # per coerenza con il formato già presente in connection_service.py legacy
 ENC_PREFIX = "enc:"
 
-# Chiave di default usata SOLO in sviluppo se nessuna env var è impostata
-# NON usare in produzione: l'app fa fail-fast quando ENVIRONMENT=production
-_DEV_DEFAULT_KEY = "urby-etl-default-key-change-in-production"
+# Stringa storica del default-key che era committata nel repo fino al
+# 2026-05-21. Mantenuta SOLO come signature per il fail-fast: se qualcuno
+# trova il valore in un .env legacy e lo copia in produzione, vogliamo
+# crashare il boot. NON viene piu' usata come chiave attiva (vedi
+# `_ephemeral_dev_key`). Threat coperto: chiunque clonando il repo
+# poteva decifrare tutti i dati at-rest di installazioni dev/staging
+# che lasciavano la default-key.
+_LEGACY_COMMITTED_KEY_SIGNATURE = (
+    "urby-etl-default-key-change-in-production"
+)
 
 # Cache del Fernet istanziato. Evita di ricalcolare la derivazione SHA-256
 # a ogni chiamata. Resettabile per i test via ``_reset_cache_for_tests``
 _FERNET_CACHE: Optional[Fernet] = None
+
+# Chiave effimera generata al primo uso in dev/test quando manca
+# `PLENORA_ENCRYPTION_KEY`. NON persistente tra restart: i dati cifrati
+# con questa chiave non sopravvivono al riavvio dell'app. Per
+# persistenza in dev locale, settare `PLENORA_ENCRYPTION_KEY` in `.env`.
+_DEV_EPHEMERAL_KEY: Optional[str] = None
 
 
 # Lunghezza minima accettabile per una chiave (in caratteri
@@ -50,59 +64,74 @@ _FERNET_CACHE: Optional[Fernet] = None
 _MIN_KEY_LENGTH = 16
 
 
+def _ephemeral_dev_key() -> str:
+    """Genera (una sola volta per processo) una chiave random per dev/test.
+
+    Pattern allineato a `JWT_SECRET_KEY` generata a runtime in
+    `app/core/auth/auth.py`. La chiave NON viene persistita su disco e
+    NON viene loggata: chi vuole stabilita' tra restart in locale deve
+    settare `PLENORA_ENCRYPTION_KEY` in `backend/.env`.
+    """
+    global _DEV_EPHEMERAL_KEY
+    if _DEV_EPHEMERAL_KEY is None:
+        _DEV_EPHEMERAL_KEY = secrets.token_urlsafe(32)
+        logger.warning(
+            "[PLENORA-ETL] Nessuna PLENORA_ENCRYPTION_KEY configurata: "
+            "generata chiave EFFIMERA per questa sessione. I campi cifrati "
+            "a-rest non sopravviveranno al riavvio del processo. Per "
+            "persistenza in dev locale, imposta PLENORA_ENCRYPTION_KEY "
+            "in backend/.env (token_urlsafe 32 byte raccomandato)."
+        )
+    return _DEV_EPHEMERAL_KEY
+
+
 def _get_raw_key() -> str:
     """Recupera la raw key dall'env var, con fallback dev e fail-fast in prod.
 
     Legge la env var canonical PLENORA_ENCRYPTION_KEY. Gli alias legacy
-    URBY_ENCRYPTION_KEY e CONN_ENCRYPT_KEY non sono piu' supportati
+    URBY_ENCRYPTION_KEY e CONN_ENCRYPT_KEY non sono piu' supportati.
     SECRET_KEY / JWT_SECRET_KEY: quei nomi appartengono al dominio auth JWT,
     tenerli separati rompe l'accoppiamento rotazione-JWT ↔ decifratura-at-rest.
-    Se nessuna è valorizzata e ci troviamo in produzione,
-    solleva ``RuntimeError`` (preferito a SystemExit per essere catturabile
-    nei test e gestibile dal framework FastAPI in fase di startup).
 
-    SECURITY hardening (Block F-D):
-      - Se la chiave configurata è uguale a `_DEV_DEFAULT_KEY` (qualcuno
-        ha copiato il valore di test in prod), trattiamo come "nessuna
-        chiave configurata" → fail-fast in production
-      - Se la chiave è più corta di `_MIN_KEY_LENGTH` caratteri, fail-fast
-        anche in dev (probabile errore di configurazione)
-      - In dev, se PLENORA_DISABLE_DEFAULT_KEY=1 è impostata, fail-fast invece
-        di usare la dev key (opt-in per chi vuole replicare prod localmente)
+    SECURITY hardening:
+      - In prod/staging, missing key o legacy committed-key signature →
+        ``RuntimeError`` fail-fast.
+      - In dev, missing key → chiave effimera generata in-process
+        (`_ephemeral_dev_key`). Pre-fix usavamo una stringa committata
+        nel sorgente, decifrabile da chiunque clonasse il repo.
+      - Opt-in `PLENORA_DISABLE_DEFAULT_KEY=1` per dev che vogliono
+        replicare il fail-fast di prod localmente.
+      - `_MIN_KEY_LENGTH` enforce in qualsiasi ambiente.
     """
-    # Unica env crypto supportata: PLENORA_ENCRYPTION_KEY. Gli alias legacy
-    # URBY_ENCRYPTION_KEY e CONN_ENCRYPT_KEY sono stati rimossi il 2026-04-23
     env_name = "PLENORA_ENCRYPTION_KEY"
     val = get_env(env_name)
-    found = (env_name, val) if val else None
 
     env = environment_name()
-    # Simmetrico a _DOTENV_DISABLED_ENVS di config.py:26 — entrambi gli
-    # ambienti "hardened" (prod + staging) devono fail-fast su missing
-    # key / dev-default. Chiude S1 runtime_config_audit.md
+    # Simmetrico a _DOTENV_DISABLED_ENVS di config.py:26: gli ambienti
+    # hardened (prod + staging) fail-fast su missing key / legacy default.
     is_prod = env in ("production", "prod", "staging", "stage")
 
-    if found:
-        env_name, val = found
-        # Detection del default-key che qualcuno ha copiato in prod
-        if val == _DEV_DEFAULT_KEY:
+    if val:
+        # Detection della stringa legacy che era committata nel repo:
+        # se qualcuno l'ha copiata in un .env di prod, crash fast.
+        if val == _LEGACY_COMMITTED_KEY_SIGNATURE:
             msg = (
-                f"[PLENORA-ETL] {env_name} contiene il valore di default di sviluppo. "
-                f"Questo è un grave rischio di sicurezza: cambia la chiave."
+                f"[PLENORA-ETL] {env_name} contiene il vecchio default-key "
+                f"committato nel repo (rimosso 2026-05-21). E' considerato "
+                f"compromesso: ruota la chiave usando `secrets.token_urlsafe(32)`."
             )
             if is_prod:
                 raise RuntimeError(msg)
             logger.warning(msg)
-        # Chiavi troppo corte sono inaccettabili in qualsiasi ambiente
         if len(val) < _MIN_KEY_LENGTH:
             raise RuntimeError(
-                f"[PLENORA-ETL] {env_name} troppo corta ({len(val)} char, minimo "
-                f"{_MIN_KEY_LENGTH}). Usa una chiave casuale di almeno "
-                f"{_MIN_KEY_LENGTH} caratteri."
+                f"[PLENORA-ETL] {env_name} troppo corta ({len(val)} char, "
+                f"minimo {_MIN_KEY_LENGTH}). Usa una chiave casuale di "
+                f"almeno {_MIN_KEY_LENGTH} caratteri."
             )
         return val
 
-    # Nessuna chiave trovata
+    # Nessuna chiave trovata.
     if is_prod:
         raise RuntimeError(
             "[PLENORA-ETL] Nessuna chiave di cifratura configurata. "
@@ -110,18 +139,15 @@ def _get_raw_key() -> str:
             "prima di avviare in produzione."
         )
 
-    # Opt-in per developer che vogliono replicare il fail-fast di prod
+    # Opt-in per developer che vogliono replicare il fail-fast di prod.
     if get_env("PLENORA_DISABLE_DEFAULT_KEY") == "1":
         raise RuntimeError(
-            "[PLENORA-ETL] Nessuna chiave di cifratura e PLENORA_DISABLE_DEFAULT_KEY=1. "
-            "Imposta PLENORA_ENCRYPTION_KEY o rimuovi PLENORA_DISABLE_DEFAULT_KEY."
+            "[PLENORA-ETL] Nessuna chiave di cifratura e "
+            "PLENORA_DISABLE_DEFAULT_KEY=1. Imposta PLENORA_ENCRYPTION_KEY "
+            "o rimuovi PLENORA_DISABLE_DEFAULT_KEY."
         )
 
-    logger.warning(
-        "[PLENORA-ETL] Nessuna chiave di cifratura trovata nelle env var: "
-        "uso la chiave di sviluppo di default. NON usare in produzione."
-    )
-    return _DEV_DEFAULT_KEY
+    return _ephemeral_dev_key()
 
 
 def _get_fernet() -> Fernet:
@@ -138,9 +164,14 @@ def _get_fernet() -> Fernet:
 
 
 def _reset_cache_for_tests() -> None:
-    """Reset della cache Fernet, da usare nei test che cambiano env var."""
-    global _FERNET_CACHE
+    """Reset della cache Fernet, da usare nei test che cambiano env var.
+
+    Reset anche la chiave effimera dev per garantire isolamento tra test
+    (un test che usa la chiave generata non deve inquinare i successivi).
+    """
+    global _FERNET_CACHE, _DEV_EPHEMERAL_KEY
     _FERNET_CACHE = None
+    _DEV_EPHEMERAL_KEY = None
 
 
 def is_encrypted(value: Optional[str]) -> bool:

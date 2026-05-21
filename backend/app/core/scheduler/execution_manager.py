@@ -230,6 +230,43 @@ class ExecutionManager:
             )
 
         _group_id = getattr(project_meta, "group_id", "") or ""
+
+        # P0 fix (bug-hunter orchestration): `open_run` + `create_intermediate_run`
+        # vengono ora chiamati DOPO `try_acquire == "acquired"`. Pre-fix erano
+        # eseguiti incondizionatamente, e i path early-return "skipped"/"queued"
+        # lasciavano un record log_run permanente in stato 'running' senza
+        # `close_run` corrispondente. Conseguenza: l'healthcheck
+        # `count_stuck_schedules` accumulava falsi positivi nel tempo.
+        lock_result = self.concurrency.try_acquire(
+            schedule_id,
+            max_queue_size=config.concurrency.max_queue_size,
+        )
+
+        if lock_result == "skipped":
+            entry = self.log_service.create_log_entry(
+                schedule_id=schedule_id,
+                event="SCHEDULE_SKIPPED",
+                triggered_by=triggered_by,
+                level="WARNING",
+                error_message="Coda piena, esecuzione saltata"
+            )
+            self.log_service.write_log(entry)
+            return {"success": False, "status": "skipped", "message": "Coda piena"}
+
+        if lock_result == "queued":
+            entry = self.log_service.create_log_entry(
+                schedule_id=schedule_id,
+                event="SCHEDULE_QUEUED",
+                triggered_by=triggered_by,
+                level="INFO"
+            )
+            self.log_service.write_log(entry)
+            # Il task Celery con countdown gestirà il retry dalla coda
+            return {"success": False, "status": "queued", "message": "In coda"}
+
+        # Lock acquisito: apri la run nel checkpoint store. Pre-fix
+        # questo blocco eseguiva PRIMA di `try_acquire` e i path "skipped"/
+        # "queued" non lo chiudevano mai.
         open_run(
             run_id=run_id,
             project_id=project_id,
@@ -237,10 +274,10 @@ class ExecutionManager:
             module=config.pipeline.project_type if config else "scheduler",
             triggered_by=triggered_by,
         )
-        # Apri run anche su intermediate storage. `open_run` (sopra)
-        # popola `log_runs` per la dashboard, ma il `node_meta` inserito
-        # dal `intermediate.snapshot.record_*_snapshot` ha una FK su
-        # `runs.id`. Senza questo create, ogni write produce
+        # Apri run anche su intermediate storage. `open_run` popola
+        # `log_runs` per la dashboard, ma il `node_meta` inserito dal
+        # `intermediate.snapshot.record_*_snapshot` ha una FK su `runs.id`.
+        # Senza questo create, ogni write produce
         # `node_meta_run_id_fkey` violation (catturato come bug nel
         # commit 6d600650). Mirror del pattern usato in
         # `workers/tasks/pipeline_task.py:189` per i task non-schedule.
@@ -258,35 +295,15 @@ class ExecutionManager:
                 op="execution_manager.create_intermediate_run",
             )
         set_run_context(run_id=run_id, project_id=project_id)
-        
-        lock_result = self.concurrency.try_acquire(
-            schedule_id, 
-            max_queue_size=config.concurrency.max_queue_size
-        )
-        
-        if lock_result == "skipped":
-            entry = self.log_service.create_log_entry(
-                schedule_id=schedule_id,
-                event="SCHEDULE_SKIPPED",
-                triggered_by=triggered_by,
-                level="WARNING",
-                error_message="Coda piena, esecuzione saltata"
-            )
-            self.log_service.write_log(entry)
-            return {"success": False, "status": "skipped", "message": "Coda piena"}
-        
-        if lock_result == "queued":
-            entry = self.log_service.create_log_entry(
-                schedule_id=schedule_id,
-                event="SCHEDULE_QUEUED",
-                triggered_by=triggered_by,
-                level="INFO"
-            )
-            self.log_service.write_log(entry)
-            # Il task Celery con countdown gestirà il retry dalla coda
-            return {"success": True, "status": "queued", "message": "In coda"}
-        
+
         self.schedule_service.set_runtime_status(schedule_id, "running")
+        # Tracker per il rollback del runtime status nel finally. Settato
+        # a True quando `update_runtime` viene chiamato (success path) o
+        # quando `_handle_failure` viene invocato (failure path); il
+        # finally usa questo flag per fare set_runtime_status("idle") di
+        # rollback se il worker e' stato killato a metà esecuzione e
+        # nessuno dei due path canonici ha aggiornato lo status.
+        runtime_status_finalized = False
 
         heartbeat_state = self._start_lock_heartbeat(schedule_id)
 
@@ -408,6 +425,7 @@ class ExecutionManager:
                     "duration_ms": total_duration
                 }
             )
+            runtime_status_finalized = True
             
             entry = self.log_service.create_log_entry(
                 schedule_id=schedule_id,
@@ -506,15 +524,41 @@ class ExecutionManager:
                 run_id=run_id,
                 scheduled_for=scheduled_for,
             )
+            # `_handle_failure` invoca `schedule_service.update_runtime`
+            # internamente (vedi `scheduler_execution_runtime.handle_failure`),
+            # quindi lo status e' coerente: marca finalized.
+            runtime_status_finalized = True
             if isinstance(failure_result, dict):
                 failure_result["lock_lost"] = lock_lost
             return failure_result
-        
+
         finally:
             try:
                 self._stop_lock_heartbeat(heartbeat_state)
             except Exception as hb_err:
                 logger.warning(f"[GESTITO] Errore stop heartbeat {schedule_id}: {hb_err}")
+            # Rollback del runtime status se nessun path canonico l'ha
+            # finalizzato. Caso tipico: worker SIGKILL'd / KeyboardInterrupt
+            # tra `set_runtime_status("running")` e l'update_runtime di
+            # success o failure → status resta "running" permanente anche
+            # quando il lock scade. Best-effort: errori del rollback
+            # vengono loggati ma non propagati per non oscurare la causa
+            # originale del fallimento.
+            if not runtime_status_finalized:
+                try:
+                    self.schedule_service.set_runtime_status(
+                        schedule_id, "idle",
+                    )
+                    logger.warning(
+                        f"[GESTITO] Schedule {schedule_id}: runtime status "
+                        f"rollback a 'idle' nel finally (esecuzione "
+                        f"interrotta prima dei path canonici)."
+                    )
+                except Exception as rb_err:
+                    logger.warning(
+                        f"[GESTITO] Rollback runtime status fallito per "
+                        f"{schedule_id}: {rb_err}"
+                    )
             # Rilascia sempre il lock con retry bounded su transient PG.
             from app.core.scheduler.scheduler_release import release_lock_with_retry
             release_lock_with_retry(self.concurrency, schedule_id)

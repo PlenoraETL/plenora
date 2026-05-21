@@ -61,25 +61,24 @@ def test_key_chain_plenora_is_used_and_legacy_aliases_are_ignored(monkeypatch):
 
 def test_urby_encryption_key_tombstoned_alone(monkeypatch):
     """Blinda §6 D4 (chiuso 2026-04-23): URBY_ENCRYPTION_KEY NON e' piu'
-    letta dalla chain. Settata da sola in dev, il comportamento corretto
-    e' ricadere sulla `_DEV_DEFAULT_KEY` (con warning rumoroso), NON usare
-    URBY_ENCRYPTION_KEY.
+    letta dalla chain. Settata da sola in dev, la chain ricade sulla
+    chiave effimera generata in-process (post-fix 2026-05-21: sostituita
+    la stringa committata `_DEV_DEFAULT_KEY` con `_ephemeral_dev_key()`).
 
     Regressione: un merge futuro che riaggiunge l'alias alla chain
-    farebbe questo test passare `_KEY_URBY` invece di `_DEV_DEFAULT_KEY`
-    → test rompe. Deploy con env legacy nel ``.env`` avrebbero chiave
-    diversa da quella canonical attesa.
+    farebbe questo test passare `_KEY_URBY` → assertion rompe.
     """
     monkeypatch.setenv("URBY_ENCRYPTION_KEY", _KEY_URBY)
     monkeypatch.setenv("ENVIRONMENT", "development")
 
     result = crypto._get_raw_key()
 
-    assert result == crypto._DEV_DEFAULT_KEY, (
+    assert result != _KEY_URBY, (
         f"URBY_ENCRYPTION_KEY e' tombstoned (D4 chiuso): settarla da sola "
-        f"in dev DEVE ricadere sulla dev default key, NON usare il valore. "
-        f"Ottenuto: {result!r}"
+        f"in dev NON deve essere usata come crypto key. Ottenuto: {result!r}"
     )
+    # La chain ricade sulla chiave effimera generata in-process.
+    assert result == crypto._DEV_EPHEMERAL_KEY
 
 
 def test_urby_encryption_key_tombstoned_fails_fast_in_prod(monkeypatch):
@@ -96,18 +95,18 @@ def test_urby_encryption_key_tombstoned_fails_fast_in_prod(monkeypatch):
 
 def test_conn_encrypt_key_tombstoned_alone(monkeypatch):
     """Blinda §6 D4: CONN_ENCRYPT_KEY NON e' piu' letta dalla chain.
-    Settata da sola in dev, ricade su dev default key.
+    Settata da sola in dev, ricade sulla chiave effimera in-process.
     """
     monkeypatch.setenv("CONN_ENCRYPT_KEY", _KEY_CONN)
     monkeypatch.setenv("ENVIRONMENT", "development")
 
     result = crypto._get_raw_key()
 
-    assert result == crypto._DEV_DEFAULT_KEY, (
+    assert result != _KEY_CONN, (
         f"CONN_ENCRYPT_KEY e' tombstoned (D4 chiuso): settarla da sola "
-        f"in dev DEVE ricadere sulla dev default key, NON usare il valore. "
-        f"Ottenuto: {result!r}"
+        f"in dev NON deve essere usata come crypto key. Ottenuto: {result!r}"
     )
+    assert result == crypto._DEV_EPHEMERAL_KEY
 
 
 def test_d5_no_fallback_on_secret_key_or_jwt_secret_key(monkeypatch):
@@ -129,18 +128,15 @@ def test_d5_no_fallback_on_secret_key_or_jwt_secret_key(monkeypatch):
 
     result = crypto._get_raw_key()
 
-    assert result == crypto._DEV_DEFAULT_KEY, (
-        f"Con solo SECRET_KEY/JWT_SECRET_KEY settate in dev, la chain "
-        f"DEVE ricadere sulla dev default key, NON usare i nomi JWT. "
-        f"Ottenuto: {result!r}"
-    )
-    # Doppio check: il valore restituito NON deve essere uno dei due segreti JWT.
+    # Il valore restituito NON deve essere uno dei due segreti JWT.
     assert "jwt-secret" not in result, (
         "Regressione D5: SECRET_KEY è stato usato come crypto key"
     )
     assert "jwt-other" not in result, (
         "Regressione D5: JWT_SECRET_KEY è stato usato come crypto key"
     )
+    # Post-fix 2026-05-21: chain ricade sulla chiave effimera in-process.
+    assert result == crypto._DEV_EPHEMERAL_KEY
 
 
 def test_fail_fast_in_production_when_no_key_configured(monkeypatch):
@@ -155,18 +151,24 @@ def test_fail_fast_in_production_when_no_key_configured(monkeypatch):
         crypto._get_raw_key()
 
 
-def test_fail_fast_when_dev_default_key_leaked_to_production(monkeypatch):
-    """Blinda hardening Block F-D: se qualcuno copia il dev default key
-    in prod, trattiamo come "nessuna chiave configurata" → fail-fast.
+def test_fail_fast_when_legacy_committed_key_leaked_to_production(monkeypatch):
+    """Blinda hardening: se qualcuno copia il legacy committed key (la
+    vecchia stringa committata nel sorgente fino al 2026-05-21) in un
+    .env di prod, trattiamo come "nessuna chiave configurata" → fail-fast.
 
-    Scenario reale: copia-incolla di ``.env.example`` su server prod
-    senza regenerare la chiave. Senza questa guardia l'attaccante che
-    conosce il sorgente open potrebbe cifrare/decifrare.
+    Scenario reale: copia-incolla di un `.env` legacy che includeva
+    `PLENORA_ENCRYPTION_KEY=urby-etl-default-key-change-in-production`.
+    Quella stringa e' considerata COMPROMESSA perche' era pubblica nel
+    repo open: un attaccante che ha clonato il sorgente prima del fix
+    puo' decifrare tutti i campi at-rest.
     """
     monkeypatch.setenv("ENVIRONMENT", "production")
-    monkeypatch.setenv("PLENORA_ENCRYPTION_KEY", crypto._DEV_DEFAULT_KEY)
+    monkeypatch.setenv(
+        "PLENORA_ENCRYPTION_KEY",
+        crypto._LEGACY_COMMITTED_KEY_SIGNATURE,
+    )
 
-    with pytest.raises(RuntimeError, match="default di sviluppo"):
+    with pytest.raises(RuntimeError, match="committato"):
         crypto._get_raw_key()
 
 
@@ -189,16 +191,52 @@ def test_fail_fast_in_staging_when_no_key_configured(env_name, monkeypatch):
 
 
 @pytest.mark.parametrize("env_name", ["staging", "stage"])
-def test_fail_fast_when_dev_default_key_leaked_to_staging(env_name, monkeypatch):
-    """Blinda S1 / P2.5: il leak del dev-default in staging e' fail-fast,
-    identicamente a production. Senza questa guardia lo stesso scenario
-    di copy-paste `.env.example` su server staging bypassa il check.
+def test_fail_fast_when_legacy_committed_key_leaked_to_staging(env_name, monkeypatch):
+    """Blinda S1 / P2.5: il leak della stringa legacy committata in
+    staging e' fail-fast, identicamente a production.
     """
     monkeypatch.setenv("ENVIRONMENT", env_name)
-    monkeypatch.setenv("PLENORA_ENCRYPTION_KEY", crypto._DEV_DEFAULT_KEY)
+    monkeypatch.setenv(
+        "PLENORA_ENCRYPTION_KEY",
+        crypto._LEGACY_COMMITTED_KEY_SIGNATURE,
+    )
 
-    with pytest.raises(RuntimeError, match="default di sviluppo"):
+    with pytest.raises(RuntimeError, match="committato"):
         crypto._get_raw_key()
+
+
+def test_ephemeral_dev_key_is_generated_randomly(monkeypatch):
+    """Post-fix 2026-05-21: in dev senza PLENORA_ENCRYPTION_KEY, la chain
+    NON deve piu' usare la stringa committata `urby-etl-default-key-...`
+    ma una chiave casuale generata in-process.
+    """
+    monkeypatch.setenv("ENVIRONMENT", "development")
+
+    result = crypto._get_raw_key()
+
+    # Non deve essere la stringa legacy che era nel sorgente.
+    assert result != crypto._LEGACY_COMMITTED_KEY_SIGNATURE
+    # Deve essere stata generata da `secrets.token_urlsafe(32)`.
+    assert len(result) >= 32
+    # Stabile per il resto del processo (Fernet cache + ephemeral key cache).
+    assert crypto._get_raw_key() == result
+
+
+def test_ephemeral_dev_key_resets_between_test_runs(monkeypatch):
+    """Garanzia di isolamento: `_reset_cache_for_tests` resetta anche la
+    chiave effimera dev. Senza questo reset, un test che usa la chiave
+    contagiata da un test precedente perderebbe la sua semantica.
+    """
+    monkeypatch.setenv("ENVIRONMENT", "development")
+
+    first = crypto._get_raw_key()
+    crypto._reset_cache_for_tests()
+    second = crypto._get_raw_key()
+
+    assert first != second, (
+        "Reset cache deve forzare una nuova chiave effimera per ogni "
+        "scope di test."
+    )
 
 
 def test_fail_fast_when_key_shorter_than_minimum_in_any_environment(monkeypatch):

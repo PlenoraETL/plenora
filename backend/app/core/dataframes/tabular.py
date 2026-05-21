@@ -210,7 +210,15 @@ def filter_visible_columns(
 
 
 def sanitize_for_json(rows: JsonRows) -> JsonRows:
-    """Make row dictionaries safe for JSON serialization."""
+    """Make row dictionaries safe for JSON serialization.
+
+    Contract (vedi `tests2/dataframes/unit/test_tabular_no_in_place_mutation_contract.py`):
+    la funzione NON muta `rows` ne' i dict interni. Il caller puo'
+    riutilizzare l'oggetto originale dopo la chiamata. Pre-fix l'iterazione
+    `row[chiave] = _sanitizza_valore(row[chiave])` mutava in-place ogni
+    dict di input, corrompendo lo stato del caller (ad es. preview che
+    usava i rows due volte vedeva la seconda volta valori gia' "stringa").
+    """
     try:
         from shapely.geometry.base import BaseGeometry
 
@@ -261,11 +269,12 @@ def sanitize_for_json(rows: JsonRows) -> JsonRows:
 
         return value
 
-    for row in rows:
-        for chiave in list(row.keys()):
-            row[chiave] = _sanitizza_valore(row[chiave])
-
-    return rows
+    # List-comprehension di nuovi dict: niente mutazione in-place dei dict
+    # passati dal caller.
+    return [
+        {chiave: _sanitizza_valore(valore) for chiave, valore in row.items()}
+        for row in rows
+    ]
 
 
 def _rest_json_safe_value(value: object) -> JsonPrimitive:
@@ -657,24 +666,36 @@ def stringify_columns_preserving_nulls(
     df: pd.DataFrame,
     columns: Iterable[str],
 ) -> pd.DataFrame:
-    """Convert selected columns to strings while preserving null sentinels."""
+    """Convert selected columns to strings while preserving null sentinels.
+
+    Contract: il DataFrame di input NON viene mutato. Pre-fix il loop
+    scriveva `df[col] = df[col].astype(str)` direttamente sull'oggetto
+    ricevuto, corrompendo lo stato del caller (es. executor che ancora
+    aveva un riferimento al df pre-stringify per altre operazioni).
+    """
+    out = df.copy()
     for col in columns:
-        mask_null = df[col].isna()
-        df[col] = df[col].astype(str)
-        df.loc[mask_null, col] = None
-    return df
+        mask_null = out[col].isna()
+        out[col] = out[col].astype(str)
+        out.loc[mask_null, col] = None
+    return out
 
 
 def geometry_series_columns_to_wkt(df: pd.DataFrame) -> pd.DataFrame:
-    """Convert GeoSeries-like columns to WKT strings."""
+    """Convert GeoSeries-like columns to WKT strings.
+
+    Contract: il DataFrame di input NON viene mutato (vedi
+    `stringify_columns_preserving_nulls` per lo stesso pattern).
+    """
     from app.core.dataframes.values import is_geometry_series, is_null_scalar
 
-    for col in df.columns:
-        if is_geometry_series(df[col]):
-            df[col] = df[col].apply(
+    out = df.copy()
+    for col in out.columns:
+        if is_geometry_series(out[col]):
+            out[col] = out[col].apply(
                 lambda g: g.wkt if g is not None and not is_null_scalar(g) else None
             )
-    return df
+    return out
 
 
 def select_and_rename_columns(
