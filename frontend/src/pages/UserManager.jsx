@@ -256,10 +256,19 @@ function GroupModal({ onClose, onSave }) {
 // MODAL — Conferma eliminazione
 function ConfirmDeleteModal({ title, message, onClose, onConfirm }) {
   const [loading, setLoading] = useState(false);
+  const [errorMsg, setErrorMsg] = useState(null);
   const handleConfirm = async () => {
     setLoading(true);
+    setErrorMsg(null);
     try { await onConfirm(); onClose(); }
-    catch { setLoading(false); }
+    catch (e) {
+      // Pre-fix il catch ingoiava l'errore senza feedback: lo spinner
+      // spariva e l'utente non sapeva perche' l'eliminazione fosse
+      // fallita. Mostra il messaggio (axios error o nativo) inline.
+      const msg = (e && e.message) ? String(e.message) : 'Eliminazione fallita';
+      setErrorMsg(msg);
+      setLoading(false);
+    }
   };
   return (
     <ModalWrapper
@@ -278,6 +287,11 @@ function ConfirmDeleteModal({ title, message, onClose, onConfirm }) {
       }
     >
       <p className="um__cdg-message">{message}</p>
+      {errorMsg && (
+        <p className="um__cdg-error" style={{ color: '#dc2626', marginTop: 8 }}>
+          {errorMsg}
+        </p>
+      )}
     </ModalWrapper>
   );
 }

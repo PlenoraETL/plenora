@@ -130,11 +130,19 @@ export function useSchemaInference(projectId) {
     }
   }, [projectId]);
 
-  // Carica schemi automaticamente quando cambia projectId
+  // Carica schemi automaticamente quando cambia projectId.
+  // Reset di `lastProjectIdRef` nel cleanup: una sequenza
+  // A → B → A con stesso projectId, dopo che il primo mount era
+  // arrivato a `lastProjectIdRef.current = "A"`, avrebbe skippato la
+  // seconda fetch lasciando schemi stale. Resettando al cleanup il
+  // ref non sopravvive ai remount → fetch sempre fresca.
   useEffect(() => {
     if (projectId && projectId !== lastProjectIdRef.current) {
       refreshSchemas();
     }
+    return () => {
+      lastProjectIdRef.current = null;
+    };
   }, [projectId, refreshSchemas]);
 
   return {

@@ -86,9 +86,23 @@ export const downloadTaskOutput = async (taskId, filename = null) => {
  */
 export const cleanupTaskCompletely = async (taskId) => {
   try {
-    await http.delete(`/tasks/${taskId}/full-cleanup`);
+    const response = await http.delete(`/tasks/${taskId}/full-cleanup`);
+    // Il BE ritorna 207 Multi-Status quando uno o piu' step di cleanup
+    // best-effort falliscono (delete_result, unlink_output_file,
+    // delete_log_runs, celery_forget). Axios tratta 207 come success,
+    // quindi senza questo check il claim "nessuna traccia sull'esecuzione"
+    // del ruolo esecutore (GDPR) sarebbe violato silenziosamente.
+    if (response.status === 207) {
+      const failedSteps = response.data?.failed_steps || [];
+      console.warn(
+        '[cleanupTaskCompletely] cleanup parziale (HTTP 207):',
+        { taskId, failedSteps, partialStatus: response.data?.status },
+      );
+    }
+    return response.data;
   } catch (e) {
     // Best-effort: il cleanup è una pulizia "soft", non blocca la UX
     console.warn('[cleanupTaskCompletely] errore cleanup:', e?.message || e);
+    return null;
   }
 };

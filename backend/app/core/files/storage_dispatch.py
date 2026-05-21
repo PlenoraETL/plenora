@@ -84,12 +84,23 @@ def dispatch_blob_storage(
             f"[FS-B1-large] Upload object storage fallito per {file_id} "
             f"(policy={policy}, {size // (1024 * 1024)} MB): {e}"
         )
+        # Pre-fix `mark_done` marcava l'intent come "completato con
+        # successo" anche su upload fallito → il riconciliator perdeva
+        # traccia dell'orphan e l'invariante "ogni intent pending
+        # converge a done o failed" era violata silenziosamente.
+        # Fix: registrare il fallimento con `mark_failed_attempt` che
+        # incrementa il contatore retry e setta last_error; il
+        # reconciler-loop decidera' poi la transizione a `lost` dopo
+        # MAX_RETRIES.
         if intent_id is not None:
             try:
-                reconciliation.mark_done(intent_id)
+                reconciliation.mark_failed_attempt(
+                    intent_id,
+                    error=f"upload_bytes failed: {type(e).__name__}: {e}",
+                )
             except Exception as mark_err:
                 logger.warning(
-                    f"[FS-B1-large] upload_intent cleanup fallito per "
+                    f"[FS-B1-large] upload_intent mark_failed fallito per "
                     f"{file_id}: {mark_err}"
                 )
         raise

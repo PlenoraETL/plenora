@@ -100,11 +100,22 @@ export function useCanvasValidation(nodes, edges, options = {}) {
   // Ref per evitare stale closure dentro al debounce
   const nodesRef = useRef(nodes);
   const edgesRef = useRef(edges);
+  // Pre-fix `onValidationChange` era nelle deps di `validate`:
+  // se il caller passava una callback inline (pattern comune in JSX),
+  // ad ogni render del parent `onValidationChange` cambiava identity,
+  // `validate` cambiava identity, l'effect di debounce ricalcolava e
+  // re-armava il timer — il debounce di 300ms non scattava mai. Fix:
+  // proxare la callback via ref (pattern di `useDialogFocus`).
+  const onValidationChangeRef = useRef(onValidationChange);
 
   useEffect(() => {
     nodesRef.current = nodes;
     edgesRef.current = edges;
   }, [nodes, edges]);
+
+  useEffect(() => {
+    onValidationChangeRef.current = onValidationChange;
+  }, [onValidationChange]);
 
   const validate = useCallback(() => {
     const currentNodes = nodesRef.current;
@@ -116,12 +127,13 @@ export function useCanvasValidation(nodes, edges, options = {}) {
       .map(i => i.nodeId);
     setState({ result, disconnectedNodeIds });
 
-    if (onValidationChange) {
-      onValidationChange(result);
+    const cb = onValidationChangeRef.current;
+    if (cb) {
+      cb(result);
     }
 
     return result;
-  }, [onValidationChange, validator]);
+  }, [validator]);
 
   const clearErrors = useCallback(() => {
     setState({ result: EMPTY_RESULT, disconnectedNodeIds: [] });

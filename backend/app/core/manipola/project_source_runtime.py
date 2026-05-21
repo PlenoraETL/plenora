@@ -22,6 +22,7 @@ from app.core.artifacts import (
     ArtifactResolutionError,
     LatestProjectArtifactRef,
     MaterializedArtifact,
+    RunArtifactRef,
 )
 from app.utils.logger import close_run, get_logger, open_run
 
@@ -295,11 +296,32 @@ def load_project_sources(
 
         materialized = None
         raw_output_path = upstream.output_path or ""
-        if raw_output_path and Path(raw_output_path).exists():
-            materialized = MaterializedArtifact(
-                path=Path(raw_output_path),
-                is_temporary=False,
-            )
+        if raw_output_path:
+            # Pre-fix il path arrivava da upstream e veniva usato
+            # direttamente come `MaterializedArtifact.path` bypassando la
+            # trusted-root whitelist (`RESULTS_DIR/{project_id}`,
+            # `TEMP_DIR`, `DATA_DIR/temp`) che
+            # `ArtifactResolver._materialize_from_output_path` applica
+            # correttamente. Un upstream compromesso poteva quindi
+            # forzare letture da path arbitrari (file traversal).
+            # Fix: delegare al resolver via `RunArtifactRef` pubblico —
+            # se il path e' fuori dai trusted roots solleva
+            # ArtifactResolutionError invece di leggere silenziosamente.
+            try:
+                materialized = ArtifactResolver().materialize_run(
+                    RunArtifactRef(
+                        project_id=source_project_id,
+                        output_path=raw_output_path,
+                    )
+                )
+            except ArtifactResolutionError as resolve_err:
+                log.warning(
+                    f"output_path upstream rifiutato (fuori trusted-root "
+                    f"o non esistente): {resolve_err}; fallback a "
+                    f"materialize_latest.",
+                    op="execute",
+                )
+                materialized = None
         if materialized is None:
             try:
                 materialized = ArtifactResolver().materialize_latest(

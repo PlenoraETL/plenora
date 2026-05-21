@@ -7,7 +7,7 @@ import io
 import json
 from pathlib import Path
 from collections.abc import Mapping
-from typing import Any, Iterable, Iterator, List
+from typing import Any, Iterable, Iterator, List, Optional
 
 import numpy as np
 import pandas as pd
@@ -22,25 +22,59 @@ RestRecord = Mapping[str, JsonPrimitive]
 RestRecords = tuple[RestRecord, ...]
 
 
-def _read_csv_safe(file_path: Path) -> pd.DataFrame:
-    """Load a CSV with robust encoding detection."""
-    encodings_to_try = ["utf-8", "utf-8-sig", "cp1252", "latin-1"]
-    last_err = None
-    for enc in encodings_to_try:
+_CSV_ENCODINGS = ("utf-8", "utf-8-sig", "cp1252", "latin-1")
+
+
+def _read_csv_with_encodings(
+    source: "Path | BytesIO",
+    *,
+    label: str,
+) -> pd.DataFrame:
+    """Helper interno: pd.read_csv con fallback multi-encoding.
+
+    `source` puo' essere un `Path` (legge da filesystem) o un
+    `io.BytesIO` (legge da blob in memoria). In entrambi i casi tenta
+    la chain `utf-8 / utf-8-sig / cp1252 / latin-1` — pre-fix il path
+    blob in `frame_io._load_dataframe_from_bytes` non aveva fallback
+    e produceva dati corrotti o exception su CSV italiani cp1252.
+    """
+    from io import BytesIO as _BytesIO  # local import to avoid module cycle
+    last_err: Optional[UnicodeDecodeError] = None
+    for enc in _CSV_ENCODINGS:
         try:
-            return pd.read_csv(file_path, low_memory=False, encoding=enc)
+            if isinstance(source, _BytesIO):
+                source.seek(0)
+            return pd.read_csv(source, low_memory=False, encoding=enc)
         except UnicodeDecodeError as e:
             last_err = e
             continue
         except Exception:
             raise
     raise UnicodeDecodeError(
-        last_err.encoding,
-        last_err.object,
-        last_err.start,
-        last_err.end,
-        f"Impossibile decodificare {file_path.name} con nessuno di {encodings_to_try}",
+        last_err.encoding if last_err else "utf-8",
+        last_err.object if last_err else b"",
+        last_err.start if last_err else 0,
+        last_err.end if last_err else 0,
+        f"Impossibile decodificare {label} con nessuno di {_CSV_ENCODINGS}",
     )
+
+
+def _read_csv_safe(file_path: Path) -> pd.DataFrame:
+    """Load a CSV from filesystem with robust encoding detection."""
+    return _read_csv_with_encodings(file_path, label=file_path.name)
+
+
+def read_csv_safe_bytes(data: bytes, *, source_label: str = "in-memory CSV") -> pd.DataFrame:
+    """Load a CSV from raw bytes with robust encoding detection.
+
+    Esportata per il path blob (`frame_io._load_dataframe_from_bytes`):
+    pre-fix `pd.read_csv(BytesIO(data))` non specificava `encoding=` e
+    falliva silenziosamente su CSV italiani cp1252 (P1 plenora-bug-
+    etl-sources). Allinea il blob path al pattern del filesystem path
+    via lo stesso helper.
+    """
+    from io import BytesIO
+    return _read_csv_with_encodings(BytesIO(data), label=source_label)
 
 
 def _compact_whole_number_floats(df: pd.DataFrame) -> pd.DataFrame:

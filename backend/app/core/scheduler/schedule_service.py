@@ -61,6 +61,15 @@ def detect_missed_run(
     if last_run is None:
         return None
 
+    # Pre-fix `last_run` poteva arrivare dal DB come datetime naive
+    # (TIMESTAMP WITHOUT TIME ZONE in colonne legacy), mentre
+    # `expected_last` calcolato da croniter rispetto a `now` tz-aware
+    # e' aware. Il confronto `last_run >= expected_last` sollevava
+    # `TypeError: can't compare offset-naive and offset-aware datetimes`.
+    # Allinea entrambi a UTC-aware prima del confronto.
+    if last_run.tzinfo is None:
+        last_run = last_run.replace(tzinfo=timezone.utc)
+
     try:
         from croniter import croniter
     except ImportError:
@@ -71,6 +80,9 @@ def detect_missed_run(
         expected_last = cron.get_prev(datetime)
     except Exception:
         return None
+
+    if expected_last.tzinfo is None:
+        expected_last = expected_last.replace(tzinfo=timezone.utc)
 
     if last_run >= expected_last:
         return None

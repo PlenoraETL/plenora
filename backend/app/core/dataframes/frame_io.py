@@ -268,7 +268,12 @@ def _load_dataframe_from_bytes(
     layer: Optional[str] = None,
 ) -> pd.DataFrame:
     if format_hint == "csv":
-        return pd.read_csv(BytesIO(data), low_memory=False)
+        # Allinea il path blob al path filesystem (_read_csv_safe) che
+        # gia' faceva fallback multi-encoding. Pre-fix
+        # `pd.read_csv(BytesIO(data))` senza `encoding=` falliva su CSV
+        # italiani cp1252 nel path in-memory.
+        from app.core.dataframes.tabular import read_csv_safe_bytes
+        return read_csv_safe_bytes(data, source_label="blob CSV")
     if format_hint == "json":
         try:
             text = data.decode("utf-8")

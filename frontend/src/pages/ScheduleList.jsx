@@ -134,7 +134,16 @@ function ScheduleList() {
   };
   const refreshData = async () => {
     try { const d = await listSchedules(projectFilter); setSchedules(d.schedules || []); }
-    catch (err) { console.error('[ScheduleList] refresh fallito:', err); }
+    catch (err) {
+      console.error('[ScheduleList] refresh fallito:', err);
+      // Sessione scaduta o accesso revocato: fermare il polling evita
+      // un flood di richieste 401/403 che inquinano i log server e
+      // generano rumore lato monitoring.
+      const status = err?.response?.status;
+      if (status === 401 || status === 403) {
+        stopPolling();
+      }
+    }
   };
   const loadData = async () => {
     try {
