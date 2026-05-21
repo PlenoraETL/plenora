@@ -96,7 +96,9 @@ def get_runs(
     where = f"WHERE {' AND '.join(conditions)}" if conditions else ""
 
     total_row = _fetchone(f"SELECT COUNT(*) as c FROM log_runs {where}", tuple(params))
-    total = total_row["c"] if total_row else 0
+    # Cast esplicito a int, coerente con il boundary canonico
+    # tickets/db.py — vedi commento equivalente in `logs/router.py`.
+    total = int(total_row["c"]) if total_row else 0
     rows = _fetchall(
         f"SELECT * FROM log_runs {where} ORDER BY ts_start DESC LIMIT %s OFFSET %s",
         tuple(params) + (limit, offset)

@@ -161,8 +161,19 @@ const ManipolaEditorContent = () => {
     // Reset dirty: setNodes/setEdges hanno marcato dirty perché inseriscono
     // nuovi ID, ma è un load programmatico, non una modifica utente.
     useCanvasStore.getState().markClean();
-    setTimeout(() => { propagateColumns(loadedNodes, rawEdges); }, 300);
-    setTimeout(() => { refreshSchemas(); }, 100);
+    // Cleanup dei timeout su unmount: pre-fix se l'utente navigava
+    // verso un altro editor entro 300ms, `propagateColumns` /
+    // `refreshSchemas` giravano sul canvas del progetto successivo
+    // (gia' resettato dallo store) sovrascrivendo dati appena caricati.
+    const propagateTimer = setTimeout(
+      () => { propagateColumns(loadedNodes, rawEdges); },
+      300,
+    );
+    const schemaTimer = setTimeout(() => { refreshSchemas(); }, 100);
+    return () => {
+      clearTimeout(propagateTimer);
+      clearTimeout(schemaTimer);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
     // setNodes/setEdges/propagateColumns/refreshSchemas/deserializeNodes
     // omessi: load programmatico una sola volta per project, non ad ogni

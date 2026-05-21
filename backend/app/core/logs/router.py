@@ -123,7 +123,11 @@ def get_logs(
     where = f"WHERE {' AND '.join(conditions)}" if conditions else ""
 
     total_row = _fetchone(f"SELECT COUNT(*) as c FROM logs {where}", tuple(params))
-    total = total_row["c"] if total_row else 0
+    # Cast esplicito a int: pattern di consistenza col boundary canonico
+    # (tickets/db.py usa `int(row["cnt"])`). psycopg2 ritorna int nativo
+    # ma il cast esplicita il contratto e protegge da driver futuri (es.
+    # asyncpg che ritorna Decimal su alcune aggregazioni).
+    total = int(total_row["c"]) if total_row else 0
     rows = _fetchall(
         f"SELECT * FROM logs {where} ORDER BY id DESC LIMIT %s OFFSET %s",
         tuple(params) + (limit, offset)
@@ -159,16 +163,16 @@ def get_log_stats(
     p = tuple(params)
 
     total_row = _fetchone(f"SELECT COUNT(*) as c FROM logs {where}", p)
-    total = total_row["c"] if total_row else 0
+    total = int(total_row["c"]) if total_row else 0
 
-    by_level = {r["level"]: r["cnt"] for r in _fetchall(
+    by_level = {r["level"]: int(r["cnt"]) for r in _fetchall(
         f"SELECT level, COUNT(*) as cnt FROM logs {where} GROUP BY level", p
     )}
-    by_module = {r["module"]: r["cnt"] for r in _fetchall(
+    by_module = {r["module"]: int(r["cnt"]) for r in _fetchall(
         f"SELECT module, COUNT(*) as cnt FROM logs {where} GROUP BY module ORDER BY cnt DESC LIMIT 20", p
     )}
     op_where = f"{where} AND op != ''" if where else "WHERE op != ''"
-    by_op = {r["op"]: r["cnt"] for r in _fetchall(
+    by_op = {r["op"]: int(r["cnt"]) for r in _fetchall(
         f"SELECT op, COUNT(*) as cnt FROM logs {op_where} GROUP BY op ORDER BY cnt DESC LIMIT 20", p
     )}
     err_where = f"{where} AND level = 'ERROR'" if where else "WHERE level = 'ERROR'"

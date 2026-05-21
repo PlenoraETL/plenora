@@ -7,6 +7,7 @@
  */
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { getProjectSchemas, getNodeSchema, validateProjectConnection, validateAllProjectSources } from '../api';
+import { useMountedRef } from './useMountedRef';
 
 /**
  * Hook per gestire l'inferenza degli schemi delle colonne attraverso il grafo dei nodi.
@@ -26,34 +27,41 @@ export function useSchemaInference(projectId) {
   const [schemas, setSchemas] = useState({});
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
-  
+
   // Ref per evitare chiamate duplicate
   const fetchingRef = useRef(false);
   const lastProjectIdRef = useRef(null);
+  // Mounted guard: setState dopo `await` deve verificare il flag per
+  // evitare leak su unmount (es. cambio progetto durante schema fetch).
+  const mountedRef = useMountedRef();
 
   /**
    * Carica tutti gli schemi per il progetto
    */
   const refreshSchemas = useCallback(async () => {
     if (!projectId || fetchingRef.current) return;
-    
+
     fetchingRef.current = true;
     setLoading(true);
     setError(null);
-    
+
     try {
       const data = await getProjectSchemas(projectId);
+      if (!mountedRef.current) return;
       setSchemas(data.schemas || {});
       lastProjectIdRef.current = projectId;
-      
+
     } catch (err) {
       console.error('[useSchemaInference] Errore caricamento schemi:', err);
+      if (!mountedRef.current) return;
       setError(err.message);
     } finally {
-      setLoading(false);
+      if (mountedRef.current) {
+        setLoading(false);
+      }
       fetchingRef.current = false;
     }
-  }, [projectId]);
+  }, [projectId, mountedRef]);
 
   /**
    * Ottiene lo schema di un singolo nodo dalla cache locale.
@@ -69,23 +77,24 @@ export function useSchemaInference(projectId) {
    */
   const fetchNodeSchema = useCallback(async (nodeId) => {
     if (!projectId || !nodeId) return [];
-    
+
     try {
       const data = await getNodeSchema(projectId, nodeId);
-      
-      // Aggiorna cache locale
+      if (!mountedRef.current) return data.columns || [];
+
+      // Aggiorna cache locale solo se il componente e' ancora montato
       setSchemas(prev => ({
         ...prev,
         [nodeId]: data.columns || []
       }));
-      
+
       return data.columns || [];
-      
+
     } catch (err) {
       console.error(`[useSchemaInference] Errore caricamento schema nodo ${nodeId}:`, err);
       return [];
     }
-  }, [projectId]);
+  }, [projectId, mountedRef]);
 
   /**
    * Valida una connessione tra due nodi

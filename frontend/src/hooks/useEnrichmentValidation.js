@@ -8,6 +8,7 @@
  */
 import { useState, useCallback } from 'react';
 import { validateEnrichment, estimateEnrichment } from '../api';
+import { useMountedRef } from './useMountedRef';
 
 /**
  * Hook per validazione e stima enrichment
@@ -33,26 +34,37 @@ export function useEnrichmentValidation() {
   const [isEstimating, setIsEstimating] = useState(false);
   const [estimationError, setEstimationError] = useState(null);
 
+  // Mounted guard: previene setState post-unmount durante la
+  // validation/estimation (l'utente puo' chiudere il modale o navigare
+  // via mentre la richiesta e' in volo).
+  const mountedRef = useMountedRef();
+
   /**
    * Valida la configurazione enrichment
    */
   const validate = useCallback(async (projectId, apiId, paramMapping, fileSourceId = null, staticColumns = null) => {
     setIsValidating(true);
     setValidationError(null);
-    
+
     try {
       const result = await validateEnrichment(projectId, apiId, paramMapping, fileSourceId, staticColumns);
-      setValidation(result);
+      if (mountedRef.current) {
+        setValidation(result);
+      }
       return result;
     } catch (error) {
       const errorMsg = error.message || 'Errore durante la validazione';
-      setValidationError(errorMsg);
-      setValidation({ valid: false, errors: [errorMsg] });
+      if (mountedRef.current) {
+        setValidationError(errorMsg);
+        setValidation({ valid: false, errors: [errorMsg] });
+      }
       return { valid: false, errors: [errorMsg] };
     } finally {
-      setIsValidating(false);
+      if (mountedRef.current) {
+        setIsValidating(false);
+      }
     }
-  }, []);
+  }, [mountedRef]);
 
   /**
    * Stima tempo esecuzione
@@ -60,20 +72,26 @@ export function useEnrichmentValidation() {
   const estimate = useCallback(async (projectId, apiId, paramMapping, fileSourceId = null) => {
     setIsEstimating(true);
     setEstimationError(null);
-    
+
     try {
       const result = await estimateEnrichment(projectId, apiId, paramMapping, fileSourceId);
-      setEstimation(result);
+      if (mountedRef.current) {
+        setEstimation(result);
+      }
       return result;
     } catch (error) {
       const errorMsg = error.message || 'Errore durante la stima';
-      setEstimationError(errorMsg);
-      setEstimation(null);
+      if (mountedRef.current) {
+        setEstimationError(errorMsg);
+        setEstimation(null);
+      }
       return null;
     } finally {
-      setIsEstimating(false);
+      if (mountedRef.current) {
+        setIsEstimating(false);
+      }
     }
-  }, []);
+  }, [mountedRef]);
 
   /**
    * Valida E stima in un'unica chiamata

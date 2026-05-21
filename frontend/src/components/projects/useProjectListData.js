@@ -15,7 +15,7 @@
  *    creazione, e come callback dei delete handlers)
  */
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import {
   listProjects,
   listConnections,
@@ -27,6 +27,7 @@ import { getFiles } from '../../api/files';
 import { listSchedules } from '../../api/schedules';
 import { listDataSources } from '../../api/datasources';
 import { useToast } from '../../hooks/useToast';
+import { useMountedRef } from '../../hooks/useMountedRef';
 
 export function useProjectListData() {
   const toast = useToast();
@@ -42,7 +43,17 @@ export function useProjectListData() {
   const [projectFileSources, setProjectFileSources] = useState({});
   const [loading, setLoading] = useState(true);
 
+  // Guard contro reload concorrenti + setState post-unmount.
+  // `reloadIdRef`: la callback memorizza il proprio id; alla resolve si
+  // confronta con il ref. Se non combacia → reload piu' recente ha
+  // sovrascritto la nostra invocazione, scartiamo i risultati per
+  // evitare race "vecchia risposta arriva dopo nuova".
+  const mountedRef = useMountedRef();
+  const reloadIdRef = useRef(0);
+
   const reload = useCallback(async () => {
+    const myId = reloadIdRef.current + 1;
+    reloadIdRef.current = myId;
     try {
       setLoading(true);
       const [
@@ -64,6 +75,11 @@ export function useProjectListData() {
         listEseguibili().catch(() => []),
         listDataSources().catch(() => []),
       ]);
+
+      // Cancel guard: se nel frattempo un altro reload e' stato avviato
+      // (myId != reloadIdRef.current) OPPURE il componente e' smontato,
+      // i risultati di questa invocazione sono stale → scarta.
+      if (!mountedRef.current || reloadIdRef.current !== myId) return;
 
       const projectsList = projectsData.projects || [];
       setProjects(projectsList);
@@ -87,11 +103,15 @@ export function useProjectListData() {
       setProjectFileSources(fileSourcesMap);
     } catch (err) {
       console.error('Errore caricamento dati:', err);
-      toast.error('Errore caricamento dati');
+      if (mountedRef.current && reloadIdRef.current === myId) {
+        toast.error('Errore caricamento dati');
+      }
     } finally {
-      setLoading(false);
+      if (mountedRef.current && reloadIdRef.current === myId) {
+        setLoading(false);
+      }
     }
-  }, [toast]);
+  }, [toast, mountedRef]);
 
   useEffect(() => { reload(); }, [reload]);
 

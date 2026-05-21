@@ -244,17 +244,26 @@ class ProjectRepository:
             )
         else:
             row = _fetchone("SELECT * FROM projects WHERE id = %s", (project_id,))
-        if row and row.get("canvas"):
-            canvas = row["canvas"]
+        if not row:
+            return None
+        # Costruisci un dict mutabile dalla mapping ritornata da psycopg2.
+        # `RealDictRow` in alcune versioni e' read-only: `row["canvas"] = ...`
+        # solleva TypeError silenziosamente catturato dal try/except qui
+        # sotto, con conseguente fallback a canvas vuoto su dati sani.
+        # Pre-fix questo bug era P1 in plenora-bug-entities (mutation
+        # in-place su Mapping non garantito mutabile).
+        normalized = dict(row)
+        canvas = normalized.get("canvas")
+        if canvas:
             # psycopg2 auto-deserializes JSONB columns into Python dicts after
             # the custom JSONB_AS_TEXT typecaster was removed by the
             # "Harden PostgreSQL boundary" commit. Older rows persisted as
             # text still come back as str. Accept both transparently.
             if isinstance(canvas, (dict, list)):
-                row["canvas"] = canvas
+                normalized["canvas"] = canvas
             else:
                 try:
-                    row["canvas"] = json.loads(canvas)
+                    normalized["canvas"] = json.loads(canvas)
                 except (json.JSONDecodeError, TypeError) as exc:
                     logger.warning(
                         "Corrupted canvas in DB for project %s: %s. "
@@ -262,14 +271,14 @@ class ProjectRepository:
                         project_id,
                         exc,
                     )
-                    row["canvas"] = {"nodes": [], "edges": []}
-        if row and row.get("output_contract"):
-            contract = row["output_contract"]
+                    normalized["canvas"] = {"nodes": [], "edges": []}
+        contract = normalized.get("output_contract")
+        if contract:
             if isinstance(contract, (dict, list)):
-                row["output_contract"] = contract
+                normalized["output_contract"] = contract
             else:
                 try:
-                    row["output_contract"] = json.loads(contract)
+                    normalized["output_contract"] = json.loads(contract)
                 except (json.JSONDecodeError, TypeError) as exc:
                     logger.warning(
                         "Corrupted output_contract in DB for project %s: %s. "
@@ -277,8 +286,8 @@ class ProjectRepository:
                         project_id,
                         exc,
                     )
-                    row["output_contract"] = None
-        return ProjectDetailRow.from_mapping(row) if row else None
+                    normalized["output_contract"] = None
+        return ProjectDetailRow.from_mapping(normalized)
 
     def list_projects(
         self,
@@ -455,7 +464,12 @@ class ProjectRepository:
                 row = cur.fetchone()
                 if not row:
                     return False
-                canvas_raw = row["canvas"] if isinstance(row, dict) else row[0]
+                # Accesso uniforme via mapping: psycopg2 e' configurato
+                # con RealDictCursor di default (vedi pg_connection).
+                # Il fallback posizionale `row[0]` era fragile rispetto
+                # a cambio cursor factory o aggiunta di colonne alla
+                # SELECT. Pre-fix bug P1 in plenora-bug-entities.
+                canvas_raw = row["canvas"]
                 if isinstance(canvas_raw, str):
                     try:
                         canvas_obj = json.loads(canvas_raw) if canvas_raw else {}

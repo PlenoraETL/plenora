@@ -78,15 +78,22 @@ describe('executeProjectQuery — intermediate_mode pass-through', () => {
     });
   });
 
-  it('signature legacy connectionId stringa: invariata, niente intermediate_mode', async () => {
+  it('signature legacy connectionId stringa: argomento ignorato post-rimozione branch', async () => {
+    // Pre-fix (plenora-bug-contracts-schemas P0): passare una stringa
+    // produceva `{ connection_id: <str> }` nel body, accettato dal FE
+    // ma ignorato silenziosamente dal BE `ExecuteRequest` model che
+    // non ha quel campo. Il branch e' stato rimosso il 2026-05-21.
+    // Caller legacy che ancora passano una stringa ottengono un payload
+    // vuoto (executor ricade su default backend).
     httpMock.post.mockResolvedValueOnce({ data: { task_id: 't4' } });
     const { executeProjectQuery } = await import('../../src/api/projects');
 
     await executeProjectQuery('proj-E', 'conn-1');
 
-    expect(httpMock.post).toHaveBeenCalledWith('/projects/proj-E/execute', {
-      connection_id: 'conn-1',
-    });
+    expect(httpMock.post).toHaveBeenCalledWith('/projects/proj-E/execute', {});
+    // Niente `connection_id` nel payload — il branch legacy e' rimosso.
+    const callArgs = httpMock.post.mock.calls[0];
+    expect(callArgs[1]).not.toHaveProperty('connection_id');
   });
 });
 

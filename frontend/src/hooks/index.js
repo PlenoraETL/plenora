@@ -37,3 +37,4 @@ export { useToast }                                 from './useToast';
 export { useEditorData }                            from './useEditorData';
 export { useTaskPolling }                           from './useTaskPolling';
 export { useUnsavedChangesGuard }                   from './useUnsavedChangesGuard';
+export { useMountedRef }                            from './useMountedRef';

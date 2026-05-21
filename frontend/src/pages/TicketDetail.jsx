@@ -111,13 +111,20 @@ export default function TicketDetail() {
 
   const handleAddComment = async (e) => {
     e.preventDefault();
-    if (!commentBody.trim()) return;
+    if (!commentBody.trim() || saving) return;
+    // Guard contro doppio submit: pre-fix il pulsante "Invia" restava
+    // attivo durante la richiesta, un secondo click creava un commento
+    // duplicato. Riusiamo il flag `saving` gia' definito per gli altri
+    // form action della pagina (status change, field change).
+    setSaving(true);
     try {
       await addComment(id, commentBody);
       setCommentBody('');
       load();
     } catch (err) {
       toast.error(err.message || 'Errore invio commento');
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -379,8 +386,12 @@ export default function TicketDetail() {
                 onChange={(e) => setCommentBody(e.target.value)}
                 required
               />
-              <button type="submit" className="tk-page__btn tk-page__btn--primary">
-                Invia
+              <button
+                type="submit"
+                className="tk-page__btn tk-page__btn--primary"
+                disabled={saving || !commentBody.trim()}
+              >
+                {saving ? 'Invio…' : 'Invia'}
               </button>
             </form>
           </div>
