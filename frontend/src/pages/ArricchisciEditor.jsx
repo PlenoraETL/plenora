@@ -44,7 +44,7 @@ const ExecutionModal = lazy(() => import('../components/modals/ExecutionModal'))
 const PreviewModal = lazy(() => import('../components/modals/PreviewModal'));
 const ConnectionSelectorModal = lazy(() => import('../components/arricchisci/ConnectionSelectorModal'));
 const EnrichmentConfirmModal = lazy(() => import('../components/modals/EnrichmentConfirmModal'));
-import { usePreview, useExecution, useCanvasCore, useMultiModal, useEnrichmentValidation, useCaricarica } from '../hooks';
+import { usePreview, useExecution, useCanvasCore, useMultiModal, useEnrichmentValidation, useCaricarica, useCanvasSave } from '../hooks';
 import { useToast } from '../hooks/useToast';
 import { useTheme } from '../hooks/useTheme';
 import '../styles/ArricchisciEditor.css';
@@ -125,7 +125,6 @@ const ArricchisciEditorContent = () => {
     sourceTypes: ARRICCHISCI_SOURCE_TYPES,
   });
 
-  const [saving, setSaving] = useState(false);
   const [exportFormat, setExportFormat]         = useState('csv');
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [showEnrichDropdown, setShowEnrichDropdown] = useState(false);
@@ -134,6 +133,9 @@ const ArricchisciEditorContent = () => {
 
   const enrichmentValidation = useEnrichmentValidation();
   const preview   = usePreview(projectId, handleSaveQuiet);
+  const { saving, handleSaveCanvas } = useCanvasSave(handleSaveQuiet, {
+    logPrefix: '[ArricchisciEditor]',
+  });
   const execution = useExecution(projectId, {
     executeFunction: executeEnrichmentAsync,
     // Tutti i guard (CANVAS_EMPTY, ARRICCHISCI_NO_SOURCES, ARRICCHISCI_NO_ENRICHER)
@@ -326,12 +328,6 @@ const ArricchisciEditorContent = () => {
         : n.style,
     })));
   }, [validationHighlights, setNodes]);
-
-  const handleSaveCanvas = useCallback(async () => {
-    try { setSaving(true); await handleSaveQuiet(); }
-    catch (err) { console.error('[ArricchisciEditor] Errore salvataggio:', err); toast.error('Errore durante il salvataggio'); }
-    finally { setSaving(false); }
-  }, [handleSaveQuiet]);
 
   const getPos = () => getViewportCenter({ screenToFlowPosition });
 

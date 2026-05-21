@@ -90,9 +90,21 @@ class EnrichExecutor:
                     "message": f"Arricchimento completato: {result.get('rows_processed', 0)} righe processate",
                 }
 
+                result_names = list(result.get("columns") or [])
+                output_columns = result.get("output_columns")
+                physical_names = (
+                    output_columns
+                    if isinstance(output_columns, list)
+                    and len(output_columns) == len(result_names)
+                    else result_names
+                )
                 result_columns = [
-                    {"name": col, "type": "str"}
-                    for col in (result.get("columns") or [])
+                    {
+                        "source_name": str(col),
+                        "name": str(physical_name),
+                        "type": "str",
+                    }
+                    for col, physical_name in zip(result_names, physical_names)
                 ]
                 try:
                     from app.core.projects.schema_inference import SchemaInferenceService
@@ -113,10 +125,10 @@ class EnrichExecutor:
                             {
                                 "id": getattr(by_name.get(col), "id", None),
                                 "source_name": getattr(by_name.get(col), "source_name", None) or col,
-                                "name": col,
+                                "name": physical_name,
                                 "type": "str",
                             }
-                            for col in (result.get("columns") or [])
+                            for col, physical_name in zip(result_names, physical_names)
                         ]
                 except Exception as exc:
                     logger.warning(
@@ -283,10 +295,14 @@ class EnrichExecutor:
                 if name.lower().strip() in _GEO_NAMES:
                     return "geometry"
                 dtype = str(series.dtype)
-                if dtype.startswith("int"):   return "int"
-                if dtype.startswith("float"): return "real"
-                if dtype == "bool":           return "bool"
-                if dtype.startswith("datetime"): return "date"
+                if dtype.startswith("int"):
+                    return "int"
+                if dtype.startswith("float"):
+                    return "real"
+                if dtype == "bool":
+                    return "bool"
+                if dtype.startswith("datetime"):
+                    return "date"
                 if dtype == "object":
                     for val in non_null_head_values(series, 3):
                         if not isinstance(val, str):

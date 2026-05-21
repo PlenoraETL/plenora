@@ -6,6 +6,7 @@ Post-refactor multi-host (R1 + in-memory): verifica che i path di
 
 from __future__ import annotations
 
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pandas as pd
@@ -333,3 +334,51 @@ def test_save_pipeline_result_fs_only_fallback_to_filesystem(monkeypatch, tmp_pa
     )
     assert result["result_id"] == "res-fs"
     assert result["output_filename"].endswith(".gpkg")
+
+
+def test_save_pipeline_result_outcome_reports_persisted_fs_columns(monkeypatch, tmp_path):
+    """Path-bound formats expose the physical columns written by OGR."""
+
+    from types import SimpleNamespace
+
+    from app.core.results.pipeline_result import save_pipeline_result_outcome
+    import app.core.results.blob_writer as result_blob_writer
+    import app.core.results.pipeline_result as pipeline_result
+    import app.core.results.store as results_store
+    import app.core.results.db as results_db
+
+    def _fake_save_dataframe(df, path, fmt, *a, **kw):
+        out = Path(str(path)).with_suffix(".zip" if fmt == "shp" else f".{fmt}")
+        out.write_bytes(b"fake-shp-zip")
+        return out
+
+    class _LoadedFrame:
+        columns = ["city_id", "producer_c", "geometry"]
+
+    monkeypatch.setattr("app.core.dataframes.frame_io.save_dataframe", _fake_save_dataframe)
+    monkeypatch.setattr("app.core.dataframes.frame_io.load_dataframe_from_file", lambda path: _LoadedFrame())
+    monkeypatch.setattr(result_blob_writer, "uuid", SimpleNamespace(uuid4=lambda: "res-shp"))
+    monkeypatch.setattr(results_store, "resolve_group_id_for_result", lambda project_id, group_id=None: "grp")
+    monkeypatch.setattr(results_db, "save_result_row", lambda **kw: None)
+    monkeypatch.setattr(result_blob_writer, "apply_results_retention_after_save", lambda pid: None)
+
+    class _FakeSettings:
+        DATA_DIR = tmp_path
+
+        @staticmethod
+        def get(key, default=None):
+            return default
+
+    monkeypatch.setattr(pipeline_result, "settings", _FakeSettings, raising=False)
+
+    outcome = save_pipeline_result_outcome(
+        project_id="p1",
+        df=pd.DataFrame({"city_id": [1], "producer_code": [2001], "geometry": ["POINT (0 0)"]}),
+        output_format="shp",
+        filename_stem="report",
+        rows_count=1,
+    )
+
+    assert outcome.result_id == "res-shp"
+    assert outcome.output_filename == "report.zip"
+    assert outcome.output_columns == ["city_id", "producer_c", "geometry"]

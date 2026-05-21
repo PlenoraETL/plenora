@@ -45,6 +45,7 @@ venv/
 # Claude / agent state
 .claude/
 .agent-temp/
+**/.agent-temp/
 
 # Node / frontend build artifacts
 node_modules/
@@ -63,6 +64,15 @@ backend/.agent-pytest-tmproot/
 backend/pytesttmp-*/
 backend/tests2-runs/
 backend/tests2/.pytest_cache/
+**/.pytest-run/
+**/.pytest-run-*/
+**/.pytest-basetemp*/
+**/.pytest-b*/
+**/.pytest-local*/
+**/.agent-pytest-tmproot/
+**/pytesttmp-*/
+**/pytest-cache-files-*/
+**/tests2-runs/
 pytesttmp-*/
 
 # Local DB / data

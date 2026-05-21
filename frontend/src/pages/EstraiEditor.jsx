@@ -28,7 +28,7 @@ import '../components/nodes/DataSourceNode.css';
 import { calculateOutputColumnsRecursive } from '../utils/columnUtils';
 import { createEdgeFromData, deserializeNodes } from '../utils/nodeFactories';
 import { getLayerSchema } from '../api/features';
-import { usePreview, useExecution, useCanvasValidation, useEdgeHandlers, useCanvasCore, useCaricarica } from '../hooks';
+import { usePreview, useExecution, useCanvasValidation, useEdgeHandlers, useCanvasCore, useCaricarica, useCanvasSave } from '../hooks';
 import { useEditorData } from '../hooks/useEditorData';
 import { describeAccessDeniedNodes } from '../utils/canvasAccessControl';
 import AccessDeniedBanner from '../components/editor/AccessDeniedBanner';
@@ -74,7 +74,6 @@ function EstraiEditor() {
   } = useEditorData(projectId, { withCatalog: true });
   const TABLES_PAGE_SIZE = 15;
 
-  const [saving, setSaving] = useState(false);
   const [searchQuery, setSearchQuery]             = useState('');
   const [viewSearchQuery, setViewSearchQuery]     = useState('');
   const [viewsCollapsed, setViewsCollapsed]       = useState(false);
@@ -88,6 +87,9 @@ function EstraiEditor() {
   useEffect(() => { setVisibleViewCount(TABLES_PAGE_SIZE);  }, [viewSearchQuery]);
   const preview    = usePreview(projectId, handleSaveQuiet);
   const execution  = useExecution(projectId, { onBeforeExecute: handleSaveQuiet });
+  const { saving, handleSaveCanvas } = useCanvasSave(handleSaveQuiet, {
+    logPrefix: '[EstraiEditor]',
+  });
   const caricarica = useCaricarica(projectId, {
     onBeforeExecute: handleSaveQuiet,
     getCanvas: () => ({ nodes: nodesRef.current, edges: edgesRef.current })
@@ -262,17 +264,6 @@ function EstraiEditor() {
       style: { width: 250, height: 150 },
       data: { level: '', label: '', title: '', color: '#fbbf24' } }));
   }, [setNodes, getViewportCenter, reactFlowInstance]);
-  const handleSave = async () => {
-    if (saving) return;
-    if (!validation.isValid) {
-      toast.error('Impossibile salvare: ' + validation.errors.join(' · '));
-      return;
-    }
-    setSaving(true);
-    try { await handleSaveQuiet(); toast.success('Progetto salvato!'); }
-    catch (err) { console.error('Errore salvataggio:', err); toast.error('Errore salvataggio progetto'); }
-    finally { setSaving(false); }
-  };
   const onDrop = useCallback((event) => {
     event.preventDefault();
     if (!reactFlowInstance) return;
@@ -435,7 +426,7 @@ function EstraiEditor() {
               <div className="estrai-toolbar__sep" />
 
               <button type="button" className="estrai-toolbar__btn estrai-toolbar__btn--save"
-                onClick={handleSave} disabled={saving}>
+                onClick={handleSaveCanvas} disabled={saving}>
                 {saving ? 'Salvataggio…' : '💾 Salva'}
               </button>
             </>

@@ -169,6 +169,7 @@ def _load_materialized_project_source(
             node_columns,
             source_project_id=source_project_id,
             group_id=group_id,
+            format_hint=m.format,
         )
     dataframes[node.id] = loaded.data
 

@@ -316,10 +316,20 @@ class ApiConnectionSupportMixin:
 
         from app.core.output_contract import build_output_contract
 
+        physical_columns = (
+            saved.output_columns
+            if saved.output_columns and len(saved.output_columns) == len(final_df.columns)
+            else list(final_df.columns)
+        )
         output_contract = build_output_contract(
             project_id=project_id,
             result_columns=[
-                {"name": c, "type": str(final_df[c].dtype)} for c in final_df.columns
+                {
+                    "source_name": str(c),
+                    "name": str(physical_name),
+                    "type": str(final_df[c].dtype),
+                }
+                for c, physical_name in zip(final_df.columns, physical_columns)
             ],
         ).model_dump()
 
@@ -331,6 +341,7 @@ class ApiConnectionSupportMixin:
             "rows_count": len(final_df),
             "rows_processed": len(final_df),
             "columns": list(final_df.columns),
+            "output_columns": saved.output_columns,
             "output_contract": output_contract,
             "columns_count": len(final_df.columns),
             "message": f"Arricchimento completato: {len(final_df)} righe processate",

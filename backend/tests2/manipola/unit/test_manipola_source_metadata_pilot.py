@@ -261,7 +261,7 @@ def test_project_source_artifact_loader_returns_resource_metadata():
         return data
 
     with patch(
-        "app.core.manipola.executor.load_dataframe_from_file",
+        "app.core.manipola.source_loading.load_dataframe_from_artifact",
         return_value=df,
     ), patch(
         "app.core.manipola.executor._applica_crs_da_colonne",
@@ -284,3 +284,31 @@ def test_project_source_artifact_loader_returns_resource_metadata():
     assert loaded.metadata.row_count == 1
     assert captured["meta"] is loaded.metadata
     assert captured["data_columns"] == ["geom_alias", "id"]
+
+
+def test_load_project_source_artifact_uses_materialized_format_hint(tmp_path):
+    """Project-source materialization must not infer format from temp suffix."""
+
+    from app.core.manipola import source_loading as sl
+
+    extensionless = tmp_path / "plenora-result-blob-no-suffix"
+    extensionless.write_bytes(b"not inspected by mocked loader")
+    node_columns = [{"name": "id", "type": "int", "visible": True}]
+
+    with patch(
+        "app.core.manipola.source_loading.load_dataframe_from_artifact",
+        return_value=pd.DataFrame({"id": [1]}),
+    ) as load_mock, patch(
+        "app.core.manipola.executor._applica_crs_da_colonne",
+        side_effect=lambda data, columns, meta=None: data,
+    ):
+        loaded = sl.load_project_source_artifact(
+            extensionless,
+            node_columns,
+            source_project_id="proj-up",
+            group_id="grp-1",
+            format_hint="xlsx",
+        )
+
+    load_mock.assert_called_once_with(path=extensionless, format_hint="xlsx")
+    assert loaded.data.to_dict("records") == [{"id": 1}]

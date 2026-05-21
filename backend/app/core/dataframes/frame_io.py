@@ -8,8 +8,10 @@ column filtering, JSON-safe row normalization, and geospatial file dispatch.
 import time as _time_mod
 
 import json
+import shutil
 import tempfile
 import zipfile
+from io import BytesIO, StringIO
 from pathlib import Path
 from typing import Optional, Union
 
@@ -104,6 +106,8 @@ from app.utils.logger import get_logger
 logger = get_logger(__name__)
 
 _GEOSPATIAL_FORMATS = {"geojson", "gpkg", "shp"}
+_IN_MEMORY_ARTIFACT_FORMATS = {"csv", "json", "xlsx", "xls", "parquet", "geojson"}
+_PATH_BOUND_ARTIFACT_FORMATS = {"gpkg", "geopackage", "shp", "zip", "gdb"}
 
 __all__ = [
     "_compact_whole_number_floats",
@@ -121,6 +125,7 @@ __all__ = [
     "float_series_non_null_whole_numbers",
     "find_latest_output_file",
     "load_arcgis_feature_dataframe",
+    "load_dataframe_from_artifact",
     "load_dataframe_from_file",
     "dataframe_records",
     "dataframe_first_column",
@@ -225,6 +230,139 @@ class DefaultFrameFileIO:
         crs: str = "EPSG:4326",
     ) -> bytes:
         return save_dataframe_to_bytes(df, format, geom_column, crs)
+
+
+def _normalize_format_hint(format_hint: Optional[str]) -> Optional[str]:
+    if not format_hint:
+        return None
+    normalized = str(format_hint).strip().lower().lstrip(".")
+    if normalized == "geopackage":
+        return "gpkg"
+    return normalized or None
+
+
+def _coerce_json_dataframe_columns(df: pd.DataFrame) -> pd.DataFrame:
+    for col in df.columns:
+        if df[col].dtype == "object":
+            sample = df[col].dropna().head(100).astype(str)
+            has_underscore = sample.str.contains("_", na=False).any()
+            if not has_underscore:
+                converted = pd.to_numeric(df[col], errors="coerce")
+                original_count = df[col].notna().sum()
+                converted_count = converted.notna().sum()
+                if original_count > 0 and converted_count == original_count:
+                    df[col] = converted
+    return df
+
+
+def _load_json_dataframe_from_text(text: str) -> pd.DataFrame:
+    data = json.loads(text)
+    return _coerce_json_dataframe_columns(pd.DataFrame(data))
+
+
+def _load_dataframe_from_bytes(
+    data: bytes,
+    *,
+    format_hint: str,
+    sheet: Optional[str] = None,
+    layer: Optional[str] = None,
+) -> pd.DataFrame:
+    if format_hint == "csv":
+        return pd.read_csv(BytesIO(data), low_memory=False)
+    if format_hint == "json":
+        try:
+            text = data.decode("utf-8")
+        except UnicodeDecodeError:
+            text = data.decode("utf-8-sig")
+        return _load_json_dataframe_from_text(text)
+    if format_hint in {"xlsx", "xls"}:
+        stream = BytesIO(data)
+        return pd.read_excel(stream, sheet_name=sheet) if sheet else pd.read_excel(stream)
+    if format_hint == "parquet":
+        return pd.read_parquet(BytesIO(data))
+    if format_hint == "geojson":
+        import geopandas as gpd
+
+        try:
+            return gpd.read_file(BytesIO(data))
+        except Exception:
+            try:
+                text = data.decode("utf-8")
+            except UnicodeDecodeError:
+                text = data.decode("utf-8-sig")
+            return gpd.read_file(StringIO(text))
+    if format_hint in _PATH_BOUND_ARTIFACT_FORMATS:
+        suffix = ".gpkg" if format_hint == "gpkg" else f".{format_hint}"
+        with tempfile.NamedTemporaryFile(delete=False, prefix="plenora-artifact-", suffix=suffix) as tmp:
+            tmp.write(data)
+            tmp_path = Path(tmp.name)
+        try:
+            return load_dataframe_from_file(tmp_path, sheet=sheet, layer=layer)
+        finally:
+            try:
+                tmp_path.unlink()
+            except OSError:
+                pass
+    raise ValueError(f"Formato artifact non supportato: {format_hint}")
+
+
+def load_dataframe_from_artifact(
+    *,
+    path: Union[str, Path, None] = None,
+    data: Optional[bytes] = None,
+    format_hint: Optional[str] = None,
+    sheet: Optional[str] = None,
+    layer: Optional[str] = None,
+) -> pd.DataFrame:
+    """Load a DataFrame from artifact payload plus explicit format metadata.
+
+    Result blobs carry `results.format`; callers must not infer the format from
+    an extensionless tempfile name.
+    """
+    fmt = _normalize_format_hint(format_hint)
+    if data is not None and fmt in (_IN_MEMORY_ARTIFACT_FORMATS | _PATH_BOUND_ARTIFACT_FORMATS):
+        return _load_dataframe_from_bytes(data, format_hint=fmt, sheet=sheet, layer=layer)
+
+    if path is None:
+        raise ValueError("Artifact senza path o data")
+
+    artifact_path = Path(path)
+    if fmt is None:
+        return load_dataframe_from_file(artifact_path, sheet=sheet, layer=layer)
+
+    if fmt == "csv":
+        return _read_csv_safe(artifact_path)
+    if fmt in {"xlsx", "xls"}:
+        return pd.read_excel(artifact_path, sheet_name=sheet) if sheet else pd.read_excel(artifact_path)
+    if fmt == "json":
+        try:
+            with open(artifact_path, "r", encoding="utf-8") as f:
+                return _load_json_dataframe_from_text(f.read())
+        except UnicodeDecodeError:
+            with open(artifact_path, "r", encoding="utf-8-sig") as f:
+                return _load_json_dataframe_from_text(f.read())
+    if fmt == "parquet":
+        return pd.read_parquet(artifact_path)
+    if fmt == "geojson":
+        import geopandas as gpd
+
+        return gpd.read_file(artifact_path)
+    if fmt in _PATH_BOUND_ARTIFACT_FORMATS:
+        expected_suffix = ".gpkg" if fmt == "gpkg" else f".{fmt}"
+        if fmt != "gdb" and artifact_path.suffix.lower() != expected_suffix:
+            with tempfile.NamedTemporaryFile(delete=False, prefix="plenora-artifact-", suffix=expected_suffix) as tmp:
+                tmp_path = Path(tmp.name)
+            try:
+                shutil.copyfile(artifact_path, tmp_path)
+                return load_dataframe_from_file(tmp_path, sheet=sheet, layer=layer)
+            finally:
+                try:
+                    tmp_path.unlink()
+                except OSError:
+                    pass
+        return load_dataframe_from_file(artifact_path, sheet=sheet, layer=layer)
+
+    return load_dataframe_from_file(artifact_path, sheet=sheet, layer=layer)
 
 
 def load_dataframe_from_file(

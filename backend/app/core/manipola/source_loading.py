@@ -8,7 +8,11 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any, Optional, Sequence
 
-from app.core.dataframes.frame_io import filter_visible_columns, rename_duplicate_columns
+from app.core.dataframes.frame_io import (
+    filter_visible_columns,
+    load_dataframe_from_artifact,
+    rename_duplicate_columns,
+)
 from app.core.output_contract import ensure_dataframe_matches_contract
 from app.core.manipola.types import ColumnMetadataRows, FrameMap, JsonObject, JsonRows
 from app.utils.logger import get_logger
@@ -43,6 +47,7 @@ def load_project_source_artifact(
     *,
     source_project_id: str,
     group_id: str,
+    format_hint: str | None = None,
 ) -> LoadedResource:
     """Load one materialized ``project_source`` artifact with metadata.
 
@@ -56,12 +61,9 @@ def load_project_source_artifact(
     Callers pass resource references; this boundary owns the final
     materialization step.
     """
-    from app.core.manipola.executor import (
-        _applica_crs_da_colonne,
-        load_dataframe_from_file,
-    )
+    from app.core.manipola.executor import _applica_crs_da_colonne
 
-    df = load_dataframe_from_file(path)
+    df = load_dataframe_from_artifact(path=path, format_hint=format_hint)
     ensure_dataframe_matches_contract(
         dataframe_columns=df.columns,
         node_columns=node_columns or [],

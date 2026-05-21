@@ -19,7 +19,7 @@ from app.core.artifacts.types import (
 )
 from app.core.artifacts.static_parameters import process_static_fields
 from app.core.auth.visibility import is_resource_visible
-from app.core.dataframes.frame_io import load_dataframe_from_file
+from app.core.dataframes.frame_io import load_dataframe_from_artifact
 from app.shared.resources.metadata import LoadedResource, ResourceMetadata
 
 logger = get_logger(__name__)
@@ -265,7 +265,7 @@ class SourceLoader:
         with materialized as m:
             if m.df is not None:
                 return m.df
-            return load_dataframe_from_file(m.path)
+            return load_dataframe_from_artifact(path=m.path, format_hint=m.format)
 
 
     def load_with_metadata(

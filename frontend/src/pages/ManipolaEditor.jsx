@@ -14,7 +14,7 @@
  *
  * Route: /editor/manipola/:id
  */
-import React, { useState, useCallback, useEffect, useRef, lazy, Suspense } from 'react';
+import React, { useCallback, useEffect, useRef, lazy, Suspense } from 'react';
 import { addEdge, useReactFlow, ReactFlowProvider, MarkerType } from 'reactflow';
 import 'reactflow/dist/style.css';
 import { useParams, useNavigate } from 'react-router-dom';
@@ -37,7 +37,7 @@ const ExecutionModal = lazy(() => import('../components/modals/ExecutionModal'))
 import StaticValuesNode from '../components/nodes/StaticValuesNode';
 import AnnotationNode from '../components/nodes/AnnotationNode';
 import DataSourceNode from '../components/nodes/DataSourceNode';
-import { useSchemaInference, usePreview, useExecution, useCanvasCore } from '../hooks';
+import { useSchemaInference, usePreview, useExecution, useCanvasCore, useCanvasSave } from '../hooks';
 import { useEditorData } from '../hooks/useEditorData';
 import useCanvasStore from '../store/useCanvasStore';
 import ValidationStatusBadge from '../components/editor/ValidationStatusBadge';
@@ -109,11 +109,12 @@ const ManipolaEditorContent = () => {
     sourceTypes: MANIPOLA_SOURCE_TYPES,
   });
 
-  const [saving, setSaving] = useState(false);
-
   const { schemas, loading: schemasLoading, refreshSchemas } = useSchemaInference(projectId);
 
   const preview   = usePreview(projectId, handleSaveQuiet);
+  const { saving, handleSaveCanvas } = useCanvasSave(handleSaveQuiet, {
+    logPrefix: '[ManipolaEditor]',
+  });
   // I 3 throws fail-fast (canvas vuoto / Output mancante / sorgente mancante)
   // erano duplicati delle regole CANVAS_EMPTY / RESULT_NODE_MISSING /
   // RESULT_NO_SOURCE in `validateManipolaCanvas`. Il flow `ResultNode.handleExecute
@@ -121,9 +122,7 @@ const ManipolaEditorContent = () => {
   // se la validazione fallisce apre il modal e ritorna; quindi questo
   // `onBeforeExecute` viene raggiunto solo a validation-passed.
   const execution = useExecution(projectId, {
-    // Arrow wrapper per evitare TDZ: `handleSaveCanvas` e' definito piu' in
-    // basso e questa config viene letta sincrono al call site di useExecution.
-    onBeforeExecute: () => handleSaveCanvas(),
+    onBeforeExecute: handleSaveQuiet,
   });
 
   // CARICA asincrono via Celery
@@ -329,19 +328,6 @@ const ManipolaEditorContent = () => {
         : n.style,
     })));
   }, [validationHighlights, setNodes]);
-
-  const handleSaveCanvas = useCallback(async () => {
-    try {
-      setSaving(true);
-      await handleSaveQuiet();
-      toast.success('Progetto salvato!');
-    } catch (err) {
-      console.error('[ManipolaEditor] Errore salvataggio:', err);
-      toast.error('Errore durante il salvataggio');
-    } finally {
-      setSaving(false);
-    }
-  }, [handleSaveQuiet]);
 
   const onConnect = useCallback((params) => {
     setEdges(eds => {

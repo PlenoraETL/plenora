@@ -21,6 +21,7 @@ class PipelineResultSave:
 
     result_id: str
     output_filename: str
+    output_columns: Optional[list[str]] = None
 
 
 def pipeline_result_save_legacy_payload(
@@ -81,6 +82,13 @@ def save_pipeline_result_outcome(
         try:
             tmp_path = tmp_dir / filename
             saved_path = save_dataframe(df, tmp_path, output_format, geom_column, crs)
+            output_columns = None
+            try:
+                from app.core.dataframes.frame_io import load_dataframe_from_file
+
+                output_columns = [str(col) for col in load_dataframe_from_file(saved_path).columns]
+            except Exception:
+                output_columns = None
             actual_fmt = saved_path.suffix.lstrip(".") if fmt_lower == "shp" else fmt_lower
             result_id = save_result_blob_from_bytes(
                 project_id=project_id,
@@ -96,6 +104,7 @@ def save_pipeline_result_outcome(
         return PipelineResultSave(
             result_id=result_id,
             output_filename=output_filename,
+            output_columns=output_columns,
         )
 
     data = save_dataframe_to_bytes(df, fmt_lower, geom_column=geom_column, crs=crs)

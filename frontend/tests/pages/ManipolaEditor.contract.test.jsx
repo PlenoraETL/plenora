@@ -121,6 +121,17 @@ vi.mock('../../src/hooks', () => ({
     isReadOnly: false,
     readOnlyProps: {},
   }),
+  useCanvasSave: (saveFn) => ({
+    saving: false,
+    handleSaveCanvas: async () => {
+      try {
+        await saveFn();
+        toastMock.success('Progetto salvato!');
+      } catch {
+        toastMock.error('Errore durante il salvataggio');
+      }
+    },
+  }),
 }));
 
 vi.mock('../../src/hooks/useColumnPropagation', () => ({

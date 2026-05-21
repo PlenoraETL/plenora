@@ -26,6 +26,52 @@ import { buildResult } from '../utils/canvasValidationContract';
 
 const EMPTY_RESULT = buildResult([]);
 
+function validationNodeFingerprint(node) {
+  if (node.type === 'tableNode') {
+    const visibleCols = (node.data?.columns || [])
+      .filter(c => c.visible)
+      .map(c => `${c.name}:${c.alias || ''}:${c.type || ''}`)
+      .join('|');
+    return `${node.id}:${node.type}:${node.data?.alias || ''}:${visibleCols}`;
+  }
+
+  if (node.type === 'carica') {
+    const d = node.data || {};
+    return [
+      node.id,
+      node.type,
+      d.dest_type || 'db',
+      d.connection_id || '',
+      d.schema_name || '',
+      d.table_name || '',
+      d.write_mode || 'create',
+      (d.match_columns || []).join('|'),
+      d.rest_url || '',
+      d.rest_method || '',
+    ].join(':');
+  }
+
+  if (node.type === 'caricaArcgis' || node.type === 'carica_arcgis') {
+    const d = node.data || {};
+    return [
+      node.id,
+      node.type,
+      d.arcgis_connection_id || '',
+      d.arcgis_layer_url || '',
+      d.arcgis_operation || '',
+      d.arcgis_new_service_name || '',
+      d.arcgis_match_column || '',
+    ].join(':');
+  }
+
+  if (node.type === 'resultNode' || node.type === 'result') {
+    const d = node.data || {};
+    return `${node.id}:${node.type}:${d.format || ''}`;
+  }
+
+  return `${node.id}:${node.type || ''}`;
+}
+
 /**
  * @param {Array} nodes
  * @param {Array} edges
@@ -83,16 +129,7 @@ export function useCanvasValidation(nodes, edges, options = {}) {
 
   // Fingerprint che include i DATI rilevanti per la validazione
   const nodesFingerprint = useMemo(() => {
-    return nodes.map(n => {
-      if (n.type === 'tableNode') {
-        const visibleCols = (n.data?.columns || [])
-          .filter(c => c.visible)
-          .map(c => `${c.name}:${c.alias || ''}`)
-          .join('|');
-        return `${n.id}:${n.data?.alias || ''}:${visibleCols}`;
-      }
-      return n.id;
-    }).sort().join(',');
+    return nodes.map(validationNodeFingerprint).sort().join(',');
   }, [nodes]);
 
   const edgesFingerprint = useMemo(() => {

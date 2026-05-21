@@ -139,6 +139,17 @@ vi.mock('../../src/hooks', () => ({
     isReadOnly: false,
     readOnlyProps: {},
   }),
+  useCanvasSave: (saveFn) => ({
+    saving: false,
+    handleSaveCanvas: async () => {
+      try {
+        await saveFn();
+        toastMock.success('Progetto salvato!');
+      } catch {
+        toastMock.error('Errore durante il salvataggio');
+      }
+    },
+  }),
   useCaricarica: () => ({
     showModal: false,
     closeModal: vi.fn(),
@@ -326,12 +337,12 @@ describe('EstraiEditor', () => {
 
     await waitFor(() => {
       expect(handleSaveQuietMock).toHaveBeenCalledTimes(1);
-      expect(toastMock.error).toHaveBeenCalledWith('Errore salvataggio progetto');
+      expect(toastMock.error).toHaveBeenCalledWith('Errore durante il salvataggio');
     });
     expect(toastMock.success).not.toHaveBeenCalled();
   });
 
-  it('blocks Save and toasts joined validation errors when canvas is invalid', async () => {
+  it('saves drafts even when the live canvas validation is invalid', async () => {
     validationStateRef.current = {
       isValid: false,
       errors: ['Nodo orphan', 'Mapping mancante'],
@@ -343,10 +354,10 @@ describe('EstraiEditor', () => {
     await screen.findByText('Estrai Orders');
     await userEvent.click(screen.getByRole('button', { name: /salva/i }));
 
-    expect(toastMock.error).toHaveBeenCalledWith(
-      'Impossibile salvare: Nodo orphan · Mapping mancante',
-    );
-    expect(handleSaveQuietMock).not.toHaveBeenCalled();
-    expect(toastMock.success).not.toHaveBeenCalled();
+    await waitFor(() => {
+      expect(handleSaveQuietMock).toHaveBeenCalledTimes(1);
+      expect(toastMock.success).toHaveBeenCalledWith('Progetto salvato!');
+    });
+    expect(toastMock.error).not.toHaveBeenCalled();
   });
 });

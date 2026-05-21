@@ -105,6 +105,31 @@ def test_load_project_returns_none_when_no_latest_result():
     assert result is None
 
 
+def test_load_project_uses_materialized_format_hint_for_extensionless_xlsx(tmp_path):
+    """Regression: result blob temp paths may be extensionless.
+
+    SourceLoader must use MaterializedArtifact.format, not guess from path
+    suffix, otherwise xlsx project_source results are attempted as CSV.
+    """
+    xlsx = tmp_path / "upstream.xlsx"
+    pd.DataFrame({"id": [1], "name": ["roma"]}).to_excel(xlsx, index=False)
+    extensionless = tmp_path / "plenora-result-blob-no-suffix"
+    extensionless.write_bytes(xlsx.read_bytes())
+    materialized = MaterializedArtifact(
+        path=extensionless,
+        format="xlsx",
+        is_temporary=False,
+    )
+    resolver = MagicMock(spec=ArtifactResolver)
+    resolver.materialize_latest.return_value = materialized
+    loader = SourceLoader(artifact_resolver=resolver)
+
+    ref = SourceRef(project=LatestProjectArtifactRef(project_id="proj-1"))
+    out = loader.load(ref, expected_group_id="grp-mine")
+
+    assert out.to_dict("records") == [{"id": 1, "name": "roma"}]
+
+
 # resolve_project_path: variante "ritorna path" del branch project
 
 

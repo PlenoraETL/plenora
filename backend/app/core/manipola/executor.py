@@ -315,6 +315,7 @@ class ManipolaExecutor:
 
         # Keep project_source reuse aligned with the actual persisted schema.
         if save_result.get("success"):
+            persisted_columns = save_result.get("output_columns")
             result_columns = [
                 {"name": c, "type": str(current_df[c].dtype)}
                 for c in current_df.columns
@@ -332,14 +333,20 @@ class ManipolaExecutor:
                     project_id=project_id,
                 )
                 by_name = {col.name: col for col in result_node_schema}
+                physical_names = (
+                    persisted_columns
+                    if isinstance(persisted_columns, list)
+                    and len(persisted_columns) == len(current_df.columns)
+                    else list(current_df.columns)
+                )
                 result_columns = [
                     {
                         "id": getattr(by_name.get(c), "id", None),
                         "source_name": getattr(by_name.get(c), "source_name", None) or c,
-                        "name": c,
+                        "name": physical_name,
                         "type": str(current_df[c].dtype),
                     }
-                    for c in current_df.columns
+                    for c, physical_name in zip(current_df.columns, physical_names)
                 ]
             except Exception as exc:
                 logger.warning(
@@ -974,6 +981,7 @@ class ManipolaExecutor:
                 "rows_count": len(df),
                 "columns_count": len(df.columns),
                 "result_id": saved.result_id,
+                "output_columns": saved.output_columns,
                 "message": f"Salvato {len(df)} righe in {saved.output_filename}"
             }
         except Exception as e:
