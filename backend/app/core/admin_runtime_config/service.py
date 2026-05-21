@@ -26,6 +26,10 @@ _SECRET_NEEDLES = (
     "KEY",
     "CREDENTIAL",
     "ACCESS",
+    # MINIO_ENDPOINT_URL e qualunque altra ENDPOINT espone topologia di
+    # storage interno (es. `http://minio:9000`) utile per lateral movement
+    # se un admin account viene compromesso. Trattato come secret.
+    "ENDPOINT",
 )
 
 _CONFIG_SECTIONS: tuple[tuple[str, tuple[str, ...]], ...] = (
@@ -255,18 +259,45 @@ def _worker_snapshot() -> dict[str, object]:
         }
 
 
+def _is_dev_env() -> bool:
+    """True quando ENVIRONMENT/ENV identifica dev/test.
+
+    Le informazioni di topologia (hostname, docker socket, compose name)
+    sono utili in dev per debugging ma rappresentano un info leak in
+    prod/staging anche se l'endpoint e' superadmin-only: un admin
+    compromesso ottiene la mappa interna per lateral movement.
+    """
+    env_name = os.environ.get(
+        "ENVIRONMENT", os.environ.get("ENV", "development")
+    ).lower()
+    return env_name not in ("production", "prod", "staging", "stage")
+
+
 def _runtime_snapshot() -> dict[str, object]:
-    return {
-        "hostname": socket.gethostname(),
-        "docker_cli_available": shutil.which("docker") is not None,
-        "docker_socket_mounted": os.path.exists("/var/run/docker.sock"),
-        "compose_project": os.getenv("COMPOSE_PROJECT_NAME"),
-        "container_name": os.getenv("HOSTNAME"),
+    """Snapshot del runtime visibile in `GET /admin/runtime-config`.
+
+    Espone solo informazioni utili e a basso rischio in prod/staging
+    (note + workers). I campi di topologia interna (hostname,
+    docker_socket, compose_project, container_name) sono visibili
+    SOLO in dev/test sotto chiave `_dev_topology` per non rompere il
+    debug locale. Pre-fix questi campi erano sempre presenti nella
+    risposta — info leak verso un admin compromesso.
+    """
+    snapshot: dict[str, object] = {
         "note": (
             "Restart e modifica configurazione non sono esposti da questo endpoint "
             "read-only."
         ),
     }
+    if _is_dev_env():
+        snapshot["_dev_topology"] = {
+            "hostname": socket.gethostname(),
+            "docker_cli_available": shutil.which("docker") is not None,
+            "docker_socket_mounted": os.path.exists("/var/run/docker.sock"),
+            "compose_project": os.getenv("COMPOSE_PROJECT_NAME"),
+            "container_name": os.getenv("HOSTNAME"),
+        }
+    return snapshot
 
 
 def get_runtime_config() -> dict[str, object]:

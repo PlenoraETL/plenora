@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Literal, Mapping, TypeAlias
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 
 StatusValue: TypeAlias = Literal["ok", "warn", "error", "unknown"]
@@ -38,10 +38,20 @@ class WorkerDetail(BaseModel):
 
 
 class DiskStatus(BaseModel):
+    """Stato del disco esposto in `GET /admin/system-status`.
+
+    `path` e `usage_path` rivelano la struttura del filesystem server
+    (es. `/var/plenora/data`, `/var`) e sono escludibili dalla risposta
+    API via `Field(exclude=True)`. Restano disponibili internamente
+    per logging/troubleshooting ma non finiscono nel payload pubblico.
+    Pre-fix venivano serializzati in chiaro: info leak per admin
+    compromesso che ne ricava la mappa del filesystem per persistenza.
+    """
+
     model_config = ConfigDict(extra="forbid")
 
-    path: str | None
-    usage_path: str
+    path: str | None = Field(default=None, exclude=True)
+    usage_path: str = Field(exclude=True)
     total_gb: float
     used_gb: float
     free_gb: float

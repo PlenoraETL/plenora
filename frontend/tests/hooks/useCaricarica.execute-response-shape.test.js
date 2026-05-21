@@ -84,6 +84,41 @@ describe('useCaricarica — executeProjectQuery response shape contract', () => 
     expect(startPollingMock.mock.calls[0][0]).toBe('carica-task-xyz');
   });
 
+  it('propaga output_format dal config al payload createTask', async () => {
+    // Drift contract P0 plenora-bug-contracts-schemas: pre-fix il
+    // createTask omettera' `output_format`, il BE ricadeva sul default
+    // "csv" anche quando il nodo CARICA aveva un formato diverso
+    // configurato.
+    const { result } = setupHook();
+
+    await act(async () => {
+      await result.current.handleExecute('carica-node', {
+        schema_name: 'plenora',
+        table_name: 'foo',
+        write_mode: 'append',
+        output_format: 'parquet',
+      });
+    });
+
+    expect(createTaskMock).toHaveBeenCalledWith(
+      expect.objectContaining({ output_format: 'parquet' })
+    );
+  });
+
+  it('cade su default csv quando il config non specifica output_format', async () => {
+    const { result } = setupHook();
+
+    await act(async () => {
+      await result.current.handleExecute('carica-node', {
+        schema_name: 'plenora', table_name: 'foo', write_mode: 'append',
+      });
+    });
+
+    expect(createTaskMock).toHaveBeenCalledWith(
+      expect.objectContaining({ output_format: 'csv' })
+    );
+  });
+
   it('propaga errore HTTP di executeProjectQuery al catch (modal mostra "Errore durante il caricamento")', async () => {
     executeProjectQueryMock.mockRejectedValueOnce(new Error('Network timeout'));
     // L'hook logga `console.error('[useCaricarica] Errore:', ...)` nel catch:

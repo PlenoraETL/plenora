@@ -104,6 +104,11 @@ export function useCaricarica(projectId, options = {}) {
           task_type: 'carica',
           project_id: projectId,
           canvas: canvas,
+          // `output_format` allinea il task al formato configurato nel
+          // nodo CARICA. Pre-fix il payload omettera' il campo e il BE
+          // ricadeva sul default "csv" anche quando il canvas voleva
+          // un formato diverso (drift contract BE↔FE).
+          output_format: config.output_format || config.format || 'csv',
           carica_node_data: config
         });
 

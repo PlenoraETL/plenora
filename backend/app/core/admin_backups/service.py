@@ -454,33 +454,20 @@ def trigger_manual_backup() -> ManualBackupTriggerResult:
         }
 
     if lock is None:
-        if is_manual_backup_running():
-            return {
-                "started": False,
-                "pid": None,
-                "task_id": None,
-                "message": "Un backup manuale e' gia' in corso. Attendi che finisca.",
-            }
-        # Se il lock era appena diventato stale, tenta una sola acquisizione
-        # dopo la cleanup best-effort fatta da is_manual_backup_running().
-        try:
-            lock = try_acquire_manual_backup_lock(
-                owner_token=owner_token,
-                ttl_seconds=MANUAL_LOCK_TTL_SEC,
-            )
-        except Exception as e:
-            logger.error(
-                f"trigger_manual_backup: retry lock DB fallito: {e}",
-                exc_info=True,
-            )
-            return {
-                "started": False,
-                "pid": None,
-                "task_id": None,
-                "message": f"Impossibile acquisire lock backup manuale: {str(e)[:200]}",
-            }
-
-    if lock is None:
+        # `try_acquire_manual_backup_lock` e' gia' atomica: usa
+        # `INSERT ... ON CONFLICT DO UPDATE WHERE expires_at <= now()`,
+        # quindi il lock viene rinegoziato in una singola operazione SQL
+        # che vede solo lock vivi.
+        #
+        # Pre-fix questo branch faceva `is_manual_backup_running()` +
+        # `try_acquire_manual_backup_lock` come due query separate. La
+        # finestra tra le due era una race TOCTOU: due admin che
+        # cliccavano "Backup ora" nello stesso istante potevano entrambi
+        # superare il gate e accodare due task Celery duplicati.
+        #
+        # Fix in profondita': nessun retry "diagnostico". Se il primo
+        # tentativo (atomico) ritorna None, il lock e' davvero detenuto
+        # → rispondi "gia' in corso" senza ulteriori query.
         return {
             "started": False,
             "pid": None,

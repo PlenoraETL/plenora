@@ -76,29 +76,30 @@ export const deleteProject = async (projectId) => {
 /**
  * Esegue la query/pipeline di un progetto in modo asincrono (Celery).
  *
- * Accetta sia un connectionId (string, per Estrai SQL) che un oggetto options
- * (per Manipola/Arricchisci).
+ * @param {string} projectId
+ * @param {Object} [options]
+ * @param {boolean} [options.force_recalculate=false]
+ * @param {string}  [options.intermediate_mode] - R-25 PR-B5: override
+ *   per-call della INTERMEDIATE_PERSISTENCE_MODE globale ('metadata_only'
+ *   | 'preview_only' | 'full_pg' | 'full_artifact'). Backend: opt-in
+ *   superadmin (BE rifiuta 403 a non-super; 422 su valore invalido).
+ *   Se omesso/falsy, NON viene serializzato come query param.
+ * @returns {Promise<Object>} { task_id, status, async, ... }
  *
- * @param {string}         projectId
- * @param {string|Object}  optionsOrConnectionId
- * @param {string}         [optionsOrConnectionId.intermediate_mode] - R-25 PR-B5:
- *   override per-call della INTERMEDIATE_PERSISTENCE_MODE globale
- *   ('metadata_only'|'preview_only'|'full_pg'|'full_artifact').
- *   Backend: opt-in superadmin (BE rifiuta 403 a non-super; 422 su valore
- *   invalido). Se omesso/falsy, NON viene serializzato come query param
- *   per preservare la compat con caller esistenti.
- * @returns {Promise<Object>} { task_id, status, ... }
+ * NOTA: il branch legacy che accettava un `connection_id` come secondo
+ * argomento stringa (Estrai v1) e' stato rimosso. Il backend
+ * `ExecuteRequest` non ha un campo `connection_id`: la connessione viene
+ * letta dal canvas server-side. Caller storici che passavano la stringa
+ * ottenevano un'esecuzione che ignorava silenziosamente il valore.
  */
-export const executeProjectQuery = async (projectId, optionsOrConnectionId = null) => {
+export const executeProjectQuery = async (projectId, options = null) => {
   let payload = {};
   let intermediate_mode = null;
 
-  if (optionsOrConnectionId && typeof optionsOrConnectionId === 'object') {
-    const { force_recalculate = false, intermediate_mode: im = null } = optionsOrConnectionId;
+  if (options && typeof options === 'object') {
+    const { force_recalculate = false, intermediate_mode: im = null } = options;
     payload = { force_recalculate };
     intermediate_mode = im;
-  } else if (optionsOrConnectionId && typeof optionsOrConnectionId === 'string') {
-    payload = { connection_id: optionsOrConnectionId };
   }
 
   // Query param solo se valorizzato. Branch evita di passare un 3o arg

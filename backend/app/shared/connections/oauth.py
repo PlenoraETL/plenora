@@ -470,7 +470,16 @@ def _fetch_oauth2_password_token(auth: JsonObject) -> Optional[JsonObject]:
         logger.warning("OAuth2 password token fallito: HTTP %s", response.status_code)
         return None
     except Exception as e:
-        logger.error(f"[CRASH] Errore OAuth2 password grant: {e}", exc_info=True)
+        # Defense-in-depth: il `f"{e}"` di alcune eccezioni `requests.*`
+        # puo' contenere stringhe del payload form-urlencoded (password,
+        # client_secret) anche se il `SanitizingFilter` lavora a posteriori.
+        # Loggiamo solo il `type(e).__name__`; il dettaglio sanificato
+        # resta nel traceback via `exc_info=True`.
+        logger.error(
+            "[CRASH] Errore OAuth2 password grant: %s",
+            type(e).__name__,
+            exc_info=True,
+        )
         return None
 
 
@@ -509,7 +518,14 @@ def _fetch_oauth2_client_credentials_token(auth: JsonObject) -> Optional[JsonObj
         logger.warning(f"OAuth2 CC token fallito: HTTP {response.status_code}")
         return None
     except Exception as e:
-        logger.error(f"[CRASH] Errore OAuth2 client_credentials: {e}", exc_info=True)
+        # Vedi commento equivalente in `_fetch_oauth2_password_token`:
+        # l'eccezione puo' contenere il payload con `client_secret`,
+        # loggiamo solo il tipo. Traceback sanitizzato via exc_info.
+        logger.error(
+            "[CRASH] Errore OAuth2 client_credentials: %s",
+            type(e).__name__,
+            exc_info=True,
+        )
         return None
 
 

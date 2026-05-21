@@ -13,7 +13,20 @@ _shared_session_lock = threading.Lock()
 
 
 def get_shared_session() -> requests.Session:
-    """Return a shared requests.Session configured for connection pooling."""
+    """Return a shared requests.Session configured for connection pooling.
+
+    Policy:
+      - `pool_maxsize=50`: cap dei connection slot riservati al pool.
+      - `pool_block=True`: i thread che eccedono il pool si bloccano in
+        attesa di uno slot libero invece di aprire connessioni TCP
+        unbounded. Pre-fix (`pool_block=False`) sotto carico concorrente
+        su ArcGIS si aprivano connessioni illimitate oltre `pool_maxsize`,
+        potendo saturare i file descriptor del processo o triggerare
+        rate-limiting lato server.
+      - `max_retries=0`: retry policy gestita esplicitamente al call
+        site (es. `arcgis_auth._request_with_token`), non mascherata
+        dall'adapter.
+    """
     global _shared_session
     if _shared_session is None:
         with _shared_session_lock:
@@ -23,7 +36,7 @@ def get_shared_session() -> requests.Session:
                     pool_connections=20,
                     pool_maxsize=50,
                     max_retries=0,
-                    pool_block=False,
+                    pool_block=True,
                 )
                 sess.mount("http://", adapter)
                 sess.mount("https://", adapter)

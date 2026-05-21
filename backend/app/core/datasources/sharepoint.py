@@ -136,6 +136,33 @@ class SharePointDataSource(DataSourceInterface):
             raise DataSourceConnectionError(_sanitize_sharepoint_error(e)) from e
 
     def disconnect(self) -> None:
+        """Chiude la sessione HTTP interna di Office365 prima di
+        dereferenziare il `ClientContext`.
+
+        Pre-fix il `self._ctx = None` lasciava la `requests.Session`
+        interna di `Office365-REST-Python-Client` aperta finche' il GC
+        non collezionava l'oggetto (non deterministico). In ambienti
+        con molti datasource SharePoint si accumulavano connessioni
+        TCP verso SharePoint proporzionali al numero di handle aperti.
+
+        Cleanup best-effort: se la libreria cambia internals e la
+        sessione non e' accessibile, log e continue. Il caller non
+        deve fallire la disconnect per un cleanup parziale.
+        """
+        ctx = self._ctx
+        if ctx is not None:
+            session = getattr(ctx, "_session", None) or getattr(
+                ctx, "session", None
+            )
+            if session is not None:
+                try:
+                    session.close()
+                except Exception as e:
+                    logger.warning(
+                        f"[GESTITO] SharePoint disconnect: chiusura "
+                        f"sessione HTTP fallita ({type(e).__name__}: {e}). "
+                        f"Il riferimento sara' liberato dal GC."
+                    )
         self._ctx = None
 
     def test_connection(self) -> DataSourceConnectionTestResult:
