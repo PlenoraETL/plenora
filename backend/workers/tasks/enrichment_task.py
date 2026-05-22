@@ -622,9 +622,16 @@ def execute_enrichment_task(
                         if exec_options.generate_error_report and enrichment_result.errors:
                             output_dir = settings.RESULTS_DIR / project_id
                             output_dir.mkdir(parents=True, exist_ok=True)
+                            # Filename basato su `task_id` (stabile per la
+                            # vita del task) invece di `datetime.now()`.
+                            # Pre-fix retry manuali producevano un nuovo file
+                            # ad ogni tentativo, accumulando report orfani
+                            # nella output_dir. Con task_id, il retry
+                            # sovrascrive il precedente report dello stesso
+                            # task: dimensione bounded, idempotente.
                             error_report_file = generate_error_report(
                                 enrichment_result.errors,
-                                str(output_dir / f"enrichment_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}"),
+                                str(output_dir / f"enrichment_errors_{task_id}"),
                                 auth=api_config_local.get("auth"),
                             )
                         logger.info(

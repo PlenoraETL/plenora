@@ -24,6 +24,7 @@ import ConfirmDialog from '../components/common/ConfirmDialog';
 import { useConfirmModal } from '../hooks/useConfirmModal';
 import { handleCascade409, formatCascadeDependencies } from '../api/errors';
 import { can, role } from '../utils/permissions';
+import { toastApiError } from '../utils/toastApiError';
 import '../styles/ConnectionManager.css';
 
 const ALL_TYPES = [
@@ -147,7 +148,10 @@ function ConnectionManager() {
         );
         return;
       }
-      toast.error('Errore eliminazione');
+      // Pre-fix il fallback usava un messaggio hardcoded "Errore
+      // eliminazione" che ingoiava err.message (auth fallita, rete
+      // giu', BE 5xx). Propaga il message tramite l'helper condiviso.
+      toastApiError(toast, err, 'Errore eliminazione connessione');
     }
   };
 

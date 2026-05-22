@@ -19,6 +19,7 @@ import ThemeToggle from '../components/common/ThemeToggle';
 import { can } from '../utils/permissions';
 import ConfirmDialog from '../components/common/ConfirmDialog';
 import { useConfirmModal } from '../hooks/useConfirmModal';
+import { toastApiError } from '../utils/toastApiError';
 import '../styles/ScheduleList.css';
 const formatDate = (s) => {
   if (!s) return '—';
@@ -162,8 +163,25 @@ function ScheduleList() {
   };
 
   const handleToggle = async (id, current) => {
-    try { await toggleSchedule(id, !current); loadData(); }
-    catch (e) { toast.error('Errore toggle: ' + (e.message || 'errore sconosciuto')); }
+    // Optimistic update + rollback su failure: l'utente vede subito il
+    // nuovo stato. Senza optimistic UX il toggle "lampeggia" (state
+    // vecchio → reload completo del backend → nuovo state); con questo
+    // pattern il visual feedback e' immediato e si annulla in caso di
+    // errore prima del reload.
+    const next = !current;
+    setSchedules(prev => prev.map(s =>
+      s.id === id ? { ...s, enabled: next } : s
+    ));
+    try {
+      await toggleSchedule(id, next);
+      loadData();
+    } catch (e) {
+      // Rollback: ripristina lo state precedente prima di mostrare l'errore.
+      setSchedules(prev => prev.map(s =>
+        s.id === id ? { ...s, enabled: current } : s
+      ));
+      toastApiError(toast, e, 'Errore toggle');
+    }
   };
   const handleDelete = async (id, desc) => {
     const ok = await confirmModal.confirm({

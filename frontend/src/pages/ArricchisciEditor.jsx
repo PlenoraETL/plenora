@@ -318,7 +318,12 @@ const ArricchisciEditorContent = () => {
     const newNodeId = `api_enrich_${Date.now()}`;
     setNodes(nds => nds.concat({ id: newNodeId,
       type: category === 'datasource' ? 'project_source' : 'api_enrich',
-      position: { x: Math.random() * 300 + 200, y: Math.random() * 200 + 100 },
+      // Posizionamento deterministico al centro del viewport corrente,
+      // allineato al pattern degli altri `handleAdd*Node` di questo file
+      // (vedi `handleAddResultNode` etc.) che usano `getPos()`. Pre-fix
+      // `Math.random()` produceva posizioni non riproducibili e potenzialmente
+      // fuori dal viewport visibile su zoom alto.
+      position: getPos(),
       data: { api_id: connection.id, api_name: connection.name, param_mapping: {}, columns: [],
         enrich_type: category, api_type: connection.api_type, endpoint: connection.endpoint,
         auth: connection.auth, parameters: connection.parameters, output_mapping: connection.output_mapping,

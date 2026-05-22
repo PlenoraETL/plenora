@@ -104,7 +104,16 @@ def _build_manifest(
     column_count: int,
     node_hash: Optional[str],
     hash_algo: Optional[str],
+    created_at: Optional[str] = None,
 ) -> ArtifactManifest:
+    """Costruisce il manifest dell'artifact.
+
+    `created_at` accettato come parametro (Go-friendly: clock iniettato)
+    per consentire test deterministici e allineare al `created_at` del
+    DB row in scenari di replay/idempotency. Default a `datetime.now(UTC)`
+    se non fornito — preserva il comportamento corrente per i caller
+    che non l'iniettano.
+    """
     return {
         "artifact_version": MANIFEST_VERSION,
         "run_id": run_id,
@@ -119,7 +128,7 @@ def _build_manifest(
         "column_count": int(column_count),
         "node_hash": node_hash,
         "hash_algo": hash_algo,
-        "created_at": datetime.now(timezone.utc).isoformat(),
+        "created_at": created_at or datetime.now(timezone.utc).isoformat(),
     }
 
 

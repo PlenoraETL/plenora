@@ -281,12 +281,29 @@ class AwsS3ObjectStorage:
         return out
 
     def upload(self, local_path: Path, key: str) -> None:
+        """Upload file locale + integrity verification post-upload.
+
+        Stesso pattern di `upload_bytes`: dopo `client.upload_file` (che
+        usa S3Transfer internamente con multipart auto), `head_object`
+        verifica `ContentLength == file size`. Su mismatch viene
+        eliminato l'oggetto (best-effort) e sollevato `StorageIntegrityError`.
+        Threat coperto: file truncation in upload, chunks corrotti su
+        connessione instabile — boto3 non rileva senza checksum
+        end-to-end esplicito.
+        """
         client = self._client()
+        expected_size = local_path.stat().st_size
         client.upload_file(
             str(local_path),
             self.bucket,
             key,
             ExtraArgs=self._extra_args(),
+        )
+        _assert_upload_integrity(
+            client=client,
+            bucket=self.bucket,
+            key=key,
+            expected_size=expected_size,
         )
 
     def upload_bytes(self, data: bytes, key: str) -> None:

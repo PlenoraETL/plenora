@@ -242,17 +242,37 @@ def _normalize_format_hint(format_hint: Optional[str]) -> Optional[str]:
 
 
 def _coerce_json_dataframe_columns(df: pd.DataFrame) -> pd.DataFrame:
+    """Coerce object-dtype columns to numeric when 100% convertibili.
+
+    Contract: NON muta il DataFrame di input. Pre-fix `df[col] = converted`
+    scriveva sull'oggetto del caller (allineato al pattern P0
+    `stringify_columns_preserving_nulls` gia' fixato in sessione 2).
+    Solo i caller `_load_json_dataframe_from_text` + `load_dataframe_from_file`
+    si aspettano il DF coerced; copia conservativa qui evita di
+    sorprendere consumer futuri.
+    """
+    out = df
+    cols_to_convert = []
     for col in df.columns:
-        if df[col].dtype == "object":
-            sample = df[col].dropna().head(100).astype(str)
-            has_underscore = sample.str.contains("_", na=False).any()
-            if not has_underscore:
-                converted = pd.to_numeric(df[col], errors="coerce")
-                original_count = df[col].notna().sum()
-                converted_count = converted.notna().sum()
-                if original_count > 0 and converted_count == original_count:
-                    df[col] = converted
-    return df
+        if df[col].dtype != "object":
+            continue
+        sample = df[col].dropna().head(100).astype(str)
+        has_underscore = sample.str.contains("_", na=False).any()
+        if has_underscore:
+            continue
+        converted = pd.to_numeric(df[col], errors="coerce")
+        original_count = df[col].notna().sum()
+        converted_count = converted.notna().sum()
+        if original_count > 0 and converted_count == original_count:
+            cols_to_convert.append((col, converted))
+
+    if cols_to_convert:
+        # Lazy copy: solo se ci sono modifiche reali, evita allocazione
+        # di un DF intero quando nessuna colonna e' candidate.
+        out = df.copy()
+        for col, converted in cols_to_convert:
+            out[col] = converted
+    return out
 
 
 def _load_json_dataframe_from_text(text: str) -> pd.DataFrame:
