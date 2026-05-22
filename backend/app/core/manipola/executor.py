@@ -723,10 +723,15 @@ class ManipolaExecutor:
                             project_id=project_id,
                         )
                         input_columns.extend(col.to_dict() for col in source_schema)
-                    if node.data is None:
-                        node.data = {}
-                    if isinstance(node.data, dict):
-                        node.data["inputColumns"] = input_columns
+                    # Pre-fix: mutation in-place su node.data ("node.data['inputColumns'] = ...")
+                    # mutava l'istanza Pydantic ricevuta dal caller, contro la semantica
+                    # "node = input read-only del run" del canvas executor.
+                    # Post-fix: model_copy (Opzione B) produce un clone con data arricchito;
+                    # rebindiamo la variabile locale `node` cosi' i metodi downstream
+                    # (_esegui_multi_join, _esegui_trasformazione, record_checkpoint_snapshot)
+                    # continuano a vedere `inputColumns`, ma l'istanza esterna resta intatta.
+                    base_data = node.data if isinstance(node.data, dict) else {}
+                    node = node.model_copy(update={"data": {**base_data, "inputColumns": input_columns}})
                 except Exception as exc:
                     logger.warning(
                         f"Risoluzione inputColumns fallita per nodo {node.id}: {exc}"

@@ -304,7 +304,18 @@ def _load_dataframe_from_bytes(
         stream = BytesIO(data)
         return pd.read_excel(stream, sheet_name=sheet) if sheet else pd.read_excel(stream)
     if format_hint == "parquet":
-        return pd.read_parquet(BytesIO(data))
+        # Pre-fix: `pd.read_parquet(BytesIO(data))` senza dtype_backend
+        # forzava NumPy classico, e una colonna parquet `int64` con
+        # null veniva degradata a `float64` (con NaN al posto dei null)
+        # — round-trip non lossless per tipi integer + null.
+        # Post-fix: dtype_backend="numpy_nullable" instrada le colonne
+        # integer nullable su pandas Int64 e preserva i null come pd.NA.
+        # Sicuro per i consumer attuali: `sanitize_for_json` rileva
+        # pd.NA via `pd.isna(value)` prima dei branch `isinstance
+        # np.integer/np.floating/np.bool_`, e `to_dict("records")`
+        # converte gia' Int64/Float64 in scalari Python nativi
+        # (int/float) per i valori non-null (vedi audit D1).
+        return pd.read_parquet(BytesIO(data), dtype_backend="numpy_nullable")
     if format_hint == "geojson":
         import geopandas as gpd
 
@@ -367,7 +378,10 @@ def load_dataframe_from_artifact(
             with open(artifact_path, "r", encoding="utf-8-sig") as f:
                 return _load_json_dataframe_from_text(f.read())
     if fmt == "parquet":
-        return pd.read_parquet(artifact_path)
+        # Pre-fix / Post-fix: vedi nota in `_load_dataframe_from_bytes`.
+        # Stessa policy applicata al path artifact-by-path per uniformare
+        # il contratto integer-null-preserving su entrambi i call site.
+        return pd.read_parquet(artifact_path, dtype_backend="numpy_nullable")
     if fmt == "geojson":
         import geopandas as gpd
 
@@ -465,7 +479,12 @@ def load_dataframe_from_file(
                             df[col] = converted
 
         elif estensione == ".parquet":
-            df = pd.read_parquet(file_path)
+            # Pre-fix / Post-fix: vedi nota in `_load_dataframe_from_bytes`.
+            # Terzo (e ultimo) call site di `pd.read_parquet` nel modulo:
+            # tenuti allineati per garantire round-trip integer+null
+            # lossless indipendentemente da come l'artifact entra
+            # (bytes blob, path artifact, path filesystem diretto).
+            df = pd.read_parquet(file_path, dtype_backend="numpy_nullable")
 
         elif estensione in [".geojson", ".gpkg", ".shp"]:
             import geopandas as gpd

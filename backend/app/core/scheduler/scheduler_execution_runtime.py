@@ -14,6 +14,7 @@ from typing_extensions import TypedDict
 from app.config import settings
 from app.core.scheduler.job_dispatcher import enqueue_schedule_run
 from app.core.scheduler.models import ScheduleConfig
+from app.core.scheduler.runtime_status import RuntimeStatus
 from app.core.scheduler.scheduler_lock import LockHeartbeatState as SchedulerHeartbeatState
 from app.utils.logger import close_run, get_logger
 
@@ -168,7 +169,9 @@ def handle_failure(
             f"retry tra {decision['wait_seconds']}s"
         )
 
-        schedule_service.set_runtime_status(schedule_id, "running")
+        # Pre-fix: literal "running" — duplicato in 3 file diversi.
+        # Post-fix: enum centralizzato.
+        schedule_service.set_runtime_status(schedule_id, RuntimeStatus.RUNNING)
 
         try:
             enqueue_schedule_run(
@@ -184,12 +187,16 @@ def handle_failure(
             )
         except Exception as e:
             logger.error(f"[CRASH] Errore scheduling retry: {e}", exc_info=True)
+            # Pre-fix: literal "failed" sia come arg che dentro la dict
+            # `last_execution`. `last_execution.status` e' un sotto-enum
+            # diverso (`Literal["completed","partial","failed"]`) ma il
+            # valore "failed" coincide, percio' usare l'enum runtime e' OK.
             schedule_service.update_runtime(
                 schedule_id,
-                status="failed",
+                status=RuntimeStatus.FAILED,
                 last_execution={
                     "timestamp": datetime.now(timezone.utc).isoformat(),
-                    "status": "failed",
+                    "status": RuntimeStatus.FAILED.value,
                     "rows_written": 0,
                     "duration_ms": total_duration,
                     "log_file": log_path,
@@ -208,12 +215,18 @@ def handle_failure(
         f"dopo {retry_attempt} tentativi"
     )
 
+    # Pre-fix: literal "failed" sia come arg di update_runtime sia nella
+    # dict last_execution. Post-fix: enum runtime per il primo (typed),
+    # `.value` per la dict che e' un dump JSON-compatibile diretto al DB.
+    # Il `status` nel return payload resta literal perche' e' formato di
+    # risposta esterno (consumato dal worker Celery / dal test contract),
+    # non un runtime_status del DB.
     schedule_service.update_runtime(
         schedule_id,
-        status="failed",
+        status=RuntimeStatus.FAILED,
         last_execution={
             "timestamp": datetime.now(timezone.utc).isoformat(),
-            "status": "failed",
+            "status": RuntimeStatus.FAILED.value,
             "rows_written": 0,
             "duration_ms": total_duration,
             "log_file": log_path,

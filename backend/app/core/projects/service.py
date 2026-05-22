@@ -518,9 +518,13 @@ class ProjectService:
             project_schedules = schedule_service.get_schedules_for_project(
                 project_id, group_id=row.group_id,
             )
+            # Pre-fix: comparison vs literal "orphan" — typo silente
+            # avrebbe ri-marcato anche schedule gia' orfani.
+            # Post-fix: enum value comparison (StrEnum -> string canonica).
+            from app.core.scheduler.runtime_status import RuntimeStatus
             orphaned_count = 0
             for sched in project_schedules:
-                if sched.runtime.status != "orphan":
+                if sched.runtime.status != RuntimeStatus.ORPHAN:
                     schedule_service.mark_as_orphan(sched.id)
                     orphaned_count += 1
             if orphaned_count:

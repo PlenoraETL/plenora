@@ -8,7 +8,16 @@ from pydantic import BaseModel, Field, model_validator
 from typing import Any, Dict, List, Optional, Literal
 from datetime import datetime
 
+from app.core.scheduler.runtime_status import RuntimeStatus
 
+
+# Pre-fix: `ScheduleStatus` era un `Literal[...]` con stringhe duplicate
+# rispetto ai ~40 callsite che assegnavano `config.runtime.status = "..."`.
+# Post-fix: l'enum canonico vive in `runtime_status.py`; qui esponiamo
+# `ScheduleStatus` come Literal backward-compat (Pydantic conserva la
+# stessa shape JSON di prima, niente migrazione DB) costruito direttamente
+# dai valori dell'enum cosi' una drift fra i due fonti diventa errore di
+# compile-time.
 ScheduleStatus = Literal[
     "idle",
     "running",
@@ -19,6 +28,9 @@ ScheduleStatus = Literal[
     "disabled",
     "orphan",
 ]
+assert set(ScheduleStatus.__args__) == {s.value for s in RuntimeStatus}, (
+    "ScheduleStatus Literal e RuntimeStatus enum devono restare allineati"
+)
 
 ScheduleEventType = Literal[
     "SCHEDULE_TRIGGERED",

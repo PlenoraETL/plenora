@@ -35,6 +35,7 @@ from app.core.scheduler.models import (
     ScheduleUpdate,
 )
 from app.core.scheduler.runs_catalog import ScheduleRunsCatalog
+from app.core.scheduler.runtime_status import RuntimeStatus
 from app.core.scheduler.schedule_service import ScheduleService
 from app.observability.audit_action import audit_action
 from app.shared import error_codes
@@ -296,9 +297,12 @@ async def run_schedule_now(schedule_id: str, current_user: CurrentUser = Depends
         )
     
     try:
-        # Setta subito "queued" — metodo leggero, non incrementa contatori
-        service.set_runtime_status(schedule_id, status="queued")
-        
+        # Pre-fix: literal "queued"/"idle" duplicato cross-modulo.
+        # Post-fix: enum centralizzato. NB: il payload JSON di risposta
+        # mantiene la stringa "queued" perche' il frontend la legge come
+        # plain text.
+        service.set_runtime_status(schedule_id, status=RuntimeStatus.QUEUED)
+
         from app.core.scheduler.job_dispatcher import enqueue_schedule_run
 
         result = enqueue_schedule_run(
@@ -306,19 +310,21 @@ async def run_schedule_now(schedule_id: str, current_user: CurrentUser = Depends
             triggered_by="manual",
             retry_attempt=0,
         )
-        
+
         # Salva task_id per tracking
-        service.set_runtime_status(schedule_id, status="queued", current_task_id=result.id)
-        
+        service.set_runtime_status(
+            schedule_id, status=RuntimeStatus.QUEUED, current_task_id=result.id
+        )
+
         return {
             "status": "queued",
             "schedule_id": schedule_id,
             "task_id": result.id,
             "message": "Esecuzione manuale avviata"
         }
-        
+
     except Exception as e:
-        service.set_runtime_status(schedule_id, status="idle")
+        service.set_runtime_status(schedule_id, status=RuntimeStatus.IDLE)
         logger.error(f"[GESTITO] Errore invio task manuale {schedule_id}: {e}", exc_info=True)
         raise_typed_http(error_codes.INTERNAL_ERROR, status_code=500, message="Errore interno del server")
 

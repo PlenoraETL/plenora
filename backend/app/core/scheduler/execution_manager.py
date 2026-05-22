@@ -17,6 +17,7 @@ from app.core.scheduler.concurrency_manager import ConcurrencyManager
 from app.core.scheduler.log_service import ScheduleLogService
 from app.core.scheduler.models import ScheduleConfig, LogStep
 from app.core.scheduler.policy_engine import PolicyEngine
+from app.core.scheduler.runtime_status import RuntimeStatus
 from app.core.scheduler.schedule_service import ScheduleService
 from app.core.scheduler.scheduler_execution_runtime import (
     SchedulerHeartbeatState,
@@ -296,7 +297,9 @@ class ExecutionManager:
             )
         set_run_context(run_id=run_id, project_id=project_id)
 
-        self.schedule_service.set_runtime_status(schedule_id, "running")
+        # Pre-fix: literal "running" duplicato fra execution_manager,
+        # scheduler_execution_runtime e router. Post-fix: enum.
+        self.schedule_service.set_runtime_status(schedule_id, RuntimeStatus.RUNNING)
         # Tracker per il rollback del runtime status nel finally. Settato
         # a True quando `update_runtime` viene chiamato (success path) o
         # quando `_handle_failure` viene invocato (failure path); il
@@ -571,8 +574,9 @@ class ExecutionManager:
             # originale del fallimento.
             if not runtime_status_finalized:
                 try:
+                    # Pre-fix: literal "idle". Post-fix: enum.
                     self.schedule_service.set_runtime_status(
-                        schedule_id, "idle",
+                        schedule_id, RuntimeStatus.IDLE,
                     )
                     logger.warning(
                         f"[GESTITO] Schedule {schedule_id}: runtime status "

@@ -27,6 +27,7 @@ from app.core.scheduler.models import (
     ScheduleRuntime,
     ScheduleUpdate,
 )
+from app.core.scheduler.runtime_status import RuntimeStatus, coerce_runtime_status
 from app.core.projects.service import ProjectService
 from app.shared import error_codes
 from fastapi import HTTPException
@@ -260,7 +261,10 @@ class ScheduleService:
             pre_check=SchedulePreCheck(
                 verify_destination_connection=schedule_data.destination is not None
             ),
-            runtime=ScheduleRuntime(status="idle")
+            # Pre-fix: literal "idle" duplicato fra service/router/manager.
+            # Post-fix: enum centralizzato (StrEnum -> stringa "idle" nel DB,
+            # nessuna migrazione necessaria).
+            runtime=ScheduleRuntime(status=RuntimeStatus.IDLE)
         )
 
         # Calcola prossima esecuzione
@@ -358,12 +362,18 @@ class ScheduleService:
     def toggle_schedule(self, schedule_id: str, enabled: bool) -> Optional[ScheduleConfig]:
         """Abilita o disabilita uno schedule."""
         def _mutate(config: ScheduleConfig) -> bool:
-            if enabled and config.runtime.status == "orphan":
+            # Pre-fix: comparison vs literal stringa, typo silente sarebbe
+            # diventato un schedule non-orfano "for ever" se qualcuno
+            # avesse scritto "orphane" altrove.
+            # Post-fix: comparison vs enum value (StrEnum -> "orphan").
+            if enabled and config.runtime.status == RuntimeStatus.ORPHAN:
                 logger.warning(f"Impossibile abilitare schedule orfano {schedule_id}")
                 return False
 
             config.schedule.enabled = enabled
-            config.runtime.status = "idle" if enabled else "disabled"
+            config.runtime.status = (
+                RuntimeStatus.IDLE if enabled else RuntimeStatus.DISABLED
+            )
 
             if enabled:
                 next_exec = self._calculate_next_execution(
@@ -414,7 +424,8 @@ class ScheduleService:
         """
         def _mutate(config: ScheduleConfig) -> bool:
             config.schedule.enabled = False
-            config.runtime.status = "orphan"
+            # Pre-fix: literal "orphan". Post-fix: enum canonico.
+            config.runtime.status = RuntimeStatus.ORPHAN
             config.runtime.next_execution = None
             return True
 
@@ -446,43 +457,66 @@ class ScheduleService:
 
     # AGGIORNAMENTO RUNTIME
 
-    def set_runtime_status(self, schedule_id: str, status: str,
-                           current_task_id: str = None) -> Optional[ScheduleConfig]:
+    def set_runtime_status(
+        self,
+        schedule_id: str,
+        status: "str | RuntimeStatus",
+        current_task_id: str = None,
+    ) -> Optional[ScheduleConfig]:
         """Aggiorna solo lo stato runtime (transizioni leggere).
 
         Read-modify-write protetto da row lock DB.
+
+        Pre-fix: `status: str` -> ~9 callsite passavano literal "running",
+        "idle", "queued" senza vincolo di compile-time. Typo finiva nel DB.
+        Post-fix: accetta `str` (back-compat) o `RuntimeStatus` (preferito).
+        `coerce_runtime_status` normalizza a stringa canonical -> il
+        Pydantic `ScheduleStatus` Literal valida e la column DB resta una
+        plain string.
         """
+        status_str = coerce_runtime_status(status)
+
         def _mutate(config: ScheduleConfig) -> bool:
-            config.runtime.status = status
+            config.runtime.status = status_str
             if current_task_id is not None:
                 config.runtime.current_task_id = current_task_id
             return True
 
         return self._update_config_locked(schedule_id, _mutate)
 
-    def update_runtime(self, schedule_id: str, status: str,
-                       last_execution: Optional[dict] = None) -> Optional[ScheduleConfig]:
+    def update_runtime(
+        self,
+        schedule_id: str,
+        status: "str | RuntimeStatus",
+        last_execution: Optional[dict] = None,
+    ) -> Optional[ScheduleConfig]:
         """Aggiorna lo stato runtime dopo un'esecuzione completata.
 
         Read-modify-write protetto da row lock DB contro race cross-process
         su counter (success_count, failure_count, consecutive_failures) e
         next_execution.
+
+        Pre-fix: come `set_runtime_status`, accettava solo `str` -> i
+        confronti `status == "completed"` erano stringly-typed.
+        Post-fix: accetta enum o str; comparison vs enum value canonico.
         """
+        status_str = coerce_runtime_status(status)
+
         def _mutate(config: ScheduleConfig) -> bool:
-            config.runtime.status = status
+            config.runtime.status = status_str
             config.runtime.current_task_id = None
 
             if last_execution:
                 config.runtime.last_execution = LastExecution(**last_execution)
 
             config.runtime.total_runs += 1
-            if status == "completed":
+            if status_str == RuntimeStatus.COMPLETED:
                 config.runtime.success_count += 1
                 config.runtime.consecutive_failures = 0
-            elif status == "partial":
+            elif status_str == RuntimeStatus.PARTIAL:
                 config.runtime.success_count += 1
                 config.runtime.consecutive_failures = 0
-            elif status == "failed":
+            elif status_str == RuntimeStatus.FAILED:
                 config.runtime.failure_count += 1
                 config.runtime.consecutive_failures += 1
 
