@@ -113,7 +113,12 @@ useEffect(() => {
     const loadCatalog = async (projectData, allConnections) => {
       let connection         = null;
       let isArcgisConnection = false;
-      const defaultConnectionId = projectData.default_connection_id || projectData.metadata?.default_connection_id;
+      // BE risponde `{ metadata: { default_connection_id, ... }, canvas,
+      // output_contract }`. Il path root `projectData.default_connection_id`
+      // e' undefined (pre-fix il fallback `||` lo salvava per coincidenza).
+      // Accesso canonico via metadata: rimuove il ramo fragile e
+      // documenta l'invariante della response shape.
+      const defaultConnectionId = projectData.metadata?.default_connection_id;
 
       if (defaultConnectionId) {
         connection = allConnections.find(c => c.id === defaultConnectionId) || null;

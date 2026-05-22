@@ -12,27 +12,35 @@ import http from './http';
  * Valida la configurazione di un arricchimento prima dell'esecuzione.
  * Verifica che le colonne mappate esistano e che i dati siano compatibili.
  *
- * @param {string}  projectId      - ID del progetto
- * @param {string}  apiId          - ID della connessione API esterna
- * @param {Object}  paramMapping   - Mapping { api_param: df_column }
- * @param {string}  fileSourceId   - ID file source (opzionale, se sorgente è file)
- * @param {Array}   staticColumns  - Colonne da nodi StaticValues (opzionale)
+ * @param {string}  projectId         - ID del progetto
+ * @param {string}  apiId             - ID della connessione API esterna
+ * @param {Object}  paramMapping      - Mapping { api_param: df_column }
+ * @param {string}  fileSourceId      - ID file source (opzionale, se sorgente è file)
+ * @param {Array}   staticColumns     - Colonne da nodi StaticValues (opzionale)
+ * @param {Object}  staticParameters  - Mappa { param: value } dei parametri fissi
+ *                                      (raccolti dai nodi StaticValues del canvas).
+ *                                      Pre-fix questo campo non veniva mai inviato:
+ *                                      il BE lo trattava come None, producendo
+ *                                      falsi `missing_columns` per parametri che
+ *                                      erano in realta' soddisfatti da static values.
  * @returns {Promise<Object>} { valid, total_rows, valid_rows, invalid_rows,
- *                              missing_columns, warnings }
+ *                              missing_columns, null_param_rows_count, warnings }
  */
 export const validateEnrichment = async (
   projectId,
   apiId,
   paramMapping,
-  fileSourceId  = null,
-  staticColumns = null
+  fileSourceId    = null,
+  staticColumns   = null,
+  staticParameters = null
 ) => {
   const response = await http.post('/enrichment/validate', {
-    project_id:    projectId,
-    api_id:        apiId,
-    param_mapping: paramMapping,
-    file_source_id: fileSourceId,
-    static_columns: staticColumns,
+    project_id:       projectId,
+    api_id:           apiId,
+    param_mapping:    paramMapping,
+    file_source_id:   fileSourceId,
+    static_columns:   staticColumns,
+    static_parameters: staticParameters,
   });
   return response.data;
 };

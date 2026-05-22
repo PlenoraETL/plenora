@@ -36,6 +36,9 @@ describe('enrichment api contract', () => {
       param_mapping: { city: 'city_name' },
       file_source_id: 'file-7',
       static_columns: [{ name: 'country', value: 'IT' }],
+      // Post-fix sessione 9: il body include sempre `static_parameters`
+      // (default null se omesso). Pre-fix non era inviato.
+      static_parameters: null,
     });
     expect(result).toEqual({ valid: true });
   });

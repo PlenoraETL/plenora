@@ -42,12 +42,12 @@ export function useEnrichmentValidation() {
   /**
    * Valida la configurazione enrichment
    */
-  const validate = useCallback(async (projectId, apiId, paramMapping, fileSourceId = null, staticColumns = null) => {
+  const validate = useCallback(async (projectId, apiId, paramMapping, fileSourceId = null, staticColumns = null, staticParameters = null) => {
     setIsValidating(true);
     setValidationError(null);
 
     try {
-      const result = await validateEnrichment(projectId, apiId, paramMapping, fileSourceId, staticColumns);
+      const result = await validateEnrichment(projectId, apiId, paramMapping, fileSourceId, staticColumns, staticParameters);
       if (mountedRef.current) {
         setValidation(result);
       }
@@ -96,16 +96,16 @@ export function useEnrichmentValidation() {
   /**
    * Valida E stima in un'unica chiamata
    */
-  const validateAndEstimate = useCallback(async (projectId, apiId, paramMapping, fileSourceId = null, staticColumns = null) => {
+  const validateAndEstimate = useCallback(async (projectId, apiId, paramMapping, fileSourceId = null, staticColumns = null, staticParameters = null) => {
     // Prima valida
-    const validResult = await validate(projectId, apiId, paramMapping, fileSourceId, staticColumns);
-    
+    const validResult = await validate(projectId, apiId, paramMapping, fileSourceId, staticColumns, staticParameters);
+
     // Se valido, stima
     if (validResult.valid) {
       const estimateResult = await estimate(projectId, apiId, paramMapping, fileSourceId);
       return { validation: validResult, estimation: estimateResult };
     }
-    
+
     return { validation: validResult, estimation: null };
   }, [validate, estimate]);
 

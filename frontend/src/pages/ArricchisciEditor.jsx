@@ -223,7 +223,8 @@ const ArricchisciEditorContent = () => {
     const currentNodes  = nodesRef.current;
     const apiNode       = currentNodes.find(n => n.type === 'api_enrich');
     if (!apiNode) return null;
-    const staticColumns = currentNodes.filter(n => n.type === 'staticValues')
+    const staticValuesNodes = currentNodes.filter(n => n.type === 'staticValues');
+    const staticColumns = staticValuesNodes
       .flatMap(node => (node.data?.fields || []).map(f => f.name));
     // B-FE-68: includi le colonne prodotte da enricher upstream (fromApi:true) nelle
     // staticColumns così il backend le skippa nel check missing_columns durante la validazione.
@@ -231,13 +232,32 @@ const ArricchisciEditorContent = () => {
       .filter(n => n.type === 'api_enrich')
       .flatMap(n => (n.data?.columns || []).filter(c => c.fromApi && c.name).map(c => c.name));
     const allStaticColumns = [...new Set([...staticColumns, ...upstreamApiColumns])];
+    // staticParameters: mappa {param_name: value} dai nodi StaticValues.
+    // Pre-fix il FE non inviava questo campo al BE → validate produceva
+    // falsi `missing_columns` per parametri soddisfatti da static values
+    // (drift contracts-schemas P1 plenora-bug-contracts-schemas).
+    const staticParameters = {};
+    staticValuesNodes.forEach(node => {
+      (node.data?.fields || []).forEach(f => {
+        if (f.name && f.value !== undefined && f.value !== null && f.value !== '') {
+          staticParameters[f.name] = f.value;
+        }
+      });
+    });
     // B-FE-41: leggi file_source_id dal nodo file_source nel canvas
     const fileSourceNode    = currentNodes.find(n => n.type === 'file_source');
     const fileSourceId      = fileSourceNode?.data?.file_source_id || null;
     // B-FE-52: leggi source_project_id dal nodo project_source per validate/estimate
     const projectSourceNode = currentNodes.find(n => n.type === 'project_source');
     const sourceProjectId   = projectSourceNode?.data?.source_project_id || null;
-    return { apiId: apiNode.data?.api_id, paramMapping: apiNode.data?.param_mapping || {}, staticColumns: allStaticColumns, fileSourceId, sourceProjectId };
+    return {
+      apiId: apiNode.data?.api_id,
+      paramMapping: apiNode.data?.param_mapping || {},
+      staticColumns: allStaticColumns,
+      staticParameters,
+      fileSourceId,
+      sourceProjectId,
+    };
   }, []);
 
   // Persistiamo le options ricevute da ResultNode (es. force_recalculate) tra
@@ -278,7 +298,14 @@ const ArricchisciEditorContent = () => {
     }
     setShowConfirmModal(true);
     const config = getEnrichmentConfig();
-    if (config?.apiId) enrichmentValidation.validateAndEstimate(config.sourceProjectId || projectId, config.apiId, config.paramMapping, config.fileSourceId, config.staticColumns);
+    if (config?.apiId) enrichmentValidation.validateAndEstimate(
+      config.sourceProjectId || projectId,
+      config.apiId,
+      config.paramMapping,
+      config.fileSourceId,
+      config.staticColumns,
+      config.staticParameters,
+    );
   }, [handleSaveQuiet, getEnrichmentConfig, projectId, enrichmentValidation, execution, exportFormat]);
 
   const handleConfirmExecution  = useCallback(() => {

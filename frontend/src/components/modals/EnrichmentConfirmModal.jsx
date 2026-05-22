@@ -124,6 +124,21 @@ const EnrichmentConfirmModal = ({
                         <span className="enrichment-confirm-stat-label">Deduplicazione</span>
                       </div>
                     )}
+                    {/* null_param_rows_count: righe che il BE saltera'
+                        per valori null nei parametri (drift FE↔BE
+                        contracts-schemas P1: pre-fix il campo non era
+                        mai esposto, l'utente non sapeva quante righe
+                        sarebbero state skippate silenziosamente). */}
+                    {validation?.null_param_rows_count > 0 && (
+                      <div className="enrichment-confirm-stat enrichment-confirm-stat--warning">
+                        <span className="enrichment-confirm-stat-value">
+                          {validation.null_param_rows_count.toLocaleString()}
+                        </span>
+                        <span className="enrichment-confirm-stat-label">
+                          Righe saltate (parametri null)
+                        </span>
+                      </div>
+                    )}
                   </div>
                 </div>
               )}
