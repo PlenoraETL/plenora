@@ -245,8 +245,34 @@ def load_project_sources(
                         dataframes,
                     )
                     continue
+                except FileNotFoundError as exc:
+                    # Cache miss semanticamente atteso: artifact non
+                    # ancora prodotto / scaduto / cleanup. No warning,
+                    # fallback canonico al ricalcolo via pipeline.
+                    log.info(
+                        "Cache miss artifact upstream (FileNotFound): "
+                        "%s, ricalcolo via pipeline_dispatcher",
+                        exc,
+                    )
+                except ArtifactResolutionError as exc:
+                    # Errore tipizzato del resolver (cross-tenant violation,
+                    # checksum mismatch, manifest corrotto). Visibile in log
+                    # con livello WARNING perche' potenzialmente indica un
+                    # problema di integrita' che andra' investigato anche
+                    # se il ricalcolo nasconde l'effetto immediato.
+                    log.warning(
+                        "ArtifactResolutionError su upstream cache: %s, "
+                        "fallback a ricalcolo via pipeline_dispatcher",
+                        exc,
+                    )
                 except Exception as exc:
-                    log.warning(f"Errore cache: {exc}, procedo con ricalcolo")
+                    # Eccezione non classificata: log ERROR + exc_info per
+                    # postmortem. Il ricalcolo procede ma il bug e' visibile.
+                    log.error(
+                        "Errore non gestito su cache lookup upstream: %s: %s",
+                        type(exc).__name__, exc,
+                        exc_info=True,
+                    )
 
         if not pipeline_dispatcher:
             return {"success": False, "message": "Pipeline dispatcher non configurato"}

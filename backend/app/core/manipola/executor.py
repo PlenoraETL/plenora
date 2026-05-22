@@ -428,21 +428,32 @@ class ManipolaExecutor:
             canvas_graph = CanvasGraph.from_canvas(canvas)
 
             dataframes = {}
-            # stesso tenant
-            # boundary esplicito di execute
-            self._carica_sorgenti_progetto(
-                canvas, dataframes, force_recalculate=False,
-                group_id=executing_group_id,
-            )
-            self._carica_sorgenti_file(
-                canvas, dataframes, group_id=executing_group_id,
-            )
-            self._carica_sorgenti_datasource(
-                canvas, dataframes, group_id=executing_group_id,
-            )
-            self._carica_sorgenti_statiche(
-                canvas, dataframes, group_id=executing_group_id,
-            )
+            # Pre-fix: i 4 loader venivano invocati ignorando il valore
+            # di ritorno; un errore-soft (es. project_source con artifact
+            # mancante, file_source con fid non risolvibile) era
+            # silenziosamente perso e la preview tornava "Nessun dato
+            # sorgente disponibile" generico invece dell'errore tipizzato
+            # del loader. Post-fix: stesso pattern di execute (linee
+            # 246-261) — ogni loader puo' tornare un dict d'errore che
+            # propaghiamo subito al caller con la causa esplicita.
+            for loader in [
+                lambda: self._carica_sorgenti_progetto(
+                    canvas, dataframes, force_recalculate=False,
+                    group_id=executing_group_id,
+                ),
+                lambda: self._carica_sorgenti_file(
+                    canvas, dataframes, group_id=executing_group_id,
+                ),
+                lambda: self._carica_sorgenti_datasource(
+                    canvas, dataframes, group_id=executing_group_id,
+                ),
+                lambda: self._carica_sorgenti_statiche(
+                    canvas, dataframes, group_id=executing_group_id,
+                ),
+            ]:
+                err = loader()
+                if err:
+                    return err
 
             if not dataframes:
                 return {"success": False, "message": "Nessun dato sorgente disponibile"}

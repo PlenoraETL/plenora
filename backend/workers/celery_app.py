@@ -28,6 +28,7 @@ celery_app = Celery(
         "workers.tasks.imdf_publish_task",
         "workers.tasks.cleanroom_task",
         "workers.tasks.cleanroom_beat_task",
+        "workers.tasks.cleanup_temp_files_task",
     ]
 )
 
@@ -63,6 +64,9 @@ celery_app.conf.update(
         "workers.tasks.admin_backup_task.run_manual_backup_task": {
             "queue": settings.CELERY_QUEUE_CONTROL_PLANE,
         },
+        "workers.tasks.cleanup_temp_files_task.run": {
+            "queue": settings.CELERY_QUEUE_CONTROL_PLANE,
+        },
         "workers.tasks.schedule_task.schedule_pipeline_task": {
             "queue": settings.CELERY_QUEUE_DATA_PLANE,
         },
@@ -88,6 +92,21 @@ if env_flag("PLENORA_CLEANROOM_BEAT_PING"):
         "[CLEANROOM] PLENORA_CLEANROOM_BEAT_PING=1: registered "
         "cleanroom.beat_ping at 5s interval in beat_schedule"
     )
+
+# P2 I2: cleanup di file_sources temp scaduti (TTL 24h, sweep hourly).
+# Vedi `workers/tasks/cleanup_temp_files_task.py`. Sempre registrato,
+# no env-gate: il task e' idempotente e su una tabella vuota ha costo
+# trascurabile (una SELECT su index parziale `idx_file_sources_temp_expires`).
+from celery.schedules import schedule as _celery_schedule
+
+celery_app.conf.beat_schedule = {
+    **(celery_app.conf.beat_schedule or {}),
+    "cleanup-temp-files-hourly": {
+        "task": "workers.tasks.cleanup_temp_files_task.run",
+        "schedule": _celery_schedule(run_every=3600.0),
+        "options": {"queue": settings.CELERY_QUEUE_CONTROL_PLANE},
+    },
+}
 
 
 class BaseTaskWithRetry(celery_app.Task):

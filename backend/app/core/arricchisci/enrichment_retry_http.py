@@ -161,7 +161,27 @@ class EnrichmentRetryHttpMixin:
 
                 # Successo
                 if response.status_code == 200:
-                    data = response.json()
+                    # Pre-fix: `response.json()` propagava `ValueError`
+                    # (es. body HTML di un captive portal/proxy che risponde
+                    # 200 OK ma non e' JSON) come crash non-tipizzato dentro
+                    # il worker, terminando il batch invece di marcare solo
+                    # la singola riga. Ora la riga finisce in RowError con
+                    # `error_type="invalid_json_response"` e il batch
+                    # prosegue sulle altre.
+                    try:
+                        data = response.json()
+                    except (ValueError, requests.exceptions.JSONDecodeError) as e:
+                        return None, RowError(
+                            row_index=row_index,
+                            status=RowStatus.ERROR,
+                            error_message=(
+                                f"Risposta HTTP 200 non e' JSON valido: "
+                                f"{type(e).__name__}"
+                            ),
+                            error_type="invalid_json_response",
+                            http_status=200,
+                            retry_count=attempt,
+                        )
                     return self._extract_output(data), None
 
                 # Rate limited - rispetta Retry-After

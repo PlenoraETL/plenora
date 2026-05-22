@@ -29,7 +29,11 @@ function PreviewModal({ file, data, onClose }) {
             </thead>
             <tbody>
               {data.rows.map((row, i) => (
-                <tr key={i}>{colNames.map(col => <td key={col}>{row[col] != null ? String(row[col]) : '—'}</td>)}</tr>
+                // key combinata (indice + hash leggero della prima cella)
+                // per stabilita' rispetto a rimaneggiamenti di rows.
+                <tr key={`row-${i}-${String(row[colNames[0]] ?? '').slice(0, 16)}`}>
+                  {colNames.map(col => <td key={col}>{row[col] != null ? String(row[col]) : '—'}</td>)}
+                </tr>
               ))}
             </tbody>
           </table>

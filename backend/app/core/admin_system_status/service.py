@@ -790,10 +790,14 @@ def get_tickets_status() -> AdminStatusBlock:
     """
     try:
         metrics = get_active_ticket_metrics()
-        total_active = metrics.total_active
-        by_severity = metrics.by_severity
-        critical = by_severity.get("critical", 0)
-        high = by_severity.get("high", 0)
+        total_active = int(metrics.total_active or 0)
+        by_severity = metrics.by_severity or {}
+        # Coerce esplicito: by_severity proviene da una query SQL
+        # GROUP BY severity COUNT(*) che psycopg2 puo' tipizzare come
+        # Decimal/str a seconda del backend. Senza int() i confronti
+        # `critical > 0` downstream possono dare risultati inattesi.
+        critical = int(by_severity.get("critical", 0) or 0)
+        high = int(by_severity.get("high", 0) or 0)
     except TicketsMetricsUnavailable as e:
         return AdminStatusBlock(
             status="unknown",

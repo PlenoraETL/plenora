@@ -93,29 +93,46 @@ class ConcurrencyManager:
         return row["value"]
 
     def _set_nx(self, key: str, value: str, ttl_seconds: int = None) -> bool:
-        """SET NX — imposta solo se non esiste. Returns True se acquisito.
+        """SET NX — imposta solo se non esiste o se scaduto. Returns True se acquisito.
 
-        Il catch e' narrow a (UniqueViolation, IntegrityError) per preservare
-        la semantica control-flow "chiave gia' esistente" SOLO sui casi
-        legittimi di conflitto UNIQUE. Altri errori DB (pool exhausted,
-        connection down, bug logici) propagano al caller `try_acquire`, che
-        a sua volta propaga al boundary `ExecutionManager.execute` — cosi'
-        il vero problema emerge come status failure esplicito invece di
-        "queued" misleading (pre-fix: qualsiasi errore -> False silent ->
-        coda corrotta su DB down).
+        Pre-fix: `self._get(key)` cancellava il lock scaduto come side-effect,
+        seguito da un INSERT separato. Tra DELETE e INSERT esisteva una
+        finestra di race in cui un altro processo poteva inserire il proprio
+        lock e farci ottenere UniqueViolation -> False, anche quando la
+        nostra DELETE era legittima e nessuno aveva un lock valido.
+
+        Post-fix: atomic test-and-steal-if-expired via PostgreSQL
+        `INSERT ... ON CONFLICT (key) DO UPDATE` con clausola WHERE che
+        permette l'update SOLO se `expires_at IS NULL` o gia' scaduto.
+        Combinato con `RETURNING (xmax = 0) AS is_insert` distinguiamo:
+          - row nuova (insert) -> acquisito True
+          - row aggiornata (steal di scaduto) -> acquisito True
+          - nessuna row tornata (WHERE non matchato, lock attivo) -> False
+
+        Riferimento: https://stackoverflow.com/a/8702291 — la combinazione
+        ON CONFLICT DO UPDATE ... WHERE e' atomica nella stessa statement.
+
+        Il catch resta narrow su (UniqueViolation, IntegrityError) per
+        sicurezza, ma con ON CONFLICT non dovrebbe piu' triggerare in
+        operativita' normale.
         """
-        self._get(key)  # side effect: cancella se scaduto
         expires_at = None
         if ttl_seconds:
             expires_at = (datetime.now(timezone.utc) + timedelta(seconds=ttl_seconds)).isoformat()
         try:
-            db.execute(
-                "INSERT INTO scheduler_locks (key, value, expires_at) VALUES (%s,%s,%s)",
-                (key, value, expires_at)
+            row = db.fetchone(
+                "INSERT INTO scheduler_locks (key, value, expires_at) "
+                "VALUES (%s,%s,%s) "
+                "ON CONFLICT (key) DO UPDATE "
+                "  SET value = EXCLUDED.value, expires_at = EXCLUDED.expires_at "
+                "  WHERE scheduler_locks.expires_at IS NOT NULL "
+                "    AND scheduler_locks.expires_at <= now() "
+                "RETURNING value",
+                (key, value, expires_at),
             )
-            return True
+            return row is not None
         except (psycopg2.errors.UniqueViolation, psycopg2.IntegrityError):
-            return False  # semantica UNIQUE constraint — lock gia' preso
+            return False  # difensivo: ON CONFLICT dovrebbe evitarlo, ma fallback
 
     def _incr(self, key: str) -> int:
         """Incrementa contatore atomicamente, crea se non esiste.

@@ -14,23 +14,44 @@ import http from './http';
 
 /**
  * Restituisce gli schemi disponibili per una connessione.
+ *
+ * Shape contract: il BE ritorna `{schemas: string[], db_type: string}`.
+ * Pre-fix l'API wrapper passava `response.data` grezzo: se in futuro il
+ * BE cambiasse a `string[]` (o lo facesse un fake-rest in test), il
+ * consumer `useCaricaSchemaSelect` faceva `data.schemas || []` e
+ * ricadeva silenziosamente a `[]` mascherando il drift. Post-fix
+ * normalizziamo SEMPRE alla shape `{schemas, db_type}` qui per garantire
+ * un contratto stabile downstream.
+ *
  * @param {string|number} connId
- * @returns {Promise<string[]>}
+ * @returns {Promise<{schemas: string[], db_type: string|null}>}
  */
 export const getCaricaSchemas = async (connId) => {
   const response = await http.get(`/carica/schemas/${connId}`);
-  return response.data;
+  const data = response.data;
+  if (Array.isArray(data)) {
+    return { schemas: data, db_type: null };
+  }
+  return { schemas: data?.schemas || [], db_type: data?.db_type ?? null };
 };
 
 /**
  * Restituisce le tabelle di uno schema.
+ *
+ * Stessa normalizzazione di `getCaricaSchemas`: shape canonica
+ * `{tables: string[]}`.
+ *
  * @param {string|number} connId
  * @param {string} schema
- * @returns {Promise<string[]>}
+ * @returns {Promise<{tables: string[]}>}
  */
 export const getCaricaTables = async (connId, schema) => {
   const response = await http.get(`/carica/tables/${connId}/${schema}`);
-  return response.data;
+  const data = response.data;
+  if (Array.isArray(data)) {
+    return { tables: data };
+  }
+  return { tables: data?.tables || [] };
 };
 
 /**

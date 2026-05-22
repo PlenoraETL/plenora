@@ -60,7 +60,14 @@ class FTPDataSource(DataSourceInterface):
         if not host:
             raise DataSourceConnectionError("Host FTP non configurato")
 
-        try:
+        # Retry transient: glitch di rete (DNS, RST, timeout) sono frequenti
+        # su FTP; ftplib.error_temp e socket OSError sono retriable.
+        # ftplib.error_perm (auth, 5xx codes) NON retriable -> propaga
+        # immediato. AuthenticationException tipo eccezioni di credenziali
+        # vengono sollevate come error_perm.
+        from app.shared.connections.retry import call_with_retry
+
+        def _do_connect():
             if tls:
                 ftp = ftplib.FTP_TLS()
                 ftp.connect(host=host, port=port, timeout=15)
@@ -70,8 +77,17 @@ class FTPDataSource(DataSourceInterface):
                 ftp = ftplib.FTP()
                 ftp.connect(host=host, port=port, timeout=15)
                 ftp.login(user=username, passwd=password)
-
             ftp.set_pasv(passive)
+            return ftp
+
+        try:
+            ftp = call_with_retry(
+                _do_connect,
+                op_name=f"ftp.connect({host}:{port})",
+                max_attempts=3,
+                backoff_base=0.5,
+                retriable_excs=(ftplib.error_temp, OSError, TimeoutError),
+            )
             self._ftp = ftp
 
             root = self.config.root_path

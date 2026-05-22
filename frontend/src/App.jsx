@@ -115,7 +115,10 @@ function AppRoutes() {
       <Route path="/" element={<ProtectedRoute><ProjectList /></ProtectedRoute>} />
       <Route path="/project/:projectId" element={<ProtectedRoute><EstraiEditor /></ProtectedRoute>} />
       <Route path="/connections" element={<ProtectedRoute><ConnectionManager /></ProtectedRoute>} />
-      <Route path="/editor/manipola/:id" element={<ProtectedRoute><ManipolaEditor /></ProtectedRoute>} />
+      {/* Param `:projectId` (coerente con /project/:projectId e
+          /arricchisci/:projectId). Pre-fix era `:id`, costringendo
+          ManipolaEditor a fare `{ id: projectId } = useParams()`. */}
+      <Route path="/editor/manipola/:projectId" element={<ProtectedRoute><ManipolaEditor /></ProtectedRoute>} />
       <Route path="/external-connectors" element={<ProtectedRoute><ApiConnectionManager /></ProtectedRoute>} />
       <Route path="/arricchisci/:projectId" element={<ProtectedRoute><ArricchisciEditor /></ProtectedRoute>} />
       <Route path="/files" element={<ProtectedRoute><FileManager /></ProtectedRoute>} />

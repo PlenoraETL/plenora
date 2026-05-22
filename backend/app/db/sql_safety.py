@@ -68,6 +68,16 @@ _ALLOWED_UPDATE_FIELDS: dict[str, frozenset[str]] = {
         "icon",
         "updated_at",
     }),
+    "tickets": frozenset({
+        "status",
+        "severity",
+        "category",
+        "assignee",
+        "title",
+        "description",
+        "updated_at",
+        "resolved_at",
+    }),
 }
 
 

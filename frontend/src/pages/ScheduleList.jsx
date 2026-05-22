@@ -151,7 +151,13 @@ function ScheduleList() {
       setLoading(true);
       const [sd, hd] = await Promise.all([
         listSchedules(projectFilter),
-        getBeatHealthcheck().catch(() => ({ status:'unknown', message:'Non raggiungibile' })),
+        getBeatHealthcheck().catch((err) => {
+          // Pre-fix: silent catch nascondeva errori network/auth del
+          // beat healthcheck. Log esplicito facilita il triage quando
+          // lo scheduler banner mostra "unknown" per troppo tempo.
+          console.warn('[ScheduleList] beat healthcheck fallito:', err?.message || err);
+          return { status: 'unknown', message: 'Non raggiungibile' };
+        }),
       ]);
       setSchedules(sd.schedules || []);
       setBeatHealth(hd);
@@ -458,7 +464,7 @@ function ScheduleCard({ schedule, isRunning, runStartTime, logs, runs, runningMa
             ) : (
               <div className="sl__logs-list">
                 {logs.map((log, i) => (
-                  <div key={i} className="sl__log-entry">
+                  <div key={log.timestamp || `log-${i}`} className="sl__log-entry">
                     <span className="sl__log-icon">{getLogIcon(log.event)}</span>
                     <span className={`sl__log-event${log.event?.includes('FAILED') ? ' sl__log-event--failed' : ''}`}>{log.event}</span>
                     <span className="sl__log-date">{formatDate(log.timestamp)}</span>
@@ -484,7 +490,7 @@ function ScheduleCard({ schedule, isRunning, runStartTime, logs, runs, runningMa
             ) : (
               <div className="sl__runs-list">
                 {runs.map((run, i) => (
-                  <div key={i} className="sl__run-entry">
+                  <div key={run.timestamp || `run-${i}`} className="sl__run-entry">
                     <span className="sl__run-ts">{formatRunTimestamp(run.timestamp)}</span>
                     <span className="sl__run-files">{run.files.map(f => f.name).join(', ')}</span>
                     <span className="sl__run-size">{formatSize(run.files.reduce((s,f) => s+f.size_bytes, 0))}</span>

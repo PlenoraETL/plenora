@@ -414,8 +414,16 @@ def _resolve_input_path(
 # `request: WriteRequest`, l'extractor accetta solo str/int (vedi
 # audit_action.py:190). Audit registra action+user+status, non il target
 @audit_action(action="arcgis.feature.write")
-async def write_features(request: WriteRequest, current_user: CurrentUser = Depends(require_not_esecutore)):
-    """Scrittura su Feature Service esistente (add/update/delete)."""
+async def write_features(request: WriteRequest, current_user: CurrentUser = Depends(require_admin)):
+    """Scrittura su Feature Service esistente (add/update/delete).
+
+    SECURITY: require_admin (non require_not_esecutore). Pre-fix qualunque
+    utente loggato di ruolo `user` o superiore poteva scrivere su un
+    Feature Service ArcGIS condiviso, anche se la mutation modifica dati
+    visibili ad altri tenant via FeatureServer pubblico. La feature di
+    write su servizi esterni e' un'operazione admin-only per coerenza
+    con `create_connection`/`update_connection`.
+    """
     _check_arcgis_access(request.connection_id, current_user)
     # Se il caller risolve l'input via `project_id` invece che
     # `input_path`, verifichiamo l'accesso al progetto prima di
@@ -469,9 +477,15 @@ async def write_features(request: WriteRequest, current_user: CurrentUser = Depe
 
 @router.post("/create-service", response_model=CreateServiceResponse)
 @audit_action(action="arcgis.service.create")
-async def create_service(request: CreateServiceRequest, current_user: CurrentUser = Depends(require_not_esecutore)):
+async def create_service(request: CreateServiceRequest, current_user: CurrentUser = Depends(require_admin)):
     """
     Crea un nuovo Feature Service su ArcGIS Online.
+
+    SECURITY: require_admin (non require_not_esecutore). La creazione di
+    un Feature Service su un account ArcGIS condiviso e' un'operazione
+    cross-tenant (il nuovo servizio resta visibile a tutti gli utenti
+    di quel portale). Allineato con `write_features` e con il pattern
+    `create_connection`/`update_connection` del modulo.
 
     Flusso:
     1. Legge il file da input_path (o project_id)

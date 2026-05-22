@@ -375,9 +375,37 @@ def execute(
     )
     # create_from_upload ritorna un oggetto FileSource (pydantic) — accediamo a .id
     temp_file_source_id = file_source.id if hasattr(file_source, "id") else file_source["id"]
+
+    # P2 I2: marca la riga come temporanea con TTL 24h. Il task beat
+    # `cleanup_temp_files_task` (orario) cancella automaticamente le
+    # righe is_temp=true con expires_at passata. Pre-fix questi file
+    # restavano nel DB indefinitamente accumulandosi. Update inline e
+    # best-effort: un errore qui (column non esistente in vecchi DB
+    # senza migration) NON blocca l'esecuzione dell'eseguibile —
+    # peggio caso il file resta orfano e va cancellato manualmente.
+    try:
+        from app.db.pg_connection import unit_of_work
+        with unit_of_work() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "UPDATE file_sources "
+                    "SET is_temp = true, "
+                    "    expires_at = now() + INTERVAL '24 hours' "
+                    "WHERE id = %s",
+                    (temp_file_source_id,),
+                )
+    except Exception as ttl_err:
+        logger.warning(
+            "[GESTITO] eseguibili: TTL marking fallito per "
+            "temp_file_source_id=%s: %s: %s — file orfanizzabile, "
+            "cleanup richiede intervento manuale",
+            temp_file_source_id, type(ttl_err).__name__, ttl_err,
+            exc_info=True,
+        )
+
     logger.info(
         f"FileSource temporaneo creato: {temp_file_source_id} "
-        f"({len(df)} righe, {len(df.columns)} colonne)",
+        f"({len(df)} righe, {len(df.columns)} colonne, TTL 24h)",
         op="eseguibili_execute"
     )
 

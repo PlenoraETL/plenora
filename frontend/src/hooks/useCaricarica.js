@@ -9,7 +9,33 @@
  */
 import { useState, useCallback, useRef } from 'react';
 import { executeProjectQuery, cancelTask as cancelTaskApi, createTask } from '../api';
+import { getTaskStatus } from '../api/tasks';
 import { useTaskPolling } from './useTaskPolling';
+
+/**
+ * Polling sincrono di un task fino a stato terminale (success/failure).
+ *
+ * Pre-fix la sequenza era: `await executeProjectQuery` → `await createTask("carica")`
+ * senza attendere completamento della execute. Race: il task CARICA poteva
+ * partire mentre il task di execute era ancora "started", leggendo output
+ * stale o vuoto (artifact non ancora scritto). Questo helper sincronizza
+ * il flusso: aspetta che execute sia "success" prima di creare il task CARICA.
+ *
+ * Pattern Go-friendly: funzione modulo, no classi, parametri espliciti.
+ * Equivalente Go: `waitForTaskTerminal(taskID string, timeoutMs int) (Task, error)`.
+ */
+async function _waitTaskTerminal(taskId, { timeoutMs = 90000, intervalMs = 500 } = {}) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const data = await getTaskStatus(taskId);
+    const status = String(data?.status || '').toLowerCase();
+    if (['success', 'failure', 'failed', 'revoked'].includes(status)) {
+      return data;
+    }
+    await new Promise((resolve) => setTimeout(resolve, intervalMs));
+  }
+  throw new Error(`Timeout polling execute task ${taskId} dopo ${timeoutMs}ms`);
+}
 
 /**
  * Hook per gestire il caricamento su database (CARICA)
@@ -93,10 +119,24 @@ export function useCaricarica(projectId, options = {}) {
       setProgressMessage('Esecuzione query...');
       const canvas = getCanvas ? getCanvas() : { nodes: [], edges: [] };
 
-      // executeProjectQuery e' async (ritorna {task_id, status, async}) — l'esito
-      // viene riportato implicitamente: in caso di HTTP error axios solleva e
-      // cade nel catch piu' in basso. La risposta non ha un campo .success.
-      await executeProjectQuery(projectId);
+      // executeProjectQuery ritorna {task_id, status, async}. Pre-fix il
+      // codice faceva solo `await executeProjectQuery(...)` che risolve
+      // appena il BE accetta il task, NON quando il task ha prodotto
+      // l'output. La createTask("carica") sotto poteva leggere artifact
+      // stale/vuoti. Post-fix: polling sincrono fino a status terminale
+      // prima di passare al task CARICA.
+      const executeResp = await executeProjectQuery(projectId);
+      if (executeResp?.task_id) {
+        setProgressMessage('Attesa esecuzione query...');
+        const executeFinal = await _waitTaskTerminal(executeResp.task_id);
+        const executeStatus = String(executeFinal?.status || '').toLowerCase();
+        if (executeStatus !== 'success') {
+          throw new Error(
+            `Esecuzione query fallita (status=${executeStatus}): `
+            + (executeFinal?.error || executeFinal?.result?.message || 'errore sconosciuto')
+          );
+        }
+      }
 
       // 3. Avvia task CARICA
       setProgressMessage('Avvio caricamento...');

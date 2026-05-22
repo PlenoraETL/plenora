@@ -14,7 +14,6 @@ import uuid
 from typing_extensions import TypedDict
 
 from fastapi import APIRouter, Depends, HTTPException
-from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from app.core.auth import disclosure as _disclosure
 from app.core.auth.models import (
@@ -36,7 +35,6 @@ __all__ = ["users_router"]
 
 
 users_router = APIRouter(prefix="/auth/users", tags=["users"])
-_security = HTTPBearer(auto_error=False)
 
 
 class UserResponsePayload(TypedDict):
@@ -61,24 +59,9 @@ def _user_response_payload(user: _users_dal.UserRow) -> UserResponsePayload:
     }
 
 
-def _get_current_user_proxy(
-    credentials: HTTPAuthorizationCredentials | None = Depends(_security),
-) -> CurrentUser:
-    """Lazy proxy to avoid `users_router -> auth.py -> users_router` cycle.
-     import moved to `dependencies` leaf.
-    """
-    from app.core.auth.dependencies import get_current_user
-
-    return get_current_user(credentials)
-
-
-def require_admin(
-    current_user: CurrentUser = Depends(_get_current_user_proxy),
-) -> CurrentUser:
-    """Lazy proxy preserving the existing `auth.require_admin` behavior."""
-    from app.core.auth.dependencies import require_admin as _require_admin
-
-    return _require_admin(current_user)
+# Dipendenze condivise estratte in `router_deps.py` per evitare drift
+# rispetto a `groups_router.py` (pre-fix erano identiche copie inline).
+from app.core.auth.router_deps import require_admin  # noqa: F401
 
 
 @users_router.get("", response_model=list[UserResponse])

@@ -28,19 +28,31 @@ export function useSchemaInference(projectId) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
-  // Ref per evitare chiamate duplicate
+  // Ref per evitare chiamate duplicate sullo STESSO projectId
   const fetchingRef = useRef(false);
   const lastProjectIdRef = useRef(null);
   // Mounted guard: setState dopo `await` deve verificare il flag per
   // evitare leak su unmount (es. cambio progetto durante schema fetch).
   const mountedRef = useMountedRef();
+  // requestIdRef: counter monotonicamente crescente, incrementato ad
+  // ogni `refreshSchemas`. La response viene applicata SOLO se il suo
+  // requestId corrisponde all'ultimo emesso. Risolve la race A→B→A:
+  // pre-fix una fetch lenta di A poteva sovrascrivere gli schemi B
+  // gia' caricati. Pattern equivalente a un AbortController + ignora
+  // stale promise (Go-friendly: counter int condiviso, niente abort
+  // signal propagation).
+  const requestIdRef = useRef(0);
 
   /**
    * Carica tutti gli schemi per il progetto
    */
   const refreshSchemas = useCallback(async () => {
-    if (!projectId || fetchingRef.current) return;
+    if (!projectId) return;
 
+    // Nessun early-return su fetchingRef: una fetch in volo per un
+    // projectId precedente NON deve bloccare la fetch del nuovo.
+    // L'ordering corretto e' garantito dal requestIdRef check sotto.
+    const myRequestId = ++requestIdRef.current;
     fetchingRef.current = true;
     setLoading(true);
     setError(null);
@@ -48,18 +60,23 @@ export function useSchemaInference(projectId) {
     try {
       const data = await getProjectSchemas(projectId);
       if (!mountedRef.current) return;
+      // Se nel frattempo e' stata avviata una fetch piu' recente
+      // (myRequestId obsoleto), scartiamo questa response per non
+      // sovrascrivere schemi gia' aggiornati.
+      if (myRequestId !== requestIdRef.current) return;
       setSchemas(data.schemas || {});
       lastProjectIdRef.current = projectId;
 
     } catch (err) {
       console.error('[useSchemaInference] Errore caricamento schemi:', err);
       if (!mountedRef.current) return;
+      if (myRequestId !== requestIdRef.current) return;
       setError(err.message);
     } finally {
-      if (mountedRef.current) {
+      if (mountedRef.current && myRequestId === requestIdRef.current) {
         setLoading(false);
+        fetchingRef.current = false;
       }
-      fetchingRef.current = false;
     }
   }, [projectId, mountedRef]);
 

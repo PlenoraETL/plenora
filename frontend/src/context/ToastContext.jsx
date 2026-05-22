@@ -21,7 +21,7 @@
  *   ✅ L'import di useToast rimane invariato (re-exported da qui)
  */
 
-import React, { createContext, useContext, useState, useCallback } from 'react';
+import React, { createContext, useContext, useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import ToastContainer from '../components/common/ToastContainer';
 let _nextId = 0;
@@ -32,15 +32,23 @@ const ToastContext = createContext(null);
  */
 export function ToastProvider({ children }) {
   const [toasts, setToasts] = useState([]);
+  // timersRef tiene i setTimeout id per cancellarli su unmount: pre-fix
+  // il setTimeout dentro addToast non era cancellabile; se il provider
+  // si smontava (mai in prod ma si' in HMR/test), il timer continuava
+  // a chiamare setToasts su un componente smontato → warning React +
+  // memory leak fra hot reloads.
+  const timersRef = useRef(new Set());
 
   const addToast = useCallback((message, type = 'info', duration = 4000) => {
     const id = ++_nextId;
     setToasts(prev => [...prev, { id, message, type }]);
 
     if (duration > 0) {
-      setTimeout(() => {
+      const timerId = setTimeout(() => {
+        timersRef.current.delete(timerId);
         setToasts(prev => prev.filter(t => t.id !== id));
       }, duration);
+      timersRef.current.add(timerId);
     }
 
     return id;
@@ -50,12 +58,30 @@ export function ToastProvider({ children }) {
     setToasts(prev => prev.filter(t => t.id !== id));
   }, []);
 
+  // Cleanup al unmount del provider: cancella tutti i timer pending.
+  useEffect(() => {
+    const timers = timersRef.current;
+    return () => {
+      for (const timerId of timers) clearTimeout(timerId);
+      timers.clear();
+    };
+  }, []);
+
   const success = useCallback((msg, duration)        => addToast(msg, 'success', duration),        [addToast]);
   const error   = useCallback((msg, duration)        => addToast(msg, 'error',   duration ?? 6000), [addToast]);
   const warning = useCallback((msg, duration)        => addToast(msg, 'warning', duration),        [addToast]);
   const info    = useCallback((msg, duration)        => addToast(msg, 'info',    duration),        [addToast]);
 
-  const value = { toasts, success, error, warning, info, dismiss };
+  // Memo del context value: senza memoization, ogni render del
+  // ToastProvider creava un nuovo oggetto `value` con stessa shape ma
+  // identita' diversa. I consumer che fanno `const toast = useToast();
+  // useCallback(..., [toast])` vedevano `toast` come dep cambiata ad
+  // ogni render del provider, invalidando i loro callback memoized.
+  // useCanvasSave era il caso piu' esposto (vedi P2-MED G3).
+  const value = useMemo(
+    () => ({ toasts, success, error, warning, info, dismiss }),
+    [toasts, success, error, warning, info, dismiss],
+  );
 
   return (
     <ToastContext.Provider value={value}>

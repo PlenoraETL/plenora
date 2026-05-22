@@ -221,7 +221,17 @@ class ConnectionService:
             else:
                 return ConnectionTestResult(success=False, message=f"Tipo '{connection.type}' non supportato")
         except Exception as e:
-            logger.error(f"[GESTITO] Errore test connessione: {e}", exc_info=True)
+            # Log con solo type+repr per evitare credential leak: i driver DB
+            # (psycopg2, pyodbc, pymssql) possono includere host/user/password
+            # nel str(e) di alcune eccezioni (es. "FATAL: password authentication
+            # failed for user 'admin' at host postgres.internal:5432"). exc_info
+            # mantiene la traceback completa per il debug operativo, ma il
+            # messaggio principale resta neutro.
+            logger.error(
+                "[GESTITO] Errore test connessione: %s",
+                type(e).__name__,
+                exc_info=True,
+            )
             return ConnectionTestResult(success=False, message="Errore durante il test della connessione")
 
     def _test_postgres(self, conn):
@@ -280,12 +290,25 @@ class ConnectionService:
                 return '{' + val.replace('}', '}}') + '}'
             return val
 
+        # TrustServerCertificate=yes accetta certificati self-signed sul lato
+        # SQL Server senza validare la chain — equivalente a TLS verify=False
+        # per HTTP. In prod un MITM puo' presentare un cert arbitrario e
+        # decryptare username/password. Gating env-aware via tls_policy:
+        # in prod/staging si forza TrustServerCertificate=no, in dev/CI
+        # rimane "yes" per supportare i certificati locali.
+        from app.core.security.tls_policy import tls_bypass_allowed
+        trust_server_cert = "yes" if tls_bypass_allowed() else "no"
+        if trust_server_cert == "no":
+            logger.info(
+                "[SECURITY] MSSQL test: TrustServerCertificate=no "
+                "(prod-like env, cert chain validata)."
+            )
         base = (
             f"SERVER={_odbc_escape(conn.host)},{conn.port};"
             f"DATABASE={_odbc_escape(conn.database)};"
             f"UID={_odbc_escape(conn.username)};"
             f"PWD={_odbc_escape(conn.password)};"
-            f"TrustServerCertificate=yes"
+            f"TrustServerCertificate={trust_server_cert}"
         )
 
         all_attempts = [
@@ -325,12 +348,18 @@ class ConnectionService:
                     # already filtered against pyodbc.drivers().
                     err_msg = str(e)
                     if "IM002" not in err_msg:
+                        # Solo type+sanitized; il raw str(e) di pyodbc puo'
+                        # includere credenziali su errori auth (es. "Login
+                        # failed for user 'sa' [...] password=..."). exc_info
+                        # mantiene traceback per debug operativo; messaggio
+                        # logger e errors[] passano per _sanitize_mssql_error.
+                        sanitized = _sanitize_mssql_error(e)
                         logger.warning(
-                            f"[GESTITO] MS SQL driver={driver_name!r} fallito: "
-                            f"{type(e).__name__}: {e}",
+                            "[GESTITO] MS SQL driver=%r fallito: %s: %s",
+                            driver_name, type(e).__name__, sanitized,
                             exc_info=True,
                         )
-                        errors.append(f"[{driver_name}] {_sanitize_mssql_error(e)}")
+                        errors.append(f"[{driver_name}] {sanitized}")
                     continue
 
             # FreeTDS is often more tolerant of older SQL Server TLS/TDS setups.

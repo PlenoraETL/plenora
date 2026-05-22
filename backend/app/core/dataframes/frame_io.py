@@ -375,8 +375,20 @@ def load_dataframe_from_artifact(
     if fmt in _PATH_BOUND_ARTIFACT_FORMATS:
         expected_suffix = ".gpkg" if fmt == "gpkg" else f".{fmt}"
         if fmt != "gdb" and artifact_path.suffix.lower() != expected_suffix:
-            with tempfile.NamedTemporaryFile(delete=False, prefix="plenora-artifact-", suffix=expected_suffix) as tmp:
-                tmp_path = Path(tmp.name)
+            # Pre-fix: `with NamedTemporaryFile(...) as tmp: tmp_path = ...`
+            # creava una finestra in cui il file su disco poteva rimanere
+            # orfano se l'uscita dal `with` falliva tra creazione e
+            # assegnazione di `tmp_path`. Post-fix: creazione esplicita
+            # via NamedTemporaryFile + close immediato, tmp_path catturato
+            # prima del try block — il finally esegue unlink in qualsiasi
+            # caso di errore successivo (shutil.copyfile o load_*).
+            tmp_obj = tempfile.NamedTemporaryFile(
+                delete=False,
+                prefix="plenora-artifact-",
+                suffix=expected_suffix,
+            )
+            tmp_path = Path(tmp_obj.name)
+            tmp_obj.close()
             try:
                 shutil.copyfile(artifact_path, tmp_path)
                 return load_dataframe_from_file(tmp_path, sheet=sheet, layer=layer)

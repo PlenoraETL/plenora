@@ -17,6 +17,9 @@ from app.observability.health import (
     check_postgres,
     check_redis,
 )
+from app.utils.logger import get_logger
+
+logger = get_logger(__name__)
 
 
 _SECRET_NEEDLES = (
@@ -190,6 +193,19 @@ def _setting_entry(key: str) -> dict[str, object]:
     raw_value = os.getenv(key)
     value = settings.get(key)
     has_default = key in settings.DEFAULTS
+    # Sanity log: una chiave in `_CONFIG_SECTIONS` che non e' ne' in
+    # `settings.DEFAULTS` ne' in `os.environ` puo' indicare un drift
+    # in cui qualcuno ha aggiunto la chiave alla sezione admin ma ha
+    # dimenticato di aggiungerla ai default canonici. Senza questo log
+    # la chiave usciva con `source="unset"` e `value=None` senza alcuna
+    # tracciabilita' operativa.
+    if raw_value is None and not has_default:
+        logger.info(
+            "[admin/runtime-config] key=%s NON in settings.DEFAULTS e non "
+            "in os.environ: ritornata come source=unset. Verifica drift "
+            "fra _CONFIG_SECTIONS e settings.DEFAULTS.",
+            key,
+        )
     return {
         "key": key,
         "value": _serialize_value(key, value),

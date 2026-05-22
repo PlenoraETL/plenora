@@ -86,12 +86,20 @@ export function useEditorData(projectId, options = {}) {
   // sourceTypes stabilizzato con ref: evita che un array literal nelle deps
   // di useCallback causi un nuovo riferimento ad ogni render → loop infinito.
   const sourceTypesRef = useRef(sourceTypes);
+  // Pre-fix: `[sourceTypes?.join(',')]` quando `sourceTypes` era undefined
+  // produceva dep `undefined` → React passava sempre `Object.is(undefined,
+  // undefined) === true`, l'effect non firerava mai sul primo array
+  // valido. Fix: fallback esplicito a '' rende la dep stabile e
+  // l'effect prevedibile.
+  const sourceTypesKey = (sourceTypes && Array.isArray(sourceTypes))
+    ? sourceTypes.join(',')
+    : '';
   useEffect(() => {
     sourceTypesRef.current = sourceTypes;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    // Joinata stringa intenzionale: stabilizza l'identità in deps, altrimenti
-    // un array literal nuovo ad ogni render rifirerebbe l'effect a vuoto.
-  }, [sourceTypes?.join(',')]);
+    // Joinata stringa stabile: una nuova string identity firera' solo
+    // quando il contenuto array cambia veramente.
+  }, [sourceTypesKey]);
 const [project,     setProject]     = useState(null);
   const [connections, setConnections] = useState([]);
   const [loading,     setLoading]     = useState(true);

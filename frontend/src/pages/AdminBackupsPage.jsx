@@ -166,54 +166,60 @@ export default function AdminBackupsPage() {
 
   const loadAll = useCallback(async () => {
     setLoading(true);
-    const [listResult, statusResult, scheduleResult] = await Promise.allSettled([
-      listBackups(),
-      getBackupStatus(),
-      getBackupSchedule(),
-    ]);
+    // try/finally garantisce che setLoading(false) venga sempre eseguito
+    // anche se un helper sincrono successivo solleva (extractErrorCode/
+    // Message o isObjectStorageDisabled potrebbero throware in futuro).
+    // Pre-fix la UI restava in stato "Loading..." indefinito su throw.
+    try {
+      const [listResult, statusResult, scheduleResult] = await Promise.allSettled([
+        listBackups(),
+        getBackupStatus(),
+        getBackupSchedule(),
+      ]);
 
-    let handledStorageDisabled = false;
-    let handledAwsCredentials = false;
-    let genericError = null;
+      let handledStorageDisabled = false;
+      let handledAwsCredentials = false;
+      let genericError = null;
 
-    if (listResult.status === 'fulfilled') {
-      setData(listResult.value);
-      setBackupUnavailable(null);
-      setAwsCredentialsError(null);
-    } else {
-      const code = extractErrorCode(listResult.reason);
-      const message = extractErrorMessage(listResult.reason);
-      if (isObjectStorageDisabled(code)) {
-        handledStorageDisabled = true;
-        setBackupUnavailable(message);
-        setAwsCredentialsError(null);
-        setData(null);
-      } else if (code === 'aws_credentials_expired') {
-        handledAwsCredentials = true;
-        setAwsCredentialsError(message);
+      if (listResult.status === 'fulfilled') {
+        setData(listResult.value);
         setBackupUnavailable(null);
+        setAwsCredentialsError(null);
       } else {
-        genericError = message;
+        const code = extractErrorCode(listResult.reason);
+        const message = extractErrorMessage(listResult.reason);
+        if (isObjectStorageDisabled(code)) {
+          handledStorageDisabled = true;
+          setBackupUnavailable(message);
+          setAwsCredentialsError(null);
+          setData(null);
+        } else if (code === 'aws_credentials_expired') {
+          handledAwsCredentials = true;
+          setAwsCredentialsError(message);
+          setBackupUnavailable(null);
+        } else {
+          genericError = message;
+        }
       }
-    }
 
-    if (statusResult.status === 'fulfilled') {
-      setStatus(statusResult.value);
-    } else if (!handledStorageDisabled && !handledAwsCredentials) {
-      genericError = genericError || extractErrorMessage(statusResult.reason);
-    }
+      if (statusResult.status === 'fulfilled') {
+        setStatus(statusResult.value);
+      } else if (!handledStorageDisabled && !handledAwsCredentials) {
+        genericError = genericError || extractErrorMessage(statusResult.reason);
+      }
 
-    if (scheduleResult.status === 'fulfilled') {
-      setSchedule(scheduleResult.value);
-    } else if (!handledStorageDisabled && !handledAwsCredentials) {
-      genericError = genericError || extractErrorMessage(scheduleResult.reason);
-    }
+      if (scheduleResult.status === 'fulfilled') {
+        setSchedule(scheduleResult.value);
+      } else if (!handledStorageDisabled && !handledAwsCredentials) {
+        genericError = genericError || extractErrorMessage(scheduleResult.reason);
+      }
 
-    if (genericError) {
-      toast.error(genericError);
+      if (genericError) {
+        toast.error(genericError);
+      }
+    } finally {
+      setLoading(false);
     }
-
-    setLoading(false);
   }, [toast]);
 
   useEffect(() => {

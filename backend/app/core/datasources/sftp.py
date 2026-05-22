@@ -119,7 +119,20 @@ class SFTPDataSource(DataSourceInterface):
                     "Credenziali SFTP mancanti: fornire 'password' o 'private_key'"
                 )
 
-            ssh.connect(**kwargs)
+            # Retry transient: timeout/RST/DNS sono frequenti su SFTP.
+            # SSHException da auth/banner errato non e' transient; viene
+            # rilevata fuori dal retry loop via except specifico sotto.
+            # paramiko.AuthenticationException NON e' OSError, propaga
+            # immediato senza retry.
+            from app.shared.connections.retry import call_with_retry
+
+            call_with_retry(
+                lambda: ssh.connect(**kwargs),
+                op_name=f"sftp.connect({host}:{port})",
+                max_attempts=3,
+                backoff_base=0.5,
+                retriable_excs=(OSError, TimeoutError),
+            )
             self._ssh = ssh
             self._sftp = ssh.open_sftp()
 

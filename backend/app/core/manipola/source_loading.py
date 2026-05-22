@@ -21,6 +21,8 @@ from app.shared.resources.metadata import LoadedResource, ResourceMetadata
 
 __all__ = ["load_file_sources", "load_project_source_artifact"]
 
+logger = get_logger(__name__)
+
 
 _DEFAULT_LOGGER = get_logger(__name__)
 
@@ -164,6 +166,17 @@ def load_file_sources(
     for node in file_nodes:
         fid = _nf(node, 'file_source_id')
         if not fid:
+            # Pre-fix: silent skip su file_source senza file_source_id.
+            # Sintomo utente: canvas con node file_source non collegato
+            # produce "Nessun dato sorgente" generico, senza indicazione
+            # che il nodo era misconfigurato. Warn esplicito facilita
+            # il triage operativo.
+            node_id = _nf(node, 'id', '<sconosciuto>')
+            logger.warning(
+                "Nodo file_source skippato (file_source_id mancante): "
+                "node_id=%s — il canvas referenzia un file non configurato",
+                node_id,
+            )
             continue
 
         ref = SourceRef.from_node_data(

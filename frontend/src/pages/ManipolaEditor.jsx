@@ -81,7 +81,7 @@ const defaultEdgeOptions = {
 };
 
 const ManipolaEditorContent = () => {
-  const { id: projectId } = useParams();
+  const { projectId } = useParams();
 
   const navigate = useNavigate();
   const { user, logout } = useAuth();
@@ -110,7 +110,7 @@ const ManipolaEditorContent = () => {
     sourceTypes: MANIPOLA_SOURCE_TYPES,
   });
 
-  const { schemas, loading: schemasLoading, refreshSchemas } = useSchemaInference(projectId);
+  const { schemas, loading: schemasLoading, error: schemasError, refreshSchemas } = useSchemaInference(projectId);
 
   const preview   = usePreview(projectId, handleSaveQuiet);
   const { saving, handleSaveCanvas } = useCanvasSave(handleSaveQuiet, {
@@ -467,6 +467,18 @@ const ManipolaEditorContent = () => {
           <h2 className="manipola-toolbar__title">{project?.metadata?.name}</h2>
           <span className="manipola-toolbar__badge">MANIPOLA</span>
           {schemasLoading && <span className="manipola-toolbar__badge" style={{background: '#FF9800'}}>⏳ Aggiornamento schemi...</span>}
+          {schemasError && !schemasLoading && (
+            <span
+              className="manipola-toolbar__badge"
+              style={{ background: '#D32F2F', cursor: 'pointer' }}
+              title={`Errore inferenza schema: ${schemasError}. Clicca per ritentare.`}
+              onClick={refreshSchemas}
+              role="button"
+              tabIndex={0}
+            >
+              ⚠️ Schemi non caricati
+            </span>
+          )}
         </div>
         <div className="manipola-toolbar__right">
           {!isReadOnly && (

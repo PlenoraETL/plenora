@@ -113,10 +113,21 @@ CREATE TABLE IF NOT EXISTS file_sources (
     metadata          TEXT,
     created_at        TEXT NOT NULL,
     updated_at        TEXT NOT NULL,
-    created_by        TEXT REFERENCES users(id)
+    created_by        TEXT REFERENCES users(id),
+    -- Temp file lifecycle (P2 I2): le righe create da `eseguibili/
+    -- service.py` con `name="__exec_temp_..."` sono marcate is_temp=true
+    -- + expires_at impostato a now()+24h. Il task
+    -- `cleanup_temp_files_task` gira ogni ora via PlenoraBeatScheduler
+    -- e cancella `WHERE is_temp = true AND expires_at < now()`.
+    is_temp           BOOLEAN NOT NULL DEFAULT false,
+    expires_at        TIMESTAMPTZ
 );
 
 CREATE INDEX IF NOT EXISTS idx_file_sources_group ON file_sources(group_id);
+-- Index parziale per cleanup sweep: solo righe is_temp=true vengono
+-- interrogate dal beat job.
+CREATE INDEX IF NOT EXISTS idx_file_sources_temp_expires
+    ON file_sources(expires_at) WHERE is_temp = true;
 
 -- Partial index su storage_key per accelerare la sibling refcount lookup
 -- e SELECT FOR UPDATE durante

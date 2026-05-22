@@ -93,7 +93,7 @@ dmypy.json
 .cursorindexingignore
 
 # Claude
-.claude/
+.claude/settings.local.json
 
 # Node.js / Frontend
 node_modules/

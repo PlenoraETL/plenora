@@ -341,48 +341,50 @@ class ArcGISAuthMixin:
         self,
         conn: ArcGISConnectionInfo,
     ) -> TokenRecord:
-        """Fetch diretto del token OAuth2 ArcGIS senza loggare secret."""
+        """Fetch del token OAuth2 ArcGIS.
+
+        Delega a `oauth._fetch_oauth2_client_credentials_token` (shared)
+        per evitare duplicazione del grant flow. Pre-fix
+        c'era un'implementazione parallela in questo file con cache
+        separata (`self._token_cache` vs `_OAUTH2_TOKEN_CACHE` globale)
+        che potevano restituire token diversi per la stessa connessione.
+        L'`extra_form_data={"f": "json"}` preserva il quirk ArcGIS
+        (forza JSON response sull'endpoint legacy `/sharing/rest/...`).
+        """
+        from app.shared.connections.oauth import (
+            _fetch_oauth2_client_credentials_token,
+        )
 
         parsed = urlparse(conn.server_url)
         oauth_url = f"{parsed.scheme}://{parsed.netloc}/sharing/rest/oauth2/token"
 
-        token_data = {
-            "client_id": conn.client_id,
-            "client_secret": conn.client_secret,
-            "grant_type": "client_credentials",
-            "f": "json",
-        }
+        result = _fetch_oauth2_client_credentials_token(
+            {
+                "token_url": oauth_url,
+                "client_id": conn.client_id,
+                "client_secret": conn.client_secret,
+            },
+            extra_form_data={"f": "json"},
+        )
 
-        try:
-            response = self._http.post(
-                oauth_url, data=token_data, timeout=self.DEFAULT_TIMEOUT
-            )
-            result = response.json()
-
-            logger.info(
-                f"OAuth2 request a {oauth_url} - status: {response.status_code}"
-            )
-
-            if "access_token" in result:
-                token = result["access_token"]
-                expires_in = result.get("expires_in", 7200)  # default 2 ore
-
-                logger.info(
-                    f"Token OAuth2 ottenuto per {conn.server_url} "
-                    f"(expires_in={expires_in}s)"
-                )
-                return {
-                    "token": token,
-                    "expires_at": time.time() + expires_in,
-                }
-            error = result.get("error", {})
-            error_desc = error.get(
-                "message", result.get("error_description", "Errore OAuth2")
-            )
+        if not result or "access_token" not in result:
+            error = (result or {}).get("error", {}) if isinstance(result, dict) else {}
+            error_desc = (
+                error.get("message")
+                if isinstance(error, dict)
+                else None
+            ) or (result or {}).get("error_description") or "Errore OAuth2"
             raise ConnectionError(f"OAuth2 fallito: {error_desc}")
 
-        except requests.RequestException as e:
-            raise ConnectionError(f"Errore connessione OAuth2: {e}")
+        expires_in = result.get("expires_in", 7200)  # default 2 ore
+        logger.info(
+            f"Token OAuth2 ottenuto per {conn.server_url} "
+            f"(expires_in={expires_in}s)"
+        )
+        return {
+            "token": result["access_token"],
+            "expires_at": time.time() + expires_in,
+        }
 
     def _authenticate_token(
         self,
@@ -449,7 +451,24 @@ class ArcGISAuthMixin:
                 if "token" in result:
                     token = result["token"]
                     expires = result.get("expires", 0)
+                    # ArcGIS API ritorna `expires` in millisecondi-since-epoch
+                    # (legacy) o secondi (alcune versioni nuove). Pre-fix
+                    # l'heuristic `> 1e10` ne distingueva l'unita': 1e10 sec
+                    # = anno 2286 → qualsiasi valore sopra e' "in ms". Bug
+                    # noto: in futuro lontano (post-2286) la heuristic si
+                    # rompe. Mitigazione: sanity cap su ttl (max ~1 anno)
+                    # per non accettare token con scadenza assurda.
                     expires_sec = expires / 1000 if expires > 1e10 else expires
+                    _MAX_REASONABLE_TTL = 366 * 24 * 3600  # 1 anno
+                    now_ts = time.time()
+                    if expires_sec - now_ts > _MAX_REASONABLE_TTL:
+                        logger.warning(
+                            "Token ArcGIS con TTL sospetto (%.0fs > 1 anno): "
+                            "ricomputo come `now + 1h`. Verifica formato "
+                            "campo `expires` (ms vs sec) del server.",
+                            expires_sec - now_ts,
+                        )
+                        expires_sec = now_ts + 3600
 
                     logger.debug(
                         f"Token ottenuto per {conn.server_url} "

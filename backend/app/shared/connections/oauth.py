@@ -483,8 +483,19 @@ def _fetch_oauth2_password_token(auth: JsonObject) -> Optional[JsonObject]:
         return None
 
 
-def _fetch_oauth2_client_credentials_token(auth: JsonObject) -> Optional[JsonObject]:
-    """Fetch diretto di un token client_credentials grant."""
+def _fetch_oauth2_client_credentials_token(
+    auth: JsonObject,
+    *,
+    extra_form_data: Optional[JsonObject] = None,
+) -> Optional[JsonObject]:
+    """Fetch diretto di un token client_credentials grant.
+
+    `extra_form_data` consente ai caller provider-specific di aggiungere
+    campi al body POST senza forkare la funzione (es. ArcGIS richiede
+    `f=json` per forzare la response JSON sul vecchio endpoint
+    `/sharing/rest/oauth2/token`). Pre-fix `arcgis_auth.py` aveva una
+    implementazione duplicata di questa funzione con poche differenze.
+    """
     token_url = auth.get("token_url", "")
     client_id = auth.get("client_id", "")
     client_secret = auth.get("client_secret", "")
@@ -501,6 +512,8 @@ def _fetch_oauth2_client_credentials_token(auth: JsonObject) -> Optional[JsonObj
         }
         if scope:
             data["scope"] = scope
+        if extra_form_data:
+            data.update(extra_form_data)
 
         response = _get_shared_session().post(
             token_url,

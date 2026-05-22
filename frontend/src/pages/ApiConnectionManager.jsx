@@ -410,7 +410,7 @@ const openWizardForNew = () => {
                   <div className="acm__wlabel acm__wlabel--mt-md">Campi estratti ({quickTestResult.result.available_fields.length})</div>
                   <div className="acm__fields-grid">
                     {quickTestResult.result.available_fields.map((f,i)=>(
-                      <div key={i} className="acm__field-item">
+                      <div key={f.name || `field-${i}`} className="acm__field-item">
                         <div className="acm__field-info">
                           <span className="acm__field-name">{f.name}</span>
                           <span className={`acm__field-type acm__field-type--${f.type}`}>{f.type}</span>

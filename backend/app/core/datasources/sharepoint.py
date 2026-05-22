@@ -115,17 +115,33 @@ class SharePointDataSource(DataSourceInterface):
                 "Configurazione SharePoint incompleta: site_url, client_id, client_secret richiesti"
             )
 
-        try:
+        # Retry transient: SharePoint subisce 502/503 transitori e socket
+        # timeout sui datacenter Microsoft (vedi fake-rest /sharepoint/
+        # transient_5xx). AADSTS auth errors NON sono transient: vengono
+        # mappati come ClientRequestException con AADSTS code stabile, NON
+        # retriable; vengono inclusi in `Exception` ma il narrow su
+        # (OSError, TimeoutError, ConnectionError) li esclude — propagano
+        # immediato e finiscono nell'except Exception fuori dal retry.
+        from app.shared.connections.retry import call_with_retry
+
+        def _do_auth():
             credentials = ClientCredential(client_id, client_secret)
             ctx = ClientContext(site_url).with_credentials(credentials)
             if tenant_id:
                 ctx.authentication_context.tenant = tenant_id
-
-            # Test connessione (stesso pattern del tuo uploader
             web = ctx.web
             ctx.load(web)
             ctx.execute_query()
+            return ctx
 
+        try:
+            ctx = call_with_retry(
+                _do_auth,
+                op_name=f"sharepoint.connect({site_url})",
+                max_attempts=3,
+                backoff_base=0.5,
+                retriable_excs=(OSError, TimeoutError, ConnectionError),
+            )
             self._ctx = ctx
 
         except Exception as e:

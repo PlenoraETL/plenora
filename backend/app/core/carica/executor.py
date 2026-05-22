@@ -246,10 +246,22 @@ class CaricaExecutor:
         return result
 
     def _get_connection(self, connection_id: str) -> JsonObject:
-        """Recupera la configurazione di connessione."""
+        """Recupera la configurazione di connessione.
+
+        Conversione a dict in ordine di preferenza:
+          1. Pydantic v2 `model_dump()` (canonico, deprecation-safe)
+          2. Pydantic v1 `.dict()` (legacy, fallback per modelli non
+             ancora migrati)
+          3. plain object `__dict__` (dataclass-like)
+        Pre-fix `conn.dict()` veniva chiamato anche su modelli v2 dove
+        emette DeprecationWarning a ogni invocazione; in Pydantic v3
+        scomparira' del tutto. Ordering canonico evita la deprecation.
+        """
         if self.connection_service:
             conn = self.connection_service.get_connection(connection_id)
             if conn:
+                if hasattr(conn, 'model_dump'):
+                    return conn.model_dump()
                 if hasattr(conn, 'dict'):
                     return conn.dict()
                 if hasattr(conn, '__dict__'):

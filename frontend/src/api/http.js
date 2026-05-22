@@ -53,9 +53,25 @@ http.interceptors.response.use(
     // Precedenza: new envelope `message` → legacy FastAPI `detail` → JS Error.
     // Il BE dual-shape mantiene `detail` come mirror durante la transizione.
     const data = error.response?.data;
+    // Pre-fix: `data?.detail` veniva passato as-is anche quando era un
+    // array (Pydantic v2 422 emette `detail: [{loc, msg, type}, ...]`).
+    // Il toast finale mostrava `[object Object]` perche' React coerce
+    // un array a stringa via .join(',') ma ogni elemento e' un dict.
+    // Post-fix: se `detail` e' array (validation 422), estraggo i `msg`
+    // di ciascun elemento e li concateno; primitive restano intoccate.
+    let detailMessage = data?.detail;
+    if (Array.isArray(detailMessage)) {
+      detailMessage = detailMessage
+        .map((d) => {
+          if (typeof d === 'string') return d;
+          const loc = Array.isArray(d?.loc) ? d.loc.join('.') : d?.loc;
+          return loc ? `${loc}: ${d?.msg || 'invalid'}` : (d?.msg || JSON.stringify(d));
+        })
+        .join('; ');
+    }
     const message =
       data?.message                 ||
-      data?.detail                  ||
+      detailMessage                 ||
       error.message                 ||
       'Errore di comunicazione con il server';
 

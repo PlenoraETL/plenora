@@ -24,9 +24,21 @@ class _ProgressTask(Protocol):
 
 
 def _update_progress(task: _ProgressTask, percent: int, message: str) -> None:
+    # Pre-fix: pipeline_task emetteva `meta["percent"]`, mentre
+    # enrichment_task e imdf_publish_task emettevano `meta["progress"]`.
+    # Il consumer `task_service.py:517` aveva un fallback
+    # `meta.get("progress", meta.get("percent", 0))` ma il drift restava
+    # un trap per nuovi consumer FE che leggono solo uno dei due. Post-fix
+    # emettiamo entrambi: `progress` canonico (allineato agli altri task)
+    # + `percent` mirror legacy per evitare regressioni FE.
     task.update_state(
         state="PROGRESS",
-        meta={"percent": percent, "message": message, "type": "pipeline"},
+        meta={
+            "progress": percent,
+            "percent": percent,  # mirror legacy
+            "message": message,
+            "type": "pipeline",
+        },
     )
 
 
@@ -324,6 +336,9 @@ def execute_pipeline_task(
                     meta={
                         "exc_type": "ConnectionError",
                         "exc_message": message,
+                        # Dual emission per evitare drift (vedi P2-MED I1):
+                        # progress canonico + percent legacy mirror.
+                        "progress": 0,
                         "percent": 0,
                         "message": f"Connessione al database persa. {message}",
                     },

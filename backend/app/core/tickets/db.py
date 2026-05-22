@@ -8,6 +8,7 @@ from datetime import datetime, timezone
 from typing import Any, List, Mapping, Optional
 
 from app.db.pg_connection import unit_of_work
+from app.db.sql_safety import safe_set_clause
 from app.shared.contracts.payloads import IntMap, JsonObject
 from app.utils.logger import get_logger
 
@@ -314,15 +315,16 @@ def update_ticket(
     if status == "resolved" and not current.get("resolved_at"):
         fields["resolved_at"] = now
 
-    set_parts = []
-    params: List[Any] = []
-    for k, v in fields.items():
-        set_parts.append(f"{k} = %s")
-        params.append(v)
-    params.append(ticket_id)
+    # Pre-fix: SET clause costruito via f-string da `fields` dict, senza
+    # allowlist. I valori provenivano da API tipizzata, ma il pattern era
+    # fragile — l'aggiunta di un nuovo campo bypassava qualsiasi safety.
+    # Post-fix: delegato a `safe_set_clause("tickets", ...)` che valida
+    # contro `_ALLOWED_UPDATE_FIELDS["tickets"]` e solleva su chiave
+    # estranea (defense-in-depth).
+    set_clause, value_params = safe_set_clause("tickets", fields)
     execute(
-        f"UPDATE tickets SET {', '.join(set_parts)} WHERE id = %s",
-        tuple(params),
+        f"UPDATE tickets SET {set_clause} WHERE id = %s",
+        value_params + (ticket_id,),
     )
     return get_ticket(ticket_id)
 

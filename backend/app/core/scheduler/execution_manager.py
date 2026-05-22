@@ -476,12 +476,37 @@ class ExecutionManager:
 
             lock_lost = bool(heartbeat_state.get("lock_lost", False))
             if lock_lost:
+                # Pre-fix: lock_lost loggava solo WARN ma ritornava
+                # success=True. Risultato: il caller (Celery task wrapper)
+                # marcava la run come riuscita anche quando un secondo
+                # worker poteva aver gia' acquisito il lock e iniziato a
+                # scrivere artifact concorrenti. L'orphan run scriveva
+                # output che poi veniva sovrascritto/corrotto dal worker
+                # legittimo, senza alcuna segnalazione operativa.
+                # Post-fix: status="partial" + success=False rende il
+                # fallimento visibile al boundary task (Celery) e ai
+                # consumer della task table (UI scheduler), garantendo
+                # che l'admin sappia che la run e' inaffidabile.
                 logger.warning(
                     f"[LOCK_LOST] Schedule {schedule_id}: heartbeat ha "
                     f"rilevato perdita del lock durante l'esecuzione. "
-                    f"Possibile concorrenza — verificare eventuali run "
-                    f"duplicati per lo stesso schedule_id."
+                    f"Possibile concorrenza — la run viene marcata "
+                    f"partial: gli output prodotti possono essere stati "
+                    f"sovrascritti dal worker concorrente."
                 )
+                return {
+                    "success": False,
+                    "status": "partial",
+                    "message": (
+                        f"Pipeline completata in {total_duration}ms ma il "
+                        f"lock e' stato perso durante l'esecuzione. "
+                        f"Run marcata partial — verificare l'integrita' "
+                        f"degli output ed eventuali run duplicati."
+                    ),
+                    "log_file": log_path,
+                    "rows_written": rows_written,
+                    "lock_lost": True,
+                }
 
             return {
                 "success": True,

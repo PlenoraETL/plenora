@@ -291,8 +291,17 @@ const handlePreview = async (file) => {
 const handleDelete = async (fileId, fileName) => {
     const ok = await confirmModal.confirm({ title: 'Elimina file', message: `Eliminare "${fileName}"?`, confirmText: 'Elimina', variant: 'danger' });
     if (!ok) return;
-    try { await deleteFile(fileId); await loadFiles(); }
-    catch { toast.error("Errore durante l'eliminazione"); }
+    try {
+      await deleteFile(fileId);
+      await loadFiles();
+    } catch (err) {
+      // Pre-fix: `catch { toast.error(...) }` senza param scartava
+      // err.message e impediva il troubleshooting di errori specifici
+      // (es. file in uso da un canvas, lock DB). Post-fix mostriamo il
+      // messaggio originale quando disponibile, fallback al generico.
+      const msg = err?.response?.data?.message || err?.message || "Errore durante l'eliminazione";
+      toast.error(msg);
+    }
   };
 const resetUploadModal = () => {
     setShowUploadModal(false); setUploadFile(null); setUploadName(''); setUploadDescription('');
