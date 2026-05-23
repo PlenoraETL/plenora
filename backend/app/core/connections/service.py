@@ -388,12 +388,19 @@ class ConnectionService:
                     finally:
                         c.close()
                 except Exception as e:
+                    # Pre-fix: f"{e}" propagava il messaggio raw di pymssql,
+                    # che su auth failure include username/password nella
+                    # form "Login failed for user '...'". Allineato al fix
+                    # gia' applicato al path pyodbc (riga 342-353) e al
+                    # safety-net (sotto): logghiamo solo type + sanitized,
+                    # exc_info mantiene la traceback completa per debug.
+                    sanitized = _sanitize_mssql_error(e)
                     logger.warning(
-                        f"[GESTITO] MS SQL pymssql fallback fallito: "
-                        f"{type(e).__name__}: {e}",
+                        "[GESTITO] MS SQL pymssql fallback fallito: %s: %s",
+                        type(e).__name__, sanitized,
                         exc_info=True,
                     )
-                    errors.append(f"[pymssql] {_sanitize_mssql_error(e)}")
+                    errors.append(f"[pymssql] {sanitized}")
             except ImportError:
                 errors.append("[pymssql non installato] Per server vecchi installa: pip install pymssql")
 
@@ -407,12 +414,16 @@ class ConnectionService:
                 details={"errors": errors},
             )
         except Exception as e:
+            # Safety-net catch-all: stesso pattern del pymssql/pyodbc path.
+            # Pre-fix: f"{e}" raw poteva leakare credenziali su eccezioni
+            # non previste (es. socket error con host:port nel messaggio).
+            sanitized = _sanitize_mssql_error(e)
             logger.error(
-                f"[GESTITO] MS SQL _test_mssql safety-net: "
-                f"{type(e).__name__}: {e}",
+                "[GESTITO] MS SQL _test_mssql safety-net: %s: %s",
+                type(e).__name__, sanitized,
                 exc_info=True,
             )
-            return ConnectionTestResult(success=False, message=_sanitize_mssql_error(e))
+            return ConnectionTestResult(success=False, message=sanitized)
 
     def _test_mysql(self, conn):
         try:

@@ -704,8 +704,27 @@ def save_tabular_dataframe(df: pd.DataFrame, base_path: Path, formato: str) -> P
         return final_path
 
     if formato == "parquet":
+        # Pre-fix: scrittura diretta su `final_path` (non-atomic) +
+        # `to_parquet` senza `engine="pyarrow"` esplicito. Due bug
+        # combinati:
+        #   1. Engine implicito: su install con fastparquet l'Int64
+        #      nullable degrada a float64 silenziosamente.
+        #   2. Non-atomic write: un reader concorrente puo' vedere il
+        #      file parquet in stato parziale durante la scrittura.
+        # Post-fix: write su `.tmp` + rename atomico + engine esplicito.
         final_path = base_path.with_suffix(".parquet")
-        df.to_parquet(final_path, index=False)
+        tmp_path = final_path.with_suffix(".parquet.tmp")
+        try:
+            df.to_parquet(tmp_path, index=False, engine="pyarrow")
+            tmp_path.replace(final_path)
+        except Exception:
+            # Cleanup best-effort del .tmp in caso di errore write/rename
+            try:
+                if tmp_path.exists():
+                    tmp_path.unlink()
+            except OSError:
+                pass
+            raise
         return final_path
 
     raise ValueError(f"Formato '{formato}' non supportato")

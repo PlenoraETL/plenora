@@ -153,8 +153,16 @@ def tabular_dataframe_to_bytes(df: pd.DataFrame, formato: str) -> bytes:
         return json.dumps(records, indent=2, default=str, ensure_ascii=False).encode("utf-8")
 
     if formato == "parquet":
+        # Pre-fix: `df.to_parquet(buf, index=False)` senza `engine=` esplicito.
+        # Pandas usa l'engine "auto" che, su install dove sia fastparquet
+        # sia pyarrow sono presenti (o solo fastparquet), puo' degradare
+        # Int64 nullable a float64 silenziosamente nel round-trip — vedi
+        # fix D1 in sessione precedente che esplicitava `dtype_backend=
+        # "numpy_nullable"` sul read path. Allineiamo il write path con
+        # engine="pyarrow" esplicito: pyarrow e' un dep diretto di
+        # requirements.txt e gestisce Int64/Float64 nullable nativamente.
         buf = io.BytesIO()
-        df.to_parquet(buf, index=False)
+        df.to_parquet(buf, index=False, engine="pyarrow")
         return buf.getvalue()
 
     raise ValueError(f"Formato '{formato}' non supportato")

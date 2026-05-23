@@ -302,6 +302,19 @@ class ApiConnectionSupportMixin:
         quindi qualunque path emesso sarebbe stale. I consumer
         downstream usano `result_id` via `PipelineArtifact.artifact_kind
         == "blob"` e l'ArtifactResolver per materializzare dal DB.
+
+        Invariante caller-responsibility (output_contract):
+            La response include `output_contract` SOLO come hint
+            descrittivo della shape colonne. La PERSISTENZA del contract
+            (via `project_service.update_project_output_contract`) e'
+            responsabilita' del caller, NON di questo metodo (il mixin
+            non ha accesso a `project_service`). Tutti i caller in
+            produzione passano da `EnrichExecutor.execute()` che esegue
+            l'update con try/except + flag `contract_update_failed`
+            (vedi `arricchisci/executor.py:137-170`). Se introduci un
+            nuovo caller esterno a `EnrichExecutor`, DEVI persistere
+            il contract a quel livello — altrimenti il progetto
+            espone schema stale.
         """
         timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
         filename_stem = f"{output_name}_{timestamp}"

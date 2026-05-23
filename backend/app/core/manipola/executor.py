@@ -394,15 +394,33 @@ class ManipolaExecutor:
                 logger.warning(
                     f"output_contract: schema id non disponibili, uso colonne DataFrame: {exc}"
                 )
-            output_contract = build_output_contract(
-                project_id=project_id,
-                result_columns=result_columns,
-                previous_contract=self.project_service.get_project_output_contract(project_id),
-            )
-            self.project_service.update_project_output_contract(
-                project_id,
-                output_contract.model_dump(),
-            )
+            # Pre-fix: build/update output_contract eseguiti SENZA try/except
+            # DOPO che il blob e' gia' stato scritto. Se DB deadlock/timeout
+            # propagava sull'update_project_output_contract, l'eccezione
+            # bypassava append_step (sotto), lasciando il run in stato
+            # ambiguo: blob persistito + contract stale + zero step log
+            # nella run. Post-fix: stesso pattern di arricchisci/executor.py
+            # — log ERROR + flag contract_update_failed nel save_result
+            # cosi' caller/UI sanno che il contract e' drift.
+            try:
+                output_contract = build_output_contract(
+                    project_id=project_id,
+                    result_columns=result_columns,
+                    previous_contract=self.project_service.get_project_output_contract(project_id),
+                )
+                self.project_service.update_project_output_contract(
+                    project_id,
+                    output_contract.model_dump(),
+                )
+            except Exception as contract_err:
+                logger.error(
+                    f"[CRASH] update_project_output_contract fallito "
+                    f"post-manipola: blob persistito, contract resta stale. "
+                    f"Caller deve gestire drift: {contract_err}",
+                    op="execute", project_id=project_id, exc_info=True,
+                )
+                save_result["contract_update_failed"] = True
+                save_result["contract_update_error"] = str(contract_err)
 
         append_step({
             "module":      "manipola",

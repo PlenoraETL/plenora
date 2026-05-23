@@ -21,7 +21,7 @@ from app.core.carica.connection_store import fetch_connection_config
 from app.core.intermediate import run_idempotency
 from app.db.query_executor import DefaultEngineFactory
 from app.shared.contracts.payloads import JsonObject, StringRows
-from app.utils.logger import get_logger
+from app.utils.logger import append_step, get_logger
 from app.utils.logger import get_logger as _get_logger
 
 
@@ -145,6 +145,29 @@ class CaricaExecutor:
         Returns:
             WriteResult con esito dell'operazione.
         """
+        import time as _time
+        _step_start = _time.time()
+
+        # Pre-fix: carica/executor.py NON emetteva mai `append_step`. Tutte
+        # le run di scrittura DB (success o failure) erano invisibili nel
+        # run step log della UI scheduler / project run history. Post-fix:
+        # helper `_failure_step` per i 5 early-return + emit di success
+        # nella final return path. Allineato al pattern di estrai/manipola.
+        def _failure_step(status: WriteStatus, message: str) -> WriteResult:
+            duration_ms = int((_time.time() - _step_start) * 1000)
+            append_step({
+                "module":      "carica",
+                "status":      "failure",
+                "rows_out":    0,
+                "duration_ms": duration_ms,
+                "error":       message,
+            })
+            return WriteResult(
+                status=status,
+                error_message=message,
+                total_rows=len(df),
+            )
+
         if run_id:
             try:
                 if run_idempotency.is_already_completed(run_id):
@@ -152,6 +175,17 @@ class CaricaExecutor:
                         f"[IDEMPOTENCY] CARICA run_id {run_id} gia' completato, skip.",
                         op="execute", project_id=project_id,
                     )
+                    # SKIPPED_IDEMPOTENT non e' un failure: emettiamo step
+                    # con status "skipped" per visibilita' senza inquinare
+                    # le metriche di failure.
+                    duration_ms = int((_time.time() - _step_start) * 1000)
+                    append_step({
+                        "module":      "carica",
+                        "status":      "skipped",
+                        "rows_out":    0,
+                        "duration_ms": duration_ms,
+                        "error":       None,
+                    })
                     return WriteResult(
                         status=WriteStatus.SKIPPED_IDEMPOTENT,
                         total_rows=len(df),
@@ -174,10 +208,9 @@ class CaricaExecutor:
             config = WriteConfig.from_node_data(node_data)
         except Exception as e:
             logger.error(f"[CRASH] Errore parsing configurazione: {e}", op="execute", project_id=project_id, exc_info=True)
-            return WriteResult(
-                status=WriteStatus.VALIDATION_ERROR,
-                error_message=f"Configurazione nodo CARICA non valida: {_short_err(e)}",
-                total_rows=len(df),
+            return _failure_step(
+                WriteStatus.VALIDATION_ERROR,
+                f"Configurazione nodo CARICA non valida: {_short_err(e)}",
             )
 
         try:
@@ -185,20 +218,18 @@ class CaricaExecutor:
             db_type = connection.get("type", "postgres")
         except Exception as e:
             logger.error(f"[CRASH] Errore recupero connessione: {e}", op="execute", project_id=project_id, exc_info=True)
-            return WriteResult(
-                status=WriteStatus.CONNECTION_ERROR,
-                error_message=f"Connessione '{config.connection_id}' non trovata: {_short_err(e)}",
-                total_rows=len(df),
+            return _failure_step(
+                WriteStatus.CONNECTION_ERROR,
+                f"Connessione '{config.connection_id}' non trovata: {_short_err(e)}",
             )
 
         try:
             engine = self._create_engine(connection)
         except Exception as e:
             logger.error(f"[CRASH] Errore creazione engine: {e}", op="execute", project_id=project_id, exc_info=True)
-            return WriteResult(
-                status=WriteStatus.CONNECTION_ERROR,
-                error_message=f"Connessione al database fallita: {_short_err(e)}",
-                total_rows=len(df),
+            return _failure_step(
+                WriteStatus.CONNECTION_ERROR,
+                f"Connessione al database fallita: {_short_err(e)}",
             )
 
         if not config.column_mappings:
@@ -226,11 +257,7 @@ class CaricaExecutor:
         is_valid, error_msg = writer.validate()
         if not is_valid:
             logger.error(f"[GESTITO] Validazione fallita: {error_msg}", op="validate", project_id=project_id)
-            return WriteResult(
-                status=WriteStatus.VALIDATION_ERROR,
-                error_message=error_msg,
-                total_rows=len(df),
-            )
+            return _failure_step(WriteStatus.VALIDATION_ERROR, error_msg)
 
         result = writer.write(df)
         result.fill_write_counts()
@@ -242,6 +269,25 @@ class CaricaExecutor:
             f"{result.rows_written}/{result.total_rows} righe scritte",
             op="execute", project_id=project_id
         )
+
+        # Step emit finale. PARTIAL ha semantica "alcune scritte/alcune
+        # fallite" — non e' un crash ma neppure un success pulito, lo
+        # tracciamo come "partial" per visibilita' nelle metriche UI
+        # (le righe failed sono raggiungibili via result.rows_failed).
+        duration_ms = int((_time.time() - _step_start) * 1000)
+        if result.status == WriteStatus.SUCCESS:
+            step_status = "success"
+        elif result.status == WriteStatus.PARTIAL:
+            step_status = "partial"
+        else:
+            step_status = "failure"
+        append_step({
+            "module":      "carica",
+            "status":      step_status,
+            "rows_out":    result.rows_written or 0,
+            "duration_ms": duration_ms,
+            "error":       result.error_message if step_status == "failure" else None,
+        })
 
         return result
 

@@ -630,7 +630,17 @@ def get_arcgis_token(auth: JsonObject) -> Optional[str]:
             }
 
         except Exception as e:
-            logger.error("[CRASH] Errore richiesta ArcGIS token: %s", e, exc_info=True)
+            # Pre-fix: `%s, e` propagava lo str(e) raw, che su errori HTTP
+            # di urllib3/requests puo' contenere l'URL token con query
+            # params (token, client_secret) o credenziali nei response body
+            # inclusi nell'eccezione. Allineato a `_fetch_oauth2_password_token`
+            # e `_fetch_oauth2_client_credentials_token` nello stesso file
+            # (gia' fixati in sessione precedente).
+            logger.error(
+                "[CRASH] Errore richiesta ArcGIS token: %s",
+                type(e).__name__,
+                exc_info=True,
+            )
             return None
 
     return _get_or_refresh_token_record(

@@ -87,11 +87,39 @@ def assert_file_source_group_access(
 
 
 def _expected_filename(row_meta: dict[str, Any]) -> str:
-    return (
+    """Estrai il filename atteso dalla riga DB, normalizzato a SOLO basename.
+
+    Pre-fix (CVE-grade P0): ritornava `row_meta["original_filename"]` raw.
+    Un record DB con `original_filename = "../../../etc/passwd"` (creato da
+    upload malformato o DB corrotto) costruiva un path `source_dir / "../../../etc/passwd"`
+    che, su filesystem, usciva dalla `source_dir`. La validazione
+    `assert_path_within` arrivava DOPO il primo `target.is_file()` (riga
+    136) e DOPO `tmp_path.write_bytes()` (riga 185), permettendo sia READ
+    sia WRITE arbitrari fuori dalla source_dir.
+
+    Post-fix: `Path(raw).name` taglia qualunque directory component,
+    indipendentemente da `..`, `/`, `\\`, separatori URL-encoded, ecc.
+    Backstop: l'`assert_path_within` rimane come defense-in-depth a valle.
+    """
+    raw = (
         row_meta.get("original_filename")
         or (row_meta.get("metadata") or {}).get("original_filename")
         or "input.bin"
     )
+    # `Path.name` ritorna solo il basename, scartando directory component
+    # e mantenendo solo l'ultimo segmento del path. Funziona cross-platform
+    # (su Windows accetta sia / sia \). Esempi:
+    #   "../../etc/passwd"        -> "passwd"
+    #   "/absolute/evil.csv"      -> "evil.csv"
+    #   "dir/../sibling.parquet"  -> "sibling.parquet"
+    #   "normal.csv"              -> "normal.csv"
+    basename = Path(str(raw)).name
+    # Edge case: se il basename e' vuoto (raw = "../") o e' `..` puro
+    # (Path("..").name == ".." su Windows e Linux), fallback al default
+    # per non ritornare un path-component pericoloso.
+    if not basename or basename in {"..", "."}:
+        return "input.bin"
+    return basename
 
 
 def resolve_file_source_id_path(
@@ -133,6 +161,13 @@ def resolve_file_source_id_path(
     expected_name = _expected_filename(row_meta)
     source_dir = get_file_source_dir(file_source_id)
     target = source_dir / expected_name
+    # Defense-in-depth: `_expected_filename` ora ritorna solo basename
+    # via `Path.name`, ma manteniamo l'assert come backstop per i casi
+    # edge in cui il `get_file_source_dir` ritorni un path-like esotico
+    # o per future regressioni del normalizer. Anti-regression P0 path
+    # traversal etl-sources cluster 5.
+    from app.shared.resources.path_policy import assert_path_within
+    assert_path_within(target, [source_dir])
     if target.is_file():
         return str(target.resolve())
 
@@ -162,10 +197,22 @@ def resolve_file_source_id_path(
                 load_file_source_blob_bytes,
             )
 
+            # Pre-fix (CVE-grade P0): `is_superadmin=expected_group_id is None`
+            # significa: "se nessun tenant e' stato specificato, leggi il blob
+            # come superadmin (no group_id filter)". Combinato con un guard
+            # `assert_file_source_group_access` che fallisce solo se
+            # `expected_group_id` e' falsy, la sequenza era:
+            #   1. expected_group_id=None -> guard solleva ValueError -> OK
+            # MA se un caller esterno bypassava il guard (es. iniezione
+            # diretta o refactor che chiama questa funzione skip-step), il
+            # blob veniva letto in modalita' superadmin: bypass cross-tenant.
+            # Post-fix: `is_superadmin=False` fisso. Il superadmin non ha
+            # ruolo in questo path di cache: chi e' superadmin passa per
+            # un endpoint admin dedicato, non per `resolve_file_source_id_path`.
             raw = load_file_source_blob_bytes(
                 file_source_id=file_source_id,
                 expected_group_id=expected_group_id or "",
-                is_superadmin=expected_group_id is None,
+                is_superadmin=False,
             )
         except Exception as exc:
             raise FileSourceResolutionError(
@@ -181,6 +228,12 @@ def resolve_file_source_id_path(
         source_dir.mkdir(parents=True, exist_ok=True)
         out_path = source_dir / expected_name
         tmp_path = source_dir / f".{expected_name}.{os.getpid()}.tmp"
+        # Defense-in-depth pre-write: stesso assert del read path sopra
+        # — protegge anche il `write_bytes` se per qualche reason
+        # `expected_name` arrivasse non-normalizzato (es. monkeypatch in
+        # un test che bypassa _expected_filename, o futuro refactor).
+        assert_path_within(out_path, [source_dir])
+        assert_path_within(tmp_path, [source_dir])
         try:
             tmp_path.write_bytes(raw if isinstance(raw, bytes) else bytes(raw))
             os.replace(str(tmp_path), str(out_path))

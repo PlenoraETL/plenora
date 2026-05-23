@@ -282,13 +282,33 @@ class EstraiExecutor:
         logger.info(f"Esecuzione ESTRAI: {project_id}", op="execute", project_id=project_id)
         _step_start = _time.time()
 
+        # Pre-fix: 4 early-return (result_node missing, default_connection_id
+        # missing, CredentialUnavailableError, ValueError) uscivano da execute()
+        # PRIMA del blocco append_step finale. Tutte le failure pre-connessione
+        # erano invisibili nel run step log — impossibile triagiare via UI.
+        # Post-fix: helper `_failure_step` single-exit-point allinea il
+        # pattern a manipola/executor.py (gia' fixato in sessione precedente).
+        def _failure_step(message: str, *, user_error: bool = False) -> JsonObject:
+            duration_ms = int((_time.time() - _step_start) * 1000)
+            append_step({
+                "module":      "estrai",
+                "status":      "failure",
+                "rows_out":    0,
+                "duration_ms": duration_ms,
+                "error":       message,
+            })
+            result: JsonObject = {"success": False, "message": message}
+            if user_error:
+                result["user_error"] = True
+            return result
+
         result_node = next((n for n in canvas.nodes if n.type == "result"), None)
         if not result_node:
-            return {"success": False, "message": "Nodo risultato non trovato"}
+            return _failure_step("Nodo risultato non trovato")
 
         metadata = self.project_service.get_project_metadata(project_id)
         if not metadata or not metadata.default_connection_id:
-            return {"success": False, "message": "Il progetto non ha una connessione associata"}
+            return _failure_step("Il progetto non ha una connessione associata")
 
         try:
             connection, conn_type = self._resolve_connection(metadata.default_connection_id)
@@ -296,13 +316,12 @@ class EstraiExecutor:
             # Policy uniforme con /test endpoints (fd35cf4): credenziale
             # cifrata non disponibile o non decriptabile → user_error invece
             # di [CRASH] worker
-            return {
-                "success": False,
-                "message": f"credenziale non disponibile o non decriptabile: {e}",
-                "user_error": True,
-            }
+            return _failure_step(
+                f"credenziale non disponibile o non decriptabile: {e}",
+                user_error=True,
+            )
         except ValueError as e:
-            return {"success": False, "message": str(e)}
+            return _failure_step(str(e))
 
         if conn_type == 'arcgis':
             res = self._execute_feature_service(project_id, canvas, result_node, connection)
@@ -367,7 +386,23 @@ class EstraiExecutor:
         )
 
         if res.get("success"):
-            self._salva_tipi_colonne_da_canvas(project_id, canvas, res)
+            # Pre-fix: _salva_tipi_colonne_da_canvas chiama
+            # update_project_output_contract senza try/except. Su failure
+            # (DB deadlock/timeout) post-blob-save l'eccezione propaga,
+            # bypassa append_step downstream e lascia il run in stato
+            # ambiguo. Post-fix: stesso pattern di arricchisci/manipola
+            # — log ERROR + flag contract_update_failed nel res.
+            try:
+                self._salva_tipi_colonne_da_canvas(project_id, canvas, res)
+            except Exception as contract_err:
+                logger.error(
+                    f"[CRASH] _salva_tipi_colonne_da_canvas fallito "
+                    f"post-estrai: blob persistito, contract resta stale. "
+                    f"Caller deve gestire drift: {contract_err}",
+                    op="execute", project_id=project_id, exc_info=True,
+                )
+                res["contract_update_failed"] = True
+                res["contract_update_error"] = str(contract_err)
         elif res.get("message"):
             original_msg = res["message"]
             res["message"] = _traduci_errore_sql(original_msg)
