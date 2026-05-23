@@ -66,6 +66,33 @@ def create_project(
     current_user: CurrentUser = Depends(require_user_or_above),
 ) -> JsonObject:
     """Crea nuovo progetto. Se canvas è presente lo salva direttamente. Viewer non può creare."""
+    parsed_canvas: CanvasState | None = None
+    if data.canvas:
+        try:
+            canvas_dict = data.canvas if isinstance(data.canvas, dict) else dict(data.canvas)
+            canvas_dict = {k: v for k, v in canvas_dict.items() if not k.startswith("_")}
+            parsed_canvas = CanvasState(**canvas_dict)
+        except (TypeError, ValueError) as e:
+            logger.warning(
+                f"create_project canvas validation fallita prima della creazione: {e}",
+                op="create_project",
+            )
+            raise HTTPException(
+                status_code=400,
+                detail={
+                    "error": "canvas_invalid",
+                    "message": str(e)[:500],
+                },
+            )
+
+    if parsed_canvas is not None or data.default_connection_id:
+        _assert_canvas_refs_visible_for_owner(
+            parsed_canvas or CanvasState(),
+            owner_group_id=current_user.group_id,
+            is_superadmin=current_user.role == "superadmin",
+            default_connection_id=data.default_connection_id,
+        )
+
     metadata = _project_service.create_project(
         data,
         group_id=current_user.group_id,
@@ -75,9 +102,7 @@ def create_project(
     canvas_warning = None
     if data.canvas:
         try:
-            canvas_dict = data.canvas if isinstance(data.canvas, dict) else dict(data.canvas)
-            canvas_dict = {k: v for k, v in canvas_dict.items() if not k.startswith("_")}
-            _project_service.update_canvas(metadata.id, CanvasState(**canvas_dict))
+            _project_service.update_canvas(metadata.id, parsed_canvas or CanvasState())
         except (TypeError, ValueError) as e:
             # FIX 2: prima il warning era silenzioso → il client riceveva
             # success ma canvas vuoto, con response['warning'] non sempre
@@ -402,6 +427,49 @@ def _collect_canvas_resource_refs(canvas: CanvasState) -> CanvasResourceRefs:
     return _canvas_access.collect_canvas_resource_refs(canvas)
 
 
+def _assert_canvas_refs_visible_for_owner(
+    canvas: CanvasState,
+    *,
+    owner_group_id: str,
+    is_superadmin: bool,
+    default_connection_id: str | None = None,
+) -> None:
+    """Fail closed when a project canvas references resources from another group."""
+    from app.core.auth.visibility import visible_resource_ids
+
+    refs = _collect_canvas_resource_refs(canvas)
+    if default_connection_id:
+        refs.setdefault("connections", set()).add(default_connection_id)
+    if not any(refs.values()):
+        return
+
+    invalid_refs = _canvas_access.find_inaccessible_canvas_refs(
+        refs,
+        owner_group_id=owner_group_id,
+        is_superadmin=is_superadmin,
+        visible_resource_ids_fn=visible_resource_ids,
+        visible_project_ids_fn=_visible_project_ids_strict,
+    )
+    parts = _canvas_access.format_inaccessible_canvas_refs(invalid_refs)
+    if not parts:
+        return
+
+    logger.warning(
+        f"[SECURITY] blocked cross-tenant canvas refs "
+        f"(owner_group={owner_group_id}): {'; '.join(parts)}",
+        op="validate_canvas_refs",
+    )
+    raise HTTPException(
+        status_code=400,
+        detail=(
+            "Il canvas contiene riferimenti a risorse non visibili "
+            "al gruppo proprietario del progetto: "
+            f"{'; '.join(parts)}. Rimuovi o sostituisci i nodi "
+            "interessati prima di salvare."
+        ),
+    )
+
+
 @router.put("/{project_id}/canvas")
 @audit_action(action="project.update_canvas", target_param="project_id")
 def update_project_canvas(
@@ -444,35 +512,11 @@ def update_project_canvas(
         )
 
     # Save-time cross-tenant validation gives a clear error before runtime.
-    refs = _collect_canvas_resource_refs(canvas)
-    if refs["file_sources"] or refs["projects"] or refs["arcgis_connections"]:
-        from app.core.auth.visibility import visible_resource_ids
-        owner_group_id = _metadata_group_id(metadata)
-        is_super = current_user.role == "superadmin"
-        invalid_refs = _canvas_access.find_inaccessible_canvas_refs(
-            refs,
-            owner_group_id=owner_group_id,
-            is_superadmin=is_super,
-            visible_resource_ids_fn=visible_resource_ids,
-            visible_project_ids_fn=_visible_project_ids_strict,
-        )
-        parts = _canvas_access.format_inaccessible_canvas_refs(invalid_refs)
-        if parts:
-            logger.warning(
-                f"[SECURITY] update_project_canvas blocked cross-tenant refs "
-                f"on {project_id} (owner_group={owner_group_id}): "
-                f"{'; '.join(parts)}",
-                op="update_canvas",
-            )
-            raise HTTPException(
-                status_code=400,
-                detail=(
-                    "Il canvas contiene riferimenti a risorse non visibili "
-                    "al gruppo proprietario del progetto: "
-                    f"{'; '.join(parts)}. Rimuovi o sostituisci i nodi "
-                    "interessati prima di salvare."
-                ),
-            )
+    _assert_canvas_refs_visible_for_owner(
+        canvas,
+        owner_group_id=_metadata_group_id(metadata) or "",
+        is_superadmin=current_user.role == "superadmin",
+    )
 
     # Backend recomputes result columns before persisting to avoid stale
     # frontend-provided canvas columns.

@@ -214,6 +214,10 @@ class CaricaExecutor:
             )
 
         try:
+            self._assert_connection_visible_for_project(
+                config.connection_id,
+                project_id,
+            )
             connection = self._get_connection(config.connection_id)
             db_type = connection.get("type", "postgres")
         except Exception as e:
@@ -320,6 +324,30 @@ class CaricaExecutor:
             return connection
 
         raise ValueError(f"Connessione '{connection_id}' non trovata")
+
+    def _assert_connection_visible_for_project(
+        self,
+        connection_id: str,
+        project_id: str,
+    ) -> None:
+        if not project_id:
+            return
+        from app.core.auth.visibility import is_resource_visible
+        from app.core.projects.service import ProjectService
+
+        metadata = ProjectService().get_project_metadata(project_id)
+        group_id = getattr(metadata, "group_id", None) if metadata else None
+        if not group_id:
+            raise ValueError("Gruppo progetto non determinabile")
+        if not is_resource_visible(
+            "connections",
+            connection_id,
+            str(group_id),
+            is_superadmin=False,
+        ):
+            raise ValueError(
+                f"Connessione '{connection_id}' non visibile al gruppo del progetto"
+            )
 
     def _create_engine(self, connection: JsonObject):
         """Crea un engine SQLAlchemy dalla connessione."""

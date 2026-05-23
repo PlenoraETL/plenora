@@ -451,6 +451,39 @@ def _execute_datasource_write(task, df, carica_node_data, project_id, task_id):
             'total_rows': len(df),
         }
 
+    try:
+        from app.core.auth.visibility import is_resource_visible
+        from app.core.projects.service import ProjectService
+
+        metadata = ProjectService().get_project_metadata(project_id)
+        group_id = getattr(metadata, "group_id", None) if metadata else None
+        if not group_id or not is_resource_visible(
+            "datasources",
+            datasource_id,
+            str(group_id),
+            is_superadmin=False,
+        ):
+            return {
+                'status': 'connection_error',
+                'success': False,
+                'error': 'datasource_not_visible',
+                'message': 'DataSource non visibile al gruppo del progetto',
+                'error_message': 'DataSource non visibile al gruppo del progetto',
+                'rows_written': 0,
+                'total_rows': len(df),
+            }
+    except Exception:
+        logger.error('[SECURITY] Errore verifica visibilita DataSource', exc_info=True)
+        return {
+            'status': 'connection_error',
+            'success': False,
+            'error': 'datasource_visibility_check_failed',
+            'message': 'Verifica DataSource fallita',
+            'error_message': 'Verifica DataSource fallita',
+            'rows_written': 0,
+            'total_rows': len(df),
+        }
+
     _update_progress(task, 20, f'Serializzazione DataFrame ({dest_format})...')
 
     # Serializza DataFrame in bytes

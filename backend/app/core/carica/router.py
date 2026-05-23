@@ -109,6 +109,11 @@ class ColumnListResponse(BaseModel):
     table_name: str
 
 
+def _assert_connection_visible(connection_id: str, current_user: CurrentUser) -> None:
+    connection = _CS().get_connection(connection_id)
+    assert_resource_visible(connection, "connections", current_user, "Connessione")
+
+
 # ENDPOINT: LISTA SCHEMA
 
 @router.get("/schemas/{connection_id}")
@@ -123,8 +128,7 @@ async def get_schemas(connection_id: str, current_user: CurrentUser = Depends(re
     # SECURITY: verifica che l'utente possa vedere questa connessione
     # owned dal suo gruppo o shared). Senza questo check un utente di
     # gruppoA potrebbe enumerare schemi/tabelle del DB di gruppoB
-    _conn_obj = _CS().get_connection(connection_id)
-    assert_resource_visible(_conn_obj, "connections", current_user, "Connessione")
+    _assert_connection_visible(connection_id, current_user)
     try:
         connection = _get_connection(connection_id)
         db_type = connection.get("type", "postgres")
@@ -149,8 +153,7 @@ async def get_tables(connection_id: str, schema_name: str, current_user: Current
 
     Ritorna la lista delle tabelle nello schema specificato.
     """
-    _conn_obj = _CS().get_connection(connection_id)
-    assert_resource_visible(_conn_obj, "connections", current_user, "Connessione")
+    _assert_connection_visible(connection_id, current_user)
     try:
         connection = _get_connection(connection_id)
         db_type = connection.get("type", "postgres")
@@ -185,6 +188,7 @@ async def auto_mapping(request: AutoMappingRequest, current_user: CurrentUser = 
     Il frontend invia la lista colonne sorgente (dal nodo Result) e
     riceve il mapping proposto che l'utente può modificare.
     """
+    _assert_connection_visible(request.connection_id, current_user)
     try:
         from app.core.dataframes.schema import empty_dataframe_from_column_metadata
 
@@ -264,6 +268,7 @@ async def check_conflicts(request: ConflictCheckRequest, current_user: CurrentUs
     Il frontend invia un campione di valori delle colonne match e
     riceve il report dei conflitti trovati.
     """
+    _assert_connection_visible(request.connection_id, current_user)
     try:
         connection = _get_connection(request.connection_id)
         db_type = connection.get("type", "postgres")
