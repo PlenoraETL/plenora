@@ -222,10 +222,10 @@
           "title": "Task/runtime guards",
           "status": "covered",
           "required": true,
-          "covers": ["scheduler carica path", "run id idempotency", "worker connection cleanup", "sanitized failures"],
+          "covers": ["scheduler carica path", "manual schedule CARICA runtime", "schedule logs/runs/download", "scheduler CARICA failure reporting", "scheduler concurrency queue/skip", "run id idempotency", "worker connection cleanup", "sanitized failures"],
           "evidence": {
             "tests": ["test_445", "test_448-test_450"],
-            "modules": ["_final_coverage.py"]
+            "modules": ["_final_coverage.py", "../test-playwright/scheduler-carica-runtime.spec.js"]
           }
         }
       ]
@@ -270,6 +270,17 @@
           "evidence": {
             "tests": ["test_691-test_700"],
             "modules": ["_multi_tenant_negative.py"]
+          }
+        },
+        {
+          "id": "scheduler_carica_same_tick_idempotency_runtime",
+          "title": "Scheduler CARICA same-tick idempotency runtime",
+          "status": "planned",
+          "required": false,
+          "covers": ["runtime replay of the same scheduled_for tick must not append duplicate rows"],
+          "evidence": {
+            "tests": [],
+            "modules": ["../test-playwright/scheduler-carica-runtime.spec.js"]
           }
         }
       ]
