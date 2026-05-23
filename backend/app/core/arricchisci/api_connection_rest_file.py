@@ -935,11 +935,42 @@ class ApiConnectionRestFileMixin:
                 if isinstance(upstream_result, dict) and upstream_result.get('is_file_result'):
                     out_path = upstream_result.get('output_path')
                     if out_path and Path(out_path).exists():
-                        logger.info(
-                            f"file-processor input: riuso output file del nodo upstream "
-                            f"{source_id} ({out_path})"
+                        # Pre-fix (P2 etl-sources): `out_path` proveniva
+                        # da `node_results` (state della run upstream)
+                        # ed era riusato senza validare che fosse dentro
+                        # la trusted tmp root. In pratica i
+                        # file-processor scrivono sempre in
+                        # `tempfile.mkdtemp(prefix="plenora_exec_")`
+                        # cioe' dentro `tempfile.gettempdir()`, ma se in
+                        # futuro un nodo personalizzato scrivesse fuori
+                        # (o `node_results` venisse corrotto) il path
+                        # poteva uscire dalla tmp dir. Post-fix:
+                        # validazione fail-closed con `assert_path_within`
+                        # contro `gettempdir()`. Allineato al pattern di
+                        # `ArtifactResolver._materialize_from_output_path`.
+                        from app.shared.resources.path_policy import (
+                            assert_path_within,
                         )
-                        return str(out_path), False
+                        try:
+                            assert_path_within(
+                                out_path,
+                                [tempfile.gettempdir()],
+                                must_exist=True,
+                            )
+                        except ValueError as path_err:
+                            logger.error(
+                                f"file-processor input: path upstream "
+                                f"fuori da tmp root, ignorato per "
+                                f"sicurezza ({source_id}): {path_err}"
+                            )
+                            # Fall-through al branch 2/3 sotto, oppure
+                            # al fallback classico se nessuno matcha.
+                        else:
+                            logger.info(
+                                f"file-processor input: riuso output file del nodo upstream "
+                                f"{source_id} ({out_path})"
+                            )
+                            return str(out_path), False
 
                 # Branch 2: upstream ha prodotto un DataFrame (api_enrich o simili
                 # FS-5: serializzazione in-memory → bytes. Nessun tempfile

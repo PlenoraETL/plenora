@@ -285,6 +285,17 @@ const handlePreview = async (file) => {
         loadFiles();
         return;
       }
+      // Pre-fix (P2 contracts-flows): 403 PermissionError (accesso al
+      // file condiviso revocato dal superadmin) cadeva nel fallback
+      // generico "Errore nel caricamento della preview". L'utente non
+      // capiva che la condivisione era stata revocata. Post-fix:
+      // messaggio dedicato + auto-refresh per rimuovere il file dalla
+      // lista (allineato al pattern 404).
+      if (err?.response?.status === 403) {
+        toast.error('Accesso al file non piu\' disponibile (condivisione revocata). Aggiorno la lista...');
+        loadFiles();
+        return;
+      }
       toast.error('Errore nel caricamento della preview');
     }
   };
