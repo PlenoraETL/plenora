@@ -392,6 +392,23 @@ class ApiConnectionRestFileMixin:
         output_ext = response_cfg.get('output_extension') or '.bin'
         if not output_ext.startswith('.'):
             output_ext = '.' + output_ext
+        # Pre-fix (P2 etl-sources HIGH): `output_extension` proveniva
+        # dal canvas user-configurabile e veniva concatenato in
+        # `output{output_ext}` senza sanificazione. Un valore tipo
+        # `.bin/../../escape` produceva un output_path fuori da
+        # tmp_exec_dir. Post-fix: sanifica l'extension a soli
+        # `.<alnum>` (es. `.csv`, `.parquet`, `.bin`). Defense-in-depth:
+        # tmp_exec_dir e' creata via mkdtemp con prefix random, MA la
+        # sanificazione blinda anche caller futuri che bypassano la
+        # tmp_exec_dir (es. test che inietta un output_path custom).
+        import re
+        if not re.match(r'^\.[A-Za-z0-9_]{1,16}$', output_ext):
+            logger.warning(
+                "Output extension non valida '%s': fallback a '.bin' "
+                "per evitare path traversal.",
+                output_ext,
+            )
+            output_ext = '.bin'
 
         request_cfg = api_config.get('request', {}) or {}
         # NOTE: NON fare fallback su `options.timeout` qui. Quel

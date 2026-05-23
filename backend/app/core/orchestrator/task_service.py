@@ -532,20 +532,26 @@ class TaskService:
             else:
                 task_result = None
 
-            # Se fallito, meta potrebbe contenere l'errore
+            # Se fallito, meta potrebbe contenere l'errore.
+            # Pre-fix (P2 orchestration HIGH): il fallback `str(meta)`
+            # serializzava l'INTERO dict meta (project_id, canvas, kwargs
+            # Celery, traceback completo) nella response API → leak di
+            # contesto interno a chiunque polla /tasks/{id}. Post-fix:
+            # fallback a un messaggio generico tipato (no payload leak).
             error = None
             if status == TaskStatus.FAILURE:
                 if isinstance(meta, Exception):
-                    error = str(meta)
+                    error = type(meta).__name__
                 elif isinstance(meta, dict):
-                    error = meta.get("error", meta.get("error_message", str(meta)))
+                    error = meta.get("error") or meta.get("error_message") or "Errore sconosciuto"
                 else:
-                    error = str(meta)
+                    error = "Errore sconosciuto"
         else:
             progress = 0
             message = str(meta) if meta else ""
             task_result = None
-            error = str(meta) if status == TaskStatus.FAILURE else None
+            # Stesso fallback safe: non emettere str(meta) raw.
+            error = "Errore sconosciuto" if status == TaskStatus.FAILURE else None
         
         # Estrai project_id dal risultato se disponibile
         project_id = ""

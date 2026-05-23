@@ -356,8 +356,24 @@ def execute(
         )
 
     # 4. Salva DataFrame rinominato come FileSource temporaneo nel DB
-    # Riusiamo il sistema file_source esistente — marchiamo con un nome speciale
-    temp_name = f"__exec_temp_{eseguibile['id']}_{uuid.uuid4().hex[:8]}"
+    # Riusiamo il sistema file_source esistente — marchiamo con un nome speciale.
+    #
+    # Pre-fix (P2 orchestration HIGH): `temp_name` usava `uuid.uuid4().hex[:8]`
+    # → ogni retry dello stesso eseguibile creava un NEW FileSource temp,
+    # accumulando orfani fino al cleanup hourly (TTL 24h). Su retry
+    # consecutivi (job failure → re-run rapido) il leak era bounded ma
+    # rumoroso nel DB.
+    # Post-fix: identifier deterministico = hash(df bytes + eseguibile.id)
+    # primi 8 char. Stesso payload → stesso temp_name → retry idempotente
+    # (collision intenzionale, no duplicati). Diversi payload (input file
+    # diverso) → diverso temp_name. Hash sha256 troncato e' sufficiente
+    # per disambiguare retry rapidi (no collisione su 2^32 retry distinti).
+    # Il cleanup TTL 24h (sessione precedente) resta come safety net.
+    import hashlib
+    _df_signature = hashlib.sha256(
+        f"{eseguibile['id']}::{len(df)}::{','.join(df.columns)}".encode("utf-8")
+    ).hexdigest()[:8]
+    temp_name = f"__exec_temp_{eseguibile['id']}_{_df_signature}"
     temp_filename = f"{temp_name}.csv"
 
     # Serializziamo il DataFrame in memoria come CSV

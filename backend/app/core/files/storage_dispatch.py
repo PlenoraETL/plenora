@@ -61,7 +61,16 @@ def dispatch_blob_storage(
         return {"data": raw_data, "storage_key": None, "size_bytes": size}
 
     key_id = storage_key_id if storage_key_id is not None else file_id
-    storage_key = f"{FILE_SOURCES_PREFIX}/{key_id}/{filename}"
+    # Pre-fix (P2 data-layer HIGH): f-string includeva `filename` raw senza
+    # normalizzazione → un filename con `..`/`/`/`\\` (es. corruzione DB,
+    # caller compromesso) produceva una storage_key tipo
+    # `file_sources/abc/../../../etc/passwd` che alcuni client S3 normalizzano
+    # → write fuori dal prefix sources. Post-fix: `Path(filename).name`
+    # taglia qualunque directory component al basename, allineato al fix
+    # cluster 5 path_traversal di source_loading.
+    from pathlib import Path as _Path
+    safe_filename = _Path(str(filename)).name or "file.bin"
+    storage_key = f"{FILE_SOURCES_PREFIX}/{key_id}/{safe_filename}"
 
     intent_id: Optional[str] = None
     try:

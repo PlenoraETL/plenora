@@ -365,7 +365,15 @@ class SharePointDataSource(DataSourceInterface):
                     # Aggiungi solo i file (non le sottocartelle ricorsive per evitare duplicati
                     results.extend([r for r in sub_results if r.type != "folder"])
                 except Exception as e:
-                    logger.warning(f"Errore ricorsione cartella {folder_path}: {e}")
+                    # Pre-fix (P2 connections HIGH): `{e}` raw poteva
+                    # includere URL SharePoint autenticati nel messaggio
+                    # di ClientRequestException (token Bearer nella query
+                    # string o nei response body inclusi nell'eccezione).
+                    # Post-fix: solo type(e).__name__ via _sanitize_sharepoint_error.
+                    logger.warning(
+                        "Errore ricorsione cartella %s: %s",
+                        folder_path, _sanitize_sharepoint_error(e),
+                    )
 
         for f in files:
             name = f.properties.get("Name", "")

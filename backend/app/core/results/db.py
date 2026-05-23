@@ -11,6 +11,9 @@ from datetime import datetime, timezone
 from typing import Optional
 
 from app.db.pg_connection import PgSession, unit_of_work
+from app.utils.logger import get_logger
+
+logger = get_logger(__name__)
 
 __all__ = [
     "ResultMetadataRow",
@@ -105,13 +108,21 @@ def save_result_row(
         resolved_size_bytes = len(data) if data else 0
 
     with unit_of_work() as session:
-        session.execute(
+        # Pre-fix (P2 data-layer): `ON CONFLICT (id) DO UPDATE` sovrascriveva
+        # silenziosamente un result gia' persistito + ri-imposta `created_at`
+        # al timestamp dell'UPDATE, spezzando l'ordinamento per ricerca
+        # "ultimo result" (ORDER BY created_at DESC). In un sistema
+        # append-only dove ogni run genera UUID nuovo via uuid.uuid4(),
+        # un conflict NON dovrebbe mai accadere. Se accade, e' un bug
+        # applicativo (generator UUID rotto, replay malformato): meglio
+        # detectarlo come anomalia che mascherarlo.
+        # Post-fix: `DO NOTHING` + log warning sulla rowcount per visibilita'.
+        # Niente exception (non blocca la run, ma marca l'anomalia).
+        cur = session.execute(
             "INSERT INTO results (id, project_id, group_id, filename, format, data, "
             "size_bytes, rows_count, created_at, created_by, storage_key) "
             "VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) "
-            "ON CONFLICT (id) DO UPDATE SET data=EXCLUDED.data, size_bytes=EXCLUDED.size_bytes, "
-            "rows_count=EXCLUDED.rows_count, created_at=EXCLUDED.created_at, "
-            "storage_key=EXCLUDED.storage_key",
+            "ON CONFLICT (id) DO NOTHING",
             (
                 result_id,
                 project_id,
@@ -126,6 +137,15 @@ def save_result_row(
                 storage_key,
             ),
         )
+        rowcount = getattr(cur, "rowcount", None)
+        if rowcount == 0:
+            logger.warning(
+                "[ANOMALIA] save_result_row: ON CONFLICT su result_id=%s "
+                "(UUID gia' presente, conflict ignorato). Investigare il "
+                "generator UUID o un replay malformato — la row originale "
+                "NON e' stata sovrascritta.",
+                result_id,
+            )
     return get_result_row(result_id)
 
 
