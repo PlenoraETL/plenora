@@ -82,5 +82,18 @@ Suite Playwright:
 frontend/node_modules/.bin/playwright test -c backend/test-e2e-v2/test/test-playwright/playwright.config.js
 ```
 
+## Coverage manifest
+
+La mappa statica di copertura vive in `coverage_manifest.json`. Non esegue
+test: collega capability funzionali a test numerati e moduli scenario gia'
+presenti.
+
+```bash
+python backend/test-e2e-v2/test/coverage_report.py --fail-on-gaps
+```
+
+Il contract test leggero e' in `backend/tests2/e2e/` e verifica che il manifest
+non referenzi file mancanti o capability richieste senza evidence.
+
 Se un test passa, cancella i progetti che ha creato. Se fallisce, li lascia nel
 database e stampa gli ID per ispezionarli dalla GUI.

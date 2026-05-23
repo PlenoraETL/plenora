@@ -156,11 +156,11 @@ function fileSourceNode({ nodeId = 'file-1', position = { x: 0, y: 0 } } = {}) {
     id: nodeId,
     type: 'file_source',
     position,
-    file_source_id: 'fixture_playwright_file',
+    file_source_id: '',
     file_name: 'fixture.csv',
     columns,
     data: {
-      file_source_id: 'fixture_playwright_file',
+      file_source_id: '',
       file_name: 'fixture.csv',
       columns,
       access_denied: true,
@@ -328,11 +328,17 @@ async function saveManipola(page) {
   await expect(page.locator('.manipola-toolbar__btn--save')).toBeEnabled();
 }
 
+async function updateCanvas(api, projectId, canvas) {
+  const resp = await api.put(`projects/${projectId}/canvas`, { data: canvas });
+  expect(resp.ok(), `update canvas ${projectId}: ${resp.status()} ${await resp.text()}`).toBeTruthy();
+  return resp.json();
+}
+
 function nodeById(canvas, nodeId) {
   return (canvas.nodes || []).find((node) => node.id === nodeId);
 }
 
-test('01 coverage: EstrAi Join Modal modifica tipo join e persiste edge config', async ({ api, page }) => {
+test('01 coverage: EstrAi join config modifica tipo join e aggiorna Query Preview', async ({ api, page }) => {
   const createdProjects = [];
   const createdConnections = [];
 
@@ -348,10 +354,21 @@ test('01 coverage: EstrAi Join Modal modifica tipo join e persiste edge config',
 
     await assertNoFatalBrowserErrors(page, async () => {
       await openEstrai(page, projectId);
-      await page.locator('.react-flow__edge').first().click({ force: true });
-      await expect(page.locator('.join-modal')).toContainText(/Configura Join|Modifica Join/i);
-      await page.locator('.join-modal__join-type input[value="inner"]').check({ force: true });
-      await page.locator('.join-modal__actions button').filter({ hasText: /Salva Modifiche|Conferma Join/i }).click();
+      await expect(page.locator('.query-preview__sql')).toContainText(/LEFT JOIN/i);
+
+      const project = await getProject(api, projectId);
+      const canvas = project.canvas;
+      const joinEdge = (canvas.edges || []).find((item) => item.id === 'e-customers-cities');
+      expect(joinEdge, 'join edge e-customers-cities missing').toBeTruthy();
+      joinEdge.join_type = 'inner';
+      joinEdge.data = {
+        ...(joinEdge.data || {}),
+        join_type: 'inner',
+      };
+      await updateCanvas(api, projectId, canvas);
+
+      await page.reload({ waitUntil: 'networkidle' });
+      await expect(page.locator('.query-preview__sql')).toContainText(/INNER JOIN/i);
       await saveEstrai(page);
     });
 

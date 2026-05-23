@@ -1,0 +1,278 @@
+{
+  "version": 1,
+  "description": "Functional coverage map for the backend E2E v2 harness. Evidence points to numbered host tests and scenario modules; it does not execute the suite.",
+  "categories": [
+    {
+      "id": "project_types",
+      "title": "Project Types",
+      "items": [
+        {
+          "id": "estrai",
+          "title": "ESTRAI extraction projects",
+          "status": "covered",
+          "required": true,
+          "covers": ["single table", "join", "filter", "group by", "having", "spatial predicates", "output contract"],
+          "evidence": {
+            "tests": ["test_003", "test_004", "test_007", "test_013-test_016", "test_017-test_070"],
+            "modules": ["_estrai_matrix.py"]
+          }
+        },
+        {
+          "id": "manipola",
+          "title": "MANIPOLA transformation projects",
+          "status": "covered",
+          "required": true,
+          "covers": ["project source", "transform chains", "runtime transform matrix", "schema and contract sync", "geospatial transforms"],
+          "evidence": {
+            "tests": ["test_001", "test_002", "test_005", "test_006", "test_008-test_012", "test_071-test_090", "test_301-test_306"],
+            "modules": ["_estrai_manipola_more.py", "_manipola_runtime_full.py"]
+          }
+        },
+        {
+          "id": "arricchisci",
+          "title": "ARRICCHISCI REST enrichment projects",
+          "status": "covered",
+          "required": true,
+          "covers": ["generator", "enricher", "auth schemes", "pagination", "error responses", "stateful sequences", "contract exchange"],
+          "evidence": {
+            "tests": ["test_481-test_685"],
+            "modules": ["_arricchisci_api_final.py", "_arricchisci_rest_matrix.py", "_arricchisci_stateful_matrix.py"]
+          }
+        },
+        {
+          "id": "project_exchange",
+          "title": "Cross-project output contract exchange",
+          "status": "covered",
+          "required": true,
+          "covers": ["ESTRAI to MANIPOLA", "ESTRAI to ARRICCHISCI", "MANIPOLA to MANIPOLA", "MANIPOLA to ARRICCHISCI", "ARRICCHISCI to MANIPOLA", "ARRICCHISCI to ARRICCHISCI"],
+          "evidence": {
+            "tests": ["test_688", "test_690"],
+            "modules": []
+          }
+        }
+      ]
+    },
+    {
+      "id": "database_providers",
+      "title": "Database Providers",
+      "items": [
+        {
+          "id": "postgres",
+          "title": "PostgreSQL/PostGIS fixture",
+          "status": "covered",
+          "required": true,
+          "covers": ["source extraction", "joins", "spatial data", "default fixture DB"],
+          "evidence": {
+            "tests": ["test_003-test_016", "test_017-test_070"],
+            "modules": ["_estrai_matrix.py"]
+          }
+        },
+        {
+          "id": "mysql",
+          "title": "MySQL cross-db provider",
+          "status": "covered",
+          "required": true,
+          "covers": ["extract", "group by", "carica update/upsert", "spatial predicate subset"],
+          "evidence": {
+            "tests": ["test_307", "test_310", "test_313", "test_316", "test_319", "test_421", "test_424"],
+            "modules": ["_cross_db.py", "_cross_db_extended.py", "_cross_db_full.py"]
+          }
+        },
+        {
+          "id": "mssql",
+          "title": "SQL Server cross-db provider",
+          "status": "covered",
+          "required": true,
+          "covers": ["extract", "group by", "carica update/upsert", "spatial predicate subset"],
+          "evidence": {
+            "tests": ["test_308", "test_311", "test_314", "test_317", "test_320", "test_422", "test_425"],
+            "modules": ["_cross_db.py", "_cross_db_extended.py", "_cross_db_full.py"]
+          }
+        },
+        {
+          "id": "oracle",
+          "title": "Oracle cross-db provider",
+          "status": "covered",
+          "required": true,
+          "covers": ["extract", "group by", "carica update/upsert", "spatial predicate subset", "preflight normalization"],
+          "evidence": {
+            "tests": ["test_309", "test_312", "test_315", "test_318", "test_321", "test_340", "test_393", "test_423", "test_426"],
+            "modules": ["_cross_db.py", "_cross_db_extended.py", "_cross_db_full.py", "_expanded_400.py"]
+          }
+        }
+      ]
+    },
+    {
+      "id": "carica_destinations",
+      "title": "CARICA Destinations",
+      "items": [
+        {
+          "id": "database_writes",
+          "title": "Database target writes",
+          "status": "covered",
+          "required": true,
+          "covers": ["create", "replace", "append", "update", "upsert", "conflict policies", "transaction rollback"],
+          "evidence": {
+            "tests": ["test_401-test_409", "test_421-test_432", "test_435-test_439"],
+            "modules": ["_final_coverage.py", "_cross_db_full.py"]
+          }
+        },
+        {
+          "id": "rest_writes",
+          "title": "REST target writes",
+          "status": "covered",
+          "required": true,
+          "covers": ["auth", "batch modes", "success", "auth failure", "payload validation"],
+          "evidence": {
+            "tests": ["test_410", "test_412-test_416", "test_440-test_442"],
+            "modules": ["_final_coverage.py"]
+          }
+        },
+        {
+          "id": "datasource_writes",
+          "title": "Datasource target writes",
+          "status": "covered",
+          "required": true,
+          "covers": ["FTP csv/json", "SFTP csv/json", "path sanitization", "delete paths"],
+          "evidence": {
+            "tests": ["test_411", "test_417-test_420", "test_433", "test_434", "test_443", "test_444"],
+            "modules": ["_final_coverage.py"]
+          }
+        },
+        {
+          "id": "arcgis_writes",
+          "title": "ArcGIS write path",
+          "status": "partial",
+          "required": false,
+          "covers": ["static dispatch guards", "REST-auth-like ArcGIS token behavior"],
+          "evidence": {
+            "tests": ["test_590", "test_591"],
+            "modules": ["_arricchisci_stateful_matrix.py"]
+          }
+        }
+      ]
+    },
+    {
+      "id": "external_sources",
+      "title": "External Sources And Services",
+      "items": [
+        {
+          "id": "fake_rest",
+          "title": "Fake REST fixture",
+          "status": "covered",
+          "required": true,
+          "covers": ["response shapes", "pagination", "auth", "rate limits", "malformed JSON", "errors"],
+          "evidence": {
+            "tests": ["test_346-test_350", "test_486-test_625"],
+            "modules": ["_expanded_400.py", "_arricchisci_rest_matrix.py", "_arricchisci_stateful_matrix.py"]
+          }
+        },
+        {
+          "id": "ftp_sftp",
+          "title": "FTP/SFTP datasource fixtures",
+          "status": "covered",
+          "required": true,
+          "covers": ["read/write/list path behavior", "csv/json output"],
+          "evidence": {
+            "tests": ["test_417-test_420", "test_443", "test_444"],
+            "modules": ["_final_coverage.py"]
+          }
+        },
+        {
+          "id": "sharepoint",
+          "title": "SharePoint datasource backend",
+          "status": "partial",
+          "required": false,
+          "covers": ["static backend presence"],
+          "evidence": {
+            "tests": ["test_411"],
+            "modules": ["_final_coverage.py"]
+          }
+        }
+      ]
+    },
+    {
+      "id": "contracts_and_legacy",
+      "title": "Contracts And Legacy Compatibility",
+      "items": [
+        {
+          "id": "canvas_sync",
+          "title": "Canvas/output_contract synchronization",
+          "status": "covered",
+          "required": true,
+          "covers": ["stable column ids", "renames", "removed columns", "visibility", "legacy config shapes"],
+          "evidence": {
+            "tests": ["test_091-test_300"],
+            "modules": ["_contract_more.py", "_contract_more2.py", "_contract_more3.py", "_contract_more4.py", "_contract_more5.py"]
+          }
+        },
+        {
+          "id": "registry_parity",
+          "title": "Transform registry and schema parity",
+          "status": "covered",
+          "required": true,
+          "covers": ["runtime registry", "schema handlers", "spatial registry coverage"],
+          "evidence": {
+            "tests": ["test_006", "test_301-test_306", "test_341", "test_342"],
+            "modules": ["_manipola_runtime_full.py", "_expanded_400.py"]
+          }
+        },
+        {
+          "id": "task_runtime",
+          "title": "Task/runtime guards",
+          "status": "covered",
+          "required": true,
+          "covers": ["scheduler carica path", "run id idempotency", "worker connection cleanup", "sanitized failures"],
+          "evidence": {
+            "tests": ["test_445", "test_448-test_450"],
+            "modules": ["_final_coverage.py"]
+          }
+        }
+      ]
+    },
+    {
+      "id": "known_gaps",
+      "title": "Known Gaps",
+      "items": [
+        {
+          "id": "playwright_ui_matrix",
+          "title": "Browser UI workflow matrix",
+          "status": "covered",
+          "required": false,
+          "covers": ["create connection from UI", "build canvas from UI", "preview from UI", "execute and download from UI", "ESTRAI/MANIPOLA/ARRICCHISCI browser workflows", "CARICA DB/REST/FTP/SFTP browser execution"],
+          "evidence": {
+            "tests": [],
+            "modules": [
+              "../test-playwright/playwright.config.js",
+              "../test-playwright/carica-runtime-ui.spec.js",
+              "../test-playwright/real-user-flows-ui.spec.js",
+              "../test-playwright/ui-workflow-matrix.spec.js"
+            ]
+          }
+        },
+        {
+          "id": "real_arcgis_write_e2e",
+          "title": "Real ArcGIS write/publish E2E",
+          "status": "planned",
+          "required": false,
+          "covers": ["real service lifecycle", "publish/update/delete against ArcGIS"],
+          "evidence": {
+            "tests": [],
+            "modules": []
+          }
+        },
+        {
+          "id": "multi_tenant_runtime_negative",
+          "title": "Runtime multi-tenant negative paths",
+          "status": "covered",
+          "required": false,
+          "covers": ["cross-group API denial", "save-time canvas reference rejection", "cross-group project source denial", "cross-group datasource denial", "cross-group connection denial", "cross-group CARICA target denial", "tenant admin group confinement"],
+          "evidence": {
+            "tests": ["test_691-test_700"],
+            "modules": ["_multi_tenant_negative.py"]
+          }
+        }
+      ]
+    }
+  ]
+}

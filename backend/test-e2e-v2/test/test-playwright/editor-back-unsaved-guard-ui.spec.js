@@ -48,12 +48,16 @@ test('ManipolaEditor back guard: cancel mantiene editor, modifiche preservate', 
       await page.locator('.manipola-toolbar__btn--transform').click();
       await expect(page.locator('.transform-node')).toBeVisible();
 
-      // Intercetta il window.confirm e cancella.
-      const dialogPromise = page.waitForEvent('dialog');
+      // Intercetta e gestisce il window.confirm prima del click: i dialog
+      // nativi bloccano la risoluzione dell'azione Playwright finche' non
+      // vengono accettati/dismissed.
+      let dialogMessage = '';
+      page.once('dialog', async (dialog) => {
+        dialogMessage = dialog.message();
+        await dialog.dismiss();
+      });
       await page.locator('.manipola-toolbar__btn--back').click();
-      const dialog = await dialogPromise;
-      expect(dialog.message()).toMatch(/modifiche non salvate/i);
-      await dialog.dismiss();
+      await expect.poll(() => dialogMessage, { timeout: 5000 }).toMatch(/modifiche non salvate/i);
 
       // Cancel → URL non cambia, editor e nodo restano montati.
       expect(new URL(page.url()).pathname).toBe(`/editor/manipola/${projectId}`);
@@ -81,11 +85,13 @@ test('ManipolaEditor back guard: accept naviga alla dashboard', async ({ api, pa
       await page.locator('.manipola-toolbar__btn--transform').click();
       await expect(page.locator('.transform-node')).toBeVisible();
 
-      const dialogPromise = page.waitForEvent('dialog');
+      let dialogMessage = '';
+      page.once('dialog', async (dialog) => {
+        dialogMessage = dialog.message();
+        await dialog.accept();
+      });
       await page.locator('.manipola-toolbar__btn--back').click();
-      const dialog = await dialogPromise;
-      expect(dialog.message()).toMatch(/modifiche non salvate/i);
-      await dialog.accept();
+      await expect.poll(() => dialogMessage, { timeout: 5000 }).toMatch(/modifiche non salvate/i);
 
       // Accept → naviga a `/` (dashboard / project list).
       await expect.poll(() => new URL(page.url()).pathname, { timeout: 5000 }).toBe('/');

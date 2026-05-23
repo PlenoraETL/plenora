@@ -437,11 +437,11 @@ test('EstrAi UI: ORDER BY direction salva e preview rispetta DESC', async ({ api
 
     await assertNoFatalBrowserErrors(page, async () => {
       await openEstrai(page, projectId);
-      await page.locator('.result-node__groupby-header').filter({ hasText: 'ORDER BY' }).click({ force: true });
+      await page.locator('.result-node__groupby-header').filter({ hasText: 'ORDER BY' }).first().evaluate(el => el.click());
       const directionButton = page.locator('.result-node__orderby-dir-btn').first();
-      await expect(directionButton).toHaveText('↑');
+      await expect(directionButton).toHaveAttribute('title', /ASC/);
       await directionButton.evaluate(button => button.click());
-      await expect(directionButton).toHaveText('↓');
+      await expect(directionButton).toHaveAttribute('title', /DESC/);
       await saveEstrai(page);
     });
 

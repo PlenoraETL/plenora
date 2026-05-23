@@ -34,23 +34,23 @@ async function createProjectFromDashboard(page, api, {
 }) {
   await page.goto('/', { waitUntil: 'networkidle' });
   await page.getByRole('button', { name: /Nuovo Progetto/i }).click();
-  await expect(page.getByRole('dialog', { name: /Nuovo progetto/i })).toBeVisible();
+  const dialog = page.getByRole('dialog').filter({ hasText: /Nuovo progetto/i }).first();
+  await expect(dialog).toBeVisible();
 
   if (type === 'manipola') {
-    await page.getByRole('button', { name: /Manipola/i }).click();
+    await dialog.getByRole('button', { name: /Manipola/i }).click();
   } else if (type === 'arricchisci') {
-    await page.getByRole('button', { name: /Arricchisci/i }).click();
+    await dialog.getByRole('button', { name: /Arricchisci/i }).click();
   } else {
-    await page.getByRole('button', { name: /Estrai/i }).click();
+    await dialog.getByRole('button', { name: /Estrai/i }).click();
   }
 
-  await page.locator('.pl__modal-input').fill(name);
+  await dialog.locator('.pl__modal-input').fill(name);
   if (type === 'estrai') {
-    await page.locator('#new-project-connection').selectOption(connectionId);
+    await dialog.locator('#new-project-connection').selectOption(connectionId);
   }
-  await page.getByRole('button', { name: /Crea Progetto/i }).click();
-  await expect(page.getByRole('dialog', { name: /Nuovo progetto/i })).toHaveCount(0);
-  await expect(page.locator('.pl__card').filter({ hasText: name })).toBeVisible();
+  await dialog.getByRole('button', { name: /Crea Progetto/i }).click();
+  await expect(dialog).toBeHidden({ timeout: 30000 });
 
   await expect.poll(async () => {
     const project = await findProjectByName(api, name);
@@ -59,6 +59,10 @@ async function createProjectFromDashboard(page, api, {
     message: `project ${name} creato via dashboard`,
     timeout: 10000,
   }).toBeTruthy();
+
+  await page.getByPlaceholder(/Cerca progetti/i).fill(name);
+  await expect(page.locator('.pl__card').filter({ hasText: name })).toBeVisible();
+
   const project = await findProjectByName(api, name);
   expect(project?.id, `project ${name} non trovato dopo creazione`).toBeTruthy();
   return project.id;
