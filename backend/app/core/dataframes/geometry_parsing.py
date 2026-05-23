@@ -99,7 +99,7 @@ def parse_geometry_series(series: pd.Series) -> pd.Series:
                 values = series.map(
                     lambda v: bytes(v) if isinstance(v, memoryview) else v
                 ).to_numpy()
-            parsed = shapely.from_wkb(values, on_invalid="ignore")
+            parsed = shapely.from_wkb(values, on_invalid="raise")
             return pd.Series(parsed, index=series.index, dtype="object")
         except Exception as e:
             logger.debug("parse_geometry_series: WKB bytes fast path fallito: %s", e)
@@ -113,7 +113,7 @@ def parse_geometry_series(series: pd.Series) -> pd.Series:
             values = series.map(
                 lambda v: None if pd.isna(v) or v == "" or v == "None" else str(v).strip()
             ).to_numpy()
-            parsed = shapely.from_wkt(values, on_invalid="ignore")
+            parsed = shapely.from_wkt(values, on_invalid="raise")
             return pd.Series(parsed, index=series.index, dtype="object")
         except Exception as e:
             logger.debug("parse_geometry_series: WKT fast path fallito: %s", e)
