@@ -5,14 +5,10 @@ Il modulo resta privato al cluster spatial: non registra transform e non cambia
 la superficie pubblica di `spatial.py`.
 """
 
+from collections import defaultdict
 from typing import Optional
 
-from shapely.geometry.base import BaseGeometry
-
-from app.core.dataframes.geodata import (
-    geoseries_first_value,
-    geoseries_from_geometry_values,
-)
+from app.core.dataframes.geodata import geoseries_from_geometry_values
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -133,23 +129,19 @@ def _utm_epsg_for_lonlat(lon: float, lat: float) -> str:
 def _buffer_per_row_local_utm(
     geoseries, distance: float, cap_style_int: int
 ):
-    """Buffer per-riga in UTM locale, riproiettato all'origine.
+    """Buffer in UTM locale, riproiettato all'origine.
 
-    Per ogni geometria sceglie la zona UTM del proprio centroide,
-    riproietta singolarmente, applica il buffer in metri, e torna
-    in EPSG:4326. Evita la distorsione del buffer globale single-CRS
-    su dataset distribuiti su piu' zone UTM (es. Italia + Tokyo).
+    Sceglie la zona UTM sul centroide di ogni geometria, ma raggruppa le
+    geometrie per EPSG per evitare un to_crs/buffer/to_crs per singola riga.
     """
     from shapely.geometry import Point
 
     src_crs = geoseries.crs or "EPSG:4326"
-    results: list[Optional[BaseGeometry]] = []
-    # Polo Nord/Sud e antimeridiano sono singolarita': UTM degenera.
-    # Per quei punti restituiamo None (buffer non rappresentabile in lat/lon
-    # senza split antimeridiano), il caller scarta i NaN.
-    for geom in geoseries:
+    results: list[Optional[object]] = [None] * len(geoseries)
+    groups = defaultdict(list)
+
+    for pos, geom in enumerate(geoseries):
         if geom is None or geom.is_empty:
-            results.append(None)
             continue
         try:
             centroid: Point = geom.centroid
@@ -160,16 +152,38 @@ def _buffer_per_row_local_utm(
                     "saltato (UTM degenera al polo/antimeridiano).",
                     lon, lat,
                 )
-                results.append(None)
                 continue
-            utm = _utm_epsg_for_lonlat(lon, lat)
-            row = geoseries_from_geometry_values([geom], crs=src_crs).to_crs(utm)
-            buffered = row.buffer(distance, cap_style=cap_style_int)
-            back = buffered.to_crs(src_crs)
-            results.append(geoseries_first_value(back))
+            groups[_utm_epsg_for_lonlat(lon, lat)].append((pos, geom))
         except Exception as e:
             logger.warning(f"Buffer per-riga fallito su geometria: {e}")
-            results.append(None)
+
+    for utm, items in groups.items():
+        try:
+            positions = [pos for pos, _ in items]
+            geoms = [geom for _, geom in items]
+
+            projected = geoseries_from_geometry_values(geoms, crs=src_crs).to_crs(utm)
+            buffered = projected.buffer(distance, cap_style=cap_style_int)
+            back = buffered.to_crs(src_crs)
+
+            for pos, geom in zip(positions, back.values):
+                results[pos] = geom
+        except Exception as e:
+            logger.warning(
+                "Buffer batch UTM fallito per %s (%d geometrie), fallback per-riga: %s",
+                utm,
+                len(items),
+                e,
+            )
+            for pos, geom in items:
+                try:
+                    row = geoseries_from_geometry_values([geom], crs=src_crs).to_crs(utm)
+                    buffered = row.buffer(distance, cap_style=cap_style_int)
+                    back = buffered.to_crs(src_crs)
+                    results[pos] = back.iloc[0]
+                except Exception as row_error:
+                    logger.warning(f"Buffer per-riga fallito su geometria: {row_error}")
+
     return geoseries_from_geometry_values(results, crs=src_crs, index=geoseries.index)
 
 
