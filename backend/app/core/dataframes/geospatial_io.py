@@ -228,16 +228,14 @@ def _salva_formato_geo(
 
 def _switch_colonna_geometria(gdf, geom_column: str):
     """Set a different column as active GeoDataFrame geometry."""
-    from shapely import wkt
+    from app.core.dataframes.geometry_parsing import parse_geometry_series
 
     col_data = gdf[geom_column]
     if col_data.dtype == "object":
         _non_null = col_data.dropna()
         primo_valido = _non_null.iloc[0] if not _non_null.empty else None
         if primo_valido and isinstance(primo_valido, str):
-            gdf[geom_column] = col_data.apply(
-                lambda x: wkt.loads(x) if pd.notna(x) and isinstance(x, str) else x
-            )
+            gdf[geom_column] = parse_geometry_series(col_data)
 
     return gdf.set_geometry(geom_column)
 

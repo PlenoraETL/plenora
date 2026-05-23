@@ -7,8 +7,6 @@ the dataframe/value transformations without depending on writer state.
 
 from __future__ import annotations
 
-import json as _json
-
 from typing import Any, Dict, List, Optional, Sequence
 
 from app.core.carica.models import ColumnMapping
@@ -54,10 +52,15 @@ def prepare_dataframe(df: Any, logger) -> Any:
 
 
 def geometry_to_wkt(value: Any, logger) -> Optional[str]:
-    """Convert common geometry representations to WKT."""
+    """Convert common geometry representations to WKT.
+
+    Delega il parsing a `parse_geometry` (single source of truth) che
+    gestisce GeoJSON / WKT / WKB hex / WKB bytes con stessi fallback.
+    """
     if value is None:
         return None
 
+    # Fast path: WKT gia' formato → ritorna invariato (no roundtrip parse).
     if isinstance(value, str):
         val_upper = value.strip().upper()
         if any(
@@ -65,31 +68,19 @@ def geometry_to_wkt(value: Any, logger) -> Optional[str]:
             for prefix in ("POINT", "LINESTRING", "POLYGON", "MULTI", "GEOMETRY")
         ):
             return value.strip()
-        if value.strip().startswith("{"):
-            try:
-                from shapely.geometry import shape
-
-                return shape(_json.loads(value)).wkt
-            except Exception as e:
-                logger.warning(f"GeoJSON->WKT fallito, provo WKB: {e}")
-        try:
-            from shapely import wkb
-
-            geom = wkb.loads(bytes.fromhex(value))
-            return geom.wkt
-        except Exception as wkb_err:
-            logger.debug(
-                "[_geometry_to_wkt] parse WKB fallito dopo GeoJSON, "
-                "restituisco valore raw: %s: %s",
-                type(wkb_err).__name__,
-                wkb_err,
-            )
-            return value
 
     if hasattr(value, "wkt"):
         return value.wkt
 
-    return str(value)
+    from app.core.dataframes.geometry_parsing import parse_geometry
+    geom = parse_geometry(value)
+    if geom is not None:
+        return geom.wkt
+    logger.debug(
+        "[geometry_to_wkt] parse_geometry None per value=%r, restituisco raw",
+        str(value)[:80],
+    )
+    return value if isinstance(value, str) else str(value)
 
 
 def normalize_sql_value(value: Any) -> Any:

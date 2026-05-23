@@ -174,11 +174,8 @@ class ArcGISClient(
                 if is_geodataframe:
                     geom = row.geometry
                 elif geometry_column in df.columns and not is_null_scalar(row[geometry_column]):
-                    from shapely import wkt
-                    try:
-                        geom = wkt.loads(str(row[geometry_column]))
-                    except Exception:
-                        geom = None
+                    from app.core.dataframes.geometry_parsing import parse_geometry
+                    geom = parse_geometry(row[geometry_column])
                 
                 if geom is not None and not geom.is_empty:
                     feature["geometry"] = ArcGISClient._shapely_to_esri(geom, spatial_ref)
@@ -463,15 +460,15 @@ class ArcGISClient(
             pass
         
         if not geom_type.startswith("esri") and geometry_column in df.columns:
-            from shapely import wkt
+            from app.core.dataframes.geometry_parsing import parse_geometry
             sample_values = non_null_head_values(df[geometry_column], 1)
             sample = sample_values[0] if sample_values else None
             if sample:
-                try:
-                    geom = wkt.loads(str(sample))
+                geom = parse_geometry(sample)
+                if geom is not None:
                     geom_type = self._esri_geometry_type(geom.geom_type)
-                except Exception as _e:
-                    logger.debug(f"Impossibile inferire geom_type da WKT sample: {_e}")
+                else:
+                    logger.debug("Impossibile inferire geom_type: parse_geometry None su sample")
         
         fields = [
             {"name": "OBJECTID", "type": "esriFieldTypeOID", "alias": "OBJECTID", "editable": False},
@@ -499,19 +496,24 @@ class ArcGISClient(
                     }
                     logger.debug(f"Extent calcolato dai dati: {extent}")
             elif geometry_column in df.columns:
-                from shapely import wkt as _wkt
+                import pandas as pd
+                from app.core.dataframes.geometry_parsing import parse_geometry_series
                 geom_values = non_null_head_values(df[geometry_column], 1000)
                 if geom_values:
-                    geoms = [_wkt.loads(str(g)) for g in geom_values]
-                    from shapely.ops import unary_union as _union
-                    combined = _union(geoms)
-                    b = combined.bounds  # minx, miny, maxx, maxy
-                    extent = {
-                        "xmin": float(b[0]), "ymin": float(b[1]),
-                        "xmax": float(b[2]), "ymax": float(b[3]),
-                        "spatialReference": {"wkid": srid},
-                    }
-                    logger.debug(f"Extent calcolato da WKT: {extent}")
+                    geoms = [
+                        geom for geom in parse_geometry_series(pd.Series(geom_values)).dropna()
+                        if geom is not None and not geom.is_empty
+                    ]
+                    if geoms:
+                        from shapely.ops import unary_union as _union
+                        combined = _union(geoms)
+                        b = combined.bounds  # minx, miny, maxx, maxy
+                        extent = {
+                            "xmin": float(b[0]), "ymin": float(b[1]),
+                            "xmax": float(b[2]), "ymax": float(b[3]),
+                            "spatialReference": {"wkid": srid},
+                        }
+                        logger.debug(f"Extent calcolato da WKT: {extent}")
         except Exception as _e:
             logger.warning(f"Impossibile calcolare extent, uso default: {_e}")
 

@@ -552,13 +552,9 @@ def load_arcgis_feature_dataframe(file_path: Union[str, Path]) -> pd.DataFrame:
         if geom_col:
             try:
                 import geopandas as gpd
-                from shapely import wkt
+                from app.core.dataframes.geometry_parsing import parse_geometry_series
 
-                df["geometry"] = df[geom_col].apply(
-                    lambda wkt_value: (
-                        wkt.loads(wkt_value) if pd.notna(wkt_value) else None
-                    )
-                )
+                df["geometry"] = parse_geometry_series(df[geom_col])
                 return gpd.GeoDataFrame(df, geometry="geometry")
             except (ImportError, Exception) as e:
                 logger.warning(f"Errore conversione geometria WKT: {e}")

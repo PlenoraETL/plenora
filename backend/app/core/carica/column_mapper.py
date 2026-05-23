@@ -229,19 +229,16 @@ class ColumnMapper:
         if is_geometry_series(series):
             return True
 
-        # 4. Contenuto WKT (campione) — usa shapely per validare geometrie reali
-        # Più robusto della regex: "POINT" fallisce, "POINT(9 45)" passa
+        # 4. Contenuto WKT (campione) — usa parse_geometry centralizzato
+        # (WKT/WKB/GeoJSON, single source of truth in geometry_parsing).
         try:
-            from shapely import wkt as _wkt
+            from app.core.dataframes.geometry_parsing import parse_geometry
             sample = non_null_head_values(series, 5)
             wkt_count = 0
             for val in sample:
-                try:
-                    geom = _wkt.loads(str(val).strip())
-                    if geom and not geom.is_empty:
-                        wkt_count += 1
-                except Exception:
-                    pass  # non è WKT valido
+                geom = parse_geometry(val)
+                if geom is not None and not geom.is_empty:
+                    wkt_count += 1
             # Richiedi che la maggioranza dei campioni sia geometria
             if wkt_count > 0 and wkt_count >= len(sample) * 0.5:
                 return True

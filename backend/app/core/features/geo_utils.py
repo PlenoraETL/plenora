@@ -18,6 +18,7 @@ from app.core.dataframes.geodata import (
     geoseries_from_geometry_values,
     is_geodataframe,
     parse_geometry,
+    parse_geometry_series,
     to_geodataframe,
 )
 
@@ -39,5 +40,6 @@ __all__ = [
     "geoseries_from_geometry_values",
     "is_geodataframe",
     "parse_geometry",
+    "parse_geometry_series",
     "to_geodataframe",
 ]

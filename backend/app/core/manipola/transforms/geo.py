@@ -44,7 +44,6 @@ def op_geo_from_coords(
         GeoDataFrame con colonna geometria
     """
     from shapely.geometry import Point
-    from shapely import wkt
 
     result = df.copy()
 
@@ -76,19 +75,10 @@ def op_geo_from_coords(
                 logger.warning(f"Geo from Coords: colonna WKT '{wkt_column}' non trovata")
                 return df
 
-            def safe_wkt_parse(val):
-                """Parsa una stringa WKT in oggetto Shapely; restituisce None per valori vuoti o malformati."""
-                if is_null_scalar(val) or not val or str(val).strip() == '':
-                    return None
-                try:
-                    return wkt.loads(str(val))
-                except Exception as _wkt_err:
-                    # Parse WKT fallito per riga singola — debug (row-loop
-                    # NOTE: causerebbe flood su dataset con WKT malformati
-                    logger.debug(f"safe_wkt_parse fallita: {_wkt_err}")
-                    return None
-
-            result[output_column] = result[wkt_column].apply(safe_wkt_parse)
+            # Fast path vettoriale via parse_geometry_series (gestisce
+            # WKT / WKB / GeoJSON con stesso contract null-safe).
+            from app.core.dataframes.geometry_parsing import parse_geometry_series
+            result[output_column] = parse_geometry_series(result[wkt_column])
 
         else:
             logger.warning(f"Geo from Coords: modo '{mode}' non supportato")

@@ -9,27 +9,18 @@ from typing import Optional, Any
 
 import pandas as pd
 import geopandas as gpd
-from shapely import wkt, wkb
-from shapely.geometry import shape
 
+from app.core.dataframes.geometry_parsing import (
+    GEOMETRY_COLUMN_NAMES,
+    WKT_PREFIXES,
+    extract_srid_from_ewkb,
+    looks_like_wkb_hex,
+    parse_geometry,
+    parse_geometry_series,
+)
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
-
-
-# COSTANTI
-
-# Nomi comunemente usati per le colonne geometriche nei database e file GIS
-GEOMETRY_COLUMN_NAMES = [
-    "geometry", "geom", "the_geom", "shape", "wkb_geometry", "wkt"
-]
-
-# Prefissi validi per il formato WKT (Well-Known Text
-WKT_PREFIXES = (
-    "POINT", "LINESTRING", "POLYGON",
-    "MULTIPOINT", "MULTILINESTRING", "MULTIPOLYGON",
-    "GEOMETRYCOLLECTION"
-)
 
 
 # PARSING GEOMETRIE
@@ -172,164 +163,6 @@ def geodataframe_total_bounds(df: Any) -> Any:
     return None
 
 
-def parse_geometry(value: Any) -> Optional[Any]:
-    """
-    Converte un valore in un oggetto geometria Shapely.
-
-    Tenta il parsing in ordine di probabilità:
-        1. GeoJSON (stringa JSON con 'type')
-        2. WKT (stringa che inizia con nome tipo geometria)
-        3. WKB/EWKB hex (stringa esadecimale lunga)
-        4. WKB bytes (oggetto bytes/memoryview)
-        5. Tentativo forzato WKB hex (ultimo fallback)
-
-    Args:
-        value: Valore da parsare. Accetta: str, bytes, memoryview,
-               oggetto Shapely, None, NaN.
-
-    Returns:
-        Oggetto geometria Shapely, o None se il parsing fallisce.
-    """
-    # Gestione valori nulli e vuoti
-    if value is None or (isinstance(value, float) and pd.isna(value)):
-        return None
-    if value == "" or value == "None":
-        return None
-
-    # Se è già un oggetto geometria Shapely, restituiscilo direttamente
-    if hasattr(value, "geom_type"):
-        return value
-
-    value_str = str(value).strip()
-    if not value_str:
-        return None
-
-    # 1. Tentativo GeoJSON (inizia con '{'
-    if value_str.startswith("{"):
-        try:
-            geojson = json.loads(value_str)
-            if isinstance(geojson, dict) and "type" in geojson:
-                geojson_type = geojson["type"]
-                # FeatureCollection → prendi la geometria della prima feature
-                if geojson_type == "FeatureCollection":
-                    features = geojson.get("features", [])
-                    if features and features[0].get("geometry"):
-                        return shape(features[0]["geometry"])
-                    return None
-                # Feature → usa la sua geometry
-                elif geojson_type == "Feature":
-                    geom = geojson.get("geometry")
-                    return shape(geom) if geom else None
-                # Geometry diretta (Point, Polygon, ecc
-                else:
-                    return shape(geojson)
-        except (json.JSONDecodeError, ValueError, Exception) as e:
-            logger.debug("parse_geometry: GeoJSON parsing fallito per %r: %s", value_str[:80], e)
-
-    # 2. Tentativo WKT (inizia con nome tipo geometria
-    value_upper = value_str.upper()
-    if any(value_upper.startswith(prefisso) for prefisso in WKT_PREFIXES):
-        try:
-            return wkt.loads(value_str)
-        except Exception as e:
-            logger.debug("parse_geometry: WKT parsing fallito per %r: %s", value_str[:80], e)
-
-    # 3. Tentativo WKB/EWKB hex (stringa esadecimale lunga che inizia con '0'
-    if _sembra_wkb_hex(value_str):
-        geom = _parsa_wkb_hex(value_str)
-        if geom is not None:
-            return geom
-
-    # 4. Tentativo WKB bytes (oggetto bytes o memoryview
-    if isinstance(value, (bytes, memoryview)):
-        try:
-            return wkb.loads(bytes(value))
-        except Exception as e:
-            logger.debug("parse_geometry: WKB bytes parsing fallito: %s", e)
-
-    # 5. Ultimo tentativo: forza interpretazione come WKB hex
-    try:
-        return wkb.loads(value_str, hex=True)
-    except Exception as e:
-        logger.debug("parse_geometry: tutti i tentativi falliti per %r: %s", value_str[:80], e)
-
-    return None
-
-
-def _sembra_wkb_hex(value: str) -> bool:
-    """
-    Euristica per determinare se una stringa potrebbe essere WKB in formato hex.
-
-    Requisiti: lunghezza >= 20, inizia con '0', primi 20 caratteri tutti esadecimali.
-    """
-    if len(value) < 20 or not value.startswith("0"):
-        return False
-    return all(c in "0123456789ABCDEFabcdef" for c in value[:20])
-
-
-def _parsa_wkb_hex(value_str: str) -> Optional[Any]:
-    """
-    Tenta il parsing di una stringa hex come WKB o EWKB.
-
-    L'EWKB (Extended WKB) include un flag SRID nel byte del tipo geometria.
-    Se il WKB standard fallisce, tenta di rimuovere il flag SRID e riprovare.
-
-    Formato EWKB:
-        byte_order (1 byte) + tipo_con_flag_srid (4 byte) + srid (4 byte) + geometria
-        Il flag SRID è 0x20000000 (bit 5 nel terzo byte del tipo).
-    """
-    # Tentativo 1: WKB/EWKB standard (Shapely gestisce EWKB nativamente
-    try:
-        return wkb.loads(value_str, hex=True)
-    except Exception as e:
-        logger.debug("_parsa_wkb_hex: WKB standard fallito: %s", e)
-
-    # Tentativo 2: EWKB con rimozione manuale del flag SRID
-    try:
-        if len(value_str) > 18 and value_str[8:10] == "20":
-            # Rimuovi flag SRID dal tipo e salta i 4 byte dell'SRID
-            wkb_pulito = (
-                value_str[:2] +
-                value_str[2:10].replace("20", "00") +
-                value_str[18:]
-            )
-            return wkb.loads(wkb_pulito, hex=True)
-    except Exception as e:
-        logger.debug("_parsa_wkb_hex: EWKB con rimozione SRID fallito: %s", e)
-
-    return None
-
-
-def extract_srid_from_ewkb(value_str: str) -> Optional[int]:
-    """
-    Estrae il codice SRID da una stringa EWKB hex.
-
-    L'SRID è codificato in little-endian nei byte 10-18 della stringa hex,
-    solo se il flag SRID (0x20) è presente nel byte del tipo geometria.
-
-    Args:
-        value_str: Stringa EWKB in formato esadecimale.
-
-    Returns:
-        SRID come intero (es. 4326), o None se non trovato o non valido.
-    """
-    if not _sembra_wkb_hex(value_str) or len(value_str) < 18:
-        return None
-
-    try:
-        # Verifica presenza flag SRID (0x20 nel tipo geometria
-        if value_str[8:10] == "20":
-            srid_hex = value_str[10:18]
-            srid_bytes = bytes.fromhex(srid_hex)
-            srid = int.from_bytes(srid_bytes, byteorder="little")
-            if srid > 0:
-                return srid
-    except (ValueError, IndexError) as e:
-        logger.debug("extract_srid_from_ewkb: estrazione SRID fallita: %s", e)
-
-    return None
-
-
 # CONVERSIONE GEODATAFRAME
 
 def to_geodataframe(
@@ -374,8 +207,8 @@ def to_geodataframe(
         )
 
 
-    # Parsing di tutte le geometrie nella colonna
-    geometrie = df[geom_column].apply(parse_geometry)
+    # Parsing di tutte le geometrie nella colonna (fast path vettoriale)
+    geometrie = parse_geometry_series(df[geom_column])
 
     # Validazione: almeno una geometria deve essere parsata con successo
     # Se fallisce, tenta di ricostruire WKT spezzato da CSV senza quoting
@@ -399,7 +232,7 @@ def to_geodataframe(
             ricostruita = df[geom_column].astype(str)
             for col in unnamed_after:
                 ricostruita = ricostruita + "," + df[col].astype(str)
-            geometrie_ricostruite = ricostruita.apply(parse_geometry)
+            geometrie_ricostruite = parse_geometry_series(ricostruita)
             if geometrie_ricostruite.notna().sum() > 0:
                 logger.info(
                     f"Ricostruzione WKT riuscita: "
@@ -494,7 +327,7 @@ def detect_geometry_column(df: pd.DataFrame) -> Optional[str]:
             return col
 
         # Check WKB hex
-        if _sembra_wkb_hex(campione_str):
+        if looks_like_wkb_hex(campione_str):
             return col
 
         # Check GeoJSON
