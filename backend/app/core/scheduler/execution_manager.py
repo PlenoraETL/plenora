@@ -324,7 +324,17 @@ class ExecutionManager:
                         "Pre-check connessione fallito: database destinazione non raggiungibile",
                         step="PRE_CHECK"
                     )
-                steps.append(LogStep(step="CARICA", status="success", duration_ms=0))
+                # Pre-fix (P2 orchestration): pre_check OK emetteva
+                # `LogStep(step="CARICA", status="success")` prima che il
+                # CARICA fosse effettivamente eseguito. L'operatore in
+                # dashboard vedeva "CARICA success" anche su run che
+                # poi fallivano nella pipeline a monte. `LogStep.step`
+                # accetta solo i 5 stadi pipeline (Literal), aggiungere
+                # "PRE_CHECK" sarebbe breaking-change per il FE.
+                # Soluzione: non emettere nessuno step sintetico per il
+                # pre_check OK (silent success). Il fail emette
+                # ExecutionError(step="PRE_CHECK") che il logger esterno
+                # registra come fallimento boundary, non come LogStep.
             
             pipeline_start = time.time()
             

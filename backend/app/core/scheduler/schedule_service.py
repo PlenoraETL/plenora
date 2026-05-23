@@ -501,6 +501,21 @@ class ScheduleService:
         Post-fix: accetta enum o str; comparison vs enum value canonico.
         """
         status_str = coerce_runtime_status(status)
+        # Pre-fix (P2 orchestration): `coerce_runtime_status` non
+        # validava le stringhe → un typo come "Completed" (mixed case)
+        # passava attraverso e nessun branch sotto matchava → counter
+        # `success_count`/`consecutive_failures` non aggiornati,
+        # silent no-op. Validazione strict: rifiutiamo subito valori
+        # fuori enum cosi' il caller scopre il bug invece di vedere
+        # contatori che non si muovono. NB: `RuntimeStatus(...)` solleva
+        # `ValueError` su input non valido.
+        try:
+            RuntimeStatus(status_str)
+        except ValueError as exc:
+            raise ValueError(
+                f"update_runtime: status non valido '{status_str}'. "
+                f"Atteso uno di {[e.value for e in RuntimeStatus]}."
+            ) from exc
 
         def _mutate(config: ScheduleConfig) -> bool:
             config.runtime.status = status_str

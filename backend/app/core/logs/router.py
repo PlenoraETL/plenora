@@ -43,8 +43,13 @@ def _row_to_dict(row: LogEntryPayload) -> LogEntryPayload:
                 type(e).__name__,
                 e,
             )
-    # Rimuovi campi vuoti
-    return {k: v for k, v in d.items() if v not in (None, "", [])}
+    # Rimuovi solo None: preservare i falsy validi `[]`, `0`, `False`,
+    # `""` che il consumer puo' usare per distinguere "campo assente"
+    # da "valore presente ma zero/vuoto". Pre-fix `v not in (None, "",
+    # [])` rimuoveva silenziosamente una lista `steps=[]` dalla
+    # response → il client non poteva distinguere "steps non popolato
+    # dal DB" da "steps esiste ma e' vuoto", drift API silente.
+    return {k: v for k, v in d.items() if v is not None}
 
 
 @router.get("")

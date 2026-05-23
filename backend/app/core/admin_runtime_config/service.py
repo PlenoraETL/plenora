@@ -331,10 +331,17 @@ def _is_dev_env() -> bool:
     prod/staging anche se l'endpoint e' superadmin-only: un admin
     compromesso ottiene la mappa interna per lateral movement.
     """
+    # Pre-fix (P2 admin-api): fallback "development" rendeva il check
+    # fail-OPEN — un deployment privo della variabile `ENVIRONMENT`
+    # (config dimenticata, k8s manifest incompleto) veniva trattato
+    # come dev e la topologia veniva esposta. Post-fix: allowlist
+    # positivo. Espongo `_dev_topology` solo se l'env e' esplicitamente
+    # marcato dev/test/local. Tutto il resto (incluso None/empty/typo)
+    # viene trattato come produzione → no leak.
     env_name = os.environ.get(
-        "ENVIRONMENT", os.environ.get("ENV", "development")
+        "ENVIRONMENT", os.environ.get("ENV", "")
     ).lower()
-    return env_name not in ("production", "prod", "staging", "stage")
+    return env_name in ("development", "dev", "test", "local")
 
 
 def _runtime_snapshot() -> dict[str, object]:

@@ -23,6 +23,15 @@ from app.shared.error_envelope import raise_typed_http
 router = APIRouter(prefix="/pipeline-runs", tags=["runs"])
 
 
+# Valori canonici della colonna `log_runs.status` (text). Centralizzati
+# come costanti perche' il confronto con literal "failure" sparso nel
+# codice rende un futuro rename del valore (`"failure"` → `"failed"`)
+# silenziosamente non rilevato dal type checker. Tutti i callsite di
+# scrittura in workers/tasks/* usano questi stessi literal.
+RUN_STATUS_RUNNING = "running"
+RUN_STATUS_SUCCESS = "success"
+RUN_STATUS_FAILURE = "failure"
+
 RunPayload: TypeAlias = dict[str, Any]
 LogPayload: TypeAlias = dict[str, Any]
 
@@ -35,7 +44,10 @@ def _run_to_dict(row: RunPayload) -> RunPayload:
         except Exception:
             d["steps"] = []
     d.pop("debug_payload", None)
-    return {k: v for k, v in d.items() if v not in (None, "", [])}
+    # Solo None viene rimosso: preservare `steps=[]` (run senza step
+    # registrati) e `rows_count=0` come valori espliciti, altrimenti
+    # il consumer non puo' distinguere "campo assente" da "vuoto/zero".
+    return {k: v for k, v in d.items() if v is not None}
 
 
 def _log_to_dict(row: LogPayload) -> LogPayload:
@@ -195,7 +207,7 @@ def get_run_payload(
                 message="Accesso negato",
             )
 
-    if d.get("status") != "failure":
+    if d.get("status") != RUN_STATUS_FAILURE:
         raise HTTPException(status_code=400, detail="Il debug_payload è disponibile solo per run fallite")
 
     raw_payload = d.get("debug_payload")

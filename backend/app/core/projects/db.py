@@ -78,6 +78,41 @@ def _optional_int(row: Mapping[str, object], key: str) -> int | None:
     return value
 
 
+def _normalize_json_column(
+    row: Mapping[str, object],
+    key: str,
+    *,
+    fallback: object,
+) -> object:
+    """Hydrate JSON/JSONB columns into Python objects with fallback.
+
+    Psycopg2 può ritornare colonne JSONB come dict (typecaster attivo) o
+    come str (rows persistite prima del cambio typecaster, oppure
+    psycopg2 build con `JSONB_AS_TEXT`). Questo helper accetta entrambe
+    e fallisce soft su payload corrotto, allineato al pattern di
+    `ProjectRepository.get_project_row`. Usato dai `from_mapping`
+    cosi' un consumer che istanzia `ProjectDetailRow` o
+    `ProjectCanvasCheckRow` da una mapping qualsiasi (test, replay,
+    list query non-detail) ottiene sempre `canvas`/`output_contract`
+    come dict/None, non come str.
+    """
+    value = row.get(key)
+    if value is None or value == "":
+        return fallback
+    if isinstance(value, (dict, list)):
+        return value
+    if isinstance(value, str):
+        try:
+            return json.loads(value)
+        except (json.JSONDecodeError, TypeError) as exc:
+            logger.warning(
+                "Corrupted JSON column %s in DB row %s: %s. Falling back.",
+                key, row.get("id"), exc,
+            )
+            return fallback
+    return fallback
+
+
 def _fetchone(sql: str, params: tuple = ()) -> Mapping[str, object] | None:
     with unit_of_work() as session:
         return session.fetchone(sql, params)
@@ -159,8 +194,12 @@ class ProjectDetailRow:
             group_id=_optional_str(row, "group_id"),
             name=_required_str(row, "name"),
             project_type=_required_str(row, "project_type"),
-            canvas=row.get("canvas"),
-            output_contract=row.get("output_contract"),
+            canvas=_normalize_json_column(
+                row, "canvas", fallback={"nodes": [], "edges": []}
+            ),
+            output_contract=_normalize_json_column(
+                row, "output_contract", fallback=None
+            ),
             connection_id=_optional_str(row, "connection_id"),
             created_at=_optional_datetime_or_str(row, "created_at"),
             updated_at=_optional_datetime_or_str(row, "updated_at"),
@@ -205,7 +244,9 @@ class ProjectCanvasCheckRow:
             id=_required_str(row, "id"),
             name=_required_str(row, "name"),
             project_type=_required_str(row, "project_type"),
-            canvas=row.get("canvas"),
+            canvas=_normalize_json_column(
+                row, "canvas", fallback={"nodes": [], "edges": []}
+            ),
             group_id=_optional_str(row, "group_id"),
         )
 

@@ -66,6 +66,21 @@ def load_project_source_artifact(
     from app.core.manipola.executor import _applica_crs_da_colonne
 
     df = load_dataframe_from_artifact(path=path, format_hint=format_hint)
+    # Pre-fix (P2 etl-sources): `ensure_dataframe_matches_contract` con
+    # `node_columns=[]` produce `visible_names=[]` → nessuna colonna
+    # mancante → check passa indipendentemente dal contenuto del DF.
+    # Subito dopo `filter_visible_columns(df, [])` ritorna un DF a 0
+    # colonne, propagato silenziosamente alla pipeline. Diagnostica
+    # zero. Post-fix: warning esplicito al boundary per attirare
+    # l'attenzione nei log durante il debug di run "vuote".
+    if not node_columns:
+        _DEFAULT_LOGGER.warning(
+            "load_project_source_artifact: node_columns vuoto per "
+            "project_source %s — filter_visible_columns produrra' un "
+            "DataFrame a 0 colonne. Probabile canvas senza colonne "
+            "selezionate sul nodo.",
+            source_project_id,
+        )
     ensure_dataframe_matches_contract(
         dataframe_columns=df.columns,
         node_columns=node_columns or [],

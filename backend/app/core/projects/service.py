@@ -179,7 +179,7 @@ class ProjectService:
         """
         return project_db.delete_project(project_id, group_id=group_id)
 
-    def list_projects(self, group_id: str = None) -> ProjectList:
+    def list_projects(self, group_id: Optional[str] = None) -> ProjectList:
         """Lista progetti.
 
         - group_id=None → no filter (usato dal superadmin per vedere tutti i gruppi)
@@ -191,7 +191,7 @@ class ProjectService:
             projects=[self.project_row_to_metadata(row) for row in rows]
         )
 
-    def get_project_metadata(self, project_id: str, group_id: str = None) -> Optional[ProjectMetadata]:
+    def get_project_metadata(self, project_id: str, group_id: Optional[str] = None) -> Optional[ProjectMetadata]:
         """Carica metadati progetto.
 
         - group_id=None → no filter (qualsiasi gruppo); il check di accesso
@@ -313,7 +313,7 @@ class ProjectService:
     def get_project(
         self,
         project_id: str,
-        group_id: str = None,
+        group_id: Optional[str] = None,
     ) -> Optional[ProjectPublicPayload]:
         """Carica progetto completo (metadata + canvas).
 
@@ -414,7 +414,7 @@ class ProjectService:
     def _find_dependent_projects(
         self,
         project_id: str,
-        group_id: str = None,
+        group_id: Optional[str] = None,
     ) -> list[ProjectDependencyPayload]:
         """Trova progetti manipola/arricchisci che usano `project_id` come sorgente
         in un nodo `project_source` del proprio canvas.
@@ -469,7 +469,7 @@ class ProjectService:
                     break
         return dependents
 
-    def delete_project(self, project_id: str, group_id: str = None) -> bool:
+    def delete_project(self, project_id: str, group_id: Optional[str] = None) -> bool:
         """Elimina progetto e tutti i risultati collegati.
 
         - group_id=None → no filter (chiamante è superadmin o ha già fatto il check)
