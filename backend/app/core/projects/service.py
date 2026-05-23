@@ -105,11 +105,17 @@ class ProjectService:
     def project_row_to_metadata(
         row: project_db.ProjectRow,
     ) -> ProjectMetadata:
-        """Serialize a typed ProjectRow into the public metadata model."""
+        """Serialize a typed ProjectRow into the public metadata model.
+
+        Pre-fix (P1 entities): `description=""` hardcoded → tutti i
+        progetti esposti via GET /projects perdevano la description
+        anche quando popolata in DB. Post-fix: lettura da `row.description`
+        (nuovo campo in ProjectRow, sessione 7).
+        """
         return ProjectMetadata(
             id=row.id,
             name=row.name,
-            description="",
+            description=row.description or "",
             project_type=row.project_type,
             default_connection_id=row.connection_id,
             group_id=resolve_project_group_id(

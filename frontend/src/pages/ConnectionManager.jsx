@@ -69,15 +69,45 @@ function ConnectionManager() {
   const loadConnections = async () => {
     try {
       setLoading(true);
-      const [dbData, arcData] = await Promise.all([
-        listConnections().catch(() => ({ connections: [] })),
-        listFeatureConnections().catch(() => ({ connections: [] })),
+      // Pre-fix (P1 frontend-pages): i `.catch(() => ({connections: []}))`
+      // inghiottivano silenziosamente errori network/auth, mostrando una
+      // lista vuota all'utente come se non avesse connessioni configurate.
+      // Post-fix: cattura esplicita con flag errore per ciascun branch,
+      // toast warning visibile all'utente quando uno dei due fallisce.
+      const [dbResult, arcResult] = await Promise.allSettled([
+        listConnections(),
+        listFeatureConnections(),
       ]);
+
+      const dbData = dbResult.status === 'fulfilled'
+        ? dbResult.value
+        : { connections: [] };
+      const arcData = arcResult.status === 'fulfilled'
+        ? arcResult.value
+        : { connections: [] };
+
       const dbConns  = (dbData.connections || []).map(c => ({ ...c, _category: 'database', _typeInfo: ALL_TYPES.find(t => t.value === c.type) || ALL_TYPES[0] }));
       const arcConns = (arcData.connections || arcData || []).map(c => ({ ...c, type: 'arcgis', _category: 'arcgis', _typeInfo: ALL_TYPES.find(t => t.value === 'arcgis') }));
       setAllConnections([...dbConns, ...arcConns]);
+
+      // Segnaliamo all'utente quale partial-failure e' avvenuta
+      if (dbResult.status === 'rejected') {
+        const msg = dbResult.reason?.response?.data?.message
+          || dbResult.reason?.message
+          || 'Errore caricamento connessioni DB';
+        toast.warning(`Connessioni database non caricate: ${msg}`);
+      }
+      if (arcResult.status === 'rejected') {
+        const msg = arcResult.reason?.response?.data?.message
+          || arcResult.reason?.message
+          || 'Errore caricamento connessioni ArcGIS';
+        toast.warning(`Connessioni ArcGIS non caricate: ${msg}`);
+      }
     } catch (err) {
-      console.error(err);
+      // Catch globale per errori NON gestiti da allSettled (es. typo nel
+      // codice sopra). Toast esplicito invece di silent console.error.
+      console.error('[ConnectionManager] loadConnections fallito:', err);
+      toast.error(err?.message || 'Errore caricamento connessioni');
     } finally {
       setLoading(false);
     }

@@ -103,6 +103,16 @@ def temp_file_for(
     For SHP/GDB blobs this extracts the ZIP into a temp directory and returns
     the .shp/.gdb path inside it. The caller owns successful-path cleanup;
     this function cleans only malformed/error paths.
+
+    CONTRACT CALLER (P0 data-layer audit):
+        Il path ritornato DEVE essere cancellato dal caller in
+        `try/finally`. Pre-fix il caller `FileSourceService.load_dataframe`
+        non garantiva l'unlink su eccezione, accumulando file orfani
+        sotto TEMP_DIR. Cleanup di emergenza atexit registrato qui
+        per i casi di graceful shutdown — non sopravvive a SIGKILL.
+
+    Per cleanup deterministico usare `temp_file_for_cm` (context
+    manager) introdotto in sessione 4.
     """
     try:
         row_meta = db_get_file_source(file_id, include_data=False)
@@ -153,7 +163,98 @@ def temp_file_for(
     )
     temporary_file.write(blob)
     temporary_file.close()
-    return Path(temporary_file.name)
+    out_path = Path(temporary_file.name)
+    # Safety net atexit: il caller dovrebbe cancellare manualmente al
+    # termine dell'uso, ma su graceful shutdown garantiamo il cleanup
+    # dei tempfile orfani — leak prevention per il path non-SHP/GDB.
+    _register_tempfile_atexit_cleanup(out_path)
+    return out_path
+
+
+from contextlib import contextmanager
+
+
+_ATEXIT_TEMPFILES: list[Path] = []
+_ATEXIT_HANDLER_REGISTERED = False
+
+
+def _register_tempfile_atexit_cleanup(path: Path) -> None:
+    """Registry process-local: cancella i tempfile orfani al graceful
+    shutdown. Best-effort, no SIGKILL coverage. Pattern uguale al
+    `result_reader._register_for_atexit_cleanup`."""
+    global _ATEXIT_HANDLER_REGISTERED
+    if not _ATEXIT_HANDLER_REGISTERED:
+        import atexit
+        atexit.register(_cleanup_tempfiles_atexit)
+        _ATEXIT_HANDLER_REGISTERED = True
+    _ATEXIT_TEMPFILES.append(path)
+
+
+def _cleanup_tempfiles_atexit() -> None:
+    """Cancella i tempfile orfani al graceful shutdown."""
+    for path in list(_ATEXIT_TEMPFILES):
+        try:
+            if path.exists():
+                path.unlink()
+        except OSError:
+            pass
+
+
+@contextmanager
+def temp_file_for_cm(
+    file_id: str,
+    *,
+    expected_group_id: Optional[str] = None,
+    db_get_file_source: DbGetFileSource,
+    get_blob_from_db: GetBlobFromDb,
+    temp_dir: str,
+    mkdtemp_writable: Callable[..., Path],
+    safe_extractall: Callable[[zipfile.ZipFile, Path], None],
+    rmtree_safe: Callable[..., None],
+    logger: Any,
+):
+    """Context manager preferito: cleanup deterministico al with-exit.
+
+    Wrapper attorno a `temp_file_for` che yield il path e ne garantisce
+    la cancellazione (file o dir SHP/GDB) al ritorno dal blocco `with`.
+    Mappa a Go come `defer os.RemoveAll(path)`.
+
+    Esempio:
+        with temp_file_for_cm(file_id, ...) as path:
+            if path is None:
+                return None
+            process(path)
+        # path cancellato qui automaticamente
+    """
+    path = temp_file_for(
+        file_id,
+        expected_group_id=expected_group_id,
+        db_get_file_source=db_get_file_source,
+        get_blob_from_db=get_blob_from_db,
+        temp_dir=temp_dir,
+        mkdtemp_writable=mkdtemp_writable,
+        safe_extractall=safe_extractall,
+        rmtree_safe=rmtree_safe,
+        logger=logger,
+    )
+    try:
+        yield path
+    finally:
+        if path is None:
+            return
+        try:
+            # SHP/GDB: path e' un file dentro tmp_dir; il rmtree_safe del
+            # caller potrebbe non sapere come trovarlo. Per safety,
+            # cancelliamo sia il file singolo (caso non-SHP) sia la
+            # directory parent se siamo dentro un tmp_dir mkdtemp.
+            if path.is_dir():
+                rmtree_safe(path)
+            elif path.exists():
+                path.unlink()
+        except OSError as e:
+            logger.warning(
+                f"[GESTITO] temp_file_for_cm cleanup fallito per {path}: {e}"
+            )
 
 
 __all__ = [
@@ -162,4 +263,5 @@ __all__ = [
     "GetBlobFromDb",
     "get_blob_from_db",
     "temp_file_for",
+    "temp_file_for_cm",
 ]

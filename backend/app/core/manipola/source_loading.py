@@ -172,7 +172,13 @@ def load_file_sources(
             # che il nodo era misconfigurato. Warn esplicito facilita
             # il triage operativo.
             node_id = _nf(node, 'id', '<sconosciuto>')
-            logger.warning(
+            # Pre-fix (P1 etl-sources): `logger.warning` invece di
+            # `log.warning`. Il logger iniettato (`logger=` kwarg, alias
+            # `log` nella funzione) viene ignorato per questo warning,
+            # rompendo i test harness con logger catturante.
+            # Post-fix: `log.warning` allineato a `log.error` del catch
+            # sottostante.
+            log.warning(
                 "Nodo file_source skippato (file_source_id mancante): "
                 "node_id=%s — il canvas referenzia un file non configurato",
                 node_id,

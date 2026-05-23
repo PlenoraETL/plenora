@@ -171,7 +171,11 @@ function ResetPasswordModal({ user, onClose, onSave }) {
 
   const handleSubmit = async () => {
     if (!newPassword.trim()) return setError('Password obbligatoria');
-    if (newPassword.length < 6) return setError('Minimo 6 caratteri');
+    // Allineato al BE che richiede min 12 char (vedi
+    // backend/app/core/auth/users_router.py). Pre-fix (P1 contracts-flows):
+    // FE accettava 6 char → ogni reset con 6-11 char produceva un
+    // roundtrip inutile + errore BE poco user-friendly.
+    if (newPassword.length < 12) return setError('Minimo 12 caratteri');
     setLoading(true); setError('');
     try { await onSave(newPassword); onClose(); }
     catch (e) { setError(e.message || 'Errore reset'); }
@@ -434,7 +438,13 @@ export default function UserManager() {
   const handleDeleteGroup = async (group) => {
     const res = await deleteGroup(group.group_id);
     const r = res?.report;
-    const detail = r ? ` (${r.projects} progetti, ${r.users} utenti, ${r.connections} connessioni)` : '';
+    // Pre-fix (P0 contracts-flows): `${r.users}` / `${r.connections}`
+    // sollevavano TypeError se `r` era definito ma senza una delle
+    // chiavi (BE shape inattesa). Optional chaining + fallback "?"
+    // garantisce no crash anche su payload BE divergente.
+    const detail = r
+      ? ` (${r?.projects ?? '?'} progetti, ${r?.users ?? '?'} utenti, ${r?.connections ?? '?'} connessioni)`
+      : '';
     toast.success(`Gruppo "${group.name}" eliminato${detail}`);
     loadData();
   };

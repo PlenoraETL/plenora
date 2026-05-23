@@ -245,7 +245,14 @@ def filter_visible_columns(
     raw_names = [c[0] for c in colonne_da_selezionare]
     alias_map = {c[0]: c[1] for c in colonne_da_selezionare if c[0] != c[1]}
 
-    result = df[raw_names]
+    # `.copy()` esplicito per evitare view-vs-copy ambiguity. Pre-fix:
+    # `df[raw_names]` con CoW disabilitato (default pandas < 2.0 e alcuni
+    # deploy attuali) ritornava una view. Qualunque modifica downstream
+    # sul `result` propagava `SettingWithCopyWarning` o mutava silenzio-
+    # samente il `df` originale. Il `rename(columns=...)` non risolveva
+    # perche' opera sullo stesso oggetto. La copia ha costo O(rows) ma
+    # qui i caller sono pipeline nodes che gia' fanno copie a valle.
+    result = df[raw_names].copy()
     if alias_map:
         result = result.rename(columns=alias_map)
     return result

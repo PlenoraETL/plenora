@@ -169,10 +169,14 @@ def handle_failure(
             f"retry tra {decision['wait_seconds']}s"
         )
 
-        # Pre-fix: literal "running" — duplicato in 3 file diversi.
-        # Post-fix: enum centralizzato.
-        schedule_service.set_runtime_status(schedule_id, RuntimeStatus.RUNNING)
-
+        # Pre-fix (P1 orchestration): `set_runtime_status(RUNNING)` veniva
+        # chiamato PRIMA di `enqueue_schedule_run`. Se l'enqueue Celery
+        # falliva (broker down, queue full), lo status restava "running"
+        # mentre il lock era gia' rilasciato dal flow precedente — UI
+        # scheduler mostrava "in esecuzione" indefinito per uno schedule
+        # NON in coda. Post-fix: enqueue PRIMA, set_runtime_status DOPO
+        # con conferma dell'enqueue. Se enqueue fallisce, status va a
+        # FAILED nel branch except sotto (gia' presente), NON RUNNING.
         try:
             enqueue_schedule_run(
                 schedule_id,
@@ -181,6 +185,8 @@ def handle_failure(
                 scheduled_for=scheduled_for,
                 countdown=decision["wait_seconds"],
             )
+            # SOLO dopo enqueue confirmed: ora possiamo segnalare RUNNING
+            schedule_service.set_runtime_status(schedule_id, RuntimeStatus.RUNNING)
             logger.info(
                 f"Retry schedulato: {schedule_id} "
                 f"tra {decision['wait_seconds']}s"

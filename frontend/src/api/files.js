@@ -60,11 +60,18 @@ export const uploadFile = async (file, name, description = '', layer = '', sheet
 };
 
 /**
- * Ottieni lista file
+ * Ottieni lista file.
+ *
+ * Pre-fix (P0 contracts-schemas): URL `/files/` con trailing slash;
+ * BE espone `/files` (senza slash). FastAPI default `redirect_slashes=True`
+ * produce 307 redirect transparent ma fragile: in setup con proxy
+ * che fa rewrite o `redirect_slashes=False`, il client riceve 404 o
+ * 307 non gestito. Post-fix: `/files` allineato al router BE.
+ *
  * @returns {Promise<{files: Array}>}
  */
 export const getFiles = async () => {
-  const response = await http.get('/files/');
+  const response = await http.get('/files');
   return response.data;
 };
 

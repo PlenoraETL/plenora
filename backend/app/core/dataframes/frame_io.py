@@ -465,18 +465,12 @@ def load_dataframe_from_file(
             except UnicodeDecodeError:
                 with open(file_path, "r", encoding="utf-8-sig") as f:
                     data = json.load(f)
-            df = pd.DataFrame(data)
-
-            for col in df.columns:
-                if df[col].dtype == "object":
-                    sample = df[col].dropna().head(100).astype(str)
-                    has_underscore = sample.str.contains("_", na=False).any()
-                    if not has_underscore:
-                        converted = pd.to_numeric(df[col], errors="coerce")
-                        original_count = df[col].notna().sum()
-                        converted_count = converted.notna().sum()
-                        if original_count > 0 and converted_count == original_count:
-                            df[col] = converted
+            # Pre-fix: loop in-place che mutava direttamente `df[col] =
+            # converted` con logica duplicata vs `_coerce_json_dataframe_columns`
+            # (riga 244). Drift fra le 2 implementazioni era P3 ma diventava
+            # P1 al primo bugfix applicato solo a uno dei due rami. Post-fix:
+            # delega all'helper canonico che gia' usa il pattern lazy-copy.
+            df = _coerce_json_dataframe_columns(pd.DataFrame(data))
 
         elif estensione == ".parquet":
             # Pre-fix / Post-fix: vedi nota in `_load_dataframe_from_bytes`.

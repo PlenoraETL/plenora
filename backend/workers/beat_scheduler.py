@@ -440,7 +440,18 @@ class PlenoraBeatScheduler(Scheduler):
 
     def _emit_single_catchup(self, schedule_id: str, expected_last: datetime,
                              now: datetime) -> None:
-        """Emette il task di catchup + update last_run + audit insert."""
+        """Emette il task di catchup + audit insert + last_run update.
+
+        Order P1 (fix orchestration): INSERT audit history PRIMA di
+        `send_task`. Pre-fix l'INSERT era fail-open DOPO il send: se
+        l'INSERT falliva (DB transient down), al tick successivo
+        `_catchup_already_emitted_recently` non trovava la riga e
+        re-emetteva lo stesso catchup → due task in volo concorrenti
+        con stesso `scheduled_for`. Post-fix: INSERT first, send_task
+        SOLO se l'INSERT riesce. Se INSERT fallisce, log + return:
+        il prossimo tick rileva ancora il missed run e re-prova
+        l'emit + INSERT atomico — niente duplicati.
+        """
         scheduled_for_iso = expected_last.isoformat()
 
         logger.info(
@@ -448,6 +459,27 @@ class PlenoraBeatScheduler(Scheduler):
             f"{scheduled_for_iso} (now={now.isoformat()}, leader={self._leader_id})"
         )
 
+        # FIRST: audit insert. Se fallisce, abort emit. Il missed run
+        # verra' detectato di nuovo al prossimo tick e ri-tentato con
+        # INSERT atomico — meglio un retry che un duplicato.
+        try:
+            _pg_execute(
+                "INSERT INTO schedule_catchup_history "
+                "(schedule_id, emitted_at, scheduled_for, leader_id) "
+                "VALUES (%s, %s, %s, %s)",
+                (schedule_id, now.isoformat(), scheduled_for_iso, self._leader_id),
+            )
+        except Exception as e:
+            logger.error(
+                f"[CRASH] [CATCHUP] Audit insert fallito per {schedule_id}: {e}. "
+                f"Abort emit per evitare duplicati al prossimo tick. "
+                f"Il missed run verra' detectato e ri-tentato.",
+                exc_info=True,
+            )
+            return
+
+        # SECOND: send_task (audit gia' registrato → dedupe history-based
+        # opera correttamente al prossimo tick).
         self.app.send_task(
             SCHEDULE_PIPELINE_TASK_NAME,
             kwargs={
@@ -467,23 +499,7 @@ class PlenoraBeatScheduler(Scheduler):
         # successo (via ExecutionManager); il dedupe anti-duplicato
         # tra un tick e il successivo e' garantito da
         # _catchup_already_emitted_recently sopra, che legge la
-        # history dell'audit
-
-        # Audit is fail-open for the tick; failure can cause a duplicate
-        # catchup because history-based dedupe will miss this emit.
-        try:
-            _pg_execute(
-                "INSERT INTO schedule_catchup_history "
-                "(schedule_id, emitted_at, scheduled_for, leader_id) "
-                "VALUES (%s, %s, %s, %s)",
-                (schedule_id, now.isoformat(), scheduled_for_iso, self._leader_id),
-            )
-        except Exception as e:
-            logger.error(
-                f"[CRASH] [CATCHUP] Audit insert fallito per {schedule_id}: {e}. "
-                f"Possibile emit duplicato al prossimo tick (dedupe history incompleta).",
-                exc_info=True,
-            )
+        # history dell'audit.
 
     # Sincronizzazione DB → schedule entries
 

@@ -164,8 +164,16 @@ function ScheduleList() {
       const init = {};
       (sd.schedules || []).forEach(s => { if (s.runtime?.status === 'running' || s.runtime?.status === 'queued') init[s.id] = Date.now(); });
       if (Object.keys(init).length) setRunStartTimes(prev => ({ ...prev, ...init }));
-    } catch (err) { console.error('[ScheduleList] load fallito:', err); }
-    finally { setLoading(false); }
+    } catch (err) {
+      // Pre-fix (P1 frontend-pages): solo console.error → l'utente
+      // vedeva la pagina vuota senza spiegazione se listSchedules
+      // falliva (auth, network, DB transient).
+      console.error('[ScheduleList] load fallito:', err);
+      const msg = err?.response?.data?.message || err?.message || 'Errore caricamento schedules';
+      toast.error(msg);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleToggle = async (id, current) => {
@@ -197,8 +205,28 @@ function ScheduleList() {
       variant: 'danger',
     });
     if (!ok) return;
-    try { await deleteSchedule(id); loadData(); }
-    catch (e) { toast.error('Errore eliminazione: ' + (e.message || 'errore sconosciuto')); }
+    try {
+      await deleteSchedule(id);
+      loadData();
+    } catch (e) {
+      // Pre-fix (P1 contracts-flows): error.message generico non distingue
+      // 404 (schedule gia' cancellato), 409 (cascaded reference in active
+      // runs), 403 (permission). Post-fix: branching su status per
+      // messaggi user-friendly + auto-refresh quando appropriato.
+      const status = e?.response?.status;
+      if (status === 404) {
+        toast.warning('Schedule gia\' eliminato (404). Aggiorno la lista.');
+        loadData();
+        return;
+      }
+      if (status === 409) {
+        const detail = e?.response?.data?.message || 'esecuzione in corso o dipendenza attiva';
+        toast.error(`Impossibile eliminare: ${detail}`);
+        return;
+      }
+      const msg = e?.response?.data?.message || e.message || 'errore sconosciuto';
+      toast.error(`Errore eliminazione: ${msg}`);
+    }
   };
   const handleRunNow = async (id) => {
     if (runningManual[id]) return;

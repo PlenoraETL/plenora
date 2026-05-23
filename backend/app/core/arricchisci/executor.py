@@ -131,8 +131,16 @@ class EnrichExecutor:
                             for col, physical_name in zip(result_names, physical_names)
                         ]
                 except Exception as exc:
+                    # Pre-fix (P1 etl-executors): logger.warning senza
+                    # exc_info=True. Per "dato mancante" il livello WARNING
+                    # e' corretto, ma un bug di codice (TypeError/AttributeError
+                    # da SchemaInferenceService) non produceva alcuna traceback
+                    # → triage impossibile. exc_info=True mantiene il livello
+                    # WARNING ma assicura la traceback completa nel log.
                     logger.warning(
-                        f"output_contract arricchisci: schema id non disponibili: {exc}"
+                        f"output_contract arricchisci: schema id non disponibili: "
+                        f"{type(exc).__name__}: {exc}",
+                        exc_info=True,
                     )
                 if result_columns:
                     # Il blob di arricchimento e' GIA' stato salvato a monte
@@ -209,18 +217,24 @@ class EnrichExecutor:
 
             result_df = None
 
+            # _nd: legge da root poi da data. Pre-fix (P1 etl-executors)
+            # era definito DENTRO il for loop, ricreando un function object
+            # ad ogni iterazione (N nodi → N defs). Non e' un late-binding
+            # bug (non cattura `node` dal loop), ma e' spreco + futura
+            # trap (se in futuro qualcuno aggiunge una capture, diventa
+            # silent bug). Estratta come closure-free a livello metodo.
+            def _nd(n, k, d=None):
+                v = n.get(k)
+                if v is not None:
+                    return v
+                return n.get("data", {}).get(k, d) if isinstance(n.get("data"), dict) else d
+
             for node_id in execution_order:
                 node = node_map.get(node_id)
                 if not node:
                     continue
 
                 node_type = node.get("type")
-                # _nd: legge da root poi da data
-                def _nd(n, k, d=None):
-                    v = n.get(k)
-                    if v is not None:
-                        return v
-                    return n.get("data", {}).get(k, d) if isinstance(n.get("data"), dict) else d
 
                 node_data = {k: _nd(node, k) for k in list(node.keys()) + list((node.get("data") or {}).keys())}
                 node_data.update(node)  # root keys override

@@ -43,13 +43,31 @@ export const cancelTask = async (taskId) => {
 /**
  * Crea un nuovo task Celery con payload personalizzato.
  * Usato per task di tipo 'carica' con mappatura colonne esplicita.
+ *
+ * Pre-fix (P0 contracts-schemas): il JSDoc non documentava
+ * `payload.canvas` che e' REQUIRED nel modello BE `CreateTaskRequest`
+ * (no default). Caller che ometteva canvas → 422 Unprocessable Entity.
+ * Post-fix: doc esplicita + assert client-side per fallire fast.
+ *
  * @param {Object} payload
- * @param {string}   payload.task_type
- * @param {string}   payload.project_id
- * @param {Object}   [payload.options]
+ * @param {string}   payload.task_type            - Tipo task ('carica', 'enrichment', ...)
+ * @param {string}   payload.project_id           - ID progetto
+ * @param {Object}   payload.canvas               - **REQUIRED** Canvas serializzato {nodes, edges}
+ * @param {string}   [payload.output_format]      - 'csv' | 'parquet' | ... default 'csv'
+ * @param {Object}   [payload.carica_node_data]   - Config nodo CARICA (per task_type='carica')
+ * @param {Object}   [payload.options]            - Opzioni runtime
  * @returns {Promise<{task_id: string}>}
  */
 export const createTask = async (payload) => {
+  if (!payload || !payload.canvas) {
+    // Fail-fast client-side: senza canvas il BE risponde 422.
+    // Meglio sollevare qui con un messaggio chiaro che aspettare
+    // l'errore HTTP poco specifico dell'interceptor.
+    throw new Error(
+      'createTask: payload.canvas e\' required (shape {nodes, edges}). ' +
+      'Il caller deve fornire il canvas serializzato del progetto.'
+    );
+  }
   const response = await http.post('/tasks', payload);
   return response.data;
 };
@@ -64,11 +82,28 @@ export const createTask = async (payload) => {
  * @returns {Promise<void>}
  */
 export const downloadTaskOutput = async (taskId, filename = null) => {
-  const response = await http.get(`/tasks/${taskId}/download`, {
-    responseType: 'blob',
-  });
-
-  downloadBlob(response, filename, `task_${taskId}_output`);
+  // Pre-fix (P1 contracts-flows): il 410 Gone (output scaduto/cancellato,
+  // tipico dei task con TTL retention) cadeva nell'interceptor http
+  // come errore generico. L'utente vedeva "Errore di comunicazione con
+  // il server" senza capire il motivo. Post-fix: gestione 410 esplicita
+  // con messaggio dedicato. Mappa al cleanup GDPR-aware del retention.
+  try {
+    const response = await http.get(`/tasks/${taskId}/download`, {
+      responseType: 'blob',
+    });
+    downloadBlob(response, filename, `task_${taskId}_output`);
+  } catch (err) {
+    if (err?.response?.status === 410) {
+      const customErr = new Error(
+        "Il file di output non è più disponibile: scaduto per la policy di retention. " +
+        "Esegui nuovamente il task per generare un nuovo output."
+      );
+      customErr.code = 'TASK_OUTPUT_GONE';
+      customErr.status = 410;
+      throw customErr;
+    }
+    throw err;
+  }
 };
 
 /**

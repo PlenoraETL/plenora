@@ -576,6 +576,19 @@ class ApiConnectionRestFileMixin:
             )
 
             # ── 6. Chiamata HTTP ──────────────────────────────────────────
+            # Pre-fix (P1 etl-sources): `requests.post` SENZA `verify=`
+            # esplicito → ignorava silenziosamente l'eventuale flag
+            # `verify_ssl=False` sull'auth/api_config. Inconsistente con
+            # il pattern centralizzato `tls_policy.resolve_tls_verify`
+            # usato in `enrichment_retry_http` e `oauth`. Post-fix:
+            # delega allo stesso helper env-aware → bypass concesso solo
+            # in dev/test/opt-in, bloccato in prod.
+            from app.core.security.tls_policy import resolve_tls_verify
+            auth_cfg = api_config.get('auth', {}) or {}
+            verify_tls = resolve_tls_verify(
+                auth_cfg.get('verify_ssl', True),
+                context=f"rest_file POST {url}",
+            )
             response = requests.post(
                 url,
                 headers=headers,
@@ -583,6 +596,7 @@ class ApiConnectionRestFileMixin:
                 data=data,
                 timeout=timeout,
                 stream=True,
+                verify=verify_tls,
             )
 
             if response.status_code >= 400:

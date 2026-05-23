@@ -299,6 +299,25 @@ class ManipolaExecutor:
             )
         except ValueError as e:
             return _failure_step(str(e), _step_start)
+        except Exception as e:
+            # Catch-all per eccezioni non previste dai plugin transform
+            # (KeyError su colonna mancante, AttributeError su dtype
+            # incompatibile, TypeError su mismatch firma plugin, ecc.).
+            # Pre-fix (P1 etl-executors): solo ValueError/MemoryLimit
+            # catturati, qualunque altra eccezione propagava al Celery
+            # task SENZA append_step → run risultava "failed" per il
+            # worker ma il modulo manipola era invisibile nello step log.
+            # Post-fix: stesso pattern di _failure_step + logger.error
+            # con exc_info per il triage operativo.
+            logger.error(
+                f"[CRASH] Errore imprevisto trasformazione manipola: "
+                f"{type(e).__name__}: {e}",
+                op="execute", project_id=project_id, exc_info=True,
+            )
+            return _failure_step(
+                f"Errore imprevisto trasformazione: {type(e).__name__}",
+                _step_start,
+            )
         if current_df is None:
             # Failure path "trasformazioni hanno prodotto None" — pre-fix
             # questo early-return saltava `append_step`, lasciando la run
@@ -666,7 +685,20 @@ class ManipolaExecutor:
                     ref, expected_group_id=current_group_id
                 )
             except Exception as e:
-                return {"success": False, "message": f"Errore StaticValues: {e}"}
+                # Pre-fix (P1 etl-executors): solo `return {"success": False,
+                # "message": ...}` senza logger.error. Un crash del SourceLoader
+                # su un nodo staticValues NON era triageable in produzione —
+                # impossibile sapere quale nodo aveva causato l'errore.
+                node_id = getattr(node, "id", "<sconosciuto>")
+                logger.error(
+                    f"[CRASH] Errore StaticValues nodo {node_id}: "
+                    f"{type(e).__name__}: {e}",
+                    exc_info=True,
+                )
+                return {
+                    "success": False,
+                    "message": f"Errore StaticValues nodo {node_id}: {type(e).__name__}",
+                }
         return None
 
     # TRASFORMAZIONI

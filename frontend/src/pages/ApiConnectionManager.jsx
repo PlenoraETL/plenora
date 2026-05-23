@@ -134,8 +134,20 @@ function ApiConnectionManager() {
   }, [showNewApiDropdown]);
 
   const loadApiConnections = async () => {
-    try { setLoading(true); const d = await listApiConnections(); setApiConnections(d.api_connections||[]); }
-    catch(e) { console.error(e); } finally { setLoading(false); }
+    // Pre-fix (P1 frontend-pages): catch ignorava l'errore con solo
+    // console.error → pagina vuota senza spiegazione per l'utente
+    // se il fetch falliva per auth/network.
+    try {
+      setLoading(true);
+      const d = await listApiConnections();
+      setApiConnections(d.api_connections || []);
+    } catch (e) {
+      console.error('[ApiConnectionManager] loadApiConnections fallito:', e);
+      const msg = e?.response?.data?.message || e?.message || 'Errore caricamento API connections';
+      toast.error(msg);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const filteredApis = useMemo(() => apiConnections.filter(api => {

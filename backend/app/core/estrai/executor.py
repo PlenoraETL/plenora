@@ -264,6 +264,32 @@ class EstraiExecutor:
         
         raise ValueError(f"Connessione {connection_id} non trovata")
 
+    def _assert_connection_visible_for_project(
+        self,
+        connection_id: str,
+        metadata: Any,
+        connection_type: str,
+    ) -> None:
+        """Ensure a project cannot run against another group's connection."""
+        group_id = getattr(metadata, "group_id", None)
+        if not group_id:
+            raise ValueError("Gruppo progetto non determinabile")
+
+        resource_table = (
+            "arcgis_connections" if connection_type == "arcgis" else "connections"
+        )
+        from app.core.auth.visibility import is_resource_visible
+
+        if not is_resource_visible(
+            resource_table,
+            connection_id,
+            str(group_id),
+            is_superadmin=False,
+        ):
+            raise ValueError(
+                f"Connessione '{connection_id}' non visibile al gruppo del progetto"
+            )
+
     # ESECUZIONE COMPLETA
 
     def execute(
@@ -312,6 +338,11 @@ class EstraiExecutor:
 
         try:
             connection, conn_type = self._resolve_connection(metadata.default_connection_id)
+            self._assert_connection_visible_for_project(
+                metadata.default_connection_id,
+                metadata,
+                conn_type,
+            )
         except CredentialUnavailableError as e:
             # Policy uniforme con /test endpoints (fd35cf4): credenziale
             # cifrata non disponibile o non decriptabile → user_error invece
@@ -491,6 +522,11 @@ class EstraiExecutor:
 
         try:
             connection, conn_type = self._resolve_connection(metadata.default_connection_id)
+            self._assert_connection_visible_for_project(
+                metadata.default_connection_id,
+                metadata,
+                conn_type,
+            )
         except CredentialUnavailableError as e:
             # Policy uniforme con /test endpoints (fd35cf4): credenziale
             # cifrata non disponibile o non decriptabile → user_error invece

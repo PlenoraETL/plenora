@@ -100,7 +100,15 @@ def delete_comparison_keys(canvas_id: str, node_id: str | None = None) -> None:
 
 @dataclass(frozen=True)
 class ProjectRow:
-    """Read model for the project list row shape."""
+    """Read model for the project list row shape.
+
+    Pre-fix (P1 entities): `description` mancava da ProjectRow + dalle
+    SELECT (era solo in `ProjectDetailRow`). Il caller
+    `ProjectService.project_row_to_metadata` hardcodava `description=""`
+    nella risposta `GET /projects` → tutti i progetti esposti senza
+    description anche se popolata in DB. Post-fix: campo aggiunto qui +
+    SELECT estese a `description` nei 4 callsite di `list_project_rows`.
+    """
 
     id: str
     group_id: str | None
@@ -110,6 +118,7 @@ class ProjectRow:
     created_at: datetime | str | None
     updated_at: datetime | str | None
     created_by: str | None
+    description: str | None = None
 
     @classmethod
     def from_mapping(cls, row: Mapping[str, object]) -> "ProjectRow":
@@ -122,6 +131,7 @@ class ProjectRow:
             created_at=_optional_datetime_or_str(row, "created_at"),
             updated_at=_optional_datetime_or_str(row, "updated_at"),
             created_by=_optional_str(row, "created_by"),
+            description=_optional_str(row, "description"),
         )
 
 
@@ -323,7 +333,7 @@ class ProjectRepository:
         return _project_rows(
             _fetchall(
                 "SELECT id, group_id, name, project_type, connection_id, "
-                "created_at, updated_at, created_by FROM projects "
+                "created_at, updated_at, created_by, description FROM projects "
                 "WHERE group_id = %s ORDER BY updated_at DESC",
                 (group_id,),
             )
@@ -338,7 +348,16 @@ class ProjectRepository:
         connection_id: str | None = None,
         created_by: str | None = None,
     ) -> ProjectDetailRow:
-        now = datetime.now(timezone.utc).isoformat()
+        # Pre-fix (P1 entities): `datetime.now(...).isoformat()` passava
+        # un ISO string a psycopg2 invece di un `datetime` nativo. Postgres
+        # accetta entrambi (cast string→timestamptz), ma il roundtrip
+        # ritorna `datetime` aware, mentre se l'INSERT fosse fallito su
+        # un trigger con NOW() server-side avremmo avuto mismatch fra
+        # ProjectDetailRow.created_at (string atteso) e il datetime
+        # caricato. Allineato al boundary B1 Pydantic (sessione precedente)
+        # che ora normalizza datetime|str. Mantiene compat callsite che
+        # legge ProjectRow.created_at via _optional_datetime_or_str.
+        now = datetime.now(timezone.utc)
         canvas = json.dumps({"nodes": [], "edges": []})
         _execute(
             "INSERT INTO projects (id, group_id, name, project_type, canvas, "
@@ -373,7 +392,9 @@ class ProjectRepository:
             fields["canvas"] = json.dumps(fields["canvas"])
         if "output_contract" in fields and isinstance(fields["output_contract"], dict):
             fields["output_contract"] = json.dumps(fields["output_contract"])
-        fields["updated_at"] = datetime.now(timezone.utc).isoformat()
+        # Pre-fix (P1 entities): isoformat string invece di datetime nativo.
+        # Vedi nota in create_project_row sopra.
+        fields["updated_at"] = datetime.now(timezone.utc)
         set_clause, vals = safe_set_clause("projects", fields)
         _execute(f"UPDATE projects SET {set_clause} WHERE id = %s", vals + (project_id,))
         return get_project_row(project_id)
@@ -454,7 +475,8 @@ class ProjectRepository:
         key: str,
         value: object,
     ) -> bool:
-        now = datetime.now(timezone.utc).isoformat()
+        # Pre-fix (P1 entities): isoformat string. Vedi note sopra.
+        now = datetime.now(timezone.utc)
         with unit_of_work() as conn:
             with conn.cursor() as cur:
                 cur.execute(

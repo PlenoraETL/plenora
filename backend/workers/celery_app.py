@@ -110,14 +110,35 @@ celery_app.conf.beat_schedule = {
 
 
 class BaseTaskWithRetry(celery_app.Task):
-    """Task base con retry automatico su errori transitori."""
+    """Task base con retry automatico su errori transitori.
 
-    # Retry only infrastructure/network errors; application errors must surface.
+    Pre-fix (P1 orchestration): `OSError` era nella lista `autoretry_for`,
+    catturando troppe sottoclassi PERMANENTI:
+      - `FileNotFoundError` (file source cancellato → retry N volte inutili)
+      - `PermissionError` (perms su MinIO bucket → retry su errore permanente)
+      - `IsADirectoryError` / `NotADirectoryError` (bug logici)
+    Tutte ereditano da OSError e sub passavano per retry → worker bloccato
+    su exponential backoff fino a max_retries, ritardando alert ops.
+
+    Post-fix: rimosso `OSError` generico. Manteniamo solo le sottoclassi
+    di OSError che sono REALMENTE transient:
+      - `ConnectionError` (gia' presente) - rete down
+      - `ConnectionResetError` (gia' presente) - peer dropped conn
+      - `TimeoutError` (gia' presente) - latenza temporanea
+      - `BlockingIOError` - resource temporarily unavailable (EAGAIN)
+      - `InterruptedError` - syscall EINTR
+    Errori application (FileNotFoundError, PermissionError) propagano
+    immediato al task, che li classifica come failure user-visible.
+    """
+
+    # Retry only transient infrastructure/network errors; application
+    # errors (file not found, permission denied) must surface immediato.
     autoretry_for = (
         ConnectionError,
         ConnectionResetError,
         TimeoutError,
-        OSError,
+        BlockingIOError,
+        InterruptedError,
     )
     retry_kwargs = {"max_retries": settings.CELERY_MAX_RETRIES}
     retry_backoff = True

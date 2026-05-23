@@ -127,6 +127,14 @@ const ManipolaEditorContent = () => {
   });
 
   // CARICA asincrono via Celery
+  // Deps `[]`: `nodesRef`/`edgesRef` sono ref Zustand stabili lifetime-bound
+  // al componente (non subiscono re-render churn). `createTask` e' import
+  // module-level, costante. Il polling generato dall'execute viene gestito
+  // da `useExecution` che ha cleanup esplicito su unmount
+  // (`useExecution.js:50-53`: `clearInterval` su tutti `caricaRefs.current`).
+  // Anti-regression P0 frontend-pages: se in futuro qualcuno aggiunge
+  // dipendenze closure (non-ref state), la deps `[]` diventa un bug di
+  // stale-closure — aggiornare la lista deps + verificare cleanup polling.
   const executeCaricanTask = useCallback(async (projId, options) => {
     const res = await createTask({
       task_type: 'carica', project_id: projId,

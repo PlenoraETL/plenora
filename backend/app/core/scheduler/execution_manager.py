@@ -299,6 +299,12 @@ class ExecutionManager:
 
         # Pre-fix: literal "running" duplicato fra execution_manager,
         # scheduler_execution_runtime e router. Post-fix: enum.
+        # NB: questo callsite e' SICURO rispetto al pattern enqueue-then-status
+        # del retry path (vedi scheduler_execution_runtime.py:174 P1 fix).
+        # Qui siamo gia' DENTRO `execute()` — non c'e' un futuro enqueue
+        # che possa fallire, il run e' in corso e RUNNING e' la stato
+        # accurato. La transizione idle→running prima del heartbeat
+        # start e' intenzionale e atomic dal punto di vista del caller.
         self.schedule_service.set_runtime_status(schedule_id, RuntimeStatus.RUNNING)
         # Tracker per il rollback del runtime status nel finally. Settato
         # a True quando `update_runtime` viene chiamato (success path) o
