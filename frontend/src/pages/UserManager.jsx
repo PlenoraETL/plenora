@@ -415,8 +415,12 @@ export default function UserManager() {
       const [u, g] = await Promise.all([listUsers(), listGroups()]);
       setUsers(Array.isArray(u) ? u : u.users || []);
       setGroups(Array.isArray(g) ? g : []);
-    } catch {
-      toast.error('Errore caricamento dati');
+    } catch (e) {
+      // Pre-fix (P2 frontend-pages): catch senza variabile ingoiava
+      // il dettaglio errore — non distinguibile 403 (utente non
+      // autorizzato, redirect mancante) da 500 (DB down). Post-fix:
+      // catturiamo `e` e mostriamo `e?.message` come fallback.
+      toast.error(e?.message || 'Errore caricamento dati');
     } finally {
       setLoading(false);
     }

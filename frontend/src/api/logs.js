@@ -25,7 +25,7 @@ import http from './http';
  * @param {string}   [params.project_id]  - Filtra per progetto
  * @param {number}   [params.limit]       - Numero massimo di risultati
  * @param {number}   [params.offset]      - Offset per paginazione
- * @returns {Promise<{logs: Array, total: number}>}
+ * @returns {Promise<{entries: Array, total: number, limit: number, offset: number, has_more: boolean}>}
  */
 export const getLogs = async (params = {}) => {
   const response = await http.get('/logs', { params });

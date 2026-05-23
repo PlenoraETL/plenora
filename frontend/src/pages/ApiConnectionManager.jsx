@@ -13,6 +13,7 @@
  */
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useToast } from '../hooks/useToast';
+import { toastApiError } from '../utils/toastApiError';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import TemplateLibraryModal from '../components/arricchisci/TemplateLibraryModal';
@@ -210,7 +211,11 @@ const openWizardForNew = () => {
         );
         return;
       }
-      toast.error('Errore eliminazione');
+      // Pre-fix (P2 frontend-pages): messaggio hardcoded 'Errore
+      // eliminazione' senza propagare il dettaglio del server →
+      // l'utente non distingue 403 (permessi) da 500 (DB down) da
+      // 502 (gateway). Allineato al pattern di ConnectionManager.
+      toastApiError(toast, e, 'Errore eliminazione connessione API');
     }
   };
 

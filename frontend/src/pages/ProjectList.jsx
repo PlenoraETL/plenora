@@ -406,48 +406,14 @@ function ProjectList() {
     </div>
   );
 }
-function useEmptyHexCanvases(theme) {
-  useEffect(() => {
-    const draw = (canvas) => {
-      if (!canvas) return;
-      const isDark = (theme || document.documentElement.getAttribute('data-theme')) !== 'light';
-      const W = canvas.offsetWidth  || 280;
-      const H = canvas.offsetHeight || 120;
-      canvas.width  = W; canvas.height = H;
-      const ctx = canvas.getContext('2d');
-      ctx.clearRect(0, 0, W, H);
-      const ac = isDark
-        ? [[75,139,255],[52,193,122],[155,109,255]]
-        : [[37,99,235],[22,163,74],[124,58,237]];
-      const rng = s => { let x = Math.sin(s+1)*43758.5453; return x-Math.floor(x); };
-      const R = 14;
-      const hexW = R * Math.sqrt(3), hexH = R * 2;
-      const cols = Math.ceil(W/hexW)+1, rows = Math.ceil(H/(hexH*0.75))+1;
-      for (let col=0; col<cols; col++) for (let row=0; row<rows; row++) {
-        const cx = col*hexW+(row%2===0?0:hexW/2), cy = row*hexH*0.75;
-        const dx=(cx-W/2)/(W/2), dy=(cy-H/2)/(H/2);
-        const dist = Math.sqrt(dx*dx+dy*dy);
-        const seed = col*13+row*7;
-        const jitter = (rng(seed)-0.5)*0.4;
-        const op = Math.min(1, Math.max(0, (1-dist*0.85)+jitter*(1-dist)));
-        if (op<0.04) continue;
-        ctx.beginPath();
-        for (let i=0;i<6;i++){const a=(Math.PI/180)*(60*i-30);i===0?ctx.moveTo(cx+R*Math.cos(a),cy+R*Math.sin(a)):ctx.lineTo(cx+R*Math.cos(a),cy+R*Math.sin(a));}
-        ctx.closePath();
-        const a=ac[Math.abs(col+row)%3];
-        ctx.strokeStyle=`rgba(${a[0]},${a[1]},${a[2]},${(op*0.22).toFixed(2)})`;
-        ctx.lineWidth=0.8; ctx.stroke();
-      }
-    };
-    document.querySelectorAll('.pl__empty-hex').forEach(draw);
-  });
-}
-
-// Hook invoked at module level via useEffect in the main component would be cleaner,
-// but for simplicity just call it inline via a small wrapper
-function EmptyHexDrawer({ theme }) {
-  useEmptyHexCanvases(theme);
-  return null;
-}
+// Pre-fix (P2 frontend-pages): `useEmptyHexCanvases` + `EmptyHexDrawer`
+// erano definiti qui ma `EmptyHexDrawer` non veniva mai renderizzato
+// nel JSX di ProjectList → i `<canvas class="pl__empty-hex">` in
+// ProjectSection/EseguibiliSection restavano sempre vuoti (il loop
+// `querySelectorAll` non scattava mai). Dead code di ~35 righe.
+// Post-fix: rimossi. I canvas restano nel DOM come placeholder vuoti
+// (allineato al comportamento osservato a runtime) — eventuali
+// disegni saranno reintrodotti con un componente esplicito quando/se
+// servira'.
 
 export default ProjectList;

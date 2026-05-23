@@ -268,12 +268,18 @@ function ScheduleList() {
   const handleToggleLogs = async (id) => {
     if (expandedLogs[id]) { setExpandedLogs(prev => { const n={...prev}; delete n[id]; return n; }); return; }
     try { const d = await getScheduleLogs(id, 1, 5); setExpandedLogs(prev => ({ ...prev, [id]: d.logs || [] })); }
-    catch (err) { console.error('[ScheduleList] logs fallito:', err); }
+    catch (err) {
+      console.error('[ScheduleList] logs fallito:', err);
+      toastApiError(toast, err, 'Impossibile caricare i log');
+    }
   };
   const handleToggleRuns = async (id) => {
     if (expandedRuns[id]) { setExpandedRuns(prev => { const n={...prev}; delete n[id]; return n; }); return; }
     try { const d = await listScheduleRuns(id); setExpandedRuns(prev => ({ ...prev, [id]: d.runs || [] })); }
-    catch (err) { console.error('[ScheduleList] runs fallito:', err); }
+    catch (err) {
+      console.error('[ScheduleList] runs fallito:', err);
+      toastApiError(toast, err, 'Impossibile caricare le esecuzioni');
+    }
   };
 const enabledCount   = schedules.filter(s => s.schedule?.enabled).length;
   const failedCount    = schedules.filter(s => s.runtime?.status === 'failed').length;
