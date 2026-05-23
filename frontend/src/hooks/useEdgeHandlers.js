@@ -6,7 +6,7 @@
  *
  * Ritorna: { edges, setEdges, onConnect, onEdgesChange, joinModalProps }
  */
-import { useState, useCallback, useMemo } from 'react';
+import { useState, useCallback, useMemo, useRef, useEffect } from 'react';
 import { addEdge } from 'reactflow';
 
 /**
@@ -32,6 +32,18 @@ export function useEdgeHandlers(nodes, setEdges, options = {}) {
   const [showJoinModal, setShowJoinModal] = useState(false);
   const [pendingEdge, setPendingEdge] = useState(null);
   const [editingEdge, setEditingEdge] = useState(null);
+
+  // Pre-fix (P2 frontend-hooks): le callback `onConnect`,
+  // `onEdgeClick`, `handleSaveJoin` avevano `nodes` nelle deps —
+  // l'array intero di ReactFlow invalidava le callback ad ogni
+  // drag/selezione/aggiornamento di un nodo qualsiasi, anche se
+  // irrilevante per join. Le modal/toolbar che le ricevevano come
+  // prop si rendevano di nuovo a frequenza elevata. Post-fix:
+  // `nodesRef.current` letto lazy dentro le callback; le deps non
+  // includono piu' `nodes` → callback referenzialmente stabili
+  // attraverso l'intera vita del canvas.
+  const nodesRef = useRef(nodes);
+  useEffect(() => { nodesRef.current = nodes; }, [nodes]);
 
   /**
    * Crea stile edge in base al tipo
@@ -84,7 +96,7 @@ export function useEdgeHandlers(nodes, setEdges, options = {}) {
    * Handler connessione nodi
    */
   const onConnect = useCallback((params) => {
-    const targetNode = nodes.find(n => n.id === params.target);
+    const targetNode = nodesRef.current.find(n => n.id === params.target);
     
     // Se target è nodo risultato, crea edge output direttamente
     if (targetNode && (targetNode.type === resultNodeType || targetNode.type === 'result')) {
@@ -132,7 +144,7 @@ export function useEdgeHandlers(nodes, setEdges, options = {}) {
       target: params.target
     });
     setShowJoinModal(true);
-  }, [nodes, setEdges, resultNodeType, getEdgeStyle, onEdgeCreated]);
+  }, [setEdges, resultNodeType, getEdgeStyle, onEdgeCreated]);
 
   /**
    * Handler click su edge (per editing)
@@ -145,7 +157,7 @@ export function useEdgeHandlers(nodes, setEdges, options = {}) {
     if (edge.data?.join_type === 'carica' || edge.data?.join_type === 'carica_arcgis') return;
 
     // Verifica anche il tipo del nodo target (fallback)
-    const targetNode = nodes.find(n => n.id === edge.target);
+    const targetNode = nodesRef.current.find(n => n.id === edge.target);
     if (targetNode && (
       targetNode.type === 'carica' ||
       targetNode.type === 'caricaArcgis' ||
@@ -158,7 +170,7 @@ export function useEdgeHandlers(nodes, setEdges, options = {}) {
     
     setEditingEdge(edge);
     setShowJoinModal(true);
-  }, [nodes]);
+  }, []);
 
   /**
    * Handler context menu su edge (per delete)
@@ -181,8 +193,9 @@ export function useEdgeHandlers(nodes, setEdges, options = {}) {
    * Salva configurazione join
    */
   const handleSaveJoin = useCallback((joinConfig) => {
-    const sourceNode = nodes.find(n => n.id === (editingEdge?.source || pendingEdge?.source));
-    const targetNode = nodes.find(n => n.id === (editingEdge?.target || pendingEdge?.target));
+    const currentNodes = nodesRef.current;
+    const sourceNode = currentNodes.find(n => n.id === (editingEdge?.source || pendingEdge?.source));
+    const targetNode = currentNodes.find(n => n.id === (editingEdge?.target || pendingEdge?.target));
     
     const edgeStyle = getEdgeStyle(joinConfig);
     
@@ -236,7 +249,7 @@ export function useEdgeHandlers(nodes, setEdges, options = {}) {
     setShowJoinModal(false);
     setPendingEdge(null);
     setEditingEdge(null);
-  }, [nodes, pendingEdge, editingEdge, setEdges, getEdgeStyle, onEdgeCreated, onEdgeUpdated]);
+  }, [pendingEdge, editingEdge, setEdges, getEdgeStyle, onEdgeCreated, onEdgeUpdated]);
 
   /**
    * Annulla operazione

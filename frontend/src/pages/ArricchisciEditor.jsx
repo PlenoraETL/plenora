@@ -375,7 +375,13 @@ const ArricchisciEditorContent = () => {
       // (vedi `handleAddResultNode` etc.) che usano `getPos()`. Pre-fix
       // `Math.random()` produceva posizioni non riproducibili e potenzialmente
       // fuori dal viewport visibile su zoom alto.
-      position: getPos(),
+      // Pre-fix (P2 frontend-pages): `getPos` veniva letta dalla
+      // closure ma `[setNodes]` era l'unica dep → se
+      // `screenToFlowPosition` cambiava (cambio viewport), la
+      // versione catturata era stale. Post-fix: invochiamo
+      // `getViewportCenter({ screenToFlowPosition })` direttamente
+      // qui dentro, e `screenToFlowPosition` e' in deps.
+      position: getViewportCenter({ screenToFlowPosition }),
       data: { api_id: connection.id, api_name: connection.name, param_mapping: {}, columns: [],
         enrich_type: category, api_type: connection.api_type, endpoint: connection.endpoint,
         auth: connection.auth, parameters: connection.parameters, output_mapping: connection.output_mapping,
@@ -388,7 +394,7 @@ const ArricchisciEditorContent = () => {
     if (category === 'openapi')    modals.close('openapi');
     if (category === 'rest_file')  modals.close('rest_file');
     if (category === 'datasource') modals.close('datasource');
-  }, [setNodes]);
+  }, [setNodes, screenToFlowPosition, modals]);
 
   const handleAddStaticValuesNode = useCallback(() => {
     setNodes(nds => nds.concat({ id: `static_${Date.now()}`, type: 'staticValues',

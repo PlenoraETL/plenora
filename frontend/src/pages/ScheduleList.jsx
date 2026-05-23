@@ -254,12 +254,28 @@ function ScheduleList() {
   };
   const handleRunNow = async (id) => {
     if (runningManual[id]) return;
+    // Pre-fix (P2 contracts-flows): l'`runningManual[id]` veniva
+    // settato ottimisticamente ma `schedules[id].runtime.status`
+    // restava al valore precedente fino al successivo refreshData
+    // (~3s di polling). Il badge "Inattivo" rimaneva visibile per
+    // tutto l'intervallo, sembrava che il bottone non rispondesse.
+    // Post-fix: aggiorniamo anche `runtime.status='queued'` con
+    // rollback al valore originale nel catch — pattern speculare a
+    // `handleToggle` per coerenza UX.
+    const prevStatus = schedules.find(s => s.id === id)?.runtime?.status;
     try {
       setRunningManual(prev => ({ ...prev, [id]: true }));
       setRunStartTimes(prev => ({ ...prev, [id]: Date.now() }));
+      setSchedules(prev => prev.map(s =>
+        s.id === id ? { ...s, runtime: { ...(s.runtime || {}), status: 'queued' } } : s
+      ));
       await runScheduleNow(id);
       await refreshData();
     } catch (e) {
+      // Rollback ottimistico: ripristina lo status precedente.
+      setSchedules(prev => prev.map(s =>
+        s.id === id ? { ...s, runtime: { ...(s.runtime || {}), status: prevStatus } } : s
+      ));
       toast.error('Errore: ' + (e.message || 'errore sconosciuto'));
       setRunningManual(prev => { const n={...prev}; delete n[id]; return n; });
       setRunStartTimes(prev => { const n={...prev}; delete n[id]; return n; });
@@ -522,7 +538,10 @@ function ScheduleCard({ schedule, isRunning, runStartTime, logs, runs, runningMa
             ) : (
               <div className="sl__logs-list">
                 {logs.map((log, i) => (
-                  <div key={log.timestamp || `log-${i}`} className="sl__log-entry">
+                  <div
+                    key={log.id || `${schedule.id}-log-${log.timestamp || ''}-${i}`}
+                    className="sl__log-entry"
+                  >
                     <span className="sl__log-icon">{getLogIcon(log.event)}</span>
                     <span className={`sl__log-event${log.event?.includes('FAILED') ? ' sl__log-event--failed' : ''}`}>{log.event}</span>
                     <span className="sl__log-date">{formatDate(log.timestamp)}</span>
@@ -548,7 +567,10 @@ function ScheduleCard({ schedule, isRunning, runStartTime, logs, runs, runningMa
             ) : (
               <div className="sl__runs-list">
                 {runs.map((run, i) => (
-                  <div key={run.timestamp || `run-${i}`} className="sl__run-entry">
+                  <div
+                    key={run.id || `${schedule.id}-run-${run.timestamp || ''}-${i}`}
+                    className="sl__run-entry"
+                  >
                     <span className="sl__run-ts">{formatRunTimestamp(run.timestamp)}</span>
                     <span className="sl__run-files">{run.files.map(f => f.name).join(', ')}</span>
                     <span className="sl__run-size">{formatSize(run.files.reduce((s,f) => s+f.size_bytes, 0))}</span>

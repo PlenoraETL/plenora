@@ -211,8 +211,13 @@ function EstraiEditor() {
   }, [preview.handlePreview, execution.prepareExecute, caricarica.handleExecute, handleAddRelatedLayer]);
 
   useEffect(() => { useCanvasStore.getState().setConnections(connections); }, [connections]);
+  // Pre-fix (P2 frontend-pages): le 3 handleAdd* callback avevano
+  // `nodes` nelle deps — ricreate ad ogni cambio nodi (drag, sel) →
+  // i bottoni toolbar che le ricevevano come prop si re-rendevano.
+  // ManipolaEditor/ArricchisciEditor gia' usavano `nodesRef.current`
+  // per il check di esistenza; allineiamo EstraiEditor.
   const handleAddResultNode = useCallback(() => {
-    if (nodes.some(n => n.type === 'resultNode')) { toast.warning('Puoi avere solo un nodo risultato per progetto'); return; }
+    if (nodesRef.current.some(n => n.type === 'resultNode')) { toast.warning('Puoi avere solo un nodo risultato per progetto'); return; }
     setNodes(nds => nds.concat({
       id: `result_${Date.now()}`, type: 'resultNode', position: getViewportCenter(reactFlowInstance),
       data: { fileName: 'output', format: 'csv', distinct: false, limit: null,
@@ -220,12 +225,13 @@ function EstraiEditor() {
         order_by_enabled: false, order_by_columns: [],
         having_enabled: false, having_conditions: [] }
     }));
-  }, [nodes, setNodes, getViewportCenter, reactFlowInstance]);
+  }, [setNodes, getViewportCenter, reactFlowInstance, toast]);
 
   const handleAddCaricanNode = useCallback(() => {
-    if (!nodes.some(n => n.type === 'resultNode')) { toast.warning('Aggiungi prima un nodo Output'); return; }
-    if (nodes.some(n => n.type === 'carica'))      { toast.warning('Puoi avere solo un nodo CARICA DB per progetto'); return; }
-    const resultNode = nodes.find(n => n.type === 'resultNode');
+    const currentNodes = nodesRef.current;
+    if (!currentNodes.some(n => n.type === 'resultNode')) { toast.warning('Aggiungi prima un nodo Output'); return; }
+    if (currentNodes.some(n => n.type === 'carica'))      { toast.warning('Puoi avere solo un nodo CARICA DB per progetto'); return; }
+    const resultNode = currentNodes.find(n => n.type === 'resultNode');
     const newNode = {
       id: `carica_${Date.now()}`, type: 'carica',
       position: { x: resultNode.position.x + 400, y: resultNode.position.y },
@@ -237,12 +243,13 @@ function EstraiEditor() {
     setNodes(nds => nds.concat(newNode));
     setEdges(eds => eds.concat({ id: `edge_result_carica_${Date.now()}`, source: resultNode.id, target: newNode.id,
       label: 'Carica DB', animated: true, style: { stroke: '#7c3aed', strokeWidth: 2 }, data: { join_type: 'carica' } }));
-  }, [nodes, setNodes, setEdges]);
+  }, [setNodes, setEdges, toast]);
 
   const handleAddCaricanArcGISNode = useCallback(() => {
-    if (!nodes.some(n => n.type === 'resultNode')) { toast.warning('Aggiungi prima un nodo Output'); return; }
-    if (nodes.some(n => n.type === 'carica_arcgis' || n.type === 'caricaArcgis')) { toast.warning('Puoi avere solo un nodo CARICA ArcGIS per progetto'); return; }
-    const resultNode = nodes.find(n => n.type === 'resultNode');
+    const currentNodes = nodesRef.current;
+    if (!currentNodes.some(n => n.type === 'resultNode')) { toast.warning('Aggiungi prima un nodo Output'); return; }
+    if (currentNodes.some(n => n.type === 'carica_arcgis' || n.type === 'caricaArcgis')) { toast.warning('Puoi avere solo un nodo CARICA ArcGIS per progetto'); return; }
+    const resultNode = currentNodes.find(n => n.type === 'resultNode');
     const newNode = {
       id: `carica_arcgis_${Date.now()}`, type: 'carica_arcgis',
       position: { x: resultNode.position.x + 400, y: resultNode.position.y + 200 },
@@ -253,7 +260,7 @@ function EstraiEditor() {
     setNodes(nds => nds.concat(newNode));
     setEdges(eds => eds.concat({ id: `edge_result_carica_arcgis_${Date.now()}`, source: resultNode.id, target: newNode.id,
       label: 'Carica ArcGIS', animated: true, style: { stroke: '#2DD4BF', strokeWidth: 2 }, data: { join_type: 'carica_arcgis' } }));
-  }, [nodes, setNodes, setEdges]);
+  }, [setNodes, setEdges, toast]);
 
   // ESTRAI accetta solo sorgenti SQL/ArcGIS; Data Source resta in MANIPOLA.
 
